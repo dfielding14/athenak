@@ -125,15 +125,28 @@ def test_four_dimensional_scalar_weighted_and_volume_pdf_outputs(tmp_path):
     ("overrides", "expected"),
     (
         (("output1/scale2=bogus",), "invalid scale2"),
-        (("output1/bin2_min=-1.0",), "requires positive bounds for logarithmic dimension 2"),
-        (("output1/linthresh4=-0.1",), "requires positive linthresh for symlog dimension 4"),
+        (
+            ("output1/bin2_min=-1.0",),
+            "requires positive bounds for logarithmic dimension 2",
+        ),
+        (
+            ("output1/linthresh4=-0.1",),
+            "requires positive linthresh for symlog dimension 4",
+        ),
     ),
 )
 def test_pdf_invalid_axis_configuration_is_rejected(tmp_path, overrides, expected):
     run_dir = tmp_path / "run"
     run_dir.mkdir()
     proc = subprocess.run(
-        ["./athena", "-i", "inputs/io_pdf_extended.athinput", "-d", str(run_dir), *overrides],
+        [
+            "./athena",
+            "-i",
+            "inputs/io_pdf_extended.athinput",
+            "-d",
+            str(run_dir),
+            *overrides,
+        ],
         capture_output=True,
         text=True,
     )

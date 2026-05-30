@@ -174,7 +174,9 @@ def test_node_restart_manifest_resumes_without_overwriting_terminal_checkpoint(t
         "time/output_timing=true",
         "time/final_output_policy=restart_only",
     )
-    assert "event=initial block=output1 type=bin distribution=node elapsed_max_s=" in stdout
+    assert (
+        "event=initial block=output1 type=bin distribution=node elapsed_max_s=" in stdout
+    )
     assert "event=final block=output6 type=rst distribution=node elapsed_max_s=" in stdout
     terminal = run_dir / "rst" / "io_node.00001.rst"
     original_manifest = terminal.read_bytes()
@@ -353,9 +355,30 @@ def test_node_restart_rejects_missing_or_truncated_payload(
     assert "is absent or incomplete" in (proc.stdout + proc.stderr)
 
 
-def test_node_restart_rejects_payload_path_entry(tmp_path, node_restart_template):
-    run_dir, manifest = _copy_node_checkpoint(tmp_path, node_restart_template, "payload_entry")
-    proc = _resume(tmp_path / "payload_entry_resume", _payload_path(manifest), check=False)
+@pytest.mark.parametrize(
+    "alias",
+    ("exact", "dot", "repeated_slash", "symlink", "temporary"),
+)
+def test_node_restart_rejects_payload_path_entry(tmp_path, node_restart_template, alias):
+    run_dir, manifest = _copy_node_checkpoint(
+        tmp_path, node_restart_template, f"payload_entry_{alias}"
+    )
+    payload = _payload_path(manifest)
+    if alias == "exact":
+        restart = payload
+    elif alias == "dot":
+        restart = str(payload.parent) + "/./" + payload.name
+    elif alias == "repeated_slash":
+        restart = str(payload.parent) + "//" + payload.name
+    elif alias == "symlink":
+        restart = tmp_path / "payload_alias.rst"
+        restart.symlink_to(payload)
+    else:
+        restart = Path(str(payload) + ".tmp")
+        shutil.copyfile(payload, restart)
+    proc = _resume(
+        tmp_path / f"payload_entry_resume_{alias}", restart, check=False
+    )
     assert proc.returncode != 0
     assert "use the public manifest path" in (proc.stdout + proc.stderr)
 
@@ -510,10 +533,16 @@ def test_promoted_node_example_generates_readable_outputs_and_manifest(tmp_path)
         / "io_node_example.00000.pdf"
     )
     node_surface = (
-        run_dir / "bin" / "node_00000000" / "io_node_example.density.r_0.25.00000.sph.bin"
+        run_dir
+        / "bin"
+        / "node_00000000"
+        / "io_node_example.density.r_0.25.00000.sph.bin"
     )
     assert bin_convert.read_binary(str(node_bin), assemble_shards=True)["n_mbs"] == 4
-    assert bin_convert.read_coarsened_binary(str(node_cbin), assemble_shards=True)["n_mbs"] == 4
+    assert (
+        bin_convert.read_coarsened_binary(str(node_cbin), assemble_shards=True)["n_mbs"]
+        == 4
+    )
     assert read_pdf(str(node_pdf))["header"]["distribution"] == "node"
     assert read_sphslice(str(node_surface))["data"].shape == (16, 32, 1)
     assert (run_dir / "rst" / "io_node_example.00001.rst").exists()

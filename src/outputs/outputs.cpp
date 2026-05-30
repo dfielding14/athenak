@@ -40,6 +40,7 @@
 //========================================================================================
 
 #include <cstdio>
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>    // strcmp
 #include <iomanip>
@@ -437,7 +438,7 @@ Outputs::Outputs(ParameterInput *pin, Mesh *pm) {
           }
         }
 
-        long long total_bins = 1;
+        std::int64_t total_bins = 1;
         for (int d = 0; d < opar.pdf_ndim; ++d) {
           if (opar.pdf_nbin[d] <= 0) {
             fail_pdf("requires positive nbin for dimension " + std::to_string(d + 1));
@@ -456,7 +457,7 @@ Outputs::Outputs(ParameterInput *pin, Mesh *pm) {
             fail_pdf("requires positive linthresh for symlog dimension "
                      + std::to_string(d + 1));
           }
-          total_bins *= static_cast<long long>(opar.pdf_nbin[d]) + 2;
+          total_bins *= static_cast<std::int64_t>(opar.pdf_nbin[d]) + 2;
           if (total_bins > std::numeric_limits<int>::max()) {
             fail_pdf("has too many total bins for a dense shared histogram");
           }

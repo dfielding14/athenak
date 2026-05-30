@@ -64,6 +64,19 @@ bool IsGeneratedPayloadLeaf(const std::string &leaf) {
                      [](char ch) { return ch >= '0' && ch <= '9'; });
 }
 
+bool IsGeneratedPayloadArtifactLeaf(std::string leaf) {
+  constexpr const char *temporary_suffix = ".tmp";
+  if (EndsWith(leaf, temporary_suffix)) {
+    leaf.resize(leaf.size() - std::string(temporary_suffix).size());
+  }
+  return IsGeneratedPayloadLeaf(leaf);
+}
+
+bool HasGeneratedPayloadContract(const std::filesystem::path &path) {
+  return IsNodeDirectory(path.parent_path().filename().string()) &&
+      IsGeneratedPayloadArtifactLeaf(path.filename().string());
+}
+
 bool IsWithinDirectory(const std::filesystem::path &directory,
                        const std::filesystem::path &path) {
   auto directory_part = directory.begin();
@@ -199,7 +212,8 @@ std::string ValidatePayloadPath(const NodeRestartPayload &payload,
   std::string directory = payload.path.substr(0, slash);
   std::string leaf = payload.path.substr(slash + 1);
   char expected_directory[32];
-  std::snprintf(expected_directory, sizeof(expected_directory), "node_%08d", payload.node);
+  std::snprintf(expected_directory, sizeof(expected_directory), "node_%08d",
+                payload.node);
   if (directory != expected_directory || directory == "." || directory == ".." ||
       leaf == "." || leaf == "..") {
     FailNodeRestart("payload path does not match its declared node directory.");
@@ -279,7 +293,8 @@ std::vector<NodeRestartSpan> RouteLocalSpans(
     };
     if (!spans.empty() && spans.back().node == span.node &&
         spans.back().local_block_start + spans.back().count == span.local_block_start &&
-        spans.back().payload_block_start + spans.back().count == span.payload_block_start) {
+        spans.back().payload_block_start + spans.back().count ==
+            span.payload_block_start) {
       spans.back().count += span.count;
     } else {
       spans.push_back(span);
@@ -311,8 +326,11 @@ bool NodeRestartManifest::LooksLikeManifest(const std::string &path) {
 }
 
 bool NodeRestartManifest::IsPayloadPath(const std::string &path) {
-  return IsNodeDirectory(LeafName(ParentDirectory(path))) &&
-      IsGeneratedPayloadLeaf(LeafName(path));
+  std::filesystem::path normalized = std::filesystem::path(path).lexically_normal();
+  if (HasGeneratedPayloadContract(normalized)) return true;
+  std::error_code error;
+  std::filesystem::path canonical = std::filesystem::canonical(normalized, error);
+  return !error && HasGeneratedPayloadContract(canonical);
 }
 
 NodeRestartManifest NodeRestartManifest::Load(const std::string &path) {
@@ -383,7 +401,8 @@ NodeRestartManifest NodeRestartManifest::Load(const std::string &path) {
 
   std::string directory = ParentDirectory(path);
   std::error_code error;
-  std::filesystem::path canonical_directory = std::filesystem::canonical(directory, error);
+  std::filesystem::path canonical_directory =
+      std::filesystem::canonical(directory, error);
   if (error) {
     FailNodeRestart("manifest directory could not be canonicalized.");
   }
@@ -457,7 +476,8 @@ NodeRestartManifest NodeRestartManifest::Load(const std::string &path) {
   return manifest;
 }
 
-void NodeRestartManifest::LoadLocalBlocks(int gid_start, int count, std::uint64_t data_size,
+void NodeRestartManifest::LoadLocalBlocks(int gid_start, int count,
+                                          std::uint64_t data_size,
                                           std::vector<char> *blocks) const {
   if (data_size != data_size_) {
     FailNodeRestart("payload per-block byte count does not match the restart header.");
@@ -495,7 +515,8 @@ void NodeRestartManifest::LoadLocalBlocks(int gid_start, int count, std::uint64_
                                 "node restart read byte count");
         source = CheckedAdd(
             header_size_,
-            CheckedMultiply(data_size, static_cast<std::uint64_t>(span.payload_block_start),
+            CheckedMultiply(data_size,
+                            static_cast<std::uint64_t>(span.payload_block_start),
                             "node restart source offset"),
             "node restart source offset");
         std::uint64_t destination_offset = CheckedMultiply(
@@ -522,7 +543,8 @@ void NodeRestartManifest::LoadLocalBlocks(int gid_start, int count, std::uint64_
           "node restart read byte count");
       std::uint64_t source = CheckedAdd(
           header_size_,
-          CheckedMultiply(data_size, static_cast<std::uint64_t>(span->payload_block_start),
+          CheckedMultiply(data_size,
+                          static_cast<std::uint64_t>(span->payload_block_start),
                           "node restart source offset"),
           "node restart source offset");
       std::uint64_t destination_offset = CheckedMultiply(

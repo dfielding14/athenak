@@ -189,7 +189,9 @@ def read_pdf_header(header_path):
                 continue
             match = _HEADER_KEY_RE.match(line)
             if match is None:
-                raise ValueError(f"malformed PDF header line in {header_path!r}: {line!r}")
+                raise ValueError(
+                    f"malformed PDF header line in {header_path!r}: {line!r}"
+                )
             key, value = match.group(1), match.group(2).strip()
             if key in ("format", "distribution", "weight", "weight_variable",
                        "binary_magic"):
@@ -232,7 +234,9 @@ def read_pdf_header(header_path):
                     info["stride"] = int(value)
 
     if header.get("format", "dense") not in ("dense", "sparse_coo"):
-        raise ValueError(f"unsupported PDF format in {header_path!r}: {header.get('format')!r}")
+        raise ValueError(
+            f"unsupported PDF format in {header_path!r}: {header.get('format')!r}"
+        )
     header.setdefault("format", "dense")
     if "binary_magic" in header and header["binary_magic"] != "AKPDFV2":
         raise ValueError(
@@ -245,12 +249,16 @@ def read_pdf_header(header_path):
     dimensions = []
     for dimension in range(1, header["ndim"] + 1):
         if dimension not in dims:
-            raise ValueError(f"PDF header {header_path!r} is missing dimension {dimension}")
+            raise ValueError(
+                f"PDF header {header_path!r} is missing dimension {dimension}"
+            )
         info = dims[dimension]
         if not isinstance(info.get("nbin"), int) or info["nbin"] <= 0:
             raise ValueError(f"PDF header {header_path!r} has invalid nbin{dimension}")
         if "variable" not in info:
-            raise ValueError(f"PDF header {header_path!r} is missing variable_{dimension}")
+            raise ValueError(
+                f"PDF header {header_path!r} is missing variable_{dimension}"
+            )
         scale = info.get("scale", "log" if info.get("logscale", False) else "linear")
         if scale not in _SCALES:
             raise ValueError(
@@ -293,7 +301,7 @@ def read_pdf_header(header_path):
         )
     header["total_bins"] = total_bins
     for dimension, info in enumerate(dimensions):
-        expected_stride = int(np.prod(shape[dimension + 1 :], dtype=int))
+        expected_stride = int(np.prod(shape[dimension + 1:], dtype=int))
         if "stride" in info and info["stride"] != expected_stride:
             raise ValueError(
                 f"PDF header {header_path!r} has invalid stride{dimension + 1}"
@@ -306,7 +314,15 @@ def read_pdf_header(header_path):
 
 
 def _compare_headers(reference, candidate, path):
-    for key in ("format", "distribution", "ndim", "weight", "weight_variable", "total_bins", "cycle"):
+    for key in (
+        "format",
+        "distribution",
+        "ndim",
+        "weight",
+        "weight_variable",
+        "total_bins",
+        "cycle",
+    ):
         if reference.get(key) != candidate.get(key):
             raise ValueError(
                 f"PDF shard metadata mismatch for {key!r} in {path!r}: "
@@ -323,7 +339,8 @@ def _compare_headers(reference, candidate, path):
                 )
         if not np.array_equal(left["bin_edges"], right["bin_edges"]):
             raise ValueError(
-                f"PDF shard metadata mismatch for dimension {number} bin edges in {path!r}"
+                f"PDF shard metadata mismatch for dimension {number} "
+                f"bin edges in {path!r}"
             )
 
 
@@ -365,7 +382,9 @@ def _read_sparse_file(path, header):
             np.dtype(np.uint64).itemsize + np.dtype(np.float64).itemsize
         )
         if len(payload) != expected_size:
-            qualifier = "truncated" if len(payload) < expected_size else "has trailing bytes"
+            qualifier = (
+                "truncated" if len(payload) < expected_size else "has trailing bytes"
+            )
             raise ValueError(
                 f"sparse PDF shard {path!r} {qualifier}: nnz={nnz}, "
                 f"expected {expected_size} bytes, found {len(payload)}"
@@ -394,7 +413,9 @@ def _read_sparse_file(path, header):
         raise ValueError(f"truncated sparse PDF shard {path!r}: missing time or nnz")
     time_value = float(np.frombuffer(payload, dtype=np.float64, count=1)[0])
     nnz = int(np.frombuffer(payload, dtype=np.uint32, count=1, offset=8)[0])
-    expected_size = 12 + nnz * (np.dtype(np.uint32).itemsize + np.dtype(np.float64).itemsize)
+    expected_size = 12 + nnz * (
+        np.dtype(np.uint32).itemsize + np.dtype(np.float64).itemsize
+    )
     if len(payload) != expected_size:
         qualifier = "truncated" if len(payload) < expected_size else "has trailing bytes"
         raise ValueError(
@@ -402,7 +423,9 @@ def _read_sparse_file(path, header):
             f"expected {expected_size} bytes, found {len(payload)}"
         )
     indices = np.frombuffer(payload, dtype=np.uint32, count=nnz, offset=12).copy()
-    values = np.frombuffer(payload, dtype=np.float64, count=nnz, offset=12 + 4 * nnz).copy()
+    values = np.frombuffer(
+        payload, dtype=np.float64, count=nnz, offset=12 + 4 * nnz
+    ).copy()
     if nnz and np.any(indices >= total_bins):
         bad = int(indices[indices >= total_bins][0])
         raise ValueError(
@@ -453,7 +476,9 @@ def _read_legacy_data(data_path, header):
             time_match = _LEGACY_TIME_RE.match(line)
             if time_match is not None:
                 if time_value is not None:
-                    raise ValueError(f"legacy PDF data {data_path!r} contains multiple times")
+                    raise ValueError(
+                        f"legacy PDF data {data_path!r} contains multiple times"
+                    )
                 time_value = float(time_match.group(1))
                 continue
             if line.startswith("#"):
@@ -488,19 +513,24 @@ def read_pdf(data_path, header_path=None, reshape=True):
     fmt = header["format"]
     if fmt == "legacy_dense":
         if _shard_kind(data_path) != "shared":
-            raise ValueError("legacy PDF data do not define rank/node shard reconstruction")
+            raise ValueError(
+                "legacy PDF data do not define rank/node shard reconstruction"
+            )
         time_value, data = _read_legacy_data(data_path, header)
         cycle = None
     elif fmt == "dense":
         if _shard_kind(data_path) != "shared":
-            raise ValueError(f"dense PDF data {data_path!r} unexpectedly resides in a shard directory")
+            raise ValueError(
+                f"dense PDF data {data_path!r} unexpectedly resides in a shard directory"
+            )
         time_value, cycle, data = _read_dense_binary(data_path, header)
     else:
         kind = _shard_kind(data_path)
         distribution = header.get("distribution", kind if kind != "shared" else None)
         if kind == "shared" or distribution != kind:
             raise ValueError(
-                f"sparse PDF data {data_path!r} cannot be resolved as a {distribution!r} shard family"
+                f"sparse PDF data {data_path!r} cannot be resolved as a "
+                f"{distribution!r} shard family"
             )
         header["distribution"] = distribution
         data = np.zeros(header["total_bins"], dtype=np.float64)
@@ -517,11 +547,13 @@ def read_pdf(data_path, header_path=None, reshape=True):
                 cycle = shard_cycle
             elif shard_time != time_value:
                 raise ValueError(
-                    f"PDF shard time mismatch in {shard!r}: {shard_time!r} != {time_value!r}"
+                    f"PDF shard time mismatch in {shard!r}: "
+                    f"{shard_time!r} != {time_value!r}"
                 )
             if shard_cycle != cycle:
                 raise ValueError(
-                    f"PDF shard cycle mismatch in {shard!r}: {shard_cycle!r} != {cycle!r}"
+                    f"PDF shard cycle mismatch in {shard!r}: "
+                    f"{shard_cycle!r} != {cycle!r}"
                 )
             np.add.at(data, indices, values)
         if time_value is None:

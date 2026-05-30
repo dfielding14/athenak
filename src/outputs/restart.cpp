@@ -9,7 +9,7 @@
 #include <sys/stat.h>  // mkdir
 
 #include <algorithm>
-#include <chrono>
+#include <chrono>  // NOLINT(build/c++11)
 #include <cstdint>
 #include <cstdio>      // fwrite(), fclose(), fopen(), fnprintf(), snprintf()
 #include <cstdlib>

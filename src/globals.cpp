@@ -100,4 +100,4 @@ int NodeMax(int local_count) {
   return local_count;
 #endif
 }
-}
+}  // namespace global_variable

@@ -6,6 +6,7 @@ import subprocess
 import sys
 
 import numpy as np
+import pytest
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -16,7 +17,10 @@ import bin_convert  # noqa: E402
 from read_sphslice import read_sphslice, read_sphslice_header  # noqa: E402
 
 
-def _run(tmp_path: Path, name: str, *overrides: str, check=True, input_file=INPUT_FILE):
+def _run(
+    tmp_path: Path, name: str, *overrides: str, check=True, input_file=INPUT_FILE,
+    nranks=2
+):
     run_dir = tmp_path / name
     run_dir.mkdir()
     env = os.environ.copy()
@@ -25,7 +29,7 @@ def _run(tmp_path: Path, name: str, *overrides: str, check=True, input_file=INPU
         [
             "mpirun",
             "-np",
-            "2",
+            str(nranks),
             "./athena",
             "-i",
             str(input_file),
@@ -113,7 +117,8 @@ def test_forced_tiny_chunks_preserve_shared_rank_and_node_writers(tmp_path):
         assert not list(run_dir.rglob("*.tmp"))
 
 
-def test_sliced_node_coarsened_binary_remains_explicitly_unpromoted(tmp_path):
+@pytest.mark.parametrize("nranks", (1, 2))
+def test_sliced_node_coarsened_binary_remains_explicitly_unpromoted(tmp_path, nranks):
     sliced_input = tmp_path / "sliced_node_cbin.athinput"
     sliced_input.write_text(
         INPUT_FILE.read_text().replace(
@@ -123,10 +128,11 @@ def test_sliced_node_coarsened_binary_remains_explicitly_unpromoted(tmp_path):
     )
     _, proc = _run(
         tmp_path,
-        "sliced_node_cbin",
+        f"sliced_node_cbin_{nranks}",
         "output3/single_file_per_node=true",
         check=False,
         input_file=sliced_input,
+        nranks=nranks,
     )
     assert proc.returncode != 0
     assert "Sliced node-sharded coarsened-binary output is not supported." in (

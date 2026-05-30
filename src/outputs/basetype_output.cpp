@@ -114,7 +114,8 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
     if (ivar < 0) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
           << std::endl << "Variable '" << variable << "' in block '"
-          << out_params.block_name << "' in input file is not a valid choice" << std::endl;
+          << out_params.block_name << "' in input file is not a valid choice"
+          << std::endl;
       exit(EXIT_FAILURE);
     }
 

@@ -12,6 +12,7 @@
 #include <limits>
 #include <string>
 #include <utility>
+#include <vector>
 #include <algorithm>
 #include <cstdio>
 
@@ -303,7 +304,8 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
       FailNodeRestart("local field range is outside the routed restart buffer.");
     }
     if (bytes > 0) {
-      std::memcpy(buffer, &(node_restart_blocks[offset - node_restart_virtual_base]), bytes);
+      std::memcpy(buffer,
+                  &(node_restart_blocks[offset - node_restart_virtual_base]), bytes);
     }
     return static_cast<std::size_t>(count);
   };

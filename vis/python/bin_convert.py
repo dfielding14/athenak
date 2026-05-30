@@ -222,7 +222,12 @@ def _validate_binary_sibling_inventory(shard_files, shard_data, family):
         sibling_ids.append(shard_id)
     if len(set(sibling_ids)) != len(sibling_ids):
         raise ValueError(f"{family} node shard inventory contains duplicate node IDs")
-    expected_ids = set(range(expected_count))
+    if expected_count != len(sibling_ids):
+        raise ValueError(
+            f"{family} node shard inventory is incomplete: "
+            f"expected {expected_count} shards, found {len(sibling_ids)}"
+        )
+    expected_ids = set(range(len(sibling_ids)))
     actual_ids = set(sibling_ids)
     if actual_ids != expected_ids:
         raise ValueError(
@@ -310,6 +315,12 @@ def _combine_partitioned_binary(shard_filename, reader, family):
     for var in reference["var_names"]:
         combined["mb_data"][var] = np.asarray(combined["mb_data"][var])
     combined["n_mbs"] = len(combined["mb_index"])
+    meshblock_counts = [item["number_of_meshblocks"] for item in shard_data]
+    combined["number_of_meshblocks"] = (
+        sum(meshblock_counts)
+        if all(count is not None for count in meshblock_counts)
+        else None
+    )
     combined["shard_files"] = shard_files
     combined["distribution"] = os.path.basename(
         os.path.dirname(os.path.abspath(shard_filename))

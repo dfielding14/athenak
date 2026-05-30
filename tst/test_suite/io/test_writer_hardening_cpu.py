@@ -88,6 +88,34 @@ def test_node_binary_inventory_accepts_explicit_empty_shards_and_rejects_gaps(
     ("kind", "reader"),
     (("bin", read_binary), ("cbin", read_coarsened_binary)),
 )
+def test_node_binary_inventory_aggregates_meshblock_counts(tmp_path, kind, reader):
+    root = tmp_path / kind
+    node0 = root / "node_00000000" / f"output.00000.{kind}"
+    node1 = root / "node_00000001" / f"output.00000.{kind}"
+    _make_node_binary(node0, _binary_fixture(kind, 0), 0, 2)
+    _make_node_binary(node1, _binary_fixture(kind, 1), 1, 2)
+
+    assembled = reader(str(node0), assemble_shards=True)
+    assert assembled["n_mbs"] == 2
+    assert assembled["number_of_meshblocks"] == 2
+
+
+@pytest.mark.parametrize(
+    ("kind", "reader"),
+    (("bin", read_binary), ("cbin", read_coarsened_binary)),
+)
+def test_node_binary_inventory_rejects_oversized_declared_count(tmp_path, kind, reader):
+    path = tmp_path / kind / "node_00000000" / f"output.00000.{kind}"
+    _make_node_binary(path, _binary_fixture(kind, 0), 0, 10**12)
+
+    with pytest.raises(ValueError, match="node shard inventory is incomplete"):
+        reader(str(path), assemble_shards=True)
+
+
+@pytest.mark.parametrize(
+    ("kind", "reader"),
+    (("bin", read_binary), ("cbin", read_coarsened_binary)),
+)
 def test_node_binary_inventory_rejects_duplicate_integer_ids(tmp_path, kind, reader):
     root = tmp_path / kind
     canonical = root / "node_00000000" / f"output.00000.{kind}"
@@ -214,3 +242,12 @@ def test_sphslice_rejects_duplicate_integer_sibling_ids(tmp_path):
 
     with pytest.raises(ValueError, match="duplicate IDs"):
         read_sphslice(str(canonical))
+
+
+def test_sphslice_rejects_oversized_declared_sibling_count(tmp_path):
+    path = tmp_path / "node_00000000" / "surface.00000.sph.bin"
+    _write_sphslice(path, "node", [0, 1], [10.0, 20.0], shard_id=0,
+                    sibling_count=10**12)
+
+    with pytest.raises(ValueError, match="node shard inventory is incomplete"):
+        read_sphslice(str(path))

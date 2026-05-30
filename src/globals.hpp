@@ -28,6 +28,6 @@ int NodePrefixSum(int local_count);
 int NodeSum(int local_count);
 int NodeMin(int local_count);
 int NodeMax(int local_count);
-}
+}  // namespace global_variable
 
 #endif // GLOBALS_HPP_

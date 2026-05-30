@@ -46,8 +46,14 @@ def test_timing_is_opt_in(tmp_path):
     stdout, _, _ = _run_case(tmp_path, "time/output_timing=true")
     assert stdout.count("[output-io] event=initial ") == 2
     assert stdout.count("[output-io] event=final ") == 2
-    assert "event=initial block=output1 type=bin distribution=shared elapsed_max_s=" in stdout
-    assert "event=initial block=output2 type=rst distribution=shared elapsed_max_s=" in stdout
+    assert (
+        "event=initial block=output1 type=bin distribution=shared "
+        "elapsed_max_s=" in stdout
+    )
+    assert (
+        "event=initial block=output2 type=rst distribution=shared "
+        "elapsed_max_s=" in stdout
+    )
 
 
 def test_invalid_final_output_policy_is_rejected(tmp_path):

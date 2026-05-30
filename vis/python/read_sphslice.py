@@ -332,7 +332,12 @@ def _validate_sibling_inventory(files, headers):
         raise ValueError(
             f"spherical-slice {distribution} shard inventory contains duplicate IDs"
         )
-    expected_ids = set(range(expected_count))
+    if expected_count != len(sibling_ids):
+        raise ValueError(
+            f"spherical-slice {distribution} shard inventory is incomplete: "
+            f"expected {expected_count} shards, found {len(sibling_ids)}"
+        )
+    expected_ids = set(range(len(sibling_ids)))
     actual_ids = set(sibling_ids)
     if actual_ids != expected_ids:
         raise ValueError(

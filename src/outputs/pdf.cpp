@@ -13,6 +13,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "athena.hpp"
@@ -337,7 +338,8 @@ void PDFOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
         std::fprintf(header, "weight_variable = %s\n",
                      out_params.pdf_weight_variable.c_str());
       }
-      std::fprintf(header, "symlog_transform = sign(x)*(abs(x)/linthresh if abs(x)<=linthresh else 1+log10(abs(x)/linthresh))\n");
+      std::fprintf(header, "symlog_transform = sign(x)*(abs(x)/linthresh if "
+                   "abs(x)<=linthresh else 1+log10(abs(x)/linthresh))\n");
       for (int d = 0; d < pdf_data.ndim; ++d) {
         std::fprintf(header, "variable_%d = %s\n", d + 1,
                      out_params.pdf_variables[d].c_str());

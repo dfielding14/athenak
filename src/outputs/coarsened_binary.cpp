@@ -92,6 +92,11 @@ void CheckedWrite(IOWrapper &file, const void *data, std::size_t count,
 CoarsenedBinaryOutput::CoarsenedBinaryOutput(ParameterInput *pin, Mesh *pm,
                                              OutputParameters op) :
   BaseTypeOutput(pin, pm, op) {
+  if ((out_params.slice1 || out_params.slice2 || out_params.slice3) &&
+      IsNodeSharded(out_params.shard_mode)) {
+    FatalCoarsenedBinaryError(
+        "Sliced node-sharded coarsened-binary output is not supported.");
+  }
   // create directories for outputs
   // useful for mpiio-based outputs because on some supercomputers you may need to
   // set different stripe counts depending on whether mpiio is used in order to
@@ -354,9 +359,6 @@ void CoarsenedBinaryOutput::LoadOutputData(Mesh *pm) {
 //   All MeshBlocks are written to the same file.
 
 void CoarsenedBinaryOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
-  // check if slicing
-  bool bin_slice = (out_params.slice1 || out_params.slice2 || out_params.slice3);
-
   // create filename: "cbin_"+"file_id"+"_"+"coarsening_factor"+"/file_basename"
   // + "." + "file_id" + "." + XXXXX + ".cbin"
   // where XXXXX = 5-digit file_number
@@ -365,11 +367,6 @@ void CoarsenedBinaryOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   bool shard_writer = IsRankSharded(shard_mode) ||
       (IsNodeSharded(shard_mode) && global_variable::node_rank == 0) ||
       (shard_mode == FileShardMode::shared && global_variable::my_rank == 0);
-  if (bin_slice && IsNodeSharded(shard_mode)) {
-    FatalCoarsenedBinaryError(
-        "Sliced node-sharded coarsened-binary output is not supported.");
-  }
-
   std::string fname;
   char number[6];
   std::snprintf(number, sizeof(number), "%05d", out_params.file_number);
