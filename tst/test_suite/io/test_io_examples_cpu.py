@@ -35,7 +35,8 @@ def test_output_formats_example_generates_readable_pdf_and_slice(tmp_path):
         )
     )
     surface = read_sphslice(
-        str(run_dir / "bin" / "io_formats.density.r_0.25.00000.sph.bin")
+        str(run_dir / "bin" /
+            "io_formats.density.r_2.5000000000000000e-01.00000.sph.bin")
     )
     assert pdf["pdf"].shape == (26, 14, 22)
     assert surface["data"].shape == (32, 64, 1)

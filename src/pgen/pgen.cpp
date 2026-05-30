@@ -177,10 +177,8 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
     Real last_output_time;
     if (global_variable::my_rank == 0 || single_file_per_rank) {
       if (resfile.Read_Reals(&last_output_time, 1,single_file_per_rank) != 1) {
-        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                  << std::endl << "z4c::last_output_time data size read from restart "
-                  << "file is incorrect, restart file is broken." << std::endl;
-        exit(EXIT_FAILURE);
+        FailNodeRestart("z4c::last_output_time data size read from restart file is "
+                        "incorrect, restart file is broken.");
       }
     }
 #if MPI_PARALLEL_ENABLED
@@ -195,10 +193,8 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
       Real pos[3];
       if (global_variable::my_rank == 0 || single_file_per_rank) {
         if (resfile.Read_Reals(&pos[0], 3, single_file_per_rank) != 3) {
-          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                    << std::endl << "compact object tracker data size read from restart "
-                    << "file is incorrect, restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          FailNodeRestart("compact object tracker data size read from restart file is "
+                          "incorrect, restart file is broken.");
         }
       }
 #if MPI_PARALLEL_ENABLED
@@ -217,10 +213,8 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
     if (global_variable::my_rank == 0 || single_file_per_rank) {
       if (resfile.Read_bytes(rng_data, 1, sizeof(RNG_State), single_file_per_rank)
           != sizeof(RNG_State)) {
-        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                  << std::endl << "RNG data size read from restart file is incorrect, "
-                  << "restart file is broken." << std::endl;
-        exit(EXIT_FAILURE);
+        FailNodeRestart("RNG data size read from restart file is incorrect, restart "
+                        "file is broken.");
       }
     }
 #if MPI_PARALLEL_ENABLED
@@ -239,10 +233,8 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
   if (global_variable::my_rank == 0 || single_file_per_rank) {
     if (resfile.Read_bytes(variabledata, 1, variablesize, single_file_per_rank)
         != variablesize) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "Variable data size read from restart file is incorrect, "
-                << "restart file is broken." << std::endl;
-      exit(EXIT_FAILURE);
+      FailNodeRestart("Variable data size read from restart file is incorrect, restart "
+                      "file is broken.");
     }
   }
 #if MPI_PARALLEL_ENABLED
@@ -314,11 +306,8 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
   }
 
   if (data_size_ != data_size) {
-    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl << "CC data size read from restart file not equal to size "
-              << "of Hydro, MHD, Rad, and/or Z4c arrays, restart file is broken."
-              << std::endl;
-    exit(EXIT_FAILURE);
+    FailNodeRestart("CC data size read from restart file not equal to size of Hydro, "
+                    "MHD, Rad, and/or Z4c arrays, restart file is broken.");
   }
 
   // read CC data into host array
@@ -389,10 +378,8 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
             mbptr.size(), FailNodeRestart, "restart Hydro subview count");
         if (read_restart_reals_at(mbptr.data(), mbcnt, myoffset, true)
             != mbcnt) {
-          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                    << std::endl << "CC hydro data not read correctly from rst file, "
-                    << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          FailNodeRestart("CC hydro data not read correctly from rst file, restart "
+                          "file is broken.");
         }
         myoffset = CheckedRestartReadAdd(myoffset, data_size, "restart MeshBlock offset");
 
@@ -405,10 +392,8 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
             mbptr.size(), FailNodeRestart, "restart Hydro subview count");
         if (read_restart_reals_at(mbptr.data(), mbcnt, myoffset, false)
             != mbcnt) {
-          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                    << std::endl << "CC hydro data not read correctly from rst file, "
-                    << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          FailNodeRestart("CC hydro data not read correctly from rst file, restart "
+                          "file is broken.");
         }
         myoffset = CheckedRestartReadAdd(myoffset, data_size, "restart MeshBlock offset");
       }
@@ -432,10 +417,8 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
             mbptr.size(), FailNodeRestart, "restart MHD subview count");
         if (read_restart_reals_at(mbptr.data(), mbcnt, myoffset, true)
             != mbcnt) {
-          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                    << std::endl << "CC mhd data not read correctly from rst file, "
-                    << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          FailNodeRestart("CC mhd data not read correctly from rst file, restart file "
+                          "is broken.");
         }
         myoffset = CheckedRestartReadAdd(myoffset, data_size, "restart MeshBlock offset");
       // some ranks are finished writing, so use non-collective write
@@ -447,10 +430,8 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
             mbptr.size(), FailNodeRestart, "restart MHD subview count");
         if (read_restart_reals_at(mbptr.data(), mbcnt, myoffset, false)
             != mbcnt) {
-          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                    << std::endl << "CC mhd data not read correctly from rst file, "
-                    << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          FailNodeRestart("CC mhd data not read correctly from rst file, restart file "
+                          "is broken.");
         }
         myoffset = CheckedRestartReadAdd(myoffset, data_size, "restart MeshBlock offset");
       }
@@ -474,10 +455,8 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
             x1fptr.size(), FailNodeRestart, "restart MHD x1-face subview count");
 
         if (read_restart_reals_at(x1fptr.data(), fldcnt, myoffset, true) != fldcnt) {
-          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "Input b0.x1f field not read correctly from rst file, "
-                << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          FailNodeRestart("Input b0.x1f field not read correctly from rst file, "
+                          "restart file is broken.");
         }
         myoffset = CheckedRestartReadAdd(myoffset, layout.mhd_x1f_bytes,
                                          "restart MHD face offset");
@@ -488,10 +467,8 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
             x2fptr.size(), FailNodeRestart, "restart MHD x2-face subview count");
 
         if (read_restart_reals_at(x2fptr.data(), fldcnt, myoffset, true) != fldcnt) {
-          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "Input b0.x2f field not read correctly from rst file, "
-                << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          FailNodeRestart("Input b0.x2f field not read correctly from rst file, "
+                          "restart file is broken.");
         }
         myoffset = CheckedRestartReadAdd(myoffset, layout.mhd_x2f_bytes,
                                          "restart MHD face offset");
@@ -502,10 +479,8 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
             x3fptr.size(), FailNodeRestart, "restart MHD x3-face subview count");
 
         if (read_restart_reals_at(x3fptr.data(), fldcnt, myoffset, true) != fldcnt) {
-          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "Input b0.x3f field not read correctly from rst file, "
-                << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          FailNodeRestart("Input b0.x3f field not read correctly from rst file, "
+                          "restart file is broken.");
         }
         myoffset = CheckedRestartReadAdd(myoffset, layout.mhd_x3f_bytes,
                                          "restart MHD face offset");
@@ -521,10 +496,8 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
             x1fptr.size(), FailNodeRestart, "restart MHD x1-face subview count");
 
         if (read_restart_reals_at(x1fptr.data(), fldcnt, myoffset, false) != fldcnt) {
-          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "Input b0.x1f field not read correctly from rst file, "
-                << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          FailNodeRestart("Input b0.x1f field not read correctly from rst file, "
+                          "restart file is broken.");
         }
         myoffset = CheckedRestartReadAdd(myoffset, layout.mhd_x1f_bytes,
                                          "restart MHD face offset");
@@ -535,10 +508,8 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
             x2fptr.size(), FailNodeRestart, "restart MHD x2-face subview count");
 
         if (read_restart_reals_at(x2fptr.data(), fldcnt, myoffset, false) != fldcnt) {
-          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "Input b0.x2f field not read correctly from rst file, "
-                << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          FailNodeRestart("Input b0.x2f field not read correctly from rst file, "
+                          "restart file is broken.");
         }
         myoffset = CheckedRestartReadAdd(myoffset, layout.mhd_x2f_bytes,
                                          "restart MHD face offset");
@@ -549,10 +520,8 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
             x3fptr.size(), FailNodeRestart, "restart MHD x3-face subview count");
 
         if (read_restart_reals_at(x3fptr.data(), fldcnt, myoffset, false) != fldcnt) {
-          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "Input b0.x3f field not read correctly from rst file, "
-                << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          FailNodeRestart("Input b0.x3f field not read correctly from rst file, "
+                          "restart file is broken.");
         }
         myoffset = CheckedRestartReadAdd(myoffset, layout.mhd_x3f_bytes,
                                          "restart MHD face offset");
@@ -589,10 +558,8 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
         IOWrapperSizeT mbcnt = restart_layout::CheckedSizeT(
             mbptr.size(), FailNodeRestart, "restart radiation subview count");
         if (read_restart_reals_at(mbptr.data(), mbcnt, myoffset, true) != mbcnt) {
-          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                    << std::endl << "CC rad data not read correctly from rst file, "
-                    << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          FailNodeRestart("CC rad data not read correctly from rst file, restart file "
+                          "is broken.");
         }
         myoffset = CheckedRestartReadAdd(myoffset, data_size, "restart MeshBlock offset");
 
@@ -604,10 +571,8 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
         IOWrapperSizeT mbcnt = restart_layout::CheckedSizeT(
             mbptr.size(), FailNodeRestart, "restart radiation subview count");
         if (read_restart_reals_at(mbptr.data(), mbcnt, myoffset, false) != mbcnt) {
-          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                    << std::endl << "CC rad data not read correctly from rst file, "
-                    << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          FailNodeRestart("CC rad data not read correctly from rst file, restart file "
+                          "is broken.");
         }
         myoffset = CheckedRestartReadAdd(myoffset, data_size, "restart MeshBlock offset");
       }
@@ -630,10 +595,8 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
         IOWrapperSizeT mbcnt = restart_layout::CheckedSizeT(
             mbptr.size(), FailNodeRestart, "restart forcing subview count");
         if (read_restart_reals_at(mbptr.data(), mbcnt, myoffset, true) != mbcnt) {
-          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                    << std::endl << "CC turb data not read correctly from rst file, "
-                    << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          FailNodeRestart("CC turb data not read correctly from rst file, restart file "
+                          "is broken.");
         }
         myoffset = CheckedRestartReadAdd(myoffset, data_size, "restart MeshBlock offset");
 
@@ -645,10 +608,8 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
         IOWrapperSizeT mbcnt = restart_layout::CheckedSizeT(
             mbptr.size(), FailNodeRestart, "restart forcing subview count");
         if (read_restart_reals_at(mbptr.data(), mbcnt, myoffset, false) != mbcnt) {
-          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                    << std::endl << "CC turb data not read correctly from rst file, "
-                    << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          FailNodeRestart("CC turb data not read correctly from rst file, restart file "
+                          "is broken.");
         }
         myoffset = CheckedRestartReadAdd(myoffset, data_size, "restart MeshBlock offset");
       }
@@ -671,10 +632,8 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
         IOWrapperSizeT mbcnt = restart_layout::CheckedSizeT(
             mbptr.size(), FailNodeRestart, "restart Z4c subview count");
         if (read_restart_reals_at(mbptr.data(), mbcnt, myoffset, true) != mbcnt) {
-          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                    << std::endl << "CC z4c data not read correctly from rst file, "
-                    << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          FailNodeRestart("CC z4c data not read correctly from rst file, restart file "
+                          "is broken.");
         }
         myoffset = CheckedRestartReadAdd(myoffset, data_size, "restart MeshBlock offset");
 
@@ -686,10 +645,8 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
         IOWrapperSizeT mbcnt = restart_layout::CheckedSizeT(
             mbptr.size(), FailNodeRestart, "restart Z4c subview count");
         if (read_restart_reals_at(mbptr.data(), mbcnt, myoffset, false) != mbcnt) {
-          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                    << std::endl << "CC z4c data not read correctly from rst file, "
-                    << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          FailNodeRestart("CC z4c data not read correctly from rst file, restart file "
+                          "is broken.");
         }
         myoffset = CheckedRestartReadAdd(myoffset, data_size, "restart MeshBlock offset");
       }
@@ -713,10 +670,8 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
         IOWrapperSizeT mbcnt = restart_layout::CheckedSizeT(
             mbptr.size(), FailNodeRestart, "restart ADM subview count");
         if (read_restart_reals_at(mbptr.data(), mbcnt, myoffset, true) != mbcnt) {
-          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                    << std::endl << "CC adm data not read correctly from rst file, "
-                    << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          FailNodeRestart("CC adm data not read correctly from rst file, restart file "
+                          "is broken.");
         }
         myoffset = CheckedRestartReadAdd(myoffset, data_size, "restart MeshBlock offset");
 
@@ -728,10 +683,8 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
         IOWrapperSizeT mbcnt = restart_layout::CheckedSizeT(
             mbptr.size(), FailNodeRestart, "restart ADM subview count");
         if (read_restart_reals_at(mbptr.data(), mbcnt, myoffset, false) != mbcnt) {
-          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                    << std::endl << "CC adm data not read correctly from rst file, "
-                    << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          FailNodeRestart("CC adm data not read correctly from rst file, restart file "
+                          "is broken.");
         }
         myoffset = CheckedRestartReadAdd(myoffset, data_size, "restart MeshBlock offset");
       }
@@ -750,28 +703,22 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
   // Check that user defined BCs were enrolled if needed
   if (user_bcs) {
     if (user_bcs_func == nullptr) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "User BCs specified in <mesh> block, but not enrolled "
-                << "during restart by SetProblemData()." << std::endl;
-      exit(EXIT_FAILURE);
+      FailNodeRestart("User BCs specified in <mesh> block, but not enrolled "
+                      "during restart by SetProblemData().");
     }
   }
   // Check that user defined srcterms were enrolled if needed
   if (user_srcs) {
     if (user_srcs_func == nullptr) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "User SRCs specified in <problem> block, but not "
-                << "enrolled by UserProblem()." << std::endl;
-      exit(EXIT_FAILURE);
+      FailNodeRestart("User SRCs specified in <problem> block, but not "
+                      "enrolled by UserProblem().");
     }
   }
   // Check that user defined history outputs were enrolled if needed
   if (user_hist) {
     if (user_hist_func == nullptr) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "User history output specified in <problem> block, "
-                << "but not enrolled by UserProblem()." << std::endl;
-      exit(EXIT_FAILURE);
+      FailNodeRestart("User history output specified in <problem> block, "
+                      "but not enrolled by UserProblem().");
     }
   }
 }

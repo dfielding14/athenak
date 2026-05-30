@@ -8,9 +8,9 @@ output-file reference area after the IO feature branch has merged.
 | Product | Shared file form | Rank/node shard form | Public reader |
 | --- | --- | --- | --- |
 | Native mesh binary (`bin`) | `bin/<basename>.<id>.<number>.bin` | `bin/rank_########/...` or `bin/node_########/...` | `vis/python/bin_convert.py` |
-| Full-volume coarsened binary (`cbin`) | `cbin_<id>_<factor>/<basename>.<id>.<number>.cbin` | `<directory>/rank_########/...` or `<directory>/node_########/...` | `vis/python/bin_convert.py` |
+| Uniform 3D active-zone full-volume coarsened binary (`cbin`) | `cbin_<id>_<factor>/<basename>.<id>.<number>.cbin` | `<directory>/rank_########/...` or `<directory>/node_########/...` | `vis/python/bin_convert.py` |
 | Modern PDF V2 (`pdf`) | `pdf_<id>[_<axes>]/<basename>.<number>.pdf` | `<directory>/rank_########/...` or `<directory>/node_########/...` | `vis/python/read_pdf.py` |
-| Spherical slice (`sphslice`) | `bin/<basename>.<id>.r_<radius>.<number>.sph.bin` | `bin/rank_########/...` or `bin/node_########/...` | `vis/python/read_sphslice.py` |
+| Spherical slice (`sphslice`) | `bin/<basename>.<id>.r_<round-trip-scientific-radius>.<number>.sph.bin` | `bin/rank_########/...` or `bin/node_########/...` | `vis/python/read_sphslice.py` |
 | Node restart (`rst`) | `rst/<basename>.<number>.rst` public manifest | `rst/node_########/<basename>.<number>.g<generation>.payload.rst` | `athena -r <manifest>` |
 
 Rank and node directory components are zero-padded numeric identifiers.
@@ -19,7 +19,8 @@ one logical output. For `.bin` and `.cbin`, request assembly through
 `bin_convert.py`; PDF and spherical-slice readers discover sharded families
 when given a shard path.
 
-Node-sharded `.bin` and full-volume `.cbin` files add `distribution`, `node`,
+Node-sharded `.bin` and uniform 3D active-zone full-volume `.cbin` files add
+`distribution`, `node`,
 `number of nodes`, and `number of meshblocks` preheader fields. These are
 additive: legacy shared and rank files retain their existing schema. Node
 writers publish explicit empty shards, and the canonical reader requires the
@@ -123,9 +124,10 @@ does not create a shared `<manifest>.assembled` staging file.
 
 ### Qualification Boundary
 
-Node-sharded binary, full-volume coarsened binary, modern PDF, spherical
+Node-sharded binary, uniform 3D active-zone full-volume coarsened binary,
+modern PDF, spherical
 slice, and restart behavior are covered by automated multi-rank tests on one
 physical node. A multi-node MPI run on the deployment filesystem remains a
-production qualification step. Sliced `cbin` is deliberately not advertised:
-construction rejects emitted extents that are incompatible with supported
-coarsening.
+production qualification step. Lower-dimensional, ghost-zone-expanded,
+static-refinement, AMR, and sliced `cbin` are deliberately not advertised:
+construction rejects them before publication.

@@ -6,13 +6,16 @@
 //! \file restart.cpp
 //! \brief writes restart files
 
-#include <sys/stat.h>  // mkdir
+#include <fcntl.h>
+#include <unistd.h>
 
 #include <algorithm>
+#include <cerrno>
 #include <chrono>  // NOLINT(build/c++11)
 #include <cstdint>
 #include <cstdio>      // fwrite(), fclose(), fopen(), fnprintf(), snprintf()
 #include <cstdlib>
+#include <cstring>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -26,6 +29,7 @@
 #include "coordinates/cell_locations.hpp"
 #include "geodesic-grid/geodesic_grid.hpp"
 #include "globals.hpp"
+#include "mpi_utils.hpp"
 #include "mesh/mesh.hpp"
 #include "hydro/hydro.hpp"
 #include "mhd/mhd.hpp"
@@ -35,6 +39,7 @@
 #include "radiation/radiation.hpp"
 #include "srcterms/turb_driver.hpp"
 #include "outputs.hpp"
+#include "output_file_utils.hpp"
 #include "restart_layout.hpp"
 #include "restart_manifest.hpp"
 
@@ -49,13 +54,110 @@ bool IsSafeRestartLeaf(const std::string &leaf) {
       leaf.find('\\') == std::string::npos;
 }
 
+struct RestartAttemptCleanup {
+  std::string temporary_payload;
+  std::string published_payload;
+  std::string temporary_manifest;
+  std::string published_manifest;
+  std::string reservation;
+  bool owns_temporary_payload = false;
+  bool owns_published_payload = false;
+  bool owns_temporary_manifest = false;
+  bool owns_published_manifest = false;
+  bool owns_reservation = false;
+};
+
+RestartAttemptCleanup *active_restart_cleanup = nullptr;
+
+void CleanupActiveRestartAttempt() {
+  if (active_restart_cleanup == nullptr) return;
+  if (active_restart_cleanup->owns_temporary_payload) {
+    output_file_utils::DiscardOwnedPath(active_restart_cleanup->temporary_payload);
+  }
+  if (active_restart_cleanup->owns_published_payload) {
+    output_file_utils::DiscardOwnedPath(active_restart_cleanup->published_payload);
+  }
+  if (active_restart_cleanup->owns_temporary_manifest) {
+    output_file_utils::DiscardOwnedPath(active_restart_cleanup->temporary_manifest);
+  }
+  if (active_restart_cleanup->owns_published_manifest) {
+    output_file_utils::DiscardOwnedPath(active_restart_cleanup->published_manifest);
+  }
+  if (active_restart_cleanup->owns_reservation) {
+    output_file_utils::DiscardOwnedPath(active_restart_cleanup->reservation);
+  }
+}
+
 [[noreturn]] void FailNodeRestartWrite(const std::string &message) {
-  std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-            << std::endl << message << std::endl;
+  mpi_utils::AbortWorld(std::string("### FATAL ERROR in ") + __FILE__ +
+                        " at line " + std::to_string(__LINE__) + "\n" + message);
+}
+
+[[noreturn]] void FailNodeRestartWriteCoordinated(const std::string &message) {
+  CleanupActiveRestartAttempt();
 #if MPI_PARALLEL_ENABLED
-  MPI_Abort(MPI_COMM_WORLD, 1);
+  int barrier_error = MPI_Barrier(MPI_COMM_WORLD);
+  if (barrier_error != MPI_SUCCESS) {
+    std::cerr << "MPI_Barrier for coordinated node-restart cleanup failed with MPI "
+              << "error: " << mpi_utils::MpiErrorString(barrier_error) << std::endl;
+  }
 #endif
-  std::exit(EXIT_FAILURE);
+  active_restart_cleanup = nullptr;
+  mpi_utils::SetFatalCleanupHook(nullptr);
+  mpi_utils::AbortWorld(std::string("### FATAL ERROR in ") + __FILE__ +
+                        " at line " + std::to_string(__LINE__) + "\n" + message);
+}
+
+void RecordNodeRestartPayloadFailure(bool coordinate_failure, int &local_failure,
+                                     std::string &local_error,
+                                     const std::string &message) {
+  if (!coordinate_failure) {
+    FailNodeRestartWrite(message);
+  }
+  local_failure = 1;
+  if (local_error.empty()) {
+    local_error = message;
+  }
+}
+
+std::uint64_t NodeRestartGenerationSeed() {
+  const char *configured_seed = std::getenv("ATHENAK_TEST_NODE_RESTART_GENERATION");
+  if (configured_seed == nullptr) {
+    return static_cast<std::uint64_t>(
+        std::chrono::high_resolution_clock::now().time_since_epoch().count());
+  }
+  char *end = nullptr;
+  errno = 0;
+  auto value = std::strtoull(configured_seed, &end, 10);
+  if (errno != 0 || end == configured_seed || *end != '\0') {
+    FailNodeRestartWrite("ATHENAK_TEST_NODE_RESTART_GENERATION must be an unsigned "
+                         "integer.");
+  }
+  return static_cast<std::uint64_t>(value);
+}
+
+bool InjectNodeRestartFailure(const std::string &stage) {
+  const char *configured_stage = std::getenv("ATHENAK_TEST_NODE_RESTART_FAIL_STAGE");
+  return configured_stage != nullptr && stage == configured_stage;
+}
+
+bool AnyWorldFailure(int local_failure, const std::string &context) {
+#if MPI_PARALLEL_ENABLED
+  int any_failure = 0;
+  mpi_utils::CheckMpi(MPI_Allreduce(&local_failure, &any_failure, 1, MPI_INT, MPI_MAX,
+                                    MPI_COMM_WORLD), context.c_str());
+  return any_failure != 0;
+#else
+  return local_failure != 0;
+#endif
+}
+
+bool BroadcastRootFailure(int root_failure, const std::string &context) {
+#if MPI_PARALLEL_ENABLED
+  mpi_utils::CheckMpi(MPI_Bcast(&root_failure, 1, MPI_INT, 0, MPI_COMM_WORLD),
+                      context.c_str());
+#endif
+  return root_failure != 0;
 }
 
 std::string NodeRestartRelativePayloadPath(const std::string &payload_name, int node_id) {
@@ -96,11 +198,21 @@ int CheckedRestartIntAdd(int left, int right, const std::string &context) {
       context);
 }
 
-void CheckedRestartWrite(IOWrapper &file, const void *data, IOWrapperSizeT bytes,
-                         const std::string &context, bool independent_file) {
-  if (file.Write_any_type(data, bytes, "byte", independent_file) != bytes) {
-    FailNodeRestartWrite(context + " was not written completely.");
+bool ReserveRestartGeneration(const std::string &reservation_name) {
+  int descriptor = open(reservation_name.c_str(), O_CREAT | O_EXCL | O_WRONLY, 0600);
+  if (descriptor >= 0) {
+    if (close(descriptor) != 0) {
+      output_file_utils::DiscardOwnedPath(reservation_name);
+      FailNodeRestartWrite("Could not close node restart generation reservation '" +
+                           reservation_name + "'.");
+    }
+    return true;
   }
+  if (errno == EEXIST) {
+    return false;
+  }
+  FailNodeRestartWrite("Could not reserve node restart generation '" + reservation_name +
+                       "': " + std::strerror(errno) + ".");
 }
 
 }  // namespace
@@ -111,11 +223,13 @@ void CheckedRestartWrite(IOWrapper &file, const void *data, IOWrapperSizeT bytes
 RestartOutput::RestartOutput(ParameterInput *pin, Mesh *pm, OutputParameters op) :
   BaseTypeOutput(pin, pm, op) {
   // create directories for outputs. Comments in binary.cpp constructor explain why
-  mkdir("rst",0775);
+  output_file_utils::EnsureDirectory("rst", 0775, "restart output",
+                                     FailNodeRestartWrite);
   if (IsSharded(op.shard_mode)) {
     std::string shard_dir = "rst/" + ShardDirectoryName(
         op.shard_mode, global_variable::my_rank, global_variable::node_id);
-    mkdir(shard_dir.c_str(), 0775);
+    output_file_utils::EnsureDirectory(shard_dir, 0775, "restart output",
+                                       FailNodeRestartWrite);
   }
 }
 
@@ -300,32 +414,62 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
       (node_sharded && global_variable::node_rank == 0) ||
       (shard_mode == FileShardMode::shared && global_variable::my_rank == 0);
   std::string fname;
+  std::string published_fname;
   std::string manifest_name;
   std::string payload_name;
+  std::string reservation_name;
   std::uint64_t generation = 0;
-  char number[7];
-  std::snprintf(number, sizeof(number), ".%05d", out_params.file_number);
+  RestartAttemptCleanup cleanup;
+  active_restart_cleanup = &cleanup;
+  mpi_utils::SetFatalCleanupHook(CleanupActiveRestartAttempt);
+  std::string number = "." + output_file_utils::FormatSequence(
+      out_params.file_number, "restart output", FailNodeRestartWrite);
   if (IsRankSharded(shard_mode)) {
     // Generate a directory and filename for each rank
     // create filename: "rst/rank_YYYYYYY/file_basename" + "." + XXXXX + ".rst"
     // where YYYYYYY = 8-digit rank number
     // where XXXXX = 5-digit file_number
-    fname = std::string("rst/") + ShardDirectoryName(
+    published_fname = std::string("rst/") + ShardDirectoryName(
         shard_mode, global_variable::my_rank, global_variable::node_id) + "/"
       + out_params.file_basename
       + number + ".rst";
+    fname = output_file_utils::TemporaryPath(published_fname);
+    cleanup.temporary_payload = fname;
+    cleanup.published_payload = published_fname;
+    cleanup.owns_temporary_payload = shard_writer;
   } else if (node_sharded) {
     if (!IsSafeRestartLeaf(out_params.file_basename)) {
       FailNodeRestartWrite("Node restart output requires <job>/basename to be a "
                            "single safe path component.");
     }
     if (global_variable::my_rank == 0) {
-      generation = static_cast<std::uint64_t>(
-          std::chrono::high_resolution_clock::now().time_since_epoch().count());
+      generation = NodeRestartGenerationSeed();
+      while (true) {
+        payload_name = out_params.file_basename + number + ".g"
+            + std::to_string(generation) + ".payload.rst";
+        for (int id = 0; id < global_variable::nnodes; ++id) {
+          NodeRestartRelativePayloadPath(payload_name, id);
+        }
+        reservation_name = std::string("rst/.") + out_params.file_basename + number
+            + ".g" + std::to_string(generation) + ".reserve";
+        if (ReserveRestartGeneration(reservation_name)) {
+          cleanup.reservation = reservation_name;
+          cleanup.owns_reservation = true;
+          break;
+        }
+        if (generation == std::numeric_limits<std::uint64_t>::max()) {
+          FailNodeRestartWrite("Could not reserve a node restart generation: the "
+                               "generation counter is exhausted.");
+        }
+        ++generation;
+      }
     }
 #if MPI_PARALLEL_ENABLED
-    MPI_Bcast(&generation, 1, MPI_UINT64_T, 0, MPI_COMM_WORLD);
+    mpi_utils::CheckMpi(MPI_Bcast(&generation, 1, MPI_UINT64_T, 0, MPI_COMM_WORLD),
+                        "MPI_Bcast for node restart generation reservation");
 #endif
+    reservation_name = std::string("rst/.") + out_params.file_basename + number
+        + ".g" + std::to_string(generation) + ".reserve";
     payload_name = out_params.file_basename + number + ".g"
         + std::to_string(generation) + ".payload.rst";
     for (int id = 0; id < global_variable::nnodes; ++id) {
@@ -333,16 +477,27 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     }
     std::string shard_dir = ShardDirectoryName(
         shard_mode, global_variable::my_rank, global_variable::node_id);
-    fname = std::string("rst/") + shard_dir + "/" + payload_name + ".tmp";
+    published_fname = std::string("rst/") + shard_dir + "/" + payload_name;
+    fname = output_file_utils::TemporaryPath(published_fname);
     manifest_name = std::string("rst/") + out_params.file_basename + number + ".rst";
+    cleanup.temporary_payload = fname;
+    cleanup.published_payload = published_fname;
+    cleanup.reservation = reservation_name;
+    cleanup.owns_temporary_payload = global_variable::node_rank == 0;
+    cleanup.owns_reservation = global_variable::my_rank == 0;
   } else {
     // Existing behavior: single restart file
     // create filename: "rst/file_basename" + "." + XXXXX + ".rst"
     // where XXXXX = 5-digit file_number
-    fname = std::string("rst/") + out_params.file_basename + number + ".rst";
+    published_fname = std::string("rst/") + out_params.file_basename + number + ".rst";
+    fname = output_file_utils::TemporaryPath(published_fname);
+    cleanup.temporary_payload = fname;
+    cleanup.published_payload = published_fname;
+    cleanup.owns_temporary_payload = shard_writer;
   }
   // increment counters now so values for *next* dump are stored in restart file
-  out_params.file_number++;
+  out_params.file_number = output_file_utils::AdvanceFileNumber(
+      out_params.file_number, "restart output", FailNodeRestartWrite);
   if (out_params.last_time < 0.0) {
     out_params.last_time = pm->time;
   } else {
@@ -368,72 +523,72 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   }
 #endif
   resfile.Open(fname.c_str(), IOWrapper::FileMode::write, independent_file);
+  int local_payload_io_failure = 0;
+  std::string local_payload_io_error;
+  auto checked_payload_write = [&](const void *data, IOWrapperSizeT bytes,
+                                   const std::string &context) {
+    if (resfile.Write_any_type(data, bytes, "byte", independent_file) != bytes) {
+      RecordNodeRestartPayloadFailure(node_sharded, local_payload_io_failure,
+                                      local_payload_io_error,
+                                      context + " was not written completely.");
+    }
+  };
   if (shard_writer) {
     // output the input parameters (input file)
-    CheckedRestartWrite(resfile, sbuf.c_str(), sbuf.size(), "restart parameter dump",
-                        independent_file);
+    checked_payload_write(sbuf.c_str(), sbuf.size(), "restart parameter dump");
     if (node_sharded) {
-      CheckedRestartWrite(resfile, kNodeRestartPayloadMarker,
-                          kNodeRestartPayloadMarkerSize,
-                          "node restart payload marker", independent_file);
+      checked_payload_write(kNodeRestartPayloadMarker, kNodeRestartPayloadMarkerSize,
+                            "node restart payload marker");
     }
 
     // output Mesh information
-    CheckedRestartWrite(resfile, &(pm->nmb_total), sizeof(int),
-                        "restart total MeshBlock count", independent_file);
-    CheckedRestartWrite(resfile, &(pm->root_level), sizeof(int),
-                        "restart root level", independent_file);
-    CheckedRestartWrite(resfile, &(pm->mesh_size), sizeof(RegionSize),
-                        "restart mesh size", independent_file);
-    CheckedRestartWrite(resfile, &(pm->mesh_indcs), sizeof(RegionIndcs),
-                        "restart mesh indices", independent_file);
-    CheckedRestartWrite(resfile, &(pm->mb_indcs), sizeof(RegionIndcs),
-                        "restart MeshBlock indices", independent_file);
-    CheckedRestartWrite(resfile, &(pm->time), sizeof(Real),
-                        "restart time", independent_file);
-    CheckedRestartWrite(resfile, &(pm->dt), sizeof(Real),
-                        "restart timestep", independent_file);
-    CheckedRestartWrite(resfile, &(pm->ncycle), sizeof(int),
-                        "restart cycle", independent_file);
+    checked_payload_write(&(pm->nmb_total), sizeof(int), "restart total MeshBlock count");
+    checked_payload_write(&(pm->root_level), sizeof(int), "restart root level");
+    checked_payload_write(&(pm->mesh_size), sizeof(RegionSize), "restart mesh size");
+    checked_payload_write(&(pm->mesh_indcs), sizeof(RegionIndcs), "restart mesh indices");
+    checked_payload_write(&(pm->mb_indcs), sizeof(RegionIndcs),
+                          "restart MeshBlock indices");
+    checked_payload_write(&(pm->time), sizeof(Real), "restart time");
+    checked_payload_write(&(pm->dt), sizeof(Real), "restart timestep");
+    checked_payload_write(&(pm->ncycle), sizeof(int), "restart cycle");
   }
   //--- STEP 2.  Root process writes list of logical locations and cost of MeshBlocks
   // This data read in Mesh::BuildTreeFromRestart()
 
   if (shard_writer) {
-    CheckedRestartWrite(resfile, &(pm->lloc_eachmb[0]),
+    checked_payload_write(&(pm->lloc_eachmb[0]),
                         CheckedRestartMultiply(
                             CheckedRestartCount(pm->nmb_total,
                                                 "restart total MeshBlock count"),
                             sizeof(LogicalLocation),
                                                "restart logical-location bytes"),
-                        "restart logical locations", independent_file);
-    CheckedRestartWrite(resfile, &(pm->cost_eachmb[0]),
+                        "restart logical locations");
+    checked_payload_write(&(pm->cost_eachmb[0]),
                         CheckedRestartMultiply(
                             CheckedRestartCount(pm->nmb_total,
                                                 "restart total MeshBlock count"),
                             sizeof(float),
                                                "restart MeshBlock-cost bytes"),
-                        "restart MeshBlock costs", independent_file);
+                        "restart MeshBlock costs");
   }
 
   //--- STEP 3.  Root process writes internal state of objects that require it
   if (shard_writer) {
     // store z4c information
     if (pz4c != nullptr) {
-      CheckedRestartWrite(resfile, &(pz4c->last_output_time), sizeof(Real),
-                          "restart z4c output time", independent_file);
+      checked_payload_write(&(pz4c->last_output_time), sizeof(Real),
+                            "restart z4c output time");
     }
     // output puncture tracker data
     if (nco > 0) {
       for (auto & pt : pz4c->ptracker) {
-        CheckedRestartWrite(resfile, pt->GetPos(), 3*sizeof(Real),
-                            "restart puncture position", independent_file);
+        checked_payload_write(pt->GetPos(), 3*sizeof(Real), "restart puncture position");
       }
     }
     // turbulence driver internal RNG
     if (pturb != nullptr) {
-      CheckedRestartWrite(resfile, &(pturb->rstate), sizeof(RNG_State),
-                          "restart turbulence RNG state", independent_file);
+      checked_payload_write(&(pturb->rstate), sizeof(RNG_State),
+                            "restart turbulence RNG state");
     }
   }
 
@@ -455,8 +610,8 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
        sizeof(Real)}, FailNodeRestartWrite);
   IOWrapperSizeT data_size = layout.data_bytes;
   if (shard_writer) {
-    CheckedRestartWrite(resfile, &(data_size), sizeof(IOWrapperSizeT),
-                        "restart per-MeshBlock byte count", independent_file);
+    checked_payload_write(&(data_size), sizeof(IOWrapperSizeT),
+                          "restart per-MeshBlock byte count");
   }
 
   // calculate size of data written in Steps 1-2 above
@@ -523,10 +678,10 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
             mbptr.size(), FailNodeRestartWrite, "restart Hydro subview count");
         if (resfile.Write_any_type_at_all(mbptr.data(),mbcnt,myoffset,"Real",
                                           independent_file) != mbcnt) {
-          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-          << std::endl << "cell-centered hydro data not written correctly to rst file, "
-          << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          RecordNodeRestartPayloadFailure(
+              node_sharded, local_payload_io_failure, local_payload_io_error,
+              "cell-centered hydro data not written correctly to rst file, restart "
+              "file is broken.");
         }
         myoffset = CheckedRestartAdd(myoffset, data_size, "restart MeshBlock offset");
 
@@ -539,10 +694,10 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
             mbptr.size(), FailNodeRestartWrite, "restart Hydro subview count");
         if (resfile.Write_any_type_at(mbptr.data(), mbcnt, myoffset,"Real",
                                           independent_file) != mbcnt) {
-          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-          << std::endl << "cell-centered hydro data not written correctly to rst file, "
-          << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          RecordNodeRestartPayloadFailure(
+              node_sharded, local_payload_io_failure, local_payload_io_error,
+              "cell-centered hydro data not written correctly to rst file, restart "
+              "file is broken.");
         }
         myoffset = CheckedRestartAdd(myoffset, data_size, "restart MeshBlock offset");
       }
@@ -562,10 +717,10 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
             mbptr.size(), FailNodeRestartWrite, "restart MHD subview count");
         if (resfile.Write_any_type_at_all(mbptr.data(),mbcnt,myoffset,"Real",
                                           independent_file) != mbcnt) {
-          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-          << std::endl << "cell-centered mhd data not written correctly to rst file, "
-          << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          RecordNodeRestartPayloadFailure(
+              node_sharded, local_payload_io_failure, local_payload_io_error,
+              "cell-centered mhd data not written correctly to rst file, restart "
+              "file is broken.");
         }
         myoffset = CheckedRestartAdd(myoffset, data_size, "restart MeshBlock offset");
 
@@ -578,10 +733,10 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
             mbptr.size(), FailNodeRestartWrite, "restart MHD subview count");
         if (resfile.Write_any_type_at(mbptr.data(), mbcnt, myoffset,"Real",
                                       independent_file) != mbcnt) {
-          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-          << std::endl << "cell-centered mhd data not written correctly to rst file, "
-          << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          RecordNodeRestartPayloadFailure(
+              node_sharded, local_payload_io_failure, local_payload_io_error,
+              "cell-centered mhd data not written correctly to rst file, restart "
+              "file is broken.");
         }
         myoffset = CheckedRestartAdd(myoffset, data_size, "restart MeshBlock offset");
       }
@@ -599,10 +754,9 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
             x1fptr.size(), FailNodeRestartWrite, "restart MHD x1-face subview count");
         if (resfile.Write_any_type_at_all(x1fptr.data(),fldcnt,myoffset,"Real",
                                           independent_file) != fldcnt) {
-          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                    << std::endl << "b0.x1f data not written correctly to rst file, "
-                    << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          RecordNodeRestartPayloadFailure(
+              node_sharded, local_payload_io_failure, local_payload_io_error,
+              "b0.x1f data not written correctly to rst file, restart file is broken.");
         }
         myoffset = CheckedRestartAdd(myoffset, layout.mhd_x1f_bytes,
                                      "restart MHD face offset");
@@ -613,10 +767,9 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
             x2fptr.size(), FailNodeRestartWrite, "restart MHD x2-face subview count");
         if (resfile.Write_any_type_at_all(x2fptr.data(),fldcnt,myoffset,"Real",
                                           independent_file) != fldcnt) {
-          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                    << std::endl << "b0.x2f data not written correctly to rst file, "
-                    << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          RecordNodeRestartPayloadFailure(
+              node_sharded, local_payload_io_failure, local_payload_io_error,
+              "b0.x2f data not written correctly to rst file, restart file is broken.");
         }
         myoffset = CheckedRestartAdd(myoffset, layout.mhd_x2f_bytes,
                                      "restart MHD face offset");
@@ -627,10 +780,9 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
             x3fptr.size(), FailNodeRestartWrite, "restart MHD x3-face subview count");
         if (resfile.Write_any_type_at_all(x3fptr.data(),fldcnt,myoffset,"Real",
                                           independent_file) != fldcnt) {
-          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                    << std::endl << "b0.x3f data not written correctly to rst file, "
-                    << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          RecordNodeRestartPayloadFailure(
+              node_sharded, local_payload_io_failure, local_payload_io_error,
+              "b0.x3f data not written correctly to rst file, restart file is broken.");
         }
         myoffset = CheckedRestartAdd(myoffset, layout.mhd_x3f_bytes,
                                      "restart MHD face offset");
@@ -648,10 +800,9 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
             x1fptr.size(), FailNodeRestartWrite, "restart MHD x1-face subview count");
         if (resfile.Write_any_type_at(x1fptr.data(),fldcnt,myoffset,"Real",
                                       independent_file) != fldcnt) {
-          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                    << std::endl << "b0.x1f data not written correctly to rst file, "
-                    << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          RecordNodeRestartPayloadFailure(
+              node_sharded, local_payload_io_failure, local_payload_io_error,
+              "b0.x1f data not written correctly to rst file, restart file is broken.");
         }
         myoffset = CheckedRestartAdd(myoffset, layout.mhd_x1f_bytes,
                                      "restart MHD face offset");
@@ -662,10 +813,9 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
             x2fptr.size(), FailNodeRestartWrite, "restart MHD x2-face subview count");
         if (resfile.Write_any_type_at(x2fptr.data(),fldcnt,myoffset,"Real",
                                       independent_file) != fldcnt) {
-          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                    << std::endl << "b0.x2f data not written correctly to rst file, "
-                    << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          RecordNodeRestartPayloadFailure(
+              node_sharded, local_payload_io_failure, local_payload_io_error,
+              "b0.x2f data not written correctly to rst file, restart file is broken.");
         }
         myoffset = CheckedRestartAdd(myoffset, layout.mhd_x2f_bytes,
                                      "restart MHD face offset");
@@ -676,10 +826,9 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
             x3fptr.size(), FailNodeRestartWrite, "restart MHD x3-face subview count");
         if (resfile.Write_any_type_at(x3fptr.data(),fldcnt,myoffset,"Real",
                                       independent_file) != fldcnt) {
-          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                    << std::endl << "b0.x3f data not written correctly to rst file, "
-                    << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          RecordNodeRestartPayloadFailure(
+              node_sharded, local_payload_io_failure, local_payload_io_error,
+              "b0.x3f data not written correctly to rst file, restart file is broken.");
         }
         myoffset = CheckedRestartAdd(myoffset, layout.mhd_x3f_bytes,
                                      "restart MHD face offset");
@@ -710,10 +859,10 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
             mbptr.size(), FailNodeRestartWrite, "restart radiation subview count");
         if (resfile.Write_any_type_at_all(mbptr.data(),mbcnt,myoffset,"Real",
                                           independent_file) != mbcnt) {
-          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-          << std::endl << "cell-centered rad data not written correctly to rst file, "
-          << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          RecordNodeRestartPayloadFailure(
+              node_sharded, local_payload_io_failure, local_payload_io_error,
+              "cell-centered rad data not written correctly to rst file, restart "
+              "file is broken.");
         }
         myoffset = CheckedRestartAdd(myoffset, data_size, "restart MeshBlock offset");
 
@@ -726,10 +875,10 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
             mbptr.size(), FailNodeRestartWrite, "restart radiation subview count");
         if (resfile.Write_any_type_at(mbptr.data(),mbcnt,myoffset,"Real",
                                       independent_file) != mbcnt) {
-          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                    << std::endl << "cell-centered rad data not written correctly"
-                    << " to rst file, restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          RecordNodeRestartPayloadFailure(
+              node_sharded, local_payload_io_failure, local_payload_io_error,
+              "cell-centered rad data not written correctly to rst file, restart "
+              "file is broken.");
         }
         myoffset = CheckedRestartAdd(myoffset, data_size, "restart MeshBlock offset");
       }
@@ -750,10 +899,10 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
             mbptr.size(), FailNodeRestartWrite, "restart forcing subview count");
         if (resfile.Write_any_type_at_all(mbptr.data(),mbcnt,myoffset,"Real",
                                           independent_file) != mbcnt) {
-          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-          << std::endl << "cell-centered turb data not written correctly to rst file, "
-          << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          RecordNodeRestartPayloadFailure(
+              node_sharded, local_payload_io_failure, local_payload_io_error,
+              "cell-centered turb data not written correctly to rst file, restart "
+              "file is broken.");
         }
         myoffset = CheckedRestartAdd(myoffset, data_size, "restart MeshBlock offset");
 
@@ -766,10 +915,10 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
             mbptr.size(), FailNodeRestartWrite, "restart forcing subview count");
         if (resfile.Write_any_type_at(mbptr.data(), mbcnt, myoffset,"Real",
                                       independent_file) != mbcnt) {
-          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                    << std::endl << "cell-centered turb data not written correctly"
-                    << " to rst file, restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          RecordNodeRestartPayloadFailure(
+              node_sharded, local_payload_io_failure, local_payload_io_error,
+              "cell-centered turb data not written correctly to rst file, restart "
+              "file is broken.");
         }
         myoffset = CheckedRestartAdd(myoffset, data_size, "restart MeshBlock offset");
       }
@@ -790,10 +939,10 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
             mbptr.size(), FailNodeRestartWrite, "restart Z4c subview count");
         if (resfile.Write_any_type_at_all(mbptr.data(),mbcnt,myoffset,"Real",
                                           independent_file) != mbcnt) {
-          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                    << std::endl << "cell-centered z4c data not written correctly"
-                    << " to rst file, restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          RecordNodeRestartPayloadFailure(
+              node_sharded, local_payload_io_failure, local_payload_io_error,
+              "cell-centered z4c data not written correctly to rst file, restart "
+              "file is broken.");
         }
         myoffset = CheckedRestartAdd(myoffset, data_size, "restart MeshBlock offset");
 
@@ -806,10 +955,10 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
             mbptr.size(), FailNodeRestartWrite, "restart Z4c subview count");
         if (resfile.Write_any_type_at(mbptr.data(), mbcnt, myoffset,"Real",
                                       independent_file) != mbcnt) {
-          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                    << std::endl << "cell-centered z4c data not written correctly"
-                    << " to rst file, restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          RecordNodeRestartPayloadFailure(
+              node_sharded, local_payload_io_failure, local_payload_io_error,
+              "cell-centered z4c data not written correctly to rst file, restart "
+              "file is broken.");
         }
         myoffset = CheckedRestartAdd(myoffset, data_size, "restart MeshBlock offset");
       }
@@ -828,10 +977,10 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
             mbptr.size(), FailNodeRestartWrite, "restart ADM subview count");
         if (resfile.Write_any_type_at_all(mbptr.data(),mbcnt,myoffset,"Real",
                                           independent_file) != mbcnt) {
-          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                    << std::endl << "cell-centered adm data not written correctly"
-                    << " to rst file, restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          RecordNodeRestartPayloadFailure(
+              node_sharded, local_payload_io_failure, local_payload_io_error,
+              "cell-centered adm data not written correctly to rst file, restart "
+              "file is broken.");
         }
         myoffset = CheckedRestartAdd(myoffset, data_size, "restart MeshBlock offset");
 
@@ -844,10 +993,10 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
             mbptr.size(), FailNodeRestartWrite, "restart ADM subview count");
         if (resfile.Write_any_type_at(mbptr.data(), mbcnt, myoffset,"Real",
                                       independent_file) != mbcnt) {
-          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                    << std::endl << "cell-centered adm data not written correctly"
-                    << " to rst file, restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          RecordNodeRestartPayloadFailure(
+              node_sharded, local_payload_io_failure, local_payload_io_error,
+              "cell-centered adm data not written correctly to rst file, restart "
+              "file is broken.");
         }
         myoffset = CheckedRestartAdd(myoffset, data_size, "restart MeshBlock offset");
       }
@@ -859,7 +1008,37 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
 
   // close file, clean up
   if (resfile.Close(independent_file) != 0) {
-    FailNodeRestartWrite("restart payload could not be closed cleanly.");
+    RecordNodeRestartPayloadFailure(
+        node_sharded, local_payload_io_failure, local_payload_io_error,
+        "restart payload could not be closed cleanly.");
+  }
+  if (node_sharded && InjectNodeRestartFailure("after_payload_write") &&
+      global_variable::my_rank == 0) {
+    RecordNodeRestartPayloadFailure(
+        true, local_payload_io_failure, local_payload_io_error,
+        "Injected node restart failure after payload write.");
+  }
+  if (node_sharded &&
+      AnyWorldFailure(local_payload_io_failure,
+                      "MPI_Allreduce for node restart payload IO completion")) {
+    FailNodeRestartWriteCoordinated(local_payload_io_error.empty()
+        ? "A node restart payload could not be written completely."
+        : local_payload_io_error);
+  }
+
+  if (!node_sharded) {
+    if (shard_writer) {
+      output_file_utils::PublishTemporaryFile(
+          fname, published_fname, "restart output", FailNodeRestartWrite);
+      cleanup.owns_temporary_payload = false;
+    }
+#if MPI_PARALLEL_ENABLED
+    mpi_utils::CheckMpi(MPI_Barrier(MPI_COMM_WORLD),
+                        "MPI_Barrier after restart output publication");
+#endif
+    active_restart_cleanup = nullptr;
+    mpi_utils::SetFatalCleanupHook(nullptr);
+    return;
   }
 
   if (node_sharded) {
@@ -871,28 +1050,46 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
                                                    "node restart payload block count"),
                                "node restart payload size"),
         "node restart payload size");
-    std::string completed_payload = fname.substr(0, fname.size() - 4);
+    int local_payload_failure = 0;
+    std::string local_payload_error;
     if (global_variable::node_rank == 0) {
       std::ifstream payload_check(fname, std::ios::binary | std::ios::ate);
       IOWrapperSizeT observed_size = payload_check.good()
           ? static_cast<IOWrapperSizeT>(payload_check.tellg()) : 0;
       payload_check.close();
-      if (observed_size != expected_size ||
-          std::rename(fname.c_str(), completed_payload.c_str()) != 0) {
-        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                  << std::endl << "Node restart payload '" << fname
-                  << "' was not completed atomically; expected " << expected_size
-                  << " bytes and found " << observed_size << "." << std::endl;
-#if MPI_PARALLEL_ENABLED
-        MPI_Abort(MPI_COMM_WORLD, 1);
-#endif
-        std::exit(EXIT_FAILURE);
+      if (observed_size != expected_size) {
+        local_payload_failure = 1;
+        local_payload_error = "Node restart payload '" + fname +
+            "' could not be published: expected " + std::to_string(expected_size) +
+            " bytes and found " + std::to_string(observed_size) + ".";
+      } else {
+        std::string publish_error;
+        if (!output_file_utils::TryPublishTemporaryFile(
+                fname, published_fname, "node restart payload", &publish_error)) {
+          local_payload_failure = 1;
+          local_payload_error = publish_error;
+        } else {
+          cleanup.owns_temporary_payload = false;
+          cleanup.owns_published_payload = true;
+        }
       }
+    }
+    if (AnyWorldFailure(local_payload_failure,
+                        "MPI_Allreduce for node restart payload publication")) {
+      FailNodeRestartWriteCoordinated(local_payload_error.empty()
+          ? "A node restart payload could not be published."
+          : local_payload_error);
     }
 
 #if MPI_PARALLEL_ENABLED
-    MPI_Barrier(MPI_COMM_WORLD);
+    mpi_utils::CheckMpi(MPI_Barrier(MPI_COMM_WORLD),
+                        "MPI_Barrier after node restart payload publication");
 #endif
+    if (AnyWorldFailure(InjectNodeRestartFailure("after_payload_publication"),
+                        "MPI_Allreduce for injected node restart failure")) {
+      FailNodeRestartWriteCoordinated(
+          "Injected node restart failure after payload publication.");
+    }
     std::vector<int> manifest_nodes;
     std::vector<int> manifest_offsets;
     if (global_variable::my_rank == 0) {
@@ -900,17 +1097,25 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
       manifest_offsets.resize(global_variable::nranks);
     }
 #if MPI_PARALLEL_ENABLED
-    MPI_Gather(&(global_variable::node_id), 1, MPI_INT, manifest_nodes.data(), 1,
-               MPI_INT, 0, MPI_COMM_WORLD);
-    MPI_Gather(&payload_block_offset, 1, MPI_INT, manifest_offsets.data(), 1,
-               MPI_INT, 0, MPI_COMM_WORLD);
+    mpi_utils::CheckMpi(
+        MPI_Gather(&(global_variable::node_id), 1, MPI_INT,
+                   global_variable::my_rank == 0 ? manifest_nodes.data() : nullptr,
+                   1, MPI_INT, 0, MPI_COMM_WORLD),
+        "MPI_Gather for node restart manifest node IDs");
+    mpi_utils::CheckMpi(
+        MPI_Gather(&payload_block_offset, 1, MPI_INT,
+                   global_variable::my_rank == 0 ? manifest_offsets.data() : nullptr,
+                   1, MPI_INT, 0, MPI_COMM_WORLD),
+        "MPI_Gather for node restart manifest payload offsets");
 #else
     manifest_nodes[0] = global_variable::node_id;
     manifest_offsets[0] = payload_block_offset;
 #endif
 
+    std::vector<int> blocks_per_node;
+    std::string manifest_error;
     if (global_variable::my_rank == 0) {
-      std::vector<int> blocks_per_node(global_variable::nnodes, 0);
+      blocks_per_node.assign(global_variable::nnodes, 0);
       std::vector<int> next_payload_block(global_variable::nnodes, 0);
       int next_gid = 0;
       for (int r = 0; r < global_variable::nranks; ++r) {
@@ -919,28 +1124,50 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
         if (id < 0 || id >= global_variable::nnodes || blocks < 0 ||
             pm->gids_eachrank[r] != next_gid ||
             manifest_offsets[r] != next_payload_block[id]) {
-          FailNodeRestartWrite("Node restart segment map is inconsistent and cannot "
-                               "be published.");
+          manifest_error = "Node restart segment map is inconsistent and cannot "
+                           "be published.";
+          break;
         }
-        blocks_per_node[id] = CheckedRestartIntAdd(
-            blocks_per_node[id], blocks, "node restart blocks-per-node count");
-        next_payload_block[id] = CheckedRestartIntAdd(
-            next_payload_block[id], blocks, "node restart payload block offset");
-        next_gid = CheckedRestartIntAdd(next_gid, blocks,
-                                        "node restart global block count");
+        if (blocks > std::numeric_limits<int>::max() - blocks_per_node[id] ||
+            blocks > std::numeric_limits<int>::max() - next_payload_block[id] ||
+            blocks > std::numeric_limits<int>::max() - next_gid) {
+          manifest_error = "Node restart segment map exceeds INT_MAX and cannot "
+                           "be published.";
+          break;
+        }
+        blocks_per_node[id] += blocks;
+        next_payload_block[id] += blocks;
+        next_gid += blocks;
       }
-      if (next_gid != pm->nmb_total) {
-        FailNodeRestartWrite("Node restart segment map does not cover all mesh blocks.");
+      if (manifest_error.empty() && next_gid != pm->nmb_total) {
+        manifest_error = "Node restart segment map does not cover all mesh blocks.";
       }
-      std::string temporary_manifest = manifest_name + ".tmp.g"
-          + std::to_string(generation);
+    }
+    if (BroadcastRootFailure(
+            global_variable::my_rank == 0 && !manifest_error.empty(),
+            "MPI_Bcast for node restart segment-map validation")) {
+      FailNodeRestartWriteCoordinated(manifest_error.empty()
+          ? "Node restart segment-map validation failed."
+          : manifest_error);
+    }
+
+    if (global_variable::my_rank == 0) {
+      std::string temporary_manifest =
+          manifest_name + ".tmp.g" + std::to_string(generation);
+      cleanup.temporary_manifest = temporary_manifest;
+      cleanup.owns_temporary_manifest = true;
       std::ofstream manifest(temporary_manifest, std::ios::trunc);
       restart_layout::ManifestBudget manifest_budget{0, kMaxNodeRestartManifestBytes};
       const auto write_manifest_record = [&](const std::string &record) {
-        manifest_budget.Add(CheckedRestartAdd(
-            restart_layout::CheckedSizeT(record.size(), FailNodeRestartWrite,
-                                         "node restart manifest record bytes"),
-            1, "node restart manifest record bytes"), FailNodeRestartWrite);
+        if (!manifest_error.empty()) return;
+        IOWrapperSizeT record_bytes = static_cast<IOWrapperSizeT>(record.size());
+        if (record.size() > std::numeric_limits<IOWrapperSizeT>::max() ||
+            record_bytes >= kMaxNodeRestartManifestBytes - manifest_budget.bytes) {
+          manifest_error = "Node restart manifest exceeds the " +
+              std::to_string(kMaxNodeRestartManifestBytes) + "-byte limit.";
+          return;
+        }
+        manifest_budget.bytes += record_bytes + 1;
         manifest << record << "\n";
       };
       write_manifest_record("AthenaK node restart manifest version=1");
@@ -972,22 +1199,61 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
       write_manifest_record("end");
       std::streampos observed_manifest_bytes = manifest.tellp();
       manifest.close();
-      if (!manifest.good() || observed_manifest_bytes < 0 ||
-          static_cast<IOWrapperSizeT>(observed_manifest_bytes) != manifest_budget.bytes ||
-          std::rename(temporary_manifest.c_str(), manifest_name.c_str()) != 0) {
-        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                  << std::endl << "Node restart manifest '" << manifest_name
-                  << "' could not be published atomically." << std::endl;
-#if MPI_PARALLEL_ENABLED
-        MPI_Abort(MPI_COMM_WORLD, 1);
-#endif
-        std::exit(EXIT_FAILURE);
+      if (manifest_error.empty() &&
+          (!manifest.good() || observed_manifest_bytes < 0 ||
+           static_cast<IOWrapperSizeT>(observed_manifest_bytes) !=
+               manifest_budget.bytes)) {
+        manifest_error = "Node restart manifest '" + manifest_name +
+                         "' was not written completely.";
+      }
+      if (manifest_error.empty()) {
+        std::string publish_error;
+        if (!output_file_utils::TryPublishTemporaryFile(
+                temporary_manifest, manifest_name, "node restart manifest",
+                &publish_error)) {
+          manifest_error = publish_error;
+        } else {
+          cleanup.owns_temporary_manifest = false;
+          cleanup.published_manifest = manifest_name;
+          cleanup.owns_published_manifest = true;
+        }
       }
     }
+    if (BroadcastRootFailure(
+            global_variable::my_rank == 0 && !manifest_error.empty(),
+            "MPI_Bcast for node restart manifest publication")) {
+      FailNodeRestartWriteCoordinated(manifest_error.empty()
+          ? "Node restart manifest publication failed."
+          : manifest_error);
+    }
+    int reservation_remove_failure = 0;
+    std::string reservation_remove_error;
+    if (global_variable::my_rank == 0) {
+      if (std::remove(reservation_name.c_str()) != 0) {
+        reservation_remove_failure = 1;
+        reservation_remove_error =
+            "Could not remove node restart generation reservation '" +
+            reservation_name + "'.";
+      } else {
+        cleanup.owns_reservation = false;
+      }
+    }
+    if (BroadcastRootFailure(
+            reservation_remove_failure,
+            "MPI_Bcast for node restart reservation removal")) {
+      FailNodeRestartWriteCoordinated(reservation_remove_error.empty()
+          ? "Node restart reservation removal failed."
+          : reservation_remove_error);
+    }
 #if MPI_PARALLEL_ENABLED
-    MPI_Barrier(MPI_COMM_WORLD);
+    mpi_utils::CheckMpi(MPI_Barrier(MPI_COMM_WORLD),
+                        "MPI_Barrier after node restart manifest publication");
 #endif
+    cleanup.owns_published_payload = false;
+    cleanup.owns_published_manifest = false;
   }
 
+  active_restart_cleanup = nullptr;
+  mpi_utils::SetFatalCleanupHook(nullptr);
   return;
 }

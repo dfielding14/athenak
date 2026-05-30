@@ -14,6 +14,7 @@
 
 #include "athena.hpp"
 #include "globals.hpp"
+#include "mpi_utils.hpp"
 #include "parameter_input.hpp"
 #include "mesh/mesh.hpp"
 #include "outputs/outputs.hpp"
@@ -34,7 +35,10 @@ namespace {
 void ReportOutputTiming(const std::string &description, double elapsed) {
   double elapsed_max = elapsed;
 #if MPI_PARALLEL_ENABLED
-  MPI_Reduce(&elapsed, &elapsed_max, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+  mpi_utils::CheckMpi(
+      MPI_Reduce(&elapsed, &elapsed_max, 1, MPI_DOUBLE, MPI_MAX, 0,
+                 MPI_COMM_WORLD),
+      "MPI_Reduce output timing");
 #endif
   if (global_variable::my_rank == 0) {
     std::cout << "[output-io] " << description << " elapsed_max_s="
@@ -532,8 +536,10 @@ void Driver::Finalize(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
 #if MPI_PARALLEL_ENABLED
     // Collect number of MeshBlocks communicated during load balancing across all ranks
     if (pmesh->adaptive) {
-      MPI_Allreduce(MPI_IN_PLACE, &(pmesh->pmr->nmb_sent_thisrank), 1, MPI_INT, MPI_SUM,
-                    MPI_COMM_WORLD);
+      mpi_utils::CheckMpi(
+          MPI_Allreduce(MPI_IN_PLACE, &(pmesh->pmr->nmb_sent_thisrank), 1, MPI_INT,
+                        MPI_SUM, MPI_COMM_WORLD),
+          "MPI_Allreduce for final AMR MeshBlock communication count");
     }
 #endif
     if (global_variable::my_rank == 0) {
@@ -606,7 +612,8 @@ Real Driver::UpdateWallClock() {
     tnow = pwall_clock_->seconds();
   }
 #if MPI_PARALLEL_ENABLED
-  MPI_Bcast(&tnow, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+  mpi_utils::CheckMpi(MPI_Bcast(&tnow, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD),
+                      "MPI_Bcast for wall-clock termination time");
 #endif
   return tnow;
 }

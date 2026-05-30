@@ -6,8 +6,7 @@
 //! \file pdf.cpp
 //! \brief writes versioned N-dimensional PDF output data
 
-#include <sys/stat.h>
-
+#include <algorithm>
 #include <cerrno>
 #include <cstdint>
 #include <cstdio>
@@ -20,9 +19,12 @@
 
 #include "athena.hpp"
 #include "globals.hpp"
+#include "mpi_utils.hpp"
 #include "hydro/hydro.hpp"
 #include "mesh/mesh.hpp"
 #include "mhd/mhd.hpp"
+#include "diagnostic_semantics.hpp"
+#include "output_file_utils.hpp"
 #include "outputs.hpp"
 #include "parameter_input.hpp"
 
@@ -32,18 +34,92 @@
 
 namespace {
 
-[[noreturn]] void FatalPDFError(const std::string &message) {
-  std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-            << std::endl << message << std::endl;
-#if MPI_PARALLEL_ENABLED
-  MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
-#endif
-  std::exit(EXIT_FAILURE);
+[[noreturn]] void FatalPDFError(const std::string &message);
+
+std::size_t PDFCountAsSize(int value, const char *context) {
+  if (value < 0) {
+    FatalPDFError(std::string(context) + " is negative.");
+  }
+  return static_cast<std::size_t>(value);
 }
+
+[[noreturn]] void FatalPDFError(const std::string &message) {
+  mpi_utils::AbortWorld(std::string("### FATAL ERROR in ") + __FILE__ +
+                        " at line " + std::to_string(__LINE__) + "\n" +
+                        message);
+}
+
+std::size_t PDFPersistentAllocationBytes(const OutputParameters &op) {
+  std::size_t edge_elements = 0;
+  std::size_t max_edge_elements = 0;
+  std::size_t total_bins = 1;
+  for (int d = 0; d < op.pdf_ndim; ++d) {
+    std::size_t bins = PDFCountAsSize(op.pdf_nbin[d], "PDF bin count");
+    edge_elements = output_file_utils::CheckedSizeAdd(
+        edge_elements, bins + 1, "PDF bin edges", FatalPDFError);
+    max_edge_elements = std::max(max_edge_elements, bins + 1);
+    total_bins = output_file_utils::CheckedSizeProduct(
+        total_bins, bins + 2, "PDF histogram", FatalPDFError);
+  }
+  std::size_t edges = output_file_utils::CheckedSizeProduct(
+      edge_elements, sizeof(Real), "PDF device bin edges", FatalPDFError);
+  std::size_t edge_mirror = output_file_utils::CheckedSizeProduct(
+      max_edge_elements, sizeof(Real), "PDF host bin-edge mirror", FatalPDFError);
+  std::size_t histogram = output_file_utils::CheckedSizeProduct(
+      total_bins, sizeof(Real), "PDF histogram result storage",
+      FatalPDFError);
+  return output_file_utils::CheckedSizeAdd(
+      output_file_utils::CheckedSizeAdd(edges, edge_mirror,
+                                        "PDF persistent allocation", FatalPDFError),
+      histogram, "PDF persistent allocation", FatalPDFError);
+}
+
+std::size_t PDFResultMirrorBytes(int total_bins) {
+  return output_file_utils::CheckedSizeProduct(
+      PDFCountAsSize(total_bins, "PDF total bin count"), sizeof(Real),
+      "PDF host result mirror", FatalPDFError);
+}
+
+void RequirePDFBudget(std::size_t bytes, std::size_t limit, const char *context) {
+  output_file_utils::RequireAllocationBudget(bytes, limit, context, FatalPDFError);
+}
+
+void ValidatePDFResult(const DvceArray1D<Real> &result, int total_bins,
+                       const char *context) {
+  auto host_result = Kokkos::create_mirror_view(result);
+  Kokkos::deep_copy(host_result, result);
+  Kokkos::fence();
+  for (int n = 0; n < total_bins; ++n) {
+    if (!output_diagnostics::IsFinite(host_result(n))) {
+      FatalPDFError(std::string(context) + " contains a nonfinite histogram bin.");
+    }
+  }
+}
+
+#if MPI_PARALLEL_ENABLED
+void ReducePDFResultViaHost(DvceArray1D<Real> &result, int total_bins, MPI_Comm comm,
+                            int root, const char *context) {
+  auto host_result = Kokkos::create_mirror_view(result);
+  Kokkos::deep_copy(host_result, result);
+  Kokkos::fence();
+  int comm_rank = 0;
+  mpi_utils::CheckMpi(MPI_Comm_rank(comm, &comm_rank),
+                      "MPI_Comm_rank for host-staged PDF reduction");
+  if (comm_rank == root) {
+    mpi_utils::CheckMpi(MPI_Reduce(MPI_IN_PLACE, host_result.data(), total_bins,
+                                   MPI_ATHENA_REAL, MPI_SUM, root, comm), context);
+    Kokkos::deep_copy(result, host_result);
+    Kokkos::fence();
+  } else {
+    mpi_utils::CheckMpi(MPI_Reduce(host_result.data(), host_result.data(), total_bins,
+                                   MPI_ATHENA_REAL, MPI_SUM, root, comm), context);
+  }
+}
+#endif
 
 void DiscardTemporaryPDFFile(std::FILE *output, const std::string &filename) {
   static_cast<void>(std::fclose(output));
-  std::remove(filename.c_str());
+  output_file_utils::DiscardOwnedPath(filename);
 }
 
 void CheckedPDFPrint(std::FILE *output, const std::string &filename, const char *text) {
@@ -75,19 +151,36 @@ void CheckedPDFWrite(std::FILE *output, const void *data, std::size_t element_si
   }
 }
 
+void CheckedLegacyPDFPrint(std::FILE *output, const std::string &filename,
+                           const char *text) {
+  if (std::fputs(text, output) == EOF) {
+    FatalPDFError("Could not append legacy PDF output '" + filename + "'.");
+  }
+}
+
+template <typename Arg, typename... Args>
+void CheckedLegacyPDFPrint(std::FILE *output, const std::string &filename,
+                           const char *format, Arg arg, Args... args) {
+  if (std::fprintf(output, format, arg, args...) < 0) {
+    FatalPDFError("Could not append legacy PDF output '" + filename + "'.");
+  }
+}
+
+void CheckedLegacyPDFClose(std::FILE *output, const std::string &filename) {
+  if (std::fclose(output) != 0) {
+    FatalPDFError("Could not close legacy PDF output '" + filename + "'.");
+  }
+}
+
 void PublishTemporaryPDFFile(std::FILE *output, const std::string &temporary_filename,
                              const std::string &filename, const char *context) {
   if (std::fclose(output) != 0) {
-    std::remove(temporary_filename.c_str());
+    output_file_utils::DiscardOwnedPath(temporary_filename);
     FatalPDFError("Could not close " + std::string(context) + " '" +
                   temporary_filename + "'.");
   }
-  if (std::rename(temporary_filename.c_str(), filename.c_str()) != 0) {
-    int rename_errno = errno;
-    std::remove(temporary_filename.c_str());
-    FatalPDFError("Could not atomically publish " + std::string(context) + " '" +
-                  filename + "': " + std::strerror(rename_errno));
-  }
+  output_file_utils::PublishTemporaryFile(temporary_filename, filename, context,
+                                          FatalPDFError);
 }
 
 std::string PDFDirectory(const OutputParameters &op) {
@@ -99,7 +192,8 @@ std::string PDFDirectory(const OutputParameters &op) {
 }
 
 void AdvanceOutputCounters(OutputParameters &op, Mesh *pm, ParameterInput *pin) {
-  op.file_number++;
+  op.file_number = output_file_utils::AdvanceFileNumber(
+      op.file_number, "PDF output", FatalPDFError);
   if (op.last_time < 0.0) {
     op.last_time = pm->time;
   } else {
@@ -116,12 +210,30 @@ void AdvanceOutputCounters(OutputParameters &op, Mesh *pm, ParameterInput *pin) 
 
 PDFOutput::PDFOutput(ParameterInput *pin, Mesh *pm, OutputParameters op)
     : BaseTypeOutput(pin, pm, op) {
+  int configured_limit = pin->GetOrAddInteger(
+      op.block_name, "max_writer_allocation_bytes",
+      static_cast<int>(output_file_utils::kDefaultMaxWriterAllocationBytes));
+  if (configured_limit <= 0) {
+    FatalPDFError("PDF max_writer_allocation_bytes must be positive.");
+  }
+  max_writer_allocation_bytes = static_cast<std::size_t>(configured_limit);
+  persistent_writer_allocation_bytes = PDFPersistentAllocationBytes(op);
+  RequirePDFBudget(persistent_writer_allocation_bytes, max_writer_allocation_bytes,
+                   "PDF persistent allocation");
+  if (op.include_gzs) {
+    FatalPDFError("PDF output block '" + op.block_name +
+                  "' cannot set ghost_zones=true; PDFs sample active zones only.");
+  }
+  if (op.pdf_weight == "mass" && pm->pmb_pack->pionn != nullptr) {
+    FatalPDFError("Mass-weighted PDF output block '" + op.block_name +
+                  "' is ambiguous for <ion-neutral> two-fluid runs.");
+  }
   std::string directory = PDFDirectory(op);
-  mkdir(directory.c_str(), 0775);
+  output_file_utils::EnsureDirectory(directory, 0775, "PDF output", FatalPDFError);
   if (IsSharded(op.shard_mode)) {
     directory += "/" + ShardDirectoryName(op.shard_mode, global_variable::my_rank,
                                            global_variable::node_id);
-    mkdir(directory.c_str(), 0775);
+    output_file_utils::EnsureDirectory(directory, 0775, "PDF output", FatalPDFError);
   }
 
   pdf_data.Initialize(op.pdf_ndim, op.pdf_nbin, op.pdf_bin_min, op.pdf_bin_max,
@@ -130,12 +242,10 @@ PDFOutput::PDFOutput(ParameterInput *pin, Mesh *pm, OutputParameters op)
 
   int expected_vars = op.pdf_ndim + (op.pdf_weight == "variable" ? 1 : 0);
   if (outvars.size() != static_cast<std::size_t>(expected_vars)) {
-    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl << "PDF output block '" << op.block_name
-              << "' requires one scalar output field per axis"
-              << (op.pdf_weight == "variable" ? " and for its variable weight" : "")
-              << std::endl;
-    std::exit(EXIT_FAILURE);
+    FatalPDFError("PDF output block '" + op.block_name +
+                  "' requires one scalar output field per axis" +
+                  (op.pdf_weight == "variable" ? " and for its variable weight" : "") +
+                  ".");
   }
 }
 
@@ -143,16 +253,6 @@ PDFOutput::PDFOutput(ParameterInput *pin, Mesh *pm, OutputParameters op)
 //! \brief Computes an N-dimensional histogram over active zones.
 
 void PDFOutput::LoadOutputData(Mesh *pm) {
-  if (out_params.contains_derived) {
-    out_params.i_derived = 0;
-    for (int d = 0; d < out_params.pdf_ndim; ++d) {
-      ComputeDerivedVariable(out_params.pdf_variables[d], pm);
-    }
-    if (out_params.pdf_weight == "variable") {
-      ComputeDerivedVariable(out_params.pdf_weight_variable, pm);
-    }
-  }
-
   int weight_mode = 0;  // 0=volume, 1=mass, 2=cell variable times volume
   if (out_params.pdf_weight == "mass") weight_mode = 1;
   if (out_params.pdf_weight == "variable") weight_mode = 2;
@@ -164,10 +264,7 @@ void PDFOutput::LoadOutputData(Mesh *pm) {
     } else if (pm->pmb_pack->pmhd != nullptr) {
       density_data = pm->pmb_pack->pmhd->u0;
     } else {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "Mass-weighted PDF requires Hydro or MHD density"
-                << std::endl;
-      std::exit(EXIT_FAILURE);
+      FatalPDFError("Mass-weighted PDF requires Hydro or MHD density.");
     }
   }
 
@@ -183,6 +280,58 @@ void PDFOutput::LoadOutputData(Mesh *pm) {
   int nx1 = indcs.nx1 + 2*indcs.ng;
   int nx2 = (indcs.nx2 > 1) ? indcs.nx2 + 2*indcs.ng : 1;
   int nx3 = (indcs.nx3 > 1) ? indcs.nx3 + 2*indcs.ng : 1;
+
+  std::size_t field_elements = output_file_utils::CheckedSizeProduct(
+      outvars.size(), PDFCountAsSize(nmb, "PDF MeshBlock count"),
+      "PDF copied fields", FatalPDFError);
+  field_elements = output_file_utils::CheckedSizeProduct(
+      field_elements, PDFCountAsSize(nx1, "PDF x1 extent"), "PDF copied fields",
+      FatalPDFError);
+  field_elements = output_file_utils::CheckedSizeProduct(
+      field_elements, PDFCountAsSize(nx2, "PDF x2 extent"), "PDF copied fields",
+      FatalPDFError);
+  field_elements = output_file_utils::CheckedSizeProduct(
+      field_elements, PDFCountAsSize(nx3, "PDF x3 extent"), "PDF copied fields",
+      FatalPDFError);
+  std::size_t field_bytes = output_file_utils::CheckedSizeProduct(
+      field_elements, sizeof(Real), "PDF copied fields", FatalPDFError);
+  std::size_t cell_elements = output_file_utils::CheckedSizeProduct(
+      PDFCountAsSize(nmb, "PDF MeshBlock count"), PDFCountAsSize(nx1, "PDF x1 extent"),
+      "PDF derived fields", FatalPDFError);
+  cell_elements = output_file_utils::CheckedSizeProduct(
+      cell_elements, PDFCountAsSize(nx2, "PDF x2 extent"), "PDF derived fields",
+      FatalPDFError);
+  cell_elements = output_file_utils::CheckedSizeProduct(
+      cell_elements, PDFCountAsSize(nx3, "PDF x3 extent"), "PDF derived fields",
+      FatalPDFError);
+  std::size_t derived_bytes = output_file_utils::CheckedSizeProduct(
+      output_file_utils::CheckedSizeProduct(
+          cell_elements, PDFCountAsSize(out_params.n_derived, "PDF derived-field count"),
+          "PDF derived fields", FatalPDFError),
+      sizeof(Real), "PDF derived fields", FatalPDFError);
+  std::size_t result_mirror_bytes = PDFResultMirrorBytes(pdf_data.total_bins);
+  constexpr std::size_t metadata_bytes =
+      2*PDFData::MAX_DIM*(3*sizeof(int) + 5*sizeof(Real)) + 2*sizeof(int);
+  std::size_t load_bytes = output_file_utils::CheckedSizeAdd(
+      persistent_writer_allocation_bytes, field_bytes, "PDF load allocation",
+      FatalPDFError);
+  load_bytes = output_file_utils::CheckedSizeAdd(
+      load_bytes, derived_bytes, "PDF load allocation", FatalPDFError);
+  load_bytes = output_file_utils::CheckedSizeAdd(
+      load_bytes, result_mirror_bytes, "PDF load allocation", FatalPDFError);
+  load_bytes = output_file_utils::CheckedSizeAdd(
+      load_bytes, metadata_bytes, "PDF load allocation", FatalPDFError);
+  RequirePDFBudget(load_bytes, max_writer_allocation_bytes, "PDF load allocation");
+
+  if (out_params.contains_derived) {
+    out_params.i_derived = 0;
+    for (int d = 0; d < out_params.pdf_ndim; ++d) {
+      ComputeDerivedVariable(out_params.pdf_variables[d], pm);
+    }
+    if (out_params.pdf_weight == "variable") {
+      ComputeDerivedVariable(out_params.pdf_weight_variable, pm);
+    }
+  }
 
   DvceArray5D<Real> fields("pdf_fields", outvars.size(), nmb, nx3, nx2, nx1);
   for (std::size_t n = 0; n < outvars.size(); ++n) {
@@ -232,12 +381,12 @@ void PDFOutput::LoadOutputData(Mesh *pm) {
   Kokkos::fence();
 
   auto result = pdf_data.result_;
-  auto scatter = pdf_data.scatter_result;
-  scatter.reset();
   Kokkos::deep_copy(result, 0.0);
   Kokkos::fence();
   int ndim = pdf_data.ndim;
   int weight_index = (weight_mode == 2) ? ndim : -1;
+  DvceArray1D<int> invalid("pdf_invalid_sample", 1);
+  Kokkos::deep_copy(invalid, 0);
 
   par_for("pdf_nd", DevExeSpace(), 0, nmb-1, ks, ke, js, je, is, ie,
   KOKKOS_LAMBDA(int m, int k, int j, int i) {
@@ -245,16 +394,25 @@ void PDFOutput::LoadOutputData(Mesh *pm) {
     for (int d = 0; d < ndim; ++d) {
       Real value = fields(d, m, k, j, i);
       int bin;
-      if (value < d_min(d)) {
+      if (!output_diagnostics::IsFinite(value)) {
+        Kokkos::atomic_exchange(&invalid(0), 1);
+        bin = 0;
+      } else if (value < d_min(d)) {
         bin = 0;
       } else if (!(value < d_max(d))) {
         bin = d_nbin(d) + 1;
       } else {
         Real transformed = PDFTransformValue(value, d_scale(d), d_linthresh(d));
         Real position = (transformed - d_transform_min(d))/d_step(d);
-        bin = static_cast<int>(position) + 1;
-        if (bin < 1) bin = 1;
-        if (bin > d_nbin(d)) bin = d_nbin(d);
+        if (!output_diagnostics::IsFinite(transformed) ||
+            !output_diagnostics::IsFinite(position)) {
+          Kokkos::atomic_exchange(&invalid(0), 1);
+          bin = 0;
+        } else {
+          bin = static_cast<int>(position) + 1;
+          if (bin < 1) bin = 1;
+          if (bin > d_nbin(d)) bin = d_nbin(d);
+        }
       }
       flat_index += bin*d_stride(d);
     }
@@ -265,32 +423,39 @@ void PDFOutput::LoadOutputData(Mesh *pm) {
     } else if (weight_mode == 2) {
       weight *= fields(weight_index, m, k, j, i);
     }
-    auto access = scatter.access();
-    access(flat_index) += weight;
+    if (!output_diagnostics::IsFinite(weight)) {
+      Kokkos::atomic_exchange(&invalid(0), 1);
+    }
+    Kokkos::atomic_add(&result(flat_index), weight);
   });
 
-  Kokkos::Experimental::contribute(result, scatter);
   Kokkos::fence();
+  auto host_invalid = Kokkos::create_mirror_view(invalid);
+  Kokkos::deep_copy(host_invalid, invalid);
+  Kokkos::fence();
+  if (host_invalid(0) != 0) {
+    FatalPDFError("PDF output encountered a nonfinite axis, transform, or weight.");
+  }
+  ValidatePDFResult(result, pdf_data.total_bins, "Local PDF result");
 
 #if MPI_PARALLEL_ENABLED
   if (out_params.shard_mode == FileShardMode::shared) {
+    ReducePDFResultViaHost(result, pdf_data.total_bins, MPI_COMM_WORLD, 0,
+                           "MPI_Reduce for shared PDF output");
+  } else if (IsNodeSharded(out_params.shard_mode)) {
+    ReducePDFResultViaHost(result, pdf_data.total_bins, global_variable::node_comm, 0,
+                           "MPI_Reduce for node PDF output");
+  }
+#endif
+  if (out_params.shard_mode == FileShardMode::shared) {
     if (global_variable::my_rank == 0) {
-      MPI_Reduce(MPI_IN_PLACE, result.data(), pdf_data.total_bins,
-                 MPI_ATHENA_REAL, MPI_SUM, 0, MPI_COMM_WORLD);
-    } else {
-      MPI_Reduce(result.data(), result.data(), pdf_data.total_bins,
-                 MPI_ATHENA_REAL, MPI_SUM, 0, MPI_COMM_WORLD);
+      ValidatePDFResult(result, pdf_data.total_bins, "Reduced shared PDF result");
     }
   } else if (IsNodeSharded(out_params.shard_mode)) {
     if (global_variable::node_rank == 0) {
-      MPI_Reduce(MPI_IN_PLACE, result.data(), pdf_data.total_bins,
-                 MPI_ATHENA_REAL, MPI_SUM, 0, global_variable::node_comm);
-    } else {
-      MPI_Reduce(result.data(), result.data(), pdf_data.total_bins,
-                 MPI_ATHENA_REAL, MPI_SUM, 0, global_variable::node_comm);
+      ValidatePDFResult(result, pdf_data.total_bins, "Reduced node PDF result");
     }
   }
-#endif
 }
 
 //----------------------------------------------------------------------------------------
@@ -304,60 +469,62 @@ void PDFOutput::LoadOutputData(Mesh *pm) {
 void PDFOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   if (out_params.pdf_legacy_layout) {
     if (global_variable::my_rank == 0) {
+      RequirePDFBudget(output_file_utils::CheckedSizeAdd(
+          persistent_writer_allocation_bytes, PDFResultMirrorBytes(pdf_data.total_bins),
+          "legacy PDF write allocation", FatalPDFError),
+          max_writer_allocation_bytes, "legacy PDF write allocation");
       std::string path = PDFDirectory(out_params) + "/";
       if (!pdf_data.bins_written) {
         std::string header_name = path + out_params.file_basename + ".bins.pdf";
         std::FILE *header = std::fopen(header_name.c_str(), "a");
         if (header == nullptr) {
-          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                    << std::endl << "Cannot open legacy PDF header '" << header_name
-                    << "'" << std::endl;
-          std::exit(EXIT_FAILURE);
+          FatalPDFError("Cannot open legacy PDF header '" + header_name + "'.");
         }
-        std::fprintf(header, "# pdf bins \n");
-        std::fprintf(header, "# [1]= %.20s \n", outvars[0].label.c_str());
+        CheckedLegacyPDFPrint(header, header_name, "# pdf bins \n");
+        CheckedLegacyPDFPrint(header, header_name, "# [1]= %.20s \n",
+                              outvars[0].label.c_str());
         if (pdf_data.ndim == 2) {
-          std::fprintf(header, "# [2]= %.20s \n", outvars[1].label.c_str());
+          CheckedLegacyPDFPrint(header, header_name, "# [2]= %.20s \n",
+                                outvars[1].label.c_str());
         }
         for (int d = 0; d < pdf_data.ndim; ++d) {
           auto edges = Kokkos::create_mirror_view(pdf_data.bin_edges[d]);
           Kokkos::deep_copy(edges, pdf_data.bin_edges[d]);
           Kokkos::fence();
           for (int n = 0; n <= pdf_data.nbin[d]; ++n) {
-            std::fprintf(header, out_params.data_format.c_str(), edges(n));
+            CheckedLegacyPDFPrint(header, header_name, out_params.data_format.c_str(),
+                                  edges(n));
           }
-          std::fprintf(header, "\n");
+          CheckedLegacyPDFPrint(header, header_name, "\n");
         }
-        std::fclose(header);
+        CheckedLegacyPDFClose(header, header_name);
         pdf_data.bins_written = true;
       }
 
-      char sequence[6];
-      std::snprintf(sequence, sizeof(sequence), "%05d", out_params.file_number);
+      std::string sequence = output_file_utils::FormatSequence(
+          out_params.file_number, "legacy PDF output", FatalPDFError);
       std::string data_name = path + out_params.file_basename + "." + sequence + ".pdf";
       std::FILE *output = std::fopen(data_name.c_str(), "a");
       if (output == nullptr) {
-        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                  << std::endl << "Cannot open legacy PDF data file '" << data_name
-                  << "'" << std::endl;
-        std::exit(EXIT_FAILURE);
+        FatalPDFError("Cannot open legacy PDF data file '" + data_name + "'.");
       }
       auto values = Kokkos::create_mirror_view(pdf_data.result_);
       Kokkos::deep_copy(values, pdf_data.result_);
       Kokkos::fence();
-      std::fprintf(output, "# time= ");
-      std::fprintf(output, out_params.data_format.c_str(), pm->time);
-      std::fprintf(output, "\n");
+      CheckedLegacyPDFPrint(output, data_name, "# time= ");
+      CheckedLegacyPDFPrint(output, data_name, out_params.data_format.c_str(), pm->time);
+      CheckedLegacyPDFPrint(output, data_name, "\n");
       int rows = (pdf_data.ndim == 2) ? pdf_data.nbin_with_overflow[1] : 1;
       for (int y = 0; y < rows; ++y) {
         for (int x = 0; x < pdf_data.nbin_with_overflow[0]; ++x) {
           int flat_index = x*pdf_data.stride[0] + y;
-          std::fprintf(output, out_params.data_format.c_str(), values(flat_index));
+          CheckedLegacyPDFPrint(output, data_name, out_params.data_format.c_str(),
+                                values(flat_index));
         }
-        std::fprintf(output, "\n");
+        CheckedLegacyPDFPrint(output, data_name, "\n");
       }
-      std::fprintf(output, "\n");
-      std::fclose(output);
+      CheckedLegacyPDFPrint(output, data_name, "\n");
+      CheckedLegacyPDFClose(output, data_name);
     }
     AdvanceOutputCounters(out_params, pm, pin);
     return;
@@ -368,6 +535,13 @@ void PDFOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
       (IsNodeSharded(out_params.shard_mode) && global_variable::node_rank == 0) ||
       (out_params.shard_mode == FileShardMode::shared && global_variable::my_rank == 0);
   if (i_write) {
+    std::size_t payload_staging = output_file_utils::CheckedSizeProduct(
+        PDFCountAsSize(pdf_data.total_bins, "PDF total bin count"),
+        sizeof(Real) + sizeof(std::uint64_t) + sizeof(double),
+        "PDF payload staging", FatalPDFError);
+    RequirePDFBudget(output_file_utils::CheckedSizeAdd(
+        persistent_writer_allocation_bytes, payload_staging, "PDF write allocation",
+        FatalPDFError), max_writer_allocation_bytes, "PDF write allocation");
     std::string path = PDFDirectory(out_params) + "/";
     if (sharded) {
       path += ShardDirectoryName(out_params.shard_mode, global_variable::my_rank,
@@ -440,8 +614,8 @@ void PDFOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
       pdf_data.bins_written = true;
     }
 
-    char sequence[6];
-    std::snprintf(sequence, sizeof(sequence), "%05d", out_params.file_number);
+    std::string sequence = output_file_utils::FormatSequence(
+        out_params.file_number, "PDF output", FatalPDFError);
     std::string data_name = path + out_params.file_basename + "." + sequence + ".pdf";
     std::string temporary_data_name = data_name + ".tmp";
     std::FILE *output = std::fopen(temporary_data_name.c_str(), "wb");
@@ -454,10 +628,20 @@ void PDFOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     std::vector<std::uint64_t> sparse_indices;
     std::vector<double> sparse_values;
     if (sharded) {
+      std::size_t nonzero_count = 0;
       for (int n = 0; n < pdf_data.total_bins; ++n) {
         if (values(n) != 0.0) {
-          sparse_indices.push_back(static_cast<std::uint64_t>(n));
-          sparse_values.push_back(static_cast<double>(values(n)));
+          ++nonzero_count;
+        }
+      }
+      sparse_indices.resize(nonzero_count);
+      sparse_values.resize(nonzero_count);
+      std::size_t sparse_index = 0;
+      for (int n = 0; n < pdf_data.total_bins; ++n) {
+        if (values(n) != 0.0) {
+          sparse_indices[sparse_index] = static_cast<std::uint64_t>(n);
+          sparse_values[sparse_index] = static_cast<double>(values(n));
+          ++sparse_index;
         }
       }
     }

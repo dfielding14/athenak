@@ -25,11 +25,31 @@
 #include "eos/eos.hpp"
 #include "hydro/hydro.hpp"
 #include "mhd/mhd.hpp"
+#include "mpi_utils.hpp"
 #include "radiation/radiation.hpp"
 #include "radiation/radiation_tetrad.hpp"
 #include "particles/particles.hpp"
+#include "diagnostic_semantics.hpp"
 #include "outputs.hpp"
 #include "utils/current.hpp"
+
+namespace {
+
+void AbortOnInvalidDiagnostic(const DvceArray1D<int> &invalid,
+                              const std::string &name) {
+  auto host_invalid = Kokkos::create_mirror_view(invalid);
+  Kokkos::deep_copy(host_invalid, invalid);
+  Kokkos::fence();
+  if (host_invalid(0) != 0) {
+    mpi_utils::AbortWorld(std::string("### FATAL ERROR in ") + __FILE__ +
+                          " at line " + std::to_string(__LINE__) +
+                          "\nDerived diagnostic '" + name +
+                          "' encountered a nonfinite value or a non-positive fluid "
+                          "density.");
+  }
+}
+
+}  // namespace
 
 KOKKOS_INLINE_FUNCTION
 void ComputeUcBcFromPrimitive(const Real uu1, const Real uu2, const Real uu3,
@@ -1279,27 +1299,30 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
     int nx2 = indcs.nx2;
     int nx3 = indcs.nx3;
     int kind = coord_kind;
+    DvceArray1D<int> invalid("coordinate_diagnostic_invalid", 1);
+    Kokkos::deep_copy(invalid, 0);
     par_for("coordinate_diagnostic", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
     KOKKOS_LAMBDA(int m, int k, int j, int i) {
       Real x = CellCenterX(i-is, nx1, size.d_view(m).x1min, size.d_view(m).x1max);
       Real y = CellCenterX(j-js, nx2, size.d_view(m).x2min, size.d_view(m).x2max);
       Real z = CellCenterX(k-ks, nx3, size.d_view(m).x3min, size.d_view(m).x3max);
-      Real cyl_r = sqrt(x*x + y*y);
-      Real radius = sqrt(cyl_r*cyl_r + z*z);
-      Real phi = atan2(y, x);
-      if (phi < 0.0) phi += 2.0*M_PI;
+      auto geometry = output_diagnostics::BuildGeometry(x, y, z);
       Real value = 0.0;
-      if (kind == 0) value = x;
-      if (kind == 1) value = y;
-      if (kind == 2 || kind == 8) value = z;
-      if (kind == 3) value = radius;
-      if (kind == 4) value = (radius > 0.0) ? acos(z/radius) : 0.0;
-      if (kind == 5 || kind == 7) value = phi;
-      if (kind == 6) value = cyl_r;
-      if (kind == 9) value = (radius > 0.0) ? z/radius : 1.0;
-      if (kind == 10) value = (radius > 0.0) ? fabs(z/radius) : 1.0;
+      if (kind == 0) value = geometry.x;
+      if (kind == 1) value = geometry.y;
+      if (kind == 2 || kind == 8) value = geometry.z;
+      if (kind == 3) value = geometry.radius;
+      if (kind == 4) value = geometry.theta;
+      if (kind == 5 || kind == 7) value = geometry.phi;
+      if (kind == 6) value = geometry.cylindrical_radius;
+      if (kind == 9) value = geometry.costheta;
+      if (kind == 10) value = geometry.abscostheta;
+      if (!geometry.valid || !output_diagnostics::IsFinite(value)) {
+        Kokkos::atomic_exchange(&invalid(0), 1);
+      }
       dv(m, i_dv, k, j, i) = value;
     });
+    AbortOnInvalidDiagnostic(invalid, name);
     i_dv += 1;
   }
 
@@ -1330,36 +1353,34 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
     int nx2 = indcs.nx2;
     int nx3 = indcs.nx3;
     int kind = flow_kind;
+    DvceArray1D<int> invalid("flow_diagnostic_invalid", 1);
+    Kokkos::deep_copy(invalid, 0);
     par_for("flow_diagnostic", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
     KOKKOS_LAMBDA(int m, int k, int j, int i) {
       Real x = CellCenterX(i-is, nx1, size.d_view(m).x1min, size.d_view(m).x1max);
       Real y = CellCenterX(j-js, nx2, size.d_view(m).x2min, size.d_view(m).x2max);
       Real z = CellCenterX(k-ks, nx3, size.d_view(m).x3min, size.d_view(m).x3max);
-      Real cyl_r = sqrt(x*x + y*y);
-      Real radius = sqrt(cyl_r*cyl_r + z*z);
       Real rho = u0_(m, IDN, k, j, i);
-      Real vx = u0_(m, IM1, k, j, i)/rho;
-      Real vy = u0_(m, IM2, k, j, i)/rho;
-      Real vz = u0_(m, IM3, k, j, i)/rho;
-      Real vr = (radius > 0.0) ? (vx*x + vy*y + vz*z)/radius : 0.0;
-      Real vcyl = (cyl_r > 0.0) ? (vx*x + vy*y)/cyl_r : 0.0;
-      Real vphi = (cyl_r > 0.0) ? (-vx*y + vy*x)/cyl_r : 0.0;
-      Real vtheta = (radius > 0.0 && cyl_r > 0.0) ?
-          (z*(vx*x + vy*y)/(radius*cyl_r) - vz*cyl_r/radius) : 0.0;
-      Real vvert = vz*((z >= 0.0) ? 1.0 : -1.0);
+      auto flow = output_diagnostics::BuildFlow(
+          x, y, z, rho, u0_(m, IM1, k, j, i), u0_(m, IM2, k, j, i),
+          u0_(m, IM3, k, j, i));
       Real value = 0.0;
-      if (kind == 0) value = vr;
-      if (kind == 1) value = vtheta;
-      if (kind == 2 || kind == 4) value = vphi;
-      if (kind == 3) value = vcyl;
-      if (kind == 5) value = rho*vr;
-      if (kind == 6) value = rho*fmax(vr, 0.0);
-      if (kind == 7) value = rho*fmin(vr, 0.0);
-      if (kind == 8) value = rho*vvert;
-      if (kind == 9) value = rho*fmax(vvert, 0.0);
-      if (kind == 10) value = rho*fmin(vvert, 0.0);
+      if (kind == 0) value = flow.radial_velocity;
+      if (kind == 1) value = flow.theta_velocity;
+      if (kind == 2 || kind == 4) value = flow.phi_velocity;
+      if (kind == 3) value = flow.cylindrical_radial_velocity;
+      if (kind == 5) value = flow.radial_mass_flux;
+      if (kind == 6) value = fmax(flow.radial_mass_flux, 0.0);
+      if (kind == 7) value = fmin(flow.radial_mass_flux, 0.0);
+      if (kind == 8) value = flow.vertical_mass_flux;
+      if (kind == 9) value = fmax(flow.vertical_mass_flux, 0.0);
+      if (kind == 10) value = fmin(flow.vertical_mass_flux, 0.0);
+      if (!flow.valid || !output_diagnostics::IsFinite(value)) {
+        Kokkos::atomic_exchange(&invalid(0), 1);
+      }
       dv(m, i_dv, k, j, i) = value;
     });
+    AbortOnInvalidDiagnostic(invalid, name);
     i_dv += 1;
   }
 
@@ -1394,57 +1415,49 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
     int nx2 = indcs.nx2;
     int nx3 = indcs.nx3;
     int kind = energy_kind;
+    bool require_total_energy = kind != 3 && kind != 5;
+    DvceArray1D<int> invalid("energy_flux_diagnostic_invalid", 1);
+    Kokkos::deep_copy(invalid, 0);
     par_for("energy_flux_diagnostic", DevExeSpace(), 0, (nmb-1),
             ks, ke, js, je, is, ie,
     KOKKOS_LAMBDA(int m, int k, int j, int i) {
       Real x = CellCenterX(i-is, nx1, size.d_view(m).x1min, size.d_view(m).x1max);
       Real y = CellCenterX(j-js, nx2, size.d_view(m).x2min, size.d_view(m).x2max);
       Real z = CellCenterX(k-ks, nx3, size.d_view(m).x3min, size.d_view(m).x3max);
-      Real radius = sqrt(x*x + y*y + z*z);
       Real rho = u0_(m, IDN, k, j, i);
-      Real vx = u0_(m, IM1, k, j, i)/rho;
-      Real vy = u0_(m, IM2, k, j, i)/rho;
-      Real vz = u0_(m, IM3, k, j, i)/rho;
-      Real vr = (radius > 0.0) ? (vx*x + vy*y + vz*z)/radius : 0.0;
-      Real v_sq = vx*vx + vy*vy + vz*vz;
-      Real b_sq = 0.0;
-      Real v_dot_b = 0.0;
-      Real br = 0.0;
+      Real bx = 0.0;
+      Real by = 0.0;
       Real bz = 0.0;
       if (is_mhd) {
-        Real bx = bcc_(m, IBX, k, j, i);
-        Real by = bcc_(m, IBY, k, j, i);
+        bx = bcc_(m, IBX, k, j, i);
+        by = bcc_(m, IBY, k, j, i);
         bz = bcc_(m, IBZ, k, j, i);
-        b_sq = bx*bx + by*by + bz*bz;
-        v_dot_b = vx*bx + vy*by + vz*bz;
-        br = (radius > 0.0) ? (bx*x + by*y + bz*z)/radius : 0.0;
       }
-      Real kin_radial = 0.5*rho*v_sq*vr;
-      Real mag_radial = b_sq*vr - v_dot_b*br;
-      Real thermal_radial = 0.0;
-      Real total_radial = 0.0;
-      Real total_vertical = 0.0;
-      if (kind != 3 && kind != 5) {
-        Real eint = u0_(m, IEN, k, j, i) - 0.5*rho*v_sq - 0.5*b_sq;
-        Real enthalpy_plus_ke = 0.5*rho*v_sq + gamma*eint;
-        thermal_radial = gamma*eint*vr;
-        total_radial = (enthalpy_plus_ke + b_sq)*vr - v_dot_b*br;
-        total_vertical = (enthalpy_plus_ke + b_sq)*vz - v_dot_b*bz;
-      }
-      Real sign_z = (z >= 0.0) ? 1.0 : -1.0;
-      Real vvert = vz*sign_z;
+      auto energy = output_diagnostics::BuildEnergyFlux(
+          x, y, z, rho, u0_(m, IM1, k, j, i), u0_(m, IM2, k, j, i),
+          u0_(m, IM3, k, j, i),
+          require_total_energy ? u0_(m, IEN, k, j, i) : 0.0, gamma, is_mhd,
+          bx, by, bz, require_total_energy);
+      Real sign_z = output_diagnostics::VerticalSign(z);
+      Real vvert = energy.flow.vz*sign_z;
       Real value = 0.0;
-      if (kind == 0) value = total_radial;
-      if (kind == 1) value = (vr > 0.0) ? total_radial : 0.0;
-      if (kind == 2) value = (vr < 0.0) ? total_radial : 0.0;
-      if (kind == 3) value = kin_radial;
-      if (kind == 4) value = thermal_radial;
-      if (kind == 5) value = mag_radial;
-      if (kind == 6) value = total_vertical*sign_z;
-      if (kind == 7) value = (vvert > 0.0) ? total_vertical*sign_z : 0.0;
-      if (kind == 8) value = (vvert < 0.0) ? total_vertical*sign_z : 0.0;
+      if (kind == 0) value = energy.total_radial;
+      if (kind == 1) value = (energy.flow.radial_velocity > 0.0)
+          ? energy.total_radial : 0.0;
+      if (kind == 2) value = (energy.flow.radial_velocity < 0.0)
+          ? energy.total_radial : 0.0;
+      if (kind == 3) value = energy.kinetic_radial;
+      if (kind == 4) value = energy.thermal_radial;
+      if (kind == 5) value = energy.magnetic_radial;
+      if (kind == 6) value = energy.total_vertical*sign_z;
+      if (kind == 7) value = (vvert > 0.0) ? energy.total_vertical*sign_z : 0.0;
+      if (kind == 8) value = (vvert < 0.0) ? energy.total_vertical*sign_z : 0.0;
+      if (!energy.valid || !output_diagnostics::IsFinite(value)) {
+        Kokkos::atomic_exchange(&invalid(0), 1);
+      }
       dv(m, i_dv, k, j, i) = value;
     });
+    AbortOnInvalidDiagnostic(invalid, name);
     i_dv += 1;
   }
 

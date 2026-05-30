@@ -6,7 +6,6 @@
 //! \file track_prtcl.cpp
 //! \brief writes data for tracked particles in unformatted binary
 
-#include <sys/stat.h>  // mkdir
 #include <vector>
 
 #include <algorithm>
@@ -19,9 +18,21 @@
 
 #include "athena.hpp"
 #include "globals.hpp"
+#include "mpi_utils.hpp"
 #include "mesh/mesh.hpp"
+#include "output_file_utils.hpp"
 #include "particles/particles.hpp"
 #include "outputs.hpp"
+
+namespace {
+
+[[noreturn]] void FatalTrackedParticleError(const std::string &message) {
+  mpi_utils::AbortWorld(std::string("### FATAL ERROR in ") + __FILE__ +
+                        " at line " + std::to_string(__LINE__) + "\n" +
+                        message);
+}
+
+}  // namespace
 
 //----------------------------------------------------------------------------------------
 // ctor: also calls BaseTypeOutput base class constructor
@@ -30,7 +41,8 @@ TrackedParticleOutput::TrackedParticleOutput(ParameterInput *pin, Mesh *pm,
                                              OutputParameters op) :
   BaseTypeOutput(pin, pm, op) {
   // create new directory for this output. Comments in binary.cpp constructor explain why
-  mkdir("trk",0775);
+  output_file_utils::EnsureDirectory("trk", 0775, "tracked particle output",
+                                     FatalTrackedParticleError);
   // allocate arrays
   npout_eachrank.resize(global_variable::nranks);
   ntrack = pin->GetInteger(op.block_name,"nparticles");
@@ -66,7 +78,10 @@ void TrackedParticleOutput::LoadOutputData(Mesh *pm) {
   // share number of tracked particles to be output across all ranks
   npout_eachrank[global_variable::my_rank] = npout;
 #if MPI_PARALLEL_ENABLED
-  MPI_Allgather(&npout, 1, MPI_INT, npout_eachrank.data(), 1, MPI_INT, MPI_COMM_WORLD);
+  mpi_utils::CheckMpi(
+      MPI_Allgather(&npout, 1, MPI_INT, npout_eachrank.data(), 1, MPI_INT,
+                    MPI_COMM_WORLD),
+      "MPI_Allgather for tracked-particle output counts");
 #endif
   tracked_prtcl.resize(npout);
   // sync tracked particle device array with host
@@ -101,12 +116,16 @@ void TrackedParticleOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
         << "  ntracked_prtcls=" << ntrack << std::endl;
     FILE *pfile;
     if ((pfile = std::fopen(fname.c_str(),"a")) == nullptr) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-        << std::endl << "Output file '" << fname << "' could not be opened" <<std::endl;
-      exit(EXIT_FAILURE);
+      FatalTrackedParticleError("Output file '" + fname + "' could not be opened.");
     }
-    std::fprintf(pfile,"%s \n",msg.str().c_str());
-    std::fclose(pfile);
+    if (std::fprintf(pfile,"%s \n",msg.str().c_str()) < 0) {
+      FatalTrackedParticleError("Tracked-particle header could not be written to '" +
+                                fname + "'.");
+    }
+    if (std::fclose(pfile) != 0) {
+      FatalTrackedParticleError("Tracked-particle header could not be closed in '" +
+                                fname + "'.");
+    }
   }
 
   // Now all ranks open file and append data
@@ -140,10 +159,8 @@ void TrackedParticleOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     std::size_t myoffset = header_offset + 6*outpart(p).tag;
     // Write particle positions collectively for minimum number of particles across ranks
     if (partfile.Write_any_type_at_all(&(data[0]),6,myoffset,"float") != 6) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-          << std::endl << "particle data not written correctly to tracked particle file"
-          << std::endl;
-      exit(EXIT_FAILURE);
+      FatalTrackedParticleError(
+          "Particle data not written correctly to tracked-particle file.");
     }
   }
   // Write particle positions individually for remaining particles on each rank
@@ -152,15 +169,15 @@ void TrackedParticleOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     std::size_t myoffset = header_offset + 6*outpart(p).tag;
     // Write particle positions collectively for minimum number of particles across ranks
     if (partfile.Write_any_type_at(&(data[0]),6,myoffset,"float") != 6) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-          << std::endl << "particle data not written correctly to tracked particle file"
-          << std::endl;
-      exit(EXIT_FAILURE);
+      FatalTrackedParticleError(
+          "Particle data not written correctly to tracked-particle file.");
     }
   }
 
   // close the output file and clean up
-  partfile.Close();
+  if (partfile.Close() != 0) {
+    FatalTrackedParticleError("Tracked-particle output file could not be closed.");
+  }
   delete[] data;
 
   // increment counters

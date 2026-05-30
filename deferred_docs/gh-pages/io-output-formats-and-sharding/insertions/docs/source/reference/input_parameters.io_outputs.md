@@ -21,26 +21,28 @@ restart file.
 | Parameter | Type | Default | Formats in this feature | Description |
 | --- | --- | --- | --- | --- |
 | `single_file_per_rank` | boolean | `false` | Existing supported formats; extended readers for `bin`, `cbin`, modern `pdf`, and `sphslice`; restart retained | Write one output shard per MPI rank. |
-| `single_file_per_node` | boolean | `false` | `bin`, full-volume `cbin`, modern `pdf`, `sphslice`, `rst` | Write one shard per MPI shared-memory node. |
+| `single_file_per_node` | boolean | `false` | `bin`, uniform 3D active-zone full-volume `cbin`, modern `pdf`, `sphslice`, `rst` | Write one shard per MPI shared-memory node. |
 
 `single_file_per_rank = true` and `single_file_per_node = true` in the same
-block are mutually exclusive and cause input rejection. Sliced `cbin` is
-rejected explicitly because its pre-existing output extent is incompatible
-with supported coarsening. Node-sharded
-binary and full-volume coarsened-binary writers add inventory metadata and
+block are mutually exclusive and cause input rejection. Lower-dimensional,
+ghost-zone-expanded, static-refinement, AMR, and sliced `cbin` are rejected
+explicitly before publication. Node-sharded binary and uniform 3D active-zone
+full-volume coarsened-binary writers add inventory metadata and
 publish valid empty shards when a node owns no selected records.
 
 ### Coarsened-Binary `<output#>` Parameters
 
-Use `file_type = cbin` for full-volume coarsened binary output:
+Use `file_type = cbin` for uniform 3D active-zone full-volume coarsened binary output:
 
 | Parameter | Type | Required/default | Validation |
 | --- | --- | --- | --- |
-| `coarsen_factor` | integer | Required | Power of two between `2` and the shortest MeshBlock dimension, inclusive; every emitted extent, including optional ghost zones, must be divisible by the factor. |
+| `coarsen_factor` | integer | Required | Power of two between `2` and the shortest MeshBlock dimension, inclusive. |
 | `compute_moments` | boolean | `false` | When enabled, retain the supported coarsened moments in addition to the mean. |
 
-The factor and emitted-extent contract is validated during writer
-construction. Sliced `cbin` remains deliberately excluded as described above.
+The factor contract is validated during writer construction. The supported
+matrix is uniform three-dimensional active-zone full-volume output.
+Lower-dimensional, ghost-zone-expanded, static-refinement, AMR, and sliced
+`cbin` remain deliberately excluded.
 
 ### Modern `<output#>` PDF Parameters
 
@@ -56,6 +58,7 @@ Use `file_type = pdf` with contiguous dimensions from axis 1 through axis 4.
 | `linthresh1` ... `linthresh4` | real | Required only with matching `scaleN = symlog` | Positive threshold; rejected when supplied for non-symlog axis. |
 | `weight` | string | `volume` | `volume`, `mass`, `variable`. |
 | `weight_variable` | string | Required with `weight = variable` | Scalar output variable. |
+| `max_writer_allocation_bytes` | positive integer | `536870912` | Per-writer allocation cap in bytes. The writer preflights histogram and edge arrays, host mirrors, copied and derived fields, metadata, and serialized staging before allocation. |
 
 Legacy unsharded PDF configurations using `variable`, optional `variable_2`,
 legacy bin/log keys, and `mass_weighted` remain accepted. A pure legacy
@@ -74,13 +77,17 @@ Use `file_type = sphslice` for fixed-radius binary angular samples:
 | `nphi` | integer | `128` | Must be at least 2. |
 | `single_file_per_rank` | boolean | `false` | Optional rank-sharded angular ownership. |
 | `single_file_per_node` | boolean | `false` | Optional node-sharded angular ownership. |
+| `max_writer_allocation_bytes` | positive integer | `536870912` | Per-writer retained-allocation cap in bytes. The writer preflights angular geometry, interpolation arrays, sparse buffers, and dense staging before allocation. |
 
-This product is separate from the pre-existing `file_type = sph` output.
+This product is separate from the pre-existing `file_type = sph` output. The
+writer embeds `slice_r` in filenames as a deterministic round-trip scientific
+token, for example `slice_r = 0.25` becomes
+`r_2.5000000000000000e-01`.
 
-### Diagnostic Scalar Names Available To Modern PDFs
+### Generic Diagnostic Scalar Names
 
-In addition to existing scalar output fields, modern PDF axes and variable
-weights can use:
+In addition to existing scalar output fields, ordinary scalar output streams
+and modern PDF axes or variable weights can use:
 
 ```text
 coord_x coord_y coord_z coord_r coord_theta coord_phi
@@ -97,4 +104,14 @@ For passive scalar names, `N` is a zero-based scalar index.
 The generic `mdot_*`, `edot_*`, and `vel_*` diagnostic names apply to
 single-fluid Hydro or MHD only. They are rejected for `<ion-neutral>`
 two-fluid configurations because module-qualified flux semantics are not yet
-defined.
+defined. They are Newtonian diagnostics and are rejected for relativistic
+coordinates. `edot_sph_mag` requires MHD. Total and thermal energy-flux names
+require an ideal-gas total-energy fluid module; `edot_sph_kin` and
+`edot_sph_mag` do not.
+
+Coordinate projection inputs are clamped where mathematically bounded. The
+canonical origin convention is `theta = 0`, `phi = 0`, and `costheta = 1`.
+Singular velocity projections at cylindrical radius zero are emitted as zero,
+and signed vertical flux is zero on the midplane. Runtime evaluation rejects
+non-positive fluid density or non-finite diagnostic values. Derived-array
+outputs do not support `ghost_zones = true`; configure active-zone sampling.

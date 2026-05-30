@@ -9,11 +9,11 @@
 //  \brief provides classes to handle ALL types of data output
 
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <vector>
 
-#include "Kokkos_ScatterView.hpp"
 
 #include "athena.hpp"
 #include "../file_sharding.hpp"
@@ -412,7 +412,6 @@ struct PDFData {
   bool bins_written;
 
   DvceArray1D<Real> result_;
-  Kokkos::Experimental::ScatterView<Real*, LayoutWrapper> scatter_result;
 
   PDFData() : ndim(0), total_bins(0), bins_written(false) {
     for (int d = 0; d < MAX_DIM; ++d) {
@@ -453,8 +452,6 @@ struct PDFData {
       stride[d] = stride[d + 1]*nbin_with_overflow[d + 1];
     }
     result_ = DvceArray1D<Real>("pdf_result", total_bins);
-    scatter_result =
-        Kokkos::Experimental::ScatterView<Real*, LayoutWrapper>(result_);
   }
 
   void PopulateBinEdges() {
@@ -483,6 +480,10 @@ class PDFOutput : public BaseTypeOutput {
 
   void LoadOutputData(Mesh *pm) override;
   void WriteOutputFile(Mesh *pm, ParameterInput *pin) override;
+
+ private:
+  std::size_t max_writer_allocation_bytes;
+  std::size_t persistent_writer_allocation_bytes;
 };
 
 //----------------------------------------------------------------------------------------
@@ -535,6 +536,7 @@ class SphericalSliceOutput : public BaseTypeOutput {
 
  private:
   SphericalSlice *psph;
+  std::size_t max_writer_allocation_bytes;
   std::vector<std::int32_t> shard_owned_angles;
   std::vector<float> shard_values;
 };

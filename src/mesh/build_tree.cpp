@@ -338,10 +338,8 @@ int RestartMaxLevel(ParameterInput *pin, int root_level, bool adaptive) {
   }
   std::int64_t max_num_levels = kMaxSafeLogicalLevel - root_level + 1;
   if (num_levels <= 0 || num_levels > max_num_levels) {
-    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl << "Number of refinement levels must be between 1 and "
-              << max_num_levels << std::endl;
-    std::exit(EXIT_FAILURE);
+    FailRestartLayout("Number of refinement levels must be between 1 and " +
+                      std::to_string(max_num_levels) + ".");
   }
   std::int64_t max_level = num_levels + root_level - 1;
   return static_cast<int>(max_level);
@@ -650,10 +648,9 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
     IOWrapperSizeT read_size = resfile.Read_bytes(headerdata, 1, headersize,
                                                   single_file_per_rank);
     if (read_size != headersize) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "Header size read from restart file is incorrect, "
-                << "expected " << headersize << ", got " << read_size << std::endl;
-      exit(EXIT_FAILURE);
+      FailRestartLayout("Header size read from restart file is incorrect, expected " +
+                        std::to_string(headersize) + ", got " +
+                        std::to_string(read_size) + ".");
     }
   }
 
@@ -732,10 +729,8 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
   if (global_variable::my_rank == 0 || single_file_per_rank) {
     if (resfile.Read_bytes(idlist, 1, metadata_bytes, single_file_per_rank) !=
         metadata_bytes) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "Incorrect MeshBlock metadata size in restart file; "
-                << "restart file is broken." << std::endl;
-      std::exit(EXIT_FAILURE);
+      FailRestartLayout("Incorrect MeshBlock metadata size in restart file; "
+                        "restart file is broken.");
     }
   }
 #if MPI_PARALLEL_ENABLED
@@ -780,10 +775,9 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
     LogicalLocation *zordered_lloc = new LogicalLocation[nmb_total];
     ptree->CreateZOrderedLLList(zordered_lloc, nullptr, nnb);
     if (nnb != nmb_total) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-        << std::endl << "Tree reconstruction failed. Total number of blocks in "
-        << "reconstructed tree=" << nnb << ", number in file=" << nmb_total << std::endl;
-      std::exit(EXIT_FAILURE);
+      FailRestartLayout(
+          "Tree reconstruction failed. Total number of blocks in reconstructed tree=" +
+          std::to_string(nnb) + ", number in file=" + std::to_string(nmb_total) + ".");
     }
     for (int i = 0; i < nmb_total; ++i) {
       if (!SameRestartLocation(lloc_eachmb[i], zordered_lloc[i])) {
@@ -797,11 +791,9 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
   // check there is at least one MeshBlock per MPI rank
   if (!single_file_per_rank) {
     if (nmb_total < global_variable::nranks) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line "
-        << __LINE__ << std::endl
-        << "Fewer MeshBlocks (nmb_total=" << nmb_total << ") than MPI ranks (nranks="
-        << global_variable::nranks << ")" << std::endl;
-      std::exit(EXIT_FAILURE);
+      FailRestartLayout("Fewer MeshBlocks (nmb_total=" + std::to_string(nmb_total) +
+                        ") than MPI ranks (nranks=" +
+                        std::to_string(global_variable::nranks) + ").");
     }
   }
 #endif
@@ -827,18 +819,17 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
     if (pin->DoesParameterExist("mesh_refinement", "max_nmb_per_rank")) {
       nmb_maxperrank = pin->GetReal("mesh_refinement", "max_nmb_per_rank");
       if (nmb_maxperrank < nmb_thisrank) {
-        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-          << std::endl << "On rank=" << global_variable::my_rank << " Root grid requires "
-          << "more MeshBlocks (nmb_thisrank=" << nmb_thisrank << ") than specified by "
-          << "<mesh_refinement>/max_nmb_per_rank=" << nmb_maxperrank << std::endl;
-        std::exit(EXIT_FAILURE);
+        FailRestartLayout(
+            "On rank=" + std::to_string(global_variable::my_rank) +
+            " root grid requires more MeshBlocks (nmb_thisrank=" +
+            std::to_string(nmb_thisrank) + ") than specified by "
+            "<mesh_refinement>/max_nmb_per_rank=" + std::to_string(nmb_maxperrank) +
+            ".");
       }
     } else {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-        << std::endl << "With AMR maximum number of MeshBlocks per rank must be "
-        << "specified in input file using <mesh_refinement>/max_nmb_per_rank"
-        << std::endl;
-      std::exit(EXIT_FAILURE);
+      FailRestartLayout("With AMR maximum number of MeshBlocks per rank must be "
+                        "specified in input file using "
+                        "<mesh_refinement>/max_nmb_per_rank.");
     }
   }
 

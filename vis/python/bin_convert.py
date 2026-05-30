@@ -307,6 +307,33 @@ def _validate_coarsening_factor(factor, grid_sizes, filename):
         )
 
 
+def _validate_coarsened_moments(filename, pheader, nvars, var_list):
+    """Validate the producer's scalar or grouped four-moment metadata contract."""
+    number_of_moments = int(pheader["number of moments"])
+    if number_of_moments not in (1, 4):
+        raise ValueError(
+            f"coarsened binary file {filename!r} has invalid number of moments"
+        )
+    if nvars % number_of_moments != 0:
+        raise ValueError(
+            f"coarsened binary file {filename!r} has incomplete moment groups"
+        )
+    if number_of_moments == 4:
+        suffixes = ("_1st", "_2nd", "_3rd", "_4th")
+        for group_start in range(0, nvars, number_of_moments):
+            group = var_list[group_start:group_start + number_of_moments]
+            if any(not label.endswith(suffix) for label, suffix in zip(group, suffixes)):
+                raise ValueError(
+                    f"coarsened binary file {filename!r} has malformed moment labels"
+                )
+            roots = [label[: -len(suffix)] for label, suffix in zip(group, suffixes)]
+            if len(set(roots)) != 1:
+                raise ValueError(
+                    f"coarsened binary file {filename!r} has malformed moment labels"
+                )
+    return number_of_moments
+
+
 def _read_limited_binary_line(fp, family, label, budget=None):
     """Read one binary metadata line without accepting an unbounded record."""
     line = fp.readline(_MAX_BINARY_HEADER_BYTES + 1)
@@ -1317,6 +1344,18 @@ def read_coarsened_binary(filename, assemble_shards=False):
                 fp, "coarsened binary", "variable list", header_budget
             ).split()[1:]
         ]
+        if len(var_list) != nvars:
+            raise ValueError(
+                f"coarsened binary variable count mismatch in {filename!r}: "
+                f"declared {nvars}, listed {len(var_list)}"
+            )
+        if len(set(var_list)) != len(var_list):
+            raise ValueError(
+                f"coarsened binary file {filename!r} has duplicate variable names"
+            )
+        number_of_moments = _validate_coarsened_moments(
+            filename, pheader, nvars, var_list
+        )
         header_size = int(
             _read_limited_binary_line(
                 fp, "coarsened binary", "parameter-header size", header_budget
@@ -1379,15 +1418,6 @@ def read_coarsened_binary(filename, assemble_shards=False):
         _validate_coarsening_factor(
             coarsen_factor, (Nx1, Nx2, Nx3, nx1, nx2, nx3), filename
         )
-        if len(var_list) != nvars:
-            raise ValueError(
-                f"coarsened binary variable count mismatch in {filename!r}: "
-                f"declared {nvars}, listed {len(var_list)}"
-            )
-        if len(set(var_list)) != len(var_list):
-            raise ValueError(
-                f"coarsened binary file {filename!r} has duplicate variable names"
-            )
         mb_index, mb_logical, mb_geometry, mb_data = _read_meshblocks(
             fp,
             filesize,
@@ -1427,7 +1457,7 @@ def read_coarsened_binary(filename, assemble_shards=False):
     filedata["Nx2"] = Nx2 // coarsen_factor
     filedata["Nx3"] = Nx3 // coarsen_factor
     filedata["nvars"] = nvars
-    filedata["number_of_moments"] = int(pheader["number of moments"])
+    filedata["number_of_moments"] = number_of_moments
 
     filedata["x1min"] = x1min
     filedata["x1max"] = x1max

@@ -40,6 +40,7 @@
 //========================================================================================
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <cstdint>
@@ -48,6 +49,7 @@
 #include <iomanip>
 #include <iostream>
 #include <limits>
+#include <map>
 #include <sstream>
 #include <string>   // std::string, to_string()
 
@@ -55,37 +57,212 @@
 #include "globals.hpp"
 #include "parameter_input.hpp"
 #include "mesh/mesh.hpp"
+#include "output_file_utils.hpp"
 #include "outputs.hpp"
 
 namespace {
 
-FileShardMode ParseShardMode(ParameterInput *pin, const std::string &block_name) {
+[[noreturn]] void FatalOutputsError(const std::string &message) {
+  std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+            << std::endl << message << std::endl;
+#if MPI_PARALLEL_ENABLED
+  MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
+#endif
+  std::exit(EXIT_FAILURE);
+}
+
+FileShardMode ParseShardMode(ParameterInput *pin, const std::string &block_name,
+                             bool initialize_node_communicator=true) {
   bool per_rank = pin->GetOrAddBoolean(block_name, "single_file_per_rank", false);
   bool per_node = pin->GetOrAddBoolean(block_name, "single_file_per_node", false);
   if (per_rank && per_node) {
-    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl << "Output block '" << block_name
-              << "' cannot set both single_file_per_rank=true and "
-              << "single_file_per_node=true." << std::endl;
-    std::exit(EXIT_FAILURE);
+    FatalOutputsError("Output block '" + block_name +
+                      "' cannot set both single_file_per_rank=true and "
+                      "single_file_per_node=true.");
   }
   if (per_node) {
-    global_variable::InitializeNodeCommunicator();
+    if (initialize_node_communicator) {
+      global_variable::InitializeNodeCommunicator();
+    }
     return FileShardMode::node;
   }
   return per_rank ? FileShardMode::rank : FileShardMode::shared;
 }
 
+std::string PartitionTemplate(FileShardMode mode) {
+  if (mode == FileShardMode::rank) return "{RANK}/";
+  if (mode == FileShardMode::node) return "{NODE}/";
+  return "";
+}
+
+int ParseFileNumber(ParameterInput *pin, const std::string &block_name) {
+  if (!pin->DoesParameterExist(block_name, "file_number")) {
+    return pin->GetOrAddInteger(block_name, "file_number", 0);
+  }
+  std::string text = pin->GetString(block_name, "file_number");
+  if (text.empty() ||
+      !std::all_of(text.begin(), text.end(), [](unsigned char ch) {
+        return std::isdigit(ch) != 0;
+      })) {
+    FatalOutputsError("Output block '" + block_name +
+                      "' requires file_number to be a non-negative integer.");
+  }
+  std::uint64_t value = 0;
+  try {
+    value = std::stoull(text);
+  } catch (const std::exception &) {
+    FatalOutputsError("Output block '" + block_name +
+                      "' has an unrepresentable file_number.");
+  }
+  if (value > static_cast<std::uint64_t>(std::numeric_limits<int>::max())) {
+    FatalOutputsError("Output block '" + block_name +
+                      "' file_number is outside the publishable range.");
+  }
+  return static_cast<int>(value);
+}
+
+bool OutputBlockIsActive(ParameterInput *pin, const std::string &block_name) {
+  if (pin->DoesParameterExist(block_name, "dcycle")) {
+    return pin->GetInteger(block_name, "dcycle") != 0;
+  }
+  Real dt = pin->GetReal(block_name, "dt");
+  if (!std::isfinite(dt)) {
+    FatalOutputsError("Output block '" + block_name + "' requires finite dt.");
+  }
+  return dt > 0.0;
+}
+
+std::string OutputVariable(ParameterInput *pin, const std::string &block_name,
+                           const std::string &file_type) {
+  if (file_type == "pdf" && pin->DoesParameterExist(block_name, "variable_1")) {
+    return pin->GetString(block_name, "variable_1");
+  }
+  return pin->GetString(block_name, "variable");
+}
+
+void ReserveOutputNamespaces(ParameterInput *pin) {
+  const std::string basename = pin->GetString("job", "basename");
+  std::map<std::string, std::string> owner_by_target;
+  const auto reserve = [&](const std::string &target, const std::string &owner) {
+    const std::string normalized_target =
+        output_file_utils::LexicallyNormalTarget(target);
+    auto inserted = owner_by_target.emplace(normalized_target, owner);
+    if (!inserted.second && inserted.first->second != owner) {
+      FatalOutputsError("Output blocks '" + inserted.first->second + "' and '" + owner +
+                        "' resolve to the same public target family '" +
+                        normalized_target + "'.");
+    }
+  };
+
+  for (const auto &block : pin->block) {
+    const std::string &name = block.block_name;
+    if (name.compare(0, 6, "output") != 0 || !OutputBlockIsActive(pin, name)) {
+      continue;
+    }
+    const std::string type = pin->GetString(name, "file_type");
+    ParseFileNumber(pin, name);
+    FileShardMode shard_mode = FileShardMode::shared;
+    if (type == "bin" || type == "cbin" || type == "pdf" ||
+        type == "sphslice" || type == "rst") {
+      shard_mode = ParseShardMode(pin, name, false);
+    }
+    const std::string partition = PartitionTemplate(shard_mode);
+
+    if (type == "hst") {
+      reserve("history:" + basename, name);
+    } else if (type == "log") {
+      reserve(basename + ".log", name);
+    } else if (type == "trk") {
+      reserve("trk/" + basename + ".trk", name);
+    } else if (type == "rst") {
+      reserve("restart:", name);
+      if (shard_mode == FileShardMode::node) {
+        reserve("rst/" + basename + ".{SEQ}.rst", name);
+        reserve("rst/{NODE}/" + basename + ".{SEQ}.g{GEN}.payload.rst", name);
+      } else {
+        reserve("rst/" + partition + basename + ".{SEQ}.rst", name);
+      }
+    } else {
+      const std::string variable = OutputVariable(pin, name, type);
+      const std::string id = pin->DoesParameterExist(name, "id")
+          ? pin->GetString(name, "id") : variable;
+      output_file_utils::ValidatePathComponent(
+          id, "Output block '" + name + "' id", FatalOutputsError);
+      if (type == "tab") {
+        reserve("tab/" + basename + "." + id + ".{SEQ}.tab", name);
+      } else if (type == "vtk") {
+        const int configured_gid =
+            pin->DoesParameterExist(name, "gid") ? pin->GetInteger(name, "gid") : -1;
+        std::string gid =
+            configured_gid >= 0 ? "." + std::to_string(configured_gid) : "";
+        reserve("vtk/" + basename + "." + id + gid + ".{SEQ}.vtk", name);
+      } else if (type == "pvtk") {
+        const int configured_gid =
+            pin->DoesParameterExist(name, "gid") ? pin->GetInteger(name, "gid") : -1;
+        std::string gid =
+            configured_gid >= 0 ? "." + std::to_string(configured_gid) : "";
+        reserve("pvtk/" + basename + "." + id + gid + ".{SEQ}.part.vtk", name);
+      } else if (type == "bin") {
+        reserve("bin/" + partition + basename + "." + id + ".{SEQ}.bin", name);
+      } else if (type == "cbin") {
+        std::string factor = std::to_string(pin->GetInteger(name, "coarsen_factor"));
+        reserve("cbin_" + id + "_" + factor + "/" + partition + basename + "." + id +
+                ".{SEQ}.cbin", name);
+      } else if (type == "cart") {
+        reserve("cart/" + basename + "." + id + ".{SEQ}.bin", name);
+      } else if (type == "sph") {
+        std::ostringstream radius;
+        radius << std::fixed << std::setprecision(2) << pin->GetReal(name, "radius");
+        reserve("sph/" + basename + ".r=" + radius.str() + "." + id + ".{SEQ}.vtk",
+                name);
+      } else if (type == "sphslice") {
+        reserve("bin/" + partition + basename + "." + id + "." +
+                output_file_utils::FormatSphericalSliceRadius(
+                    pin->GetReal(name, "slice_r")) +
+                ".{SEQ}.sph.bin", name);
+      } else if (type == "pdf") {
+        std::string directory = "pdf_" + id;
+        for (int dimension = 2; dimension <= OutputParameters::PDF_MAX_DIM; ++dimension) {
+          std::string key = "variable_" + std::to_string(dimension);
+          if (!pin->DoesParameterExist(name, key)) break;
+          std::string component = pin->GetString(name, key);
+          output_file_utils::ValidatePathComponent(
+              component, "PDF output block '" + name + "' " + key, FatalOutputsError);
+          directory += "_" + component;
+        }
+        bool modern = pin->DoesParameterExist(name, "variable_1") ||
+            IsSharded(shard_mode) || pin->DoesParameterExist(name, "weight") ||
+            pin->DoesParameterExist(name, "scale") ||
+            pin->DoesParameterExist(name, "scale1") ||
+            pin->DoesParameterExist(name, "scale2") ||
+            pin->DoesParameterExist(name, "linthresh") ||
+            pin->DoesParameterExist(name, "linthresh1") ||
+            pin->DoesParameterExist(name, "linthresh2");
+        reserve(directory + "/" + partition + basename +
+                (modern ? ".header.pdf" : ".bins.pdf"), name);
+        reserve(directory + "/" + partition + basename + ".{SEQ}.pdf", name);
+      }
+    }
+  }
+}
+
 void ValidateCoarsenFactor(Mesh *pm, const std::string &block_name, int factor) {
   auto &indcs = pm->pmb_pack->pmesh->mb_indcs;
+  if (pm->multilevel) {
+    FatalOutputsError(
+        "Coarsened-binary output supports uniform meshes only; static refinement "
+        "and AMR are not supported.");
+  }
+  if (indcs.nx2 <= 1 || indcs.nx3 <= 1) {
+    FatalOutputsError(
+        "Coarsened-binary output supports three-dimensional meshes only.");
+  }
   int shortest = std::min({indcs.nx1, indcs.nx2, indcs.nx3});
   if (factor < 2 || (factor & (factor - 1)) != 0 || factor > shortest) {
-    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl << "Coarsened-binary output block '" << block_name
-              << "' requires coarsen_factor to be a power of two between 2 and "
-              << "the shortest MeshBlock dimension (" << shortest << ")."
-              << std::endl;
-    std::exit(EXIT_FAILURE);
+    FatalOutputsError("Coarsened-binary output block '" + block_name +
+                      "' requires coarsen_factor to be a power of two between 2 and "
+                      "the shortest MeshBlock dimension (" +
+                      std::to_string(shortest) + ").");
   }
 }
 
@@ -98,6 +275,7 @@ Outputs::Outputs(ParameterInput *pin, Mesh *pm) {
   // loop over input block names.  Find those that start with "output", read parameters,
   // and add to linked list of BaseTypeOutputs.
 
+  ReserveOutputNamespaces(pin);
   int num_hst=0, num_rst=0, num_log=0; // count # of hst,rst,log outputs
   for (auto it = pin->block.begin(); it != pin->block.end(); ++it) {
     if (it->block_name.compare(0, 6, "output") == 0) {
@@ -122,7 +300,7 @@ Outputs::Outputs(ParameterInput *pin, Mesh *pm) {
       if (opar.dcycle == 0 && opar.dt <= 0.0) continue;  // only add output if dt>0
 
       // set file number, basename, and format
-      opar.file_number = pin->GetOrAddInteger(opar.block_name,"file_number",0);
+      opar.file_number = ParseFileNumber(pin, opar.block_name);
       opar.file_basename = pin->GetString("job","basename");
       opar.file_type = pin->GetString(opar.block_name,"file_type");
 
@@ -477,6 +655,16 @@ Outputs::Outputs(ParameterInput *pin, Mesh *pm) {
                opar.pdf_linthresh[d] <= 0.0)) {
             fail_pdf("requires positive linthresh for symlog dimension "
                      + std::to_string(d + 1));
+          }
+          Real transformed_min = PDFTransformValue(
+              opar.pdf_bin_min[d], opar.pdf_scale[d], opar.pdf_linthresh[d]);
+          Real transformed_max = PDFTransformValue(
+              opar.pdf_bin_max[d], opar.pdf_scale[d], opar.pdf_linthresh[d]);
+          Real step_size = (transformed_max - transformed_min)/opar.pdf_nbin[d];
+          if (!std::isfinite(transformed_min) || !std::isfinite(transformed_max) ||
+              !std::isfinite(step_size) || !(step_size > 0.0)) {
+            fail_pdf("requires finite transformed bounds and a positive finite bin "
+                     "step for dimension " + std::to_string(d + 1));
           }
           total_bins *= static_cast<std::int64_t>(opar.pdf_nbin[d]) + 2;
           if (total_bins > std::numeric_limits<int>::max()) {

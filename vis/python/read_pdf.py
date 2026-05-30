@@ -19,7 +19,7 @@ import numpy as np
 
 _HEADER_KEY_RE = re.compile(r"^([A-Za-z0-9_]+)\s*=\s*(.*)$")
 _BIN_EDGE_RE = re.compile(r"^bin_edges_(\d+)$")
-_PDF_DATA_RE = re.compile(r"^(.*)\.(\d{5})\.pdf$")
+_PDF_DATA_RE = re.compile(r"^(.*)\.([0-9]{5,})\.pdf$")
 _SHARD_DIRECTORY_RE = re.compile(r"^(rank|node)_([0-9]{8})$")
 _LEGACY_VARIABLE_RE = re.compile(r"^#\s*\[(\d+)\]\s*=\s*(\S+)")
 _LEGACY_TIME_RE = re.compile(r"^#\s*time\s*=\s*(\S+)\s*$")

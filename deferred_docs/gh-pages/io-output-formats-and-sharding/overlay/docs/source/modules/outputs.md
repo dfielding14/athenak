@@ -61,12 +61,12 @@ node-sharded stream or node restart manifest requires it.
 | Product | Per-node support | Notes |
 | --- | --- | --- |
 | `bin` | Yes | Full output and Cartesian slicing are reader-tested. Node shards include additive inventory metadata and preserve explicit empty shards. |
-| `cbin` | Yes for full-volume output | Node shards include additive inventory metadata and preserve explicit empty shards. Sliced `cbin` is rejected because its emitted extent is incompatible with supported coarsening. |
+| `cbin` | Yes for uniform 3D active-zone full-volume output | Node shards include additive inventory metadata and preserve explicit empty shards. Lower-dimensional, ghost-zone-expanded, static-refinement, AMR, and sliced `cbin` are rejected before publication. |
 | Modern `pdf` | Yes | Shards use the sparse-coordinate V2 layout, carry inventory metadata, and publish each header or payload file atomically. |
 | `sphslice` | Yes | Angular ownership is assembled by the reader; shards declare layout and inventory metadata and publish atomically. |
 | `rst` | Yes | Public manifest references transactional node payloads and is the only supported node restart entry point. |
 
-Node-sharded binary and full-volume coarsened-binary preheaders add
+Node-sharded binary and uniform 3D active-zone full-volume coarsened-binary preheaders add
 `distribution`, `node`, `number of nodes`, and `number of meshblocks`.
 Canonical readers use these optional fields to require a complete dense node
 inventory while remaining compatible with older files that do not define
@@ -78,8 +78,8 @@ that checks empty/non-owning node cases and restart recovery.
 
 For `cbin`, `coarsen_factor` is validated before writer construction. It must
 be a power of two between `2` and the shortest MeshBlock dimension,
-inclusive. Every emitted extent, including optional ghost zones, must also be
-divisible by the factor; that check runs during writer construction.
+inclusive. The supported contract is uniform three-dimensional active-zone
+full-volume output.
 
 ## N-D PDF Output
 
@@ -117,6 +117,7 @@ weight = mass
 | `linthreshN` | Positive real | Required for `scaleN = symlog`. |
 | `weight` | `volume` (default), `mass`, `variable` | Contribution accumulated in each bin. |
 | `weight_variable` | Scalar output variable | Required only for `weight = variable`. |
+| `max_writer_allocation_bytes` | Positive integer; default `536870912` | Per-writer cap for histogram and edge arrays, host mirrors, copied and derived fields, metadata, and serialized staging arrays. |
 
 `scaleN = log` requires positive bin limits. Modern syntax is selected by
 `variable_1` and by other modern options such as sharding, `scaleN`, or
@@ -126,10 +127,13 @@ PDF contributions use active zones. Weighting incorporates cell volume, so
 `mass` integrates density over cell volume and `variable` integrates the
 selected scalar over cell volume.
 
+Histogram updates use backend-portable atomic accumulation. MPI reductions are
+staged through host memory, so PDF output does not require GPU-aware MPI.
+
 ### Variables For Diagnostics
 
-The PDF axes and variable weights accept normal scalar output variables and
-these derived scalar families:
+Ordinary scalar output streams and PDF axes or variable weights accept normal
+scalar output variables and these derived scalar families:
 
 | Family | Available names |
 | --- | --- |
@@ -150,6 +154,21 @@ Unqualified `mdot_*`, `edot_*`, and `vel_*` diagnostics are defined for
 single-fluid Hydro or MHD output only. Inputs enabling `<ion-neutral>` contain
 both fluids and reject these generic names until module-qualified two-fluid
 diagnostics are defined.
+
+These generic fluid diagnostics are Newtonian-only. `edot_sph_mag` requires
+MHD. Total and thermal energy-flux names require an ideal-gas total-energy
+fluid module, while `edot_sph_kin` and `edot_sph_mag` do not. Modern PDFs
+sample active zones only and reject `ghost_zones = true`; mass-weighted PDFs
+are rejected for `<ion-neutral>` configurations because unqualified density is
+ambiguous.
+
+Coordinate diagnostics clamp mathematically bounded projection inputs before
+inverse trigonometric evaluation. At `r = 0`, the canonical values are
+`theta = 0`, `phi = 0`, and `costheta = 1`. Singular cylindrical projections
+at `R = 0` are zero, and signed vertical flux is zero at `z = 0`. Runtime
+evaluation fails when fluid density is non-positive or a diagnostic becomes
+non-finite. Derived-array output with `ghost_zones = true` is rejected because
+derived ghost zones are not populated.
 
 ### Legacy Compatibility
 
@@ -238,6 +257,7 @@ single_file_per_node = true
 | `slice_r` | Required | Radius inside the domain. |
 | `ntheta` | `64` | Number of polar angular cells; must be at least 2. |
 | `nphi` | `128` | Number of azimuthal angular cells; must be at least 2. |
+| `max_writer_allocation_bytes` | `536870912` | Positive per-writer cap for angular geometry, interpolation arrays, sparse buffers, and dense staging. |
 
 Files use a `.sph.bin` suffix and include the requested radius:
 
@@ -246,6 +266,10 @@ bin/<basename>.<id>.r_<radius>.<output-number>.sph.bin
 bin/rank_00000000/<basename>.<id>.r_<radius>.<output-number>.sph.bin
 bin/node_00000000/<basename>.<id>.r_<radius>.<output-number>.sph.bin
 ```
+
+The `<radius>` component is a deterministic round-trip scientific token. For
+example, `slice_r = 0.25` emits `r_2.5000000000000000e-01`, which keeps nearby
+representable radii distinct.
 
 Derived-array fields, including `coord_*`, `mdot_*`, `edot_*`, and `vel_*`,
 are rejected for `sphslice` because its trilinear sampling may require
@@ -346,7 +370,7 @@ The associated readback entry point is:
 
 ```bash
 python vis/python/examples/read_io_outputs.py pdf run/pdf_nd3_coord_abscostheta_vel_sph_r/io_formats.00000.pdf
-python vis/python/examples/read_io_outputs.py sphslice run/bin/node_00000000/io_node_example.density.r_0.25.00000.sph.bin
+python vis/python/examples/read_io_outputs.py sphslice run/bin/node_00000000/io_node_example.density.r_2.5000000000000000e-01.00000.sph.bin
 python vis/python/examples/read_io_outputs.py bin run/bin/node_00000000/io_node_example.density.00000.bin --assemble-shards
 ```
 

@@ -136,6 +136,6 @@ A resumed terminal checkpoint is not overwritten merely because it is loaded.
   of each stream rather than inferring output cost from total runtime.
 - Node-sharded output reduces file counts but introduces node-level
   aggregation; qualify it on the target filesystem and node topology.
-- Full-volume coarsened binary node output is supported. Avoid documenting or
-  depending on sliced `cbin`: construction rejects emitted extents that are
-  incompatible with supported coarsening.
+- Uniform three-dimensional active-zone full-volume coarsened binary node
+  output is supported. Lower-dimensional, ghost-zone-expanded,
+  static-refinement, AMR, and sliced `cbin` are rejected before publication.

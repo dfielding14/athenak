@@ -28,6 +28,12 @@ OVERSIZED_MANIFEST_LINE = "x" * 4096
 NODE_OVERRIDES = tuple(
     f"output{number}/single_file_per_node=true" for number in range(1, 7)
 )
+RESTART_ONLY_NODE_OVERRIDES = tuple(
+    f"output{number}/dt=-1" for number in range(1, 6)
+) + (
+    "output6/single_file_per_node=true",
+    "time/final_output_policy=none",
+)
 
 
 def _env(max_mpi_bytes: str):
@@ -150,10 +156,11 @@ def test_node_sharded_diagnostics_reconstruct_to_shared_output(tmp_path):
     )
     np.testing.assert_allclose(node_pdf["pdf"], shared_pdf["pdf"])
     shared_surface = read_sphslice(
-        str(shared / "bin" / "io_node.density.r_0.25.00000.sph.bin")
+        str(shared / "bin" /
+            "io_node.density.r_2.5000000000000000e-01.00000.sph.bin")
     )
     node_surface = read_sphslice(
-        str(node_dir / "io_node.density.r_0.25.00000.sph.bin")
+        str(node_dir / "io_node.density.r_2.5000000000000000e-01.00000.sph.bin")
     )
     np.testing.assert_allclose(node_surface["data"], shared_surface["data"])
 
@@ -210,6 +217,109 @@ def test_node_restart_manifest_resumes_without_overwriting_terminal_checkpoint(t
     assert terminal.read_bytes() == original_manifest
     assert (run_dir / "rst" / "io_node.00002.rst").exists()
     assert not list((run_dir / "rst").rglob("*.assembled"))
+
+
+def test_node_restart_generation_collision_preserves_ambient_reservation(tmp_path):
+    run_dir = tmp_path / "generation_collision"
+    reserve_dir = run_dir / "rst"
+    reserve_dir.mkdir(parents=True)
+    ambient_reservation = reserve_dir / ".io_node.00000.g42.reserve"
+    ambient_reservation.write_text("ambient")
+    env = os.environ.copy()
+    env["ATHENAK_TEST_NODE_RESTART_GENERATION"] = "42"
+
+    subprocess.run(
+        [
+            "mpirun",
+            "-np",
+            "2",
+            "./athena",
+            "-i",
+            INPUT_FILE,
+            "-d",
+            str(run_dir),
+            *RESTART_ONLY_NODE_OVERRIDES,
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=90,
+    )
+
+    manifest = reserve_dir / "io_node.00000.rst"
+    assert ".g43.payload.rst" in manifest.read_text()
+    assert ambient_reservation.read_text() == "ambient"
+    assert sorted(reserve_dir.glob(".*.reserve")) == [ambient_reservation]
+
+
+@pytest.mark.parametrize(
+    ("stage", "expected"),
+    (
+        ("after_payload_write", "Injected node restart failure after payload write"),
+        (
+            "after_payload_publication",
+            "Injected node restart failure after payload publication",
+        ),
+    ),
+)
+def test_injected_node_restart_failure_discards_owned_attempt_artifacts(
+    tmp_path, stage, expected
+):
+    run_dir = tmp_path / f"injected_{stage}_failure"
+    run_dir.mkdir()
+    env = os.environ.copy()
+    env["ATHENAK_TEST_NODE_RESTART_FAIL_STAGE"] = stage
+
+    proc = subprocess.run(
+        [
+            "mpirun",
+            "-np",
+            "2",
+            "./athena",
+            "-i",
+            INPUT_FILE,
+            "-d",
+            str(run_dir),
+            *RESTART_ONLY_NODE_OVERRIDES,
+        ],
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=90,
+    )
+
+    assert proc.returncode != 0
+    assert expected in (proc.stdout + proc.stderr)
+    assert not list((run_dir / "rst").rglob("*.tmp"))
+    assert not list((run_dir / "rst").rglob("*.payload.rst"))
+    assert not list((run_dir / "rst").glob(".*.reserve"))
+    assert not (run_dir / "rst" / "io_node.00000.rst").exists()
+
+
+def test_restart_persisted_exhausted_counter_can_resume_without_publication(tmp_path):
+    input_file = tmp_path / "counter_sentinel.athinput"
+    input_file.write_text(
+        Path(INPUT_FILE).read_text().replace(
+            "<output6>\n", "<output6>\nfile_number = 2147483646\n", 1
+        )
+    )
+    run_dir = tmp_path / "counter_sentinel"
+    run_dir.mkdir()
+    overrides = tuple(f"output{number}/dt=-1" for number in range(1, 6)) + (
+        "time/final_output_policy=none",
+    )
+    subprocess.run(
+        ["mpirun", "-np", "2", "./athena", "-i", str(input_file), "-d", str(run_dir),
+         *overrides],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=90,
+    )
+    restart = run_dir / "rst" / "io_node.2147483646.rst"
+    assert restart.exists()
+    _resume(tmp_path / "counter_sentinel_resume", restart)
 
 
 def test_node_restart_rejects_generated_payload_path_before_open(tmp_path):
@@ -689,7 +799,7 @@ def test_promoted_node_example_generates_readable_outputs_and_manifest(tmp_path)
         run_dir
         / "bin"
         / "node_00000000"
-        / "io_node_example.density.r_0.25.00000.sph.bin"
+        / "io_node_example.density.r_2.5000000000000000e-01.00000.sph.bin"
     )
     assert bin_convert.read_binary(str(node_bin), assemble_shards=True)["n_mbs"] == 4
     assert (

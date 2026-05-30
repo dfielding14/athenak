@@ -7,8 +7,6 @@
 //! \brief writes output data in binary format, which simply consists of each MeshBlock
 //! written contiguously in order of "gid" in binary format.
 
-#include <sys/stat.h>  // mkdir
-
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>      // fwrite(), fclose(), fopen(), fnprintf(), snprintf()
@@ -22,13 +20,25 @@
 
 #include "athena.hpp"
 #include "globals.hpp"
+#include "mpi_utils.hpp"
 #include "coordinates/cell_locations.hpp"
 #include "mesh/mesh.hpp"
+#include "output_file_utils.hpp"
 #include "outputs.hpp"
 
 namespace {
 
+std::string &ActiveBinaryTemporary() {
+  static std::string path;
+  return path;
+}
+
+void CleanupActiveBinaryTemporary() {
+  output_file_utils::DiscardOwnedPath(ActiveBinaryTemporary());
+}
+
 [[noreturn]] void FatalBinaryError(const std::string &message) {
+  CleanupActiveBinaryTemporary();
   std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
             << std::endl << message << std::endl;
 #if MPI_PARALLEL_ENABLED
@@ -54,6 +64,13 @@ std::size_t CheckedProduct(std::size_t left, std::size_t right, const char *cont
 std::size_t CountAsSize(int count, const char *context) {
   if (count < 0) {
     FatalBinaryError(std::string(context) + " is negative.");
+  }
+  return static_cast<std::size_t>(count);
+}
+
+std::size_t Count64AsSize(std::uint64_t count, const char *context) {
+  if (count > std::numeric_limits<std::size_t>::max()) {
+    FatalBinaryError(std::string(context) + " exceeds size_t range.");
   }
   return static_cast<std::size_t>(count);
 }
@@ -92,11 +109,12 @@ MeshBinaryOutput::MeshBinaryOutput(ParameterInput *pin, Mesh *pm, OutputParamete
   // useful for mpiio-based outputs because on some supercomputers you may need to
   // set different stripe counts depending on whether mpiio is used in order to
   // achieve the best performance and not to crash the filesystem
-  mkdir("bin",0775);
+  output_file_utils::EnsureDirectory("bin", 0775, "binary output", FatalBinaryError);
   if (IsSharded(op.shard_mode)) {
     std::string shard_dir = "bin/" + ShardDirectoryName(
         op.shard_mode, global_variable::my_rank, global_variable::node_id);
-    mkdir(shard_dir.c_str(), 0775);
+    output_file_utils::EnsureDirectory(shard_dir, 0775, "binary output",
+                                       FatalBinaryError);
   }
 }
 
@@ -113,22 +131,23 @@ void MeshBinaryOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
       (shard_mode == FileShardMode::shared && global_variable::my_rank == 0);
 
   // create filename: "bin/file_basename" + "." + "file_id" + "." + XXXXX + ".bin"
-  // where XXXXX = 5-digit file_number
+  // where XXXXX = file_number with a minimum width of 5 digits
 
-  std::string fname;
+  std::string sequence = output_file_utils::FormatSequence(
+      out_params.file_number, "binary output", FatalBinaryError);
+  std::string published_fname;
   if (IsSharded(shard_mode)) {
-    char number[7];
-    std::snprintf(number, sizeof(number), ".%05d", out_params.file_number);
-    fname = std::string("bin/") + ShardDirectoryName(
+    published_fname = std::string("bin/") + ShardDirectoryName(
         shard_mode, global_variable::my_rank, global_variable::node_id) + "/"
           + out_params.file_basename
-          + "." + out_params.file_id + number + ".bin";
+          + "." + out_params.file_id + "." + sequence + ".bin";
   } else {
-    char number[7];
-    std::snprintf(number, sizeof(number), ".%05d", out_params.file_number);
-    fname = std::string("bin/") + out_params.file_basename
-          + "." + out_params.file_id + number + ".bin";
+    published_fname = std::string("bin/") + out_params.file_basename
+          + "." + out_params.file_id + "." + sequence + ".bin";
   }
+  std::string fname = output_file_utils::TemporaryPath(published_fname);
+  ActiveBinaryTemporary() = shard_writer ? fname : "";
+  mpi_utils::SetFatalCleanupHook(CleanupActiveBinaryTemporary);
 
   IOWrapper binfile;
   std::size_t header_offset=0;
@@ -140,9 +159,9 @@ void MeshBinaryOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   binfile.Open(fname.c_str(), IOWrapper::FileMode::write, independent_file);
 
   int nout_mbs = CountAsInt(outmbs.size(), "binary MeshBlock count");
-  int shard_nout_mbs = nout_mbs;
+  std::uint64_t shard_nout_mbs = nout_mbs;
   if (IsNodeSharded(shard_mode)) {
-    shard_nout_mbs = global_variable::NodeSum(nout_mbs);
+    shard_nout_mbs = global_variable::NodeSum64(nout_mbs);
   }
 
   // Basic parts of the format:
@@ -219,10 +238,9 @@ void MeshBinaryOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     std::uint64_t shard_cells = 0;
     MPI_Comm comm =
         IsNodeSharded(shard_mode) ? global_variable::node_comm : MPI_COMM_WORLD;
-    if (MPI_Allreduce(&local_cells, &shard_cells, 1, MPI_UINT64_T, MPI_MAX, comm)
-        != MPI_SUCCESS) {
-      FatalBinaryError("Could not reduce binary MeshBlock cell counts.");
-    }
+    mpi_utils::CheckMpi(
+        MPI_Allreduce(&local_cells, &shard_cells, 1, MPI_UINT64_T, MPI_MAX, comm),
+        "MPI_Allreduce for binary MeshBlock cell counts");
     if (shard_cells > std::numeric_limits<std::size_t>::max()) {
       FatalBinaryError("binary MeshBlock cell count exceeds size_t range.");
     }
@@ -239,8 +257,8 @@ void MeshBinaryOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   std::size_t data_size = CheckedAdd(10*sizeof(int32_t) + 6*sizeof(Real),
                                      value_bytes, "binary MeshBlock record");
 
-  std::size_t node_offset = IsNodeSharded(shard_mode) ? CountAsSize(
-      global_variable::NodePrefixSum(nout_mbs), "binary node MeshBlock prefix") : 0;
+  std::size_t node_offset = IsNodeSharded(shard_mode) ? Count64AsSize(
+      global_variable::NodePrefixSum64(nout_mbs), "binary node MeshBlock prefix") : 0;
   std::size_t payload_bytes = CheckedProduct(
       CountAsSize(nout_mbs, "binary MeshBlock count"), data_size, "binary payload");
 
@@ -351,16 +369,29 @@ void MeshBinaryOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   const char *payload = data.empty() ? &dummy : data.data();
   if (binfile.Write_any_type_at_all(payload, payload_bytes, myoffset, "byte",
                                     independent_file) != payload_bytes) {
+    if (shard_writer) output_file_utils::DiscardOwnedPath(fname);
     FatalBinaryError("binary payload was not written completely.");
   }
 
   // close the output file and clean up ptrs to data
   if (binfile.Close(independent_file) != 0) {
+    if (shard_writer) output_file_utils::DiscardOwnedPath(fname);
     FatalBinaryError("Could not close binary output file '" + fname + "'.");
   }
+  if (shard_writer) {
+    output_file_utils::PublishTemporaryFile(fname, published_fname, "binary output",
+                                            FatalBinaryError);
+  }
+  ActiveBinaryTemporary().clear();
+  mpi_utils::SetFatalCleanupHook(nullptr);
+#if MPI_PARALLEL_ENABLED
+  mpi_utils::CheckMpi(MPI_Barrier(MPI_COMM_WORLD),
+                      "MPI_Barrier after binary output publication");
+#endif
 
   // increment counters
-  out_params.file_number++;
+  out_params.file_number = output_file_utils::AdvanceFileNumber(
+      out_params.file_number, "binary output", FatalBinaryError);
   if (out_params.last_time < 0.0) {
     out_params.last_time = pm->time;
   } else {

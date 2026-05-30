@@ -66,6 +66,7 @@ class IOWrapper {
 
  private:
   IOWrapperFile fh_;
+  std::string path_;
 #if MPI_PARALLEL_ENABLED
   MPI_Comm comm_;
 #endif

@@ -803,25 +803,107 @@ decision.
 | Evidence | `ROB-021`; `ROB-043`; independent filesystem and namespace audits. |
 | Follow-up | Add duplicate-family rejection and allowed-control regressions, including same explicit PDF `id` with different variables, bins, scales, or weights. |
 
+### D-094: Keep The Coarsened-Binary Producer Active-Zone-Only
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted for `RCP-03`; supersedes `D-075` and resolves `D-088` |
+| Decision | Produce `.cbin` only for uniform three-dimensional full-volume active-zone output in shared, rank, and node layouts. Reject `ghost_zones=true`, lower-dimensional meshes, AMR meshes, and slices during construction. Represent checked Kokkos plane strides, factor powers, coarsening ranges, and normalization ranges as `std::int64_t`; preflight retained allocations and serialized payload sizes separately as `std::size_t`. |
+| Reason | Ghost-expanded output has no promoted producer contract and introduces avoidable ambiguity. The narrow active-zone producer is explicit, documented, and sufficient for the feature. Kernel ranges and host allocations have distinct representability domains and should not be conflated. |
+| Alternatives | Permit divisible ghost-expanded extents; promote lower-dimensional, AMR, or sliced output now; use `int` launch ranges; use `std::size_t` directly inside Kokkos launch arithmetic. |
+| Why not | The broader rows need deliberate reconstruction semantics and evidence. Signed checked 64-bit launch arithmetic matches the Kokkos kernel boundary while `std::size_t` remains the correct allocation boundary. |
+| Reversal path | Promote one producer row at a time in a later branch with writer, reader, ATHDF/XDMF, sharding-equality, and documentation evidence. |
+| Evidence | `src/outputs/coarsened_binary.cpp`; `src/outputs/coarsened_binary_layout.hpp`; `tst/test_suite/io/cbin_layout_harness.cpp`; focused arithmetic harness returned `8 passed`; MPI moment conversion regression passed for shared, rank, and node layouts. |
+| Follow-up | Retain explicit constructor rejection tests and the reader-compatibility choice in `D-095`. |
+
+### D-095: Preserve Broader Read-Only Legacy Coarsened-Binary Compatibility
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted for `RCP-03` |
+| Decision | Keep `vis/python/bin_convert.py` able to read historical `.cbin` products that are broader than the active producer contract when their emitted metadata and payload are internally valid. Treat this as read-only legacy compatibility, not as permission for the C++ writer to emit those forms. Continue rejecting malformed moment groups before payload decoding. |
+| Reason | Tightening the producer prevents new ambiguous files. Tightening the reader would unnecessarily strand historical analysis products and is not required for writer safety. |
+| Alternatives | Reject every historical `.cbin` row excluded from the current producer; silently broaden the producer to match the reader. |
+| Why not | Reader compatibility is useful and low risk when validation is strict. Producer promotion requires a stronger design and test matrix. |
+| Reversal path | Narrow an individual legacy reader row only if a concrete malformed-input risk cannot be handled by validation, and document the compatibility break. |
+| Evidence | `vis/python/bin_convert.py`; early malformed-moment regressions in `tst/test_suite/io/test_python_io_readers_cpu.py`; independent RCP-03 re-audit. |
+| Follow-up | Document the producer-versus-reader distinction in the compatibility matrix and deferred Pages overlay. |
+
+### D-076: Define Finite Diagnostic Semantics At Geometric Singularities
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted for `RCP-04` |
+| Decision | Clamp mathematically bounded `z/r` inputs to `[-1, 1]` before inverse-cosine and cosine-derived outputs. At `r=0`, define radial velocity and radial mass or energy projections as zero. At cylindrical `R=0`, define cylindrical radial, azimuthal, and polar velocity projections as zero. Reject non-positive density and non-finite fluid diagnostics at runtime rather than emitting sentinels. Retain the existing construction-time rejection for ambiguous generic ion-neutral two-fluid diagnostics. |
+| Reason | Roundoff may move a theoretically bounded projection slightly outside its domain. Coordinate-axis singularities have a useful finite limiting convention for output, while division by non-positive density does not have a defensible generic fluid interpretation. |
+| Alternatives | Emit NaNs; apply a fluid floor silently; reject every axis-origin sample; emit a sentinel for non-positive density. |
+| Why not | NaNs make analysis failures late and opaque. Silent floors alter physical meaning. Axis-origin rejection is unnecessarily strict for otherwise valid meshes. Sentinels are not self-describing in ordinary output fields. |
+| Reversal path | Add module-qualified diagnostics if a fluid package establishes a different physical policy. Keep generic names conservative. |
+| Evidence | `src/outputs/diagnostic_semantics.hpp`; `src/outputs/derived_variables.cpp`; `tst/test_suite/io/diagnostic_semantics_harness.cpp`; analytic Hydro and MHD writer regressions. |
+| Follow-up | Preserve representative CUDA execution as an external `RCP-09` gate. |
+
+### D-077: Reject Derived Ghost-Zone Output Until Kernels Populate It
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted for `RCP-04` |
+| Decision | Reject `ghost_zones=true` during construction whenever an output requests derived diagnostics. Modern PDFs additionally reject ghost-zone sampling explicitly and operate on active zones only. Do not attempt a partial derived-kernel ghost-zone implementation in this branch. |
+| Reason | Existing derived arrays populate active zones. Allowing ghost-zone output would publish uninitialized or stale values. A future implementation must define every derived kernel's ghost-domain behavior consistently. |
+| Alternatives | Populate selected derived kernels only; allow the request and rely on callers to avoid ghosts; broadly redesign derived kernels now. |
+| Why not | Partial support is difficult to explain and easy to misuse. Silent allowance emits incorrect data. A broad redesign exceeds this IO branch's bounded scope. |
+| Reversal path | Promote derived ghost-zone support in a focused branch with a complete kernel inventory and boundary-value regressions. |
+| Evidence | `src/outputs/basetype_output.cpp`; `src/outputs/pdf.cpp`; derived ghost-zone construction regressions. |
+| Follow-up | Keep `sphslice` derived-field rejection until ghost-zone-safe interpolation exists. |
+
+### D-078: Use Round-Trip Scientific Spherical-Slice Radius Tokens
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted for `RCP-04` |
+| Decision | Render `sphslice` radius filename components with deterministic round-trip scientific precision, for example `r_2.5000000000000000e-01`. Permit separately configured spherical slices to share an `id` when their precise radius tokens differ. |
+| Reason | The inherited `%g` representation can collapse nearby radii into one public path. Round-trip scientific tokens remain human-readable while preserving the configured floating-point distinction. |
+| Alternatives | Keep `%g`; append a sequence-independent slice ordinal; reject duplicate IDs across all spherical slices. |
+| Why not | `%g` can collide. Ordinals hide the physical radius and make configuration ordering observable. Blanket duplicate-ID rejection blocks safe, useful multi-radius families. |
+| Reversal path | Add a versioned naming layer only if downstream tooling requires shorter tokens; retain collision resistance. |
+| Evidence | `src/outputs/output_file_utils.hpp`; `src/outputs/spherical_slice.cpp`; namespace preflight; nearby-radius regression. |
+| Follow-up | Preserve the explicit distinction between `file_type=sph` and `file_type=sphslice`. |
+
+### D-089: Bound PDF And Spherical-Slice Writer Allocations
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted for `RCP-04` |
+| Decision | Add a positive per-output `max_writer_allocation_bytes` parameter with a default of `536870912` bytes. Preflight modern PDF histogram, edge, host-mirror, copied-field, derived-field, metadata, and serialization staging bytes before allocation. Preflight spherical-slice angular geometry, interpolation arrays, sparse buffers, dense staging, and serialization buffers before allocation. |
+| Reason | File-controlled dimensions can otherwise trigger unreasonable host or device allocations before a clear diagnostic. A configurable practical cap is safer than an unbounded writer and still permits deliberate larger production products. |
+| Alternatives | Hard-code a cap; cap only final payload bytes; depend on allocator failures. |
+| Why not | Fixed caps require source edits for legitimate large products. Final payload size omits retained and transient arrays. Allocator failures are late and backend-dependent. |
+| Reversal path | Adjust the default with production evidence while keeping positive explicit overrides and early preflight. |
+| Evidence | `src/outputs/pdf.cpp`; `src/outputs/spherical_slice.cpp`; reduced-cap constructor regressions and PDF load-cap-before-derived-allocation regression. |
+| Follow-up | Keep reader-side configurable budgets separate in `RCP-06`. |
+
+### D-096: Use Backend-Portable PDF Atomics And Host-Staged Reductions
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted for `RCP-04` correction cycle |
+| Decision | Accumulate PDF bins with `Kokkos::atomic_add()` into the result view. For MPI reductions, copy result views to host mirrors, reduce host pointers, and copy reduced root results back to device. Include host mirrors in writer budget preflight. |
+| Reason | `ScatterView` replication is backend-sensitive and complicates allocation accounting. Passing device pointers directly to MPI silently assumes GPU-aware MPI. The explicit atomic and host-staging path is portable across CPU and accelerator builds. |
+| Alternatives | Retain `ScatterView`; require GPU-aware MPI; select behavior through backend-specific compile-time branches. |
+| Why not | The branch should not depend on hidden backend allocation multipliers or deployment-specific MPI capabilities. Compile-time divergence increases the qualification matrix without a demonstrated need. |
+| Reversal path | Add an opt-in GPU-aware reduction path only after measured benefit and qualification on supported production stacks. |
+| Evidence | `src/outputs/pdf.cpp`; local serial and MPI PDF regressions; deferred documentation overlay. |
+| Follow-up | Execute the representative CUDA PDF regression during `RCP-09`. |
+
 ## Pending Decision Queue
 
 Resolve these before merge readiness:
 
 | ID | Question | Required evidence | Owner checkpoint |
 | --- | --- | --- | --- |
-| D-072 | Select common MPI error-reporting helper and teardown policy. | Diff-driven MPI inventory and helper design. | RCP-02 |
-| D-074 | Define checked directory creation, stale temporary handling, and restart generation collision policy. | Filesystem helper design and failure regressions. | RCP-02 |
-| D-076 | Define diagnostic clamp, singularity, and zero-density semantics. | Numerical audit and analytic tests. | RCP-04 |
-| D-077 | Reject or implement derived ghost-zone output. | Derived-variable audit and focused regression. | RCP-04 |
-| D-078 | Select stable spherical-slice radius naming. | Collision analysis and compatibility review. | RCP-04 |
 | D-079 | Bound the C++ parser and interface cleanup. | Scope audit after correctness checkpoints. | RCP-05 |
 | D-080 | Decide whether to extract shared private Python reader utilities. | Duplication inventory and API review. | RCP-06 |
 | D-082 | Select preservation-aware deferred Pages staging implementation. | Live `origin/gh-pages` blob inventory and idempotence design. | RCP-07 |
 | D-084 | Select final process-artifact packaging. | Whole-branch review and PR usability audit. | RCP-10 |
-| D-086 | Define widened output sequence rendering and counter domain. | Writer/reader inventory and compatibility tests. | RCP-02 |
-| D-087 | Define deterministic output namespace collision rejection. | Target map inventory and compatibility tests. | RCP-02 |
-| D-088 | Select checked `cbin` Kokkos range representation. | Kernel-range audit and boundary harness. | RCP-03 |
-| D-089 | Select writer-side PDF and `sphslice` allocation limits. | Allocation map and reduced-cap tests. | RCP-04 |
 | D-090 | Preregister production scaling topology and optimization threshold. | Scheduler qualification plan. | RCP-08 |
 
 ## Decision Update Template

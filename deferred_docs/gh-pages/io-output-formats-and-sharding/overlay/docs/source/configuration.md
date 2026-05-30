@@ -98,11 +98,11 @@ single_file_per_node = true
 same output block.
 
 For `file_type = cbin`, set `coarsen_factor` to a power of two between `2`
-and the shortest MeshBlock dimension, inclusive. Every emitted extent,
-including optional ghost zones, must be divisible by the factor. The writer
-rejects invalid factors before construction and invalid extents during
-construction. Full-volume node-sharded `cbin` is supported; sliced `cbin`
-remains deliberately excluded.
+and the shortest MeshBlock dimension, inclusive. The supported contract is
+uniform three-dimensional active-zone full-volume output. The writer rejects
+lower-dimensional, ghost-zone-expanded, static-refinement, AMR, and sliced
+configurations before publication. Full-volume node-sharded `cbin` is
+supported within that contract.
 
 ### Distribution Examples
 
@@ -138,10 +138,12 @@ dt = 0.1
 single_file_per_node = true
 ```
 
-Supported node-sharded products are `bin`, full-volume `cbin`, modern `pdf`,
-`sphslice`, and `rst`. Node-sharded binary and full-volume coarsened-binary
+Supported node-sharded products are `bin`, uniform 3D active-zone full-volume
+`cbin`, modern `pdf`, `sphslice`, and `rst`. Node-sharded binary and uniform
+3D active-zone full-volume coarsened-binary
 writers emit additive inventory metadata and valid explicit empty shards.
-Sliced `cbin` is rejected explicitly and is not a promoted workflow.
+Lower-dimensional, ghost-zone-expanded, static-refinement, AMR, and sliced
+`cbin` are rejected explicitly and are not promoted workflows.
 
 ## Modern PDF Configuration
 
@@ -177,14 +179,22 @@ single_file_per_node = true
 | `linthreshN` | Positive threshold required for `symlog` |
 | `weight` | `volume`, `mass`, `variable` |
 | `weight_variable` | Required scalar name for `weight = variable` |
+| `max_writer_allocation_bytes` | Positive per-writer allocation cap for histogram and edge arrays, host mirrors, copied and derived fields, metadata, and serialized staging; default `536870912` |
 
 Legacy unsharded PDF keys remain accepted for compatibility, including
 `mass_weighted`; use the modern form for new configurations.
+
+PDF histogram updates use backend-portable atomics. MPI reductions stage
+through host memory rather than requiring GPU-aware MPI.
 
 The generic `mdot_*`, `edot_*`, and `vel_*` derived names are supported only
 for single-fluid Hydro or MHD configurations. They are rejected for
 `<ion-neutral>` two-fluid inputs because no unqualified quantity can identify
 which fluid is meant.
+These names are Newtonian-only. Total and thermal energy fluxes require an
+ideal-gas total-energy module, `edot_sph_mag` requires MHD, and derived-array
+outputs reject `ghost_zones = true`. Modern PDFs sample active zones only and
+reject two-fluid `weight = mass`.
 
 ## Spherical Slice Configuration
 
@@ -200,11 +210,15 @@ dt = 0.1
 single_file_per_node = true
 ```
 
-`slice_r` must lie in the domain and `ntheta` and `nphi` must each be at least
-2. The `variable` must be a native scalar field such as `hydro_w_d` or
+`slice_r` must be positive and strictly inside an origin-centered 3D domain;
+`ntheta` and `nphi` must each be at least 2. The optional positive
+`max_writer_allocation_bytes` cap defaults to `536870912`. The `variable`
+must be a native scalar field such as `hydro_w_d` or
 `mhd_w_d`; derived-array fields are rejected until spherical interpolation has
 ghost-zone-safe derived sampling. `sphslice` is a binary fixed-radius data
 product; the existing `file_type = sph` remains a separate output format.
+Radius filename components use deterministic round-trip scientific tokens, so
+`slice_r = 0.5` emits `r_5.0000000000000000e-01`.
 
 ## Restart Configuration
 

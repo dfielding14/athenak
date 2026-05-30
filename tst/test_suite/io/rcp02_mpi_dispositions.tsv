@@ -1,0 +1,68 @@
+# path	symbol	count	disposition	note
+src/driver/driver.cpp	MPI_Allreduce	1	checked	final AMR communication count
+src/driver/driver.cpp	MPI_Bcast	1	checked	wall-clock termination time
+src/driver/driver.cpp	MPI_Reduce	1	checked	output timing maximum
+src/globals.cpp	MPI_Allreduce	5	checked	node communicator metadata and 64-bit sums
+src/globals.cpp	MPI_Bcast	1	checked	node communicator metadata
+src/globals.cpp	MPI_Comm_free	1	checked	node communicator teardown
+src/globals.cpp	MPI_Comm_rank	1	checked	node communicator metadata
+src/globals.cpp	MPI_Comm_size	1	checked	node communicator metadata
+src/globals.cpp	MPI_Comm_split_type	1	checked	node communicator construction
+src/globals.cpp	MPI_Exscan	3	checked	node communicator metadata and 64-bit prefixes
+src/main.cpp	MPI_Comm_rank	1	inherited-startup-lifecycle	preexisting startup handling
+src/main.cpp	MPI_Comm_size	1	inherited-startup-lifecycle	preexisting startup handling
+src/main.cpp	MPI_Finalize	10	inherited-startup-lifecycle	preexisting shutdown handling
+src/main.cpp	MPI_Init	1	inherited-startup-lifecycle	preexisting startup handling
+src/main.cpp	MPI_Init_thread	1	inherited-startup-lifecycle	preexisting startup handling
+src/mesh/build_tree.cpp	MPI_Abort	1	intentional-fatal-shutdown	restart layout failure terminates world
+src/mpi_utils.hpp	MPI_Abort	1	intentional-fatal-shutdown	shared fatal helper terminates world
+src/mpi_utils.hpp	MPI_Error_string	1	checked	best-effort shared MPI diagnostic rendering
+src/outputs/basetype_output.cpp	MPI_Allreduce	1	checked	output MeshBlock inventory
+src/outputs/binary.cpp	MPI_Abort	1	intentional-fatal-shutdown	binary failure terminates world
+src/outputs/binary.cpp	MPI_Allreduce	1	checked	binary shard metadata
+src/outputs/binary.cpp	MPI_Barrier	1	checked	binary publication ordering
+src/outputs/cartgrid.cpp	MPI_Reduce	2	checked	Cartesian-grid values
+src/outputs/coarsened_binary.cpp	MPI_Abort	1	intentional-fatal-shutdown	coarsened-binary failure terminates world
+src/outputs/coarsened_binary.cpp	MPI_Allreduce	2	checked	coarsened-binary inventories
+src/outputs/coarsened_binary.cpp	MPI_Barrier	1	checked	coarsened-binary publication ordering
+src/outputs/formatted_table.cpp	MPI_Barrier	2	checked	serialized table append ordering
+src/outputs/io_wrapper.cpp	MPI_Allreduce	6	wrapper-owned-status	wrapper validates or returns failures
+src/outputs/io_wrapper.cpp	MPI_Barrier	1	wrapper-owned-status	wrapper validates or returns failures
+src/outputs/io_wrapper.cpp	MPI_Bcast	1	wrapper-owned-status	wrapper validates or returns failures
+src/outputs/io_wrapper.cpp	MPI_Comm_rank	1	wrapper-owned-status	wrapper validates or returns failures
+src/outputs/io_wrapper.cpp	MPI_Error_class	1	wrapper-owned-status	wrapper validates or returns failures
+src/outputs/io_wrapper.cpp	MPI_File_close	1	wrapper-owned-status	returned to caller for contextual failure
+src/outputs/io_wrapper.cpp	MPI_File_delete	1	wrapper-owned-status	wrapper validates or returns failures
+src/outputs/io_wrapper.cpp	MPI_File_get_position	1	wrapper-owned-status	wrapper validates or returns failures
+src/outputs/io_wrapper.cpp	MPI_File_open	1	wrapper-owned-status	wrapper validates or returns failures
+src/outputs/io_wrapper.cpp	MPI_File_read	1	wrapper-owned-status	wrapper validates or returns failures
+src/outputs/io_wrapper.cpp	MPI_File_read_at	1	wrapper-owned-status	wrapper validates or returns failures
+src/outputs/io_wrapper.cpp	MPI_File_read_at_all	1	wrapper-owned-status	wrapper validates or returns failures
+src/outputs/io_wrapper.cpp	MPI_File_seek	1	wrapper-owned-status	returned to caller for contextual failure
+src/outputs/io_wrapper.cpp	MPI_File_write	1	wrapper-owned-status	wrapper validates or returns failures
+src/outputs/io_wrapper.cpp	MPI_File_write_at	1	wrapper-owned-status	wrapper validates or returns failures
+src/outputs/io_wrapper.cpp	MPI_File_write_at_all	1	wrapper-owned-status	wrapper validates or returns failures
+src/outputs/io_wrapper.cpp	MPI_Get_count	1	wrapper-owned-status	wrapper validates or returns failures
+src/outputs/outputs.cpp	MPI_Abort	1	intentional-fatal-shutdown	output registration failure terminates world
+src/outputs/pdf.cpp	MPI_Comm_rank	1	checked	host-staged PDF reduction root
+src/outputs/pdf.cpp	MPI_Reduce	2	checked	host-staged PDF histogram values
+src/outputs/restart.cpp	MPI_Allreduce	1	checked	node payload publication failure coordination
+src/outputs/restart.cpp	MPI_Barrier	4	checked	restart cleanup and publication ordering
+src/outputs/restart.cpp	MPI_Bcast	2	checked	restart generation reservation and root publication validation
+src/outputs/restart.cpp	MPI_Gather	2	checked	restart manifest inventory
+src/outputs/spherical_slice.cpp	MPI_Allreduce	1	checked	sphslice global ownership
+src/outputs/spherical_slice.cpp	MPI_Gather	1	checked	sphslice node inventory
+src/outputs/spherical_slice.cpp	MPI_Gatherv	2	checked	sphslice node payload
+src/outputs/spherical_slice.cpp	MPI_Reduce	2	checked	sphslice values
+src/outputs/spherical_surface.cpp	MPI_Reduce	2	checked	spherical-surface values
+src/outputs/track_prtcl.cpp	MPI_Allgather	1	checked	tracked-particle inventory
+src/outputs/vtk_mesh.cpp	MPI_File_close	1	checked	mesh-VTK file lifecycle
+src/outputs/vtk_mesh.cpp	MPI_File_open	1	checked	mesh-VTK file lifecycle
+src/outputs/vtk_mesh.cpp	MPI_File_set_view	3	checked	mesh-VTK collective views
+src/outputs/vtk_mesh.cpp	MPI_File_write	3	checked	mesh-VTK independent writes
+src/outputs/vtk_mesh.cpp	MPI_File_write_all	1	checked	mesh-VTK collective write
+src/outputs/vtk_mesh.cpp	MPI_Type_commit	3	checked	mesh-VTK datatype lifecycle
+src/outputs/vtk_mesh.cpp	MPI_Type_create_subarray	3	checked	mesh-VTK datatype lifecycle
+src/outputs/vtk_mesh.cpp	MPI_Type_free	3	checked	mesh-VTK datatype lifecycle
+src/pgen/pgen.cpp	MPI_Allreduce	2	inherited-outside-rcp02	generic solution-error reporting
+src/restart_manifest.cpp	MPI_Abort	1	intentional-fatal-shutdown	node-manifest failure terminates world

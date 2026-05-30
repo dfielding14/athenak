@@ -153,7 +153,7 @@ def test_missing_restart_path_fails_immediately(tmp_path):
     )
     output = proc.stdout + proc.stderr
     assert proc.returncode != 0
-    assert f"Error: Unable to open restart file: {restart}" in output
+    assert f"Unable to open restart file: {restart}" in output
     assert "Error opening file" not in output
     assert "could not be opened" not in output
 

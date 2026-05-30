@@ -75,14 +75,15 @@ def test_rank_and_node_sharded_pdf_and_sphslice_match_shared_output(tmp_path):
         )
     )
     shared_surface = read_sphslice(
-        str(shared / "bin" / "io_formats.density.r_0.25.00000.sph.bin")
+        str(shared / "bin" /
+            "io_formats.density.r_2.5000000000000000e-01.00000.sph.bin")
     )
     rank_surface = read_sphslice(
         str(
             rank
             / "bin"
             / "rank_00000000"
-            / "io_formats.density.r_0.25.00000.sph.bin"
+            / "io_formats.density.r_2.5000000000000000e-01.00000.sph.bin"
         )
     )
     node_surface = read_sphslice(
@@ -90,13 +91,13 @@ def test_rank_and_node_sharded_pdf_and_sphslice_match_shared_output(tmp_path):
             node
             / "bin"
             / "node_00000000"
-            / "io_formats.density.r_0.25.00000.sph.bin"
+            / "io_formats.density.r_2.5000000000000000e-01.00000.sph.bin"
         )
     )
     np.testing.assert_allclose(rank_pdf["pdf"], shared_pdf["pdf"])
     np.testing.assert_allclose(node_pdf["pdf"], shared_pdf["pdf"])
-    np.testing.assert_allclose(rank_surface["data"], shared_surface["data"])
-    np.testing.assert_allclose(node_surface["data"], shared_surface["data"])
+    np.testing.assert_array_equal(rank_surface["data"], shared_surface["data"])
+    np.testing.assert_array_equal(node_surface["data"], shared_surface["data"])
     assert read_pdf_header(
         str(rank_pdf_dir / "rank_00000000" / "io_formats.header.pdf")
     )["rank"] == 0

@@ -21,6 +21,7 @@
 #include "mesh/mesh.hpp"
 #include "eos/eos.hpp"
 #include "globals.hpp"
+#include "mpi_utils.hpp"
 #include "hydro/hydro.hpp"
 #include "mhd/mhd.hpp"
 #include "dyn_grmhd/dyn_grmhd.hpp"
@@ -119,10 +120,11 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
       exit(EXIT_FAILURE);
     }
 
-    if (ivar >= 153) {
-      bool fluid_diag = variable.compare(0, 5, "mdot_") == 0 ||
-                        variable.compare(0, 5, "edot_") == 0 ||
-                        variable.compare(0, 4, "vel_") == 0;
+    bool coordinate_diag = variable.compare(0, 6, "coord_") == 0;
+    bool fluid_diag = variable.compare(0, 5, "mdot_") == 0 ||
+                      variable.compare(0, 5, "edot_") == 0 ||
+                      variable.compare(0, 4, "vel_") == 0;
+    if (coordinate_diag || fluid_diag) {
       if (fluid_diag && pm->pmb_pack->phydro == nullptr &&
           pm->pmb_pack->pmhd == nullptr) {
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -136,6 +138,16 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
             << out_params.block_name << "' is ambiguous for <ion-neutral> two-fluid "
             << "runs and is not supported without module-qualified diagnostics"
             << std::endl;
+        exit(EXIT_FAILURE);
+      }
+      if (fluid_diag &&
+          (pm->pmb_pack->pcoord->is_special_relativistic ||
+           pm->pmb_pack->pcoord->is_general_relativistic ||
+           pm->pmb_pack->pcoord->is_dynamical_relativistic)) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+            << std::endl << "Variable '" << variable << "' in block '"
+            << out_params.block_name << "' is a Newtonian diagnostic and is not "
+            << "supported for relativistic coordinates" << std::endl;
         exit(EXIT_FAILURE);
       }
       if (variable == "edot_sph_mag" && pm->pmb_pack->pmhd == nullptr) {
@@ -830,6 +842,14 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
     outvars.emplace_back("pdens",out_params.n_derived - 1,&(derived_var));
   }
 
+  if (out_params.include_gzs && out_params.contains_derived) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+        << std::endl << "Output block '" << out_params.block_name
+        << "' cannot set ghost_zones=true for derived diagnostic output because "
+        << "derived ghost zones are not populated" << std::endl;
+    exit(EXIT_FAILURE);
+  }
+
   // initialize vector containing number of output MBs per rank
   noutmbs.assign(global_variable::nranks, 0);
 }
@@ -921,8 +941,10 @@ void BaseTypeOutput::LoadOutputData(Mesh *pm) {
   std::fill(noutmbs.begin(), noutmbs.end(), 0);
   noutmbs[global_variable::my_rank] = outmbs.size();
 #if MPI_PARALLEL_ENABLED
-  MPI_Allreduce(MPI_IN_PLACE, noutmbs.data(), global_variable::nranks,
-                MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+  mpi_utils::CheckMpi(
+      MPI_Allreduce(MPI_IN_PLACE, noutmbs.data(), global_variable::nranks,
+                    MPI_INT, MPI_SUM, MPI_COMM_WORLD),
+      "MPI_Allreduce output MeshBlock counts");
 #endif
   noutmbs_min = *std::min_element(noutmbs.begin(), noutmbs.end());
   noutmbs_max = *std::max_element(noutmbs.begin(), noutmbs.end());

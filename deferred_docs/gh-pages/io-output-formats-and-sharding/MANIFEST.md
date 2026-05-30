@@ -98,12 +98,11 @@ When applying this package, remove or replace guidance that:
 - Generic `mdot_*`, `edot_*`, and `vel_*` diagnostics reject
   `<ion-neutral>` two-fluid inputs until module-qualified semantics are
   introduced.
-- Full-volume node-sharded `cbin` is covered; sliced `cbin` is not promoted and
-  is rejected explicitly because its emitted extent is incompatible with
-  supported coarsening. The full-volume producer validates `coarsen_factor` as
-  a power of two between `2` and the shortest MeshBlock dimension before
-  writer construction, then requires every emitted extent, including optional
-  ghost zones, to be divisible by the factor during construction.
+- Uniform three-dimensional active-zone full-volume node-sharded `cbin` is
+  covered. Lower-dimensional, ghost-zone-expanded, static-refinement, AMR, and
+  sliced `cbin` are rejected explicitly before publication. The supported
+  producer validates `coarsen_factor` as a power of two between `2` and the
+  shortest MeshBlock dimension before writer construction.
 - Node-sharded binary and full-volume coarsened-binary files add inventory
   metadata without changing legacy shared or rank files. Readers accept
   explicit empty shards, reject incomplete or duplicate node inventories, and
@@ -151,6 +150,12 @@ When applying this package, remove or replace guidance that:
   sibling, and remove shard-local identifiers from reconstructed aggregates. Readers retain
   historical compatibility for transitional unversioned dense/sparse binary
   payloads that may omit additive inventory metadata.
+- Modern PDF writers reject invalid transformed axis bounds and non-positive
+  transformed bin steps before launching the histogram kernel. They preflight
+  histogram and edge arrays, host mirrors, copied and derived fields,
+  metadata, and serialized staging before allocation. Histogram updates use
+  backend-portable atomics, and MPI reductions stage through host memory
+  rather than requiring GPU-aware MPI.
 - Node restart loading accepts the public manifest only. It validates generated
   relative paths, symlink containment, ordered inventory, exact segment
   coverage, payload sizes, replicated headers, bounded payload and segment

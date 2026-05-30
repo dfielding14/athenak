@@ -27,7 +27,7 @@ python vis/python/examples/read_io_outputs.py \
   pdf run_io_formats/pdf_nd3_coord_abscostheta_vel_sph_r/io_formats.00000.pdf
 
 python vis/python/examples/read_io_outputs.py \
-  sphslice run_io_formats/bin/io_formats.density.r_0.25.00000.sph.bin
+  sphslice run_io_formats/bin/io_formats.density.r_2.5000000000000000e-01.00000.sph.bin
 ```
 
 Use the exact emitted paths from the run directory if the example basename or
@@ -92,7 +92,8 @@ mpirun -np 2 ./build-mpi/src/athena \
 ```
 
 The input enables `single_file_per_node = true` for node-sharded binary,
-full-volume coarsened-binary, PDF, spherical-slice, and restart streams.
+uniform 3D active-zone full-volume coarsened-binary, PDF, spherical-slice, and
+restart streams.
 Files are organized below `node_########/` directories. For example:
 
 ```text
@@ -117,7 +118,7 @@ python vis/python/examples/read_io_outputs.py \
   pdf run_io_node/pdf_radius_density_hydro_w_d/node_00000000/io_node_example.00000.pdf
 
 python vis/python/examples/read_io_outputs.py \
-  sphslice run_io_node/bin/node_00000000/io_node_example.density.r_0.25.00000.sph.bin
+  sphslice run_io_node/bin/node_00000000/io_node_example.density.r_2.5000000000000000e-01.00000.sph.bin
 ```
 
 If local overrides change IDs, basenames, or output numbering, use the
@@ -154,9 +155,11 @@ aliases cannot bypass the manifest-only restart API.
   PDF configurations should use the modern `variable_N`, `scaleN`, and
   `weight` interface.
 - `sphslice` is not a replacement for the existing `file_type = sph` output.
-- Node-sharded full-volume `cbin` is covered by this example; sliced `cbin` is
-  rejected and remains outside the promoted workflow because its emitted
-  extent is incompatible with supported coarsening.
+- `sphslice` radius filenames use deterministic round-trip scientific tokens;
+  for example, `slice_r = 0.25` emits `r_2.5000000000000000e-01`.
+- Node-sharded uniform 3D active-zone full-volume `cbin` is covered by this
+  example. Lower-dimensional, ghost-zone-expanded, static-refinement, AMR, and
+  sliced `cbin` are rejected before publication.
 - The automated MPI example can run multiple ranks on one physical node.
   Before production use, qualify node sharding and node restart on a real
   multi-node allocation and the target parallel filesystem.

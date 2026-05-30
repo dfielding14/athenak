@@ -8,7 +8,6 @@
 //! Data is written in UNSTRUCTURED_GRID geometry, in BINARY format, and in FLOAT type
 //! Data over multiple MeehBlocks and MPI ranks is written to a single file using MPI-IO.
 
-#include <sys/stat.h>  // mkdir
 #include <vector>
 
 #include <algorithm>
@@ -22,9 +21,21 @@
 #include "athena.hpp"
 #include "coordinates/cell_locations.hpp"
 #include "globals.hpp"
+#include "mpi_utils.hpp"
 #include "mesh/mesh.hpp"
 #include "particles/particles.hpp"
+#include "output_file_utils.hpp"
 #include "outputs.hpp"
+
+namespace {
+
+[[noreturn]] void FatalParticleVTKError(const std::string &message) {
+  mpi_utils::AbortWorld(std::string("### FATAL ERROR in ") + __FILE__ +
+                        " at line " + std::to_string(__LINE__) + "\n" +
+                        message);
+}
+
+}  // namespace
 
 //----------------------------------------------------------------------------------------
 // ctor: also calls BaseTypeOutput base class constructor
@@ -33,7 +44,8 @@
 ParticleVTKOutput::ParticleVTKOutput(ParameterInput *pin, Mesh *pm, OutputParameters op) :
   BaseTypeOutput(pin, pm, op) {
   // create new directory for this output. Comments in binary.cpp constructor explain why
-  mkdir("pvtk",0775);
+  output_file_utils::EnsureDirectory("pvtk", 0775, "particle VTK output",
+                                     FatalParticleVTKError);
 }
 
 //----------------------------------------------------------------------------------------
@@ -79,10 +91,10 @@ void ParticleVTKOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   int big_end = IsBigEndian(); // =1 on big endian machine
 
   // create filename: "vtk/file_basename"."file_id"."XXXXX".part.vtk
-  // where XXXXX = 5-digit file_number
+  // where XXXXX = file_number with a minimum width of 5 digits
   std::string fname;
-  char number[6];
-  std::snprintf(number, sizeof(number), "%05d", out_params.file_number);
+  std::string number = output_file_utils::FormatSequence(
+      out_params.file_number, "particle VTK output", FatalParticleVTKError);
 
   fname.assign("pvtk/");
   fname.append(out_params.file_basename);
@@ -112,7 +124,11 @@ void ParticleVTKOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
         << "DATASET UNSTRUCTURED_GRID" << std::endl;
 
     if (global_variable::my_rank == 0) {
-      partfile.Write_any_type(msg.str().c_str(),msg.str().size(),"byte");
+      std::string header = msg.str();
+      if (partfile.Write_any_type(header.c_str(), header.size(), "byte") !=
+          header.size()) {
+        FatalParticleVTKError("Particle-VTK file header could not be written.");
+      }
     }
     header_offset += msg.str().size();
   }
@@ -122,7 +138,11 @@ void ParticleVTKOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     std::stringstream msg;
     msg << std::endl << "POINTS " << npout_total << " float" << std::endl;
     if (global_variable::my_rank == 0) {
-      partfile.Write_any_type(msg.str().c_str(),msg.str().size(),"byte");
+      std::string header = msg.str();
+      if (partfile.Write_any_type(header.c_str(), header.size(), "byte") !=
+          header.size()) {
+        FatalParticleVTKError("Particle-VTK points header could not be written.");
+      }
     }
     header_offset += msg.str().size();
   }
@@ -159,12 +179,10 @@ void ParticleVTKOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     std::size_t datasize = sizeof(float);
     std::size_t myoffset=header_offset + 3*rank_offset[global_variable::my_rank]*datasize;
     // collective writes for minimum number of particles across ranks
-    if (partfile.Write_any_type_at_all(&(data[0]),3*npout_min,myoffset,"float")
+    if (partfile.Write_any_type_at_all(data,3*npout_min,myoffset,"float")
           != 3*npout_min) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-          << std::endl << "particle data not written correctly to vtk particle file, "
-          << "vtk file is broken." << std::endl;
-      exit(EXIT_FAILURE);
+      FatalParticleVTKError(
+          "Particle positions not written correctly to particle-VTK file.");
     }
     // individual writes for remaining particles on each rank
     myoffset += datasize*3*npout_min;
@@ -172,10 +190,8 @@ void ParticleVTKOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     if (nremain > 0) {
       if (partfile.Write_any_type_at(&(data[3*npout_min]),3*nremain,myoffset,"float")
             != 3*nremain) {
-        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-            << std::endl << "particle data not written correctly to vtk particle file, "
-            << "vtk file is broken." << std::endl;
-        exit(EXIT_FAILURE);
+        FatalParticleVTKError(
+            "Particle positions not written correctly to particle-VTK file.");
       }
     }
     header_offset += 3*pm->nprtcl_total*datasize;
@@ -202,7 +218,11 @@ void ParticleVTKOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     }
 
     if (global_variable::my_rank == 0) {
-      partfile.Write_any_type_at(msg.str().c_str(),msg.str().size(),header_offset,"byte");
+      std::string header = msg.str();
+      if (partfile.Write_any_type_at(header.c_str(), header.size(), header_offset,
+                                     "byte") != header.size()) {
+        FatalParticleVTKError("Particle-VTK scalar header could not be written.");
+      }
     }
 
     header_offset += msg.str().size();
@@ -220,12 +240,10 @@ void ParticleVTKOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     std::size_t datasize = sizeof(float);
     std::size_t myoffset=header_offset + rank_offset[global_variable::my_rank]*datasize;
     // collective writes for minimum number of particles across ranks
-    if (partfile.Write_any_type_at_all(&(data[0]),npout_min,myoffset,"float")
+    if (partfile.Write_any_type_at_all(data,npout_min,myoffset,"float")
           != npout_min) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-          << std::endl << "particle data not written correctly to vtk particle file, "
-          << "vtk file is broken." << std::endl;
-      exit(EXIT_FAILURE);
+      FatalParticleVTKError(
+          "Particle scalar data not written correctly to particle-VTK file.");
     }
     // individual writes for remaining particles on each rank
     myoffset += datasize*npout_min;
@@ -233,10 +251,8 @@ void ParticleVTKOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     if (nremain > 0) {
       if (partfile.Write_any_type_at(&(data[npout_min]),nremain,myoffset,"float")
             != nremain) {
-        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-            << std::endl << "particle data not written correctly to vtk particle file, "
-            << "vtk file is broken." << std::endl;
-        exit(EXIT_FAILURE);
+        FatalParticleVTKError(
+            "Particle scalar data not written correctly to particle-VTK file.");
       }
     }
     header_offset += pm->nprtcl_total*datasize;
@@ -247,11 +263,14 @@ void ParticleVTKOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   // [then binary vx,vy,vz data .... ]
 
   // close the output file and clean up
-  partfile.Close();
+  if (partfile.Close() != 0) {
+    FatalParticleVTKError("Particle-VTK output file could not be closed.");
+  }
   delete[] data;
 
   // increment counters
-  out_params.file_number++;
+  out_params.file_number = output_file_utils::AdvanceFileNumber(
+      out_params.file_number, "particle VTK output", FatalParticleVTKError);
   if (out_params.last_time < 0.0) {
     out_params.last_time = pm->time;
   } else {

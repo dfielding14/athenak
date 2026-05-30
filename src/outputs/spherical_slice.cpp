@@ -6,8 +6,6 @@
 //! \file spherical_slice.cpp
 //! \brief writes an origin-centered spherical slice in binary analysis format
 
-#include <sys/stat.h>
-
 #include <algorithm>
 #include <cerrno>
 #include <cmath>
@@ -16,6 +14,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
+#include <iomanip>
 #include <limits>
 #include <numeric>
 #include <sstream>
@@ -24,7 +23,9 @@
 
 #include "athena.hpp"
 #include "globals.hpp"
+#include "mpi_utils.hpp"
 #include "mesh/mesh.hpp"
+#include "output_file_utils.hpp"
 #include "outputs.hpp"
 #include "parameter_input.hpp"
 
@@ -35,21 +36,9 @@
 namespace {
 
 [[noreturn]] void FatalSphericalSliceError(const std::string &message) {
-  std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-            << std::endl << message << std::endl;
-#if MPI_PARALLEL_ENABLED
-  MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
-#endif
-  std::exit(EXIT_FAILURE);
+  mpi_utils::AbortWorld(std::string("### FATAL ERROR in ") + __FILE__ +
+                        " at line " + std::to_string(__LINE__) + "\n" + message);
 }
-
-#if MPI_PARALLEL_ENABLED
-void CheckMpi(int mpi_error, const char *context) {
-  if (mpi_error != MPI_SUCCESS) {
-    FatalSphericalSliceError(std::string(context) + " failed.");
-  }
-}
-#endif
 
 std::size_t CheckedAdd(std::size_t left, std::size_t right, const char *context) {
   if (right > std::numeric_limits<std::size_t>::max() - left) {
@@ -80,6 +69,30 @@ int CheckedAngularCount(int ntheta, int nphi) {
                                    static_cast<std::size_t>(nphi),
                                    "sphslice angular grid"),
                     "sphslice angular grid");
+}
+
+std::size_t SphericalSliceAllocationBytes(int nangles, std::size_t nvars) {
+  std::size_t angles = static_cast<std::size_t>(nangles);
+  std::size_t fixed_per_angle =
+      8*sizeof(int) + 8*sizeof(Real) + 8*sizeof(std::int32_t) +
+      2*sizeof(std::size_t);
+  std::size_t variable_per_angle = output_file_utils::CheckedSizeAdd(
+      output_file_utils::CheckedSizeProduct(
+          output_file_utils::CheckedSizeProduct(
+              4, nvars, "sphslice variable staging", FatalSphericalSliceError),
+          sizeof(Real), "sphslice variable staging", FatalSphericalSliceError),
+      output_file_utils::CheckedSizeProduct(
+          output_file_utils::CheckedSizeProduct(
+              6, nvars, "sphslice serialized staging", FatalSphericalSliceError),
+          sizeof(float), "sphslice serialized staging",
+          FatalSphericalSliceError),
+      "sphslice variable staging", FatalSphericalSliceError);
+  return output_file_utils::CheckedSizeProduct(
+      angles,
+      output_file_utils::CheckedSizeAdd(
+          fixed_per_angle, variable_per_angle, "sphslice allocation",
+          FatalSphericalSliceError),
+      "sphslice allocation", FatalSphericalSliceError);
 }
 
 void ValidateOwnedAngles(const std::vector<std::int32_t> &angles, int nangles,
@@ -135,10 +148,10 @@ void ValidateGlobalOwnership(const std::vector<std::int32_t> &angles, int nangle
     local_owners[angle] = 1;
   }
 #if MPI_PARALLEL_ENABLED
-  if (MPI_Allreduce(local_owners.data(), global_owners.data(), nangles, MPI_INT, MPI_SUM,
-                    MPI_COMM_WORLD) != MPI_SUCCESS) {
-    FatalSphericalSliceError("Could not reduce sphslice angular ownership.");
-  }
+  mpi_utils::CheckMpi(
+      MPI_Allreduce(local_owners.data(), global_owners.data(), nangles, MPI_INT, MPI_SUM,
+                    MPI_COMM_WORLD),
+      "MPI_Allreduce for sphslice angular ownership");
 #else
   global_owners.swap(local_owners);
 #endif
@@ -158,7 +171,7 @@ void CheckedFileWrite(std::FILE *output, const void *data, std::size_t element_s
     return;
   }
   if (std::fwrite(data, element_size, count, output) != count) {
-    std::remove(filename.c_str());
+    output_file_utils::DiscardOwnedPath(filename);
     FatalSphericalSliceError(std::string(context) + " was not written completely to '" +
                              filename + "'.");
   }
@@ -298,41 +311,47 @@ SphericalSliceOutput::SphericalSliceOutput(ParameterInput *pin, Mesh *pm,
                                            OutputParameters op)
     : BaseTypeOutput(pin, pm, op), psph(nullptr) {
   if (pm->mesh_indcs.nx2 <= 1 || pm->mesh_indcs.nx3 <= 1) {
-    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl << "sphslice output requires a 3D mesh" << std::endl;
-    std::exit(EXIT_FAILURE);
+    FatalSphericalSliceError("sphslice output requires a 3D mesh.");
   }
   Real radius = pin->GetReal(op.block_name, "slice_r");
   int ntheta = pin->GetOrAddInteger(op.block_name, "ntheta", 64);
   int nphi = pin->GetOrAddInteger(op.block_name, "nphi", 128);
+  int configured_limit = pin->GetOrAddInteger(
+      op.block_name, "max_writer_allocation_bytes",
+      static_cast<int>(output_file_utils::kDefaultMaxWriterAllocationBytes));
+  if (configured_limit <= 0) {
+    FatalSphericalSliceError("sphslice max_writer_allocation_bytes must be positive.");
+  }
+  max_writer_allocation_bytes = static_cast<std::size_t>(configured_limit);
   Real max_radius = std::min({pm->mesh_size.x1max, -pm->mesh_size.x1min,
                               pm->mesh_size.x2max, -pm->mesh_size.x2min,
                               pm->mesh_size.x3max, -pm->mesh_size.x3min});
   if (!(radius > 0.0 && radius < max_radius)) {
-    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl << "sphslice slice_r=" << radius << " in block '"
-              << op.block_name << "' must lie strictly inside the origin-centered domain"
-              << std::endl;
-    std::exit(EXIT_FAILURE);
+    FatalSphericalSliceError("sphslice slice_r=" + std::to_string(radius) +
+                             " in block '" + op.block_name +
+                             "' must lie strictly inside the origin-centered domain.");
   }
   if (ntheta < 2 || nphi < 2) {
-    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl << "sphslice requires ntheta>=2 and nphi>=2" << std::endl;
-    std::exit(EXIT_FAILURE);
+    FatalSphericalSliceError("sphslice requires ntheta>=2 and nphi>=2.");
   }
   if (out_params.contains_derived) {
-    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl << "sphslice variable '" << out_params.variable
-              << "' in block '" << out_params.block_name
-              << "' requires derived-field interpolation, which is not supported "
-              << "until ghost-zone-safe sampling is implemented" << std::endl;
-    std::exit(EXIT_FAILURE);
+    FatalSphericalSliceError(
+        "sphslice variable '" + out_params.variable + "' in block '" +
+        out_params.block_name +
+        "' requires derived-field interpolation, which is not supported until "
+        "ghost-zone-safe sampling is implemented.");
   }
-  mkdir("bin", 0775);
+  int nangles = CheckedAngularCount(ntheta, nphi);
+  output_file_utils::RequireAllocationBudget(
+      SphericalSliceAllocationBytes(nangles, outvars.size()),
+      max_writer_allocation_bytes, "sphslice allocation", FatalSphericalSliceError);
+  output_file_utils::EnsureDirectory("bin", 0775, "sphslice output",
+                                     FatalSphericalSliceError);
   if (IsSharded(op.shard_mode)) {
     std::string shard_path = "bin/" + ShardDirectoryName(
         op.shard_mode, global_variable::my_rank, global_variable::node_id);
-    mkdir(shard_path.c_str(), 0775);
+    output_file_utils::EnsureDirectory(shard_path, 0775, "sphslice output",
+                                       FatalSphericalSliceError);
   }
   psph = new SphericalSlice(pm->pmb_pack, radius, ntheta, nphi);
 }
@@ -348,7 +367,7 @@ void SphericalSliceOutput::LoadOutputData(Mesh *pm) {
   if (pm->adaptive) {
     psph->Rebuild();
   }
-  int nvars = outvars.size();
+  int nvars = CountAsInt(outvars.size(), "sphslice variable count");
   int npoints = psph->nangles;
   shard_owned_angles.clear();
   shard_values.clear();
@@ -374,13 +393,13 @@ void SphericalSliceOutput::LoadOutputData(Mesh *pm) {
                                           "dense sphslice values"),
                            "dense sphslice values");
     if (global_variable::my_rank == 0) {
-      CheckMpi(MPI_Reduce(MPI_IN_PLACE, outarray.data(), count, MPI_ATHENA_REAL,
-                          MPI_SUM, 0, MPI_COMM_WORLD),
-               "MPI_Reduce for dense sphslice values");
+      mpi_utils::CheckMpi(MPI_Reduce(MPI_IN_PLACE, outarray.data(), count,
+                                     MPI_ATHENA_REAL, MPI_SUM, 0, MPI_COMM_WORLD),
+                          "MPI_Reduce for dense sphslice values");
     } else {
-      CheckMpi(MPI_Reduce(outarray.data(), outarray.data(), count, MPI_ATHENA_REAL,
-                          MPI_SUM, 0, MPI_COMM_WORLD),
-               "MPI_Reduce for dense sphslice values");
+      mpi_utils::CheckMpi(MPI_Reduce(outarray.data(), outarray.data(), count,
+                                     MPI_ATHENA_REAL, MPI_SUM, 0, MPI_COMM_WORLD),
+                          "MPI_Reduce for dense sphslice values");
     }
 #endif
     return;
@@ -407,10 +426,11 @@ void SphericalSliceOutput::LoadOutputData(Mesh *pm) {
     if (global_variable::node_rank == 0) {
       counts.resize(global_variable::node_size);
     }
-    CheckMpi(MPI_Gather(&local_points, 1, MPI_INT,
-                        global_variable::node_rank == 0 ? counts.data() : nullptr,
-                        1, MPI_INT, 0, global_variable::node_comm),
-             "MPI_Gather for node sphslice point counts");
+    mpi_utils::CheckMpi(
+        MPI_Gather(&local_points, 1, MPI_INT,
+                   global_variable::node_rank == 0 ? counts.data() : nullptr,
+                   1, MPI_INT, 0, global_variable::node_comm),
+        "MPI_Gather for node sphslice point counts");
     std::vector<int> offsets;
     std::size_t node_points = 0;
     if (global_variable::node_rank == 0) {
@@ -428,22 +448,24 @@ void SphericalSliceOutput::LoadOutputData(Mesh *pm) {
       node_values.resize(CheckedProduct(static_cast<std::size_t>(nvars), node_points,
                                         "node sphslice values"));
     }
-    CheckMpi(MPI_Gatherv(shard_owned_angles.data(), local_points, MPI_INT32_T,
-                         global_variable::node_rank == 0 ? node_angles.data() : nullptr,
-                         global_variable::node_rank == 0 ? counts.data() : nullptr,
-                         global_variable::node_rank == 0 ? offsets.data() : nullptr,
-                         MPI_INT32_T, 0, global_variable::node_comm),
-             "MPI_Gatherv for node sphslice angles");
+    mpi_utils::CheckMpi(
+        MPI_Gatherv(shard_owned_angles.data(), local_points, MPI_INT32_T,
+                    global_variable::node_rank == 0 ? node_angles.data() : nullptr,
+                    global_variable::node_rank == 0 ? counts.data() : nullptr,
+                    global_variable::node_rank == 0 ? offsets.data() : nullptr,
+                    MPI_INT32_T, 0, global_variable::node_comm),
+        "MPI_Gatherv for node sphslice angles");
     for (int n = 0; n < nvars; ++n) {
       const float *send_values = local_points > 0
           ? &(shard_values[static_cast<std::size_t>(n)*local_points]) : nullptr;
       float *recv_values = (global_variable::node_rank == 0 && node_points > 0)
           ? &(node_values[static_cast<std::size_t>(n)*node_points]) : nullptr;
-      CheckMpi(MPI_Gatherv(send_values, local_points, MPI_FLOAT, recv_values,
-                           global_variable::node_rank == 0 ? counts.data() : nullptr,
-                           global_variable::node_rank == 0 ? offsets.data() : nullptr,
-                           MPI_FLOAT, 0, global_variable::node_comm),
-               "MPI_Gatherv for node sphslice values");
+      mpi_utils::CheckMpi(
+          MPI_Gatherv(send_values, local_points, MPI_FLOAT, recv_values,
+                      global_variable::node_rank == 0 ? counts.data() : nullptr,
+                      global_variable::node_rank == 0 ? offsets.data() : nullptr,
+                      MPI_FLOAT, 0, global_variable::node_comm),
+          "MPI_Gatherv for node sphslice values");
     }
     if (global_variable::node_rank == 0) {
       shard_owned_angles.swap(node_angles);
@@ -469,19 +491,18 @@ void SphericalSliceOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
       SortAndValidateShardRecords(shard_owned_angles, shard_values, nvars, psph->nangles,
                                   "published sphslice shard");
     }
-    char number[7];
-    char radius_token[32];
-    std::snprintf(number, sizeof(number), ".%05d", out_params.file_number);
-    std::snprintf(radius_token, sizeof(radius_token), "r_%g",
-                  static_cast<double>(psph->radius));
+    std::string number = output_file_utils::FormatSequence(
+        out_params.file_number, "sphslice output", FatalSphericalSliceError);
+    std::string radius_token =
+        output_file_utils::FormatSphericalSliceRadius(psph->radius);
     std::string path = "bin/";
     if (sharded) {
       path += ShardDirectoryName(out_params.shard_mode, global_variable::my_rank,
                                  global_variable::node_id) + "/";
     }
     std::string filename = path + out_params.file_basename + "." + out_params.file_id
-        + "." + radius_token + number + ".sph.bin";
-    std::string temporary_filename = filename + ".tmp";
+        + "." + radius_token + "." + number + ".sph.bin";
+    std::string temporary_filename = output_file_utils::TemporaryPath(filename);
     std::FILE *output = std::fopen(temporary_filename.c_str(), "wb");
     if (output == nullptr) {
       FatalSphericalSliceError(
@@ -499,7 +520,8 @@ void SphericalSliceOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
            << "  rank=" << global_variable::my_rank << "\n"
            << "  time=" << pm->time << "\n"
            << "  cycle=" << pm->ncycle << "\n"
-           << "  radius=" << psph->radius << "\n"
+           << "  radius="
+           << output_file_utils::FormatRoundTripScientific(psph->radius) << "\n"
            << "  ntheta=" << psph->ntheta << "\n"
            << "  nphi=" << psph->nphi << "\n"
            << "  size of variable=" << sizeof(float) << "\n"
@@ -543,20 +565,16 @@ void SphericalSliceOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
                        temporary_filename, "sphslice dense values");
     }
     if (std::fclose(output) != 0) {
-      std::remove(temporary_filename.c_str());
+      output_file_utils::DiscardOwnedPath(temporary_filename);
       FatalSphericalSliceError("Could not close sphslice output '" + temporary_filename +
                                "'.");
     }
-    if (std::rename(temporary_filename.c_str(), filename.c_str()) != 0) {
-      int rename_errno = errno;
-      std::remove(temporary_filename.c_str());
-      FatalSphericalSliceError(
-          "Could not atomically publish sphslice output '" + filename +
-          "': " + std::strerror(rename_errno));
-    }
+    output_file_utils::PublishTemporaryFile(
+        temporary_filename, filename, "sphslice output", FatalSphericalSliceError);
   }
 
-  out_params.file_number++;
+  out_params.file_number = output_file_utils::AdvanceFileNumber(
+      out_params.file_number, "sphslice output", FatalSphericalSliceError);
   if (out_params.last_time < 0.0) {
     out_params.last_time = pm->time;
   } else {

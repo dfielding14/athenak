@@ -718,6 +718,53 @@ def test_coarsened_binary_rejects_nonpositive_coarsening_factor(tmp_path):
         read_coarsened_binary(str(malformed))
 
 
+@pytest.mark.parametrize("moments", (0, 2, 5))
+def test_coarsened_binary_rejects_invalid_number_of_moments(tmp_path, moments):
+    source = _binary_fixture("cbin", "shared", "00000")
+    malformed = tmp_path / source.name
+    shutil.copyfile(source, malformed)
+    _replace_binary_line(
+        malformed,
+        b"  number of moments=",
+        f"  number of moments={moments}".encode("ascii"),
+    )
+
+    with pytest.raises(ValueError, match="invalid number of moments"):
+        read_coarsened_binary(str(malformed))
+
+
+def test_coarsened_binary_rejects_incomplete_moment_group_before_payload(tmp_path):
+    source = _binary_fixture("cbin", "shared", "00000")
+    malformed = tmp_path / source.name
+    shutil.copyfile(source, malformed)
+    _replace_binary_line(
+        malformed, b"  number of moments=", b"  number of moments=4"
+    )
+
+    with pytest.raises(ValueError, match="incomplete moment groups"):
+        read_coarsened_binary(str(malformed))
+
+
+def test_coarsened_binary_rejects_malformed_moment_labels_before_payload(tmp_path):
+    source = _binary_fixture("cbin", "shared", "00000")
+    malformed = tmp_path / source.name
+    shutil.copyfile(source, malformed)
+    _replace_binary_line(
+        malformed, b"  number of moments=", b"  number of moments=4"
+    )
+    _replace_binary_line(
+        malformed, b"  number of variables=", b"  number of variables=4"
+    )
+    _replace_binary_line(
+        malformed,
+        b"  variables:",
+        b"  variables:  dens_1st  dens_bad  dens_3rd  dens_4th  ",
+    )
+
+    with pytest.raises(ValueError, match="malformed moment labels"):
+        read_coarsened_binary(str(malformed))
+
+
 @pytest.mark.parametrize("factor", (1, 3, 100))
 def test_coarsened_binary_rejects_invalid_positive_coarsening_factor(tmp_path, factor):
     source = _binary_fixture("cbin", "shared", "00000")
@@ -1295,6 +1342,27 @@ def _write_v2_dense_pdf(path, values, time=0.25, cycle=5):
         "=8sIIIIQdq", b"AKPDFV2\0", 2, 0, 1, 0, values.size, time, cycle
     )
     path.write_bytes(payload + values.tobytes())
+
+
+@pytest.mark.parametrize("dump", ("99999", "100000", "100001"))
+def test_modern_pdf_infers_header_for_widened_sequence_numbers(tmp_path, dump):
+    expected = [1.0, 0.0, 0.0, 2.5]
+    data = tmp_path / f"dense.{dump}.pdf"
+    _write_pdf_header(tmp_path / "dense.header.pdf", "dense")
+    _write_dense_pdf(data, expected)
+
+    np.testing.assert_allclose(read_pdf(str(data))["pdf"], expected)
+
+
+@pytest.mark.parametrize("dump", ("99999", "100000", "100001"))
+def test_legacy_pdf_infers_header_for_preserved_and_widened_sequence_numbers(
+    tmp_path, dump
+):
+    data = tmp_path / f"legacy.{dump}.pdf"
+    (tmp_path / "legacy.bins.pdf").write_text("# [1] = dens\n0.0 1.0 2.0\n")
+    data.write_text("# time = 0.25\n1.0 0.0 0.0 2.5\n")
+
+    np.testing.assert_allclose(read_pdf(str(data))["pdf"], [1.0, 0.0, 0.0, 2.5])
 
 
 def test_modern_pdf_sparse_empty_shard_matches_dense_shared(tmp_path):

@@ -6,19 +6,27 @@
 //! \file cartgrid.cpp
 //! \brief writes data on a Cartesian sub-grid in binary format
 
-#include <sys/stat.h>  // mkdir
-
-#include <cstdio> // snprintf
 #include <fstream>
 #include <string>
 #include <sstream>
 
 #include "athena.hpp"
 #include "globals.hpp"
+#include "mpi_utils.hpp"
 #include "mesh/mesh.hpp"
+#include "output_file_utils.hpp"
 #include "outputs.hpp"
 #include "parameter_input.hpp"
 #include "utils/cart_grid.hpp"
+
+namespace {
+
+[[noreturn]] void FatalCartesianGridError(const std::string &message) {
+  mpi_utils::AbortWorld(std::string("### FATAL ERROR in ") + __FILE__ +
+                        " at line " + std::to_string(__LINE__) + "\n" + message);
+}
+
+}  // namespace
 
 CartesianGridOutput::CartesianGridOutput(ParameterInput *pin, Mesh *pm,
                                          OutputParameters op)
@@ -27,7 +35,13 @@ CartesianGridOutput::CartesianGridOutput(ParameterInput *pin, Mesh *pm,
   int numpoints[3];
   bool is_cheb;
 
-  mkdir("cart", 0755);
+  if (out_params.contains_derived) {
+    FatalCartesianGridError(
+        "Cartesian-grid derived-field interpolation is not supported until "
+        "ghost-zone-safe sampling is implemented.");
+  }
+  output_file_utils::EnsureDirectory("cart", 0755, "Cartesian grid output",
+                                     FatalCartesianGridError);
 
   center[0] = pin->GetOrAddReal(op.block_name, "center_x", 0.0);
   center[1] = pin->GetOrAddReal(op.block_name, "center_y", 0.0);
@@ -79,11 +93,15 @@ void CartesianGridOutput::LoadOutputData(Mesh *pm) {
   // current rank
   int count = nout_vars * md.numpoints[0] * md.numpoints[1] * md.numpoints[2];
   if (0 == global_variable::my_rank) {
-    MPI_Reduce(MPI_IN_PLACE, outarray.data(), count, MPI_ATHENA_REAL, MPI_SUM,
-               0, MPI_COMM_WORLD);
+    mpi_utils::CheckMpi(
+        MPI_Reduce(MPI_IN_PLACE, outarray.data(), count, MPI_ATHENA_REAL, MPI_SUM,
+                   0, MPI_COMM_WORLD),
+        "MPI_Reduce for Cartesian grid output values");
   } else {
-    MPI_Reduce(outarray.data(), outarray.data(), count, MPI_ATHENA_REAL,
-               MPI_SUM, 0, MPI_COMM_WORLD);
+    mpi_utils::CheckMpi(
+        MPI_Reduce(outarray.data(), outarray.data(), count, MPI_ATHENA_REAL,
+                   MPI_SUM, 0, MPI_COMM_WORLD),
+        "MPI_Reduce for Cartesian grid output values");
   }
 #endif
 }
@@ -94,13 +112,16 @@ void CartesianGridOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
 #endif
 
     // Assemble filename
-    char fname[BUFSIZ];
-    std::snprintf(fname, BUFSIZ, "cart/%s.%s.%05d.bin",
-                  out_params.file_basename.c_str(), out_params.file_id.c_str(),
-                  out_params.file_number);
+    std::string sequence = output_file_utils::FormatSequence(
+        out_params.file_number, "Cartesian grid output", FatalCartesianGridError);
+    std::string fname = "cart/" + out_params.file_basename + "." + out_params.file_id +
+                        "." + sequence + ".bin";
 
     // Open file
     std::ofstream ofile(fname, std::ios::binary);
+    if (!ofile.is_open()) {
+      FatalCartesianGridError("Cannot open Cartesian grid output '" + fname + "'.");
+    }
 
     // Write metadata
     md.cycle = pm->ncycle;
@@ -135,13 +156,23 @@ void CartesianGridOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
         }
       }
     }
+    if (!ofile.good()) {
+      ofile.close();
+      FatalCartesianGridError("Could not write Cartesian grid output '" + fname +
+                              "' completely.");
+    }
+    ofile.close();
+    if (ofile.fail()) {
+      FatalCartesianGridError("Could not close Cartesian grid output '" + fname + "'.");
+    }
 
 #if MPI_PARALLEL_ENABLED
   }
 #endif
 
   // increment counters
-  out_params.file_number++;
+  out_params.file_number = output_file_utils::AdvanceFileNumber(
+      out_params.file_number, "Cartesian grid output", FatalCartesianGridError);
   if (out_params.last_time < 0.0) {
     out_params.last_time = pm->time;
   } else {

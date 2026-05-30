@@ -583,9 +583,9 @@ resolutions, and re-audit results required by `IO_FEATURE_BRANCH_GUIDE.md`.
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | RCP-00 | Locally closed | D-069, D-070, D-071, D-073, D-075, D-081, D-083, D-085 | Runtime baseline; format/tooling baseline; documentation/process baseline | `e40621d8` guide freeze | Fresh floors registered below | Three baseline reports accepted | R-00 recorded below | External CUDA and multi-node topology remain unavailable locally |
 | RCP-01 | Locally closed | D-070, D-071, D-085, D-091, D-092, D-093 | Focused layout auditor accepted | `3b96e2d1` | Full serial `238 passed`; full MPI `67 passed`; style `2 passed`; fixtures `27` verified; exact pre-edit byte comparisons pass | Arithmetic, compatibility, topology, admission, and single-issue re-auditors accepted after corrections | R-01 recorded below | Signed output-sequence domain remains queued for RCP-02 |
-| RCP-02 | Implementing | D-072, D-073, D-074, D-086, D-087 accepted | MPI call inventory; filesystem-publication inventory; sequence and namespace inventory accepted |  |  |  |  |  |
-| RCP-03 | Not started | D-075 accepted direction; D-088 pending |  |  |  |  |  |  |
-| RCP-04 | Not started | D-076, D-077, D-078, D-089 pending |  |  |  |  |  |  |
+| RCP-02 | Locally closed | D-072, D-073, D-074, D-086, D-087 accepted | MPI call inventory; filesystem-publication inventory; sequence and namespace inventory accepted | Runtime-hardening snapshot pending | Focused publication `58 passed`; injected cleanup `2 passed`; full local MPI `76 passed`; style `2 passed` | Three publication audits accepted after corrections | R-02 recorded below | Real cross-node cleanup ordering and production-filesystem behavior remain RCP-09 gates |
+| RCP-03 | Locally closed | D-094 and D-095 accepted; supersede D-075 and resolve D-088 | Kernel-range, producer-contract, and reader-compatibility audits accepted direction | Runtime-hardening snapshot pending | Layout, node64, reader, conversion, explicit adaptive-AMR rejection, and rank/node sliced rejection pass | Fresh final acceptance audit accepted | R-03 recorded below | External multi-node writer qualification remains open |
+| RCP-04 | Locally closed | D-076, D-077, D-078, D-089, D-096 accepted | Numerical semantics, analytic-test, and backend portability audits completed | Runtime-hardening snapshot pending | Direct analytic, writer/readback, negative-boundary, cap, serial `363 passed`, MPI `76 passed`, Python `159 passed`, style `2 passed` | Fresh docs-to-code and backend acceptance audit accepted | R-04 recorded below | Representative CUDA execution remains an RCP-09 gate |
 | RCP-05 | Not started | D-079 pending |  |  |  |  |  |  |
 | RCP-06 | Not started | D-080 pending; D-081 accepted direction |  |  |  |  |  |  |
 | RCP-07 | Not started | D-082 pending |  |  |  |  |  | Preservation-aware staging must replace literal full-page application |
@@ -768,3 +768,88 @@ The local matrix does not satisfy these production gates:
 | Accepted helper boundary | Add a narrow shared MPI helper for best-effort error rendering, checked returns, and simple world abort. Add a narrow output-filesystem helper for checked directories, minimum-five-digit unbounded sequence rendering, checked counter advancement, temporary naming, rename publication, and safe generated path components. Keep communicator participation and publication ordering visible at call sites. |
 | Compatibility boundary | Preserve legacy PDF bytes and direct append behavior. Preserve names below `100000`. Widen tokens at and above `100000`. Do not promise crash durability. Preserve inherited non-feature writer formats while migrating their sequence rendering away from fixed buffers. |
 | Stop-gate status | Reconnaissance recorded. Implementation may begin, but `RCP-02` remains open until focused tests and two independent post-edit audits accept the result. |
+
+### 2026-05-29: RCP-02 Publication Re-Audit Corrections
+
+| Field | Record |
+| --- | --- |
+| Re-audit blockers | The first post-edit publication auditor found that node-restart failure cleanup could abort before remote node leaders finished unlinking owned payloads, `.bin` and `.cbin` header failures bypassed temporary cleanup, restart wrapper-level fatal exits bypassed attempt cleanup, unlink failures were silent, and producer-surface failure coverage was incomplete. |
+| Resolution | Added process-local fatal cleanup hooks through `src/mpi_utils.hpp`; made node-restart failures that are already world-coordinated clean every rank, wait at a world barrier, and only then abort; retained manifest ownership until reservation removal completes; cleaned `.bin` and `.cbin` temporaries on header and wrapper-level failures; and report failed cleanup attempts to stderr. |
+| Focused verification | Shared helper, namespace, and serial publication coverage returned `35 passed`; targeted node-restart MPI regressions returned `4 passed`; the diff-driven MPI source gate passed after dispositioning the coordinated cleanup barrier. Producer-level publication coverage then returned `29 passed`, including stale temporary replacement, failed rename cleanup for `.bin`, `.cbin`, modern PDF, `sphslice`, and restart, plus portable unwritable-directory rejection. |
+| Namespace expansion | Construction-time namespace coverage returned `17 passed`, including cadence-independent `.bin`, `.cbin`, `sphslice`, negative-PVTK-`gid`, and PDF histogram-definition collision cases. Legacy PDF widened-name inference now includes `100001`. |
+| External limit | Real cross-node failure-injection qualification remains an `RCP-09` scheduler-backed gate. Local evidence uses one physical host only. |
+| Remaining action | Wait for the third independent filesystem-publication re-audit before locally closing `RCP-02`. |
+
+### Reflection R-02: Keep Publication Guarantees Narrow And Observable
+
+| Question | Record |
+| --- | --- |
+| Did re-audit change implementation direction? | Yes. Rename publication alone was insufficient for node restart. Expected multi-rank transaction failures now clean before abort; unexpected wrapper or MPI fatals still perform best-effort local cleanup. |
+| Is crash durability promised? | No. The branch promises namespace-atomic rename publication and observable best-effort cleanup, not payload or directory sync durability. |
+| Did the helper boundary remain narrow? | Yes. Shared hooks, checked MPI rendering, directories, sequence formatting, temporary naming, rename, and cleanup reporting are centralized. Communicator ordering remains visible in writers. |
+| What remains externally unproven? | Cleanup ordering across at least two physical nodes and production filesystems. Preserve that as an explicit qualification gate rather than inferring it from one-host MPI. |
+
+### 2026-05-29: RCP-03 Coarsened-Binary Contract And Evidence
+
+| Field | Record |
+| --- | --- |
+| Contract correction | Superseded the earlier ghost-expanded producer allowance. The writer now supports uniform three-dimensional full-volume active-zone output only and rejects ghost zones, AMR, slices, and lower-dimensional meshes during construction. The Python reader deliberately remains broader for validated historical files. |
+| Arithmetic hardening | Added checked `std::int64_t` Kokkos plane, factor, and iteration ranges; checked `std::size_t` allocation elements and bytes; 64-bit node sum and prefix helpers; and a direct two-rank MPI harness proving node-local totals and prefixes above `INT_MAX`. |
+| Reader hardening | Validate moment count, suffix groups, shared roots, and variable-count divisibility before reading payload bytes. |
+| Conversion evidence | The moment-enabled shared, rank-sharded, and node-sharded regression now inspects generated ATHDF variable names, `uov` shape, `uov` values, XDMF attributes, and HDF hyperslab references rather than only checking that files exist. |
+| Focused verification | Checked-layout harness returned `8 passed`; direct node-64 MPI harness returned `1 passed`; shared/rank/node moment ATHDF/XDMF regression returned `1 passed`; widened PDF reader subset returned `6 passed`; `git diff --check` returned no output. |
+| Remaining action | Complete rebuild, run the focused reader and MPI writer matrix, then ask the RCP-03 auditor for a final read-only acceptance pass. |
+
+### Reflection R-03: Prefer A Narrow Producer And A Compatible Reader
+
+| Question | Record |
+| --- | --- |
+| Should the writer expand to match every reader capability? | No. Historical reader breadth is useful for analysis but is not evidence for newly supported producer rows. |
+| Did the Kokkos refactor stay scoped? | Yes. Checked arithmetic is isolated in `coarsened_binary_layout.hpp`; serialization and format ownership remain in `coarsened_binary.cpp`. |
+| Did testing become more representative? | Yes. Boundary tests now distinguish valid values above `INT_MAX` from true overflow, exercise node-local 64-bit collectives, and inspect generated conversion content. |
+| Should lower-dimensional, AMR, sliced, or ghost-zone output be promoted now? | No. Add rows later only with explicit format semantics and end-to-end evidence. |
+
+### 2026-05-29: RCP-02 Secondary Cleanup Reporting Correction
+
+| Field | Record |
+| --- | --- |
+| Fresh re-audit blockers | The third independent publication auditor accepted the coordinated node-restart transaction but found secondary raw `remove()` calls after reservation-close, PDF write or close, and `sphslice` write or close failures. Those branches could silently fail to discard an attempt-owned path. |
+| Resolution | Route each secondary discard through `output_file_utils::DiscardOwnedPath()` so unlink failures are reported to stderr. Keep the normal node-restart reservation removal explicitly world-coordinated because it participates in transaction completion. |
+| Focused verification | Shared helper, namespace, serial publication, and MPI-source coverage returned `58 passed`; direct helper coverage now includes a failed owned-path discard and returned `10 passed`; injected node-restart payload-write and post-publication cleanup returned `2 passed`. |
+| External limit | Cross-node cleanup ordering, remote-node completion before abort, and production-filesystem rename or unlink behavior remain scheduler-backed `RCP-09` requirements. Namespace atomicity and observable best-effort cleanup are claimed locally; crash durability is not. |
+| Remaining action | Wait for a fresh correction-only acceptance auditor before marking `RCP-02` locally closed. |
+
+### 2026-05-29: RCP-04 Diagnostic And Writer-Budget Implementation
+
+| Field | Record |
+| --- | --- |
+| Numerical policy | Clamp bounded coordinate projections. Define zero radial or cylindrical projections on singular geometric axes. Reject non-positive-density and non-finite generic fluid diagnostics at runtime. Preserve construction-time rejection for ambiguous generic ion-neutral diagnostics. |
+| Ghost-zone boundary | Reject derived-array `ghost_zones=true` output during construction. Reject PDF ghost sampling explicitly. Keep `sphslice` native-state-backed until ghost-zone-safe derived interpolation exists. |
+| Spherical-slice naming | Replace low-precision radius names with deterministic round-trip scientific tokens and permit distinct radii with the same `id`. |
+| Writer allocation caps | Add positive per-output `max_writer_allocation_bytes` with a default of `536870912` bytes. Preflight PDF and spherical-slice retained and staging allocations before materialization. |
+| Backend portability correction | Remove PDF `ScatterView` accumulation, use `Kokkos::atomic_add()`, and stage MPI reductions through host mirrors so PDF output does not assume GPU-aware MPI. Account for host mirrors in budget preflight. |
+| Focused verification | Direct semantic harness passed; focused PDF and `sphslice` subset returned `45 passed`; MPI PDF and restart subset returned `3 passed`; serial canonical matrix returned `361 passed`; MPI canonical matrix returned `74 passed`; Python reader subset returned `159 passed`; style returned `2 passed`; fixture checks verified `27` artifacts. |
+| External limit | Representative CUDA execution is still required under `RCP-09`; the local host has no CUDA toolchain or runtime. |
+| Remaining action | Wait for a fresh documentation-to-code and backend-portability auditor before marking `RCP-04` locally closed. |
+
+### Reflection R-04: Keep Diagnostics Explicit And Backend-Neutral
+
+| Question | Record |
+| --- | --- |
+| Are these diagnostics general output fields or PDF-focused fields? | They are general derived output fields. PDFs are a major consumer but do not own the semantics. |
+| Should any advertised diagnostic be removed? | No. Every advertised name has analytic coverage or an explicit construction-time rejection boundary. |
+| Are ghost-zone restrictions consistent? | Yes. Derived ghost zones are rejected before loading because current kernels do not populate them. |
+| Does precise radius naming remain usable? | Yes. The token is longer but deterministic, readable, and collision-resistant for adjacent representable radii. |
+| Did GPU readiness change implementation direction? | Yes. PDF accumulation now uses backend-portable atomics and MPI reductions use host staging. Real CUDA execution remains a required external gate. |
+
+### 2026-05-29: RCP-02 Through RCP-04 Local Closure
+
+| Field | Record |
+| --- | --- |
+| RCP-02 acceptance | A fresh correction-only auditor accepted centralized reporting for attempt-owned cleanup, intentional normal-path reservation removal with coordinated fallback, checked directories, widened sequences, namespace preflight, MPI dispositions, wrapper path context, and local transaction cleanup. |
+| RCP-03 acceptance | A fresh final auditor accepted the narrow uniform-three-dimensional active-zone `.cbin` producer, broader validated legacy reader, checked Kokkos arithmetic, 64-bit node accounting, docs agreement, and focused evidence. Added explicit adaptive-AMR and rank-sharded sliced negative rows after the audit. |
+| RCP-04 acceptance | A fresh docs-to-code and backend-portability auditor accepted diagnostic singularity semantics, density failure policy, derived ghost-zone rejection, radius naming, writer caps, PDF atomics, host-staged reductions, and deferred docs agreement. |
+| Canonical verification | Python readers returned `159 passed`; serial IO plus GPU-selectable CPU smoke returned `363 passed`; MPI IO returned `76 passed`; style returned `2 passed`; fixture checksum verification passed for all `27` artifacts; `py_compile`, collection (`439 tests`), and `git diff --check origin/main --` passed. The serial count includes the explicit adaptive-AMR negative row. The MPI count includes shared rank/node sliced `.cbin` rejection rows. |
+| Frozen-guide check | `IO_FEATURE_BRANCH_ROBUSTIFICATION_GUIDE.md` remains SHA-256 `cdf53351104c135f2d79f9ee2f36c2908001b00a31339db18eb1cf66bcae11ff`, `2222` lines, and `89840` bytes. |
+| External boundary | Local closure is not production qualification. Real CUDA execution and scheduler-backed multi-node cleanup, empty-node, routing, restart, timing, scaling, and production-filesystem behavior remain open under `RCP-09`. |
+| Status | `RCP-02`, `RCP-03`, and `RCP-04` are locally closed. Commit the coherent correctness snapshot before starting `RCP-05`. |

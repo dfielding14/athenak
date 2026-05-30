@@ -37,7 +37,8 @@ cbin_node = bin_convert.read_coarsened_binary(
 When `assemble_shards=True`, the reader discovers sibling `rank_########` or
 `node_########` files and assembles their meshblock records into one logical
 output. It validates file structure and consistent metadata across discovered
-shards. New node-sharded binary and full-volume coarsened-binary files add
+shards. New node-sharded binary and uniform 3D active-zone full-volume
+coarsened-binary files add
 `distribution`, `node`, `number of nodes`, and `number of meshblocks`
 preheader fields. The canonical reader uses these optional fields to reject
 missing or duplicate node IDs while accepting explicit empty shards. Shared
@@ -84,9 +85,12 @@ python vis/python/examples/read_io_outputs.py \
   --assemble-shards
 ```
 
-Full-volume node-sharded `.cbin` is supported. Sliced `cbin` is rejected
-explicitly because its emitted extent is incompatible with supported
-coarsening.
+Uniform 3D active-zone full-volume node-sharded `.cbin` is supported.
+Lower-dimensional, ghost-zone-expanded, static-refinement, AMR, and sliced
+`cbin` are rejected explicitly before publication.
+The canonical reader intentionally remains able to read validated historical
+`.cbin` products outside the current writer matrix. That read-only
+compatibility does not promote those layouts as new producer workflows.
 
 ## Reading PDFs
 
@@ -147,10 +151,10 @@ Use `read_sphslice.py` for `file_type = sphslice` output:
 from vis.python import read_sphslice
 
 shared = read_sphslice.read_sphslice(
-    "run/bin/simulation.rho_shell.r_0.5.00000.sph.bin"
+    "run/bin/simulation.rho_shell.r_5.0000000000000000e-01.00000.sph.bin"
 )
 node = read_sphslice.read_sphslice(
-    "run/bin/node_00000000/simulation.rho_shell.r_0.5.00000.sph.bin",
+    "run/bin/node_00000000/simulation.rho_shell.r_5.0000000000000000e-01.00000.sph.bin",
 )
 ```
 
@@ -166,10 +170,13 @@ angular ownership. Shared files declare `layout=dense`; sharded files declare
   offsets are bounded before loading or materialization. Incorporated sparse
   arrays are released before the next sibling read, and reconstructed aggregates
   remove shard-local identifiers.
+The filename radius component uses a deterministic round-trip scientific
+token; for example, `slice_r = 0.5` emits
+`r_5.0000000000000000e-01`.
 
 ```bash
 python vis/python/examples/read_io_outputs.py \
-  sphslice run/bin/node_00000000/simulation.rho_shell.r_0.5.00000.sph.bin
+  sphslice run/bin/node_00000000/simulation.rho_shell.r_5.0000000000000000e-01.00000.sph.bin
 ```
 
 `sphslice` is a new binary analysis product; it does not replace the existing

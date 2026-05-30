@@ -291,8 +291,7 @@ int main(int argc, char *argv[]) {
     // Now use restart_file for opening the file
     std::ifstream file_check(restart_file);
     if (!file_check.good()) {
-        std::cerr << "Error: Unable to open restart file: " << restart_file << std::endl;
-        std::exit(EXIT_FAILURE);
+      FailNodeRestart("Unable to open restart file: " + restart_file);
     }
 
     // read parameters from restart file

@@ -8,7 +8,9 @@
 //! \file globals.hpp
 //  \brief namespace containing external global variables
 
-#include "athena.hpp"
+#include <cstdint>
+
+#include "config.hpp"
 
 #if MPI_PARALLEL_ENABLED
 #include <mpi.h>
@@ -26,6 +28,8 @@ void InitializeNodeCommunicator();
 void FinalizeNodeCommunicator();
 int NodePrefixSum(int local_count);
 int NodeSum(int local_count);
+std::uint64_t NodePrefixSum64(std::uint64_t local_count);
+std::uint64_t NodeSum64(std::uint64_t local_count);
 int NodeMin(int local_count);
 int NodeMax(int local_count);
 }  // namespace global_variable

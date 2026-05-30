@@ -20,18 +20,16 @@
 #include <string>
 
 #include "athena.hpp"
+#include "mpi_utils.hpp"
 
 namespace {
 
 constexpr const char* kTestMaxMpiBytesEnv = "ATHENAK_TEST_MAX_MPI_BYTES";
 
 [[noreturn]] void FatalIOError(const std::string& message) {
-  std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-            << std::endl << message << std::endl;
-#if MPI_PARALLEL_ENABLED
-  MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
-#endif
-  std::exit(EXIT_FAILURE);
+  mpi_utils::AbortWorld(std::string("### FATAL ERROR in ") + __FILE__ +
+                        " at line " + std::to_string(__LINE__) + "\n" +
+                        message);
 }
 
 IOWrapperSizeT CheckedByteCount(IOWrapperSizeT size, IOWrapperSizeT count,
@@ -120,19 +118,16 @@ std::size_t SizeOfDatatype(const std::string& datatype) {
 }
 
 #if MPI_PARALLEL_ENABLED
-std::string MpiErrorMessage(const char* context, int mpi_error) {
-  char message[MPI_MAX_ERROR_STRING];
-  int message_length = 0;
-  MPI_Error_string(mpi_error, message, &message_length);
-  return std::string(context) + " failed with MPI error: " +
-         std::string(message, message_length);
+std::string MpiIOContext(const char* operation, const std::string &path) {
+  return std::string(operation) + " for IOWrapper path '" + path + "'";
 }
 
-[[noreturn]] void FatalMpiError(const char* context, int mpi_error) {
-  FatalIOError(MpiErrorMessage(context, mpi_error));
+std::string MpiErrorMessage(const std::string &context, int mpi_error) {
+  return context + " failed with MPI error: " +
+         mpi_utils::MpiErrorString(mpi_error);
 }
 
-void PrintMpiError(const char* context, int mpi_error) {
+void PrintMpiError(const std::string &context, int mpi_error) {
   std::cerr << MpiErrorMessage(context, mpi_error) << std::endl;
 }
 
@@ -189,7 +184,7 @@ void PreflightPositionedMpiRange(IOWrapperSizeT offset,
   CheckedMpiOffset(end_offset, context);
 }
 
-IOWrapperSizeT TransferredBytes(MPI_Status* status, const char* context,
+IOWrapperSizeT TransferredBytes(MPI_Status* status, const std::string &context,
                                 bool* valid) {
   int transferred = 0;
   int mpi_error = MPI_Get_count(status, MPI_BYTE, &transferred);
@@ -208,42 +203,34 @@ IOWrapperSizeT TransferredBytes(MPI_Status* status, const char* context,
 }
 
 bool CollectiveRoundSucceeded(MPI_Comm comm, bool local_success,
-                              const char* context) {
+                              const std::string &context) {
   int local_failed = local_success ? 0 : 1;
   int any_failed = 0;
   int mpi_error = MPI_Allreduce(&local_failed, &any_failed, 1, MPI_INT, MPI_MAX,
                                 comm);
-  if (mpi_error != MPI_SUCCESS) {
-    FatalMpiError(context, mpi_error);
-  }
+  mpi_utils::CheckMpi(mpi_error, context.c_str());
   return any_failed == 0;
 }
 
 IOWrapperSizeT CollectiveMaxBytes(MPI_Comm comm, IOWrapperSizeT local_bytes,
-                                  const char* context) {
+                                  const std::string &context) {
   IOWrapperSizeT max_bytes = 0;
   int mpi_error = MPI_Allreduce(&local_bytes, &max_bytes, 1, MPI_UINT64_T,
                                 MPI_MAX, comm);
-  if (mpi_error != MPI_SUCCESS) {
-    FatalMpiError(context, mpi_error);
-  }
+  mpi_utils::CheckMpi(mpi_error, context.c_str());
   return max_bytes;
 }
 
-IOWrapperSizeT AgreedMaxMpiBytes(MPI_Comm comm, const char* context) {
+IOWrapperSizeT AgreedMaxMpiBytes(MPI_Comm comm, const std::string &context) {
   IOWrapperSizeT local_bytes = GetConfiguredMaxMpiBytes();
   IOWrapperSizeT min_bytes = 0;
   IOWrapperSizeT max_bytes = 0;
   int mpi_error = MPI_Allreduce(&local_bytes, &min_bytes, 1, MPI_UINT64_T,
                                 MPI_MIN, comm);
-  if (mpi_error != MPI_SUCCESS) {
-    FatalMpiError(context, mpi_error);
-  }
+  mpi_utils::CheckMpi(mpi_error, context.c_str());
   mpi_error = MPI_Allreduce(&local_bytes, &max_bytes, 1, MPI_UINT64_T, MPI_MAX,
                             comm);
-  if (mpi_error != MPI_SUCCESS) {
-    FatalMpiError(context, mpi_error);
-  }
+  mpi_utils::CheckMpi(mpi_error, context.c_str());
   if (min_bytes != max_bytes) {
     FatalIOError(std::string(kTestMaxMpiBytesEnv) +
                  " must have the same value on every communicator rank.");
@@ -252,7 +239,9 @@ IOWrapperSizeT AgreedMaxMpiBytes(MPI_Comm comm, const char* context) {
 }
 
 IOWrapperSizeT ChunkedMpiByteRead(IOWrapperFile fh, char* buf,
-                                  IOWrapperSizeT total_bytes) {
+                                  IOWrapperSizeT total_bytes,
+                                  const std::string &path) {
+  const std::string operation = MpiIOContext("MPI_File_read", path);
   IOWrapperSizeT bytes_read = 0;
   IOWrapperSizeT max_chunk = GetConfiguredMaxMpiBytes();
   while (bytes_read < total_bytes) {
@@ -262,12 +251,12 @@ IOWrapperSizeT ChunkedMpiByteRead(IOWrapperFile fh, char* buf,
         fh, buf + CheckedSizeT(bytes_read, "Read_bytes buffer offset"),
         static_cast<int>(chunk_bytes), MPI_BYTE, &status);
     if (mpi_error != MPI_SUCCESS) {
-      PrintMpiError("MPI_File_read", mpi_error);
+      PrintMpiError(operation, mpi_error);
       return 0;
     }
     bool valid = false;
     IOWrapperSizeT transferred = TransferredBytes(
-        &status, "MPI_File_read MPI_Get_count", &valid);
+        &status, MpiIOContext("MPI_File_read MPI_Get_count", path), &valid);
     if (!valid) {
       return 0;
     }
@@ -281,7 +270,9 @@ IOWrapperSizeT ChunkedMpiByteRead(IOWrapperFile fh, char* buf,
 
 IOWrapperSizeT ChunkedMpiByteReadAt(IOWrapperFile fh, char* buf,
                                     IOWrapperSizeT total_bytes,
-                                    IOWrapperSizeT offset) {
+                                    IOWrapperSizeT offset,
+                                    const std::string &path) {
+  const std::string operation = MpiIOContext("MPI_File_read_at", path);
   PreflightPositionedMpiRange(offset, total_bytes, "MPI_File_read_at");
   IOWrapperSizeT bytes_read = 0;
   IOWrapperSizeT max_chunk = GetConfiguredMaxMpiBytes();
@@ -296,12 +287,12 @@ IOWrapperSizeT ChunkedMpiByteReadAt(IOWrapperFile fh, char* buf,
         buf + CheckedSizeT(bytes_read, "Read_bytes_at buffer offset"),
         static_cast<int>(chunk_bytes), MPI_BYTE, &status);
     if (mpi_error != MPI_SUCCESS) {
-      PrintMpiError("MPI_File_read_at", mpi_error);
+      PrintMpiError(operation, mpi_error);
       return 0;
     }
     bool valid = false;
     IOWrapperSizeT transferred = TransferredBytes(
-        &status, "MPI_File_read_at MPI_Get_count", &valid);
+        &status, MpiIOContext("MPI_File_read_at MPI_Get_count", path), &valid);
     if (!valid) {
       return 0;
     }
@@ -315,12 +306,15 @@ IOWrapperSizeT ChunkedMpiByteReadAt(IOWrapperFile fh, char* buf,
 
 IOWrapperSizeT ChunkedMpiByteReadAtAll(IOWrapperFile fh, MPI_Comm comm,
                                        char* buf, IOWrapperSizeT total_bytes,
-                                       IOWrapperSizeT offset) {
+                                       IOWrapperSizeT offset,
+                                       const std::string &path) {
+  const std::string operation = MpiIOContext("MPI_File_read_at_all", path);
   PreflightPositionedMpiRange(offset, total_bytes, "MPI_File_read_at_all");
   IOWrapperSizeT max_total_bytes =
-      CollectiveMaxBytes(comm, total_bytes, "MPI_Allreduce read byte count");
+      CollectiveMaxBytes(comm, total_bytes,
+                         MpiIOContext("MPI_Allreduce read byte count", path));
   IOWrapperSizeT max_chunk =
-      AgreedMaxMpiBytes(comm, "MPI_Allreduce read chunk limit");
+      AgreedMaxMpiBytes(comm, MpiIOContext("MPI_Allreduce read chunk limit", path));
   char dummy = '\0';
   IOWrapperSizeT bytes_read = 0;
   IOWrapperSizeT chunk_begin = 0;
@@ -343,18 +337,18 @@ IOWrapperSizeT ChunkedMpiByteReadAtAll(IOWrapperFile fh, MPI_Comm comm,
         fh, mpi_offset, local_buf, static_cast<int>(local_bytes), MPI_BYTE,
         &status);
     if (mpi_error != MPI_SUCCESS) {
-      PrintMpiError("MPI_File_read_at_all", mpi_error);
+      PrintMpiError(operation, mpi_error);
     }
     bool valid = false;
     IOWrapperSizeT transferred = 0;
     if (mpi_error == MPI_SUCCESS) {
       transferred = TransferredBytes(
-          &status, "MPI_File_read_at_all MPI_Get_count", &valid);
+          &status, MpiIOContext("MPI_File_read_at_all MPI_Get_count", path), &valid);
     }
     bool local_success =
         mpi_error == MPI_SUCCESS && valid && transferred == local_bytes;
     if (!CollectiveRoundSucceeded(comm, local_success,
-                                  "MPI_Allreduce read result")) {
+                                  MpiIOContext("MPI_Allreduce read result", path))) {
       return 0;
     }
     bytes_read = CheckedOffsetAdd(bytes_read, transferred,
@@ -366,7 +360,9 @@ IOWrapperSizeT ChunkedMpiByteReadAtAll(IOWrapperFile fh, MPI_Comm comm,
 }
 
 IOWrapperSizeT ChunkedMpiByteWrite(IOWrapperFile fh, const char* buf,
-                                   IOWrapperSizeT total_bytes) {
+                                   IOWrapperSizeT total_bytes,
+                                   const std::string &path) {
+  const std::string operation = MpiIOContext("MPI_File_write", path);
   IOWrapperSizeT bytes_written = 0;
   IOWrapperSizeT max_chunk = GetConfiguredMaxMpiBytes();
   while (bytes_written < total_bytes) {
@@ -378,12 +374,12 @@ IOWrapperSizeT ChunkedMpiByteWrite(IOWrapperFile fh, const char* buf,
                 buf + CheckedSizeT(bytes_written, "Write_any_type buffer offset")),
         static_cast<int>(chunk_bytes), MPI_BYTE, &status);
     if (mpi_error != MPI_SUCCESS) {
-      PrintMpiError("MPI_File_write", mpi_error);
+      PrintMpiError(operation, mpi_error);
       return 0;
     }
     bool valid = false;
     IOWrapperSizeT transferred = TransferredBytes(
-        &status, "MPI_File_write MPI_Get_count", &valid);
+        &status, MpiIOContext("MPI_File_write MPI_Get_count", path), &valid);
     if (!valid) {
       return 0;
     }
@@ -398,7 +394,9 @@ IOWrapperSizeT ChunkedMpiByteWrite(IOWrapperFile fh, const char* buf,
 
 IOWrapperSizeT ChunkedMpiByteWriteAt(IOWrapperFile fh, const char* buf,
                                      IOWrapperSizeT total_bytes,
-                                     IOWrapperSizeT offset) {
+                                     IOWrapperSizeT offset,
+                                     const std::string &path) {
+  const std::string operation = MpiIOContext("MPI_File_write_at", path);
   PreflightPositionedMpiRange(offset, total_bytes, "MPI_File_write_at");
   IOWrapperSizeT bytes_written = 0;
   IOWrapperSizeT max_chunk = GetConfiguredMaxMpiBytes();
@@ -415,12 +413,12 @@ IOWrapperSizeT ChunkedMpiByteWriteAt(IOWrapperFile fh, const char* buf,
             buf + CheckedSizeT(bytes_written, "Write_any_type_at buffer offset")),
         static_cast<int>(chunk_bytes), MPI_BYTE, &status);
     if (mpi_error != MPI_SUCCESS) {
-      PrintMpiError("MPI_File_write_at", mpi_error);
+      PrintMpiError(operation, mpi_error);
       return 0;
     }
     bool valid = false;
     IOWrapperSizeT transferred = TransferredBytes(
-        &status, "MPI_File_write_at MPI_Get_count", &valid);
+        &status, MpiIOContext("MPI_File_write_at MPI_Get_count", path), &valid);
     if (!valid) {
       return 0;
     }
@@ -436,12 +434,15 @@ IOWrapperSizeT ChunkedMpiByteWriteAt(IOWrapperFile fh, const char* buf,
 IOWrapperSizeT ChunkedMpiByteWriteAtAll(IOWrapperFile fh, MPI_Comm comm,
                                         const char* buf,
                                         IOWrapperSizeT total_bytes,
-                                        IOWrapperSizeT offset) {
+                                        IOWrapperSizeT offset,
+                                        const std::string &path) {
+  const std::string operation = MpiIOContext("MPI_File_write_at_all", path);
   PreflightPositionedMpiRange(offset, total_bytes, "MPI_File_write_at_all");
   IOWrapperSizeT max_total_bytes =
-      CollectiveMaxBytes(comm, total_bytes, "MPI_Allreduce write byte count");
+      CollectiveMaxBytes(comm, total_bytes,
+                         MpiIOContext("MPI_Allreduce write byte count", path));
   IOWrapperSizeT max_chunk =
-      AgreedMaxMpiBytes(comm, "MPI_Allreduce write chunk limit");
+      AgreedMaxMpiBytes(comm, MpiIOContext("MPI_Allreduce write chunk limit", path));
   char dummy = '\0';
   IOWrapperSizeT bytes_written = 0;
   IOWrapperSizeT chunk_begin = 0;
@@ -464,18 +465,18 @@ IOWrapperSizeT ChunkedMpiByteWriteAtAll(IOWrapperFile fh, MPI_Comm comm,
         fh, mpi_offset, const_cast<char*>(local_buf),
         static_cast<int>(local_bytes), MPI_BYTE, &status);
     if (mpi_error != MPI_SUCCESS) {
-      PrintMpiError("MPI_File_write_at_all", mpi_error);
+      PrintMpiError(operation, mpi_error);
     }
     bool valid = false;
     IOWrapperSizeT transferred = 0;
     if (mpi_error == MPI_SUCCESS) {
       transferred = TransferredBytes(
-          &status, "MPI_File_write_at_all MPI_Get_count", &valid);
+          &status, MpiIOContext("MPI_File_write_at_all MPI_Get_count", path), &valid);
     }
     bool local_success =
         mpi_error == MPI_SUCCESS && valid && transferred == local_bytes;
     if (!CollectiveRoundSucceeded(comm, local_success,
-                                  "MPI_Allreduce write result")) {
+                                  MpiIOContext("MPI_Allreduce write result", path))) {
       return 0;
     }
     bytes_written = CheckedOffsetAdd(bytes_written, transferred,
@@ -489,28 +490,25 @@ IOWrapperSizeT ChunkedMpiByteWriteAtAll(IOWrapperFile fh, MPI_Comm comm,
 bool MpiFileIsMissing(int mpi_error) {
   int error_class = MPI_SUCCESS;
   int class_error = MPI_Error_class(mpi_error, &error_class);
-  if (class_error != MPI_SUCCESS) {
-    FatalMpiError("MPI_Error_class", class_error);
-  }
+  mpi_utils::CheckMpi(class_error, "MPI_Error_class");
   return error_class == MPI_ERR_NO_SUCH_FILE;
 }
 
 void DeleteExistingMpiFile(const char* fname, MPI_Comm comm) {
   int comm_rank = 0;
   int mpi_error = MPI_Comm_rank(comm, &comm_rank);
-  if (mpi_error != MPI_SUCCESS) {
-    FatalMpiError("MPI_Comm_rank", mpi_error);
-  }
+  mpi_utils::CheckMpi(mpi_error,
+                      "MPI_Comm_rank for IOWrapper publication communicator");
   if (comm_rank == 0) {
     mpi_error = MPI_File_delete(fname, MPI_INFO_NULL);
     if (mpi_error != MPI_SUCCESS && !MpiFileIsMissing(mpi_error)) {
-      FatalMpiError("MPI_File_delete", mpi_error);
+      mpi_utils::CheckMpi(mpi_error,
+                          "MPI_File_delete for IOWrapper replacement");
     }
   }
   mpi_error = MPI_Barrier(comm);
-  if (mpi_error != MPI_SUCCESS) {
-    FatalMpiError("MPI_Barrier before MPI_File_open", mpi_error);
-  }
+  mpi_utils::CheckMpi(
+      mpi_error, "MPI_Barrier before MPI_File_open for IOWrapper publication");
 }
 #endif
 
@@ -524,13 +522,9 @@ void BroadcastBytes(void* buf, IOWrapperSizeT count, int root, MPI_Comm comm) {
   IOWrapperSizeT max_count = 0;
   int mpi_error = MPI_Allreduce(&count, &min_count, 1, MPI_UINT64_T, MPI_MIN,
                                 comm);
-  if (mpi_error != MPI_SUCCESS) {
-    FatalMpiError("MPI_Allreduce broadcast byte count", mpi_error);
-  }
+  mpi_utils::CheckMpi(mpi_error, "MPI_Allreduce broadcast byte count");
   mpi_error = MPI_Allreduce(&count, &max_count, 1, MPI_UINT64_T, MPI_MAX, comm);
-  if (mpi_error != MPI_SUCCESS) {
-    FatalMpiError("MPI_Allreduce broadcast byte count", mpi_error);
-  }
+  mpi_utils::CheckMpi(mpi_error, "MPI_Allreduce broadcast byte count");
   if (min_count != max_count) {
     FatalIOError("BroadcastBytes count must match on every communicator rank.");
   }
@@ -544,10 +538,9 @@ void BroadcastBytes(void* buf, IOWrapperSizeT count, int root, MPI_Comm comm) {
     mpi_error = MPI_Bcast(
         byte_buf + CheckedSizeT(offset, "BroadcastBytes buffer offset"),
         static_cast<int>(chunk_bytes), MPI_BYTE, root, comm);
-    if (mpi_error != MPI_SUCCESS) {
-      FatalMpiError("MPI_Bcast", mpi_error);
-    }
-    offset = CheckedOffsetAdd(offset, chunk_bytes, "MPI_Bcast progress");
+    mpi_utils::CheckMpi(mpi_error, "MPI_Bcast for IOWrapper byte broadcast");
+    offset = CheckedOffsetAdd(offset, chunk_bytes,
+                              "MPI_Bcast for IOWrapper byte-broadcast progress");
   }
 }
 #endif
@@ -560,6 +553,7 @@ void BroadcastBytes(void* buf, IOWrapperSizeT count, int root, MPI_Comm comm) {
 //! This function must not be called by multiple threads in shared memory parallel regions
 
 int IOWrapper::Open(const char* fname, FileMode rw, bool use_serial_io) {
+  path_ = fname;
   const char* mode;
   switch (rw) {
     case FileMode::read:
@@ -594,9 +588,9 @@ int IOWrapper::Open(const char* fname, FileMode rw, bool use_serial_io) {
     }
 
     int mpi_error = MPI_File_open(comm_, fname, mpi_mode, MPI_INFO_NULL, &fh_);
-    if (mpi_error != MPI_SUCCESS) {
-      FatalMpiError("MPI_File_open", mpi_error);
-    }
+    std::string open_context =
+        "MPI_File_open for IOWrapper path '" + std::string(fname) + "'";
+    mpi_utils::CheckMpi(mpi_error, open_context.c_str());
   } else {
     FILE* local_fh;
     if ((local_fh = std::fopen(fname, mode)) == nullptr) {
@@ -629,7 +623,7 @@ std::size_t IOWrapper::Read_bytes(void* buf, IOWrapperSizeT size,
   if (!use_serial_io) {
     IOWrapperSizeT total_bytes = CheckedByteCount(size, cnt, "Read_bytes");
     return CompletedElements(
-        ChunkedMpiByteRead(fh_, reinterpret_cast<char*>(buf), total_bytes),
+        ChunkedMpiByteRead(fh_, reinterpret_cast<char*>(buf), total_bytes, path_),
         size, "Read_bytes result");
   }
   return std::fread(buf, CheckedSizeT(size, "Read_bytes element size"),
@@ -654,7 +648,7 @@ std::size_t IOWrapper::Read_bytes_at(void* buf, IOWrapperSizeT size,
   if (!use_serial_io) {
     IOWrapperSizeT total_bytes = CheckedByteCount(size, cnt, "Read_bytes_at");
     return CompletedElements(ChunkedMpiByteReadAt(
-        fh_, reinterpret_cast<char*>(buf), total_bytes, offset),
+        fh_, reinterpret_cast<char*>(buf), total_bytes, offset, path_),
         size, "Read_bytes_at result");
   }
   IOWrapperSizeT total_bytes = CheckedByteCount(size, cnt, "Read_bytes_at");
@@ -686,7 +680,7 @@ std::size_t IOWrapper::Read_bytes_at_all(void* buf, IOWrapperSizeT size,
     char dummy = '\0';
     char* read_buf = total_bytes == 0 ? &dummy : reinterpret_cast<char*>(buf);
     IOWrapperSizeT read =
-        ChunkedMpiByteReadAtAll(fh_, comm_, read_buf, total_bytes, offset);
+        ChunkedMpiByteReadAtAll(fh_, comm_, read_buf, total_bytes, offset, path_);
     return size == 0 ? 0 : CompletedElements(read, size,
                                              "Read_bytes_at_all result");
   }
@@ -748,7 +742,7 @@ std::size_t IOWrapper::Write_any_type(const void* buf, IOWrapperSizeT cnt,
     IOWrapperSizeT total_bytes =
         CheckedByteCount(datasize, cnt, "Write_any_type");
     return CompletedElements(ChunkedMpiByteWrite(
-        fh_, reinterpret_cast<const char*>(buf), total_bytes),
+        fh_, reinterpret_cast<const char*>(buf), total_bytes, path_),
         datasize, "Write_any_type result");
   }
   std::size_t written = std::fwrite(
@@ -778,7 +772,7 @@ std::size_t IOWrapper::Write_any_type_at(const void* buf, IOWrapperSizeT cnt,
     IOWrapperSizeT total_bytes =
         CheckedByteCount(datasize, cnt, "Write_any_type_at");
     return CompletedElements(ChunkedMpiByteWriteAt(
-        fh_, reinterpret_cast<const char*>(buf), total_bytes, offset),
+        fh_, reinterpret_cast<const char*>(buf), total_bytes, offset, path_),
         datasize, "Write_any_type_at result");
   }
   IOWrapperSizeT total_bytes = CheckedByteCount(datasize, cnt, "Write_any_type_at");
@@ -818,7 +812,7 @@ std::size_t IOWrapper::Write_any_type_at_all(const void* buf,
     const char* write_buf =
         total_bytes == 0 ? &dummy : reinterpret_cast<const char*>(buf);
     return CompletedElements(ChunkedMpiByteWriteAtAll(
-        fh_, comm_, write_buf, total_bytes, offset),
+        fh_, comm_, write_buf, total_bytes, offset, path_),
         datasize, "Write_any_type_at_all result");
   }
   IOWrapperSizeT total_bytes =
@@ -849,7 +843,11 @@ std::size_t IOWrapper::Write_any_type_at_all(const void* buf,
 int IOWrapper::Close(bool use_serial_io) {
 #if MPI_PARALLEL_ENABLED
   if (!use_serial_io) {
-    return MPI_File_close(&fh_);
+    int mpi_error = MPI_File_close(&fh_);
+    if (mpi_error != MPI_SUCCESS) {
+      PrintMpiError(MpiIOContext("MPI_File_close", path_), mpi_error);
+    }
+    return mpi_error;
   }
   return std::fclose(reinterpret_cast<FILE*>(fh_));
 #else
@@ -863,8 +861,12 @@ int IOWrapper::Close(bool use_serial_io) {
 int IOWrapper::Seek(IOWrapperSizeT offset, bool use_serial_io) {
 #if MPI_PARALLEL_ENABLED
   if (!use_serial_io) {
-    return MPI_File_seek(fh_, CheckedMpiOffset(offset, "MPI_File_seek"),
-                         MPI_SEEK_SET);
+    int mpi_error = MPI_File_seek(fh_, CheckedMpiOffset(offset, "MPI_File_seek"),
+                                  MPI_SEEK_SET);
+    if (mpi_error != MPI_SUCCESS) {
+      PrintMpiError(MpiIOContext("MPI_File_seek", path_), mpi_error);
+    }
+    return mpi_error;
   }
   return SerialSeek(reinterpret_cast<FILE*>(fh_), offset, "Seek");
 #else
@@ -880,11 +882,10 @@ IOWrapperSizeT IOWrapper::GetPosition(bool use_serial_io) {
   if (!use_serial_io) {
     MPI_Offset position = 0;
     int mpi_error = MPI_File_get_position(fh_, &position);
-    if (mpi_error != MPI_SUCCESS) {
-      FatalMpiError("MPI_File_get_position", mpi_error);
-    }
+    std::string context = MpiIOContext("MPI_File_get_position", path_);
+    mpi_utils::CheckMpi(mpi_error, context.c_str());
     if (position < 0) {
-      FatalIOError("MPI_File_get_position returned a negative offset.");
+      FatalIOError(context + " returned a negative offset.");
     }
     return static_cast<IOWrapperSizeT>(position);
   }

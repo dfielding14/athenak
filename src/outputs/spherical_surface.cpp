@@ -8,24 +8,52 @@
 
 #include "utils/spherical_surface.hpp"
 
-#include <sys/stat.h>  // mkdir
-
-#include <cstdio>  // snprintf
+#include <cstdio>
 #include <fstream>
 #include <sstream>
 #include <string>
 
 #include "athena.hpp"
 #include "globals.hpp"
+#include "mpi_utils.hpp"
 #include "mesh/mesh.hpp"
+#include "output_file_utils.hpp"
 #include "parameter_input.hpp"
 #include "outputs.hpp"
+
+namespace {
+
+[[noreturn]] void FatalSphericalSurfaceError(const std::string &message) {
+  mpi_utils::AbortWorld(std::string("### FATAL ERROR in ") + __FILE__ +
+                        " at line " + std::to_string(__LINE__) + "\n" + message);
+}
+
+std::string FormatRadius(Real radius) {
+  int length = std::snprintf(nullptr, 0, "%.2f", radius);
+  if (length < 0) {
+    FatalSphericalSurfaceError("Could not format spherical surface radius.");
+  }
+  std::string formatted(static_cast<std::size_t>(length) + 1, '\0');
+  if (std::snprintf(formatted.data(), formatted.size(), "%.2f", radius) != length) {
+    FatalSphericalSurfaceError("Could not format spherical surface radius.");
+  }
+  formatted.resize(length);
+  return formatted;
+}
+
+}  // namespace
 
 
 SphericalSurfaceOutput::SphericalSurfaceOutput(ParameterInput *pin, Mesh *pm,
                                                OutputParameters op)
     : BaseTypeOutput(pin, pm, op) {
-  mkdir("sph", 0755);
+  if (out_params.contains_derived) {
+    FatalSphericalSurfaceError(
+        "Spherical-surface derived-field interpolation is not supported until "
+        "ghost-zone-safe sampling is implemented.");
+  }
+  output_file_utils::EnsureDirectory("sph", 0755, "spherical surface output",
+                                     FatalSphericalSurfaceError);
 
   Real rad = pin->GetReal(op.block_name, "radius");
   int ntheta = pin->GetOrAddInteger(op.block_name, "ntheta", 32);
@@ -62,11 +90,15 @@ void SphericalSurfaceOutput::LoadOutputData(Mesh *pm) {
   // current rank
   int count = nout_vars * psurf->nangles;
   if (0 == global_variable::my_rank) {
-    MPI_Reduce(MPI_IN_PLACE, outarray.data(), count, MPI_ATHENA_REAL, MPI_SUM,
-               0, MPI_COMM_WORLD);
+    mpi_utils::CheckMpi(
+        MPI_Reduce(MPI_IN_PLACE, outarray.data(), count, MPI_ATHENA_REAL, MPI_SUM,
+                   0, MPI_COMM_WORLD),
+        "MPI_Reduce for spherical surface output values");
   } else {
-    MPI_Reduce(outarray.data(), outarray.data(), count, MPI_ATHENA_REAL,
-               MPI_SUM, 0, MPI_COMM_WORLD);
+    mpi_utils::CheckMpi(
+        MPI_Reduce(outarray.data(), outarray.data(), count, MPI_ATHENA_REAL,
+                   MPI_SUM, 0, MPI_COMM_WORLD),
+        "MPI_Reduce for spherical surface output values");
   }
 #endif
 }
@@ -78,13 +110,17 @@ void SphericalSurfaceOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   if (0 == global_variable::my_rank) {
 #endif
     // Assemble filename
-    char fname[BUFSIZ];
-    std::snprintf(fname, BUFSIZ, "sph/%s.r=%.2f.%s.%05d.vtk",
-                  out_params.file_basename.c_str(), psurf->radius,
-                  out_params.file_id.c_str(), out_params.file_number);
+    std::string sequence = output_file_utils::FormatSequence(
+        out_params.file_number, "spherical surface output", FatalSphericalSurfaceError);
+    std::string fname = "sph/" + out_params.file_basename + ".r=" +
+                        FormatRadius(psurf->radius) + "." +
+                        out_params.file_id + "." + sequence + ".vtk";
 
     // Open file
     std::ofstream ofile(fname, std::ios::binary);
+    if (!ofile.is_open()) {
+      FatalSphericalSurfaceError("Cannot open spherical surface output '" + fname + "'.");
+    }
 
     ofile << "# vtk DataFile Version 3.0" << std::endl;
     ofile << "# AthenaK data at time=" << pm->time
@@ -148,13 +184,24 @@ void SphericalSurfaceOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
         ofile.write(reinterpret_cast<char *>(&d), sizeof(float));
       }
     }
+    if (!ofile.good()) {
+      ofile.close();
+      FatalSphericalSurfaceError("Could not write spherical surface output '" + fname +
+                                 "' completely.");
+    }
+    ofile.close();
+    if (ofile.fail()) {
+      FatalSphericalSurfaceError("Could not close spherical surface output '" + fname +
+                                 "'.");
+    }
 
 #if MPI_PARALLEL_ENABLED
   }
 #endif
 
   // increment counters
-  out_params.file_number++;
+  out_params.file_number = output_file_utils::AdvanceFileNumber(
+      out_params.file_number, "spherical surface output", FatalSphericalSurfaceError);
   if (out_params.last_time < 0.0) {
     out_params.last_time = pm->time;
   } else {

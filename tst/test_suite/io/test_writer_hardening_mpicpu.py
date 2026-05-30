@@ -5,6 +5,7 @@ from pathlib import Path
 import subprocess
 import sys
 
+import h5py
 import numpy as np
 import pytest
 
@@ -100,9 +101,10 @@ def test_forced_tiny_chunks_preserve_shared_rank_and_node_writers(tmp_path):
     _compare_binary(shared_cbin, rank_cbin, coarsened=True)
     _compare_binary(shared_cbin, node_cbin, coarsened=True)
 
-    shared_sph = shared / "bin" / "io_node.density.r_0.25.00000.sph.bin"
-    rank_sph = rank / "bin" / "rank_00000000" / "io_node.density.r_0.25.00000.sph.bin"
-    node_sph = node / "bin" / "node_00000000" / "io_node.density.r_0.25.00000.sph.bin"
+    sph_name = "io_node.density.r_2.5000000000000000e-01.00000.sph.bin"
+    shared_sph = shared / "bin" / sph_name
+    rank_sph = rank / "bin" / "rank_00000000" / sph_name
+    node_sph = node / "bin" / "node_00000000" / sph_name
     np.testing.assert_allclose(read_sphslice(str(rank_sph))["data"],
                                read_sphslice(str(shared_sph))["data"])
     np.testing.assert_allclose(read_sphslice(str(node_sph))["data"],
@@ -117,9 +119,101 @@ def test_forced_tiny_chunks_preserve_shared_rank_and_node_writers(tmp_path):
         assert not list(run_dir.rglob("*.tmp"))
 
 
+def test_coarsened_binary_moments_round_trip_across_shared_rank_and_node(tmp_path):
+    shared, _ = _run(tmp_path, "moments_shared", "output3/compute_moments=true")
+    rank, _ = _run(
+        tmp_path,
+        "moments_rank",
+        "output3/compute_moments=true",
+        "output3/single_file_per_rank=true",
+    )
+    node, _ = _run(
+        tmp_path,
+        "moments_node",
+        "output3/compute_moments=true",
+        "output3/single_file_per_node=true",
+    )
+
+    shared_cbin = shared / "cbin_coarse_2" / "io_node.coarse.00000.cbin"
+    rank_cbin = rank / "cbin_coarse_2" / "rank_00000000" / "io_node.coarse.00000.cbin"
+    node_cbin = node / "cbin_coarse_2" / "node_00000000" / "io_node.coarse.00000.cbin"
+    _compare_binary(shared_cbin, rank_cbin, coarsened=True)
+    _compare_binary(shared_cbin, node_cbin, coarsened=True)
+
+    shared_data = bin_convert.read_coarsened_binary(str(shared_cbin))
+    assert shared_data["number_of_moments"] == 4
+    assert shared_data["var_names"] == [
+        "dens_1st",
+        "dens_2nd",
+        "dens_3rd",
+        "dens_4th",
+    ]
+    expected_uov = np.asarray(
+        [shared_data["mb_data"][variable] for variable in shared_data["var_names"]]
+    )
+    for path, assemble in ((shared_cbin, False), (rank_cbin, True), (node_cbin, True)):
+        bin_convert.convert_file(str(path), assemble_shards=assemble)
+        athdf = path.with_suffix(".athdf")
+        assert athdf.exists()
+        xdmf = Path(str(athdf) + ".xdmf")
+        assert xdmf.exists()
+        with h5py.File(athdf) as handle:
+            variable_names = [
+                name.decode() for name in handle.attrs["VariableNames"]
+            ]
+            assert variable_names == shared_data["var_names"]
+            assert handle["uov"].shape == expected_uov.shape
+            np.testing.assert_allclose(handle["uov"][:], expected_uov)
+        xdmf_text = xdmf.read_text()
+        for variable in shared_data["var_names"]:
+            assert f'<Attribute Name="{variable}" Center="Cell">' in xdmf_text
+        assert xdmf_text.count(":/uov") == (
+            shared_data["n_mbs"] * len(shared_data["var_names"])
+        )
+
+
+def test_coarsened_binary_gid_filter_uses_global_meshblock_ids(tmp_path):
+    gid_input = tmp_path / "cbin_gid.athinput"
+    gid_input.write_text(
+        INPUT_FILE.read_text().replace(
+            "<output3>\nfile_type = cbin\n",
+            "<output3>\nfile_type = cbin\ngid = 1\n",
+        )
+    )
+    rank, _ = _run(
+        tmp_path,
+        "cbin_gid",
+        "output3/single_file_per_rank=true",
+        input_file=gid_input,
+    )
+    rank_one = (
+        rank / "cbin_coarse_2" / "rank_00000001" / "io_node.coarse.00000.cbin"
+    )
+    rank_zero = (
+        rank / "cbin_coarse_2" / "rank_00000000" / "io_node.coarse.00000.cbin"
+    )
+    data = bin_convert.read_coarsened_binary(str(rank_one))
+    empty = bin_convert.read_coarsened_binary(str(rank_zero))
+    assembled = bin_convert.read_coarsened_binary(str(rank_one), assemble_shards=True)
+    assert empty["n_mbs"] == 0
+    assert data["n_mbs"] == 1
+    assert assembled["n_mbs"] == 1
+    np.testing.assert_array_equal(data["mb_logical"][0], [1, 0, 0, 0])
+    np.testing.assert_array_equal(assembled["mb_logical"][0], [1, 0, 0, 0])
+
+
 @pytest.mark.parametrize("nranks", (1, 2))
-def test_sliced_node_coarsened_binary_remains_explicitly_unpromoted(tmp_path, nranks):
-    sliced_input = tmp_path / "sliced_node_cbin.athinput"
+@pytest.mark.parametrize(
+    "distribution",
+    (
+        "output3/single_file_per_rank=true",
+        "output3/single_file_per_node=true",
+    ),
+)
+def test_sliced_sharded_coarsened_binary_remains_explicitly_unpromoted(
+    tmp_path, nranks, distribution
+):
+    sliced_input = tmp_path / "sliced_sharded_cbin.athinput"
     sliced_input.write_text(
         INPUT_FILE.read_text().replace(
             "<output3>\nfile_type = cbin\n",
@@ -128,8 +222,8 @@ def test_sliced_node_coarsened_binary_remains_explicitly_unpromoted(tmp_path, nr
     )
     _, proc = _run(
         tmp_path,
-        f"sliced_node_cbin_{nranks}",
-        "output3/single_file_per_node=true",
+        f"sliced_sharded_cbin_{nranks}",
+        distribution,
         check=False,
         input_file=sliced_input,
         nranks=nranks,
