@@ -254,6 +254,54 @@ class PicPreregistrationTests(unittest.TestCase):
                 self.assertTrue(claim["limitations"])
                 self.assertIsInstance(claim["evidence_links"], list)
 
+    def test_q018_registered_f1_bundle_tracks_pending_review_manifests(self) -> None:
+        links = _load(Q018_LINKS_PATH)
+        bundle = links["registered_f1_pending_external_review_bundle"]
+        successor = _load(
+            READINESS_DIR
+            / "q027_frontier_f1_registered_science_successor_candidate_2026-05-30.json"
+        )
+        self.assertEqual(
+            bundle["status"],
+            "frozen_pending_external_review_not_claim_qualified",
+        )
+        self.assertEqual(
+            bundle["current_active_policy_sha256"],
+            successor["coupling_v2_submission_artifact_scrub_transition"][
+                "active_policy_sha256"
+            ],
+        )
+        self.assertEqual(
+            bundle["current_active_promotion_sha256"],
+            successor["coupling_v2_submission_artifact_scrub_transition"][
+                "active_promotion_sha256"
+            ],
+        )
+        expected = {
+            execution["registered_science_authorization_id"]: (
+                execution["qualification_manifest_path"],
+                execution["qualification_manifest_sha256"],
+            )
+            for execution in [
+                successor["accepted_gyro_v3_registered_execution"],
+                successor["accepted_paper_coupling_v2_registered_execution"],
+            ]
+        }
+        actual = {
+            qualification["registered_science_authorization_id"]: (
+                qualification["manifest_path"],
+                qualification["manifest_sha256"],
+            )
+            for qualification in bundle["qualifications"]
+        }
+        self.assertEqual(actual, expected)
+        self.assertTrue(
+            all(
+                qualification["review"] == "pending external review"
+                for qualification in bundle["qualifications"]
+            )
+        )
+
     def test_q022_entity_map_matches_schema_and_stays_bounded(self) -> None:
         schema = _load(Q022_EQUATION_MAP_SCHEMA_PATH)
         entity_map = _load(Q022_ENTITY_MAP_PATH)

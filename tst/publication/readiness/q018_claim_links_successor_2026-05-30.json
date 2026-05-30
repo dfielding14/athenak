@@ -3,11 +3,31 @@
   "schema_version": 1,
   "date": "2026-05-30",
   "gate": "Q-018",
-  "qualification_effect": "registry_link_scaffold_only",
+  "qualification_effect": "registry_links_with_registered_f1_pending_review_bundle",
   "disposition": "open",
   "reviewer_assignment": "pending external review",
   "claims_registry": "tst/publication/readiness/claims_registry.json",
   "qualification_manifest_gate": "tst/publication/pic_qualification_manifest.py",
+  "registered_f1_pending_external_review_bundle": {
+    "status": "frozen_pending_external_review_not_claim_qualified",
+    "source_record": "tst/publication/readiness/q027_frontier_f1_registered_science_successor_candidate_2026-05-30.json",
+    "current_active_policy_sha256": "559a4b1ebc13425e53e40b544cf92931d11271ec0a07f678b680f68bf5c00052",
+    "current_active_promotion_sha256": "84065c8a8abb5aad3fc41e452537e27507260ca968eb1bae6eec60b0655fa436",
+    "qualifications": [
+      {
+        "registered_science_authorization_id": "f1-clean-gyro-mpich-stderr-v3",
+        "manifest_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/qualifications/f1_gpu_relativistic_gyro/79c74d09-8462-437b-b357-97b7bf63717d/qualification_manifest.policy-559a4b1e.json",
+        "manifest_sha256": "17265e0244e410b900ec2296dfcfcb51ec19138d82a331d497c8f341ad4cd354",
+        "review": "pending external review"
+      },
+      {
+        "registered_science_authorization_id": "f1-clean-paper-coupling-mpich-stderr-v2",
+        "manifest_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/qualifications/f1_gpu_paper_coupling/fad21006-b33a-4d53-9636-55d055b0bf81/qualification_manifest.json",
+        "manifest_sha256": "6262332ad758953525cd745999766f7c9b23eb535594b802a79a75fee8fc5456",
+        "review": "pending external review"
+      }
+    ]
+  },
   "default_limitations": [
     "A source-controlled registry link is not qualifying evidence.",
     "Every required gate, immutable qualifying bundle link, and named external reviewer disposition must close before promotion."
@@ -39,5 +59,5 @@
     {"claim_id": "CLAIM-RELEASE-PAPER-MHD-PIC-001", "applicability_envelope": "bounded production-ready paper_mhd_pic release profile", "limitations": ["all profile gates and terminal review remain open"], "evidence_links": []},
     {"claim_id": "CLAIM-RELEASE-EXTENDED-MHD-PIC-001", "applicability_envelope": "bounded production-ready selected extended_mhd_pic release profile", "limitations": ["all paper and extension gates plus terminal review remain open"], "evidence_links": []}
   ],
-  "q018_status": "open_registry_links_scaffolded_immutable_qualifying_bundle_links_and_named_external_dispositions_absent"
+  "q018_status": "open_registry_links_scaffolded_registered_f1_qualification_bundle_frozen_pending_external_review_named_external_dispositions_absent"
 }
