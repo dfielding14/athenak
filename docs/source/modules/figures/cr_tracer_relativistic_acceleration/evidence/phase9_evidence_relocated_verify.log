@@ -61,6 +61,7 @@ docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase9_
 docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase9_portable_replay_README.md: OK
 docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase9_provenance_envelope.json: OK
 docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase9_provenance_envelope_verify.log: OK
+docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase9_public_restart_resume_template_runtime.log: OK
 docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase9_public_solver_coupled_example.athinput: OK
 docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase9_public_solver_coupled_example_runtime.log: OK
 docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase9_pusher_release_CMakeCache.txt: OK
