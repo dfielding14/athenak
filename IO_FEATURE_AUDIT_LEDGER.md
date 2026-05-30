@@ -582,7 +582,7 @@ resolutions, and re-audit results required by `IO_FEATURE_BRANCH_GUIDE.md`.
 | Checkpoint | Status | Decisions | Pre-edit auditors | Implementation commit(s) | Focused tests | Post-edit auditors | Reflection | Remaining risk |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | RCP-00 | Locally closed | D-069, D-070, D-071, D-073, D-075, D-081, D-083, D-085 | Runtime baseline; format/tooling baseline; documentation/process baseline | `e40621d8` guide freeze | Fresh floors registered below | Three baseline reports accepted | R-00 recorded below | External CUDA and multi-node topology remain unavailable locally |
-| RCP-01 | Implementing | D-070, D-071, D-085, D-091 | Focused layout auditor accepted |  |  |  |  | Restart arithmetic, metadata reconstruction, serial positioning, bounded manifests, and startup failure |
+| RCP-01 | Locally closed | D-070, D-071, D-085, D-091, D-092, D-093 | Focused layout auditor accepted | Pending coherent commit | Full serial `238 passed`; full MPI `67 passed`; style `2 passed`; fixtures `27` verified; exact pre-edit byte comparisons pass | Arithmetic, compatibility, topology, admission, and single-issue re-auditors accepted after corrections | R-01 recorded below | Signed output-sequence domain remains queued for RCP-02 |
 | RCP-02 | Not started | D-072, D-073, D-074, D-086, D-087 pending |  |  |  |  |  |  |
 | RCP-03 | Not started | D-075 accepted direction; D-088 pending |  |  |  |  |  |  |
 | RCP-04 | Not started | D-076, D-077, D-078, D-089 pending |  |  |  |  |  |  |
@@ -607,6 +607,16 @@ cleanup claims.
 | ROB-026 | P3 | Public Python converter paths still need explicit allocation preflight and deliberate budget override behavior | RCP-06 |
 | ROB-027 | P1 docs | Literal deferred Pages whole-page replacement can delete unrelated live `origin/gh-pages` guidance even when Sphinx builds successfully | RCP-07 |
 | ROB-028 | P1 | Restart metadata reconstruction allocates and broadcasts `listsize * nmb_total` bytes with unchecked arithmetic and advances through the buffer with a signed cursor | RCP-01 |
+| ROB-029 | P1 | Restart startup consumes serialized mesh dimensions, ghost counts, refinement state, and coordinate bounds before rejecting structurally invalid values | RCP-01 |
+| ROB-030 | P2 | Serial positioned IO validates the starting offset but not the terminal offset, and serial byte operations narrow counts to `size_t` without representability checks | RCP-01 |
+| ROB-031 | P2 | Node-restart writer can publish a manifest above the strict reader's 64 MiB limit and can generate payload paths above the parser's accepted path bound | RCP-01 |
+| ROB-032 | P2 | Restart allocation and MHD face-stride calculations need checked `size_t` preflight and checked subtraction as well as checked add and multiply operations | RCP-01 |
+| ROB-033 | P1 | Restart leaf metadata can reach tree shifts, refinement recursion, and load balancing without validating topology completeness, canonical persisted order, signed-safe logical levels, positive finite costs, or rank-map completion | RCP-01 |
+| ROB-034 | P1 | Multilevel restart headers can accept odd active MeshBlock extents even though scratch construction rejects them before coarse-grid refinement arithmetic | RCP-01 |
+| ROB-035 | P2 | Adaptive `num_levels + root_level - 1` arithmetic can overflow a signed `int` before restart or scratch admission checks reject the requested refinement depth | RCP-01 |
+| ROB-036 | P1 | Serialized restart dimensions can disagree with dimension flags derived from the persisted parameter dump, allowing self-consistent but incompatible header metadata into tree and physics setup | RCP-01 |
+| ROB-037 | P2 | Adaptive `num_levels` still narrows through `atoi()` inside `GetOrAddInteger()` before wide logical-level validation unless mesh construction parses the textual value directly | RCP-01 |
+| ROB-038 | P1 | Inactive coarse MeshBlock axes can retain noncanonical serialized bounds even though scratch construction initializes them to `0/0` | RCP-01 |
 
 The `ROB-017` inventory is expanded to include inherited table and VTK writers in
 addition to `.bin`, `.cbin`, PDF, `sphslice`, and restart output.
@@ -680,3 +690,61 @@ The local matrix does not satisfy these production gates:
 | Accepted recommendations | Include metadata reconstruction; preflight signed counts before unsigned conversion; replace `int` Kokkos subview-count narrowing; use descriptor field offsets for MHD face strides; add artificial-count, serial-wrapper, bounded-manifest, and immediate missing-path tests. |
 | Rejected recommendations | None. Local Kokkos allocation preflight is accepted as part of the descriptor use sites rather than a separate abstraction. |
 | Stop-gate status | Pre-edit layout map and abstraction decision are recorded. Runtime editing may begin. |
+
+### 2026-05-29: RCP-01 Restart-Layout Implementation And Red-Team Corrections
+
+| Field | Record |
+| --- | --- |
+| Implementation scope | Added the header-only `src/restart_layout.hpp` arithmetic facility; used it from restart write, restart read, and replicated metadata reconstruction; added checked POSIX serial positioning; made parameter-header reposition failures fatal; made missing restart input fail immediately; bounded node-manifest materialization; and added focused harnesses and regressions. |
+| Arithmetic auditor findings | Added `ROB-029` through `ROB-032`: validate serialized mesh structure before division and allocation; reject serial terminal-offset and `size_t` narrowing overflow; enforce reader-writer manifest-limit symmetry; preflight memory-size representability and use checked subtraction for MHD face-stride remainders. |
+| Corrections | Added structural restart-header validation in `Mesh::BuildTreeFromRestart()` before root-grid division; expanded serial wrapper checks; added `CheckedSizeT`, `CheckedMemorySize`, `CheckedSubtract`, and `ManifestBudget`; enforced generated payload-path and final manifest-byte budgets in the writer; stored checked MHD face-stride remainder bytes in the descriptor; and extended harness coverage. |
+| Deferred finding | The auditor reconfirmed signed `file_number` truncation and overflow exposure across output writers. That is already registered as `ROB-024` and remains intentionally queued for the cross-format inventory in `RCP-02`; it is not silently closed by restart work. |
+| Focused verification | Restart-layout and serial-wrapper CPU harnesses plus restart finalization tests returned `21 passed`; MPI restart and node-sharding tests returned `56 passed`; repository style returned `2 passed`; `git diff --check` returned no output. |
+| Legacy byte preservation | Built detached pre-edit `9fe385b8b900f99beecdc9bd4440819ebd67aac1` serial and MPI executables. Deterministic generated shared restart files matched post-edit bytes exactly for file numbers `00000` and `00001` (`56183` bytes each). Deterministic generated per-rank restart files matched post-edit bytes exactly for both ranks and both file numbers (`34886` bytes each). |
+| Compatibility auditor | Accepted preservation of shared and per-rank wire order, node marker placement, manifest-only node entry, direct span routing, and MHD field strides. The detached pre-edit comparison closes the auditor's request for producer-to-producer byte evidence. |
+| Remaining RCP-01 action | Wait for the correction re-auditor and run the full local matrix before closing and committing the checkpoint. |
+
+### Reflection R-01: Keep The Restart Facility Narrow
+
+| Question | Record |
+| --- | --- |
+| Did the shared layout work reveal duplicated logic elsewhere? | Yes. Replicated metadata reconstruction and MHD face-stride arithmetic were part of the same restart safety boundary. They are covered by the shared checked helpers without moving serialization control flow. |
+| Is the abstraction narrow enough? | Yes. `src/restart_layout.hpp` owns checked arithmetic and payload offsets only. Restart format order, MPI routing, file opening, Kokkos view construction, and module-specific loops remain in their existing owners. |
+| Did any legacy fixture change unexpectedly? | No. Frozen resume coverage still passes, and detached pre-edit producer comparisons are byte-identical for generated shared and per-rank restart files. |
+| Are wrapper-level chunk tests still representative after caller changes? | Yes. Caller arithmetic is checked before entry, and the existing forced-small-chunk node restart tests still exercise wrapper chunking. |
+| Should any helper move into a general checked-IO utility for RCP-02? | Not yet. Keep restart-layout helpers scoped to restart until the MPI/publication inventory demonstrates an actually shared boundary. |
+
+### 2026-05-29: RCP-01 Topology Re-Audit And Second Correction Cycle
+
+| Field | Record |
+| --- | --- |
+| Correction re-audit blockers | The first correction re-auditor rejected payload-path validation after mutation, noncanonical positive mesh spacing, and unvalidated leaf metadata before tree shifts. The metadata-domain sidecar then identified the 3D x2-axis flag, signed-safe level cap, zero-cost, full-child topology, and aggregate-load risks. A second correction auditor added multilevel MeshBlock parity and wide adaptive-level arithmetic. |
+| Durable findings | Added `ROB-033` through `ROB-035` for restart topology admission, multilevel parity, and adaptive level-count overflow. |
+| Resolution | Validate node payload paths before opening temporary payloads; validate canonical spacing, root level, active MeshBlock parity, and signed-safe level `<=30`; validate decoded leaf axes, duplicates, ancestors, complete child sets, canonical persisted Z order, positive finite costs, finite aggregate cost, neighbor balance, and post-load-balance rank maps before payload routing; compute adaptive maximum level in wide arithmetic. |
+| Focused coverage | Added corruption regressions for generated payload path before open, spacing, MeshBlock extent, multilevel parity, adaptive level count, negative and excessive levels, active and inactive axis bounds, duplicate locations, permuted records, ancestor overlap, incomplete refinement, 2:1 imbalance, zero cost, infinite cost, finite-value aggregate overflow, and valid 3D restart with nonzero x2 location. Serial restart/layout harness set returned `39 passed`; MPI restart set returned `58 passed`. |
+| Full local verification | Full serial IO plus CPU smoke of the GPU-selectable regression returned `236 passed`; full MPI IO returned `67 passed`; repository style returned `2 passed`; fixture checksum verification passed for all `27` artifacts; targeted py_compile and `git diff --check` returned no output. |
+| Compatibility note | Restart wire bytes are unchanged. The additional checks reject malformed persisted metadata before unsafe arithmetic or silent payload relabeling. Previously recorded detached pre-edit producer comparisons remain byte-identical for valid shared and per-rank output. |
+| Remaining RCP-01 action | Wait for the fresh final topology auditor, then commit the coherent checkpoint if accepted. |
+
+### 2026-05-29: RCP-01 Final Admission Corrections
+
+| Field | Record |
+| --- | --- |
+| Final topology-audit blockers | Serialized restart dimensions were validated internally but were not required to match the dimensional flags derived from the persisted parameter dump. Adaptive `num_levels` validation performed wide addition only after `GetOrAddInteger()` had already narrowed text through `atoi()`. |
+| Durable findings | Added `ROB-036` and `ROB-037`. |
+| Resolution | Require serialized mesh and MeshBlock active dimensions to agree with retained `multi_d` and `three_d` flags before index arithmetic. Read existing adaptive `num_levels` as text, parse with checked `std::stoll`, reject malformed text and out-of-range values before addition, and use `GetOrAddInteger()` only for the safe missing-default case. |
+| Focused verification | Restart/layout harness set returned `40 passed`; MPI restart set returned `58 passed`; dimensional mismatch and oversized adaptive-level regressions pass. |
+| Full local verification | Full serial IO plus CPU smoke of the GPU-selectable regression returned `237 passed`; full MPI IO returned `67 passed`; repository style returned `2 passed`; fixture checksum verification passed for all `27` artifacts; targeted py_compile and `git diff --check` returned no output. |
+| Remaining RCP-01 action | Wait for a fresh admission-focused auditor, then commit the coherent checkpoint if accepted. |
+
+### 2026-05-29: RCP-01 Inactive Coarse-Axis Correction
+
+| Field | Record |
+| --- | --- |
+| Admission re-audit blocker | Inactive coarse MeshBlock axes were not required to retain canonical `0/0` bounds. |
+| Durable finding | Added `ROB-038`. |
+| Resolution | Reject nonzero inactive `cjs/cje` and `cks/cke` bounds while preserving the existing active-axis coarse-grid checks. |
+| Focused verification | Restart/layout harness set returned `41 passed`; MPI restart set returned `58 passed`; inactive coarse-axis regression passes. |
+| Full local verification | Full serial IO plus CPU smoke of the GPU-selectable regression returned `238 passed`; full MPI IO returned `67 passed`; repository style returned `2 passed`; fixture checksum verification passed for all `27` artifacts; targeted py_compile and `git diff --check` returned no output. |
+| Independent acceptance | Fresh single-issue re-auditor returned `ACCEPTED` after inspecting inactive coarse-axis bounds, active-axis checks, dimensional agreement, and checked adaptive-level parsing. |
+| Status | `RCP-01` is locally closed. Commit the coherent checkpoint before starting `RCP-02`. |

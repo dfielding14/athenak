@@ -22,6 +22,9 @@ from read_sphslice import read_sphslice  # noqa: E402
 INPUT_FILE = "inputs/io_node_sharding.athinput"
 MAX_MPI_BYTES_ENV = "ATHENAK_TEST_MAX_MPI_BYTES"
 NODE_PAYLOAD_MARKER = b"AthenaK node restart payload version=1\n"
+MAX_NODE_MANIFEST_BYTES = 64 * 1024 * 1024
+MAX_GENERATED_PAYLOAD_PATH_BYTES = 1024
+OVERSIZED_MANIFEST_LINE = "x" * 4096
 NODE_OVERRIDES = tuple(
     f"output{number}/single_file_per_node=true" for number in range(1, 7)
 )
@@ -209,6 +212,40 @@ def test_node_restart_manifest_resumes_without_overwriting_terminal_checkpoint(t
     assert not list((run_dir / "rst").rglob("*.assembled"))
 
 
+def test_node_restart_rejects_generated_payload_path_before_open(tmp_path):
+    run_dir = tmp_path / "oversized_generated_payload_path"
+    run_dir.mkdir()
+    basename = "x" * 1000
+    proc = subprocess.run(
+        [
+            "mpirun",
+            "-np",
+            "2",
+            "./athena",
+            "-i",
+            INPUT_FILE,
+            "-d",
+            str(run_dir),
+            f"job/basename={basename}",
+            "output1/dt=-1",
+            "output2/dt=-1",
+            "output3/dt=-1",
+            "output4/dt=-1",
+            "output5/dt=-1",
+            "output6/single_file_per_node=true",
+            "time/final_output_policy=none",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=90,
+    )
+    assert proc.returncode != 0
+    assert "generated payload path exceeds the 1024-byte limit" in (
+        proc.stdout + proc.stderr
+    )
+    assert not list((run_dir / "rst").rglob("*payload.rst*"))
+
+
 @pytest.mark.parametrize(
     ("corruption", "expected"),
     (
@@ -233,6 +270,13 @@ def test_node_restart_manifest_resumes_without_overwriting_terminal_checkpoint(t
         ("segment_count", "node-local payload count"),
         ("segment_zero", "segment block count must be positive"),
         ("segment_inventory", "too many segment records"),
+        ("oversized_signature", "manifest signature exceeds"),
+        ("oversized_scalar", "'complete' record exceeds"),
+        ("oversized_payload", "payload inventory record exceeds"),
+        ("oversized_segment", "segment inventory record exceeds"),
+        ("oversized_trailing", "trailing record exceeds"),
+        ("oversized_payload_path", "generated path exceeds"),
+        ("sparse_total_manifest", "node restart manifest exceeds"),
     ),
 )
 def test_node_restart_rejects_corrupted_manifest(
@@ -277,6 +321,46 @@ def test_node_restart_rejects_corrupted_manifest(
         text += "unknown=1\n"
     elif corruption == "unsupported_version":
         text = text.replace("version=1", "version=2", 1)
+    elif corruption == "oversized_signature":
+        lines = text.splitlines()
+        lines[0] = "AthenaK node restart manifest version=" + OVERSIZED_MANIFEST_LINE
+        text = "\n".join(lines) + "\n"
+    elif corruption == "oversized_scalar":
+        text = text.replace("complete=1", "complete=" + OVERSIZED_MANIFEST_LINE, 1)
+    elif corruption == "oversized_payload":
+        lines = text.splitlines()
+        index = next(index for index, line in enumerate(lines)
+                     if line.startswith("payload "))
+        lines[index] += " " + OVERSIZED_MANIFEST_LINE
+        text = "\n".join(lines) + "\n"
+    elif corruption == "oversized_segment":
+        lines = text.splitlines()
+        index = next(index for index, line in enumerate(lines)
+                     if line.startswith("segment "))
+        lines[index] += " " + OVERSIZED_MANIFEST_LINE
+        text = "\n".join(lines) + "\n"
+    elif corruption == "oversized_trailing":
+        text += OVERSIZED_MANIFEST_LINE + "\n"
+    elif corruption == "oversized_payload_path":
+        lines = text.splitlines()
+        index = next(index for index, line in enumerate(lines)
+                     if line.startswith("payload "))
+        fields = lines[index].split()
+        directory, leaf = fields[4].split("/", 1)
+        prefix = leaf.split(".g", 1)[0]
+        fields[4] = (
+            f"{directory}/{prefix}.g"
+            + "1" * (MAX_GENERATED_PAYLOAD_PATH_BYTES + 1)
+            + ".payload.rst"
+        )
+        lines[index] = " ".join(fields)
+        text = "\n".join(lines) + "\n"
+    elif corruption == "sparse_total_manifest":
+        manifest.write_text(text)
+        with manifest.open("r+b") as stream:
+            stream.seek(MAX_NODE_MANIFEST_BYTES)
+            stream.write(b"\n")
+        text = None
     elif corruption == "mixed_generation":
         lines = text.splitlines()
         payload_index = next(index for index, line in enumerate(lines)
@@ -351,7 +435,8 @@ def test_node_restart_rejects_corrupted_manifest(
         if fields is not None:
             lines[segment_indexes[0]] = " ".join(fields)
             text = "\n".join(lines) + "\n"
-    manifest.write_text(text)
+    if text is not None:
+        manifest.write_text(text)
     proc = subprocess.run(
         ["mpirun", "-np", "2", "./athena", "-r", str(manifest), "-d", str(run_dir)],
         capture_output=True,

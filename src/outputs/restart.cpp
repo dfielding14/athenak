@@ -35,9 +35,13 @@
 #include "radiation/radiation.hpp"
 #include "srcterms/turb_driver.hpp"
 #include "outputs.hpp"
+#include "restart_layout.hpp"
 #include "restart_manifest.hpp"
 
 namespace {
+
+constexpr std::size_t kMaxGeneratedPayloadPathBytes = 1024;
+constexpr IOWrapperSizeT kMaxNodeRestartManifestBytes = 64ULL*1024ULL*1024ULL;
 
 bool IsSafeRestartLeaf(const std::string &leaf) {
   return !leaf.empty() && leaf != "." && leaf != ".." &&
@@ -54,20 +58,42 @@ bool IsSafeRestartLeaf(const std::string &leaf) {
   std::exit(EXIT_FAILURE);
 }
 
+std::string NodeRestartRelativePayloadPath(const std::string &payload_name, int node_id) {
+  std::string relative_path = ShardDirectoryName(FileShardMode::node, 0, node_id)
+      + "/" + payload_name;
+  if (relative_path.size() > kMaxGeneratedPayloadPathBytes) {
+    FailNodeRestartWrite("node restart generated payload path exceeds the "
+                         "1024-byte limit.");
+  }
+  return relative_path;
+}
+
 IOWrapperSizeT CheckedRestartAdd(IOWrapperSizeT left, IOWrapperSizeT right,
                                  const std::string &context) {
-  if (right > std::numeric_limits<IOWrapperSizeT>::max() - left) {
-    FailNodeRestartWrite(context + " overflows.");
-  }
-  return left + right;
+  return restart_layout::CheckedAdd(left, right, FailNodeRestartWrite, context);
 }
 
 IOWrapperSizeT CheckedRestartMultiply(IOWrapperSizeT left, IOWrapperSizeT right,
                                       const std::string &context) {
-  if (left != 0 && right > std::numeric_limits<IOWrapperSizeT>::max()/left) {
-    FailNodeRestartWrite(context + " overflows.");
+  return restart_layout::CheckedMultiply(left, right, FailNodeRestartWrite, context);
+}
+
+IOWrapperSizeT CheckedRestartCount(int value, const std::string &context) {
+  return restart_layout::CheckedNonNegative(value, FailNodeRestartWrite, context);
+}
+
+int CheckedRestartInt(IOWrapperSizeT value, const std::string &context) {
+  if (value > static_cast<IOWrapperSizeT>(std::numeric_limits<int>::max())) {
+    FailNodeRestartWrite(context + " exceeds INT_MAX.");
   }
-  return left*right;
+  return static_cast<int>(value);
+}
+
+int CheckedRestartIntAdd(int left, int right, const std::string &context) {
+  return CheckedRestartInt(
+      CheckedRestartAdd(CheckedRestartCount(left, context),
+                        CheckedRestartCount(right, context), context),
+      context);
 }
 
 void CheckedRestartWrite(IOWrapper &file, const void *data, IOWrapperSizeT bytes,
@@ -101,9 +127,15 @@ RestartOutput::RestartOutput(ParameterInput *pin, Mesh *pm, OutputParameters op)
 void RestartOutput::LoadOutputData(Mesh *pm) {
   // get spatial dimensions of arrays, including ghost zones
   auto &indcs = pm->pmb_pack->pmesh->mb_indcs;
-  int nout1 = indcs.nx1 + 2*(indcs.ng);
-  int nout2 = (indcs.nx2 > 1)? (indcs.nx2 + 2*(indcs.ng)) : 1;
-  int nout3 = (indcs.nx3 > 1)? (indcs.nx3 + 2*(indcs.ng)) : 1;
+  int nout1 = CheckedRestartInt(restart_layout::CheckedExtentWithGhosts(
+      indcs.nx1, indcs.ng, true, FailNodeRestartWrite, "restart x1 extent"),
+      "restart x1 extent");
+  int nout2 = CheckedRestartInt(restart_layout::CheckedExtentWithGhosts(
+      indcs.nx2, indcs.ng, indcs.nx2 > 1, FailNodeRestartWrite, "restart x2 extent"),
+      "restart x2 extent");
+  int nout3 = CheckedRestartInt(restart_layout::CheckedExtentWithGhosts(
+      indcs.nx3, indcs.ng, indcs.nx3 > 1, FailNodeRestartWrite, "restart x3 extent"),
+      "restart x3 extent");
   int nmb = pm->pmb_pack->nmb_thispack;
 
   // calculate total number of CC variables
@@ -115,10 +147,12 @@ void RestartOutput::LoadOutputData(Mesh *pm) {
   TurbulenceDriver* pturb=pm->pmb_pack->pturb;
   int nhydro=0, nmhd=0, nrad=0, nforce=3, nadm=0, nz4c=0;
   if (phydro != nullptr) {
-    nhydro = phydro->nhydro + phydro->nscalars;
+    nhydro = CheckedRestartIntAdd(phydro->nhydro, phydro->nscalars,
+                                  "restart Hydro component count");
   }
   if (pmhd != nullptr) {
-    nmhd = pmhd->nmhd + pmhd->nscalars;
+    nmhd = CheckedRestartIntAdd(pmhd->nmhd, pmhd->nscalars,
+                                "restart MHD component count");
   }
   if (pz4c != nullptr) {
     nz4c = pz4c->nz4c;
@@ -129,42 +163,80 @@ void RestartOutput::LoadOutputData(Mesh *pm) {
   if (prad != nullptr) {
     nrad = prad->prgeo->nangles;
   }
+  restart_layout::PayloadLayout layout = restart_layout::PayloadLayout::Build(
+      {CheckedRestartCount(nout1, "restart x1 extent"),
+       CheckedRestartCount(nout2, "restart x2 extent"),
+       CheckedRestartCount(nout3, "restart x3 extent"),
+       CheckedRestartCount(nhydro, "restart Hydro component count"),
+       CheckedRestartCount(nmhd, "restart MHD component count"),
+       CheckedRestartCount(nrad, "restart radiation component count"),
+       pturb == nullptr ? 0 : CheckedRestartCount(nforce, "restart forcing count"),
+       CheckedRestartCount(nz4c, "restart Z4c component count"),
+       CheckedRestartCount(nadm, "restart ADM component count"),
+       sizeof(Real)}, FailNodeRestartWrite);
+  IOWrapperSizeT local_blocks = CheckedRestartCount(nmb, "restart local MeshBlock count");
+  const auto preflight_local = [&](IOWrapperSizeT block_bytes,
+                                   const std::string &context) {
+    restart_layout::CheckedMemorySize(
+        CheckedRestartMultiply(local_blocks, block_bytes, context),
+        FailNodeRestartWrite, context);
+  };
+  int nout1f = nout1;
+  int nout2f = nout2;
+  int nout3f = nout3;
+  if (pmhd != nullptr) {
+    nout1f = CheckedRestartInt(CheckedRestartAdd(nout1, 1, "restart MHD x1 extent"),
+                               "restart MHD x1 extent");
+    nout2f = CheckedRestartInt(CheckedRestartAdd(nout2, 1, "restart MHD x2 extent"),
+                               "restart MHD x2 extent");
+    nout3f = CheckedRestartInt(CheckedRestartAdd(nout3, 1, "restart MHD x3 extent"),
+                               "restart MHD x3 extent");
+  }
 
   // Note for restarts, outarrays are dimensioned (m,n,k,j,i)
   if (phydro != nullptr) {
+    preflight_local(layout.hydro_bytes, "restart local Hydro allocation bytes");
     Kokkos::realloc(outarray_hyd, nmb, nhydro, nout3, nout2, nout1);
     Kokkos::deep_copy(outarray_hyd, Kokkos::subview(phydro->u0, std::make_pair(0,nmb),
                       Kokkos::ALL, Kokkos::ALL, Kokkos::ALL, Kokkos::ALL));
   }
   if (pmhd != nullptr) {
+    preflight_local(layout.mhd_bytes, "restart local MHD allocation bytes");
+    preflight_local(layout.mhd_x1f_bytes, "restart local MHD x1-face allocation bytes");
+    preflight_local(layout.mhd_x2f_bytes, "restart local MHD x2-face allocation bytes");
+    preflight_local(layout.mhd_x3f_bytes, "restart local MHD x3-face allocation bytes");
     Kokkos::realloc(outarray_mhd, nmb, nmhd, nout3, nout2, nout1);
     Kokkos::deep_copy(outarray_mhd, Kokkos::subview(pmhd->u0, std::make_pair(0,nmb),
                       Kokkos::ALL, Kokkos::ALL, Kokkos::ALL, Kokkos::ALL));
-    Kokkos::realloc(outfield.x1f, nmb, nout3, nout2, nout1+1);
+    Kokkos::realloc(outfield.x1f, nmb, nout3, nout2, nout1f);
     Kokkos::deep_copy(outfield.x1f, Kokkos::subview(pmhd->b0.x1f, std::make_pair(0,nmb),
                       Kokkos::ALL, Kokkos::ALL, Kokkos::ALL));
-    Kokkos::realloc(outfield.x2f, nmb, nout3, nout2+1, nout1);
+    Kokkos::realloc(outfield.x2f, nmb, nout3, nout2f, nout1);
     Kokkos::deep_copy(outfield.x2f, Kokkos::subview(pmhd->b0.x2f, std::make_pair(0,nmb),
                       Kokkos::ALL, Kokkos::ALL, Kokkos::ALL));
-    Kokkos::realloc(outfield.x3f, nmb, nout3+1, nout2, nout1);
+    Kokkos::realloc(outfield.x3f, nmb, nout3f, nout2, nout1);
     Kokkos::deep_copy(outfield.x3f, Kokkos::subview(pmhd->b0.x3f, std::make_pair(0,nmb),
                       Kokkos::ALL, Kokkos::ALL, Kokkos::ALL));
   }
   if (prad != nullptr) {
+    preflight_local(layout.radiation_bytes, "restart local radiation allocation bytes");
     Kokkos::realloc(outarray_rad, nmb, nrad, nout3, nout2, nout1);
     Kokkos::deep_copy(outarray_rad, Kokkos::subview(prad->i0, std::make_pair(0,nmb),
                       Kokkos::ALL, Kokkos::ALL, Kokkos::ALL, Kokkos::ALL));
   }
   if (pturb != nullptr) {
+    preflight_local(layout.forcing_bytes, "restart local forcing allocation bytes");
     Kokkos::realloc(outarray_force, nmb, nforce, nout3, nout2, nout1);
     Kokkos::deep_copy(outarray_force, Kokkos::subview(pturb->force, std::make_pair(0,nmb),
                       Kokkos::ALL, Kokkos::ALL, Kokkos::ALL, Kokkos::ALL));
   }
   if (pz4c != nullptr) {
+    preflight_local(layout.z4c_bytes, "restart local Z4c allocation bytes");
     Kokkos::realloc(outarray_z4c, nmb, nz4c, nout3, nout2, nout1);
     Kokkos::deep_copy(outarray_z4c, Kokkos::subview(pz4c->u0, std::make_pair(0,nmb),
                       Kokkos::ALL, Kokkos::ALL, Kokkos::ALL, Kokkos::ALL));
   } else if (padm != nullptr) {
+    preflight_local(layout.adm_bytes, "restart local ADM allocation bytes");
     Kokkos::realloc(outarray_adm, nmb, nadm, nout3, nout2, nout1);
     Kokkos::deep_copy(outarray_adm, Kokkos::subview(padm->u_adm, std::make_pair(0,nmb),
                       Kokkos::ALL, Kokkos::ALL, Kokkos::ALL, Kokkos::ALL));
@@ -186,28 +258,38 @@ void RestartOutput::LoadOutputData(Mesh *pm) {
 void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   // get spatial dimensions of arrays, including ghost zones
   auto &indcs = pm->pmb_pack->pmesh->mb_indcs;
-  int nout1 = indcs.nx1 + 2*(indcs.ng);
-  int nout2 = (indcs.nx2 > 1)? (indcs.nx2 + 2*(indcs.ng)) : 1;
-  int nout3 = (indcs.nx3 > 1)? (indcs.nx3 + 2*(indcs.ng)) : 1;
+  int nout1 = CheckedRestartInt(restart_layout::CheckedExtentWithGhosts(
+      indcs.nx1, indcs.ng, true, FailNodeRestartWrite, "restart x1 extent"),
+      "restart x1 extent");
+  int nout2 = CheckedRestartInt(restart_layout::CheckedExtentWithGhosts(
+      indcs.nx2, indcs.ng, indcs.nx2 > 1, FailNodeRestartWrite, "restart x2 extent"),
+      "restart x2 extent");
+  int nout3 = CheckedRestartInt(restart_layout::CheckedExtentWithGhosts(
+      indcs.nx3, indcs.ng, indcs.nx3 > 1, FailNodeRestartWrite, "restart x3 extent"),
+      "restart x3 extent");
   hydro::Hydro* phydro = pm->pmb_pack->phydro;
   mhd::MHD* pmhd = pm->pmb_pack->pmhd;
   radiation::Radiation* prad = pm->pmb_pack->prad;
   TurbulenceDriver* pturb=pm->pmb_pack->pturb;
   z4c::Z4c* pz4c = pm->pmb_pack->pz4c;
   adm::ADM* padm = pm->pmb_pack->padm;
-  int nhydro=0, nmhd=0, nrad=0, nforce=3, nz4c=0, nadm=0, nco=0;
+  int nhydro=0, nmhd=0, nrad=0, nforce=3, nz4c=0, nadm=0;
+  IOWrapperSizeT nco=0;
   if (phydro != nullptr) {
-    nhydro = phydro->nhydro + phydro->nscalars;
+    nhydro = CheckedRestartIntAdd(phydro->nhydro, phydro->nscalars,
+                                  "restart Hydro component count");
   }
   if (pmhd != nullptr) {
-    nmhd = pmhd->nmhd + pmhd->nscalars;
+    nmhd = CheckedRestartIntAdd(pmhd->nmhd, pmhd->nscalars,
+                                "restart MHD component count");
   }
   if (prad != nullptr) {
     nrad = prad->prgeo->nangles;
   }
   if (pz4c != nullptr) {
     nz4c = pz4c->nz4c;
-    nco = pz4c->ptracker.size();
+    nco = restart_layout::CheckedSizeT(pz4c->ptracker.size(), FailNodeRestartWrite,
+                                       "restart compact-object tracker count");
   } else if (padm != nullptr) {
     nadm = padm->nadm;
   }
@@ -246,6 +328,9 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
 #endif
     payload_name = out_params.file_basename + number + ".g"
         + std::to_string(generation) + ".payload.rst";
+    for (int id = 0; id < global_variable::nnodes; ++id) {
+      NodeRestartRelativePayloadPath(payload_name, id);
+    }
     std::string shard_dir = ShardDirectoryName(
         shard_mode, global_variable::my_rank, global_variable::node_id);
     fname = std::string("rst/") + shard_dir + "/" + payload_name + ".tmp";
@@ -316,11 +401,17 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
 
   if (shard_writer) {
     CheckedRestartWrite(resfile, &(pm->lloc_eachmb[0]),
-                        CheckedRestartMultiply(pm->nmb_total, sizeof(LogicalLocation),
+                        CheckedRestartMultiply(
+                            CheckedRestartCount(pm->nmb_total,
+                                                "restart total MeshBlock count"),
+                            sizeof(LogicalLocation),
                                                "restart logical-location bytes"),
                         "restart logical locations", independent_file);
     CheckedRestartWrite(resfile, &(pm->cost_eachmb[0]),
-                        CheckedRestartMultiply(pm->nmb_total, sizeof(float),
+                        CheckedRestartMultiply(
+                            CheckedRestartCount(pm->nmb_total,
+                                                "restart total MeshBlock count"),
+                            sizeof(float),
                                                "restart MeshBlock-cost bytes"),
                         "restart MeshBlock costs", independent_file);
   }
@@ -351,57 +442,65 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
 
   // total size of all cell-centered variables and face-centered fields to be written by
   // this rank
-  IOWrapperSizeT data_size = 0;
-  if (phydro != nullptr) {
-    data_size += nout1*nout2*nout3*nhydro*sizeof(Real); // hydro u0
-  }
-  if (pmhd != nullptr) {
-    data_size += nout1*nout2*nout3*nmhd*sizeof(Real);   // mhd u0
-    data_size += (nout1+1)*nout2*nout3*sizeof(Real);    // mhd b0.x1f
-    data_size += nout1*(nout2+1)*nout3*sizeof(Real);    // mhd b0.x2f
-    data_size += nout1*nout2*(nout3+1)*sizeof(Real);    // mhd b0.x3f
-  }
-  if (prad != nullptr) {
-    data_size += nout1*nout2*nout3*nrad*sizeof(Real);   // radiation i0
-  }
-  if (pturb != nullptr) {
-    data_size += nout1*nout2*nout3*nforce*sizeof(Real); // forcing
-  }
-  if (pz4c != nullptr) {
-    data_size += nout1*nout2*nout3*nz4c*sizeof(Real);   // z4c u0
-  } else if (padm != nullptr) {
-    data_size += nout1*nout2*nout3*nadm*sizeof(Real);   // adm u_adm
-  }
+  restart_layout::PayloadLayout layout = restart_layout::PayloadLayout::Build(
+      {CheckedRestartCount(nout1, "restart x1 extent"),
+       CheckedRestartCount(nout2, "restart x2 extent"),
+       CheckedRestartCount(nout3, "restart x3 extent"),
+       CheckedRestartCount(nhydro, "restart Hydro component count"),
+       CheckedRestartCount(nmhd, "restart MHD component count"),
+       CheckedRestartCount(nrad, "restart radiation component count"),
+       pturb == nullptr ? 0 : CheckedRestartCount(nforce, "restart forcing count"),
+       CheckedRestartCount(nz4c, "restart Z4c component count"),
+       CheckedRestartCount(nadm, "restart ADM component count"),
+       sizeof(Real)}, FailNodeRestartWrite);
+  IOWrapperSizeT data_size = layout.data_bytes;
   if (shard_writer) {
     CheckedRestartWrite(resfile, &(data_size), sizeof(IOWrapperSizeT),
                         "restart per-MeshBlock byte count", independent_file);
   }
 
   // calculate size of data written in Steps 1-2 above
-  IOWrapperSizeT step1size = sbuf.size()*sizeof(char) + 3*sizeof(int) + 2*sizeof(Real) +
-                             sizeof(RegionSize) + 2*sizeof(RegionIndcs);
-  if (node_sharded) {
-    step1size = CheckedRestartAdd(step1size, kNodeRestartPayloadMarkerSize,
-                                  "node restart header size");
+  IOWrapperSizeT fixed_mesh_bytes = 3*sizeof(int) + 2*sizeof(Real)
+      + sizeof(RegionSize) + 2*sizeof(RegionIndcs);
+  IOWrapperSizeT state_bytes = CheckedRestartMultiply(
+      CheckedRestartMultiply(3, nco, "restart tracker state bytes"), sizeof(Real),
+      "restart tracker state bytes");
+  if (pz4c != nullptr) {
+    state_bytes = CheckedRestartAdd(state_bytes, sizeof(Real),
+                                    "restart Z4c state bytes");
   }
-  IOWrapperSizeT step2size = (pm->nmb_total)*(sizeof(LogicalLocation) + sizeof(float));
-
-  IOWrapperSizeT step3size = 3*nco*sizeof(Real);
-  if (pz4c != nullptr) step3size += sizeof(Real);
-  if (pturb != nullptr) step3size += sizeof(RNG_State);
+  if (pturb != nullptr) {
+    state_bytes = CheckedRestartAdd(state_bytes, sizeof(RNG_State),
+                                    "restart turbulence state bytes");
+  }
+  restart_layout::HeaderLayout header_layout = restart_layout::HeaderLayout::Build(
+      {restart_layout::CheckedSizeT(sbuf.size(), FailNodeRestartWrite,
+                                    "restart parameter dump bytes"),
+       node_sharded ? kNodeRestartPayloadMarkerSize : 0,
+       fixed_mesh_bytes,
+       restart_layout::CheckedPositive(pm->nmb_total, FailNodeRestartWrite,
+                                       "restart total MeshBlock count"),
+       sizeof(LogicalLocation) + sizeof(float),
+       state_bytes,
+       sizeof(IOWrapperSizeT)}, FailNodeRestartWrite);
 
   // write cell-centered variables in parallel
-  IOWrapperSizeT header_size = step1size + step2size + step3size
-      + sizeof(IOWrapperSizeT);
+  IOWrapperSizeT header_size = header_layout.header_bytes;
   IOWrapperSizeT offset_myrank = header_size;
   int payload_block_offset = 0;
   if (shard_mode == FileShardMode::shared) {
-    offset_myrank += data_size*(pm->gids_eachrank[global_variable::my_rank]);
+    offset_myrank = restart_layout::CheckedOffset(
+        header_size, data_size,
+        CheckedRestartCount(pm->gids_eachrank[global_variable::my_rank],
+                            "restart shared rank block offset"),
+        FailNodeRestartWrite, "restart shared rank byte offset");
   } else if (node_sharded) {
     payload_block_offset = global_variable::NodePrefixSum(pm->nmb_thisrank);
     offset_myrank = CheckedRestartAdd(
         offset_myrank,
-        CheckedRestartMultiply(data_size, payload_block_offset,
+        CheckedRestartMultiply(data_size,
+                               CheckedRestartCount(payload_block_offset,
+                                                   "node restart payload block offset"),
                                "node restart rank payload offset"),
         "node restart rank payload offset");
     noutmbs_min = global_variable::NodeMin(pm->nmb_thisrank);
@@ -420,7 +519,8 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
         // get ptr to cell-centered MeshBlock data
         auto mbptr = Kokkos::subview(outarray_hyd, m, Kokkos::ALL, Kokkos::ALL,
                                      Kokkos::ALL, Kokkos::ALL);
-        int mbcnt = mbptr.size();
+        IOWrapperSizeT mbcnt = restart_layout::CheckedSizeT(
+            mbptr.size(), FailNodeRestartWrite, "restart Hydro subview count");
         if (resfile.Write_any_type_at_all(mbptr.data(),mbcnt,myoffset,"Real",
                                           independent_file) != mbcnt) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -428,14 +528,15 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
           << "restart file is broken." << std::endl;
           exit(EXIT_FAILURE);
         }
-        myoffset += data_size;
+        myoffset = CheckedRestartAdd(myoffset, data_size, "restart MeshBlock offset");
 
       // some ranks are finished writing, so use non-collective write
       } else if (m < pm->nmb_thisrank) {
         // get ptr to MeshBlock data
         auto mbptr = Kokkos::subview(outarray_hyd, m, Kokkos::ALL, Kokkos::ALL,
                                      Kokkos::ALL, Kokkos::ALL);
-        int mbcnt = mbptr.size();
+        IOWrapperSizeT mbcnt = restart_layout::CheckedSizeT(
+            mbptr.size(), FailNodeRestartWrite, "restart Hydro subview count");
         if (resfile.Write_any_type_at(mbptr.data(), mbcnt, myoffset,"Real",
                                           independent_file) != mbcnt) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -443,10 +544,11 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
           << "restart file is broken." << std::endl;
           exit(EXIT_FAILURE);
         }
-        myoffset += data_size;
+        myoffset = CheckedRestartAdd(myoffset, data_size, "restart MeshBlock offset");
       }
     }
-    offset_myrank += nout1*nout2*nout3*nhydro*sizeof(Real); // hydro u0
+    offset_myrank = CheckedRestartAdd(offset_myrank, layout.hydro_bytes,
+                                      "restart field offset"); // hydro u0
     myoffset = offset_myrank;
   }
   if (pmhd != nullptr) {
@@ -456,7 +558,8 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
         // get ptr to cell-centered MeshBlock data
         auto mbptr = Kokkos::subview(outarray_mhd, m, Kokkos::ALL, Kokkos::ALL,
                                      Kokkos::ALL, Kokkos::ALL);
-        int mbcnt = mbptr.size();
+        IOWrapperSizeT mbcnt = restart_layout::CheckedSizeT(
+            mbptr.size(), FailNodeRestartWrite, "restart MHD subview count");
         if (resfile.Write_any_type_at_all(mbptr.data(),mbcnt,myoffset,"Real",
                                           independent_file) != mbcnt) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -464,14 +567,15 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
           << "restart file is broken." << std::endl;
           exit(EXIT_FAILURE);
         }
-        myoffset += data_size;
+        myoffset = CheckedRestartAdd(myoffset, data_size, "restart MeshBlock offset");
 
       // some ranks are finished writing, so use non-collective write
       } else if (m < pm->nmb_thisrank) {
         // get ptr to MeshBlock data
         auto mbptr = Kokkos::subview(outarray_mhd, m, Kokkos::ALL, Kokkos::ALL,
                                      Kokkos::ALL, Kokkos::ALL);
-        int mbcnt = mbptr.size();
+        IOWrapperSizeT mbcnt = restart_layout::CheckedSizeT(
+            mbptr.size(), FailNodeRestartWrite, "restart MHD subview count");
         if (resfile.Write_any_type_at(mbptr.data(), mbcnt, myoffset,"Real",
                                       independent_file) != mbcnt) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -479,10 +583,11 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
           << "restart file is broken." << std::endl;
           exit(EXIT_FAILURE);
         }
-        myoffset += data_size;
+        myoffset = CheckedRestartAdd(myoffset, data_size, "restart MeshBlock offset");
       }
     }
-    offset_myrank += nout1*nout2*nout3*nmhd*sizeof(Real);   // mhd u0
+    offset_myrank = CheckedRestartAdd(offset_myrank, layout.mhd_bytes,
+                                      "restart field offset"); // mhd u0
     myoffset = offset_myrank;
 
     for (int m=0;  m<noutmbs_max; ++m) {
@@ -490,7 +595,8 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
       if (m < noutmbs_min) {
         // get ptr to x1-face field
         auto x1fptr = Kokkos::subview(outfield.x1f,m,Kokkos::ALL,Kokkos::ALL,Kokkos::ALL);
-        int fldcnt = x1fptr.size();
+        IOWrapperSizeT fldcnt = restart_layout::CheckedSizeT(
+            x1fptr.size(), FailNodeRestartWrite, "restart MHD x1-face subview count");
         if (resfile.Write_any_type_at_all(x1fptr.data(),fldcnt,myoffset,"Real",
                                           independent_file) != fldcnt) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -498,11 +604,13 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
                     << "restart file is broken." << std::endl;
           exit(EXIT_FAILURE);
         }
-        myoffset += fldcnt*sizeof(Real);
+        myoffset = CheckedRestartAdd(myoffset, layout.mhd_x1f_bytes,
+                                     "restart MHD face offset");
 
         // get ptr to x2-face field
         auto x2fptr = Kokkos::subview(outfield.x2f,m,Kokkos::ALL,Kokkos::ALL,Kokkos::ALL);
-        fldcnt = x2fptr.size();
+        fldcnt = restart_layout::CheckedSizeT(
+            x2fptr.size(), FailNodeRestartWrite, "restart MHD x2-face subview count");
         if (resfile.Write_any_type_at_all(x2fptr.data(),fldcnt,myoffset,"Real",
                                           independent_file) != fldcnt) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -510,11 +618,13 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
                     << "restart file is broken." << std::endl;
           exit(EXIT_FAILURE);
         }
-        myoffset += fldcnt*sizeof(Real);
+        myoffset = CheckedRestartAdd(myoffset, layout.mhd_x2f_bytes,
+                                     "restart MHD face offset");
 
         // get ptr to x3-face field
         auto x3fptr = Kokkos::subview(outfield.x3f,m,Kokkos::ALL,Kokkos::ALL,Kokkos::ALL);
-        fldcnt = x3fptr.size();
+        fldcnt = restart_layout::CheckedSizeT(
+            x3fptr.size(), FailNodeRestartWrite, "restart MHD x3-face subview count");
         if (resfile.Write_any_type_at_all(x3fptr.data(),fldcnt,myoffset,"Real",
                                           independent_file) != fldcnt) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -522,15 +632,20 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
                     << "restart file is broken." << std::endl;
           exit(EXIT_FAILURE);
         }
-        myoffset += fldcnt*sizeof(Real);
+        myoffset = CheckedRestartAdd(myoffset, layout.mhd_x3f_bytes,
+                                     "restart MHD face offset");
 
-        myoffset += data_size-(x1fptr.size()+x2fptr.size()+x3fptr.size())*sizeof(Real);
+        myoffset = CheckedRestartAdd(
+            myoffset,
+            layout.mhd_face_stride_remainder_bytes,
+            "restart MeshBlock offset");
 
       // some ranks are finished writing, so use non-collective write
       } else if (m < pm->nmb_thisrank) {
         // get ptr to x1-face field
         auto x1fptr = Kokkos::subview(outfield.x1f,m,Kokkos::ALL,Kokkos::ALL,Kokkos::ALL);
-        int fldcnt = x1fptr.size();
+        IOWrapperSizeT fldcnt = restart_layout::CheckedSizeT(
+            x1fptr.size(), FailNodeRestartWrite, "restart MHD x1-face subview count");
         if (resfile.Write_any_type_at(x1fptr.data(),fldcnt,myoffset,"Real",
                                       independent_file) != fldcnt) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -538,11 +653,13 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
                     << "restart file is broken." << std::endl;
           exit(EXIT_FAILURE);
         }
-        myoffset += fldcnt*sizeof(Real);
+        myoffset = CheckedRestartAdd(myoffset, layout.mhd_x1f_bytes,
+                                     "restart MHD face offset");
 
         // get ptr to x2-face field
         auto x2fptr = Kokkos::subview(outfield.x2f,m,Kokkos::ALL,Kokkos::ALL,Kokkos::ALL);
-        fldcnt = x2fptr.size();
+        fldcnt = restart_layout::CheckedSizeT(
+            x2fptr.size(), FailNodeRestartWrite, "restart MHD x2-face subview count");
         if (resfile.Write_any_type_at(x2fptr.data(),fldcnt,myoffset,"Real",
                                       independent_file) != fldcnt) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -550,11 +667,13 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
                     << "restart file is broken." << std::endl;
           exit(EXIT_FAILURE);
         }
-        myoffset += fldcnt*sizeof(Real);
+        myoffset = CheckedRestartAdd(myoffset, layout.mhd_x2f_bytes,
+                                     "restart MHD face offset");
 
         // get ptr to x3-face field
         auto x3fptr = Kokkos::subview(outfield.x3f,m,Kokkos::ALL,Kokkos::ALL,Kokkos::ALL);
-        fldcnt = x3fptr.size();
+        fldcnt = restart_layout::CheckedSizeT(
+            x3fptr.size(), FailNodeRestartWrite, "restart MHD x3-face subview count");
         if (resfile.Write_any_type_at(x3fptr.data(),fldcnt,myoffset,"Real",
                                       independent_file) != fldcnt) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -562,14 +681,21 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
                     << "restart file is broken." << std::endl;
           exit(EXIT_FAILURE);
         }
-        myoffset += fldcnt*sizeof(Real);
+        myoffset = CheckedRestartAdd(myoffset, layout.mhd_x3f_bytes,
+                                     "restart MHD face offset");
 
-        myoffset += data_size-(x1fptr.size()+x2fptr.size()+x3fptr.size())*sizeof(Real);
+        myoffset = CheckedRestartAdd(
+            myoffset,
+            layout.mhd_face_stride_remainder_bytes,
+            "restart MeshBlock offset");
       }
     }
-    offset_myrank += (nout1+1)*nout2*nout3*sizeof(Real);    // mhd b0.x1f
-    offset_myrank += nout1*(nout2+1)*nout3*sizeof(Real);    // mhd b0.x2f
-    offset_myrank += nout1*nout2*(nout3+1)*sizeof(Real);    // mhd b0.x3f
+    offset_myrank = CheckedRestartAdd(offset_myrank, layout.mhd_x1f_bytes,
+                                      "restart field offset"); // mhd b0.x1f
+    offset_myrank = CheckedRestartAdd(offset_myrank, layout.mhd_x2f_bytes,
+                                      "restart field offset"); // mhd b0.x2f
+    offset_myrank = CheckedRestartAdd(offset_myrank, layout.mhd_x3f_bytes,
+                                      "restart field offset"); // mhd b0.x3f
     myoffset = offset_myrank;
   }
 
@@ -580,7 +706,8 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
         // get ptr to cell-centered MeshBlock data
         auto mbptr = Kokkos::subview(outarray_rad, m, Kokkos::ALL, Kokkos::ALL,
                                      Kokkos::ALL, Kokkos::ALL);
-        int mbcnt = mbptr.size();
+        IOWrapperSizeT mbcnt = restart_layout::CheckedSizeT(
+            mbptr.size(), FailNodeRestartWrite, "restart radiation subview count");
         if (resfile.Write_any_type_at_all(mbptr.data(),mbcnt,myoffset,"Real",
                                           independent_file) != mbcnt) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -588,14 +715,15 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
           << "restart file is broken." << std::endl;
           exit(EXIT_FAILURE);
         }
-        myoffset += data_size;
+        myoffset = CheckedRestartAdd(myoffset, data_size, "restart MeshBlock offset");
 
       // some ranks are finished writing, so use non-collective write
       } else if (m < pm->nmb_thisrank) {
         // get ptr to MeshBlock data
         auto mbptr = Kokkos::subview(outarray_rad, m, Kokkos::ALL, Kokkos::ALL,
                                      Kokkos::ALL, Kokkos::ALL);
-        int mbcnt = mbptr.size();
+        IOWrapperSizeT mbcnt = restart_layout::CheckedSizeT(
+            mbptr.size(), FailNodeRestartWrite, "restart radiation subview count");
         if (resfile.Write_any_type_at(mbptr.data(),mbcnt,myoffset,"Real",
                                       independent_file) != mbcnt) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -603,10 +731,11 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
                     << " to rst file, restart file is broken." << std::endl;
           exit(EXIT_FAILURE);
         }
-        myoffset += data_size;
+        myoffset = CheckedRestartAdd(myoffset, data_size, "restart MeshBlock offset");
       }
     }
-    offset_myrank += nout1*nout2*nout3*nrad*sizeof(Real);   // radiation i0
+    offset_myrank = CheckedRestartAdd(offset_myrank, layout.radiation_bytes,
+                                      "restart field offset"); // radiation i0
     myoffset = offset_myrank;
   }
 
@@ -617,7 +746,8 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
         // get ptr to cell-centered MeshBlock data
         auto mbptr = Kokkos::subview(outarray_force, m, Kokkos::ALL, Kokkos::ALL,
                                      Kokkos::ALL, Kokkos::ALL);
-        int mbcnt = mbptr.size();
+        IOWrapperSizeT mbcnt = restart_layout::CheckedSizeT(
+            mbptr.size(), FailNodeRestartWrite, "restart forcing subview count");
         if (resfile.Write_any_type_at_all(mbptr.data(),mbcnt,myoffset,"Real",
                                           independent_file) != mbcnt) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -625,14 +755,15 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
           << "restart file is broken." << std::endl;
           exit(EXIT_FAILURE);
         }
-        myoffset += data_size;
+        myoffset = CheckedRestartAdd(myoffset, data_size, "restart MeshBlock offset");
 
       // some ranks are finished writing, so use non-collective write
       } else if (m < pm->nmb_thisrank) {
         // get ptr to MeshBlock data
         auto mbptr = Kokkos::subview(outarray_force, m, Kokkos::ALL, Kokkos::ALL,
                                      Kokkos::ALL, Kokkos::ALL);
-        int mbcnt = mbptr.size();
+        IOWrapperSizeT mbcnt = restart_layout::CheckedSizeT(
+            mbptr.size(), FailNodeRestartWrite, "restart forcing subview count");
         if (resfile.Write_any_type_at(mbptr.data(), mbcnt, myoffset,"Real",
                                       independent_file) != mbcnt) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -640,10 +771,11 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
                     << " to rst file, restart file is broken." << std::endl;
           exit(EXIT_FAILURE);
         }
-        myoffset += data_size;
+        myoffset = CheckedRestartAdd(myoffset, data_size, "restart MeshBlock offset");
       }
     }
-    offset_myrank += nout1*nout2*nout3*nforce*sizeof(Real); // forcing
+    offset_myrank = CheckedRestartAdd(offset_myrank, layout.forcing_bytes,
+                                      "restart field offset"); // forcing
     myoffset = offset_myrank;
   }
 
@@ -654,7 +786,8 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
         // get ptr to cell-centered MeshBlock data
         auto mbptr = Kokkos::subview(outarray_z4c, m, Kokkos::ALL, Kokkos::ALL,
                                      Kokkos::ALL, Kokkos::ALL);
-        int mbcnt = mbptr.size();
+        IOWrapperSizeT mbcnt = restart_layout::CheckedSizeT(
+            mbptr.size(), FailNodeRestartWrite, "restart Z4c subview count");
         if (resfile.Write_any_type_at_all(mbptr.data(),mbcnt,myoffset,"Real",
                                           independent_file) != mbcnt) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -662,14 +795,15 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
                     << " to rst file, restart file is broken." << std::endl;
           exit(EXIT_FAILURE);
         }
-        myoffset += data_size;
+        myoffset = CheckedRestartAdd(myoffset, data_size, "restart MeshBlock offset");
 
       // some ranks are finished writing, so use non-collective write
       } else if (m < pm->nmb_thisrank) {
         // get ptr to MeshBlock data
         auto mbptr = Kokkos::subview(outarray_z4c, m, Kokkos::ALL, Kokkos::ALL,
                                      Kokkos::ALL, Kokkos::ALL);
-        int mbcnt = mbptr.size();
+        IOWrapperSizeT mbcnt = restart_layout::CheckedSizeT(
+            mbptr.size(), FailNodeRestartWrite, "restart Z4c subview count");
         if (resfile.Write_any_type_at(mbptr.data(), mbcnt, myoffset,"Real",
                                       independent_file) != mbcnt) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -677,10 +811,11 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
                     << " to rst file, restart file is broken." << std::endl;
           exit(EXIT_FAILURE);
         }
-        myoffset += data_size;
+        myoffset = CheckedRestartAdd(myoffset, data_size, "restart MeshBlock offset");
       }
     }
-    offset_myrank += nout1*nout2*nout3*nz4c*sizeof(Real); // z4c u0
+    offset_myrank = CheckedRestartAdd(offset_myrank, layout.z4c_bytes,
+                                      "restart field offset"); // z4c u0
     myoffset = offset_myrank;
   } else if (padm != nullptr) {
     for (int m=0;  m<noutmbs_max; ++m) {
@@ -689,7 +824,8 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
         // get ptr to cell-centered MeshBlock data
         auto mbptr = Kokkos::subview(outarray_adm, m, Kokkos::ALL, Kokkos::ALL,
                                      Kokkos::ALL, Kokkos::ALL);
-        int mbcnt = mbptr.size();
+        IOWrapperSizeT mbcnt = restart_layout::CheckedSizeT(
+            mbptr.size(), FailNodeRestartWrite, "restart ADM subview count");
         if (resfile.Write_any_type_at_all(mbptr.data(),mbcnt,myoffset,"Real",
                                           independent_file) != mbcnt) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -697,14 +833,15 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
                     << " to rst file, restart file is broken." << std::endl;
           exit(EXIT_FAILURE);
         }
-        myoffset += data_size;
+        myoffset = CheckedRestartAdd(myoffset, data_size, "restart MeshBlock offset");
 
       // some ranks are finished writing, so use non-collective write
       } else if (m < pm->nmb_thisrank) {
         // get ptr to MeshBlock data
         auto mbptr = Kokkos::subview(outarray_adm, m, Kokkos::ALL, Kokkos::ALL,
                                      Kokkos::ALL, Kokkos::ALL);
-        int mbcnt = mbptr.size();
+        IOWrapperSizeT mbcnt = restart_layout::CheckedSizeT(
+            mbptr.size(), FailNodeRestartWrite, "restart ADM subview count");
         if (resfile.Write_any_type_at(mbptr.data(), mbcnt, myoffset,"Real",
                                       independent_file) != mbcnt) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -712,10 +849,11 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
                     << " to rst file, restart file is broken." << std::endl;
           exit(EXIT_FAILURE);
         }
-        myoffset += data_size;
+        myoffset = CheckedRestartAdd(myoffset, data_size, "restart MeshBlock offset");
       }
     }
-    offset_myrank += nout1*nout2*nout3*nadm*sizeof(Real); // adm u_adm
+    offset_myrank = CheckedRestartAdd(offset_myrank, layout.adm_bytes,
+                                      "restart field offset"); // adm u_adm
     myoffset = offset_myrank;
   }
 
@@ -728,7 +866,9 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     int node_blocks = global_variable::NodeSum(pm->nmb_thisrank);
     IOWrapperSizeT expected_size = CheckedRestartAdd(
         header_size,
-        CheckedRestartMultiply(data_size, static_cast<IOWrapperSizeT>(node_blocks),
+        CheckedRestartMultiply(data_size,
+                               CheckedRestartCount(node_blocks,
+                                                   "node restart payload block count"),
                                "node restart payload size"),
         "node restart payload size");
     std::string completed_payload = fname.substr(0, fname.size() - 4);
@@ -782,9 +922,12 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
           FailNodeRestartWrite("Node restart segment map is inconsistent and cannot "
                                "be published.");
         }
-        blocks_per_node[id] += blocks;
-        next_payload_block[id] += blocks;
-        next_gid += blocks;
+        blocks_per_node[id] = CheckedRestartIntAdd(
+            blocks_per_node[id], blocks, "node restart blocks-per-node count");
+        next_payload_block[id] = CheckedRestartIntAdd(
+            next_payload_block[id], blocks, "node restart payload block offset");
+        next_gid = CheckedRestartIntAdd(next_gid, blocks,
+                                        "node restart global block count");
       }
       if (next_gid != pm->nmb_total) {
         FailNodeRestartWrite("Node restart segment map does not cover all mesh blocks.");
@@ -792,32 +935,45 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
       std::string temporary_manifest = manifest_name + ".tmp.g"
           + std::to_string(generation);
       std::ofstream manifest(temporary_manifest, std::ios::trunc);
-      manifest << "AthenaK node restart manifest version=1\n"
-               << "complete=1\n"
-               << "payload_count=" << global_variable::nnodes << "\n"
-               << "nmb_total=" << pm->nmb_total << "\n"
-               << "header_size=" << header_size << "\n"
-               << "data_size=" << data_size << "\n";
+      restart_layout::ManifestBudget manifest_budget{0, kMaxNodeRestartManifestBytes};
+      const auto write_manifest_record = [&](const std::string &record) {
+        manifest_budget.Add(CheckedRestartAdd(
+            restart_layout::CheckedSizeT(record.size(), FailNodeRestartWrite,
+                                         "node restart manifest record bytes"),
+            1, "node restart manifest record bytes"), FailNodeRestartWrite);
+        manifest << record << "\n";
+      };
+      write_manifest_record("AthenaK node restart manifest version=1");
+      write_manifest_record("complete=1");
+      write_manifest_record("payload_count=" + std::to_string(global_variable::nnodes));
+      write_manifest_record("nmb_total=" + std::to_string(pm->nmb_total));
+      write_manifest_record("header_size=" + std::to_string(header_size));
+      write_manifest_record("data_size=" + std::to_string(data_size));
       for (int id = 0; id < global_variable::nnodes; ++id) {
-        std::string relative_path = ShardDirectoryName(FileShardMode::node, 0, id)
-            + "/" + payload_name;
+        std::string relative_path = NodeRestartRelativePayloadPath(payload_name, id);
         IOWrapperSizeT payload_size = CheckedRestartAdd(
             header_size,
             CheckedRestartMultiply(data_size,
-                                   static_cast<IOWrapperSizeT>(blocks_per_node[id]),
+                                   CheckedRestartCount(blocks_per_node[id],
+                                                       "node restart payload block "
+                                                       "count"),
                                    "node restart manifest payload size"),
             "node restart manifest payload size");
-        manifest << "payload " << id << " " << blocks_per_node[id] << " "
-                 << payload_size << " " << relative_path << "\n";
+        write_manifest_record("payload " + std::to_string(id) + " " +
+                              std::to_string(blocks_per_node[id]) + " " +
+                              std::to_string(payload_size) + " " + relative_path);
       }
       for (int r = 0; r < global_variable::nranks; ++r) {
-        manifest << "segment " << manifest_nodes[r] << " "
-                 << pm->gids_eachrank[r] << " " << pm->nmb_eachrank[r] << " "
-                 << manifest_offsets[r] << "\n";
+        write_manifest_record("segment " + std::to_string(manifest_nodes[r]) + " " +
+                              std::to_string(pm->gids_eachrank[r]) + " " +
+                              std::to_string(pm->nmb_eachrank[r]) + " " +
+                              std::to_string(manifest_offsets[r]));
       }
-      manifest << "end\n";
+      write_manifest_record("end");
+      std::streampos observed_manifest_bytes = manifest.tellp();
       manifest.close();
-      if (!manifest.good() ||
+      if (!manifest.good() || observed_manifest_bytes < 0 ||
+          static_cast<IOWrapperSizeT>(observed_manifest_bytes) != manifest_budget.bytes ||
           std::rename(temporary_manifest.c_str(), manifest_name.c_str()) != 0) {
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                   << std::endl << "Node restart manifest '" << manifest_name

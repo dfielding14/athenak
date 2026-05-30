@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
+#include <cstdint>
 #include <cstring>
 #include <exception>
 #include <filesystem>
@@ -35,6 +36,13 @@ constexpr const char *kNodeRestartPrefix = "AthenaK node restart manifest versio
 constexpr const char *kPayloadSuffix = ".payload.rst";
 constexpr int kMaxNodeRestartPayloads = 1024 * 1024;
 constexpr std::size_t kMaxNodeRestartSegments = 1024 * 1024;
+constexpr std::uintmax_t kMaxNodeRestartManifestBytes = 64ULL*1024ULL*1024ULL;
+constexpr std::size_t kMaxManifestSignatureBytes = 256;
+constexpr std::size_t kMaxManifestScalarRecordBytes = 256;
+constexpr std::size_t kMaxManifestPayloadRecordBytes = 4096;
+constexpr std::size_t kMaxManifestSegmentRecordBytes = 256;
+constexpr std::size_t kMaxManifestTrailingRecordBytes = 256;
+constexpr std::size_t kMaxGeneratedPayloadPathBytes = 1024;
 
 struct NodeRestartSpan {
   int node;
@@ -42,6 +50,8 @@ struct NodeRestartSpan {
   int payload_block_start;
   int count;
 };
+
+enum class BoundedLineResult { line, end_of_file, limit_exceeded, read_error };
 
 bool EndsWith(const std::string &text, const std::string &suffix) {
   return text.size() >= suffix.size() &&
@@ -158,16 +168,47 @@ int ParseIntToken(const std::string &token, const std::string &context) {
   return static_cast<int>(value);
 }
 
-std::string ReadRequiredLine(std::ifstream *input, const std::string &context) {
+BoundedLineResult ReadBoundedLine(std::ifstream *input, std::string *line,
+                                  std::size_t max_bytes) {
+  line->clear();
+  while (true) {
+    int next = input->get();
+    if (next == std::char_traits<char>::eof()) {
+      if (input->bad()) return BoundedLineResult::read_error;
+      return line->empty() ? BoundedLineResult::end_of_file : BoundedLineResult::line;
+    }
+    char ch = static_cast<char>(next);
+    if (ch == '\n') return BoundedLineResult::line;
+    if (line->size() >= max_bytes) return BoundedLineResult::limit_exceeded;
+    line->push_back(ch);
+  }
+}
+
+bool ReadOptionalLine(std::ifstream *input, std::string *line, std::size_t max_bytes,
+                      const std::string &context) {
+  BoundedLineResult result = ReadBoundedLine(input, line, max_bytes);
+  if (result == BoundedLineResult::limit_exceeded) {
+    FailNodeRestart(context + " exceeds the " + std::to_string(max_bytes) +
+                    "-byte limit.");
+  }
+  if (result == BoundedLineResult::read_error) {
+    FailNodeRestart("could not read " + context + ".");
+  }
+  return result == BoundedLineResult::line;
+}
+
+std::string ReadRequiredLine(std::ifstream *input, const std::string &context,
+                             std::size_t max_bytes) {
   std::string line;
-  if (!std::getline(*input, line)) {
+  if (!ReadOptionalLine(input, &line, max_bytes, context)) {
     FailNodeRestart("missing " + context + ".");
   }
   return line;
 }
 
 std::uint64_t ReadUnsignedRecord(std::ifstream *input, const std::string &key) {
-  std::string line = ReadRequiredLine(input, "'" + key + "' record");
+  std::string line = ReadRequiredLine(
+      input, "'" + key + "' record", kMaxManifestScalarRecordBytes);
   std::string prefix = key + "=";
   if (line.rfind(prefix, 0) != 0) {
     FailNodeRestart("expected '" + key + "' record, found '" + line + "'.");
@@ -345,7 +386,15 @@ void CheckNodeRestartPayloadMarker(IOWrapper &input, bool single_file_per_rank,
 bool NodeRestartManifest::LooksLikeManifest(const std::string &path) {
   std::ifstream input(path);
   std::string first_line;
-  return input.good() && std::getline(input, first_line) &&
+  if (!input.good()) return false;
+  BoundedLineResult result =
+      ReadBoundedLine(&input, &first_line, kMaxManifestSignatureBytes);
+  if (result == BoundedLineResult::limit_exceeded &&
+      first_line.rfind(kNodeRestartPrefix, 0) == 0) {
+    FailNodeRestart("manifest signature exceeds the " +
+                    std::to_string(kMaxManifestSignatureBytes) + "-byte limit.");
+  }
+  return result == BoundedLineResult::line &&
       first_line.rfind(kNodeRestartPrefix, 0) == 0;
 }
 
@@ -360,12 +409,23 @@ bool NodeRestartManifest::IsPayloadPath(const std::string &path) {
 NodeRestartManifest NodeRestartManifest::Load(const std::string &path) {
   NodeRestartManifest manifest;
   manifest.manifest_path_ = path;
+  std::error_code error;
+  std::uintmax_t manifest_bytes = std::filesystem::file_size(path, error);
+  if (error) {
+    FailNodeRestart("manifest file size could not be determined.");
+  }
+  if (manifest_bytes > kMaxNodeRestartManifestBytes) {
+    FailNodeRestart("node restart manifest exceeds the " +
+                    std::to_string(kMaxNodeRestartManifestBytes) + "-byte limit.");
+  }
   std::ifstream input(path);
-  std::string line = ReadRequiredLine(&input, "manifest signature");
+  std::string line = ReadRequiredLine(
+      &input, "manifest signature", kMaxManifestSignatureBytes);
   if (line != kNodeRestartMagic) {
     FailNodeRestart("unsupported manifest signature in '" + path + "'.");
   }
-  if (ReadRequiredLine(&input, "'complete' record") != "complete=1") {
+  if (ReadRequiredLine(&input, "'complete' record", kMaxManifestScalarRecordBytes) !=
+      "complete=1") {
     FailNodeRestart("invalid completion record.");
   }
   int payload_count = ReadIntRecord(&input, "payload_count");
@@ -384,10 +444,15 @@ NodeRestartManifest NodeRestartManifest::Load(const std::string &path) {
 
   manifest.payloads_.reserve(static_cast<std::size_t>(payload_count));
   for (int expected_node = 0; expected_node < payload_count; ++expected_node) {
-    line = ReadRequiredLine(&input, "payload inventory record");
+    line = ReadRequiredLine(
+        &input, "payload inventory record", kMaxManifestPayloadRecordBytes);
     std::vector<std::string> fields = SplitRecord(line);
     if (fields.size() != 5 || fields[0] != "payload") {
       FailNodeRestart("malformed or missing payload inventory record.");
+    }
+    if (fields[4].size() > kMaxGeneratedPayloadPathBytes) {
+      FailNodeRestart("payload inventory record generated path exceeds the " +
+                      std::to_string(kMaxGeneratedPayloadPathBytes) + "-byte limit.");
     }
     NodeRestartPayload payload{
       ParseIntToken(fields[1], "payload node"),
@@ -403,7 +468,8 @@ NodeRestartManifest NodeRestartManifest::Load(const std::string &path) {
   }
 
   bool saw_end = false;
-  while (std::getline(input, line)) {
+  while (ReadOptionalLine(
+      &input, &line, kMaxManifestSegmentRecordBytes, "segment inventory record")) {
     if (line == "end") {
       saw_end = true;
       break;
@@ -431,12 +497,12 @@ NodeRestartManifest NodeRestartManifest::Load(const std::string &path) {
   if (!saw_end) {
     FailNodeRestart("missing manifest terminator.");
   }
-  if (std::getline(input, line)) {
+  if (ReadOptionalLine(
+      &input, &line, kMaxManifestTrailingRecordBytes, "trailing record")) {
     FailNodeRestart("records found after the manifest terminator.");
   }
 
   std::string directory = ParentDirectory(path);
-  std::error_code error;
   std::filesystem::path canonical_directory =
       std::filesystem::canonical(directory, error);
   if (error) {

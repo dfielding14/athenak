@@ -8,6 +8,8 @@
 
 #include "io_wrapper.hpp"
 
+#include <sys/types.h>
+
 #include <algorithm>
 #include <cerrno>
 #include <cstdint>
@@ -58,6 +60,44 @@ std::size_t CheckedSizeT(IOWrapperSizeT value, const char* context) {
 std::size_t CompletedElements(IOWrapperSizeT bytes, IOWrapperSizeT element_size,
                               const char* context) {
   return CheckedSizeT(bytes/element_size, context);
+}
+
+off_t CheckedSerialOffset(IOWrapperSizeT offset, const char* context) {
+  if constexpr (std::numeric_limits<off_t>::digits <
+                std::numeric_limits<IOWrapperSizeT>::digits) {
+    if (offset > static_cast<IOWrapperSizeT>(std::numeric_limits<off_t>::max())) {
+      FatalIOError(std::string(context) + " exceeds off_t range.");
+    }
+  }
+  return static_cast<off_t>(offset);
+}
+
+int SerialSeek(FILE* file, IOWrapperSizeT offset, const char* context) {
+  return ::fseeko(file, CheckedSerialOffset(offset, context), SEEK_SET);
+}
+
+void RequireSerialSeek(FILE* file, IOWrapperSizeT offset, const char* context) {
+  if (SerialSeek(file, offset, context) != 0) {
+    FatalIOError(std::string(context) + " serial seek failed.");
+  }
+}
+
+void PreflightPositionedSerialRange(IOWrapperSizeT offset,
+                                    IOWrapperSizeT total_bytes,
+                                    const char* context) {
+  if (total_bytes == 0) {
+    return;
+  }
+  IOWrapperSizeT end_offset = CheckedOffsetAdd(offset, total_bytes - 1, context);
+  CheckedSerialOffset(end_offset, context);
+}
+
+IOWrapperSizeT SerialPosition(FILE* file, const char* context) {
+  off_t position = ::ftello(file);
+  if (position < 0) {
+    FatalIOError(std::string(context) + " returned a negative offset.");
+  }
+  return static_cast<IOWrapperSizeT>(position);
 }
 
 std::size_t SizeOfDatatype(const std::string& datatype) {
@@ -592,14 +632,17 @@ std::size_t IOWrapper::Read_bytes(void* buf, IOWrapperSizeT size,
         ChunkedMpiByteRead(fh_, reinterpret_cast<char*>(buf), total_bytes),
         size, "Read_bytes result");
   }
-  return std::fread(buf, size, cnt, reinterpret_cast<FILE*>(fh_));
+  return std::fread(buf, CheckedSizeT(size, "Read_bytes element size"),
+                    CheckedSizeT(cnt, "Read_bytes element count"),
+                    reinterpret_cast<FILE*>(fh_));
 #else
-  return std::fread(buf, size, cnt, fh_);
+  return std::fread(buf, CheckedSizeT(size, "Read_bytes element size"),
+                    CheckedSizeT(cnt, "Read_bytes element count"), fh_);
 #endif
 }
 
 //----------------------------------------------------------------------------------------
-//! \brief wrapper for {MPI_File_read_at} versus {std::fseek+std::fread}.
+//! \brief wrapper for {MPI_File_read_at} versus checked {fseeko+std::fread}.
 
 std::size_t IOWrapper::Read_bytes_at(void* buf, IOWrapperSizeT size,
                                      IOWrapperSizeT cnt, IOWrapperSizeT offset,
@@ -614,16 +657,23 @@ std::size_t IOWrapper::Read_bytes_at(void* buf, IOWrapperSizeT size,
         fh_, reinterpret_cast<char*>(buf), total_bytes, offset),
         size, "Read_bytes_at result");
   }
-  std::fseek(reinterpret_cast<FILE*>(fh_), offset, SEEK_SET);
-  return std::fread(buf, size, cnt, reinterpret_cast<FILE*>(fh_));
+  IOWrapperSizeT total_bytes = CheckedByteCount(size, cnt, "Read_bytes_at");
+  PreflightPositionedSerialRange(offset, total_bytes, "Read_bytes_at");
+  RequireSerialSeek(reinterpret_cast<FILE*>(fh_), offset, "Read_bytes_at");
+  return std::fread(buf, CheckedSizeT(size, "Read_bytes_at element size"),
+                    CheckedSizeT(cnt, "Read_bytes_at element count"),
+                    reinterpret_cast<FILE*>(fh_));
 #else
-  std::fseek(fh_, offset, SEEK_SET);
-  return std::fread(buf, size, cnt, fh_);
+  IOWrapperSizeT total_bytes = CheckedByteCount(size, cnt, "Read_bytes_at");
+  PreflightPositionedSerialRange(offset, total_bytes, "Read_bytes_at");
+  RequireSerialSeek(fh_, offset, "Read_bytes_at");
+  return std::fread(buf, CheckedSizeT(size, "Read_bytes_at element size"),
+                    CheckedSizeT(cnt, "Read_bytes_at element count"), fh_);
 #endif
 }
 
 //----------------------------------------------------------------------------------------
-//! \brief wrapper for {MPI_File_read_at_all} versus {std::fseek+std::fread}.
+//! \brief wrapper for {MPI_File_read_at_all} versus checked {fseeko+std::fread}.
 
 std::size_t IOWrapper::Read_bytes_at_all(void* buf, IOWrapperSizeT size,
                                          IOWrapperSizeT cnt,
@@ -645,11 +695,18 @@ std::size_t IOWrapper::Read_bytes_at_all(void* buf, IOWrapperSizeT size,
     return 0;
   }
 #if MPI_PARALLEL_ENABLED
-  std::fseek(reinterpret_cast<FILE*>(fh_), offset, SEEK_SET);
-  return std::fread(buf, size, cnt, reinterpret_cast<FILE*>(fh_));
+  IOWrapperSizeT total_bytes = CheckedByteCount(size, cnt, "Read_bytes_at_all");
+  PreflightPositionedSerialRange(offset, total_bytes, "Read_bytes_at_all");
+  RequireSerialSeek(reinterpret_cast<FILE*>(fh_), offset, "Read_bytes_at_all");
+  return std::fread(buf, CheckedSizeT(size, "Read_bytes_at_all element size"),
+                    CheckedSizeT(cnt, "Read_bytes_at_all element count"),
+                    reinterpret_cast<FILE*>(fh_));
 #else
-  std::fseek(fh_, offset, SEEK_SET);
-  return std::fread(buf, size, cnt, fh_);
+  IOWrapperSizeT total_bytes = CheckedByteCount(size, cnt, "Read_bytes_at_all");
+  PreflightPositionedSerialRange(offset, total_bytes, "Read_bytes_at_all");
+  RequireSerialSeek(fh_, offset, "Read_bytes_at_all");
+  return std::fread(buf, CheckedSizeT(size, "Read_bytes_at_all element size"),
+                    CheckedSizeT(cnt, "Read_bytes_at_all element count"), fh_);
 #endif
 }
 
@@ -694,10 +751,12 @@ std::size_t IOWrapper::Write_any_type(const void* buf, IOWrapperSizeT cnt,
         fh_, reinterpret_cast<const char*>(buf), total_bytes),
         datasize, "Write_any_type result");
   }
-  std::size_t written =
-      std::fwrite(buf, datasize, cnt, reinterpret_cast<FILE*>(fh_));
+  std::size_t written = std::fwrite(
+      buf, datasize, CheckedSizeT(cnt, "Write_any_type element count"),
+      reinterpret_cast<FILE*>(fh_));
 #else
-  std::size_t written = std::fwrite(buf, datasize, cnt, fh_);
+  std::size_t written =
+      std::fwrite(buf, datasize, CheckedSizeT(cnt, "Write_any_type element count"), fh_);
 #endif
   if (written != cnt) {
     std::cerr << "Error writing data. Expected to write " << cnt
@@ -722,12 +781,18 @@ std::size_t IOWrapper::Write_any_type_at(const void* buf, IOWrapperSizeT cnt,
         fh_, reinterpret_cast<const char*>(buf), total_bytes, offset),
         datasize, "Write_any_type_at result");
   }
-  std::fseek(reinterpret_cast<FILE*>(fh_), offset, SEEK_SET);
-  std::size_t written =
-      std::fwrite(buf, datasize, cnt, reinterpret_cast<FILE*>(fh_));
+  IOWrapperSizeT total_bytes = CheckedByteCount(datasize, cnt, "Write_any_type_at");
+  PreflightPositionedSerialRange(offset, total_bytes, "Write_any_type_at");
+  RequireSerialSeek(reinterpret_cast<FILE*>(fh_), offset, "Write_any_type_at");
+  std::size_t written = std::fwrite(
+      buf, datasize, CheckedSizeT(cnt, "Write_any_type_at element count"),
+      reinterpret_cast<FILE*>(fh_));
 #else
-  std::fseek(fh_, offset, SEEK_SET);
-  std::size_t written = std::fwrite(buf, datasize, cnt, fh_);
+  IOWrapperSizeT total_bytes = CheckedByteCount(datasize, cnt, "Write_any_type_at");
+  PreflightPositionedSerialRange(offset, total_bytes, "Write_any_type_at");
+  RequireSerialSeek(fh_, offset, "Write_any_type_at");
+  std::size_t written = std::fwrite(
+      buf, datasize, CheckedSizeT(cnt, "Write_any_type_at element count"), fh_);
 #endif
   if (written != cnt) {
     std::cerr << "Error writing data. Expected to write " << cnt
@@ -756,12 +821,20 @@ std::size_t IOWrapper::Write_any_type_at_all(const void* buf,
         fh_, comm_, write_buf, total_bytes, offset),
         datasize, "Write_any_type_at_all result");
   }
-  std::fseek(reinterpret_cast<FILE*>(fh_), offset, SEEK_SET);
-  std::size_t written =
-      std::fwrite(buf, datasize, cnt, reinterpret_cast<FILE*>(fh_));
+  IOWrapperSizeT total_bytes =
+      CheckedByteCount(datasize, cnt, "Write_any_type_at_all");
+  PreflightPositionedSerialRange(offset, total_bytes, "Write_any_type_at_all");
+  RequireSerialSeek(reinterpret_cast<FILE*>(fh_), offset, "Write_any_type_at_all");
+  std::size_t written = std::fwrite(
+      buf, datasize, CheckedSizeT(cnt, "Write_any_type_at_all element count"),
+      reinterpret_cast<FILE*>(fh_));
 #else
-  std::fseek(fh_, offset, SEEK_SET);
-  std::size_t written = std::fwrite(buf, datasize, cnt, fh_);
+  IOWrapperSizeT total_bytes =
+      CheckedByteCount(datasize, cnt, "Write_any_type_at_all");
+  PreflightPositionedSerialRange(offset, total_bytes, "Write_any_type_at_all");
+  RequireSerialSeek(fh_, offset, "Write_any_type_at_all");
+  std::size_t written = std::fwrite(
+      buf, datasize, CheckedSizeT(cnt, "Write_any_type_at_all element count"), fh_);
 #endif
   if (written != cnt) {
     std::cerr << "Error writing data. Expected to write " << cnt
@@ -785,7 +858,7 @@ int IOWrapper::Close(bool use_serial_io) {
 }
 
 //----------------------------------------------------------------------------------------
-//! \brief wrapper for {MPI_File_seek} versus {std::fseek}.
+//! \brief wrapper for {MPI_File_seek} versus checked {fseeko}.
 
 int IOWrapper::Seek(IOWrapperSizeT offset, bool use_serial_io) {
 #if MPI_PARALLEL_ENABLED
@@ -793,14 +866,14 @@ int IOWrapper::Seek(IOWrapperSizeT offset, bool use_serial_io) {
     return MPI_File_seek(fh_, CheckedMpiOffset(offset, "MPI_File_seek"),
                          MPI_SEEK_SET);
   }
-  return std::fseek(reinterpret_cast<FILE*>(fh_), offset, SEEK_SET);
+  return SerialSeek(reinterpret_cast<FILE*>(fh_), offset, "Seek");
 #else
-  return std::fseek(fh_, offset, SEEK_SET);
+  return SerialSeek(fh_, offset, "Seek");
 #endif
 }
 
 //----------------------------------------------------------------------------------------
-//! \brief wrapper for {MPI_File_get_position} versus {std::ftell}.
+//! \brief wrapper for {MPI_File_get_position} versus checked {ftello}.
 
 IOWrapperSizeT IOWrapper::GetPosition(bool use_serial_io) {
 #if MPI_PARALLEL_ENABLED
@@ -815,10 +888,8 @@ IOWrapperSizeT IOWrapper::GetPosition(bool use_serial_io) {
     }
     return static_cast<IOWrapperSizeT>(position);
   }
-  int64_t pos = ftell(reinterpret_cast<FILE*>(fh_));
-  return pos;
+  return SerialPosition(reinterpret_cast<FILE*>(fh_), "GetPosition");
 #else
-  int64_t pos = ftell(fh_);
-  return pos;
+  return SerialPosition(fh_, "GetPosition");
 #endif
 }

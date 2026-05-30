@@ -251,7 +251,12 @@ void ParameterInput::LoadFromFile(IOWrapper &input, bool single_file_per_rank) {
   // Read the stream and load the parameters
   LoadFromStream(par);
   // Seek the file to the end of the header
-  input.Seek(header, single_file_per_rank);
+  if (input.Seek(header, single_file_per_rank) != 0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "Unable to reposition restart file after reading "
+              << "parameter input." << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
 
   return;
 }

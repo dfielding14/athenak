@@ -292,7 +292,7 @@ int main(int argc, char *argv[]) {
     std::ifstream file_check(restart_file);
     if (!file_check.good()) {
         std::cerr << "Error: Unable to open restart file: " << restart_file << std::endl;
-        // Handle the error (e.g., exit the program or use a default configuration)
+        std::exit(EXIT_FAILURE);
     }
 
     // read parameters from restart file
@@ -300,7 +300,6 @@ int main(int argc, char *argv[]) {
     pinput->LoadFromFile(restartfile, single_file_per_rank);
     CheckNodeRestartPayloadMarker(restartfile, single_file_per_rank,
                                   node_restart_manifest != nullptr);
-    IOWrapperSizeT headeroffset = restartfile.GetPosition(single_file_per_rank);
   }
 
   // read parameters from input file.  If both -r and -i are specified, this will

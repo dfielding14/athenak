@@ -725,6 +725,32 @@ decision.
 | Evidence | Focused `RCP-01` pre-edit restart-layout audit; `src/outputs/restart.cpp`; `src/pgen/pgen.cpp`; `src/mesh/build_tree.cpp`. |
 | Follow-up | Add artificial large-count harness coverage and preserve frozen shared and per-rank restart resumes. |
 
+### D-092: Enforce Symmetric Restart Manifest Budgets And Early Header Rejection
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted for `RCP-01` closure |
+| Decision | Make the strict node-manifest writer obey the same 64 MiB total-byte and 1024-byte generated payload-path limits enforced by the reader. Validate serialized restart mesh structure before root-grid division, metadata allocation, or payload routing. Expand serial positioned-IO checks through the terminal byte and through `size_t` representability. |
+| Reason | A writer that can publish a manifest its own reader rejects violates the transaction contract. Likewise, checked payload arithmetic does not protect startup if malformed serialized mesh dimensions are consumed first. Serial positioned IO must prove that the entire requested span, not only its first byte, is representable. |
+| Alternatives | Treat reader limits as malformed-input defenses only; validate restart structure after allocation; rely on standard-library narrowing or seek failure for terminal-range rejection. |
+| Why not | Those alternatives leave locally generated unreadable products, permit unsafe arithmetic before validation, and make overflow behavior platform-dependent. |
+| Reversal path | Raise reader and writer manifest budgets together with production-topology evidence and focused regressions. Broaden structural validation only if a valid historical restart fixture demonstrates a missing compatibility case. |
+| Evidence | `ROB-029` through `ROB-032`; independent arithmetic audit; `src/restart_layout.hpp`; `src/mesh/build_tree.cpp`; `src/outputs/io_wrapper.cpp`; `src/outputs/restart.cpp`; focused restart/layout and serial-wrapper tests returned `21 passed`; MPI restart tests returned `56 passed`; detached pre-edit shared and per-rank restart bytes matched exactly. |
+| Follow-up | Close `RCP-01` only after a correction-focused independent re-audit and the full local matrix pass. |
+
+### D-093: Reject Malformed Restart Topologies Before Tree Mutation
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted for `RCP-01` closure |
+| Decision | Treat restart leaf metadata as an untrusted persisted topology. Before constructing `MeshBlockTree`, require signed-safe logical levels `<=30`, representable axis capacities, valid active and inactive axes, positive finite per-block costs, finite aggregate cost, unique locations, no ancestor overlap, complete dimensionally active children, and canonical persisted Z order. After safe construction, traverse neighbors to enforce the existing 2:1 balance contract and validate that load balancing assigns one contiguous nonempty range to every rank. Apply the same signed-safe maximum-level and wide adaptive-level arithmetic to scratch construction. |
+| Reason | Tree insertion, geometry creation, neighbor discovery, and load balancing assume a complete canonical leaf inventory. A malformed restart could otherwise reach signed shifts, null-child dereferences, silent payload relabeling, or partially initialized rank maps before a useful error. |
+| Alternatives | Depend on post-construction MeshBlock counts; harden only individual tree methods; accept permuted valid leaf sets and reorder payload metadata implicitly. |
+| Why not | Counts do not prove topology completeness, tree-local checks occur after unsafe input has entered recursion, and implicit reordering disconnects serialized payload records from their logical locations. |
+| Reversal path | If a historical valid fixture demonstrates a missing topology case, refine the preflight with a fixture-backed compatibility rule. Do not weaken signed-safe levels or canonical payload ordering. |
+| Evidence | `ROB-033` through `ROB-038`; correction-focused topology audits; `src/mesh/build_tree.cpp`; `tst/inputs/io_restart_metadata.athinput`; corruption and positive regressions in `tst/test_suite/io/test_io_finalization_timing_cpu.py`; focused serial restart/layout set returned `41 passed`; focused MPI restart set returned `58 passed`; full serial matrix returned `238 passed`; full MPI matrix returned `67 passed`; style returned `2 passed`; fixture checksum verification passed for all `27` artifacts. |
+| Follow-up | Retain the restart-specific preflight locally. Revisit a more general tree validation API only if later non-restart paths need the same boundary. |
+
 ## Pending Decision Queue
 
 Resolve these before merge readiness:
