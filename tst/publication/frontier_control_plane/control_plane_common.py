@@ -135,6 +135,10 @@ PRODUCTION_RUNTIME_MODULEFILES = (
     "/opt/cray/pe/lmod/modulefiles/craype-targets/1.15.0/craype-accel-amd-gfx90a.lua",
 )
 PRODUCTION_RUNTIME_MODULEPATH = (
+    "/sw/frontier/spack-envs/modules/rocmcc/6.2.4/cray-mpich-8.1.31/rocm-6.2.4/rocmcc-6.2.4:"
+    "/sw/frontier/spack-envs/modules/rocmcc/6.2.4/rocm-6.2.4/rocmcc-6.2.4:"
+    "/sw/frontier/spack-envs/modules/rocmcc/6.2.4/cray-mpich-8.1.31/rocmcc-6.2.4:"
+    "/sw/frontier/spack-envs/modules/rocmcc/6.2.4/rocmcc-6.2.4:"
     "/opt/cray/pe/lmod/modulefiles/mpi/amd/4.0/ofi/1.0/cray-mpich/8.0:"
     "/opt/cray/pe/lmod/modulefiles/comnet/amd/4.0/ofi/1.0:"
     "/opt/cray/pe/lmod/modulefiles/compiler/amd/4.0:"
@@ -147,7 +151,9 @@ PRODUCTION_RUNTIME_MODULEPATH = (
     "/opt/cray/pe/lmod/modulefiles/core:"
     "/opt/cray/pe/modulefiles/Linux:"
     "/opt/cray/pe/modulefiles/Core:"
-    "/opt/cray/pe/lmod/lmod/modulefiles/Core"
+    "/opt/cray/pe/lmod/lmod/modulefiles/Core:"
+    "/opt/cray/pe/lmod/modulefiles/craype-targets/default:"
+    "/sw/frontier/modulefiles"
 )
 PRODUCTION_REQUIRED_MODULES = set(PRODUCTION_RUNTIME_LOADED_MODULES)
 PRODUCTION_BUILD_ENVIRONMENT = {

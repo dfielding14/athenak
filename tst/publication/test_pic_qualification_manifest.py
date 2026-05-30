@@ -431,6 +431,7 @@ class PicQualificationManifestTests(unittest.TestCase):
 
     def test_environment_allowlist_rejects_extra_duplicate_and_missing_keys(self) -> None:
         records = _runtime_allowlist().splitlines(keepends=True)
+        modulepath = f"MODULEPATH={PRODUCTION_RUNTIME_MODULEPATH}\n"
         _validate_environment_allowlist(
             "".join(records).encode("utf-8"),
             require_frontier_values=True,
@@ -446,6 +447,12 @@ class PicQualificationManifestTests(unittest.TestCase):
                 for record in records
             ),
             "".join(records).replace("\n", "\r\n"),
+            "".join(records).replace(modulepath, f"MODULEPATH=/tmp/forged:{PRODUCTION_RUNTIME_MODULEPATH}\n"),
+            "".join(records).replace(modulepath, f"MODULEPATH={PRODUCTION_RUNTIME_MODULEPATH}:/tmp/forged\n"),
+            "".join(records).replace(
+                modulepath,
+                f"MODULEPATH={PRODUCTION_RUNTIME_MODULEPATH.split(':', 1)[1]}\n",
+            ),
         ]:
             with self.subTest(data=data):
                 with self.assertRaises(ValueError):

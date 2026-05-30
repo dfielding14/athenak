@@ -12,8 +12,14 @@ case "$PIC_FRONTIER_PROFILE" in
     ;;
 esac
 
-if ! module --force purge \
-    || ! module use /opt/cray/pe/lmod/modulefiles/core \
+if ! module --force purge; then
+  printf 'Failed to purge inherited Frontier module profile\n' >&2
+  return 1 2>/dev/null || exit 1
+fi
+
+export MODULEPATH=/opt/cray/pe/modulefiles/Linux:/opt/cray/pe/modulefiles/Core:/opt/cray/pe/lmod/lmod/modulefiles/Core:/opt/cray/pe/lmod/modulefiles/craype-targets/default:/sw/frontier/modulefiles
+
+if ! module use /opt/cray/pe/lmod/modulefiles/core \
     || ! module use /opt/cray/pe/lmod/modulefiles/craype-targets/1.15.0 \
     || ! module use /opt/cray/modulefiles \
     || ! module load cpe/24.11 \
@@ -39,6 +45,10 @@ if module is-loaded darshan-runtime && ! module unload darshan-runtime; then
   printf 'Failed to unload inactive darshan-runtime module\n' >&2
   return 1 2>/dev/null || exit 1
 fi
+
+# Site Lmod hooks are intentionally absent from the stripped compute-node
+# launcher.  Publish the reviewed final value explicitly after all module work.
+export MODULEPATH=/sw/frontier/spack-envs/modules/rocmcc/6.2.4/cray-mpich-8.1.31/rocm-6.2.4/rocmcc-6.2.4:/sw/frontier/spack-envs/modules/rocmcc/6.2.4/rocm-6.2.4/rocmcc-6.2.4:/sw/frontier/spack-envs/modules/rocmcc/6.2.4/cray-mpich-8.1.31/rocmcc-6.2.4:/sw/frontier/spack-envs/modules/rocmcc/6.2.4/rocmcc-6.2.4:/opt/cray/pe/lmod/modulefiles/mpi/amd/4.0/ofi/1.0/cray-mpich/8.0:/opt/cray/pe/lmod/modulefiles/comnet/amd/4.0/ofi/1.0:/opt/cray/pe/lmod/modulefiles/compiler/amd/4.0:/opt/cray/pe/lmod/modulefiles/mix_compilers:/opt/cray/pe/lmod/modulefiles/perftools/24.11.0:/opt/cray/pe/lmod/modulefiles/net/ofi/1.0:/opt/cray/pe/lmod/modulefiles/cpu/x86-trento/1.0:/opt/cray/modulefiles:/opt/cray/pe/lmod/modulefiles/craype-targets/1.15.0:/opt/cray/pe/lmod/modulefiles/core:/opt/cray/pe/modulefiles/Linux:/opt/cray/pe/modulefiles/Core:/opt/cray/pe/lmod/lmod/modulefiles/Core:/opt/cray/pe/lmod/modulefiles/craype-targets/default:/sw/frontier/modulefiles
 
 export MPICH_GPU_SUPPORT_ENABLED=1
 export MPICH_ENV_DISPLAY=1

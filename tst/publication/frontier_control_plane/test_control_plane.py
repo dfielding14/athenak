@@ -37,6 +37,7 @@ from control_plane_common import require_storage_policy_unlock_snapshot
 from control_plane_common import validate_clean_candidate_bundle
 from control_plane_common import validate_launch_contract, verify_installed_control_plane
 from control_plane_common import verify_snapshot_files
+from control_plane_common import PRODUCTION_RUNTIME_MODULEPATH
 from control_plane_common import TRUSTED_GIT, TRUSTED_PYTHON
 from control_plane_common import TRUSTED_SACCT, TRUSTED_SBATCH, TRUSTED_SCANCEL
 from control_plane_common import TRUSTED_SCONTROL, TRUSTED_SQUEUE
@@ -1613,6 +1614,106 @@ class SnapshotTests(unittest.TestCase):
                 os.close(control_plane_descriptor)
         self.assertFalse(marker.exists())
         self.assertEqual(allowlist.read_text(encoding="utf-8"), "ALLOWLISTED=1\n")
+
+    def test_production_profile_wrapper_emits_canonical_allowlist_from_stripped_environment(
+        self,
+    ) -> None:
+        from launch_trampoline import _profile_environment
+
+        repo_root = str(Path(__file__).resolve().parents[3])
+        if repo_root not in sys.path:
+            sys.path.insert(0, repo_root)
+            self.addCleanup(sys.path.remove, repo_root)
+        from tst.publication.pic_qualification_manifest import (
+            _validate_environment_allowlist,
+        )
+
+        wrapper = Path(__file__).with_name("launch_with_frontier_profile.sh")
+        control_plane_dir = wrapper.parent
+        inherited = {**os.environ, **_profile_environment()}
+        inherited.pop("BASH_ENV", None)
+        inherited.pop("ENV", None)
+        inherited.pop("OMP_NUM_THREADS", None)
+        variants = {
+            "stripped": _profile_environment(),
+            "inherited": inherited,
+            "poisoned": {
+                **inherited,
+                "MODULEPATH": "/tmp/caller-controlled-modulepath",
+            },
+        }
+        payloads: list[bytes] = []
+        for name, base_environment in variants.items():
+            allowlist = self.root / f"{name}.environment.allowlist.txt"
+            descriptor = os.open(allowlist, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            directory_descriptor = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY)
+            control_plane_descriptor = os.open(
+                control_plane_dir, os.O_RDONLY | os.O_DIRECTORY
+            )
+            try:
+                environment = {
+                    **base_environment,
+                    "PIC_CONTROL_PLANE_DIR_FD": str(control_plane_descriptor),
+                    "PIC_RUNTIME_ALLOWLIST_FD": str(descriptor),
+                    "PIC_RUNTIME_ALLOWLIST_DIR_FD": str(directory_descriptor),
+                }
+                subprocess.run(
+                    ["/bin/bash", str(wrapper), "/bin/true"],
+                    env=environment,
+                    pass_fds=(
+                        descriptor,
+                        directory_descriptor,
+                        control_plane_descriptor,
+                    ),
+                    check=True,
+                )
+            finally:
+                os.close(descriptor)
+                os.close(directory_descriptor)
+                os.close(control_plane_descriptor)
+            payload = allowlist.read_bytes()
+            _validate_environment_allowlist(payload, require_frontier_values=True)
+            payloads.append(payload)
+        self.assertEqual(payloads, [payloads[0]] * len(payloads))
+
+    def test_production_module_measurement_accepts_profile_and_rejects_late_mutation(
+        self,
+    ) -> None:
+        profile = Path(__file__).with_name("frontier_pic_environment.sh")
+        command = r"""
+source /opt/cray/pe/lmod/lmod/init/profile
+source "$1"
+PYTHONPATH="$2" /opt/cray/pe/python/3.11.7/bin/python3 - <<'PY'
+import os
+from control_plane_common import measured_production_module_list_bytes
+measured_production_module_list_bytes()
+print("writer-precondition-canonical-ok")
+os.environ["MODULEPATH"] += ":/tmp/post-activation-forged"
+try:
+    measured_production_module_list_bytes()
+except ValueError:
+    print("writer-precondition-post-mutation-rejected")
+else:
+    raise SystemExit("post-activation MODULEPATH mutation accepted")
+PY
+"""
+        environment = {**os.environ, "MODULEPATH": "/tmp/caller-controlled-modulepath"}
+        environment.pop("BASH_ENV", None)
+        environment.pop("ENV", None)
+        result = subprocess.run(
+            ["/bin/bash", "-c", command, "bash", str(profile), str(profile.parent)],
+            check=True,
+            capture_output=True,
+            text=True,
+            env=environment,
+        )
+        self.assertEqual(
+            result.stdout.splitlines(),
+            [
+                "writer-precondition-canonical-ok",
+                "writer-precondition-post-mutation-rejected",
+            ],
+        )
 
     def test_trampoline_strips_bash_startup_hooks_before_profile_wrapper(self) -> None:
         hook = self.root / "bash-env-hook.sh"
@@ -4292,6 +4393,7 @@ class SnapshotTests(unittest.TestCase):
         def capture(profile: str) -> dict[str, str]:
             environment = dict(os.environ)
             environment["PIC_FRONTIER_PROFILE"] = profile
+            environment["MODULEPATH"] = "/tmp/caller-controlled-modulepath"
             for name in scrubbed:
                 environment.pop(name, None)
             result = subprocess.run(
@@ -4309,15 +4411,18 @@ class SnapshotTests(unittest.TestCase):
         self.assertEqual(baseline["MPICH_GPU_SUPPORT_ENABLED"], "1")
         self.assertEqual(baseline["MPICH_OFI_NIC_POLICY"], "<unset>")
         self.assertEqual(baseline["SLURM_EXPORT_ENV"], "ALL")
+        self.assertEqual(baseline["MODULEPATH"], PRODUCTION_RUNTIME_MODULEPATH)
 
         xnack = capture("frontier_xnack1_experimental")
         self.assertEqual(xnack["HSA_XNACK"], "1")
         self.assertEqual(xnack["MPICH_GPU_MANAGED_MEMORY_SUPPORT_ENABLED"], "1")
+        self.assertEqual(xnack["MODULEPATH"], PRODUCTION_RUNTIME_MODULEPATH)
 
         ofi = capture("frontier_ofi_tuned_experimental")
         self.assertEqual(ofi["MPICH_OFI_NIC_POLICY"], "GPU")
         self.assertEqual(ofi["MPICH_GPU_IPC_CACHE_MAX_SIZE"], "1000")
         self.assertEqual(ofi["FI_CXI_RX_MATCH_MODE"], "software")
+        self.assertEqual(ofi["MODULEPATH"], PRODUCTION_RUNTIME_MODULEPATH)
 
         result = subprocess.run(
             ["/bin/bash", "-c", command, "bash", str(path)],
