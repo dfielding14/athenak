@@ -208,7 +208,7 @@ class PicReadinessRegistryTests(unittest.TestCase):
             "operational_ledger_mirror_only",
         )
         candidate = _load(
-            "q027_control_plane_modulepath_hardening_candidate_2026-05-30.json"
+            "q027_control_plane_source_alias_hardening_candidate_2026-05-30.json"
         )
         self.assertEqual(
             storage["staged_control_plane_candidate_version"],
@@ -216,10 +216,12 @@ class PicReadinessRegistryTests(unittest.TestCase):
         )
         lifecycle = storage["installed_control_plane_lifecycle"]
         if lifecycle == "live_active_generation_successor_staged_not_installed":
-            paired = _load("q027_outer_anchor_paired_activation_2026-05-30.json")
+            paired = _load(
+                "q027_control_plane_modulepath_hardening_candidate_2026-05-30.json"
+            )
             self.assertEqual(
                 storage["installed_control_plane_version"],
-                paired["active_generation"]["control_plane_version"],
+                paired["active_policy_transition"]["control_plane_version"],
             )
             self.assertNotEqual(
                 storage["installed_control_plane_version"],

@@ -1,0 +1,84 @@
+{
+  "record_type": "q027_control_plane_source_alias_hardening_candidate",
+  "schema_version": 1,
+  "date": "2026-05-30",
+  "gates": [
+    "Q-027",
+    "Q-038",
+    "Q-042"
+  ],
+  "qualification_effect": "local_source_alias_hardening_successor_pass_independent_audit_paired_install_pending",
+  "scope": "Successor chronology after the exact clean Orion build-profile attempt through live MODULEPATH-hardening digest c8002a1d rejected initialized clean submodule kokkos before creating artifacts. The authorized lexical source spelling /ccs/home/dfielding/athenak-pic resolves through site mount aliases to /autofs/nccs-svm1_home2/dfielding/athenak-pic. The predecessor validator authenticated the reviewed lexical root but then compared each lexical submodule path directly with its resolved physical path. This successor normalizes only after the exact authorized-spelling and resolved-identity checks, preserves the lexical spelling across the second writer authentication boundary, and keeps generated checkout plus submodule canonical-path rejection strict. This record does not attest a paired live install, active-policy promotion, clean-candidate freeze or Frontier science execution.",
+  "live_predecessor": {
+    "record": "tst/publication/readiness/q027_control_plane_modulepath_hardening_candidate_2026-05-30.json",
+    "control_plane_version": "c8002a1d5d30b5ab98b36907e0dad5f67cc39ea25e3f9c597857f8e911f6c859",
+    "lifecycle": "live_active_generation_pending_reviewed_source_alias_successor_install"
+  },
+  "rejected_build_preflight": {
+    "source_commit": "61f5b664fff7e49a3b587bacd28902cb3bae4799",
+    "active_control_plane_version": "c8002a1d5d30b5ab98b36907e0dad5f67cc39ea25e3f9c597857f8e911f6c859",
+    "status": "expected_fail_closed_rejection_before_artifact_creation",
+    "diagnostic": "ValueError: Submodule path is not a canonical directory: kokkos",
+    "partial_build_artifacts": "none"
+  },
+  "staged_successor": {
+    "control_plane_version": "6cbbbbd6f5da8fb2dcd0a1ab9b91fca51570f5a54502dcb1da59aea0eda0f3ab",
+    "operational_source_commit": "5f1458e30bc7af19642f7db36d2dba6a3a083a46",
+    "paired_install_status": "pending",
+    "active_policy_promotion_status": "pending",
+    "science_submission_freeze": "pending_clean_candidate_freeze"
+  },
+  "local_validation": {
+    "control_plane_discovery_tests": {
+      "status": "pass",
+      "tests_run": 217
+    },
+    "publication_discovery_tests": {
+      "status": "pass",
+      "tests_run": 293
+    },
+    "temporary_install_digest_probe": {
+      "status": "pass",
+      "control_plane_version": "6cbbbbd6f5da8fb2dcd0a1ab9b91fca51570f5a54502dcb1da59aea0eda0f3ab",
+      "inventory_sha256": "46d88643a4d469e7e30fc7d95bf063313a26c2f716bb4651cc0671eea46bb74c"
+    },
+    "source_alias_contract": {
+      "status": "pass",
+      "authorized_lexical_root": "/ccs/home/dfielding/athenak-pic",
+      "resolved_physical_root": "/autofs/nccs-svm1_home2/dfielding/athenak-pic",
+      "validated_submodule": "kokkos",
+      "validated_submodule_commit": "08ceff92bcf3a828844480bc1e6137eb74028517",
+      "trusted_root_alias_normalization": true,
+      "lexical_second_authentication_handoff": true,
+      "arbitrary_source_root_alias_rejection": true,
+      "empty_source_root_alias_rejection": true,
+      "below_root_submodule_symlink_rejection": true
+    },
+    "python_compile": "pass",
+    "shell_syntax": "pass",
+    "git_diff_check": "pass"
+  },
+  "closed_activation_blockers": [
+    "the exact reviewed lexical source spelling is still mandatory at every caller-selected authentication boundary",
+    "the authenticated source root is normalized to its resolved physical directory before submodule identity validation",
+    "the writer retains the lexical source spelling for its second authenticated profile-write handoff",
+    "fresh generated checkout roots reject arbitrary symlink aliases even when no submodules are present",
+    "submodule paths still reject symlink traversal below the canonical generated or authenticated root",
+    "all outer-anchor serialization and canonical MODULEPATH controls from live predecessor c8002a1d remain preserved"
+  ],
+  "independent_review": {
+    "status": "pass",
+    "review_scope": "site mount-alias root normalization, strict arbitrary-root rejection, zero-submodule defense in depth, below-root submodule symlink rejection, chained writer authentication handoff, actual kokkos probe and immutable inventory surface",
+    "reviewed_commit": "5f1458e30bc7af19642f7db36d2dba6a3a083a46",
+    "reviewed_control_plane_version": "6cbbbbd6f5da8fb2dcd0a1ab9b91fca51570f5a54502dcb1da59aea0eda0f3ab",
+    "independent_reviewers": 2
+  },
+  "open_boundaries": [
+    "paired Orion and Project Home immutable install remains pending",
+    "active-policy promotion remains pending",
+    "science_submission_freeze.status remains pending_clean_candidate_freeze",
+    "matched Frontier environment-profile A/B evidence remains open",
+    "external reviewer disposition remains pending external review"
+  ],
+  "overall_disposition": "source_alias_hardening_successor_staged_all_science_submissions_paused_pending_paired_install_promotion_clean_candidate_freeze_and_applicable_prerequisites"
+}

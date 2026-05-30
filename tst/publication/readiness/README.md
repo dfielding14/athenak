@@ -102,7 +102,7 @@ qualify any scientific claim by itself.
 - `q027_outer_anchor_paired_activation_2026-05-30.json`: current live paired
   `80c0797b` outer-anchor activation, preserved genesis-anchor migration,
   coherent mirrored policy promotion and unchanged 22-record ledger evidence.
-- `q027_control_plane_modulepath_hardening_candidate_2026-05-30.json`: staged
+- `q027_control_plane_modulepath_hardening_candidate_2026-05-30.json`: active
   successor `c8002a1d` after the first clean build-profile preflight through
   live `80c0797b` rejected caller-dependent Frontier `MODULEPATH` provenance
   before artifact creation. The successor resets a reviewed seed before module
@@ -110,6 +110,15 @@ qualify any scientific claim by itself.
   passes stripped, inherited and poisoned-wrapper audit variants. Paired
   immutable install, idempotent anchor migration and coherent policy promotion
   pass. Science freeze remains pending.
+- `q027_control_plane_source_alias_hardening_candidate_2026-05-30.json`:
+  staged successor `6cbbbbd6` after the exact clean build-profile retry through
+  live `c8002a1d` rejected initialized clean `kokkos` because the authorized
+  `/ccs/home/...` source mount alias was compared directly with its resolved
+  `/autofs/...` path. The successor normalizes only after exact lexical
+  authentication, preserves that spelling for the second writer boundary,
+  keeps generated checkout and submodule aliases fail closed, and passes two
+  independent reviews. Paired install, promotion and science freeze remain
+  pending.
 - `q003_frontier_f1_gpu_gyro_2026-05-30.json`: bounded registered Frontier
   one-rank GPU relativistic-gyro candidate oracle, hardened execution-context
   evidence, reconciled node-hours and explicit clean-freeze boundary.
