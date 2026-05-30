@@ -1,0 +1,137 @@
+CR relativistic pusher Phase 0 comparison spike transcript
+Frozen criteria manifest: /Users/dbf75/.codex/worktrees/e354/athenak-DF/docs/source/modules/figures/cr_tracer_relativistic_acceleration/cr_relativistic_pusher_preregistered_criteria.json
+Frozen criteria manifest sha256: a8659125ecd37f21eb9eaff4dab869b806e31352b72bf3bcaea087c9b3d0af0c
+Preregistered acceptance criteria loaded before results calculation:
+  P0-01: All compared methods reproduce the pure-E acceleration and deceleration closed-form endpoint momentum.
+    max_pure_e_endpoint_momentum_error <= 5e-12
+  P0-02: All compared relativistic methods agree in the explicit low-speed limit.
+    max_low_speed_pairwise_endpoint_momentum_separation <= 5e-10
+  P0-03: The Higuera-Cary trapezoid-work diagnostic converges under timestep refinement and is small at the finest step.
+    hc_finest_abs_trapezoid_work_closure_error <= 0.0001
+    hc_fitted_trapezoid_work_closure_slope_finest_four >= 1.8
+  P0-04: Higuera-Cary preserves the equivalent boosted-frame crossed-field equilibrium cancellation.
+    hc_max_crossed_field_equilibrium_momentum_departure <= 1e-12
+  P0-05: The equivalent boosted-frame cancellation case discriminates standard relativistic Boris from Higuera-Cary.
+    boris_max_crossed_field_equilibrium_momentum_departure >= 0.001
+  P0-06: The numerical Jacobian probe is consistent with differential volume preservation for Boris and Higuera-Cary.
+    max_volume_preserving_abs_determinant_minus_one <= 5e-08
+  P0-07: The same numerical Jacobian probe visibly discriminates Vay's non-volume-preserving momentum map.
+    vay_max_abs_determinant_minus_one >= 0.0001
+  P0-08: Higuera-Cary retains expected second-order endpoint convergence against the independently integrated ODE.
+    hc_fitted_endpoint_error_slope_finest_four >= 1.8
+  P0-09: Higuera-Cary remains reversible to floating-point tolerance in the fixed prescribed-field round trip.
+    hc_reversibility_roundtrip_abs_momentum_error <= 1e-10
+  P0-10: Higuera-Cary remains finite and bounded in the paper-inspired dt = 1/10 resonance-neighborhood scan.
+    hc_resonance_all_finite == True
+    hc_resonance_max_abs_h_error <= 0.05
+  P0-11: The paper-inspired dt = 1/10 scan resolves the expected Higuera-Cary versus Vay resonance-risk ordering.
+    hc_minus_vay_resonance_max_abs_h_error < 0.0
+  P0-12: All compared methods remain finite in the long-time uniform-B and crossed-field stress controls.
+    all_long_time_stress_finite == True
+  P0-13: Higuera-Cary remains finite, preserves gamma, and has bounded gyro-phase error in the uniform-B control.
+    hc_uniform_b_finite == True
+    hc_uniform_b_max_rel_gamma_delta <= 1e-12
+    hc_uniform_b_endpoint_phase_error_radians <= 0.003
+  P0-14: Higuera-Cary has bounded ordinary crossed-E/B drift error over the fixed long-window control.
+    hc_crossed_eb_finite == True
+    hc_crossed_eb_average_velocity_error_vs_reference <= 0.0005
+    hc_crossed_eb_average_velocity_error_vs_expected_drift <= 0.0035
+  P0-15: Higuera-Cary remains finite with bounded endpoint phase, relative momentum, and gamma drift errors at gamma approximately 1000.
+    hc_high_gamma_finite == True
+    hc_high_gamma_max_rel_gamma_delta <= 1e-12
+    hc_high_gamma_endpoint_phase_error_radians <= 0.05
+    hc_high_gamma_endpoint_relative_momentum_error_vs_reference <= 0.05
+  P0-16: Higuera-Cary remains finite and bounded close to the crossed-field limit, and the bounded strong-rotation guard exercises the cancellation-resistant root branch.
+    hc_near_exb_finite == True
+    hc_near_exb_max_rel_momentum_departure <= 1e-12
+    strong_rotation_cancellation_guard_finite == True
+    strong_rotation_guard_used_cancellation_resistant_branch == True
+  P0-17: Higuera-Cary satisfies the exact discrete direct-work identity DeltaW = alpha*h*cE dot (w_n+w_np1)/(gamma_n+gamma_np1) in the bounded prescribed-field probe.
+    hc_direct_work_all_finite == True
+    hc_direct_work_max_abs_single_step_identity_residual <= 2e-15
+    hc_direct_work_max_abs_accumulated_identity_residual <= 2e-12
+
+Wrote results JSON: /Users/dbf75/.codex/worktrees/e354/athenak-DF/docs/source/modules/figures/cr_tracer_relativistic_acceleration/cr_relativistic_pusher_spike.json
+Results JSON sha256: 26b47c2e4b8a246687180e24f3275de7ddb31612f945070ff1ca7e9c6e5b89a4
+Transcript path: /Users/dbf75/.codex/worktrees/e354/athenak-DF/docs/source/modules/figures/cr_tracer_relativistic_acceleration/cr_relativistic_pusher_spike_transcript.txt
+Criteria manifest sha256 verified unchanged before emission: a8659125ecd37f21eb9eaff4dab869b806e31352b72bf3bcaea087c9b3d0af0c
+Crossed-field equilibrium max |delta u|:
+  relativistic_boris: 2.657607e-01
+  vay: 1.524533e-15
+  higuera_cary: 0.000000e+00
+High-gamma endpoint phase error [rad]:
+  relativistic_boris: 8.028175e-02
+  vay: 8.028175e-02
+  higuera_cary: 4.054875e-02
+Timestep-convergence fitted slope, finest four points:
+  relativistic_boris: 1.998940
+  vay: 1.999170
+  higuera_cary: 1.996299
+Reversibility roundtrip |delta u|:
+  relativistic_boris: 1.666602e-14
+  vay: 1.573366e-13
+  higuera_cary: 1.896273e-14
+Momentum-map Jacobian max |det(J) - 1|:
+  relativistic_boris: 1.152227e-10
+  vay: 4.454228e-03
+  higuera_cary: 2.820594e-10
+Resonance scan dt=0.1 max |delta H|:
+  relativistic_boris: 2.276889e-03
+  vay: 8.531051e-02
+  higuera_cary: 2.276889e-03
+Long-time stress uniform-B max relative gamma drift:
+  relativistic_boris: 1.136806e-14
+  vay: 5.528997e-12
+  higuera_cary: 8.952346e-15
+HC exact discrete direct-work identity residuals:
+  max abs single-step residual: 5.941428e-16
+  max abs accumulated residual: 5.756506e-14
+Acceptance criteria all passed: True
+  P0-01: PASS
+    max_pure_e_endpoint_momentum_error: actual=4.263256414560601e-14 <= limit=5e-12 -> True
+  P0-02: PASS
+    max_low_speed_pairwise_endpoint_momentum_separation: actual=2.344226520275566e-16 <= limit=5e-10 -> True
+  P0-03: PASS
+    hc_finest_abs_trapezoid_work_closure_error: actual=6.801550711532656e-09 <= limit=0.0001 -> True
+    hc_fitted_trapezoid_work_closure_slope_finest_four: actual=2.0005454567407606 >= limit=1.8 -> True
+  P0-04: PASS
+    hc_max_crossed_field_equilibrium_momentum_departure: actual=0.0 <= limit=1e-12 -> True
+  P0-05: PASS
+    boris_max_crossed_field_equilibrium_momentum_departure: actual=0.2657607227850845 >= limit=0.001 -> True
+  P0-06: PASS
+    max_volume_preserving_abs_determinant_minus_one: actual=2.820593758556811e-10 <= limit=5e-08 -> True
+  P0-07: PASS
+    vay_max_abs_determinant_minus_one: actual=0.004454227962400692 >= limit=0.0001 -> True
+  P0-08: PASS
+    hc_fitted_endpoint_error_slope_finest_four: actual=1.9962986936275904 >= limit=1.8 -> True
+  P0-09: PASS
+    hc_reversibility_roundtrip_abs_momentum_error: actual=1.8962726262663198e-14 <= limit=1e-10 -> True
+  P0-10: PASS
+    hc_resonance_all_finite: actual=True == limit=True -> True
+    hc_resonance_max_abs_h_error: actual=0.002276888740010641 <= limit=0.05 -> True
+  P0-11: PASS
+    hc_minus_vay_resonance_max_abs_h_error: actual=-0.08303362485208954 < limit=0.0 -> True
+  P0-12: PASS
+    all_long_time_stress_finite: actual=True == limit=True -> True
+  P0-13: PASS
+    hc_uniform_b_finite: actual=True == limit=True -> True
+    hc_uniform_b_max_rel_gamma_delta: actual=1.811201292677658e-15 <= limit=1e-12 -> True
+    hc_uniform_b_endpoint_phase_error_radians: actual=0.002284001491163727 <= limit=0.003 -> True
+  P0-14: PASS
+    hc_crossed_eb_finite: actual=True == limit=True -> True
+    hc_crossed_eb_average_velocity_error_vs_reference: actual=0.00038356340601482334 <= limit=0.0005 -> True
+    hc_crossed_eb_average_velocity_error_vs_expected_drift: actual=0.002851720221547568 <= limit=0.0035 -> True
+  P0-15: PASS
+    hc_high_gamma_finite: actual=True == limit=True -> True
+    hc_high_gamma_max_rel_gamma_delta: actual=4.547471235129592e-16 <= limit=1e-12 -> True
+    hc_high_gamma_endpoint_phase_error_radians: actual=0.04054875030393133 <= limit=0.05 -> True
+    hc_high_gamma_endpoint_relative_momentum_error_vs_reference: actual=0.04054597243181514 <= limit=0.05 -> True
+  P0-16: PASS
+    hc_near_exb_finite: actual=True == limit=True -> True
+    hc_near_exb_max_rel_momentum_departure: actual=7.850375460079695e-20 <= limit=1e-12 -> True
+    strong_rotation_cancellation_guard_finite: actual=True == limit=True -> True
+    strong_rotation_guard_used_cancellation_resistant_branch: actual=True == limit=True -> True
+  P0-17: PASS
+    hc_direct_work_all_finite: actual=True == limit=True -> True
+    hc_direct_work_max_abs_single_step_identity_residual: actual=5.941427905220564e-16 <= limit=2e-15 -> True
+    hc_direct_work_max_abs_accumulated_identity_residual: actual=5.756506382681437e-14 <= limit=2e-12 -> True

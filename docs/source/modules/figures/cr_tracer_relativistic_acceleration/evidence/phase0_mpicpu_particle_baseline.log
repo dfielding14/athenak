@@ -1,0 +1,9 @@
+2026-05-30 00:10:41,486 - INFO - Cleaning build directory
+2026-05-30 00:10:41,554 - INFO - Configuring CMake in /Users/dbf75/.codex/worktrees/e354/athenak-DF
+2026-05-30 00:10:41,554 - INFO - Executing command: cmake -D Athena_ENABLE_MPI=ON -B tst/build
+2026-05-30 00:10:43,042 - INFO - Executing command: make -j 16
+2026-05-30 00:11:21,835 - INFO - make completed in 38.79 seconds
+2026-05-30 00:11:21,835 - INFO - Build directory cleaned and project rebuilt
+2026-05-30 00:11:21,835 - INFO - Executing command: ln -s ../../inputs inputs
+.........                                                                [100%]
+9 passed in 2.17s

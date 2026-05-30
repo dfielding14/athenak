@@ -1,0 +1,25 @@
+Phase 0 effective whitespace audit
+cwd=/Users/dbf75/.codex/worktrees/e354/athenak-DF
+
+[tracked git diff --check]
+PASS tracked git diff --check
+
+[untracked git diff --no-index --check]
+PASS docs/source/modules/cr_tracer_relativistic_acceleration_ledger.md
+PASS docs/source/modules/figures/cr_tracer_relativistic_acceleration/cr_relativistic_pusher_preregistered_criteria.json
+PASS docs/source/modules/figures/cr_tracer_relativistic_acceleration/cr_relativistic_pusher_spike.json
+PASS docs/source/modules/figures/cr_tracer_relativistic_acceleration/cr_relativistic_pusher_spike_transcript.txt
+PASS docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase0_branch_snapshot.txt
+PASS docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase0_cpu_CMakeCache.txt
+PASS docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase0_cpu_named_restart_CMakeCache.txt
+PASS docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase0_cpu_particle_baseline.log
+PASS docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase0_cpu_restart_inspector_named.log
+PASS docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase0_deep_amr.log
+PASS docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase0_merge_tree.log
+PASS docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase0_mpicpu_CMakeCache.txt
+PASS docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase0_mpicpu_named_restart_CMakeCache.txt
+PASS docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase0_mpicpu_particle_baseline.log
+PASS docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase0_mpicpu_restart_inspector_named.log
+PASS docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase0_spike_manifest_negative_controls.log
+PASS docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase0_style.log
+PASS scripts/particles/cr_relativistic_pusher_spike.py

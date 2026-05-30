@@ -1,0 +1,266 @@
+{
+  "manifest_schema_version": 1,
+  "experiment": "CR relativistic pusher Phase 0 comparison spike",
+  "status": "frozen_before_results_run",
+  "frozen_at_utc": "2026-05-30T04:09:37Z",
+  "immutability_policy": "The results run loads this manifest, records its sha256, and refuses to emit results if its bytes change during computation.",
+  "criteria": [
+    {
+      "id": "P0-01",
+      "requirement": "All compared methods reproduce the pure-E acceleration and deceleration closed-form endpoint momentum.",
+      "checks": [
+        {
+          "metric": "max_pure_e_endpoint_momentum_error",
+          "operator": "<=",
+          "limit": 5e-12
+        }
+      ]
+    },
+    {
+      "id": "P0-02",
+      "requirement": "All compared relativistic methods agree in the explicit low-speed limit.",
+      "checks": [
+        {
+          "metric": "max_low_speed_pairwise_endpoint_momentum_separation",
+          "operator": "<=",
+          "limit": 5e-10
+        }
+      ]
+    },
+    {
+      "id": "P0-03",
+      "requirement": "The Higuera-Cary trapezoid-work diagnostic converges under timestep refinement and is small at the finest step.",
+      "checks": [
+        {
+          "metric": "hc_finest_abs_trapezoid_work_closure_error",
+          "operator": "<=",
+          "limit": 0.0001
+        },
+        {
+          "metric": "hc_fitted_trapezoid_work_closure_slope_finest_four",
+          "operator": ">=",
+          "limit": 1.8
+        }
+      ]
+    },
+    {
+      "id": "P0-04",
+      "requirement": "Higuera-Cary preserves the equivalent boosted-frame crossed-field equilibrium cancellation.",
+      "checks": [
+        {
+          "metric": "hc_max_crossed_field_equilibrium_momentum_departure",
+          "operator": "<=",
+          "limit": 1e-12
+        }
+      ]
+    },
+    {
+      "id": "P0-05",
+      "requirement": "The equivalent boosted-frame cancellation case discriminates standard relativistic Boris from Higuera-Cary.",
+      "checks": [
+        {
+          "metric": "boris_max_crossed_field_equilibrium_momentum_departure",
+          "operator": ">=",
+          "limit": 0.001
+        }
+      ]
+    },
+    {
+      "id": "P0-06",
+      "requirement": "The numerical Jacobian probe is consistent with differential volume preservation for Boris and Higuera-Cary.",
+      "checks": [
+        {
+          "metric": "max_volume_preserving_abs_determinant_minus_one",
+          "operator": "<=",
+          "limit": 5e-08
+        }
+      ]
+    },
+    {
+      "id": "P0-07",
+      "requirement": "The same numerical Jacobian probe visibly discriminates Vay's non-volume-preserving momentum map.",
+      "checks": [
+        {
+          "metric": "vay_max_abs_determinant_minus_one",
+          "operator": ">=",
+          "limit": 0.0001
+        }
+      ]
+    },
+    {
+      "id": "P0-08",
+      "requirement": "Higuera-Cary retains expected second-order endpoint convergence against the independently integrated ODE.",
+      "checks": [
+        {
+          "metric": "hc_fitted_endpoint_error_slope_finest_four",
+          "operator": ">=",
+          "limit": 1.8
+        }
+      ]
+    },
+    {
+      "id": "P0-09",
+      "requirement": "Higuera-Cary remains reversible to floating-point tolerance in the fixed prescribed-field round trip.",
+      "checks": [
+        {
+          "metric": "hc_reversibility_roundtrip_abs_momentum_error",
+          "operator": "<=",
+          "limit": 1e-10
+        }
+      ]
+    },
+    {
+      "id": "P0-10",
+      "requirement": "Higuera-Cary remains finite and bounded in the paper-inspired dt = 1/10 resonance-neighborhood scan.",
+      "checks": [
+        {
+          "metric": "hc_resonance_all_finite",
+          "operator": "==",
+          "limit": true
+        },
+        {
+          "metric": "hc_resonance_max_abs_h_error",
+          "operator": "<=",
+          "limit": 0.05
+        }
+      ]
+    },
+    {
+      "id": "P0-11",
+      "requirement": "The paper-inspired dt = 1/10 scan resolves the expected Higuera-Cary versus Vay resonance-risk ordering.",
+      "checks": [
+        {
+          "metric": "hc_minus_vay_resonance_max_abs_h_error",
+          "operator": "<",
+          "limit": 0.0
+        }
+      ]
+    },
+    {
+      "id": "P0-12",
+      "requirement": "All compared methods remain finite in the long-time uniform-B and crossed-field stress controls.",
+      "checks": [
+        {
+          "metric": "all_long_time_stress_finite",
+          "operator": "==",
+          "limit": true
+        }
+      ]
+    },
+    {
+      "id": "P0-13",
+      "requirement": "Higuera-Cary remains finite, preserves gamma, and has bounded gyro-phase error in the uniform-B control.",
+      "checks": [
+        {
+          "metric": "hc_uniform_b_finite",
+          "operator": "==",
+          "limit": true
+        },
+        {
+          "metric": "hc_uniform_b_max_rel_gamma_delta",
+          "operator": "<=",
+          "limit": 1e-12
+        },
+        {
+          "metric": "hc_uniform_b_endpoint_phase_error_radians",
+          "operator": "<=",
+          "limit": 0.003
+        }
+      ]
+    },
+    {
+      "id": "P0-14",
+      "requirement": "Higuera-Cary has bounded ordinary crossed-E/B drift error over the fixed long-window control.",
+      "checks": [
+        {
+          "metric": "hc_crossed_eb_finite",
+          "operator": "==",
+          "limit": true
+        },
+        {
+          "metric": "hc_crossed_eb_average_velocity_error_vs_reference",
+          "operator": "<=",
+          "limit": 0.0005
+        },
+        {
+          "metric": "hc_crossed_eb_average_velocity_error_vs_expected_drift",
+          "operator": "<=",
+          "limit": 0.0035
+        }
+      ]
+    },
+    {
+      "id": "P0-15",
+      "requirement": "Higuera-Cary remains finite with bounded endpoint phase, relative momentum, and gamma drift errors at gamma approximately 1000.",
+      "checks": [
+        {
+          "metric": "hc_high_gamma_finite",
+          "operator": "==",
+          "limit": true
+        },
+        {
+          "metric": "hc_high_gamma_max_rel_gamma_delta",
+          "operator": "<=",
+          "limit": 1e-12
+        },
+        {
+          "metric": "hc_high_gamma_endpoint_phase_error_radians",
+          "operator": "<=",
+          "limit": 0.05
+        },
+        {
+          "metric": "hc_high_gamma_endpoint_relative_momentum_error_vs_reference",
+          "operator": "<=",
+          "limit": 0.05
+        }
+      ]
+    },
+    {
+      "id": "P0-16",
+      "requirement": "Higuera-Cary remains finite and bounded close to the crossed-field limit, and the bounded strong-rotation guard exercises the cancellation-resistant root branch.",
+      "checks": [
+        {
+          "metric": "hc_near_exb_finite",
+          "operator": "==",
+          "limit": true
+        },
+        {
+          "metric": "hc_near_exb_max_rel_momentum_departure",
+          "operator": "<=",
+          "limit": 1e-12
+        },
+        {
+          "metric": "strong_rotation_cancellation_guard_finite",
+          "operator": "==",
+          "limit": true
+        },
+        {
+          "metric": "strong_rotation_guard_used_cancellation_resistant_branch",
+          "operator": "==",
+          "limit": true
+        }
+      ]
+    },
+    {
+      "id": "P0-17",
+      "requirement": "Higuera-Cary satisfies the exact discrete direct-work identity DeltaW = alpha*h*cE dot (w_n+w_np1)/(gamma_n+gamma_np1) in the bounded prescribed-field probe.",
+      "checks": [
+        {
+          "metric": "hc_direct_work_all_finite",
+          "operator": "==",
+          "limit": true
+        },
+        {
+          "metric": "hc_direct_work_max_abs_single_step_identity_residual",
+          "operator": "<=",
+          "limit": 2e-15
+        },
+        {
+          "metric": "hc_direct_work_max_abs_accumulated_identity_residual",
+          "operator": "<=",
+          "limit": 2e-12
+        }
+      ]
+    }
+  ]
+}

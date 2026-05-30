@@ -1,0 +1,21 @@
+PASS threshold tampering rejected: exit=2
+  cr_relativistic_pusher_spike.py: error: cannot load frozen criteria manifest: criteria manifest bytes do not match the frozen harness digest
+PASS direct manifest/results alias rejected: exit=2
+  cr_relativistic_pusher_spike.py: error: criteria manifest and results JSON must be distinct
+PASS symlink manifest/results alias rejected: exit=2
+  cr_relativistic_pusher_spike.py: error: criteria manifest and results JSON must be distinct
+PASS hard-link manifest/results alias rejected: exit=2
+  cr_relativistic_pusher_spike.py: error: criteria manifest and results JSON must be distinct
+PASS direct manifest/transcript alias rejected: exit=2
+  cr_relativistic_pusher_spike.py: error: criteria manifest and transcript must be distinct
+PASS symlink manifest/transcript alias rejected: exit=2
+  cr_relativistic_pusher_spike.py: error: criteria manifest and transcript must be distinct
+PASS hard-link manifest/transcript alias rejected: exit=2
+  cr_relativistic_pusher_spike.py: error: criteria manifest and transcript must be distinct
+PASS direct results/transcript alias rejected: exit=2
+  cr_relativistic_pusher_spike.py: error: results JSON and transcript must be distinct
+PASS symlink results/transcript alias rejected: exit=2
+  cr_relativistic_pusher_spike.py: error: results JSON and transcript must be distinct
+PASS hard-link results/transcript alias rejected: exit=2
+  cr_relativistic_pusher_spike.py: error: results JSON and transcript must be distinct
+PASS all Phase 0 manifest integrity negative controls

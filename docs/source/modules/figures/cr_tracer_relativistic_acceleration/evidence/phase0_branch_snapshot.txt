@@ -1,0 +1,23 @@
+Phase 0 branch snapshot
+captured_utc=2026-05-30T04:25:43Z
+
+[current branch]
+feature/CR_tracers_relativistic_acceleration
+
+[branch tip]
+3984b57ec8832b3e3e8140e08188a8a05e773136
+
+[frozen prerequisite]
+64a4d1be8da1c22d1328cc47280195b3747fa0ab
+
+[target development]
+c6a73b08e60807f8b925164c5e7edd5cb820c8ae
+
+[submodule status]
+ 08ceff92bcf3a828844480bc1e6137eb74028517 kokkos (post-formating-9968-g08ceff92b)
+
+[git status --short --branch]
+## feature/CR_tracers_relativistic_acceleration...origin/feature/CR_tracers_relativistic_acceleration
+?? docs/source/modules/cr_tracer_relativistic_acceleration_ledger.md
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/
+?? scripts/particles/cr_relativistic_pusher_spike.py

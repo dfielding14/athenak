@@ -1,0 +1,3156 @@
+{
+  "preregistered_acceptance_criteria": {
+    "manifest_path": "/Users/dbf75/.codex/worktrees/e354/athenak-DF/docs/source/modules/figures/cr_tracer_relativistic_acceleration/cr_relativistic_pusher_preregistered_criteria.json",
+    "manifest_sha256": "a8659125ecd37f21eb9eaff4dab869b806e31352b72bf3bcaea087c9b3d0af0c",
+    "loaded_before_results": true,
+    "manifest_sha256_verified_unchanged_before_emission": true,
+    "note": "The executable loads and prints the frozen criteria manifest before calculating case results, then refuses to emit results if the manifest bytes changed during calculation.",
+    "manifest": {
+      "manifest_schema_version": 1,
+      "experiment": "CR relativistic pusher Phase 0 comparison spike",
+      "status": "frozen_before_results_run",
+      "frozen_at_utc": "2026-05-30T04:09:37Z",
+      "immutability_policy": "The results run loads this manifest, records its sha256, and refuses to emit results if its bytes change during computation.",
+      "criteria": [
+        {
+          "id": "P0-01",
+          "requirement": "All compared methods reproduce the pure-E acceleration and deceleration closed-form endpoint momentum.",
+          "checks": [
+            {
+              "metric": "max_pure_e_endpoint_momentum_error",
+              "operator": "<=",
+              "limit": 5e-12
+            }
+          ]
+        },
+        {
+          "id": "P0-02",
+          "requirement": "All compared relativistic methods agree in the explicit low-speed limit.",
+          "checks": [
+            {
+              "metric": "max_low_speed_pairwise_endpoint_momentum_separation",
+              "operator": "<=",
+              "limit": 5e-10
+            }
+          ]
+        },
+        {
+          "id": "P0-03",
+          "requirement": "The Higuera-Cary trapezoid-work diagnostic converges under timestep refinement and is small at the finest step.",
+          "checks": [
+            {
+              "metric": "hc_finest_abs_trapezoid_work_closure_error",
+              "operator": "<=",
+              "limit": 0.0001
+            },
+            {
+              "metric": "hc_fitted_trapezoid_work_closure_slope_finest_four",
+              "operator": ">=",
+              "limit": 1.8
+            }
+          ]
+        },
+        {
+          "id": "P0-04",
+          "requirement": "Higuera-Cary preserves the equivalent boosted-frame crossed-field equilibrium cancellation.",
+          "checks": [
+            {
+              "metric": "hc_max_crossed_field_equilibrium_momentum_departure",
+              "operator": "<=",
+              "limit": 1e-12
+            }
+          ]
+        },
+        {
+          "id": "P0-05",
+          "requirement": "The equivalent boosted-frame cancellation case discriminates standard relativistic Boris from Higuera-Cary.",
+          "checks": [
+            {
+              "metric": "boris_max_crossed_field_equilibrium_momentum_departure",
+              "operator": ">=",
+              "limit": 0.001
+            }
+          ]
+        },
+        {
+          "id": "P0-06",
+          "requirement": "The numerical Jacobian probe is consistent with differential volume preservation for Boris and Higuera-Cary.",
+          "checks": [
+            {
+              "metric": "max_volume_preserving_abs_determinant_minus_one",
+              "operator": "<=",
+              "limit": 5e-08
+            }
+          ]
+        },
+        {
+          "id": "P0-07",
+          "requirement": "The same numerical Jacobian probe visibly discriminates Vay's non-volume-preserving momentum map.",
+          "checks": [
+            {
+              "metric": "vay_max_abs_determinant_minus_one",
+              "operator": ">=",
+              "limit": 0.0001
+            }
+          ]
+        },
+        {
+          "id": "P0-08",
+          "requirement": "Higuera-Cary retains expected second-order endpoint convergence against the independently integrated ODE.",
+          "checks": [
+            {
+              "metric": "hc_fitted_endpoint_error_slope_finest_four",
+              "operator": ">=",
+              "limit": 1.8
+            }
+          ]
+        },
+        {
+          "id": "P0-09",
+          "requirement": "Higuera-Cary remains reversible to floating-point tolerance in the fixed prescribed-field round trip.",
+          "checks": [
+            {
+              "metric": "hc_reversibility_roundtrip_abs_momentum_error",
+              "operator": "<=",
+              "limit": 1e-10
+            }
+          ]
+        },
+        {
+          "id": "P0-10",
+          "requirement": "Higuera-Cary remains finite and bounded in the paper-inspired dt = 1/10 resonance-neighborhood scan.",
+          "checks": [
+            {
+              "metric": "hc_resonance_all_finite",
+              "operator": "==",
+              "limit": true
+            },
+            {
+              "metric": "hc_resonance_max_abs_h_error",
+              "operator": "<=",
+              "limit": 0.05
+            }
+          ]
+        },
+        {
+          "id": "P0-11",
+          "requirement": "The paper-inspired dt = 1/10 scan resolves the expected Higuera-Cary versus Vay resonance-risk ordering.",
+          "checks": [
+            {
+              "metric": "hc_minus_vay_resonance_max_abs_h_error",
+              "operator": "<",
+              "limit": 0.0
+            }
+          ]
+        },
+        {
+          "id": "P0-12",
+          "requirement": "All compared methods remain finite in the long-time uniform-B and crossed-field stress controls.",
+          "checks": [
+            {
+              "metric": "all_long_time_stress_finite",
+              "operator": "==",
+              "limit": true
+            }
+          ]
+        },
+        {
+          "id": "P0-13",
+          "requirement": "Higuera-Cary remains finite, preserves gamma, and has bounded gyro-phase error in the uniform-B control.",
+          "checks": [
+            {
+              "metric": "hc_uniform_b_finite",
+              "operator": "==",
+              "limit": true
+            },
+            {
+              "metric": "hc_uniform_b_max_rel_gamma_delta",
+              "operator": "<=",
+              "limit": 1e-12
+            },
+            {
+              "metric": "hc_uniform_b_endpoint_phase_error_radians",
+              "operator": "<=",
+              "limit": 0.003
+            }
+          ]
+        },
+        {
+          "id": "P0-14",
+          "requirement": "Higuera-Cary has bounded ordinary crossed-E/B drift error over the fixed long-window control.",
+          "checks": [
+            {
+              "metric": "hc_crossed_eb_finite",
+              "operator": "==",
+              "limit": true
+            },
+            {
+              "metric": "hc_crossed_eb_average_velocity_error_vs_reference",
+              "operator": "<=",
+              "limit": 0.0005
+            },
+            {
+              "metric": "hc_crossed_eb_average_velocity_error_vs_expected_drift",
+              "operator": "<=",
+              "limit": 0.0035
+            }
+          ]
+        },
+        {
+          "id": "P0-15",
+          "requirement": "Higuera-Cary remains finite with bounded endpoint phase, relative momentum, and gamma drift errors at gamma approximately 1000.",
+          "checks": [
+            {
+              "metric": "hc_high_gamma_finite",
+              "operator": "==",
+              "limit": true
+            },
+            {
+              "metric": "hc_high_gamma_max_rel_gamma_delta",
+              "operator": "<=",
+              "limit": 1e-12
+            },
+            {
+              "metric": "hc_high_gamma_endpoint_phase_error_radians",
+              "operator": "<=",
+              "limit": 0.05
+            },
+            {
+              "metric": "hc_high_gamma_endpoint_relative_momentum_error_vs_reference",
+              "operator": "<=",
+              "limit": 0.05
+            }
+          ]
+        },
+        {
+          "id": "P0-16",
+          "requirement": "Higuera-Cary remains finite and bounded close to the crossed-field limit, and the bounded strong-rotation guard exercises the cancellation-resistant root branch.",
+          "checks": [
+            {
+              "metric": "hc_near_exb_finite",
+              "operator": "==",
+              "limit": true
+            },
+            {
+              "metric": "hc_near_exb_max_rel_momentum_departure",
+              "operator": "<=",
+              "limit": 1e-12
+            },
+            {
+              "metric": "strong_rotation_cancellation_guard_finite",
+              "operator": "==",
+              "limit": true
+            },
+            {
+              "metric": "strong_rotation_guard_used_cancellation_resistant_branch",
+              "operator": "==",
+              "limit": true
+            }
+          ]
+        },
+        {
+          "id": "P0-17",
+          "requirement": "Higuera-Cary satisfies the exact discrete direct-work identity DeltaW = alpha*h*cE dot (w_n+w_np1)/(gamma_n+gamma_np1) in the bounded prescribed-field probe.",
+          "checks": [
+            {
+              "metric": "hc_direct_work_all_finite",
+              "operator": "==",
+              "limit": true
+            },
+            {
+              "metric": "hc_direct_work_max_abs_single_step_identity_residual",
+              "operator": "<=",
+              "limit": 2e-15
+            },
+            {
+              "metric": "hc_direct_work_max_abs_accumulated_identity_residual",
+              "operator": "<=",
+              "limit": 2e-12
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "experiment": "CR relativistic pusher Phase 0 comparison spike",
+  "generated_at_utc": "2026-05-30T04:21:25+00:00",
+  "scope": "Standalone prescribed-field Python comparison only; no AthenaK production integration.",
+  "normalization": {
+    "speed_of_light_c": 1.0,
+    "charge_to_mass_q_over_m": 1.0,
+    "momentum_variable": "u = gamma*v",
+    "gamma": "sqrt(1 + |u|^2)"
+  },
+  "phase_0_selection_boundary": {
+    "compared_methods": [
+      "relativistic_boris",
+      "vay",
+      "higuera_cary"
+    ],
+    "working_selection": "higuera_cary",
+    "production_authorization": false,
+    "reason": "Higuera-Cary is the compared method that preserves both the crossed-field equilibrium cancellation and differential volume.  Vay is retained as an experimental comparator; standard relativistic Boris is retained as a control."
+  },
+  "environment": {
+    "python": "3.13.13",
+    "platform": "macOS-26.5-arm64-arm-64bit-Mach-O",
+    "numpy": "2.2.6",
+    "scipy": "1.15.2",
+    "reference_policy": "scipy.integrate.solve_ivp(method=DOP853) with tight tolerances",
+    "git": {
+      "branch": "feature/CR_tracers_relativistic_acceleration",
+      "commit": "3984b57ec8832b3e3e8140e08188a8a05e773136"
+    }
+  },
+  "operation_and_clarity_notes": {
+    "higuera_cary_formula_check": {
+      "source": "A. V. Higuera and J. R. Cary, Structure-preserving second-order integration of relativistic charged particle trajectories in electromagnetic fields, Physics of Plasmas 24, 052104 (2017).",
+      "doi": "10.1063/1.4979989",
+      "equation_map": [
+        "Eq. (20): HC gamma_rotation^2 positive root.",
+        "Eq. (21): Boris uses gamma_minus = gamma(u_minus).",
+        "Eq. (24): both methods use the familiar Boris rotation.",
+        "Eq. (28)-(29): HC preserves the crossed-field E x B stationary velocity; standard relativistic Boris does not."
+      ]
+    },
+    "vay_formula_check": {
+      "source": "J.-L. Vay, Simulation of beams or plasmas crossing at relativistic velocity, Physics of Plasmas 15, 056701 (2008).",
+      "doi": "10.1063/1.2837054",
+      "equation_map": [
+        "Eq. (9): compute u_sharp from ui, E, and vi cross B/2.",
+        "Eq. (11): solve explicitly for gamma_final.",
+        "Eq. (12): compute u_final from u_sharp and t."
+      ]
+    },
+    "shared_push_shape": [
+      "Compute electric half-kick epsilon = E*dt/2.",
+      "Compute u_minus = u_initial + epsilon and beta = B*dt/2.",
+      "Select the rotation gamma.",
+      "Apply t = beta/gamma and s = 2*t/(1 + |t|^2).",
+      "Apply u_prime = u_minus + u_minus cross t.",
+      "Apply u_plus = u_minus + u_prime cross s.",
+      "Compute u_final = u_plus + epsilon."
+    ],
+    "shared_push_shape_limit": "The shared Boris-rotation shape applies to relativistic Boris and Higuera-Cary.  Vay follows its separate explicit Eqs. (9)-(12).",
+    "standard_relativistic_boris": "The rotation gamma is gamma(u_minus).  This is the shorter scalar path and shares all vector rotation work with Higuera-Cary.",
+    "higuera_cary": "The rotation gamma uses the Eq. (20) positive root.  Relative to standard relativistic Boris, this adds beta^2, beta dot u_minus, a discriminant, and a second square root while leaving the vector rotation unchanged.  The script uses the algebraically equivalent conjugate root when sigma < 0 to reduce cancellation within the bounded spike.",
+    "vay": "Vay is implemented directly as an experimental third comparator. It preserves the crossed-field cancellation condition but is not volume-preserving in general.  It is not the Phase 0 working selection.",
+    "cost_scope": "These are operation and clarity notes, not measured AthenaK cost claims.  Python wall times are emitted only as harness context."
+  },
+  "cases": {
+    "pure_e_closed_form": {
+      "purpose": "Check pure-E acceleration and deceleration against the exact momentum law u(t) = u(0) + E*t.  The field-work diagnostic is accumulated from E dot v trapezoid quadrature, not inferred from the kinetic-energy change.",
+      "limit": "The closed form is exact for prescribed spatially uniform E and B = 0 in normalized c = q/m = 1 units.  The independent field-work quadrature is expected to converge rather than be exact.",
+      "acceleration": {
+        "inputs": {
+          "momentum0": [
+            0.1,
+            0.0,
+            0.0
+          ],
+          "electric": [
+            0.25,
+            0.0,
+            0.0
+          ],
+          "magnetic": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "dt": 0.05,
+          "steps": 240,
+          "duration": 12.0
+        },
+        "closed_form": {
+          "endpoint_momentum": [
+            3.1,
+            0.0,
+            0.0
+          ],
+          "endpoint_gamma": 3.2572994949804666,
+          "kinetic_energy_change": 2.252311932868378
+        },
+        "methods": {
+          "relativistic_boris": {
+            "finite": true,
+            "endpoint_momentum": [
+              3.100000000000027,
+              0.0,
+              0.0
+            ],
+            "endpoint_momentum_error_vs_closed_form": 2.708944180085382e-14,
+            "endpoint_gamma_error_vs_closed_form": 2.531308496145357e-14,
+            "kinetic_energy_change": 2.2523119328684027,
+            "electric_field_work_trapezoid": 2.252299481599803,
+            "work_closure_error": 1.2451268599722454e-05
+          },
+          "vay": {
+            "finite": true,
+            "endpoint_momentum": [
+              3.1000000000000107,
+              0.0,
+              0.0
+            ],
+            "endpoint_momentum_error_vs_closed_form": 1.0658141036401503e-14,
+            "endpoint_gamma_error_vs_closed_form": 9.769962616701378e-15,
+            "kinetic_energy_change": 2.2523119328683876,
+            "electric_field_work_trapezoid": 2.2522994815998008,
+            "work_closure_error": 1.2451268586843867e-05
+          },
+          "higuera_cary": {
+            "finite": true,
+            "endpoint_momentum": [
+              3.100000000000027,
+              0.0,
+              0.0
+            ],
+            "endpoint_momentum_error_vs_closed_form": 2.708944180085382e-14,
+            "endpoint_gamma_error_vs_closed_form": 2.531308496145357e-14,
+            "kinetic_energy_change": 2.2523119328684027,
+            "electric_field_work_trapezoid": 2.252299481599803,
+            "work_closure_error": 1.2451268599722454e-05
+          }
+        }
+      },
+      "deceleration": {
+        "inputs": {
+          "momentum0": [
+            3.0,
+            0.0,
+            0.0
+          ],
+          "electric": [
+            -0.1,
+            0.0,
+            0.0
+          ],
+          "magnetic": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "dt": 0.05,
+          "steps": 400,
+          "duration": 20.0
+        },
+        "closed_form": {
+          "endpoint_momentum": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "endpoint_gamma": 1.4142135623730951,
+          "kinetic_energy_change": -1.7480640977952844
+        },
+        "methods": {
+          "relativistic_boris": {
+            "finite": true,
+            "endpoint_momentum": [
+              1.0000000000000426,
+              0.0,
+              0.0
+            ],
+            "endpoint_momentum_error_vs_closed_form": 4.263256414560601e-14,
+            "endpoint_gamma_error_vs_closed_form": 2.9976021664879227e-14,
+            "kinetic_energy_change": -1.7480640977952544,
+            "electric_field_work_trapezoid": -1.7480634271071755,
+            "work_closure_error": -6.706880788520664e-07
+          },
+          "vay": {
+            "finite": true,
+            "endpoint_momentum": [
+              1.0000000000000426,
+              0.0,
+              0.0
+            ],
+            "endpoint_momentum_error_vs_closed_form": 4.263256414560601e-14,
+            "endpoint_gamma_error_vs_closed_form": 2.9976021664879227e-14,
+            "kinetic_energy_change": -1.7480640977952544,
+            "electric_field_work_trapezoid": -1.7480634271071755,
+            "work_closure_error": -6.706880788520664e-07
+          },
+          "higuera_cary": {
+            "finite": true,
+            "endpoint_momentum": [
+              1.0000000000000426,
+              0.0,
+              0.0
+            ],
+            "endpoint_momentum_error_vs_closed_form": 4.263256414560601e-14,
+            "endpoint_gamma_error_vs_closed_form": 2.9976021664879227e-14,
+            "kinetic_energy_change": -1.7480640977952544,
+            "electric_field_work_trapezoid": -1.7480634271071755,
+            "work_closure_error": -6.706880788520664e-07
+          }
+        }
+      }
+    },
+    "low_speed_agreement": {
+      "purpose": "Check that the three relativistic maps collapse onto each other and the Newtonian Boris limit when |v| is much less than c.",
+      "limit": "This is a low-speed numerical agreement probe, not a derivation of the non-relativistic limit or a production regression.",
+      "inputs": {
+        "momentum0": [
+          0.0001,
+          -0.0002,
+          0.0003
+        ],
+        "electric": [
+          2e-05,
+          -1e-05,
+          0.0
+        ],
+        "magnetic": [
+          0.0,
+          0.0,
+          0.7
+        ],
+        "dt": 0.01,
+        "steps": 500,
+        "duration": 5.0
+      },
+      "newtonian_boris_endpoint_momentum": [
+        -6.117793532540197e-05,
+        0.00017205284512894248,
+        0.0003
+      ],
+      "maximum_sampled_endpoint_speed": 0.00037416571248579517,
+      "methods": {
+        "relativistic_boris": {
+          "finite": true,
+          "endpoint_momentum": [
+            -6.117798705039097e-05,
+            0.00017205283030643533,
+            0.0003
+          ],
+          "endpoint_momentum_error_vs_newtonian_boris": 5.380688808236291e-11
+        },
+        "vay": {
+          "finite": true,
+          "endpoint_momentum": [
+            -6.117798705035305e-05,
+            0.00017205283030642587,
+            0.00030000000000000247
+          ],
+          "endpoint_momentum_error_vs_newtonian_boris": 5.380685423550769e-11
+        },
+        "higuera_cary": {
+          "finite": true,
+          "endpoint_momentum": [
+            -6.117798705016525e-05,
+            0.00017205283030649862,
+            0.0003
+          ],
+          "endpoint_momentum_error_vs_newtonian_boris": 5.3806653663530735e-11
+        }
+      },
+      "pairwise_endpoint_momentum_separation": {
+        "relativistic_boris_vs_vay": 3.916156031855087e-17,
+        "relativistic_boris_vs_higuera_cary": 2.344226520275566e-16,
+        "vay_vs_higuera_cary": 2.0141158758627285e-16
+      },
+      "max_pairwise_endpoint_momentum_separation": 2.344226520275566e-16
+    },
+    "work_closure": {
+      "purpose": "Accumulate prescribed electric-field work as the independent trapezoid sum of E dot v and compare it with Delta(gamma - 1).",
+      "limit": "This is a convergence diagnostic for field-work quadrature in constant prescribed fields.  It is not a self-consistent particle-field energy-conservation test.",
+      "inputs": {
+        "momentum0": [
+          1.1,
+          -0.3,
+          0.2
+        ],
+        "electric": [
+          0.2,
+          -0.1,
+          0.05
+        ],
+        "magnetic": [
+          0.1,
+          0.2,
+          1.0
+        ],
+        "duration": 12.0,
+        "step_sizes": [
+          0.2,
+          0.1,
+          0.05,
+          0.025,
+          0.0125
+        ]
+      },
+      "methods": {
+        "relativistic_boris": {
+          "rows": [
+            {
+              "dt": 0.2,
+              "steps": 60,
+              "kinetic_energy_change": 0.36330157769762095,
+              "electric_field_work_trapezoid": 0.363299493816436,
+              "work_closure_error": 2.0838811849444028e-06,
+              "abs_work_closure_error": 2.0838811849444028e-06
+            },
+            {
+              "dt": 0.1,
+              "steps": 120,
+              "kinetic_energy_change": 0.3650680241994846,
+              "electric_field_work_trapezoid": 0.3650675672990676,
+              "work_closure_error": 4.5690041700074957e-07,
+              "abs_work_closure_error": 4.5690041700074957e-07
+            },
+            {
+              "dt": 0.05,
+              "steps": 240,
+              "kinetic_energy_change": 0.36550988268920737,
+              "electric_field_work_trapezoid": 0.3655097725135573,
+              "work_closure_error": 1.1017565004767249e-07,
+              "abs_work_closure_error": 1.1017565004767249e-07
+            },
+            {
+              "dt": 0.025,
+              "steps": 480,
+              "kinetic_energy_change": 0.36562036241512796,
+              "electric_field_work_trapezoid": 0.36562033512501624,
+              "work_closure_error": 2.7290111725974953e-08,
+              "abs_work_closure_error": 2.7290111725974953e-08
+            },
+            {
+              "dt": 0.0125,
+              "steps": 960,
+              "kinetic_energy_change": 0.3656479832854891,
+              "electric_field_work_trapezoid": 0.36564797647877456,
+              "work_closure_error": 6.806714525353641e-09,
+              "abs_work_closure_error": 6.806714525353641e-09
+            }
+          ],
+          "fitted_abs_work_closure_slope_finest_four": 2.0219687237188184
+        },
+        "vay": {
+          "rows": [
+            {
+              "dt": 0.2,
+              "steps": 60,
+              "kinetic_energy_change": 0.36377064254019476,
+              "electric_field_work_trapezoid": 0.363085859843471,
+              "work_closure_error": 0.0006847826967237292,
+              "abs_work_closure_error": 0.0006847826967237292
+            },
+            {
+              "dt": 0.1,
+              "steps": 120,
+              "kinetic_energy_change": 0.36518627768708,
+              "electric_field_work_trapezoid": 0.3650142595485158,
+              "work_closure_error": 0.00017201813856421166,
+              "abs_work_closure_error": 0.00017201813856421166
+            },
+            {
+              "dt": 0.05,
+              "steps": 240,
+              "kinetic_energy_change": 0.36553950797635815,
+              "electric_field_work_trapezoid": 0.36549645203262976,
+              "work_closure_error": 4.305594372838728e-05,
+              "abs_work_closure_error": 4.305594372838728e-05
+            },
+            {
+              "dt": 0.025,
+              "steps": 480,
+              "kinetic_energy_change": 0.36562777260991264,
+              "electric_field_work_trapezoid": 0.3656170054108406,
+              "work_closure_error": 1.0767199072059253e-05,
+              "abs_work_closure_error": 1.0767199072059253e-05
+            },
+            {
+              "dt": 0.0125,
+              "steps": 960,
+              "kinetic_energy_change": 0.3656498360762839,
+              "electric_field_work_trapezoid": 0.3656471440756949,
+              "work_closure_error": 2.6920005889996546e-06,
+              "abs_work_closure_error": 2.6920005889996546e-06
+            }
+          ],
+          "fitted_abs_work_closure_slope_finest_four": 1.9992783896809792
+        },
+        "higuera_cary": {
+          "rows": [
+            {
+              "dt": 0.2,
+              "steps": 60,
+              "kinetic_energy_change": 0.36521068283471503,
+              "electric_field_work_trapezoid": 0.3652089329891971,
+              "work_closure_error": 1.749845517928783e-06,
+              "abs_work_closure_error": 1.749845517928783e-06
+            },
+            {
+              "dt": 0.1,
+              "steps": 120,
+              "kinetic_energy_change": 0.36554592720415036,
+              "electric_field_work_trapezoid": 0.36554549138880726,
+              "work_closure_error": 4.3581534309167225e-07,
+              "abs_work_closure_error": 4.3581534309167225e-07
+            },
+            {
+              "dt": 0.05,
+              "steps": 240,
+              "kinetic_energy_change": 0.3656293973060969,
+              "electric_field_work_trapezoid": 0.365629288451507,
+              "work_closure_error": 1.0885458989751129e-07,
+              "abs_work_closure_error": 1.0885458989751129e-07
+            },
+            {
+              "dt": 0.025,
+              "steps": 480,
+              "kinetic_energy_change": 0.36565024349368347,
+              "electric_field_work_trapezoid": 0.3656502162861877,
+              "work_closure_error": 2.720749575635395e-08,
+              "abs_work_closure_error": 2.720749575635395e-08
+            },
+            {
+              "dt": 0.0125,
+              "steps": 960,
+              "kinetic_energy_change": 0.3656554537065737,
+              "electric_field_work_trapezoid": 0.365655446905023,
+              "work_closure_error": 6.801550711532656e-09,
+              "abs_work_closure_error": 6.801550711532656e-09
+            }
+          ],
+          "fitted_abs_work_closure_slope_finest_four": 2.0005454567407606
+        }
+      }
+    },
+    "higuera_cary_direct_work_identity": {
+      "purpose": "Check the exact discrete Higuera-Cary direct-work identity separately from the trapezoid-work convergence diagnostic.",
+      "identity": "DeltaW = alpha*h*cE dot (w_n+w_np1)/(gamma_n+gamma_np1)",
+      "normalized_variables": {
+        "alpha": 1.0,
+        "h": "dt",
+        "speed_of_light_c": 1.0,
+        "w": "u = gamma*v",
+        "DeltaW": "gamma_np1 - gamma_n"
+      },
+      "limit": "This is a bounded prescribed-field floating-point check of the discrete identity, not a self-consistent particle-field energy-conservation test.",
+      "inputs": {
+        "momentum0": [
+          1.1,
+          -0.3,
+          0.2
+        ],
+        "electric": [
+          0.2,
+          -0.1,
+          0.05
+        ],
+        "magnetic": [
+          0.1,
+          0.2,
+          1.0
+        ],
+        "duration": 12.0,
+        "step_sizes": [
+          0.2,
+          0.1,
+          0.05,
+          0.025,
+          0.0125
+        ]
+      },
+      "rows": [
+        {
+          "dt": 0.2,
+          "steps": 60,
+          "finite": true,
+          "kinetic_energy_change": 0.36521068283471503,
+          "discrete_direct_electric_work": 0.3652106828347151,
+          "max_abs_single_step_identity_residual": 3.226585665316861e-16,
+          "accumulated_identity_residual": -5.551115123125783e-17,
+          "abs_accumulated_identity_residual": 5.551115123125783e-17
+        },
+        {
+          "dt": 0.1,
+          "steps": 120,
+          "finite": true,
+          "kinetic_energy_change": 0.36554592720415036,
+          "discrete_direct_electric_work": 0.36554592720415824,
+          "max_abs_single_step_identity_residual": 5.100087019371813e-16,
+          "accumulated_identity_residual": -7.882583474838611e-15,
+          "abs_accumulated_identity_residual": 7.882583474838611e-15
+        },
+        {
+          "dt": 0.05,
+          "steps": 240,
+          "finite": true,
+          "kinetic_energy_change": 0.3656293973060969,
+          "discrete_direct_electric_work": 0.3656293973061046,
+          "max_abs_single_step_identity_residual": 4.839878497975292e-16,
+          "accumulated_identity_residual": -7.716050021144838e-15,
+          "abs_accumulated_identity_residual": 7.716050021144838e-15
+        },
+        {
+          "dt": 0.025,
+          "steps": 480,
+          "finite": true,
+          "kinetic_energy_change": 0.36565024349368347,
+          "discrete_direct_electric_work": 0.3656502434936916,
+          "max_abs_single_step_identity_residual": 5.017687654262915e-16,
+          "accumulated_identity_residual": -8.104628079763643e-15,
+          "abs_accumulated_identity_residual": 8.104628079763643e-15
+        },
+        {
+          "dt": 0.0125,
+          "steps": 960,
+          "finite": true,
+          "kinetic_energy_change": 0.3656554537065737,
+          "discrete_direct_electric_work": 0.36565545370651614,
+          "max_abs_single_step_identity_residual": 5.941427905220564e-16,
+          "accumulated_identity_residual": 5.756506382681437e-14,
+          "abs_accumulated_identity_residual": 5.756506382681437e-14
+        }
+      ],
+      "all_finite": true,
+      "max_abs_single_step_identity_residual": 5.941427905220564e-16,
+      "max_abs_accumulated_identity_residual": 5.756506382681437e-14
+    },
+    "phase_volume_jacobian": {
+      "purpose": "Numerically probe the local Jacobian determinant of each constant-field momentum map.  Boris and Higuera-Cary should preserve differential volume; Vay is included as a discriminator.",
+      "limit": "This central-difference probe covers the isolated momentum submap at two sample points.  It is not a proof for a full staggered position-momentum integrator or for AthenaK integration.",
+      "inputs": {
+        "probes": [
+          {
+            "momentum": [
+              1.7,
+              -0.8,
+              0.45
+            ],
+            "electric": [
+              0.4,
+              -0.25,
+              0.15
+            ],
+            "magnetic": [
+              0.3,
+              0.5,
+              1.2
+            ],
+            "dt": 0.7
+          },
+          {
+            "momentum": [
+              4.0,
+              1.5,
+              -0.5
+            ],
+            "electric": [
+              -0.2,
+              0.35,
+              0.1
+            ],
+            "magnetic": [
+              0.1,
+              -0.4,
+              1.8
+            ],
+            "dt": 1.1
+          }
+        ],
+        "central_difference_perturbations": [
+          1e-05,
+          3e-06,
+          1e-06
+        ]
+      },
+      "methods": {
+        "relativistic_boris": {
+          "rows": [
+            {
+              "probe_index": 0,
+              "perturbation": 1e-05,
+              "determinant": 1.0000000000058402,
+              "abs_determinant_minus_one": 5.8402171987381735e-12
+            },
+            {
+              "probe_index": 0,
+              "perturbation": 3e-06,
+              "determinant": 0.999999999982665,
+              "abs_determinant_minus_one": 1.7335022306497194e-11
+            },
+            {
+              "probe_index": 0,
+              "perturbation": 1e-06,
+              "determinant": 0.9999999999510957,
+              "abs_determinant_minus_one": 4.890432503401598e-11
+            },
+            {
+              "probe_index": 1,
+              "perturbation": 1e-05,
+              "determinant": 0.9999999999732229,
+              "abs_determinant_minus_one": 2.6777136064026763e-11
+            },
+            {
+              "probe_index": 1,
+              "perturbation": 3e-06,
+              "determinant": 1.0000000001152227,
+              "abs_determinant_minus_one": 1.1522272025388247e-10
+            },
+            {
+              "probe_index": 1,
+              "perturbation": 1e-06,
+              "determinant": 0.9999999998914454,
+              "abs_determinant_minus_one": 1.0855460974568132e-10
+            }
+          ],
+          "max_abs_determinant_minus_one": 1.1522272025388247e-10
+        },
+        "vay": {
+          "rows": [
+            {
+              "probe_index": 0,
+              "perturbation": 1e-05,
+              "determinant": 1.0044542279624007,
+              "abs_determinant_minus_one": 0.004454227962400692
+            },
+            {
+              "probe_index": 0,
+              "perturbation": 3e-06,
+              "determinant": 1.004454227902981,
+              "abs_determinant_minus_one": 0.0044542279029808896
+            },
+            {
+              "probe_index": 0,
+              "perturbation": 1e-06,
+              "determinant": 1.0044542278545963,
+              "abs_determinant_minus_one": 0.00445422785459626
+            },
+            {
+              "probe_index": 1,
+              "perturbation": 1e-05,
+              "determinant": 0.9994643947975139,
+              "abs_determinant_minus_one": 0.000535605202486078
+            },
+            {
+              "probe_index": 1,
+              "perturbation": 3e-06,
+              "determinant": 0.9994643945004017,
+              "abs_determinant_minus_one": 0.0005356054995983017
+            },
+            {
+              "probe_index": 1,
+              "perturbation": 1e-06,
+              "determinant": 0.9994643955854137,
+              "abs_determinant_minus_one": 0.0005356044145863326
+            }
+          ],
+          "max_abs_determinant_minus_one": 0.004454227962400692
+        },
+        "higuera_cary": {
+          "rows": [
+            {
+              "probe_index": 0,
+              "perturbation": 1e-05,
+              "determinant": 1.0000000000085707,
+              "abs_determinant_minus_one": 8.570699705501283e-12
+            },
+            {
+              "probe_index": 0,
+              "perturbation": 3e-06,
+              "determinant": 1.0000000000240874,
+              "abs_determinant_minus_one": 2.4087398742267396e-11
+            },
+            {
+              "probe_index": 0,
+              "perturbation": 1e-06,
+              "determinant": 0.999999999798506,
+              "abs_determinant_minus_one": 2.0149404367231227e-10
+            },
+            {
+              "probe_index": 1,
+              "perturbation": 1e-05,
+              "determinant": 0.9999999999839286,
+              "abs_determinant_minus_one": 1.607136645986884e-11
+            },
+            {
+              "probe_index": 1,
+              "perturbation": 3e-06,
+              "determinant": 1.0000000000128817,
+              "abs_determinant_minus_one": 1.2881695710120766e-11
+            },
+            {
+              "probe_index": 1,
+              "perturbation": 1e-06,
+              "determinant": 0.9999999997179406,
+              "abs_determinant_minus_one": 2.820593758556811e-10
+            }
+          ],
+          "max_abs_determinant_minus_one": 2.820593758556811e-10
+        }
+      }
+    },
+    "uniform_b_energy_phase": {
+      "purpose": "Check no-E energy conservation and uniform-B gyro phase.",
+      "inputs": {
+        "momentum0": [
+          3.0,
+          0.0,
+          0.4
+        ],
+        "electric": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "magnetic": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "dt": 0.15,
+        "steps": 800,
+        "duration": 120.0
+      },
+      "reference": {
+        "engine": "scipy.integrate.solve_ivp_DOP853",
+        "success": true,
+        "function_evaluations": 24014,
+        "position": [
+          -0.15522126440234452,
+          -0.00401829794017567,
+          15.05893932331626
+        ],
+        "momentum": [
+          2.995981702059825,
+          0.15522126440234452,
+          0.4
+        ]
+      },
+      "methods": {
+        "relativistic_boris": {
+          "finite": true,
+          "max_rel_gamma_delta": 1.3932317635981985e-15,
+          "endpoint_phase_error_radians": 0.006945407363309593,
+          "endpoint_momentum_error_vs_reference": 0.02083618021038658,
+          "endpoint_relative_momentum_error_vs_reference": 0.006884467722728868
+        },
+        "vay": {
+          "finite": true,
+          "max_rel_gamma_delta": 4.249356878974505e-14,
+          "endpoint_phase_error_radians": 0.006945407362364571,
+          "endpoint_momentum_error_vs_reference": 0.020836180207552037,
+          "endpoint_relative_momentum_error_vs_reference": 0.006884467721792309
+        },
+        "higuera_cary": {
+          "finite": true,
+          "max_rel_gamma_delta": 1.811201292677658e-15,
+          "endpoint_phase_error_radians": 0.002284001491163727,
+          "endpoint_momentum_error_vs_reference": 0.006852002984048635,
+          "endpoint_relative_momentum_error_vs_reference": 0.0022639655111165655
+        }
+      }
+    },
+    "crossed_eb_drift": {
+      "purpose": "Measure long-window E x B drift with a bounded gyro transient; the pusher position is diagnostic trapezoid quadrature only.",
+      "inputs": {
+        "momentum0": [
+          0.25,
+          0.1,
+          0.0
+        ],
+        "electric": [
+          0.6,
+          0.0,
+          0.0
+        ],
+        "magnetic": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "expected_drift": [
+          0.0,
+          -0.6,
+          0.0
+        ],
+        "dt": 0.2,
+        "steps": 4000,
+        "duration": 800.0
+      },
+      "reference": {
+        "engine": "scipy.integrate.solve_ivp_DOP853",
+        "success": true,
+        "function_evaluations": 120038,
+        "position": [
+          2.288777659333188,
+          -480.359391753044,
+          0.0
+        ],
+        "momentum": [
+          -0.10939175304420715,
+          -2.188777659333185,
+          0.0
+        ],
+        "average_velocity": [
+          0.0028609720741664853,
+          -0.600449239691305,
+          0.0
+        ],
+        "average_velocity_error_vs_expected_drift": 0.002896027884776724
+      },
+      "methods": {
+        "relativistic_boris": {
+          "finite": true,
+          "average_velocity_trapezoid_diagnostic": [
+            0.002675052342987512,
+            -0.5998417605941669,
+            0.0
+          ],
+          "average_velocity_error_vs_expected_drift": 0.002679728483873202,
+          "average_velocity_error_vs_reference": 0.0006352928457816754,
+          "endpoint_momentum_error_vs_reference": 0.5997091180423797
+        },
+        "vay": {
+          "finite": true,
+          "average_velocity_trapezoid_diagnostic": [
+            0.0027187839799773126,
+            -0.5997821693813775,
+            0.0
+          ],
+          "average_velocity_error_vs_expected_drift": 0.0027274963809674835,
+          "average_velocity_error_vs_reference": 0.0006820559013130423,
+          "endpoint_momentum_error_vs_reference": 0.5456447210511605
+        },
+        "higuera_cary": {
+          "finite": true,
+          "average_velocity_trapezoid_diagnostic": [
+            0.0028509608321314,
+            -0.6000658069573521,
+            0.0
+          ],
+          "average_velocity_error_vs_expected_drift": 0.002851720221547568,
+          "average_velocity_error_vs_reference": 0.00038356340601482334,
+          "endpoint_momentum_error_vs_reference": 0.025127628494782367
+        }
+      }
+    },
+    "equivalent_boosted_frame_cancellation_discriminator": {
+      "purpose": "Expose exact crossed-field equilibrium cancellation as an equivalent boosted-frame discriminator.  For perpendicular |E| < |B| fields, the E x B drift frame removes E; a correct stationary drift should therefore remain force-free.",
+      "limit": "This checks the equivalent constant-field cancellation condition without implementing a general Lorentz transformation of fields and trajectories.",
+      "inputs": {
+        "momentum0": [
+          0.0,
+          -2.0647416048350564,
+          0.0
+        ],
+        "electric": [
+          0.9,
+          0.0,
+          0.0
+        ],
+        "magnetic": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "dt": 0.8,
+        "steps": 200,
+        "duration": 160.0
+      },
+      "reference": {
+        "engine": "scipy.integrate.solve_ivp_DOP853",
+        "success": true,
+        "function_evaluations": 12026,
+        "position": [
+          -3.0933473001466076e-14,
+          -143.99999999999886,
+          0.0
+        ],
+        "momentum": [
+          2.882316398928808e-17,
+          -2.0647416048350546,
+          0.0
+        ]
+      },
+      "methods": {
+        "relativistic_boris": {
+          "finite": true,
+          "max_abs_momentum_departure": 0.2657607227850845,
+          "endpoint_momentum_departure": 0.2655332612065011,
+          "endpoint_momentum_error_vs_reference": 0.2655332612065029
+        },
+        "vay": {
+          "finite": true,
+          "max_abs_momentum_departure": 1.5245328679561793e-15,
+          "endpoint_momentum_departure": 1.1157782604955708e-15,
+          "endpoint_momentum_error_vs_reference": 1.6626807396271383e-15
+        },
+        "higuera_cary": {
+          "finite": true,
+          "max_abs_momentum_departure": 0.0,
+          "endpoint_momentum_departure": 0.0,
+          "endpoint_momentum_error_vs_reference": 1.7765906663231124e-15
+        }
+      }
+    },
+    "high_gamma": {
+      "purpose": "Compare relativistic gyro phase at gamma approximately 1000; uniform-B energy remains an invariant for both methods.",
+      "inputs": {
+        "momentum0": [
+          1000.0,
+          0.0,
+          0.0
+        ],
+        "gamma0": 1000.000499999875,
+        "electric": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "magnetic": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "orbits": 4,
+        "steps_per_orbit": 32,
+        "dt": 196.34963902410797,
+        "steps": 128,
+        "duration": 25132.75379508582
+      },
+      "reference": {
+        "engine": "scipy.integrate.solve_ivp_DOP853",
+        "success": true,
+        "function_evaluations": 48050,
+        "position": [
+          -3.909139678626161e-11,
+          5.259041466199044e-12,
+          0.0
+        ],
+        "momentum": [
+          1000.0000000000042,
+          3.909139678626161e-11,
+          0.0
+        ]
+      },
+      "methods": {
+        "relativistic_boris": {
+          "finite": true,
+          "max_rel_gamma_delta": 1.0231810279041581e-15,
+          "endpoint_phase_error_radians": 0.08028175400144989,
+          "endpoint_momentum_error_vs_reference": 80.26019620695834,
+          "endpoint_relative_momentum_error_vs_reference": 0.080260196206958
+        },
+        "vay": {
+          "finite": true,
+          "max_rel_gamma_delta": 5.68433904391199e-16,
+          "endpoint_phase_error_radians": 0.08028175400144989,
+          "endpoint_momentum_error_vs_reference": 80.2601962069599,
+          "endpoint_relative_momentum_error_vs_reference": 0.08026019620695957
+        },
+        "higuera_cary": {
+          "finite": true,
+          "max_rel_gamma_delta": 4.547471235129592e-16,
+          "endpoint_phase_error_radians": 0.04054875030393133,
+          "endpoint_momentum_error_vs_reference": 40.54597243181531,
+          "endpoint_relative_momentum_error_vs_reference": 0.04054597243181514
+        }
+      }
+    },
+    "timestep_convergence": {
+      "purpose": "Check expected second-order endpoint convergence.",
+      "inputs": {
+        "momentum0": [
+          1.5,
+          -0.4,
+          0.7
+        ],
+        "electric": [
+          0.35,
+          0.1,
+          0.0
+        ],
+        "magnetic": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "duration": 8.0,
+        "step_sizes": [
+          0.4,
+          0.2,
+          0.1,
+          0.05,
+          0.025
+        ]
+      },
+      "reference": {
+        "engine": "scipy.integrate.solve_ivp_DOP853",
+        "success": true,
+        "function_evaluations": 48014,
+        "position": [
+          1.1258991093166788,
+          -5.445189973477451,
+          2.485168402045779
+        ],
+        "momentum": [
+          -1.1451899734774553,
+          -0.7258991093166852,
+          0.7
+        ]
+      },
+      "methods": {
+        "relativistic_boris": {
+          "rows": [
+            {
+              "dt": 0.4,
+              "steps": 20,
+              "endpoint_momentum_error_vs_reference": 0.026610170040028032
+            },
+            {
+              "dt": 0.2,
+              "steps": 40,
+              "endpoint_momentum_error_vs_reference": 0.006699172311987514
+            },
+            {
+              "dt": 0.1,
+              "steps": 80,
+              "endpoint_momentum_error_vs_reference": 0.0016777333845557141
+            },
+            {
+              "dt": 0.05,
+              "steps": 160,
+              "endpoint_momentum_error_vs_reference": 0.00041961752350112727
+            },
+            {
+              "dt": 0.025,
+              "steps": 320,
+              "endpoint_momentum_error_vs_reference": 0.00010491589833681987
+            }
+          ],
+          "fitted_endpoint_error_slope_all_points": 1.9970037242419285,
+          "fitted_endpoint_error_slope_finest_four": 1.9989399567407735
+        },
+        "vay": {
+          "rows": [
+            {
+              "dt": 0.4,
+              "steps": 20,
+              "endpoint_momentum_error_vs_reference": 0.014693135454573899
+            },
+            {
+              "dt": 0.2,
+              "steps": 40,
+              "endpoint_momentum_error_vs_reference": 0.0036933601862426807
+            },
+            {
+              "dt": 0.1,
+              "steps": 80,
+              "endpoint_momentum_error_vs_reference": 0.0009246081830128803
+            },
+            {
+              "dt": 0.05,
+              "steps": 160,
+              "endpoint_momentum_error_vs_reference": 0.00023123151597306
+            },
+            {
+              "dt": 0.025,
+              "steps": 320,
+              "endpoint_momentum_error_vs_reference": 5.781284920677054e-05
+            }
+          ],
+          "fitted_endpoint_error_slope_all_points": 1.997659682213356,
+          "fitted_endpoint_error_slope_finest_four": 1.9991704025059573
+        },
+        "higuera_cary": {
+          "rows": [
+            {
+              "dt": 0.4,
+              "steps": 20,
+              "endpoint_momentum_error_vs_reference": 0.0005835607258669459
+            },
+            {
+              "dt": 0.2,
+              "steps": 40,
+              "endpoint_momentum_error_vs_reference": 0.00014946612247691425
+            },
+            {
+              "dt": 0.1,
+              "steps": 80,
+              "endpoint_momentum_error_vs_reference": 3.7595995388790566e-05
+            },
+            {
+              "dt": 0.05,
+              "steps": 160,
+              "endpoint_momentum_error_vs_reference": 9.413431723385222e-06
+            },
+            {
+              "dt": 0.025,
+              "steps": 320,
+              "endpoint_momentum_error_vs_reference": 2.3542613956045104e-06
+            }
+          ],
+          "fitted_endpoint_error_slope_all_points": 1.9895882890061989,
+          "fitted_endpoint_error_slope_finest_four": 1.9962986936275904
+        }
+      }
+    },
+    "reversibility": {
+      "purpose": "Check forward-then-backward momentum-map reversibility.",
+      "inputs": {
+        "momentum0": [
+          2.0,
+          -0.7,
+          0.4
+        ],
+        "electric": [
+          0.3,
+          -0.2,
+          0.1
+        ],
+        "magnetic": [
+          0.15,
+          0.05,
+          1.0
+        ],
+        "dt": 0.37,
+        "steps_each_direction": 500
+      },
+      "methods": {
+        "relativistic_boris": {
+          "finite": true,
+          "roundtrip_abs_momentum_error": 1.666601559568368e-14
+        },
+        "vay": {
+          "finite": true,
+          "roundtrip_abs_momentum_error": 1.5733662211460188e-13
+        },
+        "higuera_cary": {
+          "finite": true,
+          "roundtrip_abs_momentum_error": 1.8962726262663198e-14
+        }
+      }
+    },
+    "finite_state_near_limit": {
+      "purpose": "Check finite states close to the |E|/|B| = 1 equilibrium limit and exercise the cancellation-resistant HC positive-root evaluation when sigma < 0 within the bounded spike.",
+      "near_exb_limit": {
+        "inputs": {
+          "electric_to_magnetic_ratio": 0.999999999999,
+          "equilibrium_gamma": 707114.6025256454,
+          "momentum0": [
+            0.0,
+            -707114.6025249383,
+            0.0
+          ],
+          "electric": [
+            0.999999999999,
+            0.0,
+            0.0
+          ],
+          "magnetic": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "dt": 0.5,
+          "steps": 1000
+        },
+        "methods": {
+          "relativistic_boris": {
+            "finite": true,
+            "max_abs_momentum_departure": 3.13082615388538e-11,
+            "max_rel_momentum_departure": 4.427607834297218e-17
+          },
+          "vay": {
+            "finite": true,
+            "max_abs_momentum_departure": 0.0,
+            "max_rel_momentum_departure": 0.0
+          },
+          "higuera_cary": {
+            "finite": true,
+            "max_abs_momentum_departure": 5.551115123125783e-14,
+            "max_rel_momentum_departure": 7.850375460079695e-20
+          }
+        }
+      },
+      "strong_rotation_cancellation_guard": {
+        "momentum_minus": [
+          1000.0,
+          2.0,
+          -3.0
+        ],
+        "beta": [
+          0.0,
+          0.0,
+          50000000.0
+        ],
+        "gamma_rotation": 3.1622776608008376,
+        "finite": true,
+        "details": {
+          "gamma_minus": 1000.0069999755002,
+          "beta2": 2500000000000000.0,
+          "beta_dot_u": -150000000.0,
+          "sigma": -2499999998999986.0,
+          "positive_term": 2.5e+16,
+          "radical": 2499999999000006.0,
+          "gamma_rotation": 3.1622776608008376,
+          "evaluation": "conjugate_positive_root"
+        }
+      }
+    },
+    "resonance_large_step_stress": {
+      "purpose": "Run a paper-inspired resonance and large-step stress scan in the Higuera-Cary 2017 sheared fields E = -a*x*xhat and B = b*y*xhat. The scan includes the reported py approximately 1.7 neighborhood and compares dt = 1/40 with dt = 1/10.",
+      "limit": "This is a bounded drift-kick-drift scalar-orbit probe.  It does not reproduce the paper's Poincare plots, scan every orbit, or validate a production subcycling policy.",
+      "source_parameters": {
+        "a": 1.0,
+        "b": 2.0,
+        "initial_h": 4.0,
+        "dt_values": [
+          0.025,
+          0.1
+        ],
+        "steps_per_orbit_probe": 12000,
+        "initial_py_values": [
+          1.55,
+          1.6,
+          1.65,
+          1.7,
+          1.75,
+          1.8,
+          1.85
+        ]
+      },
+      "methods": {
+        "relativistic_boris": {
+          "rows": [
+            {
+              "dt": 0.025,
+              "steps": 12000,
+              "initial_py": 1.55,
+              "initial_momentum": [
+                3.5492957047842606,
+                1.55,
+                0.0
+              ],
+              "finite": true,
+              "endpoint_position": [
+                -0.18721550923644137,
+                -0.6951008435149817,
+                -74.4949990392844
+              ],
+              "endpoint_momentum": [
+                -3.5295335895203506,
+                1.472875046555503,
+                -0.48284479621725307
+              ],
+              "max_abs_h_error": 0.00014222836865052102,
+              "max_abs_iy_error": 0.00174121453184517,
+              "max_abs_canonical_pz_error": 0.0006439203822278982,
+              "kinetic_energy_change": -0.017524970630403924,
+              "electric_field_work_trapezoid": -0.017524969989620116,
+              "work_closure_error": -6.407838079591777e-10
+            },
+            {
+              "dt": 0.025,
+              "steps": 12000,
+              "initial_py": 1.6,
+              "initial_momentum": [
+                3.5270384177096794,
+                1.6,
+                0.0
+              ],
+              "finite": true,
+              "endpoint_position": [
+                0.14031900442321554,
+                0.56238477225703,
+                -75.78321904107125
+              ],
+              "endpoint_momentum": [
+                -3.5158695281962196,
+                1.5684997684868682,
+                -0.3159247952546088
+              ],
+              "max_abs_h_error": 0.0001369181848547285,
+              "max_abs_iy_error": 0.002883701389279736,
+              "max_abs_canonical_pz_error": 0.0009849072576387312,
+              "kinetic_energy_change": -0.00984479759261303,
+              "electric_field_work_trapezoid": -0.00984479738326173,
+              "work_closure_error": -2.0935130018440162e-10
+            },
+            {
+              "dt": 0.025,
+              "steps": 12000,
+              "initial_py": 1.65,
+              "initial_momentum": [
+                3.5039263690893963,
+                1.65,
+                0.0
+              ],
+              "finite": true,
+              "endpoint_position": [
+                0.4673461370019905,
+                1.2741353818695955,
+                -77.79833663510435
+              ],
+              "endpoint_momentum": [
+                -3.3787228460169967,
+                -0.3045103594755723,
+                -1.6216576213775933
+              ],
+              "max_abs_h_error": 0.0001317793803954359,
+              "max_abs_iy_error": 0.005805907960537482,
+              "max_abs_canonical_pz_error": 0.001834661679128824,
+              "kinetic_energy_change": -0.10920726969462313,
+              "electric_field_work_trapezoid": -0.10920724055270975,
+              "work_closure_error": -2.9141913382435547e-08
+            },
+            {
+              "dt": 0.025,
+              "steps": 12000,
+              "initial_py": 1.7,
+              "initial_momentum": [
+                3.479942528261063,
+                1.7,
+                0.0
+              ],
+              "finite": true,
+              "endpoint_position": [
+                0.789857295147736,
+                0.38554644658123094,
+                -79.6619893626029
+              ],
+              "endpoint_momentum": [
+                -3.1163728686515824,
+                -1.6934856601367851,
+                -0.1486819387521965
+              ],
+              "max_abs_h_error": 0.00012680565499101348,
+              "max_abs_iy_error": 0.0005107317558254998,
+              "max_abs_canonical_pz_error": 0.00015022187085755867,
+              "kinetic_energy_change": -0.3119409093036851,
+              "electric_field_work_trapezoid": -0.31194062233214087,
+              "work_closure_error": -2.8697154424994764e-07
+            },
+            {
+              "dt": 0.025,
+              "steps": 12000,
+              "initial_py": 1.75,
+              "initial_momentum": [
+                3.4550687402713134,
+                1.75,
+                0.0
+              ],
+              "finite": true,
+              "endpoint_position": [
+                1.1018112892278615,
+                -0.7470306155828247,
+                -80.9586500036045
+              ],
+              "endpoint_momentum": [
+                -2.729455477885094,
+                -1.6580012192428015,
+                -0.5599392440161335
+              ],
+              "max_abs_h_error": 0.00012199068106344413,
+              "max_abs_iy_error": 0.006632067437419398,
+              "max_abs_canonical_pz_error": 0.0019124476515517408,
+              "kinetic_energy_change": -0.6070032116494835,
+              "electric_field_work_trapezoid": -0.6070017908231643,
+              "work_closure_error": -1.4208263191539672e-06
+            },
+            {
+              "dt": 0.025,
+              "steps": 12000,
+              "initial_py": 1.8,
+              "initial_momentum": [
+                3.4292856398964493,
+                1.8,
+                0.0
+              ],
+              "finite": true,
+              "endpoint_position": [
+                1.393118805980618,
+                -1.3380950974868655,
+                -82.88557091861907
+              ],
+              "endpoint_momentum": [
+                -2.222253870119682,
+                0.17832200592991204,
+                -1.7911452376066879
+              ],
+              "max_abs_h_error": 0.00011732808624209667,
+              "max_abs_iy_error": 0.004058758429086762,
+              "max_abs_canonical_pz_error": 0.0011278480467264984,
+              "kinetic_energy_change": -0.970410545426676,
+              "electric_field_work_trapezoid": -0.9704053907834256,
+              "work_closure_error": -5.154643250460111e-06
+            },
+            {
+              "dt": 0.025,
+              "steps": 12000,
+              "initial_py": 1.85,
+              "initial_momentum": [
+                3.4025725561698166,
+                1.85,
+                0.0
+              ],
+              "finite": true,
+              "endpoint_position": [
+                1.6458323192717101,
+                -0.7274740238327094,
+                -84.6890558439985
+              ],
+              "endpoint_momentum": [
+                -1.605168922746671,
+                1.7726713954856936,
+                -0.5292788713210143
+              ],
+              "max_abs_h_error": 0.00011281161717668908,
+              "max_abs_iy_error": 0.002944434174520172,
+              "max_abs_canonical_pz_error": 0.0007959839287707826,
+              "kinetic_energy_change": -1.354424964104826,
+              "electric_field_work_trapezoid": -1.3544097821779988,
+              "work_closure_error": -1.5181926827256831e-05
+            },
+            {
+              "dt": 0.1,
+              "steps": 12000,
+              "initial_py": 1.55,
+              "initial_momentum": [
+                3.5492957047842606,
+                1.55,
+                0.0
+              ],
+              "finite": true,
+              "endpoint_position": [
+                0.8530402998738551,
+                0.05527651057132857,
+                -295.81545158086146
+              ],
+              "endpoint_momentum": [
+                3.1334837432336027,
+                -1.5499997002784944,
+                -0.0009639173082549527
+              ],
+              "max_abs_h_error": 0.0022768887399844395,
+              "max_abs_iy_error": 0.027054909567166607,
+              "max_abs_canonical_pz_error": 0.010013636282643651,
+              "kinetic_energy_change": -0.3639003906508185,
+              "electric_field_work_trapezoid": -0.3638947455824139,
+              "work_closure_error": -5.645068404558362e-06
+            },
+            {
+              "dt": 0.1,
+              "steps": 12000,
+              "initial_py": 1.6,
+              "initial_momentum": [
+                3.5270384177096794,
+                1.6,
+                0.0
+              ],
+              "finite": true,
+              "endpoint_position": [
+                -0.4491093775890647,
+                1.2547855063522764,
+                -302.17553194335477
+              ],
+              "endpoint_momentum": [
+                3.4122217330806097,
+                0.35083180144564685,
+                -1.561062794090756
+              ],
+              "max_abs_h_error": 0.002191795910828631,
+              "max_abs_iy_error": 0.043321435189138224,
+              "max_abs_canonical_pz_error": 0.0148209135385059,
+              "kinetic_energy_change": -0.10086456304635716,
+              "electric_field_work_trapezoid": -0.10086419195534099,
+              "work_closure_error": -3.710910161658365e-07
+            },
+            {
+              "dt": 0.1,
+              "steps": 12000,
+              "initial_py": 1.65,
+              "initial_momentum": [
+                3.5039263690893963,
+                1.65,
+                0.0
+              ],
+              "finite": true,
+              "endpoint_position": [
+                -1.6609743914641026,
+                -0.8827808372215324,
+                -308.0181293381312
+              ],
+              "endpoint_momentum": [
+                1.7725070644541114,
+                1.4546284814508332,
+                -0.7788170394592568
+              ],
+              "max_abs_h_error": 0.0021094582089862257,
+              "max_abs_iy_error": 0.0825085226393174,
+              "max_abs_canonical_pz_error": 0.026186958994784175,
+              "kinetic_energy_change": -1.3800226540025635,
+              "electric_field_work_trapezoid": -1.379805019283635,
+              "work_closure_error": -0.00021763471892843889
+            },
+            {
+              "dt": 0.1,
+              "steps": 12000,
+              "initial_py": 1.7,
+              "initial_momentum": [
+                3.479942528261063,
+                1.7,
+                0.0
+              ],
+              "finite": true,
+              "endpoint_position": [
+                -1.8515250896869355,
+                1.1117559790449236,
+                -311.90452977954226
+              ],
+              "endpoint_momentum": [
+                -1.1533639808543525,
+                -1.2171553634295522,
+                -1.186816254217426
+              ],
+              "max_abs_h_error": 0.002029773647243882,
+              "max_abs_iy_error": 0.20626355238121974,
+              "max_abs_canonical_pz_error": 0.06102447018729388,
+              "kinetic_energy_change": -1.7152136921952184,
+              "electric_field_work_trapezoid": -1.7147001416920706,
+              "work_closure_error": -0.0005135505031477194
+            },
+            {
+              "dt": 0.1,
+              "steps": 12000,
+              "initial_py": 1.75,
+              "initial_momentum": [
+                3.4550687402713134,
+                1.75,
+                0.0
+              ],
+              "finite": true,
+              "endpoint_position": [
+                -0.7055967763083598,
+                0.029823682300633536,
+                -327.8957569933354
+              ],
+              "endpoint_momentum": [
+                -3.1634873614068946,
+                -1.7499901603510049,
+                -0.005868447381500312
+              ],
+              "max_abs_h_error": 0.0019526386340893431,
+              "max_abs_iy_error": 0.09737793321472532,
+              "max_abs_canonical_pz_error": 0.028052166149277635,
+              "kinetic_energy_change": -0.24897983399433565,
+              "electric_field_work_trapezoid": -0.2489769372707278,
+              "work_closure_error": -2.896723607842544e-06
+            },
+            {
+              "dt": 0.1,
+              "steps": 12000,
+              "initial_py": 1.8,
+              "initial_momentum": [
+                3.4292856398964493,
+                1.8,
+                0.0
+              ],
+              "finite": true,
+              "endpoint_position": [
+                0.625498655754048,
+                0.2403077796750908,
+                -332.77849378671664
+              ],
+              "endpoint_momentum": [
+                -3.1989052838644283,
+                1.7989090322888261,
+                -0.06266014323052872
+              ],
+              "max_abs_h_error": 0.0018779530793873178,
+              "max_abs_iy_error": 0.061222381525253944,
+              "max_abs_canonical_pz_error": 0.017089543030612164,
+              "kinetic_energy_change": -0.19566102783469752,
+              "electric_field_work_trapezoid": -0.19565923343059474,
+              "work_closure_error": -1.794404102778424e-06
+            },
+            {
+              "dt": 0.1,
+              "steps": 12000,
+              "initial_py": 1.85,
+              "initial_momentum": [
+                3.4025725561698166,
+                1.85,
+                0.0
+              ],
+              "finite": true,
+              "endpoint_position": [
+                1.7684241832012924,
+                -0.5485611663584561,
+                -338.584615787963
+              ],
+              "endpoint_momentum": [
+                -1.2281701343558808,
+                -1.8234042859300252,
+                -0.3125648893462304
+              ],
+              "max_abs_h_error": 0.0018056131958577026,
+              "max_abs_iy_error": 0.045788506817511454,
+              "max_abs_canonical_pz_error": 0.012422981075128847,
+              "kinetic_energy_change": -1.564655696020838,
+              "electric_field_work_trapezoid": -1.5642486264795776,
+              "work_closure_error": -0.000407069541260352
+            }
+          ],
+          "summaries_by_dt": {
+            "0.025": {
+              "max_abs_h_error": 0.00014222836865052102,
+              "worst_initial_py": 1.55,
+              "max_abs_iy_error": 0.006632067437419398,
+              "max_abs_canonical_pz_error": 0.0019124476515517408,
+              "all_finite": true
+            },
+            "0.1": {
+              "max_abs_h_error": 0.0022768887399844395,
+              "worst_initial_py": 1.55,
+              "max_abs_iy_error": 0.20626355238121974,
+              "max_abs_canonical_pz_error": 0.06102447018729388,
+              "all_finite": true
+            }
+          }
+        },
+        "vay": {
+          "rows": [
+            {
+              "dt": 0.025,
+              "steps": 12000,
+              "initial_py": 1.55,
+              "initial_momentum": [
+                3.5492957047842606,
+                1.55,
+                0.0
+              ],
+              "finite": true,
+              "endpoint_position": [
+                -0.16831996548442618,
+                -0.6803926395243418,
+                -74.53182947940553
+              ],
+              "endpoint_momentum": [
+                -3.5335380274807395,
+                1.4800892519133653,
+                -0.4629360657040469
+              ],
+              "max_abs_h_error": 0.0010579530472432097,
+              "max_abs_iy_error": 0.005251890330912001,
+              "max_abs_canonical_pz_error": 8.692632053031689e-05,
+              "kinetic_energy_change": -0.013665218999853845,
+              "electric_field_work_trapezoid": -0.014165931653047557,
+              "work_closure_error": 0.0005007126531937113
+            },
+            {
+              "dt": 0.025,
+              "steps": 12000,
+              "initial_py": 1.6,
+              "initial_momentum": [
+                3.5270384177096794,
+                1.6,
+                0.0
+              ],
+              "finite": true,
+              "endpoint_position": [
+                0.18082551933666546,
+                0.5936040123761035,
+                -75.85747634386607
+              ],
+              "endpoint_momentum": [
+                -3.508756526156644,
+                1.561742718230311,
+                -0.352366716563915
+              ],
+              "max_abs_h_error": 0.0016774679838009732,
+              "max_abs_iy_error": 0.008479751373997146,
+              "max_abs_canonical_pz_error": 8.746134464610988e-05,
+              "kinetic_energy_change": -0.01570897389080317,
+              "electric_field_work_trapezoid": -0.016349087324626047,
+              "work_closure_error": 0.0006401134338228781
+            },
+            {
+              "dt": 0.025,
+              "steps": 12000,
+              "initial_py": 1.65,
+              "initial_momentum": [
+                3.5039263690893963,
+                1.65,
+                0.0
+              ],
+              "finite": true,
+              "endpoint_position": [
+                0.5199377568018201,
+                1.2670518365337842,
+                -77.92696171722108
+              ],
+              "endpoint_momentum": [
+                -3.3500177762669243,
+                -0.4017612496441121,
+                -1.6054452576734346
+              ],
+              "max_abs_h_error": 0.003175608372520955,
+              "max_abs_iy_error": 0.016286622663424843,
+              "max_abs_canonical_pz_error": 8.67383406150668e-05,
+              "kinetic_energy_change": -0.1319920271015329,
+              "electric_field_work_trapezoid": -0.13516898259663288,
+              "work_closure_error": 0.00317695549509997
+            },
+            {
+              "dt": 0.025,
+              "steps": 12000,
+              "initial_py": 1.7,
+              "initial_momentum": [
+                3.479942528261063,
+                1.7,
+                0.0
+              ],
+              "finite": true,
+              "endpoint_position": [
+                0.7889677173776724,
+                0.3868447363105875,
+                -79.66062861673724
+              ],
+              "endpoint_momentum": [
+                -3.1171831939098036,
+                -1.6933149669334961,
+                -0.14964414599700468
+              ],
+              "max_abs_h_error": 0.00025693239590784955,
+              "max_abs_iy_error": 0.0007276954169248562,
+              "max_abs_canonical_pz_error": 2.8222656234699883e-05,
+              "kinetic_energy_change": -0.3112956187753557,
+              "electric_field_work_trapezoid": -0.31123836902742885,
+              "work_closure_error": -5.7249747926868544e-05
+            },
+            {
+              "dt": 0.025,
+              "steps": 12000,
+              "initial_py": 1.75,
+              "initial_momentum": [
+                3.4550687402713134,
+                1.75,
+                0.0
+              ],
+              "finite": true,
+              "endpoint_position": [
+                1.0516123669425559,
+                -0.7160891001354859,
+                -80.85748723767796
+              ],
+              "endpoint_momentum": [
+                -2.795418325833518,
+                -1.667966613260728,
+                -0.5127768517118898
+              ],
+              "max_abs_h_error": 0.0034252308579105772,
+              "max_abs_iy_error": 0.017475507000854762,
+              "max_abs_canonical_pz_error": 8.636071898426856e-05,
+              "kinetic_energy_change": -0.5562496694722641,
+              "electric_field_work_trapezoid": -0.5529510958857476,
+              "work_closure_error": -0.003298573586516418
+            },
+            {
+              "dt": 0.025,
+              "steps": 12000,
+              "initial_py": 1.8,
+              "initial_momentum": [
+                3.4292856398964493,
+                1.8,
+                0.0
+              ],
+              "finite": true,
+              "endpoint_position": [
+                1.3533761969147706,
+                -1.33948505786893,
+                -82.78741476136456
+              ],
+              "endpoint_momentum": [
+                -2.2959116677678386,
+                0.12212098005347324,
+                -1.7942516157316593
+              ],
+              "max_abs_h_error": 0.0020849268661859988,
+              "max_abs_iy_error": 0.0106137085793514,
+              "max_abs_canonical_pz_error": 8.766281661316041e-05,
+              "kinetic_energy_change": -0.9169069458549601,
+              "electric_field_work_trapezoid": -0.9158276632056043,
+              "work_closure_error": -0.0010792826493558616
+            },
+            {
+              "dt": 0.025,
+              "steps": 12000,
+              "initial_py": 1.85,
+              "initial_momentum": [
+                3.4025725561698166,
+                1.85,
+                0.0
+              ],
+              "finite": true,
+              "endpoint_position": [
+                1.6286723276491808,
+                -0.734618221139088,
+                -84.64678896667208
+              ],
+              "endpoint_momentum": [
+                -1.651067887320493,
+                1.7693324957597392,
+                -0.5396289201659119
+              ],
+              "max_abs_h_error": 0.0014717637261716376,
+              "max_abs_iy_error": 0.007437253361747942,
+              "max_abs_canonical_pz_error": 8.743058420834088e-05,
+              "kinetic_energy_change": -1.3264701197533304,
+              "electric_field_work_trapezoid": -1.326313510746546,
+              "work_closure_error": -0.0001566090067843806
+            },
+            {
+              "dt": 0.1,
+              "steps": 12000,
+              "initial_py": 1.55,
+              "initial_momentum": [
+                3.5492957047842606,
+                1.55,
+                0.0
+              ],
+              "finite": true,
+              "endpoint_position": [
+                -0.6802432975325194,
+                -1.061190311648584,
+                -298.51519707699947
+              ],
+              "endpoint_momentum": [
+                3.293026865993057,
+                -1.1056871010782003,
+                -1.1262870599160482
+              ],
+              "max_abs_h_error": 0.01829440296193141,
+              "max_abs_iy_error": 0.09141257383622925,
+              "max_abs_canonical_pz_error": 0.001408606144756192,
+              "kinetic_energy_change": -0.21382878794723448,
+              "electric_field_work_trapezoid": -0.2314040677202439,
+              "work_closure_error": 0.017575279773009433
+            },
+            {
+              "dt": 0.1,
+              "steps": 12000,
+              "initial_py": 1.6,
+              "initial_momentum": [
+                3.5270384177096794,
+                1.6,
+                0.0
+              ],
+              "finite": true,
+              "endpoint_position": [
+                -1.716889143446746,
+                0.6151835697912327,
+                -307.2117786774144
+              ],
+              "endpoint_momentum": [
+                -1.6780905091163512,
+                -1.6089232287412625,
+                -0.3778624042214756
+              ],
+              "max_abs_h_error": 0.03380496550713552,
+              "max_abs_iy_error": 0.17320552444158643,
+              "max_abs_canonical_pz_error": 0.0014300086847718173,
+              "kinetic_energy_change": -1.441210890031455,
+              "electric_field_work_trapezoid": -1.4742884249346406,
+              "work_closure_error": 0.033077534903185546
+            },
+            {
+              "dt": 0.1,
+              "steps": 12000,
+              "initial_py": 1.65,
+              "initial_momentum": [
+                3.5039263690893963,
+                1.65,
+                0.0
+              ],
+              "finite": true,
+              "endpoint_position": [
+                2.015130835264573,
+                1.1132835097104496,
+                -316.5564836050856
+              ],
+              "endpoint_momentum": [
+                -0.34304015969215335,
+                1.151800878366007,
+                -1.238992122963024
+              ],
+              "max_abs_h_error": 0.08531051359210018,
+              "max_abs_iy_error": 0.44447632666057846,
+              "max_abs_canonical_pz_error": 0.0011006560617359273,
+              "kinetic_energy_change": -2.0051508088753316,
+              "electric_field_work_trapezoid": -2.0312983572326604,
+              "work_closure_error": 0.026147548357328798
+            },
+            {
+              "dt": 0.1,
+              "steps": 12000,
+              "initial_py": 1.7,
+              "initial_momentum": [
+                3.479942528261063,
+                1.7,
+                0.0
+              ],
+              "finite": true,
+              "endpoint_position": [
+                -1.6947644751537094,
+                -0.9808978244475103,
+                -317.62941206371045
+              ],
+              "endpoint_momentum": [
+                -1.6371162243399038,
+                -1.406387504711084,
+                -0.9618609841461903
+              ],
+              "max_abs_h_error": 0.003519514239876287,
+              "max_abs_iy_error": 0.017976655760413074,
+              "max_abs_canonical_pz_error": 0.00045156249408773164,
+              "kinetic_energy_change": -1.4342151496613966,
+              "electric_field_work_trapezoid": -1.4365505114248454,
+              "work_closure_error": 0.002335361763448729
+            },
+            {
+              "dt": 0.1,
+              "steps": 12000,
+              "initial_py": 1.75,
+              "initial_momentum": [
+                3.4550687402713134,
+                1.75,
+                0.0
+              ],
+              "finite": true,
+              "endpoint_position": [
+                0.9001409765721149,
+                1.043877983051647,
+                -318.8309222892718
+              ],
+              "endpoint_momentum": [
+                2.9653046766642293,
+                1.3031873782028585,
+                -1.0898248961657506
+              ],
+              "max_abs_h_error": 0.08073394435609238,
+              "max_abs_iy_error": 0.404528071484346,
+              "max_abs_canonical_pz_error": 0.0009739459563328223,
+              "kinetic_energy_change": -0.439234987750992,
+              "electric_field_work_trapezoid": -0.40519261995797573,
+              "work_closure_error": -0.03404236779301628
+            },
+            {
+              "dt": 0.1,
+              "steps": 12000,
+              "initial_py": 1.8,
+              "initial_momentum": [
+                3.4292856398964493,
+                1.8,
+                0.0
+              ],
+              "finite": true,
+              "endpoint_position": [
+                -1.960496001863412,
+                -0.9147842110270491,
+                -327.935226914367
+              ],
+              "endpoint_momentum": [
+                0.29307848896085553,
+                1.572868346350841,
+                -0.8358840674984138
+              ],
+              "max_abs_h_error": 0.04319458242434049,
+              "max_abs_iy_error": 0.22097136180349164,
+              "max_abs_canonical_pz_error": 0.0013721968812116271,
+              "kinetic_energy_change": -1.936383754197089,
+              "electric_field_work_trapezoid": -1.9226658239224463,
+              "work_closure_error": -0.013717930274642631
+            },
+            {
+              "dt": 0.1,
+              "steps": 12000,
+              "initial_py": 1.85,
+              "initial_momentum": [
+                3.4025725561698166,
+                1.85,
+                0.0
+              ],
+              "finite": true,
+              "endpoint_position": [
+                0.07296382453646051,
+                0.25903672967612745,
+                -335.5750271741373
+              ],
+              "endpoint_momentum": [
+                -3.39910354760222,
+                -1.8475370374162017,
+                -0.06710050861469455
+              ],
+              "max_abs_h_error": 0.02566071883517651,
+              "max_abs_iy_error": 0.12979578440298134,
+              "max_abs_canonical_pz_error": 0.0013829085791909222,
+              "kinetic_energy_change": -0.0035264907417458247,
+              "electric_field_work_trapezoid": -0.0026621095119292847,
+              "work_closure_error": -0.0008643812298165399
+            }
+          ],
+          "summaries_by_dt": {
+            "0.025": {
+              "max_abs_h_error": 0.0034252308579105772,
+              "worst_initial_py": 1.75,
+              "max_abs_iy_error": 0.017475507000854762,
+              "max_abs_canonical_pz_error": 8.766281661316041e-05,
+              "all_finite": true
+            },
+            "0.1": {
+              "max_abs_h_error": 0.08531051359210018,
+              "worst_initial_py": 1.65,
+              "max_abs_iy_error": 0.44447632666057846,
+              "max_abs_canonical_pz_error": 0.0014300086847718173,
+              "all_finite": true
+            }
+          }
+        },
+        "higuera_cary": {
+          "rows": [
+            {
+              "dt": 0.025,
+              "steps": 12000,
+              "initial_py": 1.55,
+              "initial_momentum": [
+                3.5492957047842606,
+                1.55,
+                0.0
+              ],
+              "finite": true,
+              "endpoint_position": [
+                -0.18721550923507296,
+                -0.6857214610361517,
+                -74.51309889575136
+              ],
+              "endpoint_momentum": [
+                -3.529533589520788,
+                1.4769325455244156,
+                -0.4702874184695985
+              ],
+              "max_abs_h_error": 0.00014222836863364563,
+              "max_abs_iy_error": 0.000509232532581283,
+              "max_abs_canonical_pz_error": 0.0001731530377231394,
+              "kinetic_energy_change": -0.01752497063000691,
+              "electric_field_work_trapezoid": -0.01752496998930946,
+              "work_closure_error": -6.406974499550966e-10
+            },
+            {
+              "dt": 0.025,
+              "steps": 12000,
+              "initial_py": 1.6,
+              "initial_momentum": [
+                3.5270384177096794,
+                1.6,
+                0.0
+              ],
+              "finite": true,
+              "endpoint_position": [
+                0.14031900442339645,
+                0.5796732680746522,
+                -75.82078738889587
+              ],
+              "endpoint_momentum": [
+                -3.5158695281962196,
+                1.5642961348209383,
+                -0.3361214104817323
+              ],
+              "max_abs_h_error": 0.00013691818486094576,
+              "max_abs_iy_error": 0.0006624590561563615,
+              "max_abs_canonical_pz_error": 0.00022026217465187514,
+              "kinetic_energy_change": -0.009844797592621912,
+              "electric_field_work_trapezoid": -0.009844797383245885,
+              "work_closure_error": -2.093760269328282e-10
+            },
+            {
+              "dt": 0.025,
+              "steps": 12000,
+              "initial_py": 1.65,
+              "initial_momentum": [
+                3.5039263690893963,
+                1.65,
+                0.0
+              ],
+              "finite": true,
+              "endpoint_position": [
+                0.46734613700184635,
+                1.2681012257296413,
+                -77.87235996712597
+              ],
+              "endpoint_momentum": [
+                -3.3787228460170793,
+                -0.36826162829145803,
+                -1.6083791136197063
+              ],
+              "max_abs_h_error": 0.00013177938039721226,
+              "max_abs_iy_error": 0.0011685740695126512,
+              "max_abs_canonical_pz_error": 0.00037317830534844276,
+              "kinetic_energy_change": -0.10920726969454986,
+              "electric_field_work_trapezoid": -0.10920724055265307,
+              "work_closure_error": -2.914189678460133e-08
+            },
+            {
+              "dt": 0.025,
+              "steps": 12000,
+              "initial_py": 1.7,
+              "initial_momentum": [
+                3.479942528261063,
+                1.7,
+                0.0
+              ],
+              "finite": true,
+              "endpoint_position": [
+                0.7898572951472416,
+                0.3818206272900064,
+                -79.65767730074721
+              ],
+              "endpoint_momentum": [
+                -3.1163728686520558,
+                -1.6937394525124723,
+                -0.145762364836461
+              ],
+              "max_abs_h_error": 0.0001268056549905694,
+              "max_abs_iy_error": 0.0005226886763036731,
+              "max_abs_canonical_pz_error": 0.00015373891558256858,
+              "kinetic_energy_change": -0.3119409093032943,
+              "electric_field_work_trapezoid": -0.31194062233174263,
+              "work_closure_error": -2.869715516884419e-07
+            },
+            {
+              "dt": 0.025,
+              "steps": 12000,
+              "initial_py": 1.75,
+              "initial_momentum": [
+                3.4550687402713134,
+                1.75,
+                0.0
+              ],
+              "finite": true,
+              "endpoint_position": [
+                1.1018112892285405,
+                -0.7268294882281878,
+                -80.89627996428985
+              ],
+              "endpoint_momentum": [
+                -2.7294554778842137,
+                -1.6684588960567301,
+                -0.5279629837111195
+              ],
+              "max_abs_h_error": 0.00012199068104612465,
+              "max_abs_iy_error": 0.0009921502567324936,
+              "max_abs_canonical_pz_error": 0.0004006520725636231,
+              "kinetic_energy_change": -0.6070032116501891,
+              "electric_field_work_trapezoid": -0.6070017908238874,
+              "work_closure_error": -1.4208263017234657e-06
+            },
+            {
+              "dt": 0.025,
+              "steps": 12000,
+              "initial_py": 1.8,
+              "initial_momentum": [
+                3.4292856398964493,
+                1.8,
+                0.0
+              ],
+              "finite": true,
+              "endpoint_position": [
+                1.3931188059808366,
+                -1.3398646163918444,
+                -82.82456488379563
+              ],
+              "endpoint_momentum": [
+                -2.2222538701192804,
+                0.13210455452708955,
+                -1.7951457842396024
+              ],
+              "max_abs_h_error": 0.00011732808623055035,
+              "max_abs_iy_error": 0.0005767874092921232,
+              "max_abs_canonical_pz_error": 0.00024787649489213526,
+              "kinetic_energy_change": -0.9704105454269656,
+              "electric_field_work_trapezoid": -0.9704053907837176,
+              "work_closure_error": -5.154643248017621e-06
+            },
+            {
+              "dt": 0.025,
+              "steps": 12000,
+              "initial_py": 1.85,
+              "initial_momentum": [
+                3.4025725561698166,
+                1.85,
+                0.0
+              ],
+              "finite": true,
+              "endpoint_position": [
+                1.645832319271577,
+                -0.7348726905917858,
+                -84.66210722747526
+              ],
+              "endpoint_momentum": [
+                -1.6051689227469939,
+                1.7694455363113255,
+                -0.5399652711313175
+              ],
+              "max_abs_h_error": 0.00011281161717713317,
+              "max_abs_iy_error": 0.0006054012582632495,
+              "max_abs_canonical_pz_error": 0.00019672106294288394,
+              "kinetic_energy_change": -1.3544249641046395,
+              "electric_field_work_trapezoid": -1.3544097821777743,
+              "work_closure_error": -1.5181926865226458e-05
+            },
+            {
+              "dt": 0.1,
+              "steps": 12000,
+              "initial_py": 1.55,
+              "initial_momentum": [
+                3.5492957047842606,
+                1.55,
+                0.0
+              ],
+              "finite": true,
+              "endpoint_position": [
+                0.8530402998751762,
+                -0.5932744380402506,
+                -296.9183959233437
+              ],
+              "endpoint_momentum": [
+                3.1334837432323135,
+                -1.5094846545805227,
+                -0.3520739660723809
+              ],
+              "max_abs_h_error": 0.002276888740010641,
+              "max_abs_iy_error": 0.00814462611493072,
+              "max_abs_canonical_pz_error": 0.002772186764529838,
+              "kinetic_energy_change": -0.36390039065192736,
+              "electric_field_work_trapezoid": -0.3638947455835279,
+              "work_closure_error": -5.645068399451336e-06
+            },
+            {
+              "dt": 0.1,
+              "steps": 12000,
+              "initial_py": 1.6,
+              "initial_momentum": [
+                3.5270384177096794,
+                1.6,
+                0.0
+              ],
+              "finite": true,
+              "endpoint_position": [
+                -0.4491093775860187,
+                0.831526907177892,
+                -304.63077519715705
+              ],
+              "endpoint_momentum": [
+                3.412221733082129,
+                -1.4420879942840585,
+                -0.6930961093108101
+              ],
+              "max_abs_h_error": 0.0021917959108348484,
+              "max_abs_iy_error": 0.01061309416261036,
+              "max_abs_canonical_pz_error": 0.00353318669275815,
+              "kinetic_energy_change": -0.100864563045032,
+              "electric_field_work_trapezoid": -0.10086419195399338,
+              "work_closure_error": -3.710910386200972e-07
+            },
+            {
+              "dt": 0.1,
+              "steps": 12000,
+              "initial_py": 1.65,
+              "initial_momentum": [
+                3.5039263690893963,
+                1.65,
+                0.0
+              ],
+              "finite": true,
+              "endpoint_position": [
+                -1.6609743914668107,
+                0.7562289907004345,
+                -311.4891244657902
+              ],
+              "endpoint_momentum": [
+                1.7725070644474665,
+                1.5462377460426568,
+                -0.5758896011501893
+              ],
+              "max_abs_h_error": 0.002109458208983561,
+              "max_abs_iy_error": 0.01913841059533672,
+              "max_abs_canonical_pz_error": 0.006115704730112581,
+              "kinetic_energy_change": -1.3800226540070666,
+              "electric_field_work_trapezoid": -1.3798050192881193,
+              "work_closure_error": -0.00021763471894731268
+            },
+            {
+              "dt": 0.1,
+              "steps": 12000,
+              "initial_py": 1.7,
+              "initial_momentum": [
+                3.479942528261063,
+                1.7,
+                0.0
+              ],
+              "finite": true,
+              "endpoint_position": [
+                -1.851525089687157,
+                -1.1292340276754234,
+                -317.05820596403834
+              ],
+              "endpoint_momentum": [
+                -1.1533639808535203,
+                -1.126093627938725,
+                -1.2735435371889705
+              ],
+              "max_abs_h_error": 0.0020297736472505434,
+              "max_abs_iy_error": 0.008257967112418996,
+              "max_abs_canonical_pz_error": 0.002435436106955624,
+              "kinetic_energy_change": -1.7152136921956411,
+              "electric_field_work_trapezoid": -1.7147001416924905,
+              "work_closure_error": -0.000513550503150606
+            },
+            {
+              "dt": 0.1,
+              "steps": 12000,
+              "initial_py": 1.75,
+              "initial_momentum": [
+                3.4550687402713134,
+                1.75,
+                0.0
+              ],
+              "finite": true,
+              "endpoint_position": [
+                -0.7055967763064394,
+                1.3137474604021184,
+                -323.3135799386368
+              ],
+              "endpoint_momentum": [
+                -3.163487361408519,
+                -0.31448946395380095,
+                -1.721509911984852
+              ],
+              "max_abs_h_error": 0.0019526386340631419,
+              "max_abs_iy_error": 0.017005934928144395,
+              "max_abs_canonical_pz_error": 0.0067359458239062975,
+              "kinetic_energy_change": -0.2489798339929612,
+              "electric_field_work_trapezoid": -0.24897693726936476,
+              "work_closure_error": -2.8967235964350024e-06
+            },
+            {
+              "dt": 0.1,
+              "steps": 12000,
+              "initial_py": 1.8,
+              "initial_momentum": [
+                3.4292856398964493,
+                1.8,
+                0.0
+              ],
+              "finite": true,
+              "endpoint_position": [
+                0.6254986557524937,
+                -0.5564210183226892,
+                -330.5324702227855
+              ],
+              "endpoint_momentum": [
+                -3.198905283865582,
+                1.7732364260880698,
+                -0.3092451732758213
+              ],
+              "max_abs_h_error": 0.0018779530794050814,
+              "max_abs_iy_error": 0.009249442643361139,
+              "max_abs_canonical_pz_error": 0.004022007723219173,
+              "kinetic_energy_change": -0.19566102783372852,
+              "electric_field_work_trapezoid": -0.19565923342962985,
+              "work_closure_error": -1.794404098670599e-06
+            },
+            {
+              "dt": 0.1,
+              "steps": 12000,
+              "initial_py": 1.85,
+              "initial_momentum": [
+                3.4025725561698166,
+                1.85,
+                0.0
+              ],
+              "finite": true,
+              "endpoint_position": [
+                1.7684241832005552,
+                -0.006186054851752061,
+                -336.89075268824655
+              ],
+              "endpoint_momentum": [
+                -1.2281701343584979,
+                -1.8499978841628433,
+                0.0027979622792207257
+              ],
+              "max_abs_h_error": 0.0018056131958634758,
+              "max_abs_iy_error": 0.009708833763846236,
+              "max_abs_canonical_pz_error": 0.003170634362486935,
+              "kinetic_energy_change": -1.5646556960195372,
+              "electric_field_work_trapezoid": -1.564248626478244,
+              "work_closure_error": -0.0004070695412932146
+            }
+          ],
+          "summaries_by_dt": {
+            "0.025": {
+              "max_abs_h_error": 0.00014222836863364563,
+              "worst_initial_py": 1.55,
+              "max_abs_iy_error": 0.0011685740695126512,
+              "max_abs_canonical_pz_error": 0.0004006520725636231,
+              "all_finite": true
+            },
+            "0.1": {
+              "max_abs_h_error": 0.002276888740010641,
+              "worst_initial_py": 1.55,
+              "max_abs_iy_error": 0.01913841059533672,
+              "max_abs_canonical_pz_error": 0.0067359458239062975,
+              "all_finite": true
+            }
+          }
+        }
+      }
+    },
+    "long_time_stress": {
+      "purpose": "Run many prescribed-field updates to reveal non-finite states, no-E energy drift, or loss of crossed-field equilibrium.",
+      "uniform_b_inputs": {
+        "momentum0": [
+          100.0,
+          0.3,
+          0.1
+        ],
+        "electric": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "magnetic": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "dt": 0.4,
+        "steps": 100000
+      },
+      "crossed_field_equilibrium_inputs": {
+        "momentum0": [
+          0.0,
+          -3.0424349222966542,
+          0.0
+        ],
+        "electric": [
+          0.95,
+          0.0,
+          0.0
+        ],
+        "magnetic": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "dt": 0.2,
+        "steps": 100000
+      },
+      "methods": {
+        "relativistic_boris": {
+          "uniform_b": {
+            "finite": true,
+            "max_rel_gamma_delta": 1.1368058546134808e-14,
+            "wall_seconds": 2.3842953329440206
+          },
+          "crossed_field_equilibrium": {
+            "finite": true,
+            "max_abs_momentum_departure": 0.027451872603392772,
+            "wall_seconds": 2.4974160839337856
+          }
+        },
+        "vay": {
+          "uniform_b": {
+            "finite": true,
+            "max_rel_gamma_delta": 5.5289973746444905e-12,
+            "wall_seconds": 2.5950684159761295
+          },
+          "crossed_field_equilibrium": {
+            "finite": true,
+            "max_abs_momentum_departure": 7.762046213104929e-15,
+            "wall_seconds": 2.747301790979691
+          }
+        },
+        "higuera_cary": {
+          "uniform_b": {
+            "finite": true,
+            "max_rel_gamma_delta": 8.952346105081161e-15,
+            "wall_seconds": 2.56650329194963
+          },
+          "crossed_field_equilibrium": {
+            "finite": true,
+            "max_abs_momentum_departure": 0.0,
+            "wall_seconds": 2.641117666964419
+          }
+        }
+      },
+      "timing_note": "Wall times are Python-harness observations only, not production performance measurements."
+    }
+  },
+  "acceptance_evaluation": {
+    "all_passed": true,
+    "results": [
+      {
+        "id": "P0-01",
+        "requirement": "All compared methods reproduce the pure-E acceleration and deceleration closed-form endpoint momentum.",
+        "passed": true,
+        "checks": [
+          {
+            "metric": "max_pure_e_endpoint_momentum_error",
+            "operator": "<=",
+            "limit": 5e-12,
+            "actual": 4.263256414560601e-14,
+            "passed": true
+          }
+        ]
+      },
+      {
+        "id": "P0-02",
+        "requirement": "All compared relativistic methods agree in the explicit low-speed limit.",
+        "passed": true,
+        "checks": [
+          {
+            "metric": "max_low_speed_pairwise_endpoint_momentum_separation",
+            "operator": "<=",
+            "limit": 5e-10,
+            "actual": 2.344226520275566e-16,
+            "passed": true
+          }
+        ]
+      },
+      {
+        "id": "P0-03",
+        "requirement": "The Higuera-Cary trapezoid-work diagnostic converges under timestep refinement and is small at the finest step.",
+        "passed": true,
+        "checks": [
+          {
+            "metric": "hc_finest_abs_trapezoid_work_closure_error",
+            "operator": "<=",
+            "limit": 0.0001,
+            "actual": 6.801550711532656e-09,
+            "passed": true
+          },
+          {
+            "metric": "hc_fitted_trapezoid_work_closure_slope_finest_four",
+            "operator": ">=",
+            "limit": 1.8,
+            "actual": 2.0005454567407606,
+            "passed": true
+          }
+        ]
+      },
+      {
+        "id": "P0-04",
+        "requirement": "Higuera-Cary preserves the equivalent boosted-frame crossed-field equilibrium cancellation.",
+        "passed": true,
+        "checks": [
+          {
+            "metric": "hc_max_crossed_field_equilibrium_momentum_departure",
+            "operator": "<=",
+            "limit": 1e-12,
+            "actual": 0.0,
+            "passed": true
+          }
+        ]
+      },
+      {
+        "id": "P0-05",
+        "requirement": "The equivalent boosted-frame cancellation case discriminates standard relativistic Boris from Higuera-Cary.",
+        "passed": true,
+        "checks": [
+          {
+            "metric": "boris_max_crossed_field_equilibrium_momentum_departure",
+            "operator": ">=",
+            "limit": 0.001,
+            "actual": 0.2657607227850845,
+            "passed": true
+          }
+        ]
+      },
+      {
+        "id": "P0-06",
+        "requirement": "The numerical Jacobian probe is consistent with differential volume preservation for Boris and Higuera-Cary.",
+        "passed": true,
+        "checks": [
+          {
+            "metric": "max_volume_preserving_abs_determinant_minus_one",
+            "operator": "<=",
+            "limit": 5e-08,
+            "actual": 2.820593758556811e-10,
+            "passed": true
+          }
+        ]
+      },
+      {
+        "id": "P0-07",
+        "requirement": "The same numerical Jacobian probe visibly discriminates Vay's non-volume-preserving momentum map.",
+        "passed": true,
+        "checks": [
+          {
+            "metric": "vay_max_abs_determinant_minus_one",
+            "operator": ">=",
+            "limit": 0.0001,
+            "actual": 0.004454227962400692,
+            "passed": true
+          }
+        ]
+      },
+      {
+        "id": "P0-08",
+        "requirement": "Higuera-Cary retains expected second-order endpoint convergence against the independently integrated ODE.",
+        "passed": true,
+        "checks": [
+          {
+            "metric": "hc_fitted_endpoint_error_slope_finest_four",
+            "operator": ">=",
+            "limit": 1.8,
+            "actual": 1.9962986936275904,
+            "passed": true
+          }
+        ]
+      },
+      {
+        "id": "P0-09",
+        "requirement": "Higuera-Cary remains reversible to floating-point tolerance in the fixed prescribed-field round trip.",
+        "passed": true,
+        "checks": [
+          {
+            "metric": "hc_reversibility_roundtrip_abs_momentum_error",
+            "operator": "<=",
+            "limit": 1e-10,
+            "actual": 1.8962726262663198e-14,
+            "passed": true
+          }
+        ]
+      },
+      {
+        "id": "P0-10",
+        "requirement": "Higuera-Cary remains finite and bounded in the paper-inspired dt = 1/10 resonance-neighborhood scan.",
+        "passed": true,
+        "checks": [
+          {
+            "metric": "hc_resonance_all_finite",
+            "operator": "==",
+            "limit": true,
+            "actual": true,
+            "passed": true
+          },
+          {
+            "metric": "hc_resonance_max_abs_h_error",
+            "operator": "<=",
+            "limit": 0.05,
+            "actual": 0.002276888740010641,
+            "passed": true
+          }
+        ]
+      },
+      {
+        "id": "P0-11",
+        "requirement": "The paper-inspired dt = 1/10 scan resolves the expected Higuera-Cary versus Vay resonance-risk ordering.",
+        "passed": true,
+        "checks": [
+          {
+            "metric": "hc_minus_vay_resonance_max_abs_h_error",
+            "operator": "<",
+            "limit": 0.0,
+            "actual": -0.08303362485208954,
+            "passed": true
+          }
+        ]
+      },
+      {
+        "id": "P0-12",
+        "requirement": "All compared methods remain finite in the long-time uniform-B and crossed-field stress controls.",
+        "passed": true,
+        "checks": [
+          {
+            "metric": "all_long_time_stress_finite",
+            "operator": "==",
+            "limit": true,
+            "actual": true,
+            "passed": true
+          }
+        ]
+      },
+      {
+        "id": "P0-13",
+        "requirement": "Higuera-Cary remains finite, preserves gamma, and has bounded gyro-phase error in the uniform-B control.",
+        "passed": true,
+        "checks": [
+          {
+            "metric": "hc_uniform_b_finite",
+            "operator": "==",
+            "limit": true,
+            "actual": true,
+            "passed": true
+          },
+          {
+            "metric": "hc_uniform_b_max_rel_gamma_delta",
+            "operator": "<=",
+            "limit": 1e-12,
+            "actual": 1.811201292677658e-15,
+            "passed": true
+          },
+          {
+            "metric": "hc_uniform_b_endpoint_phase_error_radians",
+            "operator": "<=",
+            "limit": 0.003,
+            "actual": 0.002284001491163727,
+            "passed": true
+          }
+        ]
+      },
+      {
+        "id": "P0-14",
+        "requirement": "Higuera-Cary has bounded ordinary crossed-E/B drift error over the fixed long-window control.",
+        "passed": true,
+        "checks": [
+          {
+            "metric": "hc_crossed_eb_finite",
+            "operator": "==",
+            "limit": true,
+            "actual": true,
+            "passed": true
+          },
+          {
+            "metric": "hc_crossed_eb_average_velocity_error_vs_reference",
+            "operator": "<=",
+            "limit": 0.0005,
+            "actual": 0.00038356340601482334,
+            "passed": true
+          },
+          {
+            "metric": "hc_crossed_eb_average_velocity_error_vs_expected_drift",
+            "operator": "<=",
+            "limit": 0.0035,
+            "actual": 0.002851720221547568,
+            "passed": true
+          }
+        ]
+      },
+      {
+        "id": "P0-15",
+        "requirement": "Higuera-Cary remains finite with bounded endpoint phase, relative momentum, and gamma drift errors at gamma approximately 1000.",
+        "passed": true,
+        "checks": [
+          {
+            "metric": "hc_high_gamma_finite",
+            "operator": "==",
+            "limit": true,
+            "actual": true,
+            "passed": true
+          },
+          {
+            "metric": "hc_high_gamma_max_rel_gamma_delta",
+            "operator": "<=",
+            "limit": 1e-12,
+            "actual": 4.547471235129592e-16,
+            "passed": true
+          },
+          {
+            "metric": "hc_high_gamma_endpoint_phase_error_radians",
+            "operator": "<=",
+            "limit": 0.05,
+            "actual": 0.04054875030393133,
+            "passed": true
+          },
+          {
+            "metric": "hc_high_gamma_endpoint_relative_momentum_error_vs_reference",
+            "operator": "<=",
+            "limit": 0.05,
+            "actual": 0.04054597243181514,
+            "passed": true
+          }
+        ]
+      },
+      {
+        "id": "P0-16",
+        "requirement": "Higuera-Cary remains finite and bounded close to the crossed-field limit, and the bounded strong-rotation guard exercises the cancellation-resistant root branch.",
+        "passed": true,
+        "checks": [
+          {
+            "metric": "hc_near_exb_finite",
+            "operator": "==",
+            "limit": true,
+            "actual": true,
+            "passed": true
+          },
+          {
+            "metric": "hc_near_exb_max_rel_momentum_departure",
+            "operator": "<=",
+            "limit": 1e-12,
+            "actual": 7.850375460079695e-20,
+            "passed": true
+          },
+          {
+            "metric": "strong_rotation_cancellation_guard_finite",
+            "operator": "==",
+            "limit": true,
+            "actual": true,
+            "passed": true
+          },
+          {
+            "metric": "strong_rotation_guard_used_cancellation_resistant_branch",
+            "operator": "==",
+            "limit": true,
+            "actual": true,
+            "passed": true
+          }
+        ]
+      },
+      {
+        "id": "P0-17",
+        "requirement": "Higuera-Cary satisfies the exact discrete direct-work identity DeltaW = alpha*h*cE dot (w_n+w_np1)/(gamma_n+gamma_np1) in the bounded prescribed-field probe.",
+        "passed": true,
+        "checks": [
+          {
+            "metric": "hc_direct_work_all_finite",
+            "operator": "==",
+            "limit": true,
+            "actual": true,
+            "passed": true
+          },
+          {
+            "metric": "hc_direct_work_max_abs_single_step_identity_residual",
+            "operator": "<=",
+            "limit": 2e-15,
+            "actual": 5.941427905220564e-16,
+            "passed": true
+          },
+          {
+            "metric": "hc_direct_work_max_abs_accumulated_identity_residual",
+            "operator": "<=",
+            "limit": 2e-12,
+            "actual": 5.756506382681437e-14,
+            "passed": true
+          }
+        ]
+      }
+    ]
+  },
+  "observations": [
+    "All compared methods conserve uniform-B energy to roundoff in this prescribed-field experiment.",
+    "The equilibrium-cancellation case directly exposes the crossed-field limiting-solution difference discussed in the paper.",
+    "The convergence fit checks the expected second-order endpoint behavior against an independently integrated Lorentz ODE.",
+    "The finite-state stress includes a cancellation-resistant evaluation of the HC Eq. (20) positive root within bounded spike inputs.  Production helpers must own overflow-resistant scaled norms.",
+    "The exact discrete Higuera-Cary direct-work identity is checked separately from the trapezoid-work convergence diagnostic.",
+    "The Vay comparator is included directly from the primary source. Its Jacobian and resonance probes retain the bounded reason not to select it for the Phase 0 production path."
+  ],
+  "residual_limits": [
+    "This Phase 0 harness compares isolated momentum maps in prescribed constant fields; it does not validate AthenaK C++ integration.",
+    "The harness does not exercise field gather, position staggering, subcycling policy, AMR, MPI exchange, restart, or output formats.",
+    "Normalized units c = q/m = 1 are used.  A production integration must map AthenaK variable conventions and units explicitly.",
+    "The crossed-field drift position is trapezoid-integrated only as a diagnostic; it is not a proposed production position update.",
+    "The cancellation-resistant HC positive-root branch is exercised within bounded spike inputs.  Production helpers must own overflow-resistant scaled norms and broader floating-point extremes.",
+    "The Jacobian rows are finite-difference probes of isolated constant-field momentum maps, not a proof for a complete staggered phase-space integrator.",
+    "The sheared-field resonance scan is paper-inspired and bounded. It does not reproduce the full Poincare-section analysis.",
+    "The Vay implementation is an experimental Phase 0 comparator. Its inclusion does not authorize a production option.",
+    "Python timings are not representative of device kernels or production throughput."
+  ],
+  "transcript_path": "/Users/dbf75/.codex/worktrees/e354/athenak-DF/docs/source/modules/figures/cr_tracer_relativistic_acceleration/cr_relativistic_pusher_spike_transcript.txt"
+}

@@ -1,0 +1,17 @@
+2026-05-30 00:14:58,461 - INFO - Cleaning build directory
+2026-05-30 00:14:58,467 - INFO - Configuring CMake in /Users/dbf75/.codex/worktrees/e354/athenak-DF
+2026-05-30 00:14:58,467 - INFO - Executing command: cmake -B tst/build
+2026-05-30 00:14:59,666 - INFO - Executing command: make -j 16
+2026-05-30 00:15:26,402 - INFO - make completed in 26.74 seconds
+2026-05-30 00:15:26,402 - INFO - Build directory cleaned and project rebuilt
+2026-05-30 00:15:26,402 - INFO - Executing command: ln -s ../../inputs inputs
+============================= test session starts ==============================
+platform darwin -- Python 3.13.13, pytest-8.4.1, pluggy-1.6.0 -- /Users/dbf75/.uv/envs/interactive/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /Users/dbf75/.codex/worktrees/e354/athenak-DF/tst
+plugins: anyio-4.9.0, xdist-3.8.0, jaxtyping-0.3.7, cov-6.2.1, Faker-40.1.2
+collecting ... collected 1 item
+
+../../test_suite/particles/test_particles_cr_cpu.py::test_serial_drift_smoke_and_restart_cpu PASSED [100%]
+
+============================== 1 passed in 0.28s ===============================
