@@ -19,7 +19,7 @@
   },
   "registered_science_slices": [
     {
-      "authorization_id": "f1-clean-gyro-v1",
+      "authorization_id": "f1-clean-gyro-mpich-stderr-v2",
       "status": "authorized",
       "campaign": "f1_gpu_relativistic_gyro",
       "test_id": "pic_relativistic_gyro_paper",
@@ -35,15 +35,15 @@
       "input_deck_sha256": "994acc009bf7455d3666db44da2c8825b6124ce025a2e3547bef6e7c75992c8e",
       "environment_profile_sha256": "7ff6cff3e263e8b4552bcbac1d5b55a85264a2a7af5565bbc9856584e35402c1",
       "analysis_script_sha256": [
-        "ea995c6f7b7d8a7d333dff7411243e279ab8abc06246f0eb4ee4675665aa58f3",
-        "a24ac54490dee03d577ea15543021059a1f88d38a5ab743a2da00704a32cdf67"
+        "e9a5c93aea3e2cc288e07fc2adbc93ab22c49df74c1e83dfaf5cd694eced7d68",
+        "c5c77b6a952ed319498f08c91b9adc40101c090f91dc57d798dafdc455a38c01"
       ],
       "executable_sha256": "bea2a418faf582e0b7e8a2830494fa156ddddb18763dde21d344a4cba14a60d8",
       "launch_contract_sha256": "f63d539df5118ff0f9cec769fa656f4f34784dce54847a285aea48517e299a1f",
       "clean_candidate_manifest_sha256": "3174515d1578f0310e8ce4b0bf214050f8b4d95ff4af3c694b44eb466b7dff41"
     },
     {
-      "authorization_id": "f1-clean-paper-coupling-v1",
+      "authorization_id": "f1-clean-paper-coupling-mpich-stderr-v2",
       "status": "authorized",
       "campaign": "f1_gpu_paper_coupling",
       "test_id": "pic_paper_coupling_conservation",
@@ -59,8 +59,8 @@
       "input_deck_sha256": "d0dc2e23a2085c9ad54479240f3f65c4b28f6d565d8bf4279c9865b40d095fc5",
       "environment_profile_sha256": "7ff6cff3e263e8b4552bcbac1d5b55a85264a2a7af5565bbc9856584e35402c1",
       "analysis_script_sha256": [
-        "8f3c6bd4240f4ae3be2310061743e389c21ed5088b716fd98654cbbba95f2414",
-        "a24ac54490dee03d577ea15543021059a1f88d38a5ab743a2da00704a32cdf67"
+        "f9c23bddf0ad0ac991baced9ffc7cf94e9b9776993962f2ece042e41aec9556b",
+        "c5c77b6a952ed319498f08c91b9adc40101c090f91dc57d798dafdc455a38c01"
       ],
       "executable_sha256": "bea2a418faf582e0b7e8a2830494fa156ddddb18763dde21d344a4cba14a60d8",
       "launch_contract_sha256": "0daebd7708c642af2aae000a9a35c773599956e5e3273c4eb4124125fdd5a1e6",
@@ -74,8 +74,8 @@
     "status": "passed_user_authorized_orion_only_storage",
     "last_preflight_utc": "2026-05-30T21:55:42Z",
     "installed_control_plane_version": "6002c80e305d6cfd322675b3e27e17e169b1718d8edd722330464cccb0c4fd86",
-    "staged_control_plane_candidate_version": "6002c80e305d6cfd322675b3e27e17e169b1718d8edd722330464cccb0c4fd86",
-    "installed_control_plane_lifecycle": "paired_installed_reviewed_generation",
+    "staged_control_plane_candidate_version": "cbc6fb50937a728098d22cf9e8e11aa2baf421d5549378ef5f1833a65b294fd8",
+    "installed_control_plane_lifecycle": "live_active_generation_successor_staged_not_installed",
     "orion_simulation_root_preflight": {
       "status": "passed",
       "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC",

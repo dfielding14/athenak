@@ -18,6 +18,7 @@ from unittest.mock import patch
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
+from tst.publication import pic_qualification_manifest as qualification_manifest
 from tst.publication.pic_qualification_manifest import (
     RUNTIME_ENVIRONMENT_ALLOWLIST_KEYS,
     _load_object_bytes,
@@ -949,6 +950,102 @@ class PicQualificationManifestTests(unittest.TestCase):
                 detached_artifact_dir.rename(artifact_dir)
             recompute.side_effect = None
 
+            original_manifest = manifest_path.read_bytes()
+            for replacement in (original_manifest, b'{"changed":true}\n'):
+                with self.subTest(replaced_pre_submit_manifest=replacement):
+                    detached_manifest = manifest_path.with_name("manifest.detached")
+
+                    def replace_manifest(*_: object, **__: object) -> None:
+                        manifest_path.rename(detached_manifest)
+                        manifest_path.write_bytes(replacement)
+                        manifest_path.chmod(0o444)
+
+                    recompute.side_effect = replace_manifest
+                    try:
+                        with self.assertRaisesRegex(ValueError, "path changed"):
+                            _require_frontier_ledger_binding(
+                                {"resources": resources},
+                                candidate_sha256=candidate_sha256,
+                                control_plane_version=control_plane_version,
+                                authorized_pic_root=pic_root,
+                                authorized_project_home_root=project_home_root,
+                            )
+                    finally:
+                        manifest_path.unlink(missing_ok=True)
+                        detached_manifest.rename(manifest_path)
+                    recompute.side_effect = None
+
+            detached_transplanted_pic_root = self.root / "frontier-pic-transplanted-detached"
+
+            def transplant_pic_root(*_: object, **__: object) -> None:
+                pic_root.rename(detached_transplanted_pic_root)
+                pic_root.mkdir()
+                (detached_transplanted_pic_root / "runs").rename(pic_root / "runs")
+                (detached_transplanted_pic_root / "manifests").rename(
+                    pic_root / "manifests"
+                )
+
+            recompute.side_effect = transplant_pic_root
+            try:
+                with self.assertRaisesRegex(ValueError, "ancestry changed"):
+                    _require_frontier_ledger_binding(
+                        {"resources": resources},
+                        candidate_sha256=candidate_sha256,
+                        control_plane_version=control_plane_version,
+                        authorized_pic_root=pic_root,
+                        authorized_project_home_root=project_home_root,
+                    )
+            finally:
+                (pic_root / "runs").rename(detached_transplanted_pic_root / "runs")
+                (pic_root / "manifests").rename(
+                    detached_transplanted_pic_root / "manifests"
+                )
+                pic_root.rmdir()
+                detached_transplanted_pic_root.rename(pic_root)
+            recompute.side_effect = None
+
+            detached_pre_pin_pic_root = self.root / "frontier-pic-pre-pin-detached"
+            real_open_pinned = (
+                qualification_manifest._open_pinned_read_only_regular_file_at
+            )
+            transplanted = False
+
+            def transplant_pic_root_after_manifest_open(
+                *args: object, **kwargs: object
+            ) -> tuple[int, bytes]:
+                nonlocal transplanted
+                result = real_open_pinned(*args, **kwargs)
+                if (
+                    not transplanted
+                    and kwargs.get("label") == "Frontier pre-submit manifest"
+                ):
+                    pic_root.rename(detached_pre_pin_pic_root)
+                    pic_root.mkdir()
+                    for child in list(detached_pre_pin_pic_root.iterdir()):
+                        child.rename(pic_root / child.name)
+                    transplanted = True
+                return result
+
+            try:
+                with patch(
+                    "tst.publication.pic_qualification_manifest."
+                    "_open_pinned_read_only_regular_file_at",
+                    side_effect=transplant_pic_root_after_manifest_open,
+                ):
+                    with self.assertRaisesRegex(ValueError, "ancestry changed"):
+                        _require_frontier_ledger_binding(
+                            {"resources": resources},
+                            candidate_sha256=candidate_sha256,
+                            control_plane_version=control_plane_version,
+                            authorized_pic_root=pic_root,
+                            authorized_project_home_root=project_home_root,
+                        )
+            finally:
+                for child in list(pic_root.iterdir()):
+                    child.rename(detached_pre_pin_pic_root / child.name)
+                pic_root.rmdir()
+                detached_pre_pin_pic_root.rename(pic_root)
+
             runs_dir = pic_root / "runs"
             detached_runs_dir = pic_root / "runs-detached"
             runs_dir.rename(detached_runs_dir)
@@ -982,6 +1079,22 @@ class PicQualificationManifestTests(unittest.TestCase):
             finally:
                 snapshot_dir.unlink()
                 detached_snapshot_dir.rename(snapshot_dir)
+
+            detached_pic_root = self.root / "frontier-pic-detached"
+            pic_root.rename(detached_pic_root)
+            pic_root.symlink_to(detached_pic_root, target_is_directory=True)
+            try:
+                with self.assertRaises((OSError, ValueError)):
+                    _require_frontier_ledger_binding(
+                        {"resources": resources},
+                        candidate_sha256=candidate_sha256,
+                        control_plane_version=control_plane_version,
+                        authorized_pic_root=pic_root,
+                        authorized_project_home_root=project_home_root,
+                    )
+            finally:
+                pic_root.unlink()
+                detached_pic_root.rename(pic_root)
 
             _require_frontier_ledger_binding(
                 {"resources": resources},

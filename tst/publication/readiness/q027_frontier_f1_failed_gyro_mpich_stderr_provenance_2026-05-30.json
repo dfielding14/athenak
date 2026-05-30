@@ -1,0 +1,44 @@
+{
+  "record_type": "q027_frontier_f1_failed_gyro_mpich_stderr_provenance",
+  "schema_version": 1,
+  "date": "2026-05-30",
+  "gate": "Q-027",
+  "qualification_effect": "historical_failed_attempt_transcript_provenance_only",
+  "scope": "Bind the exact reviewed Cray MPICH informational stderr transcript from the immutable, reconciled but scientifically rejected first registered F1 gyro attempt to a locally reviewable regression fixture. This record does not qualify the failed attempt and does not authorize a retry by itself.",
+  "failed_attempt": {
+    "job_id": "4746123",
+    "submission_id": "7fbdd818-c3c8-4da3-9ce8-ba71a6446b16",
+    "reservation_id": "09244f9e-18c7-4a98-a218-7044418847fc",
+    "registered_science_authorization_id": "f1-clean-gyro-v1",
+    "pre_submit_manifest_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/manifests/f1_gpu_relativistic_gyro/7fbdd818-c3c8-4da3-9ce8-ba71a6446b16/pre_submit_manifest.json",
+    "pre_submit_manifest_sha256": "12ad6e9b4923763db0dd2e5961d18c01d0dd114d00a380a390bbb19609860ebe",
+    "run_artifact_dir": "/lustre/orion/ast207/proj-shared/dfielding/PIC/runs/f1_gpu_relativistic_gyro/7fbdd818-c3c8-4da3-9ce8-ba71a6446b16",
+    "run_artifact_dir_mode": "0555",
+    "artifact_inventory_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/runs/f1_gpu_relativistic_gyro/7fbdd818-c3c8-4da3-9ce8-ba71a6446b16/artifact_inventory.json",
+    "artifact_inventory_mode": "0444",
+    "artifact_inventory_sha256": "8ddb136b1cc5b6dfddea01f8257988820ac7c07fd47c13fb6faeea9643f13a76",
+    "stderr_inventory_entry": {
+      "path": "athena_stderr.txt",
+      "sha256": "fecd6e9635eb80d47efa65ec0789ad03c2ea1375ac96bfa9c801b3cbb7dc00ac",
+      "size": 6804
+    },
+    "stderr_mode": "0444"
+  },
+  "local_review_fixture": {
+    "path": "tst/publication/readiness/frontier_mpich_diagnostic_stderr.base64",
+    "encoding": "base64",
+    "encoded_file_sha256": "43d70274a4658a6dc1cf48afdd618d151125c4f1e30dfa267edd5c3f260cbc49",
+    "decoded_sha256": "fecd6e9635eb80d47efa65ec0789ad03c2ea1375ac96bfa9c801b3cbb7dc00ac",
+    "decoded_size": 6804,
+    "verified_byte_identical_to_live_immutable_stderr": true
+  },
+  "reviewed_validator_binding": {
+    "support_module": "tst/publication/frontier_f1_structured_artifacts.py",
+    "support_module_sha256": "c5c77b6a952ed319498f08c91b9adc40101c090f91dc57d798dafdc455a38c01",
+    "gyro_analyzer": "tst/publication/frontier_f1_gpu_relativistic_gyro_analysis.py",
+    "gyro_analyzer_sha256": "e9a5c93aea3e2cc288e07fc2adbc93ab22c49df74c1e83dfaf5cd694eced7d68",
+    "paper_coupling_analyzer": "tst/publication/frontier_f1_gpu_paper_coupling_analysis.py",
+    "paper_coupling_analyzer_sha256": "f9c23bddf0ad0ac991baced9ffc7cf94e9b9776993962f2ece042e41aec9556b"
+  },
+  "disposition": "pass_historical_transcript_bound_to_local_fixture_retry_requires_separate_v2_policy_activation"
+}

@@ -408,13 +408,27 @@ and emits one trusted GPU-launch preflight line before `exec`. After all actions
 and declarative post-actions complete, the trampoline freezes every launch
 artifact read-only, publishes a checksummed `artifact_inventory.json`, freezes
 the artifact root read-only, rejects empty artifact subtrees, and leaves only
-the original empty owner-only `analysis/` directory writable. The trampoline
-creates that directory under an unpredictable staging name, pins its descriptor,
-renames it into place and verifies that the published entry still names the
-pinned directory. It retains
-the artifact-root descriptor throughout launch, rechecks the lexical run path
-around execution and inventory publication, retains the original nested-directory
-identities through final publication, and rejects replacement while freezing.
+the original empty owner-only `analysis/` directory writable. Artifact-root,
+declared launch-directory and analysis-staging creation start below a stable
+account serialization anchor outside the replaceable `${PIC_ROOT}` name. Each
+new directory is created exclusively, inspected without following aliases and
+bound to the opened descriptor before use. The trampoline creates `analysis/`
+under an unpredictable staging name, pins its descriptor, renames it into place
+and verifies that the published entry still names the pinned directory. It
+retains the artifact-root descriptor throughout launch, rechecks the lexical
+run path around execution and inventory publication, retains every registered
+launch-directory identity through workload execution and final publication,
+captures workload-created descendant identities after each action and retains
+those observed identities through final publication. It rejects replacement
+while freezing, including substitution between pre-open metadata inspection
+and descriptor acquisition.
+Regular-file freeze applies the same pre-open identity binding before hashing.
+POSIX `mkdirat` does not return the created directory descriptor. Registered
+launch therefore requires same-account process isolation from directory
+creation until the first no-follow open and retained-ancestry binding complete.
+Workload-created descendants require the same isolation from their creation
+through the post-action recursive-capture handoff. After those observation
+boundaries, retained ancestry and identity checks reject later substitution.
 Offline F1 analysis retains one no-follow
 artifact-root descriptor for inventory load, exact tree-closure validation,
 every checksummed read and result publication. It rejects duplicate inventory
@@ -426,13 +440,18 @@ replacement. Invoke the snapshotted analyzer only through
 analyzer and support-module digests, the frozen inventory and the passing
 analysis result. Frontier qualification requires all three evidence digests
 beneath the ledger-bound run directory, verifies the snapshotted analyzer and
-support-module bytes, traverses `runs/`, `manifests/` and `snapshot/` below the
-trusted PIC root without following aliases, retains descriptors for the run
-tree, the inventory, result and receipt files, their directory ancestry and
-both source files, binds the exact inventory digest into the child, executes the
-analyzer through its inherited `/proc/self/fd` descriptor, and rejects run-root,
+support-module bytes, traverses the lexical PIC root plus `runs/`, `manifests/`
+and `snapshot/` below the stable account serialization anchor without following
+aliases, pins the pre-submit-manifest ancestry before reading it, retains that
+manifest descriptor plus descriptors for the run tree, the inventory, result
+and receipt files, their directory ancestry and both source files, binds the
+exact inventory digest into the child, executes the analyzer through its
+inherited `/proc/self/fd` descriptor, and rejects pre-submit-manifest, run-root,
 evidence-file, ancestry or source replacement around no-write recomputation
 before accepting the qualification manifest.
+The registered v2 analyzers reject Athena stderr unless it is byte-identical to
+the reviewed Cray MPICH informational transcript. Additional diagnostics,
+warnings or changed settings require a new reviewed authorization ID.
 The snapshotted environment profile must match that installed trusted profile:
 
 ```json
@@ -570,6 +589,18 @@ stronger storage trust boundary. Such a direct submission is outside the
 registered evidence path and must not be accepted as readiness evidence. The
 trusted path reduces accidental and ordinary caller-controlled bypasses; it is
 not a site security boundary against a malicious account holder.
+
+Before each `registered_science` pre-submit manifest is created and again
+immediately before its submission wrapper is invoked, archive and review the
+same-account process-isolation attestation defined by
+`../readiness/q027_frontier_registered_science_same_account_isolation_attestation_template_2026-05-30.json`.
+Capture the exact `ps`, `squeue`, pending-marker and mirrored-ledger snapshots
+listed by that template beneath
+`${PIC_ROOT}/operator_attestations/<timestamp>-<authorization-id>/`, add the
+reviewed `attestation.json`, sync the files and directory, then make that
+attestation tree read-only. Do not submit if another same-account process is
+authorized to mutate either PIC root throughout registered launch and
+publication until the frozen artifact inventory is durably published.
 
 Scientific qualification is a separate freeze step. A Frontier qualification
 manifest is accepted only when its candidate matches the live policy and its

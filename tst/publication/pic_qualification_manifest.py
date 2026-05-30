@@ -48,6 +48,8 @@ from control_plane_common import require_canonical_path_below  # noqa: E402
 from control_plane_common import require_ledger_paths  # noqa: E402
 from control_plane_common import require_same_directory  # noqa: E402
 from control_plane_common import require_storage_policy_unlock_snapshot  # noqa: E402
+from control_plane_common import PinnedDirectoryAncestry  # noqa: E402
+from control_plane_common import stable_serialization_anchor  # noqa: E402
 from control_plane_common import utc_datetime  # noqa: E402
 from control_plane_common import validate_clean_candidate_bundle  # noqa: E402
 from control_plane_common import verify_historical_installed_control_plane  # noqa: E402
@@ -687,21 +689,32 @@ def _require_frontier_completed_evidence_binding(
     ]:
         raise ValueError("Frontier pre-submit manifest has an unauthorized analyzer set")
     snapshot_analysis_dir = manifest_path.parent / "snapshot" / "analysis"
-    artifact_dir_fd = open_directory_below(artifact_dir, root=authorized_pic_root)
-    analysis_dir_fd = open_directory_below(
-        snapshot_analysis_dir, root=authorized_pic_root
+    trusted_pic_anchor = stable_serialization_anchor(authorized_pic_root)
+    artifact_dir_ancestry = PinnedDirectoryAncestry(
+        artifact_dir, root=trusted_pic_anchor
     )
+    try:
+        analysis_dir_ancestry = PinnedDirectoryAncestry(
+            snapshot_analysis_dir, root=trusted_pic_anchor
+        )
+    except BaseException:
+        artifact_dir_ancestry.close()
+        raise
+    artifact_dir_fd = artifact_dir_ancestry.descriptor
+    analysis_dir_fd = analysis_dir_ancestry.descriptor
     source_fds = []
     pinned_evidence = {}
     try:
         require_same_directory(
-            artifact_dir, artifact_dir_fd, root=authorized_pic_root
+            artifact_dir, artifact_dir_fd, root=trusted_pic_anchor
         )
+        artifact_dir_ancestry.require_same()
         require_same_directory(
             snapshot_analysis_dir,
             analysis_dir_fd,
-            root=authorized_pic_root,
+            root=trusted_pic_anchor,
         )
+        analysis_dir_ancestry.require_same()
         source_paths = []
         for record in analysis_scripts:
             source_path = require_canonical_path_below(
@@ -839,13 +852,15 @@ def _require_frontier_completed_evidence_binding(
             result_sha256=str(resources["analysis_result_sha256"]),
         )
         require_same_directory(
-            artifact_dir, artifact_dir_fd, root=authorized_pic_root
+            artifact_dir, artifact_dir_fd, root=trusted_pic_anchor
         )
+        artifact_dir_ancestry.require_same()
         require_same_directory(
             snapshot_analysis_dir,
             analysis_dir_fd,
-            root=authorized_pic_root,
+            root=trusted_pic_anchor,
         )
+        analysis_dir_ancestry.require_same()
         for record, source_path, descriptor in zip(
             analysis_scripts, source_paths, source_fds
         ):
@@ -872,8 +887,8 @@ def _require_frontier_completed_evidence_binding(
             _close_pinned_artifact(pinned)
         for descriptor in reversed(source_fds):
             os.close(descriptor)
-        os.close(analysis_dir_fd)
-        os.close(artifact_dir_fd)
+        analysis_dir_ancestry.close()
+        artifact_dir_ancestry.close()
 
 
 def _require_frontier_ledger_binding(
@@ -914,44 +929,68 @@ def _require_frontier_ledger_binding(
         Path(str(resources["pre_submit_manifest_path"])),
         authorized_pic_root / "manifests",
     )
-    manifest_bytes = read_stable_regular_file_below(
-        manifest_path,
-        authorized_pic_root / "manifests",
-        require_read_only_mode=True,
+    manifest_dir_ancestry = PinnedDirectoryAncestry(
+        manifest_path.parent,
+        root=stable_serialization_anchor(authorized_pic_root),
     )
-    manifest_sha256 = sha256_bytes(manifest_bytes)
-    if manifest_sha256 != resources["pre_submit_manifest_sha256"]:
-        raise ValueError("Frontier pre-submit manifest checksum mismatch")
-    pre_submit_manifest = read_json_bytes(
-        manifest_bytes, label="Frontier pre-submit manifest"
-    )
-    if (
-        pre_submit_manifest.get("registered_science_authorization_id")
-        != resources["registered_science_authorization_id"]
-    ):
-        raise ValueError(
-            "Frontier qualification authorization ID differs from pre-submit manifest"
+    manifest_fd: int | None = None
+    try:
+        manifest_dir_fd = manifest_dir_ancestry.descriptor
+        manifest_fd, manifest_bytes = _open_pinned_read_only_regular_file_at(
+            manifest_dir_fd,
+            manifest_path.name,
+            label="Frontier pre-submit manifest",
         )
-    artifact_dir = require_canonical_path_below(
-        Path(str(resources["run_artifact_dir"])),
-        authorized_pic_root / "runs",
-    )
-    if (
-        pre_submit_manifest.get("artifact_dir") != str(artifact_dir)
-        or pre_submit_manifest.get("submission_id") != resources["submission_id"]
-    ):
-        raise ValueError("Frontier qualification run directory differs from pre-submit binding")
-    _require_frontier_completed_evidence_binding(
-        resources,
-        pre_submit_manifest=pre_submit_manifest,
-        manifest_path=manifest_path,
-        manifest_sha256=manifest_sha256,
-        artifact_dir=artifact_dir,
-        candidate_sha256=candidate_sha256,
-        control_plane_version=control_plane_version,
-        authorized_pic_root=authorized_pic_root,
-        authorized_project_home_root=authorized_project_home_root,
-    )
+        manifest_sha256 = sha256_bytes(manifest_bytes)
+        if manifest_sha256 != resources["pre_submit_manifest_sha256"]:
+            raise ValueError("Frontier pre-submit manifest checksum mismatch")
+        pre_submit_manifest = read_json_bytes(
+            manifest_bytes, label="Frontier pre-submit manifest"
+        )
+        if (
+            pre_submit_manifest.get("registered_science_authorization_id")
+            != resources["registered_science_authorization_id"]
+        ):
+            raise ValueError(
+                "Frontier qualification authorization ID differs from pre-submit manifest"
+            )
+        artifact_dir = require_canonical_path_below(
+            Path(str(resources["run_artifact_dir"])),
+            authorized_pic_root / "runs",
+        )
+        if (
+            pre_submit_manifest.get("artifact_dir") != str(artifact_dir)
+            or pre_submit_manifest.get("submission_id") != resources["submission_id"]
+        ):
+            raise ValueError(
+                "Frontier qualification run directory differs from pre-submit binding"
+            )
+        _require_frontier_completed_evidence_binding(
+            resources,
+            pre_submit_manifest=pre_submit_manifest,
+            manifest_path=manifest_path,
+            manifest_sha256=manifest_sha256,
+            artifact_dir=artifact_dir,
+            candidate_sha256=candidate_sha256,
+            control_plane_version=control_plane_version,
+            authorized_pic_root=authorized_pic_root,
+            authorized_project_home_root=authorized_project_home_root,
+        )
+        manifest_dir_ancestry.require_same()
+        _require_pinned_regular_file_identity_at(
+            manifest_dir_fd,
+            manifest_path.name,
+            manifest_fd,
+            label="Frontier pre-submit manifest",
+        )
+        if sha256_bytes(
+            _descriptor_bytes(manifest_fd, label="Frontier pre-submit manifest")
+        ) != manifest_sha256:
+            raise ValueError("Frontier pre-submit manifest changed during recomputation")
+    finally:
+        if manifest_fd is not None:
+            os.close(manifest_fd)
+        manifest_dir_ancestry.close()
 
 
 def validate_qualification_manifest(

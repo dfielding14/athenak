@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import os
@@ -30,13 +31,44 @@ from frontier_f1_gpu_relativistic_gyro_analysis import parse_particle_vtk_bytes 
 from frontier_f1_gpu_relativistic_gyro_analysis import registered_particle_output
 from frontier_f1_gpu_relativistic_gyro_analysis import require_linked_library
 from frontier_f1_structured_artifacts import StructuredArtifactTree
+from frontier_f1_structured_artifacts import REVIEWED_FRONTIER_MPICH_DIAGNOSTIC_SHA256
 from frontier_f1_structured_artifacts import load_inventory
 from frontier_f1_structured_artifacts import read_inventory_bytes
 from frontier_f1_structured_artifacts import require_inventory_sha256
+from frontier_f1_structured_artifacts import validate_frontier_mpich_diagnostic_stderr
 from frontier_f1_structured_artifacts import write_result_exclusive
 
 
 class FrontierF1StructuredAnalysisTests(unittest.TestCase):
+    def test_mpich_stderr_accepts_only_exact_reviewed_transcript(self) -> None:
+        diagnostic = base64.b64decode(
+            (
+                PUBLICATION_DIR
+                / "readiness/frontier_mpich_diagnostic_stderr.base64"
+            ).read_bytes().replace(b"\n", b""),
+            validate=True,
+        ).decode("utf-8")
+        self.assertEqual(
+            hashlib.sha256(diagnostic.encode("utf-8")).hexdigest(),
+            REVIEWED_FRONTIER_MPICH_DIAGNOSTIC_SHA256,
+        )
+        validate_frontier_mpich_diagnostic_stderr(diagnostic)
+        for forged in (
+            diagnostic + "warning: runtime drift\n",
+            diagnostic + "PE 0:   MALICIOUS_DIAGNOSTIC = runtime drift accepted\n",
+            diagnostic.replace("CRAY MPICH version 8.1.31.9",
+                               "CRAY MPICH version 8.1.31.9 arbitrary suffix"),
+            diagnostic.replace("(CH4)\n", "(CH4) arbitrary suffix\n"),
+            diagnostic + "PE 0:   MPICH_GPU_SUPPORT_ENABLED                      = 1\n",
+            diagnostic.replace("MPICH_GPU_SUPPORT_ENABLED                      = 1",
+                               "MPICH_GPU_SUPPORT_ENABLED                      = 0"),
+            diagnostic.replace("MPI BUILD INFO : Wed", "MPI BUILD INFO : \nWed"),
+            "",
+        ):
+            with self.subTest(forged=forged):
+                with self.assertRaises(ValueError):
+                    validate_frontier_mpich_diagnostic_stderr(forged)
+
     def _values(self) -> dict[str, str]:
         return {
             **{key: "<unset>" for key in RUNTIME_ALLOWLIST_KEYS},

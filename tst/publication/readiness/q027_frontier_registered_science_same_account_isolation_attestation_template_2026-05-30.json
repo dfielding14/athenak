@@ -1,0 +1,33 @@
+{
+  "record_type": "q027_frontier_registered_science_same_account_isolation_attestation_template",
+  "schema_version": 1,
+  "date": "2026-05-30",
+  "gate": "Q-027",
+  "qualification_effect": "operational_gate_template_only",
+  "scope": "Archive one reviewed operator attestation immediately before each registered-science submission. POSIX mkdirat does not return a descriptor, so the control plane cannot enforce same-account process isolation from exclusive directory creation until no-follow descriptor and retained-ancestry binding complete. Workload-created descendants have a corresponding isolation interval through their post-action recursive-capture handoff. Retained descriptor and ancestry checks reject later substitution of observed identities. This template records the remaining operational prerequisite without representing it as an enforceable site security boundary.",
+  "archive_root": "/lustre/orion/ast207/proj-shared/dfielding/PIC/operator_attestations",
+  "required_before": [
+    "each registered_science pre-submit manifest creation",
+    "each registered_science submit_frontier_job.sh invocation"
+  ],
+  "required_fields": [
+    "schema_version",
+    "record_type",
+    "recorded_utc",
+    "registered_science_authorization_id",
+    "control_plane_version",
+    "same_account_process_snapshot",
+    "queue_snapshot",
+    "pending_submission_marker",
+    "mirrored_ledger_line_counts",
+    "operator_statement"
+  ],
+  "required_snapshot_commands": [
+    "ps -u \"$USER\" -o pid=,ppid=,state=,args=",
+    "squeue -u \"$USER\" -h -o '%i|%a|%P|%q|%T|%j|%k'",
+    "test -e \"${PIC_ROOT}/ledger/pending_submission.json\" && printf 'present\\n' || printf 'absent\\n'",
+    "wc -l \"${PIC_ROOT}/ledger/node_hours.jsonl\" \"${PIC_ROOT}/ledger/mirror_receipts.jsonl\" \"${PROJECT_HOME_MIRROR_ROOT}/ledger/node_hours.jsonl\""
+  ],
+  "operator_statement": "Reviewed same-account process snapshot immediately before registered submission; no competing process is authorized to mutate the PIC roots throughout registered launch and publication until the frozen artifact inventory is durably published.",
+  "status": "required_before_each_registered_science_submission"
+}

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import base64
 import copy
 import hashlib
 import json
@@ -236,9 +237,15 @@ class PicReadinessRegistryTests(unittest.TestCase):
         )
         lifecycle = storage["installed_control_plane_lifecycle"]
         if lifecycle == "live_active_generation_successor_staged_not_installed":
+            prior_active = f1_candidate.get("prior_active_policy_transition")
+            expected_active_version = (
+                prior_active["control_plane_version"]
+                if prior_active is not None
+                else candidate["active_successor"]["control_plane_version"]
+            )
             self.assertEqual(
                 storage["installed_control_plane_version"],
-                candidate["active_successor"]["control_plane_version"],
+                expected_active_version,
             )
             self.assertEqual(
                 storage["staged_control_plane_candidate_version"],
@@ -394,8 +401,8 @@ class PicReadinessRegistryTests(unittest.TestCase):
             for record in policy["registered_science_slices"]
         }
         sidecars = {
-            "f1-clean-gyro-v1": "frontier_f1_clean_gyro_launch_contract.json",
-            "f1-clean-paper-coupling-v1": (
+            "f1-clean-gyro-mpich-stderr-v2": "frontier_f1_clean_gyro_launch_contract.json",
+            "f1-clean-paper-coupling-mpich-stderr-v2": (
                 "frontier_f1_clean_paper_coupling_launch_contract.json"
             ),
         }
@@ -431,7 +438,7 @@ class PicReadinessRegistryTests(unittest.TestCase):
         clean_manifest = json.loads(clean_manifest_path.read_text(encoding="utf-8"))
         executable_path = Path(clean_manifest["build"]["executable_path"])
         binding_paths = {
-            "f1-clean-gyro-v1": {
+            "f1-clean-gyro-mpich-stderr-v2": {
                 "job_script_sha256": (
                     REPO_ROOT
                     / "tst/publication/frontier_f1_structured_gpu_relativistic_gyro_job.sh"
@@ -445,7 +452,7 @@ class PicReadinessRegistryTests(unittest.TestCase):
                     REPO_ROOT / "tst/publication/frontier_f1_structured_artifacts.py",
                 ],
             },
-            "f1-clean-paper-coupling-v1": {
+            "f1-clean-paper-coupling-mpich-stderr-v2": {
                 "job_script_sha256": (
                     REPO_ROOT
                     / "tst/publication/frontier_f1_structured_gpu_paper_coupling_job.sh"
@@ -521,6 +528,85 @@ class PicReadinessRegistryTests(unittest.TestCase):
                 self.assertEqual(
                     authorization["executable_sha256"], _sha256(executable_path)
                 )
+
+    def test_reviewed_mpich_stderr_fixture_matches_failed_attempt_provenance(self) -> None:
+        successor = _load(
+            "q027_frontier_f1_registered_science_successor_candidate_2026-05-30.json"
+        )
+        superseded = successor["superseded_registered_execution"]
+        provenance_path = (
+            REPO_ROOT
+            / superseded["reviewed_stderr_transcript_provenance"]
+        )
+        provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+        failed = provenance["failed_attempt"]
+        for key in (
+            "job_id",
+            "submission_id",
+            "reservation_id",
+            "registered_science_authorization_id",
+            "run_artifact_dir",
+        ):
+            self.assertEqual(failed[key], superseded[key])
+        manifest_path = Path(failed["pre_submit_manifest_path"])
+        artifact_root = Path(failed["run_artifact_dir"])
+        inventory_path = Path(failed["artifact_inventory_path"])
+        self.assertEqual(_sha256(manifest_path), failed["pre_submit_manifest_sha256"])
+        self.assertEqual(_sha256(inventory_path), failed["artifact_inventory_sha256"])
+        self.assertEqual(f"{artifact_root.stat().st_mode & 0o777:04o}", failed["run_artifact_dir_mode"])
+        self.assertEqual(f"{inventory_path.stat().st_mode & 0o777:04o}", failed["artifact_inventory_mode"])
+        fixture = provenance["local_review_fixture"]
+        fixture_path = REPO_ROOT / fixture["path"]
+        decoded = base64.b64decode(
+            fixture_path.read_bytes().replace(b"\n", b""),
+            validate=True,
+        )
+        stderr_entry = failed["stderr_inventory_entry"]
+        inventory = json.loads(inventory_path.read_text(encoding="utf-8"))
+        inventory_records = {
+            record["path"]: record for record in inventory["files"]
+        }
+        stderr_path = artifact_root / stderr_entry["path"]
+        self.assertEqual(_sha256(fixture_path), fixture["encoded_file_sha256"])
+        self.assertEqual(hashlib.sha256(decoded).hexdigest(), fixture["decoded_sha256"])
+        self.assertEqual(len(decoded), fixture["decoded_size"])
+        self.assertEqual(fixture["decoded_sha256"], stderr_entry["sha256"])
+        self.assertEqual(fixture["decoded_size"], stderr_entry["size"])
+        self.assertEqual(inventory_records[stderr_entry["path"]], stderr_entry)
+        self.assertEqual(stderr_path.read_bytes(), decoded)
+        self.assertEqual(f"{stderr_path.stat().st_mode & 0o777:04o}", failed["stderr_mode"])
+        self.assertTrue(fixture["verified_byte_identical_to_live_immutable_stderr"])
+        binding = provenance["reviewed_validator_binding"]
+        for key, relative in {
+            "support_module_sha256": "tst/publication/frontier_f1_structured_artifacts.py",
+            "gyro_analyzer_sha256": "tst/publication/frontier_f1_gpu_relativistic_gyro_analysis.py",
+            "paper_coupling_analyzer_sha256": "tst/publication/frontier_f1_gpu_paper_coupling_analysis.py",
+        }.items():
+            self.assertEqual(binding[key], _sha256(REPO_ROOT / relative))
+        self.assertEqual(
+            provenance["disposition"],
+            "pass_historical_transcript_bound_to_local_fixture_retry_requires_separate_v2_policy_activation",
+        )
+
+    def test_registered_science_same_account_isolation_attestation_template(self) -> None:
+        template = _load(
+            "q027_frontier_registered_science_same_account_isolation_attestation_template_2026-05-30.json"
+        )
+        self.assertEqual(
+            template["archive_root"],
+            "/lustre/orion/ast207/proj-shared/dfielding/PIC/operator_attestations",
+        )
+        self.assertEqual(
+            template["status"],
+            "required_before_each_registered_science_submission",
+        )
+        self.assertIn("same_account_process_snapshot", template["required_fields"])
+        self.assertIn("operator_statement", template["required_fields"])
+        self.assertIn(
+            "test -e \"${PIC_ROOT}/ledger/pending_submission.json\" "
+            "&& printf 'present\\n' || printf 'absent\\n'",
+            template["required_snapshot_commands"],
+        )
 
     def test_claim_classes_and_required_extensions(self) -> None:
         registry = _load("claims_registry.json")

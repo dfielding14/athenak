@@ -26,6 +26,7 @@ import launch_trampoline
 import reconcile_frontier_job
 import terminal_recovery_handoff
 from control_plane_common import atomic_write_bytes, durable_mkdir_parents
+from control_plane_common import PinnedDirectoryAncestry
 from control_plane_common import CONTROL_PLANE_FILES, inventory_digest, make_tree_read_only
 from control_plane_common import durable_replace_tree
 from control_plane_common import git_archive_commit_from_bytes
@@ -55,6 +56,7 @@ from initialize_frontier_ledger import initialize_from_policy
 from install_control_plane import install
 from launch_trampoline import _freeze_artifact_file_at
 from launch_trampoline import _freeze_artifact_tree_at
+from launch_trampoline import _capture_artifact_directory_identities_at
 from launch_trampoline import _publish_frozen_artifact_inventory, _TASK_LOCAL_EXEC, launch
 from ledger import accounting, genesis_anchor_paths, validate_primary_chain
 from promote_active_policy import _promotion_lock, promote
@@ -1856,6 +1858,92 @@ class SnapshotTests(unittest.TestCase):
         finally:
             os.close(root_fd)
 
+    def test_artifact_freeze_rejects_nested_directory_swap_before_open(self) -> None:
+        root = self.root / "artifact-freeze-before-open"
+        nested = root / "nested"
+        detached = root / "nested.detached"
+        nested.mkdir(parents=True)
+        (nested / "artifact.txt").write_text("original\n", encoding="utf-8")
+        root_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+        real_open = os.open
+        swapped = False
+
+        def open_with_replacement(*args: object, **kwargs: object) -> int:
+            nonlocal swapped
+            if not swapped and args[0] == "nested" and kwargs.get("dir_fd") == root_fd:
+                nested.rename(detached)
+                nested.mkdir()
+                (nested / "artifact.txt").write_text("replacement\n", encoding="utf-8")
+                swapped = True
+            return real_open(*args, **kwargs)
+
+        try:
+            with patch("launch_trampoline.os.open", side_effect=open_with_replacement):
+                with self.assertRaisesRegex(ValueError, "changed before freezing"):
+                    _freeze_artifact_tree_at(root_fd)
+        finally:
+            os.close(root_fd)
+
+    def test_artifact_freeze_rejects_regular_file_swap_before_open(self) -> None:
+        root = self.root / "artifact-freeze-file-before-open"
+        artifact = root / "artifact.txt"
+        detached = root / "artifact.detached"
+        root.mkdir()
+        artifact.write_text("original\n", encoding="utf-8")
+        root_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+        real_open = os.open
+        swapped = False
+
+        def open_with_replacement(*args: object, **kwargs: object) -> int:
+            nonlocal swapped
+            if not swapped and args[0] == artifact.name and kwargs.get("dir_fd") == root_fd:
+                artifact.rename(detached)
+                artifact.write_text("replacement\n", encoding="utf-8")
+                swapped = True
+            return real_open(*args, **kwargs)
+
+        try:
+            with patch("launch_trampoline.os.open", side_effect=open_with_replacement):
+                with self.assertRaisesRegex(ValueError, "changed before freezing"):
+                    _freeze_artifact_tree_at(root_fd)
+        finally:
+            os.close(root_fd)
+
+    def test_pinned_directory_ancestry_rejects_real_component_relocation(self) -> None:
+        anchor = self.root / "stable-anchor"
+        pic_root = anchor / "project" / "PIC"
+        leaf = pic_root / "runs" / "campaign"
+        leaf.mkdir(parents=True)
+        detached = anchor / "project" / "PIC.detached"
+        with PinnedDirectoryAncestry(leaf, root=anchor) as ancestry:
+            pic_root.rename(detached)
+            pic_root.mkdir()
+            (detached / "runs").rename(pic_root / "runs")
+            with self.assertRaisesRegex(ValueError, "ancestry changed"):
+                ancestry.require_same()
+
+    def test_artifact_freeze_rejects_workload_descendant_replacement_after_capture(
+        self,
+    ) -> None:
+        root = self.root / "artifact-freeze-workload-descendant"
+        nested = root / "output" / "nested"
+        nested.mkdir(parents=True)
+        (nested / "artifact.txt").write_text("original\n", encoding="utf-8")
+        root_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+        identities: dict[str, tuple[int, int]] = {}
+        try:
+            _capture_artifact_directory_identities_at(root_fd, identities)
+            nested.rename(root / "output" / "nested.detached")
+            nested.mkdir()
+            (nested / "artifact.txt").write_text("replacement\n", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "changed before freezing"):
+                _freeze_artifact_tree_at(
+                    root_fd,
+                    directory_identities=identities,
+                )
+        finally:
+            os.close(root_fd)
+
     def test_artifact_freeze_hashes_final_read_only_bytes(self) -> None:
         root = self.root / "artifact-freeze-final-bytes"
         root.mkdir()
@@ -1988,6 +2076,123 @@ class SnapshotTests(unittest.TestCase):
             with patch("launch_trampoline.os.rename", side_effect=rename_with_replacement):
                 with self.assertRaisesRegex(ValueError, "analysis directory changed"):
                     _publish_frozen_artifact_inventory(root_fd, root)
+        finally:
+            os.close(root_fd)
+
+    def test_artifact_inventory_rejects_analysis_staging_swap_before_open(self) -> None:
+        root = self.root / "artifact-freeze-analysis-staging-swap"
+        root.mkdir()
+        (root / "artifact.txt").write_text("verified\n", encoding="utf-8")
+        root_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+        real_open = os.open
+        swapped = False
+
+        def open_with_replacement(*args: object, **kwargs: object) -> int:
+            nonlocal swapped
+            name = args[0]
+            if (
+                not swapped
+                and isinstance(name, str)
+                and name.startswith(".analysis.staging-")
+                and kwargs.get("dir_fd") == root_fd
+            ):
+                staging = root / name
+                staging.rename(root / f"{name}.detached")
+                staging.mkdir(mode=0o700)
+                swapped = True
+            return real_open(*args, **kwargs)
+
+        try:
+            with patch("launch_trampoline.os.open", side_effect=open_with_replacement):
+                with self.assertRaisesRegex(ValueError, "changed between creation and open"):
+                    _publish_frozen_artifact_inventory(root_fd, root)
+        finally:
+            os.close(root_fd)
+
+    def test_artifact_root_rejects_swap_between_creation_and_open(self) -> None:
+        pic_root = self.root / "pic-root-create-open"
+        target = pic_root / "runs" / "campaign" / "submission"
+        target.parent.mkdir(parents=True)
+        detached = target.with_name("submission.detached")
+        real_open = os.open
+        swapped = False
+
+        def open_with_replacement(*args: object, **kwargs: object) -> int:
+            nonlocal swapped
+            if not swapped and args[0] == target.name and target.exists():
+                target.rename(detached)
+                target.mkdir()
+                swapped = True
+            return real_open(*args, **kwargs)
+
+        with patch("launch_trampoline.os.open", side_effect=open_with_replacement):
+            with self.assertRaisesRegex(ValueError, "changed between creation and open"):
+                launch_trampoline._create_artifact_directory(target, pic_root=pic_root)
+
+    def test_artifact_root_rejects_pic_root_relocation_after_open(self) -> None:
+        pic_root = self.root / "pic-root-after-open"
+        target = pic_root / "runs" / "campaign" / "submission"
+        target.parent.mkdir(parents=True)
+        detached = self.root / "pic-root-after-open.detached"
+        real_create = launch_trampoline._open_created_directory_at
+
+        def create_with_relocation(*args: object, **kwargs: object) -> int:
+            descriptor = real_create(*args, **kwargs)
+            pic_root.rename(detached)
+            pic_root.mkdir()
+            (detached / "runs").rename(pic_root / "runs")
+            return descriptor
+
+        with patch(
+            "launch_trampoline._open_created_directory_at",
+            side_effect=create_with_relocation,
+        ):
+            with self.assertRaisesRegex(ValueError, "ancestry changed"):
+                launch_trampoline._create_artifact_directory(target, pic_root=pic_root)
+
+    def test_launch_directory_rejects_swap_between_creation_and_open(self) -> None:
+        root = self.root / "launch-directory-create-open"
+        root.mkdir()
+        output = root / "output"
+        detached = root / "output.detached"
+        root_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+        real_open = os.open
+        swapped = False
+
+        def open_with_replacement(*args: object, **kwargs: object) -> int:
+            nonlocal swapped
+            if not swapped and args[0] == output.name and output.exists():
+                output.rename(detached)
+                output.mkdir()
+                swapped = True
+            return real_open(*args, **kwargs)
+
+        try:
+            with patch("launch_trampoline.os.open", side_effect=open_with_replacement):
+                with self.assertRaisesRegex(ValueError, "changed between creation and open"):
+                    launch_trampoline._mkdir_artifact_directory(
+                        root_fd, root, output, {}
+                    )
+        finally:
+            os.close(root_fd)
+
+    def test_launch_directory_rejects_replacement_after_retention(self) -> None:
+        root = self.root / "launch-directory-retained"
+        root.mkdir()
+        output = root / "output"
+        detached = root / "output.detached"
+        root_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+        identities: dict[str, tuple[int, int]] = {}
+        try:
+            launch_trampoline._mkdir_artifact_directory(
+                root_fd, root, output, identities
+            )
+            output.rename(detached)
+            output.mkdir()
+            with self.assertRaisesRegex(ValueError, "changed during execution"):
+                launch_trampoline._require_retained_artifact_directories_at(
+                    root_fd, root, identities
+                )
         finally:
             os.close(root_fd)
 

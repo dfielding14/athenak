@@ -41,6 +41,9 @@ load_inventory = _ARTIFACT_HELPERS.load_inventory
 offline_analysis_receipt = _ARTIFACT_HELPERS.offline_analysis_receipt
 read_inventory_bytes = _ARTIFACT_HELPERS.read_inventory_bytes
 require_inventory_sha256 = _ARTIFACT_HELPERS.require_inventory_sha256
+validate_frontier_mpich_diagnostic_stderr = (
+    _ARTIFACT_HELPERS.validate_frontier_mpich_diagnostic_stderr
+)
 write_result_exclusive = _ARTIFACT_HELPERS.write_result_exclusive
 
 
@@ -341,8 +344,7 @@ def _analyze_tree(artifact_tree: object) -> dict[str, object]:
     stderr = read_inventory_bytes(artifact_tree, inventory, "athena_stderr.txt").decode(
         "utf-8"
     )
-    if stderr:
-        raise ValueError("Athena stderr is not empty")
+    validate_frontier_mpich_diagnostic_stderr(stderr)
     if "physical_mode=paper_test_particle" not in stdout:
         raise ValueError("Missing paper_test_particle runtime identity")
     execution_context["gpu_launch"] = require_trusted_gpu_launch(stdout)

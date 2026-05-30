@@ -2253,7 +2253,7 @@ and measured values as work progresses.
 | Q-024 | Resilience aggregate report | Forced walltime, interrupted output, corrupt checkpoint, restart schema and bounded storage-failure tests; closes after Q-036 | Verifying: schema-6 hardening parity plus the schema-7 Q-016 provenance successor, canonical manifest binding, wrong-path, checksum, payload, selector, adaptive-state, star-potential and shock continuation-control guards pass; bounded serial-host schema mutation, short-write, seek-failure, `/dev/full`, interrupted-writer residue and soft-wallclock continuation-parity drills pass; per-rank MPI, node-loss, scheduler-pretimeout and Frontier-filesystem matrix remain open |
 | Q-025 | Portability aggregate report | Debug/Release, warnings, host memory checking, declared CPU/OpenMP/MPI scope and Frontier HIP/MPI matrix; closes after Q-038 | Verifying: host Debug/Release serial, Debug/Release MPI compile, Debug/Release OpenMP compile, OpenMP 1/2-thread byte-identity, warnings-enabled build, GNU ASan bounded run and UBSan checks pass; registered Frontier HIP/MPI build, one-rank parser/startup launch and dirty-candidate one-rank Release GPU gyro runtime pass after the device-capture portability fix; clean-candidate and rank-launched Athena MPI matrix remain open |
 | Q-026 | Archive integrity, licensing and sensitive-data handling | Pre-ingestion and pre-export classification, scrubbed submission artifacts, checksums, redistribution basis, manifest schema and fresh-directory restore drill | Verifying: paper source, bounded Entity snapshot and private 20-page rendered PDF checksums are frozen; Orion private-bundle restore drill passes; export review and the external disposition on Orion-only durability risk remain open |
-| Q-027 | Frontier QOS-selection and budget boundary | `debug`-preferred, `normal`-fallback selection is recorded and policy-compliant; serialized PIC submission ledger is complete; cumulative reserved-plus-consumed usage remains `<=10000` node-hours; expanded work remains blocked pending revised authorization and user permission | Verifying: mirrored ledger genesis event `849bf340` was initialized by predecessor snapshot `cde67c16`; registered F0 job `4744225` and F1 dirty-candidate GPU gyro job `4744232` remain historical bounded evidence; predecessor digests through outer-anchor `80c0797b`, MODULEPATH `c8002a1d`, source-alias `6cbbbbd6` and terminal-recovery `f2ad817a` are preserved as read-only chronology in their Q-027 sidecars. Source-alias successor `6cbbbbd6` passed paired install, independent reviews, exact clean freeze `31be2cd6`, mirrored authorization policy SHA `e8909bf5`, promotion SHA `3e7e8c7f` and narrow structured F0 policy SHA `1d525be1` with promotion SHA `2460cc0c`. Its first structured clean-candidate F0 retry produced held job `4745523`; account-spelling rejection cancelled it before execution and retained the pending marker until reviewed successor `f2ad817a` published immutable mirrored handoff `06392534` and reconciled zero node-hours. Its fresh F0 retry attached job `4745755`, then failed before Athena because the Frontier compute-node Project Home mount returned `OSError 524` for the login-side mirrored writer lock. Reviewed active successor `e8e47ead` retains those writer locks for login-side reads and mutation paths while using an authorized-root-traversed descriptor-pinned read-only compute snapshot; its 261-test control-plane suite, 76-test PIC publication suite, 5-test Frontier publication suite, 8-test readiness registry, static checks and three independent reviews pass. Mirrored policy SHA `cfe6610a` and promotion SHA `6d6bf1cd` are active. Fresh structured clean-candidate F0 job `4745842` completed and reconciled through that installed successor with parser analysis pass. All three ledger streams are coherent at 31 records; cumulative consumption remains `0.07833333333333331` node-hours with no active reservation. Applicable registered Frontier prerequisites remain open |
+| Q-027 | Frontier QOS-selection and budget boundary | `debug`-preferred, `normal`-fallback selection is recorded and policy-compliant; serialized PIC submission ledger is complete; cumulative reserved-plus-consumed usage remains `<=10000` node-hours; expanded work remains blocked pending revised authorization and user permission | Verifying: mirrored ledger genesis event `849bf340` and predecessor digests through compute-snapshot successor `e8e47ead` remain immutable chronology. Registered F0 job `4745842` passed and reconciled. Active retry predecessor `6002c80e` was paired-installed and promoted with policy SHA `ee3923fb` and promotion SHA `433d0afc`; bounded gyro attempt `4746123` completed but was scientifically rejected before result publication because the v1 analyzer required empty stderr while Frontier emitted reviewed Cray MPICH diagnostics. All three ledger streams are coherent at 34 records with cumulative consumption `0.08138888888888887` node-hours, no active reservation and no PIC pending marker. Staged successor `cbc6fb50` binds the exact reviewed transcript, retains ancestry across launch and qualification, rejects regular-file namespace substitution during freeze, and requires archived same-account process-isolation attestation before either v2 registered submission. Fresh exploit retest passes; clean commit curation, paired install, policy promotion, both v2 slices and external review remain open |
 | Q-028 | Independent Bell nonlinear comparisons | Non-Hall paper-mode campaign compared against Bai et al., Riquelme-Spitkovsky, Gargaté et al. and Zacharegkas et al. where regimes overlap: amplification, wavelength evolution, spectra, cavities, filaments, energy transfer and saturation time/mechanism | Blocked by Q-019/Q-022/Q-023 |
 | Q-029 | Hall-extension qualification | Separately named derived mode with linear/nonlinear Bell and shock-front tests. The authorized target requires an `implemented_and_qualified` outcome | Verifying: opt-in experimental CT source and host odd-in-`alpha_H` manufactured-source smoke pass; derived normalization, linear/nonlinear Bell, shock-front, GPU and decomposition qualification remain open |
 | Q-030 | Independent matched-code comparisons | Close explicit sub-gates Q-030-A Athena/Bai matched Bell-shock observables, Q-030-P PLUTO matched conservative coupling and Q-030-M MPI-AMRVAC overlapping AMR-shock observables, with frozen mappings, quantitative residuals and discrepancy reports | Blocked by Q-004/Q-009/Q-011/Q-019/Q-022/Q-023 |
@@ -2334,6 +2334,29 @@ promotion SHA `433d0afc` pass. The existing paired genesis anchors are
 preserved without append; this successor does not require another anchor
 migration. Both registered F1 executions remain pending.
 
+Registered gyro attempt `4746123` then completed and reconciled
+`0.0030555555555555557` node-hours, but scientific analysis rejected the
+immutable run before result publication: the required Frontier profile emits
+reviewed Cray MPICH version and environment diagnostics to stderr while the
+first analyzer required empty stderr. Preserve that run as unqualified
+chronology. Retry registrations bind the exact reviewed Cray MPICH
+informational transcript SHA-256, locally archive its immutable-inventory
+provenance in
+`q027_frontier_f1_failed_gyro_mpich_stderr_provenance_2026-05-30.json`, reject
+any stderr byte drift and rotate both one-attempt authorization IDs before
+retry promotion.
+
+Before retry promotion, an adjacent-path review staged successor `cbc6fb50`.
+It preserves the active `6002c80e` chronology, anchors launch and qualification
+below the site-owned serialization root, retains observed artifact-directory
+ancestry and workload-created directory identities through final publication,
+rejects regular-file namespace substitution during freeze, and explicitly
+records the irreducible same-account process-isolation
+prerequisite from `mkdirat` through no-follow descriptor and retained-ancestry
+binding, plus workload-created descendant isolation through the post-action
+recursive-capture handoff. Fresh exploit retest passes; clean commit curation,
+paired install and reviewed retry-policy promotion remain pending.
+
 ## Immediate Agent Handoff: First Actions
 
 Future implementation agents should execute the following successor sequence:
@@ -2374,11 +2397,18 @@ Future implementation agents should execute the following successor sequence:
    `c1be6cab`, identical paired-install inventory SHA `5144e836`, reviewed
    policy SHA `ee3923fb` and active promotion SHA `433d0afc`. The paired
    genesis anchors were preserved without append.
-7. After promotion, execute only `f1-clean-gyro-v1` and
-   `f1-clean-paper-coupling-v1`, serially. Reconcile each reservation, run the
-   snapshotted offline analyzer, freeze the immutable result and receipt, and
-   rerun qualification-time no-write recomputation before treating either slice
-   as evidence.
+7. Preserve freshly retested staged successor `cbc6fb50`, curate one clean commit,
+   paired-install it and promote the reviewed retry policy through that exact
+   installed runner. Before each v2 pre-submit manifest creation and again
+   immediately before each submit-wrapper invocation, archive and review the
+   same-account process-isolation attestation defined by
+   `q027_frontier_registered_science_same_account_isolation_attestation_template_2026-05-30.json`.
+   Then execute only
+   `f1-clean-gyro-mpich-stderr-v2` and
+   `f1-clean-paper-coupling-mpich-stderr-v2`, serially. Reconcile each
+   reservation, run the snapshotted offline analyzer, freeze the immutable
+   result and receipt, and rerun qualification-time no-write recomputation
+   before treating either slice as evidence.
 8. Close remaining local prerequisites: Q-009 broader-boundary, MPI, ASan and
    HIP stress slices after the bounded coupled Debug/UBSan pass,
    Q-016 MPI/HIP parity, Q-017 kernel telemetry, Q-018 immutable claim links,
@@ -2457,6 +2487,8 @@ Future implementation agents should execute the following successor sequence:
 | 2026-05-30 | Staged registered-F1 successor `140e9a29` with exact one-attempt clean-candidate gyro and paper-coupling slices, structured immutable artifact inventories, descriptor-pinned analyzer execution and qualification-time no-write recomputation; repaired fresh independent-review findings by retaining inventory/result/receipt descriptors plus ancestry across recomputation, rejecting every extra coupling file beneath `output/`, retaining launch-time nested-directory identities, keeping the original empty owner-only `analysis/` descriptor through final publication and scoping deterministic `umask 022` creation with restoration; added independent readiness-registry recomputation of the control-plane inventory and every staged slice binding; passed fresh independent launch-publication and qualification-domain exploit retests | Keep registered-science submissions paused until clean commit curation, paired immutable install, reviewed lifecycle update and active-policy promotion pass |
 | 2026-05-30 | Preserved paired immutable `140e9a29` as a never-promoted pre-activation install after an adjacent-path review found an `analysis/` mkdir/open substitution window, unbound empty structured subtrees and replaceable qualification traversal trust roots; staged repaired successor `6002c80e` with descriptor-pinned staging rename, empty-subtree rejection, trusted-PIC-root ancestry and focused regressions; passed fresh launch-publication and qualification-domain exploit retests | Keep live predecessor `e8e47ead` active and registered-science submissions paused until `6002c80e` passes clean commit curation, paired immutable install, reviewed lifecycle update and active-policy promotion |
 | 2026-05-30 | Curated registered-F1 successor `6002c80e` at commit `c1be6cab`, paired-installed identical immutable inventory SHA `5144e836`, preserved existing genesis anchors without append and promoted reviewed mirrored policy SHA `ee3923fb` with active-promotion SHA `433d0afc` after empty-queue and zero-reservation validation | Execute only registered slices `f1-clean-gyro-v1` and `f1-clean-paper-coupling-v1` serially; reconcile, analyze and qualify each before broader work |
+| 2026-05-30 | Reconciled registered gyro attempt `4746123` at `0.0030555555555555557` node-hours but rejected scientific result publication because required Cray MPICH display diagnostics populate stderr; staged exact reviewed-transcript SHA-256 validation in both F1 analyzers and rotated both one-attempt authorization IDs to `v2` | Preserve `4746123` as unqualified immutable chronology; promote the reviewed retry policy before submitting either `v2` slice |
+| 2026-05-30 | Staged adjacent-path retry successor `cbc6fb50`: anchored launch and qualification below the site-owned serialization root, retained observed directory ancestry and workload-created directory identities through final publication, retained the pre-submit manifest through qualification recomputation, rejected regular-file namespace substitution during freeze, recorded the irreducible same-account process-isolation prerequisite from `mkdirat` through no-follow descriptor and retained-ancestry binding plus post-action descendant capture, and passed fresh launch, qualification and exact-stderr exploit retests | Preserve active `6002c80e`; keep submissions paused until clean commit curation, paired immutable install and reviewed retry-policy promotion |
 
 ## Source Pointers For The Initial Review
 

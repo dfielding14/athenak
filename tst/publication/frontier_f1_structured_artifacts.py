@@ -13,6 +13,19 @@ import stat
 _DIRECTORY_FLAGS = os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0)
 _FILE_FLAGS = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
 TRUSTED_PYTHON = "/opt/cray/pe/python/3.11.7/bin/python3"
+REVIEWED_FRONTIER_MPICH_DIAGNOSTIC_SHA256 = (
+    "fecd6e9635eb80d47efa65ec0789ad03c2ea1375ac96bfa9c801b3cbb7dc00ac"
+)
+
+
+def validate_frontier_mpich_diagnostic_stderr(
+    stderr: str,
+    *,
+    expected_sha256: str = REVIEWED_FRONTIER_MPICH_DIAGNOSTIC_SHA256,
+) -> None:
+    """Accept only the exact reviewed Cray MPICH informational transcript."""
+    if hashlib.sha256(stderr.encode("utf-8")).hexdigest() != expected_sha256:
+        raise ValueError("Athena stderr differs from reviewed Cray MPICH diagnostics")
 
 
 def _parts(relative: str) -> tuple[str, ...]:

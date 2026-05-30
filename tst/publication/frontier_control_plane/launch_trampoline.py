@@ -22,9 +22,11 @@ from typing import Callable, Iterator
 import uuid
 
 from control_plane_common import AUTHORIZED_PIC_ROOT, AUTHORIZED_PROJECT_HOME_ROOT
-from control_plane_common import durable_mkdir_parents, open_directory_below
+from control_plane_common import durable_mkdir_parents
+from control_plane_common import PinnedDirectoryAncestry
 from control_plane_common import record_for_role, require_ledger_paths
 from control_plane_common import require_same_directory, validate_launch_contract
+from control_plane_common import stable_serialization_anchor
 from control_plane_common import verify_snapshot_files
 from validate_and_reserve_frontier_job import _require_run_artifact_dir
 from validate_and_reserve_frontier_job import executable_reservation_bound_manifest
@@ -167,11 +169,15 @@ class _PinnedSnapshot:
         self.root = Path(os.path.abspath(root))
         self.expected_sha256 = expected_sha256
         self.require_executable = require_executable
+        self.parent_ancestry: PinnedDirectoryAncestry | None = None
         self.parent_descriptor: int | None = None
         self.descriptor: int | None = None
 
     def __enter__(self) -> "_PinnedSnapshot":
-        self.parent_descriptor = open_directory_below(self.path.parent, root=self.root)
+        self.parent_ancestry = PinnedDirectoryAncestry(
+            self.path.parent, root=self.root
+        )
+        self.parent_descriptor = self.parent_ancestry.descriptor
         try:
             self.descriptor = os.open(
                 self.path.name,
@@ -196,16 +202,18 @@ class _PinnedSnapshot:
             raise
 
     def require_lexical_parent(self) -> None:
-        if self.parent_descriptor is None:
+        if self.parent_descriptor is None or self.parent_ancestry is None:
             raise ValueError("Pinned snapshot parent is not open")
         require_same_directory(self.path.parent, self.parent_descriptor, root=self.root)
+        self.parent_ancestry.require_same()
 
     def __exit__(self, *_: object) -> None:
         if self.descriptor is not None:
             os.close(self.descriptor)
             self.descriptor = None
-        if self.parent_descriptor is not None:
-            os.close(self.parent_descriptor)
+        if self.parent_ancestry is not None:
+            self.parent_ancestry.close()
+            self.parent_ancestry = None
             self.parent_descriptor = None
 
 
@@ -232,29 +240,71 @@ def _artifact_relative_parts(artifact_dir: Path, path: Path) -> tuple[str, ...]:
     return parts
 
 
+def _directory_identity(metadata: os.stat_result) -> tuple[int, int]:
+    return metadata.st_dev, metadata.st_ino
+
+
+def _open_created_directory_at(
+    parent_fd: int, name: str, *, mode: int, label: str
+) -> int:
+    # POSIX mkdirat does not return a descriptor. Same-UID process isolation is
+    # therefore an operational prerequisite until the first no-follow open.
+    try:
+        os.mkdir(name, mode=mode, dir_fd=parent_fd)
+    except FileExistsError as error:
+        raise ValueError(f"{label} already exists: {name}") from error
+    created = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+    descriptor = os.open(name, _DIRECTORY_OPEN_FLAGS, dir_fd=parent_fd)
+    try:
+        opened = os.fstat(descriptor)
+        if (
+            not stat.S_ISDIR(created.st_mode)
+            or not stat.S_ISDIR(opened.st_mode)
+            or _directory_identity(created) != _directory_identity(opened)
+        ):
+            raise ValueError(f"{label} changed between creation and open: {name}")
+        return descriptor
+    except BaseException:
+        os.close(descriptor)
+        raise
+
+
 def _open_artifact_directory(
     artifact_dir_fd: int,
     artifact_dir: Path,
     directory: Path,
     *,
     create: bool,
+    directory_identities: dict[str, tuple[int, int]] | None = None,
 ) -> int:
     descriptor = os.dup(artifact_dir_fd)
     try:
-        for part in _artifact_relative_parts(artifact_dir, directory):
+        for index, part in enumerate(_artifact_relative_parts(artifact_dir, directory)):
             created = False
             try:
                 child_descriptor = os.open(part, _DIRECTORY_OPEN_FLAGS, dir_fd=descriptor)
             except FileNotFoundError:
                 if not create:
                     raise
-                try:
-                    os.mkdir(part, mode=0o755, dir_fd=descriptor)
-                    created = True
-                except FileExistsError:
-                    pass
-                child_descriptor = os.open(part, _DIRECTORY_OPEN_FLAGS, dir_fd=descriptor)
+                child_descriptor = _open_created_directory_at(
+                    descriptor,
+                    part,
+                    mode=0o755,
+                    label="Launch artifact directory",
+                )
+                created = True
             try:
+                child = os.fstat(child_descriptor)
+                relative = "/".join(
+                    _artifact_relative_parts(artifact_dir, directory)[: index + 1]
+                )
+                identity = _directory_identity(child)
+                if directory_identities is not None:
+                    expected = directory_identities.setdefault(relative, identity)
+                    if expected != identity:
+                        raise ValueError(
+                            f"Launch artifact directory changed during execution: {relative}"
+                        )
                 if created:
                     os.fsync(child_descriptor)
                     os.fsync(descriptor)
@@ -270,12 +320,69 @@ def _open_artifact_directory(
 
 
 def _mkdir_artifact_directory(
-    artifact_dir_fd: int, artifact_dir: Path, directory: Path
+    artifact_dir_fd: int,
+    artifact_dir: Path,
+    directory: Path,
+    directory_identities: dict[str, tuple[int, int]],
 ) -> None:
     descriptor = _open_artifact_directory(
-        artifact_dir_fd, artifact_dir, directory, create=True
+        artifact_dir_fd,
+        artifact_dir,
+        directory,
+        create=True,
+        directory_identities=directory_identities,
     )
     os.close(descriptor)
+
+
+def _require_retained_artifact_directories_at(
+    artifact_dir_fd: int,
+    artifact_dir: Path,
+    directory_identities: dict[str, tuple[int, int]],
+) -> None:
+    for relative in sorted(directory_identities):
+        descriptor = _open_artifact_directory(
+            artifact_dir_fd,
+            artifact_dir,
+            artifact_dir.joinpath(*PurePosixPath(relative).parts),
+            create=False,
+            directory_identities=directory_identities,
+        )
+        os.close(descriptor)
+
+
+def _capture_artifact_directory_identities_at(
+    directory_fd: int,
+    directory_identities: dict[str, tuple[int, int]],
+    prefix: tuple[str, ...] = (),
+) -> None:
+    for name in sorted(os.listdir(directory_fd)):
+        if not prefix and name == "analysis":
+            continue
+        metadata = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+        if not stat.S_ISDIR(metadata.st_mode):
+            continue
+        relative = "/".join((*prefix, name))
+        child_fd = os.open(name, _DIRECTORY_OPEN_FLAGS, dir_fd=directory_fd)
+        try:
+            child = os.fstat(child_fd)
+            identity = _directory_identity(child)
+            if _directory_identity(metadata) != identity:
+                raise ValueError(
+                    f"Launch artifact directory changed during capture: {relative}"
+                )
+            expected = directory_identities.setdefault(relative, identity)
+            if expected != identity:
+                raise ValueError(
+                    f"Launch artifact directory changed during execution: {relative}"
+                )
+            _capture_artifact_directory_identities_at(
+                child_fd,
+                directory_identities,
+                (*prefix, name),
+            )
+        finally:
+            os.close(child_fd)
 
 
 def _open_artifact_file(
@@ -359,7 +466,11 @@ def _write_new_text_artifact(
 
 
 def _freeze_artifact_file_at(
-    directory_fd: int, name: str, relative: str
+    directory_fd: int,
+    name: str,
+    relative: str,
+    *,
+    expected_metadata: os.stat_result | None = None,
 ) -> dict[str, object]:
     descriptor = os.open(
         name,
@@ -368,6 +479,11 @@ def _freeze_artifact_file_at(
     )
     try:
         initial = os.fstat(descriptor)
+        if (
+            expected_metadata is not None
+            and _directory_identity(expected_metadata) != _directory_identity(initial)
+        ):
+            raise ValueError(f"Launch artifact changed before freezing: {relative}")
         if not stat.S_ISREG(initial.st_mode):
             raise ValueError(f"Launch artifact is not a regular file: {relative}")
         os.fchmod(descriptor, 0o444)
@@ -408,10 +524,22 @@ def _freeze_artifact_tree_at(
         relative = "/".join((*prefix, name))
         metadata = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
         if stat.S_ISREG(metadata.st_mode):
-            records.append(_freeze_artifact_file_at(directory_fd, name, relative))
+            records.append(
+                _freeze_artifact_file_at(
+                    directory_fd,
+                    name,
+                    relative,
+                    expected_metadata=metadata,
+                )
+            )
         elif stat.S_ISDIR(metadata.st_mode):
             child_fd = os.open(name, _DIRECTORY_OPEN_FLAGS, dir_fd=directory_fd)
             try:
+                child = os.fstat(child_fd)
+                if _directory_identity(metadata) != _directory_identity(child):
+                    raise ValueError(
+                        f"Launch artifact directory changed before freezing: {relative}"
+                    )
                 child_records = _freeze_artifact_tree_at(
                     child_fd,
                     (*prefix, name),
@@ -431,7 +559,12 @@ def _freeze_artifact_tree_at(
                         f"Launch artifact directory changed while freezing: {relative}"
                     )
                 if directory_identities is not None:
-                    directory_identities[relative] = (after.st_dev, after.st_ino)
+                    identity = (after.st_dev, after.st_ino)
+                    expected = directory_identities.setdefault(relative, identity)
+                    if expected != identity:
+                        raise ValueError(
+                            f"Launch artifact directory changed before freezing: {relative}"
+                        )
             finally:
                 os.close(child_fd)
         else:
@@ -554,10 +687,14 @@ def _publish_empty_analysis_directory_at(artifact_dir_fd: int) -> int:
     else:
         raise ValueError("Launch artifact analysis directory already exists")
     staging_name = f".analysis.staging-{uuid.uuid4()}"
-    os.mkdir(staging_name, mode=0o700, dir_fd=artifact_dir_fd)
     analysis_fd: int | None = None
     try:
-        analysis_fd = os.open(staging_name, _DIRECTORY_OPEN_FLAGS, dir_fd=artifact_dir_fd)
+        analysis_fd = _open_created_directory_at(
+            artifact_dir_fd,
+            staging_name,
+            mode=0o700,
+            label="Launch artifact staged analysis directory",
+        )
         os.fchmod(analysis_fd, 0o700)
         os.fsync(analysis_fd)
         before = os.fstat(analysis_fd)
@@ -592,16 +729,23 @@ def _publish_empty_analysis_directory_at(artifact_dir_fd: int) -> int:
         raise
 
 
-def _publish_frozen_artifact_inventory_at(artifact_dir_fd: int, artifact_dir: Path) -> None:
+def _publish_frozen_artifact_inventory_at(
+    artifact_dir_fd: int,
+    artifact_dir: Path,
+    *,
+    directory_identities: dict[str, tuple[int, int]] | None = None,
+) -> None:
     try:
         analysis_fd = _publish_empty_analysis_directory_at(artifact_dir_fd)
     except FileExistsError as error:
         raise ValueError("Launch artifact analysis directory already exists") from error
     try:
-        directory_identities: dict[str, tuple[int, int]] = {}
+        frozen_directory_identities = (
+            {} if directory_identities is None else dict(directory_identities)
+        )
         records = _freeze_artifact_tree_at(
             artifact_dir_fd,
-            directory_identities=directory_identities,
+            directory_identities=frozen_directory_identities,
         )
         _write_new_text_artifact(
             artifact_dir_fd,
@@ -628,16 +772,25 @@ def _publish_frozen_artifact_inventory_at(artifact_dir_fd: int, artifact_dir: Pa
         _verify_frozen_artifact_tree_at(
             artifact_dir_fd,
             records,
-            directory_identities,
+            frozen_directory_identities,
             analysis_fd,
         )
     finally:
         os.close(analysis_fd)
 
 
-def _publish_frozen_artifact_inventory(artifact_dir_fd: int, artifact_dir: Path) -> None:
+def _publish_frozen_artifact_inventory(
+    artifact_dir_fd: int,
+    artifact_dir: Path,
+    *,
+    directory_identities: dict[str, tuple[int, int]] | None = None,
+) -> None:
     with _deterministic_artifact_umask():
-        _publish_frozen_artifact_inventory_at(artifact_dir_fd, artifact_dir)
+        _publish_frozen_artifact_inventory_at(
+            artifact_dir_fd,
+            artifact_dir,
+            directory_identities=directory_identities,
+        )
 
 
 def _profile_environment() -> dict[str, str]:
@@ -648,29 +801,33 @@ def _profile_environment() -> dict[str, str]:
     }
 
 
-def _create_artifact_directory(artifact_dir: Path, *, pic_root: Path) -> int:
-    durable_mkdir_parents(artifact_dir.parent, root=pic_root)
-    parent_fd = open_directory_below(artifact_dir.parent, root=pic_root)
+def _create_artifact_directory(
+    artifact_dir: Path, *, pic_root: Path
+) -> tuple[int, PinnedDirectoryAncestry]:
+    trusted_anchor = stable_serialization_anchor(pic_root)
+    durable_mkdir_parents(artifact_dir.parent, root=trusted_anchor)
+    parent_ancestry = PinnedDirectoryAncestry(
+        artifact_dir.parent, root=trusted_anchor
+    )
+    parent_fd = parent_ancestry.descriptor
     child_fd: int | None = None
     try:
-        try:
-            os.mkdir(artifact_dir.name, mode=0o755, dir_fd=parent_fd)
-        except FileExistsError as error:
-            raise ValueError(f"Launch artifact directory already exists: {artifact_dir}") from error
-        child_fd = os.open(
+        child_fd = _open_created_directory_at(
+            parent_fd,
             artifact_dir.name,
-            os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0),
-            dir_fd=parent_fd,
+            mode=0o755,
+            label="Launch artifact directory",
         )
         os.fsync(child_fd)
         os.fsync(parent_fd)
-        return child_fd
+        parent_ancestry.require_same()
+        require_same_directory(artifact_dir, child_fd, root=trusted_anchor)
+        return child_fd, parent_ancestry
     except BaseException:
         if child_fd is not None:
             os.close(child_fd)
+        parent_ancestry.close()
         raise
-    finally:
-        os.close(parent_fd)
 
 
 def _require_read_only_regular_at(directory_descriptor: int, name: str) -> None:
@@ -699,13 +856,22 @@ def _launch_actions(
 ) -> None:
     contract = validate_launch_contract(manifest.get("launch_contract"))
     pic_root = Path(str(manifest["pic_root"]))
+    trusted_anchor = stable_serialization_anchor(pic_root)
     artifact_dir = _require_run_artifact_dir(manifest)
-    artifact_dir_fd = _create_artifact_directory(artifact_dir, pic_root=pic_root)
+    artifact_dir_fd, artifact_parent_ancestry = _create_artifact_directory(
+        artifact_dir, pic_root=pic_root
+    )
+    launch_directory_identities: dict[str, tuple[int, int]] = {}
+
+    def require_artifact_directory() -> None:
+        require_same_directory(artifact_dir, artifact_dir_fd, root=trusted_anchor)
+        artifact_parent_ancestry.require_same()
+
     try:
-        require_same_directory(artifact_dir, artifact_dir_fd, root=pic_root)
+        require_artifact_directory()
         _bounded_actions(contract["pre_actions"], manifest, artifact_dir, artifact_dir_fd)
         for action in contract["actions"]:
-            require_same_directory(artifact_dir, artifact_dir_fd, root=pic_root)
+            require_artifact_directory()
             executable.require_lexical_parent()
             input_deck.require_lexical_parent()
             resources = action["resources"]
@@ -735,7 +901,12 @@ def _launch_actions(
                     command.append(_INPUT_DECK_FD_TOKEN)
                 else:
                     directory = _artifact_path(artifact_dir, argument["artifact_directory"])
-                    _mkdir_artifact_directory(artifact_dir_fd, artifact_dir, directory)
+                    _mkdir_artifact_directory(
+                        artifact_dir_fd,
+                        artifact_dir,
+                        directory,
+                        launch_directory_identities,
+                    )
                     command.append(str(directory))
             stdout_path = _artifact_path(artifact_dir, action["stdout_artifact"])
             stderr_path = _artifact_path(artifact_dir, action["stderr_artifact"])
@@ -745,6 +916,9 @@ def _launch_actions(
             environment = _profile_environment()
             allowlist_fd: int | None = None
             try:
+                _require_retained_artifact_directories_at(
+                    artifact_dir_fd, artifact_dir, launch_directory_identities
+                )
                 allowlist_fd = _open_new_artifact(
                     artifact_dir_fd, artifact_dir, allowlist_path
                 )
@@ -770,21 +944,40 @@ def _launch_actions(
                             ),
                         )
                     finally:
-                        require_same_directory(artifact_dir, artifact_dir_fd, root=pic_root)
+                        require_artifact_directory()
+                        _capture_artifact_directory_identities_at(
+                            artifact_dir_fd, launch_directory_identities
+                        )
+                        _require_retained_artifact_directories_at(
+                            artifact_dir_fd, artifact_dir, launch_directory_identities
+                        )
                 executable.require_lexical_parent()
                 input_deck.require_lexical_parent()
             finally:
                 if allowlist_fd is not None:
                     os.close(allowlist_fd)
         _bounded_actions(contract["post_actions"], manifest, artifact_dir, artifact_dir_fd)
-        require_same_directory(artifact_dir, artifact_dir_fd, root=pic_root)
-        _publish_frozen_artifact_inventory(artifact_dir_fd, artifact_dir)
-        require_same_directory(artifact_dir, artifact_dir_fd, root=pic_root)
+        require_artifact_directory()
+        _require_retained_artifact_directories_at(
+            artifact_dir_fd, artifact_dir, launch_directory_identities
+        )
+        _capture_artifact_directory_identities_at(
+            artifact_dir_fd, launch_directory_identities
+        )
+        _publish_frozen_artifact_inventory(
+            artifact_dir_fd,
+            artifact_dir,
+            directory_identities=launch_directory_identities,
+        )
+        require_artifact_directory()
     finally:
         try:
-            require_same_directory(artifact_dir, artifact_dir_fd, root=pic_root)
+            require_artifact_directory()
         finally:
-            os.close(artifact_dir_fd)
+            try:
+                artifact_parent_ancestry.close()
+            finally:
+                os.close(artifact_dir_fd)
 
 
 def _bounded_actions(
@@ -848,6 +1041,7 @@ def launch(
     slurm_job_id = os.environ.get("SLURM_JOB_ID", "")
     if not re.fullmatch(r"[0-9]+", slurm_job_id):
         raise ValueError("Trampoline requires a live numeric SLURM_JOB_ID")
+    trusted_anchor = stable_serialization_anchor(authorized_pic_root)
     require_ledger_paths(
         ledger_jsonl,
         authorized_pic_root.resolve() / "ledger" / "node_hours.csv",
@@ -875,7 +1069,7 @@ def launch(
     for record in manifest["snapshot_files"]:
         with _PinnedSnapshot(
             Path(str(record["path"])),
-            root=authorized_pic_root,
+            root=trusted_anchor,
             expected_sha256=str(record["sha256"]),
         ):
             pass
@@ -900,13 +1094,15 @@ def launch(
     if declared and os.path.abspath(declared) != executable_path:
         raise ValueError("PIC_EXECUTABLE differs from verified executable snapshot")
     os.environ["PIC_EXECUTABLE"] = executable_path
-    control_plane_dir_fd = open_directory_below(
-        control_plane_dir, root=authorized_pic_root
+    control_plane_dir_ancestry = PinnedDirectoryAncestry(
+        control_plane_dir, root=trusted_anchor
     )
+    control_plane_dir_fd = control_plane_dir_ancestry.descriptor
     try:
         require_same_directory(
-            control_plane_dir, control_plane_dir_fd, root=authorized_pic_root
+            control_plane_dir, control_plane_dir_fd, root=trusted_anchor
         )
+        control_plane_dir_ancestry.require_same()
         _require_read_only_regular_at(
             control_plane_dir_fd, "launch_with_frontier_profile.sh"
         )
@@ -915,12 +1111,12 @@ def launch(
         )
         with _PinnedSnapshot(
             Path(executable_path),
-            root=authorized_pic_root,
+            root=trusted_anchor,
             expected_sha256=str(executable["sha256"]),
             require_executable=True,
         ) as pinned_executable, _PinnedSnapshot(
             Path(str(input_deck["path"])),
-            root=authorized_pic_root,
+            root=trusted_anchor,
             expected_sha256=str(input_deck["sha256"]),
         ) as pinned_input_deck:
             with _deterministic_artifact_umask():
@@ -934,10 +1130,11 @@ def launch(
                     runner=runner,
                 )
         require_same_directory(
-            control_plane_dir, control_plane_dir_fd, root=authorized_pic_root
+            control_plane_dir, control_plane_dir_fd, root=trusted_anchor
         )
+        control_plane_dir_ancestry.require_same()
     finally:
-        os.close(control_plane_dir_fd)
+        control_plane_dir_ancestry.close()
 
 
 def main() -> None:

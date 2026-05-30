@@ -1317,6 +1317,75 @@ def open_directory_below(path: Path, *, root: Path) -> int:
         os.close(parent_descriptor)
 
 
+class PinnedDirectoryAncestry:
+    """Retain and recheck every directory component below one stable anchor."""
+
+    def __init__(self, path: Path, *, root: Path) -> None:
+        self.path = Path(os.path.abspath(path))
+        self.root = Path(os.path.abspath(root))
+        try:
+            self.relative = self.path.relative_to(self.root)
+        except ValueError as error:
+            raise ValueError(
+                f"Directory path is outside trusted lexical root: {self.path}"
+            ) from error
+        self._descriptors: list[tuple[Path, int]] = []
+        flags = os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0)
+        descriptor = os.open(self.root, flags)
+        self._descriptors.append((self.root, descriptor))
+        try:
+            current = self.root
+            for part in self.relative.parts:
+                descriptor = os.open(part, flags, dir_fd=descriptor)
+                current /= part
+                self._descriptors.append((current, descriptor))
+            self.require_same()
+        except BaseException:
+            self.close()
+            raise
+
+    @property
+    def descriptor(self) -> int:
+        if not self._descriptors:
+            raise ValueError("Pinned directory ancestry is closed")
+        return self._descriptors[-1][1]
+
+    def __enter__(self) -> "PinnedDirectoryAncestry":
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        self.close()
+
+    def require_same(self) -> None:
+        if not self._descriptors:
+            raise ValueError("Pinned directory ancestry is closed")
+        flags = os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0)
+        lexical_descriptor = os.open(self.root, flags)
+        try:
+            for index, (_, expected_descriptor) in enumerate(self._descriptors):
+                expected = os.fstat(expected_descriptor)
+                actual = os.fstat(lexical_descriptor)
+                if (actual.st_dev, actual.st_ino) != (expected.st_dev, expected.st_ino):
+                    raise ValueError(
+                        f"Directory ancestry changed below trusted root: {self.path}"
+                    )
+                if index + 1 < len(self._descriptors):
+                    child_descriptor = os.open(
+                        self._descriptors[index + 1][0].name,
+                        flags,
+                        dir_fd=lexical_descriptor,
+                    )
+                    os.close(lexical_descriptor)
+                    lexical_descriptor = child_descriptor
+        finally:
+            os.close(lexical_descriptor)
+
+    def close(self) -> None:
+        for _, descriptor in reversed(self._descriptors):
+            os.close(descriptor)
+        self._descriptors.clear()
+
+
 def atomic_write_bytes(
     path: Path,
     data: bytes,

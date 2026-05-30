@@ -10,7 +10,7 @@
     "Q-038",
     "Q-042"
   ],
-  "qualification_effect": "local_registered_f1_successor_active_registered_execution_pending",
+  "qualification_effect": "local_registered_f1_successor_gyro_first_attempt_reconciled_retry_and_adjacent_path_successor_staged",
   "scope": "Staged successor chronology after the clean-candidate Frontier F0 admission closure. The candidate retains the completed F0 chronology and adds two exact one-attempt registered-science slices: a clean-candidate GPU relativistic-gyro oracle and a clean-candidate GPU paper-mode coupling oracle. The launch trampoline freezes an exact structured artifact tree and immutable inventory. Offline analyzers retain descriptor-pinned tree identity, validate exact inventory closure, publish one immutable result and receipt, and support qualification-time no-write recomputation from the snapshotted analyzer. Qualification retains descriptors for the immutable inventory, result and receipt plus their directory ancestry across recomputation and rechecks path identity and bytes afterward. This candidate does not claim Frontier F1 execution or scientific qualification.",
   "live_predecessor": {
     "record": "tst/publication/readiness/q027_frontier_f0_compute_snapshot_activation_2026-05-30.json",
@@ -22,53 +22,54 @@
     "active_reservations": 0
   },
   "staged_successor": {
-    "control_plane_version": "6002c80e305d6cfd322675b3e27e17e169b1718d8edd722330464cccb0c4fd86",
+    "control_plane_version": "cbc6fb50937a728098d22cf9e8e11aa2baf421d5549378ef5f1833a65b294fd8",
     "control_plane_inventory_files": 19,
-    "worktree_state": "clean_reviewed_commit_c1be6cabae1aed5df152d0033722ebb4a4616697",
-    "paired_install_status": "pass_identical_immutable_install",
-    "active_policy_promotion_status": "pass"
+    "worktree_state": "dirty_candidate_pending_clean_commit_curation",
+    "paired_install_status": "pending_clean_commit_and_paired_install",
+    "active_policy_promotion_status": "pending_paired_install"
   },
   "registered_science_slices": [
     {
-      "authorization_id": "f1-clean-gyro-v1",
+      "authorization_id": "f1-clean-gyro-mpich-stderr-v2",
       "campaign": "f1_gpu_relativistic_gyro",
       "maximum_nodes": 1,
       "maximum_walltime_seconds": 900,
       "maximum_attempts": 1,
-      "analysis_script_sha256": "ea995c6f7b7d8a7d333dff7411243e279ab8abc06246f0eb4ee4675665aa58f3",
-      "analysis_support_sha256": "a24ac54490dee03d577ea15543021059a1f88d38a5ab743a2da00704a32cdf67"
+      "analysis_script_sha256": "e9a5c93aea3e2cc288e07fc2adbc93ab22c49df74c1e83dfaf5cd694eced7d68",
+      "analysis_support_sha256": "c5c77b6a952ed319498f08c91b9adc40101c090f91dc57d798dafdc455a38c01"
     },
     {
-      "authorization_id": "f1-clean-paper-coupling-v1",
+      "authorization_id": "f1-clean-paper-coupling-mpich-stderr-v2",
       "campaign": "f1_gpu_paper_coupling",
       "maximum_nodes": 1,
       "maximum_walltime_seconds": 900,
       "maximum_attempts": 1,
-      "analysis_script_sha256": "8f3c6bd4240f4ae3be2310061743e389c21ed5088b716fd98654cbbba95f2414",
-      "analysis_support_sha256": "a24ac54490dee03d577ea15543021059a1f88d38a5ab743a2da00704a32cdf67"
+      "analysis_script_sha256": "f9c23bddf0ad0ac991baced9ffc7cf94e9b9776993962f2ece042e41aec9556b",
+      "analysis_support_sha256": "c5c77b6a952ed319498f08c91b9adc40101c090f91dc57d798dafdc455a38c01"
     }
   ],
   "closed_activation_blockers": [
     "registered-science reservations require an exact active-policy authorization ID and permit at most one ledger attempt per slice",
-    "the launch trampoline retains and rechecks one artifact-root descriptor, retains the original nested-directory identity map through final publication, rejects root substitution, byte-identical nested-directory replacement and empty artifact subtrees, freezes final read-only bytes, publishes one immutable inventory and revalidates exact final tree closure",
-    "the launch trampoline creates the owner-only analysis directory under an unpredictable staging name, pins its descriptor, renames it into place, verifies the published identity through final publication and offline analyzers require that exact owner-only analysis directory, retain one no-follow artifact-root descriptor and reject duplicate keys, noncanonical paths, checksum drift, unlisted files, nested-directory replacement, redirected analysis output and root substitution",
+    "the launch trampoline traverses from a stable account serialization anchor outside the replaceable PIC-root name, retains artifact-parent ancestry before creating the artifact root, creates the artifact root and every declared launch directory exclusively, requires same-account process isolation from mkdir until the first no-follow descriptor and retained-ancestry binding complete, captures workload-created descendant identities after each action under the same isolation prerequisite through the recursive-capture handoff, retains and rechecks every observed directory identity through final publication, rejects later root substitution, byte-identical nested-directory replacement and empty artifact subtrees, freezes final read-only bytes, publishes one immutable inventory and revalidates exact final tree closure",
+    "the launch trampoline creates the owner-only analysis directory under an unpredictable staging name with the same first-observation operational boundary, renames it into place, verifies the published identity through final publication and offline analyzers require that exact owner-only analysis directory, retain one no-follow artifact-root descriptor and reject duplicate keys, noncanonical paths, checksum drift, unlisted files, nested-directory replacement, redirected analysis output and root substitution",
     "the launch lifecycle scopes deterministic umask 022 artifact creation and restores the inherited process value after success or failure",
     "the gyro analyzer requires exactly the registered cycle-two particle VTK output and rejects wildcard output drift",
-    "qualification traverses runs/, manifests/ and snapshot/ below the trusted PIC root without following aliases, retains the run tree, immutable inventory, analysis result, offline receipt, their directory ancestry and snapshotted analyzer/helper descriptors, binds the immutable inventory digest into the child, executes the exact analyzer bytes through /proc/self/fd and rejects source, evidence-file or run-root replacement around no-write recomputation",
-    "the paper-mode coupling analyzer requires the exact registered cycle-zero through cycle-two output families for both coefficient cases and the structured artifact layer rejects every extra file or empty directory subtree beneath output/"
+    "qualification traverses the lexical PIC root, runs/, manifests/ and snapshot/ below a stable account serialization anchor without following aliases, pins the pre-submit-manifest ancestry before reading it, retains that manifest descriptor plus the run tree, immutable inventory, analysis result, offline receipt, their directory ancestry and snapshotted analyzer/helper descriptors, binds the immutable inventory digest into the child, executes the exact analyzer bytes through /proc/self/fd and rejects pre-submit-manifest, source, evidence-file, run-root or PIC-root replacement around no-write recomputation",
+    "the paper-mode coupling analyzer requires the exact registered cycle-zero through cycle-two output families for both coefficient cases and the structured artifact layer rejects every extra file or empty directory subtree beneath output/",
+    "the v2 analyzers accept Athena stderr only when it is byte-identical to the reviewed Cray MPICH informational transcript and reject additional diagnostics, warnings or setting drift"
   ],
   "local_validation": {
     "control_plane_discovery_tests": {
       "status": "pass",
-      "tests_run": 285
+      "tests_run": 294
     },
     "publication_standalone_tests": {
       "status": "pass",
-      "tests_run": 102
+      "tests_run": 105
     },
     "focused_frontier_chain_tests": {
       "status": "pass",
-      "tests_run": 39,
+      "tests_run": 40,
       "command": "python3 -m unittest tst.publication.test_frontier_f1_structured_analysis tst.publication.test_pic_qualification_manifest"
     },
     "registered_science_concurrency_regression": {
@@ -78,7 +79,7 @@
     },
     "readiness_registry_tests": {
       "status": "pass",
-      "tests_run": 10,
+      "tests_run": 12,
       "command": "python3 -m unittest tst.publication.test_pic_readiness_registry"
     },
     "control_plane_discovery_command": "python3 -m unittest discover -s tst/publication/frontier_control_plane -p 'test_*.py'",
@@ -101,8 +102,8 @@
     }
   },
   "independent_review": {
-    "status": "pass_exact_staged_successor_fresh_exploit_retest",
-    "review_scope": "structured artifact freeze, exact inventory closure, root and directory substitution, analyzer source binding, immutable result and receipt binding, qualification-time no-write recomputation, registered output-set closure and adversarial regressions",
+    "status": "pass_exact_cbc6fb50_fresh_exploit_retest",
+    "review_scope": "stable PIC-root ancestry, explicit same-account isolation prerequisite through first descriptor and retained-ancestry binding plus post-action descendant capture, retained post-observation launch-directory identities, structured artifact freeze, exact inventory closure, analyzer source binding, immutable result and receipt binding, qualification-time no-write recomputation, exact reviewed Cray MPICH stderr binding, registered output-set closure and adversarial regressions",
     "addressed_findings": [
       "retain and recheck immutable inventory, result and receipt descriptors plus ancestry across qualification-time recomputation",
       "reject extra paper-mode coupling files anywhere beneath output/",
@@ -111,7 +112,13 @@
       "normalize and restore the inherited umask around launch artifact creation so artifact-root, output, immutable-inventory and owner-only analysis-directory modes do not depend on ambient process state",
       "publish analysis through a descriptor-pinned staged directory rename and reject substitution between rename and final identity verification",
       "reject empty structured artifact subtrees so directory identity closure cannot contain unbound directories",
-      "anchor qualification traversal at the trusted PIC root so replaceable runs/ and manifest snapshot/ components cannot become trust roots"
+      "anchor qualification traversal at the trusted PIC root so replaceable runs/ and manifest snapshot/ components cannot become trust roots",
+      "derive a stable account serialization anchor outside the replaceable PIC-root name for launch and qualification traversal",
+      "document the irreducible mkdir-to-first-open-and-ancestry-binding same-account isolation prerequisite and retain no-follow artifact-root, launch-directory and analysis-staging descriptors after their observation boundaries",
+      "retain declared launch-directory identities through workload execution, capture workload-created descendants after each action under the same isolation prerequisite and retain those observed identities through final publication",
+      "pin pre-submit-manifest ancestry before reading it and retain the immutable manifest descriptor across qualification-time no-write recomputation",
+      "bind each regular-file tree entry inspected before freeze to the no-follow opened descriptor and reject namespace replacement before hashing",
+      "bind v2 Athena stderr acceptance to the exact reviewed Cray MPICH informational transcript digest"
     ],
     "prior_fresh_retest_for_superseded_140e9a29": [
       "launch-publication reviewer reproduced and closed nested-directory replacement, analysis-directory replacement, unsafe analysis mode, late-file insertion, final-byte binding and inherited-umask restoration probes",
@@ -120,6 +127,11 @@
     "fresh_retest_for_6002c80e": [
       "launch-publication reviewer independently rejected pre-rename staging substitution, post-rename analysis-directory replacement, late nested replacement, late analysis replacement, late unlisted insertion and empty subtrees; confirmed inherited-umask restoration after success and each rejection",
       "qualification-domain reviewer independently rejected runs symlink ancestry, manifest snapshot symlink ancestry and nested empty subtrees; recomputed the exact 19-file inventory and all staged slice bindings; confirmed restrictive-umask publication modes and no staging leftovers"
+    ],
+    "fresh_retest_for_cbc6fb50": [
+      "launch-publication reviewer recomputed the exact 19-file inventory, rejected artifact-parent and PIC-root relocation after artifact-root open, snapshot ancestry transplant, byte-identical nested replacement, analysis-directory replacement and regular-file metadata/open namespace substitution, confirmed inherited-umask restoration and accepted the explicit same-account isolation prerequisite through durable frozen-inventory publication",
+      "qualification-domain reviewer rejected byte-identical and changed-byte pre-submit-manifest replacement, PIC-root recreation immediately after manifest capture and PIC-root recreation with transplanted leaves during recomputation; confirmed the corrected ledger/pending_submission.json attestation probe and exact regression",
+      "stderr-provenance reviewer confirmed the immutable failed-run inventory, local fixture encoded and decoded digests, exact production-default validator, v2 analyzer bindings and altered-transcript rejection probes"
     ]
   },
   "superseded_pre_activation_install": {
@@ -131,7 +143,7 @@
     "project_home_inventory_sha256": "7a5988c84cdd3ce309045c8149b09f26f61dd227fc73d2e3226b7bc11e5dcb40",
     "reason": "Superseded before promotion after an adjacent-path review added staged analysis-directory publication, empty-subtree rejection and trusted-root qualification ancestry."
   },
-  "paired_install_transition": {
+  "prior_paired_install_transition": {
     "status": "pass_active_policy_promotion_pending",
     "installed_utc": "2026-05-30T21:55:42Z",
     "control_plane_version": "6002c80e305d6cfd322675b3e27e17e169b1718d8edd722330464cccb0c4fd86",
@@ -148,7 +160,7 @@
     "active_reservations": 0,
     "pending_submission_marker": "absent"
   },
-  "active_policy_transition": {
+  "prior_active_policy_transition": {
     "status": "pass",
     "validated_utc": "2026-05-30T21:56:38Z",
     "control_plane_version": "6002c80e305d6cfd322675b3e27e17e169b1718d8edd722330464cccb0c4fd86",
@@ -162,8 +174,44 @@
     "active_reservations": 0,
     "pending_submission_marker": "absent"
   },
+  "retry_live_predecessor": {
+    "control_plane_version": "6002c80e305d6cfd322675b3e27e17e169b1718d8edd722330464cccb0c4fd86",
+    "policy_sha256": "ee3923fb678d0bba692a9c3ceaf653e96984afe0bbe5632f761006b36bec92de",
+    "promotion_sha256": "433d0afcb65af36932217fe51f619119b6c95e0f6832d6ac99f6168e8d00241b",
+    "ledger_records": 34,
+    "cumulative_consumed_node_hours": 0.08138888888888887,
+    "active_reservations": 0
+  },
+  "paired_install_transition": {
+    "status": "pending_clean_commit_and_paired_install"
+  },
+  "superseded_registered_execution": {
+    "status": "reconciled_scheduler_pass_scientific_analysis_rejected_retry_registration_required",
+    "submission_id": "7fbdd818-c3c8-4da3-9ce8-ba71a6446b16",
+    "reservation_id": "09244f9e-18c7-4a98-a218-7044418847fc",
+    "job_id": "4746123",
+    "registered_science_authorization_id": "f1-clean-gyro-v1",
+    "run_artifact_dir": "/lustre/orion/ast207/proj-shared/dfielding/PIC/runs/f1_gpu_relativistic_gyro/7fbdd818-c3c8-4da3-9ce8-ba71a6446b16",
+    "scheduler_state": "COMPLETED",
+    "elapsed_seconds": 11,
+    "consumed_node_hours": 0.0030555555555555557,
+    "cumulative_consumed_node_hours": 0.08138888888888887,
+    "analysis_status": "rejected_before_result_publication",
+    "analysis_rejection": "The required Frontier profile sets MPICH_ENV_DISPLAY=1 and MPICH_VERSION_DISPLAY=1, so Cray MPICH informational diagnostics populate Athena stderr. The v1 analyzer incorrectly required empty stderr.",
+    "reviewed_stderr_transcript_provenance": "tst/publication/readiness/q027_frontier_f1_failed_gyro_mpich_stderr_provenance_2026-05-30.json",
+    "immutable_analysis_directory": "empty",
+    "remediation": "Register v2 one-attempt slices bound to analyzers that accept only the exact reviewed Cray MPICH informational transcript SHA-256 and reject any byte drift."
+  },
+  "registered_retry_policy_transition": {
+    "status": "pending_successor_review_commit_paired_install_and_active_policy_promotion",
+    "predecessor_policy_sha256": "ee3923fb678d0bba692a9c3ceaf653e96984afe0bbe5632f761006b36bec92de",
+    "predecessor_promotion_sha256": "433d0afcb65af36932217fe51f619119b6c95e0f6832d6ac99f6168e8d00241b",
+    "reason": "Rotate one-attempt authorization IDs and bind the exact reviewed Cray MPICH informational stderr transcript SHA-256 before retry submission."
+  },
   "open_boundaries": [
-    "the two registered Frontier F1 slices have not executed",
+    "clean commit curation, paired install and reviewed policy promotion for staged successor cbc6fb50 are pending",
+    "archive one reviewed same-account process-isolation attestation from tst/publication/readiness/q027_frontier_registered_science_same_account_isolation_attestation_template_2026-05-30.json immediately before each v2 registered-science submission",
+    "the v2 registered Frontier F1 slices have not executed",
     "external reviewer disposition remains pending external review"
   ],
   "overall_disposition": "local_registered_f1_successor_candidate_only_keep_registered_science_submissions_paused"
