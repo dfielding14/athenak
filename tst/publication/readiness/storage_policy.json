@@ -12,7 +12,9 @@
     "maximum_node_hours": 10000
   },
   "science_submission_freeze": {
-    "status": "pending_clean_candidate_freeze"
+    "status": "authorized",
+    "manifest_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/clean_candidates/31be2cd6-19db-4246-9857-06fc2f523c19/clean_candidate_manifest.json",
+    "manifest_sha256": "3174515d1578f0310e8ce4b0bf214050f8b4d95ff4af3c694b44eb466b7dff41"
   },
   "frontier_admission_smoke": {
     "status": "pending_exact_executable_binding"

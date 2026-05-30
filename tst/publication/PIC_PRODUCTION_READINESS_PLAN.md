@@ -2282,7 +2282,9 @@ writer authorization boundary, rejects arbitrary generated-checkout aliases
 including the zero-submodule case and passes 217 control-plane tests, 293
 publication tests, static checks, the actual clean pinned `kokkos` probe and
 two independent reviews. Paired immutable install, idempotent anchor migration
-and coherent policy promotion pass; the exact clean-candidate freeze remains
+and coherent policy promotion pass. Exact clean build-profile publication and
+immutable clean-candidate freeze `31be2cd6` pass with source bundle `e11dc8fb`
+and executable `bea2a418`; applicable registered-science prerequisites remain
 open.
 
 ## Immediate Agent Handoff: First Actions
@@ -2305,7 +2307,9 @@ Future implementation agents should execute the following successor sequence:
    rejected the authenticated `/ccs/home/...` source alias before artifact
    creation. Active reviewed successor `6cbbbbd6` from operational commit
    `5f1458e3` is paired-installed and promoted with its existing-genesis anchor
-   migration complete. Rerun the exact clean build and freeze.
+   migration complete. Its exact clean build and immutable freeze `31be2cd6`
+   pass; preserve that freeze while closing applicable registered-science
+   prerequisites.
 5. Curate a clean source commit series, remove or classify generated guard
    outputs and freeze the exact clean candidate and executable digest.
 6. Close remaining local prerequisites: Q-009 broader-boundary, MPI, ASan and
@@ -2377,6 +2381,7 @@ Future implementation agents should execute the following successor sequence:
 | 2026-05-30 | Activated runtime-hardening snapshot `c8002a1d`: paired immutable Orion and Project Home install, idempotent existing-genesis anchor migration, coherent policy SHA `46bac279` promotion and post-promotion validation pass while all three ledger streams remain at 22 records | Keep science submissions paused until the exact clean-candidate build and freeze plus applicable prerequisites close |
 | 2026-05-30 | Preserved live `c8002a1d` after its exact clean build-profile retry rejected clean initialized `kokkos` because the authorized `/ccs/home/...` source mount alias was compared directly with its resolved `/autofs/...` path before artifact creation; staged source-alias hardening digest `6cbbbbd6` normalizes only after exact lexical authentication, preserves the second writer authorization handoff, rejects arbitrary checkout aliases including zero-submodule roots and passes its 217-test control-plane suite, 293-test publication discovery, static checks, actual-worktree probe and two independent reviews | Keep science submissions paused until paired successor install, active-policy promotion and exact clean-candidate freeze |
 | 2026-05-30 | Activated source-alias hardening snapshot `6cbbbbd6`: paired immutable Orion and Project Home install, idempotent existing-genesis anchor migration, coherent policy SHA `6533172b` promotion and post-promotion validation pass while all three ledger streams remain at 22 records | Keep science submissions paused until the exact clean-candidate build and freeze plus applicable prerequisites close |
+| 2026-05-30 | Passed exact clean HIP/MPI build-profile publication and immutable clean-candidate freeze `31be2cd6` through live `6cbbbbd6`: archived clean source commit `4cceb5d4`, tree `933f2e3a`, pinned `kokkos`, source bundle `e11dc8fb`, build profile `353412be`, receipt `f6a9ac20` and executable `bea2a418` | Authorize only this exact clean freeze in the reviewed policy while keeping registered science submissions paused until their applicable prerequisites close |
 
 ## Source Pointers For The Initial Review
 

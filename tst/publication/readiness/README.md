@@ -118,7 +118,9 @@ qualify any scientific claim by itself.
   authentication, preserves that spelling for the second writer boundary,
   keeps generated checkout and submodule aliases fail closed, and passes two
   independent reviews. Paired immutable install and idempotent anchor migration
-  plus coherent policy promotion pass. Science freeze remains pending.
+  plus coherent policy promotion pass. Exact clean-candidate build and freeze
+  `31be2cd6` pass with pinned `kokkos`, immutable provenance and executable
+  closure.
 - `q003_frontier_f1_gpu_gyro_2026-05-30.json`: bounded registered Frontier
   one-rank GPU relativistic-gyro candidate oracle, hardened execution-context
   evidence, reconciled node-hours and explicit clean-freeze boundary.
