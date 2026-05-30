@@ -407,8 +407,11 @@ The task-local helper also requires a numeric Slurm rank and numeric
 and emits one trusted GPU-launch preflight line before `exec`. After all actions
 and declarative post-actions complete, the trampoline freezes every launch
 artifact read-only, publishes a checksummed `artifact_inventory.json`, freezes
-the artifact root read-only, and leaves only the original empty owner-only
-`analysis/` directory writable. It retains
+the artifact root read-only, rejects empty artifact subtrees, and leaves only
+the original empty owner-only `analysis/` directory writable. The trampoline
+creates that directory under an unpredictable staging name, pins its descriptor,
+renames it into place and verifies that the published entry still names the
+pinned directory. It retains
 the artifact-root descriptor throughout launch, rechecks the lexical run path
 around execution and inventory publication, retains the original nested-directory
 identities through final publication, and rejects replacement while freezing.
@@ -423,12 +426,13 @@ replacement. Invoke the snapshotted analyzer only through
 analyzer and support-module digests, the frozen inventory and the passing
 analysis result. Frontier qualification requires all three evidence digests
 beneath the ledger-bound run directory, verifies the snapshotted analyzer and
-support-module bytes, retains descriptors for the run tree, the inventory,
-result and receipt files, their directory ancestry and both source files, binds
-the exact inventory digest into the child, executes the analyzer through its
-inherited `/proc/self/fd` descriptor, and rejects run-root, evidence-file,
-ancestry or source replacement around no-write recomputation before accepting
-the qualification manifest.
+support-module bytes, traverses `runs/`, `manifests/` and `snapshot/` below the
+trusted PIC root without following aliases, retains descriptors for the run
+tree, the inventory, result and receipt files, their directory ancestry and
+both source files, binds the exact inventory digest into the child, executes the
+analyzer through its inherited `/proc/self/fd` descriptor, and rejects run-root,
+evidence-file, ancestry or source replacement around no-write recomputation
+before accepting the qualification manifest.
 The snapshotted environment profile must match that installed trusted profile:
 
 ```json

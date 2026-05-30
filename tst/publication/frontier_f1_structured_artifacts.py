@@ -296,13 +296,16 @@ class StructuredArtifactTree:
                             child_metadata.st_dev,
                             child_metadata.st_ino,
                         )
-                    paths.extend(
-                        self._tree_files(
-                            child_fd,
-                            (*prefix, name),
-                            directory_identities,
-                        )
+                    child_paths = self._tree_files(
+                        child_fd,
+                        (*prefix, name),
+                        directory_identities,
                     )
+                    if not child_paths:
+                        raise ValueError(
+                            f"Structured artifact tree contains an empty directory: {relative}"
+                        )
+                    paths.extend(child_paths)
                     after = os.fstat(child_fd)
                     entry = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
                     if (entry.st_dev, entry.st_ino) != (after.st_dev, after.st_ino):

@@ -19,6 +19,7 @@ import re
 import stat
 import subprocess
 from typing import Callable, Iterator
+import uuid
 
 from control_plane_common import AUTHORIZED_PIC_ROOT, AUTHORIZED_PROJECT_HOME_ROOT
 from control_plane_common import durable_mkdir_parents, open_directory_below
@@ -411,13 +412,16 @@ def _freeze_artifact_tree_at(
         elif stat.S_ISDIR(metadata.st_mode):
             child_fd = os.open(name, _DIRECTORY_OPEN_FLAGS, dir_fd=directory_fd)
             try:
-                records.extend(
-                    _freeze_artifact_tree_at(
-                        child_fd,
-                        (*prefix, name),
-                        directory_identities,
-                    )
+                child_records = _freeze_artifact_tree_at(
+                    child_fd,
+                    (*prefix, name),
+                    directory_identities,
                 )
+                if not child_records:
+                    raise ValueError(
+                        f"Launch artifact tree contains an empty directory: {relative}"
+                    )
+                records.extend(child_records)
                 os.fchmod(child_fd, 0o555)
                 os.fsync(child_fd)
                 after = os.fstat(child_fd)
@@ -542,15 +546,58 @@ def _verify_frozen_artifact_tree_at(
         raise ValueError("Launch artifact tree lost a frozen directory")
 
 
+def _publish_empty_analysis_directory_at(artifact_dir_fd: int) -> int:
+    try:
+        os.stat("analysis", dir_fd=artifact_dir_fd, follow_symlinks=False)
+    except FileNotFoundError:
+        pass
+    else:
+        raise ValueError("Launch artifact analysis directory already exists")
+    staging_name = f".analysis.staging-{uuid.uuid4()}"
+    os.mkdir(staging_name, mode=0o700, dir_fd=artifact_dir_fd)
+    analysis_fd: int | None = None
+    try:
+        analysis_fd = os.open(staging_name, _DIRECTORY_OPEN_FLAGS, dir_fd=artifact_dir_fd)
+        os.fchmod(analysis_fd, 0o700)
+        os.fsync(analysis_fd)
+        before = os.fstat(analysis_fd)
+        entry = os.stat(staging_name, dir_fd=artifact_dir_fd, follow_symlinks=False)
+        if (
+            not stat.S_ISDIR(before.st_mode)
+            or stat.S_IMODE(before.st_mode) != 0o700
+            or os.listdir(analysis_fd)
+            or (entry.st_dev, entry.st_ino) != (before.st_dev, before.st_ino)
+        ):
+            raise ValueError("Launch artifact staged analysis directory changed")
+        os.rename(
+            staging_name,
+            "analysis",
+            src_dir_fd=artifact_dir_fd,
+            dst_dir_fd=artifact_dir_fd,
+        )
+        os.fsync(artifact_dir_fd)
+        after = os.fstat(analysis_fd)
+        entry = os.stat("analysis", dir_fd=artifact_dir_fd, follow_symlinks=False)
+        if (
+            not stat.S_ISDIR(after.st_mode)
+            or stat.S_IMODE(after.st_mode) != 0o700
+            or os.listdir(analysis_fd)
+            or (entry.st_dev, entry.st_ino) != (after.st_dev, after.st_ino)
+        ):
+            raise ValueError("Launch artifact analysis directory changed during publication")
+        return analysis_fd
+    except BaseException:
+        if analysis_fd is not None:
+            os.close(analysis_fd)
+        raise
+
+
 def _publish_frozen_artifact_inventory_at(artifact_dir_fd: int, artifact_dir: Path) -> None:
     try:
-        os.mkdir("analysis", mode=0o700, dir_fd=artifact_dir_fd)
+        analysis_fd = _publish_empty_analysis_directory_at(artifact_dir_fd)
     except FileExistsError as error:
         raise ValueError("Launch artifact analysis directory already exists") from error
-    analysis_fd = os.open("analysis", _DIRECTORY_OPEN_FLAGS, dir_fd=artifact_dir_fd)
     try:
-        os.fsync(analysis_fd)
-        os.fsync(artifact_dir_fd)
         directory_identities: dict[str, tuple[int, int]] = {}
         records = _freeze_artifact_tree_at(
             artifact_dir_fd,

@@ -2300,7 +2300,7 @@ passed parser analysis and reconciled `0.0025` node-hours. The coherent
 consumption `0.07833333333333331` node-hours and no active reservation.
 Applicable registered-science prerequisites remain open.
 
-Staged registered-F1 successor `140e9a29` preserves the active `e8e47ead`
+Staged registered-F1 successor `6002c80e` preserves the active `e8e47ead`
 chronology and narrows the next execution boundary to two exact one-attempt
 clean-candidate slices: GPU relativistic gyro and GPU paper-mode coupling. Its
 structured artifact freeze, immutable inventory, descriptor-pinned offline
@@ -2321,9 +2321,16 @@ artifact creation. The repaired launch lifecycle scopes a deterministic
 `umask 022` across artifact-root, workload and publication creation and restores
 the inherited value on exit. Paired production install, active-policy promotion
 and both registered F1 executions remain pending clean commit curation. Fresh
-independent launch-publication and qualification-domain exploit retests pass.
-The existing paired genesis anchors are already present; this successor does
-not require another anchor migration.
+independent launch-publication and qualification-domain exploit retests pass for
+superseded pre-activation install `140e9a29`. An adjacent-path review then
+rejected promotion before any live-policy mutation and staged `6002c80e`: it
+publishes `analysis/` through a descriptor-pinned staging rename, rejects empty
+structured subtrees and anchors qualification traversal at the trusted PIC root
+so replaceable `runs/` and manifest `snapshot/` components cannot become trust
+roots. Fresh launch-publication and qualification-domain exploit retests pass
+for `6002c80e`; clean commit curation, paired install and promotion remain
+pending. The existing paired genesis anchors are already present; this
+successor does not require another anchor migration.
 
 ## Immediate Agent Handoff: First Actions
 
@@ -2361,13 +2368,13 @@ Future implementation agents should execute the following successor sequence:
    `31be2cd6`, executable digest `bea2a418`, historical clean-freeze
    authorization promotion `3e7e8c7f` and active predecessor promotion
    `6d6bf1cd`.
-6. Freshly retest staged registered-F1 successor `140e9a29`; then curate the
-   reviewed commit and require clean Git status for its tracked control-plane
-   source. Install the same immutable digest in Orion and Project Home. The
+6. Curate freshly retested registered-F1 successor `6002c80e` and require clean
+   Git status for its tracked control-plane source. Install the same immutable
+   digest in Orion and Project Home. The
    paired genesis anchors already exist, so do not run another migration.
    Update the reviewed policy lifecycle to `paired_installed_reviewed_generation`,
    update the successor chronology and promote the reviewed policy only through
-   the installed `140e9a29` runner.
+   the installed `6002c80e` runner.
 7. After promotion, execute only `f1-clean-gyro-v1` and
    `f1-clean-paper-coupling-v1`, serially. Reconcile each reservation, run the
    snapshotted offline analyzer, freeze the immutable result and receipt, and
@@ -2449,6 +2456,7 @@ Future implementation agents should execute the following successor sequence:
 | 2026-05-30 | Activated paired immutable recovery successor `f2ad817a` after its 250-test control-plane suite, 76-test PIC publication suite, 5-test Frontier publication suite, static checks and three independent reviews pass; published mirrored handoff `06392534`, appended synthetic attachment `f518c3d8` and zero-consumption reconciliation `a13311b3`, removed the pending marker, and promoted mirrored policy SHA `2f01e58f` with promotion SHA `51c9d6a4` while all three ledger streams remain coherent at 25 records | Resume only a fresh authorized structured F0 parser-contract retry through the installed successor; keep registered science submissions paused |
 | 2026-05-30 | Preserved fresh F0 compute-startup failure job `4745755` after Frontier returned `OSError 524` for the login-side Project Home writer lock before Athena; activated paired immutable successor `e8e47ead` from commit `a110e38c` with dedicated numeric scheduler-ID descriptor-pinned exact-byte read-only compute snapshots, authorized-root traversal for new and inherited parent descriptors, transient pathname-ABA rejection and retained login-side writer locks; passed its 261-test control-plane suite, 76-test PIC publication suite, 5-test Frontier publication suite, 8-test readiness registry, static checks and three independent reviews; promoted mirrored policy SHA `cfe6610a` with promotion SHA `6d6bf1cd`; completed fresh structured F0 job `4745842`, parser analysis and reconciliation while all three ledger streams remain coherent at 31 records | Close the real Frontier compute-mount startup blocker without weakening writer serialization; preserve narrow F0 authorization and keep registered-science submissions paused until applicable prerequisites close |
 | 2026-05-30 | Staged registered-F1 successor `140e9a29` with exact one-attempt clean-candidate gyro and paper-coupling slices, structured immutable artifact inventories, descriptor-pinned analyzer execution and qualification-time no-write recomputation; repaired fresh independent-review findings by retaining inventory/result/receipt descriptors plus ancestry across recomputation, rejecting every extra coupling file beneath `output/`, retaining launch-time nested-directory identities, keeping the original empty owner-only `analysis/` descriptor through final publication and scoping deterministic `umask 022` creation with restoration; added independent readiness-registry recomputation of the control-plane inventory and every staged slice binding; passed fresh independent launch-publication and qualification-domain exploit retests | Keep registered-science submissions paused until clean commit curation, paired immutable install, reviewed lifecycle update and active-policy promotion pass |
+| 2026-05-30 | Preserved paired immutable `140e9a29` as a never-promoted pre-activation install after an adjacent-path review found an `analysis/` mkdir/open substitution window, unbound empty structured subtrees and replaceable qualification traversal trust roots; staged repaired successor `6002c80e` with descriptor-pinned staging rename, empty-subtree rejection, trusted-PIC-root ancestry and focused regressions; passed fresh launch-publication and qualification-domain exploit retests | Keep live predecessor `e8e47ead` active and registered-science submissions paused until `6002c80e` passes clean commit curation, paired immutable install, reviewed lifecycle update and active-policy promotion |
 
 ## Source Pointers For The Initial Review
 

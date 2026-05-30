@@ -687,22 +687,20 @@ def _require_frontier_completed_evidence_binding(
     ]:
         raise ValueError("Frontier pre-submit manifest has an unauthorized analyzer set")
     snapshot_analysis_dir = manifest_path.parent / "snapshot" / "analysis"
-    artifact_dir_fd = open_directory_below(
-        artifact_dir, root=authorized_pic_root / "runs"
-    )
+    artifact_dir_fd = open_directory_below(artifact_dir, root=authorized_pic_root)
     analysis_dir_fd = open_directory_below(
-        snapshot_analysis_dir, root=manifest_path.parent / "snapshot"
+        snapshot_analysis_dir, root=authorized_pic_root
     )
     source_fds = []
     pinned_evidence = {}
     try:
         require_same_directory(
-            artifact_dir, artifact_dir_fd, root=authorized_pic_root / "runs"
+            artifact_dir, artifact_dir_fd, root=authorized_pic_root
         )
         require_same_directory(
             snapshot_analysis_dir,
             analysis_dir_fd,
-            root=manifest_path.parent / "snapshot",
+            root=authorized_pic_root,
         )
         source_paths = []
         for record in analysis_scripts:
@@ -841,12 +839,12 @@ def _require_frontier_completed_evidence_binding(
             result_sha256=str(resources["analysis_result_sha256"]),
         )
         require_same_directory(
-            artifact_dir, artifact_dir_fd, root=authorized_pic_root / "runs"
+            artifact_dir, artifact_dir_fd, root=authorized_pic_root
         )
         require_same_directory(
             snapshot_analysis_dir,
             analysis_dir_fd,
-            root=manifest_path.parent / "snapshot",
+            root=authorized_pic_root,
         )
         for record, source_path, descriptor in zip(
             analysis_scripts, source_paths, source_fds

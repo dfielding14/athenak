@@ -949,6 +949,40 @@ class PicQualificationManifestTests(unittest.TestCase):
                 detached_artifact_dir.rename(artifact_dir)
             recompute.side_effect = None
 
+            runs_dir = pic_root / "runs"
+            detached_runs_dir = pic_root / "runs-detached"
+            runs_dir.rename(detached_runs_dir)
+            runs_dir.symlink_to(detached_runs_dir, target_is_directory=True)
+            try:
+                with self.assertRaises((OSError, ValueError)):
+                    _require_frontier_ledger_binding(
+                        {"resources": resources},
+                        candidate_sha256=candidate_sha256,
+                        control_plane_version=control_plane_version,
+                        authorized_pic_root=pic_root,
+                        authorized_project_home_root=project_home_root,
+                    )
+            finally:
+                runs_dir.unlink()
+                detached_runs_dir.rename(runs_dir)
+
+            snapshot_dir = manifest_path.parent / "snapshot"
+            detached_snapshot_dir = manifest_path.parent / "snapshot-detached"
+            snapshot_dir.rename(detached_snapshot_dir)
+            snapshot_dir.symlink_to(detached_snapshot_dir, target_is_directory=True)
+            try:
+                with self.assertRaises((OSError, ValueError)):
+                    _require_frontier_ledger_binding(
+                        {"resources": resources},
+                        candidate_sha256=candidate_sha256,
+                        control_plane_version=control_plane_version,
+                        authorized_pic_root=pic_root,
+                        authorized_project_home_root=project_home_root,
+                    )
+            finally:
+                snapshot_dir.unlink()
+                detached_snapshot_dir.rename(snapshot_dir)
+
             _require_frontier_ledger_binding(
                 {"resources": resources},
                 candidate_sha256=candidate_sha256,

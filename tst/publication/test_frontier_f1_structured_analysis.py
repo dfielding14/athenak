@@ -293,6 +293,15 @@ class FrontierF1StructuredAnalysisTests(unittest.TestCase):
                     with self.assertRaises(ValueError):
                         load_inventory(artifact_tree)
 
+    def test_inventory_rejects_empty_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "empty").mkdir()
+            self._publish_inventory(root)
+            with StructuredArtifactTree(root) as artifact_tree:
+                with self.assertRaisesRegex(ValueError, "empty directory"):
+                    load_inventory(artifact_tree)
+
     def test_pinned_tree_rejects_root_substitution_and_analysis_symlink(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             base = Path(temporary)

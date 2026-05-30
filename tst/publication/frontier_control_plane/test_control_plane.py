@@ -1885,6 +1885,16 @@ class SnapshotTests(unittest.TestCase):
         self.assertEqual(record["sha256"], hashlib.sha256(b"new\n").hexdigest())
         self.assertEqual(stat.S_IMODE(artifact.stat().st_mode), 0o444)
 
+    def test_artifact_freeze_rejects_empty_directory(self) -> None:
+        root = self.root / "artifact-freeze-empty-directory"
+        (root / "empty").mkdir(parents=True)
+        root_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            with self.assertRaisesRegex(ValueError, "empty directory"):
+                _freeze_artifact_tree_at(root_fd)
+        finally:
+            os.close(root_fd)
+
     def test_artifact_inventory_rejects_late_unlisted_file(self) -> None:
         root = self.root / "artifact-freeze-late-file"
         root.mkdir()
@@ -1955,6 +1965,27 @@ class SnapshotTests(unittest.TestCase):
                 "launch_trampoline._write_new_text_artifact",
                 side_effect=write_with_late_analysis_directory,
             ):
+                with self.assertRaisesRegex(ValueError, "analysis directory changed"):
+                    _publish_frozen_artifact_inventory(root_fd, root)
+        finally:
+            os.close(root_fd)
+
+    def test_artifact_inventory_rejects_analysis_directory_publish_swap(self) -> None:
+        root = self.root / "artifact-freeze-analysis-publish-swap"
+        detached = root / "analysis.detached"
+        root.mkdir()
+        (root / "artifact.txt").write_text("verified\n", encoding="utf-8")
+        root_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+        real_rename = os.rename
+
+        def rename_with_replacement(*args: object, **kwargs: object) -> None:
+            real_rename(*args, **kwargs)
+            if len(args) >= 2 and args[1] == "analysis":
+                (root / "analysis").rename(detached)
+                (root / "analysis").mkdir(mode=0o700)
+
+        try:
+            with patch("launch_trampoline.os.rename", side_effect=rename_with_replacement):
                 with self.assertRaisesRegex(ValueError, "analysis directory changed"):
                     _publish_frozen_artifact_inventory(root_fd, root)
         finally:

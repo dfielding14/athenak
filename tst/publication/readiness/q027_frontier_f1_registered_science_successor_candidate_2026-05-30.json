@@ -10,7 +10,7 @@
     "Q-038",
     "Q-042"
   ],
-  "qualification_effect": "local_registered_f1_successor_hardening_and_independent_retest_pass_paired_activation_pending",
+  "qualification_effect": "local_registered_f1_successor_adjacent_path_hardening_reviewed_paired_activation_pending",
   "scope": "Staged successor chronology after the clean-candidate Frontier F0 admission closure. The candidate retains the completed F0 chronology and adds two exact one-attempt registered-science slices: a clean-candidate GPU relativistic-gyro oracle and a clean-candidate GPU paper-mode coupling oracle. The launch trampoline freezes an exact structured artifact tree and immutable inventory. Offline analyzers retain descriptor-pinned tree identity, validate exact inventory closure, publish one immutable result and receipt, and support qualification-time no-write recomputation from the snapshotted analyzer. Qualification retains descriptors for the immutable inventory, result and receipt plus their directory ancestry across recomputation and rechecks path identity and bytes afterward. This candidate does not claim Frontier F1 execution or scientific qualification.",
   "live_predecessor": {
     "record": "tst/publication/readiness/q027_frontier_f0_compute_snapshot_activation_2026-05-30.json",
@@ -22,11 +22,11 @@
     "active_reservations": 0
   },
   "staged_successor": {
-    "control_plane_version": "140e9a2981ba4378b1164f6eed4021fe5d4462c37571d59439c11b491d58ac49",
+    "control_plane_version": "6002c80e305d6cfd322675b3e27e17e169b1718d8edd722330464cccb0c4fd86",
     "control_plane_inventory_files": 19,
-    "worktree_state": "clean_operational_commit_ab7b2bbc977551de9d7b67c2ec264abfcc9246a5",
-    "paired_install_status": "pass",
-    "active_policy_promotion_status": "pending"
+    "worktree_state": "dirty_candidate_pending_clean_commit_curation",
+    "paired_install_status": "pending_clean_commit_and_paired_install",
+    "active_policy_promotion_status": "pending_paired_install"
   },
   "registered_science_slices": [
     {
@@ -36,7 +36,7 @@
       "maximum_walltime_seconds": 900,
       "maximum_attempts": 1,
       "analysis_script_sha256": "ea995c6f7b7d8a7d333dff7411243e279ab8abc06246f0eb4ee4675665aa58f3",
-      "analysis_support_sha256": "7d482905e3e678db20f94bd85ed0686ce0157476c2cb8db5dcf9a015175181a1"
+      "analysis_support_sha256": "a24ac54490dee03d577ea15543021059a1f88d38a5ab743a2da00704a32cdf67"
     },
     {
       "authorization_id": "f1-clean-paper-coupling-v1",
@@ -45,30 +45,30 @@
       "maximum_walltime_seconds": 900,
       "maximum_attempts": 1,
       "analysis_script_sha256": "8f3c6bd4240f4ae3be2310061743e389c21ed5088b716fd98654cbbba95f2414",
-      "analysis_support_sha256": "7d482905e3e678db20f94bd85ed0686ce0157476c2cb8db5dcf9a015175181a1"
+      "analysis_support_sha256": "a24ac54490dee03d577ea15543021059a1f88d38a5ab743a2da00704a32cdf67"
     }
   ],
   "closed_activation_blockers": [
     "registered-science reservations require an exact active-policy authorization ID and permit at most one ledger attempt per slice",
-    "the launch trampoline retains and rechecks one artifact-root descriptor, retains the original nested-directory identity map through final publication, rejects root substitution and byte-identical nested-directory replacement, freezes final read-only bytes, publishes one immutable inventory and revalidates exact final tree closure",
-    "the launch trampoline retains the created owner-only analysis-directory descriptor through final publication and offline analyzers require that exact owner-only analysis directory, retain one no-follow artifact-root descriptor and reject duplicate keys, noncanonical paths, checksum drift, unlisted files, nested-directory replacement, redirected analysis output and root substitution",
+    "the launch trampoline retains and rechecks one artifact-root descriptor, retains the original nested-directory identity map through final publication, rejects root substitution, byte-identical nested-directory replacement and empty artifact subtrees, freezes final read-only bytes, publishes one immutable inventory and revalidates exact final tree closure",
+    "the launch trampoline creates the owner-only analysis directory under an unpredictable staging name, pins its descriptor, renames it into place, verifies the published identity through final publication and offline analyzers require that exact owner-only analysis directory, retain one no-follow artifact-root descriptor and reject duplicate keys, noncanonical paths, checksum drift, unlisted files, nested-directory replacement, redirected analysis output and root substitution",
     "the launch lifecycle scopes deterministic umask 022 artifact creation and restores the inherited process value after success or failure",
     "the gyro analyzer requires exactly the registered cycle-two particle VTK output and rejects wildcard output drift",
-    "qualification retains the run tree, immutable inventory, analysis result, offline receipt, their directory ancestry and snapshotted analyzer/helper descriptors, binds the immutable inventory digest into the child, executes the exact analyzer bytes through /proc/self/fd and rejects source, evidence-file or run-root replacement around no-write recomputation",
-    "the paper-mode coupling analyzer requires the exact registered cycle-zero through cycle-two output families for both coefficient cases and rejects every extra file anywhere beneath output/"
+    "qualification traverses runs/, manifests/ and snapshot/ below the trusted PIC root without following aliases, retains the run tree, immutable inventory, analysis result, offline receipt, their directory ancestry and snapshotted analyzer/helper descriptors, binds the immutable inventory digest into the child, executes the exact analyzer bytes through /proc/self/fd and rejects source, evidence-file or run-root replacement around no-write recomputation",
+    "the paper-mode coupling analyzer requires the exact registered cycle-zero through cycle-two output families for both coefficient cases and the structured artifact layer rejects every extra file or empty directory subtree beneath output/"
   ],
   "local_validation": {
     "control_plane_discovery_tests": {
       "status": "pass",
-      "tests_run": 283
+      "tests_run": 285
     },
     "publication_standalone_tests": {
       "status": "pass",
-      "tests_run": 101
+      "tests_run": 102
     },
     "focused_frontier_chain_tests": {
       "status": "pass",
-      "tests_run": 38,
+      "tests_run": 39,
       "command": "python3 -m unittest tst.publication.test_frontier_f1_structured_analysis tst.publication.test_pic_qualification_manifest"
     },
     "registered_science_concurrency_regression": {
@@ -101,37 +101,44 @@
     }
   },
   "independent_review": {
-    "status": "pass",
+    "status": "pass_exact_staged_successor_fresh_exploit_retest",
     "review_scope": "structured artifact freeze, exact inventory closure, root and directory substitution, analyzer source binding, immutable result and receipt binding, qualification-time no-write recomputation, registered output-set closure and adversarial regressions",
     "addressed_findings": [
       "retain and recheck immutable inventory, result and receipt descriptors plus ancestry across qualification-time recomputation",
       "reject extra paper-mode coupling files anywhere beneath output/",
       "retain the original launch-time nested-directory identity map through final publication and reject byte-identical replacement",
       "retain the original empty owner-only analysis-directory descriptor through final launch publication and require exact mode 0700 during offline analysis",
-      "normalize and restore the inherited umask around launch artifact creation so artifact-root, output, immutable-inventory and owner-only analysis-directory modes do not depend on ambient process state"
+      "normalize and restore the inherited umask around launch artifact creation so artifact-root, output, immutable-inventory and owner-only analysis-directory modes do not depend on ambient process state",
+      "publish analysis through a descriptor-pinned staged directory rename and reject substitution between rename and final identity verification",
+      "reject empty structured artifact subtrees so directory identity closure cannot contain unbound directories",
+      "anchor qualification traversal at the trusted PIC root so replaceable runs/ and manifest snapshot/ components cannot become trust roots"
     ],
-    "fresh_retest": [
+    "prior_fresh_retest_for_superseded_140e9a29": [
       "launch-publication reviewer reproduced and closed nested-directory replacement, analysis-directory replacement, unsafe analysis mode, late-file insertion, final-byte binding and inherited-umask restoration probes",
       "qualification-domain reviewer recomputed the exact 19-file inventory and all registered slice bindings, reran the restrictive-umask operational probe and completed the focused F1 qualification and registry suite"
+    ],
+    "fresh_retest_for_6002c80e": [
+      "launch-publication reviewer independently rejected pre-rename staging substitution, post-rename analysis-directory replacement, late nested replacement, late analysis replacement, late unlisted insertion and empty subtrees; confirmed inherited-umask restoration after success and each rejection",
+      "qualification-domain reviewer independently rejected runs symlink ancestry, manifest snapshot symlink ancestry and nested empty subtrees; recomputed the exact 19-file inventory and all staged slice bindings; confirmed restrictive-umask publication modes and no staging leftovers"
     ]
   },
-  "paired_install_transition": {
-    "status": "pass",
+  "superseded_pre_activation_install": {
+    "status": "paired_installed_never_promoted",
     "timestamp": "2026-05-30T21:49:15Z",
     "control_plane_version": "140e9a2981ba4378b1164f6eed4021fe5d4462c37571d59439c11b491d58ac49",
     "operational_commit": "ab7b2bbc977551de9d7b67c2ec264abfcc9246a5",
     "orion_inventory_sha256": "7a5988c84cdd3ce309045c8149b09f26f61dd227fc73d2e3226b7bc11e5dcb40",
     "project_home_inventory_sha256": "7a5988c84cdd3ce309045c8149b09f26f61dd227fc73d2e3226b7bc11e5dcb40",
-    "genesis_event_sha256": "849bf340986f4d1e1f7cc69c0d2e2845c0313c02d935822113aa8b1df5f1f4c1",
-    "genesis_mirror_ack_sha256": "a3af8af8c3b579ee323850902aad7aab58abde98dff98618ccffd15958dbb296",
-    "orion_ledger_records": 31,
-    "project_home_ledger_records": 31,
-    "orion_receipt_records": 31,
-    "active_reservations": 0,
-    "pending_submission_marker": "absent"
+    "reason": "Superseded before promotion after an adjacent-path review added staged analysis-directory publication, empty-subtree rejection and trusted-root qualification ancestry."
+  },
+  "paired_install_transition": {
+    "status": "pending_clean_commit_and_paired_install"
+  },
+  "active_policy_transition": {
+    "status": "pending_paired_install"
   },
   "open_boundaries": [
-    "active-policy promotion is pending after the paired immutable Orion and Project Home install",
+    "paired immutable Orion and Project Home install of the staged successor is pending",
     "active-policy promotion is pending",
     "the two registered Frontier F1 slices have not executed",
     "external reviewer disposition remains pending external review"

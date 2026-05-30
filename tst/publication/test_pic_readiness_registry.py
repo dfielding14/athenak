@@ -361,7 +361,7 @@ class PicReadinessRegistryTests(unittest.TestCase):
             recovery_transition = candidate["active_policy_transition"]
             self.assertEqual(
                 recovery_transition["control_plane_version"],
-                storage["installed_control_plane_version"],
+                candidate["active_successor"]["control_plane_version"],
             )
             self.assertEqual(
                 recovery_transition["policy_sha256"],
