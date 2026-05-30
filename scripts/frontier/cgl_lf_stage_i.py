@@ -38,8 +38,12 @@ HISTORICAL_DEBUG_NODE_HOURS = 0.851670
 HISTORICAL_E01_STAGE_I_NODE_HOURS = 9.962778
 EXECUTION_EPOCH = "E02-modal-driver"
 EXECUTION_EPOCH_SLUG = "E02_modal_driver"
-AUTHORIZED_CASE_ID = "R16"
-R16_COMPLETION_RESERVED_NODE_HOURS = 7.0
+AUTHORIZED_CASE_ID = "R02"
+COMPLETED_R16_NODE_HOURS = 6.145556
+STANDARD_LAYOUT_PILOT_RESERVED_NODE_HOURS = 2.0
+CURRENT_STAGE_I_RESERVED_NODE_HOURS = (
+    COMPLETED_R16_NODE_HOURS + STANDARD_LAYOUT_PILOT_RESERVED_NODE_HOURS
+)
 MAX_SEGMENT_SECONDS = 24 * 60 * 60
 LEDGER_COLUMNS = (
     "execution_epoch",
@@ -161,11 +165,12 @@ def require_current_epoch(manifest: dict[str, object], label: str) -> None:
 
 
 def require_authorized_case(case_id: str) -> None:
-    """Limit the current E02 authorization to measured R16 completion."""
+    """Limit the current E02 authorization to the standard-layout timing pilot."""
 
     if case_id != AUTHORIZED_CASE_ID:
         raise ValueError(
-            f"E02 Stage I is authorized only for {AUTHORIZED_CASE_ID} completion "
+            f"E02 Stage I is authorized only for the {AUTHORIZED_CASE_ID} "
+            "standard-layout timing pilot "
             "until the measured matrix reservation is reviewed"
         )
 
@@ -249,10 +254,10 @@ def refresh_summary(paths: dict[str, Path]) -> None:
     actual = sum(float(row["actual_node_hours"]) for row in ledger)
     active = active_reservations(reservations)
     reserved = sum(float(item["reserved_node_hours"]) for item in active)
-    stage_remaining = R16_COMPLETION_RESERVED_NODE_HOURS - actual - reserved
+    stage_remaining = CURRENT_STAGE_I_RESERVED_NODE_HOURS - actual - reserved
     project_remaining = PROJECT_BUDGET_NODE_HOURS - actual - reserved
     lines = [
-        "# MKS24 Stage I Frontier E02 R16 Completion Budget",
+        "# MKS24 Stage I Frontier E02 Standard-Layout Pilot Budget",
         "",
         f"- Updated UTC: `{utc_now()}`",
         f"- Execution epoch: `{EXECUTION_EPOCH}`",
@@ -262,11 +267,13 @@ def refresh_summary(paths: dict[str, Path]) -> None:
         f"`{HISTORICAL_DEBUG_NODE_HOURS:.6f}` node-hours",
         f"- Historical E01 Stage I use, reported but not charged to E02: "
         f"`{HISTORICAL_E01_STAGE_I_NODE_HOURS:.6f}` node-hours",
-        f"- Approved E02 R16 completion reservation: "
-        f"`{R16_COMPLETION_RESERVED_NODE_HOURS:.6f}` node-hours",
+        f"- Completed E02 R16 use: `{COMPLETED_R16_NODE_HOURS:.6f}` node-hours",
+        f"- Approved E02 R02 standard-layout timing-pilot reservation: "
+        f"`{STANDARD_LAYOUT_PILOT_RESERVED_NODE_HOURS:.6f}` node-hours",
         f"- E02 Stage I actual use: `{actual:.6f}` node-hours",
         f"- Active segment reservations: `{reserved:.6f}` node-hours",
-        f"- Unreserved E02 R16 remainder: `{stage_remaining:.6f}` node-hours",
+        f"- Unreserved E02 R02 timing-pilot remainder: "
+        f"`{stage_remaining:.6f}` node-hours",
         f"- Incremental project remainder after active E02 Stage I use: "
         f"`{project_remaining:.6f}` node-hours",
         "",
@@ -301,7 +308,7 @@ def refresh_summary(paths: dict[str, Path]) -> None:
     lines.extend([
         "",
         "Only one E02 Stage I segment may be prepared or submitted at a time. "
-        "The current authorization is R16 completion only. "
+        "The current authorization is an R02 standard-layout timing pilot only. "
         "Jobs use the `batch` partition with Frontier's default production "
         "`normal` QOS; the `debug` QOS is not used for paper production.",
         "",
@@ -677,7 +684,7 @@ def prepare(args: argparse.Namespace) -> Path:
         raise ValueError("Athena walltime must leave ten minutes for shutdown")
     segment_hours = node_hours(args.nodes, requested_seconds)
     actual, reserved = reservation_usage(paths)
-    if actual + reserved + segment_hours > R16_COMPLETION_RESERVED_NODE_HOURS:
+    if actual + reserved + segment_hours > CURRENT_STAGE_I_RESERVED_NODE_HOURS:
         raise ValueError("proposed segment exceeds the Stage I reservation")
     if (
         actual + reserved + segment_hours > PROJECT_BUDGET_NODE_HOURS
@@ -731,8 +738,10 @@ def prepare(args: argparse.Namespace) -> Path:
             "project_budget_node_hours": PROJECT_BUDGET_NODE_HOURS,
             "historical_debug_node_hours": HISTORICAL_DEBUG_NODE_HOURS,
             "historical_e01_stage_i_node_hours": HISTORICAL_E01_STAGE_I_NODE_HOURS,
-            "stage_i_reserved_node_hours": R16_COMPLETION_RESERVED_NODE_HOURS,
-            "stage_i_authorization": f"{AUTHORIZED_CASE_ID} completion only",
+            "stage_i_reserved_node_hours": CURRENT_STAGE_I_RESERVED_NODE_HOURS,
+            "stage_i_authorization": (
+                f"{AUTHORIZED_CASE_ID} standard-layout timing pilot only"
+            ),
             "sequential_manual_submission_required": True,
         },
         "run": {
@@ -933,7 +942,7 @@ def check_submit(args: argparse.Namespace) -> int:
     if reservation.get("state") != "prepared":
         raise ValueError("reservation is unavailable for submission")
     actual, reserved = reservation_usage(paths)
-    if actual + reserved > R16_COMPLETION_RESERVED_NODE_HOURS:
+    if actual + reserved > CURRENT_STAGE_I_RESERVED_NODE_HOURS:
         raise ValueError("active Stage I reservation exceeds its ceiling")
     lines = [line for line in production_queue_output(args).splitlines()
              if line.strip()]
@@ -1344,7 +1353,7 @@ def record(args: argparse.Namespace) -> int:
             raise ValueError("clean_partial requires clean output short of its target")
     actual = node_hours(nodes, int(sacct["elapsed_seconds"]))
     cumulative = sum(float(row["actual_node_hours"]) for row in ledger) + actual
-    if cumulative > R16_COMPLETION_RESERVED_NODE_HOURS:
+    if cumulative > CURRENT_STAGE_I_RESERVED_NODE_HOURS:
         raise ValueError("actual use exceeds the Stage I reservation")
     if cumulative > PROJECT_BUDGET_NODE_HOURS:
         raise ValueError("actual use exceeds the incremental project ceiling")

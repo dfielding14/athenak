@@ -156,11 +156,12 @@ as a mutable ledger for new work, or the old storage/runtime estimate as an
 preflight, and an initial `4.0` node-hour `R16`-pilot-only reservation were
 implemented locally in `scripts/frontier/cgl_lf_stage_i.py` with focused
 offline regression coverage. The immutable replacement-driver HIP/MPI build
-and qualification ladder are now retained. Fresh `E02` `R16` jobs `4743735`
-and `4743933` are accepted through `t = 3.5`, using `1.866111` node-hours.
-Their measured recost expands authorization only for `R16` completion to
-`7.0` node-hours; the remaining mapped matrix stays blocked until completed
-`R16` analysis and final recost review.
+and qualification ladder are now retained. Fresh `E02` R16 jobs `4743735`
+through `4744158` are accepted through exact `t = 10.0`, using `6.145556`
+node-hours. Their completed lineage bundle passes `t = 8`--`10` production
+analysis. R16 scaling alone leaves a broad matrix-runtime bracket, so the
+remaining mapped matrix stays blocked while only a `2.0` node-hour `R02`
+standard-layout timing pilot is authorized.
 
 ## Read This First
 
@@ -296,10 +297,10 @@ test or run evidence.
 | Frontier GPU numerical equivalence | CPU/GPU comparison suite, MPI/GPU restart checks, strict diagnostics | Yes for Frontier use | Partial 2026-05-30; archived pre-replacement HIP/MPI builds and G-001 through G013 evidence remain useful historical qualification. Reduced replacement-driver startup `g015`, natural-cycle eight-rank modal restart comparison `g018`, one-rank versus eight-rank decomposition comparison `g019`, passive-Alfvénic smoke `g020`, active-random smoke `g021`, corrected nonlinear hard-wall run `g022`, and standard-layout rank-local startup/sizing run `g023` pass with zero strict safety counters. Frontier debug qualification is closed; long-time production statistics remain open. |
 | Paper pgen and forcing fidelity | Input/pgen review, forcing metadata, restartable reduced smoke | Yes for MKS24 claims | Partial 2026-05-30; pre-replacement active/passive/random reduced smoke, forcing restart, OU cadence, multi-cycle RK-companion source-work checks, passive flow-decoupling checks, and Frontier G-007 reduced-paper matrix passed. The merged driver now stores authoritative modal OU coefficients with `TurbulenceRestartMetadata`; `g018` closes reduced rank-local modal restart identity, and replacement-driver `g020`/`g021` close reduced passive-Alfvénic and active-random startup smoke. Long-time production forcing statistics remain open. |
 | Paper observables and analysis | Synthetic analysis tests and archived reduced-run products | Yes for MKS24 claims | Partial 2026-05-25; reduced histories, restartable RK-integrated applied forcing work/global active residual, RKL2-applied heat-flux contractions with fine-side AMR ownership, AMR-corrected RK-applied total/anisotropic CGL pressure-work ledgers, operator-face cap counters, windowed snapshot PDF/spectral/transfer/alignment/local-strain products, Figure 2(a)-coordinate joint pressure-density PDFs and admitted checksum-qualified sampled surfaces, Figure 3 compressive-flow spectra, Figure 4(b) normalized-density spectra, Figure 6(a) thermal/magnetic-pressure spectra, MKS24-normalized transfer and alignment-peak curve comparisons, opt-in local-field eddy-anisotropy structure functions, deduplicated threshold-volume history curves, manifest-qualified proxies and cadence-limited estimates, generic figures, checksum/uncertainty-qualified reference-data comparison plumbing, Figure 2(b) histories, Figure 4(a) normalized-density PDFs, Figure 5(b) normalized eddy scales, Figure 7 lower-panel transfer ratios, Figure 8 selected-shell alignment PDFs, Figure 9, Figure 11 lower-panel, and Figure 12 alignment curves, and Figure 13(b),(d) dimensionless curves are implemented; guarded Figure 3 case definitions are present under `paper-compressive`; dimensional/unmatched-panel conversion, standard-run comparison, and remaining panel references remain open |
-| Standard MKS24 results | Required cases, durations, manifests, figure comparisons | Yes for reproduction claim | Partial 2026-05-30; the frozen sixteen-case mapped Stage I manifest remains the target matrix. The pre-replacement `R16` lineage is archival only. Fresh replacement-driver `E02` jobs `4743735` and `4743933` are accepted through `t = 3.5` with zero strict counters and complete rank-local products. The production analysis window begins at `t = 8`; no replacement-driver scientific figure comparison exists yet. |
-| Operational workflow | Frontier scripts, budget ledger, failure recovery, storage plan | Yes for Frontier use | Partial 2026-05-30; the debug-helper ledger records `1.361950` node-hours after retained `g014` through `g023`; separately retained scheduled MPI CPU job `4743666` consumed `0.002222` node-hours, and the old Stage I ledger records `9.962778` historical node-hours through rejected job `4686032`. Commit `462b9dbd` makes `scripts/frontier/cgl_lf_stage_i.py` write new work beneath `E02-modal-driver`, use separate accounting files, reject cross-epoch ancestry, and check all queued user jobs and active top-level shared-root campaign records. The fresh `E02` ledger records `1.866111` node-hours through accepted jobs `4743735` and `4743933`; F-068 recosts a `7.0` node-hour `R16`-completion-only envelope. Commits `d210cdd5`, `eab6e12b`, and `7fae0bcf` retain bundle-backed source provenance, complete rank-local debug restart archival, matching debug shared-root checks, and absent-override-key rejection before reservation. |
+| Standard MKS24 results | Required cases, durations, manifests, figure comparisons | Yes for reproduction claim | Partial 2026-05-30; the frozen sixteen-case mapped Stage I manifest remains the target matrix. The pre-replacement `R16` lineage is archival only. Fresh replacement-driver `E02` jobs `4743735` through `4744158` are accepted through exact `R16 t = 10.0` with zero strict counters and complete rank-local products. The `t = 8`--`10` analyzer selects nine snapshots and passes its synthetic check. Other mapped cases and cross-case comparisons remain open. |
+| Operational workflow | Frontier scripts, budget ledger, failure recovery, storage plan | Yes for Frontier use | Partial 2026-05-30; the debug-helper ledger records `1.361950` node-hours after retained `g014` through `g023`; separately retained scheduled MPI CPU job `4743666` consumed `0.002222` node-hours, and the old Stage I ledger records `9.962778` historical node-hours through rejected job `4686032`. Commit `462b9dbd` makes `scripts/frontier/cgl_lf_stage_i.py` write new work beneath `E02-modal-driver`, use separate accounting files, reject cross-epoch ancestry, and check all queued user jobs and active top-level shared-root campaign records. The fresh `E02` ledger records `6.145556` node-hours through accepted R16 completion. F-069 permits only a `2.0` node-hour `R02` standard-layout timing pilot next. Commits `d210cdd5`, `eab6e12b`, and `7fae0bcf` retain bundle-backed source provenance, complete rank-local debug restart archival, matching debug shared-root checks, and absent-override-key rejection before reservation. |
 | User documentation | Sphinx build and accurately scoped runbook | Yes | Implemented for current functionality 2026-05-25; Sphinx warnings-as-errors and repository style suite pass in an isolated validation environment; future campaign results must still be documented when executed |
-| Performance suitability | Representative timing/memory/I/O evidence; no uninvestigated prohibitive bottleneck | Yes for production use | Partial 2026-05-30; G-008 records reduced debug-scale evidence, G010b records reduced shared-MPI-I/O timing, G011 measures startup-only historical standard-layout memory/file size, and corrected replacement-driver nonlinear `g022` reaches `t = 2.0` in `1554` allocated seconds with retained shared MPI-I/O timing. Replacement-driver `g023` launches the exact `192 x 192 x 384` standard layout with intended rank-local output, retains `509682248`-byte terminal snapshots and `1381366136`-byte modal checkpoint groups, and reaches startup-only `t = 0.01` in `79` allocated seconds. Fresh rank-local `R16` reaches `t = 3.5` in `1.866111` node-hours; developed-state extrapolation projects `5.639721` node-hours through `t = 10`. This is enough for an R16-only completion envelope, not a matrix runtime authorization. |
+| Performance suitability | Representative timing/memory/I/O evidence; no uninvestigated prohibitive bottleneck | Yes for production use | Partial 2026-05-30; G-008 records reduced debug-scale evidence, G010b records reduced shared-MPI-I/O timing, G011 measures startup-only historical standard-layout memory/file size, and corrected replacement-driver nonlinear `g022` reaches `t = 2.0` in `1554` allocated seconds with retained shared MPI-I/O timing. Replacement-driver `g023` launches the exact `192 x 192 x 384` standard layout with intended rank-local output, retains `509682248`-byte terminal snapshots and `1381366136`-byte modal checkpoint groups, and reaches startup-only `t = 0.01` in `79` allocated seconds. Fresh rank-local R16 completes `t = 10.0` in `6.145556` node-hours. Cell-only and CFL-aware matrix projections span `1087.763412` to `2956.012436` node-hours, so a bounded R02 standard-layout timing pilot is required before matrix authorization. |
 
 The final readiness report must distinguish:
 
@@ -324,7 +325,7 @@ while preserving all historical usage records.
 | --- | --- | --- | --- |
 | Local operator and reduced-workflow implementation | Supported for the exercised replacement-driver scope; production comparison still required | Full CPU suite (`218 passed, 15 skipped`), retained historical focused suites and bundles, F-018 through F-026 regression evidence, F-033 local exact-state hard-wall evidence, current focused serial CGL gate (`39 passed`), and scheduled current MPI CPU job `4743666` (`2 passed`); the retained current gate covers modal restart, CGL-LF turbulence-driving AMR interaction, and F-056 layout-fraction accounting | Complete production/statistical comparison gates |
 | Validated on Frontier GPU hardware | Supported for archived pre-replacement reduced qualification cases through F-033 plus replacement-driver debug qualification through standard-layout rank-local startup/sizing | Immutable historical HIP/MPI builds; G-001 through G-007 strict/restart/decomposition/reduced-paper records; post-F-026 restart jobs `4658072`/`4658163`, GPU AMR jobs `4658191`/`4658283`, managed-policy confirmation job `4659663`, G010b/G011 I/O evidence, G013 corrected nonlinear hard-wall job `4673404`, and replacement-driver `g015`/`g018`/`g019`/`g020`/`g021`/`g022`/`g023` | Long-time replacement-driver production runtime and statistical qualification remain open; G012 remains the retained failure of the superseded finite-rate hard-wall interpretation |
-| Production ready for supported CGL-LF use | Not established | Debug policy/accounting tooling, committed epoch isolation and shared-root controls, immutable replacement-driver build archival, retained focused current serial/MPI CPU gates, reduced `g015` startup, `g018` rank-local modal restart identity, `g019` one-rank/eight-rank decomposition, `g020`/`g021` passive/random smoke, `g022` nonlinear hard-wall completion, `g023` standard-layout rank-local startup/sizing, fresh accepted `E02` `R16` prefix evidence through `t = 3.5`, archived reduced GPU qualification including F-033 G013, historical shared-MPI-I/O measurements, and RK/AMR-consistent applied hyperbolic pressure traction histories exist | Complete and analyze isolated `R16`, recost the mapped matrix, execute representative mapped production runs, and complete production/statistical qualification |
+| Production ready for supported CGL-LF use | Not established | Debug policy/accounting tooling, committed epoch isolation and shared-root controls, immutable replacement-driver build archival, retained focused current serial/MPI CPU gates, reduced `g015` startup, `g018` rank-local modal restart identity, `g019` one-rank/eight-rank decomposition, `g020`/`g021` passive/random smoke, `g022` nonlinear hard-wall completion, `g023` standard-layout rank-local startup/sizing, accepted `E02` R16 completion and production-window analysis, archived reduced GPU qualification including F-033 G013, historical shared-MPI-I/O measurements, and RK/AMR-consistent applied hyperbolic pressure traction histories exist | Run the bounded R02 standard-layout timing pilot, recost the mapped matrix, execute representative mapped production runs, and complete production/statistical qualification |
 | MKS24 reproduction complete | Not established | Guarded standard/limiter/heat-flux/compressive/scale-separation input matrices, paper analysis products including Figure 2(a)-coordinate joint PDFs with source-qualified sampled-surface references, Figure 3/4(b)/6(a) spectral fields, checksum/uncertainty-qualified reference-data comparison interface, populated Figure 2(b) histories, Figure 4(a) normalized-density PDFs, Figure 5(b) normalized eddy-scale curves, dimensionless Figure 7 transfer ratios, Figure 8 selected-shell alignment PDFs, Figure 9, Figure 11 lower-panel, and Figure 12 alignment curves, Figure 13(b),(d) curves, and an archived pre-replacement `R16` prefix through `t = 7.5` exist | Paper-to-AthenaK transforms for remaining dimensional or unmatched spectral panels, replacement-driver qualification, fresh `E02` completion/analysis of `R16` through `t = 10`, all other mapped Stage I production cases, quantitative panel comparisons, and archived scientific interpretation remain required |
 
 The final audit specifically rejects two tempting overclaims:
@@ -562,11 +563,13 @@ table such as:
 | F-066 | 2026-05-30 | Replacement-driver G023 standard-layout rank-local startup and retained-output sizing qualification | Reduced replacement-driver correctness passed through G022, but the production handoff still lacked a current exact-standard-layout launch using the intended rank-local snapshot and modal-restart protocol. Historical G011 measured shared MPI-I/O before the modal-driver replacement and cannot establish current retained-product sizing. | `runs/qualification-462b9dbd-e02/g023-modal-rankio-sizing-active-beta10-192x192x384-8gpu`; job `4743662`; retained input SHA-256 `cee4c1c97ceb1be2f5d72488c15ca4a02f8f95e5402c58343b461e85c77e5c96`; evidence JSON SHA-256 `effba10b616246e1c9f6863c6a068f674551fa9ac4b4a02bdb92ead0f963c14f` | High | Launch the guarded `192 x 192 x 384` layout with one node/eight GPU ranks and intended rank-local binary/restart settings. Require startup through `t = 0.01`, zero strict counters, finite ledgers, forcing-work residual below `1e-10`, complete initial/final eight-rank snapshot and modal-restart groups, and readable assembled endpoints without extrapolating production runtime. | Job `4743662` completes in `79` allocated seconds and uses `0.021944` node-hours. It retains two complete binary groups with terminal aggregate size `509682248` bytes and two complete modal checkpoint groups with aggregate size `1381366136` bytes. The assembled endpoint reader passes at shape `384 x 192 x 192`; forcing-work relative residual is `1.053e-11`; strict counters remain zero. | Replacement-driver Frontier debug startup and retained-output sizing qualification closed. F-068 supplies initial rank-local R16 runtime and storage measurements; long-time production statistics remain open. |
 | F-067 | 2026-05-30 | Post-merge focused local serial and scheduled MPI CPU retention | The `E02` entry gate explicitly requires retained current local evidence after the modal-driver merge and F-056 correction. Frontend direct invocation lacks `mpirun`, so the MPI pytest files require a scheduled wrapper rather than an unrecorded login-node workaround. | `runs/local-validation-462b9dbd-e02`; serial evidence JSON SHA-256 `3fc869c0d7455f1221d7838de900c0db7426673b2730cd954f264b8934fc0c29`; scheduled MPI CPU job `4743666`; MPI evidence JSON SHA-256 `397aced4e90aa7e77ab17da05a522ad4c99c9d0e15bd48d86ce20aa195fb36d3` | High | Run the focused serial CGL suites against the current source. Build a current Kokkos-Serial/MPI executable, schedule one isolated one-node debug allocation, translate test `mpirun -np` invocations into nested `srun --overlap` steps, and retain executable, wrapper, batch, log, source, test-count, and Slurm accounting provenance. | Serial suites pass `39` tests in `23.89` seconds. Scheduled job `4743666` passes both one-rank/four-rank MPI decomposition regressions in `2.81` pytest seconds, completes `0:0` in `8` allocated seconds, and uses `0.002222` node-hours separately from the debug-helper ledger. | Focused post-merge local serial/MPI entry gate closed. |
 | F-068 | 2026-05-30 | Fresh E02 R16 segmented pilot, restart continuation, and preliminary completion recost | Replacement-driver debug and local gates closed, but the initial `4.0` node-hour production-path cap was intentionally only a pilot authorization. A current rank-local production measurement and one authenticated modal-restart continuation were required before extending even the first case. | `runs/mks24-stage-i/E02-modal-driver/R16/s00_rankio_t0_t2`; `s01_rankio_t2_t3p5`; jobs `4743735` and `4743933`; accepted-prefix bundle `R16_rankio_t3p5_prefix_20260530`; recost evidence JSON SHA-256 `5095d8833da4ca65eac0552d8dcbbfea87f696f6fd3932e25277dcb89c5534a5` | High | Run fresh `R16` from `t = 0` with rank-local products; inspect and record each segment before continuation; archive all terminal restart siblings; assemble transient-prefix bundles; require zero strict counters, finite ledgers, clean continuation, and synthetic analyzer pass. Use the developed continuation cost only to size an R16-completion envelope, not to authorize the mapped matrix. | `s00` reaches exact `t = 2.0` in `0.995278` node-hours. Authenticated restart continuation `s01` reaches exact `t = 3.5` in `0.870833` node-hours. The prefix retains fifteen snapshot groups, uses `1.866111` node-hours total, and stores `1820024680` raw snapshot/restart bytes. The transient `t = 0`--`2` forcing-work residual is `1.803e-12`; default `t = 8`--`10` analysis correctly selects zero prefix samples while its synthetic check passes. Developed-state extrapolation projects `5.639721` node-hours through `t = 10`. | Expand only the `R16` completion envelope to `7.0` node-hours, leaving `1.360279` projected margin. Continue sequential inspection through `t = 10`; do not reserve the remaining matrix until completed R16 production-window analysis and final recost review. |
+| F-069 | 2026-05-30 | Fresh E02 R16 completion, production-window analysis, and standard-layout timing-pilot authorization | F-068 safely bounded R16 completion, but low-resolution R16 cannot determine standard-layout cost from cell count alone: the `192 x 192 x 384` cases also reduce CFL timestep, and `R17` adds another scaling risk. | accepted R16 jobs `4743735`, `4743933`, `4743988`, `4744019`, `4744056`, `4744120`, and `4744158`; completed bundle `R16_rankio_t10_20260530` manifest SHA-256 `9955085f3557a15c9775722bd1574dbd3636adbbb8df4c4ba5e4e3b9b37d6aa8`; production diagnostics SHA-256 `b3547ff697391dc7d56588028da2d7dd595e9b1ad33fbf7887e0e98188f9e6ab`; completion-recost evidence JSON SHA-256 `d42a0432858127a94ab4aee5aab0c0b79572b70730085352aec53147670adad3` | High | Inspect and record every continuation through exact `t = 10`; assemble the complete ranked lineage; analyze `t = 8`--`10`; calculate actual logical and retained storage; bracket matrix runtime with both cell-count-only and CFL-aware scaling; authorize only the smallest standard-layout timing measurement needed to collapse that uncertainty. | R16 completes in `6.145556` node-hours inside its `7.0` envelope and retains `4686854064` raw segment-tree bytes. The analyzer selects nine snapshots and 101 history rows, passes its synthetic test, and closes forcing work to relative residual `8.806e-13`. Matrix runtime brackets `1087.763412` to `2956.012436` node-hours; cell-scaled logical raw storage is `798538119152` bytes before margin. | Preserve completed R16. Authorize only a `2.0` node-hour `R02` standard-layout timing pilot next; do not authorize the remaining matrix until its measured review. |
 
 ### Implemented Core Decision Log
 
 | Date | Decision | Rationale | Evidence still required |
 | --- | --- | --- | --- |
+| 2026-05-30 | Preserve completed `R16` and authorize only a `2.0` node-hour `R02` standard-layout timing pilot next. | R16 completes cleanly in `6.145556` node-hours, but cell-count-only and CFL-aware mapped-matrix projections span `1087.763412` to `2956.012436` node-hours. `R02` holds active-Alfvenic beta-10 physics fixed while changing from `96 x 96 x 192` to `192 x 192 x 384`, making it the smallest discriminating production-path measurement. | Run and inspect one bounded R02 timing segment, then revise mapped-matrix runtime/storage authorization; no broader matrix execution is authorized yet. |
 | 2026-05-30 | Expand only the fresh `E02` `R16` completion envelope from the initial `4.0` node-hour pilot cap to `7.0` node-hours. | Accepted jobs `4743735` and `4743933` establish clean rank-local execution and modal-restart continuation through `t = 3.5`. Their developed-state rate projects `5.639721` node-hours through `t = 10`, leaving `1.360279` node-hours of margin under the revised cap. | Complete and analyze `R16` through `t = 10`, then review the measured matrix runtime and storage reservation; no other mapped case is authorized yet. |
 | 2026-05-30 | Start MKS24 production over as isolated epoch `E02-modal-driver`, with a fresh incremental `4000` node-hour planning ceiling and immutable `E01-pre-modal-driver` history. | F-056 invalidates old cap-fraction products for comparison, and F-057 makes old forcing restarts incompatible with the modal-driver executable. A clean namespace prevents archival segments from contaminating future discovery, bundles, and cost decisions. | Commit the locally implemented epoch-aware Stage I helper and separate ledger paths; complete replacement-driver qualification, fresh `R16` pilot from `t = 0`, and recosted Stage I reservation. |
 | 2026-05-30 | Treat `/lustre/orion/ast207/proj-shared/dfielding/CGL` as a shared campaign root, not as an MKS24-exclusive directory. | Exploratory beta-25 comparison jobs coexist with MKS24 archives, and the prior Stage I helper filtered queue conflicts by `cgl_mks24_` job names only. MKS24 work must not modify, prune, or unintentionally overlap another live campaign. | Commit the locally implemented all-user-job and active-campaign-record preflight; verify the root is quiescent or explicitly reviewed before the next Stage I submission. |
@@ -2628,15 +2631,15 @@ ceiling:
 
 Reserve no more than `50` node-hours initially for replacement-driver
 requalification. The epoch-aware helper initially carried a separate `4.0`
-node-hour production-path envelope for an `R16` pilot only. Accepted
-replacement-driver jobs `4743735` and `4743933` now reach `t = 3.5` using
-`1.866111` node-hours and retain one authenticated restart continuation. The
-measured developed-state projection is `5.639721` node-hours through
-`t = 10`, so the helper now carries a `7.0` node-hour `R16`-completion-only
-envelope. Do not reserve the remaining production matrix until completed
-replacement-driver `R16` analysis has measured runtime and rank-local
-storage. The old `1068.888889` Stage I reservation is planning history, not
-an `E02` entitlement.
+node-hour production-path envelope for an `R16` pilot only, then a `7.0`
+node-hour completion envelope after F-068. Accepted replacement-driver jobs
+`4743735` through `4744158` now complete exact `t = 10.0` using `6.145556`
+node-hours and pass production-window analysis. F-069 preserves that
+accounting and authorizes only a separate `2.0` node-hour `R02`
+standard-layout timing pilot. Do not reserve the remaining production matrix
+until that pilot measures the combined standard-layout cell-count and
+timestep cost. The old `1068.888889` Stage I reservation is planning
+history, not an `E02` entitlement.
 
 According to OLCF accounting, a job is charged according to requested nodes
 multiplied by actual time from entering the running state until exit; unused
@@ -2763,8 +2766,9 @@ Start the new epoch narrowly:
 | Activity | Initial `E02` upper envelope | Expansion rule |
 | --- | ---: | --- |
 | Replacement-driver local and Frontier debug requalification | `50` node-hours | Stop after the smallest tests establish modal restart, decomposition, hard-wall, and rank-local I/O behavior |
-| Stage I `R16` completion | `7.0` node-hours | F-068 measured completion envelope; helper rejects non-`R16` cases until completed production-window analysis and final recost review |
-| Remaining Stage I production matrix | `TBD` | Set only after completed fresh `R16` analysis measures runtime and storage |
+| Completed Stage I `R16` | `6.145556` node-hours actual inside `7.0` reserved | F-069 completed low-resolution case and production-window analysis |
+| Stage I `R02` standard-layout timing pilot | `2.0` node-hours | F-069 bounded production-path measurement; helper rejects every other case until review |
+| Remaining Stage I production matrix | `TBD` | Set only after the R02 timing pilot measures standard-layout runtime and storage |
 | Stage II extension | `0` | Remains unauthorized until Stage I acceptance and recosting |
 
 #### Recommended Accounting Helper
@@ -2812,12 +2816,12 @@ This utility remains the debug-qualification helper. Production work uses the
 separate `scripts/frontier/cgl_lf_stage_i.py` utility. That production helper
 now carries explicit `E02-modal-driver` run/reservation/summary/ledger paths,
 cross-epoch restart and bundle rejection, an all-user-job queue preflight,
-active top-level CGL-root campaign-record checks, a measured `7.0` node-hour
-`R16`-completion-only reservation, and the same retained-bundle requirement
-for the committed input and executable revisions. Preserve the committed
-F-060 and F-061 controls through `7fae0bcf` and the F-068 recost before
-continuation. Expand the matrix reservation only after completed `R16`
-production-window analysis and final recost review.
+active top-level CGL-root campaign-record checks, completed R16 accounting,
+a bounded `2.0` node-hour `R02` standard-layout timing-pilot reservation, and
+the same retained-bundle requirement for the committed input and executable
+revisions. Preserve the committed F-060/F-061 controls and F-069 recost
+before continuation. Expand the matrix reservation only after the measured
+R02 timing-pilot review.
 Validate its policy logic offline with:
 
 ```bash
@@ -3670,11 +3674,12 @@ startup-only rank-local counterpart at the exact standard layout. It reaches
 `t = 0.01` in `79` allocated seconds with zero strict counters, retains
 terminal aggregate snapshot size `509682248` bytes, and retains modal
 checkpoint-group size `1381366136` bytes. This closes current launch and
-rank-local retained-output sizing. Fresh `R16` jobs `4743735` and `4743933`
-now measure rank-local production through `t = 3.5`; F-068 projects
-`4514125800` bytes (`4.204` GiB) for completed `R16` cadence and
-`5.639721` node-hours through `t = 10`. Complete that case before reviewing
-the mapped cadence/storage proposal.
+rank-local retained-output sizing. Fresh R16 jobs `4743735` through `4744158`
+complete rank-local production through `t = 10.0`; F-069 records
+`4686854064` raw retained segment-tree bytes (`4.365` GiB), a deduplicated
+logical cadence of `4514126544` bytes, and `6.145556` actual node-hours.
+Measure one bounded R02 timing pilot before reviewing the mapped
+cadence/storage proposal.
 
 The following G011 calculations describe the archived shared-file assumption.
 The tracked guarded paper decks now explicitly set
@@ -3713,13 +3718,14 @@ retain all analysis snapshots and the final two restarts for every accepted
 case, and remove earlier checkpoints only after acceptance and archive
 verification are recorded. The standard-layout file-size measurement remains
 authoritative in `analysis/g011_standard_layout_mpiio_sizing_evidence.json`
-beneath the G011 run directory as shared-file reconnaissance. F-068 now
-measures fresh rank-local `R16` products through `t = 3.5`: terminal snapshot
-and restart groups are `63758960` and `172728040` bytes, respectively, and
-the two accepted segments retain `1820024680` raw bytes. At the same cadence,
-G023 terminal groups project `36091999664` bytes (`33.613` GiB) for one
-standard-layout case. Complete `R16`, retain final write-time evidence, and
-review the Figure 11 mixed-resolution increments before matrix execution.
+beneath the G011 run directory as shared-file reconnaissance. F-069 measures
+completed rank-local R16 products: terminal snapshot and restart groups are
+`63758976` and `172728048` bytes, respectively, and the seven accepted
+segments retain `4686854064` raw bytes. At the same cadence, G023 terminal
+groups project `36091999664` bytes (`33.613` GiB) for one standard-layout
+case. Cell scaling yields `798538119152` logical raw bytes (`743.697` GiB)
+for the mapped matrix before margin. Measure R02 timing and retained products
+before matrix execution.
 Executing all eighteen guarded definitions independently would duplicate the
 equivalent hard-wall beta-100 role and execute the unmapped active-Alfvenic
 beta-1 inventory entry; the frozen Stage I manifest does neither.
@@ -3763,9 +3769,10 @@ replacement turbulent driver changed forcing/restart state.  Stage I has
 consumed `9.962778` node-hours with no active segment reservation.  The
 historical mapped lower-envelope storage estimates are `811.179` GB under the
 sequential retained-policy margin or `1091.586` GB without pruning. Fresh
-`E02-modal-driver` `R16` is accepted through `t = 3.5`; F-068 expands only
-its completion reservation to `7.0` node-hours. Complete and analyze `R16`,
-then approve a measured matrix reservation before other production cases.
+`E02-modal-driver` R16 is accepted through exact `t = 10.0` and passes its
+production-window analysis. F-069 authorizes only a `2.0` node-hour R02
+standard-layout timing pilot next. Approve a measured matrix reservation only
+after that review.
 Any additional panel-reference-driven case beyond the frozen manifest
 requires a revised cost before execution.
 
@@ -3859,10 +3866,10 @@ mapped cases, submitted sequentially through
 `scripts/frontier/cgl_lf_stage_i.py` on `batch` with default `normal` QOS.
 Its accepted `R16` prefix ends at `t = 7.5`; no complete accepted case or
 paper-panel result exists yet. The replacement driver invalidates
-continuation of that lineage. Fresh `E02-modal-driver` `R16` jobs `4743735`
-and `4743933` are accepted through `t = 3.5` after helper isolation,
-requalification, and immutable-build archival. Continue only that lineage
-under its `7.0` node-hour completion envelope until final R16 recost review.
+continuation of that lineage. Fresh `E02-modal-driver` R16 jobs `4743735`
+through `4744158` are accepted through exact `t = 10.0` after helper
+isolation, requalification, and immutable-build archival. F-069 authorizes
+only one bounded R02 standard-layout timing pilot before matrix recost review.
 
 Required baseline:
 
@@ -3954,14 +3961,15 @@ including margin. The `E01-pre-modal-driver` protocol retained the more
 conservative earlier `880.368` GB allocation. Neither is an
 `E02-modal-driver` reservation: the tracked decks now select rank-local
 snapshot/restart products, and the replacement driver adds authoritative
-modal state to restarts. F-068 records `1820024680` raw snapshot/restart
-bytes through `R16 t = 3.5`; the observed terminal group sizes project
-`4514125800` bytes (`4.204` GiB) for one completed `R16` with 41 snapshots
-and 11 restarts. G023 terminal groups project `36091999664` bytes
-(`33.613` GiB) for one standard-layout case at the same cadence. These are
-preliminary per-case measurements, not a matrix storage authorization. Any
-change in case matrix, cadence, file layout, retention policy, or required
-panel coverage must revise the storage/runtime proposal.
+modal state to restarts. F-069 records `4686854064` raw snapshot/restart
+bytes (`4.365` GiB) across the completed segmented R16 tree and a
+`4514126544`-byte deduplicated logical cadence. G023 terminal groups project
+`36091999664` bytes (`33.613` GiB) for one standard-layout case at the same
+cadence. Cell scaling yields `798538119152` logical raw bytes (`743.697`
+GiB) for the mapped matrix before retention margin. These remain preliminary
+storage measurements, not a matrix authorization. Any change in case matrix,
+cadence, file layout, retention policy, or required panel coverage must
+revise the storage/runtime proposal.
 
 Do not launch long high-resolution runs without this plan.
 Do not launch any Frontier test run without updating its projected and actual
@@ -4202,9 +4210,9 @@ through Frontier `debug`.  The archived pre-replacement Stage I execution
 accepted `R16` only as a prefix through `t = 7.5`; job `4686032` reached
 `t = 8.5` cleanly but is rejected for continuation after the turbulent-driver
 forcing/restart-state contract changed. Fresh replacement-driver `E02`
-execution has since begun from `t = 0`: jobs `4743735` and `4743933` are
-accepted through `t = 3.5`. Continue that lineage sequentially under the
-measured `7.0` node-hour `R16`-completion-only envelope.
+execution has since completed R16 from `t = 0` through exact `t = 10.0` in
+jobs `4743735` through `4744158`. F-069 permits only one bounded `R02`
+standard-layout timing pilot before broader matrix authorization.
 
 ## Repository Validation Gates
 
@@ -4649,8 +4657,9 @@ local implementation evidence. The next critical path is:
    reservation, summary, and ledger paths; rejects cross-epoch restart
    ancestry and bundle discovery; fails closed on all queued user jobs; checks
    active top-level CGL-root campaign records. Its initial `4.0` node-hour
-   `R16` pilot cap is now superseded by the F-068 measured `7.0` node-hour
-   `R16`-completion-only envelope. Commits `462b9dbd`, `d210cdd5`,
+   R16 pilot cap and F-068 `7.0` node-hour completion envelope are now
+   superseded by completed R16 accounting plus the F-069 bounded `2.0`
+   node-hour `R02` standard-layout timing pilot. Commits `462b9dbd`, `d210cdd5`,
    `eab6e12b`, and `7fae0bcf` retain the original controls, including the
    F-061 prepare-time absent-override-key guard exposed by `g014`. The
    2026-05-29 EDT audit found cancelled exploratory job `4743020` and
@@ -4685,16 +4694,17 @@ local implementation evidence. The next critical path is:
    (`39 passed`) and scheduled MPI CPU job `4743666` (`2 passed`) close the
    retained local entry gate. Frontier debug qualification is complete.
 
-3. **Complete the fresh `R16` lineage and recost the mapped matrix.**
-   Fresh `E02-modal-driver` jobs `4743735` and `4743933` are accepted through
-   `t = 3.5` with zero strict counters and one authenticated modal-restart
-   continuation. Their measured developed-state projection is `5.639721`
-   node-hours through `t = 10`. Continue sequentially under the `7.0`
-   node-hour `R16`-completion-only envelope, inspecting and recording each
-   segment. Analyze the production `t = 8`--`10` window after completion,
-   then propose a mapped-matrix runtime and storage reservation. The old
-   `1068.888889` node-hour and `880.368` GB values remain historical priors,
-   not authorization.
+3. **Run the bounded `R02` standard-layout timing pilot and recost the mapped
+   matrix.**
+   Fresh `E02-modal-driver` R16 jobs `4743735` through `4744158` are accepted
+   through exact `t = 10.0` with zero strict counters, authenticated modal
+   restarts, and passing `t = 8`--`10` analysis. They consume `6.145556`
+   node-hours. Cell-count-only and CFL-aware matrix projections span
+   `1087.763412` to `2956.012436` node-hours, so F-069 authorizes only a
+   `2.0` node-hour R02 timing pilot next. Inspect and record that bounded
+   measurement, then propose a mapped-matrix runtime and storage reservation.
+   The old `1068.888889` node-hour and `880.368` GB values remain historical
+   priors, not authorization.
 
 4. **Complete reference coverage and long-time calibration in parallel.**
    Figure 2(b)'s eight unstable-volume histories, Figure 7's dimensionless
