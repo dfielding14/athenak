@@ -1,0 +1,70 @@
+{
+  "schema_version": 1,
+  "purpose": "Source-local accepted Frontier F1 closure archive. Preserve the live Orion evidence projection for clone-local review without treating the repository copy as a replacement for the immutable Orion qualification bundle.",
+  "registered_executions": {
+    "accepted_gyro_v3_registered_execution": {
+      "pre_submit_manifest": {
+        "path": "tst/publication/readiness/fixtures/q027_frontier_f1_gyro_v3_pre_submit_manifest_2026-05-30.json",
+        "sha256": "85df58614531a7bab395867b7d3c34aa4ef9e64111f8eea713ecfc12cd5ad30c"
+      },
+      "artifact_inventory": {
+        "path": "tst/publication/readiness/fixtures/q027_frontier_f1_gyro_v3_artifact_inventory_2026-05-30.json",
+        "sha256": "2714c82f9cc02819b778637a21a5a6e98a6c42c09b84785ca2f0329780f1651f"
+      },
+      "analysis_result": {
+        "path": "tst/publication/readiness/fixtures/q027_frontier_f1_gyro_v3_analysis_result_2026-05-30.json",
+        "sha256": "0ca735018f17067c541acb331ecef3b308416810fced0547eb2aa5926bfd3ad2"
+      },
+      "offline_analysis_receipt": {
+        "path": "tst/publication/readiness/fixtures/q027_frontier_f1_gyro_v3_offline_analysis_receipt_2026-05-30.json",
+        "sha256": "4bfe86664dcd46c9f31c15e12a39024436428f1ff1cd8fffc286ac256a0d2821"
+      },
+      "initial_qualification_manifest": {
+        "path": "tst/publication/readiness/fixtures/q027_frontier_f1_gyro_v3_initial_qualification_manifest_2026-05-30.json",
+        "sha256": "9f7a5d64f818b3d59b0b1bfd9e6cf46fa72716884e6cb74a39cdb5d853f96b84"
+      },
+      "terminal_qualification_manifest": {
+        "path": "tst/publication/readiness/fixtures/q027_frontier_f1_gyro_v3_terminal_qualification_manifest_2026-05-30.json",
+        "sha256": "17265e0244e410b900ec2296dfcfcb51ec19138d82a331d497c8f341ad4cd354"
+      },
+      "terminal_reconciliation_event": {
+        "path": "tst/publication/readiness/fixtures/q027_frontier_f1_gyro_v3_terminal_reconciliation_event_2026-05-30.json",
+        "sha256": "1b306dc3f60a8478b7988a563929626eadea9d9333e10689255e4f2c561b459f"
+      },
+      "terminal_reconciliation_mirror_receipt": {
+        "path": "tst/publication/readiness/fixtures/q027_frontier_f1_gyro_v3_terminal_reconciliation_mirror_receipt_2026-05-30.json",
+        "sha256": "173b84a971fa5f5d85f9c53f110057559443564e52d7040f0da8b8099ba10f9d"
+      }
+    },
+    "accepted_paper_coupling_v2_registered_execution": {
+      "pre_submit_manifest": {
+        "path": "tst/publication/readiness/fixtures/q027_frontier_f1_paper_coupling_v2_pre_submit_manifest_2026-05-30.json",
+        "sha256": "e074c163d16b918d558880bba21ba8530130e4ce01dfb173ef5af1c952a92637"
+      },
+      "artifact_inventory": {
+        "path": "tst/publication/readiness/fixtures/q027_frontier_f1_paper_coupling_v2_artifact_inventory_2026-05-30.json",
+        "sha256": "a11b7f4ed98ad2e8074e711f44168274c9a97f3cf871bd5a31049440b0e21a80"
+      },
+      "analysis_result": {
+        "path": "tst/publication/readiness/fixtures/q027_frontier_f1_paper_coupling_v2_analysis_result_2026-05-30.json",
+        "sha256": "0260dfa6d8a48a66ee82e6dd253bd1dd92cdc198039c3f476858230cac290284"
+      },
+      "offline_analysis_receipt": {
+        "path": "tst/publication/readiness/fixtures/q027_frontier_f1_paper_coupling_v2_offline_analysis_receipt_2026-05-30.json",
+        "sha256": "8d9353e8f003fdf7734622d96511dc09f866cb897f3bd5ed7f52fb3e0037ab00"
+      },
+      "terminal_qualification_manifest": {
+        "path": "tst/publication/readiness/fixtures/q027_frontier_f1_paper_coupling_v2_terminal_qualification_manifest_2026-05-30.json",
+        "sha256": "6262332ad758953525cd745999766f7c9b23eb535594b802a79a75fee8fc5456"
+      },
+      "terminal_reconciliation_event": {
+        "path": "tst/publication/readiness/fixtures/q027_frontier_f1_paper_coupling_v2_terminal_reconciliation_event_2026-05-30.json",
+        "sha256": "d0e7351c309f86c05fe959b5a6e9884f13848449dfde79936396347404a888c3"
+      },
+      "terminal_reconciliation_mirror_receipt": {
+        "path": "tst/publication/readiness/fixtures/q027_frontier_f1_paper_coupling_v2_terminal_reconciliation_mirror_receipt_2026-05-30.json",
+        "sha256": "8eaab55c06215c7f1bf1bd34611764423ec499a283ab9b525afd90fc82f449de"
+      }
+    }
+  }
+}

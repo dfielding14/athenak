@@ -1,0 +1,130 @@
+{
+  "files": [
+    {
+      "path": "athena_stderr.txt",
+      "sha256": "fecd6e9635eb80d47efa65ec0789ad03c2ea1375ac96bfa9c801b3cbb7dc00ac",
+      "size": 6804
+    },
+    {
+      "path": "athena_stdout.sha256",
+      "sha256": "23e2e94867cf00a02b730e6138176e5a81fee616b9febf699c358155a3a56cae",
+      "size": 65
+    },
+    {
+      "path": "athena_stdout.txt",
+      "sha256": "318b997d7407f8e70531eeba004c8f38619a6924f4490fc4b8ab7f20b244521c",
+      "size": 7147
+    },
+    {
+      "path": "f1-gyro.environment.allowlist.txt",
+      "sha256": "9febe6ba923833ebdba984a4da3aaaf8b6ab7dd444ec2164cf7410a584d5f1be",
+      "size": 2557
+    },
+    {
+      "path": "output/f1_gpu_relativistic_gyro-errs.dat",
+      "sha256": "4e6542e29467361de1085199c02abcabae8bc4c75bcd9e25e24fb3c7c695e582",
+      "size": 231
+    },
+    {
+      "path": "output/pvtk/f1_gpu_relativistic_gyro.prtcl_all.00000.part.vtk",
+      "sha256": "8b0e04874db3b32744ac33a882405d8a618d3d8caa97e4e94ae46c831baf2705",
+      "size": 4127
+    },
+    {
+      "path": "output/pvtk/f1_gpu_relativistic_gyro.prtcl_all.00001.part.vtk",
+      "sha256": "00183309261aec2999c9cde6983fa088906f0b0c49fb0c6dac277b7c0d224c23",
+      "size": 4130
+    },
+    {
+      "path": "output/pvtk/f1_gpu_relativistic_gyro.prtcl_all.00002.part.vtk",
+      "sha256": "03a4c450c35536e2507f31950afe73fce3deccf8b941b9ca74b7d4090df26d75",
+      "size": 4130
+    },
+    {
+      "path": "output/pvtk/f1_gpu_relativistic_gyro.prtcl_all.00003.part.vtk",
+      "sha256": "03a4c450c35536e2507f31950afe73fce3deccf8b941b9ca74b7d4090df26d75",
+      "size": 4130
+    },
+    {
+      "path": "output/rst/f1_gpu_relativistic_gyro.00000.rst",
+      "sha256": "1141b71cfb58e284d905ef0b1818fcdc0a00956aa9a7b6b5bba7180a5b0cd21a",
+      "size": 80152
+    },
+    {
+      "path": "output/rst/f1_gpu_relativistic_gyro.00000.rst.complete",
+      "sha256": "8a65f31c98f98dac8c92d2520b0642e864d795d5b6078a0cdd560ef0b98fc183",
+      "size": 64
+    },
+    {
+      "path": "output/rst/f1_gpu_relativistic_gyro.00000.rst.manifest",
+      "sha256": "dbdc8b3dc1fb919100e778e9ff523415e103200950ee8191c9f750adf4175a5d",
+      "size": 167
+    },
+    {
+      "path": "output/rst/f1_gpu_relativistic_gyro.00000.rst.manifest.complete",
+      "sha256": "835d6377efa5029101220d70555fa1f6254ce0ad61dd2dd8a440676cd7235ac2",
+      "size": 62
+    },
+    {
+      "path": "output/rst/f1_gpu_relativistic_gyro.00001.rst",
+      "sha256": "b165004652d20d62ff4135b15298696733077628175d0bfc80eb53d6fe7add2c",
+      "size": 80152
+    },
+    {
+      "path": "output/rst/f1_gpu_relativistic_gyro.00001.rst.complete",
+      "sha256": "c65ef1285fb0301754193276b427a093a7fda72d2c1847d6a06b4fc26f41defb",
+      "size": 64
+    },
+    {
+      "path": "output/rst/f1_gpu_relativistic_gyro.00001.rst.manifest",
+      "sha256": "8eb112ac5edfbce32c2a526803adc451fcddef1f97b87823ce2f0ff1d6a195a8",
+      "size": 167
+    },
+    {
+      "path": "output/rst/f1_gpu_relativistic_gyro.00001.rst.manifest.complete",
+      "sha256": "3ec654fe8069b88956de64564dcbbaacc0729f2878f77b09be574247cf5d5b86",
+      "size": 62
+    },
+    {
+      "path": "output/rst/f1_gpu_relativistic_gyro.00002.rst",
+      "sha256": "4b3286a3253f772dc52436a3d608f6d5deea7d4821f1591adf592b8a6c8109bc",
+      "size": 80152
+    },
+    {
+      "path": "output/rst/f1_gpu_relativistic_gyro.00002.rst.complete",
+      "sha256": "c3baed2ea0d8722c61cf9bf388bf3d700422fcb8b751f2b62728b85e257591f3",
+      "size": 64
+    },
+    {
+      "path": "output/rst/f1_gpu_relativistic_gyro.00002.rst.manifest",
+      "sha256": "d452d84a7308c7aecc997c7735c26bcbc82544135cd972bc84b530ec62d09a9a",
+      "size": 167
+    },
+    {
+      "path": "output/rst/f1_gpu_relativistic_gyro.00002.rst.manifest.complete",
+      "sha256": "7a28448e02782156273c3de4166c88200081eadd3e1a5e829803f2d77cb27e98",
+      "size": 62
+    },
+    {
+      "path": "output/rst/f1_gpu_relativistic_gyro.00003.rst",
+      "sha256": "27b59e59319aad285fb22f4ecc81ea58bb35a41e8df270bbd9e5e650cc12dcca",
+      "size": 80152
+    },
+    {
+      "path": "output/rst/f1_gpu_relativistic_gyro.00003.rst.complete",
+      "sha256": "a8aeb66040b2957dbbb1c00242fa22b00f34ef068875d09379019b813d8e130f",
+      "size": 64
+    },
+    {
+      "path": "output/rst/f1_gpu_relativistic_gyro.00003.rst.manifest",
+      "sha256": "313c02b571f609c67ea9fe21a6b50aca020572a27fa191d3e0abcdcc3e1785dc",
+      "size": 167
+    },
+    {
+      "path": "output/rst/f1_gpu_relativistic_gyro.00003.rst.manifest.complete",
+      "sha256": "10cbddf29624ccaef33e744640e247d9f123a555a86bb72ce9254833c458f07f",
+      "size": 62
+    }
+  ],
+  "schema_version": 1
+}

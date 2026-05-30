@@ -1,0 +1,120 @@
+{
+  "athena_binary_parser": {
+    "dependencies": "python_stdlib_only",
+    "format_version": "1.1",
+    "payload_byteorder": "little"
+  },
+  "cases": {
+    "coeff0": {
+      "abs_energy_conservation_error": 6.459872196273864e-06,
+      "gpu_launch": {
+        "host": "frontier07750",
+        "linkage": [
+          "libamdhip64",
+          "libmpi_amd",
+          "libmpi_gtl_hsa"
+        ],
+        "rank": 0,
+        "rocr_visible_devices": "0"
+      },
+      "max_abs_momentum_conservation_error": 6.731680066707213e-07,
+      "max_abs_particle_momentum_delta": 0.7713060171481612,
+      "mhd_energy_delta": 0.00251007080078125,
+      "mhd_momentum_delta": [
+        0.11668812856078148,
+        0.19018694385886192,
+        -0.7713061720132828
+      ],
+      "particle_count": 64,
+      "particle_energy_final": 6.678734740770252,
+      "particle_energy_initial": 6.681251271443216,
+      "particle_momentum_final": [
+        25.483312162647394,
+        12.609812885425235,
+        7.171306258242207
+      ],
+      "particle_momentum_initial": [
+        25.600000964376182,
+        12.800000482188091,
+        6.4000002410940455
+      ],
+      "runtime_identity": "PIC runtime model: physical_mode=paper_mhd_pic state=momentum_p_over_m C=3 background=coupled feedback=coupled induction=ideal_mhd_only deposition=tsc deltaf=off deltaf_adapt=off deltaf_adapt_interval=0 expanding_box=off expansion_law=linear wave_damping=off nu_in=0 lb_cost_per_particle=0 max_cell_cross=2 theta_max=0.3 restart_schema=7",
+      "total_energy_delta": -6.459872196273864e-06,
+      "total_momentum_delta": [
+        -6.731680066707213e-07,
+        -6.52903993980658e-07,
+        -1.5486512161544397e-07
+      ]
+    },
+    "coeff7": {
+      "abs_energy_conservation_error": 6.459872196273864e-06,
+      "gpu_launch": {
+        "host": "frontier07750",
+        "linkage": [
+          "libamdhip64",
+          "libmpi_amd",
+          "libmpi_gtl_hsa"
+        ],
+        "rank": 0,
+        "rocr_visible_devices": "0"
+      },
+      "max_abs_momentum_conservation_error": 6.731680066707213e-07,
+      "max_abs_particle_momentum_delta": 0.7713060171481612,
+      "mhd_energy_delta": 0.00251007080078125,
+      "mhd_momentum_delta": [
+        0.11668812856078148,
+        0.19018694385886192,
+        -0.7713061720132828
+      ],
+      "particle_count": 64,
+      "particle_energy_final": 6.678734740770252,
+      "particle_energy_initial": 6.681251271443216,
+      "particle_momentum_final": [
+        25.483312162647394,
+        12.609812885425235,
+        7.171306258242207
+      ],
+      "particle_momentum_initial": [
+        25.600000964376182,
+        12.800000482188091,
+        6.4000002410940455
+      ],
+      "runtime_identity": "PIC runtime model: physical_mode=paper_mhd_pic state=momentum_p_over_m C=3 background=coupled feedback=coupled induction=ideal_mhd_only deposition=tsc deltaf=off deltaf_adapt=off deltaf_adapt_interval=0 expanding_box=off expansion_law=linear wave_damping=off nu_in=0 lb_cost_per_particle=0 max_cell_cross=2 theta_max=0.3 restart_schema=7",
+      "total_energy_delta": -6.459872196273864e-06,
+      "total_momentum_delta": [
+        -6.731680066707213e-07,
+        -6.52903993980658e-07,
+        -1.5486512161544397e-07
+      ]
+    }
+  },
+  "coefficient_invariance": {
+    "max_abs_bcc_error": {
+      "bcc1": 0.0,
+      "bcc2": 0.0,
+      "bcc3": 0.0
+    },
+    "max_abs_particle_momentum_error": 0.0
+  },
+  "execution_context": {
+    "launch_contract": "trusted_trampoline_athena_argv_v1",
+    "mpich_gpu_support_enabled": "1",
+    "runtime_allowlist_sha256": {
+      "f1-coupling-coeff0.environment.allowlist.txt": "9febe6ba923833ebdba984a4da3aaaf8b6ab7dd444ec2164cf7410a584d5f1be",
+      "f1-coupling-coeff7.environment.allowlist.txt": "9febe6ba923833ebdba984a4da3aaaf8b6ab7dd444ec2164cf7410a584d5f1be"
+    },
+    "runtime_profile": "frontier_minimum_supported",
+    "slurm_export_env": "ALL"
+  },
+  "physical_mode": "paper_mhd_pic",
+  "schema_version": 1,
+  "status": "pass",
+  "thresholds": {
+    "coefficient_invariance_tolerance": 1e-12,
+    "energy_conservation_tolerance": 3e-05,
+    "expected_mhd_cell_count": 64,
+    "expected_particle_count": 64,
+    "momentum_conservation_tolerance": 2e-06,
+    "particle_momentum_liveness_minimum": 0.001
+  }
+}

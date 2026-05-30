@@ -1,0 +1,295 @@
+{
+  "files": [
+    {
+      "path": "athena_coeff0_stderr.txt",
+      "sha256": "fecd6e9635eb80d47efa65ec0789ad03c2ea1375ac96bfa9c801b3cbb7dc00ac",
+      "size": 6804
+    },
+    {
+      "path": "athena_coeff0_stdout.sha256",
+      "sha256": "9904509eb578b9f839788b328a1e40d2611037eecad1e34fe542b6e8190a97f6",
+      "size": 65
+    },
+    {
+      "path": "athena_coeff0_stdout.txt",
+      "sha256": "37942cea9f26ce76c5b7f5f1424bccf77a43d4cc7db36871e7831ab205feb9a1",
+      "size": 7136
+    },
+    {
+      "path": "athena_coeff7_stderr.txt",
+      "sha256": "fecd6e9635eb80d47efa65ec0789ad03c2ea1375ac96bfa9c801b3cbb7dc00ac",
+      "size": 6804
+    },
+    {
+      "path": "athena_coeff7_stdout.sha256",
+      "sha256": "90352bb392c6254b02e17f30b9bd435b90fa232cec5587cae15efd3c5477535e",
+      "size": 65
+    },
+    {
+      "path": "athena_coeff7_stdout.txt",
+      "sha256": "cfa87ef30f45177a55ee04cae9abe08331d40bee6beaec2a19b8c21f63ea0a71",
+      "size": 7136
+    },
+    {
+      "path": "f1-coupling-coeff0.environment.allowlist.txt",
+      "sha256": "9febe6ba923833ebdba984a4da3aaaf8b6ab7dd444ec2164cf7410a584d5f1be",
+      "size": 2557
+    },
+    {
+      "path": "f1-coupling-coeff7.environment.allowlist.txt",
+      "sha256": "9febe6ba923833ebdba984a4da3aaaf8b6ab7dd444ec2164cf7410a584d5f1be",
+      "size": 2557
+    },
+    {
+      "path": "output/coeff0/bin/f1_gpu_paper_coupling_coeff0.mhd_bcc.00000.bin",
+      "sha256": "74a51217d74e1ca3bef3ae1f8870523a9d2d4407073093dda6c285b62b483b83",
+      "size": 10306
+    },
+    {
+      "path": "output/coeff0/bin/f1_gpu_paper_coupling_coeff0.mhd_bcc.00001.bin",
+      "sha256": "cd02662e38bef920829dfb6d125c1246e64dadad48e1106bac498ba2277e0176",
+      "size": 10281
+    },
+    {
+      "path": "output/coeff0/bin/f1_gpu_paper_coupling_coeff0.mhd_bcc.00002.bin",
+      "sha256": "f9b05ebc4abe8fd26d27bb7dfde6c0190f7f3593ae133e2dd4b4ea2599d84ab7",
+      "size": 10281
+    },
+    {
+      "path": "output/coeff0/bin/f1_gpu_paper_coupling_coeff0.mhd_bcc.00003.bin",
+      "sha256": "683b0586faafc3f498db73e56df970a38b56c6a7ae76c32a15688d4047c689cf",
+      "size": 10281
+    },
+    {
+      "path": "output/coeff0/bin/f1_gpu_paper_coupling_coeff0.mhd_u_e.00000.bin",
+      "sha256": "d882877765ada0117e9f4289bb96ef4954ee87cef4e31b8a76548454e263aef9",
+      "size": 9846
+    },
+    {
+      "path": "output/coeff0/bin/f1_gpu_paper_coupling_coeff0.mhd_u_e.00001.bin",
+      "sha256": "4dd299b724570e9eab5c3789b726469ca5ab55b26b5f73e94fc0a64cb3605fb3",
+      "size": 9757
+    },
+    {
+      "path": "output/coeff0/bin/f1_gpu_paper_coupling_coeff0.mhd_u_e.00002.bin",
+      "sha256": "50d0ef4672ac2fdccf441e4cc01d02dcb80e051da56efaa07cd4739c0c2e5e93",
+      "size": 9757
+    },
+    {
+      "path": "output/coeff0/bin/f1_gpu_paper_coupling_coeff0.mhd_u_e.00003.bin",
+      "sha256": "8d75fd8ba5f33455bb8385fd85fe3f318e027dadd7f83721b06d29bd4629bdb4",
+      "size": 9757
+    },
+    {
+      "path": "output/coeff0/bin/f1_gpu_paper_coupling_coeff0.mhd_u_m1.00000.bin",
+      "sha256": "8ff1c3c30779ecca48c497ab0dd0e5decee61fab0349f4c0f68c49459f8a627a",
+      "size": 9798
+    },
+    {
+      "path": "output/coeff0/bin/f1_gpu_paper_coupling_coeff0.mhd_u_m1.00001.bin",
+      "sha256": "8c8b414e50dc481d7d18997bbc185449760cfdaaac3fa7543e7ccd9b8813de25",
+      "size": 9757
+    },
+    {
+      "path": "output/coeff0/bin/f1_gpu_paper_coupling_coeff0.mhd_u_m1.00002.bin",
+      "sha256": "79307bd374e01fcaa801f6f29464d566df7d65d9e0d23b08afa15d865cb9d072",
+      "size": 9757
+    },
+    {
+      "path": "output/coeff0/bin/f1_gpu_paper_coupling_coeff0.mhd_u_m1.00003.bin",
+      "sha256": "b94039e6f7eede8532a2c132eb2518f9a7e6bf46cfac11fe035936d10758280c",
+      "size": 9757
+    },
+    {
+      "path": "output/coeff0/bin/f1_gpu_paper_coupling_coeff0.mhd_u_m2.00000.bin",
+      "sha256": "281cebb11217695750b9c651370ef3e2a0feaed0b5f57db76bf4bc8c68cd8751",
+      "size": 9814
+    },
+    {
+      "path": "output/coeff0/bin/f1_gpu_paper_coupling_coeff0.mhd_u_m2.00001.bin",
+      "sha256": "937ba81d7728a39392883f1f0634a74ce918db778a0d4f5b2aece482295032a0",
+      "size": 9757
+    },
+    {
+      "path": "output/coeff0/bin/f1_gpu_paper_coupling_coeff0.mhd_u_m2.00002.bin",
+      "sha256": "f67b73fe2b0ed0c9a77d3e71ef3f0bdb0c60e8faaccdf6f76d0ed3ea2c273165",
+      "size": 9757
+    },
+    {
+      "path": "output/coeff0/bin/f1_gpu_paper_coupling_coeff0.mhd_u_m2.00003.bin",
+      "sha256": "47a788d1257bc62c9766a726fb34d08b8ca7cc1d49a73d84545d916284cacca6",
+      "size": 9757
+    },
+    {
+      "path": "output/coeff0/bin/f1_gpu_paper_coupling_coeff0.mhd_u_m3.00000.bin",
+      "sha256": "5fad1546404b917f89b1236b08c83f0ed68166d3906e5fcf2c6cd6e97592d2e2",
+      "size": 9830
+    },
+    {
+      "path": "output/coeff0/bin/f1_gpu_paper_coupling_coeff0.mhd_u_m3.00001.bin",
+      "sha256": "f18c7b6209f3e3825ddcef62320d60cde325ccc31dbd75841dc96d47f3257e10",
+      "size": 9757
+    },
+    {
+      "path": "output/coeff0/bin/f1_gpu_paper_coupling_coeff0.mhd_u_m3.00002.bin",
+      "sha256": "860ba2e3f633d59475034b1167721e31f87403d1e997bf0636620db4d3b378cd",
+      "size": 9757
+    },
+    {
+      "path": "output/coeff0/bin/f1_gpu_paper_coupling_coeff0.mhd_u_m3.00003.bin",
+      "sha256": "84300b5a0be09a2321ec6795a97af5704dac16c6858c41089896ba953aedf017",
+      "size": 9757
+    },
+    {
+      "path": "output/coeff0/f1_gpu_paper_coupling_coeff0-errs.dat",
+      "sha256": "7fc3b76f3eaef29180a610bdc648c9d42789214326fe71b23f8fdcb82388c7e4",
+      "size": 316
+    },
+    {
+      "path": "output/coeff0/pvtk/f1_gpu_paper_coupling_coeff0.prtcl_all.00000.part.vtk",
+      "sha256": "a0374c304e13ddf3100fdd7e8188b43373ee432d9b0c2f95a6e7f76820184ec5",
+      "size": 4127
+    },
+    {
+      "path": "output/coeff0/pvtk/f1_gpu_paper_coupling_coeff0.prtcl_all.00001.part.vtk",
+      "sha256": "b45bb617f97d6de69b9d08defad2c06fcba62153f2103e5b189e7a9cb598b589",
+      "size": 4134
+    },
+    {
+      "path": "output/coeff0/pvtk/f1_gpu_paper_coupling_coeff0.prtcl_all.00002.part.vtk",
+      "sha256": "7d595bed007dca911dc28f5d506a5b30b4a6270b0bda784b55769ec430b81d85",
+      "size": 4134
+    },
+    {
+      "path": "output/coeff0/pvtk/f1_gpu_paper_coupling_coeff0.prtcl_all.00003.part.vtk",
+      "sha256": "7d595bed007dca911dc28f5d506a5b30b4a6270b0bda784b55769ec430b81d85",
+      "size": 4134
+    },
+    {
+      "path": "output/coeff7/bin/f1_gpu_paper_coupling_coeff7.mhd_bcc.00000.bin",
+      "sha256": "4916b4b9792913b4e099c2075acd1d9b07e444b0318ebad6e7efb5329040e043",
+      "size": 10306
+    },
+    {
+      "path": "output/coeff7/bin/f1_gpu_paper_coupling_coeff7.mhd_bcc.00001.bin",
+      "sha256": "98587a8e6bd33bd1004b6705229f8a03044940c5965c11e34cb1a1b26fe7e02c",
+      "size": 10281
+    },
+    {
+      "path": "output/coeff7/bin/f1_gpu_paper_coupling_coeff7.mhd_bcc.00002.bin",
+      "sha256": "1d40fbbf8bb3554eecab71ee977b332fdd882cab8522b78c44010e27185d5ffd",
+      "size": 10281
+    },
+    {
+      "path": "output/coeff7/bin/f1_gpu_paper_coupling_coeff7.mhd_bcc.00003.bin",
+      "sha256": "e6a2e86cee72ee3fcfbc4899598debe955e44299557bdde79da8d5f212f32de0",
+      "size": 10281
+    },
+    {
+      "path": "output/coeff7/bin/f1_gpu_paper_coupling_coeff7.mhd_u_e.00000.bin",
+      "sha256": "91c14d069226af00085d69dfa433c53bbd6e0d44f8147a0a715dc71e5e0aa776",
+      "size": 9846
+    },
+    {
+      "path": "output/coeff7/bin/f1_gpu_paper_coupling_coeff7.mhd_u_e.00001.bin",
+      "sha256": "bb7a688c38670332b968889b7bc7de909d2549c268455c68976796f546b51431",
+      "size": 9757
+    },
+    {
+      "path": "output/coeff7/bin/f1_gpu_paper_coupling_coeff7.mhd_u_e.00002.bin",
+      "sha256": "63f4e2e4ccdc37b7849fbe2692dbd7906c2e06ea062a2ef8d9e2195011f32317",
+      "size": 9757
+    },
+    {
+      "path": "output/coeff7/bin/f1_gpu_paper_coupling_coeff7.mhd_u_e.00003.bin",
+      "sha256": "8abe34328b5d542de1ec74bdea72ef2fd1a4abeffd0869f2fd05935cc3b5013b",
+      "size": 9757
+    },
+    {
+      "path": "output/coeff7/bin/f1_gpu_paper_coupling_coeff7.mhd_u_m1.00000.bin",
+      "sha256": "e739634967d276331b5d1acd39e431f354251a782bf44baf9de34f2b46910b06",
+      "size": 9798
+    },
+    {
+      "path": "output/coeff7/bin/f1_gpu_paper_coupling_coeff7.mhd_u_m1.00001.bin",
+      "sha256": "b02d313b501189eae97b14aaf7c31b7bdd8ff3b04db0c130dc30d05644805b3e",
+      "size": 9757
+    },
+    {
+      "path": "output/coeff7/bin/f1_gpu_paper_coupling_coeff7.mhd_u_m1.00002.bin",
+      "sha256": "392cd1205c3a0987719a15528a2e57506507b4cb786055f08ed4c2839f465020",
+      "size": 9757
+    },
+    {
+      "path": "output/coeff7/bin/f1_gpu_paper_coupling_coeff7.mhd_u_m1.00003.bin",
+      "sha256": "084d289e0738c9357f7547607074669377e4eaf2afa56bb36f9a66e2d7d3507e",
+      "size": 9757
+    },
+    {
+      "path": "output/coeff7/bin/f1_gpu_paper_coupling_coeff7.mhd_u_m2.00000.bin",
+      "sha256": "1ea83504723f192b4d49d37fa4672bbabe0a7da339f8e048ca95cbdbfaf46efc",
+      "size": 9814
+    },
+    {
+      "path": "output/coeff7/bin/f1_gpu_paper_coupling_coeff7.mhd_u_m2.00001.bin",
+      "sha256": "9119cec06679d6b4215c3b7ca7d8df6d17010ea94ab84c1df468c769b162c70f",
+      "size": 9757
+    },
+    {
+      "path": "output/coeff7/bin/f1_gpu_paper_coupling_coeff7.mhd_u_m2.00002.bin",
+      "sha256": "654d509cccdb0b085253285b7457021e33054a993988d45d04aaea998ce26800",
+      "size": 9757
+    },
+    {
+      "path": "output/coeff7/bin/f1_gpu_paper_coupling_coeff7.mhd_u_m2.00003.bin",
+      "sha256": "7f8894f12ce05aee8e2878ab7bd35227af659a8b4d03e12050d13e4e46f18dba",
+      "size": 9757
+    },
+    {
+      "path": "output/coeff7/bin/f1_gpu_paper_coupling_coeff7.mhd_u_m3.00000.bin",
+      "sha256": "f7c84d92ec5ed12fed5f9cd8d72ecc47e06da9ce94aea9f9918d3ff155d64f5a",
+      "size": 9830
+    },
+    {
+      "path": "output/coeff7/bin/f1_gpu_paper_coupling_coeff7.mhd_u_m3.00001.bin",
+      "sha256": "21274bb944a996b9503d60bba0c7a033f71bb127c891ffd993f95a8405a69f29",
+      "size": 9757
+    },
+    {
+      "path": "output/coeff7/bin/f1_gpu_paper_coupling_coeff7.mhd_u_m3.00002.bin",
+      "sha256": "9fdbb167ab05ac159c43347a02c6b915609b27fa25b1681ce5615cbea6fc8bc2",
+      "size": 9757
+    },
+    {
+      "path": "output/coeff7/bin/f1_gpu_paper_coupling_coeff7.mhd_u_m3.00003.bin",
+      "sha256": "1d368787d9f5038c2f61ebe05dd3adbecbc702320bedc7a96f4c28fcb6fb9891",
+      "size": 9757
+    },
+    {
+      "path": "output/coeff7/f1_gpu_paper_coupling_coeff7-errs.dat",
+      "sha256": "7fc3b76f3eaef29180a610bdc648c9d42789214326fe71b23f8fdcb82388c7e4",
+      "size": 316
+    },
+    {
+      "path": "output/coeff7/pvtk/f1_gpu_paper_coupling_coeff7.prtcl_all.00000.part.vtk",
+      "sha256": "a0374c304e13ddf3100fdd7e8188b43373ee432d9b0c2f95a6e7f76820184ec5",
+      "size": 4127
+    },
+    {
+      "path": "output/coeff7/pvtk/f1_gpu_paper_coupling_coeff7.prtcl_all.00001.part.vtk",
+      "sha256": "b45bb617f97d6de69b9d08defad2c06fcba62153f2103e5b189e7a9cb598b589",
+      "size": 4134
+    },
+    {
+      "path": "output/coeff7/pvtk/f1_gpu_paper_coupling_coeff7.prtcl_all.00002.part.vtk",
+      "sha256": "7d595bed007dca911dc28f5d506a5b30b4a6270b0bda784b55769ec430b81d85",
+      "size": 4134
+    },
+    {
+      "path": "output/coeff7/pvtk/f1_gpu_paper_coupling_coeff7.prtcl_all.00003.part.vtk",
+      "sha256": "7d595bed007dca911dc28f5d506a5b30b4a6270b0bda784b55769ec430b81d85",
+      "size": 4134
+    }
+  ],
+  "schema_version": 1
+}

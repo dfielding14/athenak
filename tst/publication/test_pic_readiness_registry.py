@@ -4,14 +4,17 @@
 from __future__ import annotations
 
 import base64
+from contextlib import contextmanager
 import copy
 import hashlib
 import json
 import os
 from pathlib import Path
+import stat
 import subprocess
 import sys
 import unittest
+from collections.abc import Iterator
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
@@ -22,6 +25,7 @@ from control_plane_common import inventory_digest
 from control_plane_common import launch_contract_sha256
 from control_plane_common import validate_launch_contract
 from ledger import record_sha256
+from ledger import validate_mirrored_state
 from tst.publication.pic_qualification_manifest import validate_qualification_manifest
 from tst.publication.pic_qualification_manifest import validate_schema
 
@@ -63,6 +67,48 @@ def _load(name: str) -> dict[str, object]:
 
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _descriptor_bytes(descriptor: int) -> bytes:
+    os.lseek(descriptor, 0, os.SEEK_SET)
+    chunks = []
+    while chunk := os.read(descriptor, 1024 * 1024):
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
+def _require_regular_namespace_identity(path: Path, identity: tuple[int, int]) -> None:
+    observed = os.stat(path, follow_symlinks=False)
+    if not stat.S_ISREG(observed.st_mode) or (observed.st_dev, observed.st_ino) != identity:
+        raise ValueError(f"pinned regular file namespace changed: {path}")
+
+
+@contextmanager
+def _pinned_regular_bytes(path: Path) -> Iterator[bytes]:
+    descriptor = os.open(
+        path,
+        os.O_RDONLY | os.O_CLOEXEC | getattr(os, "O_NOFOLLOW", 0),
+    )
+    try:
+        before = os.fstat(descriptor)
+        if not stat.S_ISREG(before.st_mode):
+            raise ValueError(f"pinned path is not a regular file: {path}")
+        identity = (before.st_dev, before.st_ino)
+        data = _descriptor_bytes(descriptor)
+        after = os.fstat(descriptor)
+        if (
+            identity != (after.st_dev, after.st_ino)
+            or before.st_size != after.st_size
+            or len(data) != after.st_size
+        ):
+            raise ValueError(f"pinned regular file changed during read: {path}")
+        _require_regular_namespace_identity(path, identity)
+        yield data
+        if _descriptor_bytes(descriptor) != data:
+            raise ValueError(f"pinned regular file bytes changed during validation: {path}")
+        _require_regular_namespace_identity(path, identity)
+    finally:
+        os.close(descriptor)
 
 
 def _git_blob_sha256(commit: str, relative_path: str) -> str:
@@ -772,10 +818,11 @@ class PicReadinessRegistryTests(unittest.TestCase):
                 "/lustre/orion/ast207/proj-shared/dfielding/PIC/ledger/pending_submission.json"
             ).exists()
         )
-        ledger_events = [
-            json.loads(line)
-            for line in ledger_path.read_text(encoding="utf-8").splitlines()
-        ]
+        ledger_events = validate_mirrored_state(
+            ledger_path,
+            live_surfaces[2],
+            live_surfaces[3],
+        )
         active_reservations = set()
         for event in ledger_events:
             if event["event_type"] == "reservation":
@@ -802,6 +849,148 @@ class PicReadinessRegistryTests(unittest.TestCase):
         )
         self.assertIn(gyro_fixture["terminal_reconciliation_event"], ledger_events)
 
+    def test_accepted_registered_f1_source_local_closure_is_bound(self) -> None:
+        successor = _load(
+            "q027_frontier_f1_registered_science_successor_candidate_2026-05-30.json"
+        )
+        closure_path = successor["source_local_accepted_closure_fixture"]
+        closure = json.loads((REPO_ROOT / closure_path).read_text(encoding="utf-8"))
+        executions = closure["registered_executions"]
+        self.assertEqual(
+            set(executions),
+            {
+                "accepted_gyro_v3_registered_execution",
+                "accepted_paper_coupling_v2_registered_execution",
+            },
+        )
+        for key, fixture in executions.items():
+            execution = successor[key]
+            documents = {}
+            for name, record in fixture.items():
+                path = REPO_ROOT / record["path"]
+                self.assertEqual(_sha256(path), record["sha256"])
+                documents[name] = json.loads(path.read_text(encoding="utf-8"))
+
+            self.assertEqual(
+                fixture["pre_submit_manifest"]["sha256"],
+                execution["pre_submit_manifest_sha256"],
+            )
+            self.assertEqual(
+                fixture["artifact_inventory"]["sha256"],
+                execution["artifact_inventory_sha256"],
+            )
+            self.assertEqual(
+                fixture["analysis_result"]["sha256"],
+                execution["analysis_result_sha256"],
+            )
+            self.assertEqual(
+                fixture["offline_analysis_receipt"]["sha256"],
+                execution["offline_analysis_receipt_sha256"],
+            )
+            self.assertEqual(
+                fixture["terminal_qualification_manifest"]["sha256"],
+                execution["qualification_manifest_sha256"],
+            )
+            pre_submit_manifest = documents["pre_submit_manifest"]
+            reconciliation = documents["terminal_reconciliation_event"]
+            receipt = documents["terminal_reconciliation_mirror_receipt"]
+            offline_receipt = documents["offline_analysis_receipt"]
+            qualification = documents["terminal_qualification_manifest"]
+            result = documents["analysis_result"]
+            for field, expected in {
+                "submission_id": execution["submission_id"],
+                "registered_science_authorization_id":
+                    execution["registered_science_authorization_id"],
+                "artifact_dir": execution["run_artifact_dir"],
+            }.items():
+                self.assertEqual(pre_submit_manifest[field], expected)
+            for field, expected in {
+                "submission_id": execution["submission_id"],
+                "reservation_id": execution["reservation_id"],
+                "job_id": execution["job_id"],
+                "registered_science_authorization_id":
+                    execution["registered_science_authorization_id"],
+                "manifest_sha256": execution["pre_submit_manifest_sha256"],
+                "artifact_dir": execution["run_artifact_dir"],
+                "consumed_node_hours": execution["consumed_node_hours"],
+                "cumulative_consumed_node_hours":
+                    execution["cumulative_consumed_node_hours"],
+            }.items():
+                self.assertEqual(reconciliation[field], expected)
+            self.assertEqual(
+                reconciliation["event_sha256"],
+                record_sha256(reconciliation, "event_sha256"),
+            )
+            self.assertEqual(
+                receipt["mirror_ack_sha256"],
+                record_sha256(receipt, "mirror_ack_sha256"),
+            )
+            self.assertEqual(
+                receipt["mirrored_event_sha256"],
+                reconciliation["event_sha256"],
+            )
+            self.assertEqual(
+                offline_receipt["artifact_inventory"]["sha256"],
+                execution["artifact_inventory_sha256"],
+            )
+            self.assertEqual(
+                offline_receipt["analysis_result"]["sha256"],
+                execution["analysis_result_sha256"],
+            )
+            resources = qualification["resources"]
+            for field, expected in {
+                "submission_id": execution["submission_id"],
+                "reservation_id": execution["reservation_id"],
+                "job_id": execution["job_id"],
+                "registered_science_authorization_id":
+                    execution["registered_science_authorization_id"],
+                "pre_submit_manifest_sha256": execution["pre_submit_manifest_sha256"],
+                "artifact_inventory_sha256": execution["artifact_inventory_sha256"],
+                "analysis_result_sha256": execution["analysis_result_sha256"],
+                "offline_analysis_receipt_sha256":
+                    execution["offline_analysis_receipt_sha256"],
+                "node_hours": execution["consumed_node_hours"],
+            }.items():
+                self.assertEqual(resources[field], expected)
+            if key == "accepted_gyro_v3_registered_execution":
+                for field in [
+                    "status",
+                    "cycle",
+                    "particle_count",
+                    "max_abs_velocity_error",
+                    "velocity_tolerance",
+                ]:
+                    self.assertEqual(result[field], execution["analysis"][field])
+                self.assertEqual(
+                    fixture["initial_qualification_manifest"]["sha256"],
+                    execution["initial_qualification_manifest_sha256"],
+                )
+            else:
+                coeff0 = result["cases"]["coeff0"]
+                coeff7 = result["cases"]["coeff7"]
+                self.assertEqual(
+                    coeff0["max_abs_momentum_conservation_error"],
+                    execution["analysis"]["coeff0_max_abs_momentum_conservation_error"],
+                )
+                self.assertEqual(
+                    coeff0["abs_energy_conservation_error"],
+                    execution["analysis"]["coeff0_abs_energy_conservation_error"],
+                )
+                self.assertEqual(
+                    coeff7["max_abs_momentum_conservation_error"],
+                    execution["analysis"]["coeff7_max_abs_momentum_conservation_error"],
+                )
+                self.assertEqual(
+                    coeff7["abs_energy_conservation_error"],
+                    execution["analysis"]["coeff7_abs_energy_conservation_error"],
+                )
+                self.assertEqual(
+                    result["coefficient_invariance"]["max_abs_particle_momentum_error"],
+                    execution["analysis"][
+                        "max_abs_particle_momentum_coefficient_invariance_error"
+                    ],
+                )
+
     @unittest.skipUnless(
         os.environ.get("PIC_RUN_LIVE_PREFLIGHT") == "1",
         "set PIC_RUN_LIVE_PREFLIGHT=1 for Orion live-state checks",
@@ -816,13 +1005,12 @@ class PicReadinessRegistryTests(unittest.TestCase):
         ]:
             execution = successor[key]
             manifest_path = Path(execution["qualification_manifest_path"])
-            self.assertEqual(
-                _sha256(manifest_path),
-                execution["qualification_manifest_sha256"],
-            )
-            validate_qualification_manifest(
-                json.loads(manifest_path.read_text(encoding="utf-8"))
-            )
+            with _pinned_regular_bytes(manifest_path) as manifest_bytes:
+                self.assertEqual(
+                    hashlib.sha256(manifest_bytes).hexdigest(),
+                    execution["qualification_manifest_sha256"],
+                )
+                validate_qualification_manifest(json.loads(manifest_bytes))
 
     def test_registered_parser_policy_transition_resolves_source_commit(self) -> None:
         successor = _load(

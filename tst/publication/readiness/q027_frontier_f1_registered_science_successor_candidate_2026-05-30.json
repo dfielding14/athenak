@@ -66,7 +66,7 @@
     },
     "publication_standalone_tests": {
       "status": "pass",
-      "tests_run": 119
+      "tests_run": 121
     },
     "focused_frontier_chain_tests": {
       "status": "pass",
@@ -80,7 +80,7 @@
     },
     "readiness_registry_tests": {
       "status": "pass",
-      "tests_run": 20,
+      "tests_run": 21,
       "command": "python3 -m unittest tst.publication.test_pic_readiness_registry"
     },
     "control_plane_discovery_command": "python3 -m unittest discover -s tst/publication/frontier_control_plane -p 'test_*.py'",
@@ -491,6 +491,7 @@
     },
     "review": "pending external review"
   },
+  "source_local_accepted_closure_fixture": "tst/publication/readiness/q027_frontier_f1_accepted_closure_source_local_evidence_2026-05-30.json",
   "required_live_preflight": {
     "status": "required_immediately_before_policy_promotion_and_each_registered_science_submission_boundary",
     "historical_submission_ids_must_remain_absent_from_live_ledgers": [

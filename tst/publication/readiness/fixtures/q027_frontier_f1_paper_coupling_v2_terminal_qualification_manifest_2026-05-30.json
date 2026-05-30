@@ -1,0 +1,218 @@
+{
+  "artifacts": [
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/manifests/f1_gpu_paper_coupling/fad21006-b33a-4d53-9636-55d055b0bf81/pre_submit_manifest.json",
+      "sha256": "e074c163d16b918d558880bba21ba8530130e4ce01dfb173ef5af1c952a92637"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/runs/f1_gpu_paper_coupling/fad21006-b33a-4d53-9636-55d055b0bf81/artifact_inventory.json",
+      "sha256": "a11b7f4ed98ad2e8074e711f44168274c9a97f3cf871bd5a31049440b0e21a80"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/runs/f1_gpu_paper_coupling/fad21006-b33a-4d53-9636-55d055b0bf81/analysis/analysis.json",
+      "sha256": "0260dfa6d8a48a66ee82e6dd253bd1dd92cdc198039c3f476858230cac290284"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/runs/f1_gpu_paper_coupling/fad21006-b33a-4d53-9636-55d055b0bf81/analysis/offline_analysis_receipt.json",
+      "sha256": "8d9353e8f003fdf7734622d96511dc09f866cb897f3bd5ed7f52fb3e0037ab00"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/operator_attestations/20260530T231650Z-f1-clean-paper-coupling-mpich-stderr-v2-pre_policy_promotion_scrub_retry/attestation.json",
+      "sha256": "a45a004af785b44e1398f98cd154794648f289402aca198f7e4eb488adb4e6f0"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/operator_attestations/20260530T231708Z-f1-clean-paper-coupling-mpich-stderr-v2-pre_manifest/attestation.json",
+      "sha256": "1799197c0c34d0ddf64dfad39fa379bbe88dc4a68be887b873cb4ce8c844db2f"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/operator_attestations/20260530T231709Z-f1-clean-paper-coupling-mpich-stderr-v2-pre_submit_wrapper/attestation.json",
+      "sha256": "eacbbdd9850971d93104f593ba70c3653b7974b61ab0db3b7e4556357b07c5ca"
+    }
+  ],
+  "authorization": {
+    "active_policy": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/storage_policy.json",
+      "sha256": "559a4b1ebc13425e53e40b544cf92931d11271ec0a07f678b680f68bf5c00052"
+    },
+    "active_promotion": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/active_promotion.json",
+      "sha256": "84065c8a8abb5aad3fc41e452537e27507260ca968eb1bae6eec60b0655fa436"
+    },
+    "build_profile_control_plane_version": "6cbbbbd6f5da8fb2dcd0a1ab9b91fca51570f5a54502dcb1da59aea0eda0f3ab",
+    "clean_candidate_manifest_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/clean_candidates/31be2cd6-19db-4246-9857-06fc2f523c19/clean_candidate_manifest.json",
+    "clean_candidate_manifest_sha256": "3174515d1578f0310e8ce4b0bf214050f8b4d95ff4af3c694b44eb466b7dff41",
+    "control_plane_version": "4ccde8dfe557fbb6450c15b2ee68d41d2ac0711d5d56d79e775fa75178177bd3"
+  },
+  "claim_ids": [
+    "CLAIM-RELEASE-PAPER-MHD-PIC-001"
+  ],
+  "created_utc": "2026-05-30T23:18:56Z",
+  "evidence_class": "athenak_production_mode",
+  "executable": {
+    "cmake_cache": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/clean_candidates/31be2cd6-19db-4246-9857-06fc2f523c19/build_provenance/CMakeCache.txt",
+      "sha256": "66349c38560ae9758e09962fb5418ddad008636bd5925632ada95a3a7d375037"
+    },
+    "environment_allowlist": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/runs/f1_gpu_paper_coupling/fad21006-b33a-4d53-9636-55d055b0bf81/f1-coupling-coeff0.environment.allowlist.txt",
+      "sha256": "9febe6ba923833ebdba984a4da3aaaf8b6ab7dd444ec2164cf7410a584d5f1be"
+    },
+    "modules": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/clean_candidates/31be2cd6-19db-4246-9857-06fc2f523c19/build_provenance/modules.txt",
+      "sha256": "8b1f01fc24d01b9183abe9aa9ddad450feb769f3de5404f915f1c6d84f153e1b"
+    },
+    "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/clean_candidates/31be2cd6-19db-4246-9857-06fc2f523c19/athena",
+    "sha256": "bea2a418faf582e0b7e8a2830494fa156ddddb18763dde21d344a4cba14a60d8"
+  },
+  "git": {
+    "clean_candidate_build_profile": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/clean_candidates/31be2cd6-19db-4246-9857-06fc2f523c19/build_profile.json",
+      "sha256": "353412bed0ccd1c7717a52bca72a0e5c6883d5dbcd91099d3b41512cdbff9c23"
+    },
+    "clean_candidate_build_profile_receipt": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/clean_candidates/31be2cd6-19db-4246-9857-06fc2f523c19/profile_receipt.json",
+      "sha256": "f6a9ac200cfc33a0cad2e468b82e5d70c635c2dac93dafe64c94aac5f3dcb79f"
+    },
+    "clean_candidate_build_provenance": {
+      "build_environment": {
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/clean_candidates/31be2cd6-19db-4246-9857-06fc2f523c19/build_provenance/build-environment.json",
+        "sha256": "0de582a07cc5e878ee2b7bb1ee0d3fd4e98bee1ea039c66f9037200f66f3752f"
+      },
+      "build_invocations": {
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/clean_candidates/31be2cd6-19db-4246-9857-06fc2f523c19/build_provenance/build-invocations.json",
+        "sha256": "02fd174b684aac29c312eac53a562da8eb2fcf94b92433a0ac45fa2f84aab5ab"
+      },
+      "build_log": {
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/clean_candidates/31be2cd6-19db-4246-9857-06fc2f523c19/build_provenance/build.log",
+        "sha256": "792ad08e1eb5982cb1d2a2f6d3238abbe6d3874d0ded27b89a5c1ebe4a7ad7d2"
+      },
+      "cmake_cache": {
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/clean_candidates/31be2cd6-19db-4246-9857-06fc2f523c19/build_provenance/CMakeCache.txt",
+        "sha256": "66349c38560ae9758e09962fb5418ddad008636bd5925632ada95a3a7d375037"
+      },
+      "configure_log": {
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/clean_candidates/31be2cd6-19db-4246-9857-06fc2f523c19/build_provenance/configure.log",
+        "sha256": "d789abb65aa14c51247be91e4e2fb0ec49cd412150fdc10236c1274af427cc4f"
+      },
+      "environment_allowlist": {
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/clean_candidates/31be2cd6-19db-4246-9857-06fc2f523c19/build_provenance/environment.allowlist.txt",
+        "sha256": "bc9073b07989faac9bfd9bb3a13cabc24dcc0660128c24fb53747b6faebb2b4a"
+      },
+      "git_status": {
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/clean_candidates/31be2cd6-19db-4246-9857-06fc2f523c19/build_provenance/git_status.txt",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "git_status_preconfigure": {
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/clean_candidates/31be2cd6-19db-4246-9857-06fc2f523c19/build_provenance/git_status.preconfigure.txt",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "module_list": {
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/clean_candidates/31be2cd6-19db-4246-9857-06fc2f523c19/build_provenance/modules.txt",
+        "sha256": "8b1f01fc24d01b9183abe9aa9ddad450feb769f3de5404f915f1c6d84f153e1b"
+      },
+      "submodule_status": {
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/clean_candidates/31be2cd6-19db-4246-9857-06fc2f523c19/build_provenance/submodule_status.txt",
+        "sha256": "04f853c0662447118743df7ddd3d2fa5ec45bb422f47278587f2b4bf570df4e9"
+      },
+      "toolchain": {
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/clean_candidates/31be2cd6-19db-4246-9857-06fc2f523c19/build_provenance/toolchain.txt",
+        "sha256": "7b39e2a3b476d420908b4c0411843077194b8b9f003ce8ec9e46e506e6779ecd"
+      }
+    },
+    "clean_candidate_manifest": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/clean_candidates/31be2cd6-19db-4246-9857-06fc2f523c19/clean_candidate_manifest.json",
+      "sha256": "3174515d1578f0310e8ce4b0bf214050f8b4d95ff4af3c694b44eb466b7dff41"
+    },
+    "commit": "4cceb5d4e9b78e7058d7a696653d56604f94bd53",
+    "source_archive": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/clean_candidates/31be2cd6-19db-4246-9857-06fc2f523c19/source.tar",
+      "sha256": "99aee07e450090ec6ea0fd5b5bc128d7a2373b76738b316ae4be3723f4e33acb"
+    },
+    "source_bundle_sha256": "e11dc8fbb3397592c085d26cdcac67b9cc3a168d1abe53d12772b81804032c47",
+    "source_commit": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/clean_candidates/31be2cd6-19db-4246-9857-06fc2f523c19/source.commit",
+      "sha256": "5a4f36953d0cfbfa486e76e20b68414c0534b78b9e96878a9162962ee0fbbd28"
+    },
+    "status": [],
+    "submodule_status": "clean_pinned_archived",
+    "submodules": [
+      {
+        "archive_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/clean_candidates/31be2cd6-19db-4246-9857-06fc2f523c19/submodules/0000.tar",
+        "archive_sha256": "6691e7e1039e1013833f8c45e9a247fbbf66c623c9ecde97a2e9fb1f59dae399",
+        "commit_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/clean_candidates/31be2cd6-19db-4246-9857-06fc2f523c19/submodules/0000.commit",
+        "commit_sha256": "440729826279037a16480c35c47623173a4718b1ec6bbe28677e24abf5368ea3",
+        "git_commit": "08ceff92bcf3a828844480bc1e6137eb74028517",
+        "git_tree": "79f135abe311e460b49e3673f60068f016ec24d5",
+        "path": "kokkos",
+        "worktree_status": "clean"
+      }
+    ],
+    "tree": "933f2e3ae526245131a75a45435cf253fa204540"
+  },
+  "manifest_id": "frontier-f1-paper-coupling-v2-fad21006-b33a-4d53-9636-55d055b0bf81",
+  "metrics": [
+    {
+      "name": "coeff0_max_abs_momentum_conservation_error",
+      "value": 6.731680066707213e-07
+    },
+    {
+      "name": "coeff0_abs_energy_conservation_error",
+      "value": 6.459872196273864e-06
+    },
+    {
+      "name": "coeff7_max_abs_momentum_conservation_error",
+      "value": 6.731680066707213e-07
+    },
+    {
+      "name": "coeff7_abs_energy_conservation_error",
+      "value": 6.459872196273864e-06
+    },
+    {
+      "name": "max_abs_particle_momentum_coefficient_invariance_error",
+      "value": 0
+    }
+  ],
+  "oracle": {
+    "kind": "paper_mode_coupled_conservation_and_coefficient_invariance",
+    "reference": "AthenaK paper_mhd_pic ideal-MHD induction coupling contract",
+    "tolerances": {
+      "abs_energy_conservation_error": 3e-05,
+      "coefficient_invariance_error": 1e-12,
+      "max_abs_momentum_conservation_error": 2e-06
+    }
+  },
+  "parameters": {
+    "coefficients": [
+      0,
+      7
+    ],
+    "cycle": 2,
+    "particles_per_case": 64,
+    "registered_science_authorization_id": "f1-clean-paper-coupling-mpich-stderr-v2"
+  },
+  "physical_mode": "paper_mhd_pic",
+  "resources": {
+    "analysis_result_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/runs/f1_gpu_paper_coupling/fad21006-b33a-4d53-9636-55d055b0bf81/analysis/analysis.json",
+    "analysis_result_sha256": "0260dfa6d8a48a66ee82e6dd253bd1dd92cdc198039c3f476858230cac290284",
+    "artifact_inventory_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/runs/f1_gpu_paper_coupling/fad21006-b33a-4d53-9636-55d055b0bf81/artifact_inventory.json",
+    "artifact_inventory_sha256": "a11b7f4ed98ad2e8074e711f44168274c9a97f3cf871bd5a31049440b0e21a80",
+    "artifact_root": "/lustre/orion/ast207/proj-shared/dfielding/PIC",
+    "job_id": "4746297",
+    "node_hours": 0.006111111111111111,
+    "offline_analysis_receipt_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/runs/f1_gpu_paper_coupling/fad21006-b33a-4d53-9636-55d055b0bf81/analysis/offline_analysis_receipt.json",
+    "offline_analysis_receipt_sha256": "8d9353e8f003fdf7734622d96511dc09f866cb897f3bd5ed7f52fb3e0037ab00",
+    "platform": "Frontier",
+    "pre_submit_manifest_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/manifests/f1_gpu_paper_coupling/fad21006-b33a-4d53-9636-55d055b0bf81/pre_submit_manifest.json",
+    "pre_submit_manifest_sha256": "e074c163d16b918d558880bba21ba8530130e4ce01dfb173ef5af1c952a92637",
+    "registered_science_authorization_id": "f1-clean-paper-coupling-mpich-stderr-v2",
+    "reservation_id": "281a8b1f-9576-436e-bae2-c440874c101e",
+    "run_artifact_dir": "/lustre/orion/ast207/proj-shared/dfielding/PIC/runs/f1_gpu_paper_coupling/fad21006-b33a-4d53-9636-55d055b0bf81",
+    "submission_id": "fad21006-b33a-4d53-9636-55d055b0bf81"
+  },
+  "review": {
+    "disposition": "pending external review",
+    "reviewer": "pending external review"
+  },
+  "schema_version": 1,
+  "test_id": "pic_paper_coupling_conservation"
+}

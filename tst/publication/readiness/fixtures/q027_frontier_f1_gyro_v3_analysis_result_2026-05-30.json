@@ -1,0 +1,31 @@
+{
+  "cycle": 2,
+  "execution_context": {
+    "gpu_launch": {
+      "host": "frontier07088",
+      "linkage": [
+        "libamdhip64",
+        "libmpi_amd",
+        "libmpi_gtl_hsa"
+      ],
+      "rank": 0,
+      "rocr_visible_devices": "0"
+    },
+    "launch_contract": "trusted_trampoline_athena_argv_v1",
+    "mpich_gpu_support_enabled": "1",
+    "runtime_allowlist_sha256": "9febe6ba923833ebdba984a4da3aaaf8b6ab7dd444ec2164cf7410a584d5f1be",
+    "runtime_profile": "frontier_minimum_supported",
+    "slurm_export_env": "ALL"
+  },
+  "expected_velocity": [
+    0.934901774991901,
+    -0.1611169485715052,
+    0.0
+  ],
+  "max_abs_velocity_error": 5.808176634092277e-09,
+  "particle_count": 64,
+  "physical_mode": "paper_test_particle",
+  "schema_version": 1,
+  "status": "pass",
+  "velocity_tolerance": 2e-06
+}

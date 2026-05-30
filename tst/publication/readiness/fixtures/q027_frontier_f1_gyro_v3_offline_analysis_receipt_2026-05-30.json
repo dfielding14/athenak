@@ -1,0 +1,28 @@
+{
+  "analysis_result": {
+    "path": "analysis/analysis.json",
+    "sha256": "0ca735018f17067c541acb331ecef3b308416810fced0547eb2aa5926bfd3ad2"
+  },
+  "analyzer": {
+    "path": "000-frontier_f1_gpu_relativistic_gyro_analysis.py",
+    "sha256": "411337175b5d3a2506939833656142a766dfac00b54ae8c1f7b34ca28e0ed905"
+  },
+  "artifact_inventory": {
+    "path": "artifact_inventory.json",
+    "sha256": "2714c82f9cc02819b778637a21a5a6e98a6c42c09b84785ca2f0329780f1651f"
+  },
+  "runner": {
+    "flags": [
+      "-I",
+      "-B"
+    ],
+    "python": "/opt/cray/pe/python/3.11.7/bin/python3"
+  },
+  "schema_version": 1,
+  "support_modules": [
+    {
+      "path": "frontier_f1_structured_artifacts.py",
+      "sha256": "cf090115bcdfd143f67b12339115102b57e74cf3205b1ebb1521c144c3415a5a"
+    }
+  ]
+}

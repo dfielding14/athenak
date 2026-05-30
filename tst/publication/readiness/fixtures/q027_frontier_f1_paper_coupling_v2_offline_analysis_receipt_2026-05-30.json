@@ -1,0 +1,28 @@
+{
+  "analysis_result": {
+    "path": "analysis/analysis.json",
+    "sha256": "0260dfa6d8a48a66ee82e6dd253bd1dd92cdc198039c3f476858230cac290284"
+  },
+  "analyzer": {
+    "path": "000-frontier_f1_gpu_paper_coupling_analysis.py",
+    "sha256": "9b27bace0b8fc1e6ae4ebeac914b25c80c2d8b12beeb763628b4049c5085c67a"
+  },
+  "artifact_inventory": {
+    "path": "artifact_inventory.json",
+    "sha256": "a11b7f4ed98ad2e8074e711f44168274c9a97f3cf871bd5a31049440b0e21a80"
+  },
+  "runner": {
+    "flags": [
+      "-I",
+      "-B"
+    ],
+    "python": "/opt/cray/pe/python/3.11.7/bin/python3"
+  },
+  "schema_version": 1,
+  "support_modules": [
+    {
+      "path": "frontier_f1_structured_artifacts.py",
+      "sha256": "cf090115bcdfd143f67b12339115102b57e74cf3205b1ebb1521c144c3415a5a"
+    }
+  ]
+}
