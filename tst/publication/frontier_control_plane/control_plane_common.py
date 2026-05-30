@@ -5,11 +5,14 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import hashlib
+import io
 import json
 import os
 from pathlib import Path, PurePosixPath
 import re
 import shutil
+import stat
+import subprocess
 import tarfile
 from typing import Iterable
 import uuid
@@ -97,6 +100,47 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def sha256_bytes(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def read_stable_regular_file(path: Path, *, require_read_only_mode: bool = False) -> bytes:
+    """Read one non-symlink regular file once so later checks use identical bytes."""
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(path, flags)
+    try:
+        metadata = os.fstat(descriptor)
+        if not stat.S_ISREG(metadata.st_mode):
+            raise ValueError(f"Artifact is not a regular file: {path}")
+        if require_read_only_mode and metadata.st_mode & 0o222:
+            raise ValueError(f"Artifact is not read-only: {path}")
+        with os.fdopen(descriptor, "rb", closefd=False) as stream:
+            return stream.read()
+    finally:
+        os.close(descriptor)
+
+
+def git_archive_commit_from_bytes(data: bytes) -> str:
+    return subprocess.check_output(
+        [TRUSTED_GIT, "get-tar-commit-id"], input=data
+    ).decode("ascii").strip()
+
+
+def canonical_relative_posix_path(value: object, *, field: str) -> PurePosixPath:
+    if not isinstance(value, str):
+        raise ValueError(f"{field} must be a string")
+    path = PurePosixPath(value)
+    if (
+        not value
+        or path.is_absolute()
+        or not path.parts
+        or value != path.as_posix()
+        or any(part in {"", ".", ".."} for part in path.parts)
+    ):
+        raise ValueError(f"{field} is not a canonical relative path: {value!r}")
+    return path
+
+
 def _git_object_sha1(kind: str, data: bytes) -> bytes:
     header = f"{kind} {len(data)}\0".encode("ascii")
     return hashlib.sha1(header + data).digest()
@@ -110,14 +154,12 @@ def direct_submodule_gitlinks(
     seen: set[str] = set()
     for record in records:
         value = str(record["path"])
-        path = PurePosixPath(value)
+        path = canonical_relative_posix_path(value, field="Git-link path")
         commit = str(record["git_commit"])
         if (
             not value
             or path.is_absolute()
             or not path.parts
-            or path.parts
-            != tuple(part for part in path.parts if part not in {"", ".", ".."})
             or not re.fullmatch(r"[0-9a-f]{40}", commit)
         ):
             raise ValueError(f"Unsafe Git-link attestation: {value!r}")
@@ -125,7 +167,11 @@ def direct_submodule_gitlinks(
             raise ValueError(f"Duplicate Git-link attestation: {value!r}")
         seen.add(value)
         parsed.append((path, commit))
-    parent = PurePosixPath(parent_path) if parent_path is not None else None
+    parent = (
+        canonical_relative_posix_path(parent_path, field="Git-link parent path")
+        if parent_path is not None
+        else None
+    )
     result: dict[str, str] = {}
     for path, commit in parsed:
         ancestors = [
@@ -155,20 +201,21 @@ def source_bundle_sha256(
     ).hexdigest()
 
 
-def git_tree_sha1_from_archive(
-    archive: Path,
+def git_tree_sha1_from_archive_bytes(
+    data: bytes,
     *,
     gitlinks: dict[str, str] | None = None,
     reject_symlinks: bool = False,
 ) -> str:
     """Reconstruct the Git tree object ID represented by a git-archive tarball."""
     root: dict[str, object] = {}
-    with tarfile.open(archive, "r:*") as stream:
+    with tarfile.open(fileobj=io.BytesIO(data), mode="r:*") as stream:
         for member in stream.getmembers():
             path = PurePosixPath(member.name)
+            canonical_name = path.as_posix()
             if path.is_absolute() or not path.parts or any(
                 part in {"", ".", ".."} for part in path.parts
-            ):
+            ) or member.name != canonical_name:
                 raise ValueError(f"Unsafe path in source archive: {member.name!r}")
             node = root
             for part in path.parts[:-1]:
@@ -188,26 +235,21 @@ def git_tree_sha1_from_archive(
                 extracted = stream.extractfile(member)
                 if extracted is None:
                     raise ValueError(f"Cannot read source-archive member: {member.name!r}")
-                data = extracted.read()
+                payload = extracted.read()
                 mode = "100755" if member.mode & 0o111 else "100644"
             elif member.issym():
                 if reject_symlinks:
                     raise ValueError(f"Symlink is not allowed in source archive: {member.name!r}")
-                data = member.linkname.encode("utf-8", "surrogateescape")
+                payload = member.linkname.encode("utf-8", "surrogateescape")
                 mode = "120000"
             else:
                 raise ValueError(f"Unsupported source-archive member: {member.name!r}")
-            node[name] = (mode, _git_object_sha1("blob", data))
+            node[name] = (mode, _git_object_sha1("blob", payload))
 
     for value, commit in (gitlinks or {}).items():
-        path = PurePosixPath(value)
+        path = canonical_relative_posix_path(value, field="Git-link path")
         if (
-            not value
-            or path.is_absolute()
-            or not path.parts
-            or path.parts
-            != tuple(part for part in path.parts if part not in {"", ".", ".."})
-            or not re.fullmatch(r"[0-9a-f]{40}", commit)
+            not re.fullmatch(r"[0-9a-f]{40}", commit)
         ):
             raise ValueError(f"Unsafe Git-link attestation: {value!r}")
         node = root
@@ -238,6 +280,145 @@ def git_tree_sha1_from_archive(
         return _git_object_sha1("tree", payload)
 
     return tree_sha1(root).hex()
+
+
+def git_tree_sha1_from_archive(
+    archive: Path,
+    *,
+    gitlinks: dict[str, str] | None = None,
+    reject_symlinks: bool = False,
+) -> str:
+    return git_tree_sha1_from_archive_bytes(
+        archive.read_bytes(), gitlinks=gitlinks, reject_symlinks=reject_symlinks
+    )
+
+
+def validate_clean_candidate_bundle(
+    candidate: dict[str, object],
+    *,
+    source_archive: bytes,
+    submodule_archives: list[bytes],
+    executable_sha256: str,
+) -> list[dict[str, str]]:
+    """Validate the path-independent cryptographic closure of one candidate."""
+    if set(candidate) != {"schema_version", "freeze_id", "created_utc", "source", "build"}:
+        raise ValueError("Clean-candidate manifest has unexpected top-level fields")
+    if candidate.get("schema_version") != 2:
+        raise ValueError("Unsupported clean-candidate manifest schema")
+    source = candidate.get("source")
+    build = candidate.get("build")
+    if not isinstance(source, dict) or set(source) != {
+        "archive_path",
+        "archive_sha256",
+        "source_bundle_sha256",
+        "git_commit",
+        "git_tree",
+        "worktree_status",
+        "submodule_status",
+        "submodules",
+    }:
+        raise ValueError("Clean-candidate source attestation has unexpected fields")
+    if not isinstance(build, dict) or set(build) != {
+        "profile_id",
+        "profile_path",
+        "profile_sha256",
+        "source_archive_sha256",
+        "source_bundle_sha256",
+        "toolchain",
+        "build_command",
+        "executable_path",
+        "executable_sha256",
+    }:
+        raise ValueError("Clean-candidate build attestation has unexpected fields")
+    source_digest = str(source.get("archive_sha256", ""))
+    if sha256_bytes(source_archive) != source_digest:
+        raise ValueError("Clean-candidate source archive checksum mismatch")
+    git_commit = str(source.get("git_commit", ""))
+    git_tree = str(source.get("git_tree", ""))
+    if not re.fullmatch(r"[0-9a-f]{40}", git_commit):
+        raise ValueError("Clean-candidate Git commit is malformed")
+    if not re.fullmatch(r"[0-9a-f]{40}", git_tree):
+        raise ValueError("Clean-candidate Git tree is malformed")
+    if source.get("worktree_status") != "clean":
+        raise ValueError("Clean-candidate source worktree is not attested clean")
+    records = source.get("submodules")
+    if not isinstance(records, list) or len(records) != len(submodule_archives):
+        raise ValueError("Clean-candidate submodule archive count mismatch")
+    profile_records: list[dict[str, str]] = []
+    for index, (record, archive) in enumerate(zip(records, submodule_archives)):
+        if not isinstance(record, dict) or set(record) != {
+            "path",
+            "archive_path",
+            "archive_sha256",
+            "git_commit",
+            "git_tree",
+            "worktree_status",
+        }:
+            raise ValueError("Clean-candidate submodule attestation has unexpected fields")
+        path = canonical_relative_posix_path(
+            record.get("path"), field="Clean-candidate submodule path"
+        ).as_posix()
+        commit = str(record.get("git_commit", ""))
+        tree = str(record.get("git_tree", ""))
+        archive_digest = str(record.get("archive_sha256", ""))
+        if not re.fullmatch(r"[0-9a-f]{40}", commit):
+            raise ValueError("Clean-candidate submodule Git commit is malformed")
+        if not re.fullmatch(r"[0-9a-f]{40}", tree):
+            raise ValueError("Clean-candidate submodule Git tree is malformed")
+        if not re.fullmatch(r"[0-9a-f]{64}", archive_digest):
+            raise ValueError("Clean-candidate submodule archive checksum is malformed")
+        if record.get("worktree_status") != "clean":
+            raise ValueError("Clean-candidate submodule worktree is not attested clean")
+        if sha256_bytes(archive) != archive_digest:
+            raise ValueError("Clean-candidate submodule archive checksum mismatch")
+        if git_archive_commit_from_bytes(archive) != commit:
+            raise ValueError("Clean-candidate submodule archive does not identify its commit")
+        profile_records.append(
+            {
+                "path": path,
+                "archive_sha256": archive_digest,
+                "git_commit": commit,
+                "git_tree": tree,
+            }
+        )
+    paths = [record["path"] for record in profile_records]
+    if paths != sorted(set(paths)):
+        raise ValueError("Clean-candidate submodules must use unique canonical path order")
+    expected_status = "clean_pinned_archived" if records else "absent"
+    if source.get("submodule_status") != expected_status:
+        raise ValueError("Clean-candidate submodule status does not match its archives")
+    for archive, record in zip(submodule_archives, profile_records):
+        if (
+            git_tree_sha1_from_archive_bytes(
+                archive,
+                gitlinks=direct_submodule_gitlinks(
+                    profile_records, parent_path=record["path"]
+                ),
+                reject_symlinks=True,
+            )
+            != record["git_tree"]
+        ):
+            raise ValueError("Clean-candidate submodule archive does not match its Git tree")
+    if git_archive_commit_from_bytes(source_archive) != git_commit:
+        raise ValueError("Clean-candidate source archive does not identify its Git commit")
+    if (
+        git_tree_sha1_from_archive_bytes(
+            source_archive,
+            gitlinks=direct_submodule_gitlinks(profile_records),
+            reject_symlinks=True,
+        )
+        != git_tree
+    ):
+        raise ValueError("Clean-candidate source archive does not match its Git tree")
+    bundle_digest = source_bundle_sha256(source_digest, profile_records)
+    if (
+        source.get("source_bundle_sha256") != bundle_digest
+        or build.get("source_archive_sha256") != source_digest
+        or build.get("source_bundle_sha256") != bundle_digest
+        or build.get("executable_sha256") != executable_sha256
+    ):
+        raise ValueError("Clean-candidate build is not bound to its frozen source bundle")
+    return profile_records
 
 
 def read_json(path: Path) -> dict[str, object]:

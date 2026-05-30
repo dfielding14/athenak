@@ -1158,6 +1158,7 @@ class SnapshotTests(unittest.TestCase):
         manifest_path = self._create_manifest()
         candidate.parent.chmod(0o755)
         candidate.unlink()
+        candidate.parent.chmod(0o555)
         with self.assertRaises(FileNotFoundError):
             self._reserve(manifest_path)
 
@@ -1168,6 +1169,67 @@ class SnapshotTests(unittest.TestCase):
         executable = Path(str(record_for_role(manifest, "executable")["source_path"]))
         executable.chmod(0o755)
         executable.write_text("mutated after freeze\n", encoding="utf-8")
+        with self.assertRaises(ValueError):
+            self._reserve(manifest_path)
+
+    def test_registered_science_manifest_path_swap_uses_stable_candidate_bytes(
+        self,
+    ) -> None:
+        candidate = self._write_science_config(authorize=True)
+        manifest_path = self._create_manifest()
+        from validate_and_reserve_frontier_job import _read_regular_file_at
+
+        swapped = False
+
+        def read_and_swap(directory_fd: int, name: str, *, label: str) -> bytes:
+            nonlocal swapped
+            data = _read_regular_file_at(directory_fd, name, label=label)
+            if label == "Clean-candidate manifest" and not swapped:
+                swapped = True
+                candidate.parent.chmod(0o755)
+                candidate.unlink()
+                candidate.write_text('{"forged": true}\n', encoding="utf-8")
+                candidate.chmod(0o444)
+            return data
+
+        with patch(
+            "validate_and_reserve_frontier_job._read_regular_file_at",
+            side_effect=read_and_swap,
+        ):
+            reservation = self._reserve(manifest_path)
+        self.assertTrue(swapped)
+        self.assertEqual(reservation["submission_scope"], "registered_science")
+
+    def test_registered_science_rejects_candidate_layout_widening(self) -> None:
+        candidate = self._write_science_config(authorize=True)
+        value = json.loads(candidate.read_text(encoding="utf-8"))
+        alternate = self.pic_root / "alternate-athena"
+        alternate.write_text("alternate\n", encoding="utf-8")
+        value["build"]["executable_path"] = str(alternate)
+        candidate.parent.chmod(0o755)
+        candidate.chmod(0o644)
+        candidate.write_text(json.dumps(value), encoding="utf-8")
+        candidate.chmod(0o444)
+        self._write_policy(
+            science_submission_freeze={
+                "status": "authorized",
+                "manifest_path": str(candidate),
+                "manifest_sha256": sha256(candidate),
+            }
+        )
+        self._promote_policy()
+        manifest_path = self._create_manifest()
+        with self.assertRaises(ValueError):
+            self._reserve(manifest_path)
+
+    def test_registered_science_rejects_extra_candidate_file(self) -> None:
+        candidate = self._write_science_config(authorize=True)
+        candidate.parent.chmod(0o755)
+        extra = candidate.parent / "unexpected.txt"
+        extra.write_text("not part of the frozen layout\n", encoding="utf-8")
+        extra.chmod(0o444)
+        candidate.parent.chmod(0o555)
+        manifest_path = self._create_manifest()
         with self.assertRaises(ValueError):
             self._reserve(manifest_path)
 

@@ -7,6 +7,7 @@ import copy
 import hashlib
 import json
 from pathlib import Path
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -35,11 +36,104 @@ class PicQualificationManifestTests(unittest.TestCase):
             ("modules.txt", "modules"),
             ("environment.txt", "environment"),
             ("metrics.json", '{"relative_error": 0.0}\n'),
-            ("source.tar", "source archive"),
-            ("kokkos.tar", "kokkos archive"),
-            ("clean_candidate_manifest.json", '{"schema_version": 2}\n'),
         ):
             (self.root / name).write_text(contents, encoding="utf-8")
+        nested = self.root / "nested-repo"
+        source = self.root / "source-repo"
+        for repository in (nested, source):
+            subprocess.run(["git", "init", str(repository)], check=True, capture_output=True)
+            (repository / "tracked.txt").write_text(f"{repository.name}\n", encoding="utf-8")
+            subprocess.run(["git", "-C", str(repository), "add", "tracked.txt"], check=True)
+            subprocess.run(
+                [
+                    "git", "-C", str(repository), "-c", "user.name=PIC Test",
+                    "-c", "user.email=pic-test@example.invalid", "commit", "-m", "fixture",
+                ],
+                check=True, capture_output=True,
+            )
+        subprocess.run(
+            [
+                "git", "-c", "protocol.file.allow=always", "-C", str(source),
+                "submodule", "add", str(nested), "kokkos",
+            ],
+            check=True, capture_output=True,
+        )
+        subprocess.run(["git", "-C", str(source), "add", "."], check=True)
+        subprocess.run(
+            [
+                "git", "-C", str(source), "-c", "user.name=PIC Test",
+                "-c", "user.email=pic-test@example.invalid", "commit", "-m", "add submodule",
+            ],
+            check=True, capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(source), "archive", "--format=tar",
+             f"--output={self.root / 'source.tar'}", "HEAD"],
+            check=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(source / "kokkos"), "archive", "--format=tar",
+             f"--output={self.root / 'kokkos.tar'}", "HEAD"],
+            check=True,
+        )
+        commit = subprocess.check_output(
+            ["git", "-C", str(source), "rev-parse", "HEAD"], text=True
+        ).strip()
+        tree = subprocess.check_output(
+            ["git", "-C", str(source), "rev-parse", "HEAD^{tree}"], text=True
+        ).strip()
+        kokkos_commit = subprocess.check_output(
+            ["git", "-C", str(source / "kokkos"), "rev-parse", "HEAD"], text=True
+        ).strip()
+        kokkos_tree = subprocess.check_output(
+            ["git", "-C", str(source / "kokkos"), "rev-parse", "HEAD^{tree}"], text=True
+        ).strip()
+        profile_submodules = [
+            {
+                "path": "kokkos",
+                "archive_sha256": _sha256(self.root / "kokkos.tar"),
+                "git_commit": kokkos_commit,
+                "git_tree": kokkos_tree,
+            }
+        ]
+        source_bundle = _source_bundle_sha256(
+            _sha256(self.root / "source.tar"), profile_submodules
+        )
+        candidate = {
+            "schema_version": 2,
+            "freeze_id": "03a7bd9a-7d4c-4e37-a12b-46de3817eff2",
+            "created_utc": "2026-05-30T12:00:00Z",
+            "source": {
+                "archive_path": "/original/source.tar",
+                "archive_sha256": _sha256(self.root / "source.tar"),
+                "source_bundle_sha256": source_bundle,
+                "git_commit": commit,
+                "git_tree": tree,
+                "worktree_status": "clean",
+                "submodule_status": "clean_pinned_archived",
+                "submodules": [
+                    {
+                        **profile_submodules[0],
+                        "archive_path": "/original/submodules/0000.tar",
+                        "worktree_status": "clean",
+                    }
+                ],
+            },
+            "build": {
+                "profile_id": "fixture",
+                "profile_path": "/original/build_profile.json",
+                "profile_sha256": "4" * 64,
+                "source_archive_sha256": _sha256(self.root / "source.tar"),
+                "source_bundle_sha256": source_bundle,
+                "toolchain": "fixture",
+                "build_command": "fixture",
+                "executable_path": "/original/athena",
+                "executable_sha256": _sha256(self.root / "athena"),
+            },
+        }
+        (self.root / "clean_candidate_manifest.json").write_text(
+            json.dumps(candidate), encoding="utf-8"
+        )
         self.manifest = {
             "schema_version": 1,
             "manifest_id": "qualification-fixture-001",
@@ -49,8 +143,8 @@ class PicQualificationManifestTests(unittest.TestCase):
             "evidence_class": "sun_bai_2023_reproduction",
             "physical_mode": "paper_test_particle",
             "git": {
-                "commit": "0" * 40,
-                "tree": "1" * 40,
+                "commit": commit,
+                "tree": tree,
                 "status": [],
                 "source_archive": {
                     "path": "source.tar",
@@ -63,8 +157,8 @@ class PicQualificationManifestTests(unittest.TestCase):
                         "path": "kokkos",
                         "archive_path": "kokkos.tar",
                         "archive_sha256": _sha256(self.root / "kokkos.tar"),
-                        "git_commit": "2" * 40,
-                        "git_tree": "3" * 40,
+                        "git_commit": kokkos_commit,
+                        "git_tree": kokkos_tree,
                         "worktree_status": "clean",
                     }
                 ],
@@ -146,6 +240,10 @@ class PicQualificationManifestTests(unittest.TestCase):
         candidate["git"]["clean_candidate_manifest"]["sha256"] = "0" * 64
         self._assert_rejected(candidate)
 
+        projected = copy.deepcopy(self.manifest)
+        projected["git"]["tree"] = "0" * 40
+        self._assert_rejected(projected)
+
     def test_escaped_missing_and_checksum_mismatched_files_are_rejected(
         self,
     ) -> None:
@@ -161,6 +259,15 @@ class PicQualificationManifestTests(unittest.TestCase):
         mismatched["artifacts"][0]["sha256"] = "0" * 64
         self._assert_rejected(mismatched)
 
+        aliased = copy.deepcopy(self.manifest)
+        aliased["git"]["source_archive"]["path"] = "./source.tar"
+        self._assert_rejected(aliased)
+
+        (self.root / "metrics-link.json").symlink_to("metrics.json")
+        symlinked = copy.deepcopy(self.manifest)
+        symlinked["artifacts"][0]["path"] = "metrics-link.json"
+        self._assert_rejected(symlinked)
+
     def test_freeze_writes_canonical_file_once(self) -> None:
         source = self.root / "prepared.json"
         output = self.root / "frozen.json"
@@ -168,6 +275,7 @@ class PicQualificationManifestTests(unittest.TestCase):
         freeze_qualification_manifest(source, output)
         self.assertEqual(json.loads(output.read_text(encoding="utf-8")),
                          self.manifest)
+        self.assertFalse(output.stat().st_mode & 0o222)
         with self.assertRaises(FileExistsError):
             freeze_qualification_manifest(source, output)
 

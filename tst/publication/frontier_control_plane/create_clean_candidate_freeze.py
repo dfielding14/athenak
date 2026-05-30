@@ -50,8 +50,8 @@ def _relative_submodule_path(value: str) -> PurePosixPath:
         not value
         or path.is_absolute()
         or not path.parts
-        or path.parts
-        != tuple(part for part in path.parts if part not in {"", ".", ".."})
+        or value != path.as_posix()
+        or any(part in {"", ".", ".."} for part in path.parts)
     ):
         raise ValueError(f"Unsafe submodule path: {value!r}")
     return path
