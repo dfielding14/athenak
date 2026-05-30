@@ -43,6 +43,46 @@ manifest intentionally excludes itself and the index. The ledger or archive
 record holds the outer index digest. Do not create a self-referential checksum
 claim.
 
+Finalize a completed packet with the checked-in helper. Keep the archive record
+outside the packet so the packet can become read-only after the outer digest is
+retained:
+
+```bash
+export ARCHIVE_RECORD=/durable/path/to/io-qualification-archive.tsv
+"$REPO/scripts/finalize_external_io_qualification_packet.sh" \
+  "$PACKET" "$ARCHIVE_RECORD"
+```
+
+The finalizer is idempotent for completed packets and retryable after admitted
+publication failures. It rejects packet aliases, existing
+or dangling archive-record symlinks, archive-record hard-link aliases,
+control-character paths, structurally invalid runner histories, and conflicting
+outer claims for one canonical packet path. It publishes metadata through a
+packet-local exclusive temporary, file sync, same-directory atomic rename, and
+packet-directory sync; re-syncs admitted retained metadata on retry; and resets
+a writable inconsistent metadata pair on retry. Retained packet-local reserved
+temporary paths and archive-adjacent destination-scoped replacement candidates
+fail closed for explicit operator adjudication rather than being deleted from
+filename shape alone. It
+verifies inner checksums; removes and verifies packet write permissions; repeats
+packet-tree alias and reserved-path admission; verifies inner checksums again;
+regenerates the canonical inventory to reject late artifacts; and only then
+appends the durable
+outer-index record through an alias-safe descriptor-bound primitive that
+requires archive-directory, archive-sink, and packet identities admitted at
+finalizer startup. Packet-index and archive-row appends publish a completely
+written and synced sibling temporary through same-directory atomic replacement,
+then sync the parent directory. Archive-sink admission always re-syncs its
+parent directory. The final append is the helper's last substantive operation.
+A retry after interrupted metadata, permission, or archive-record publication
+resumes from admitted retained state or fails closed on an ambiguous
+packet-local or archive-adjacent reserved temporary for operator adjudication.
+Run the entire first-runner-invocation-through-finalization lifecycle from a
+trusted environment with no concurrent or inter-invocation same-owner packet or
+archive mutator. Removing owner write bits is an operator-visible immutability
+transition, not a defense against an owner deliberately restoring permissions
+after the helper returns.
+
 ## CUDA Qualification
 
 Use a CUDA-capable AthenaK build. Retain:
@@ -130,7 +170,7 @@ Run and retain evidence for:
 11. output timing labels;
 12. expected and observed shard inventories;
 13. canonical-reader assembly and equality checks;
-14. no `.assembled` staging;
+14. no `.assembled` or `.assembled.tmp` staging;
 15. production-filesystem rename, unlink, and cleanup behavior;
 16. injected post-payload-write and post-publication restart rollback;
 17. the measurements preregistered in
@@ -171,16 +211,36 @@ export MR2_HOSTFILE="$PACKET/decks/mr2.hostfile"
 ```
 
 The script fixes ED-1 and MR-1 at two nodes with two ranks per node. It requires
-an explicit three-line `MR2_HOSTFILE` for MR-2: host A once, then host B twice.
+an explicit three-line `MR2_HOSTFILE` for MR-2: canonical hostname-token host A
+once, then canonical hostname-token host B twice.
 It records unique row/action/attempt/sample logs with Slurm job-step IDs,
 launcher exit codes, timeout dispositions, single-process monotonic launcher
-intervals, retained forbidden-staging scans, and a site-filled
+intervals published through revalidated packet-root and log-directory
+descriptors, retained
+forbidden-staging scans, and a site-filled
 `FS_ACCOUNTING_HOOK`. Duplicate packet-local launch keys are rejected. Resume
 scans include the packet and manifest directory and reject both `*.assembled`
 and `*.assembled.tmp`. An unset hook leaves the observed-filesystem-read row
-explicitly incomplete. Use
-scheduler-equivalent scripts on a non-Slurm cluster and preserve the exact
-substitutions. For `ED-1`, `MR-1`, and `MR-2`, use the exact overrides and
+explicitly incomplete. Before deck copying and before every scheduler launch,
+the runner fail-closed scans the packet tree for symlinks, hard-link aliases,
+control-character paths, and scan failures. It repeats that scan immediately
+after each scheduler return. Observed rank-map files must be regular single-link
+files, and the retained topology inventory is created without following an
+existing publication target. Measured resume rows require an attributable-read
+hook unless they terminally record that the hook was unavailable. Packet-tree
+admission repeats after each accounting-hook execution and requires the
+packet-root identity pinned at launcher startup. Candidate TSV rows are
+validated before append. The runner also pins the packet-local index inode and
+fixed `decks/`, `logs/`, `outputs/`, and `inventory/` directories for its
+invocation, plus each rank-map and launch-output directory after creation. It
+revalidates those identities after scheduler and accounting-hook transitions.
+Do not replace packet-local children between runner invocations or between the
+last runner invocation and finalization.
+Use
+scheduler-equivalent scripts on a non-Slurm cluster only if they retain and
+validate the observed rank map and terminally index recursive-inventory or
+forbidden-staging scan failures. Preserve the exact substitutions. For `ED-1`,
+`MR-1`, and `MR-2`, use the exact overrides and
 oracles preregistered in
 `IO_RESTART_MANIFEST_SCALING_QUALIFICATION.md`. After each output row, retain
 the recursive file inventory and run the applicable canonical Python reader

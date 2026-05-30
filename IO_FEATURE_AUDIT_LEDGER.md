@@ -20,7 +20,7 @@ historical feature-isolation plan. Active execution is governed by the frozen
 | --- | --- | --- | --- |
 | Historical-scope separation | Gotham IO changes versus unrelated source/physics/mesh/test drift | Complete | Independent audit accepted; only listed generic IO behaviors were reconstructed. |
 | File-format compatibility | Headers, versions, names, frozen fixtures and reader boundaries | Corrective local matrix passed; fresh re-audit pending | Frozen compatibility, modern writer/reader, node-PDF payload binding, and one-node node-layout evidence pass; real multi-node qualification remains recorded. |
-| Python API consolidation | One canonical `bin_convert.py`, consumers, CLI and reader behavior | Reopened for `D-110` full rerun and fresh re-audit | Canonical module/readers/examples pass focused tests after fixed-grammar parsing, direct preallocated shard assembly, and legacy wrapper-default correction; complete local matrix and fresh malformed-input/API re-audit remain required. |
+| Python API consolidation | One canonical `bin_convert.py`, consumers, CLI and reader behavior | Locally closed; committed-tree rerun active | Canonical module/readers/examples pass focused tests after fixed-grammar parsing, direct preallocated shard assembly, and legacy wrapper-default correction; external qualification remains recorded separately. |
 | MPI and restart correctness | Node sharding, empty shards, manifests and resume numbering | Locally complete; external topology qualification remains | Native direct manifest loading, forced chunks, alias rejection, and one-node MPI tests pass. True multi-node routing with an empty or non-owning node remains required. |
 | Tests and examples | Harness placement, fixtures, negative cases and executable usage | Corrective local matrix passed; final audit pending | Corrected serial/MPI suites, style gate, fixture checksums, and executable examples pass; GPU and multi-node execution remain external gates. |
 | Deferred Pages integration | Candidate docs content, final API alignment and later Sphinx validation | Locally accepted; publication deferred | The exact nine-file detached stage, strict builds, rendered table checks, and fresh independent structure audit pass. Live Pages remains unchanged and publication waits for code merge. |
@@ -589,11 +589,11 @@ historical feature-isolation plan. Active execution is governed by the frozen
 | RCP-03 | Locally closed | D-094 and D-095 accepted; supersede D-075 and resolve D-088 | Kernel-range, producer-contract, and reader-compatibility audits accepted direction | `e6e6ee7c` runtime hardening | Layout, node64, reader, conversion, explicit adaptive-AMR rejection, and rank/node sliced rejection pass | Fresh final acceptance audit accepted | R-03 recorded below | External multi-node writer qualification remains open |
 | RCP-04 | Locally closed | D-076, D-077, D-078, D-089, D-096, D-097, D-112, D-116 accepted | Numerical semantics, analytic-test, backend portability, and late adaptive-shape/staging audits completed | `e6e6ee7c` runtime hardening | Serial format matrix and mixed-level oracle pass; sharded sparse-overflow MPI `3 passed`; repeated shared/rank/node smoke passed | Fresh numerical/MPI re-auditor accepted; mixed-level MPI composition retained as nonblocking enhancement | R-04 refreshed below | Representative CUDA execution remains an RCP-09 gate |
 | RCP-05 | Locally closed | D-079 accepted | Bounded registration cleanup and tracked-particle repair implemented | `e6e6ee7c` runtime hardening | Parser-sensitive serial `88 passed`; MPI format hardening `8 passed`; tracked serial `5 passed`; tracked MPI `3 passed`; source audit `1 passed`; style `2 passed`; post-correction focused serial `113 passed`; post-correction MPI `63 passed` | Behavior-preservation auditor accepted; scope auditor accepted after narrow correction | R-05 recorded below | Tracked-particle bytes remain intentionally native-endian legacy format |
-| RCP-06 | Locally closed; committed-tree rerun pending | D-080, D-081, D-108, D-110, D-111, D-114, D-118 accepted | Python API and memory-budget audits completed | `e6e6ee7c` runtime hardening | Focused readers and writer hardening `298 passed`; canonical serial `532 passed, 4 skipped`; canonical MPI `85 passed, 3 skipped`; collection `624 tests` | Fresh Python/file-format re-auditor accepted checked-in fail-closed boundary coverage | Closure refreshed below | Public limits remain keyword-only overrides and CLI flags |
+| RCP-06 | Locally closed; committed-tree rerun pending | D-080, D-081, D-108, D-110, D-111, D-114, D-118 accepted | Python API and memory-budget audits completed | `e6e6ee7c` runtime hardening | Focused readers and writer hardening `298 passed`; canonical serial `580 passed, 4 skipped`; canonical MPI `85 passed, 3 skipped`; collection `672 tests` | Fresh Python/file-format re-auditor accepted checked-in fail-closed boundary coverage | Closure refreshed below | Public limits remain keyword-only overrides and CLI flags |
 | RCP-07 | Locally closed again; post-merge restaging required | D-082, D-098, D-099, D-104, D-107 accepted | Live Pages structure and protected-blob inventory established | `6d64ab74` deferred Pages integration | Helper `25 passed`; nine-file strict detached stage, build, linkcheck, drift packet, and rendered browser QA passed | Fresh file-format/Pages re-auditor accepted exact allowlist, hashes, prose, and helper assertions | R-07 refreshed below | Publish only after code merge through a separate Pages review |
 | RCP-08 | RCP-08A locally closed; RCP-08B external | D-083 direction retained; D-090 accepted | Benchmark-design auditor accepted corrected instrumentation and preregistration | `e6e6ee7c` instrumentation; process snapshot pending | Focused timing `3 passed`; full node-sharding MPI `58 passed`; style passed | Fresh benchmark-design correction auditor accepted | R-08A closure recorded below | RCP-08B requires scheduler-backed measurements |
-| RCP-09 | Blocked locally; corrected external plan recorded | D-109, D-115, D-117, D-119, D-120 accepted | Local environment and evidence-plan auditors completed | Snapshot pending | Local environment probe recorded; Slurm runner syntax-check and expanded macOS Python/Bash-3 mock lifecycle matrix passed; checked-in runner suite `9 passed` | External qualification-plan re-audit required before execution | Plan corrected again after settled-tree audit | No CUDA/HIP toolchain, scheduler launcher, second physical host, or attributable deployment-filesystem measurements locally |
-| RCP-10 | Settled local matrix passed; scheduler and committed-tree audits active | D-084, D-100 through D-120 accepted | Final lane auditors found bounded reader, diagnostic, timeout, package-summary, restart-payload, rendered-doc, transient-admission, evidence-boundary, token-expansion, shard-bookkeeping, wrapper-default, commit-point, intrinsic-header, coarse-fine-oracle, serialized-narrowing, external-packet, and header-only-contract blockers | `e6e6ee7c` runtime; `6d64ab74` Pages; process snapshot pending | Readers `298 passed`; spherical slices `14 passed`; restart MPI `7 passed`; sharded sparse-overflow MPI `3 passed`; runner mock `9 passed`; canonical serial `532 passed, 4 skipped`; canonical MPI `85 passed, 3 skipped`; collection `624 tests`; style and static gates passed | Numerical/MPI and Python/file-format lanes accepted; scheduler and final committed-tree whole-branch lanes required | R-10 local correction matrix recorded; audit correction active | Cannot close merge-readiness gate before external CUDA, optional deployment-specific HIP, physical multi-node, filesystem, and RCP-08B evidence |
+| RCP-09 | Blocked externally; archive-admission correction locally validated | D-109, D-115, D-117, D-119 through D-134, D-136, D-138, and D-140 accepted; D-135, D-137, and D-139 rejected | Local environment and evidence-plan auditors completed | `f5c29fc5` process baseline plus archive-admission correction pending commit | Local environment probe recorded; Slurm runner syntax-check and expanded macOS Python/Bash-3 mock lifecycle matrix passed; strict checked-in runner plus packet-finalizer suites `116 passed` after D-141 hygiene refinement | Superseding external qualification-plan re-audit required before execution | Plan corrected after durable-publication, crash-consistency, and archive-admission audits | No CUDA/HIP toolchain, scheduler launcher, second physical host, or attributable deployment-filesystem measurements locally |
+| RCP-10 | Settled local matrix passed; scheduler and committed-tree audits active | D-084, D-100 through D-134, D-136, D-138, D-140, and D-141 accepted; D-135, D-137, and D-139 rejected | Final lane auditors found bounded reader, diagnostic, timeout, package-summary, restart-payload, rendered-doc, transient-admission, evidence-boundary, token-expansion, shard-bookkeeping, wrapper-default, commit-point, intrinsic-header, coarse-fine-oracle, serialized-narrowing, external-packet, header-only-contract, retained-timer-grammar, MR-2-hostfile, scan-terminality, rank-map, packet-publication, canonical-inventory, permission-scan, structured-index, packet-tree-alias, rank-map-alias, lifecycle-prefix, dangling-archive-symlink, outer-identity, post-launch-alias, accounting-history, canonical-archive-identity, timing-publication, accounting-hook-window, timing-parent-alias, failing-hook-index-alias, packet-root-alias, packet-replacement, rejected-append-mutation, late-read-only-artifact, late-archive-sink-alias, child-object-replacement, cross-filesystem-metadata-publication, short-append, process-termination, parent-sync-retry, ambiguous-reserved-temp, archive-adjacent-temp, and imported-descriptor-hygiene blockers | `e6e6ee7c` runtime; `6d64ab74` Pages; `f5c29fc5` process baseline plus archive-admission and descriptor-hygiene correction pending commit | Readers `298 passed`; spherical slices `14 passed`; restart MPI `7 passed`; sharded sparse-overflow MPI `3 passed`; scheduler/finalizer mock `116 passed`; canonical serial `639 passed, 4 skipped`; canonical MPI `85 passed, 3 skipped`; collection `731 tests`; tracked particles `5 passed` and `3 passed`; deferred Pages helper `25 passed`; style `2 passed`; frozen fixtures `27` verified; static gates passed | Numerical/MPI and Python/file-format lanes accepted; superseding scheduler and final committed-tree whole-branch lanes required | R-10 imported-validator hygiene refinement passed locally; fresh acceptance audits active | Cannot close merge-readiness gate before external CUDA, optional deployment-specific HIP, physical multi-node, filesystem, and RCP-08B evidence |
 
 ### Expanded Robustification Finding Register
 
@@ -1224,6 +1224,46 @@ The local matrix does not satisfy these production gates:
 | Canonical refresh | Serial IO plus GPU-selectable CPU smoke returned `532 passed, 4 skipped`; MPI IO remained `85 passed, 3 skipped`; collection returned `624 tests`; repository style returned `2 passed`; static gates passed. |
 | Status | Fresh process-evidence re-audit remains required before external scheduler use. |
 
+### 2026-05-30: RCP-09 Strict Retained-Timer Grammar Correction
+
+| Field | Record |
+| --- | --- |
+| Independent finding | Fresh process-evidence re-audit rejected the prior scheduler deck because retained timing TSVs with extra rows still indexed as passed. It also found stale `.assembled`-only preregistration summaries and a premature re-audit citation. |
+| Decision | Accepted `D-121`. Require exactly one retained two-column `monotonic_elapsed_ns` timing row with a nonnegative decimal integer; reject every other grammar terminally. Align all preregistration summaries with both forbidden sidecar suffixes and record the rejected audit truthfully. |
+| Checked-in regression evidence | Expanded runner suite returned exit `0`: `19 passed`. It covers extra-row, missing-row, extra-column, wrong-key, malformed-value, and negative-value timing artifacts at both rank-map and Athena-launch boundaries. |
+| Canonical refresh | Serial IO plus GPU-selectable CPU smoke returned `542 passed, 4 skipped`; MPI IO remained `85 passed, 3 skipped`; collection returned `634 tests`; repository style returned `2 passed`; fixture checksums and static gates passed. |
+| Status | Local correction validation passed. A fresh independent process-evidence re-audit remains required before external scheduler use. |
+
+### 2026-05-30: RCP-09 MR-2 Admission And Executable Packet-Finalization Correction
+
+| Field | Record |
+| --- | --- |
+| Independent finding | Fresh process-evidence re-audit accepted `D-121` but rejected the deck because blank or whitespace-only MR-2 host-B lines still indexed as passing scheduler rows. It also identified operator-driven packet finalization as an avoidable packaging weakness. |
+| Decisions | Accepted `D-122` and `D-123`. Reject blank MR-2 host lines before launch. Add a checked-in packet finalizer that constructs the acyclic inner manifest and outer archive record and removes packet write permissions. |
+| Checked-in regression evidence | Runner plus packet-finalizer suites returned exit `0`: `26 passed`. They cover empty and whitespace-only MR-2 hostfile rejection; acyclic manifests; root-only metadata exclusion; nested retained filename handling; outer records outside the packet; removed write permissions; repeat-finalization rejection; and packet/archive symlink rejection. |
+| Canonical refresh | Serial IO plus GPU-selectable CPU smoke returned `549 passed, 4 skipped`; MPI IO remained `85 passed, 3 skipped`; collection returned `641 tests`; repository style returned `2 passed`; fixture checksums and static gates passed. |
+| Status | Local correction validation passed. A fresh independent process-evidence re-audit remains required before external scheduler use. |
+
+### 2026-05-30: RCP-09 Fail-Closed Scheduler Evidence And Transactional Finalization Correction
+
+| Field | Record |
+| --- | --- |
+| Independent finding | Fresh process-evidence re-audit rejected the prior deck because recursive-output scan failures could escape without terminal Athena rows, forbidden-staging scan failures could false-pass, requested MR-2 placement was not proven by retained observed rank maps, archive hard-link aliases could corrupt covered packet artifacts, and interrupted finalization was not retryable. |
+| Decisions | Accepted `D-124` and `D-125`. Retain and validate observed rank maps, require canonical hostname tokens, terminally index scan failures with retained stderr, reject aliases and control-character paths, and make packet finalization checksum-verified, permission-verified, idempotent, and retryable before the outer archive claim. |
+| Checked-in regression evidence | Runner plus packet-finalizer suites returned exit `0`: `45 passed`. They cover malformed hostfiles; missing and incorrect observed rank maps; recursive-inventory and staging-scan failures; strict timing TSV grammar; symlink and hard-link aliases; control-character root and artifact paths; Markdown-breaking packet roots; acyclic manifests; writable partial metadata recovery; permission-removal retry; archive-append retry; ordinary filename spaces; and idempotent repeats. |
+| Canonical refresh | Serial IO plus GPU-selectable CPU smoke returned `568 passed, 4 skipped`; MPI IO returned `85 passed, 3 skipped`; reader subset returned `298 passed`; tracked-particle serial and MPI returned `5 passed` and `3 passed`; deferred-doc helper returned `25 passed`; collection returned `660 tests`; repository style returned `2 passed`; fixture checksums and static gates passed. |
+| Status | Local correction validation passed. A fresh independent process-evidence re-audit remains required before external scheduler use. |
+
+### 2026-05-30: RCP-09 Canonical Inventory And Structured Index Correction
+
+| Field | Record |
+| --- | --- |
+| Independent finding | Fresh process-evidence re-audit accepted the D-124 topology and scan fixes but rejected the deck because retries could archive incomplete checksum inventories, failed permission scans could false-pass as empty, and preseeded or control-character runner indexes could be archived as checksum-valid malformed evidence. |
+| Decision | Accepted `D-126`. Add one shared strict validator for packet-index and archive TSV records; admit packet aliases and serialized controls before scheduler work; regenerate and compare canonical inventories on every retry; reject stale helper-temp artifacts; and require successful permission scans before outer publication. |
+| Checked-in regression evidence | Runner plus packet-finalizer suites returned exit `0`: `57 passed`. Added malformed preseeded index, index-symlink write-through, hook-control, stale helper-temp, incomplete retained-manifest, late retry mutation, failed permission-scan, malformed runner-index, header-only runner-index, mutated retained Markdown index, and malformed outer-archive rows to the existing fail-closed matrix. |
+| Canonical refresh | Serial IO plus GPU-selectable CPU smoke returned `580 passed, 4 skipped`; MPI IO remained `85 passed, 3 skipped`; collection returned `672 tests`; repository style returned `2 passed`; fixture checksums and static gates passed. |
+| Status | Local correction validation passed. A fresh independent process-evidence re-audit remains required before external scheduler use. |
+
 ### 2026-05-30: RCP-10 Superseding Precommit Matrix And Rendered Pages QA
 
 | Field | Record |
@@ -1235,3 +1275,171 @@ The local matrix does not satisfy these production gates:
 | Detached Pages | Fresh strict staging with warnings-as-errors builds, `--verify-staged --run-builds`, reviewed-drift generation, exact nine-file status, and empty linkcheck output passed. |
 | Rendered Pages QA | In-app browser QA confirmed output commit-point, native-endian, serialized-overflow, spherical-slice, implementation-entry, and mass-weighting prose; Configuration and Running commit-point/native-endian prose; the 13-format module-index row and Boundary Values neighbor; Visualization header-path, declaration-scope, `ReaderLimits`, and both header APIs; promoted example readback, `--assemble-shards`, manifest resume, and spherical-slice prose; File Reference `payload_rank`, native-endian, commit-point, and declaration-scope prose; and one preserved home iframe. Retained record: `/tmp/athenak-io-robust-logs-settled-pages-final/browser-final.log`. |
 | Status | Precommit local matrix passed. Fresh targeted re-audits, deliberate commits, immutable local packet assembly, committed-tree rerun, final whole-branch audit, and external qualification remain open. |
+
+### 2026-05-30: RCP-09 Packet-Lifecycle And Alias-Admission Correction
+
+| Field | Record |
+| --- | --- |
+| Independent finding | A fresh process-evidence re-audit rejected the `D-126` deck. It reproduced packet deck-copy write-through through a hard-link alias before scheduler work, observed rank-map symlink false passes, checksum-valid contradictory and impossible TSV histories, dangling archive-symlink write-through before rejection, and conflicting durable claims for one packet path. |
+| Decision | Accepted `D-127`. Fail-closed scan packet symlinks, hard-link aliases, control-character paths, and scanner failures before deck copying and before every scheduler launch; require regular single-link observed rank-map artifacts; bind exit codes to dispositions; validate attempt-local lifecycle prefixes; reject dangling archive symlinks; and key outer archive claims by absolute packet path. |
+| Checked-in regression evidence | Expanded runner plus packet-finalizer suites returned exit `0`: `70 passed`. Added preexisting deck hard-link, nested control-character path, packet-tree scanner-failure, rank-map symlink, rank-map hard-link, dangling archive-symlink, conflicting archive-claim, contradictory exit-status, negative exit-status, missing-prefix, and post-terminal continuation regressions to the existing fail-closed matrix. |
+| Static evidence | `bash -n` over the runner and finalizer, Python bytecode compilation of the shared validator, and `git diff --check` returned exit `0`. |
+| Status | Local correction validation passed. A fresh independent process-evidence re-audit remains required before external scheduler use. |
+
+### 2026-05-30: RCP-09 Postlaunch Publication And Canonical-Identity Correction
+
+| Field | Record |
+| --- | --- |
+| Independent finding | A fresh process-evidence re-audit rejected the `D-127` deck. It reproduced scheduler-created rank-map directory and inventory-target symlinks that reached topology publication before the next prelaunch scan, checksum-valid impossible accounting histories, and conflicting outer claims for one packet through lexically distinct absolute spellings. |
+| Decision | Accepted `D-128`. Repeat packet-tree admission immediately after each scheduler return; publish topology inventories exclusively after rank-map directory admission; retain validation stderr through an external temporary followed by packet-local publication; constrain accounting dispositions to measured rows with truthful hook state; and require canonical outer packet identities. |
+| Checked-in regression evidence | Expanded runner plus packet-finalizer suites returned exit `0`: `76 passed`. Added scheduler-created rank-map directory-symlink, scheduler-created topology-inventory symlink, noncanonical outer-packet path, unmeasured accounting-before, warm-up accounting-after, and measured pass with unset-hook regressions to the preceding matrix. |
+| Static evidence | `bash -n` over the runner and finalizer, Python bytecode compilation of the shared validator, and `git diff --check` returned exit `0`. |
+| Status | Local correction validation passed. A fresh independent process-evidence re-audit remains required before external scheduler use. |
+
+### 2026-05-30: RCP-09 Timer And Accounting-Hook Admission Correction
+
+| Field | Record |
+| --- | --- |
+| Reflection finding | The `D-128` rank-map publication fix exposed adjacent retained-evidence windows: ordinary timing TSV publication after scheduler return and packet mutation by site-filled accounting hooks between launcher-boundary scans. |
+| Decision | Accepted `D-129`. Publish timing TSV files exclusively after subprocess return and repeat packet-tree admission after successful pre-launch hooks and after post-launch hooks before retaining inventories. |
+| Checked-in regression evidence | Expanded runner plus packet-finalizer suites returned exit `0`: `78 passed`. Added scheduler-created timing-symlink and accounting-hook-created alias regressions to the preceding matrix. |
+| Static evidence | `bash -n` over the runner and finalizer plus `git diff --check` returned exit `0`. |
+| Status | Local correction validation passed. The active fresh process-evidence re-auditor was instructed to assess the latest live tree before external scheduler use. |
+
+### 2026-05-30: RCP-09 Descriptor-Bound Timing And Index-Append Correction
+
+| Field | Record |
+| --- | --- |
+| Independent finding | A fresh process-evidence re-audit rejected the `D-129` deck. It reproduced timing-file write-through through a scheduler-created `logs/` parent symlink despite final-component `O_EXCL`, and packet-index write-through when a failing pre-launch accounting hook replaced `packet-index.tsv` with an external symlink before returning. |
+| Decision | Accepted `D-130`. Bind timing publication to preopened and postreturn-revalidated packet-root and log-directory descriptors. Move packet-index append into the shared validator with packet scan, index validation, parent descriptor/path identity checks, final-component no-follow open, regular single-link inode matching, append sync, and complete postappend validation. Scan after every hook return, including failures, before appending. |
+| Checked-in regression evidence | Expanded runner plus packet-finalizer suites returned exit `0`: `81 passed`. Added scheduler-created timing-parent symlink, scheduler-created packet-root symlink, and failing-accounting-hook packet-index symlink regressions to the preceding matrix. |
+| Static evidence | `bash -n` over the runner and finalizer, Python bytecode compilation of the shared validator, and `git diff --check` returned exit `0`. |
+| Status | Local correction validation passed. A new independent process-evidence acceptance audit remains required before external scheduler use. |
+
+### 2026-05-30: RCP-09 Stable Packet And Archive-Publication Correction
+
+| Field | Record |
+| --- | --- |
+| Independent finding | A fresh process-evidence re-audit rejected the `D-130` deck. It reproduced successful-hook clean packet-root replacement, packet-index mutation before rejected-row validation, late read-only artifact archival outside `artifacts.sha256`, and outer-record write-through through a symlink substituted after shell preflight. |
+| Decision | Accepted `D-131`. Pin and recheck packet-root identity throughout runner admission; validate complete candidate TSV histories before append and require the expected packet parent; pin packet-root and archive-directory identity during finalization; regenerate the canonical packet inventory after recursive write-permission removal; and publish outer archive rows through the shared descriptor-bound validator primitive with the expected archive parent and packet identities. |
+| Checked-in regression evidence | Expanded runner plus packet-finalizer suites returned exit `0`: `85 passed`. Added clean packet-root replacement, rejected-candidate immutability, read-only late-artifact, and late archive-sink substitution regressions to the preceding matrix. |
+| Static evidence | `bash -n` over the runner and finalizer, Python bytecode compilation of the shared validator, and `git diff --check` returned exit `0`. |
+| Status | Local correction validation passed. A new independent process-evidence acceptance audit remains required before external scheduler use. |
+
+### 2026-05-30: RCP-09 Post-Permission Alias-Admission Reflection
+
+| Field | Record |
+| --- | --- |
+| Reflection finding | The `D-131` stable-publication correction exposed one adjacent boundary worth making explicit: recursive write-permission removal precedes the durable archive claim and can be wrapped or observed as a packet-topology mutation window. |
+| Decision | Accepted `D-132`. Repeat the complete packet-tree safety scan after `chmod -R a-w` and at each later durable-publication boundary. Keep the pinned packet-root check and reject symlinks, hard-link aliases, control-character paths, and reserved helper-temporary paths before archival. |
+| Checked-in regression evidence | Added direct fault injection that introduces a symlink during the permission-removal command and requires terminal rejection before any archive row is retained. |
+| Status | Narrow correction validation and an independent latest-tree acceptance audit remain required before external scheduler use. |
+
+### 2026-05-30: RCP-09 Root-Only Identity Admission Rejection
+
+| Field | Record |
+| --- | --- |
+| Independent finding | A fresh read-only adversarial acceptance audit rejected the `D-131` staged tree. It reproduced clean replacement of packet-local index, logs, rank-map, and launch-output objects within a stable packet root; symlink insertion during canonical-manifest construction; a late artifact inserted through the postpublication `grep` window; and clean replacement of the archive sink inode. |
+| Decision | Rejected root-only admission as `D-133`. The post-`chmod` alias scan in `D-132` remains necessary but is not sufficient. |
+| Bound snapshot | Rejected staged tree `673c9a70c1d8de24c99d7e435f28f9410e2e0dd7`; `HEAD=f5c29fc564f17343ed594c1aa7d2442c99baf38c`; frozen guide SHA-256 `cdf53351104c135f2d79f9ee2f36c2908001b00a31339db18eb1cf66bcae11ff`. |
+| Status | Rejected for external scheduler-deck use. Superseding correction required. |
+
+### 2026-05-30: RCP-09 Child-Object And Archive-Sink Continuity Correction
+
+| Field | Record |
+| --- | --- |
+| Decision | Accepted `D-134`. Pin and revalidate runner child evidence objects; require packet-index inode continuity before and after append; bracket manifest construction with full packet-tree safety admission; create and pin the archive sink through the shared descriptor-safe helper; remove the postpublication shell `grep`; and make descriptor-bound archive append the final substantive operation. |
+| Trust boundary | Invoke finalization from a trusted environment without a concurrent same-owner packet or archive mutator. Owner write-bit removal provides an operator-visible immutable packet transition; it cannot prevent an owner from deliberately restoring permissions after finalization returns. |
+| Checked-in regression evidence | Added direct clean-replacement probes for index, logs, inventory, rank-map directory, launch-output directory, and archive sink; manifest-scan symlink injection; and proof that no postpublication `grep` mutation window remains. |
+| Status | Focused validation passed, but a fresh independent audit rejected best-effort publication. Superseded by `D-136`. |
+
+### 2026-05-30: RCP-09 Best-Effort Publication Rejection
+
+| Field | Record |
+| --- | --- |
+| Independent finding | A fresh read-only adversarial acceptance audit rejected the `D-134` staged tree. External-temporary `mv` publication could become cross-filesystem copy-and-remove and leave a non-retryable partial metadata pair. One unchecked `os.write()` in either append path could leave packet-local or shared archive TSV state malformed after rejection. |
+| Decision | Rejected best-effort publication as `D-135`. Invocation-local child pins remain necessary but do not establish durable metadata or append retryability. |
+| Bound snapshot | Rejected staged tree `e15fcd89b2ce5e6439ba6b37d72441b0d84f0b06`; `HEAD=f5c29fc564f17343ed594c1aa7d2442c99baf38c`; frozen guide SHA-256 `cdf53351104c135f2d79f9ee2f36c2908001b00a31339db18eb1cf66bcae11ff`. |
+| Status | Rejected for external scheduler-deck use. Superseding durable-publication correction required. |
+
+### 2026-05-30: RCP-09 Durable Metadata And Append Retry Correction
+
+| Field | Record |
+| --- | --- |
+| Decision | Accepted `D-136`. Publish finalizer metadata through packet-local exclusive temporaries, complete writes, file sync, same-directory atomic rename, and packet-directory sync. Descriptor-safely reset exact root-level owned helper temporaries and writable inconsistent pairs. Append complete rows with checked write loops and truncate-plus-sync rollback on any write, sync, or postvalidation failure. Sync the archive parent after sink creation. |
+| Operator lifecycle | From the first runner invocation through finalization, do not replace packet-local children between invocations and do not permit a concurrent same-owner packet or archive mutator. |
+| Checked-in regression evidence | Added owned stale-helper-temporary recovery, writable inconsistent-pair recovery, packet-index short-write rollback with successful retry, archive-sink short-write rollback with successful retry, and packet-local metadata short-write completion regressions. |
+| Status | Focused validation and a fresh independent latest-tree acceptance audit remain required before external scheduler use. |
+
+### 2026-05-30: RCP-10 Durable-Publication Canonical Refresh
+
+| Field | Record |
+| --- | --- |
+| Focused packet-tool evidence | Runner plus packet-finalizer fault-injection suites returned exit `0`: `97 passed`. The matrix now covers owned stale-helper-temporary cleanup, writable inconsistent metadata-pair recovery, checked completion under partial metadata writes, and truncate-plus-sync rollback with successful retry after packet-index and archive-row write failures. |
+| Canonical local matrix | Explicit-interpreter serial IO plus GPU-selectable CPU smoke returned exit `0`: `620 passed, 4 skipped`. Explicit-interpreter MPI IO returned exit `0`: `85 passed, 3 skipped`. IO collection returned `712 tests`. |
+| Supporting gates | Repository style returned `2 passed`; Bash syntax, targeted `py_compile`, targeted `flake8`, `git diff --check`, and frozen-guide verification returned exit `0`. The preceding four-build D-134 refresh, reader `298 passed`, tracked-particle `5 passed` and `3 passed`, deferred-doc helper `25 passed`, frozen-fixture checksum pass, fresh detached Pages strict stage and browser QA remain applicable because D-136 changes only process tooling and process documentation. |
+| Status | Local correction validation passed. A fresh independent process-evidence acceptance audit remains required before external scheduler use. |
+
+### 2026-05-30: RCP-09 Exception-Only Crash-Recovery Rejection
+
+| Field | Record |
+| --- | --- |
+| Independent finding | A fresh read-only adversarial acceptance audit rejected the `D-136` staged tree. Process termination could retain poisoned packet-index or shared-archive append suffixes without invoking exception rollback. Directory-sync failure could leave visible metadata or an archive sink that retry accepted without re-syncing. Exact reserved-looking root files were silently deleted without ownership proof. |
+| Decision | Rejected exception-only recovery and filename ownership as `D-137`. |
+| Bound snapshot | Rejected staged tree `e276eb9855f729fd3c83d4f31d70a133a8e742a6`; `HEAD=f5c29fc564f17343ed594c1aa7d2442c99baf38c`; frozen guide SHA-256 `cdf53351104c135f2d79f9ee2f36c2908001b00a31339db18eb1cf66bcae11ff`. |
+| Status | Rejected for external scheduler-deck use. Superseding crash-consistency correction required. |
+
+### 2026-05-30: RCP-09 Whole-Target Atomic-Append Correction
+
+| Field | Record |
+| --- | --- |
+| Decision | Accepted `D-138`. Publish complete packet-index and archive-row replacements through sibling temporaries, checked complete writes, file sync, same-directory atomic rename, and parent-directory sync. Refresh the runner's pinned packet-index identity after each append. Re-sync admitted retained metadata and archive parents on retry. Reject ambiguous retained packet-local reserved temporaries for explicit operator adjudication rather than silent deletion. |
+| Checked-in regression evidence | Updated direct short-write probes to require preservation of the preceding complete packet-index and prior shared archive history; expanded finalizer reserved-temporary negatives; added runner rejection of ambiguous packet-index atomic temporaries before scheduler work; and injected packet-local metadata, archive-sink admission, packet-index replacement, and archive replacement parent-directory sync failures followed by explicit retry or re-sync. Runner plus packet-finalizer fault-injection suites returned exit `0`: `103 passed`. IO collection returned `718 tests`. Bash syntax, targeted `py_compile`, targeted `flake8`, `git diff --check`, frozen-guide verification, and serial-build example execution passed. |
+| Status | Focused validation passed, but a fresh independent audit rejected archive-adjacent replacement-temporary admission. Superseded by `D-140`. |
+
+### 2026-05-30: RCP-10 Crash-Consistency Correction Refresh
+
+| Field | Record |
+| --- | --- |
+| Focused packet-tool evidence | Runner plus packet-finalizer fault-injection suites returned exit `0`: `103 passed`. The matrix now covers whole-target atomic replacement after short writes, parent-directory sync failure after visible replacement, retry admission of an existing archive sink after creation-sync failure, retained packet-local metadata re-sync, and fail-closed handling of ambiguous reserved temporaries. |
+| Collection | Explicit-interpreter IO collection returned exit `0`: `718 tests collected`. |
+| Supporting gates | Serial-build examples returned exit `0`: `4 passed`. Bash syntax, targeted `py_compile`, targeted `flake8`, `git diff --check`, and frozen-guide verification returned exit `0`. |
+| Status | Focused local correction validation passed. Canonical D-138 matrix refresh and fresh independent acceptance audits remain required before commit. |
+
+### 2026-05-30: RCP-09 Archive-Adjacent Temporary Admission Rejection
+
+| Field | Record |
+| --- | --- |
+| Independent finding | A fresh read-only adversarial acceptance audit rejected the `D-138` staged tree. Process termination before archive replacement rename could retain `.archive.tsv.tmp.*` beside the shared archive, outside the packet tree. Retry admitted the canonical archive while the ambiguous sibling remained. |
+| Decision | Rejected archive-adjacent replacement-temporary blind spots as `D-139`. |
+| Bound snapshot | Rejected staged tree `ccc80754849e59cb6f45f6428d4bb371f8784b65`; `HEAD=f5c29fc564f17343ed594c1aa7d2442c99baf38c`; frozen guide SHA-256 `cdf53351104c135f2d79f9ee2f36c2908001b00a31339db18eb1cf66bcae11ff`. |
+| Status | Rejected for external scheduler-deck use. Superseding archive-directory admission required. |
+
+### 2026-05-30: RCP-09 Archive-Adjacent Temporary Admission Correction
+
+| Field | Record |
+| --- | --- |
+| Decision | Accepted `D-140`. Before every archive-record open, scan the verified archive-parent descriptor for destination-scoped `.<archive-name>.tmp.*` siblings. Reject and preserve every match for explicit operator adjudication. |
+| Checked-in regression evidence | Added exact and near archive-adjacent finalizer rejection, operator-cleanup recovery, actual subprocess kill before archive rename with retained-candidate adjudication, and actual subprocess kill after archive rename with idempotent retry regressions. Runner plus packet-finalizer fault-injection suites returned exit `0`: `108 passed`. IO collection returned `723 tests`. Bash syntax, targeted `py_compile`, targeted `flake8`, and `git diff --check` passed. |
+| Status | Focused validation passed. A fresh independent latest-tree acceptance audit remains required before external scheduler use. |
+
+### 2026-05-30: RCP-10 Archive-Admission Correction Refresh
+
+| Field | Record |
+| --- | --- |
+| Focused packet-tool evidence | Runner plus packet-finalizer fault-injection suites returned exit `0`: `108 passed`. The matrix now includes exact and near archive-adjacent candidate rejection, operator-cleanup recovery, actual subprocess termination before archive rename, and actual subprocess termination after archive rename with idempotent retry. |
+| Collection | Explicit-interpreter IO collection returned exit `0`: `723 tests collected`. |
+| Canonical local matrix | Explicit-interpreter serial IO plus GPU-selectable CPU smoke returned exit `0`: `631 passed, 4 skipped`. Explicit-interpreter MPI IO returned exit `0`: `85 passed, 3 skipped`. Reader hardening returned `298 passed`; tracked-particle modules returned `5 passed` and `3 passed`; deferred Pages helper returned `25 passed`; repository style returned `2 passed`; all `27` frozen fixtures verified. |
+| Supporting gates | Bash syntax, targeted `py_compile`, targeted `flake8`, `git diff --check`, frozen-guide verification, and detached Pages strict stage verification with warnings-as-errors HTML plus empty linkcheck returned exit `0`. |
+| Status | Full local correction validation passed. Fresh independent acceptance audits remain required before commit. |
+
+### 2026-05-30: RCP-10 Imported-Validator Descriptor-Hygiene Refinement
+
+| Field | Record |
+| --- | --- |
+| Independent finding | The fresh `D-140` adversarial audit accepted external scheduler-deck use under the documented trust boundary and found no P1/P2 issues. It reported a P3 imported-module hygiene gap: malformed archive validation and expected-identity rejection closed descriptors only on success. |
+| Decision | Accepted `D-141`. Close verified parent-directory, packet-index, archive-record, and archive-parent descriptors through `finally` throughout the shared validator. |
+| Checked-in regression evidence | Added repeated parent-identity, directory-sync, existing-publication-target, publication-rollback-sync, aliased-metadata-reset, packet-index-identity, malformed-archive, and archive-identity rejection loops that preserve the baseline `/dev/fd` count. Focused descriptor-hygiene subset returned exit `0`: `8 passed`; runner plus packet-finalizer fault-injection suites returned exit `0`: `116 passed`. IO collection returned `731 tests`. |
+| Canonical serial refresh | Explicit-interpreter serial IO plus GPU-selectable CPU smoke returned exit `0`: `639 passed, 4 skipped`. |
+| Supporting gates | Explicit-interpreter MPI IO returned exit `0`: `85 passed, 3 skipped`. Repository style returned exit `0`: `2 passed`. Bash syntax, targeted `py_compile`, targeted `flake8`, `git diff --check`, frozen-guide verification, and detached Pages strict verification with warnings-as-errors HTML plus empty linkcheck returned exit `0`. |
+| Status | Full local D-141 refinement validation passed. A fresh independent latest-tree acceptance audit remains required before commit. |

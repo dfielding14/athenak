@@ -1292,8 +1292,281 @@ by `IO_FEATURE_BRANCH_ROBUSTIFICATION_GUIDE.md`.
 | Alternatives | Assume cross-process monotonic comparability; scan only the `-d` output directory; reject only final `.assembled` files. |
 | Why not | Those choices allow negative elapsed intervals or miss the precise unsupported restart-staging artifacts the qualification lane must disprove. |
 | Reversal path | Replace the timer or scan only with a scheduler-specific equivalent that retains a nonnegative launcher interval and proves absence of both restart-sidecar suffixes. |
-| Evidence | `scripts/run_external_io_qualification_slurm.sh`; `tst/test_suite/io/test_external_io_slurm_runner_cpu.py`; local macOS Python `3.9.6` and Bash `3.2.57` mock lifecycle matrix; fresh process-evidence re-audit. |
+| Evidence | `scripts/run_external_io_qualification_slurm.sh`; `tst/test_suite/io/test_external_io_slurm_runner_cpu.py`; local macOS Python `3.9.6` and Bash `3.2.57` mock lifecycle matrix. A fresh process-evidence re-audit rejected the initial retained-timer parser and required `D-121`. |
 | Follow-up | Preserve the checked-in mock suite and require real scheduler evidence before closing external qualification. |
+
+### D-121: Require A Strict Retained-Timer Grammar
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted during final `RCP-09` scheduler-deck correction |
+| Decision | Require each retained launcher timing TSV to contain exactly one two-column row: `monotonic_elapsed_ns`, then a nonnegative decimal integer. Reject missing rows, extra rows, extra columns, malformed values, and negatives terminally before indexing a passing launch. |
+| Reason | The first `D-120` parser extracted any matching row and ignored trailing records. A malformed artifact could therefore be indexed as a passing rank map or Athena launch even though the retained evidence was not trustworthy. |
+| Alternatives | Extract the first matching row; ignore unknown trailing records; validate only the numeric substring consumed by summary scripts. |
+| Why not | Those choices retain an avoidable false-pass path in the external evidence boundary. The retained artifact is intentionally tiny, so a strict grammar has negligible operational cost. |
+| Reversal path | Replace the TSV grammar only with an equally fail-closed versioned format and update the checked-in adversarial mock suite before external use. |
+| Evidence | `scripts/run_external_io_qualification_slurm.sh`; `tst/test_suite/io/test_external_io_slurm_runner_cpu.py`; fresh process-evidence re-audit rejection of the permissive parser. |
+| Follow-up | Run the expanded local mock suite and require one more fresh process-evidence re-audit before scheduler use. |
+
+### D-122: Reject Blank MR-2 Hostfile Entries
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted during final `RCP-09` scheduler-deck correction |
+| Decision | Require every MR-2 hostfile line to contain at least one non-whitespace character before validating the host-A once and host-B twice relationships or launching a scheduler row. |
+| Reason | The earlier relationship-only validation accepted empty or whitespace-only host-B entries, weakening the preregistered world-rank placement evidence. |
+| Alternatives | Trust Slurm to reject blank hosts; strip blank lines; validate only line count and equality relationships. |
+| Why not | Scheduler-specific interpretation is not a stable evidence contract. Stripping lines hides malformed input. Relationship-only validation already produced bounded local false passes. |
+| Reversal path | Replace the hostfile grammar only with an equally fail-closed scheduler-specific placement file and update the checked-in negative regressions. |
+| Evidence | `scripts/run_external_io_qualification_slurm.sh`; `tst/test_suite/io/test_external_io_slurm_runner_cpu.py`; fresh process-evidence re-audit rejection of blank host-B entries. |
+| Follow-up | Require a fresh process-evidence re-audit before external scheduler use. |
+
+### D-123: Make Packet Finalization Executable
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted during final `RCP-09` process-packaging correction |
+| Decision | Add a checked-in packet finalizer that writes `artifacts.sha256` without checksum cycles, writes a packet index containing the inner-manifest digest, appends the outer packet-index digest to an archive record outside the packet, and removes packet write permissions. |
+| Reason | The acyclic checksum contract was correct in prose but operator-driven. A narrow helper reduces variance at the evidence boundary and is directly testable on this workstation. |
+| Alternatives | Keep prose-only commands; generate an outer digest file inside the packet; include the inner manifest or packet index in its own checksum inventory. |
+| Why not | Prose-only execution is avoidably variable. An outer record inside the packet mutates the packet after indexing. Self-reference creates an impossible or misleading checksum claim. |
+| Reversal path | Replace the helper only with a scheduler-specific equivalent that preserves the same acyclic checksum and immutable-packet contract. |
+| Evidence | `scripts/finalize_external_io_qualification_packet.sh`; `tst/test_suite/io/test_external_io_packet_finalizer_cpu.py`; `IO_EXTERNAL_IO_QUALIFICATION_PLAN.md`. |
+| Follow-up | Retain the helper with the external qualification deck and archive the site-filled outer record with each physical packet. |
+
+### D-124: Make Scheduler Evidence Fail Closed
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted during final `RCP-09` scheduler-deck correction |
+| Decision | Retain one packet-local hostname record per launched rank and validate the observed row-specific topology before indexing rank-map success. Require canonical hostname tokens. Retain stderr for recursive-output and forbidden-staging scans and append a terminal failure row when either scan fails. |
+| Reason | A scheduler exit code alone does not prove physical placement. Failed scan pipelines must not look like empty successful inventories or escape without a terminal Athena row. |
+| Alternatives | Trust launcher success; validate only requested hostfiles; let `set -e` terminate failed inventory pipelines; treat a failed forbidden-staging scan as empty. |
+| Why not | Bounded adversarial mocks demonstrated false-pass topology rows, false-pass staging scans, and missing terminal launch rows. |
+| Reversal path | Replace the retained rank-map or scan inventory only with an equally fail-closed scheduler-specific evidence format and update the fault-injection regressions. |
+| Evidence | `scripts/run_external_io_qualification_slurm.sh`; `tst/test_suite/io/test_external_io_slurm_runner_cpu.py`; fresh process-evidence re-audit rejection of permissive scan and placement handling. |
+| Follow-up | Require a fresh process-evidence re-audit before external scheduler use. |
+
+### D-125: Make Packet Finalization Retryable And Transactional
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted during final `RCP-09` process-packaging correction |
+| Decision | Preflight packet and archive aliases, control-character paths, and archive sink writability. Publish owned metadata recoverably. Verify inner checksums, remove and verify packet write permissions, verify checksums again, and only then append the durable outer-index archive row. Treat retries as idempotent and rebuild writable one-file partial metadata. |
+| Reason | An archive alias could mutate a covered artifact. Archive-append and permission-removal failures could leave unrecoverable or falsely claimed packet states. |
+| Alternatives | Append before chmod; reject every retry; retain writable packets after an interrupted finalizer; allow aliases that appear path-distinct. |
+| Why not | Bounded adversarial probes demonstrated checksum corruption, writable claimed packets, and non-retryable metadata publication. |
+| Reversal path | Replace the helper only with an equally acyclic, alias-safe, permission-verified, and retryable packet finalizer. |
+| Evidence | `scripts/finalize_external_io_qualification_packet.sh`; `tst/test_suite/io/test_external_io_packet_finalizer_cpu.py`; fresh process-evidence re-audit rejection of hard-link and interrupted-publication handling. |
+| Follow-up | Require a fresh process-evidence re-audit before external scheduler use and retain the helper with each physical evidence packet. |
+
+### D-126: Admit Structured Evidence Before Publication
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted during final `RCP-09` evidence-boundary correction |
+| Decision | Use one checked-in validator for semantic runner-index and outer-archive TSV grammars. Admit regular single-link indexes before scheduler work and after every append. Reject packet-tree aliases and control-character serialized fields before launch. During finalization, require runner rows, reject stale helper-temp artifacts, regenerate and compare the complete canonical artifact inventory and Markdown index template on every retry, validate archive grammar, and require an explicitly successful write-permission scan before outer publication. |
+| Reason | Checksums alone prove byte identity, not completeness or structure. Retry metadata, failed permission scans, malformed packet indexes, and control-character fields could otherwise produce checksum-valid but untrustworthy archived packets. |
+| Alternatives | Trust retained manifest pairs on retry; exclude temp-like filenames broadly; treat failed permission scans as empty; validate only after archiving; permit arbitrary preseeded TSV rows. |
+| Why not | Bounded adversarial probes demonstrated incomplete archived inventories, writable archived packets, malformed runner rows, and index-symlink write-through before rejection. |
+| Reversal path | Replace the validator or retry protocol only with an equally strict, canonical-inventory-complete, alias-safe, permission-proven evidence format and update all fault-injection regressions. |
+| Evidence | `scripts/validate_external_io_packet_index.py`; `scripts/run_external_io_qualification_slurm.sh`; `scripts/finalize_external_io_qualification_packet.sh`; focused runner and finalizer fault-injection suites; fresh process-evidence re-audit rejection of incomplete or malformed structured evidence. |
+| Follow-up | Require a fresh process-evidence re-audit before external scheduler use. |
+
+### D-127: Bind Packet Admission To Alias-Free Lifecycle Evidence
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted during final `RCP-09` evidence-boundary correction |
+| Decision | Fail-closed scan the packet tree for symlinks, hard-link aliases, control-character paths, and scan failures before deck copying and before every scheduler launch. Require every retained observed rank-map artifact to be a regular single-link file. Require nonnegative exit codes, bind passing and timeout dispositions to their exit codes, and admit only attempt-local lifecycle prefixes that begin with rank-map validation and stop after any terminal disposition. Reject existing or dangling archive-record symlinks and reject conflicting outer archive claims for one absolute packet path while preserving identical idempotent claims. |
+| Reason | The preceding structured grammar still allowed deck-copy write-through through a packet hard link, false passing topology evidence through rank-map aliases, checksum-valid contradictory or impossible runner histories, write-through through a dangling archive symlink, and conflicting durable claims for one packet path. |
+| Alternatives | Rely on finalization to catch aliases after scheduler work; validate rank-map contents through symlinks; admit rows independently without lifecycle order; treat dangling archive symlinks as absent files; key outer records by complete lines rather than packet identity. |
+| Why not | Bounded adversarial probes reproduced every path. They either mutate storage outside the packet, run Athena before rejecting unsafe state, or archive evidence whose structure contradicts its claimed disposition. |
+| Reversal path | Replace these checks only with an equally fail-closed packet admission and lifecycle protocol, then update the checked-in adversarial matrix and obtain a fresh independent acceptance audit. |
+| Evidence | `scripts/run_external_io_qualification_slurm.sh`; `scripts/finalize_external_io_qualification_packet.sh`; `scripts/validate_external_io_packet_index.py`; checked-in runner and finalizer regressions returned `70 passed`; fresh process-evidence re-audit rejection after `D-126`. |
+| Follow-up | Require a fresh process-evidence re-audit before external scheduler use. |
+
+### D-128: Publish Rank Maps Safely And Canonicalize Evidence Identity
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted during final `RCP-09` evidence-boundary correction |
+| Decision | Repeat packet-tree admission immediately after every scheduler return. Publish the retained observed-topology inventory only through exclusive file creation after rank-map directory admission, and retain validator errors through an external temporary followed by packet-local publication. Reject accounting-only dispositions for unmeasured rows, reject measured rows that claim success while retaining an unset-hook sentinel, and preserve valid terminally incomplete measured prefixes. Require canonical absolute packet paths in the durable outer archive record so lexical or symlink aliases cannot carry conflicting claims for one packet identity. |
+| Reason | Post-launch scheduler-created aliases could redirect retained topology publication outside the packet before the next prelaunch scan. The `D-127` row grammar also admitted impossible accounting histories, and outer records keyed by path spelling treated lexical aliases as distinct packet identities. |
+| Alternatives | Scan only before launch; use ordinary `write_text()` publication; rely on operators to interpret accounting rows; permit noncanonical absolute outer paths and compare only their literal strings. |
+| Why not | Bounded adversarial probes reproduced external write-through, false passing rank-map rows, successful archival of impossible histories, and conflicting durable claims for one packet through `..` spelling. |
+| Reversal path | Replace this protocol only with an equally alias-safe publication primitive, lifecycle-semantic validator, and canonical outer identity rule, then update checked-in adversarial regressions and obtain fresh acceptance. |
+| Evidence | `scripts/run_external_io_qualification_slurm.sh`; `scripts/validate_external_io_packet_index.py`; checked-in runner and packet-finalizer regressions returned `76 passed`; fresh process-evidence re-audit rejection after `D-127`. |
+| Follow-up | Require a fresh process-evidence re-audit before external scheduler use. |
+
+### D-129: Close Timer And Accounting-Hook Publication Windows
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted during final `RCP-09` evidence-boundary correction |
+| Decision | Publish each retained single-process timing TSV only through exclusive file creation after the wrapped subprocess returns. Repeat packet-tree admission after successful pre-launch accounting hooks and after post-launch accounting hooks before retaining recursive inventories or forbidden-staging scans. |
+| Reason | The rank-map correction exposed the same postreturn publication pattern in timing logs and the same between-scan mutation window around site-filled accounting hooks. A scheduler-created timing symlink or hook-created packet alias must not receive external writes or survive into a measured launch. |
+| Alternatives | Trust scheduler and hook implementations not to create aliases; scan only at launcher boundaries; retain ordinary truncating timing publication. |
+| Why not | The protocol should fail closed at every retained-evidence publication boundary. Direct checked-in regressions demonstrate that the stronger rule is practical and preserves ordinary execution. |
+| Reversal path | Replace the exclusive timer or post-hook admission only with an equally alias-safe publication protocol and update the checked-in regressions. |
+| Evidence | `scripts/run_external_io_qualification_slurm.sh`; `tst/test_suite/io/test_external_io_slurm_runner_cpu.py`; expanded runner and packet-finalizer suites returned `78 passed`. |
+| Follow-up | Require the active fresh process-evidence re-auditor to assess the latest staged tree before external scheduler use. |
+
+### D-130: Bind Timing And Index Publication To Verified Descriptors
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted during final `RCP-09` evidence-boundary correction |
+| Decision | Open the packet root and packet-local timing-log directory before launching a subprocess, revalidate both descriptors against their packet-local paths after subprocess return, and publish timing rows through the log-directory descriptor only after both identity checks pass. Move packet-index append into the shared validator: scan the packet tree, revalidate the existing index, open its parent directory without following its final component, require descriptor/path identity, open the index without following its final component, require a regular single-link inode match, append and sync, then validate the complete TSV. Scan after every accounting-hook return, including failures, before any terminal row append. |
+| Reason | Final-component `O_EXCL` did not prevent timing write-through through a scheduler-created parent-directory symlink. A failing pre-launch accounting hook could replace `packet-index.tsv` with a symlink and return before the success-only hook scan, causing terminal-row append through an external alias. |
+| Alternatives | Add only `O_NOFOLLOW` to timing filenames; scan hooks only after success; keep shell redirection for packet-index appends; trust the scheduler and site hook not to mutate packet paths. |
+| Why not | Bounded adversarial probes reproduced both external-write paths. Descriptor/path identity checks and a shared append primitive close the boundary without weakening ordinary packet retention. |
+| Reversal path | Replace these primitives only with equally descriptor-bound packet-local publication and append admission, then update direct adversarial regressions and obtain fresh acceptance. |
+| Evidence | `scripts/run_external_io_qualification_slurm.sh`; `scripts/validate_external_io_packet_index.py`; `tst/test_suite/io/test_external_io_slurm_runner_cpu.py`; expanded runner and packet-finalizer suites returned `81 passed`; fresh process-evidence re-audit rejection after `D-129`. |
+| Follow-up | Require a new independent process-evidence acceptance audit before external scheduler use. |
+
+### D-131: Pin Packet Identity And Make Final Publication Stable
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted during final `RCP-09` evidence-boundary correction |
+| Decision | Pin the runner packet-root device/inode identity after packet-directory creation and require that identity during every packet-tree admission scan. Pre-admit a complete candidate packet-index history before mutating `packet-index.tsv`, and require its parent descriptor to match the runner-pinned packet identity. Pin packet-root and archive-directory identities at finalizer startup. After recursive write-permission removal, regenerate and compare the canonical artifact inventory so a late read-only file cannot escape `artifacts.sha256`. Publish durable outer archive rows through the shared validator with expected archive-directory and packet identities, descriptor-bound parent and sink checks, no-follow final-component open, regular single-link identity admission, candidate-record validation, append sync, and postappend validation. |
+| Reason | The `D-130` tree still accepted a clean packet-root replacement by a successful accounting hook, mutated its runner index before rejecting a structurally invalid candidate row, archived a late read-only artifact omitted from the retained manifest, and wrote an outer row through an archive symlink substituted after shell preflight. |
+| Alternatives | Treat a clean packet replacement as equivalent; rely on postappend TSV validation; verify only already-manifested files after chmod; retain shell redirection after archive preflight. |
+| Why not | Bounded adversarial probes reproduced all four integrity failures. Each can produce a false or externally redirected retained-evidence claim despite a nonzero final status in some paths. |
+| Reversal path | Replace these checks only with an equally stable packet identity, pre-admitted mutation protocol, complete post-chmod inventory proof, and alias-safe archive publisher, then update direct regressions and obtain fresh acceptance. |
+| Evidence | `scripts/run_external_io_qualification_slurm.sh`; `scripts/finalize_external_io_qualification_packet.sh`; `scripts/validate_external_io_packet_index.py`; checked-in runner and packet-finalizer suites returned `85 passed`; fresh process-evidence re-audit rejection after `D-130`. |
+| Follow-up | Require a new independent process-evidence acceptance audit before external scheduler use. |
+
+### D-132: Repeat Alias Admission After Permission Removal
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted during final `RCP-09` reflection |
+| Decision | Repeat the complete packet-tree safety scan after recursive write-permission removal and at every subsequent durable-publication boundary. The scan rechecks the pinned packet-root identity and rejects symlinks, hard-link aliases, control-character paths, and reserved helper-temporary paths before an outer archive row can be appended. |
+| Reason | Recursive permission removal is an observable mutation boundary. A wrapper or filesystem-side mutation could introduce a read-only symlink or hard-link alias after initial admission; canonical regular-file inventory regeneration alone would not admit or reject every alias class explicitly. |
+| Alternatives | Treat successful `chmod -R a-w` plus canonical regular-file inventory comparison as sufficient; rescan only immediately before the archive append; assume the local permission-removal command cannot mutate packet topology. |
+| Why not | Qualification evidence should fail closed at each transition that precedes a durable claim. The additional scan is cheap, explicit, and directly regression-testable. |
+| Reversal path | Remove the repeated safety scan only if an equally explicit alias-admission proof covers the post-permission-removal packet topology and the checked-in adversarial regression remains covered. |
+| Evidence | `scripts/finalize_external_io_qualification_packet.sh`; `tst/test_suite/io/test_external_io_packet_finalizer_cpu.py`; direct symlink-during-`chmod` fault injection. |
+| Follow-up | Require the active independent process-evidence auditor to bind acceptance to the superseding staged tree. |
+
+### D-133: Reject Root-Only Identity Admission
+
+| Field | Value |
+| --- | --- |
+| Status | Rejected during independent `RCP-09` acceptance audit |
+| Decision | Do not treat a stable packet-root inode, final-component alias checks, and canonical manifest comparisons as sufficient evidence-object continuity. |
+| Reason | Fresh bounded probes cleanly replaced packet-local child objects while preserving a stable packet root: `packet-index.tsv`, `logs/`, rank-map directories, and launch-output directories. Separate probes inserted a symlink during canonical-manifest construction, inserted a late artifact through the postpublication `grep` window, and cleanly replaced the archive sink inode. |
+| Alternatives | Accept clean packet-local replacements because they remain under the admitted packet root; rely on write-bit removal alone; document child replacement as an operator responsibility without additional enforcement. |
+| Why not | Clean replacement can detach retained history or let a durable outer claim refer to an incompletely admitted packet even when every final component is regular and alias-free at one observation point. |
+| Reversal path | None. Any future simplification must retain equivalent object-continuity checks and direct adversarial coverage. |
+| Evidence | Independent read-only adversarial audit bound to staged tree `673c9a70c1d8de24c99d7e435f28f9410e2e0dd7`; bounded child-replacement, manifest-scan mutation, late-`grep`, and archive-sink replacement reproductions. |
+| Follow-up | Apply `D-134`, refresh focused validation, and obtain a fresh independent acceptance audit. |
+
+### D-134: Pin Child Evidence Objects And The Archive Sink
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted during final `RCP-09` evidence-continuity correction |
+| Decision | Pin the runner's packet-local index inode and fixed `decks/`, `logs/`, `outputs/`, and `inventory/` directories for each invocation. Pin each rank-map and launch-output directory after creation and revalidate identities after scheduler and accounting-hook transitions. Require the validator's packet-index append to preserve the pinned index inode before and after append. Bracket canonical-manifest construction with packet-tree safety admission. Create and pin the archive sink through the shared descriptor-safe helper, require that sink identity during append, reject a symlinked packet root inside the validator, and make archive append the final substantive finalizer operation. |
+| Reason | A stable root is necessary but not sufficient for retained-evidence continuity. The durable archive record also needs continuity of its own sink inode, and the finalizer must not execute a PATH-resolved mutation opportunity after publication. |
+| Alternatives | Persist an on-disk child-identity ledger; retain only root pinning; reopen the archive record without an expected inode; append and then verify with shell `grep`. |
+| Why not | The selected invocation-local pins close the reproduced windows without adding mutable metadata that would itself require publication and retry semantics. Shell `grep` created an avoidable postpublication mutation window. |
+| Reversal path | Replace invocation-local identity pins only with an equally fail-closed child-object continuity mechanism and keep direct clean-replacement regressions. |
+| Evidence | `scripts/run_external_io_qualification_slurm.sh`; `scripts/finalize_external_io_qualification_packet.sh`; `scripts/validate_external_io_packet_index.py`; direct clean-replacement and manifest-scan fault-injection regressions. |
+| Follow-up | Obtain a fresh independent process-evidence acceptance audit bound to the superseding staged tree before external scheduler use. |
+
+### D-135: Reject Best-Effort Metadata And Append Publication
+
+| Field | Value |
+| --- | --- |
+| Status | Rejected during independent `RCP-09` acceptance audit |
+| Decision | Do not publish packet metadata with external-temporary `mv` operations or treat one unchecked `os.write()` call as a durable append. Do not claim retryability without recovering writable inconsistent metadata pairs. |
+| Reason | A durable packet may reside on a filesystem different from `${TMPDIR:-/tmp}`, turning `mv` into copy-and-remove publication. A bounded interruption left both metadata paths present with a partial Markdown index and no retry path. Separate short-write probes left packet-index and shared archive TSV files malformed after rejected appends. |
+| Alternatives | Document same-filesystem `${TMPDIR}` as an operator prerequisite; reject every inconsistent pair; rely on postappend validation without restoring retained state. |
+| Why not | External qualification artifacts must remain retryable after bounded publication failures. A poisoned shared archive TSV can detach prior durable history, not merely fail one packet. |
+| Reversal path | None. Any replacement must preserve same-directory atomic metadata publication and append rollback semantics. |
+| Evidence | Independent read-only adversarial audit bound to staged tree `e15fcd89b2ce5e6439ba6b37d72441b0d84f0b06`; bounded metadata interruption and packet-index/archive short-write reproductions. |
+| Follow-up | Apply `D-136`, refresh focused validation, and obtain a fresh independent acceptance audit. |
+
+### D-136: Make Metadata And Append Publication Durably Retryable
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted during final `RCP-09` durable-publication correction |
+| Decision | Publish each finalizer metadata file through a packet-local exclusive temporary, complete write, file sync, same-directory atomic rename, and packet-directory sync. Descriptor-safely remove exact root-level owned helper temporaries and writable inconsistent metadata pairs before retry. For packet-index and archive appends, loop until the complete row is written and truncate plus sync back to the original length on write, sync, or postvalidation failure. Sync the archive parent after sink creation. State that the trusted operator lifecycle begins with the first runner invocation and continues through finalization without packet-child replacement between invocations. |
+| Reason | Durable evidence requires explicit publication and rollback behavior at filesystem boundaries. Invocation-local child pins close mutation windows inside one runner call; the runbook must also state the operator responsibility between separate calls. |
+| Alternatives | Add a journaling metadata file; require one runner process for all rows; accept non-retryable archival failures as terminal operator incidents. |
+| Why not | The selected protocol is smaller, testable with bounded fault injection, and consistent with the existing acyclic evidence contract. |
+| Reversal path | Replace these primitives only with an equally atomic, synced, rollback-capable publication protocol and preserve the direct interruption and short-write regressions. |
+| Evidence | `scripts/finalize_external_io_qualification_packet.sh`; `scripts/validate_external_io_packet_index.py`; `tst/test_suite/io/test_external_io_packet_finalizer_cpu.py`; direct owned-temporary cleanup, writable-pair recovery, and short-write rollback regressions. |
+| Follow-up | Obtain a fresh independent process-evidence acceptance audit bound to the superseding staged tree before external scheduler use. |
+
+### D-137: Reject Exception-Only Append Recovery And Filename Ownership
+
+| Field | Value |
+| --- | --- |
+| Status | Rejected during independent `RCP-09` acceptance audit |
+| Decision | Do not rely on in-process truncate rollback for append crash consistency. Do not silently delete a retained reserved temporary solely because its filename matches the helper grammar. Do not skip parent-directory sync when admitting visible state after an earlier sync failure. |
+| Reason | A killed in-place append can retain a malformed suffix without executing rollback and can poison the shared archive TSV. A directory-sync failure can leave visible complete state that retry accepts without re-syncing. Filename grammar alone does not prove that a reserved-looking file belongs to the helper. |
+| Alternatives | Add an append journal; trust filename-shaped temporaries as helper-owned; document process termination and directory-sync retry as operator-only failures. |
+| Why not | Same-directory atomic replacement is simpler and removes the poisoned-suffix class. Ambiguous retained paths should fail closed for explicit adjudication rather than be deleted implicitly. |
+| Reversal path | None. Any future recovery automation must prove ownership or validate a transaction record before deleting retained paths. |
+| Evidence | Independent read-only adversarial audit bound to staged tree `e276eb9855f729fd3c83d4f31d70a133a8e742a6`; killed packet-index/archive suffix, directory-sync retry, and exact-pattern operator-file probes. |
+| Follow-up | Apply `D-138`, refresh validation, and obtain a fresh independent acceptance audit. |
+
+### D-138: Replace Whole Append Targets Atomically And Fail Closed On Ambiguous Temps
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted during `RCP-09` crash-consistency correction; superseded by `D-140` archive-admission extension |
+| Decision | Build each packet-index and archive-row append as a complete sibling temporary, perform checked complete writes, sync the temporary, atomically replace the destination within the same directory, and sync the parent directory. Update the runner's pinned packet-index identity from the validator after each successful replacement. Re-sync admitted packet metadata and archive-sink parent directories on retry. Reject retained packet-local reserved temporaries for explicit operator adjudication; never infer ownership from filename shape alone. |
+| Reason | Atomic replacement leaves either the preceding complete target or the succeeding complete target visible across process termination. Re-syncing admitted state closes prior-sync-failure retry ambiguity. Fail-closed reserved-path handling avoids silently deleting ambiguous operator data. |
+| Alternatives | Retain in-place append with a journal; delete exact-pattern temporaries automatically; require manual archive repair after termination. |
+| Why not | Whole-target atomic replacement is smaller than a crash-recovery journal and preserves shared archive history without in-place poisoned suffixes. |
+| Reversal path | Replace atomic replacement only with an equally crash-consistent, parent-synced protocol and preserve direct failure-injection coverage. |
+| Evidence | `scripts/run_external_io_qualification_slurm.sh`; `scripts/finalize_external_io_qualification_packet.sh`; `scripts/validate_external_io_packet_index.py`; runner reserved-temp rejection, atomic short-write preservation, packet-local metadata re-sync, archive-sink retry admission, packet-index replacement-sync failure, and archive replacement-sync failure regressions. Runner plus packet-finalizer fault-injection suites returned `103 passed`; IO collection returned `718 tests`. |
+| Follow-up | Obtain a fresh independent process-evidence acceptance audit bound to the superseding staged tree before external scheduler use. |
+
+### D-139: Reject Archive-Adjacent Replacement-Temporary Blind Spot
+
+| Field | Value |
+| --- | --- |
+| Status | Rejected during independent `RCP-09` acceptance audit |
+| Decision | Do not admit or append an archive sink while any destination-scoped sibling replacement candidate remains beside it. Preserve the candidate for explicit operator adjudication. |
+| Reason | A killed archive replacement can retain `.archive.tsv.tmp.*` outside the packet tree before rename. The `D-138` packet-local scan did not admit that archive-adjacent namespace, so retry could append successfully while an ambiguous sibling remained. |
+| Alternatives | Ignore stale archive-adjacent candidates because the canonical archive remains complete; delete exact-pattern candidates automatically; scan only from the shell finalizer. |
+| Why not | Ignoring retained candidates weakens the fail-closed evidence contract. Filename shape does not establish ownership. Shell-only handling would leave direct validator callers inconsistent with the finalizer. |
+| Reversal path | Replace archive-directory scanning only with an equally descriptor-bound admission protocol that preserves ambiguous candidates and requires explicit adjudication. |
+| Evidence | Independent read-only adversarial audit bound to staged tree `ccc80754849e59cb6f45f6428d4bb371f8784b65`; killed pre-rename archive replacement and exact/near archive-adjacent candidate probes. |
+| Follow-up | Apply `D-140`, refresh validation, and obtain a fresh independent acceptance audit. |
+
+### D-140: Fail Closed On Archive-Adjacent Replacement Candidates
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted during final `RCP-09` archive-admission correction |
+| Decision | Before every archive-record open, scan the verified archive-parent descriptor for any destination-scoped `.<archive-name>.tmp.*` sibling. Reject and preserve every match for explicit operator adjudication. Keep packet-local reserved-path rejection unchanged. |
+| Reason | The validator is the common admission boundary for archive creation, retry, and final append. Descriptor-bound scanning there closes interrupted pre-rename replacement artifacts for both direct validator use and finalizer use without inferring ownership or deleting data. |
+| Alternatives | Add a shell `find` before finalization; automatically unlink exact hexadecimal suffixes; treat archive-adjacent candidates as nonblocking debris. |
+| Why not | Common-layer enforcement avoids inconsistent callers. Automatic deletion repeats the filename-provenance error rejected in `D-137`. Nonblocking retention contradicts the explicit fail-closed evidence lifecycle. |
+| Reversal path | Replace the descriptor-bound scan only with an equally strict ownership-aware transaction protocol and preserve termination-boundary regressions. |
+| Evidence | `scripts/validate_external_io_packet_index.py`; `tst/test_suite/io/test_external_io_packet_finalizer_cpu.py`; exact and near archive-adjacent finalizer rejection, operator-cleanup recovery, actual subprocess kill before archive rename, and actual subprocess kill after archive rename with idempotent retry regressions. Runner plus packet-finalizer fault-injection suites returned `108 passed`; IO collection returned `723 tests`. |
+| Follow-up | Obtain a fresh independent process-evidence acceptance audit bound to the superseding staged tree before external scheduler use. |
+
+### D-141: Close Imported Validator Descriptor Rejection Leaks
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted during final `RCP-10` robustness refinement |
+| Decision | Close verified parent-directory, packet-index, archive-record, and archive-parent descriptors through `finally` throughout the shared validator, including directory admission, directory sync, metadata publication, metadata reset, packet-index append, malformed archive validation, and expected archive-identity rejection. |
+| Reason | Scheduler-deck CLI use is one-shot, but the validator is also a checked-in Python module. Repeated imported-module rejection must not leak descriptors in a long-lived process. Applying the rule throughout the module avoids repairing the same defect class one call site at a time. |
+| Alternatives | Treat the validator as CLI-only; close descriptors only in the two archive callers identified by the acceptance audit. |
+| Why not | The shared module boundary should remain reusable and unsurprising. The broader cleanup is narrow and mechanically testable. |
+| Reversal path | None. Preserve success-path and rejection-path descriptor hygiene in any future refactor. |
+| Evidence | `scripts/validate_external_io_packet_index.py`; `tst/test_suite/io/test_external_io_packet_finalizer_cpu.py`; repeated parent-identity, directory-sync, existing-publication-target, publication-rollback-sync, aliased-metadata-reset, packet-index-identity, malformed-archive, and archive-identity rejection loops preserve the baseline `/dev/fd` count; focused hygiene subset returned `8 passed`; runner plus packet-finalizer fault-injection suites returned `116 passed`; serial IO plus GPU-selectable CPU smoke returned `639 passed, 4 skipped`; IO collection returned `731 tests`. |
+| Follow-up | Refresh packet-tool and serial matrices, then obtain a fresh independent acceptance audit bound to the superseding staged tree. |
 
 ## Pending Decision Queue
 

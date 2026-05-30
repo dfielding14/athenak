@@ -145,7 +145,8 @@ time/output_timing=false
 ```
 
 Set `ATHENAK_RESTART_MANIFEST_TIMING=1` only for measured resumes. Require one
-record per rank for each registered phase and no `.assembled` file.
+record per rank for each registered phase and no `.assembled` or
+`.assembled.tmp` file.
 
 ### MR-2: Minimal imbalanced restart resume
 
@@ -238,7 +239,7 @@ Retain raw stdout and stderr for every run. For each rank and run, capture:
 9. `phase=load_local_blocks elapsed_s`, `local_bytes`, and `span_count`;
 10. filesystem, scheduler, compiler, MPI, and Kokkos environment;
 11. `external_minimal_resume_wall_s` from the operational endpoint above; and
-12. confirmation that no `.assembled` file appears.
+12. confirmation that no `.assembled` or `.assembled.tmp` file appears.
 13. attributable observed filesystem-read bytes for the measured resume, the
     command used to collect them, and raw accounting logs; and
 14. observed read amplification, defined as attributable filesystem-read bytes
@@ -265,21 +266,64 @@ export FS_ACCOUNTING_HOOK=/site/path/to/attributable-read-accounting-hook
 export MR2_HOSTFILE="$PACKET/decks/mr2.hostfile"
 "$REPO/scripts/run_external_io_qualification_slurm.sh" MR-2 generate
 "$REPO/scripts/run_external_io_qualification_slurm.sh" MR-2 resume "$MR2_MANIFEST"
+export ARCHIVE_RECORD=/durable/path/to/io-qualification-archive.tsv
+"$REPO/scripts/finalize_external_io_qualification_packet.sh" \
+  "$PACKET" "$ARCHIVE_RECORD"
 ```
 
 The runner fixes ED-1 and MR-1 at two nodes with two ranks per node. Its
-three-line `MR2_HOSTFILE` must list host A once and host B twice, forcing the
-MR-2 world-rank placement. Resume rows execute one unmeasured warm-up plus five
-measured samples. Only measured samples enable
+three-line `MR2_HOSTFILE` must list canonical hostname-token host A once and
+canonical hostname-token host B twice, forcing the MR-2 world-rank placement.
+Resume rows execute one
+unmeasured warm-up plus five measured samples. Only measured samples enable
 `ATHENAK_RESTART_MANIFEST_TIMING=1`. Every launcher interval is measured inside
-one timer process; every rank log path includes row and sample identity; every
+one timer process and published through revalidated packet-root and
+log-directory descriptors; every rank log path includes row and sample
+identity; every
 exit code and timeout disposition lands in `packet-index.tsv`; packet-local
 attempt IDs and duplicate-key rejection protect retries; every Athena launch
 retains a forbidden-staging scan; and every measured sample invokes the
 site-filled accounting hook before and after the launcher. Resume scans include
 the packet and manifest directory and reject both `*.assembled` and
 `*.assembled.tmp`. If the hook is unset, the observed-read row remains
-explicitly incomplete.
+explicitly incomplete. Recursive-inventory and forbidden-staging scan failures
+are retained and terminally indexed. Rank-map tasks retain one record per rank;
+the runner requires regular single-link rank-map records and validates the
+observed ED-1, MR-1, MR-2, or scaling topology before indexing success. Before
+deck copying and every scheduler launch, it fail-closed scans the packet tree
+for symlinks, hard-link aliases, control-character paths, and scanner failures;
+it repeats that scan immediately after every scheduler return. The retained
+rank-map inventory is published without following an existing target. Measured
+resume rows require the site-filled accounting hook unless they terminally
+record hook unavailability. Packet-tree admission repeats after each accounting
+hook execution and requires the packet-root identity pinned at launcher
+startup. Candidate TSV rows are validated before append. The runner also pins
+its packet-local index inode and fixed evidence directories for the invocation,
+plus each rank-map and launch-output directory after creation, and revalidates
+those identities after scheduler and hook transitions. The packet finalizer
+is idempotent and retryable:
+it validates the runner lifecycle, rejects existing or dangling archive-record
+symlinks and conflicting outer claims for one canonical packet path, and
+publishes metadata through packet-local exclusive temporaries, file sync,
+same-directory atomic rename, and packet-directory sync. It re-syncs admitted
+retained metadata and resets writable inconsistent metadata pairs on retry.
+Retained packet-local reserved temporary paths and archive-adjacent
+destination-scoped replacement candidates fail closed for explicit operator
+adjudication rather than being deleted from filename shape alone. It verifies
+checksums, removed write
+permissions, and a regenerated canonical inventory before appending the
+external outer-index archive record. It repeats packet-tree alias and
+reserved-path admission after permission removal and before durable
+publication. Packet-index and archive-row appends use checked complete writes
+to sibling temporaries, file sync, same-directory atomic replacement, and
+parent-directory sync. Archive-sink admission always re-syncs its parent.
+The descriptor-bound primitive requires the archive-directory, archive-sink,
+and packet identities admitted at finalizer startup. The append is the helper's
+last substantive operation. From the first runner invocation through
+finalization, use a trusted environment with no concurrent or inter-invocation
+same-owner packet or archive mutator and do not replace packet-local children.
+Owner write-bit removal is not a defense against an owner deliberately
+restoring permissions after the helper returns.
 
 For `ED-1`, generate outputs from `tst/inputs/io_node_sharding.athinput` with
 the exact ED-1 overrides, then assemble the sliced `.bin` shard with the
@@ -325,7 +369,7 @@ Compare correctness risk, implementation complexity, measured performance, and
 required requalification. Any protocol refactor must rerun malformed-manifest,
 header-mismatch, missing-payload, marker, traversal, alias, changed-rank-count,
 multi-node, empty/non-owning-node, forced-chunking, collective-error, and
-no-`.assembled` checks.
+no-`.assembled` or `.assembled.tmp` checks.
 
 ## RCP-08A Reflection
 
