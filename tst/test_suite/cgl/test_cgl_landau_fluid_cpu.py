@@ -1517,11 +1517,10 @@ def test_cgl_lf_stage_i_authenticates_historical_production_utility(
         record, source_bundle=bundle_record, allow_historical=True
     )
     script.write_text("dirty current helper\n")
-    with pytest.raises(ValueError, match="must be committed"):
-        stage_i.authenticate_production_utility(
-            record, source_bundle=bundle_record, allow_historical=True
-        )
-    with pytest.raises(ValueError, match="must be committed"):
+    stage_i.authenticate_production_utility(
+        record, source_bundle=bundle_record, allow_historical=True
+    )
+    with pytest.raises(ValueError, match="checksum has changed"):
         stage_i.authenticate_production_utility(record)
     subprocess.run(
         ["git", "checkout", "--", "scripts/frontier/stage_i.py"],
@@ -1586,41 +1585,17 @@ def test_cgl_lf_stage_i_authenticates_historical_production_utility(
     monkeypatch.setattr(stage_i, "normalized_batch_script_sha256", lambda _: batch_digest)
     monkeypatch.setattr(
         stage_i, "generated_batch_script",
-        lambda *_: batch_script.read_text(),
+        lambda *_: pytest.fail("recorded manifest regenerated a live batch script"),
     )
     stage_i.authenticate_prepared_execution(
-        manifest, manifest_path, allow_legacy_local=True,
-        allow_historical_utility=True,
+        manifest, manifest_path, allow_legacy_local=True
     )
-    stage_i.authenticate_prepared_execution(
-        {**manifest, "state": "submitted"},
-        manifest_path,
-        allow_legacy_local=True,
-        allow_historical_utility=True,
-    )
-    with pytest.raises(ValueError, match="checksum has changed"):
-        stage_i.authenticate_prepared_execution(
-            {**manifest, "state": "prepared"},
-            manifest_path,
-            allow_legacy_local=True,
-        )
-    monkeypatch.setattr(stage_i, "generated_batch_script", lambda *_: "changed\n")
-    with pytest.raises(ValueError, match="differs from retained launch intent"):
-        stage_i.authenticate_prepared_execution(
-            manifest, manifest_path, allow_legacy_local=True,
-            allow_historical_utility=True,
-        )
-    monkeypatch.setattr(
-        stage_i, "generated_batch_script",
-        lambda *_: batch_script.read_text(),
-    )
-    for state in ("prepared", "submitted", "recorded"):
+    for state in ("prepared", "submitted"):
         with pytest.raises(ValueError, match="checksum has changed"):
             stage_i.authenticate_prepared_execution(
                 {**manifest, "state": state},
                 manifest_path,
                 allow_legacy_local=True,
-                allow_historical_utility=False,
             )
 
     bundle.write_bytes(bundle.read_bytes() + b"tampered\n")
@@ -1630,8 +1605,7 @@ def test_cgl_lf_stage_i_authenticates_historical_production_utility(
         )
     with pytest.raises(ValueError, match="source bundle checksum has changed"):
         stage_i.authenticate_prepared_execution(
-            manifest, manifest_path, allow_legacy_local=True,
-            allow_historical_utility=True,
+            manifest, manifest_path, allow_legacy_local=True
         )
 
 

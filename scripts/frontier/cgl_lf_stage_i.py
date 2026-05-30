@@ -1812,9 +1812,6 @@ def authenticate_production_utility(
     expected = record.get("sha256")
     if not isinstance(expected, str) or SHA256_PATTERN.fullmatch(expected) is None:
         raise ValueError("prepared production utility checksum is invalid")
-    current = production_utility_provenance(allow_uncommitted=allow_uncommitted)
-    if current["sha256"] == expected:
-        return
     if not allow_historical:
         require_file_sha256(path, expected, "production utility")
         return
@@ -2132,8 +2129,7 @@ def validate_prepared_resources(manifest: dict[str, object],
 
 def authenticate_prepared_execution(manifest: dict[str, object],
                                     manifest_path: Path,
-                                    allow_legacy_local: bool = False,
-                                    allow_historical_utility: bool = False) -> None:
+                                    allow_legacy_local: bool = False) -> None:
     """Authenticate every prepared artifact used by one production launch."""
 
     command = manifest.get("command")
@@ -2172,11 +2168,12 @@ def authenticate_prepared_execution(manifest: dict[str, object],
     validate_prepared_continuation_target(manifest)
     validate_prepared_resources(manifest, canonical_production=not allow_legacy_local)
     bundle = command.get("source_bundle")
+    recorded = manifest.get("state") == "recorded"
     authenticate_production_utility(
         command.get("production_utility"),
         source_bundle=bundle,
         allow_uncommitted=allow_legacy_local,
-        allow_historical=allow_historical_utility,
+        allow_historical=recorded,
     )
     batch_script = Path(str(paths.get("batch_script", ""))).resolve()
     if batch_script != (manifest_path.parent / "cgl_lf_stage_i.sbatch").resolve():
@@ -2191,11 +2188,12 @@ def authenticate_prepared_execution(manifest: dict[str, object],
         "batch_script_sha256"
     ):
         raise ValueError("prepared batch script normalized checksum has changed")
-    expected_script = generated_batch_script(manifest, manifest_path)
-    if normalized_batch_script_text(script_text) != normalized_batch_script_text(
-        expected_script
-    ):
-        raise ValueError("prepared batch script differs from retained launch intent")
+    if not recorded:
+        expected_script = generated_batch_script(manifest, manifest_path)
+        if normalized_batch_script_text(script_text) != normalized_batch_script_text(
+            expected_script
+        ):
+            raise ValueError("prepared batch script differs from retained launch intent")
     require_file_sha256(
         Path(str(command.get("input_file", ""))).resolve(),
         command.get("input_sha256"),
@@ -2794,7 +2792,6 @@ def verify_continuation_restart(
     authenticate_prepared_execution(
         parent, parent_manifest_path,
         allow_legacy_local=parent_root != DEFAULT_ROOT.expanduser().resolve(),
-        allow_historical_utility=True,
     )
     if parent_root == DEFAULT_ROOT.expanduser().resolve():
         parent_paths = layout(parent_root)
@@ -3771,7 +3768,6 @@ def inspect_segment(args: argparse.Namespace) -> int:
     authenticate_prepared_execution(
         manifest, manifest_path,
         allow_legacy_local=offline_local_root,
-        allow_historical_utility=True,
     )
     if manifest.get("state") not in {"submitted", "recorded"}:
         raise ValueError("only a submitted or recorded segment may be inspected")
@@ -3983,7 +3979,6 @@ def record(args: argparse.Namespace) -> int:
     authenticate_prepared_execution(
         manifest, manifest_path,
         allow_legacy_local=offline_local_root,
-        allow_historical_utility=True,
     )
     if manifest.get("state") != "submitted":
         raise ValueError("only a submitted segment can be accounted")
@@ -4126,8 +4121,7 @@ def accepted_case_segments(paths: dict[str, Path],
                 f"retained segment lacks qualifying inspection: {manifest_path}"
             )
         authenticate_prepared_execution(
-            manifest, manifest_path, allow_legacy_local=allow_legacy_local,
-            allow_historical_utility=True,
+            manifest, manifest_path, allow_legacy_local=allow_legacy_local
         )
         require_reserved_execution_intent(
             reservation_for_manifest(reservations, manifest_path),
@@ -4589,8 +4583,7 @@ def cancel(args: argparse.Namespace) -> int:
             reservation, manifest, allow_legacy_local=offline_local_root
         )
         authenticate_prepared_execution(
-            manifest, manifest_path, allow_legacy_local=offline_local_root,
-            allow_historical_utility=True,
+            manifest, manifest_path, allow_legacy_local=offline_local_root
         )
         cancellation_mode = "authenticated"
     reservation["state"] = "cancelled"
@@ -4782,7 +4775,6 @@ def reconcile_report(root: Path) -> dict[str, object]:
                 authenticate_prepared_execution(
                     manifest, manifest_path,
                     allow_legacy_local=offline_local_root,
-                    allow_historical_utility=True,
                 )
             except (OSError, ValueError, KeyError, TypeError) as error:
                 issues.append(f"prepared artifact drift for {manifest_path}: {error}")
