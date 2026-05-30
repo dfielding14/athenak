@@ -24,9 +24,9 @@
   "staged_successor": {
     "control_plane_version": "4ccde8dfe557fbb6450c15b2ee68d41d2ac0711d5d56d79e775fa75178177bd3",
     "control_plane_inventory_files": 19,
-    "worktree_state": "dirty_candidate_pending_clean_commit_curation",
-    "paired_install_status": "pending_clean_commit_and_paired_install",
-    "active_policy_promotion_status": "pending_paired_install"
+    "worktree_state": "clean_reviewed_commit_6fa926a9bf113edf6258a7555aeab4ac450ca06b",
+    "paired_install_status": "pass_identical_immutable_paired_install",
+    "active_policy_promotion_status": "pending"
   },
   "registered_science_slices": [
     {
@@ -222,9 +222,23 @@
     "pending_submission_marker": "absent"
   },
   "paired_install_transition": {
-    "status": "pending_clean_commit_and_paired_install"
+    "status": "pass_active_policy_promotion_pending",
+    "installed_utc": "2026-05-30T22:53:08Z",
+    "control_plane_version": "4ccde8dfe557fbb6450c15b2ee68d41d2ac0711d5d56d79e775fa75178177bd3",
+    "operational_source_commit": "6fa926a9bf113edf6258a7555aeab4ac450ca06b",
+    "orion_install": "/lustre/orion/ast207/proj-shared/dfielding/PIC/control_plane/4ccde8dfe557fbb6450c15b2ee68d41d2ac0711d5d56d79e775fa75178177bd3",
+    "project_home_install": "/ccs/proj/ast207/proj-shared/PIC/control_plane/4ccde8dfe557fbb6450c15b2ee68d41d2ac0711d5d56d79e775fa75178177bd3",
+    "inventory_sha256": "ea45cdc57c864f93dfa1b965965bfd5c5349092e161900ab3c328a33667b9fb7",
+    "anchor_migration": "pass_existing_genesis_preserved_without_append",
+    "genesis_event_sha256": "849bf340986f4d1e1f7cc69c0d2e2845c0313c02d935822113aa8b1df5f1f4c1",
+    "genesis_mirror_ack_sha256": "a3af8af8c3b579ee323850902aad7aab58abde98dff98618ccffd15958dbb296",
+    "orion_ledger_records": 34,
+    "orion_receipt_records": 34,
+    "project_home_ledger_records": 34,
+    "active_reservations": 0,
+    "pending_submission_marker": "absent"
   },
-  "active_policy_transition": {
+  "superseded_active_policy_transition": {
     "status": "superseded_after_late_exploit_review_one_rejected_v2_manifest_no_reservation_or_scheduler_submission",
     "validated_utc": "2026-05-30T22:25:48Z",
     "control_plane_version": "cbc6fb50937a728098d22cf9e8e11aa2baf421d5549378ef5f1833a65b294fd8",
@@ -298,7 +312,7 @@
     "evidence_rule": "Archive the current preflight result separately from the immutable historical incident fixture. Legitimate later reservations may advance live ledger counts without changing the frozen 34/34/34 incident chronology."
   },
   "open_boundaries": [
-    "clean commit curation, paired install and reviewed policy promotion for staged repair successor 4ccde8df are pending",
+    "reviewed policy promotion for paired-installed repair successor 4ccde8df is pending",
     "archive one reviewed same-account process-isolation attestation from tst/publication/readiness/q027_frontier_registered_science_same_account_isolation_attestation_template_2026-05-30.json immediately before each v2 registered-science submission",
     "the v2 registered Frontier F1 slices have not executed",
     "external reviewer disposition remains pending external review"
