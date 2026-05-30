@@ -44,7 +44,7 @@ COMPLETED_R02_STANDARD_LAYOUT_PILOT_NODE_HOURS = 0.473333
 COMPLETED_R17_HIGH_RESOLUTION_PILOT_NODE_HOURS = 4.235556
 MEASURED_STAGE_I_RESERVED_NODE_HOURS = 900.0
 CURRENT_STAGE_I_RESERVED_NODE_HOURS = MEASURED_STAGE_I_RESERVED_NODE_HOURS
-MAX_SEGMENT_SECONDS = 24 * 60 * 60
+MAX_SEGMENT_SECONDS = 2 * 60 * 60
 LEDGER_COLUMNS = (
     "execution_epoch",
     "job_id",
@@ -684,7 +684,9 @@ def prepare(args: argparse.Namespace) -> Path:
         raise ValueError("--nodes must be positive")
     requested_seconds = parse_walltime(args.walltime)
     if requested_seconds > MAX_SEGMENT_SECONDS:
-        raise ValueError("a Stage I segment may not request more than 24 hours")
+        raise ValueError(
+            "a Stage I normal-QOS segment may not request more than two hours"
+        )
     athena_seconds = parse_walltime(args.athena_walltime)
     if athena_seconds > requested_seconds - 600:
         raise ValueError("Athena walltime must leave ten minutes for shutdown")

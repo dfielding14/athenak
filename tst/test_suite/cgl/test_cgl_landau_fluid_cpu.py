@@ -1170,6 +1170,7 @@ def test_cgl_lf_stage_i_isolates_e02_and_checks_all_shared_root_jobs(tmp_path):
     assert stage_i.COMPLETED_R17_HIGH_RESOLUTION_PILOT_NODE_HOURS == 4.235556
     assert stage_i.MEASURED_STAGE_I_RESERVED_NODE_HOURS == 900.0
     assert stage_i.CURRENT_STAGE_I_RESERVED_NODE_HOURS == 900.0
+    assert stage_i.MAX_SEGMENT_SECONDS == 2 * 60 * 60
     stage_i.require_authorized_case("R02")
     stage_i.require_authorized_case("R17")
     with pytest.raises(

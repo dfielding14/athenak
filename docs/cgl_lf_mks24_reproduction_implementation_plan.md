@@ -167,6 +167,9 @@ authenticated continuation rate. High-resolution R17 jobs `4744210` and
 `4.235556` node-hours, and project `42.488889` node-hours per simulated time
 unit. F-071 authorizes only the frozen sixteen-case `R02`--`R17` matrix under
 sequential inspection inside a measured `900.000000` node-hour E02 envelope.
+R02 job `4744249` then reaches exact native restart boundary `t = 1.0` in
+`1.452778` node-hours. F-072 updates the continuation-aware projection to
+`702.195370` node-hours and records the two-hour Frontier normal-QOS limit.
 
 ## Read This First
 
@@ -303,9 +306,9 @@ test or run evidence.
 | Paper pgen and forcing fidelity | Input/pgen review, forcing metadata, restartable reduced smoke | Yes for MKS24 claims | Partial 2026-05-30; pre-replacement active/passive/random reduced smoke, forcing restart, OU cadence, multi-cycle RK-companion source-work checks, passive flow-decoupling checks, and Frontier G-007 reduced-paper matrix passed. The merged driver now stores authoritative modal OU coefficients with `TurbulenceRestartMetadata`; `g018` closes reduced rank-local modal restart identity, and replacement-driver `g020`/`g021` close reduced passive-Alfvénic and active-random startup smoke. Long-time production forcing statistics remain open. |
 | Paper observables and analysis | Synthetic analysis tests and archived reduced-run products | Yes for MKS24 claims | Partial 2026-05-25; reduced histories, restartable RK-integrated applied forcing work/global active residual, RKL2-applied heat-flux contractions with fine-side AMR ownership, AMR-corrected RK-applied total/anisotropic CGL pressure-work ledgers, operator-face cap counters, windowed snapshot PDF/spectral/transfer/alignment/local-strain products, Figure 2(a)-coordinate joint pressure-density PDFs and admitted checksum-qualified sampled surfaces, Figure 3 compressive-flow spectra, Figure 4(b) normalized-density spectra, Figure 6(a) thermal/magnetic-pressure spectra, MKS24-normalized transfer and alignment-peak curve comparisons, opt-in local-field eddy-anisotropy structure functions, deduplicated threshold-volume history curves, manifest-qualified proxies and cadence-limited estimates, generic figures, checksum/uncertainty-qualified reference-data comparison plumbing, Figure 2(b) histories, Figure 4(a) normalized-density PDFs, Figure 5(b) normalized eddy scales, Figure 7 lower-panel transfer ratios, Figure 8 selected-shell alignment PDFs, Figure 9, Figure 11 lower-panel, and Figure 12 alignment curves, and Figure 13(b),(d) dimensionless curves are implemented; guarded Figure 3 case definitions are present under `paper-compressive`; dimensional/unmatched-panel conversion, standard-run comparison, and remaining panel references remain open |
 | Standard MKS24 results | Required cases, durations, manifests, figure comparisons | Yes for reproduction claim | Partial 2026-05-30; the frozen sixteen-case mapped Stage I manifest remains the target matrix. The pre-replacement `R16` lineage is archival only. Fresh replacement-driver `E02` jobs `4743735` through `4744158` are accepted through exact `R16 t = 10.0` with zero strict counters and complete rank-local products. The `t = 8`--`10` analyzer selects nine snapshots and passes its synthetic check. Other mapped cases and cross-case comparisons remain open. |
-| Operational workflow | Frontier scripts, budget ledger, failure recovery, storage plan | Yes for Frontier use | Partial 2026-05-30; the debug-helper ledger records `1.361950` node-hours after retained `g014` through `g023`; separately retained scheduled MPI CPU job `4743666` consumed `0.002222` node-hours, and the old Stage I ledger records `9.962778` historical node-hours through rejected job `4686032`. Commit `462b9dbd` makes `scripts/frontier/cgl_lf_stage_i.py` write new work beneath `E02-modal-driver`, use separate accounting files, reject cross-epoch ancestry, and check all queued user jobs and active top-level shared-root campaign records. The fresh `E02` ledger records `10.854444` node-hours through accepted R16 completion and the accepted R02/R17 timing pilots. F-071 permits only the frozen `R02`--`R17` mapped matrix under sequential inspection inside a `900.000000` node-hour envelope. Commits `d210cdd5`, `eab6e12b`, and `7fae0bcf` retain bundle-backed source provenance, complete rank-local debug restart archival, matching debug shared-root checks, and absent-override-key rejection before reservation. |
+| Operational workflow | Frontier scripts, budget ledger, failure recovery, storage plan | Yes for Frontier use | Partial 2026-05-30; the debug-helper ledger records `1.361950` node-hours after retained `g014` through `g023`; separately retained scheduled MPI CPU job `4743666` consumed `0.002222` node-hours, and the old Stage I ledger records `9.962778` historical node-hours through rejected job `4686032`. Commit `462b9dbd` makes `scripts/frontier/cgl_lf_stage_i.py` write new work beneath `E02-modal-driver`, use separate accounting files, reject cross-epoch ancestry, and check all queued user jobs and active top-level shared-root campaign records. The fresh `E02` ledger records `12.307222` node-hours through accepted R16 completion, accepted R02/R17 timing pilots, and mapped R02 continuation `4744249` through `t = 1.0`. F-071 permits only the frozen `R02`--`R17` mapped matrix under sequential inspection inside a `900.000000` node-hour envelope. F-072 adds prepare-time rejection above the observed two-hour normal-QOS limit. Commits `d210cdd5`, `eab6e12b`, and `7fae0bcf` retain bundle-backed source provenance, complete rank-local debug restart archival, matching debug shared-root checks, and absent-override-key rejection before reservation. |
 | User documentation | Sphinx build and accurately scoped runbook | Yes | Implemented for current functionality 2026-05-25; Sphinx warnings-as-errors and repository style suite pass in an isolated validation environment; future campaign results must still be documented when executed |
-| Performance suitability | Representative timing/memory/I/O evidence; no uninvestigated prohibitive bottleneck | Yes for production use | Partial 2026-05-30; G-008 records reduced debug-scale evidence, G010b records reduced shared-MPI-I/O timing, G011 measures startup-only historical standard-layout memory/file size, and corrected replacement-driver nonlinear `g022` reaches `t = 2.0` in `1554` allocated seconds with retained shared MPI-I/O timing. Replacement-driver `g023` launches the exact `192 x 192 x 384` standard layout with intended rank-local output, retains `509682248`-byte terminal snapshots and `1381366136`-byte modal checkpoint groups, and reaches startup-only `t = 0.01` in `79` allocated seconds. Fresh rank-local R16 completes `t = 10.0` in `6.145556` node-hours. Standard-layout R02 reaches native cadence `t = 0.25`; its authenticated continuation projects `19.000000` node-hours per standard `t = 10` case. R17 reaches authenticated continuation `t = 0.10`; its developed interval projects `424.888889` node-hours for full high-resolution `t = 10`. The continuation-aware mapped E02 matrix projection is `697.019444` node-hours. |
+| Performance suitability | Representative timing/memory/I/O evidence; no uninvestigated prohibitive bottleneck | Yes for production use | Partial 2026-05-30; G-008 records reduced debug-scale evidence, G010b records reduced shared-MPI-I/O timing, G011 measures startup-only historical standard-layout memory/file size, and corrected replacement-driver nonlinear `g022` reaches `t = 2.0` in `1554` allocated seconds with retained shared MPI-I/O timing. Replacement-driver `g023` launches the exact `192 x 192 x 384` standard layout with intended rank-local output, retains `509682248`-byte terminal snapshots and `1381366136`-byte modal checkpoint groups, and reaches startup-only `t = 0.01` in `79` allocated seconds. Fresh rank-local R16 completes `t = 10.0` in `6.145556` node-hours. Standard-layout R02 reaches native restart boundary `t = 1.0`; its longer authenticated continuation measures `1.937037` node-hours per simulated unit. R17 reaches authenticated continuation `t = 0.10`; its developed interval projects `424.888889` node-hours for full high-resolution `t = 10`. The updated continuation-aware mapped E02 matrix projection is `702.195370` node-hours. |
 
 The final readiness report must distinguish:
 
@@ -571,11 +574,13 @@ table such as:
 | F-069 | 2026-05-30 | Fresh E02 R16 completion, production-window analysis, and standard-layout timing-pilot authorization | F-068 safely bounded R16 completion, but low-resolution R16 cannot determine standard-layout cost from cell count alone: the `192 x 192 x 384` cases also reduce CFL timestep, and `R17` adds another scaling risk. | accepted R16 jobs `4743735`, `4743933`, `4743988`, `4744019`, `4744056`, `4744120`, and `4744158`; completed bundle `R16_rankio_t10_20260530` manifest SHA-256 `9955085f3557a15c9775722bd1574dbd3636adbbb8df4c4ba5e4e3b9b37d6aa8`; production diagnostics SHA-256 `b3547ff697391dc7d56588028da2d7dd595e9b1ad33fbf7887e0e98188f9e6ab`; completion-recost evidence JSON SHA-256 `d42a0432858127a94ab4aee5aab0c0b79572b70730085352aec53147670adad3` | High | Inspect and record every continuation through exact `t = 10`; assemble the complete ranked lineage; analyze `t = 8`--`10`; calculate actual logical and retained storage; bracket matrix runtime with both cell-count-only and CFL-aware scaling; authorize only the smallest standard-layout timing measurement needed to collapse that uncertainty. | R16 completes in `6.145556` node-hours inside its `7.0` envelope and retains `4686854064` raw segment-tree bytes. The analyzer selects nine snapshots and 101 history rows, passes its synthetic test, and closes forcing work to relative residual `8.806e-13`. Matrix runtime brackets `1087.763412` to `2956.012436` node-hours; cell-scaled logical raw storage is `798538119152` bytes before margin. | Preserve completed R16. Authorize only a `2.0` node-hour `R02` standard-layout timing pilot next; do not authorize the remaining matrix until its measured review. |
 | F-070 | 2026-05-30 | Fresh E02 R02 standard-layout timing pilot and bounded R17 high-resolution-probe authorization | F-069 isolated standard-layout runtime uncertainty, but a measured standard result still cannot choose between the `8x` cell-only and `16x` CFL-aware R02-to-R17 node-hour factors. | `runs/mks24-stage-i/E02-modal-driver/R02/s00_rankio_t0_t0p1`; `s01_rankio_t0p1_t0p25`; jobs `4744198` and `4744205`; R02 recost evidence JSON SHA-256 `81c9f6e56cca9eb5a69449a1166bf5d3e3cc8a0a4102b6b4fd0c3f73f3c2123b` | High | Run R02 from `t = 0` through `t = 0.1`, inspect and record the complete eight-rank modal-restart set, then continue from that authenticated restart through native snapshot boundary `t = 0.25`. Require zero strict counters and complete ranked products. Use only the developed continuation rate for the standard-case estimate; keep R17 bracketed until an eight-node/64-rank high-resolution probe preserves the standard 27-meshblock-per-rank load. | `s00` reaches exact `t = 0.1` in `0.188333` node-hours. Authenticated continuation `s01` reaches exact `t = 0.25` in `0.285000` node-hours with zero strict counters and complete products. Its `0.15` simulated-time interval projects `19.000000` node-hours per standard `t = 10` case. Measured terminal groups are `509682424` snapshot bytes and `1381366304` restart bytes. The mapped-matrix bracket narrows to `424.145556`--`576.145556` node-hours; cell-scaled logical raw storage is `798538318560` bytes before margin. | Preserve completed R02 timing evidence. Authorize only an `8.0` node-hour `R17` high-resolution timing probe next; do not authorize the remaining matrix until its measured review. |
 | F-071 | 2026-05-30 | Fresh E02 R17 high-resolution timing pilot and measured mapped-matrix authorization | F-070 left only the R17 scaling factor unresolved. A fresh R17 segment alone still includes startup effects, so an authenticated continuation was required before replacing the bracket with a measured matrix envelope. | `runs/mks24-stage-i/E02-modal-driver/R17/s00_rankio_t0_t0p05`; `s01_rankio_t0p05_t0p1`; jobs `4744210` and `4744230`; R17 recost evidence JSON SHA-256 `79147715729a2c9017400e170de2191a3f7d6b0bf411acee09a948ada464b822` | High | Run R17 from `t = 0` through exact `t = 0.05` on eight nodes/64 GPU ranks, inspect and record the complete restart set, then continue through exact `t = 0.10`. Require 27 meshblocks per rank, zero strict counters, complete ranked products, and a developed high-resolution rate. Recalculate logical raw, acceptance-retained, and sequential-peak storage from measured ranked groups. | Both segments pass formal inspection with zero strict counters and complete products. The developed `t = 0.05`--`0.10` interval uses `2.124444` node-hours, projecting `424.888889` node-hours for full R17. Reusing completed prefixes yields a `697.019444` node-hour mapped E02 projection. Measured logical raw matrix storage is `798559758560` bytes; sequential peak with 20-percent margin is `747543662189` bytes. | Authorize only the frozen `R02`--`R17` mapped matrix under sequential inspection inside a `900.000000` node-hour E02 envelope. Resume R02 first and complete R17 last. |
+| F-072 | 2026-05-30 | First mapped R02 production continuation and normal-QOS walltime guard | F-071 authorizes sequential mapped execution, but the first `02:15:00` R02 continuation preparation reached Slurm `--test-only` before revealing Frontier normal QOS rejects requests above 120 minutes. The helper should reject that limit before archiving restart siblings. | released `R02/s02_rankio_t0p25_t1`; accepted `R02/s03_rankio_t0p25_t1`; job `4744249`; R02 continuation evidence JSON SHA-256 `7ba577644cd65eefb4c9e3a782f284c36be9e86894af1ec17e6242eba1c17b06` | High | Preserve the released unsubmitted manifest, reprepare at `02:00:00` with Athena `01:50:00`, run from authenticated `t = 0.25` restart siblings through native restart boundary `t = 1.0`, require zero strict counters and complete ranked products, and encode the observed normal-QOS walltime cap during `prepare`. | Slurm rejects only the unsubmitted `s02` request. Job `4744249` completes `s03` at exact `t = 1.0` in `1.452778` node-hours with zero strict counters, expected active hard-wall projection, and complete products. The longer developed rate is `1.937037` node-hours per simulated unit, updating the mapped projection to `702.195370` node-hours and leaving `197.804630` margin. | Continue R02 conservatively from `t = 1.0` to `1.5`, inspect, and recost before lengthening later segments. Reject normal-QOS preparations above two hours. |
 
 ### Implemented Core Decision Log
 
 | Date | Decision | Rationale | Evidence still required |
 | --- | --- | --- | --- |
+| 2026-05-30 | Continue R02 conservatively and reject Stage I normal-QOS preparations above two hours. | R02 job `4744249` reaches exact `t = 1.0` cleanly in `1.452778` node-hours. The longer developed rate updates the mapped projection only modestly to `702.195370` node-hours. Slurm preflight rejects the released unsubmitted `02:15:00` attempt because normal QOS is capped at 120 minutes. | Continue R02 from `t = 1.0` to `1.5`, inspect, and recost before lengthening later segments. |
 | 2026-05-30 | Authorize only the frozen `R02`--`R17` mapped matrix under a `900.000000` node-hour E02 envelope and sequential inspection. | R17 jobs `4744210` and `4744230` preserve 27 meshblocks per rank, pass strict inspection, and close the developed high-resolution rate. The continuation-aware mapped projection is `697.019444` node-hours with `202.980556` node-hours of envelope margin. | Resume R02 first, inspect each segment, retain accepted snapshots plus final two restart groups, and complete R17 last to control sequential peak storage. |
 | 2026-05-30 | Preserve completed `R02` timing evidence and authorize only an `8.0` node-hour eight-node `R17` high-resolution timing probe next. | R02 jobs `4744198` and `4744205` reach native cadence `t = 0.25` cleanly. Their authenticated continuation projects `19.000000` node-hours per standard `t = 10` case, narrowing the matrix bracket to `424.145556`--`576.145556` node-hours. The residual spread is isolated to R17. | Run and inspect one bounded R17 timing probe with 64 GPU ranks so each rank retains the standard 27-meshblock load, then revise mapped-matrix runtime/storage authorization; no broader matrix execution is authorized yet. |
 | 2026-05-30 | Preserve completed `R16` and authorize only a `2.0` node-hour `R02` standard-layout timing pilot next. | R16 completes cleanly in `6.145556` node-hours, but cell-count-only and CFL-aware mapped-matrix projections span `1087.763412` to `2956.012436` node-hours. `R02` holds active-Alfvenic beta-10 physics fixed while changing from `96 x 96 x 192` to `192 x 192 x 384`, making it the smallest discriminating production-path measurement. | Run and inspect one bounded R02 timing segment, then revise mapped-matrix runtime/storage authorization; no broader matrix execution is authorized yet. |
@@ -2475,7 +2480,9 @@ historical use. That ceiling is not permission to submit broadly: helper
 isolation, shared-root controls, requalification, R16 completion, and R02/R17
 timing are now complete. F-071 authorizes only the frozen `R02`--`R17`
 mapped matrix under sequential inspection inside a `900.000000` node-hour
-E02 envelope.
+E02 envelope. F-072 accepts R02 through exact `t = 1.0`, updates the mapped
+projection to `702.195370` node-hours, and requires prepare-time rejection
+above the two-hour normal-QOS walltime limit.
 
 All Frontier simulations for this CGL-LF project must place their output,
 logs, manifests, restart products, and usage accounting beneath:
@@ -2651,8 +2658,10 @@ separate `2.0` node-hour R02 standard-layout timing pilot. Jobs `4744198` and
 high-resolution timing pilot through authenticated continuation `t = 0.10`
 using `4.235556` node-hours. F-071 replaces the bracket with a measured
 `900.000000` node-hour mapped-matrix envelope. Resume R02 first and complete
-R17 last. The old `1068.888889` Stage I reservation is planning history, not
-an `E02` entitlement.
+R17 last. F-072 records R02 job `4744249` through exact `t = 1.0`, updates
+the projection to `702.195370` node-hours, and requires conservative
+two-hour-or-shorter normal-QOS segments. The old `1068.888889` Stage I
+reservation is planning history, not an `E02` entitlement.
 
 According to OLCF accounting, a job is charged according to requested nodes
 multiplied by actual time from entering the running state until exit; unused
@@ -2783,6 +2792,7 @@ Start the new epoch narrowly:
 | Completed Stage I `R02` standard-layout timing pilot | `0.473333` node-hours actual inside `2.0` reserved | F-070 completes native-cadence standard-layout timing and storage measurement |
 | Completed Stage I `R17` high-resolution timing pilot | `4.235556` node-hours actual | F-071 completes fresh and authenticated developed eight-node timing measurements |
 | Stage I frozen mapped matrix | `900.000000` node-hours | F-071 continuation-aware projection is `697.019444`; run only `R02`--`R17` sequentially, resume R02 first, and complete R17 last |
+| Accepted Stage I `R02` mapped continuation through `t = 1.0` | `1.452778` node-hours actual | F-072 longer developed interval updates mapped projection to `702.195370`; continue conservatively |
 | Stage II extension | `0` | Remains unauthorized until Stage I acceptance and recosting |
 
 #### Recommended Accounting Helper
@@ -2834,7 +2844,8 @@ active top-level CGL-root campaign-record checks, completed R16/R02/R17
 accounting, the F-071 measured `900.000000` node-hour frozen-matrix envelope,
 and the same retained-bundle requirement for the committed input and
 executable revisions. Preserve the committed F-060/F-061 controls and F-071
-recost before continuation.
+recost before continuation. F-072 additionally rejects production
+normal-QOS preparations above two hours before restart archival.
 Validate its policy logic offline with:
 
 ```bash
@@ -3787,6 +3798,14 @@ prefixes yields a continuation-aware mapped E02 projection of `697.019444`
 node-hours. The measured `900.000000` node-hour envelope leaves `202.980556`
 node-hours of projected margin for case-to-case and late-time variation.
 
+F-072 extends R02 from `t = 0.25` to native restart boundary `t = 1.0`.
+Job `4744249` consumes `1.452778` node-hours, or `1.937037` node-hours per
+simulated time unit over the longer developed interval. Applying that rate to
+the unfinished standard-layout work updates the continuation-aware mapped
+projection to `702.195370` node-hours and leaves `197.804630` node-hours of
+F-071 envelope margin. Continue with conservative normal-QOS segments at or
+below two requested hours and recost after inspection.
+
 This estimate is not a standard-mesh benchmark. It assumes linear scaling
 with cell count and simulated duration, equivalent timestep behavior among
 cases, and no late-time performance change. The 2x factor is a planning
@@ -3913,7 +3932,9 @@ isolation, requalification, and immutable-build archival. R02 jobs `4744198`
 and `4744205` close the standard-layout timing gate through native cadence
 `t = 0.25`. R17 jobs `4744210` and `4744230` close high-resolution timing
 through authenticated continuation `t = 0.10`. F-071 authorizes only the
-frozen mapped matrix under sequential inspection.
+frozen mapped matrix under sequential inspection. R02 job `4744249` then
+reaches exact `t = 1.0`; F-072 requires conservative two-hour-or-shorter
+normal-QOS continuation segments.
 
 Required baseline:
 
@@ -4262,7 +4283,9 @@ jobs `4743735` through `4744158`. R02 jobs `4744198` and `4744205` close the
 standard-layout timing gate through native cadence `t = 0.25`. R17 jobs
 `4744210` and `4744230` close high-resolution timing through authenticated
 continuation `t = 0.10`. F-071 permits only the frozen `R02`--`R17` mapped
-matrix inside the `900.000000` node-hour envelope.
+matrix inside the `900.000000` node-hour envelope. R02 job `4744249`
+subsequently reaches exact `t = 1.0`; F-072 encodes the two-hour normal-QOS
+preparation limit.
 
 ## Repository Validation Gates
 
@@ -4709,7 +4732,8 @@ local implementation evidence. The next critical path is:
    active top-level CGL-root campaign records. Its initial `4.0` node-hour
    R16 pilot cap and F-068 `7.0` node-hour completion envelope are now
    superseded by completed R16, R02, and R17 accounting plus the F-071
-   measured `900.000000` node-hour mapped-matrix envelope. Commits `462b9dbd`, `d210cdd5`,
+   measured `900.000000` node-hour mapped-matrix envelope. F-072 accepts R02
+   through exact `t = 1.0` and hardens the two-hour normal-QOS limit. Commits `462b9dbd`, `d210cdd5`,
    `eab6e12b`, and `7fae0bcf` retain the original controls, including the
    F-061 prepare-time absent-override-key guard exposed by `g014`. The
    2026-05-29 EDT audit found cancelled exploratory job `4743020` and
@@ -4756,7 +4780,9 @@ local implementation evidence. The next critical path is:
    timing gate through authenticated continuation `t = 0.10`; their developed
    rate yields a continuation-aware `697.019444` node-hour mapped projection.
    F-071 authorizes only the frozen mapped matrix inside a `900.000000`
-   node-hour envelope. Resume R02 first, inspect every segment, retain
+   node-hour envelope. R02 job `4744249` reaches exact `t = 1.0` in
+   `1.452778` node-hours; F-072 updates the projection to `702.195370`
+   node-hours. Continue R02 conservatively, inspect every segment, retain
    accepted snapshots plus final two restart groups, and complete R17 last.
    The old `1068.888889` node-hour and `880.368` GB values remain historical
    priors, not authorization.
