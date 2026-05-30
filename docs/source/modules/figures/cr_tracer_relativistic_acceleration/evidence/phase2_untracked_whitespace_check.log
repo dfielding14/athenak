@@ -1,0 +1,6 @@
+PASS inputs/particles/cr_tracer_relativistic_contract.athinput
+PASS tst/test_suite/particles/test_particles_cr_relativistic_contract_cpu.py
+PASS docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase2_parser_contract_cpu.log
+PASS docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase2_particle_cpu.log
+PASS docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase2_particle_mpicpu.log
+PASS docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase2_style.log

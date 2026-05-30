@@ -463,6 +463,13 @@ void Particles::ExchangeAfterSubcycle() {
 //  \brief
 
 TaskStatus Particles::Push(Driver *pdriver, int stage) {
+  if (pusher == ParticlesPusher::relativistic_hc) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "Particle pusher 'relativistic_hc' parsed successfully "
+              << "but prescribed-field execution is not implemented or qualified"
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   int is = indcs.is;
   int js = indcs.js;

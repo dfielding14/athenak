@@ -1,0 +1,16 @@
+## feature/CR_tracers_relativistic_acceleration...origin/feature/CR_tracers_relativistic_acceleration [ahead 2]
+ M docs/source/modules/cr_tracer_relativistic_acceleration_ledger.md
+ M src/particles/README.md
+ M src/particles/particles.cpp
+ M src/particles/particles.hpp
+ M src/particles/particles_pushers.cpp
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase2_branch_snapshot.txt
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase2_diff_check.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase2_evidence_sha256.txt
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase2_parser_contract_cpu.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase2_particle_cpu.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase2_particle_mpicpu.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase2_style.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase2_untracked_whitespace_check.log
+?? inputs/particles/cr_tracer_relativistic_contract.athinput
+?? tst/test_suite/particles/test_particles_cr_relativistic_contract_cpu.py

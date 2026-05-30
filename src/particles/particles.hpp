@@ -22,10 +22,13 @@
 
 // constants that enumerate ParticlesPusher options
 enum class ParticlesPusher {drift, leap_frog, lagrangian_tracer, lagrangian_mc,
-                            boris};
+                            boris, relativistic_hc};
 
 // constants that enumerate particle field-gather interpolation options
 enum class ParticleInterpolation {lin_legacy, trilinear, tsc};
+
+// constants that enumerate relativistic CR field-source options
+enum class RelativisticFieldSource {prescribed_test};
 
 // constants that enumerate ParticleTypes
 enum class ParticleType {cosmic_ray};
@@ -90,6 +93,8 @@ class Particles {
   Real subcycle_cell_fraction;
   Real subcycle_meshblock_fraction;
   Real subcycle_gyro_fraction;
+  Real c_model;
+  Real alpha_s;
   ParticlesConsistencyMode consistency_mode;
   ParticlesAMRRemapMode amr_remap_mode;
   ParticlesExchangeMode exchange_mode;
@@ -99,6 +104,7 @@ class Particles {
 
   ParticlesPusher pusher;
   ParticleInterpolation interpolation;
+  RelativisticFieldSource relativistic_field_source;
 
   // Boundary communication buffers and functions for particles
   ParticlesBoundaryValues *pbval_part;

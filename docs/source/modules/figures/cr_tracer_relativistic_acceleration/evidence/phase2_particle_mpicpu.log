@@ -1,0 +1,29 @@
+2026-05-30 01:01:15,282 - INFO - Cleaning build directory
+2026-05-30 01:01:15,287 - INFO - Configuring CMake in /Users/dbf75/.codex/worktrees/e354/athenak-DF
+2026-05-30 01:01:15,287 - INFO - Executing command: cmake -D Athena_ENABLE_MPI=ON -B tst/build
+2026-05-30 01:01:16,609 - INFO - Executing command: make -j 16
+2026-05-30 01:01:37,183 - INFO - make completed in 20.57 seconds
+2026-05-30 01:01:37,184 - INFO - Build directory cleaned and project rebuilt
+2026-05-30 01:01:37,184 - INFO - Executing command: ln -s ../../inputs inputs
+============================= test session starts ==============================
+platform darwin -- Python 3.13.13, pytest-8.4.1, pluggy-1.6.0
+rootdir: /Users/dbf75/.codex/worktrees/e354/athenak-DF/tst
+plugins: anyio-4.9.0, xdist-3.8.0, jaxtyping-0.3.7, cov-6.2.1, Faker-40.1.2
+collected 351 items / 313 deselected / 38 selected
+
+../../test_suite/dyngrmhd/test_dyngrmhd_lwave2d_amr_mpicpu.py ..         [  5%]
+../../test_suite/gr/test_gr_bondi_mpicpu.py .                            [  7%]
+../../test_suite/gr/test_gr_lwave2d_amr_mpicpu.py ....                   [ 18%]
+../../test_suite/ion-neutral/test_in_cshock2d_mpicpu.py ..               [ 23%]
+../../test_suite/nr/test_nr_lwave2d_amr_mpicpu.py ........               [ 44%]
+../../test_suite/nr/test_nr_lwave3d_amr_mpicpu.py ....                   [ 55%]
+../../test_suite/particles/test_particles_cr_accuracy_mpicpu.py .....    [ 68%]
+../../test_suite/particles/test_particles_cr_mpicpu.py ....              [ 78%]
+../../test_suite/rad/test_rad_lwave2d_amr_mpicpu.py .                    [ 81%]
+../../test_suite/sbox/test_sbox_hydroshwave_mpicpu.py .                  [ 84%]
+../../test_suite/sbox/test_sbox_mhdshwave_mpicpu.py .                    [ 86%]
+../../test_suite/sr/test_sr_lwave2d_amr_mpicpu.py ....                   [ 97%]
+../../test_suite/z4c/test_z4c_lwave2d_amr_mpicpu.py .                    [100%]2026-05-30 01:13:22,628 - INFO - Cleaning build directory
+
+
+================ 38 passed, 313 deselected in 705.25s (0:11:45) ================

@@ -139,6 +139,9 @@ The supported particle settings are:
 - `pusher = drift`: moves particles with stored velocities.
 - `pusher = boris`: uses the magnetic Boris update and requires an `<mhd>`
   block.
+- `pusher = relativistic_hc`: reserves the explicit opt-in relativistic
+  Higuera-Cary contract.  This mode is parser-visible but execution remains
+  fail-closed until the prescribed-field kernel is implemented and qualified.
 - `interpolation = tsc`: for `pusher = boris`, interpolates the cell-centered
   magnetic field with triangular-shaped-cloud weights.
 - `interpolation = trilinear`: for `pusher = boris`, uses full
@@ -184,6 +187,63 @@ one-particle uniform-field Boris accuracy test.
 `inputs/particles/cr_tracer_boris_amr_perf.athinput` and
 `inputs/particles/cr_tracer_drift_amr_perf.athinput` are CPU/MPI performance
 comparison inputs for end-to-end Boris AMR and remap-focused AMR timing.
+
+## Relativistic Parser Contract
+
+The relativistic acceleration path is under staged qualification.  The current
+runtime contract accepts construction-only parser checks for:
+
+```text
+<time>
+evolution = kinematic
+nlim      = 0
+
+<particles>
+particle_type             = cosmic_ray
+ppc                       = 0.001953125
+nspecies                  = 1
+pusher                    = relativistic_hc
+interpolation             = trilinear
+relativistic_field_source = prescribed_test
+c_model                   = 1.0
+alpha_s                   = 1.0
+```
+
+This opt-in contract is intentionally narrow:
+
+- `c_model` is the explicit code-unit model light speed and must be finite and
+  strictly positive.  Choosing physical light speed or a reduced model speed
+  is a deliberate model decision; neither is inferred from legacy inputs.
+- `alpha_s` is a separate signed normalized force coefficient and must be
+  finite and nonzero.  Both signs are accepted.  Its sign is not the legacy
+  `IPM < 0` alignment sentinel.
+- `nspecies = 1`, a 3D strictly periodic mesh, Newtonian coordinates, ideal
+  MHD, and explicit `interpolation = trilinear` are required.
+- `relativistic_field_source = prescribed_test` selects the mechanically
+  isolated analytical harness planned for the next stage.  It does not enable
+  sampled production MHD fields.
+- `evolution = kinematic` is required so later prescribed-field particle tests
+  execute the particle task list.  It is not a claim that the MHD background
+  is frozen.  The parser fixture uses the constructor-required
+  `<mhd>/rsolver = advect`; no positive-cycle ideal-MHD evolution claim is
+  authorized.
+- Legacy particle restart input, legacy output blocks, staged relativistic keys
+  under legacy pushers, and unqualified coupled physics blocks are rejected
+  before execution.
+- Nonzero MHD passive-scalar counts and configured MHD diffusion coefficients
+  remain outside the parser-only qualification boundary and are rejected.
+- The superseded `relativistic_background` spelling is rejected explicitly.
+  Select `relativistic_field_source` instead; no background mode is inferred.
+- Any positive-cycle `relativistic_hc` run currently aborts with an explicit
+  unimplemented-or-unqualified message.  The mode cannot silently no-op.
+
+Do not infer relativistic semantics from legacy `boris`, `IPM`, velocity,
+restart, or output fields.  The authoritative momentum layout, prescribed
+field kernel, acceleration pusher, restart schema, and relativistic
+diagnostics remain gated follow-up work.
+
+`inputs/particles/cr_tracer_relativistic_contract.athinput` is the
+construction-only parser fixture.  Its default `nlim = 0` is deliberate.
 
 Useful `part_random` problem settings:
 
@@ -238,9 +298,12 @@ point-centered field to roundoff for a linear cross-field, while `lin_legacy`
 shows the expected cross-direction interpolation error that decreases with
 resolution.  This is a pusher/gather test, not an MHD evolution test.
 
-## Particle Data
+## Legacy Particle Data
 
-Cosmic-ray tracer particles allocate 14 real fields and 3 integer fields.
+Legacy `drift` and `boris` cosmic-ray tracer particles allocate 14 real fields
+and 3 integer fields.  Parser-only `relativistic_hc` construction checks do not
+authorize this as a relativistic data contract.  The appended authoritative
+momentum layout remains gated follow-up work.
 
 Integer fields:
 
@@ -314,9 +377,12 @@ particle counts are assigned to the new parent.  `particle_load_weight = 0.0`
 preserves the original mesh-only behavior and is the right baseline for
 performance comparisons.
 
-## Outputs
+## Legacy Outputs
 
-The inherited particle outputs are still available:
+The following particle outputs remain available for legacy `drift` and
+`boris`.  Parser-only `relativistic_hc` currently rejects every output block
+before initial output emission; relativistic output semantics remain gated
+follow-up work.
 
 - `pvtk`: particle VTK output.
 - `trk`: tracked-particle output.

@@ -25,14 +25,14 @@ The statuses in this initial draft are intentionally conservative:
 | --- | --- | --- |
 | Ledger date | `2026-05-30` | Record the date of each accepted update. |
 | Working branch | `feature/CR_tracers_relativistic_acceleration` | Stop if the working branch changes unexpectedly. |
-| Working branch HEAD at latest accepted commit | `04090c1a402bdf07dfc24ab18c3936ea13111141` | Refresh after every accepted commit. |
+| Working branch HEAD at latest accepted commit | `0687973f3df831381f8a6ad71ffd3729febdc0fa` | Refresh after every accepted commit. |
 | Frozen feature base | `64a4d1be8da1c22d1328cc47280195b3747fa0ab` from `feature/CR_tracers_followup_architecture` | Change only through an accepted `DR-000` update. |
 | Intended eventual integration target | `origin/development` at `c6a73b08e60807f8b925164c5e7edd5cb820c8ae` | Refresh the target SHA and merge-tree audit after target updates and before handoff. |
-| Current implementation phase | `Phase 1: state-helper done claim under final independent recheck` | Advance to Phase 2 only after the Phase-1 evidence archive, `RG-002`, and both final rechecks record `PROCEED`. |
-| Allowed write manifest | `src/particles/relativistic_state.hpp`, `src/pgen/unit_tests/cr_relativistic_state_test.cpp`, `inputs/unit_tests/cr_relativistic_state_test.athinput`, this ledger, and archived Phase-1 evidence only | Do not edit runtime parser, particle layout, pusher, restart, output, gather, MHD, AMR, or timestep surfaces until the Phase-1 done claim is accepted. |
-| Last accepted checkpoint | Phase 0 freeze-baseline and pusher-spike checkpoint at `04090c1a402bdf07dfc24ab18c3936ea13111141` | Phase 1 remains a candidate until its final independent rechecks pass and its milestone commit is recorded. |
-| Open blocking findings | Phase-1 final recheck closure; downstream `BF-009`, `BF-014`, backend qualification, and solver-coupling obligations remain open for their owning phases | Keep the live list current.  Do not proceed while a blocker for the next edit set remains open. |
-| CPU/MPI qualification status | Phase-1 candidate: isolated double-precision CPU helper harness passed; legacy particle CPU `32 passed`; legacy particle MPI CPU `9 passed`; single precision blocked before helper qualification by inherited repository narrowing errors | Rerun and archive qualification at each accepted milestone. |
+| Current implementation phase | `Phase 2: explicit parser-only opt-in runtime contract` | Advance to gathers only after parser tests, user documentation, independent integration review, and `RG-003` record `PROCEED`. |
+| Allowed write manifest | `src/particles/particles.hpp`, `src/particles/particles.cpp`, `src/particles/particles_pushers.cpp`, `src/particles/README.md`, Phase-2 parser tests and evidence, and this ledger only | Keep the 14-real legacy layout unchanged.  Do not edit restart payloads, outputs, gathers, MHD, AMR, timestep algorithms, or acceleration kernels until the Phase-2 done claim is accepted. |
+| Last accepted checkpoint | Phase-1 relativistic state-helper milestone at `0687973f3df831381f8a6ad71ffd3729febdc0fa` | Record each milestone commit before opening the next phase. |
+| Open blocking findings | Phase-2 parser qualification and review; downstream `BF-009`, `BF-014`, backend qualification, layout, restart, output, solver-coupling, and migration obligations remain open for their owning phases | Keep the live list current.  Do not proceed while a blocker for the next edit set remains open. |
+| CPU/MPI qualification status | Phase 1 accepted: isolated double-precision CPU helper harness passed; legacy particle CPU `32 passed`; legacy particle MPI CPU `9 passed`; single precision blocked before helper qualification by inherited repository narrowing errors | Rerun and archive qualification at each accepted milestone. |
 | GPU qualification status | Not started; unavailable on this workstation | GPU qualification is optional for `MERGE READY` on this workstation, but it remains a separate unqualified residual risk.  Do not claim `GPU QUALIFIED` without accelerator evidence on an accepted SHA. |
 | Merge-ready status | Not eligible | Requires the guide's checkpoint sequence, including `CP-4 Solver Coupling` and `CP-7 Final Cold Review`. |
 
@@ -1828,3 +1828,189 @@ remain closed behind their owning gates.
   repository narrowing errors; GPU execution unavailable and unqualified
 - Next allowed edit set: Phase-2 explicit opt-in parser contract only, with
   legacy particle layout and runtime semantics preserved
+
+## Phase 2 Opening Update 1: Fail-Closed Parser Contract
+
+The accepted Phase-1 milestone is committed at
+`0687973f3df831381f8a6ad71ffd3729febdc0fa`.  Phase 2 opens only the explicit
+runtime parser contract and its tests.  The particle layout remains the legacy
+`nrdata = 14`, `nidata = 3` prefix.  No relativistic particle execution is
+authorized in this phase.
+
+### DR-021: Prescribed-Test-Only Parser Boundary
+
+- Status: selected for Phase-2 implementation and independent review
+- Date: 2026-05-30
+- Problem: expose an explicit relativistic opt-in without silently changing
+  legacy `boris`, widening storage, reading incompatible restart payloads, or
+  allowing a selectable-but-unimplemented pusher to fall through as a no-op
+- Options considered:
+  1. Alias the new mode onto legacy `boris`.
+  2. Add `relativistic_hc` only to the enum and defer validation.
+  3. Add a parser-visible `relativistic_hc` contract that is construction-only,
+     prescribed-test-only, and explicitly aborts attempted execution.
+  4. Widen layout, restart, outputs, gathers, and pusher behavior together.
+- Selected option: option 3
+- Exact parser contract:
+  - preserve legacy `drift` and `boris` parsing and runtime semantics;
+  - require explicit `pusher = relativistic_hc`;
+  - require finite `c_model > 0`;
+  - require finite signed `alpha_s != 0`;
+  - require `nspecies = 1`;
+  - require a 3-D strictly periodic mesh and Newtonian coordinates;
+  - require ideal MHD;
+  - require explicit `interpolation = trilinear`;
+  - require `relativistic_field_source = prescribed_test`;
+  - require `time/evolution = kinematic` as a particle-task scheduling vehicle
+    for the future mechanically isolated prescribed-field harness;
+  - use the constructor-required `<mhd>/rsolver = advect` in parser fixtures;
+  - reject legacy particle restart before restart-file access;
+  - reject unqualified coupled physics blocks and MHD diffusion;
+  - abort any attempted `relativistic_hc` particle push with a clear
+    unimplemented-or-unqualified message.
+- Physics clarification: `kinematic` does not freeze MHD fields.  This parser
+  contract authorizes only the planned prescribed-field harness.  Sampled-MHD
+  production coupling remains closed until `CP-4 Solver Coupling`.  The
+  `advect` solver selection is constructor plumbing for the Phase-2 fixture,
+  not qualified positive-cycle ideal-MHD evolution.
+- Why the other options were not selected: option 1 silently changes legacy
+  semantics; option 2 creates a silent no-op risk in the existing default push
+  switch; option 4 violates the reviewed phase boundary and prevents isolated
+  parser qualification.
+- Compatibility and migration impact: no legacy layout, restart payload,
+  output schema, gather, AMR, MPI, or particle timestep behavior changes.
+- Validation required: legacy deck regressions, successful construction-only
+  parsing for both `alpha_s` signs, clear rejection of each unsupported input
+  class, restart rejection before file access, and explicit positive-cycle
+  execution abort.
+- Failure signals: old deck behavior changes, missing validation path,
+  accepted unsupported combination, restart file access before new-mode
+  rejection, or positive-cycle silent no-op.
+- Revisit trigger: Phase-3 prescribed-field harness implementation or a
+  separately reviewed compatibility widening.
+
+### Phase-2 Layout Audit Before Layout Edits
+
+The fresh direct-consumer sidecar audit confirmed that Phase 2 can and should
+remain parser-only:
+
+- Keep `ParticlesIndex`, `nrdata = 14`, and `nidata = 3` unchanged.
+- Keep legacy restart bytes and positional tuple consumers unchanged.
+- Keep outputs unchanged.
+- Keep MPI/AMR transport unchanged; it is width-generic but not yet qualified
+  for appended relativistic state.
+- Treat hard-coded 17-`Real` restart payloads, legacy velocity/energy diagnostic
+  aliases, `IPM` sentinel semantics, timestep refresh, `IPDB` displacement
+  semantics, and known `ptrack` / `pvtk` findings as downstream gates.
+
+## Phase 2 Review Update 2: Superseding Fail-Closed Boundary
+
+Independent adversarial and documentation reviews held the first Phase-2
+candidate.  This append-only update supersedes the incomplete `DR-021` parser
+list above without rewriting the historical record.
+
+### DR-022: Reject Ambiguous Staged Configuration
+
+- Status: selected for Phase-2 closure and independent re-review
+- Date: 2026-05-30
+- Problem: parser-only qualification is unsafe if an input deck can retain a
+  staged relativistic key, a stale architecture spelling, an output request, or
+  an unqualified MHD widening that is silently ignored.
+- Options considered:
+  1. Ignore unknown or future-facing keys until the implementation phase that
+     consumes them.
+  2. Warn and continue.
+  3. Fail closed until each spelling, output, and widening is deliberately
+     implemented and qualified.
+- Selected option: option 3.
+- Superseding parser boundary:
+  - reject every `output*` block for `relativistic_hc` before initial output
+    emission; Phase 2 does not serialize legacy particle artifacts under the
+    new mode;
+  - reject `relativistic_field_source`, `c_model`, `alpha_s`, and the stale
+    `relativistic_background` key when `pusher != relativistic_hc`;
+  - reject the superseded `particles/relativistic_background` spelling under
+    `relativistic_hc`; select `relativistic_field_source` explicitly instead;
+  - reject configured MHD diffusion coefficients and nonzero MHD passive-scalar
+    counts;
+  - retain the earlier rejection of coupled physics blocks, unsupported
+    dimensions, nonperiodic boundaries, relativistic coordinates, static or
+    dynamic scheduling, legacy particle restart, non-ideal MHD, non-trilinear
+    interpolation, non-prescribed field sources, invalid `c_model`, invalid
+    `alpha_s`, and every attempted positive-cycle execution.
+- Historical-spelling clarification:
+  `particles/relativistic_background = frozen` in earlier architecture notes is
+  not an accepted input.  It is superseded by the mechanically distinct
+  `particles/relativistic_field_source = prescribed_test` Phase-2 parser
+  fixture.  Neither spelling authorizes solver-coupled field sampling.
+- Why the other options were not selected: warnings and silent ignores allow a
+  deck to appear configured for a relativistic contract while executing a
+  different semantic surface.
+- Compatibility impact: legacy `drift` and `boris` decks remain valid when they
+  do not contain staged relativistic-only keys.  Existing legacy layout,
+  restart bytes, output schemas, gathers, MPI/AMR transport, and timestep logic
+  remain unchanged.
+- Validation expansion:
+  - direct new-mode and legacy-mode rejection of the stale background spelling;
+  - direct legacy-mode rejection of staged relativistic-only keys;
+  - rejection of every output block before file creation;
+  - absent-MHD and static-scheduling rejection;
+  - direct passive-scalar, Ohmic resistivity, viscosity, conductivity, and
+    time-dependent-conductivity rejection;
+  - active turbulence forcing and shearing-box/orbital-advection rejection;
+  - direct SR and GR coordinate rejection after selecting compatible dynamic
+    MHD constructor plumbing;
+  - inherited fail-closed rejection for ion-neutral and dynamical-GR inputs
+    whose module constructors reject the incompatible deck before particle
+    construction.
+- Evidence status: focused parser archive refreshed after this update; CPU,
+  MPI CPU, style, whitespace, snapshot, and checksum archives must be rebound
+  before the Phase-2 done claim.
+- Revisit trigger: Phase-3 prescribed-field harness implementation, any output
+  schema opening, or any solver-coupled widening.
+
+## Phase 2 Done Claim: Accepted Parser-Only Milestone
+
+Phase 2 is accepted as a bounded parser-only milestone.  It does not authorize
+relativistic particle execution, layout widening, restart changes, output
+changes, prescribed-field gathering, sampled-MHD coupling, acceleration,
+subcycling changes, or MPI/AMR migration claims for appended state.
+
+### Accepted Review Dispositions
+
+| Review | Disposition | Closure |
+| --- | --- | --- |
+| Adversarial parser matrix | `PROCEED` | Verified missing-MHD, static scheduling, active forcing, shearing-box/orbital-advection, SR, GR, inherited ion-neutral and dynamical-GR fail-closed paths, nonzero passive scalars, all four diffusion arms, stale spelling, output rejection, and legacy controls. |
+| `RG-003` documentation gate | `PROCEED` | README and append-only `DR-022` clearly separate constructor plumbing, prescribed-test scope, legacy data and output meanings, stale-spelling rejection, and the positive-cycle abort. |
+| Runtime integration done claim | `PROCEED` | Verified parser ordering before output construction and restart-file access, reachability of direct guards, unchanged legacy widths, appended enum ordering, bounded out-of-tree compatibility impact, evidence hashes, and live whitespace hygiene. |
+
+### Accepted Evidence Archive
+
+| Artifact | Result |
+| --- | --- |
+| `evidence/phase2_parser_contract_cpu.log` | `49 passed`; direct `nlim = 0` construction succeeded; direct positive-cycle execution rejected explicitly. |
+| `evidence/phase2_particle_cpu.log` | Full CPU collection: `269 passed, 15 skipped, 67 deselected`. |
+| `evidence/phase2_particle_mpicpu.log` | Full MPI CPU collection: `38 passed, 313 deselected`. |
+| `evidence/phase2_style.log` | `2 passed`. |
+| `evidence/phase2_diff_check.log` | Empty; `git diff --check` passed. |
+| `evidence/phase2_untracked_whitespace_check.log` | Every retained untracked fixture, test, and runtime log passed the trailing-whitespace scan. |
+| `evidence/phase2_branch_snapshot.txt` | Captures the intended tracked and untracked Phase-2 surface before commit. |
+| `evidence/phase2_evidence_sha256.txt` | Binds the production sources, README, fixture, test, ledger, runtime logs, diff check, whitespace report, and branch snapshot. |
+
+### Reflection Gate RG-003: Proceed
+
+- Status: `PROCEED`
+- Accepted scope: explicit constructor-only `relativistic_hc` opt-in with
+  fail-closed unsupported combinations and unchanged legacy drift/Boris
+  semantics.
+- Assumptions weakened: stale architecture spellings and staged future keys
+  cannot remain silently ignored; every such ambiguity must fail closed until
+  deliberately implemented.
+- Residual risks: single-precision repository build remains blocked by inherited
+  narrowing errors; GPU execution remains unavailable and unqualified; the
+  prescribed-field gather helper, runtime diagnostic-only integration, state
+  widening, pusher, timestep, restart, outputs, and MPI/AMR migration remain
+  downstream gates.
+- Next permitted edit set: Phase-3 mechanically isolated trilinear gather helper
+  and custom test harness only.  Preserve the positive-cycle
+  `relativistic_hc` abort and keep production sampled-MHD coupling closed.

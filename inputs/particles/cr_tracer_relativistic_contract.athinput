@@ -1,0 +1,72 @@
+# AthenaK input file for parser-only relativistic CR contract tests
+
+<comment>
+problem   = parser-only relativistic CR tracer contract test
+
+<job>
+basename  = cr_tracer_relativistic_contract
+
+<mesh>
+nghost    = 2
+nx1       = 8
+x1min     = -0.5
+x1max     = 0.5
+ix1_bc    = periodic
+ox1_bc    = periodic
+
+nx2       = 8
+x2min     = -0.5
+x2max     = 0.5
+ix2_bc    = periodic
+ox2_bc    = periodic
+
+nx3       = 8
+x3min     = -0.5
+x3max     = 0.5
+ix3_bc    = periodic
+ox3_bc    = periodic
+
+<meshblock>
+nx1       = 8
+nx2       = 8
+nx3       = 8
+
+<time>
+evolution  = kinematic
+integrator = rk2
+cfl_number = 0.4
+nlim       = 0
+tlim       = 0.2
+ndiag      = 1
+
+<mhd>
+eos         = ideal
+reconstruct = plm
+rsolver     = advect
+gamma       = 1.666666667
+
+<particles>
+particle_type             = cosmic_ray
+ppc                       = 0.001953125
+nspecies                  = 1
+pusher                    = relativistic_hc
+interpolation             = trilinear
+relativistic_field_source = prescribed_test
+c_model                   = 1.0
+alpha_s                   = 1.0
+
+<problem>
+pgen_name         = part_random
+particle_position = center
+particle_x1       = 0.0
+particle_x2       = 0.0
+particle_x3       = 0.0
+particle_velocity = uniform
+v0x               = 0.0
+v0y               = 0.0
+v0z               = 0.0
+prtcl_rst_flag    = 0
+B0x               = 0.0
+B0y               = 0.0
+B0z               = 1.0
+B_profile         = uniform

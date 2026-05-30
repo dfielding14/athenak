@@ -43,10 +43,13 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
     subcycle_cell_fraction(0.5),
     subcycle_meshblock_fraction(0.5),
     subcycle_gyro_fraction(0.25),
+    c_model(0.0),
+    alpha_s(0.0),
     consistency_mode(ParticlesConsistencyMode::none),
     amr_remap_mode(ParticlesAMRRemapMode::device_table),
     exchange_mode(ParticlesExchangeMode::alltoall_counts),
     interpolation(ParticleInterpolation::tsc),
+    relativistic_field_source(RelativisticFieldSource::prescribed_test),
     reference_counts_set(false),
     reference_nprtcl_total(0) {
   // check this is at least a 2D problem
@@ -144,6 +147,35 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
               << "' not recognized" << std::endl;
     std::exit(EXIT_FAILURE);
   }
+  std::string ppush = pin->GetString("particles","pusher");
+  bool has_relativistic_key =
+      pin->DoesParameterExist("particles","relativistic_field_source") ||
+      pin->DoesParameterExist("particles","c_model") ||
+      pin->DoesParameterExist("particles","alpha_s") ||
+      pin->DoesParameterExist("particles","relativistic_background");
+  if (ppush.compare("relativistic_hc") != 0 && has_relativistic_key) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "Relativistic-only <particles> keys require "
+              << "pusher = relativistic_hc" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if (ppush.compare("relativistic_hc") == 0) {
+    for (auto it = pin->block.begin(); it != pin->block.end(); ++it) {
+      if (it->block_name.compare(0, 6, "output") == 0) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "Particle pusher 'relativistic_hc' parser-only "
+                  << "contract rejects <" << it->block_name
+                  << "> until relativistic outputs are qualified" << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+    }
+  }
+  if (prtcl_rst_flag && ppush.compare("relativistic_hc") == 0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "Particle pusher 'relativistic_hc' does not support "
+              << "legacy particle restart input" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
   if (prtcl_rst_flag) {
     std::string prst_fname = pin->GetString("problem","prtcl_res_file");
     char rank_dir[20];
@@ -199,7 +231,6 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
 
   // select pusher algorithm
   {
-    std::string ppush = pin->GetString("particles","pusher");
     std::string interp = pin->GetOrAddString("particles","interpolation", "tsc");
     if (ppush.compare("drift") == 0) {
       pusher = ParticlesPusher::drift;
@@ -223,6 +254,122 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
         std::exit(EXIT_FAILURE);
       }
       pusher = ParticlesPusher::boris;
+    } else if (ppush.compare("relativistic_hc") == 0) {
+      if (pin->DoesParameterExist("particles","relativistic_background")) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "<particles>/relativistic_background is unsupported; "
+                  << "select <particles>/relativistic_field_source explicitly"
+                  << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      if (pmy_pack->pmhd == nullptr) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "Particle pusher 'relativistic_hc' requires an "
+                  << "<mhd> block" << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      if (nspecies != 1) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "Particle pusher 'relativistic_hc' currently requires "
+                  << "<particles>/nspecies = 1" << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      if (!(pmy_pack->pmesh->three_d) || !(pmy_pack->pmesh->strictly_periodic)) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "Particle pusher 'relativistic_hc' currently requires "
+                  << "a 3D strictly periodic mesh" << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      if (pmy_pack->pcoord->is_special_relativistic ||
+          pmy_pack->pcoord->is_general_relativistic ||
+          pmy_pack->pcoord->is_dynamical_relativistic) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "Particle pusher 'relativistic_hc' currently supports "
+                  << "Newtonian coordinates only" << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      if (pin->DoesBlockExist("hydro") || pin->DoesBlockExist("radiation") ||
+          pin->DoesBlockExist("ion-neutral") || pin->DoesBlockExist("turb_driving") ||
+          pin->DoesBlockExist("mhd_srcterms") || pin->DoesBlockExist("shearing_box") ||
+          pin->DoesBlockExist("adm") || pin->DoesBlockExist("z4c")) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "Particle pusher 'relativistic_hc' prescribed-test "
+                  << "contract rejects unqualified coupled physics blocks" << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      if (pin->DoesParameterExist("mhd","viscosity") ||
+          pin->DoesParameterExist("mhd","ohmic_resistivity") ||
+          pin->DoesParameterExist("mhd","conductivity") ||
+          pin->DoesParameterExist("mhd","tdep_conductivity")) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "Particle pusher 'relativistic_hc' prescribed-test "
+                  << "contract rejects unqualified MHD diffusion" << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      if (pin->DoesParameterExist("mhd","nscalars") &&
+          pin->GetInteger("mhd","nscalars") != 0) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "Particle pusher 'relativistic_hc' prescribed-test "
+                  << "contract rejects unqualified MHD passive scalars" << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      std::string eos = pin->GetString("mhd","eos");
+      if (eos.compare("ideal") != 0) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "Particle pusher 'relativistic_hc' requires "
+                  << "<mhd>/eos = ideal" << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      if (evolution_t.compare("kinematic") != 0) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "Particle pusher 'relativistic_hc' prescribed-test "
+                  << "contract requires <time>/evolution = kinematic" << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      if (!(pin->DoesParameterExist("particles","interpolation")) ||
+          interp.compare("trilinear") != 0) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "Particle pusher 'relativistic_hc' requires explicit "
+                  << "<particles>/interpolation = trilinear" << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      std::string field_source =
+          pin->GetOrAddString("particles","relativistic_field_source","");
+      if (field_source.compare("prescribed_test") != 0) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "Particle pusher 'relativistic_hc' currently requires "
+                  << "<particles>/relativistic_field_source = prescribed_test"
+                  << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      relativistic_field_source = RelativisticFieldSource::prescribed_test;
+      if (!(pin->DoesParameterExist("particles","c_model"))) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "Particle pusher 'relativistic_hc' requires "
+                  << "<particles>/c_model" << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      c_model = pin->GetReal("particles","c_model");
+      if (!std::isfinite(c_model) || c_model <= 0.0) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "<particles>/c_model must be finite and > 0 for "
+                  << "particle pusher 'relativistic_hc'" << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      if (!(pin->DoesParameterExist("particles","alpha_s"))) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "Particle pusher 'relativistic_hc' requires "
+                  << "<particles>/alpha_s" << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      alpha_s = pin->GetReal("particles","alpha_s");
+      if (!std::isfinite(alpha_s) || alpha_s == 0.0) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "<particles>/alpha_s must be finite and nonzero for "
+                  << "particle pusher 'relativistic_hc'" << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      pusher = ParticlesPusher::relativistic_hc;
     } else {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "Particle pusher must be specified in <particles> block"
