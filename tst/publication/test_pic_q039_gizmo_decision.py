@@ -56,8 +56,7 @@ class PicQ039GizmoDecisionTests(unittest.TestCase):
         }
         self.assertEqual(
             references[REFERENCE_ID]["retrieved_artifact_status"],
-            "local_staged_checksummed_pending_orion_post_copy_verification_"
-            "and_data_extraction",
+            "orion_private_copy_checksum_verified_data_extraction_open",
         )
         comparisons = {
             item["comparison_id"]: item for item in self.q022["comparison_matrix"]
@@ -70,22 +69,20 @@ class PicQ039GizmoDecisionTests(unittest.TestCase):
         }
         self.assertEqual(
             artifacts[EXTERNAL_ARTIFACT_ID]["status"],
-            "local_staged_checksummed_reference_sources_pending_orion_copy_"
-            "post_copy_verification_and_dataset_extraction",
+            "orion_private_copy_checksum_verified_reference_sources_"
+            "dataset_extraction_open",
         )
 
-    def test_sources_remain_staged_pending_orion_copy_and_verification(self) -> None:
+    def test_sources_are_privately_archived_with_orion_checksum_verification(self) -> None:
         preparation = self.q039["reference_source_preparation"]
         self.assertEqual(
             preparation["status"],
-            "local_staged_checksummed_pending_orion_copy_post_copy_verification_"
-            "mapping_and_data_extraction",
+            "orion_private_copy_checksum_verified_mapping_and_data_extraction_open",
         )
         self.assertTrue(
             all(
                 artifact["status"]
-                == "local_staged_checksummed_pending_orion_copy_and_post_copy_"
-                "checksum_verification"
+                == "orion_private_copy_checksum_verified"
                 for artifact in preparation["required_artifacts"]
             )
         )

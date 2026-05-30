@@ -5,7 +5,7 @@
   "gate": "Q-022",
   "qualification_effect": "preregistration_scaffold_only",
   "disposition": "open",
-  "scope": "Local metadata tranche freezing the mandatory comparison-family inventory and comparison-report contract. Private source-reference artifacts are locally staged and checksummed in preparation for Orion copy and post-copy checksum verification, but this record does not freeze extracted external datasets, complete equation maps, numerical tolerances, comparison runs, discrepancy dispositions, or reviewer sign-off.",
+  "scope": "Local metadata tranche freezing the mandatory comparison-family inventory and comparison-report contract. Private source-reference artifacts are archived in Orion with post-copy checksum verification, but this record does not freeze extracted external datasets, complete equation maps, numerical tolerances, comparison runs, discrepancy dispositions, or reviewer sign-off.",
   "primary_reproduction_contract": {
     "reference_id": "sun_bai_2023_arxiv_2304.10568v1",
     "citation": "Sun and Bai (2023), arXiv:2304.10568v1",
@@ -19,70 +19,70 @@
       "citation": "Bai et al. (2015), arXiv:1412.1087",
       "locator": "arXiv:1412.1087",
       "role": "Bell growth, nonlinear evolution, shock precursor, and Hall-applicability comparison",
-      "retrieved_artifact_status": "local_staged_checksummed_pending_orion_post_copy_verification_and_data_extraction"
+      "retrieved_artifact_status": "orion_private_copy_checksum_verified_data_extraction_open"
     },
     {
       "reference_id": "riquelme_spitkovsky_2009_arxiv_0810.4565",
       "citation": "Riquelme and Spitkovsky (2009), arXiv:0810.4565",
       "locator": "arXiv:0810.4565",
       "role": "Independent kinetic nonlinear Bell and CRCD saturation comparison",
-      "retrieved_artifact_status": "local_staged_checksummed_pending_orion_post_copy_verification_and_data_extraction"
+      "retrieved_artifact_status": "orion_private_copy_checksum_verified_data_extraction_open"
     },
     {
       "reference_id": "gargate_2010_arxiv_1002.1701",
       "citation": "Gargate et al. (2010), arXiv:1002.1701",
       "locator": "arXiv:1002.1701",
       "role": "Independent hybrid-PIC nonlinear Bell saturation comparison",
-      "retrieved_artifact_status": "local_staged_checksummed_pending_orion_post_copy_verification_and_data_extraction"
+      "retrieved_artifact_status": "orion_private_copy_checksum_verified_data_extraction_open"
     },
     {
       "reference_id": "zacharegkas_2022_arxiv_2210.08072",
       "citation": "Zacharegkas et al. (2022), arXiv:2210.08072",
       "locator": "arXiv:2210.08072",
       "role": "Hybrid nonlinear Bell saturation survey comparison",
-      "retrieved_artifact_status": "local_staged_checksummed_pending_orion_post_copy_verification_and_data_extraction"
+      "retrieved_artifact_status": "orion_private_copy_checksum_verified_data_extraction_open"
     },
     {
       "reference_id": "mignone_2018_arxiv_1804.01946",
       "citation": "Mignone et al. (2018), arXiv:1804.01946",
       "locator": "arXiv:1804.01946",
       "role": "Independent PLUTO conservative-coupling comparison",
-      "retrieved_artifact_status": "local_staged_checksummed_pending_orion_post_copy_verification_and_data_extraction"
+      "retrieved_artifact_status": "orion_private_copy_checksum_verified_data_extraction_open"
     },
     {
       "reference_id": "van_marle_casse_marcowith_2018_doi_stx2509",
       "citation": "van Marle, Casse and Marcowith (2018), DOI:10.1093/mnras/stx2509",
       "locator": "DOI:10.1093/mnras/stx2509",
       "role": "Independent MPI-AMRVAC AMR-shock and particle-acceleration comparison",
-      "retrieved_artifact_status": "local_staged_checksummed_pending_orion_post_copy_verification_and_data_extraction"
+      "retrieved_artifact_status": "orion_private_copy_checksum_verified_data_extraction_open"
     },
     {
       "reference_id": "bai_2019_arxiv_1902.10219",
       "citation": "Bai et al. (2019), arXiv:1902.10219",
       "locator": "arXiv:1902.10219",
       "role": "True delta-f nonlinear CRSI comparison",
-      "retrieved_artifact_status": "local_staged_checksummed_pending_orion_post_copy_verification_and_data_extraction"
+      "retrieved_artifact_status": "orion_private_copy_checksum_verified_data_extraction_open"
     },
     {
       "reference_id": "plotnikov_ostriker_bai_2021_arxiv_2102.11878",
       "citation": "Plotnikov, Ostriker and Bai (2021), arXiv:2102.11878",
       "locator": "arXiv:2102.11878",
       "role": "Ion-neutral-damped CRSI extension comparison",
-      "retrieved_artifact_status": "local_staged_checksummed_pending_orion_post_copy_verification_and_data_extraction"
+      "retrieved_artifact_status": "orion_private_copy_checksum_verified_data_extraction_open"
     },
     {
       "reference_id": "sun_bai_zhao_2024_arxiv_2409.08592",
       "citation": "Sun, Bai and Zhao (2024), arXiv:2409.08592",
       "locator": "arXiv:2409.08592",
       "role": "Adaptive-delta-f ion-neutral-friction CRPAI transport-calibration extension comparison",
-      "retrieved_artifact_status": "local_staged_checksummed_pending_orion_post_copy_verification_and_data_extraction"
+      "retrieved_artifact_status": "orion_private_copy_checksum_verified_data_extraction_open"
     },
     {
       "reference_id": "ji_hopkins_2022_arxiv_2111.14704",
       "citation": "Ji and Hopkins (2022), arXiv:2111.14704, plus frozen GIZMO documentation",
       "locator": "arXiv:2111.14704",
       "role": "Bounded reduced-speed-of-light comparison or documented exclusion decision",
-      "retrieved_artifact_status": "local_staged_checksummed_pending_orion_post_copy_verification_and_data_extraction"
+      "retrieved_artifact_status": "orion_private_copy_checksum_verified_data_extraction_open"
     },
     {
       "reference_id": "entity_toolkit_snapshot_512998c4",
@@ -102,7 +102,7 @@
       "observable_families": ["dispersion", "amplification", "spectra", "morphology", "shock_diagnostics", "hall_applicability"],
       "equation_map_status": "open_placeholder_requires_freeze_before_run",
       "normalization_map_status": "open_placeholder_requires_freeze_before_run",
-      "reference_data_status": "local_staged_checksummed_pending_orion_post_copy_verification_and_data_extraction"
+      "reference_data_status": "orion_private_copy_checksum_verified_data_extraction_open"
     },
     {
       "comparison_id": "XCMP-BELL-NONLINEAR-INDEPENDENT",
@@ -111,7 +111,7 @@
       "observable_families": ["growth", "dominant_wavelength", "magnetic_amplification", "spectra", "morphology", "energy_transfer", "saturation"],
       "equation_map_status": "open_placeholder_requires_freeze_before_run",
       "normalization_map_status": "open_placeholder_requires_freeze_before_run",
-      "reference_data_status": "local_staged_checksummed_pending_orion_post_copy_verification_and_data_extraction"
+      "reference_data_status": "orion_private_copy_checksum_verified_data_extraction_open"
     },
     {
       "comparison_id": "XCMP-BAI2019-CRSI",
@@ -120,7 +120,7 @@
       "observable_families": ["growth", "polarization_spectra", "distribution_evolution", "quasilinear_diffusion", "pitch_angle_evolution", "ninety_degree_crossing", "isotropization", "saturation", "resolution_dependence"],
       "equation_map_status": "open_placeholder_requires_freeze_before_run",
       "normalization_map_status": "open_placeholder_requires_freeze_before_run",
-      "reference_data_status": "local_staged_checksummed_pending_orion_post_copy_verification_and_data_extraction"
+      "reference_data_status": "orion_private_copy_checksum_verified_data_extraction_open"
     },
     {
       "comparison_id": "XCMP-PLUTO-COUPLING",
@@ -129,7 +129,7 @@
       "observable_families": ["linear_modes", "feedback_conservation", "matched_instability_metrics", "matched_shock_diagnostics"],
       "equation_map_status": "open_placeholder_requires_freeze_before_run",
       "normalization_map_status": "open_placeholder_requires_freeze_before_run",
-      "reference_data_status": "local_staged_checksummed_pending_orion_post_copy_verification_and_data_extraction"
+      "reference_data_status": "orion_private_copy_checksum_verified_data_extraction_open"
     },
     {
       "comparison_id": "XCMP-AMRVAC-SHOCK",
@@ -138,7 +138,7 @@
       "observable_families": ["shock_morphology", "precursor_structure", "spectra", "amr_behavior", "setup_differences"],
       "equation_map_status": "open_placeholder_requires_freeze_before_run",
       "normalization_map_status": "open_placeholder_requires_freeze_before_run",
-      "reference_data_status": "local_staged_checksummed_pending_orion_post_copy_verification_and_data_extraction"
+      "reference_data_status": "orion_private_copy_checksum_verified_data_extraction_open"
     },
     {
       "comparison_id": "XCMP-GIZMO-RSOL-DECISION",
@@ -147,7 +147,7 @@
       "observable_families": ["steady_state_rsol_invariance", "normalization", "applicability_differences"],
       "equation_map_status": "open_placeholder_requires_freeze_before_decision",
       "normalization_map_status": "open_placeholder_requires_freeze_before_decision",
-      "reference_data_status": "local_staged_checksummed_pending_orion_post_copy_verification_and_data_extraction"
+      "reference_data_status": "orion_private_copy_checksum_verified_data_extraction_open"
     },
     {
       "comparison_id": "XCMP-ENTITY-MICRO",
@@ -166,7 +166,7 @@
       "observable_families": ["damping_rate_dependence", "unstable_bandwidth", "saturation", "isotropization"],
       "equation_map_status": "open_placeholder_requires_freeze_before_run",
       "normalization_map_status": "open_placeholder_requires_freeze_before_run",
-      "reference_data_status": "local_staged_checksummed_pending_orion_post_copy_verification_and_data_extraction"
+      "reference_data_status": "orion_private_copy_checksum_verified_data_extraction_open"
     },
     {
       "comparison_id": "XCMP-EXT-CRPAI-TRANSPORT",
@@ -175,7 +175,7 @@
       "observable_families": ["anisotropy", "spectra", "effective_scattering_rate", "quasi_steady_state", "driving_rate_scaling", "friction_scaling"],
       "equation_map_status": "open_placeholder_requires_freeze_before_run",
       "normalization_map_status": "open_placeholder_requires_freeze_before_run",
-      "reference_data_status": "local_staged_checksummed_pending_orion_post_copy_verification_and_data_extraction"
+      "reference_data_status": "orion_private_copy_checksum_verified_data_extraction_open"
     }
   ],
   "equation_and_normalization_map_placeholder": {
@@ -200,7 +200,7 @@
     "rule": "No unresolved discrepancy may be hidden behind a proxy pass, omitted observable, or broadened tolerance."
   },
     "open_items": [
-        "Copy the locally staged private reference-source bundle to Orion, verify its post-copy checksums, and classify redistribution basis before external export.",
+        "Classify redistribution basis before external export.",
         "Freeze one equation and normalization map per executed comparison.",
         "Ingest or digitize reference data with provenance and extraction uncertainty.",
         "Freeze numerical tolerances per observable before qualifying comparison output is inspected.",
@@ -214,5 +214,5 @@
         "tst/publication/readiness/schemas/q022_equation_normalization_map.schema.json",
         "tst/publication/readiness/schemas/q022_tolerance_table.schema.json"
     ],
-    "q022_status": "open_local_staged_checksummed_reference_sources_pending_orion_post_copy_verification_extraction_maps_thresholds_comparison_runs_and_review"
+    "q022_status": "open_orion_private_copy_checksum_verified_reference_sources_extraction_maps_thresholds_comparison_runs_export_review_and_external_review_pending"
 }

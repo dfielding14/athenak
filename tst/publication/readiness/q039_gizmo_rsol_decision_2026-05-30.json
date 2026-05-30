@@ -5,7 +5,7 @@
   "gate": "Q-039",
   "qualification_effect": "local_fail_closed_decision_scaffold_only",
   "disposition": "open",
-  "scope": "Local decision artifact for the bounded Ji-Hopkins/GIZMO reduced-speed-of-light comparison question. The referenced paper, official GIZMO documentation, cosmic-ray notes and public repository HEAD are locally staged and checksummed pending private Orion copy, post-copy checksum verification and any required dataset extraction, so this record freezes decision boundaries and remaining open placeholders only. It does not authorize a comparison run, a reviewer-approved permanent exclusion, or a manuscript comparative claim.",
+  "scope": "Local decision artifact for the bounded Ji-Hopkins/GIZMO reduced-speed-of-light comparison question. The referenced paper, official GIZMO documentation and cosmic-ray notes are archived privately in Orion with post-copy checksum verification, and the public repository HEAD is frozen. Required dataset extraction and mapping remain open, so this record freezes decision boundaries and remaining open placeholders only. It does not authorize a comparison run, a reviewer-approved permanent exclusion, or a manuscript comparative claim.",
   "linked_records": {
     "claim_id": "CLAIM-XCODE-GIZMO-RSOL-DECISION-001",
     "comparison_id": "XCMP-GIZMO-RSOL-DECISION",
@@ -16,21 +16,23 @@
     "private_source_ingest": "tst/publication/readiness/q022_external_reference_private_ingest_2026-05-30.json"
   },
   "reference_source_preparation": {
-    "status": "local_staged_checksummed_pending_orion_copy_post_copy_verification_mapping_and_data_extraction",
+    "status": "orion_private_copy_checksum_verified_mapping_and_data_extraction_open",
+    "orion_private_bundle": "/lustre/orion/ast207/proj-shared/dfielding/PIC/reference_artifacts/q022_external_preprints_2026-05-30",
+    "bundle_manifest_sha256": "7028552e0c9975bcc9ae869959f6ea30599bd3a0c192a1b9c626b3c4d5e12278",
     "required_artifacts": [
       {
         "artifact": "Ji and Hopkins (2022), arXiv:2111.14704",
-        "status": "local_staged_checksummed_pending_orion_copy_and_post_copy_checksum_verification",
+        "status": "orion_private_copy_checksum_verified",
         "sha256": "0c333d329b2304b90547f8e1218e43560af2bc23b048bfbf7e82189d6afc5edd"
       },
       {
         "artifact": "Frozen GIZMO documentation version used for interpretation",
-        "status": "local_staged_checksummed_pending_orion_copy_and_post_copy_checksum_verification",
+        "status": "orion_private_copy_checksum_verified",
         "sha256": "500e051675e663270a162dce30fc347fb1821819505a63e9cad2af3f0efa5d0f"
       },
       {
         "artifact": "Official GIZMO cosmic-ray notes used for interpretation",
-        "status": "local_staged_checksummed_pending_orion_copy_and_post_copy_checksum_verification",
+        "status": "orion_private_copy_checksum_verified",
         "sha256": "fcb45f715db921e919871109f742312aa07636312d66681124ec07acabc74bc1"
       }
     ],
@@ -51,7 +53,7 @@
       "classification": "known_non_overlap_plan_boundary",
       "accepted_exact_overlap": false,
       "athenak_side": "paper_mhd_pic artificial-C reproduction contract",
-      "gizmo_side": "local_staged_checksummed_reference_sources_equation_mapping_open",
+      "gizmo_side": "orion_private_copy_checksum_verified_reference_sources_equation_mapping_open",
       "allowed_interpretation": "Do not use GIZMO RSOL material as an equation oracle for Sun and Bai paper reproduction."
     },
     {
@@ -59,7 +61,7 @@
       "classification": "candidate_overlap_requires_mapping",
       "accepted_exact_overlap": false,
       "athenak_side": "open_placeholder_requires_equation_parameter_and_observable_map",
-      "gizmo_side": "local_staged_checksummed_reference_sources_equation_mapping_open",
+      "gizmo_side": "orion_private_copy_checksum_verified_reference_sources_equation_mapping_open",
       "allowed_interpretation": "A bounded comparison may be proposed only after exact equation, parameter, normalization, regime, and estimator mapping."
     },
     {
@@ -67,7 +69,7 @@
       "classification": "candidate_overlap_requires_mapping",
       "accepted_exact_overlap": false,
       "athenak_side": "open_placeholder_requires_normalization_map",
-      "gizmo_side": "local_staged_checksummed_reference_sources_normalization_mapping_open",
+      "gizmo_side": "orion_private_copy_checksum_verified_reference_sources_normalization_mapping_open",
       "allowed_interpretation": "Record intentional mismatches explicitly; never silently translate a mismatch into a relaxed tolerance."
     },
     {
@@ -75,7 +77,7 @@
       "classification": "candidate_overlap_requires_mapping",
       "accepted_exact_overlap": false,
       "athenak_side": "open_placeholder_requires_profile_and_excluded_regime_map",
-      "gizmo_side": "local_staged_checksummed_reference_sources_regime_mapping_open",
+      "gizmo_side": "orion_private_copy_checksum_verified_reference_sources_regime_mapping_open",
       "allowed_interpretation": "Compare only a frozen bounded overlap, if one exists after Orion checksum verification and mapping."
     },
     {
@@ -83,12 +85,12 @@
       "classification": "open_requires_mapping_and_review",
       "accepted_exact_overlap": false,
       "athenak_side": "AthenaK MHD-PIC implementation",
-      "gizmo_side": "local_staged_checksummed_reference_sources_method_mapping_open",
+      "gizmo_side": "orion_private_copy_checksum_verified_reference_sources_method_mapping_open",
       "allowed_interpretation": "Do not claim code-method equivalence or superiority from an unreviewed setup translation."
     }
   ],
   "mapping_prerequisites_before_bounded_comparison": [
-    "Copy the locally staged checksummed Ji-Hopkins reference, exact GIZMO documentation version and cosmic-ray notes to Orion, then verify the post-copy Orion SHA256SUMS file.",
+    "Preserve the verified Orion private archive and its SHA256SUMS checksum manifest.",
     "Freeze the Q-022 equation-and-normalization map fields: comparison_id, reference_id, athenak_physical_mode, matched_equations, intentional_mismatches, unit_map, normalization_map, parameter_overlap, excluded_regimes, and reviewer_disposition.",
     "Freeze the selected AthenaK runtime profile and explain why the proposed observable is informative despite the distinct RSOL boundary.",
     "Preregister exact observables, estimators, fit or averaging windows, parameter grid, exclusion rules, reference extraction uncertainty, and numerical tolerances before inspecting qualifying output.",
@@ -109,7 +111,7 @@
     },
     "documented_exclusion": {
       "status": "provisional_fail_closed_exclusion_only",
-      "rule": "Public reference sources are locally staged and checksummed only. Until Orion copy and post-copy SHA256SUMS verification, a bounded route rationale, and external reviewer approval close, exclude Ji-Hopkins/GIZMO RSOL comparative interpretation from manuscript claims. This provisional exclusion prevents overclaiming but is not the reviewer-approved documented exclusion that closes Q-039.",
+      "rule": "Public reference sources are privately archived in Orion with post-copy SHA256SUMS verification. Until a bounded route rationale and external reviewer approval close, exclude Ji-Hopkins/GIZMO RSOL comparative interpretation from manuscript claims. This provisional exclusion prevents overclaiming but is not the reviewer-approved documented exclusion that closes Q-039.",
       "closure_requires": [
         "orion_reference_source_copy_complete",
         "orion_post_copy_sha256sums_verified",
@@ -118,9 +120,13 @@
       ]
     }
   },
+  "satisfied_prerequisites": [
+    "orion_reference_source_copy_complete",
+    "orion_post_copy_sha256sums_verified"
+  ],
   "frozen_open_placeholders": {
     "accepted_exact_overlap_count": 0,
-    "reference_artifacts": "local_staged_checksummed_reference_sources_pending_orion_copy_post_copy_verification_data_extraction_and_export_review_open",
+    "reference_artifacts": "orion_private_copy_checksum_verified_reference_sources_data_extraction_and_export_review_open",
     "equation_map": "open_placeholder_requires_freeze_before_decision",
     "normalization_map": "open_placeholder_requires_freeze_before_decision",
     "bounded_metrics": "open_placeholder_requires_preregistration",
@@ -147,5 +153,5 @@
       "external_reviewer_disposition_recorded"
     ]
   },
-  "q039_status": "open_local_fail_closed_decision_artifact_recorded_local_staged_checksummed_reference_sources_pending_orion_copy_post_copy_verification_dataset_extraction_if_used_mapping_route_and_external_review"
+  "q039_status": "open_local_fail_closed_decision_artifact_recorded_orion_private_copy_checksum_verified_reference_sources_dataset_extraction_if_used_mapping_route_and_external_review_pending"
 }

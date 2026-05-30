@@ -69,10 +69,9 @@
     "status": "superseded_chronology_only",
     "historical_statement": "frontier_execution_storage_unlocked_registered_budget_tracked_submissions_may_proceed_terminal_durability_review_open",
     "current_submission_status": "all_submissions_paused",
-    "current_rule": "All submissions remain paused pending repaired successor independent PASS, paired promotion from a clean source candidate, and applicable prerequisites.",
+    "current_rule": "Repaired successor independent PASS, paired install and active-policy promotion are recorded in q027_successor_control_plane_independent_pass_2026-05-30.json. All submissions remain paused pending the clean-candidate science freeze and applicable prerequisites.",
     "resume_only_after": [
-      "repaired successor independent PASS",
-      "paired promotion from a clean source candidate",
+      "clean-candidate science freeze",
       "applicable prerequisites"
     ]
   },
@@ -83,5 +82,5 @@
     "private_bundle_payload_checksums_verified": 23,
     "installed_unlock_validation": "pass"
   },
-  "overall_disposition": "historical_transition_snapshot_predecessor_proceed_language_superseded_chronology_only_all_submissions_paused_pending_repaired_successor_independent_pass_paired_promotion_from_clean_source_candidate_and_applicable_prerequisites"
+  "overall_disposition": "historical_transition_snapshot_predecessor_proceed_language_superseded_chronology_only_successor_control_plane_promoted_all_submissions_paused_pending_clean_candidate_science_freeze_and_applicable_prerequisites"
 }

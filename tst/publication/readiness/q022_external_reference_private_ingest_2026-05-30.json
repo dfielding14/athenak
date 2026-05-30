@@ -3,18 +3,20 @@
   "schema_version": 1,
   "date": "2026-05-30",
   "gate": "Q-022",
-  "qualification_effect": "local_staged_checksummed_reference_source_preparation_only",
+  "qualification_effect": "orion_private_copy_checksum_verified_reference_sources_only",
   "disposition": "open",
-  "scope": "Local staged checksummed source-artifact preparation for a pending private Orion copy and post-copy checksum verification. These artifacts are papers and GIZMO interpretation references, not digitized comparison datasets. Orion copy, post-copy checksum verification, extraction provenance, uncertainty, equation maps, numerical tolerances, comparisons, export review and external reviewer disposition remain open.",
-  "local_staged_preparation": {
-    "status": "local_staged_checksummed_preparation_pending_orion_copy_and_post_copy_checksum_verification",
+  "scope": "Private Orion copy with post-copy checksum verification for source-reference artifacts. These artifacts are papers and GIZMO interpretation references, not digitized comparison datasets. Extraction provenance, uncertainty, equation maps, numerical tolerances, comparisons, export review and external reviewer disposition remain open.",
+  "orion_private_copy": {
+    "status": "orion_private_copy_checksum_verified",
     "orion_target_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/reference_artifacts/q022_external_preprints_2026-05-30",
     "checksum_manifest": "SHA256SUMS",
     "allowed_orion_target_location": "user_selected_orion_only_bulk_evidence_root_with_documented_durability_risk",
-    "redistribution_status": "private_archive_only_review_required_before_external_export"
+    "redistribution_status": "private_archive_only_review_required_before_external_export",
+    "orion_manifest_sha256": "7028552e0c9975bcc9ae869959f6ea30599bd3a0c192a1b9c626b3c4d5e12278",
+    "verified_payload_files": 12
   },
   "transport_notes": [
-    "arXiv PDFs were fetched from public arXiv export endpoints and checksummed in local staging before the pending Orion copy.",
+    "arXiv PDFs were fetched from public arXiv export endpoints, checksummed in local staging, copied atomically to Orion and verified again after rename.",
     "The official GIZMO tapir.caltech.edu host presented a legacy TLS chain rejected by the system OpenSSL policy as EE certificate key too weak. Public reference-only HTML and PDF retrieval used an explicit curl --insecure exception, followed immediately by SHA-256 capture. This exception is not authorized for production control-plane, ledger, executable or simulation-artifact transport.",
     "The GIZMO public Git HEAD was captured with git ls-remote over the GitHub endpoint; no source checkout is archived by this record."
   ],
@@ -97,11 +99,10 @@
     "head": "a828c4ba79d67093bd1a3d04f6f90b5d2d94d65f"
   },
   "remaining_open_items": [
-    "Copy the locally staged private bundle to Orion and verify the Orion SHA256SUMS file after copy.",
     "Classify redistribution and license basis before any external export.",
     "Digitize or otherwise extract each comparison dataset with provenance and uncertainty.",
     "Freeze one equation and normalization map plus numeric tolerances per executed comparison.",
     "Obtain external reviewer disposition."
   ],
-  "ingest_status": "local_staged_checksummed_preparation_pending_orion_copy_and_post_copy_checksum_verification"
+  "ingest_status": "orion_private_copy_checksum_verified_extraction_maps_thresholds_export_review_and_external_disposition_open"
 }

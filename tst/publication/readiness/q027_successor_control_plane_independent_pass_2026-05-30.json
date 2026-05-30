@@ -6,8 +6,8 @@
     "Q-027",
     "Q-042"
   ],
-  "qualification_effect": "local_successor_control_plane_adversarial_pass_only_paired_install_and_policy_promotion_pending_clean_candidate",
-  "scope": "Local successor Frontier control-plane hardening and independent adversarial retest. Orion, Project Home and the scheduler remained unchanged. This record does not authorize submissions, replace the clean-candidate freeze or close Frontier runtime gates.",
+  "qualification_effect": "local_successor_control_plane_adversarial_pass_paired_install_and_active_policy_promotion_pass_science_freeze_pending",
+  "scope": "Successor Frontier control-plane chronology: local hardening and independent adversarial retest completed before the paired immutable Orion and Project Home install and active-policy promotion. Ledger genesis was not recreated and the scheduler remained unchanged. This record does not authorize submissions, replace the clean-candidate freeze or close Frontier runtime gates.",
   "staged_successor": {
     "control_plane_version": "12750ea6f8ef540e3807a56cb7573d9d690532f729405b37b031936d045b22dc",
     "installed_predecessor_version": "1635c9f6bab8ae03bd9ce59ca399f2262b61a386d27d699ae14d37ea35962d1c",
@@ -15,7 +15,14 @@
     "orion_install": "/lustre/orion/ast207/proj-shared/dfielding/PIC/control_plane/12750ea6f8ef540e3807a56cb7573d9d690532f729405b37b031936d045b22dc",
     "project_home_install": "/ccs/proj/ast207/proj-shared/PIC/control_plane/12750ea6f8ef540e3807a56cb7573d9d690532f729405b37b031936d045b22dc",
     "inventory_sha256": "c9310caa60ee68a12d3e585b781048a436ae3a389828704eb1bcb67b63f3108a",
-    "active_policy_promotion_status": "pending_committed_reviewed_policy"
+    "active_policy_promotion_status": "pass",
+    "active_policy_sha256": "e2d5b29deb9aff4725cc139b82652dea81060aec77f2df82ab5791bbbb5b19b8",
+    "orion_active_promotion": "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/active_promotion.json",
+    "project_home_active_promotion": "/ccs/proj/ast207/proj-shared/PIC/policy/active_promotion.json",
+    "ledger_invariant_after_promotion": {
+      "events": 22,
+      "sha256": "018b523df8e47ae54547838c0bf928f7e4ed5fb8363d1e6ef7903489e658a837"
+    }
   },
   "local_validation": {
     "control_plane_tests": {
@@ -42,9 +49,8 @@
     "residual_site_boundary": "The account holder can still invoke sbatch directly or mutate owner-writable Orion state outside the wrapper. This is a site-policy limitation, not a repo-controlled wrapper bypass."
   },
   "next_actions": [
-    "Curate and commit the exact clean source candidate.",
-    "Promote the reviewed active storage policy through the installed successor wrapper.",
+    "Build the exact clean source candidate under Orion and freeze its manifest and executable digest.",
     "Keep registered Frontier submissions paused until applicable prerequisite gates close."
   ],
-  "overall_disposition": "local_independent_adversarial_pass_paired_install_passed_policy_promotion_pending_committed_reviewed_policy_all_submissions_paused"
+  "overall_disposition": "local_independent_adversarial_pass_paired_install_and_active_policy_promotion_passed_science_freeze_and_applicable_prerequisites_pending_all_submissions_paused"
 }

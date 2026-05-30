@@ -64,10 +64,12 @@
       {
         "artifact_id": "CROSS_CODE_REFERENCE_DATA",
         "kind": "digitized_or_machine_readable_reference_data",
-        "status": "local_staged_checksummed_reference_sources_pending_orion_copy_post_copy_verification_and_dataset_extraction",
+        "status": "orion_private_copy_checksum_verified_reference_sources_dataset_extraction_open",
         "private_source_ingest_record": "tst/publication/readiness/q022_external_reference_private_ingest_2026-05-30.json",
-        "pending_orion_private_bundle_target": "/lustre/orion/ast207/proj-shared/dfielding/PIC/reference_artifacts/q022_external_preprints_2026-05-30",
-        "required_action": "copy_locally_staged_reference_sources_to_orion_verify_post_copy_checksums_then_freeze_each_extracted_dataset_with_citation_checksum_license_and_extraction_uncertainty",
+        "orion_private_bundle": "/lustre/orion/ast207/proj-shared/dfielding/PIC/reference_artifacts/q022_external_preprints_2026-05-30",
+        "bundle_manifest_sha256": "7028552e0c9975bcc9ae869959f6ea30599bd3a0c192a1b9c626b3c4d5e12278",
+        "verified_payload_files": 12,
+        "required_action": "freeze_each_extracted_dataset_with_citation_checksum_license_and_extraction_uncertainty",
         "allowed_location": "private_reference_archive_or_retrieval_instructions"
       },
         {

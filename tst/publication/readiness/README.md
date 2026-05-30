@@ -50,8 +50,8 @@ qualify any scientific claim by itself.
   control-plane promotion with scheduled manifest-digest anchoring.
 - `q027_successor_control_plane_independent_pass_2026-05-30.json`: local
   successor control-plane suite and independent adversarial PASS at the staged
-  digest. Paired install passes; policy promotion remains pending the committed
-  reviewed policy.
+  digest. Paired install and active-policy promotion pass; science freeze and
+  applicable Frontier prerequisites remain open.
 - `q003_frontier_f1_gpu_gyro_2026-05-30.json`: bounded registered Frontier
   one-rank GPU relativistic-gyro candidate oracle, hardened execution-context
   evidence, reconciled node-hours and explicit clean-freeze boundary.
@@ -100,14 +100,13 @@ qualify any scientific claim by itself.
 - `q034_unsupported_capability_local_closure.md`: local parser, rename, docs,
   and extension-gate classification for unsupported-capability rows.
 - `q039_gizmo_rsol_decision_2026-05-30.json`: fail-closed local GIZMO/RSOL
-  decision scaffold. Public sources are locally staged and checksummed; Orion
-  copy and checksum verification, dataset extraction if used, mapped route
+  decision scaffold. Public sources are privately archived in Orion with
+  post-copy checksum verification; dataset extraction if used, mapped route
   selection and external review remain open.
 - `q022_external_reference_private_ingest_2026-05-30.json`: compact checksum
-  manifest for locally staged public comparison-source references and GIZMO
-  interpretation artifacts pending private Orion copy; Orion checksum
-  verification, extracted
-  datasets, equation mappings and export review remain open.
+  manifest for public comparison-source references and GIZMO interpretation
+  artifacts privately archived in Orion with post-copy checksum verification;
+  extracted datasets, equation mappings and export review remain open.
 - `q035_scoped_state_of_the_art_draft_2026-05-30.json` and
   `q035_scoped_state_of_the_art_wording_draft_2026-05-30.md`: explicitly
   unapproved wording draft that cannot be used as a result or manuscript claim.
