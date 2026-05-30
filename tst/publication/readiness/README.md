@@ -108,7 +108,8 @@ qualify any scientific claim by itself.
   before artifact creation. The successor resets a reviewed seed before module
   loading, publishes the reviewed 19-component value after all module work and
   passes stripped, inherited and poisoned-wrapper audit variants. Paired
-  install, promotion and science freeze remain pending.
+  immutable install and idempotent anchor migration pass; promotion and science
+  freeze remain pending.
 - `q003_frontier_f1_gpu_gyro_2026-05-30.json`: bounded registered Frontier
   one-rank GPU relativistic-gyro candidate oracle, hardened execution-context
   evidence, reconciled node-hours and explicit clean-freeze boundary.

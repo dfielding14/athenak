@@ -17,7 +17,7 @@
   "frontier_admission_policy": {
     "checked_in_source_policy_role": "fail_closed_successor_staging_policy",
     "historical_predecessor_f0": "registered_job_4744225_consumed_and_reconciled",
-    "new_submissions": "paused_pending_staged_c8002a1d_paired_install_active_policy_promotion_clean_candidate_freeze_and_applicable_prerequisites"
+    "new_submissions": "paused_pending_installed_c8002a1d_active_policy_promotion_clean_candidate_freeze_and_applicable_prerequisites"
   },
   "limitations": [
     "Orion-only retention is user-directed and does not provide institutional or approved off-site durable archival.",

@@ -230,23 +230,24 @@ class PicReadinessRegistryTests(unittest.TestCase):
                 storage["installed_control_plane_version"],
                 storage["staged_control_plane_candidate_version"],
             )
-            paired = _load("q027_outer_anchor_paired_activation_2026-05-30.json")
+            paired = candidate["paired_install_transition"]
             self.assertEqual(
                 storage["installed_control_plane_version"],
-                paired["active_generation"]["control_plane_version"],
+                paired["control_plane_version"],
             )
             self.assertEqual(
                 storage["ledger_genesis"]["event_sha256"],
-                paired["anchor_migration"]["event_sha256"],
+                paired["genesis_event_sha256"],
             )
             self.assertEqual(
                 storage["ledger_genesis"]["mirror_ack_sha256"],
-                paired["anchor_migration"]["mirror_ack_sha256"],
+                paired["genesis_mirror_ack_sha256"],
             )
             self.assertEqual(
-                paired["mirrored_ledger_invariant"]["active_reservations"],
-                0,
+                paired["orion_ledger_records"],
+                paired["project_home_ledger_records"],
             )
+            self.assertEqual(paired["active_reservations"], 0)
         else:
             self.fail(f"Unknown installed-control-plane lifecycle: {lifecycle}")
         self.assertEqual(

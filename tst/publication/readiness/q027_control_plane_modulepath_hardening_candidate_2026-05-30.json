@@ -7,7 +7,7 @@
     "Q-038",
     "Q-042"
   ],
-  "qualification_effect": "local_modulepath_hardening_successor_pass_independent_runtime_audit_paired_install_pending",
+  "qualification_effect": "paired_modulepath_hardening_successor_install_pass_active_policy_promotion_pending",
   "scope": "Successor chronology after the first clean Orion build-profile attempt through live outer-anchor digest 80c0797b rejected the measured Frontier MODULEPATH before creating build artifacts. The live profile retained caller-dependent site Lmod hook state: an interactive shell regenerated four rocmcc Spack prefixes while the stripped compute-node launcher did not. This successor resets MODULEPATH to a reviewed system seed before module loading, publishes the exact reviewed 19-component value after all module operations and preserves strict build-time and runtime equality checks. This record does not attest a paired live install, active-policy promotion, clean-candidate freeze or Frontier science execution.",
   "live_predecessor": {
     "record": "tst/publication/readiness/q027_outer_anchor_paired_activation_2026-05-30.json",
@@ -24,7 +24,7 @@
   "staged_successor": {
     "control_plane_version": "c8002a1d5d30b5ab98b36907e0dad5f67cc39ea25e3f9c597857f8e911f6c859",
     "operational_source_commit": "37ccee56248929e1576a6ac127a8080a8df58153",
-    "paired_install_status": "pending",
+    "paired_install_status": "pass_identical_immutable_install_and_anchor_migration",
     "active_policy_promotion_status": "pending",
     "science_submission_freeze": "pending_clean_candidate_freeze"
   },
@@ -64,6 +64,21 @@
     "build writer and runtime qualification equality checks remain fail closed",
     "all outer-anchor serialization controls from live predecessor 80c0797b remain preserved"
   ],
+  "paired_install_transition": {
+    "status": "pass_active_policy_promotion_pending",
+    "installed_utc": "2026-05-30T19:18:07Z",
+    "control_plane_version": "c8002a1d5d30b5ab98b36907e0dad5f67cc39ea25e3f9c597857f8e911f6c859",
+    "orion_install": "/lustre/orion/ast207/proj-shared/dfielding/PIC/control_plane/c8002a1d5d30b5ab98b36907e0dad5f67cc39ea25e3f9c597857f8e911f6c859",
+    "project_home_install": "/ccs/proj/ast207/proj-shared/PIC/control_plane/c8002a1d5d30b5ab98b36907e0dad5f67cc39ea25e3f9c597857f8e911f6c859",
+    "inventory_sha256": "1e04be62977204a13040f6f569e692b0c65db3479a5f1224449cc502e081ab8f",
+    "anchor_migration": "pass_existing_genesis_preserved_without_append",
+    "genesis_event_sha256": "849bf340986f4d1e1f7cc69c0d2e2845c0313c02d935822113aa8b1df5f1f4c1",
+    "genesis_mirror_ack_sha256": "a3af8af8c3b579ee323850902aad7aab58abde98dff98618ccffd15958dbb296",
+    "orion_ledger_records": 22,
+    "orion_receipt_records": 22,
+    "project_home_ledger_records": 22,
+    "active_reservations": 0
+  },
   "independent_review": {
     "status": "pass",
     "review_scope": "interactive writer profile, stripped compute-node wrapper, inherited and poisoned MODULEPATH variants, exact payload equality, qualification mutation rejection and suite-compatible regression invocation",
@@ -71,11 +86,10 @@
     "reviewed_control_plane_version": "c8002a1d5d30b5ab98b36907e0dad5f67cc39ea25e3f9c597857f8e911f6c859"
   },
   "open_boundaries": [
-    "paired Orion and Project Home immutable install remains pending",
     "active-policy promotion remains pending",
     "science_submission_freeze.status remains pending_clean_candidate_freeze",
     "matched Frontier environment-profile A/B evidence remains open",
     "external reviewer disposition remains pending external review"
   ],
-  "overall_disposition": "modulepath_hardening_successor_staged_all_science_submissions_paused_pending_paired_install_promotion_clean_candidate_freeze_and_applicable_prerequisites"
+  "overall_disposition": "modulepath_hardening_successor_paired_install_pass_all_science_submissions_paused_pending_promotion_clean_candidate_freeze_and_applicable_prerequisites"
 }
