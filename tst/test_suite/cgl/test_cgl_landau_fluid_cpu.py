@@ -1092,6 +1092,61 @@ def test_cgl_lf_stage_i_groups_rank_local_output_products(tmp_path):
     assert stage_i.retained_product_paths(product) == groups[0]
 
 
+def test_cgl_lf_stage_i_requires_retained_source_bundle_provenance(tmp_path):
+    spec = importlib.util.spec_from_file_location(
+        "cgl_lf_stage_i_bundle_provenance_test", PAPER_STAGE_I_TOOL
+    )
+    assert spec is not None and spec.loader is not None
+    stage_i = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = stage_i
+    spec.loader.exec_module(stage_i)
+
+    repository = tmp_path / "source"
+    repository.mkdir()
+    subprocess.run(["git", "init", "--quiet"], cwd=repository, check=True)
+    subprocess.run(
+        ["git", "config", "user.email", "test@example.invalid"],
+        cwd=repository, check=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "CGL-LF test"],
+        cwd=repository, check=True,
+    )
+    tracked = repository / "tracked.txt"
+    tracked.write_text("retained source provenance\n")
+    subprocess.run(["git", "add", "tracked.txt"], cwd=repository, check=True)
+    subprocess.run(
+        ["git", "commit", "--quiet", "-m", "test"], cwd=repository, check=True
+    )
+    revision = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=repository,
+        check=True, capture_output=True, text=True,
+    ).stdout.strip()
+    root = tmp_path / "root"
+    bundle = root / "source-archives" / "test.bundle"
+    bundle.parent.mkdir(parents=True)
+    subprocess.run(
+        ["git", "bundle", "create", str(bundle), "--all"],
+        cwd=repository, check=True,
+    )
+
+    provenance = stage_i.source_bundle_provenance(
+        str(bundle), [revision], root, allow_local_root=False
+    )
+    assert provenance is not None
+    assert provenance["path"] == str(bundle)
+    assert provenance["sha256"] == hashlib.sha256(bundle.read_bytes()).hexdigest()
+    assert provenance["verified_revisions"] == [revision]
+    with pytest.raises(ValueError, match="--source-bundle is required"):
+        stage_i.source_bundle_provenance(
+            None, [revision], root, allow_local_root=False
+        )
+    with pytest.raises(ValueError, match="does not contain revision"):
+        stage_i.source_bundle_provenance(
+            str(bundle), ["0" * 40], root, allow_local_root=False
+        )
+
+
 def test_cgl_lf_stage_i_isolates_e02_and_checks_all_shared_root_jobs(tmp_path):
     spec = importlib.util.spec_from_file_location(
         "cgl_lf_stage_i_epoch_test", PAPER_STAGE_I_TOOL

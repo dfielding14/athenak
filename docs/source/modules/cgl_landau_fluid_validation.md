@@ -194,6 +194,9 @@ python3 scripts/frontier/cgl_lf_stage_i.py prepare \
   --acceptance-criterion "<terminal acceptance rule>" \
   --executable <immutable-athena-executable> \
   --build-manifest <immutable-build-manifest> \
+  --source-dir <clean-committed-checkout> \
+  --matrix <clean-committed-checkout>/inputs/cgl_lf_paper/mks24_stage_i_manifest.json \
+  --source-bundle <retained-CGL-root-git-bundle> \
   --restart-file <inspected-terminal-restart-if-continuing> \
   --nodes <nodes> --walltime <slurm-walltime> \
   --athena-walltime <shorter-application-walltime> \
@@ -691,7 +694,8 @@ immutable HIP/MPI executable from a clean committed checkout using:
 scripts/frontier/build_cgl_lf_frontier.sh
 ```
 
-Then initialize the prescribed project area and prepare a reduced validation
+Retain a Git bundle beneath the prescribed project root containing that source
+revision. Then initialize the project area and prepare a reduced validation
 job. The utility writes a retained manifest and concrete `debug`-QOS batch
 script; it does not call `sbatch`.
 
@@ -702,7 +706,9 @@ python3 scripts/frontier/cgl_lf_frontier.py prepare \
   --purpose "strict reduced CGL-LF GPU smoke" \
   --acceptance-criterion "clean LF safety diagnostics and finite output" \
   --executable /lustre/orion/ast207/proj-shared/dfielding/CGL/build/<build>/src/athena \
-  --input-file /lustre/orion/ast207/proj-shared/dfielding/CGL/repo/athenak-DF/inputs/cgl_lf_paper/cgl_lf_paper_smoke_active_beta10.athinput \
+  --input-file /lustre/orion/ast207/proj-shared/dfielding/CGL/inputs/archived/<reduced-input>.athinput \
+  --source-dir <clean-committed-checkout> \
+  --source-bundle /lustre/orion/ast207/proj-shared/dfielding/CGL/source-archives/<source>.bundle \
   --nodes 1 --walltime 00:20:00 --athena-walltime 00:15:00
 python3 scripts/frontier/cgl_lf_frontier.py check-submit \
   --manifest /lustre/orion/ast207/proj-shared/dfielding/CGL/runs/qualification/g002_paper_smoke_active/manifest/prepared_run.json
@@ -720,10 +726,14 @@ python3 scripts/frontier/cgl_lf_frontier.py record \
   --result passed --notes "inspected reduced diagnostics"
 ```
 
-For real runs the utility requires all source, executable, input, and output
-locations beneath `/lustre/orion/ast207/proj-shared/dfielding/CGL`, limits
-debug walltime to two hours, reserves against the 1000 node-hour testing
-budget, checks that no other debug job is queued, and rejects
+For real runs the utility requires executable, input, retained source bundle,
+and output locations beneath
+`/lustre/orion/ast207/proj-shared/dfielding/CGL`; the clean committed checkout
+may remain outside that root. It verifies that the retained bundle contains
+the prepared revision, records the bundle checksum, archives complete sibling
+sets for rank-local restart continuations, limits debug walltime to two hours,
+reserves against the 1000 node-hour testing budget, checks that no other debug
+job is queued, and rejects
 `paper-standard`, `paper-nulim`, `paper-heat-flux`, `paper-compressive`, and
 `paper-scale-separation` inputs.
 Paper-production simulations must not be run through this debug-only workflow.

@@ -85,6 +85,16 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def retained_file(path: Path) -> dict[str, object]:
+    """Return stable provenance for one retained file."""
+
+    return {
+        "path": str(path),
+        "sha256": sha256(path),
+        "size_bytes": path.stat().st_size,
+    }
+
+
 def require_root(root: Path, allow_local_root: bool) -> Path:
     """Require the prescribed project root except during an explicit local test."""
 
@@ -272,6 +282,54 @@ def git_revision(source_dir: Path, allow_dirty: bool,
     return revision
 
 
+def source_bundle_provenance(source_bundle_value: str | None,
+                             revisions: list[str], root: Path,
+                             allow_local_root: bool
+                             ) -> dict[str, object] | None:
+    """Require retained bundle provenance for real Frontier preparation."""
+
+    if source_bundle_value is None:
+        if allow_local_root:
+            return None
+        raise ValueError(
+            "--source-bundle is required for retained Frontier source provenance"
+        )
+    source_bundle = Path(source_bundle_value).expanduser().resolve()
+    require_beneath_root(
+        source_bundle, root, "source bundle", allow_local_root
+    )
+    if not source_bundle.is_file():
+        raise ValueError(f"source bundle is missing: {source_bundle}")
+    with tempfile.TemporaryDirectory(prefix="cgl_lf_bundle_verify_") as directory:
+        repository = Path(directory) / "source.git"
+        try:
+            subprocess.run(
+                ["git", "clone", "--bare", "--quiet",
+                 str(source_bundle), str(repository)],
+                check=True, capture_output=True, text=True,
+            )
+        except subprocess.CalledProcessError as error:
+            raise ValueError(
+                f"source bundle cannot be cloned: {source_bundle}"
+            ) from error
+        for revision in revisions:
+            present = subprocess.run(
+                ["git", "-C", str(repository), "cat-file", "-e",
+                 f"{revision}^{{commit}}"],
+                check=False, capture_output=True, text=True,
+            )
+            if present.returncode != 0:
+                raise ValueError(
+                    f"source bundle does not contain revision {revision}: "
+                    f"{source_bundle}"
+                )
+    return {
+        "path": str(source_bundle),
+        "sha256": sha256(source_bundle),
+        "verified_revisions": revisions,
+    }
+
+
 def validate_debug_input(path: Path) -> None:
     """Reject paper-production input decks from the debug-only utility."""
 
@@ -453,7 +511,6 @@ def prepare(args: argparse.Namespace) -> Path:
         raise ValueError(f"restart file is missing: {restart_path}")
     require_beneath_root(executable, root, "executable", args.allow_local_root)
     require_beneath_root(input_path, root, "input deck", args.allow_local_root)
-    require_beneath_root(source_dir, root, "source directory", args.allow_local_root)
     if restart_path is not None:
         require_beneath_root(
             restart_path, root, "restart file", args.allow_local_root
@@ -476,6 +533,9 @@ def prepare(args: argparse.Namespace) -> Path:
         source_dir, args.allow_dirty_source,
         args.test_git_revision,
     )
+    bundle_provenance = source_bundle_provenance(
+        args.source_bundle, [revision], root, args.allow_local_root
+    )
     reserved_node_hours = node_hours(nodes, requested_seconds)
     consumed, already_reserved = reservation_usage(paths)
     if consumed + already_reserved + reserved_node_hours > BUDGET_NODE_HOURS:
@@ -493,9 +553,36 @@ def prepare(args: argparse.Namespace) -> Path:
     archived_input = manifest_dir / "submitted_input.athinput"
     shutil.copy2(input_path, archived_input)
     archived_restart = None
+    archived_restart_files: list[Path] = []
     if restart_path is not None:
-        archived_restart = manifest_dir / "submitted_restart.rst"
-        shutil.copy2(restart_path, archived_restart)
+        if restart_path.parent.name.startswith("rank_"):
+            source_restart_files = sorted(
+                restart_path.parent.parent.glob(f"rank_*/{restart_path.name}")
+            )
+            expected_ranks = nodes * args.ranks_per_node
+            expected_names = [
+                f"rank_{rank:08d}" for rank in range(expected_ranks)
+            ]
+            if [
+                source.parent.name for source in source_restart_files
+            ] != expected_names:
+                raise ValueError(
+                    "rank-local restart set must contain one file for every "
+                    "prepared MPI rank"
+                )
+            archive_root = manifest_dir / "submitted_restart"
+            for source in source_restart_files:
+                target = archive_root / source.parent.name / source.name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source, target)
+                archived_restart_files.append(target)
+            archived_restart = (
+                archive_root / restart_path.parent.name / restart_path.name
+            )
+        else:
+            archived_restart = manifest_dir / "submitted_restart.rst"
+            shutil.copy2(restart_path, archived_restart)
+            archived_restart_files.append(archived_restart)
     batch_script = manifest_dir / "cgl_lf_debug.sbatch"
     manifest: dict[str, object] = {
         "schema_version": 1,
@@ -526,6 +613,7 @@ def prepare(args: argparse.Namespace) -> Path:
         },
         "command": {
             "source_dir": str(source_dir),
+            "source_bundle": bundle_provenance,
             "git_revision": revision,
             "executable": str(executable),
             "executable_sha256": sha256(executable),
@@ -541,6 +629,9 @@ def prepare(args: argparse.Namespace) -> Path:
             "restart_sha256": (
                 sha256(archived_restart) if archived_restart is not None else None
             ),
+            "restart_files": [
+                retained_file(path) for path in archived_restart_files
+            ],
             "execution_target": args.execution_target,
             "mpiio_timers": args.mpiio_timers,
             "athena_walltime": args.athena_walltime,
@@ -842,6 +933,7 @@ def self_test() -> int:
             input_file=str(smoke_input),
             restart_file=None,
             source_dir=str(ROOT_DIR),
+            source_bundle=None,
             test_git_revision="self-test-revision",
             nodes=1,
             walltime="00:30:00",
@@ -911,6 +1003,27 @@ def self_test() -> int:
             manifest=str(restart_manifest_path), allow_local_root=True,
             notes="offline restart preparation check complete",
         ))
+        rank_restart_root = Path(directory) / "rank-restart"
+        for rank in range(2):
+            path = rank_restart_root / f"rank_{rank:08d}" / "checkpoint.rst"
+            path.parent.mkdir(parents=True)
+            path.write_text(f"rank {rank}\n", encoding="utf-8")
+        arguments.run_name = "valid_rank_restart"
+        arguments.restart_file = str(
+            rank_restart_root / "rank_00000000" / "checkpoint.rst"
+        )
+        arguments.ranks_per_node = 2
+        rank_manifest_path = prepare(arguments)
+        rank_command = read_manifest(rank_manifest_path)["command"]
+        if ("/rank_00000000/" not in str(rank_command["restart_file"])
+                or len(rank_command["restart_files"]) != 2):
+            raise ValueError("self-test failed to archive rank-local restart set")
+        cancel(argparse.Namespace(
+            manifest=str(rank_manifest_path), allow_local_root=True,
+            notes="offline rank-local restart preparation check complete",
+        ))
+        arguments.ranks_per_node = 8
+        arguments.restart_file = str(restart)
         arguments.run_name = "valid_cpu"
         arguments.execution_target = "cpu"
         cpu_manifest_path = prepare(arguments)
@@ -1007,6 +1120,49 @@ def self_test() -> int:
             raise ValueError(
                 "self-test failed to reject scale-separation production input"
             )
+        bundle_repo = Path(directory) / "bundle-repo"
+        bundle_repo.mkdir()
+        subprocess.run(
+            ["git", "init", "--quiet"], cwd=bundle_repo, check=True,
+        )
+        subprocess.run(
+            ["git", "config", "user.email", "self-test@example.invalid"],
+            cwd=bundle_repo, check=True,
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "CGL-LF self-test"],
+            cwd=bundle_repo, check=True,
+        )
+        tracked = bundle_repo / "tracked.txt"
+        tracked.write_text("bundle provenance\n", encoding="utf-8")
+        subprocess.run(["git", "add", "tracked.txt"], cwd=bundle_repo, check=True)
+        subprocess.run(
+            ["git", "commit", "--quiet", "-m", "self-test"],
+            cwd=bundle_repo, check=True,
+        )
+        bundle_revision = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=bundle_repo,
+            check=True, capture_output=True, text=True,
+        ).stdout.strip()
+        bundle = root / "source-archives" / "self-test.bundle"
+        bundle.parent.mkdir(parents=True)
+        subprocess.run(
+            ["git", "bundle", "create", str(bundle), "--all"],
+            cwd=bundle_repo, check=True,
+        )
+        provenance = source_bundle_provenance(
+            str(bundle), [bundle_revision], root, allow_local_root=True
+        )
+        if provenance is None or provenance["sha256"] != sha256(bundle):
+            raise ValueError("self-test failed to retain bundle provenance")
+        try:
+            source_bundle_provenance(
+                str(bundle), ["0" * 40], root, allow_local_root=True
+            )
+        except ValueError:
+            pass
+        else:
+            raise ValueError("self-test failed to reject an absent bundle revision")
     print("Frontier CGL-LF campaign utility self-test passed.")
     return 0
 
@@ -1036,6 +1192,13 @@ def parser() -> argparse.ArgumentParser:
         help="Archive and resume from a retained restart file beneath the run root.",
     )
     prepare_parser.add_argument("--source-dir", default=str(ROOT_DIR))
+    prepare_parser.add_argument(
+        "--source-bundle",
+        help=(
+            "Retained Git bundle beneath the Frontier root containing the "
+            "prepared source revision."
+        ),
+    )
     prepare_parser.add_argument("--nodes", type=int, required=True)
     prepare_parser.add_argument("--walltime", required=True)
     prepare_parser.add_argument("--athena-walltime", required=True)

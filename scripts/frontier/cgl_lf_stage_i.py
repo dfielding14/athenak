@@ -24,6 +24,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
@@ -417,6 +418,54 @@ def git_revision_for_input(source_dir: Path, input_path: Path,
     return revision
 
 
+def source_bundle_provenance(source_bundle_value: str | None,
+                             revisions: list[str], root: Path,
+                             allow_local_root: bool
+                             ) -> dict[str, object] | None:
+    """Require retained bundle provenance for real Stage I preparation."""
+
+    if source_bundle_value is None:
+        if allow_local_root:
+            return None
+        raise ValueError(
+            "--source-bundle is required for retained Stage I source provenance"
+        )
+    source_bundle = Path(source_bundle_value).expanduser().resolve()
+    require_beneath_root(
+        source_bundle, root, "source bundle", allow_local_root
+    )
+    if not source_bundle.is_file():
+        raise ValueError(f"source bundle is missing: {source_bundle}")
+    with tempfile.TemporaryDirectory(prefix="cgl_lf_bundle_verify_") as directory:
+        repository = Path(directory) / "source.git"
+        try:
+            subprocess.run(
+                ["git", "clone", "--bare", "--quiet",
+                 str(source_bundle), str(repository)],
+                check=True, capture_output=True, text=True,
+            )
+        except subprocess.CalledProcessError as error:
+            raise ValueError(
+                f"source bundle cannot be cloned: {source_bundle}"
+            ) from error
+        for revision in revisions:
+            present = subprocess.run(
+                ["git", "-C", str(repository), "cat-file", "-e",
+                 f"{revision}^{{commit}}"],
+                check=False, capture_output=True, text=True,
+            )
+            if present.returncode != 0:
+                raise ValueError(
+                    f"source bundle does not contain revision {revision}: "
+                    f"{source_bundle}"
+                )
+    return {
+        "path": str(source_bundle),
+        "sha256": sha256(source_bundle),
+        "verified_revisions": revisions,
+    }
+
+
 def production_utility_provenance() -> dict[str, str]:
     """Require the production-control script itself to be committed."""
 
@@ -588,7 +637,6 @@ def prepare(args: argparse.Namespace) -> Path:
         Path(args.restart_file).expanduser().resolve()
         if args.restart_file else None
     )
-    require_beneath_root(source_dir, root, "source directory", args.allow_local_root)
     require_beneath_root(executable, root, "executable", args.allow_local_root)
     require_beneath_root(
         build_manifest, root, "build manifest", args.allow_local_root
@@ -603,6 +651,12 @@ def prepare(args: argparse.Namespace) -> Path:
     input_revision = git_revision_for_input(source_dir, input_path, matrix_path)
     utility_provenance = production_utility_provenance()
     provenance = read_build_provenance(executable, build_manifest)
+    bundle_provenance = source_bundle_provenance(
+        args.source_bundle,
+        list(dict.fromkeys([input_revision, provenance["revision"]])),
+        root,
+        args.allow_local_root,
+    )
     if restart is not None and not restart.is_file():
         raise ValueError(f"restart file is unavailable: {restart}")
     parent_segment = verify_continuation_restart(restart) if restart else None
@@ -701,6 +755,7 @@ def prepare(args: argparse.Namespace) -> Path:
         "command": {
             "production_utility": utility_provenance,
             "source_dir": str(source_dir),
+            "source_bundle": bundle_provenance,
             "input_revision": input_revision,
             "source_input_file": str(input_path),
             "input_file": str(archived_input),
@@ -1770,6 +1825,13 @@ def parser() -> argparse.ArgumentParser:
     prepare_parser.add_argument("--executable", required=True)
     prepare_parser.add_argument("--build-manifest", required=True)
     prepare_parser.add_argument("--source-dir", default=str(ROOT_DIR))
+    prepare_parser.add_argument(
+        "--source-bundle",
+        help=(
+            "Retained Git bundle beneath the CGL root containing the input "
+            "and executable revisions."
+        ),
+    )
     prepare_parser.add_argument("--matrix", default=str(DEFAULT_MATRIX))
     prepare_parser.add_argument("--restart-file")
     prepare_parser.add_argument("--nodes", type=int, required=True)
