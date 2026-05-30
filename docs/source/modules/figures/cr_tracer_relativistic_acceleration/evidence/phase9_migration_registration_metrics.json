@@ -1,0 +1,10 @@
+{
+  "criteria": {
+    "count": 62,
+    "path": "$REPO_ROOT/docs/source/modules/figures/cr_tracer_relativistic_acceleration/cr_relativistic_phase8_preregistered_criteria.json",
+    "sha256": "add2ab12fbaf7f669e8e4eecc9e8f9cb0d581f06947c7e39876f934239708b74"
+  },
+  "qualification": "cr_relativistic_migration_runtime_phase8_registration",
+  "schema_version": 1,
+  "status": "PASS"
+}

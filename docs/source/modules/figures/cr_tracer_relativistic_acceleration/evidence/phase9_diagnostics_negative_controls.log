@@ -1,0 +1,102 @@
+rejected tampered criteria digest: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/tampered-criteria.json: criteria SHA-256 b4adb11eee71ea367e5cd7df60a42a582916fc7c41c7e49158427e2c41eb8bad != frozen 1608e681952fa5d0133d8fc2ae1b0681fa17a09a667272340446625dccfba0d1
+rejected binary provenance digest mismatch: metrics binary_sha256='0000000000000000000000000000000000000000000000000000000000000000', expected 'd58004ddb1bce7579f4884907c1b66eb238087eb08c3616c7ed23ad00c9fe0ef'
+rejected input provenance digest mismatch: metrics input_sha256='ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff', expected 'd58004ddb1bce7579f4884907c1b66eb238087eb08c3616c7ed23ad00c9fe0ef'
+rejected canonical sample alias collision: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/sample.psamp:3 has duplicate canonical sample columns ['x']
+rejected sample field-count mismatch: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/sample.psamp metadata field_count=2, expected 1
+rejected sample row-count mismatch: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/sample.psamp metadata sample_count=2, expected 1
+rejected unknown sample column: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/sample.psamp:3 has unknown sample column 'mystery'
+rejected relativistic sample legacy alias: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/sample.psamp:3 relativistic_hc sample rejects ambiguous column 'p'
+rejected sample metadata after columns: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/sample.psamp:4 metadata after columns
+rejected non-finite sample value: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/sample.psamp:4 has non-finite x
+rejected duplicate sample metadata key: Malformed or duplicate metadata key 'sample_count'
+accepted spectrum metadata retention
+rejected spectrum nbin mismatch: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/sample.pspec metadata nbin=2, expected 3
+rejected relativistic spectrum legacy alias: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/sample.pspec relativistic_hc spectrum rejects ambiguous or missing quantity 'p'
+rejected relativistic spectrum species metadata mismatch: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/sample.pspec metadata nspecies=2, expected 1
+rejected relativistic joint-spectrum legacy alias: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/sample.pspec2 relativistic_hc joint spectrum rejects ambiguous or missing quantity 'mu_p'
+rejected relativistic joint-spectrum species metadata mismatch: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/sample.pspec2 metadata nspecies=2, expected 1
+accepted ppd metadata retention
+rejected duplicate ppd metadata key: Malformed or duplicate metadata key 'mode'
+rejected ppd header payload count mismatch: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/sample.ppd ppd header particles=2, payload count=1
+rejected fractional ppd species: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/sample.ppd contains non-integral, negative, or out-of-range ppd species
+rejected duplicate ppd particle count: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/sample.ppd header requires exactly one particles integer token
+rejected fractional ppd particle count: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/sample.ppd header has invalid particles='1.5'
+rejected prefixed ppd particle-count label: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/sample.ppd header requires exactly one particles integer token
+rejected missing ppd particle count: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/sample.ppd header requires exactly one particles integer token
+rejected out-of-range ppd particle count: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/sample.ppd header has out-of-range particles='2147483648'
+accepted exact float32 ppd species boundary
+rejected out-of-range ppd species: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/sample.ppd contains non-integral, negative, or out-of-range ppd species
+rejected malformed reserved ppd markers: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/sample.ppd relativistic_hc ppd metadata schema='akcr_particle_output_v1_typo', expected 'akcr_particle_output_v1'
+rejected pmom missing header: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/sample.pmom is missing particle-moment header
+rejected fractional pmom count: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/sample.pmom contains non-integral or negative count
+rejected fractional pmom species: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/sample.pmom contains non-integral or negative species
+rejected pmom latest block row count mismatch: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/sample.pmom latest block contains 2 particle-moment rows, expected 1
+rejected duplicate relativistic pmom species identity: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/sample.pmom relativistic_hc pmom row 1 has species 0
+rejected reordered relativistic pmom species identity: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/sample.pmom relativistic_hc pmom row 0 has species 1
+rejected out-of-range relativistic pmom species identity: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/sample.pmom relativistic_hc pmom row 1 has species 2
+accepted histogram leading-count-35 binary payload
+accepted histogram leading-count-32 binary payload
+accepted histogram leading-count-10 binary payload
+accepted histogram leading-count-13 binary payload
+rejected histogram species metadata mismatch: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/sample.df metadata nspecies=2, expected 1
+rejected negative df histogram bin: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/sample.df contains negative histogram bin count
+rejected negative dxh histogram bin: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/sample.dxh contains negative histogram bin count
+rejected negative drh histogram bin: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/sample.drh contains negative histogram bin count
+rejected negative dparh histogram bin: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/sample.dparh contains negative histogram bin count
+rejected negative pspec histogram bin: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/sample.pspec contains negative histogram bin count
+rejected negative pspec2 histogram bin: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/sample.pspec2 contains negative histogram bin count
+rejected invalid df histogram layout: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/sample.df histogram layout 'wrong', expected 'species-major int32 histogram; mu=dot(v,B)/(|v||B|)'
+rejected invalid dxh histogram layout: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/sample.dxh histogram layout 'wrong', expected 'species-major int32 histograms ordered dx, dy, dz'
+rejected invalid drh histogram layout: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/sample.drh histogram layout 'wrong', expected 'species-major int32 histogram'
+rejected invalid dparh histogram layout: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/sample.dparh histogram layout 'wrong', expected 'species-major int32 histogram'
+rejected invalid pspec histogram layout: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/sample.pspec histogram layout 'wrong', expected 'species-major int32 histogram'
+rejected invalid pspec2 histogram layout: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/sample.pspec2 histogram layout 'wrong', expected 'species-major int32 histogram, bin1 then bin2'
+rejected missing relativistic histogram layout: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/sample.df relativistic_hc histogram is missing layout metadata
+rejected malformed ppd metadata token: Malformed metadata token 'junk'
+rejected underspecified relativistic ppd metadata: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/sample.ppd relativistic_hc ppd metadata is missing ['alpha_s', 'c_model', 'columns', 'payload', 'position_units', 'schema', 'units']
+rejected underspecified relativistic df metadata: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/sample.df relativistic_hc df metadata is missing ['alpha_s', 'c_model', 'histogram_units', 'nbin', 'nspecies', 'quantity', 'quantity_units', 'reduce', 'schema', 'units', 'vmax', 'vmin']
+rejected underspecified relativistic dxh metadata: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/sample.dxh relativistic_hc dxh metadata is missing ['alpha_s', 'c_model', 'histogram_units', 'nbin', 'nspecies', 'quantity', 'quantity_units', 'reduce', 'schema', 'units', 'vmax', 'vmin']
+rejected underspecified relativistic drh metadata: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/sample.drh relativistic_hc drh metadata is missing ['alpha_s', 'c_model', 'histogram_units', 'nbin', 'nspecies', 'quantity', 'quantity_units', 'reduce', 'schema', 'units', 'vmax', 'vmin']
+rejected underspecified relativistic dparh metadata: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/sample.dparh relativistic_hc dparh metadata is missing ['alpha_s', 'c_model', 'definition', 'histogram_units', 'nbin', 'nspecies', 'quantity', 'quantity_units', 'reduce', 'schema', 'units', 'vmax', 'vmin']
+rejected underspecified relativistic pspec metadata: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/sample.pspec relativistic_hc pspec metadata is missing ['alpha_s', 'c_model', 'histogram_units', 'nbin', 'nspecies', 'quantity_units', 'reduce', 'schema', 'units', 'vmax', 'vmin']
+rejected underspecified relativistic pspec2 metadata: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/sample.pspec2 relativistic_hc pspec2 metadata is missing ['alpha_s', 'axis1_units', 'axis2_units', 'c_model', 'histogram_units', 'nbin1', 'nbin2', 'nspecies', 'reduce', 'schema', 'units', 'vmax1', 'vmax2', 'vmin1', 'vmin2']
+rejected relativistic pmom legacy-width row: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/sample.pmom relativistic_hc pmom requires 26-column rows
+rejected underspecified relativistic psamp metadata: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/sample.psamp relativistic_hc psamp metadata is missing ['alpha_s', 'alpha_s_units', 'cE_units', 'c_model', 'gamma_units', 'kinetic_energy_model_units', 'position_units', 'r_larmor_over_dx_min_units', 'sample_offset', 'sample_stride', 'schema', 'selected_species', 'units', 'velocity_units', 'w_units', 'work_units']
+rejected negative sample rank: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/psamp/rank_00000000/sample.psamp relativistic_hc sample has out-of-range rank
+rejected negative sample pgid: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/psamp/rank_00000000/sample.psamp relativistic_hc sample has out-of-range pgid
+rejected negative sample tag: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/psamp/rank_00000000/sample.psamp relativistic_hc sample has out-of-range tag
+rejected negative sample species: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/psamp/rank_00000000/sample.psamp relativistic_hc sample has out-of-range species
+rejected sample shard rank mismatch: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/psamp/rank_00000000/sample.psamp relativistic_hc sample row rank 1 does not match shard rank 0
+rejected unsharded relativistic sample: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/sample.psamp relativistic_hc sample requires canonical psamp/rank_######## shard path
+rejected substring relativistic sample shard: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/foo_rank_00000007_bar/sample.psamp relativistic_hc sample requires canonical psamp/rank_######## shard path
+rejected relativistic sample shard rank outside header: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/psamp/rank_00000007/sample.psamp relativistic_hc sample shard rank 7 is outside nranks=1
+rejected duplicate sample rank count: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/psamp/rank_00000000/sample.psamp header requires exactly one nranks integer token
+rejected fractional sample rank count: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/psamp/rank_00000000/sample.psamp header has invalid nranks='1.5'
+rejected prefixed sample rank-count label: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/psamp/rank_00000000/sample.psamp relativistic_hc sample header is missing nranks
+rejected missing sample rank count: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/psamp/rank_00000000/sample.psamp relativistic_hc sample header is missing nranks
+rejected zero sample rank count: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/psamp/rank_00000000/sample.psamp header has out-of-range nranks='0'
+rejected out-of-range sample rank count: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/psamp/rank_00000000/sample.psamp header has out-of-range nranks='2147483648'
+rejected zero sample stride: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/psamp/rank_00000000/sample.psamp metadata has out-of-range sample_stride='0'
+rejected sample offset equals stride: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/psamp/rank_00000000/sample.psamp relativistic_hc sample requires 0 <= sample_offset < sample_stride
+rejected sample selected-species mismatch: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/psamp/rank_00000000/sample.psamp relativistic_hc sample row does not satisfy selection metadata
+rejected sample splitmix64 mismatch: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/psamp/rank_00000000/sample.psamp relativistic_hc sample row does not satisfy selection metadata
+rejected sample rank upper bound: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/psamp/rank_00000000/sample.psamp relativistic_hc sample has out-of-range rank
+rejected sample pgid upper bound: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/psamp/rank_00000000/sample.psamp relativistic_hc sample has out-of-range pgid
+rejected sample tag upper bound: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/psamp/rank_00000000/sample.psamp relativistic_hc sample has out-of-range tag
+rejected sample species upper bound: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/psamp/rank_00000000/sample.psamp relativistic_hc sample has out-of-range species
+rejected relativistic spectrum contradictory quantity units: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/sample.pspec relativistic_hc pspec metadata quantity_units='dimensionless', expected 'code_velocity'
+rejected malformed reserved spectrum markers: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/sample.pspec relativistic_hc pspec metadata schema='akcr_particle_output_v1_typo', expected 'akcr_particle_output_v1'
+rejected relativistic joint-spectrum contradictory axis units: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/sample.pspec2 relativistic_hc pspec2 metadata axis2_units='bananas', expected 'code_velocity'
+rejected relativistic log spectrum missing floor: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/sample.pspec relativistic_hc pspec metadata is missing ['log10_floor', 'log10_floor_units']
+rejected relativistic log spectrum missing floor units: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/sample.pspec relativistic_hc pspec metadata is missing ['log10_floor_units']
+rejected relativistic log spectrum contradictory floor units: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/sample.pspec relativistic_hc pspec metadata log10_floor_units='dimensionless', expected 'code_velocity_squared'
+rejected relativistic log spectrum zero floor: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/sample.pspec metadata requires log10_floor > 0
+rejected relativistic log spectrum negative floor: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/sample.pspec metadata requires log10_floor > 0
+rejected relativistic log spectrum non-finite floor: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase7-negative-fh1fkyrv/sample.pspec metadata has non-finite log10_floor='nan'
+accepted legacy df histogram without layout metadata
+accepted legacy dxh histogram without layout metadata
+accepted legacy drh histogram without layout metadata
+accepted legacy dparh histogram without layout metadata
+accepted legacy pspec histogram without layout metadata
+accepted legacy pspec2 histogram without layout metadata
+CR relativistic Phase-7 diagnostic mutation controls passed: 88 rejected

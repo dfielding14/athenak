@@ -25,12 +25,14 @@ and still be physically wrong. Agents must therefore work in small, reviewable
 increments, record design choices, run independent reviews repeatedly, and
 pause at the reflection gates below before widening the implementation.
 
-## Control Header
+## Historical Guide-Creation Control Header
 
-Update this table at every accepted checkpoint. Do not leave it stale while
-implementation proceeds.
+The table below is the Phase-0 creation snapshot.  The append-only
+[living ledger](cr_tracer_relativistic_acceleration_ledger.md) became the
+authoritative mutable control header once implementation began.  Update the
+ledger at every accepted checkpoint; do not rewrite this historical snapshot.
 
-| Control | Current value at guide creation | Update rule |
+| Control | Historical value at guide creation | Original update rule |
 | --- | --- | --- |
 | Frozen feature base | `64a4d1be` | Change only through an accepted integration-target decision |
 | Current implementation phase | `Phase 0: freeze baseline and open the ledger` | Advance only after the current reflection gate records `PROCEED` |

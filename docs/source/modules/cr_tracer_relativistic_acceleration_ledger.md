@@ -25,15 +25,15 @@ The historical Phase-0 entries use these intentionally conservative statuses:
 | --- | --- | --- |
 | Ledger date | `2026-05-30` | Record the date of each accepted update. |
 | Working branch | `feature/CR_tracers_relativistic_acceleration` | Stop if the working branch changes unexpectedly. |
-| Working branch HEAD at latest accepted commit | `addd12d4e26f7d8b275165b6be7b364d39f22a43` | Refresh after every accepted commit. |
+| Working branch HEAD at latest accepted commit | `aa8663e8a5d49e26c206363d028b52d0e350a91f` | Refresh after every accepted commit. |
 | Frozen feature base | `64a4d1be8da1c22d1328cc47280195b3747fa0ab` from `feature/CR_tracers_followup_architecture` | Change only through an accepted `DR-000` update. |
 | Intended eventual integration target | `origin/development` at `c6a73b08e60807f8b925164c5e7edd5cb820c8ae` | Refresh the target SHA and merge-tree audit after target updates and before handoff. |
 | Current implementation phase | `Phase 9: GPU disposition, documentation, public overlay, and final handoff` | Keep the temporal claim explicitly first-order for evolving fields until a separately reviewed stage-coupled widening exists. |
 | Allowed write manifest | Phase-9 documentation and retained qualification evidence only: `docs/source/modules/particles.md`, bounded handoff documents, append-only ledger updates, and evidence artifacts | Do not widen solver-coupled MPI/SMR/AMR execution, nonperiodic boundaries, changed-rank redistribution, or physics semantics in the handoff phase. |
 | Last accepted checkpoint | `CP-6 AMR And MPI PROCEED`: bounded periodic `prescribed_test` MPI, same-level multiblock, static-SMR, adaptive-AMR, and same-topology continuation qualification accepted on `addd12d4` after source and evidence rebounds | Record each milestone commit before opening the next phase. |
-| Open blocking findings | Phase-9 docs overlay, GPU disposition, final evidence archive, `RG-010`, and `CP-7 Final Cold Review` remain open | Keep the live list current.  Do not proceed while a blocker for the next edit set remains open. |
-| CPU/MPI qualification status | Phase-8 accepted source `addd12d4`: frozen registration `62/62`; mutation controls `17/17` rejected; migration replay `62/62` across `21` cases; parser `172/172`; legacy CPU plus accuracy `20/20` and `12/12`; legacy MPI CPU plus accuracy `4/4` and `5/5`; bounded periodic `prescribed_test` MPI/SMR/AMR opening accepted; solver-coupled `mhd_ideal` MPI/SMR/AMR remains fail-closed; single precision remains blocked by inherited repository narrowing errors | Rerun and archive qualification at each accepted milestone. |
-| GPU qualification status | Not started; unavailable on this workstation | GPU qualification is optional for `MERGE READY` on this workstation, but it remains a separate unqualified residual risk.  Do not claim `GPU QUALIFIED` without accelerator evidence on an accepted SHA. |
+| Open blocking findings | Corrected Phase-9 evidence seal and fresh cold-review rebound remain open; public docs preview overlay and workstation GPU disposition are complete | Keep the live list current.  Do not proceed while a blocker for the next edit set remains open. |
+| CPU/MPI qualification status | Phase-8 accepted source `addd12d4` plus Phase-9 candidate replay: frozen registration `62/62`; release and debug-bounds migration replay `62/62` across `21` cases each; mutation controls `17/17`, `88/88`, `8/8`, and coupled-oracle controls rejected; release and debug restart, diagnostic, subcycle, coupled, and all-format replays passed; parser `172/172`; legacy CPU plus accuracy `20/20` and `12/12`; legacy MPI CPU plus accuracy `4/4` and `5/5`; style `2/2`; deep AMR `divB` `1/1`; bounded periodic `prescribed_test` MPI/SMR/AMR opening accepted; solver-coupled `mhd_ideal` MPI/SMR/AMR remains fail-closed; single precision remains blocked before CR source by inherited repository narrowing errors | Rerun and archive qualification at each accepted milestone. |
+| GPU qualification status | Workstation disposition archived; unavailable locally and explicitly unclaimed | GPU qualification is optional for `MERGE READY` on this workstation, but it remains a separate unqualified residual risk.  Do not claim `GPU QUALIFIED` without accelerator evidence on an accepted SHA. |
 | Merge-ready status | Not eligible | Requires Phase-9 qualification, public docs overlay, `RG-010`, and `CP-7 Final Cold Review`. |
 
 ## Historical Branch And Base Facts At Ledger Creation
@@ -4415,3 +4415,274 @@ before the fixes are accepted.
   - require a fresh evidence-adversary `PROCEED` before sealing CP-6;
   - if the evidence review finds a source-bound provenance, replay durability,
     or executable-oracle gap, reopen Phase 8 rather than advancing to Phase 9.
+
+## DR-062: Phase-9 Workstation Backend Disposition
+
+- Date: 2026-05-30
+- Status: selected and archived
+- Choice:
+  - keep `GPU QUALIFIED` explicitly unclaimed on this workstation;
+  - allow workstation `MERGE READY` assessment to proceed through the optional
+    backend policy selected in `DR-000`;
+  - archive a separate GPU testing handoff that must run on an accepted SHA
+    before any accelerator-readiness claim.
+- Evidence:
+  - the Apple M4 Max workstation exposes Metal graphics but no configured CUDA
+    or HIP Kokkos backend;
+  - `nvcc`, `hipcc`, `nvidia-smi`, and `rocminfo` are unavailable;
+  - accepted release, MPI release, debug-bounds, and MPI debug-bounds caches
+    enable Kokkos Serial and disable CUDA, HIP, and SYCL.
+- Alternative rejected:
+  - treating Metal presence as GPU qualification would claim an unconfigured
+    backend that AthenaK did not build or execute;
+  - blocking the workstation handoff on unavailable optional hardware would
+    contradict the Phase-0 backend policy without adding executable evidence.
+- Residual risk:
+  - accelerator compilation, execution, CPU/GPU differential replay,
+    device-aware MPI transport, and profiling remain unqualified follow-up
+    work.
+
+## DR-063: Phase-9 Public Documentation Overlay Scope
+
+- Date: 2026-05-30
+- Status: selected and validated
+- Choice:
+  - validate the public page update in a temporary detached
+    `origin/gh-pages` worktree;
+  - overlay `particles.md`, the complete stacked CR tracer markdown set, and
+    the inherited CR tracer accuracy figures required by linked pages;
+  - run `make clean html SPHINXOPTS="-W --keep-going"` under `docs/`.
+- Correction during validation:
+  - the first invocation ran from the repository root, but the public branch
+    keeps its Sphinx `Makefile` under `docs/`;
+  - the second invocation exposed missing inherited CR accuracy figures;
+  - the corrected stacked overlay included those prerequisite images and
+    passed with warnings treated as errors.
+- Alternatives rejected:
+  - validating only the new relativistic markdown files would not represent
+    the linked public integration surface;
+  - accepting a warning-tolerant build would hide broken public assets.
+
+## DR-064: Phase-9 Unsupported Single-Precision Build Disposition
+
+- Date: 2026-05-30
+- Status: archived inherited blocker
+- Choice:
+  - rerun and retain a final `Athena_SINGLE_PRECISION=ON` build attempt;
+  - classify single precision as unsupported for this handoff because the
+    build fails before CR source in inherited coordinate headers;
+  - keep single-precision repair outside this bounded feature branch.
+- Evidence:
+  - configuration succeeded;
+  - compilation failed with pre-existing C++ narrowing errors in
+    `src/coordinates/cartesian_ks.hpp`, including initializer-list conversions
+    from `double` to `Real` when `Real` is `float`.
+- Alternative rejected:
+  - widening Phase 9 into repository-wide coordinate-header cleanup would
+    obscure the CR feature boundary and invalidate the final cold-review
+    surface.
+
+## Phase-9 Candidate Qualification Before Final Cold Review
+
+- Date: 2026-05-30
+- Candidate parent seal:
+  `aa8663e8a5d49e26c206363d028b52d0e350a91f`
+- Runtime and build results:
+  - serial release, MPI release, debug-bounds, and MPI debug-bounds general
+    builds passed;
+  - dedicated release pusher, release coupled, and debug-bounds coupled builds
+    passed;
+  - prescribed pusher, solver-coupled, subcycle, restart, and diagnostics
+    analyzers passed, including debug-bounds replays for coupled, subcycle,
+    restart, and diagnostics paths;
+  - release and debug-bounds prescribed-test migration qualification each
+    passed the frozen `62/62` contract across `21` isolated runtime cases;
+  - migration mutation controls rejected `17/17`, diagnostic mutation controls
+    rejected `88/88`, subcycle controls rejected `8/8`, coupled-oracle
+    mutations rejected as expected, and retained writer adversarial probes
+    passed `20/20`;
+  - release and debug-bounds all-format inspection passed;
+  - deterministic release all-format analysis rerun from the retained tarball
+    matched the original report byte-for-byte;
+  - parser contract passed `172/172`;
+  - legacy CPU suites passed `20/20` and `12/12`;
+  - legacy MPI suites passed `4/4` and `5/5`;
+  - style passed `2/2`;
+  - inherited deep AMR `divB` regression passed `1/1`;
+  - strict public `origin/gh-pages` overlay build passed with warnings as
+    errors.
+- Integration result:
+  - refreshed merge-tree audit against
+    `origin/development@c6a73b08e60807f8b925164c5e7edd5cb820c8ae`
+    remains intentionally unmerged and reports seven manual content-conflict
+    paths;
+  - preserve the stacked prerequisite and use a dedicated reviewed
+    integration step before merging to `development`.
+- Inflection point:
+  - commit and push this Phase-9 candidate documentation and evidence;
+  - ask fresh cold reviewers with no implementation ownership to try to
+    falsify physics, migration, evidence durability, public documentation, and
+    handoff claims;
+  - do not record `RG-010`, `CP-7`, or `MERGE READY` until blocking reviewer
+    findings are closed.
+
+## DR-065: Phase-9 First Cold-Review HOLD And Replacement Seal
+
+- Date: 2026-05-30
+- Status: corrected replacement packet prepared for rebound
+- Candidate reviewed:
+  `2a18501df4ab64a60283f18a63e6b090c8516b1a`
+- Independent-review result:
+  - physics and migration source audits found no implementation blocker within
+    the bounded passive scope;
+  - physics, migration, evidence-adversary, and handoff reviewers each returned
+    `HOLD` on the release packet;
+  - do not record `RG-010`, `CP-7`, or `MERGE READY` on `2a18501d`.
+- Public-documentation corrections:
+  - add the required `relativistic_initial_state = velocity` selector to the
+    solver-coupled example;
+  - document `subcycle_electric_kick_max`, `relativistic_initial_state`,
+    direct `w0x`, `w0y`, `w0z` initialization, prescribed `cE0x`, `cE0y`,
+    `cE0z`, and the relativistic `B_profile = uniform` restriction;
+  - state that non-strict cap clipping is legacy-only and that
+    `relativistic_hc` requires `subcycle_strict = true`;
+  - separate legacy independent particle restart from typed-v2 paired mesh and
+    particle restart, including changed-rank rejection;
+  - gate public stable-site publication on the later reviewed integration
+    branch;
+  - relabel the implementation-guide control header as the historical Phase-0
+    creation snapshot and point readers to this living ledger;
+  - add concrete bounded follow-up branch names and entry gates;
+  - add the missing GPU all-format replay command and require debug-bounds
+    accelerator replays.
+- Evidence-packet corrections:
+  - archive exact analytical replay commands instead of ellipses;
+  - add one source-bound Phase-9 provenance envelope covering source SHA,
+    source tree, binaries, analyzers, inputs, criteria, metrics, frozen
+    `development`, and frozen `gh-pages`;
+  - replace the nonportable all-format tarball with a deterministic portable
+    package containing a prefix-mapped qualified release binary, runtime
+    artifacts, input, criteria, required inspectors, manifest, and replay
+    wrapper;
+  - prove the portable replay from a fresh extraction path;
+  - redact local checkout and workstation identity from retained text
+    artifacts and record a package privacy scan;
+  - reduce the GPU disposition artifact to backend facts only;
+  - rerun the Pages overlay from immutable
+    `origin/gh-pages@4833aa9341e19861297e330ff02aabfd8001935c` and archive an
+    overlay inventory;
+  - regenerate the merge-tree artifact in the intended
+    `development <- candidate` direction;
+  - normalize retained text-log trailing whitespace and archive a real
+    commit-range `git diff --check`.
+- Additional executable check:
+  - run the public solver-coupled documentation example with the general
+    release binary and retain its successful runtime log.
+- Alternatives rejected:
+  - treating rendering success as proof of a runnable public example;
+  - accepting opaque one-line replay logs without a cross-artifact provenance
+    envelope;
+  - retaining a package that requires an ephemeral external binary path;
+  - publishing host-specific identity or workstation inventory in the handoff;
+  - force-recording `PROCEED` before a fresh rebound reviews the corrected
+    immutable seal.
+- Inflection point:
+  - seal and push a corrected immutable packet;
+  - rerun a fresh physics, migration, evidence-adversary, and handoff cold
+    review against that exact SHA;
+  - stop again on any blocking finding.
+
+## DR-066: Phase-9 First Rebound Seal-Metadata Correction
+
+- Date: 2026-05-30
+- Status: corrected packet prepared for second rebound
+- First sanitized evidence seal reviewed:
+  `89084c66b149e9b310a06e13eb4465c58240a4aa`
+- Fresh handoff-rebound verdict: `HOLD`.
+- Findings:
+  - the handoff named the corrected documentation candidate
+    `720fb8fc193a8d598dccbf780cee3777ebba8bc9` but did not distinguish the
+    immutable evidence-seal tip `89084c66b149e9b310a06e13eb4465c58240a4aa`;
+  - the merge-tree artifact remained bound to the documentation candidate
+    rather than the first sanitized evidence-seal tip;
+  - the Pages overlay inventory preceded final handoff and ledger edits and
+    therefore did not match the exact sealed overlay set;
+  - the GPU follow-up handoff required debug-bounds coupled replay without
+    giving a dedicated coupled-debug build;
+  - the empty whitespace-audit artifact did not state its intended Phase-9
+    packet range or disclose inherited archive noise in the older stacked
+    range.
+- Corrected choices:
+  - preserve separate labels for the documentation candidate and each
+    immutable evidence-seal tip;
+  - rerun the merge-tree artifact in the intended `development <- seal-tip`
+    direction;
+  - rerun the frozen-`gh-pages` preview overlay after the complete seal-doc
+    update and archive the matching inventory;
+  - add an explicit dedicated coupled GPU debug-bounds build and exact binary
+    selection for required debug replays;
+  - record the scoped Phase-9 `git diff --check` command and disclose that
+    older stacked retained evidence still contains historical whitespace.
+- Alternative rejected:
+  - treating a two-stage evidence seal as self-explanatory would force future
+    reviewers to infer candidate roles from Git history and leave the handoff
+    ambiguous.
+- Inflection point:
+  - reseal and push the corrected packet;
+  - require fresh read-only rebound review against the new immutable tip;
+  - stop again on any blocking finding.
+
+## DR-067: Phase-9 Second Rebound Portability And Public-Replay Correction
+
+- Date: 2026-05-30
+- Status: corrected packet prepared for sanitized-history replacement
+- Second rebound evidence seal reviewed:
+  `5e031387e66224b0e9dc4462fbf4d9a7ee01c9df`
+- Independent-review result:
+  - one integration reviewer returned `PROCEED`;
+  - physics, evidence-adversary, and documentation reviewers returned `HOLD`;
+  - do not record `RG-010`, `CP-7`, or `MERGE READY` on `5e031387`.
+- Findings:
+  - the outer Phase-9 manifest and its verification log used absolute local
+    checkout paths, so they were not offline-portable and leaked workstation
+    identity despite the retained privacy claim;
+  - the provenance envelope retained one stale Pages-build digest;
+  - the public documentation described the solver-coupled selectors but did
+    not ship or link the complete runnable one-cycle deck;
+  - the typed-v2 restart example exposed the internally injected paired-mesh
+    key without showing the required full-mesh `-r` invocation;
+  - the retained command inventory omitted package construction, manifest
+    generation, envelope verification, privacy scanning, and final outer
+    verification commands;
+  - the archived whitespace check stopped at the earlier candidate;
+  - portable replay reports remained semantically equivalent but encoded
+    extraction-local paths.
+- Corrected choices:
+  - publish a complete one-cycle solver-coupled input under
+    `inputs/particles/` and execute that public path in the retained smoke;
+  - document typed-v2 resume as paired `-r` plus particle-shard input and mark
+    `relativistic_paired_mesh_restart_file` as internal plumbing;
+  - normalize portable report prefixes to `$PACKAGE_ROOT`;
+  - regenerate the outer manifest with repository-relative paths, verify it
+    from a relocated checkout root, and run the privacy scan only after all
+    retained text artifacts exist;
+  - archive package-construction, deterministic metadata normalization,
+    internal-manifest, outer-manifest, envelope-verification, privacy-scan,
+    and final verification commands;
+  - bind the final whitespace audit to the latest pre-seal candidate and ask
+    the rebound reviewers to rerun it through the later seal tip;
+  - rewrite the Phase-9 documentation history so the leaked local identity is
+    removed from the branch history rather than merely corrected at the tip.
+- Alternatives rejected:
+  - retaining an absolute-path manifest because it verifies in the original
+    checkout would not prove offline replay;
+  - documenting an internal restart key as a user parameter would preserve an
+    operationally incomplete resume procedure;
+  - accepting path-varying portable reports would weaken deterministic replay
+    evidence without providing useful information.
+- Inflection point:
+  - construct a sanitized replacement candidate from the accepted Phase-8
+    evidence seal;
+  - regenerate and verify the complete Phase-9 envelope and portable packet;
+  - force-update the remote branch with an exact lease against the leaked tip;
+  - require a fresh exact-SHA cold review before recording closure.

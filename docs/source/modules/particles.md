@@ -4,10 +4,10 @@
 
 The Particles module implements Lagrangian cosmic-ray tracer particles on top of
 the existing AthenaK task list, boundary exchange, and AMR infrastructure.  The
-current supported particle type is `cosmic_ray`, with drift and magnetic Boris
-pushers, per-particle species tags, restart output, compact position output,
-pitch-angle histograms, spectra, displacement histograms, reduced particle moments, and
-AMR-aware particle remap.
+current supported particle type is `cosmic_ray`, with drift, magnetic Boris, and
+explicit opt-in relativistic Higuera-Cary pushers, per-particle species tags,
+restart output, compact position output, pitch-angle histograms, spectra,
+displacement histograms, reduced particle moments, and AMR-aware particle remap.
 
 Particle evolution is owned by `particles::Particles` and is scheduled through
 the standard mesh task flow.  Particle exchange reuses the boundary-value
@@ -21,7 +21,9 @@ by MeshBlocks.
 |------|---------|
 | `src/particles/particles.hpp` | Particle class state, runtime options, and debug-check API. |
 | `src/particles/particles.cpp` | Construction, restart sizing, AMR remap, and consistency checks. |
-| `src/particles/particles_pushers.cpp` | Drift and Boris particle pushers. |
+| `src/particles/particles_pushers.cpp` | Drift, Boris, and relativistic Higuera-Cary particle pushers. |
+| `src/particles/relativistic_state.hpp` | Device-capable relativistic state conversion and validation helpers. |
+| `src/particles/relativistic_pusher.hpp` | Device-capable Higuera-Cary map and work quadrature. |
 | `src/particles/particles_tasks.cpp` | Particle task registration. |
 | `src/bvals/bvals_part.cpp` | Particle MPI exchange. |
 | `src/outputs/*_prtcl.cpp` | Particle `ppd`, `prst`, `df`, `pspec`, `dxh`, `drh`, `dparh`, `pmom`, VTK, and tracking outputs. |
@@ -81,6 +83,52 @@ The shipped smoke and stress inputs are:
 | `inputs/particles/cr_tracer_boris_uniform.athinput` | One-particle uniform-field Boris accuracy test. |
 | `inputs/particles/cr_tracer_boris_amr_perf.athinput` | End-to-end CPU/MPI Boris AMR performance comparison. |
 | `inputs/particles/cr_tracer_drift_amr_perf.athinput` | Remap-focused CPU/MPI AMR performance comparison. |
+| `inputs/particles/cr_tracer_relativistic_contract.athinput` | Explicit opt-in relativistic parser and single-cycle smoke fixture. |
+| `inputs/particles/cr_tracer_relativistic_mhd_ideal_example.athinput` | Complete one-cycle solver-coupled relativistic development-preview example. |
+
+The solver-coupled relativistic opening is deliberately narrower than the
+legacy Boris mode.  It currently requires a 3-D strictly periodic, serial,
+uniform-level, exactly-one-MeshBlock Newtonian ideal-MHD setup:
+
+```text
+<time>
+evolution = dynamic
+
+<mhd>
+eos     = ideal
+rsolver = hlld
+
+<particles>
+particle_type                  = cosmic_ray
+pusher                         = relativistic_hc
+interpolation                  = trilinear
+relativistic_field_source      = mhd_ideal
+relativistic_temporal_sampling = frozen_tn
+nspecies                       = 1
+ppc                            = 1
+c_model                        = 1.0
+alpha_s                        = 1.0
+
+<problem>
+pgen_name                      = part_random
+B0x                            = 1.0
+B0y                            = 0.0
+B0z                            = 0.0
+particle_velocity              = uniform
+relativistic_initial_state     = velocity
+v0x                            = 0.0
+v0y                            = 0.1
+v0z                            = 0.0
+```
+
+This remains a passive full-orbit tracer model.  It samples Newtonian ideal-MHD
+`cE = -u x B`; it does not feed particle energy or momentum back into the fluid.
+The fragment above highlights the relativistic selectors.  Run the complete
+one-cycle development-preview deck with:
+
+```bash
+./athena -i inputs/particles/cr_tracer_relativistic_mhd_ideal_example.athinput
+```
 
 ## Runtime Parameters
 
@@ -91,7 +139,7 @@ The shipped smoke and stress inputs are:
 | `particle_type` | required | Must be `cosmic_ray`. |
 | `ppc` | `1.0` | Particles per cell per species.  Fractional values are allowed. |
 | `nspecies` | `1` | Number of particle species. |
-| `pusher` | required | `drift` or `boris`. |
+| `pusher` | required | `drift`, `boris`, or explicit opt-in `relativistic_hc`. |
 | `interpolation` | `tsc` | For `boris`: `tsc`, `trilinear`, `lin`, or `lin_legacy`. |
 | `min_mass` | `1.0` | Species-zero gyro parameter used by the Boris update. |
 | `mass_log_spacing` | `1.0` | Multiplicative spacing between species gyro parameters. |
@@ -110,7 +158,12 @@ The shipped smoke and stress inputs are:
 | `subcycle_cell_fraction` | `0.5` | Limits per-substep motion to this fraction of the local cell width. |
 | `subcycle_meshblock_fraction` | `0.5` | Limits per-substep motion to this fraction of the local MeshBlock size. |
 | `subcycle_gyro_fraction` | `0.25` | Limits Boris gyro angle per substep in radians. |
+| `subcycle_electric_kick_max` | `0.1` | For `relativistic_hc`, limits the normalized electric kick magnitude per substep. |
 | `subcycle_strict` | `true` | If true, fail when the requested constraints need more than `subcycle_max_steps`. |
+| `relativistic_field_source` | required for `relativistic_hc` | `prescribed_test` for the qualified analytical and migration fixtures, or `mhd_ideal` for the narrower solver-coupled opening. |
+| `relativistic_temporal_sampling` | required for `mhd_ideal` | Currently only `frozen_tn`; this is first-order sampling of the MHD state at `t^n`, not stage-coupled temporal accuracy. |
+| `c_model` | required for `relativistic_hc` | Finite positive code-unit model light speed.  Coupled `mhd_ideal` currently requires `1.0`. |
+| `alpha_s` | required for `relativistic_hc` | Finite nonzero signed normalized force coefficient. |
 
 ### `<problem>` for `part_random`
 
@@ -125,8 +178,11 @@ The shipped smoke and stress inputs are:
 | `particle_velocity` | `random` | `random`, `uniform`, `isotropic`, or `isotropic_tag_random`; `uniform` uses `v0x`, `v0y`, and `v0z`, while `isotropic_tag_random` is deterministic across MPI decompositions. |
 | `particle_seed` | `0` | Seed combined with species and tag for `tag_random` and `isotropic_tag_random`. |
 | `v0x`, `v0y`, `v0z` | `1, 0, 0` | Uniform particle velocity used when `particle_velocity = uniform`. |
-| `B0x`, `B0y`, `B0z` | `0, 0, 1` | Uniform magnetic field initialized by `part_random`. |
-| `B_profile` | `uniform` | `uniform`, `linear_cross`, `sinusoidal_divb_free`, `mirror`, `gradb`, or `turbulent`; the nonuniform profiles are prescribed accuracy fields. |
+| `relativistic_initial_state` | required for `relativistic_hc` | `velocity` initializes authoritative `w` from `v0x`, `v0y`, and `v0z`; `w` initializes it directly from `w0x`, `w0y`, and `w0z`. |
+| `w0x`, `w0y`, `w0z` | required for `relativistic_initial_state = w` | Uniform authoritative `w = gamma v` initialization.  Reject these fields when the selected initial state is `velocity`. |
+| `cE0x`, `cE0y`, `cE0z` | required for `prescribed_test` | Uniform prescribed `cE` initialization for the qualified analytical and migration fixtures.  Solver-coupled `mhd_ideal` rejects these fields. |
+| `B0x`, `B0y`, `B0z` | `0, 0, 1` | Uniform magnetic field initialized by `part_random`; explicit values are required for `relativistic_hc`. |
+| `B_profile` | `uniform` | `uniform`, `linear_cross`, `sinusoidal_divb_free`, `mirror`, `gradb`, or `turbulent`; the nonuniform profiles are legacy prescribed accuracy fields, while `relativistic_hc` currently requires `uniform`. |
 | `Bgrad` | `1.0` | Gradient strength for `linear_cross`, `mirror`, and `gradb` manufactured fields. |
 | `Bamp`, `Bwave_number` | `0.05`, `1.0` | Amplitude and wave number for `sinusoidal_divb_free` and `turbulent` profiles. |
 
@@ -138,7 +194,9 @@ The shipped smoke and stress inputs are:
 
 ## Particle Data Layout
 
-Cosmic-ray tracer particles allocate 14 real fields and 3 integer fields.
+Legacy `drift` and `boris` cosmic-ray tracer particles allocate 14 real fields
+and 3 integer fields.  The opt-in `relativistic_hc` mode appends 8 real fields
+and retains the same integer identity layout.
 
 Integer fields:
 
@@ -159,6 +217,15 @@ Real fields:
 | `IPDX`, `IPDY`, `IPDZ` | Accumulated displacement. |
 | `IPDB` | Accumulated displacement parallel to the sampled magnetic field. |
 
+Appended `relativistic_hc` real fields:
+
+| Field | Meaning |
+|-------|---------|
+| `IPWX`, `IPWY`, `IPWZ` | Authoritative `w = gamma v` momentum state. |
+| `IPCEX`, `IPCEY`, `IPCEZ` | Prescribed or gathered `cE` sample. |
+| `IPWORK` | Accumulated direct sampled-field work quadrature. |
+| `IPALPHA` | Signed normalized force coefficient. |
+
 ## Pushers
 
 | Pusher | Requirements | Notes |
@@ -167,6 +234,7 @@ Real fields:
 | `boris` + `tsc` | `<mhd>` block | Uses cell-centered magnetic fields and triangular-shaped-cloud weights. |
 | `boris` + `trilinear` | `<mhd>` block | Uses full multidimensional trilinear interpolation of cell-centered magnetic fields. |
 | `boris` + `lin` or `lin_legacy` | `<mhd>` block | Uses legacy component-wise interpolation of face-centered magnetic fields. |
+| `relativistic_hc` + `mhd_ideal` | Narrow Newtonian ideal-MHD contract | Uses cell-centered trilinear `u` and `B` gathers, forms `cE = -u x B`, and advances authoritative `w = gamma v` with the Higuera-Cary map. |
 
 The Boris pusher requires MHD because it samples magnetic fields.  The
 interpolation choice is made through `<particles>/interpolation`.  All Boris
@@ -181,6 +249,14 @@ the expected cross-direction interpolation error that decreases with
 resolution.  The test is intentionally a pusher/gather check, not an MHD
 evolution test.
 
+For `relativistic_hc`, the reduced-model relations are
+`gamma = sqrt(1 + |w|^2 / c_model^2)`, `v = w / gamma`, and
+`kinetic_energy_model = (gamma - 1) c_model^2`.  The coupled selector is
+intentionally fail-closed outside the documented serial one-MeshBlock scope.
+The separately qualified `prescribed_test` selector supports periodic MPI,
+same-level multiblock, static-SMR, and adaptive-AMR migration oracles; it is not
+a general sampled-MHD production widening.
+
 ## Particle Subcycling
 
 Subcycling is off by default so existing CR tracer inputs preserve their
@@ -188,13 +264,19 @@ previous timestep behavior.  Set `<particles>/subcycle = true` when particle
 motion in one mesh timestep would make the field gather stale or when a Boris
 orbit needs a smaller gyro-angle step.
 
-When enabled, AthenaK computes a global substep count from three constraints:
+When enabled, AthenaK computes a global substep count from the active
+constraints:
 
 - `subcycle_cell_fraction`: maximum particle displacement as a fraction of the
   local cell width,
 - `subcycle_meshblock_fraction`: maximum particle displacement as a fraction of
   the owning MeshBlock size,
 - `subcycle_gyro_fraction`: maximum Boris gyro angle per substep.
+
+`relativistic_hc` additionally applies its qualified acceleration-aware
+electric-kick and outer-timestep bounds.  The deferred
+`subcycle_momentum_fraction` and `subcycle_kinetic_energy_fraction` keys remain
+rejected until separately reviewed.
 
 The active substep count is the maximum over local particles and MPI ranks.
 Between intermediate substeps, the particle module updates `PGID` and runs the
@@ -204,10 +286,12 @@ end of the full mesh timestep.  The final substep still hands off to the normal
 `NewGID`/exchange tasks.
 
 With `subcycle_strict = true`, the run fails fast if the constraints require
-more than `subcycle_max_steps`.  With `subcycle_strict = false`, the run caps at
-`subcycle_max_steps`; pair that mode with `check_motion_bounds = true` while
-debugging.  When `log_performance = true`, rank zero prints the selected
-substep count and active constraint.
+more than `subcycle_max_steps`.  Legacy pushers may instead use
+`subcycle_strict = false` to cap at `subcycle_max_steps`; pair that mode with
+`check_motion_bounds = true` while debugging.  `relativistic_hc` rejects
+non-strict cap clipping and requires `subcycle_strict = true`.  When
+`log_performance = true`, rank zero prints the selected substep count and
+active constraint.
 
 ## AMR Remapping
 
@@ -324,9 +408,16 @@ intermediate ownership updates or smaller Boris gyro-angle steps.
 | `pvtk` | run directory | Particle VTK output. |
 | `trk` | run directory | Tracked-particle output. |
 
-`prst` files store a three-`Real` header `(time, dt, particles_this_rank)`,
-followed by 17 `Real` values per particle: `PGID`, `PTAG`, `PSP`, and the 14
-real particle fields.
+Legacy `drift` and `boris` `prst` files store a three-`Real` header
+`(time, dt, particles_this_rank)`, followed by 17 `Real` values per particle:
+`PGID`, `PTAG`, `PSP`, and the 14 real particle fields.
+
+`relativistic_hc` uses a paired typed-v2 particle shard and manifest plus the
+native mesh restart and `.rst.rmeta` witness.  The shard stores typed `PGID`,
+`PTAG`, and `PSP` values plus all 22 relativistic real fields.  The paired
+contract binds rank count, topology, cycle, time, timestep, byte counts,
+checksums, and checkpoint identity.  Rank-count changes reject clearly until a
+separately reviewed redistribution design exists.
 
 For `df`, `pspec`, `dxh`, `drh`, `dparh`, and `pmom`, `reduce = true` is the default.
 MPI runs write one globally reduced diagnostic from rank zero.  The sum of each
@@ -394,8 +485,8 @@ rank count, selection parameters, sample count, field count, and column names.
 
 ## Particle Restart
 
-Particle restart is independent from full mesh restart.  To reload particle
-data:
+Legacy `drift` and `boris` particle restart is independent from full mesh
+restart.  To reload a legacy particle shard:
 
 ```text
 <problem>
@@ -406,6 +497,28 @@ prtcl_res_file = prst/rank_00000000/cr_tracer_amr.00002.prst
 In MPI, each rank replaces `rank_00000000` with its own rank directory.  The
 mesh configuration must remain compatible with the saved particle `PGID`
 values.
+
+`relativistic_hc` instead requires a paired typed-v2 particle checkpoint and
+native mesh restart.  The particle manifest binds the mesh restart witness,
+checkpoint identity, cycle, time, timestep, topology, rank count, payload byte
+counts, and checksums.  Resume with the matching native mesh `.rst` file and
+its paired particle shard:
+
+```text
+<problem>
+prtcl_rst_flag = 1
+prtcl_res_file = prst/rank_00000000/cr_rel.00002.prst
+```
+
+```bash
+./athena -r rst/cr_rel.00002.rst -i inputs/particles/cr_rel_resume.athinput
+```
+
+The executable injects the paired mesh-restart path internally after processing
+`-r`.  Do not set `relativistic_paired_mesh_restart_file` in the input deck.
+Typed-v2 continuation currently requires the saved MPI rank count and topology.
+Changed-rank continuation rejects clearly until a separately reviewed
+redistribution design exists.
 
 ## Readback Utility
 
@@ -432,6 +545,10 @@ reports sampled-field totals and field names when `psamp` output is present.
 
 The particle regression tests import this utility directly so command-line and
 automated checks use the same parser.
+
+For `relativistic_hc`, the inspector also validates typed-v2 shard manifests,
+paired mesh witnesses, explicit diagnostic metadata, and the narrower canonical
+sample and spectrum field names.
 
 ## Performance Logging
 
@@ -588,10 +705,14 @@ within the test's normalized `div(B)` tolerances.
 ## Integration Notes
 
 The GitHub Pages branch already includes this page in the module toctree as
-`docs/source/modules/particles.md`.  To publish these docs there, copy or merge
-this file and the linked CR tracer Markdown pages into
-`docs/source/modules/` on `origin/gh-pages`; no `index.md` toctree edit is
-needed because the supporting pages are reached from this page.
+`docs/source/modules/particles.md`.  This branch validates a temporary
+development-preview overlay only.  Do not publish the relativistic update to
+`origin/gh-pages` until the stacked prerequisite and relativistic branch have
+been reconciled onto a reviewed integration branch, the complete
+qualification matrix has been rerun there, and the integration cold review
+records `PROCEED`.  At that point, copy or merge this file and the linked CR
+tracer Markdown pages into `docs/source/modules/`; no `index.md` toctree edit
+is needed because the supporting pages are reached from this page.
 
 These linked pages summarize validation evidence and recommended next CR tracer
 work:
@@ -616,3 +737,9 @@ work:
 - [CR Tracer Relativistic Acceleration Implementation Guide](cr_tracer_relativistic_acceleration_implementation_guide.md)
   defines the gated implementation and validation workflow for an opt-in
   passive relativistic acceleration follow-up.
+- [CR Tracer Relativistic Acceleration Handoff](cr_tracer_relativistic_acceleration_handoff.md)
+  records the qualified scope, accepted evidence seals, known limitations, and
+  integration strategy for the completed implementation branch.
+- [CR Tracer Relativistic GPU Testing Handoff](cr_tracer_relativistic_gpu_testing_handoff.md)
+  records the accelerator qualification matrix that remains intentionally
+  unclaimed on the CPU/MPI-only workstation.

@@ -1,0 +1,17 @@
+2026-05-30 05:45:38,443 - INFO - Cleaning build directory
+2026-05-30 05:45:38,448 - INFO - Configuring CMake in $REPO_ROOT
+2026-05-30 05:45:38,448 - INFO - Executing command: cmake -D Athena_ENABLE_MPI=ON -B tst/build
+2026-05-30 05:45:39,831 - INFO - Executing command: make -j 16
+2026-05-30 05:46:03,317 - INFO - make completed in 23.49 seconds
+2026-05-30 05:46:03,317 - INFO - Build directory cleaned and project rebuilt
+2026-05-30 05:46:03,317 - INFO - Executing command: ln -s ../../inputs inputs
+============================= test session starts ==============================
+platform darwin -- Python 3.13.13, pytest-8.4.1, pluggy-1.6.0
+rootdir: $REPO_ROOT/tst
+plugins: anyio-4.9.0, xdist-3.8.0, jaxtyping-0.3.7, cov-6.2.1, Faker-40.1.2
+collected 5 items
+
+../../test_suite/particles/test_particles_cr_accuracy_mpicpu.py .....    [100%]2026-05-30 05:46:04,898 - INFO - Cleaning build directory
+
+
+============================== 5 passed in 1.41s ===============================

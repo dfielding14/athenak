@@ -1,0 +1,247 @@
+-- The C compiler identification is AppleClang 21.0.0.21000101
+-- The CXX compiler identification is AppleClang 21.0.0.21000101
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Setting build type to 'Release' as none was specified.
+-- Setting default Kokkos CXX standard to 17
+-- Kokkos version: 4.4.0
+-- The project name is: Kokkos
+-- Using internal gtest for testing
+-- Configured git information in /tmp/athenak-cr-phase9-single-precision/generated/Kokkos_Version_Info.cpp
+-- SERIAL backend is being turned on to ensure there is at least one Host space. To change this, you must enable another host execution space and configure with -DKokkos_ENABLE_SERIAL=OFF or change CMakeCache.txt
+-- Using -std=c++17 for C++17 standard as feature
+-- Built-in Execution Spaces:
+--     Device Parallel: NoTypeDefined
+--     Host Parallel: NoTypeDefined
+--       Host Serial: SERIAL
+--
+-- Architectures:
+-- Found TPLLIBDL: /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include
+-- Using internal desul_atomics copy
+-- Experimental mdspan support is enabled
+-- Looking for C++ include experimental/mdspan
+-- Looking for C++ include experimental/mdspan - not found
+-- Looking for C++ include mdspan
+-- Looking for C++ include mdspan - found
+-- Using internal mdspan directory $REPO_ROOT/kokkos/core/src/../../tpls/mdspan/include
+-- Kokkos Backends: SERIAL
+-- Configuring done (1.1s)
+-- Generating done (0.1s)
+-- Build files have been written to: /tmp/athenak-cr-phase9-single-precision
+configure_exit=0
+[  1%] Building CXX object kokkos/simd/src/CMakeFiles/kokkossimd.dir/Kokkos_SIMD_dummy.cpp.o
+[  3%] Building CXX object kokkos/core/src/CMakeFiles/kokkoscore.dir/impl/Kokkos_CPUDiscovery.cpp.o
+[  3%] Building CXX object kokkos/core/src/CMakeFiles/kokkoscore.dir/impl/Kokkos_Abort.cpp.o
+[  4%] Linking CXX static library libkokkossimd.a
+-- Configured git information in /tmp/athenak-cr-phase9-single-precision/kokkos/generated/Kokkos_Version_Info.cpp
+[  4%] Built target AlwaysCheckGit
+[  4%] Built target kokkossimd
+[  4%] Building CXX object kokkos/core/src/CMakeFiles/kokkoscore.dir/impl/Kokkos_Command_Line_Parsing.cpp.o
+[  5%] Building CXX object kokkos/core/src/CMakeFiles/kokkoscore.dir/impl/Kokkos_Core.cpp.o
+[  5%] Building CXX object kokkos/core/src/CMakeFiles/kokkoscore.dir/impl/Kokkos_Error.cpp.o
+[  6%] Building CXX object kokkos/core/src/CMakeFiles/kokkoscore.dir/impl/Kokkos_ExecPolicy.cpp.o
+[  7%] Building CXX object kokkos/CMakeFiles/impl_git_version.dir/__/generated/Kokkos_Version_Info.cpp.o
+[  7%] Building CXX object kokkos/core/src/CMakeFiles/kokkoscore.dir/impl/Kokkos_HostBarrier.cpp.o
+[  7%] Linking CXX static library libimpl_git_version.a
+[  8%] Building CXX object kokkos/core/src/CMakeFiles/kokkoscore.dir/impl/Kokkos_HostSpace.cpp.o
+[  8%] Built target impl_git_version
+[  8%] Building CXX object kokkos/core/src/CMakeFiles/kokkoscore.dir/impl/Kokkos_HostSpace_deepcopy.cpp.o
+[  9%] Building CXX object kokkos/core/src/CMakeFiles/kokkoscore.dir/impl/Kokkos_HostThreadTeam.cpp.o
+[ 10%] Building CXX object kokkos/core/src/CMakeFiles/kokkoscore.dir/impl/Kokkos_MemoryPool.cpp.o
+[ 10%] Building CXX object kokkos/core/src/CMakeFiles/kokkoscore.dir/impl/Kokkos_Profiling.cpp.o
+[ 11%] Building CXX object kokkos/core/src/CMakeFiles/kokkoscore.dir/impl/Kokkos_SharedAlloc.cpp.o
+[ 11%] Building CXX object kokkos/core/src/CMakeFiles/kokkoscore.dir/impl/Kokkos_Stacktrace.cpp.o
+[ 12%] Building CXX object kokkos/core/src/CMakeFiles/kokkoscore.dir/impl/Kokkos_hwloc.cpp.o
+[ 12%] Building CXX object kokkos/core/src/CMakeFiles/kokkoscore.dir/Serial/Kokkos_Serial.cpp.o
+[ 13%] Building CXX object kokkos/core/src/CMakeFiles/kokkoscore.dir/Serial/Kokkos_Serial_Task.cpp.o
+[ 13%] Linking CXX static library libkokkoscore.a
+[ 13%] Built target kokkoscore
+[ 14%] Building CXX object kokkos/containers/src/CMakeFiles/kokkoscontainers.dir/impl/Kokkos_UnorderedMap_impl.cpp.o
+[ 14%] Linking CXX static library libkokkoscontainers.a
+[ 14%] Built target kokkoscontainers
+[ 14%] Building CXX object src/CMakeFiles/athena.dir/main.cpp.o
+[ 15%] Building CXX object src/CMakeFiles/athena.dir/globals.cpp.o
+[ 15%] Building CXX object src/CMakeFiles/athena.dir/parameter_input.cpp.o
+[ 16%] Building CXX object src/CMakeFiles/athena.dir/bvals/bvals.cpp.o
+[ 16%] Building CXX object src/CMakeFiles/athena.dir/bvals/buffs_cc.cpp.o
+[ 17%] Building CXX object src/CMakeFiles/athena.dir/bvals/buffs_fc.cpp.o
+[ 17%] Building CXX object src/CMakeFiles/athena.dir/bvals/bvals_cc.cpp.o
+[ 18%] Building CXX object src/CMakeFiles/athena.dir/bvals/bvals_fc.cpp.o
+[ 18%] Building CXX object src/CMakeFiles/athena.dir/bvals/bvals_part.cpp.o
+[ 19%] Building CXX object src/CMakeFiles/athena.dir/bvals/bvals_tasks.cpp.o
+[ 20%] Building CXX object src/CMakeFiles/athena.dir/bvals/flux_correct_cc.cpp.o
+[ 20%] Building CXX object src/CMakeFiles/athena.dir/bvals/flux_correct_fc.cpp.o
+[ 21%] Building CXX object src/CMakeFiles/athena.dir/bvals/prolongation.cpp.o
+[ 21%] Building CXX object src/CMakeFiles/athena.dir/bvals/prolong_prims.cpp.o
+[ 22%] Building CXX object src/CMakeFiles/athena.dir/bvals/physics/hydro_bcs.cpp.o
+[ 22%] Building CXX object src/CMakeFiles/athena.dir/bvals/physics/bfield_bcs.cpp.o
+In file included from $REPO_ROOT/src/bvals/prolong_prims.cpp:25:
+$REPO_ROOT/src/coordinates/cartesian_ks.hpp:140:27: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  140 |   Real const beta_d[3] = {2.*H*l_u[0], 2.*H*l_u[1], 2.*H*l_u[2]};
+      |                           ^~~~~~~~~~~
+$REPO_ROOT/src/coordinates/cartesian_ks.hpp:140:27: note: insert an explicit cast to silence this issue
+  140 |   Real const beta_d[3] = {2.*H*l_u[0], 2.*H*l_u[1], 2.*H*l_u[2]};
+      |                           ^~~~~~~~~~~
+      |                           static_cast<Real>( )
+$REPO_ROOT/src/coordinates/cartesian_ks.hpp:140:40: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  140 |   Real const beta_d[3] = {2.*H*l_u[0], 2.*H*l_u[1], 2.*H*l_u[2]};
+      |                                        ^~~~~~~~~~~
+$REPO_ROOT/src/coordinates/cartesian_ks.hpp:140:40: note: insert an explicit cast to silence this issue
+  140 |   Real const beta_d[3] = {2.*H*l_u[0], 2.*H*l_u[1], 2.*H*l_u[2]};
+      |                                        ^~~~~~~~~~~
+      |                                        static_cast<Real>( )
+$REPO_ROOT/src/coordinates/cartesian_ks.hpp:140:53: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  140 |   Real const beta_d[3] = {2.*H*l_u[0], 2.*H*l_u[1], 2.*H*l_u[2]};
+      |                                                     ^~~~~~~~~~~
+$REPO_ROOT/src/coordinates/cartesian_ks.hpp:140:53: note: insert an explicit cast to silence this issue
+  140 |   Real const beta_d[3] = {2.*H*l_u[0], 2.*H*l_u[1], 2.*H*l_u[2]};
+      |                                                     ^~~~~~~~~~~
+      |                                                     static_cast<Real>( )
+$REPO_ROOT/src/coordinates/cartesian_ks.hpp:172:5: error: non-constant-expression cannot be narrowed from type '__promote_t<float, int>' (aka 'double') to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  172 |     SQR(H)*x/(pow(r,3)) * ( ( qc ) )/ qa,
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+$REPO_ROOT/src/athena.hpp:48:16: note: expanded from macro 'SQR'
+   48 | #define SQR(x) ( (x)*(x) )
+      |                ^
+$REPO_ROOT/src/coordinates/cartesian_ks.hpp:172:5: note: insert an explicit cast to silence this issue
+  172 |     SQR(H)*x/(pow(r,3)) * ( ( qc ) )/ qa,
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |     static_cast<Real>(                  )
+$REPO_ROOT/src/athena.hpp:48:16: note: expanded from macro 'SQR'
+   48 | #define SQR(x) ( (x)*(x) )
+      |                ^
+In file included from $REPO_ROOT/src/bvals/prolong_prims.cpp:25:
+$REPO_ROOT/src/coordinates/cartesian_ks.hpp:173:5: error: non-constant-expression cannot be narrowed from type '__promote_t<float, int>' (aka 'double') to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  173 |     SQR(H)*y/(pow(r,3)) * ( ( qc ) )/ qa,
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+$REPO_ROOT/src/athena.hpp:48:16: note: expanded from macro 'SQR'
+   48 | #define SQR(x) ( (x)*(x) )
+      |                ^
+$REPO_ROOT/src/coordinates/cartesian_ks.hpp:173:5: note: insert an explicit cast to silence this issue
+  173 |     SQR(H)*y/(pow(r,3)) * ( ( qc ) )/ qa,
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |     static_cast<Real>(                  )
+$REPO_ROOT/src/athena.hpp:48:16: note: expanded from macro 'SQR'
+   48 | #define SQR(x) ( (x)*(x) )
+      |                ^
+In file included from $REPO_ROOT/src/bvals/prolong_prims.cpp:25:
+$REPO_ROOT/src/coordinates/cartesian_ks.hpp:174:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  174 |     SQR(H)*z/(pow(r,5)) * ( ( qc * qb ) / qa - 2.0*SQR(a*r))
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+$REPO_ROOT/src/athena.hpp:48:16: note: expanded from macro 'SQR'
+   48 | #define SQR(x) ( (x)*(x) )
+      |                ^
+$REPO_ROOT/src/coordinates/cartesian_ks.hpp:174:5: note: insert an explicit cast to silence this issue
+  174 |     SQR(H)*z/(pow(r,5)) * ( ( qc * qb ) / qa - 2.0*SQR(a*r))
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |     static_cast<Real>(                                      )
+$REPO_ROOT/src/athena.hpp:48:16: note: expanded from macro 'SQR'
+   48 | #define SQR(x) ( (x)*(x) )
+      |                ^
+In file included from $REPO_ROOT/src/bvals/prolong_prims.cpp:25:
+$REPO_ROOT/src/coordinates/cartesian_ks.hpp:180:6: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  180 |     {x*r * ( SQR(a)*x - 2.0*a*r*y - SQR(r)*x )/( SQR(qb) * qa ) + r/( qb ),
+      |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+$REPO_ROOT/src/coordinates/cartesian_ks.hpp:180:6: note: insert an explicit cast to silence this issue
+  180 |     {x*r * ( SQR(a)*x - 2.0*a*r*y - SQR(r)*x )/( SQR(qb) * qa ) + r/( qb ),
+      |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |      static_cast<Real>(                                                   )
+$REPO_ROOT/src/coordinates/cartesian_ks.hpp:181:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  181 |     x*r * ( SQR(a)*y + 2.0*a*r*x - SQR(r)*y )/( SQR(qb) * qa ) - a/( qb ),
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+$REPO_ROOT/src/coordinates/cartesian_ks.hpp:181:5: note: insert an explicit cast to silence this issue
+  181 |     x*r * ( SQR(a)*y + 2.0*a*r*x - SQR(r)*y )/( SQR(qb) * qa ) - a/( qb ),
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |     static_cast<Real>(                                                   )
+$REPO_ROOT/src/coordinates/cartesian_ks.hpp:184:6: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  184 |     {y*r * ( SQR(a)*x - 2.0*a*r*y - SQR(r)*x )/( SQR(qb) * qa ) + a/( qb ),
+      |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+$REPO_ROOT/src/coordinates/cartesian_ks.hpp:184:6: note: insert an explicit cast to silence this issue
+  184 |     {y*r * ( SQR(a)*x - 2.0*a*r*y - SQR(r)*x )/( SQR(qb) * qa ) + a/( qb ),
+      |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |      static_cast<Real>(                                                   )
+$REPO_ROOT/src/coordinates/cartesian_ks.hpp:185:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  185 |     y*r * ( SQR(a)*y + 2.0*a*r*x - SQR(r)*y )/( SQR(qb) * qa ) + r/( qb ),
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+$REPO_ROOT/src/coordinates/cartesian_ks.hpp:185:5: note: insert an explicit cast to silence this issue
+  185 |     y*r * ( SQR(a)*y + 2.0*a*r*x - SQR(r)*y )/( SQR(qb) * qa ) + r/( qb ),
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |     static_cast<Real>(                                                   )
+$REPO_ROOT/src/coordinates/cartesian_ks.hpp:188:6: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  188 |     {z/r * ( SQR(a)*x - 2.0*a*r*y - SQR(r)*x )/( (qb) * qa ),
+      |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+$REPO_ROOT/src/coordinates/cartesian_ks.hpp:188:6: note: insert an explicit cast to silence this issue
+  188 |     {z/r * ( SQR(a)*x - 2.0*a*r*y - SQR(r)*x )/( (qb) * qa ),
+      |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |      static_cast<Real>(                                     )
+$REPO_ROOT/src/coordinates/cartesian_ks.hpp:189:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  189 |     z/r * ( SQR(a)*y + 2.0*a*r*x - SQR(r)*y )/( (qb) * qa ),
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+$REPO_ROOT/src/coordinates/cartesian_ks.hpp:189:5: note: insert an explicit cast to silence this issue
+  189 |     z/r * ( SQR(a)*y + 2.0*a*r*x - SQR(r)*y )/( (qb) * qa ),
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |     static_cast<Real>(                                     )
+$REPO_ROOT/src/coordinates/cartesian_ks.hpp:190:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  190 |     - SQR(z)/(SQR(r)*r) * ( qb )/( qa ) + 1.0/r},
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+$REPO_ROOT/src/coordinates/cartesian_ks.hpp:190:5: note: insert an explicit cast to silence this issue
+  190 |     - SQR(z)/(SQR(r)*r) * ( qb )/( qa ) + 1.0/r},
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |     static_cast<Real>(                         )
+$REPO_ROOT/src/coordinates/cartesian_ks.hpp:219:6: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  219 |     {2.*dH_d[0]*l_d[0] + 2.*H*dl_dd[0][0],
+      |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+$REPO_ROOT/src/coordinates/cartesian_ks.hpp:219:6: note: insert an explicit cast to silence this issue
+  219 |     {2.*dH_d[0]*l_d[0] + 2.*H*dl_dd[0][0],
+      |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |      static_cast<Real>(                  )
+$REPO_ROOT/src/coordinates/cartesian_ks.hpp:220:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  220 |     2.*dH_d[0]*l_d[1] + 2.*H*dl_dd[0][1],
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+$REPO_ROOT/src/coordinates/cartesian_ks.hpp:220:5: note: insert an explicit cast to silence this issue
+  220 |     2.*dH_d[0]*l_d[1] + 2.*H*dl_dd[0][1],
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |     static_cast<Real>(                  )
+$REPO_ROOT/src/coordinates/cartesian_ks.hpp:221:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  221 |     2.*dH_d[0]*l_d[2] + 2.*H*dl_dd[0][2]},
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+$REPO_ROOT/src/coordinates/cartesian_ks.hpp:221:5: note: insert an explicit cast to silence this issue
+  221 |     2.*dH_d[0]*l_d[2] + 2.*H*dl_dd[0][2]},
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |     static_cast<Real>(                  )
+$REPO_ROOT/src/coordinates/cartesian_ks.hpp:223:6: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  223 |     {2.*dH_d[1]*l_d[0] + 2.*H*dl_dd[1][0],
+      |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+$REPO_ROOT/src/coordinates/cartesian_ks.hpp:223:6: note: insert an explicit cast to silence this issue
+  223 |     {2.*dH_d[1]*l_d[0] + 2.*H*dl_dd[1][0],
+      |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |      static_cast<Real>(                  )
+$REPO_ROOT/src/coordinates/cartesian_ks.hpp:224:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  224 |     2.*dH_d[1]*l_d[1] + 2.*H*dl_dd[1][1],
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+$REPO_ROOT/src/coordinates/cartesian_ks.hpp:224:5: note: insert an explicit cast to silence this issue
+  224 |     2.*dH_d[1]*l_d[1] + 2.*H*dl_dd[1][1],
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |     static_cast<Real>(                  )
+$REPO_ROOT/src/coordinates/cartesian_ks.hpp:225:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  225 |     2.*dH_d[1]*l_d[2] + 2.*H*dl_dd[1][2]},
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+$REPO_ROOT/src/coordinates/cartesian_ks.hpp:225:5: note: insert an explicit cast to silence this issue
+  225 |     2.*dH_d[1]*l_d[2] + 2.*H*dl_dd[1][2]},
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |     static_cast<Real>(                  )
+fatal error: too many errors emitted, stopping now [-ferror-limit=]
+20 errors generated.
+make[2]: *** [src/CMakeFiles/athena.dir/bvals/prolong_prims.cpp.o] Error 1
+make[2]: *** Waiting for unfinished jobs....
+make[1]: *** [src/CMakeFiles/athena.dir/all] Error 2
+make: *** [all] Error 2
+build_exit=2

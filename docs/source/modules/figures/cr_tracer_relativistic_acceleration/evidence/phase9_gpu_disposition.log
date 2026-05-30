@@ -1,0 +1,23 @@
+date=2026-05-30
+
+--- workstation backend boundary ---
+host_os=macOS-arm64
+host_processor=Apple-M4-Max
+graphics_api=Metal
+
+--- accelerator toolchain probes ---
+nvcc=NOT_FOUND
+hipcc=NOT_FOUND
+nvidia-smi=NOT_FOUND
+rocminfo=NOT_FOUND
+
+--- accepted Kokkos cache boundary ---
+Kokkos_ENABLE_SERIAL=ON
+Kokkos_ENABLE_CUDA=OFF
+Kokkos_ENABLE_HIP=OFF
+Kokkos_ENABLE_SYCL=OFF
+
+--- disposition ---
+GPU QUALIFIED is not claimed: this workstation exposes Metal graphics but no
+configured CUDA or HIP Kokkos backend and no CUDA or HIP toolchain.
+Accelerator qualification remains an explicit follow-up residual risk.

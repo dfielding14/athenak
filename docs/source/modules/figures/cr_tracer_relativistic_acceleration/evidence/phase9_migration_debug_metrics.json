@@ -1,0 +1,481 @@
+{
+  "binary": "/private/tmp/athenak-cr-phase9-debug/src/athena",
+  "cases": [
+    {
+      "checkpoint_numbers": [
+        0,
+        1
+      ],
+      "created_blocks": 0,
+      "deleted_blocks": 0,
+      "final_rank_counts": [
+        8
+      ],
+      "final_topology_hash": 2955283251572180930,
+      "meshblocks": 1,
+      "name": "serial_single",
+      "root": "serial_single"
+    },
+    {
+      "checkpoint_numbers": [
+        0,
+        1
+      ],
+      "created_blocks": 0,
+      "deleted_blocks": 0,
+      "final_rank_counts": [
+        8
+      ],
+      "final_topology_hash": 13693262057698997051,
+      "meshblocks": 8,
+      "name": "serial_multiblock",
+      "root": "serial_multiblock"
+    },
+    {
+      "checkpoint_numbers": [
+        0,
+        1
+      ],
+      "created_blocks": 0,
+      "deleted_blocks": 0,
+      "final_rank_counts": [
+        8
+      ],
+      "final_topology_hash": 13693262057698997051,
+      "meshblocks": 8,
+      "name": "mpi_1",
+      "root": "mpi_1"
+    },
+    {
+      "checkpoint_numbers": [
+        0,
+        1
+      ],
+      "created_blocks": 0,
+      "deleted_blocks": 0,
+      "final_rank_counts": [
+        5,
+        3
+      ],
+      "final_topology_hash": 16523021084408890907,
+      "meshblocks": 8,
+      "name": "mpi_2",
+      "root": "mpi_2"
+    },
+    {
+      "checkpoint_numbers": [
+        0,
+        1
+      ],
+      "created_blocks": 0,
+      "deleted_blocks": 0,
+      "final_rank_counts": [
+        3,
+        2,
+        2,
+        1
+      ],
+      "final_topology_hash": 5266918667707144667,
+      "meshblocks": 8,
+      "name": "mpi_4",
+      "root": "mpi_4"
+    },
+    {
+      "checkpoint_numbers": [
+        0,
+        1
+      ],
+      "created_blocks": 0,
+      "deleted_blocks": 0,
+      "final_rank_counts": [
+        3,
+        0,
+        1,
+        1,
+        2,
+        0,
+        0,
+        1
+      ],
+      "final_topology_hash": 14996917351198386491,
+      "meshblocks": 8,
+      "name": "mpi_8",
+      "root": "mpi_8"
+    },
+    {
+      "checkpoint_numbers": [
+        0,
+        1
+      ],
+      "created_blocks": 0,
+      "deleted_blocks": 0,
+      "final_rank_counts": [
+        15
+      ],
+      "final_topology_hash": 2459195829332877683,
+      "meshblocks": 64,
+      "name": "serial_fine_uniform_reference",
+      "root": "serial_fine_uniform_reference"
+    },
+    {
+      "checkpoint_numbers": [
+        0,
+        1
+      ],
+      "created_blocks": 0,
+      "deleted_blocks": 0,
+      "final_rank_counts": [
+        15
+      ],
+      "final_topology_hash": 8230683564343660428,
+      "meshblocks": 15,
+      "name": "serial_static_smr",
+      "root": "serial_static_smr"
+    },
+    {
+      "checkpoint_numbers": [
+        0,
+        1
+      ],
+      "created_blocks": 0,
+      "deleted_blocks": 0,
+      "final_rank_counts": [
+        7,
+        7,
+        0,
+        1
+      ],
+      "final_topology_hash": 1945322644811759180,
+      "meshblocks": 15,
+      "name": "mpi_4_static_smr",
+      "root": "mpi_4_static_smr"
+    },
+    {
+      "checkpoint_numbers": [
+        0,
+        1
+      ],
+      "created_blocks": 0,
+      "deleted_blocks": 0,
+      "final_rank_counts": [
+        7,
+        7,
+        0,
+        1
+      ],
+      "final_topology_hash": 1945322644811759180,
+      "meshblocks": 15,
+      "name": "mpi_4_static_smr_host_tree",
+      "root": "mpi_4_static_smr_host_tree"
+    },
+    {
+      "checkpoint_numbers": [
+        0,
+        1
+      ],
+      "created_blocks": 0,
+      "deleted_blocks": 0,
+      "final_rank_counts": [
+        5,
+        0,
+        2,
+        1
+      ],
+      "final_topology_hash": 5769391719176193651,
+      "meshblocks": 64,
+      "name": "mpi_4_adaptive_uniform_reference",
+      "root": "mpi_4_adaptive_uniform_reference"
+    },
+    {
+      "checkpoint_numbers": [
+        0,
+        1
+      ],
+      "created_blocks": 56,
+      "deleted_blocks": 21,
+      "final_rank_counts": [
+        3,
+        2,
+        2,
+        1
+      ],
+      "final_topology_hash": 6437373932178859880,
+      "meshblocks": 8,
+      "name": "mpi_4_adaptive_device_table",
+      "root": "mpi_4_adaptive_device_table"
+    },
+    {
+      "checkpoint_numbers": [
+        0,
+        1
+      ],
+      "created_blocks": 56,
+      "deleted_blocks": 21,
+      "final_rank_counts": [
+        3,
+        2,
+        2,
+        1
+      ],
+      "final_topology_hash": 6437373932178859880,
+      "meshblocks": 8,
+      "name": "mpi_4_adaptive_host_tree",
+      "root": "mpi_4_adaptive_host_tree"
+    },
+    {
+      "checkpoint_numbers": [
+        0,
+        1
+      ],
+      "created_blocks": 70,
+      "deleted_blocks": 42,
+      "final_rank_counts": [
+        5,
+        2,
+        1,
+        0
+      ],
+      "final_topology_hash": 15926086121326311447,
+      "meshblocks": 8,
+      "name": "mpi_4_adaptive_device_table_long_reference",
+      "root": "mpi_4_adaptive_device_table_long_reference"
+    },
+    {
+      "checkpoint_numbers": [
+        1,
+        2
+      ],
+      "created_blocks": 14,
+      "deleted_blocks": 21,
+      "final_rank_counts": [
+        5,
+        2,
+        1,
+        0
+      ],
+      "final_topology_hash": 15926086121326311447,
+      "meshblocks": 43,
+      "name": "mpi_4_adaptive_device_table_continuation_after_amr",
+      "root": "mpi_4_adaptive_device_table_continuation_after_amr"
+    },
+    {
+      "checkpoint_numbers": [
+        0,
+        1
+      ],
+      "created_blocks": 70,
+      "deleted_blocks": 42,
+      "final_rank_counts": [
+        5,
+        2,
+        1,
+        0
+      ],
+      "final_topology_hash": 15926086121326311447,
+      "meshblocks": 8,
+      "name": "mpi_4_adaptive_host_tree_long_reference",
+      "root": "mpi_4_adaptive_host_tree_long_reference"
+    },
+    {
+      "checkpoint_numbers": [
+        1,
+        2
+      ],
+      "created_blocks": 14,
+      "deleted_blocks": 21,
+      "final_rank_counts": [
+        5,
+        2,
+        1,
+        0
+      ],
+      "final_topology_hash": 15926086121326311447,
+      "meshblocks": 43,
+      "name": "mpi_4_adaptive_host_tree_continuation_after_amr",
+      "root": "mpi_4_adaptive_host_tree_continuation_after_amr"
+    },
+    {
+      "checkpoint_numbers": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "created_blocks": 0,
+      "deleted_blocks": 0,
+      "final_rank_counts": [
+        3,
+        2,
+        2,
+        1
+      ],
+      "final_topology_hash": 5266918667707144667,
+      "meshblocks": 8,
+      "name": "mpi_4_continuation_source",
+      "root": "mpi_4_continuation_source"
+    },
+    {
+      "checkpoint_numbers": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "created_blocks": 0,
+      "deleted_blocks": 0,
+      "final_rank_counts": [
+        3,
+        2,
+        2,
+        1
+      ],
+      "final_topology_hash": 5266918667707144667,
+      "meshblocks": 8,
+      "name": "mpi_4_long_reference",
+      "root": "mpi_4_long_reference"
+    },
+    {
+      "checkpoint_numbers": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "created_blocks": 0,
+      "deleted_blocks": 0,
+      "final_rank_counts": [
+        3,
+        2,
+        2,
+        1
+      ],
+      "final_topology_hash": 5266918667707144667,
+      "meshblocks": 8,
+      "name": "mpi_4_continuation_before_migration",
+      "root": "mpi_4_continuation_before_migration"
+    },
+    {
+      "checkpoint_numbers": [
+        4,
+        5
+      ],
+      "created_blocks": 0,
+      "deleted_blocks": 0,
+      "final_rank_counts": [
+        3,
+        2,
+        2,
+        1
+      ],
+      "final_topology_hash": 5266918667707144667,
+      "meshblocks": 8,
+      "name": "mpi_4_continuation_after_migration",
+      "root": "mpi_4_continuation_after_migration"
+    }
+  ],
+  "criteria": {
+    "count": 62,
+    "path": "$REPO_ROOT/docs/source/modules/figures/cr_tracer_relativistic_acceleration/cr_relativistic_phase8_preregistered_criteria.json",
+    "sha256": "add2ab12fbaf7f669e8e4eecc9e8f9cb0d581f06947c7e39876f934239708b74",
+    "status": "PASS"
+  },
+  "input": "$REPO_ROOT/inputs/unit_tests/cr_relativistic_migration_runtime.athinput",
+  "metrics": {
+    "adaptive_device_created_blocks": 56,
+    "adaptive_device_deleted_blocks": 21,
+    "adaptive_device_off_rank_remap_sent": 2,
+    "adaptive_device_uniform_reference_max_real_error": 0.0,
+    "adaptive_host_created_blocks": 56,
+    "adaptive_host_deleted_blocks": 21,
+    "adaptive_host_off_rank_remap_sent": 2,
+    "adaptive_host_uniform_reference_max_real_error": 0.0,
+    "adaptive_identity_preserved": true,
+    "adaptive_mpi_rank_count": 4,
+    "adaptive_off_rank_remap_modes_exercised": 2,
+    "adaptive_remap_mode_max_real_error": 0.0,
+    "adaptive_remap_modes_exercised": 2,
+    "adaptive_restart_after_amr_comparisons": 2,
+    "adaptive_restart_after_amr_identity_equal": true,
+    "adaptive_restart_after_amr_max_real_error": 0.0,
+    "adaptive_uniform_reference_comparisons": 2,
+    "adaptive_uniform_reference_identity_equal": true,
+    "all_checkpoint_identity_exact": true,
+    "all_checkpoint_reals_finite": true,
+    "continuation_after_migration_identity_equal": true,
+    "continuation_after_migration_max_real_error": 0.0,
+    "continuation_after_schedule_length": 2,
+    "continuation_before_migration_identity_equal": true,
+    "continuation_before_migration_max_real_error": 0.0,
+    "continuation_before_schedule_length": 8,
+    "continuation_before_source_owner_change_count": 6,
+    "continuation_long_schedule_length": 8,
+    "continuation_phase_count": 2,
+    "continuation_same_rank_count": true,
+    "continuation_same_topology_hash": true,
+    "continuation_source_schedule_length": 6,
+    "expected_particle_identity_count": 8,
+    "inspected_checkpoint_count": 51,
+    "mhd_ideal_amr_rejected": true,
+    "mhd_ideal_mpi_rejected": true,
+    "mhd_ideal_multiblock_rejected": true,
+    "mhd_ideal_smr_rejected": true,
+    "mpi_identity_preserved": true,
+    "mpi_rank8_empty_particle_rank_count": 3,
+    "mpi_rank_ladder_exact": true,
+    "mpi_rank_ladder_max_real_error": 0.0,
+    "periodic_wrap_particle_count": 6,
+    "prescribed_momentum_change_count": 8,
+    "prescribed_nonperiodic_rejected": true,
+    "prescribed_nonzero_field_component_count": 4,
+    "prescribed_nonzero_work_count": 8,
+    "prescribed_sampled_field_max_real_error": 0.0,
+    "rank_count_change_restart_diagnostic_exact": true,
+    "rank_count_change_restart_rejected": true,
+    "retained_runtime_negative_control_count": 5,
+    "serial_multiblock_owner_change_count": 6,
+    "serial_single_multiblock_identity_equal": true,
+    "serial_single_multiblock_max_real_error": 0.0,
+    "static_smr_cross_level_transition_count": 1,
+    "static_smr_has_more_meshblocks_than_uniform": true,
+    "static_smr_host_tree_cross_level_transition_count": 1,
+    "static_smr_host_tree_mpi_exchange_sent": 7,
+    "static_smr_host_tree_mpi_identity_equal": true,
+    "static_smr_host_tree_mpi_max_real_error": 0.0,
+    "static_smr_host_tree_mpi_multilevel_lookup_exercised": true,
+    "static_smr_identity_equal": true,
+    "static_smr_mpi_exchange_sent": 7,
+    "static_smr_mpi_identity_equal": true,
+    "static_smr_mpi_max_real_error": 0.0,
+    "static_smr_mpi_multilevel_lookup_exercised": true,
+    "static_smr_mpi_rank_count": 4,
+    "static_smr_uniform_field_max_real_error": 0.0,
+    "temporary_case_directories_isolated": true,
+    "typed_v2_real_field_count": 22
+  },
+  "mpi_binary": "/private/tmp/athenak-cr-phase9-mpi-debug/src/athena",
+  "provenance": {
+    "binary_sha256": "ac6ef31d0a0172adefe94e109452ce54315d7a10f184bbdddcf76821e0408909",
+    "criteria_sha256": "add2ab12fbaf7f669e8e4eecc9e8f9cb0d581f06947c7e39876f934239708b74",
+    "input_sha256": "b88971f10608614b67b55134647a76f4384b001c8232054eae0a7798223a4c7b",
+    "mpi_binary_sha256": "6c32dcbdad7f7437ca5bf56210eed2fa8ccb13df652ff5ecc54eb220f4b89b87",
+    "script_sha256": "911de18099bb47759f469a8967c466df0bafb0aa4bf987632958aabf2f495af1",
+    "source_head": "aa8663e8a5d49e26c206363d028b52d0e350a91f"
+  },
+  "qualification": "cr_relativistic_migration_runtime_phase8",
+  "rank_count_change_rejection": {
+    "expected_diagnostic": "typed-v2 restart rejects MPI rank-count change",
+    "observed_diagnostic": "typed-v2 restart rejects MPI rank-count change"
+  },
+  "retained_runtime_negative_controls": {
+    "mhd_ideal_amr_rejection": "relativistic_field_source = mhd_ideal currently requires a serial uniform-level mesh; MPI, SMR, and AMR remain closed until qualification",
+    "mhd_ideal_mpi_rejection": "relativistic_field_source = mhd_ideal currently requires a serial uniform-level mesh; MPI, SMR, and AMR remain closed until qualification",
+    "mhd_ideal_multiblock_rejection": "relativistic_field_source = mhd_ideal currently requires exactly one MeshBlock",
+    "mhd_ideal_smr_rejection": "relativistic_field_source = mhd_ideal currently requires a serial uniform-level mesh; MPI, SMR, and AMR remain closed until qualification",
+    "prescribed_nonperiodic": "Particle pusher 'relativistic_hc' currently requires a 3D strictly periodic mesh"
+  },
+  "schema_version": 1,
+  "status": "PASS"
+}

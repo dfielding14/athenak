@@ -1,0 +1,64 @@
+
+=== mutation: tight ===
+Traceback (most recent call last):
+  File "$REPO_ROOT/scripts/particles/cr_relativistic_coupled_runtime_inspect.py", line 531, in <module>
+    main()
+    ~~~~^^
+  File "$REPO_ROOT/scripts/particles/cr_relativistic_coupled_runtime_inspect.py", line 523, in main
+    _validate_criteria(args.criteria, metrics)
+    ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "$REPO_ROOT/scripts/particles/cr_relativistic_coupled_runtime_inspect.py", line 252, in _validate_criteria
+    raise RuntimeError(
+        f"{item['id']} failed: {item['metric']}={actual} "
+        f"{operator} {limit} is false")
+RuntimeError: P4B-14 failed: midpoint_live_sampling_field_error=3.469446951953614e-17 <= -1.0 is false
+exit_code=1
+
+=== mutation: missing ===
+Traceback (most recent call last):
+  File "$REPO_ROOT/scripts/particles/cr_relativistic_coupled_runtime_inspect.py", line 531, in <module>
+    main()
+    ~~~~^^
+  File "$REPO_ROOT/scripts/particles/cr_relativistic_coupled_runtime_inspect.py", line 523, in main
+    _validate_criteria(args.criteria, metrics)
+    ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "$REPO_ROOT/scripts/particles/cr_relativistic_coupled_runtime_inspect.py", line 241, in _validate_criteria
+    raise RuntimeError(
+        f"criteria completeness mismatch: unbound={sorted(emitted - registered)}, "
+        f"missing={sorted(registered - emitted)}")
+RuntimeError: criteria completeness mismatch: unbound=['production_failure_probe_count'], missing=[]
+exit_code=1
+
+=== mutation: source-drift ===
+Traceback (most recent call last):
+  File "$REPO_ROOT/scripts/particles/cr_relativistic_coupled_runtime_inspect.py", line 531, in <module>
+    main()
+    ~~~~^^
+  File "$REPO_ROOT/scripts/particles/cr_relativistic_coupled_runtime_inspect.py", line 523, in main
+    _validate_criteria(args.criteria, metrics)
+    ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "$REPO_ROOT/scripts/particles/cr_relativistic_coupled_runtime_inspect.py", line 252, in _validate_criteria
+    raise RuntimeError(
+        f"{item['id']} failed: {item['metric']}={actual} "
+        f"{operator} {limit} is false")
+RuntimeError: P4B-R03 failed: manufactured_temporal_convergence_slope=-0.0462091897886505 >= 0.75 is false
+exit_code=1
+
+=== mutation: right-end ===
+Traceback (most recent call last):
+  File "$REPO_ROOT/scripts/particles/cr_relativistic_coupled_runtime_inspect.py", line 531, in <module>
+    main()
+    ~~~~^^
+  File "$REPO_ROOT/scripts/particles/cr_relativistic_coupled_runtime_inspect.py", line 450, in main
+    metrics["manufactured_one_step_tn_sampled_ce_error"] = _near(
+                                                           ~~~~~^
+        _ce(manufactured_one_step), manufactured_oracle_ce, 2.0e-13,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        "manufactured one-step frozen-t^n sampled cE")
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "$REPO_ROOT/scripts/particles/cr_relativistic_coupled_runtime_inspect.py", line 78, in _near
+    raise RuntimeError(f"{label}: error={error:.6e}, tolerance={tolerance:.6e}")
+RuntimeError: manufactured one-step frozen-t^n sampled cE: error=3.590265e-03, tolerance=2.000000e-13
+exit_code=1
+
+mutation negative controls rejected as expected

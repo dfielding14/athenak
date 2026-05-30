@@ -1,0 +1,13 @@
+{
+  "rejected_mutation_count": 8,
+  "rejections": {
+    "ceil_exact_ratio": "ceiling helper no longer preserves exact integer ratios",
+    "drop_cap_preflight": "relativistic cap preflight is missing before the first drift",
+    "drop_checked_multiplication": "relativistic electric bound lost checked multiplication",
+    "drop_gamma_floor": "gyro schedule no longer uses the conservative momentum floor",
+    "drop_midpoint_regather": "relativistic coupled fields are not re-gathered in each substep",
+    "drop_post_integrator_refresh": "post-integrator relativistic refresh hook is missing",
+    "refresh_during_initialization": "coupled initialization refreshes before driver boundary fill",
+    "refresh_inside_push": "push recomputes relativistic dtnew before final exchange"
+  }
+}

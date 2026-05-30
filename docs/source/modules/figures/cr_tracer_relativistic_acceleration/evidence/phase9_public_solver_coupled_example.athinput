@@ -1,0 +1,63 @@
+# Public-documentation solver-coupled relativistic CR smoke input
+
+<job>
+basename  = cr_relativistic_public_example
+
+<mesh>
+nghost    = 2
+nx1       = 8
+x1min     = -1.0
+x1max     = 1.0
+ix1_bc    = periodic
+ox1_bc    = periodic
+nx2       = 8
+x2min     = -1.0
+x2max     = 1.0
+ix2_bc    = periodic
+ox2_bc    = periodic
+nx3       = 8
+x3min     = -1.0
+x3max     = 1.0
+ix3_bc    = periodic
+ox3_bc    = periodic
+
+<meshblock>
+nx1       = 8
+nx2       = 8
+nx3       = 8
+
+<time>
+evolution  = dynamic
+integrator = rk2
+cfl_number = 0.2
+nlim       = 1
+tlim       = 0.05
+ndiag      = 1
+
+<mhd>
+eos         = ideal
+reconstruct = plm
+rsolver     = hlld
+gamma       = 1.666666667
+
+<particles>
+particle_type                  = cosmic_ray
+pusher                         = relativistic_hc
+interpolation                  = trilinear
+relativistic_field_source      = mhd_ideal
+relativistic_temporal_sampling = frozen_tn
+nspecies                       = 1
+ppc                            = 0.001953125
+c_model                        = 1.0
+alpha_s                        = 1.0
+
+<problem>
+pgen_name                  = part_random
+B0x                        = 1.0
+B0y                        = 0.0
+B0z                        = 0.0
+particle_velocity          = uniform
+relativistic_initial_state = velocity
+v0x                        = 0.0
+v0y                        = 0.1
+v0z                        = 0.0

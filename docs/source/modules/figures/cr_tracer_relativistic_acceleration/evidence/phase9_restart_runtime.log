@@ -1,0 +1,8 @@
+CR relativistic Phase-6 runtime qualification PASS
+  paired typed-v2 source checkpoints inspected: 2
+  continuation comparison: checkpoint 00000 -> 00001, decoded state equal and particle shard byte-identical
+  copied-artifact negative controls rejected: 13
+  inspector negative controls rejected: 1
+  preregistered criteria passed: 21
+  JSON report: docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase9_restart_runtime_metrics.json
+  preserved runtime cases: /private/tmp/cr-rel-phase9-restart

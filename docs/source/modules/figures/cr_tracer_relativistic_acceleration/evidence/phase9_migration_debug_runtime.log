@@ -1,0 +1,6 @@
+cr_relativistic_migration_runtime_phase8 PASS
+  frozen criteria validated: 62
+  runtime cases inspected: 21
+  preregistered criteria passed: 62
+  JSON report: docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase9_migration_debug_metrics.json
+  preserved runtime cases: /private/tmp/cr-rel-phase9-migration-debug
