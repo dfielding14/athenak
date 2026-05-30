@@ -343,21 +343,21 @@ class PicPreregistrationTests(unittest.TestCase):
             READINESS_DIR
             / "q027_frontier_f1_registered_science_successor_candidate_2026-05-30.json"
         )
+        f2 = _load(
+            READINESS_DIR
+            / "q027_frontier_f2_multirank_runtime_metadata_candidate_2026-05-30.json"
+        )["accepted_v2_execution"]
         self.assertEqual(
             bundle["status"],
             "frozen_pending_external_review_not_claim_qualified",
         )
         self.assertEqual(
             bundle["current_active_policy_sha256"],
-            successor["coupling_v2_submission_artifact_scrub_transition"][
-                "active_policy_sha256"
-            ],
+            f2["active_policy_sha256"],
         )
         self.assertEqual(
             bundle["current_active_promotion_sha256"],
-            successor["coupling_v2_submission_artifact_scrub_transition"][
-                "active_promotion_sha256"
-            ],
+            f2["active_promotion_sha256"],
         )
         expected = {
             execution["registered_science_authorization_id"]: (

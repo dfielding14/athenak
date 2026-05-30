@@ -715,7 +715,7 @@
     {
       "analyzer_id": "Q023-ANALYZER-PVTK-READER",
       "path": "tst/publication/pvtk_particles.py",
-      "sha256": "feb99ddb8ef68fceec14c9b24829b58aec97c65c36fae6b5922f8799441dad0d",
+      "sha256": "adaa48ceafc7806a921b78001cf73ace6a4f6014a051826a2b3a8123d57b4413",
       "qualification_limit": "shared_particle_output_reader_only"
     },
     {
