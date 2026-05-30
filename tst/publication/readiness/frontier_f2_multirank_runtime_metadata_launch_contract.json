@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "executor": "trusted_trampoline_athena_argv_v1",
+  "pre_actions": [],
+  "actions": [
+    {
+      "action_id": "f2-runtime-metadata",
+      "kind": "athena",
+      "resources": {
+        "nodes": 1,
+        "tasks": 8,
+        "cpus_per_task": 7,
+        "gpus_per_task": 1,
+        "gpu_bind": "closest"
+      },
+      "arguments": [
+        {
+          "literal": "-i"
+        },
+        {
+          "snapshot_role": "input-deck"
+        },
+        {
+          "literal": "job/basename=f2_multirank_runtime_metadata"
+        },
+        {
+          "literal": "mesh/nx1=8"
+        },
+        {
+          "literal": "mesh/nx2=8"
+        },
+        {
+          "literal": "mesh/nx3=8"
+        },
+        {
+          "literal": "time/nlim=1"
+        }
+      ],
+      "stdout_artifact": "athena_stdout.txt",
+      "stderr_artifact": "athena_stderr.txt"
+    }
+  ],
+  "post_actions": [
+    {
+      "action_id": "require-runtime-metadata-stdout",
+      "kind": "artifact_nonempty",
+      "artifact": "athena_stdout.txt"
+    },
+    {
+      "action_id": "sha-runtime-metadata-stdout",
+      "kind": "artifact_sha256",
+      "artifact": "athena_stdout.txt",
+      "output_artifact": "athena_stdout.sha256"
+    }
+  ]
+}

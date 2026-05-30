@@ -1,0 +1,125 @@
+#!/usr/bin/env python3
+"""Regression tests for the structured Frontier F2 runtime-metadata analyzer."""
+
+from __future__ import annotations
+
+import tempfile
+from pathlib import Path
+import sys
+import unittest
+
+PUBLICATION_DIR = Path(__file__).resolve().parent
+CONTROL_PLANE_DIR = PUBLICATION_DIR / "frontier_control_plane"
+sys.path.insert(0, str(PUBLICATION_DIR))
+sys.path.insert(0, str(CONTROL_PLANE_DIR))
+
+from control_plane_common import PRODUCTION_RUNTIME_LOADED_MODULES
+from control_plane_common import PRODUCTION_RUNTIME_MODULEFILES
+from control_plane_common import PRODUCTION_RUNTIME_MODULEPATH
+from frontier_f0_structured_smoke_analysis import EXPECTED_BASELINE
+from frontier_f0_structured_smoke_analysis import RUNTIME_ALLOWLIST_KEYS
+from frontier_f2_multirank_runtime_metadata_analysis import analyze
+
+
+class FrontierF2MultirankRuntimeMetadataAnalysisTests(unittest.TestCase):
+    def _artifacts(self, root: Path) -> None:
+        values = {
+            **{key: "<unset>" for key in RUNTIME_ALLOWLIST_KEYS},
+            **EXPECTED_BASELINE,
+            "LOADEDMODULES": ":".join(PRODUCTION_RUNTIME_LOADED_MODULES),
+            "_LMFILES_": ":".join(PRODUCTION_RUNTIME_MODULEFILES),
+            "MODULEPATH": PRODUCTION_RUNTIME_MODULEPATH,
+        }
+        allowlist = root / "f2-runtime-metadata.environment.allowlist.txt"
+        allowlist.write_text(
+            "".join(f"{key}={values[key]}\n" for key in RUNTIME_ALLOWLIST_KEYS),
+            encoding="utf-8",
+        )
+        allowlist.chmod(0o400)
+        preflight = "".join(
+            "PIC trusted GPU launch: "
+            f"rank={rank} host=frontier00001 ROCR_VISIBLE_DEVICES={rank} "
+            "linkage=libamdhip64,libmpi_amd,libmpi_gtl_hsa\n"
+            for rank in range(8)
+        )
+        runtime = (
+            "Number of parallel ranks = 8\n"
+            "PIC runtime model: physical_mode=extended_mhd_pic state=momentum_p_over_m "
+            "C=3 background=coupled feedback=coupled induction=ideal_mhd_only "
+            "deposition=tsc deltaf=off deltaf_adapt=off deltaf_adapt_interval=0 "
+            "expanding_box=off expansion_law=linear wave_damping=off nu_in=0 "
+            "lb_cost_per_particle=0 max_cell_cross=2 theta_max=0.3 restart_schema=7\n"
+        )
+        (root / "athena_stdout.txt").write_text(preflight + runtime, encoding="utf-8")
+        (root / "athena_stderr.txt").write_text("reviewed MPICH diagnostics\n", encoding="utf-8")
+
+    def test_multirank_runtime_metadata_passes(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self._artifacts(root)
+            result = analyze(root)
+            self.assertEqual(result["status"], "pass")
+            self.assertEqual(result["parallel_ranks"], 8)
+            self.assertEqual(result["hosts"], ["frontier00001"])
+            self.assertEqual(
+                [binding["rocr_visible_device"] for binding in result["rank_gpu_bindings"]],
+                list(range(8)),
+            )
+
+    def test_multirank_runtime_metadata_rejects_rank_drift(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self._artifacts(root)
+            stdout = root / "athena_stdout.txt"
+            stdout.write_text(
+                stdout.read_text(encoding="utf-8").replace("rank=7 ", "rank=6 ", 1),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "exactly ranks 0 through 7"):
+                analyze(root)
+
+    def test_multirank_runtime_metadata_rejects_gpu_alias(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self._artifacts(root)
+            stdout = root / "athena_stdout.txt"
+            stdout.write_text(
+                stdout.read_text(encoding="utf-8").replace(
+                    "ROCR_VISIBLE_DEVICES=7", "ROCR_VISIBLE_DEVICES=0", 1
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "exactly devices 0 through 7"):
+                analyze(root)
+
+    def test_multirank_runtime_metadata_rejects_multinode_drift(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self._artifacts(root)
+            stdout = root / "athena_stdout.txt"
+            stdout.write_text(
+                stdout.read_text(encoding="utf-8").replace(
+                    "rank=7 host=frontier00001", "rank=7 host=frontier00002", 1
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "one Frontier node"):
+                analyze(root)
+
+    def test_multirank_runtime_metadata_rejects_runtime_model_drift(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self._artifacts(root)
+            stdout = root / "athena_stdout.txt"
+            stdout.write_text(
+                stdout.read_text(encoding="utf-8").replace(
+                    "background=coupled", "background=passive_mhd", 1
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "missing expected tokens"):
+                analyze(root)
+
+
+if __name__ == "__main__":
+    unittest.main()
