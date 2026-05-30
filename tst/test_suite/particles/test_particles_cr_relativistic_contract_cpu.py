@@ -424,13 +424,16 @@ def test_relativistic_hc_rejects_deferred_fractional_subcycle_scales_cpu(
     _assert_fatal(result, "separately reviewed nonsingular near-rest scale")
 
 
-def test_relativistic_hc_rejects_multilevel_mesh_cpu(tmp_path):
-    """SMR and AMR remain closed until relativistic migration is qualified."""
+def test_relativistic_hc_prescribed_accepts_static_smr_cpu(tmp_path):
+    """Phase-8 migration qualification opens prescribed-test multilevel meshes."""
     result = _run_relativistic(
         tmp_path,
-        append_text=("\n<mesh_refinement>\nrefinement = adaptive\n"
-                     "num_levels = 2\nmax_nmb_per_rank = 16\n"))
-    _assert_fatal(result, "serial uniform-level mesh")
+        append_text=("\n<mesh_refinement>\nrefinement = static\n"
+                     "\n<refined_region1>\nlevel = 1\n"
+                     "x1min = -0.1\nx1max = 0.1\n"
+                     "x2min = -0.1\nx2max = 0.1\n"
+                     "x3min = -0.1\nx3max = 0.1\n"))
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 def test_relativistic_hc_rejects_gather_diagnostic_escape_for_normal_pgen_cpu(

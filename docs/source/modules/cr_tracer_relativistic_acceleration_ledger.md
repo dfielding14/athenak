@@ -4011,3 +4011,294 @@ before the fixes are accepted.
 - Residual boundary:
   - MPI, block migration, SMR, AMR, and changed-rank restart policy remain
     closed until the separately preregistered Phase-8 gate passes.
+
+## DR-052: Phase-8 Narrow Migration Qualification Opening
+
+- Date: 2026-05-30
+- Status: qualification replay pending
+- Selected choices:
+  - preserve the serial uniform-level fence for
+    `relativistic_field_source=mhd_ideal`;
+  - remove that parent fence only from the prescribed-test path so the frozen
+    Phase-8 oracle can exercise generic particle migration, MPI exchange, SMR,
+    adaptive AMR remap, periodic wrapping, and momentum evolution;
+  - preserve the typed-v2 changed-rank restart rejection policy and report its
+    exact diagnostic before evaluating the derived topology hash.
+- Evidence before edit:
+  - frozen `57`-criterion Phase-8 registration validates with SHA-256
+    `c11ee798522629e4cc4aa14af3c45bf3df730d84a1eb4f114609651c1d75c645`;
+  - `14` Phase-8 oracle mutation controls reject;
+  - pre-fence smoke confirms one-block and multiblock serial parity, owner
+    changes, periodic wraps, expected MPI/SMR/AMR fences, and the preempted
+    changed-rank diagnostic.
+- Alternatives rejected:
+  - opening solver-coupled `mhd_ideal` migration in the same edit would combine
+    generic transport qualification with live-grid coupling scope;
+  - adding special migration code before the existing generic loops fail would
+    widen the patch without evidence.
+- Required review surfaces:
+  - inspect `src/bvals/bvals_part.cpp`, `src/mesh/mesh_refinement.cpp`, and
+    `Particles::RemapAfterAMR()` even if the generic record loops already cover
+    the appended relativistic fields.
+- Inflection point:
+  - stop if the frozen runtime oracle exposes state drift, stale appended
+    fields, missing off-rank witnesses, or changed-rank diagnostic ambiguity.
+
+## DR-053: Phase-8 Static-SMR Oracle Population Correction
+
+- Date: 2026-05-30
+- Status: corrected qualifier replay pending
+- First post-fence qualifier HOLD:
+  - the static-SMR fixture requested `8 / (15 * 512)` particles per cell;
+  - serial initialization truncated once and created `8` particles, while the
+    four MPI packs truncated independently across `3 + 4 + 4 + 4` leaf blocks
+    and created only `7`;
+  - the qualifier therefore rejected the MPI static-SMR case before comparing
+    transport state.
+- Corrected choice:
+  - keep the preregistered base, adaptive, continuation, and empty-rank ladders
+    at `8` particles;
+  - give the static-SMR and matching fine-uniform reference leg a separate
+    deterministic `15`-particle identity set using one particle per static-SMR
+    leaf block, which is exactly additive across serial and four MPI packs.
+- Alternative rejected:
+  - weakening identity checks or accepting a seven-particle MPI artifact would
+    hide fixture decomposition drift instead of testing migration.
+- Frozen-criteria disposition:
+  - retain the registered `57` acceptance criteria unchanged; the correction
+    repairs the oracle population used to evaluate the existing static-SMR
+    parity criteria.
+- Inflection point:
+  - rerun the complete Phase-8 qualifier and stop again if any physical-state
+    comparison, exchange witness, adaptive remap witness, or restart policy
+    assertion fails.
+
+## DR-054: Phase-8 Adaptive Oracle Timestep Correction
+
+- Date: 2026-05-30
+- Status: corrected qualifier replay pending
+- Second post-fence qualifier HOLD:
+  - the adaptive fixture capped `tlim` below the default relativistic outer
+    timestep bound, so it completed one outer step;
+  - the moving-box oracle refined after that step but could not execute a
+    second refinement pass to witness derefinement.
+- Corrected choice:
+  - retain the registered three-cycle adaptive oracle;
+  - give the adaptive legs and their matching fine-uniform reference the same
+    fixture-local `subcycle_max_steps=4` and
+    `subcycle_gyro_fraction=0.0005`;
+  - this makes the gyro-limited outer timestep smaller than the finest-cell
+    crossing bound while exercising real relativistic subcycling.
+- Alternatives rejected:
+  - a production-only timestep override would widen runtime semantics solely
+    for the qualification fixture;
+  - staging an AMR restart continuation would add checkpoint orchestration
+    when the existing outer-bound contract can express the required schedule;
+  - allowing adaptive and fine-uniform legs to take different outer steps
+    would weaken their physical-state comparison.
+- Frozen-criteria disposition:
+  - retain the registered `57` acceptance criteria unchanged; this repairs the
+    execution schedule used to evaluate the existing adaptive AMR criteria.
+- Inflection point:
+  - rerun the complete Phase-8 qualifier and stop if AMR churn, off-rank remap,
+    physical-state parity, or restart policy evidence fails.
+
+## DR-055: Phase-8 Continuation Reference Schedule Correction
+
+- Date: 2026-05-30
+- Status: corrected qualifier replay pending
+- Third post-fence qualifier HOLD:
+  - the first continuation oracle compared an uninterrupted `tlim=0.8` run
+    taking one outer step with a restarted path taking `0.6 + 0.2`;
+  - the resulting small state difference was expected integrator partition
+    sensitivity, not evidence that typed-v2 restart restoration lost state.
+- Corrected choice:
+  - add a dedicated MPI-4 continuation source instead of overloading the rank
+    ladder;
+  - apply fixture-local `subcycle_max_steps=4` and
+    `subcycle_cell_fraction=0.4` to source, uninterrupted reference, and both
+    restart continuations so they all advance through the same `0.1` outer
+    steps;
+  - retain the post-migration restart source, exact typed-v2 inspection, owner
+    migration assertion, same-rank policy, and topology-hash equality checks.
+- Alternatives rejected:
+  - loosening the state tolerance would conceal an invalid reference schedule;
+  - requiring the relativistic integrator to be invariant under arbitrary
+    outer-step repartitioning would test a stronger and unrelated property;
+  - changing production restart state solely for this mismatch would patch
+    code before demonstrating a code defect.
+- Frozen-criteria disposition:
+  - retain the registered `57` acceptance criteria unchanged; the dedicated
+    split reference repairs the schedule used to evaluate restart parity.
+- Inflection point:
+  - rerun the complete Phase-8 qualifier and stop if the schedule-matched
+    post-migration restart path differs from its uninterrupted reference.
+
+## DR-056: Phase-8 Narrow MHD-Ideal Fence Diagnostic Update
+
+- Date: 2026-05-30
+- Status: corrected qualifier replay pending
+- Fourth post-fence qualifier HOLD:
+  - the retained `mhd_ideal` MPI negative control rejected correctly, but its
+    expected-diagnostic list still named only the removed parent fence and the
+    older one-MeshBlock restriction;
+  - the narrowed production fence now reports that `mhd_ideal` requires a
+    serial uniform-level mesh.
+- Corrected choice:
+  - add the exact narrowed `mhd_ideal` runtime-fence diagnostic to the retained
+    negative-control allow-list;
+  - preserve the historical parent-fence and one-MeshBlock diagnostics so the
+    pre-fence and constructor-level rejection paths remain inspectable.
+- Alternative rejected:
+  - matching a broad substring such as `currently requires` would stop binding
+    the intentional scope boundary expressed by the diagnostic.
+- Frozen-criteria disposition:
+  - retain the registered `57` acceptance criteria unchanged; the production
+    rejection was correct and only its expected text contract lagged.
+- Inflection point:
+  - rerun the complete Phase-8 qualifier and stop if any retained negative
+    control unexpectedly executes or reports an unrecognized scope boundary.
+
+## DR-057: Phase-8 Parser Contract Multilevel Opening
+
+- Date: 2026-05-30
+- Status: corrected regression replay pending
+- Post-qualification regression HOLD:
+  - the parser suite still required every prescribed-test relativistic
+    multilevel constructor to reject with the removed parent-fence diagnostic;
+  - after the intentional Phase-8 opening, its incomplete adaptive fixture
+    proceeded far enough to fail for a missing AMR criterion instead.
+- Corrected choice:
+  - replace that obsolete rejection with a valid constructor-level static-SMR
+    acceptance case for `relativistic_field_source=prescribed_test`;
+  - retain the separate solver-coupled `mhd_ideal` multilevel rejection test
+    unchanged.
+- Alternative rejected:
+  - preserving the old rejection would contradict the qualified MPI, SMR, and
+    AMR migration scope;
+  - accepting an unrelated missing-criterion failure would make the parser
+    suite pass for the wrong reason.
+- Inflection point:
+  - replay the parser contract and broader legacy regressions before recording
+    `RG-009`.
+
+## DR-058: Phase-8 Evidence-Adversary Strengthening
+
+- Date: 2026-05-30
+- Status: strengthened qualifier replay pending
+- Independent evidence-adversary `HOLD` findings:
+  - the first passing qualifier restarted after same-level MPI migration but
+    did not restart after adaptive refinement and derefinement;
+  - continuation schedules were not parsed and allowed floating-point
+    cleanup cycles near zero timestep;
+  - AMR churn parsing scanned setup output as well as runtime output;
+  - static-SMR multilevel lookup was inferred from hierarchy plus traffic
+    instead of an explicit source-to-destination refinement-level transition;
+  - the passing package was not yet sealed with durable replay artifacts and
+    SHA-256 provenance.
+- Corrected choices:
+  - add schedule-matched adaptive restart continuations after AMR churn for
+    both `device_table` and `host_tree`;
+  - stop the same-level continuation fixtures by exact cycle count, parse the
+    intended positive-timestep schedule, and reject near-zero cleanup cycles;
+  - accept create/delete churn only after the setup-complete marker;
+  - add a diagnostic-only `particle_multilevel_lookup` performance counter
+    that counts actual old-level versus destination-level transitions in both
+    multilevel lookup implementations and bind `P8-20` to it;
+  - add binary, MPI binary, input, criteria, script, and source-HEAD digests to
+    the runtime report, then create a durable Phase-8 seal after replay.
+- Alternatives rejected:
+  - inferring cross-level behavior from MPI sends could pass for same-level
+    movement inside an SMR hierarchy;
+  - weakening restart tolerances would conceal reference-schedule defects;
+  - preserving temporary paths as the only replay evidence would make the
+    qualification package non-durable.
+- Frozen-criteria disposition:
+  - retain the registered `57` acceptance criteria unchanged; the new checks
+    strengthen witnesses and add defense-in-depth metrics without weakening a
+    threshold.
+- Inflection point:
+  - rebuild, replay the strengthened qualifier and mutation controls, archive
+    durable evidence, and require a fresh evidence-adversary recheck before
+    recording `CP-6` and `RG-009`.
+
+## DR-059: Phase-8 Cycle-Parser Token Grammar Correction
+
+- Date: 2026-05-30
+- Status: corrected qualifier replay pending
+- Strengthened-qualifier HOLD:
+  - the new cycle-schedule regular expression used a literal-space exclusion,
+    so its timestep capture consumed a newline and the next `Particle` token;
+  - static-SMR cross-level evidence and adaptive restart-after-AMR legs had
+    already executed successfully before this parser stop.
+- Corrected choice:
+  - parse elapsed, time, and timestep values as non-whitespace tokens.
+- Alternative rejected:
+  - trimming the captured value after a permissive match would keep accepting
+    malformed schedule lines.
+- Inflection point:
+  - rerun script syntax, mutation controls, and the complete strengthened
+    Phase-8 qualifier.
+
+## DR-060: Phase-8 Diagnostic Isolation and Host-Tree Witness Amendment
+
+- Date: 2026-05-30
+- Status: corrected qualifier replay and fresh source rebound passed
+- Fresh source-rebound `HOLD` findings:
+  - the first cross-level counter allocated and copied the diagnostic level
+    table and dereferenced source levels even when performance logging was
+    disabled;
+  - the device-table static-SMR fixture asserted a cross-level transition, but
+    the host-tree implementation was only exercised indirectly by adaptive
+    continuations.
+- Corrected choices:
+  - allocate the device level table and read source levels only when
+    `particles/log_performance=true`;
+  - validate source GID ranges before diagnostic source-level lookups in both
+    the device-table and host-tree implementations;
+  - add a dedicated MPI-4 static-SMR `host_tree` fixture with exact identity,
+    field-parity, off-rank-send, and cross-level-transition assertions;
+  - amend the registered criteria from `57` to `62` checks and add a mutation
+    control that must reject loss of the host-tree transition count.
+- Alternatives rejected:
+  - leaving the counter active outside diagnostics would impose qualification
+    overhead and new reads on ordinary multilevel migration;
+  - treating host-tree observation in an archived log as sufficient would
+    allow the executable oracle to pass after a future host-tree regression;
+  - inferring host-tree behavior from adaptive AMR traffic alone would not
+    prove an actual source-to-destination refinement-level transition.
+- Registration disposition:
+  - the criteria amendment strengthens the oracle after independent rebound
+    review; it does not loosen an existing threshold or widen production
+    scope;
+  - bind the amended manifest with SHA-256
+    `add2ab12fbaf7f669e8e4eecc9e8f9cb0d581f06947c7e39876f934239708b74`.
+- Inflection point:
+  - rerun registration, mutation controls, both builds, and the complete
+    Phase-8 qualifier; stop again if either lookup implementation lacks an
+    explicit cross-level witness or if the source rebound remains on hold.
+
+## Phase-8 DR-060 Source Rebound Recheck
+
+- Date: 2026-05-30
+- Reviewer verdict: `PROCEED`
+- Reviewer scope:
+  - diagnostic-only level-tracking isolation;
+  - source-index bounds checks;
+  - multilevel empty-rank MPI collective cadence;
+  - explicit static-SMR device-table and host-tree cross-level assertions;
+  - bounded `prescribed_test` opening and retained `mhd_ideal` closure;
+  - typed-v2 rank-count rejection ordering;
+  - amended criteria/schema coherence.
+- Recheck evidence:
+  - frozen registration passed with `62` ordered criteria;
+  - mutation controls rejected `17` deliberate weakenings;
+  - serial and MPI builds passed;
+  - complete corrected runtime replay passed `62/62` criteria across `21`
+    isolated runtime cases;
+  - device-table and host-tree static-SMR fixtures each recorded one explicit
+    cross-level transition and exact physical-state parity.
+- Disposition:
+  - accept the corrected source rebound for a source-bound milestone commit;
+  - rebuild and rerun the Phase-8 evidence package on that accepted source SHA
+    before recording `CP-6` and `RG-009`.

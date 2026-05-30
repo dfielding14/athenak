@@ -44,8 +44,9 @@ int ParticleLocationIndex(Real x, Real xmin, Real xmax, int nloc) {
   return static_cast<int>(ix);
 }
 
-bool BuildParticleLookupTable(Mesh *pm, int max_entries, DvceArray1D<int> &gid_table,
-                              DvceArray1D<int> &rank_table, int &nloc1, int &nloc2,
+bool BuildParticleLookupTable(Mesh *pm, int max_entries, bool track_level_transitions,
+                              DvceArray1D<int> &gid_table, DvceArray1D<int> &rank_table,
+                              DvceArray1D<int> &level_table, int &nloc1, int &nloc2,
                               int &nloc3) {
   int lev_offset = pm->max_level - pm->root_level;
   nloc1 = pm->nmb_rootx1 << lev_offset;
@@ -60,6 +61,11 @@ bool BuildParticleLookupTable(Mesh *pm, int max_entries, DvceArray1D<int> &gid_t
   HostArray1D<int> rank_h("particle_lookup_rank_h", ntable);
   Kokkos::deep_copy(gid_h, -1);
   Kokkos::deep_copy(rank_h, -1);
+  HostArray1D<int> level_h;
+  if (track_level_transitions) {
+    level_h = HostArray1D<int>("particle_lookup_level_h", ntable);
+    Kokkos::deep_copy(level_h, -1);
+  }
 
   for (int gid=0; gid<pm->nmb_total; ++gid) {
     LogicalLocation &lloc = pm->lloc_eachmb[gid];
@@ -81,13 +87,15 @@ bool BuildParticleLookupTable(Mesh *pm, int max_entries, DvceArray1D<int> &gid_t
                               static_cast<std::int64_t>(k));
           gid_h(idx) = gid;
           rank_h(idx) = pm->rank_eachmb[gid];
+          if (track_level_transitions) {level_h(idx) = lloc.level;}
         }
       }
     }
   }
 
   for (std::int64_t idx=0; idx<ntable; ++idx) {
-    if (gid_h(idx) < 0 || rank_h(idx) < 0) {
+    if (gid_h(idx) < 0 || rank_h(idx) < 0 ||
+        (track_level_transitions && level_h(idx) < 0)) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "Particle lookup table has an unfilled logical slot"
                 << std::endl;
@@ -99,6 +107,10 @@ bool BuildParticleLookupTable(Mesh *pm, int max_entries, DvceArray1D<int> &gid_t
   rank_table = DvceArray1D<int>("particle_lookup_rank", ntable);
   Kokkos::deep_copy(gid_table, gid_h);
   Kokkos::deep_copy(rank_table, rank_h);
+  if (track_level_transitions) {
+    level_table = DvceArray1D<int>("particle_lookup_level", ntable);
+    Kokkos::deep_copy(level_table, level_h);
+  }
   return true;
 }
 
@@ -136,23 +148,34 @@ TaskStatus ParticlesBoundaryValues::SetNewPrtclGID() {
   auto &pr = pmy_part->prtcl_rdata;
   auto &pi = pmy_part->prtcl_idata;
   int npart = pmy_part->nprtcl_thispack;
+  bool track_level_transitions = pmy_part->log_performance;
+  int64_t nlevel_transitions = 0;
   nprtcl_send = 0;
-  if (npart <= 0) {return TaskStatus::complete;}
+  if (npart <= 0) {
+    if (pm->multilevel) {
+      pmy_part->LogPerformance(
+          "particle_multilevel_lookup", 0, 0, 0, 0, nlevel_transitions);
+    }
+    return TaskStatus::complete;
+  }
 
   if (pm->multilevel) {
     if (pmy_part->amr_remap_mode == ParticlesAMRRemapMode::device_table) {
       DvceArray1D<int> gid_table;
       DvceArray1D<int> rank_table;
+      DvceArray1D<int> level_table;
       int nloc1, nloc2, nloc3;
-      bool built_table = BuildParticleLookupTable(pm, pmy_part->amr_lookup_max_cells,
-                                                  gid_table, rank_table, nloc1, nloc2,
-                                                  nloc3);
+      bool built_table = BuildParticleLookupTable(
+          pm, pmy_part->amr_lookup_max_cells, track_level_transitions, gid_table,
+          rank_table, level_table, nloc1, nloc2, nloc3);
       if (built_table) {
         Kokkos::realloc(sendlist, std::max(1,npart));
         auto &slist = sendlist;
-        DvceArray1D<int> atom_count("particle_lookup_send_count", 2);
+        DvceArray1D<int> atom_count("particle_lookup_send_count", 3);
         Kokkos::deep_copy(atom_count, 0);
         int myrank = global_variable::my_rank;
+        auto &mblev = pmy_part->pmy_pack->pmb->mb_lev;
+        int nmb_pack = mblev.d_view.extent_int(0);
         bool multi_d = pm->multi_d;
         bool three_d = pm->three_d;
         Real x1min = pm->mesh_size.x1min;
@@ -186,6 +209,17 @@ TaskStatus ParticlesBoundaryValues::SetNewPrtclGID() {
             return;
           }
 
+          if (track_level_transitions) {
+            int source_pack_index = pi(PGID,p) - gids;
+            if (source_pack_index < 0 || source_pack_index >= nmb_pack) {
+              Kokkos::atomic_fetch_add(&atom_count(1), 1);
+              return;
+            }
+            int source_level = mblev.d_view(source_pack_index);
+            if (level_table(idx) != source_level) {
+              Kokkos::atomic_fetch_add(&atom_count(2), 1);
+            }
+          }
           pr(IPX,p) = x1;
           pr(IPY,p) = x2;
           pr(IPZ,p) = x3;
@@ -199,19 +233,22 @@ TaskStatus ParticlesBoundaryValues::SetNewPrtclGID() {
           }
 #endif
         });
-        HostArray1D<int> count_h("particle_lookup_send_count_h", 2);
+        HostArray1D<int> count_h("particle_lookup_send_count_h", 3);
         Kokkos::deep_copy(count_h, atom_count);
         if (count_h(1) != 0) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                     << std::endl << count_h(1)
-                    << " particles mapped outside the particle lookup table"
+                    << " particles failed multilevel lookup validation"
                     << std::endl;
           std::exit(EXIT_FAILURE);
         }
+        nlevel_transitions = count_h(2);
         nprtcl_send = count_h(0);
         Kokkos::resize(sendlist, nprtcl_send);
         sendlist.template modify<DevExeSpace>();
         sendlist.template sync<HostMemSpace>();
+        pmy_part->LogPerformance(
+            "particle_multilevel_lookup", 0, 0, 0, 0, nlevel_transitions);
         return TaskStatus::complete;
       }
     }
@@ -237,6 +274,18 @@ TaskStatus ParticlesBoundaryValues::SetNewPrtclGID() {
                   << std::endl;
         std::exit(EXIT_FAILURE);
       }
+      if (track_level_transitions) {
+        int source_gid = pi_h(PGID,p);
+        if (source_gid < 0 || source_gid >= pm->nmb_total) {
+          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                    << std::endl << "Particle source GID is outside the mesh hierarchy"
+                    << std::endl;
+          std::exit(EXIT_FAILURE);
+        }
+        if (pm->lloc_eachmb[dest_gid].level != pm->lloc_eachmb[source_gid].level) {
+          ++nlevel_transitions;
+        }
+      }
       pi_h(PGID,p) = dest_gid;
 #if MPI_PARALLEL_ENABLED
       int dest_rank = pm->rank_eachmb[dest_gid];
@@ -259,6 +308,8 @@ TaskStatus ParticlesBoundaryValues::SetNewPrtclGID() {
     Kokkos::resize(sendlist, nprtcl_send);
     sendlist.template modify<HostMemSpace>();
     sendlist.template sync<DevExeSpace>();
+    pmy_part->LogPerformance(
+        "particle_multilevel_lookup", 0, 0, 0, 0, nlevel_transitions);
     return TaskStatus::complete;
   }
 

@@ -746,11 +746,11 @@ inline V2Shard ReadV2Shard(const std::string &rank_zero_path,
           witness.mesh_checksum == manifest.mesh_checksum &&
           witness.mesh_topology_hash == manifest.mesh_topology_hash,
           "typed-v2 restart particle manifest does not match mesh witness");
-  Require(witness.mesh_topology_hash == current_topology_hash,
-          "typed-v2 restart rejects changed rank-to-MeshBlock topology");
   Require(current_nranks >= 0 &&
           manifest.saved_nranks == static_cast<std::uint32_t>(current_nranks),
           "typed-v2 restart rejects MPI rank-count change");
+  Require(witness.mesh_topology_hash == current_topology_hash,
+          "typed-v2 restart rejects changed rank-to-MeshBlock topology");
   Require(current_rank >= 0 &&
           static_cast<std::uint32_t>(current_rank) < manifest.saved_nranks,
           "typed-v2 restart current rank is out of range");

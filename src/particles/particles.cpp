@@ -362,14 +362,6 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
                   << "<particles>/nspecies = 1" << std::endl;
         std::exit(EXIT_FAILURE);
       }
-      if (!gather_diagnostic_only &&
-          (global_variable::nranks != 1 || pmy_pack->pmesh->multilevel)) {
-        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                  << std::endl << "Particle pusher 'relativistic_hc' execution currently "
-                  << "requires a serial uniform-level mesh; "
-                  << "MPI, SMR, and AMR remain closed until qualification" << std::endl;
-        std::exit(EXIT_FAILURE);
-      }
       if (!(pmy_pack->pmesh->three_d) || !(pmy_pack->pmesh->strictly_periodic)) {
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                   << std::endl << "Particle pusher 'relativistic_hc' currently requires "
@@ -481,6 +473,15 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
         }
       } else if (field_source.compare("mhd_ideal") == 0) {
         relativistic_field_source = RelativisticFieldSource::mhd_ideal;
+        if (!gather_diagnostic_only &&
+            (global_variable::nranks != 1 || pmy_pack->pmesh->multilevel)) {
+          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                    << std::endl << "relativistic_field_source = mhd_ideal currently "
+                    << "requires a serial uniform-level mesh; "
+                    << "MPI, SMR, and AMR remain closed until qualification"
+                    << std::endl;
+          std::exit(EXIT_FAILURE);
+        }
         if (pmy_pack->nmb_thispack != 1) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                     << std::endl << "relativistic_field_source = mhd_ideal currently "

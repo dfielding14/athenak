@@ -1,0 +1,99 @@
+# AthenaK base input for bounded relativistic CR Phase-8 migration qualification
+
+<comment>
+problem   = prescribed-test relativistic CR migration, wrap, SMR, AMR, and restart witness
+
+<job>
+basename  = cr_relativistic_migration
+
+<mesh>
+nghost    = 2
+nx1       = 16
+x1min     = -0.5
+x1max     = 0.5
+ix1_bc    = periodic
+ox1_bc    = periodic
+
+nx2       = 16
+x2min     = -0.5
+x2max     = 0.5
+ix2_bc    = periodic
+ox2_bc    = periodic
+
+nx3       = 16
+x3min     = -0.5
+x3max     = 0.5
+ix3_bc    = periodic
+ox3_bc    = periodic
+
+<meshblock>
+nx1       = 16
+nx2       = 16
+nx3       = 16
+
+<time>
+evolution  = kinematic
+integrator = rk2
+cfl_number = 0.2
+nlim       = 64
+tlim       = 0.6
+ndiag      = 1
+
+<mhd>
+eos         = ideal
+reconstruct = plm
+rsolver     = advect
+gamma       = 1.666666667
+
+<particles>
+particle_type              = cosmic_ray
+ppc                        = 0.001953125
+nspecies                   = 1
+pusher                     = relativistic_hc
+interpolation              = trilinear
+relativistic_field_source  = prescribed_test
+c_model                    = 1.0
+alpha_s                    = 0.7
+cfl_part                   = 0.05
+min_mass                   = 1.0
+check_consistency_mode     = full
+check_motion_bounds        = true
+log_performance            = true
+amr_remap                  = device_table
+validate_amr_lookup        = true
+exchange_mode              = alltoall_counts
+subcycle                   = true
+subcycle_strict            = true
+subcycle_max_steps         = 128
+subcycle_cell_fraction     = 0.5
+subcycle_meshblock_fraction = 0.5
+subcycle_gyro_fraction     = 0.25
+subcycle_electric_kick_max = 0.1
+
+<problem>
+pgen_name                  = part_random
+particle_refinement        = none
+particle_position          = tag_random
+particle_seed              = 1
+particle_velocity          = uniform
+relativistic_initial_state = w
+w0x                        = 2.0
+w0y                        = 0.35
+w0z                        = -0.2
+cE0x                       = 0.03
+cE0y                       = -0.02
+cE0z                       = 0.01
+B0x                        = 0.0
+B0y                        = 0.0
+B0z                        = 0.35
+B_profile                  = uniform
+prtcl_rst_flag             = 0
+prtcl_res_file             = prst/rank_00000000/cr_relativistic_migration.00000.prst
+
+<output1>
+file_type   = prst
+dt          = 0.2
+
+<output2>
+file_type   = rst
+dt          = 0.2
