@@ -1,0 +1,30 @@
+{
+  "files": [
+    {
+      "path": "athena_stderr.txt",
+      "sha256": "fecd6e9635eb80d47efa65ec0789ad03c2ea1375ac96bfa9c801b3cbb7dc00ac",
+      "size": 6804
+    },
+    {
+      "path": "athena_stdout.sha256",
+      "sha256": "db39767f3cd46596984974cdf737a3102bdcd7e9cac9cea52169223faa540c7d",
+      "size": 65
+    },
+    {
+      "path": "athena_stdout.txt",
+      "sha256": "c274de2fb381eaee2c1a20400fec33e518d5ab567f9e7bdf025cb20a993dd269",
+      "size": 8248
+    },
+    {
+      "path": "f2-runtime-metadata.environment.allowlist.txt",
+      "sha256": "9febe6ba923833ebdba984a4da3aaaf8b6ab7dd444ec2164cf7410a584d5f1be",
+      "size": 2557
+    },
+    {
+      "path": "output/f2_multirank_runtime_metadata-errs.dat",
+      "sha256": "df1a5f2a771947324955a839d3e9fed8cf6be490d0e473857835dde4228ae580",
+      "size": 316
+    }
+  ],
+  "schema_version": 1
+}

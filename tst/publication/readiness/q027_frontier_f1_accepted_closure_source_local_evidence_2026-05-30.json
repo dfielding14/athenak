@@ -24,8 +24,8 @@
         "sha256": "9f7a5d64f818b3d59b0b1bfd9e6cf46fa72716884e6cb74a39cdb5d853f96b84"
       },
       "terminal_qualification_manifest": {
-        "path": "tst/publication/readiness/fixtures/q027_frontier_f1_gyro_v3_terminal_qualification_manifest_2026-05-30.json",
-        "sha256": "17265e0244e410b900ec2296dfcfcb51ec19138d82a331d497c8f341ad4cd354"
+        "path": "tst/publication/readiness/fixtures/q027_frontier_f1_gyro_v3_terminal_qualification_manifest_policy_446db26a_2026-05-30.json",
+        "sha256": "d77b88f151b56b63818a6394ab11e13b81f6b7bdc5c7a6d77fe426c706de8771"
       },
       "terminal_reconciliation_event": {
         "path": "tst/publication/readiness/fixtures/q027_frontier_f1_gyro_v3_terminal_reconciliation_event_2026-05-30.json",
@@ -54,8 +54,8 @@
         "sha256": "8d9353e8f003fdf7734622d96511dc09f866cb897f3bd5ed7f52fb3e0037ab00"
       },
       "terminal_qualification_manifest": {
-        "path": "tst/publication/readiness/fixtures/q027_frontier_f1_paper_coupling_v2_terminal_qualification_manifest_2026-05-30.json",
-        "sha256": "6262332ad758953525cd745999766f7c9b23eb535594b802a79a75fee8fc5456"
+        "path": "tst/publication/readiness/fixtures/q027_frontier_f1_paper_coupling_v2_terminal_qualification_manifest_policy_446db26a_2026-05-30.json",
+        "sha256": "df0876df0cf48096b65aa5dc140b57a8afdcb42b76f6ba17a0b1eb29c58d122b"
       },
       "terminal_reconciliation_event": {
         "path": "tst/publication/readiness/fixtures/q027_frontier_f1_paper_coupling_v2_terminal_reconciliation_event_2026-05-30.json",

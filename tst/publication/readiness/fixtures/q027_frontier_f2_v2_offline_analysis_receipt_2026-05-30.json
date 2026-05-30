@@ -1,0 +1,28 @@
+{
+  "analysis_result": {
+    "path": "analysis/analysis.json",
+    "sha256": "95dc6e40a21e9fd952c46f282fec39a5077df3667af64930ded76f5fd173bea3"
+  },
+  "analyzer": {
+    "path": "000-frontier_f2_multirank_runtime_metadata_analysis.py",
+    "sha256": "8c240ef0a2d9431f5cbb37b1f6d8639ab77a83d2dd8c61870568c30ef1cc115a"
+  },
+  "artifact_inventory": {
+    "path": "artifact_inventory.json",
+    "sha256": "ca67351517011906d891cc7fc4ec9a76a6ecaba6809336e532b469ddfcc5c8a6"
+  },
+  "runner": {
+    "flags": [
+      "-I",
+      "-B"
+    ],
+    "python": "/opt/cray/pe/python/3.11.7/bin/python3"
+  },
+  "schema_version": 1,
+  "support_modules": [
+    {
+      "path": "frontier_f1_structured_artifacts.py",
+      "sha256": "cf090115bcdfd143f67b12339115102b57e74cf3205b1ebb1521c144c3415a5a"
+    }
+  ]
+}

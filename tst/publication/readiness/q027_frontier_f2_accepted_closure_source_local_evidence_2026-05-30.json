@@ -1,0 +1,92 @@
+{
+  "schema_version": 1,
+  "purpose": "Source-local accepted Frontier F2 closure archive. Preserve the live Orion bounded runtime-metadata evidence projection for clone-local review without treating the repository copy as a replacement for the immutable Orion qualification bundle.",
+  "active_terminal_ledger": {
+    "orion_jsonl_sha256": "567af79d34656347cddd84c2fd6c7bcf216873a041a15da8140ad1c73ed52803",
+    "orion_csv_sha256": "9f9058bb77610b45c1af582b8bee496b735e98241d7410573c8102e3113a4dd8",
+    "orion_mirror_receipts_sha256": "72e2c9d7d5526da1173be4685390e89b5d297ba8be80756f888b50f9b756a7c5",
+    "project_home_jsonl_sha256": "567af79d34656347cddd84c2fd6c7bcf216873a041a15da8140ad1c73ed52803",
+    "records": 49,
+    "cumulative_consumed_node_hours": 0.09944444444444443,
+    "active_reservations": 0,
+    "pending_submission_marker": "absent"
+  },
+  "rejected_pre_reservation_chronology": {
+    "queue_format_manifest": {
+      "submission_id": "c82c35ae-e505-4f3e-af31-09c2cb2f73aa",
+      "disposition": "fail_closed_before_reservation_intent_because_operator_queue_snapshot_format_did_not_match_the_exact_validator_contract",
+      "pre_submit_manifest": {
+        "path": "tst/publication/readiness/fixtures/q027_frontier_f2_v2_rejected_queue_format_pre_submit_manifest_2026-05-30.json",
+        "sha256": "eb2c36c3ce8cf269ad5a622f90660914788dc2f439d24e24fd036cf28230c46b"
+      },
+      "attestations": [
+        {
+          "path": "tst/publication/readiness/fixtures/q027_frontier_f2_v2_rejected_queue_format_pre_manifest_attestation_2026-05-30.json",
+          "sha256": "2e56b9c4c96b123070c4c265fbb819ebf0a626d98fde2e1cb34bd3d76015c463"
+        },
+        {
+          "path": "tst/publication/readiness/fixtures/q027_frontier_f2_v2_rejected_queue_format_pre_submit_wrapper_attestation_2026-05-30.json",
+          "sha256": "56d4062dd1b92bc3df12d8d363b32a9d93487db42683ddec1048575f279a8c22"
+        }
+      ]
+    },
+    "transient_queue_drift": {
+      "disposition": "fail_closed_before_reservation_intent_after_transient_scheduler_queue_snapshot_drift",
+      "attestation": {
+        "path": "tst/publication/readiness/fixtures/q027_frontier_f2_v2_rejected_queue_drift_pre_submit_wrapper_attestation_2026-05-30.json",
+        "sha256": "7575aefba6f709ecfa5781143aca2fce8a626b2b3cc02ec03ea94e80a9357c0d"
+      }
+    }
+  },
+  "accepted_v2_registered_execution": {
+    "submission_id": "500fa268-180f-4a71-8cf6-b5c7492939e4",
+    "reservation_id": "cdd26b3e-8ceb-4f3b-b559-2cd4a8e300ea",
+    "job_id": "4746316",
+    "registered_science_authorization_id": "f2-parser-multirank-runtime-metadata-v2",
+    "run_artifact_dir": "/lustre/orion/ast207/proj-shared/dfielding/PIC/runs/f2_multirank_runtime_metadata/500fa268-180f-4a71-8cf6-b5c7492939e4",
+    "contained_output_path": "output/f2_multirank_runtime_metadata-errs.dat",
+    "contained_output_sha256": "df1a5f2a771947324955a839d3e9fed8cf6be490d0e473857835dde4228ae580",
+    "documents": {
+      "pre_submit_manifest": {
+        "path": "tst/publication/readiness/fixtures/q027_frontier_f2_v2_pre_submit_manifest_2026-05-30.json",
+        "sha256": "f9afb0a7efbd5f9ca933040e6a25cea7a414e481f4efb2fd43d2dd2d3699e9ac"
+      },
+      "artifact_inventory": {
+        "path": "tst/publication/readiness/fixtures/q027_frontier_f2_v2_artifact_inventory_2026-05-30.json",
+        "sha256": "ca67351517011906d891cc7fc4ec9a76a6ecaba6809336e532b469ddfcc5c8a6"
+      },
+      "analysis_result": {
+        "path": "tst/publication/readiness/fixtures/q027_frontier_f2_v2_analysis_result_2026-05-30.json",
+        "sha256": "95dc6e40a21e9fd952c46f282fec39a5077df3667af64930ded76f5fd173bea3"
+      },
+      "offline_analysis_receipt": {
+        "path": "tst/publication/readiness/fixtures/q027_frontier_f2_v2_offline_analysis_receipt_2026-05-30.json",
+        "sha256": "1685be754be94aac901bb4e173895c7b7e262fa7ca31aafe4e21fb9ffe81118f"
+      },
+      "terminal_qualification_manifest": {
+        "path": "tst/publication/readiness/fixtures/q027_frontier_f2_v2_terminal_qualification_manifest_2026-05-30.json",
+        "sha256": "09e71dbda243fb3928a7233badec2f5a09e094842bfb1039b7cd9b3fe6867114"
+      },
+      "terminal_reconciliation_event": {
+        "path": "tst/publication/readiness/fixtures/q027_frontier_f2_v2_terminal_reconciliation_event_2026-05-30.json",
+        "sha256": "a991060389743e08e83c920d7eafedef733db3e1bd260e607dd4d053c4fe7f71"
+      },
+      "terminal_reconciliation_mirror_receipt": {
+        "path": "tst/publication/readiness/fixtures/q027_frontier_f2_v2_terminal_reconciliation_mirror_receipt_2026-05-30.json",
+        "sha256": "02a61e9a602e994daca9e39fb005a378e0ced8e3e72fdce667736086a165c3c7"
+      },
+      "pre_policy_promotion_attestation": {
+        "path": "tst/publication/readiness/fixtures/q027_frontier_f2_v2_pre_policy_promotion_attestation_2026-05-30.json",
+        "sha256": "2aa648997fea4c355295fd17e24db20ba97a031b42b67e09558fc0bb92cc7ea3"
+      },
+      "pre_manifest_attestation": {
+        "path": "tst/publication/readiness/fixtures/q027_frontier_f2_v2_pre_manifest_attestation_2026-05-30.json",
+        "sha256": "add41aa89aeff39284ff1bad1a05bcd3bcc3744202e2b1cf57d4b3f333d38e0b"
+      },
+      "pre_submit_wrapper_attestation": {
+        "path": "tst/publication/readiness/fixtures/q027_frontier_f2_v2_pre_submit_wrapper_attestation_2026-05-30.json",
+        "sha256": "79d6eeda55f2a3d714b49a9fdbc54f633ffd6a93b0a4512ad3013be36cbeaef0"
+      }
+    }
+  }
+}

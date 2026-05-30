@@ -66,6 +66,17 @@
     "escaped_output_sha256": "df1a5f2a771947324955a839d3e9fed8cf6be490d0e473857835dde4228ae580",
     "disposition": "rejected_before_evidence_acceptance_because_launch_contract_omitted_artifact_output_directory_and_athena_error_history_escaped_the_registered_run_tree"
   },
+  "rejected_v2_pre_reservation_chronology": {
+    "submission_id": "c82c35ae-e505-4f3e-af31-09c2cb2f73aa",
+    "pre_submit_manifest_sha256": "eb2c36c3ce8cf269ad5a622f90660914788dc2f439d24e24fd036cf28230c46b",
+    "pre_manifest_attestation_sha256": "2e56b9c4c96b123070c4c265fbb819ebf0a626d98fde2e1cb34bd3d76015c463",
+    "pre_submit_wrapper_attestation_sha256": "56d4062dd1b92bc3df12d8d363b32a9d93487db42683ddec1048575f279a8c22",
+    "transient_queue_drift_retry_attestation_sha256": "7575aefba6f709ecfa5781143aca2fce8a626b2b3cc02ec03ea94e80a9357c0d",
+    "reservation_attachments": "absent",
+    "ledger_intent": "absent",
+    "scheduler_submission": "absent",
+    "disposition": "fail_closed_before_reservation_intent_because_operator_queue_snapshot_format_and_then_transient_scheduler_queue_drift_did_not_match_the_exact_validator_contract"
+  },
   "accepted_v2_execution": {
     "authorization_id": "f2-parser-multirank-runtime-metadata-v2",
     "submission_id": "500fa268-180f-4a71-8cf6-b5c7492939e4",
@@ -83,11 +94,19 @@
     "artifact_inventory_sha256": "ca67351517011906d891cc7fc4ec9a76a6ecaba6809336e532b469ddfcc5c8a6",
     "analysis_result_sha256": "95dc6e40a21e9fd952c46f282fec39a5077df3667af64930ded76f5fd173bea3",
     "offline_analysis_receipt_sha256": "1685be754be94aac901bb4e173895c7b7e262fa7ca31aafe4e21fb9ffe81118f",
+    "qualification_manifest_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/qualifications/f2_multirank_runtime_metadata/500fa268-180f-4a71-8cf6-b5c7492939e4/qualification_manifest.json",
+    "qualification_manifest_sha256": "09e71dbda243fb3928a7233badec2f5a09e094842bfb1039b7cd9b3fe6867114",
+    "terminal_reconciliation_event_sha256": "8ad9d4b9a24f7b6a9a123feeb07e0b045bc74a1672420416c0e98c739401e04d",
+    "terminal_reconciliation_mirror_ack_sha256": "f6ddcd72859ec96b5257638f5d881350caa31ec48d14860f7396c5a03f4fa109",
+    "pre_policy_promotion_attestation_sha256": "2aa648997fea4c355295fd17e24db20ba97a031b42b67e09558fc0bb92cc7ea3",
+    "pre_manifest_attestation_sha256": "add41aa89aeff39284ff1bad1a05bcd3bcc3744202e2b1cf57d4b3f333d38e0b",
+    "pre_submit_wrapper_attestation_sha256": "79d6eeda55f2a3d714b49a9fdbc54f633ffd6a93b0a4512ad3013be36cbeaef0",
     "contained_output_path": "output/f2_multirank_runtime_metadata-errs.dat",
     "contained_output_sha256": "df1a5f2a771947324955a839d3e9fed8cf6be490d0e473857835dde4228ae580",
     "descriptor_pinned_no_write_replay": "pass",
     "disposition": "accepted_bounded_f2_multirank_runtime_metadata_engineering_evidence_pending_external_review"
   },
+  "source_local_accepted_closure_fixture": "tst/publication/readiness/q027_frontier_f2_accepted_closure_source_local_evidence_2026-05-30.json",
   "submission_state": "accepted_v2_execution_reconciled_no_active_reservation_no_pending_pic_marker",
   "open_boundaries": [
     "preserve the accepted bounded F2 runtime-metadata v2 slice as immutable engineering evidence",

@@ -2409,6 +2409,22 @@ closure index
 binds both live execution projections for clone-local review. The opt-in live
 registry additionally validates exact mirrored ledger chains and replays both
 terminal manifests through descriptor-pinned bytes.
+Bounded F2 v1 job `4746310` remains rejected chronology because its launch
+contract allowed Athena error history to escape the registered artifact tree.
+Repaired F2 v2 policy SHA `446db26a` and promotion SHA `b772da00` route that
+output below the run tree. Attested job `4746316` completed, reconciled
+`0.0025` node-hours and passed descriptor-pinned no-write replay with inventory
+SHA `ca673515`, analysis SHA `95dc6e40`, receipt SHA `1685be75` and terminal
+qualification SHA `09e71dbd`. The final ledger is coherent at 49 records with
+cumulative consumption `0.09944444444444443` node-hours, zero active
+reservations and no pending PIC marker. After the F2 policy replacement, both
+registered-F1 executions replayed through current-policy successor
+qualification manifests: gyro-v3 SHA `d77b88f1` and paper-coupling-v2 SHA
+`df0876df`. Preserve the older F1 qualification freezes as immutable chronology.
+Source-local accepted closure index
+`q027_frontier_f2_accepted_closure_source_local_evidence_2026-05-30.json`
+binds accepted F2 evidence plus fail-closed queue-format and transient-drift
+chronology for clone-local review.
 
 ## Immediate Agent Handoff: First Actions
 
@@ -2468,10 +2484,17 @@ Future implementation agents should execute the following successor sequence:
    reconciliations, snapshotted offline-analysis publications, no-write
    qualification replays and immutable pending-review qualification manifests
    `17265e02` and `6262332a`; preserve initial gyro freeze `9f7a5d64` as
-   immutable chronology after the final active-policy replacement. Preserve
+   immutable chronology after the coupling-policy replacement. Preserve
    clone-local accepted-closure projection
    `q027_frontier_f1_accepted_closure_source_local_evidence_2026-05-30.json`
-   alongside the immutable Orion evidence.
+   alongside the immutable Orion evidence. Preserve rejected F2 v1 job
+   `4746310`, repaired F2 policy SHA `446db26a`, promotion SHA `b772da00`,
+   fail-closed pre-reservation queue-snapshot chronology and accepted F2 v2 job
+   `4746316`. Use current-policy F1 qualification manifests `d77b88f1` and
+   `df0876df`, bounded F2 qualification manifest `09e71dbd` and clone-local F2
+   closure projection
+   `q027_frontier_f2_accepted_closure_source_local_evidence_2026-05-30.json`
+   for terminal review while retaining older F1 freezes as chronology.
 8. Close remaining local prerequisites: Q-009 broader-boundary, MPI, ASan and
    HIP stress slices after the bounded coupled Debug/UBSan pass,
    Q-016 MPI/HIP parity, Q-017 kernel telemetry, Q-018 immutable claim links,
@@ -2569,6 +2592,7 @@ Future implementation agents should execute the following successor sequence:
 | 2026-05-30 | Archived the accepted gyro-v3 and paper-coupling-v2 manifests, inventories, analytical results, receipts and terminal mirrored reconciliation records into source-local fixture index `q027_frontier_f1_accepted_closure_source_local_evidence_2026-05-30.json`; hardened the opt-in registry to validate exact mirrored ledger chains and descriptor-pinned terminal-manifest bytes against the accepted-execution projection | Preserve the source-local review bundle as a clone-local projection of immutable Orion evidence while keeping Orion as the sole bulk root |
 | 2026-05-30 | Preserved rejected bounded F2 v1 job `4746310` after its launch contract omitted `-d` and allowed Athena error history to escape the registered artifact tree; archived escaped-output SHA `df1a5f2a` in Orion, repaired routing at `d59b8ebf`, rotated authorization at `2db6b060`, archived pre-promotion and pre-submit attestations, promoted mirrored policy SHA `446db26a` with promotion SHA `b772da00`, retained transient queue-snapshot retries as fail-closed pre-reservation chronology, and reconciled attested v2 job `4746316` at `0.0025` node-hours | Preserve v1 as rejected chronology and v2 inventory SHA `ca673515`, analysis SHA `95dc6e40`, receipt SHA `1685be75` and contained output SHA `df1a5f2a` as bounded F2 engineering evidence pending external review |
 | 2026-05-30 | Replayed the F2 v2 snapshotted analyzer with its descriptor-pinned no-write mode against the reconciled run tree; exact inventory SHA `ca673515` and result SHA `95dc6e40` passed while the source worktree remained free of escaped `f2_multirank_runtime_metadata-errs.dat` output. All three ledger streams remain coherent at 49 records with cumulative consumption `0.09944444444444443` node-hours, no active reservation and no pending PIC marker | Continue only separately scoped local prerequisites and preregistered campaign work; do not broaden the bounded Q-002 engineering slice into a paper claim |
+| 2026-05-30 | Replayed accepted gyro-v3 and paper-coupling-v2 evidence through final bounded-F2 policy SHA `446db26a`, froze current-policy qualification manifests SHA `d77b88f1` and `df0876df`, validated those plus bounded-F2 manifest SHA `09e71dbd`, and archived F2 terminal artifacts, attestations, ledger projections and fail-closed queue-snapshot retries in source-local index `q027_frontier_f2_accepted_closure_source_local_evidence_2026-05-30.json` | Use the current-policy F1 projections and bounded-F2 source-local archive for clone-local review while preserving prior F1 freezes and rejected F2 retries as immutable chronology |
 
 ## Source Pointers For The Initial Review
 

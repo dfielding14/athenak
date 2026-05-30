@@ -1,0 +1,61 @@
+{
+  "evidence_class": "frontier_f2_clean_candidate_multirank_runtime_metadata",
+  "hosts": [
+    "frontier09119"
+  ],
+  "launch_contract": "trusted_trampoline_athena_argv_v1",
+  "parallel_ranks": 8,
+  "parser_runtime_smoke": "pass",
+  "rank_gpu_bindings": [
+    {
+      "host": "frontier09119",
+      "rank": 0,
+      "rocr_visible_device": 4
+    },
+    {
+      "host": "frontier09119",
+      "rank": 1,
+      "rocr_visible_device": 5
+    },
+    {
+      "host": "frontier09119",
+      "rank": 2,
+      "rocr_visible_device": 2
+    },
+    {
+      "host": "frontier09119",
+      "rank": 3,
+      "rocr_visible_device": 3
+    },
+    {
+      "host": "frontier09119",
+      "rank": 4,
+      "rocr_visible_device": 6
+    },
+    {
+      "host": "frontier09119",
+      "rank": 5,
+      "rocr_visible_device": 7
+    },
+    {
+      "host": "frontier09119",
+      "rank": 6,
+      "rocr_visible_device": 0
+    },
+    {
+      "host": "frontier09119",
+      "rank": 7,
+      "rocr_visible_device": 1
+    }
+  ],
+  "runtime_artifacts": {
+    "athena_stderr.txt": "fecd6e9635eb80d47efa65ec0789ad03c2ea1375ac96bfa9c801b3cbb7dc00ac",
+    "athena_stdout.txt": "c274de2fb381eaee2c1a20400fec33e518d5ab567f9e7bdf025cb20a993dd269",
+    "f2-runtime-metadata.environment.allowlist.txt": "9febe6ba923833ebdba984a4da3aaaf8b6ab7dd444ec2164cf7410a584d5f1be",
+    "output/f2_multirank_runtime_metadata-errs.dat": "df1a5f2a771947324955a839d3e9fed8cf6be490d0e473857835dde4228ae580"
+  },
+  "runtime_model": "PIC runtime model: physical_mode=extended_mhd_pic state=momentum_p_over_m C=3 background=coupled feedback=coupled induction=ideal_mhd_only deposition=tsc deltaf=off deltaf_adapt=off deltaf_adapt_interval=0 expanding_box=off expansion_law=linear wave_damping=off nu_in=0 lb_cost_per_particle=0 max_cell_cross=2 theta_max=0.3 restart_schema=7",
+  "runtime_profile": "frontier_minimum_supported",
+  "schema_version": 1,
+  "status": "pass"
+}

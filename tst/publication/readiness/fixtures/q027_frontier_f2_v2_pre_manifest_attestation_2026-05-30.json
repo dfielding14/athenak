@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "record_type": "q027_frontier_registered_science_same_account_isolation_attestation",
+  "recorded_utc": "2026-05-30T23:45:56Z",
+  "registered_science_authorization_id": "f2-parser-multirank-runtime-metadata-v2",
+  "control_plane_version": "4ccde8dfe557fbb6450c15b2ee68d41d2ac0711d5d56d79e775fa75178177bd3",
+  "phase": "pre_manifest_retry_exact_validator_queue_snapshot",
+  "same_account_process_snapshot": {
+    "path": "same_account_process_snapshot.txt",
+    "sha256": "8e7b0aeef2f581cb762256da2e33713c76e3d9eea3c49857151cc0b882a734ff"
+  },
+  "queue_snapshot": {
+    "path": "queue_snapshot.txt",
+    "sha256": "d3bae5ba96a8dc8989338f3588afbbef814963d51cb61447fdc30a40135d378b"
+  },
+  "pending_submission_marker": {
+    "path": "pending_submission_marker.txt",
+    "sha256": "7925d3e9a9613a093e5eb4054b32aa39de910d2b03ba7e8046c3b4550b8de1e4",
+    "value": "absent"
+  },
+  "mirrored_ledger_line_counts": {
+    "path": "mirrored_ledger_line_counts.txt",
+    "sha256": "b966ee892d4ddce23915876a985f142a28902e0ccf5e59b16ea7be237704db46",
+    "counts": {
+      "/lustre/orion/ast207/proj-shared/dfielding/PIC/ledger/node_hours.jsonl": 46,
+      "/lustre/orion/ast207/proj-shared/dfielding/PIC/ledger/mirror_receipts.jsonl": 46,
+      "/ccs/proj/ast207/proj-shared/PIC/ledger/node_hours.jsonl": 46
+    }
+  },
+  "operator_statement": "Reviewed same-account process snapshot immediately before retry manifest creation after preserving the malformed queue-format manifest as rejected pre-reservation chronology; no competing process is authorized to mutate the PIC roots throughout manifest snapshot publication."
+}
