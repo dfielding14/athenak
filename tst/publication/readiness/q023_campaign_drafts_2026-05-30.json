@@ -51,12 +51,12 @@
       "exclusion_profile": "Q023-EXCLUSIONS-FAIL-CLOSED",
       "multiplicity_family": "paper_bell_linear_primary_endpoints",
       "local_input_ids": [
-        "Q023-INPUT-BELL-PROXY"
+        "Q023-INPUT-PAPER-BELL-LINEAR-1D-CANDIDATE",
+        "Q023-INPUT-PAPER-BELL-LINEAR-2D-CANDIDATE",
+        "Q023-INPUT-PAPER-BELL-LINEAR-3D-CANDIDATE"
       ],
       "local_analyzer_ids": [
-        "Q023-ANALYZER-COMMON-GROWTH",
-        "Q023-ANALYZER-BELL-LOCAL",
-        "Q023-ANALYZER-BIN-READER"
+        "Q023-ANALYZER-PAPER-BELL-LINEAR-CANDIDATE"
       ],
       "reference_values": {
         "status": "frozen_analytical_formula",
@@ -65,7 +65,8 @@
       },
       "claim_specific_exclusions": [
         "Hall-extension inference",
-        "promotion of the checksummed Bell proxy deck or local proxy analyzer into Section 5.2 evidence"
+        "promotion of the checksummed Bell proxy deck or local proxy analyzer into Section 5.2 evidence",
+        "promotion of the source-local paper candidates into Section 5.2 qualification before clean-candidate binding, dedicated eigenmode implementation, registered Frontier execution, independent recompute, and external review"
       ],
       "failure_artifact_root": "open_authorized_orion_campaign_subdirectory_not_frozen",
       "independent_recompute_profile": "Q023-RECOMPUTE-RAW-ARTIFACT-INDEPENDENT",
@@ -73,13 +74,14 @@
         "status": "open_before_qualifying_run",
         "git_commit": "open_clean_candidate_not_frozen",
         "executable_sha256": "open_clean_frontier_executable_not_frozen",
-        "qualifying_input_checksums": "open_paper_faithful_decks_not_created",
-        "production_analysis_checksums": "open_qualifying_dispersion_analyzer_not_created"
+        "qualifying_input_checksums": "source_local_paper_candidate_checksums_recorded_clean_candidate_freeze_open",
+        "production_analysis_checksums": "source_local_analytical_dispersion_candidate_checksum_recorded_clean_candidate_freeze_open"
       },
       "open_dependencies": [
-        "Create and checksum paper-faithful 1D, 2D, and 3D decks.",
-        "Create and checksum the qualifying analytical-dispersion analyzer.",
-        "Bind the clean candidate and Frontier executable."
+        "Freeze the source-local paper candidate decks and analytical-dispersion analyzer into an exact clean candidate.",
+        "Implement and bind the dedicated Section 5.2 Bell eigenmode problem generator and raw mode-trace extraction.",
+        "Materialize the epsilon, sensitivity, seed, and timestep variants before output inspection.",
+        "Bind the clean Frontier executable, authorized Orion artifact root, and registered run."
       ]
     },
     {

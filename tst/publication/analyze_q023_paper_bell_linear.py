@@ -1,0 +1,380 @@
+#!/usr/bin/env python3
+"""Source-local Q-023 Section 5.2 Bell analytical-dispersion candidate."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import math
+from pathlib import Path
+from typing import Any
+
+import numpy as np
+
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+CAMPAIGN_ID = "Q023-PAPER-BELL-LINEAR"
+EPSILON_VALUES = (0.1, 0.2, 0.4, 0.6, 0.8)
+DIMENSIONS = (1, 2, 3)
+QUALIFYING_SEEDS = (
+    23050101,
+    23050102,
+    23050103,
+    23050104,
+    23050105,
+    23050106,
+    23050107,
+    23050108,
+)
+PHASE_INTERVAL = math.pi
+MIN_GROWTH_SNAPSHOTS = 8
+MIN_RIGHT_TO_LEFT_RATIO = 10.0
+ABSOLUTE_TOLERANCE = 0.02
+RELATIVE_TOLERANCE = 0.05
+
+DECKS = {
+    1: REPO_ROOT / "inputs/tests/pic_q023_paper_bell_linear_1d_candidate.athinput",
+    2: REPO_ROOT / "inputs/tests/pic_q023_paper_bell_linear_2d_candidate.athinput",
+    3: REPO_ROOT / "inputs/tests/pic_q023_paper_bell_linear_3d_candidate.athinput",
+}
+
+_EXPECTED_GEOMETRY = {
+    1: {
+        "nx": (32, 1, 1),
+        "extent": (1.0, 1.0, 1.0),
+        "active_dx": (1.0 / 32.0,),
+    },
+    2: {
+        "nx": (64, 32, 1),
+        "extent": (math.sqrt(5.0), math.sqrt(1.25), 1.0),
+        "active_dx": (math.sqrt(5.0) / 64.0, math.sqrt(1.25) / 32.0),
+    },
+    3: {
+        "nx": (128, 64, 32),
+        "extent": (math.sqrt(21.0), math.sqrt(5.25), math.sqrt(1.3125)),
+        "active_dx": (
+            math.sqrt(21.0) / 128.0,
+            math.sqrt(5.25) / 64.0,
+            math.sqrt(1.3125) / 32.0,
+        ),
+    },
+}
+
+_EXPECTED_DECK_VALUES = {
+    ("time", "nlim"): "0",
+    ("time", "tlim"): "0.0",
+    ("particles", "particle_type"): "cosmic_ray",
+    ("particles", "ppc"): "2.0",
+    ("particles", "pusher"): "boris_tsc",
+    ("particles", "nspecies"): "1",
+    ("particles", "cr_distribution"): "center",
+    ("particles", "deposit_moments"): "true",
+    ("particles", "deposit_order"): "1",
+    ("particles", "deposit_qscale"): "1.0e9",
+    ("particles", "couple_moments_to_mhd"): "true",
+    ("particles", "couple_j_to_efield_coeff"): "1.0",
+    ("particles", "couple_j_to_efield_representation"): "cell_centered",
+    ("particles", "couple_j_deposition_mode"): "cc_convert",
+    ("particles", "couple_moments_momentum_to_mhd"): "true",
+    ("particles", "couple_moments_energy_to_mhd"): "true",
+    ("particles", "couple_fluid_feedback_order"): "mhd_src_terms",
+    ("particles", "cr_vx0"): "2.5",
+    ("particles", "cr_vy0"): "0.0",
+    ("particles", "cr_vz0"): "0.0",
+    ("particles", "pic_physical_mode"): "paper_mhd_pic",
+    ("particles", "pic_background_mode"): "coupled",
+    ("particles", "pic_feedback_mode"): "coupled",
+    ("particles", "pic_enable_2d3v"): "true",
+    ("particles", "pic_cr_light_speed"): "2500.0",
+    ("particles", "pic_cr_initial_state"): "velocity",
+    ("particles", "pic_cr_hall_mode"): "off",
+    ("particles", "pic_wave_damping_mode"): "off",
+    ("species0", "mass"): "1.0",
+    ("species0", "charge"): "6.283185307179586e-6",
+    ("problem", "pgen_name"): "q023_paper_bell_linear_open",
+    ("q023_paper_bell_linear", "campaign_id"): CAMPAIGN_ID,
+    ("q023_paper_bell_linear", "deck_role"):
+        "source_local_paper_candidate_not_authorized",
+    ("q023_paper_bell_linear", "epsilon_default"): "0.4",
+    ("q023_paper_bell_linear", "epsilon_grid"): "0.1,0.2,0.4,0.6,0.8",
+    ("q023_paper_bell_linear", "rho"): "1.0",
+    ("q023_paper_bell_linear", "b_g"): "1.0",
+    ("q023_paper_bell_linear", "u_a"): "1.0",
+    ("q023_paper_bell_linear", "wavelength"): "1.0",
+    ("q023_paper_bell_linear", "k0"): "6.283185307179586",
+    ("q023_paper_bell_linear", "omega"): "6.283185307179586e-6",
+    ("q023_paper_bell_linear", "c_over_v_cr"): "1000.0",
+    ("q023_paper_bell_linear", "initial_eigenmode"):
+        "open_dedicated_section52_problem_generator",
+    ("q023_paper_bell_linear", "timestep"):
+        "open_clean_candidate_timestep_freeze",
+}
+
+_TRACE_KEYS = {
+    "dimension",
+    "epsilon",
+    "normalized_time",
+    "right_mode_real",
+    "right_mode_imag",
+    "left_mode_real",
+    "left_mode_imag",
+    "phase_interval",
+    "phase_change",
+}
+
+
+class ContractError(ValueError):
+    """Raised when a candidate deck or extracted trace violates the contract."""
+
+
+def parse_athinput(path: Path) -> dict[str, dict[str, str]]:
+    """Parse the strict Athena input subset used by the source-local decks."""
+    blocks: dict[str, dict[str, str]] = {}
+    current = None
+    for lineno, raw_line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        line = raw_line.split("#", 1)[0].strip()
+        if not line:
+            continue
+        if line.startswith("<"):
+            if not line.endswith(">"):
+                raise ContractError(f"{path}:{lineno}: malformed block header")
+            current = line[1:-1].strip()
+            if not current:
+                raise ContractError(f"{path}:{lineno}: empty block name")
+            blocks.setdefault(current, {})
+            continue
+        if current is None or "=" not in line:
+            raise ContractError(f"{path}:{lineno}: malformed parameter line")
+        name, value = (item.strip() for item in line.split("=", 1))
+        if not name or not value:
+            raise ContractError(f"{path}:{lineno}: empty parameter name or value")
+        if name in blocks[current]:
+            raise ContractError(f"{path}:{lineno}: duplicate {current}/{name}")
+        blocks[current][name] = value
+    return blocks
+
+
+def _require_close(label: str, measured: float, expected: float) -> None:
+    if not math.isclose(measured, expected, rel_tol=1.0e-14, abs_tol=1.0e-14):
+        raise ContractError(f"{label}: expected {expected!r}, measured {measured!r}")
+
+
+def validate_candidate_deck(path: Path, expected_dimension: int) -> dict[str, Any]:
+    """Validate paper values and retain the deliberate launch-blocked boundary."""
+    blocks = parse_athinput(path)
+    for (block, name), expected in _EXPECTED_DECK_VALUES.items():
+        measured = blocks.get(block, {}).get(name)
+        if measured != expected:
+            raise ContractError(
+                f"{path}: {block}/{name}: expected {expected!r}, measured {measured!r}"
+            )
+
+    metadata = blocks["q023_paper_bell_linear"]
+    if metadata.get("dimension") != str(expected_dimension):
+        raise ContractError(f"{path}: unexpected paper dimension")
+    geometry = _EXPECTED_GEOMETRY[expected_dimension]
+    nx = tuple(int(blocks["mesh"][f"nx{axis}"]) for axis in (1, 2, 3))
+    extent = tuple(
+        float(blocks["mesh"][f"x{axis}max"]) - float(blocks["mesh"][f"x{axis}min"])
+        for axis in (1, 2, 3)
+    )
+    if nx != geometry["nx"]:
+        raise ContractError(f"{path}: mesh cell-count contract mismatch")
+    for axis, (measured, expected) in enumerate(
+        zip(extent, geometry["extent"]), 1
+    ):
+        _require_close(f"{path}: x{axis} extent", measured, expected)
+    active_dx = tuple(extent[axis] / nx[axis] for axis in range(expected_dimension))
+    for axis, (measured, expected) in enumerate(
+        zip(active_dx, geometry["active_dx"]), 1
+    ):
+        _require_close(f"{path}: dx{axis}", measured, expected)
+
+    rho = float(metadata["rho"])
+    bg = float(metadata["b_g"])
+    ua = float(metadata["u_a"])
+    wavelength = float(metadata["wavelength"])
+    k0 = float(metadata["k0"])
+    omega = float(metadata["omega"])
+    epsilon = float(metadata["epsilon_default"])
+    vcr = float(blocks["particles"]["cr_vx0"])
+    light_speed = float(blocks["particles"]["pic_cr_light_speed"])
+    q_over_m = float(blocks["species0"]["charge"]) / float(blocks["species0"]["mass"])
+    ppc = float(blocks["particles"]["ppc"])
+    qscale = float(blocks["particles"]["deposit_qscale"])
+    jcr = ppc * qscale * float(blocks["species0"]["charge"]) * vcr
+
+    _require_close(f"{path}: U_A", ua, bg / math.sqrt(rho))
+    _require_close(f"{path}: k0", k0, 2.0 * math.pi / wavelength)
+    _require_close(f"{path}: Omega", omega, 1.0e-6 * k0 * ua)
+    _require_close(f"{path}: species q/m", q_over_m, omega / bg)
+    _require_close(f"{path}: epsilon", epsilon, ua / vcr)
+    _require_close(f"{path}: C", light_speed, 1.0e3 * vcr)
+    _require_close(f"{path}: j_CR", jcr, 2.0 * bg * light_speed * k0)
+
+    return {
+        "path": str(path.relative_to(REPO_ROOT)),
+        "dimension": expected_dimension,
+        "epsilon_default": epsilon,
+        "active_dx": list(active_dx),
+        "launch_status": "blocked_open_dedicated_section52_problem_generator",
+    }
+
+
+def validate_source_local_candidate_decks() -> list[dict[str, Any]]:
+    """Validate all three paper-value candidate decks without launching AthenaK."""
+    return [
+        validate_candidate_deck(DECKS[dimension], dimension)
+        for dimension in DIMENSIONS
+    ]
+
+
+def theoretical_dispersion(epsilon: float) -> tuple[float, float]:
+    """Return normalized (phase frequency, growth rate) at k=k0."""
+    if epsilon not in EPSILON_VALUES:
+        raise ContractError(f"epsilon {epsilon!r} is outside the preregistered grid")
+    return epsilon, math.sqrt(1.0 - epsilon * epsilon)
+
+
+def _finite_array(record: dict[str, Any], key: str) -> np.ndarray:
+    values = np.asarray(record[key], dtype=float)
+    if values.ndim != 1 or values.size == 0 or not np.all(np.isfinite(values)):
+        raise ContractError(f"{key} must be a finite nonempty one-dimensional array")
+    return values
+
+
+def _within_both_tolerances(measured: float, expected: float) -> bool:
+    absolute_error = abs(measured - expected)
+    relative_error = absolute_error / abs(expected)
+    return absolute_error <= ABSOLUTE_TOLERANCE and relative_error <= RELATIVE_TOLERANCE
+
+
+def _analyze_record(record: dict[str, Any]) -> dict[str, Any]:
+    if set(record) != _TRACE_KEYS:
+        raise ContractError("Bell extracted-trace record keys do not match the contract")
+    dimension = record["dimension"]
+    if type(dimension) is not int or dimension not in DIMENSIONS:
+        raise ContractError("dimension must be one of the preregistered integer values")
+    epsilon = float(record["epsilon"])
+    expected_phase, expected_growth = theoretical_dispersion(epsilon)
+
+    time = _finite_array(record, "normalized_time")
+    if time.size < MIN_GROWTH_SNAPSHOTS or np.any(np.diff(time) <= 0.0):
+        raise ContractError("normalized_time must be strictly increasing with >= 8 rows")
+    mode_arrays = [
+        _finite_array(record, key)
+        for key in (
+            "right_mode_real",
+            "right_mode_imag",
+            "left_mode_real",
+            "left_mode_imag",
+        )
+    ]
+    if any(values.size != time.size for values in mode_arrays):
+        raise ContractError("mode arrays must match normalized_time length")
+    right = mode_arrays[0] + 1.0j * mode_arrays[1]
+    left = mode_arrays[2] + 1.0j * mode_arrays[3]
+    right_amplitude = np.abs(right)
+    left_amplitude = np.abs(left)
+    fit_mask = (expected_growth * time >= 1.0) & (expected_growth * time <= 5.0)
+    if np.count_nonzero(fit_mask) < MIN_GROWTH_SNAPSHOTS:
+        raise ContractError("the fixed theory growth window requires >= 8 snapshots")
+    if np.any(right_amplitude[fit_mask] <= 0.0):
+        raise ContractError("right-polarized mode amplitude must remain positive")
+    fit_time = time[fit_mask]
+    fit_log_amplitude = np.log(right_amplitude[fit_mask])
+    coeff = np.polyfit(fit_time, fit_log_amplitude, 1)
+    measured_growth = float(coeff[0])
+    fitted = np.polyval(coeff, fit_time)
+    residual = fit_log_amplitude - fitted
+    ss_res = float(np.sum(residual * residual))
+    ss_tot = float(np.sum((fit_log_amplitude - np.mean(fit_log_amplitude)) ** 2))
+    growth_r2 = 1.0 if ss_tot == 0.0 else 1.0 - ss_res / ss_tot
+
+    phase_interval = _finite_array(record, "phase_interval")
+    phase_change = _finite_array(record, "phase_change")
+    if phase_interval.size != phase_change.size:
+        raise ContractError("phase interval and phase change arrays must have equal length")
+    if not np.allclose(phase_interval, PHASE_INTERVAL, rtol=0.0, atol=1.0e-14):
+        raise ContractError("phase intervals must equal pi/(k0*U_A)")
+    measured_phase = float(np.mean(np.abs(phase_change / phase_interval)))
+    final_fit_index = int(np.flatnonzero(fit_mask)[-1])
+    polarization_ratio = float(
+        right_amplitude[final_fit_index]
+        / max(float(left_amplitude[final_fit_index]), np.finfo(float).tiny)
+    )
+
+    growth_pass = _within_both_tolerances(measured_growth, expected_growth)
+    phase_pass = _within_both_tolerances(measured_phase, expected_phase)
+    polarization_pass = polarization_ratio >= MIN_RIGHT_TO_LEFT_RATIO
+    return {
+        "dimension": dimension,
+        "epsilon": epsilon,
+        "expected_growth_rate_over_k0_ua": expected_growth,
+        "measured_growth_rate_over_k0_ua": measured_growth,
+        "growth_fit_r2": growth_r2,
+        "expected_phase_frequency_over_k0_ua": expected_phase,
+        "measured_phase_frequency_over_k0_ua": measured_phase,
+        "right_to_left_amplitude_ratio": polarization_ratio,
+        "growth_pass": growth_pass,
+        "phase_pass": phase_pass,
+        "polarization_pass": polarization_pass,
+        "passed": growth_pass and phase_pass and polarization_pass,
+    }
+
+
+def analyze_trace_bundle(bundle: dict[str, Any]) -> dict[str, Any]:
+    """Analyze an exact extracted-trace grid without making a qualification claim."""
+    if set(bundle) != {"schema_version", "campaign_id", "qualifying_seed", "records"}:
+        raise ContractError("Bell extracted-trace bundle keys do not match the contract")
+    if bundle["schema_version"] != 1 or bundle["campaign_id"] != CAMPAIGN_ID:
+        raise ContractError("Bell extracted-trace bundle identity mismatch")
+    qualifying_seed = bundle["qualifying_seed"]
+    if type(qualifying_seed) is not int or qualifying_seed not in QUALIFYING_SEEDS:
+        raise ContractError("Bell extracted-trace bundle seed is not preregistered")
+    if not isinstance(bundle["records"], list):
+        raise ContractError("Bell extracted-trace records must be a list")
+
+    expected_keys = {(dimension, epsilon) for dimension in DIMENSIONS
+                     for epsilon in EPSILON_VALUES}
+    measured_keys = []
+    reports = []
+    for record in bundle["records"]:
+        if not isinstance(record, dict):
+            raise ContractError("Bell extracted-trace rows must be objects")
+        report = _analyze_record(record)
+        key = (report["dimension"], report["epsilon"])
+        if key in measured_keys:
+            raise ContractError(f"duplicate Bell extracted-trace row {key!r}")
+        measured_keys.append(key)
+        reports.append(report)
+    if set(measured_keys) != expected_keys:
+        raise ContractError("Bell extracted-trace grid is incomplete or contains extra rows")
+
+    reports.sort(key=lambda item: (item["dimension"], item["epsilon"]))
+    return {
+        "schema_version": 1,
+        "campaign_id": CAMPAIGN_ID,
+        "qualifying_seed": qualifying_seed,
+        "qualification_effect": (
+            "source_local_candidate_analysis_only_clean_candidate_binding_registered_"
+            "frontier_execution_independent_recompute_and_external_review_required"
+        ),
+        "deck_contracts": validate_source_local_candidate_decks(),
+        "record_count": len(reports),
+        "records": reports,
+        "passed": all(report["passed"] for report in reports),
+    }
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("trace_bundle", type=Path)
+    args = parser.parse_args()
+    bundle = json.loads(args.trace_bundle.read_text(encoding="utf-8"))
+    print(json.dumps(analyze_trace_bundle(bundle), indent=2, sort_keys=True,
+                     allow_nan=False))
+
+
+if __name__ == "__main__":
+    main()
