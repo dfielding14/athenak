@@ -90,6 +90,88 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _test_only_q022_ready_path_fixtures() -> tuple[
+    dict[str, object], dict[str, object], dict[str, object]
+]:
+    """Return synthetic complete records for schema ready-path coverage only."""
+    comparison_id = "XCMP-TEST-ONLY-READY-PATH"
+    dataset_id = "Q022-DATASET-TEST-ONLY-READY-PATH"
+    provenance = copy.deepcopy(_load(Q022_DATASET_PROVENANCE_PATH))
+    provenance["authorized_extracted_dataset_root_status"] = (
+        "present_extracted_dataset_ingest_requires_manifest_update"
+    )
+    provenance["dataset_candidates"] = [
+        {
+            "dataset_id": dataset_id,
+            "comparison_id": comparison_id,
+            "reference_ids": ["test_only_reference"],
+            "source_records": ["test-only synthetic schema fixture"],
+            "extraction_status": (
+                "extracted_dataset_checksum_verified_pending_external_review"
+            ),
+            "redistribution_basis": "test-only synthetic redistribution basis",
+            "reviewer_disposition": "pending external review",
+            "blocked_input_ids": [],
+            "extracted_dataset_locator": (
+                f"{Q022_AUTHORIZED_EXTRACTED_DATASET_ROOT}/"
+                "test-only-ready-path/dataset.csv"
+            ),
+            "extracted_dataset_sha256": "a" * 64,
+            "extraction_method": "test-only synthetic extraction method",
+            "extraction_script_sha256": "b" * 64,
+            "extraction_uncertainty": "test-only synthetic uncertainty record",
+        }
+    ]
+    provenance["manifest_status"] = "test_only_ready_path_schema_fixture"
+
+    equation_map = {
+        "schema_version": 2,
+        "map_status": "frozen_before_comparison_run",
+        "comparison_id": comparison_id,
+        "dataset_provenance_id": dataset_id,
+        "reference_ids": ["test_only_reference"],
+        "athenak_physical_mode": "test_only_ready_path_mode",
+        "matched_equations": ["test-only synthetic matched equation"],
+        "intentional_mismatches": ["test-only synthetic excluded mismatch"],
+        "unit_map": {"observable": "test-only synthetic unit map"},
+        "normalization_map": {"observable": "test-only synthetic normalization"},
+        "parameter_overlap": {"parameter": "test-only synthetic overlap"},
+        "excluded_regimes": ["test-only synthetic excluded regime"],
+        "source_records": ["test-only synthetic schema fixture"],
+        "blocked_inputs": [],
+        "reviewer_disposition": "pending external review",
+    }
+    tolerance_table = {
+        "schema_version": 2,
+        "comparison_id": comparison_id,
+        "dataset_provenance_id": dataset_id,
+        "freeze_status": "frozen_before_qualifying_run",
+        "observable_families": ["test_only_observable_family"],
+        "rows": [
+            {
+                "observable": "test_only_observable",
+                "units": "test_only_units",
+                "reference_value_or_extraction": (
+                    "test-only synthetic extracted value with uncertainty"
+                ),
+                "expected_discretization_trend": (
+                    "test-only synthetic convergent trend"
+                ),
+                "absolute_tolerance": 0.01,
+                "relative_tolerance": 0.02,
+                "tolerance_rationale": "test-only synthetic tolerance rationale",
+                "cpu_mpi_gpu_reduction_variation": (
+                    "test-only synthetic reduction variation bound"
+                ),
+                "failure_artifact_path": "test-only/failures/observable.json",
+            }
+        ],
+        "blocked_inputs": [],
+        "reviewer_disposition": "pending external review",
+    }
+    return provenance, equation_map, tolerance_table
+
+
 class PicPreregistrationTests(unittest.TestCase):
     def setUp(self) -> None:
         self.q022 = _load(Q022_PATH)
@@ -465,6 +547,26 @@ class PicPreregistrationTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_schema(tolerance_table,
                             _load(Q022_TOLERANCE_TABLE_SCHEMA_PATH))
+
+    def test_q022_schemas_accept_complete_test_only_ready_path_fixtures(
+        self,
+    ) -> None:
+        provenance, equation_map, tolerance_table = (
+            _test_only_q022_ready_path_fixtures()
+        )
+        validate_schema(provenance, _load(Q022_DATASET_PROVENANCE_SCHEMA_PATH))
+        validate_schema(equation_map, _load(Q022_EQUATION_MAP_SCHEMA_PATH))
+        validate_schema(tolerance_table, _load(Q022_TOLERANCE_TABLE_SCHEMA_PATH))
+
+        candidate = provenance["dataset_candidates"][0]
+        self.assertEqual(candidate["comparison_id"], equation_map["comparison_id"])
+        self.assertEqual(candidate["comparison_id"],
+                         tolerance_table["comparison_id"])
+        self.assertEqual(candidate["dataset_id"],
+                         equation_map["dataset_provenance_id"])
+        self.assertEqual(candidate["dataset_id"],
+                         tolerance_table["dataset_provenance_id"])
+        self.assertEqual(len(tolerance_table["rows"]), 1)
 
     def test_q023_drafts_cover_policy_campaigns_and_block_runs(self) -> None:
         drafts = _load(Q023_DRAFTS_PATH)
