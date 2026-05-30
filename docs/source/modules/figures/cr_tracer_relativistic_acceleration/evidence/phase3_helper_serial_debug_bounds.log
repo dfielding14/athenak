@@ -1,0 +1,30 @@
+[  2%] Built target kokkossimd
+[ 11%] Built target kokkoscore
+[ 13%] Built target kokkoscontainers
+[ 13%] Built target AlwaysCheckGit
+[ 14%] Built target impl_git_version
+[ 15%] Building CXX object src/CMakeFiles/athena.dir/pgen/unit_tests/cr_relativistic_gather_test.cpp.o
+[ 15%] Linking CXX executable athena
+[100%] Built target athena
+
+Root grid = 1 x 1 x 1 MeshBlocks
+Total number of MeshBlocks = 1
+Number of logical  levels of refinement = 0 (1 levels total)
+Number of physical levels of refinement = 0 (1 levels total)
+Number of parallel ranks = 1
+CR relativistic gather varying-u nonlinear RMS errors: 0.00389056 0.00100209 0.000252406; orders: 1.95697 1.98919
+CR relativistic gather varying-B nonlinear RMS errors: 0.00293677 0.000756365 0.00019051; orders: 1.95708 1.98922
+CR relativistic gather helper tests passed
+
+Setup complete, executing task list(s)...
+
+elapsed=1.627662e-01 cycle=0 time=0.000000e+00 dt=2.112886e-02
+
+Terminating on cycle limit
+time=0.000000e+00 cycle=0
+tlim=0.000000e+00 nlim=0
+
+MeshBlock-cycles = 0
+cpu time used  = 9.666000e-06
+zone-cycles/cpu_second = 0.000000e+00
+particle-updates/cpu_second = 0.000000e+00

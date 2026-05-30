@@ -18,6 +18,7 @@
 #include "globals.hpp"
 #include "mhd/mhd.hpp"
 #include "particles.hpp"
+#include "trilinear_gather.hpp"
 
 #if MPI_PARALLEL_ENABLED
 #include <mpi.h>
@@ -29,13 +30,6 @@ namespace {
 struct ParticleBField {
   Real x, y, z;
 };
-
-KOKKOS_INLINE_FUNCTION
-int FloorToInt(Real x) {
-  int i = static_cast<int>(x);
-  if (static_cast<Real>(i) > x) {--i;}
-  return i;
-}
 
 KOKKOS_INLINE_FUNCTION
 int StepsForRatio(Real ratio) {
@@ -96,46 +90,9 @@ struct TrilinearGather {
     (void)nx1;
     (void)nx2;
     (void)nx3;
-    Real a1 = (x1 - mbsize.d_view(m).x1min)/mbsize.d_view(m).dx1 +
-              static_cast<Real>(is) - 0.5;
-    int i0 = FloorToInt(a1);
-    Real d1 = a1 - static_cast<Real>(i0);
-
-    int j0 = js;
-    Real d2 = 0.0;
-    if (multi_d) {
-      Real a2 = (x2 - mbsize.d_view(m).x2min)/mbsize.d_view(m).dx2 +
-                static_cast<Real>(js) - 0.5;
-      j0 = FloorToInt(a2);
-      d2 = a2 - static_cast<Real>(j0);
-    }
-
-    int k0 = ks;
-    Real d3 = 0.0;
-    if (three_d) {
-      Real a3 = (x3 - mbsize.d_view(m).x3min)/mbsize.d_view(m).dx3 +
-                static_cast<Real>(ks) - 0.5;
-      k0 = FloorToInt(a3);
-      d3 = a3 - static_cast<Real>(k0);
-    }
-
-    ParticleBField bf{0.0, 0.0, 0.0};
-    int nk = three_d ? 2 : 1;
-    int nj = multi_d ? 2 : 1;
-    for (int k=0; k<nk; ++k) {
-      Real wk = (k == 0) ? (1.0 - d3) : d3;
-      for (int j=0; j<nj; ++j) {
-        Real wj = (j == 0) ? (1.0 - d2) : d2;
-        for (int i=0; i<2; ++i) {
-          Real wi = (i == 0) ? (1.0 - d1) : d1;
-          Real w = wi*wj*wk;
-          bf.x += w*bcc(m,IBX,k0+k,j0+j,i0+i);
-          bf.y += w*bcc(m,IBY,k0+k,j0+j,i0+i);
-          bf.z += w*bcc(m,IBZ,k0+k,j0+j,i0+i);
-        }
-      }
-    }
-    return bf;
+    ParticleVector3 bf = GatherCellCenteredB(
+        bcc, mbsize, m, x1, x2, x3, is, js, ks, multi_d, three_d);
+    return ParticleBField{bf.x, bf.y, bf.z};
   }
 };
 

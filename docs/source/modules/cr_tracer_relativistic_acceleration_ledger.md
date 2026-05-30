@@ -25,14 +25,14 @@ The statuses in this initial draft are intentionally conservative:
 | --- | --- | --- |
 | Ledger date | `2026-05-30` | Record the date of each accepted update. |
 | Working branch | `feature/CR_tracers_relativistic_acceleration` | Stop if the working branch changes unexpectedly. |
-| Working branch HEAD at latest accepted commit | `0687973f3df831381f8a6ad71ffd3729febdc0fa` | Refresh after every accepted commit. |
+| Working branch HEAD at latest accepted commit | `be24fa12ca9b330f1da20c489c826a231bf01d85` | Refresh after every accepted commit. |
 | Frozen feature base | `64a4d1be8da1c22d1328cc47280195b3747fa0ab` from `feature/CR_tracers_followup_architecture` | Change only through an accepted `DR-000` update. |
 | Intended eventual integration target | `origin/development` at `c6a73b08e60807f8b925164c5e7edd5cb820c8ae` | Refresh the target SHA and merge-tree audit after target updates and before handoff. |
-| Current implementation phase | `Phase 2: explicit parser-only opt-in runtime contract` | Advance to gathers only after parser tests, user documentation, independent integration review, and `RG-003` record `PROCEED`. |
-| Allowed write manifest | `src/particles/particles.hpp`, `src/particles/particles.cpp`, `src/particles/particles_pushers.cpp`, `src/particles/README.md`, Phase-2 parser tests and evidence, and this ledger only | Keep the 14-real legacy layout unchanged.  Do not edit restart payloads, outputs, gathers, MHD, AMR, timestep algorithms, or acceleration kernels until the Phase-2 done claim is accepted. |
-| Last accepted checkpoint | Phase-1 relativistic state-helper milestone at `0687973f3df831381f8a6ad71ffd3729febdc0fa` | Record each milestone commit before opening the next phase. |
-| Open blocking findings | Phase-2 parser qualification and review; downstream `BF-009`, `BF-014`, backend qualification, layout, restart, output, solver-coupling, and migration obligations remain open for their owning phases | Keep the live list current.  Do not proceed while a blocker for the next edit set remains open. |
-| CPU/MPI qualification status | Phase 1 accepted: isolated double-precision CPU helper harness passed; legacy particle CPU `32 passed`; legacy particle MPI CPU `9 passed`; single precision blocked before helper qualification by inherited repository narrowing errors | Rerun and archive qualification at each accepted milestone. |
+| Current implementation phase | `Phase 3: shared trilinear gather helper and prescribed-field diagnostics` | Advance to acceleration only after helper and diagnostic-only gather tests, independent review, and `RG-004` record `PROCEED`. |
+| Allowed write manifest | `src/particles/trilinear_gather.hpp`, `src/particles/particles_pushers.cpp`, narrowly scoped Phase-3 diagnostic pgen and input files, gather-only tests, Phase-3 evidence, and this ledger only | Keep particle widths, restart payloads, outputs, MHD tasks, AMR algorithms, subcycling, displacement, Boris algebra, and positive-cycle `relativistic_hc` abort unchanged. |
+| Last accepted checkpoint | Phase-2 fail-closed parser contract at `be24fa12ca9b330f1da20c489c826a231bf01d85` | Record each milestone commit before opening the next phase. |
+| Open blocking findings | Phase-3 helper review corrections, true MPI launch parity, diagnostic-only runtime integration, and actual ghost-fill, periodic, block-boundary, SMR, forced-AMR evidence; downstream `BF-009`, `BF-014`, backend qualification, layout, restart, output, solver-coupling, and migration obligations remain open for their owning phases | Keep the live list current.  Do not proceed while a blocker for the next edit set remains open. |
+| CPU/MPI qualification status | Phase 2 accepted: focused parser `49 passed` plus `nlim=0` smoke and positive-cycle abort; full CPU `269 passed, 15 skipped, 67 deselected`; MPI CPU `38 passed, 313 deselected`; style `2 passed`; single precision remains blocked by inherited repository narrowing errors | Rerun and archive qualification at each accepted milestone. |
 | GPU qualification status | Not started; unavailable on this workstation | GPU qualification is optional for `MERGE READY` on this workstation, but it remains a separate unqualified residual risk.  Do not claim `GPU QUALIFIED` without accelerator evidence on an accepted SHA. |
 | Merge-ready status | Not eligible | Requires the guide's checkpoint sequence, including `CP-4 Solver Coupling` and `CP-7 Final Cold Review`. |
 
@@ -2014,3 +2014,158 @@ subcycling changes, or MPI/AMR migration claims for appended state.
 - Next permitted edit set: Phase-3 mechanically isolated trilinear gather helper
   and custom test harness only.  Preserve the positive-cycle
   `relativistic_hc` abort and keep production sampled-MHD coupling closed.
+
+## Phase 3 Opening Update 1: Helper-First Gather Boundary
+
+Phase 2 is committed at `be24fa12`.  Independent architecture and adversarial
+test sidecars both held any broad Phase-3 done claim and selected a narrower
+first edit set.
+
+### DR-023: Shared Pointwise Trilinear Gather Helper
+
+- Status: selected for helper implementation and independent review
+- Date: 2026-05-30
+- Problem: interpolate Newtonian primitive fluid velocity and cell-centered
+  magnetic field without permitting silent stencil drift, CT-edge reuse,
+  face-centered-field reuse, precomputed-field gathering, or premature
+  acceleration.
+- Options considered:
+  1. Interpolate `u_fluid` and `B` through separate copied kernels.
+  2. Gather a precomputed grid electric field or CT edge electromotive force.
+  3. Extract one device-capable cell-centered trilinear stencil object, reuse
+     its exact indices and weights for both vectors, then construct pointwise
+     normalized `cE = -u_fluid x B`.
+- Selected option: option 3.
+- Why the other options were not selected: duplicated interpolation can drift;
+  precomputed grid fields and CT edge EMFs answer a different discretization
+  question and require a separate reviewed widening.
+- Initial helper-only write manifest:
+  `src/particles/trilinear_gather.hpp`,
+  `src/particles/particles_pushers.cpp`, a custom unit-test pgen, test inputs,
+  test utilities, gather-only tests, this ledger, and Phase-3 evidence files.
+- Protected surfaces: do not change particle widths, `ParticlesIndex`, restart,
+  outputs, MHD tasks, AMR algorithms, subcycling, displacement, Boris algebra,
+  or the positive-cycle `relativistic_hc` abort.
+- Helper qualification contract:
+  - gather arbitrary cell-centered vectors through one reusable stencil;
+  - gather primitive `w0(IVX:IVZ)` and cell-centered `bcc0(IBX:IBZ)` with that
+    same stencil when the diagnostic-only integration layer opens;
+  - name the normalized electric quantity `cE`, not unqualified `E`;
+  - keep `trilinear` as the only relativistic gather policy;
+  - require post-boundary-repair lifecycle points for ghost-zone access.
+- Helper-only validation ladder: host/device parity; uniform fields; affine
+  exactness; smooth nonlinear convergence; parallel-field cancellation;
+  basis-vector sign table; `cE dot B` debug invariant; noncommutation trap;
+  periodic ghost probes; poisoned-ghost negative control; synthetic two-block
+  interface; synthetic coarse/fine views; MPI launch parity.
+- Diagnostic-only runtime ladder before `RG-004`: actual ghost fill,
+  block-boundary continuity, periodic wrap, MPI decomposition including empty
+  ranks, SMR behavior, and forced refine/derefine migration with identity
+  preservation and no stale sampled state.
+- Stop conditions: any source edit outside the manifest; separate `u` and `B`
+  stencils; conserved-momentum velocity input; CT-edge or face-centered-field
+  reuse; out-of-range stencil access; analytical-sign failure; unexplained MPI,
+  block-boundary, periodic, SMR, or AMR disagreement; or removal of the
+  positive-cycle runtime abort.
+- Revisit trigger: helper review findings or the diagnostic-only runtime
+  integration checkpoint.
+
+## Phase 3 Update 2: Independent Helper Review Hold And Correction Scope
+
+The first helper implementation compiled and passed an isolated serial harness,
+but an independent reviewer returned `HOLD`.  This is intentionally recorded
+before the fixes are accepted.
+
+### Helper Review Finding Record
+
+- Review status: `HOLD`
+- Date: 2026-05-30
+- Findings:
+  1. Host-side parity checks dereferenced device views and were valid only on
+     host-accessible serial memory.
+  2. The nonlinear convergence ladder varied `u_fluid` and `B` together rather
+     than isolating the two required manufactured cases.
+  3. Synthetic ghost and interface fixtures did not qualify actual AthenaK
+     periodic repair, MPI exchange, SMR prolongation, or AMR remapping.
+  4. Boundary probes did not assert stencil index bounds explicitly.
+  5. MPI launch parity had not yet been run through a true MPI-enabled build.
+  6. The control header still described the accepted Phase-1 checkpoint.
+  7. Lower-dimensional helper branches remain outside the first 3-D-only
+     relativistic contract.
+- Selected correction scope:
+  - mirror device fields for host-oracle comparisons;
+  - replace captured profile callables with a device-capable profile enum;
+  - split nonlinear convergence into varying-`u_fluid`/uniform-`B` and
+    uniform-`u_fluid`/varying-`B` sequences;
+  - assert every derived stencil index stays inside the allocated synthetic
+    ghost extent;
+  - retain synthetic interface checks as helper-contract evidence only;
+  - run a true `Athena_ENABLE_MPI=ON` launch ladder;
+  - keep actual periodic, SMR, and AMR claims open for a separate test-only
+    runtime diagnostic harness;
+  - refresh the live control header to the accepted Phase-2 SHA.
+- Why the scope remains narrow: none of the review findings requires a particle
+  layout, restart, output, MHD-task, AMR-algorithm, subcycling, displacement,
+  Boris-algebra, or positive-cycle relativistic-execution change.
+- Initial corrected serial result:
+  - varying-`u_fluid` RMS order: `1.95697`, then `1.98919`;
+  - varying-`B` RMS order: `1.95708`, then `1.98922`.
+- Open before helper acceptance: true MPI launch results, independent rereview,
+  archived evidence, and the separate runtime diagnostic ladder.
+
+## Phase 3 Update 3: Corrected Helper Validation In Progress
+
+- Date: 2026-05-30
+- Corrected serial release harness: `PASS`
+- Corrected smooth manufactured sequences:
+  - varying-`u_fluid`, uniform-`B`: RMS errors `3.89056e-03`,
+    `1.00209e-03`, `2.52406e-04`; observed orders `1.95697`, `1.98919`;
+  - uniform-`u_fluid`, varying-`B`: RMS errors `2.93677e-03`,
+    `7.56365e-04`, `1.90510e-04`; observed orders `1.95708`, `1.98922`.
+- True MPI configuration:
+  `-D PROBLEM=unit_tests/cr_relativistic_gather_test
+  -D Athena_ENABLE_MPI=ON`.
+- True MPI launch ladder:
+  - rank `1`: `PASS`;
+  - ranks `2`: initial one-MeshBlock fixture rejected as intended by AthenaK,
+    then `PASS` with `mesh/nx1=8`;
+  - ranks `4`: initial one-MeshBlock fixture rejected as intended by AthenaK,
+    then `PASS` with `mesh/nx1=16`.
+- Claim boundary: these launches qualify helper execution parity only.  They do
+  not qualify production MPI particle collection, actual periodic ghost repair,
+  SMR prolongation, or AMR remapping.
+- Open before helper-only acceptance: debug-bounds build, independent rereview,
+  and archived evidence.
+
+## Phase 3 Helper-Only Checkpoint Closure
+
+- Date: 2026-05-30
+- Status: `PROCEED` for the mechanically isolated helper slice only.
+- Reviewer loop:
+  1. Initial review returned `HOLD` for host dereferences of device views,
+     combined convergence norms, missing explicit bounds assertions, missing
+     true MPI launches, and a stale control header.
+  2. Rereview returned `HOLD` for one remaining host dereference of a device
+     `cell_cE` view and then for an evidence manifest that did not bind untracked
+     helper files.
+  3. Final rereview returned `PROCEED` after moving the last gather into a device
+     kernel and directly hashing the helper source files, harness input, and
+     retained logs.
+- Accepted evidence:
+  - `evidence/phase3_helper_serial_release.log`;
+  - `evidence/phase3_helper_serial_debug_bounds.log`;
+  - `evidence/phase3_helper_mpi_launch_parity.log`;
+  - `evidence/phase3_helper_diff_check.log`;
+  - `evidence/phase3_helper_sha256.txt`.
+- Accepted narrow implementation:
+  - reuse one cell-centered trilinear stencil for arbitrary gathered vectors;
+  - preserve the legacy trilinear Boris magnetic gather through that helper;
+  - gather primitive fluid velocity and cell-centered magnetic field with the
+    same stencil in helper-only tests;
+  - construct explicitly named pointwise `cE = -u_fluid x B`;
+  - keep primitive-velocity gather and `cE` construction unused by production
+    particle execution.
+- Still open before `RG-004`: actual repaired periodic ghosts, live
+  block-boundary behavior, production MPI collection including particle-empty
+  ranks, static refinement, forced AMR migration shadow evidence, and an
+  independent runtime-diagnostic review.
