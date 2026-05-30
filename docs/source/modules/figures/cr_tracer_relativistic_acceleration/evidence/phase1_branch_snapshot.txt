@@ -1,0 +1,35 @@
+Phase 1 branch snapshot
+captured_utc=2026-05-30T04:41:53Z
+
+[current branch]
+feature/CR_tracers_relativistic_acceleration
+
+[branch tip]
+04090c1a402bdf07dfc24ab18c3936ea13111141
+
+[remote tracking tip]
+3984b57ec8832b3e3e8140e08188a8a05e773136
+
+[frozen prerequisite]
+64a4d1be8da1c22d1328cc47280195b3747fa0ab
+
+[target development]
+c6a73b08e60807f8b925164c5e7edd5cb820c8ae
+
+[submodule status]
+ 08ceff92bcf3a828844480bc1e6137eb74028517 kokkos (post-formating-9968-g08ceff92b)
+
+[git status --short --branch]
+## feature/CR_tracers_relativistic_acceleration...origin/feature/CR_tracers_relativistic_acceleration [ahead 1]
+ M docs/source/modules/cr_tracer_relativistic_acceleration_ledger.md
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase1_branch_snapshot.txt
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase1_evidence_sha256.txt
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase1_helper_cpu.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase1_helper_cpu_single_precision_blocked.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase1_legacy_cpu.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase1_legacy_mpicpu.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase1_style.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase1_untracked_whitespace_check.log
+?? inputs/unit_tests/cr_relativistic_state_test.athinput
+?? src/particles/relativistic_state.hpp
+?? src/pgen/unit_tests/cr_relativistic_state_test.cpp

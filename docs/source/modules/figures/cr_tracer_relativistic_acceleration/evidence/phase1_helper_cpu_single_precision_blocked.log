@@ -1,0 +1,1025 @@
+-- Including user-specified problem generator file: unit_tests/cr_relativistic_state_test
+-- Enabling Kokkos debug mode
+-- Setting default Kokkos CXX standard to 17
+-- Kokkos version: 4.4.0
+-- The project name is: Kokkos
+-- Using internal gtest for testing
+-- Using -std=c++17 for C++17 standard as feature
+-- Built-in Execution Spaces:
+--     Device Parallel: NoTypeDefined
+--     Host Parallel: NoTypeDefined
+--       Host Serial: SERIAL
+--
+-- Architectures:
+-- Using internal desul_atomics copy
+-- Experimental mdspan support is enabled
+-- Using internal mdspan directory /Users/dbf75/.codex/worktrees/e354/athenak-DF/kokkos/core/src/../../tpls/mdspan/include
+-- Kokkos Backends: SERIAL
+-- Configuring done (0.4s)
+-- Generating done (0.1s)
+-- Build files have been written to: /tmp/athenak-cr-rel-state-cpu-sp
+[  2%] Built target kokkossimd
+[  2%] Built target AlwaysCheckGit
+[ 11%] Built target kokkoscore
+[ 12%] Built target impl_git_version
+[ 14%] Built target kokkoscontainers
+[ 14%] Building CXX object src/CMakeFiles/athena.dir/bvals/prolong_prims.cpp.o
+[ 15%] Building CXX object src/CMakeFiles/athena.dir/coordinates/adm.cpp.o
+[ 15%] Building CXX object src/CMakeFiles/athena.dir/coordinates/coordinates.cpp.o
+[ 16%] Building CXX object src/CMakeFiles/athena.dir/dyn_grmhd/dyn_grmhd.cpp.o
+[ 17%] Building CXX object src/CMakeFiles/athena.dir/dyn_grmhd/dyn_grmhd_fofc.cpp.o
+[ 17%] Building CXX object src/CMakeFiles/athena.dir/eos/ideal_srhyd.cpp.o
+[ 19%] Building CXX object src/CMakeFiles/athena.dir/eos/isothermal_mhd.cpp.o
+[ 19%] Building CXX object src/CMakeFiles/athena.dir/eos/ideal_grhyd.cpp.o
+In file included from /Users/dbf75/.codex/worktrees/e354/athenak-DF/src/bvals/prolong_prims.cpp:25:
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:140:27: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  140 |   Real const beta_d[3] = {2.*H*l_u[0], 2.*H*l_u[1], 2.*H*l_u[2]};
+      |                           ^~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:140:27: note: insert an explicit cast to silence this issue
+  140 |   Real const beta_d[3] = {2.*H*l_u[0], 2.*H*l_u[1], 2.*H*l_u[2]};
+      |                           ^~~~~~~~~~~
+      |                           static_cast<Real>( )
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:140:40: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  140 |   Real const beta_d[3] = {2.*H*l_u[0], 2.*H*l_u[1], 2.*H*l_u[2]};
+      |                                        ^~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:140:40: note: insert an explicit cast to silence this issue
+  140 |   Real const beta_d[3] = {2.*H*l_u[0], 2.*H*l_u[1], 2.*H*l_u[2]};
+      |                                        ^~~~~~~~~~~
+      |                                        static_cast<Real>( )
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:140:53: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  140 |   Real const beta_d[3] = {2.*H*l_u[0], 2.*H*l_u[1], 2.*H*l_u[2]};
+      |                                                     ^~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:140:53: note: insert an explicit cast to silence this issue
+  140 |   Real const beta_d[3] = {2.*H*l_u[0], 2.*H*l_u[1], 2.*H*l_u[2]};
+      |                                                     ^~~~~~~~~~~
+      |                                                     static_cast<Real>( )
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:172:5: error: non-constant-expression cannot be narrowed from type '__promote_t<float, int>' (aka 'double') to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  172 |     SQR(H)*x/(pow(r,3)) * ( ( qc ) )/ qa,
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/athena.hpp:48:16: note: expanded from macro 'SQR'
+   48 | #define SQR(x) ( (x)*(x) )
+      |                ^
+In file included from /Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/adm.cpp:11:
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:140:27: /Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:172:5: note: insert an explicit cast to silence this issue
+error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  172 |    140 |   Real co   SQR(H)*x/(pow(r,3)) * ( ( qc ) nst beta)/ q_d[3] = {2.*Ha,
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |     static_cast<Real>(                  )
+*l_u[/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/athena.hpp:48:16:0], 2.*H note: expanded from macro 'SQR'
+*l_u[1],   48 | #define SQR(x) ( (x)*( 2.*H*l_u[2]x) )
+      |                ^};
+      |                           ^~~~~~~~~~~
+
+In file included from /Users/dbf75/.codex/worktrees/e354/athenak-DF/src/bvals/prolong_prims.cpp:25:
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:173:5: error: non-constant-expression cannot be narrowed from type '__promote_t<float, int>' (aka 'double') to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  173 |     SQ/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:140:27: note: R(H)*y/(insert an explicit cast to silence this issue
+  140 |   Reapow(r,3)) * ( ( qcl const beta_d[3] = {2.*H*l_u[0], 2.*H*l_u[1] ) )/ qa,
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~, 2.*H*l_u
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/athena.hpp:48:[2]};
+      |                           ^~~~~~~~~~~
+16: note: expanded from macro 'SQR'
+      |                           static_cast<Real>( )
+   48/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:140:40: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  140 |   Real const beta_d[3]  | #define SQR(x)= {2.*H*l_u[0], 2.*H*l_u[1], 2.*H*l_u[2]} ( (x)*;
+      |                                        ^~~~~~~~~~~
+(x) )
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:140:40:      |                ^
+ note: insert an explicit cast to silence this issue
+  140 |   R/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:173:5: note: insert an explicit cast to silence this issue
+eal c  173 |     SQRonst beta_d[3] = {2.*H*l_u(H)*y[0], 2./(pow(*H*l_u[1], r,3)) * ( ( qc ) 2.*H*l_)/ qu[2]};
+      a,
+      | |                                        ^~~~~~~~~~~
+      |                                        static_cast<Real>( )
+    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |     static_cast<Real>(                  )
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/athena.hpp:48:16: note: 140:53: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  140 |   Reexpanded from macro 'SQR'
+al const beta_d[3] = {2.*H*l_u[0], 2.*H*l_u[1], 2.*H*l_u[2]};
+      |                                                     ^~~~~~~~~~~
+   48 | #define SQR(x) ( (x)/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:140:53: note: insert an explicit cast to silence this issue
+*(x)  140 ) |
+      |                ^
+ Real const beta_d[3] =In file included from /Users/dbf75/.codex/worktrees/e354/athenak-DF/src/bvals/prolong_prims.cpp:25:
+ {2.*H*l_u[0], 2.*/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:174H*l_u[1], 2.*H:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]*l_u[2]};
+      |                                                     ^~~~~~~~~~~
+      |                                                     static_cast<Real>( )
+
+  174 |     SQR(H)*z/(pow(r,5)) * ( ( qc * qb ) / qa - 2.0*SQR(a*r))
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/athena.hpp:48:16: note: expanded from macro 'SQR'
+   48 | #define SQR(x) ( (x)*(x) )
+      |                ^
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:174:5: note: insert an explicit cast to silence this issue
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:172:5: error: non-constant-expression cannot be narrowed from type '__promote_t<float, int>' (aka 'double') to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  174 |       172 |   SQR(H)*z/(pow  SQ(r,R(H)*x/(po5)w(r,3) * ( ( qc * qb ) / qa - 2.0*S)) * QR(a*r))
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      | ( (    static_cast<Real>(                                      )
+ qc )/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/athena.hpp:48:16: note: expanded from macro 'SQR'
+ )/   48 | #define SQ qa,
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+R(x)/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/athena.hpp:48:16: note: expanded from macro 'SQR'
+ (    48(x)*( | #definx) )
+      |                ^
+e SQR(x) ( (x)*(x) )
+      |                ^
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:172:5: note: insert an explicit cast to silence this issue
+  172 |     SQR(H)*x/(pow(r,3)) * ( ( qc ) )/ qa,
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |     static_cast<Real>(                  )
+In file included from /Users/dbf75/.codex/worktrees/e354/athenak-DF/src/bvals/prolong_prims.cpp:25:
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/athena.hpp:48:16: note: expanded from macro 'SQR'
+:180:6: error:    48 | #dnon-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+ef  180in |  e   SQ {R(x) x*( (xr * )*( SQR(a)*x(x -)  2)
+      |                ^
+.0*a*r*y - SQIn file included from /Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/adm.cpp:11:
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hppR(r)*x )/( SQR(qb) * qa:173:5: error: non-constant-expression cannot be narrowed from type '__promote_t<float, int>' (aka 'double') to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+ )  173 + r/ |     SQR( qb ),(H)*
+      y/(p|      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ow(r,3)) * /Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:180:6: note: insert an explicit cast to silence this issue
+(  180 |     {x*r * ( SQ ( qc )R(a)*x -  )/ qa,
+      2.0*a|     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+*r*y - SQR(r)*/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/athena.hpp:48:16: note: expanded from macro 'SQR'
+   48 | #define SQR(x) ( (x)*(x) )
+      |                ^
+x/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:173:5: note: insert an explicit cast to silence this issue
+ )/(   173 |     SQSQR(qb) *R( qa H)) + *yr/( qb /(pow(r,3),
+      |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |      static_cast<Real>(                                                   )
+)/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:181:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  181 |     x*r * ) ( * ( (SQR(a)*y + 2.0*a*r*x - SQR(r)*y )/( SQR(qb) qc )  * qa )/ qa,) - a
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      | /(    static_cast<Real>(                  )
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/athena.hpp: qb ),
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+48:16: note: expanded from macro 'SQR'
+   48 | #define S/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:181:5: note: insert an explicit cast to silence this issue
+Q  181 | R(x) (    x*r (x)*(x) )
+       * ( SQR|                ^
+(a)*y + In file included from /Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/adm.cpp:11:
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:174:52.: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  174 |     SQR(H)*z/(pow(0r,5)) * ( ( qc * qb ) / qa *a*r*x - SQR(r- 2.0)*y )/*SQR(a*r))
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/athena.hpp:48:16( : note: expanded from macro 'SQR'
+   48 | #SQR(qbde) fine SQR(x) * q( (a x)) *(x- ) )a/( q
+      b |                ^),
+
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |     static_cast<Real>(                                                   )
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:174:5: note: insert an explicit cast to silence this issue/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:
+184  174 | :6: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+     184 |      SQR(H{y)**rz/ *(p ( SQowR((ra),5*x)) - * 2 (.0 (*a qc *r*y - SQR(r)** qb ) / qax )/( SQ - 2R(.0qb*S) QR* (aqa*r ))) +
+       a|     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~/(
+       q|     static_cast<Real>(                                      )b ),
+      |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/athena.hpp:48:16: note: expanded from macro 'SQR'
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:184   48 | :6: note: #deinsert an explicit cast to silence this issue
+f  184 |  ine SQR(x) ( (x)*(x) )
+      |                ^
+   {y*r * ( SQR(a)*x - 2.0*a*r*y - SQR(r)*x )/( SQR(qb) * qa ) + a/( qb ),
+      |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |      static_cast<Real>(                                                   )
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:185:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  185 |     y*r * ( SQR(a)*y + 2.0*a*r*xIn file included from /Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/adm.cpp:11:
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:180:6: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+ - SQR(r)*y  180 |    )/( SQR(qb)   {x* *r *qa  ( SQ) R(+ a)r/*x(  -qb 2 ).0,
+*a      | *r    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+*y - SQR(r)/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:*x185: )5:/( note:  SQinsert an explicit cast to silence this issue
+R(qb)   185 | *   qa ) + r/(   y*r * qb(  )SQR(a,
+)*y       |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
++ 2.0*a*r*x - SQR(r)*y )/( SQR(qb/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:) 180:* qa6: note: insert an explicit cast to silence this issue
+   180 |     ) + r/( qb ){x*,
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~r *
+      |     static_cast<Real>(                                                   )
+( SQR(a)*x/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:188 -:6: error:  2non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+.0*a*  188 |     {z/r * ( SQR(a)*x - 2.0*r*y - SQR(ra*r)*x )/( SQR(qb*y) * - q SQR(r)a *x )) /( (qb) *+  qr/(a  qb ),),
+
+            | |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+      |      static_cast<Real>(                                                   )
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp::188181::65:: note: insert an explicit cast to silence this issue
+ error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+    181 |  188 |      x*r * ( S  QR{z/r(a *)* (y  S+ QR2.(a)*x - 2.0*a0**ra**yr* -x  S- QRSQ(rR(r))**yx  ))/( (qb) * qa )/(,
+ S      | QR     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+(qb)      |  * qa ) - a/     static_cast<Real>(                                     )
+( qb )/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:,
+189:      | 5:    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  189 |   /Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:  181:z/5:r  note: * insert an explicit cast to silence this issue
+(  181 SQR(a)*y + |   2  .0 x*a*r*r **x ( - S SQR(r)*y )/QR( (a(q)*b)y  *+  q2.a 0*),a*
+      r*|     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~x
+- SQR(r/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:)*189:y 5:)/ note: ( insert an explicit cast to silence this issue
+SQR  189(qb) * qa ) - a/( |     qb ) z,
+/r      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |     static_cast<Real>(                                                   )
+ * (/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp: SQR(a)*y +184: 26:.0 error: *anon-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+*r*x - SQR(r)  184*y |   )/( (qb) * qa ),
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |     static_cast<Real>(                                     )
+   {y*r * ( S/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:QR190:5: (aerror: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  190)*x  |  -   2. -0* Sa*r*yQR -(z S)/QR(r)*x )/( SQR(q(Sb)QR *(r q)*a r))  *+  (a/ q( b )qb/( ) q,
+a       | )      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
++ 1.0/r},
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:184:6
+: note: insert an explicit cast to silence this issue
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:190:  1845: |   note:   insert an explicit cast to silence this issue
+ {y  190*r |   *   ( - S SQRQR(a(z)*x -)/ 2(S.0QR*a(r*r)**yr) - SQR(r)*x )/(  *SQ (R( qqbb ) * qa ) + a/( qb ),
+      |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |      static_cast<Real>(                                                   )
+)/( qa ) + /Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:1.185:0/r}5:,
+ error:       | non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |     static_cast<Real>(                         )
+  185 |     y*r * ( SQR(a)*y + 2.0*a*r*x - SQR(r)*y )/( SQR(qb) * qa ) + r/( qb ),
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:185:5: note: insert an explicit cast to silence this issue
+  185 |     y*r * ( SQR(a)*y + 2.0*a*r*x - SQR(r)*y )/( SQR(qb) * qa ) + r/( qb ),
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |     static_cast<Real>(                                                   )/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:
+219:6:/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp: In file included from /Users/dbf75/.codex/worktrees/e354/athenak-DF/src/eos/ideal_grhyd.cpp:19:
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:140error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]:27: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+
+  140 |   Real const  219 188:6: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+ |    beta_d[3] = {2.*H*l_u[0], 2.*H*l_u[1], 2.*H*l_u[2]};
+      |                           ^~~~~~~~~~~
+188 |      {  2.{z*d/r * ( SQR(a)*x - 2.0*a*r*y - SQR(r)*x H_/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:140)/( (qb) * qa ),
+      |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+:27d[0: ]/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:note: insert an explicit cast to silence this issue*188
+l:6: note: insert an explicit cast to silence this issue
+  140 |     188_dR | [0  ] eal const beta_d[3] = {2.*H*l_u[0], 2.*H*l_u[1], 2.*H*l_u[2]};
+      |                           ^~~~~~~~~~~
+      |                           static_cast<Real>( )
+  +/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:140:40: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+ 2.*H*dl_dd[0][0],
+      |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  140{z/r * ( SQR( |   Real const beta_d[3] =/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp {2.a)*x - *H*l_u[0], 2.:21902.*a*r*y - SQR(r)*x )/( (qb) * q*H*l_u[1], 2.*H*l_u[2]};
+      |                                        ^~~~~~~~~~~
+a :6),:/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:140:40: note: insert an explicit cast to silence this issue
+ note:
+insert an explicit cast to silence this issue
+      |   140     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ |   Real const beta_d[3] = {2.*H*l_u[0], 2.*H*l_u[1], 2.*H*l_u[2]};
+      |                                        ^~~~~~~~~~~
+      |                                        static_cast<Real>( )
+      |      static_cast<Real>(                                     )219 | /Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp
+:140:    {2.*dH_d[0/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:53: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]189:]*5:
+ error:   lnon-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+_  189 |     z/r * ( d[140S0] + 2.*H*dl_dd[ |  QR0](a)*y + 2.0*a*r*x - SQR(r)*y )/( (qb[0],
+      |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      ) |      static_cast<Real>(                  ) * qa ),
+
+|     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+R/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:220:5:/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hppe :189error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  a:5: note: insert an explicit cast to silence this issue
+l  189 |   220 const beta_d[3 |   ]   = 2.*dH_d[0]* z {l_d[1] + 2.*H*dl_dd[0][1],
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+2./r *H/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:* *220:( SQR(a)*y + 2.0*a*r*x - SQ5:R(rl_ note: insert an explicit cast to silence this issue
+u  220)* |   y [0  2.*d])/H_( d[0,(qb) * qa ), 2]
+.*H*l_u[1]      *l|     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+_d[1      |     static_cast<Real>(                                     )
+, ] + 2.*H*dl2.*_/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hppH*l_u[2]dd[0][1],
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |     static_cast<Real>(                  )
+:190:5};: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+
+      |                                                     ^~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:221:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  221/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:140 |     2.*dH_d[0]  190 | :53   *l_d[2] + 2.: note:  - SQR(z)/(Sinsert an explicit cast to silence this issue
+*  140H*dl_dd[0][2]QR},
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+(r |  )/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:*r) * ( qb ) Rea/(221l q const beta_d[3] = {2.*H:a*l5:_u[0],  ) + 1.0 note: insert an explicit cast to silence this issue
+  221 |     2.*dH_d2.*H*l_u[1], 2.*H*l_u[2]};
+      |                                                     ^~~~~~~~~~~
+      |                                                     static_cast<Real>( )
+/r[0},]*
+      l_|     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~d[2
+] + 2.*H*dl/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:_d190:d[5:0] note: [2insert an explicit cast to silence this issue
+]  190 |  },
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ -
+       S|     static_cast<Real>(                  )QR
+(z)//Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:(S223:QR6: error: (rnon-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+)*r)  223 |   *   ( { q2.b *d)/H_( d[qa1] )*l + 1.0/_dr}[0,
+]       |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:172:5: error: non-constant-expression cannot be narrowed from type '__promote_t<float, int>' (aka 'double') to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+
+      |     static_cast<Real>(                         )
++   1722. |  *H  *d Sl_QRdd(H[1)*][x/(pow(r,3)) * (0] (,
+ q      |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+c ) )/ qa,
+      /Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:|     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~223:
+6: note: insert an explicit cast to silence this issue
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/athena.hpp:48:16:  223 |     {2 note: expanded from macro 'SQR'
+   48 | #.*ddefine SQR(/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:Hx) ( (219:_x)*(x) )
+      |                ^
+6: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]d[1
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp  ]:172:5: note: insert an explicit cast to silence this issue219 |
+    {  *2.*d172l_H_ | dd[[00 ]] + 2.*H*dl_dd[1] *[0],
+      |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |      static_cast<Real>(                  )
+l_  d[0] + SQR(H)2./Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:224*H**x:dl_/(dd[0][0],
+5po      | w(r,3): error:      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+) */Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:219:6   224 |     : note: insert an explicit cast to silence this issue
+(  2192. |  (   qc )  *dH_d[1]*l )_{2/d.* [1dH_d[qa] + 20,
+.*]      H**|     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~dl_d[0l_
+]dd[      |  +     static_cast<Real>(                  )1][2.*1]
+H,/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/athena.hpp:*
+      48d|     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+l_:dd[/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hppIn file included from 16: note: :0expanded from macro 'SQR'224:
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd_fofc.cpp:][0],
+      5   |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+48 | 15      | :
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp#d: :     static_cast<Real>(                  )efin140
+e:27:/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:220: S 5Qerror: :R(x error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing])
+  220 |     note: 2.*d(insert an explicit cast to silence this issueH
+140  224 |     2 (x)*(x) .*dH_ |  _d[d0]*[1 )
+      Rea| l]*ll c_               ^_d
+onst beta_d[3In file included from ] d[1/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/eos/ideal_grhyd.cpp:19[1] + :
+= {2.2] */Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:+ H173.*:2.5*H**Hl_u[0]dl_d:d[0][1]* ,, 2derror: .l
+*non-constant-expression cannot be narrowed from type '__promote_t<float, int>' (aka 'double') to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+_      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+dd[1][1  173 | /Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp],
+      H :*l220SQR(H)*:5:|     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ y/note: insert an explicit cast to silence this issue
+
+      (  220 |  | p_    static_cast<Real>(                  )ou[
+  w1], (r2. 2*dH_d[0,.]3)*l*H*l_/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp_u:d[) * (2225:5: ][error:  1non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+]  };
+(225 |       |    q                            ^~~~~~~~~~~
++ c 2 ) .*)/ qa,
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+H*2.*d/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/athena.hpp:H_d48d[1/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:l_]*l_140:ddd[:16: [27: note: note: expanded from macro 'SQR'
+20]insert an explicit cast to silence this issue   48 | #de
+f[1],
+  140i       |  ne |  Real c]SQRo    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ + 2.*
+      H*dl_dd[| 1n]s[2(]},
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+t    static_cast<Real>(                  )
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:225 /Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:221:betx) (5: (x:5: note: a_d)*(x) )
+      |                ^
+ error: insert an explicit cast to silence this issue
+non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]  225 |
+[  221 |   2.*dH3]/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:173:_    = 2d.*dH_d[0]*5:l note: [insert an explicit cast to silence this issue
+{2  _1731] |    .*H*dl_u[0[2 ],]  2.*H**ll_Su[1], 2.+_*H*l_u[2QR(H)] 2d[2}.*;]y/(
+*H* pdl_o+       w(r,d| 3d[0]2.*)[                          ^~~~~~~~~~~2]}) * H*d
+      |                           static_cast<Real>( )
+( ( qc ) )/ ql/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hppa,
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~_d,d:140[
+      |     static_cast<Real>(                  )1:][2]40
+
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/athena.hpp:48}      :16:| ,    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ note: expanded from macro 'SQR'
+:
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |     static_cast<Real>(                  )
+    error: fatal error: 48 | non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+
+  140 | #/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:221too many errors emitted, stopping now [-ferror-limit=]
+:5: note: insert an explicit cast to silence this issue
+Real codenstfine SQR(x beta_d) ( [3](x)* = {2(x.*) )
+      |                ^
+H*l_u[0  In file included from /Users/dbf75/.codex/worktrees/e354/athenak-DF/src/eos/ideal_grhyd.cpp:19:
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:221 |     2.*dH_d], 174:52.*H*l: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+_u[[0]*l_d1],[2] + 2.*H*dl_dd[0][2]},  174 |
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |     static_cast<Real>(                  )
+  SQR(H)*z/(pow(r/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:223:6: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+,5   )) * (223 |     {2.*dH_d[1]*l_d[0] + 2.*H2 ( qc * .**dl_dd[qb ) / qa - 2.0*SQR(a*r))
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/athena.hpp1H:48:16:][* 0],
+      |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+note: l_u[/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:2]expanded from macro 'SQR'
+};   48
+223: |       |                                        ^~~~~~~~~~~
+#define 6: note: insert an explicit cast to silence this issue
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hppSQR(x:140  223 |     {2.*dH_d[1]*l_d[0] + 2.*H*dl_dd[1) ( (x][0],
+      |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |      static_cast<Real>(                  )
+:40:/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:224:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing] note: insert an explicit cast to silence this issue
+
+  224 |     2.*dH)*_d[1]*l_d[1] + 2.*H*dl_dd[1][1],
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+(x) )
+      |                ^
+  140 |   R/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:224:5: /Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:174note: insert an explicit cast to silence this issue
+ea  :5:l const bet224 |    a_d[3] =  note: insert an explicit cast to silence this issue {2.*H*l_
+2.  174 |     S*du[0], 2.*HQR(H)*z/(pow(r,5)) * ( ( qc * qb ) H*l_u[1_d[1]*l_d[1] + 2.*H*dl_dd[1][1],
+], 2.      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |     static_cast<Real>(                  )/* qa -
+ 2.0*SQR(a*H/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:225:*l_u[2]};
+      |                                        ^~~~~~~~~~~
+      |                                        static_cast<Real>( )
+r))
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      | 5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:140:53: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  225 |   140 |   Re    2.*dH_d[1]al const beta_d[3] = {2.*H**l_    static_cast<Real>(                                      )
+l_u[d0], 2.*H*l_u[[21], 2.*H*l_u[2]};
+      /Users/dbf75/.codex/worktrees/e354/athenak-DF/src/athena.hpp:48:16|                                                     ^~~~~~~~~~~
+: note: expanded from macro 'SQR'
+] +    /Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:140:53: 2.*H*dnote: insert an explicit cast to silence this issue
+  140 | 48l | # _dd[1][ Real const beta_d[32]},defin]
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+e SQ = {2/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:225:5: R(x) ( (x)*(x) )
+      |                ^
+note: insert an explicit cast to silence this issue
+  225 |     .*H*l_u[0], 2.*H*l_u[1], In file included from /Users/dbf75/.codex/worktrees/e354/athenak-DF/src/eos/ideal_grhyd.cpp:19:
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:180:6: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  180 |     {x*r * ( SQR(a)*x - 2.0*a*r*y - SQR(r)*x )/( SQR(qb2.*H*l_u[2]};
+      |                                                     ^~~~~~~~~~~
+      )2|                                                     static_cast<Real>( )
+. * qa*dH_d ) + [1]*lr/( qb ),
+      |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~_d[2] + 2.*H*dl_dd
+[1][2]},
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |     static_cast<Real>(                  )
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:180:6: fatal error: too many errors emitted, stopping now [-ferror-limit=]
+note: insert an explicit cast to silence this issue
+  180 |     {x*r * ( SQR(a)*x - 2.0*a*r*y - SQR(r)*x )/( SQR(qb) * qa ) + r/( qb ),
+      |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |      static_cast<Real>(                                                   )
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:181:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  181 |     x*r * ( SQR(a)*y + 2.0*a*r*x - SQR(r)*y )/( SQR(qb) * qa ) - a/( qb ),
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:181:5: note: insert an explicit cast to silence this issue
+  181 |     x*r * ( SQ/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:172:5: error: non-constant-expression cannot be narrowed from type '__promote_t<float, int>' (aka 'double') to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+R(a)*y + 2.0*a*r  172*x - S |  QR(r)   S*y )/( SQRQR(qb) * (H)*qa ) x/(pow- a/((r,3 qb )) * ),
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |     static_cast<Real>(                                                   )
+( ( q/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:184:6: c ) error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  184 |     {y*r)/ * (  qa,SQR(a
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~)*x -
+ 2./Users/dbf75/.codex/worktrees/e354/athenak-DF/src/athena.hpp:48:160*a*r*y: note: expanded from macro 'SQR'
+ - SQR(r)*x )/( S   48 | #define SQRQR(x(qb)) ( (x)*( *x) )
+      |                ^
+ qa ) + a/( qb ),
+      |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:172:5: note: insert an explicit cast to silence this issue
+  172 |     SQR(H)*x//Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:(pow(184:6: note: insert an explicit cast to silence this issue
+r  184 |   ,3)) * ( ( qc ) )/ qa,
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~{y
+      |     static_cast<Real>(                  )*r *
+ ( S/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/athena.hpp:48:QR(a16: note: )*x expanded from macro 'SQR'
+-    48 | #def2.0*a*r*y - SQR(ine r)*x )/SQ( R(x) ( SQR(qb) (x* qa )*(x)) +  )
+      |                ^
+a/( qb )In file included from /Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd_fofc.cpp:15:
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:173:5: error: non-constant-expression cannot be narrowed from type '__promote_t<float, int>' (aka 'double') to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  173 |     SQR(H,
+      |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~)*y/(pow(r,3)) *
+      |      static_cast<Real>(                                                   )
+( ( /Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:185:qc ) )/ qa,
+      5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+|   185 |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   y*/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/athena.hpp:r * 48:16( : note: expanded from macro 'SQR'
+SQR(a)   48 | #*y + 2.define SQR(x) ( (x)*(x) )
+0*a*r*      |                ^
+x - SQR(r)*y )/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:173:/( SQR(5: note: insert an explicit cast to silence this issueqb) * qa
+  173 |    ) + r/( qb  SQR(H)*y/(pow(r),,3)) * ( ( q
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+c ) )/ qa,
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      /Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:185:5:|     static_cast<Real>(                  )
+ note: insert an explicit cast to silence this issue
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/athena.hpp:48:16: note:   185 |  expanded from macro 'SQR'
+     48 | # y*r define SQR(x) ( (x)* *(x) )
+      |                ^
+( SQR(a)*In file included from /Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd_fofc.cpp:15:
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:174:5y + 2.0*a: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+*r*  174 |   x - SQR(  SQRr)*y )/((H)*z/(pow(r,5)) * ( (  qcSQR(qb)  * qb ) / * qa ) +qa - r/( qb ),
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |     static_cast<Real>(                                                   )
+ 2.0*/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:188:6: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+SQ  188 |   R(a*r  {z/r * ( S))
+      QR(|     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+a)*x -/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/athena.hpp: 2.048:*a*r16: note: expanded from macro 'SQR'
+   48 | *y - SQR(r)*x )/(#defi (ne SQqb) * qa ),
+      |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+R(x) ( (x)*(x/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:188:6) )
+      |                ^: note: insert an explicit cast to silence this issue
+
+  188 |     {z/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:174:5: note: insert an explicit cast to silence this issue
+/r * ( SQR(a)*x - 2.0*a*r*y   - S174 |  QR(r   SQR(H)*z/()*x )/( (pow(r,5)) * (qb)  (* qa ),
+      |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |      static_cast<Real>(                                     )
+ qc * qb ) / qa - 2.0*SQ/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:189:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+R(a*r))
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |     static_cast<Real>(                                      )
+  189 |     z/r/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/athena.hpp:48:16: note: expanded from macro 'SQR' * ( SQR(a)*y + 2
+   48 | #define SQR(x) ( (x)*(x) )
+      |                ^
+.0*a*r*x - SQR(r)*y )/( (qb) * qa ),
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:189:5: note: insert an explicit cast to silence this issue
+  189 |   In file included from /Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd_fofc.cpp:15:
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:180:6  z/r * ( SQR(a)*y: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+ + 2.0*a*r*x - SQR(r)*y  180 |    )/( (qb)  {x*r  * qa ),
+      * ( SQRIn file included from /Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/coordinates.cpp:14:
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:140:27: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+(a)*x - 2|     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |   .020 errors generated140*a*r |   R*    static_cast<Real>(                                     )
+y.
+ -eal const be SQR(t/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:190:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+a_d[3] r  190 |     - SQR(z)/(S)*x )/( Q=SQ {2.*HR(qb) * R(r)*r) * ( qb )qa/( qa )*l_u[0], 2.*H*l_u[1], 2.*H*l_u[2]};
+      |                           ^~~~~~~~~~~
+ ) +  + 1.0/r},
+      r/( qb ),
+      |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:140:27: note: insert an explicit cast to silence this issue
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp  140 |   R:180|     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~:6: note: insert an explicit cast to silence this issueea
+l co
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:190ns:  t5180 b | : note:     {xeinsert an explicit cast to silence this issue
+ta_d[  *r190 |     -3] =  SQR(z)/{2.*H*l_(SQR(r * ()*r SQR(au[)) * (0* qx]b ), 2.*/ H(- 2.0*a *l_u[*r1], 2.*Hq**ay - SQRl_(r)* ) + u[1x2]};
+      | .0/r},
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+                          ^~~~~~~~~~~       |     static_cast<Real>(                         )
+
+      | )/( S                          static_cast<Real>( )
+QR(qb) * q/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:a ) + r/( qb140:40: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+   140 |   Real cons),t beta_
+      |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |      static_cast<Real>(                                                   )d[3] = {2.*H
+*l_u/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:181:5: [0], 2error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+.*  181 |     xH**r * ( l_u[1],SQR/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp 2(a)*y + 2:.*H*l_.0*a*r*219:6: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]x - SQR(r)*y )/( SQR(qb) * qa ) - a/( qb ),
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+u[
+  219 |     {2.*dH2/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp_]:181:5: note: insert an explicit cast to silence this issued[
+};
+0]*l        |                                        ^~~~~~~~~~~
+_d[0181 |     x*/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:140:40: note: insert an explicit cast to silence this issue
+r * ] + 2.*H*dl_dd[  140 |   Real const beta_d[3] = {2.*H*l_u[0], 2.*H*l_u[1], 2.*H*l_u[2]};
+      | 0][                                       ^~~~~~~~~~~
+      |                                        static_cast<Real>( )
+0/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:],
+      |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+140:53:( SQR(a)*y + 2.0* error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp  140 |   Real const b:219:6: note: insert an explicit cast to silence this issue
+  219 |     {2.*dH_d[0]*l_eta_dad[*r0[*x - ] + 2.*H*3] = {2.*H*l_u[0dl_],dd[0] 2[0],
+S.*H*l_u[1], 2.*H*l_u[2]};
+      |                                                     ^~~~~~~~~~~
+      |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |      static_cast<Real>(                  )
+QR(r)*y )/( SQR/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:140/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:220:5:53: note: insert an explicit cast to silence this issue: error:
+(qb)non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]  140 |   R
+  220 |   *    2.*dHea_d[0qa ) - a]*l_dl co[1] +/( qb ) 2,ns
+.*H*dt       belta_d[3] = {2.|     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |     static_cast<Real>(                                                   )
+_*H/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:184:d*l_u6d[0][1],
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+[/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:220:5: note: insert an explicit cast to silence this issue0], 2.*H*l_u
+  184 |       220 |    [1], { 2.*H*ly*r * ( SQ2.*d_RHu[2]};
+      |                                                     ^~~~~~~~~~~(a)*x - _
+2d      |                                                     static_cast<Real>( )
+.0*a*r*y - SQR(r)*x )/( SQR(qb) * [0]qa ) + a/( qb ),*l_d[1] + 2.*H*dl_
+      |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+dd[0][/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:184:6: note: insert an explicit cast to silence this issue
+1]  184 |     {y*r * ( SQR(a)*x - 2.0*a*r*y - SQ,
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |     static_cast<Real>(                  )
+R(r)*x )/(/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:221:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  221 |  SQR(q    2.*dH_d[0]*l_d[2b) * qa] + 2.* ) +/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hppH*dl a/_:172:d(5: error: d non-constant-expression cannot be narrowed from type '__promote_t<float, int>' (aka 'double') to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing][0][2]}
+qb  172 |     SQ ),R,
+      |
+          ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+| (H)*x/(po/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:221:5:      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |      static_cast<Real>(                                                   )
+note: insert an explicit cast to silence this issuew(
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:185:  221r,3)) * 5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+( ( q |     2.*dH_d  c[185 |  0 ) )/ qa,
+      ]*l|     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~   y*r
+_d[/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/athena.hpp:2] 48:16: + 2. note: expanded from macro 'SQR'* (*
+H    *dl_dd[0]48 | [2]},#defineSQR(a)*y  SQ
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |     static_cast<Real>(                  )
++ R(2.0*a*r*x /Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:223:- SQRx) ( (6: x)*(x) )
+      (r)*y )/(|                ^
+ Serror: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+QR(qb)   /Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp20:172:5: note: insert an explicit cast to silence this issue
+223 |   errors generated *.
+     172{2.*d |  qa )   S + r/( qb ),
+      | QR    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~H_(
+H)*x/(pow(d[1]r,/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:185:5:3*l_)) *d[0] + 2.*H*dl_dd[1][0], ( note: insert an explicit cast to silence this issue (
+
+      |   185 |        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+q  c y*) r/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:223:6 * ( SQR(a: )/)*y + 2.0*note: insert an explicit cast to silence this issue
+  223 |     {2.*dHa*r*x_d[1 qa,
+       - ]*S| l_    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |     static_cast<Real>(                  )
+QR(rd[)/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/athena.hpp:*y )/( SQR(qb) *480] + 2.*H*dl_dd[1][0],
+      |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |  q:16:     static_cast<Real>(                  )
+ note: expanded from macro 'SQR'
+a /Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:)   48 | #d + re224:5: /( ferror: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+qb ),
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |     static_cast<Real>(                                                   )
+ine S  224 | QR(x) ( (x/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:188:6: error:   non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  2.*dH_d)*[1  188(x]* |  ) l_   {z/r * ( SQR(a)*x - d[1)
+      |                ^
+] +2.0*a*In file included from /Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/coordinates.cpp:14:
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp 2.r**:173:5: error: non-constant-expression cannot be narrowed from type '__promote_t<float, int>' (aka 'double') to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+H*y   d- l_173 | dd[1][SQR(r)*x )/( (qb) * qa ),
+      |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  1]  ,
+      S/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:188:6: note: |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+QR(H)*y/(pow(r,3)) * ( /Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hppinsert an explicit cast to silence this issue
+:  188224:5 |  ( qc ) : note: insert an explicit cast to silence this issue
+)/ q  224 |    a, 2.*dH_
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+{z/r * d[1]*( l/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/athena.hpp:SQ48:16: note: expanded from macro 'SQR'
+R(   _d[1] + 2.*H*a)dl_dd48 | #d[*efine S1]x QR(x)- [1] ( (x)*(x) )
+      | ,
+2.               ^      |
+    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |     static_cast<Real>(                  )
+0/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:225:/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:173:5:*a*r*y - SQ note: insert an explicit cast to silence this issue
+R5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+(r  173  225)* |  |  x     S )/(   2.*dH_d[1]*l_d[2] + 2.*H*dl_dd[1]QR(H)[2]*y(qb},
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+) * qa /(pow(r,/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp),3:225
+      |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |      static_cast<Real>(                                     ))) *:5: note:
+ (/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp: (insert an explicit cast to silence this issue
+  225 |     2.*dH189:5: error:  q_dnon-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+c   189) )/ qa,
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |     static_cast<Real>(                  )
+ |     [1/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/athena.hpp:z]*l_d[2] + 48:16: note: expanded from macro 'SQR'2/r
+ * (    48S.*H*dQR(a) | #l_dd*d[1efine SQR(x)y][2]},
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |  +     static_cast<Real>(                  )
+2.0 ( (x)make[2]: fatal error: too many errors emitted, stopping now [-ferror-limit=]
+*a*r*x - SQR(r)*y*** [src/CMakeFiles/athena.dir/bvals/prolong_prims.cpp.o] Error 1
+ )/( *(x) (qb) )
+      * q|                ^a
+make[2]: *** Waiting for unfinished jobs....
+),
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from /Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/coordinates.cpp:14:
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:174:5/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:: 189:error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]5:
+ note: insert an explicit cast to silence this issue
+  174 |     SQR(  189H) |  *z  /( z/r * ( SQR(pow(r,5)) a)* *y( ( + q 2c * qb .0) / qa - 2.*a*r*x - 0*SQR(SQr)*y )/R(( a*(qr)b))
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ * qa ),
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/athena.hpp:48:16: note:       |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+expanded from macro 'SQR'
+      |     static_cast<Real>(                                     )   48
+ | /Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:#d190:ef5:ine SQR(x error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+)   190 |    ( (x)*(x -)  SQ)
+R(z      |                ^)/
+(SQR(r)*r) * /Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:174( :5qb:  )note: insert an explicit cast to silence this issue/( qa
+ ) +   1741.0/r |     },
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~SQR(H
+)*z/(pow(r,5)) /Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:* 190:5( : note: ( insert an explicit cast to silence this issue
+qc * qb ) / qa - 2.0*SQR(a  190*r))
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |     static_cast<Real>(                                      )
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/athena.hpp: |     48:16: note: expanded from macro 'SQR'- SQR
+   48(z) | #defi/(SneQR S(r)*rQR(x) () * ( (x)* qb (x) )/)
+( qa )      |                ^
+ + 1.0/r},
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |     static_cast<Real>(                         )
+In file included from /Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/coordinates.cpp:14:
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:180:6: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  180 |     {x*r * ( SQR(a)*x - 2.0*a*r*y - SQR(r)*x )/( SQR(qb) * qa ) + r/( qb ),
+      |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:219
+:6: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  219 |     /Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:180:6: note: insert an explicit cast to silence this issue
+{2.*  180 |   dH_d[0]*l_  {x*r *d[0]  (+  SQR(a)*x - 2.2.*H*dl_dd[0*a*0][r*y - SQR(0]r)*x,
+ )      | /(     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ SQR(qb) * qa /Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:) +219:6:  rnote: insert an explicit cast to silence this issue
+/  219( qb ), |
+        |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ {2.*dH_
+      | d[     static_cast<Real>(                                                   )
+0]*l_d[0] /Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:181+ :52.: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+*H*d  181l_ |    dd x[0*r * ][( SQR0],
+(a      |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |      static_cast<Real>(                  )
+)*y + 2.0*/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:220:5:a* error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]r*x - S
+  220 | QR(r)*y     )/2.*dH_( SQR(d[qb0]) **l_ qa d[) 1]-  +a/ 2.*H( *dqbl_ )dd[,
+      | 0][1]    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+,
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:181:5: note: insert an explicit cast to silence this issue/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:
+220:5:   181 | note: insert an explicit cast to silence this issue
+    x*r   220 |     2* ( .*dH_d[0SQ]*R(l_a)d[*y1] + + 2.*H*dl_dd[0][1],
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+       2.|     static_cast<Real>(                  )0*a*
+r*x - /Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:221:5: error: SQnon-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+R(r)  221*y |   )  /( 2 S.*QRdH(q_db)[0 *]* ql_a ) - a/(d[ qb )2] +,
+ 2      | .*H*    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+dl      | _d    static_cast<Real>(                                                   )
+d[0][2]}/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:,
+      | 184:6:     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  184 |   /Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:  221:{y*r *5: note: insert an explicit cast to silence this issue
+ ( S  221 |     2.*dH_d[0]*l_dQR[2] +(a 2.)*x - 2*H*dl_d.0d[*a0]*r[2*y - SQ]}R(,
+r)      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+*x      |  )    static_cast<Real>(                  )
+/( SQR(qb) * qa ) + /Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:223:a/6: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+(   223qb |   ),
+         {2.*dH_d[|      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~1]
+*l_d[0] + 2./Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:*H*184:6: make[2]: note: insert an explicit cast to silence this issue
+  184 |     dl_dd[1][0],
+      |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+{y**** [src/CMakeFiles/athena.dir/coordinates/adm.cpp.o] Error 1
+r */Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp: ( SQR(a)223:6: *xnote: insert an explicit cast to silence this issue -
+ 2.0*  223 |     {2.*dH_d[1]a*r*y - SQR(r)*x *l_d[0] + 2.*H*dl_dd[1][0],
+      |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |      static_cast<Real>(                  )
+)/( SQR(qb) * qa ) + a/( qb ),
+      |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |      static_cast<Real>(                                                   )
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:185:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  185 |    /Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:224 y*r * ( SQR:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing](a)*y + 2.0*a
+*r*x - SQ  224 |   R(  r)*y )2./(*dH SQR(_dqb)[1 *]*l_d[ q1] + 2a .*) H*d+ r/( l_ddqb ),
+[1      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~][1],
+
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:185:5: note: insert an explicit cast to silence this issue/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:224:5: note: insert an explicit cast to silence this issue
+
+  185 |     y*r  224 |    * ( SQR(a)*y +   2.*dH_d[1]*l_d[1]2.0*a*r*x - S + 2.*H*dl_dd[1QR][1],
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~(r)*
+      |     static_cast<Real>(                  )
+y )/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:/( S225:5:QR( error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  225 |  qb) *    q2.*dH_da [1]*l_d[2] + 2.*H*dl_dd[1][2]},
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+) + r/( qb ),
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |     static_cast<Real>(                                                   )
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:225:5: note: insert an explicit cast to silence this issue
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:188:6  225 |  : error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  188 |     {z/r * (   2.*d SH_QR(a)*x - 2.0*a*r*y d[1- ]*l_d[2] + 2.*H*SQdl_R(r)*x )/( (ddqb[1) * qa ][),
+      |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+2]},
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |     static_cast<Real>(                  )
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:188:6: note: insert an explicit cast to silence this issue
+fatal error: too many errors emitted, stopping now [-ferror-limit=]
+  188 |     {z/r * ( SQR(a)*x - 2.0*a*r*y - SQR(r)*x )/( (qb) * qa ),
+      |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |      static_cast<Real>(                                     )
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:189:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  189 |     z/r * ( SQR(a)*y + 2.0*a*r*x - SQR(r)*y )/( (qb) * qa ),
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+20 errors generated.
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:189:5: note: insert an explicit cast to silence this issue
+  189 |     z/r * ( SQR(a)*y + 2.0*a*r*x - SQR(r)*y )/( (qb) * qa ),
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |     static_cast<Real>(                                     )
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:190:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  190 |     - SQR(z)/(SQR(r)*r) * ( qb )/( qa ) + 1.0/r},
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:190:5: note: insert an explicit cast to silence this issue
+  190 |     - SQR(z)/(SQR(r)*r) * ( qb )/( qa ) + 1.0/r},
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |     static_cast<Real>(                         )
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:219:6: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  219 |     {2.*dH_d[0]*l_d[0] + 2.*H*dl_dd[0][0],
+      |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:219:6: note: insert an explicit cast to silence this issue
+  219 |     {2.*dH_d[0]*l_d[0] + 2.*H*dl_dd[0][0],
+      |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |      static_cast<Real>(                  )
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:220:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  220 |     2.*dH_d[0]*l_d[1] + 2.*H*dl_dd[0][1],
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:220:5: note: insert an explicit cast to silence this issue
+  220 |     2.*dH_d[0]*l_d[1] + 2.*H*dl_dd[0][1],
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |     static_cast<Real>(                  )
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:221:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  221 |     2.*dH_d[0]*l_d[2] + 2.*H*dl_dd[0][2]},
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:221:5: note: insert an explicit cast to silence this issue
+  221 |     2.*dH_d[0]*l_d[2] + 2.*H*dl_dd[0][2]},
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |     static_cast<Real>(                  )
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:223:6: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  223 |     {2.*dH_d[1]*l_d[0] + 2.*H*dl_dd[1][0],
+      |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:223:6: note: insert an explicit cast to silence this issue
+  223 |     {2.*dH_d[1]*l_d[0] + 2.*H*dl_dd[1][0],
+      |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |      static_cast<Real>(                  )
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:224:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  224 |     2.*dH_d[1]*l_d[1] + 2.*H*dl_dd[1][1],
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:224:5: note: insert an explicit cast to silence this issue
+  224 |     2.*dH_d[1]*l_d[1] + 2.*H*dl_dd[1][1],
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |     static_cast<Real>(                  )
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:225:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  225 |     2.*dH_d[1]*l_d[2] + 2.*H*dl_dd[1][2]},
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/coordinates/cartesian_ks.hpp:225:5: note: insert an explicit cast to silence this issue
+  225 |     2.*dH_d[1]*l_d[2] + 2.*H*dl_dd[1][2]},
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |     static_cast<Real>(                  )
+fatal error: too many errors emitted, stopping now [-ferror-limit=]
+make[2]: *** [src/CMakeFiles/athena.dir/eos/ideal_grhyd.cpp.o] Error 1
+20 errors generated.
+make[2]: *** [src/CMakeFiles/athena.dir/coordinates/coordinates.cpp.o] Error 1
+20 errors generated.
+make[2]: *** [src/CMakeFiles/athena.dir/dyn_grmhd/dyn_grmhd_fofc.cpp.o] Error 1
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:19: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                   ^~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:535:69: note: while substituting into a lambda expression here
+  535 |   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+      |                                                                     ^
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:680:1: note: in instantiation of function template specialization 'dyngr::DynGRMHDPS<Primitive::IdealGas, Primitive::ResetFloor>::AddCoordTermsEOS<2>' requested here
+  680 | INSTANTIATE_COORD_TERMS(Primitive::IdealGas, Primitive::ResetFloor);
+      | ^
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:668:42: note: expanded from macro 'INSTANTIATE_COORD_TERMS'
+  668 | void DynGRMHDPS<EOSPolicy, ErrorPolicy>::AddCoordTermsEOS<2>( \
+      |                                          ^
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:19: note: insert an explicit cast to silence this issue
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                   ^~~~~~~~~~~~~~~~~~~~~
+      |                   static_cast<Real>(   )
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:42: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                                          ^~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:42: note: insert an explicit cast to silence this issue
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                                          ^~~~~~~~~~~~~~~~~~~~~
+      |                                          static_cast<Real>(   )
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:65: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                                                                 ^~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:65: note: insert an explicit cast to silence this issue
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                                                                 ^~~~~~~~~~~~~~~~~~~~~
+      |                                                                 static_cast<Real>(   )
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:19: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                   ^~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:535:69: note: while substituting into a lambda expression here
+  535 |   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+      |                                                                     ^
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:680:1: note: in instantiation of function template specialization 'dyngr::DynGRMHDPS<Primitive::IdealGas, Primitive::ResetFloor>::AddCoordTermsEOS<3>' requested here
+  680 | INSTANTIATE_COORD_TERMS(Primitive::IdealGas, Primitive::ResetFloor);
+      | ^
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:672:42: note: expanded from macro 'INSTANTIATE_COORD_TERMS'
+  672 | void DynGRMHDPS<EOSPolicy, ErrorPolicy>::AddCoordTermsEOS<3>( \
+      |                                          ^
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:19: note: insert an explicit cast to silence this issue
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                   ^~~~~~~~~~~~~~~~~~~~~
+      |                   static_cast<Real>(   )
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:42: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                                          ^~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:42: note: insert an explicit cast to silence this issue
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                                          ^~~~~~~~~~~~~~~~~~~~~
+      |                                          static_cast<Real>(   )
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:65: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                                                                 ^~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:65: note: insert an explicit cast to silence this issue
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                                                                 ^~~~~~~~~~~~~~~~~~~~~
+      |                                                                 static_cast<Real>(   )
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:19: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                   ^~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:535:69: note: while substituting into a lambda expression here
+  535 |   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+      |                                                                     ^
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:680:1: note: in instantiation of function template specialization 'dyngr::DynGRMHDPS<Primitive::IdealGas, Primitive::ResetFloor>::AddCoordTermsEOS<4>' requested here
+  680 | INSTANTIATE_COORD_TERMS(Primitive::IdealGas, Primitive::ResetFloor);
+      | ^
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:676:42: note: expanded from macro 'INSTANTIATE_COORD_TERMS'
+  676 | void DynGRMHDPS<EOSPolicy, ErrorPolicy>::AddCoordTermsEOS<4>( \
+      |                                          ^
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:19: note: insert an explicit cast to silence this issue
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                   ^~~~~~~~~~~~~~~~~~~~~
+      |                   static_cast<Real>(   )
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:42: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                                          ^~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:42: note: insert an explicit cast to silence this issue
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                                          ^~~~~~~~~~~~~~~~~~~~~
+      |                                          static_cast<Real>(   )
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:65: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                                                                 ^~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:65: note: insert an explicit cast to silence this issue
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                                                                 ^~~~~~~~~~~~~~~~~~~~~
+      |                                                                 static_cast<Real>(   )
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:19: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                   ^~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:535:69: note: while substituting into a lambda expression here
+  535 |   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+      |                                                                     ^
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:681:1: note: in instantiation of function template specialization 'dyngr::DynGRMHDPS<Primitive::PiecewisePolytrope, Primitive::ResetFloor>::AddCoordTermsEOS<2>' requested here
+  681 | INSTANTIATE_COORD_TERMS(Primitive::PiecewisePolytrope, Primitive::ResetFloor);
+      | ^
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:668:42: note: expanded from macro 'INSTANTIATE_COORD_TERMS'
+  668 | void DynGRMHDPS<EOSPolicy, ErrorPolicy>::AddCoordTermsEOS<2>( \
+      |                                          ^
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:19: note: insert an explicit cast to silence this issue
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                   ^~~~~~~~~~~~~~~~~~~~~
+      |                   static_cast<Real>(   )
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:42: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                                          ^~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:42: note: insert an explicit cast to silence this issue
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                                          ^~~~~~~~~~~~~~~~~~~~~
+      |                                          static_cast<Real>(   )
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:65: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                                                                 ^~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:65: note: insert an explicit cast to silence this issue
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                                                                 ^~~~~~~~~~~~~~~~~~~~~
+      |                                                                 static_cast<Real>(   )
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:19: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                   ^~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:535:69: note: while substituting into a lambda expression here
+  535 |   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+      |                                                                     ^
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:681:1: note: in instantiation of function template specialization 'dyngr::DynGRMHDPS<Primitive::PiecewisePolytrope, Primitive::ResetFloor>::AddCoordTermsEOS<3>' requested here
+  681 | INSTANTIATE_COORD_TERMS(Primitive::PiecewisePolytrope, Primitive::ResetFloor);
+      | ^
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:672:42: note: expanded from macro 'INSTANTIATE_COORD_TERMS'
+  672 | void DynGRMHDPS<EOSPolicy, ErrorPolicy>::AddCoordTermsEOS<3>( \
+      |                                          ^
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:19: note: insert an explicit cast to silence this issue
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                   ^~~~~~~~~~~~~~~~~~~~~
+      |                   static_cast<Real>(   )
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:42: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                                          ^~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:42: note: insert an explicit cast to silence this issue
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                                          ^~~~~~~~~~~~~~~~~~~~~
+      |                                          static_cast<Real>(   )
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:65: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                                                                 ^~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:65: note: insert an explicit cast to silence this issue
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                                                                 ^~~~~~~~~~~~~~~~~~~~~
+      |                                                                 static_cast<Real>(   )
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:19: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                   ^~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:535:69: note: while substituting into a lambda expression here
+  535 |   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+      |                                                                     ^
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:681:1: note: in instantiation of function template specialization 'dyngr::DynGRMHDPS<Primitive::PiecewisePolytrope, Primitive::ResetFloor>::AddCoordTermsEOS<4>' requested here
+  681 | INSTANTIATE_COORD_TERMS(Primitive::PiecewisePolytrope, Primitive::ResetFloor);
+      | ^
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:676:42: note: expanded from macro 'INSTANTIATE_COORD_TERMS'
+  676 | void DynGRMHDPS<EOSPolicy, ErrorPolicy>::AddCoordTermsEOS<4>( \
+      |                                          ^
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:19: note: insert an explicit cast to silence this issue
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                   ^~~~~~~~~~~~~~~~~~~~~
+      |                   static_cast<Real>(   )
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:42: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                                          ^~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:42: note: insert an explicit cast to silence this issue
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                                          ^~~~~~~~~~~~~~~~~~~~~
+      |                                          static_cast<Real>(   )
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:65: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                                                                 ^~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:65: note: insert an explicit cast to silence this issue
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                                                                 ^~~~~~~~~~~~~~~~~~~~~
+      |                                                                 static_cast<Real>(   )
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:19: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                   ^~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:535:69: note: while substituting into a lambda expression here
+  535 |   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+      |                                                                     ^
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:682:1: note: in instantiation of function template specialization 'dyngr::DynGRMHDPS<Primitive::EOSCompOSE<Primitive::NormalLogs>, Primitive::ResetFloor>::AddCoordTermsEOS<2>' requested here
+  682 | INSTANTIATE_COORD_TERMS(Primitive::EOSCompOSE<Primitive::NormalLogs>,
+      | ^
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:668:42: note: expanded from macro 'INSTANTIATE_COORD_TERMS'
+  668 | void DynGRMHDPS<EOSPolicy, ErrorPolicy>::AddCoordTermsEOS<2>( \
+      |                                          ^
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:19: note: insert an explicit cast to silence this issue
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                   ^~~~~~~~~~~~~~~~~~~~~
+      |                   static_cast<Real>(   )
+fatal error: too many errors emitted, stopping now [-ferror-limit=]
+20 errors generated.
+make[2]: *** [src/CMakeFiles/athena.dir/dyn_grmhd/dyn_grmhd.cpp.o] Error 1
+make[1]: *** [src/CMakeFiles/athena.dir/all] Error 2
+make: *** [all] Error 2

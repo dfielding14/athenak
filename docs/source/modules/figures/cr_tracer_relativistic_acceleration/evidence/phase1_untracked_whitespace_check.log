@@ -1,0 +1,12 @@
+Phase 1 tracked diff whitespace audit
+PASS tracked diff
+
+Phase 1 untracked artifact whitespace audit
+PASS inputs/unit_tests/cr_relativistic_state_test.athinput
+PASS src/particles/relativistic_state.hpp
+PASS src/pgen/unit_tests/cr_relativistic_state_test.cpp
+PASS docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase1_helper_cpu.log
+PASS docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase1_helper_cpu_single_precision_blocked.log
+PASS docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase1_legacy_cpu.log
+PASS docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase1_legacy_mpicpu.log
+PASS docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase1_style.log

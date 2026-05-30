@@ -23,20 +23,24 @@ The statuses in this initial draft are intentionally conservative:
 
 | Control | Current value | Update rule |
 | --- | --- | --- |
-| Ledger date | `2026-05-29` | Record the date of each accepted update. |
+| Ledger date | `2026-05-30` | Record the date of each accepted update. |
 | Working branch | `feature/CR_tracers_relativistic_acceleration` | Stop if the working branch changes unexpectedly. |
-| Working branch HEAD at ledger creation | `3984b57ec8832b3e3e8140e08188a8a05e773136` | Refresh after every accepted commit. |
+| Working branch HEAD at latest accepted commit | `04090c1a402bdf07dfc24ab18c3936ea13111141` | Refresh after every accepted commit. |
 | Frozen feature base | `64a4d1be8da1c22d1328cc47280195b3747fa0ab` from `feature/CR_tracers_followup_architecture` | Change only through an accepted `DR-000` update. |
 | Intended eventual integration target | `origin/development` at `c6a73b08e60807f8b925164c5e7edd5cb820c8ae` | Refresh the target SHA and merge-tree audit after target updates and before handoff. |
-| Current implementation phase | `Phase 0: freeze baseline and open the ledger` | Advance only after `CP-0`, `CP-1`, and `RG-001` record `PROCEED`. |
-| Allowed write manifest | This ledger and archived Phase 0 evidence only | Do not edit production source, existing guides, tests, or existing user documentation until the opening gates record `PROCEED`. |
-| Last accepted checkpoint | None | The guide-creation commit is context, not a passing Phase 0 checkpoint. |
-| Open blocking findings | `BF-001` through `BF-008` | Keep the live list current.  Do not proceed while a blocker for the next edit set remains open. |
-| CPU/MPI qualification status | Not started for the relativistic branch | Historical fixed-energy results are inherited context only; rerun and archive the Phase 0 baseline. |
+| Current implementation phase | `Phase 1: state-helper done claim under final independent recheck` | Advance to Phase 2 only after the Phase-1 evidence archive, `RG-002`, and both final rechecks record `PROCEED`. |
+| Allowed write manifest | `src/particles/relativistic_state.hpp`, `src/pgen/unit_tests/cr_relativistic_state_test.cpp`, `inputs/unit_tests/cr_relativistic_state_test.athinput`, this ledger, and archived Phase-1 evidence only | Do not edit runtime parser, particle layout, pusher, restart, output, gather, MHD, AMR, or timestep surfaces until the Phase-1 done claim is accepted. |
+| Last accepted checkpoint | Phase 0 freeze-baseline and pusher-spike checkpoint at `04090c1a402bdf07dfc24ab18c3936ea13111141` | Phase 1 remains a candidate until its final independent rechecks pass and its milestone commit is recorded. |
+| Open blocking findings | Phase-1 final recheck closure; downstream `BF-009`, `BF-014`, backend qualification, and solver-coupling obligations remain open for their owning phases | Keep the live list current.  Do not proceed while a blocker for the next edit set remains open. |
+| CPU/MPI qualification status | Phase-1 candidate: isolated double-precision CPU helper harness passed; legacy particle CPU `32 passed`; legacy particle MPI CPU `9 passed`; single precision blocked before helper qualification by inherited repository narrowing errors | Rerun and archive qualification at each accepted milestone. |
 | GPU qualification status | Not started; unavailable on this workstation | GPU qualification is optional for `MERGE READY` on this workstation, but it remains a separate unqualified residual risk.  Do not claim `GPU QUALIFIED` without accelerator evidence on an accepted SHA. |
 | Merge-ready status | Not eligible | Requires the guide's checkpoint sequence, including `CP-4 Solver Coupling` and `CP-7 Final Cold Review`. |
 
-## Branch And Base Facts
+## Historical Branch And Base Facts At Ledger Creation
+
+The labels in this original Phase-0 table are historical snapshots at ledger
+creation.  Use the refreshed control header and the latest bound
+`evidence/phase*_branch_snapshot.txt` archive for live checkpoint provenance.
 
 | Fact | Recorded value | Evidence |
 | --- | --- | --- |
@@ -1490,3 +1494,337 @@ Do not edit `src/athena.hpp`, `src/particles/particles.hpp`,
 code, outputs, `src/CMakeLists.txt`, or runtime inputs during Phase 1.  The
 existing custom-pgen hook accepts nested `PROBLEM=unit_tests/...` paths without
 a CMake change.
+
+## Phase 1 Review Update 1: Velocity-Shadow Representability Domain
+
+The first Phase-1 physics review found that reconstructing a compatibility
+physical-velocity shadow from arbitrarily large finite `w` is not a
+deterministic operation near floating-point saturation.  Mathematically valid
+large-`gamma` states can round to `|v| = C_model`, and nearby values can
+alternate between acceptance and rejection if the only policy is a post-hoc
+strict-speed check.  This append-only decision record is accepted before
+revising the helper.
+
+## DR-019: Deterministic Velocity-Shadow Representability Limit
+
+- Status: accepted
+- Date: 2026-05-30
+- Author: implementation agent after fresh Phase-1 physics review
+- Commit: working tree on top of `04090c1a`
+- Question: Which finite momentum-like states can be accepted while the first
+  implementation retains a synchronized physical-velocity compatibility
+  shadow?
+- Constraints: the shadow must remain strictly subluminal after rounding;
+  acceptance must be deterministic and monotonic rather than dependent on
+  rounded reconstruction accidents; the Phase-0 `gamma approximately 1000`
+  regime must remain representable where backend precision permits; clipping
+  is forbidden.
+- Options considered:
+  1. Accept every finite `w` and rely only on a strict post-reconstruction
+     `|v| < C_model` check.
+  2. Clip rounded velocities below `C_model`.
+  3. Define a conservative precision-dependent representability domain for the
+     compatibility shadow and reject states beyond it explicitly.
+  4. Remove the compatibility shadow immediately.
+- Selected option: option 3.  Define:
+
+  ```text
+  gamma_shadow_max = 1 / sqrt(8 epsilon_Real)
+  ```
+
+  `VelocityFromW()`, `ValidateWState()`, and `WFromVelocity()` reject states
+  above this cap with an explicit
+  `velocity_shadow_unrepresentable` status.  `GammaFromW()` and
+  `KineticEnergyFromW()` may still evaluate larger finite momentum states when
+  their requested derived quantity remains finite.  Retain the strict
+  reconstructed-speed check as a defensive invariant inside the accepted
+  domain.
+- Evidence and reasoning: near the ultrarelativistic limit,
+  `1 - |v|/C_model` is approximately `1/(2 gamma^2)`.  The selected cap reserves
+  an approximate four-`epsilon_Real` gap below `C_model`, avoiding the
+  non-monotonic saturation region while retaining the Phase-0 high-gamma
+  oracle in default double precision and, narrowly, around `gamma = 1000` in
+  single precision.
+- Why the other options were not selected: option 1 is non-deterministic near
+  saturation; option 2 silently changes the physical state; option 4 would
+  expand Phase 1 into an unreviewed layout and output migration.
+- Compatibility and migration impact: later runtime parsing must reject
+  momentum or velocity initializations that cannot produce a trustworthy
+  compatibility shadow.  A later momentum-only layout may revisit this cap.
+- Validation required: test accepted high momentum, asymptotic gamma and
+  kinetic-energy behavior, deterministic acceptance below the cap, rejection
+  above the cap, direct invalid-`C_model` conversion cases, nonfinite
+  validation inputs, and host/device parity for all status classes.
+- Failure signals: non-monotonic status below the selected cap, accepted
+  rounded `|v| >= C_model`, clipped values, backend disagreement, or inability
+  to retain the Phase-0 high-gamma regime.
+- Revisit trigger: remove or redesign the physical-velocity compatibility
+  shadow; widen supported precision backends; or qualify a science case above
+  the selected cap.
+- Independent reviewers: fresh Phase-1 physics reviewer requested recheck
+  after implementation
+- Follow-up actions: revise the helper and parity harness; record the inherited
+  single-precision repository build blocker separately; rerun helper and
+  compatibility evidence.
+
+## Phase 1 Review Update 2: Candidate Helper Checkpoint
+
+This append-only update records the post-`DR-019` helper implementation,
+evidence, and initial reviewer-finding closures.  Phase 2 remains closed until
+fresh physics and integration/test rechecks record `PROCEED`.
+
+### Phase-1 Implementation Scope
+
+The helper increment adds only:
+
+```text
+src/particles/relativistic_state.hpp
+src/pgen/unit_tests/cr_relativistic_state_test.cpp
+inputs/unit_tests/cr_relativistic_state_test.athinput
+```
+
+No shared runtime pusher, particle state width, state index, parser, restart,
+output, gather, task-ordering, AMR, timestep, MHD, or CMake surface changed.
+The nested custom-pgen build uses the existing
+`PROBLEM=unit_tests/cr_relativistic_state_test` hook.
+
+The header-only `particles::relativistic` helper now provides device-capable:
+
+```text
+ScaledNorm3
+MaxVelocityShadowGamma
+GammaFromW
+VelocityFromW
+KineticEnergyFromW
+WFromVelocity
+ValidateWState
+```
+
+The implementation uses scaled norms for large-magnitude state, the
+cancellation-resistant kinetic-energy form
+`|w| * (|w| / (gamma + 1))`, explicit finite-state status returns, strict
+sub-luminal reconstruction, and the accepted `DR-019` compatibility-shadow
+representability cap.  It clips no value.
+
+### Phase-1 Test Coverage
+
+The isolated host/device parity harness covers:
+
+- zero momentum and `gamma = 1`;
+- nonrelativistic kinetic-energy behavior;
+- moderate vector reconstruction;
+- large-magnitude scaled-norm and `GammaFromW()` behavior where naive squaring
+  overflows;
+- deterministic compatibility-shadow rejection for the overflow-prone state;
+- accepted `gamma approximately 1000` velocity-shadow reconstruction;
+- high-momentum gamma and kinetic-energy asymptotes;
+- accepted state at `0.9 * gamma_shadow_max`;
+- deterministic rejection at `2 * gamma_shadow_max`;
+- `v -> w -> v` and `w -> v -> w` round trips;
+- strict `|v| = C_model` and `|v| > C_model` rejection;
+- zero, negative, NaN, and infinite `C_model` rejection for direct gamma and
+  conversion paths;
+- NaN and infinite momentum, velocity, and validation input rejection;
+- `DevExeSpace` parity for success and rejection status classes.
+
+### Phase-1 Evidence Archive
+
+| Gate | Archived evidence | Result |
+| --- | --- | --- |
+| Double-precision CPU helper harness | `evidence/phase1_helper_cpu.log` | Passed: `CR relativistic state helper tests passed` |
+| Single-precision CPU qualification attempt | `evidence/phase1_helper_cpu_single_precision_blocked.log` | Blocked before the new helper by inherited narrowing errors in existing repository source including `src/coordinates/cartesian_ks.hpp` and `src/dyn_grmhd/dyn_grmhd.cpp`; not a pass |
+| Legacy particle CPU plus accuracy | `evidence/phase1_legacy_cpu.log` | `32 passed in 6.68s` |
+| Legacy particle MPI CPU plus accuracy | `evidence/phase1_legacy_mpicpu.log` | `9 passed in 2.20s` |
+| Style | `evidence/phase1_style.log` | `2 passed in 13.15s` |
+| Branch snapshot | `evidence/phase1_branch_snapshot.txt` | Archived |
+| Evidence hashes | `evidence/phase1_evidence_sha256.txt` | Archived |
+
+GPU execution remains unavailable locally and explicitly unqualified.
+Single-precision qualification remains blocked by inherited repository source
+outside the accepted Phase-1 write manifest.  Neither backend is silently
+reported as passing evidence.
+
+### Initial Phase-1 Reviewer Findings And Closures
+
+| Finding | Closure |
+| --- | --- |
+| Strict reconstructed-speed validation became non-monotonic near floating-point saturation. | Accepted and implemented `DR-019` deterministic `gamma_shadow_max` domain with explicit `velocity_shadow_unrepresentable` status. |
+| Required high-momentum coverage was incomplete. | Added gamma and kinetic-energy asymptotes, accepted high-momentum velocity reconstruction, and accepted/rejected shadow-cap boundary cases. |
+| Conversion rejection coverage was incomplete. | Added direct and parity cases for zero, negative, NaN, and infinite conversion `C_model`, plus nonfinite validation inputs. |
+| `w -> v -> w` round trip was absent. | Added explicit momentum round-trip assertion. |
+| Style defects remained. | Added explicit include and wrapped long lines; style rerun passes. |
+| Generated caches and logs remained. | Removed generated `test_log.txt`, Python caches, and the invalid non-MPI diagnostic artifact; mechanically normalized retained evidence logs. |
+
+### RG-002: Is The Chosen State Still The Right One?
+
+- Date: 2026-05-30
+- Commit range reviewed: working tree on top of `04090c1a`
+- Evidence reviewed: helper diff, `DR-019`, double-precision helper harness,
+  inherited single-precision blocker, legacy CPU and MPI CPU regressions,
+  style, whitespace, branch snapshot, and evidence hashes
+- Assumptions that still hold: momentum-like `w` remains the authoritative
+  relativistic state candidate; `gamma` should be derived; helper code can
+  remain header-only and device-capable; no mutable `gamma` cache is justified
+- Assumptions weakened or falsified: a synchronized physical-velocity shadow
+  cannot represent arbitrarily high finite `w` deterministically in finite
+  precision
+- New risks: runtime parsing and pusher integration must propagate the explicit
+  `velocity_shadow_unrepresentable` failure; a future momentum-only layout may
+  revisit the cap; single-precision and GPU qualification remain unavailable
+- Blocking findings: none candidate-closed for Phase 1; independent rechecks
+  pending
+- Decision: candidate `proceed`
+- Plan changes: retain a compatibility velocity shadow only inside the
+  reviewed deterministic representability domain; carry `DR-019` into Phase-2
+  parser validation
+- Tests added or changed: high-momentum asymptotes, deterministic shadow-cap
+  boundaries, both conversion round trips, invalid conversion inputs,
+  nonfinite validation parity, style rerun
+- Independent reviewer findings and responses: initial physics and
+  integration/test reviews returned `HOLD`; every local Phase-1 blocker is
+  dispositioned above; request fresh recheck
+- Next smallest reviewable increment: after recheck only, Phase-2 opt-in
+  runtime contract and layout audit
+
+### Phase-1 Candidate Done Claim
+
+- Allowed edit set reviewed: narrow Phase-1 helper manifest only
+- Evidence added: listed Phase-1 archive above
+- Scope drift found: none
+- Unresolved risks: inherited single-precision blocker; unavailable GPU
+  execution; downstream direct-consumer layout re-audit; downstream restart
+  `BF-009`; downstream solver-coupling gate
+- Verdict: candidate `PROCEED`, pending fresh independent physics and
+  integration/test rechecks
+- Next allowed edit set if accepted: Phase-2 runtime contract only
+
+## Phase 1 Review Update 3: Separate Inverse Velocity-Parsing Domain
+
+The fresh physics recheck found that the accepted forward compatibility-shadow
+domain was not closed under inverse conversion near
+`MaxVelocityShadowGamma()`.  A rounded velocity shadow can remain strictly
+sub-luminal and valid for output while the inverse `v -> w` map is too
+ill-conditioned for reliable initialization parsing.
+
+### DR-020: Keep Broad Forward Shadows But Narrow Inverse Parsing
+
+- Status: accepted for Phase-1 final recheck
+- Date: 2026-05-30
+- Problem: the broad forward `w -> v` output-shadow domain from `DR-019`
+  remains deterministic, but using the same cap for `v -> w` parsing permits
+  large conditioning error near `|v| / C_model = 1` and does not guarantee a
+  stable high-gamma round trip
+- Options considered:
+  1. Lower the forward shadow cap until the whole compatibility-shadow domain
+     is round-trip safe.
+  2. Retain the reviewed forward output-shadow cap and introduce a separate
+     conservative inverse velocity-parsing cap.
+  3. Remove inverse velocity parsing and require momentum-only initialization
+     immediately.
+  4. Accept the ill-conditioned inverse domain and rely on downstream
+     tolerances.
+- Selected option: option 2
+- Exact rule:
+  - `w -> v` output reconstruction retains
+    `gamma <= 1 / sqrt(8 * epsilon_Real)`;
+  - `v -> w` initialization parsing requires
+    `beta < beta_parse_max`, where
+    `gamma_parse_max = 0.5 * epsilon_Real^(-1/4)` and
+    `beta_parse_max = sqrt((gamma_parse_max - 1) *
+    (gamma_parse_max + 1)) / gamma_parse_max`;
+  - the inverse guard is strict at `beta_parse_max`;
+  - `WFromVelocity()` retains a defensive decoded-gamma guard;
+  - values are rejected with `velocity_shadow_unrepresentable`; no value is
+    clipped.
+- Evidence and reasoning: the inverse map has worsening conditioning as
+  `beta -> 1`.  The selected precision-aware inverse cap bounds the leading
+  round-trip sensitivity scale `epsilon_Real * gamma^2` at approximately
+  `sqrt(epsilon_Real) / 4`, while preserving a materially relativistic
+  velocity-initialization range.  Forward shadows beyond the narrower inverse
+  cap remain output-only compatibility values.
+- Why the other options were not selected: option 1 unnecessarily narrows
+  deterministic output reconstruction; option 3 removes a useful bounded
+  compatibility path before the parser contract is implemented; option 4
+  accepts a known unstable initialization map.
+- Compatibility and migration impact: Phase-2 parsing must document that
+  velocity initialization is supported only below the inverse parsing cap.
+  Higher-gamma initialization must use the authoritative momentum-like state
+  after the later data-contract gate.  No legacy runtime behavior changes in
+  Phase 1.
+- Validation required: direct `WFromVelocity()` cases immediately below, at,
+  and above `beta_parse_max`; a high-gamma `w -> v -> w` round trip inside the
+  parsing domain with an explicit tolerance; reverse-cap rejection under
+  `DevExeSpace`; all six `StateStatus` classes under host/device parity.
+- Failure signals: accepted `beta >= beta_parse_max`, clipped values,
+  backend disagreement, unstable interior round trip, or accidental narrowing
+  of the broader forward output-shadow domain.
+- Revisit trigger: remove velocity initialization, remove the compatibility
+  shadow, widen precision/backend support, or qualify a science case that
+  requires velocity initialization above the selected inverse cap.
+- Independent reviewers: physics and integration/test rechecks requested
+  after implementation.
+
+### Fresh-Recheck Finding Closure Delta
+
+| Finding | Closure |
+| --- | --- |
+| Forward output shadows were not closed under high-gamma inverse parsing. | Added accepted `DR-020`, `MaxVelocityParsingGamma()`, `MaxVelocityParsingBeta()`, and strict inverse parsing rejection. |
+| Reverse cap-edge tests were absent. | Added direct below, at, and above parsing-boundary tests, a high-gamma interior round trip, and DevExeSpace parity for reverse-cap statuses. |
+| Host/device parity omitted `nonfinite_result`. | Added an explicit finite-input `GammaFromW()` overflow case to the parity table. |
+| DevExeSpace parity omitted nonfinite `WFromVelocity()` inputs and high-momentum energy. | Added NaN/infinite velocity inputs and high-momentum kinetic energy to the parity table. |
+| Phase-1 evidence hashes omitted the uncommitted implementation. | Regenerate the final evidence index with helper, harness, and input hashes before final recheck. |
+| Phase-1 branch snapshot lacked full checkpoint provenance. | Regenerate the final snapshot using the Phase-0 provenance structure before final recheck. |
+| Ledger control header was stale. | Refreshed the control header to the Phase-1 done-claim boundary and latest accepted Phase-0 commit. |
+| Mixed-precision `std::nextafter()` arguments would collapse immediate float neighbors onto the inverse parsing boundary. | Passed typed `Real` zero and one arguments so the strict below, at, and above parsing-boundary tests remain precision-generic after the inherited single-precision repository blocker is repaired. |
+
+### Phase-1 Final-Recheck Evidence Refresh
+
+The final-recheck archive is regenerated after `DR-020` and now binds:
+
+```text
+src/particles/relativistic_state.hpp
+src/pgen/unit_tests/cr_relativistic_state_test.cpp
+inputs/unit_tests/cr_relativistic_state_test.athinput
+evidence/phase1_branch_snapshot.txt
+evidence/phase1_helper_cpu.log
+evidence/phase1_helper_cpu_single_precision_blocked.log
+evidence/phase1_legacy_cpu.log
+evidence/phase1_legacy_mpicpu.log
+evidence/phase1_style.log
+evidence/phase1_untracked_whitespace_check.log
+```
+
+`evidence/phase1_branch_snapshot.txt` records timestamp, branch, accepted local
+HEAD, tracking tip, frozen prerequisite, integration target, Kokkos pin, and
+the full short branch status.  The SHA-256 index verifies every bound file.
+
+## Phase 1 Review Update 4: Accepted State-Helper Milestone
+
+The final post-`DR-020` physics/numerics and integration/test rechecks both
+record `PROCEED`.  Phase 1 may commit.  The next open edit set is Phase-2
+parser-only runtime-contract work; layout widening, restart schema changes,
+output changes, prescribed-field gathering, particle acceleration, production
+solver coupling, subcycling redesign, and MPI/AMR migration qualification
+remain closed behind their owning gates.
+
+### Final Independent Rechecks
+
+| Reviewer | Verdict | Verified closure |
+| --- | --- | --- |
+| Physics/numerics | `PROCEED` | Typed-`Real` inverse-boundary neighbors, split forward-shadow and inverse-parsing domains, strict rejection without clipping, live isolated helper pass, SHA bindings, snapshot, style, legacy regressions, whitespace hygiene, inherited single-precision blocker, and explicit GPU residual risk. |
+| Integration/test | `PROCEED` | Phase-1 scope discipline, typed-neighbor repair, isolated helper rerun, `2 passed in 13.15s` style rerun, legacy `32` CPU and `9` MPI CPU passes, full provenance snapshot, bound SHA index, whitespace hygiene, inherited single-precision disposition, and historical-label clarification. |
+
+### RG-002 Final Disposition
+
+- Decision: `PROCEED`
+- Authoritative relativistic state: momentum-like `w`
+- Derived values: `gamma`, physical velocity, and kinetic energy
+- Cached mutable `gamma`: rejected as unnecessary synchronization risk
+- Compatibility-shadow policy: broad deterministic `w -> v` output domain
+  from `DR-019`; narrower conservative `v -> w` initialization-parsing domain
+  from `DR-020`
+- Backend status: double-precision CPU helper qualified; single-precision
+  full-build qualification blocked before helper compilation by inherited
+  repository narrowing errors; GPU execution unavailable and unqualified
+- Next allowed edit set: Phase-2 explicit opt-in parser contract only, with
+  legacy particle layout and runtime semantics preserved

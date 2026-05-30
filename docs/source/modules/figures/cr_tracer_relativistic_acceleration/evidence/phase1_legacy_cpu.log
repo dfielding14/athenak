@@ -1,0 +1,9 @@
+2026-05-30 00:31:56,988 - INFO - Cleaning build directory
+2026-05-30 00:31:56,994 - INFO - Configuring CMake in /Users/dbf75/.codex/worktrees/e354/athenak-DF
+2026-05-30 00:31:56,994 - INFO - Executing command: cmake -B tst/build
+2026-05-30 00:31:58,043 - INFO - Executing command: make -j 16
+2026-05-30 00:32:25,252 - INFO - make completed in 27.21 seconds
+2026-05-30 00:32:25,252 - INFO - Build directory cleaned and project rebuilt
+2026-05-30 00:32:25,252 - INFO - Executing command: ln -s ../../inputs inputs
+................................                                         [100%]
+32 passed in 6.68s
