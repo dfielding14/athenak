@@ -11,8 +11,11 @@
   "staged_successor": {
     "control_plane_version": "12750ea6f8ef540e3807a56cb7573d9d690532f729405b37b031936d045b22dc",
     "installed_predecessor_version": "1635c9f6bab8ae03bd9ce59ca399f2262b61a386d27d699ae14d37ea35962d1c",
-    "paired_install_status": "pending_clean_candidate_commit",
-    "active_policy_promotion_status": "pending_paired_install"
+    "paired_install_status": "pass",
+    "orion_install": "/lustre/orion/ast207/proj-shared/dfielding/PIC/control_plane/12750ea6f8ef540e3807a56cb7573d9d690532f729405b37b031936d045b22dc",
+    "project_home_install": "/ccs/proj/ast207/proj-shared/PIC/control_plane/12750ea6f8ef540e3807a56cb7573d9d690532f729405b37b031936d045b22dc",
+    "inventory_sha256": "c9310caa60ee68a12d3e585b781048a436ae3a389828704eb1bcb67b63f3108a",
+    "active_policy_promotion_status": "pending_committed_reviewed_policy"
   },
   "local_validation": {
     "control_plane_tests": {
@@ -40,9 +43,8 @@
   },
   "next_actions": [
     "Curate and commit the exact clean source candidate.",
-    "Install the paired immutable successor control plane in Orion and Project Home without recreating ledger genesis.",
     "Promote the reviewed active storage policy through the installed successor wrapper.",
     "Keep registered Frontier submissions paused until applicable prerequisite gates close."
   ],
-  "overall_disposition": "local_independent_adversarial_pass_paired_install_and_policy_promotion_pending_clean_candidate_all_submissions_paused"
+  "overall_disposition": "local_independent_adversarial_pass_paired_install_passed_policy_promotion_pending_committed_reviewed_policy_all_submissions_paused"
 }

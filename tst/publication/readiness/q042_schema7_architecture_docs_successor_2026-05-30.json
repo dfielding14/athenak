@@ -47,7 +47,7 @@
   ],
   "residual_risks": [
     "The schema-7 records do not replace the required clean-candidate freeze or full resilience matrix.",
-    "The successor Frontier control plane passed its separate local unit/static suite and independent adversarial re-audit in q027_successor_control_plane_independent_pass_2026-05-30.json; paired Orion and Project Home install plus policy promotion remain pending a clean source candidate.",
+    "The successor Frontier control plane passed its separate local unit/static suite, independent adversarial re-audit and paired Orion and Project Home install in q027_successor_control_plane_independent_pass_2026-05-30.json; active-policy promotion remains pending the committed reviewed policy.",
     "MPI per-rank, non-PIC multilevel and orbital-advection runtime coverage, node-loss, scheduler-pretimeout, Frontier-filesystem, Frontier HIP/GPU and scientific campaigns remain open.",
     "External reviewer disposition remains pending."
   ],

@@ -50,7 +50,8 @@ qualify any scientific claim by itself.
   control-plane promotion with scheduled manifest-digest anchoring.
 - `q027_successor_control_plane_independent_pass_2026-05-30.json`: local
   successor control-plane suite and independent adversarial PASS at the staged
-  digest. Paired install and policy promotion remain pending a clean candidate.
+  digest. Paired install passes; policy promotion remains pending the committed
+  reviewed policy.
 - `q003_frontier_f1_gpu_gyro_2026-05-30.json`: bounded registered Frontier
   one-rank GPU relativistic-gyro candidate oracle, hardened execution-context
   evidence, reconciled node-hours and explicit clean-freeze boundary.
