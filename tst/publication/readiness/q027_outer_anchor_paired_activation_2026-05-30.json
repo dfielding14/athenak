@@ -1,0 +1,63 @@
+{
+  "record_type": "q027_outer_anchor_paired_activation",
+  "schema_version": 1,
+  "date": "2026-05-30",
+  "gates": [
+    "Q-027",
+    "Q-038",
+    "Q-042"
+  ],
+  "qualification_effect": "paired_outer_anchor_control_plane_activation_pass_science_submission_freeze_pending",
+  "predecessor": {
+    "control_plane_version": "3e933edde9590a85976a94c0b61673979abf3c13cc2c125ed0ecbc1815029a6e",
+    "policy_sha256": "228440de18ff07af28721caf430775e209e8d8882190f17740796b9bbf3b13a7",
+    "promotion_sha256": "700a059acc725e6359f16b0663a2df255878211cae56b9c5086579d06a3db8dc",
+    "lifecycle": "chronology_only_superseded_by_quiescent_outer_anchor_activation"
+  },
+  "active_generation": {
+    "control_plane_version": "80c0797be1ce71bbe24f0848b6c983be5ffa31f884c2a8e2596cf8839dc1e9d5",
+    "operational_source_commit": "20ca3fce90a9fb1073a681cd4a4af198bb9ca842",
+    "reviewed_policy_commit": "cfab7b5b931723edb23df9b257ead14ac82f3a21",
+    "orion_install": "/lustre/orion/ast207/proj-shared/dfielding/PIC/control_plane/80c0797be1ce71bbe24f0848b6c983be5ffa31f884c2a8e2596cf8839dc1e9d5",
+    "project_home_install": "/ccs/proj/ast207/proj-shared/PIC/control_plane/80c0797be1ce71bbe24f0848b6c983be5ffa31f884c2a8e2596cf8839dc1e9d5",
+    "inventory_sha256": "7fa4d9d47274e77da15ae1382d352736e61ecf0ed4d7366a740b5d95ef891fb5",
+    "policy_sha256": "eec031f40807eacd174d8fc4cdb26aab3a5a712e2b1b16c60d49fc50050ed600",
+    "promotion_sha256": "cb58eac8b58cead7d7ca93098102f598ebcc71e80d6fbd708e3a08a0859fa4e3",
+    "activated_utc": "2026-05-30T19:05:10Z"
+  },
+  "anchor_migration": {
+    "status": "pass_existing_genesis_preserved_without_second_append",
+    "event_sha256": "849bf340986f4d1e1f7cc69c0d2e2845c0313c02d935822113aa8b1df5f1f4c1",
+    "mirror_ack_sha256": "a3af8af8c3b579ee323850902aad7aab58abde98dff98618ccffd15958dbb296",
+    "orion_anchor": "/lustre/orion/ast207/proj-shared/dfielding/PIC/ledger/genesis_anchor.json",
+    "project_home_anchor": "/ccs/proj/ast207/proj-shared/PIC/ledger/genesis_anchor.json",
+    "anchor_mode": "0444",
+    "idempotent_post_promotion_validation": "pass"
+  },
+  "mirrored_ledger_invariant": {
+    "status": "pass",
+    "orion_primary_records": 22,
+    "orion_receipt_records": 22,
+    "project_home_primary_records": 22,
+    "primary_mirrors_identical": true,
+    "cumulative_consumed_node_hours": 0.07444444444444442,
+    "active_reservations": 0
+  },
+  "scheduler_observation": {
+    "status": "pass_no_user_jobs_during_quiescent_cutover",
+    "checked_utc": "2026-05-30T19:03:50Z"
+  },
+  "independent_review": {
+    "status": "pass",
+    "record": "tst/publication/readiness/q027_control_plane_activation_lock_hardening_candidate_2026-05-30.json",
+    "reviewed_commit": "20ca3fce90a9fb1073a681cd4a4af198bb9ca842",
+    "reviewed_control_plane_version": "80c0797be1ce71bbe24f0848b6c983be5ffa31f884c2a8e2596cf8839dc1e9d5"
+  },
+  "open_boundaries": [
+    "science_submission_freeze.status remains pending_clean_candidate_freeze",
+    "frontier_admission_smoke.status remains pending_exact_executable_binding",
+    "matched Frontier environment-profile A/B evidence remains open",
+    "external reviewer disposition remains pending external review"
+  ],
+  "overall_disposition": "paired_outer_anchor_activation_pass_all_science_submissions_paused_pending_clean_candidate_freeze_and_applicable_prerequisites"
+}

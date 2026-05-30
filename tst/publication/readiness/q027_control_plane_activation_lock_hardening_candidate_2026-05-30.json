@@ -25,7 +25,7 @@
   "staged_successor": {
     "control_plane_version": "80c0797be1ce71bbe24f0848b6c983be5ffa31f884c2a8e2596cf8839dc1e9d5",
     "paired_install_status": "pass_identical_immutable_install_and_anchor_migration",
-    "active_policy_promotion_status": "pending_reviewed_policy_commit_and_promotion",
+    "active_policy_promotion_status": "pass",
     "science_submission_freeze": "pending_clean_candidate_freeze"
   },
   "local_validation": {
@@ -98,13 +98,22 @@
     "orion_receipt_records": 22,
     "project_home_ledger_records": 22
   },
+  "active_policy_transition": {
+    "status": "pass",
+    "record": "tst/publication/readiness/q027_outer_anchor_paired_activation_2026-05-30.json",
+    "policy_sha256": "eec031f40807eacd174d8fc4cdb26aab3a5a712e2b1b16c60d49fc50050ed600",
+    "promotion_sha256": "cb58eac8b58cead7d7ca93098102f598ebcc71e80d6fbd708e3a08a0859fa4e3",
+    "genesis_event_sha256": "849bf340986f4d1e1f7cc69c0d2e2845c0313c02d935822113aa8b1df5f1f4c1",
+    "orion_ledger_records": 22,
+    "orion_receipt_records": 22,
+    "project_home_ledger_records": 22
+  },
   "staged_source_context": {
     "core_repair_commit": "20ca3fce90a9fb1073a681cd4a4af198bb9ca842",
-    "worktree_state": "dirty_reviewed_policy_transition_pending_active_policy_promotion"
+    "worktree_state": "dirty_activation_chronology_pending_clean_candidate_freeze"
   },
   "next_actions": [
-    "Promote the committed reviewed closed policy without recreating ledger genesis.",
     "Build and freeze the exact clean source candidate under Orion before any new Frontier submission."
   ],
-  "overall_disposition": "outer_anchor_successor_paired_installed_anchor_migration_pass_all_submissions_paused_pending_active_policy_promotion_clean_candidate_science_freeze_and_applicable_prerequisites"
+  "overall_disposition": "outer_anchor_successor_paired_activation_pass_all_science_submissions_paused_pending_clean_candidate_science_freeze_and_applicable_prerequisites"
 }

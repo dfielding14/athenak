@@ -59,9 +59,9 @@ qualify any scientific claim by itself.
   its staged digest. Its paired install and active-policy promotion remain
   chronology; a later security-hardening candidate supersedes it for the next
   promotion.
-- `q027_active_control_plane_generation_2026-05-30.json`: read-only chronology
-  snapshot of the currently live paired `3e933edd` control plane, active policy,
-  promotion record and healthy mirrored ledger before the next promotion.
+- `q027_active_control_plane_generation_2026-05-30.json`: read-only predecessor
+  chronology snapshot of paired `3e933edd`, its active policy, promotion record
+  and healthy mirrored ledger before the outer-anchor promotion.
 - `q027_control_plane_security_hardening_candidate_2026-05-30.json`: local
   security-hardening chronology superseded by the later anchor-repair
   candidate.
@@ -97,8 +97,11 @@ qualify any scientific claim by itself.
   serializes ledger mutation and policy promotion through a descriptor lock on
   site-owned `/lustre/orion/ast207`, outside the replaceable PIC tree. Final
   independent clone/hardlink lock retest and quiescent paired immutable install
-  plus anchor migration pass. Active-policy promotion, science freeze and
+  plus anchor migration and active-policy promotion pass. Science freeze and
   applicable Frontier prerequisites remain open.
+- `q027_outer_anchor_paired_activation_2026-05-30.json`: current live paired
+  `80c0797b` outer-anchor activation, preserved genesis-anchor migration,
+  coherent mirrored policy promotion and unchanged 22-record ledger evidence.
 - `q003_frontier_f1_gpu_gyro_2026-05-30.json`: bounded registered Frontier
   one-rank GPU relativistic-gyro candidate oracle, hardened execution-context
   evidence, reconciled node-hours and explicit clean-freeze boundary.
