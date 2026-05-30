@@ -2403,7 +2403,12 @@ replacement, gyro-v3 replayed through current-policy successor qualification
 manifest SHA `17265e02`; preserve initial gyro manifest `9f7a5d64` as immutable
 chronology and use `17265e02` for terminal review. The ledger is coherent
 at 43 records with cumulative consumption `0.09388888888888887` node-hours,
-zero active reservations and no pending PIC marker.
+zero active reservations and no pending PIC marker. Source-local accepted
+closure index
+`q027_frontier_f1_accepted_closure_source_local_evidence_2026-05-30.json`
+binds both live execution projections for clone-local review. The opt-in live
+registry additionally validates exact mirrored ledger chains and replays both
+terminal manifests through descriptor-pinned bytes.
 
 ## Immediate Agent Handoff: First Actions
 
@@ -2463,7 +2468,10 @@ Future implementation agents should execute the following successor sequence:
    reconciliations, snapshotted offline-analysis publications, no-write
    qualification replays and immutable pending-review qualification manifests
    `17265e02` and `6262332a`; preserve initial gyro freeze `9f7a5d64` as
-   immutable chronology after the final active-policy replacement.
+   immutable chronology after the final active-policy replacement. Preserve
+   clone-local accepted-closure projection
+   `q027_frontier_f1_accepted_closure_source_local_evidence_2026-05-30.json`
+   alongside the immutable Orion evidence.
 8. Close remaining local prerequisites: Q-009 broader-boundary, MPI, ASan and
    HIP stress slices after the bounded coupled Debug/UBSan pass,
    Q-016 MPI/HIP parity, Q-017 kernel telemetry, Q-018 immutable claim links,
@@ -2558,6 +2566,7 @@ Future implementation agents should execute the following successor sequence:
 | 2026-05-30 | Attested paper-coupling-v2 job `4746297` under policy SHA `559a4b1e`, reconciled `0.006111111111111111` node-hours, published passing conservation and coefficient-invariance result plus receipt, replayed the snapshotted analyzer through the qualification gate and froze pending-review qualification manifest SHA `6262332a`; all three ledger streams remain coherent at 43 records with cumulative consumption `0.09388888888888887` node-hours, no active reservation and no pending PIC marker | Preserve registered F1 closure as pending external review evidence and continue only separately authorized remaining local and campaign gates |
 | 2026-05-30 | Replayed gyro-v3 evidence through the final active policy after the paper-coupling scrub-safe promotion and froze current-policy successor qualification manifest SHA `17265e02`; preserved initial gyro freeze `9f7a5d64` as immutable chronology | Use gyro successor `17265e02` and paper-coupling manifest `6262332a` for terminal external review |
 | 2026-05-30 | Linked registered-F1 gyro-v3 qualification manifest SHA `17265e02` and paper-coupling-v2 qualification manifest SHA `6262332a` into the Q-018 claim registry as immutable pending-external-review evidence | Preserve claim dispositions as open until all required child gates and named external reviews close |
+| 2026-05-30 | Archived the accepted gyro-v3 and paper-coupling-v2 manifests, inventories, analytical results, receipts and terminal mirrored reconciliation records into source-local fixture index `q027_frontier_f1_accepted_closure_source_local_evidence_2026-05-30.json`; hardened the opt-in registry to validate exact mirrored ledger chains and descriptor-pinned terminal-manifest bytes against the accepted-execution projection | Preserve the source-local review bundle as a clone-local projection of immutable Orion evidence while keeping Orion as the sole bulk root |
 
 ## Source Pointers For The Initial Review
 
