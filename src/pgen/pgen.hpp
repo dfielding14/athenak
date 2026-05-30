@@ -21,6 +21,8 @@ using UserSrctermFnPtr = void (*)(Mesh* pm, const Real bdt);
 using UserRefinementFnPtr = void (*)(MeshBlockPack* pmbp);
 using UserHistoryFnPtr = void (*)(HistoryData *pdata, Mesh *pm);
 
+class NodeRestartManifest;
+
 //----------------------------------------------------------------------------------------
 //! \class ProblemGenerator
 
@@ -30,7 +32,8 @@ class ProblemGenerator {
   ProblemGenerator(ParameterInput *pin, Mesh *pmesh);
   // constructor for restarts
   ProblemGenerator(ParameterInput *pin, Mesh *pmesh, IOWrapper resfile,
-                   bool single_file_per_rank=false);
+                   bool single_file_per_rank=false,
+                   const NodeRestartManifest *node_restart_manifest=nullptr);
   ~ProblemGenerator() = default;
 
   // true if user BCs are specified on any face
