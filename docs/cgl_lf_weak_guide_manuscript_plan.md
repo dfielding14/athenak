@@ -102,7 +102,27 @@ checkpoints, and fourteen retained MPI-I/O net-write records. It used
 `0.431667` node-hours. Its evidence JSON has SHA-256
 `339a3309276a93be7bb55c196f367ead9754f7c2ebdf94afdb9aeedd37f026cf`.
 This closes reduced replacement-driver nonlinear correctness only. The
-standard-layout rank-local gate remains open.
+standard-layout rank-local startup and retained-output sizing gate was then
+closed by `g023` (job `4743662`). That one-node/eight-rank run launched the
+guarded `192 x 192 x 384` layout, advanced through `t = 0.01` in `79`
+allocated seconds with zero strict counters, forcing-work relative residual
+`1.053e-11`, two complete eight-rank binary groups, and two complete
+eight-rank modal restart groups. Each terminal snapshot shard is `63710281`
+bytes (`509682248` bytes aggregated), and each modal restart shard is
+`172670767` bytes (`1381366136` bytes aggregated). The assembled endpoint
+reader passes at shape `384 x 192 x 192`. `g023` used `0.021944` node-hours;
+its evidence JSON has SHA-256
+`effba10b616246e1c9f6863c6a068f674551fa9ac4b4a02bdb92ead0f963c14f`.
+This closes replacement-driver Frontier debug startup and sizing
+qualification only, not production runtime or long-time statistics.
+
+The focused post-merge local gate is also retained. The serial CGL suites
+passed `39` tests in `23.89` seconds; evidence JSON SHA-256 is
+`3fc869c0d7455f1221d7838de900c0db7426673b2730cd954f264b8934fc0c29`.
+Scheduled one-node MPI CPU job `4743666` passed both one-rank/four-rank
+decomposition regressions in `2.81` pytest seconds and consumed `0.002222`
+node-hours separately from the debug-helper ledger; evidence JSON SHA-256 is
+`397aced4e90aa7e77ab17da05a522ad4c99c9d0e15bd48d86ce20aa195fb36d3`.
 Utility commits `476f9dbd`, `9c5c1b40`, and `bad8ba05` select only the
 explicit accepted restart lineage during bundling and admit normal
 sampled-history separation across authenticated restart boundaries while
@@ -496,10 +516,10 @@ work is:
 | Freeze MKS24 case inventory | `inputs/cgl_lf_paper/mks24_stage_i_manifest.json` and guarded workflow `paper-mks24-stage-i` define sixteen source-mapped executions, reuse aliases, and exclude the unmapped active-Alfvenic beta-1 deck. | Preserve the committed manifest and validate it against every submitted input bundle. |
 | Close reference-data boundary | Many dimensionless curves/surfaces are extracted; dimensional panels remain blocked. | Author/archive data, explicit transform proof, or manuscript-scoped blocked-panel decision. |
 | Verify numerical model identity | Corrected collisions, limiter threshold selection, forcing work, passive feedback, and reduced/GPU gates are recorded. | Formal pre-production review against Stage I Sections 3-6 and passing required tests. |
-| Replacement-driver qualification | The merged modal OU driver records `TurbulenceRestartMetadata` and authoritative modal state. Existing local regressions cover fixed-grid/AMR restart and CGL-LF interaction paths. An immutable replacement-driver HIP/MPI executable is retained at revision `462b9dbd53e085dea46c2478b567781576d7d03e` with SHA-256 `df87684e9d2b7af33b36c2757779d15de87b84ef051ca9c4489f2efa358f5c48`. Reduced startup `g015`, natural-cycle rank-local restart comparison `g018`, one-rank versus eight-rank decomposition comparison `g019`, passive-Alfvénic smoke `g020`, active-random smoke `g021`, and reduced nonlinear hard-wall run `g022` pass with zero strict counters. | Complete a standard-layout rank-local I/O probe from that immutable build. |
+| Replacement-driver qualification | The merged modal OU driver records `TurbulenceRestartMetadata` and authoritative modal state. An immutable replacement-driver HIP/MPI executable is retained at revision `462b9dbd53e085dea46c2478b567781576d7d03e` with SHA-256 `df87684e9d2b7af33b36c2757779d15de87b84ef051ca9c4489f2efa358f5c48`. Focused post-merge local serial (`39 passed`) and scheduled MPI CPU (`2 passed`) gates are retained. Reduced startup `g015`, natural-cycle rank-local restart comparison `g018`, one-rank versus eight-rank decomposition comparison `g019`, passive-Alfvénic smoke `g020`, active-random smoke `g021`, reduced nonlinear hard-wall run `g022`, and standard-layout rank-local sizing run `g023` pass with zero strict counters. | Frontier debug qualification is closed. Begin with the isolated fresh `R16` pilot and retain its inspection before expanding production authorization. |
 | Execution-epoch isolation | Commit `462b9dbd` makes `scripts/frontier/cgl_lf_stage_i.py` record new work beneath `runs/mks24-stage-i/E02-modal-driver/`, use `mks24_stage_i_E02_modal_driver_*` accounting files, tag manifests and job names with the epoch, and reject cross-epoch restart ancestry and bundle discovery. The old `runs/mks24-stage-i/R16` tree remains outside discovery. | Retain its passing offline epoch-isolation regression before any Frontier submission. |
 | Shared-root coordination | `/lustre/orion/ast207/proj-shared/dfielding/CGL` also contains exploratory non-MKS24 runs. A read-only audit found cancelled job `4743020` and two-node debug job `4743106` beneath `runs/beta25-accel05-*`; neither is Stage I evidence. Slurm now records `4743106` as `COMPLETED 0:0`, but its top-level campaign manifest remains stale at `state = running`. The helper therefore continues to require explicit acknowledgement after a read-only isolation review. | Before every Stage I prepare and submit action, inspect all user jobs and all active CGL-root campaign records. Do not modify the stale exploratory manifest. Do not overlap Stage I with another root-writing CGL campaign unless an explicit isolation and concurrency review authorizes it. Account exploratory runs separately from the MKS24 ledgers. |
-| Retained source provenance | The campaign-root working checkout was intentionally replaced by Git bundles on 2026-05-29. Both launchers now permit a clean external source checkout while requiring a checksummed in-root `--source-bundle` that contains the prepared revision. The debug helper also retains complete sibling rank restart sets rather than only rank zero, rejects every queued user job, scans active top-level CGL-root records before submission, and rejects absent override targets before reservation. Commits `d210cdd5`, `eab6e12b`, and `7fae0bcf` implement F-060/F-061; the bundle used for `g019` has SHA-256 `938170bd0e4757befe614ee9c471875d539de92fde93670d32a96e6d1771cd58` and contains documentation commit `ec98c25e` plus the immutable executable revision. | Retain the passing bundle/rank-local/shared-root/override self-tests and use the latest indexed bundle for subsequent debug qualification. |
+| Retained source provenance | The campaign-root working checkout was intentionally replaced by Git bundles on 2026-05-29. Both launchers now permit a clean external source checkout while requiring a checksummed in-root `--source-bundle` that contains the prepared revision. The debug helper also retains complete sibling rank restart sets rather than only rank zero, rejects every queued user job, scans active top-level CGL-root records before submission, and rejects absent override targets before reservation. Commits `d210cdd5`, `eab6e12b`, and `7fae0bcf` implement F-060/F-061; `g023` used indexed bundle `athenak-feature-cgl-through-e4249794.bundle` with SHA-256 `492c178e67feb0c3b8ceae674e4766a48fa43415c459e3465b055464971326a4`, containing the immutable executable revision. | Retain the passing bundle/rank-local/shared-root/override self-tests and use the latest indexed bundle for the fresh production pilot. |
 | Production accounting path | `scripts/frontier/cgl_lf_stage_i.py` is separate from the debug-only utility, validates mapped cases and aliases, uses `batch` with default production `normal` QOS, archives executable/input, retained-bundle, and production-utility provenance, enforces sequential Stage I reservations, and requires an inspection record before an output may be recorded as `accepted` or retained as a clean partial prefix. Rank-local output sets are retained and checksum-verified as grouped products. Continuations may use only the inspected terminal restart set from a parent with matching epoch, case, input digest, and executable digest. The initial `E02` implementation permits only an `R16` pilot under a `4.0` node-hour envelope until recosting is reviewed. | Record and review each completed pilot segment before preparing its continuation. Expand the matrix reservation only after pilot recosting. |
 | Production analysis/plot orchestration | Existing analyzer and MKS24 extractors implement many products; `paper-analyze` composes repeated checksum-qualified split reference manifests while rejecting duplicate product identifiers, and commit `449e297b` adds explicit partial-case comparison recording plus header-only snapshot-window selection; `cgl_lf_stage_i.py bundle-case` follows the explicit accepted restart lineage, merges sampled histories that need not repeat authenticated restart boundary rows while bounding gaps by their retained cadence and boundary timesteps, and links time-deduplicated shared or rank-local snapshot sets only after a case reaches its required final time, while `bundle-campaign` requires all sixteen completed mapped cases for cross-case comparisons. | Workflow command regenerating the per-panel gate table and retained figures from accepted output bundles. |
 | Manuscript conversion | Illustrated validation note exists. | TeX manuscript structured around reproduction claims, blocked boundaries, and only later an extension. |
@@ -522,8 +542,9 @@ be silently copied into `E02`.
 | Allocation record | Calculation basis | Node-hours |
 | --- | --- | ---: |
 | Historical debug qualification | Retained pre-replacement CGL-LF debug ledger | `0.851670` |
-| Fresh replacement-driver debug qualification used so far | Retained `g014` through `g022`, including the failed preflight execution and inconclusive clipped-boundary comparator | `0.488336` |
-| Current recorded debug total | Historical debug qualification plus fresh replacement-driver debug use | `1.340006` |
+| Fresh replacement-driver debug qualification used so far | Retained `g014` through `g023`, including the failed preflight execution and inconclusive clipped-boundary comparator | `0.510280` |
+| Current recorded debug total | Historical debug qualification plus fresh replacement-driver debug use | `1.361950` |
+| Separately retained scheduled MPI CPU local-gate allocation | Job `4743666`; not charged through the debug-helper ledger | `0.002222` |
 | Historical `E01-pre-modal-driver` Stage I | Retained production segments through rejected job `4686032` | `9.962778` |
 | Historical archive total | Reported for provenance; not charged against the fresh planning reset | `10.814448` |
 | Fresh `E02-modal-driver` project ceiling | Incremental ceiling for replacement-driver qualification, Stage I production, and any later separately approved Stage II work | `4000.000000` |
@@ -713,6 +734,21 @@ Reduced passive-Alfvénic smoke `g020` passed with perpendicular-only forcing
 `driving_type = 0`, `rseed = 314159`, activated all three force components,
 and produced finite nonzero pressure-work ledgers. Both reached `t = 0.01`
 with zero strict counters and retained restart checkpoints.
+
+Reduced nonlinear hard-wall `g022` then reached `t = 2.0` with active
+algebraic projection, zero strict counters, finite retained ledgers, and
+forcing-work relative residual `1.863e-12`. Standard-layout rank-local
+startup and sizing run `g023` launched the guarded `192 x 192 x 384` layout,
+reached `t = 0.01` cleanly, retained complete initial/final eight-rank
+snapshot and modal-restart groups, and passed assembled endpoint reads. Its
+startup-only products close the remaining Frontier debug gate without
+establishing production runtime.
+
+Focused post-merge local retention is complete: the serial CGL suites passed
+`39` tests, and scheduled one-node MPI CPU job `4743666` passed both retained
+decomposition regressions. With no queued user job after that allocation, the
+six `E02-modal-driver` entry conditions above are satisfied. The next
+authorized computation is the isolated fresh `R16` pilot from `t = 0`.
 
 ### 8.3 Why Stage II is not currently reserved
 
@@ -966,11 +1002,12 @@ As of the read-only Frontier-root audit on 2026-05-29 EDT
    restarts. The isolated `E02-modal-driver` accounting namespace,
    pilot-only reservation, and shared-root helper checks are committed through
    `7fae0bcf`. Its immutable HIP/MPI executable and retained source bundle are
-   archived. Reduced nonlinear hard-wall `g022` passed through `t = 2.0`;
-   complete the standard-layout rank-local probe, then run a fresh `R16`
-   pilot from `t = 0`. Recalculate runtime and storage from that pilot before
-   reserving the sixteen-case matrix. Only accepted `E02` bundles can support
-   new comparison claims.
+   archived. Reduced nonlinear hard-wall `g022`, standard-layout rank-local
+   sizing `g023`, focused serial CGL regression, and scheduled MPI CPU
+   regression gates passed. Run the fresh `R16` pilot from `t = 0`.
+   Recalculate runtime and storage from that pilot before reserving the
+   sixteen-case matrix. Only accepted `E02` bundles can support new
+   comparison claims.
 
 ## 13. Reproducibility Record
 
