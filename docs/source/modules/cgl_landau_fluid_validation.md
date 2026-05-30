@@ -734,8 +734,8 @@ the prepared revision, records the bundle checksum, archives complete sibling
 sets for rank-local restart continuations, limits debug walltime to two hours,
 rejects malformed or absent `block/name=value` override targets before
 reservation, reserves against the 1000 node-hour testing budget, rejects any
-queued user job, requires explicit acknowledgement of an active top-level CGL-root
-campaign record only after an isolation review, and rejects
+queued user job, requires explicit acknowledgement of an active top-level
+CGL-root campaign record only after an isolation review, and rejects
 `paper-standard`, `paper-nulim`, `paper-heat-flux`, `paper-compressive`, and
 `paper-scale-separation` inputs.
 Paper-production simulations must not be run through this debug-only workflow.
@@ -744,6 +744,10 @@ For restart-identity comparisons, branch from a natural-cycle checkpoint
 unless both comparator legs intentionally use the same clipped terminal
 timestep; an exact segment `tlim` can otherwise change the integration
 sequence without indicating a restart defect.
+
+For decomposition comparisons, assemble complete rank-local binary products
+onto the common physical grid before comparing fields. Rank-local file shards
+and their boundaries differ by design when the MPI decomposition changes.
 
 ## Diagnostics
 
