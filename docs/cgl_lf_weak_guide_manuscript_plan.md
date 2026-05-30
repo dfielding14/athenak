@@ -55,17 +55,17 @@ pre-replacement lineage. Preserve the existing `R16` tree, inspections, and
 ledger as immutable historical epoch `E01-pre-modal-driver`. Create a separate
 `E02-modal-driver` namespace and ledger before the next MKS24 submission. That
 namespace, its pilot-only reservation, and its shared-root submission checks
-are committed through `eab6e12b`; the F-061 absent-override-key follow-up
-must be committed before broader qualification.
+are committed through `7fae0bcf`.
 Reset the planning ceiling for that new epoch to an incremental `4000`
 node-hours while continuing to report the historical `0.851670` debug and
 `9.962778` Stage I node-hours. A reset is an accounting boundary for future
 authorization; it does not erase consumed allocation.
-Commits `d210cdd5` and `eab6e12b` retain bundle-backed source provenance,
-complete rank-local debug-restart archival, an all-user-job debug preflight,
-and reviewed top-level shared-root acknowledgement. The retained bundle
-`source-archives/athenak-feature-cgl-through-eab6e12b.bundle` has SHA-256
-`dbbf139dfd41d50de1816858d0372ac15cb75e6b79a795c240406ba4ca530483`.
+Commits `d210cdd5`, `eab6e12b`, and `7fae0bcf` retain bundle-backed source
+provenance, complete rank-local debug-restart archival, an all-user-job debug
+preflight, reviewed top-level shared-root acknowledgement, and prepare-time
+rejection of absent override targets. The retained bundle
+`source-archives/athenak-feature-cgl-through-7fae0bcf.bundle` has SHA-256
+`15235ba07685388523d618c9c6d59df305b05d1ffbaded71795640ba954330c9`.
 Replacement-driver debug job `4743463` (`g014`) then exposed and retained a
 deck/override preflight gap before physics startup, consuming `0.002778`
 node-hours. Corrected startup job `4743465` (`g015`) used explicit hard-wall
@@ -74,9 +74,18 @@ and rank-local settings in retained reduced input SHA-256
 reached `t = 0.01` with zero strict LF safety counters, and consumed
 `0.005556` node-hours. Its retained evidence JSON has SHA-256
 `e2f4a047f601e6d1539d77a85a09d65e4df8b338c22eb6638441cdd6af75cd70`.
-This is startup, modal-payload, and rank-local layout evidence only; restart
-identity, decomposition, nonlinear hard-wall, and standard-layout gates
-remain open.
+Follow-up `g016` (job `4743470`) loaded the authenticated terminal eight-rank
+restart set and reached `t = 0.02` cleanly. The first uninterrupted comparator,
+`g017` (job `4743472`), was retained as `inconclusive` because stopping `g015`
+exactly at `t = 0.01` clipped its final timestep and changed the subsequent
+integration sequence. Natural-cycle continuation `g018` (job `4743473`) then
+resumed the complete `g017` `.00013.rst` set and matched the uninterrupted
+`g017` terminal histories, rank-local snapshot fields, and turbulence-force
+slice within declared retained-format tolerances. Its evidence JSON has
+SHA-256
+`4d898cf4aa4427b81164e4eb688f011adbbb277874b1ca7453a7a2c1e60b580f`.
+This closes reduced modal restart identity only; decomposition, nonlinear
+hard-wall, passive/random smoke, and standard-layout gates remain open.
 Utility commits `476f9dbd`, `9c5c1b40`, and `bad8ba05` select only the
 explicit accepted restart lineage during bundling and admit normal
 sampled-history separation across authenticated restart boundaries while
@@ -470,10 +479,10 @@ work is:
 | Freeze MKS24 case inventory | `inputs/cgl_lf_paper/mks24_stage_i_manifest.json` and guarded workflow `paper-mks24-stage-i` define sixteen source-mapped executions, reuse aliases, and exclude the unmapped active-Alfvenic beta-1 deck. | Preserve the committed manifest and validate it against every submitted input bundle. |
 | Close reference-data boundary | Many dimensionless curves/surfaces are extracted; dimensional panels remain blocked. | Author/archive data, explicit transform proof, or manuscript-scoped blocked-panel decision. |
 | Verify numerical model identity | Corrected collisions, limiter threshold selection, forcing work, passive feedback, and reduced/GPU gates are recorded. | Formal pre-production review against Stage I Sections 3-6 and passing required tests. |
-| Replacement-driver qualification | The merged modal OU driver records `TurbulenceRestartMetadata` and authoritative modal state. Existing local regressions cover fixed-grid/AMR restart and CGL-LF interaction paths. An immutable replacement-driver HIP/MPI executable is retained at revision `462b9dbd53e085dea46c2478b567781576d7d03e` with SHA-256 `df87684e9d2b7af33b36c2757779d15de87b84ef051ca9c4489f2efa358f5c48`. Reduced startup job `4743465` (`g015`) reaches `t = 0.01` with zero strict counters, readable eight-rank snapshots, and complete eight-rank restart sets; its retained evidence JSON has SHA-256 `e2f4a047f601e6d1539d77a85a09d65e4df8b338c22eb6638441cdd6af75cd70`. | Complete rank-local restart identity, GPU/MPI decomposition checks, reduced passive/random smoke, reduced nonlinear hard-wall validation through at least `t = 2`, and a standard-layout rank-local I/O probe from that immutable build. |
+| Replacement-driver qualification | The merged modal OU driver records `TurbulenceRestartMetadata` and authoritative modal state. Existing local regressions cover fixed-grid/AMR restart and CGL-LF interaction paths. An immutable replacement-driver HIP/MPI executable is retained at revision `462b9dbd53e085dea46c2478b567781576d7d03e` with SHA-256 `df87684e9d2b7af33b36c2757779d15de87b84ef051ca9c4489f2efa358f5c48`. Reduced startup `g015` and natural-cycle rank-local restart comparison `g018` pass with zero strict counters; `g018` evidence JSON SHA-256 is `4d898cf4aa4427b81164e4eb688f011adbbb277874b1ca7453a7a2c1e60b580f`. | Complete GPU/MPI decomposition checks, reduced passive/random smoke, reduced nonlinear hard-wall validation through at least `t = 2`, and a standard-layout rank-local I/O probe from that immutable build. |
 | Execution-epoch isolation | Commit `462b9dbd` makes `scripts/frontier/cgl_lf_stage_i.py` record new work beneath `runs/mks24-stage-i/E02-modal-driver/`, use `mks24_stage_i_E02_modal_driver_*` accounting files, tag manifests and job names with the epoch, and reject cross-epoch restart ancestry and bundle discovery. The old `runs/mks24-stage-i/R16` tree remains outside discovery. | Retain its passing offline epoch-isolation regression before any Frontier submission. |
 | Shared-root coordination | `/lustre/orion/ast207/proj-shared/dfielding/CGL` also contains exploratory non-MKS24 runs. A read-only audit found cancelled job `4743020` and running two-node debug job `4743106` beneath `runs/beta25-accel05-*`; neither is Stage I evidence. The helper now checks all queued user jobs and top-level active CGL-root campaign records, requiring explicit acknowledgement only after an isolation review. | Before every Stage I prepare and submit action, inspect all user jobs and all active CGL-root campaign records. Do not overlap Stage I with another root-writing CGL campaign unless an explicit isolation and concurrency review authorizes it. Account exploratory runs separately from the MKS24 ledgers. |
-| Retained source provenance | The campaign-root working checkout was intentionally replaced by Git bundles on 2026-05-29. Both launchers now permit a clean external source checkout while requiring a checksummed in-root `--source-bundle` that contains the prepared revision. The debug helper also retains complete sibling rank restart sets rather than only rank zero, rejects every queued user job, and scans active top-level CGL-root records before submission. Commits `d210cdd5` and `eab6e12b` implement F-060; retained bundle SHA-256 `dbbf139dfd41d50de1816858d0372ac15cb75e6b79a795c240406ba4ca530483` contains the immutable executable revision and those helper commits. | Retain the passing bundle/rank-local/shared-root self-tests. Commit and retain the F-061 absent-override-key guard before broadening debug qualification. |
+| Retained source provenance | The campaign-root working checkout was intentionally replaced by Git bundles on 2026-05-29. Both launchers now permit a clean external source checkout while requiring a checksummed in-root `--source-bundle` that contains the prepared revision. The debug helper also retains complete sibling rank restart sets rather than only rank zero, rejects every queued user job, scans active top-level CGL-root records before submission, and rejects absent override targets before reservation. Commits `d210cdd5`, `eab6e12b`, and `7fae0bcf` implement F-060/F-061; retained bundle SHA-256 `15235ba07685388523d618c9c6d59df305b05d1ffbaded71795640ba954330c9` contains the immutable executable revision and those helper commits. | Retain the passing bundle/rank-local/shared-root/override self-tests and use the indexed `7fae0bcf` bundle for subsequent debug qualification. |
 | Production accounting path | `scripts/frontier/cgl_lf_stage_i.py` is separate from the debug-only utility, validates mapped cases and aliases, uses `batch` with default production `normal` QOS, archives executable/input, retained-bundle, and production-utility provenance, enforces sequential Stage I reservations, and requires an inspection record before an output may be recorded as `accepted` or retained as a clean partial prefix. Rank-local output sets are retained and checksum-verified as grouped products. Continuations may use only the inspected terminal restart set from a parent with matching epoch, case, input digest, and executable digest. The initial `E02` implementation permits only an `R16` pilot under a `4.0` node-hour envelope until recosting is reviewed. | Record and review each completed pilot segment before preparing its continuation. Expand the matrix reservation only after pilot recosting. |
 | Production analysis/plot orchestration | Existing analyzer and MKS24 extractors implement many products; `paper-analyze` composes repeated checksum-qualified split reference manifests while rejecting duplicate product identifiers, and commit `449e297b` adds explicit partial-case comparison recording plus header-only snapshot-window selection; `cgl_lf_stage_i.py bundle-case` follows the explicit accepted restart lineage, merges sampled histories that need not repeat authenticated restart boundary rows while bounding gaps by their retained cadence and boundary timesteps, and links time-deduplicated shared or rank-local snapshot sets only after a case reaches its required final time, while `bundle-campaign` requires all sixteen completed mapped cases for cross-case comparisons. | Workflow command regenerating the per-panel gate table and retained figures from accepted output bundles. |
 | Manuscript conversion | Illustrated validation note exists. | TeX manuscript structured around reproduction claims, blocked boundaries, and only later an extension. |
@@ -496,8 +505,8 @@ be silently copied into `E02`.
 | Allocation record | Calculation basis | Node-hours |
 | --- | --- | ---: |
 | Historical debug qualification | Retained pre-replacement CGL-LF debug ledger | `0.851670` |
-| Fresh replacement-driver debug qualification used so far | Retained `g014` failed preflight execution and corrected `g015` startup qualification | `0.008334` |
-| Current recorded debug total | Historical debug qualification plus fresh replacement-driver debug use | `0.860004` |
+| Fresh replacement-driver debug qualification used so far | Retained `g014` through `g018`, including the failed preflight execution and inconclusive clipped-boundary comparator | `0.027779` |
+| Current recorded debug total | Historical debug qualification plus fresh replacement-driver debug use | `0.879449` |
 | Historical `E01-pre-modal-driver` Stage I | Retained production segments through rejected job `4686032` | `9.962778` |
 | Historical archive total | Reported for provenance; not charged against the fresh planning reset | `10.814448` |
 | Fresh `E02-modal-driver` project ceiling | Incremental ceiling for replacement-driver qualification, Stage I production, and any later separately approved Stage II work | `4000.000000` |
@@ -508,9 +517,8 @@ be silently copied into `E02`.
 The archived estimate is not a measured replacement-driver benchmark. Prior
 to `E02` production:
 
-1. Preserve the committed bundle-backed source-provenance and shared-root
-   controls through `eab6e12b`. Commit and retain the F-061 absent-override-key
-   preflight guard exposed by `g014`.
+1. Preserve the committed bundle-backed source-provenance, shared-root, and
+   absent-override-key controls through `7fae0bcf`.
 2. Qualify one immutable replacement-driver build and rerun a fresh `R16`
    pilot from `t = 0`.
 3. Recalculate runtime, rank-local storage, and the Stage I reservation from
@@ -661,6 +669,18 @@ with explicit deck settings, two complete eight-rank binary groups, fifteen
 complete eight-rank restart groups, and `28,403,848` bytes per rank-local
 restart file. This does not satisfy the restart-identity, nonlinear, or
 standard-layout requirements above.
+
+Further progress on 2026-05-30: rank-local restart-load smoke `g016` passed.
+The intended `g016` versus uninterrupted `g017` comparison was retained as
+inconclusive because the exact `t = 0.01` stop clipped the integration
+timestep. Natural-cycle comparison `g018` instead resumed `g017` checkpoint
+`.00013.rst` and passed with maximum terminal MHD-history, user-history,
+float32 snapshot-field, and turbulence-force-slice differences
+`6.10e-17`, `1.82e-13`, `3.73e-9`, and `2.04e-14`. Histories/tabs use
+`rtol = atol = 1e-12`; float32 snapshots use `rtol = 1e-6`,
+`atol = 1e-7`. Future identity checks must branch from a natural-cycle
+checkpoint unless both comparator legs intentionally share the same clipped
+segment boundary.
 
 ### 8.3 Why Stage II is not currently reserved
 
@@ -911,9 +931,8 @@ As of the read-only Frontier-root audit on 2026-05-29 EDT
 5. The next task is not to launch the weak-guide extension or continue old
    restarts. The isolated `E02-modal-driver` accounting namespace,
    pilot-only reservation, and shared-root helper checks are committed through
-   `eab6e12b`. Its immutable HIP/MPI executable and retained source bundle are
-   archived. Commit the F-061 absent-override guard, complete replacement
-   turbulent-driver qualification, and
+   `7fae0bcf`. Its immutable HIP/MPI executable and retained source bundle are
+   archived. Complete replacement turbulent-driver qualification and
    run a fresh `R16` pilot from `t = 0`. Recalculate runtime and storage from
    that pilot before reserving the sixteen-case matrix. Only accepted `E02`
    bundles can support new comparison claims.
