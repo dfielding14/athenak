@@ -679,18 +679,41 @@ void ProblemGenerator::PartRandom(ParameterInput *pin, const bool restart) {
   // set timestep (which will remain constant for entire run
   // Assumes uniform mesh (no SMR or AMR)
   // Assumes velocities normalized to one, so dt=min(dx)
-  Real &dtnew_ = pmbp->ppart->dtnew;
-  dtnew_ = std::min(mbsize.h_view(0).dx1, mbsize.h_view(0).dx2);
-  dtnew_ = std::min(dtnew_, mbsize.h_view(0).dx3);
-  Real min_mass = pin->GetOrAddReal("particles","min_mass",1.0);
-  Real bmag = std::sqrt(B0x*B0x + B0y*B0y + B0z*B0z);
-  if (bmag > 0.0) {
-    dtnew_ = std::min(dtnew_, cfl_part*min_mass/bmag);
+  Real runtime_dtnew_override =
+      pin->GetOrAddReal("problem","runtime_particle_dtnew_override",-1.0);
+  bool standalone_relativistic_kernel_harness =
+      pmbp->ppart->pusher == ParticlesPusher::relativistic_hc &&
+      pmbp->ppart->relativistic_field_source ==
+          RelativisticFieldSource::prescribed_test &&
+      std::string(PROBLEM_GENERATOR).compare(
+          "unit_tests/cr_relativistic_pusher_runtime_test") == 0;
+  if (pmbp->ppart->pusher != ParticlesPusher::relativistic_hc ||
+      standalone_relativistic_kernel_harness) {
+    Real &dtnew_ = pmbp->ppart->dtnew;
+    dtnew_ = std::min(mbsize.h_view(0).dx1, mbsize.h_view(0).dx2);
+    dtnew_ = std::min(dtnew_, mbsize.h_view(0).dx3);
+    Real min_mass = pin->GetOrAddReal("particles","min_mass",1.0);
+    Real bmag = std::sqrt(B0x*B0x + B0y*B0y + B0z*B0z);
+    if (bmag > 0.0) {
+      dtnew_ = std::min(dtnew_, cfl_part*min_mass/bmag);
+    }
   }
   std::string particle_position =
       pin->GetOrAddString("problem","particle_position","random");
   if ((!restart) && particle_position.compare("tag_random") == 0) {
     pmbp->ppart->RemapAfterAMR();
+  }
+  if (standalone_relativistic_kernel_harness) {
+    if (runtime_dtnew_override > 0.0) {
+      pmbp->ppart->dtnew = runtime_dtnew_override;
+    }
+    pmbp->ppart->relativistic_timestep_bound_dirty = false;
+    pmbp->ppart->relativistic_timestep_bound_override = true;
+  } else if (pmbp->ppart->pusher != ParticlesPusher::relativistic_hc ||
+             pmbp->ppart->relativistic_field_source ==
+                 RelativisticFieldSource::prescribed_test) {
+    pmbp->ppart->MarkRelativisticTimestepBoundDirty();
+    pmbp->ppart->RefreshRelativisticTimestepBound();
   }
 
   return;

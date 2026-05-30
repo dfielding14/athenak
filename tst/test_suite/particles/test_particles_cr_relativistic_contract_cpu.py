@@ -397,10 +397,30 @@ def test_relativistic_hc_positive_cycle_prescribed_test_runs_cpu(tmp_path):
     assert result.returncode == 0, result.stdout + result.stderr
 
 
-def test_relativistic_hc_rejects_unqualified_subcycling_cpu(tmp_path):
-    """Acceleration-aware subcycling remains closed until its owning phase."""
+def test_relativistic_hc_accepts_strict_subcycling_cpu(tmp_path):
+    """The Phase-5 acceleration-aware subcycle path is explicit and executable."""
     result = _run_relativistic(tmp_path, inject_in_particles="subcycle = true\n")
-    _assert_fatal(result, "Phase-5 redesign")
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_relativistic_hc_rejects_subcycle_cap_clipping_cpu(tmp_path):
+    """Relativistic subcycling never clips an excessive global request."""
+    result = _run_relativistic(
+        tmp_path,
+        inject_in_particles="subcycle = true\nsubcycle_strict = false\n")
+    _assert_fatal(result, "cap clipping is unsupported")
+
+
+@pytest.mark.parametrize(
+    "parameter",
+    ["subcycle_momentum_fraction", "subcycle_kinetic_energy_fraction"],
+)
+def test_relativistic_hc_rejects_deferred_fractional_subcycle_scales_cpu(
+        tmp_path, parameter):
+    """Near-rest-singular fractional controls remain closed pending a reviewed scale."""
+    result = _run_relativistic(
+        tmp_path, inject_in_particles=f"{parameter} = 0.1\n")
+    _assert_fatal(result, "separately reviewed nonsingular near-rest scale")
 
 
 def test_relativistic_hc_rejects_multilevel_mesh_cpu(tmp_path):

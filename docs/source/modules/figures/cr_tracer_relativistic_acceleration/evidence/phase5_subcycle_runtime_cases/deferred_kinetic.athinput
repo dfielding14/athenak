@@ -1,0 +1,120 @@
+# AthenaK input for serial experimental mhd_ideal frozen_tn CR runtime qualification
+
+<comment>
+problem   = serial experimental solver-coupled relativistic CR runtime witness
+
+<job>
+basename  = cr_relativistic_coupled_runtime
+
+<mesh>
+nghost    = 2
+nx1       = 8
+x1min     = -1.0
+x1max     = 1.0
+ix1_bc    = periodic
+ox1_bc    = periodic
+
+nx2       = 8
+x2min     = -1.0
+x2max     = 1.0
+ix2_bc    = periodic
+ox2_bc    = periodic
+
+nx3       = 8
+x3min     = -1.0
+x3max     = 1.0
+ix3_bc    = periodic
+ox3_bc    = periodic
+
+<meshblock>
+nx1       = 8
+nx2       = 8
+nx3       = 8
+
+<time>
+evolution  = dynamic
+integrator = rk2
+cfl_number = 0.2
+nlim       = 1
+tlim       = 0.05
+ndiag      = 1
+
+<mhd>
+eos         = ideal
+reconstruct = plm
+rsolver     = hlld
+gamma       = 1.666666667
+
+<particles>
+particle_type                  = cosmic_ray
+ppc                            = 0.001953125
+nspecies                       = 1
+pusher                         = relativistic_hc
+interpolation                  = trilinear
+relativistic_field_source      = mhd_ideal
+relativistic_temporal_sampling = frozen_tn
+c_model                        = 1.0
+alpha_s                        = 1.0
+cfl_part                       = 0.05
+min_mass                       = 1.0
+subcycle                       = false
+subcycle_strict                = true
+subcycle_max_steps             = 8
+subcycle_cell_fraction         = 0.5
+subcycle_meshblock_fraction    = 0.5
+subcycle_gyro_fraction         = 0.25
+subcycle_electric_kick_max     = 0.1
+subcycle_kinetic_energy_fraction = 0.1
+log_performance                = false
+
+<problem>
+pgen_name                  = cr_relativistic_coupled_runtime_test
+user_srcs                  = false
+relativistic_coupled_manufactured_test = false
+manufactured_acceleration  = 0.2
+runtime_invalid_gid        = false
+runtime_invalid_stencil_position = false
+runtime_invalid_stencil_x1 = 10.0
+runtime_particle_dtnew_override = -1.0
+particle_position          = fixed
+particle_x1                = 0.0
+particle_x2                = 0.0
+particle_x3                = 0.0
+particle_velocity          = uniform
+relativistic_initial_state = w
+w0x                        = 0.0
+w0y                        = 0.0
+w0z                        = 0.0
+B0x                        = 0.0
+B0y                        = 0.0
+B0z                        = 0.4
+B_profile                  = uniform
+prtcl_rst_flag              = 0
+
+live_velocity_profile      = uniform
+live_density               = 1.0
+live_pressure              = 0.6
+live_u1                    = 0.0
+live_u2                    = -0.2
+live_u3                    = 0.0
+live_u1_x1                 = 0.0
+live_u1_x2                 = 0.0
+live_u1_x3                 = 0.0
+live_u2_x1                 = 0.0
+live_u2_x2                 = 0.0
+live_u2_x3                 = 0.0
+live_u3_x1                 = 0.0
+live_u3_x2                 = 0.0
+live_u3_x3                 = 0.0
+live_velocity_amplitude    = 0.0
+live_velocity_wave_number  = 1.0
+live_B1                    = 0.0
+live_B2                    = 0.0
+live_B3                    = 0.4
+
+poison_B1                  = 7.0
+poison_B2                  = -11.0
+poison_B3                  = 13.0
+poison_cE1                 = -17.0
+poison_cE2                 = 19.0
+poison_cE3                 = -23.0

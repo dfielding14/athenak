@@ -1,0 +1,3 @@
+# coupled-runtime	mhd_ideal	frozen_tn	cE=-u_cross_B
+# cycle	time	gid	tag	x	y	z	vx	vy	vz	wx	wy	wz	cE1	cE2	cE3	b1	b2	b3	work	alpha	gamma	kinetic	dx	dy	dz	db	legacy_ipm	final_live_u1	final_live_u2	final_live_u3	final_live_b1	final_live_b2	final_live_b3	final_live_cE1	final_live_cE2	final_live_cE3	final_live_cE_dot_b	particle_dtnew	last_subcycle_steps	last_push_dt
+0	0	0	0	0	0	0	0	0	0	0	0	0	-17	19	-23	7	-11	13	0	1	1	0	0	0	0	0	1	0	-0.39999999999999997	0	0	0	1	0.39999999999999997	0	-0	0	0.19999999999999998	1	0

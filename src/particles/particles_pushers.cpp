@@ -7,8 +7,10 @@
 //  \brief
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <iostream>
+#include <limits>
 #include <string>
 
 #include "athena.hpp"
@@ -49,8 +51,12 @@ bool IsCellCenteredTrilinearCoordinateSupported(Real x, Real xmin, Real dx,
 KOKKOS_INLINE_FUNCTION
 int StepsForRatio(Real ratio) {
   if (ratio <= 1.0) {return 1;}
+  if (!relativistic::IsFinite(ratio) ||
+      ratio >= static_cast<Real>(std::numeric_limits<int>::max())) {
+    return std::numeric_limits<int>::max();
+  }
   int n = static_cast<int>(ratio);
-  if (static_cast<Real>(n) <= ratio) {++n;}
+  if (static_cast<Real>(n) < ratio) {++n;}
   return n;
 }
 
@@ -541,6 +547,213 @@ void RunRelativisticMHDIdealStep(MeshBlockPack *pmy_pack, DvceArray2D<Real> &pr,
   if (failure_h(0) != 0) {FatalRelativisticPush(failure_h(0));}
 }
 
+struct RelativisticEnvelope {
+  Real dx_min;
+  Real block_length_min;
+  Real b_max;
+  Real e_max;
+  Real alpha_max;
+  Real w_min;
+};
+
+[[noreturn]] void FatalRelativisticBound(const std::string &message) {
+  if (global_variable::my_rank == 0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << message << std::endl;
+  }
+#if MPI_PARALLEL_ENABLED
+  int initialized = 0;
+  MPI_Initialized(&initialized);
+  if (initialized != 0) {MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);}
+#endif
+  std::exit(EXIT_FAILURE);
+}
+
+RelativisticEnvelope ComputeRelativisticEnvelope(MeshBlockPack *pmy_pack,
+                                                 DvceArray2D<Real> &pr,
+                                                 int npart,
+                                                 RelativisticFieldSource source,
+                                                 Real alpha_s,
+                                                 Real c_model) {
+  auto &indcs = pmy_pack->pmesh->mb_indcs;
+  auto &mbsize = pmy_pack->pmb->mb_size;
+  const int nmb = pmy_pack->nmb_thispack;
+  Real dx_min = std::numeric_limits<Real>::max();
+  Real block_length_min = std::numeric_limits<Real>::max();
+  for (int m=0; m<nmb; ++m) {
+    dx_min = std::min(dx_min, mbsize.h_view(m).dx1);
+    dx_min = std::min(dx_min, mbsize.h_view(m).dx2);
+    dx_min = std::min(dx_min, mbsize.h_view(m).dx3);
+    block_length_min = std::min(block_length_min,
+        mbsize.h_view(m).x1max - mbsize.h_view(m).x1min);
+    block_length_min = std::min(block_length_min,
+        mbsize.h_view(m).x2max - mbsize.h_view(m).x2min);
+    block_length_min = std::min(block_length_min,
+        mbsize.h_view(m).x3max - mbsize.h_view(m).x3min);
+  }
+
+  Real u_max = 0.0;
+  Real b_max = 0.0;
+  Real e_max = 0.0;
+  int invalid_fields = 0;
+  if (source == RelativisticFieldSource::mhd_ideal) {
+    auto w0 = pmy_pack->pmhd->w0;
+    auto bcc0 = pmy_pack->pmhd->bcc0;
+    const int ni = indcs.nx1;
+    const int nj = indcs.nx2;
+    const int nk = indcs.nx3;
+    const int nmkji = nmb*nk*nj*ni;
+    Kokkos::parallel_reduce("part_relativistic_grid_envelope",
+      Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
+      KOKKOS_LAMBDA(const int idx, Real &local_u_max, Real &local_b_max,
+                    int &local_invalid) {
+        int i = indcs.is + idx % ni;
+        int j = indcs.js + (idx/ni) % nj;
+        int k = indcs.ks + (idx/(ni*nj)) % nk;
+        int m = idx/(ni*nj*nk);
+        relativistic::Vector3 u{w0(m,IVX,k,j,i), w0(m,IVY,k,j,i),
+                                w0(m,IVZ,k,j,i)};
+        relativistic::Vector3 b{bcc0(m,IBX,k,j,i), bcc0(m,IBY,k,j,i),
+                                bcc0(m,IBZ,k,j,i)};
+        Real umag = relativistic::ScaledNorm3(u);
+        Real bmag = relativistic::ScaledNorm3(b);
+        if (!relativistic::IsFinite(u) || !relativistic::IsFinite(b) ||
+            !relativistic::IsFinite(umag) || !relativistic::IsFinite(bmag)) {
+          local_invalid = 1;
+          return;
+        }
+        local_u_max = Kokkos::max(local_u_max, umag);
+        local_b_max = Kokkos::max(local_b_max, bmag);
+      }, Kokkos::Max<Real>(u_max), Kokkos::Max<Real>(b_max),
+         Kokkos::Max<int>(invalid_fields));
+  }
+
+  Real alpha_max = std::abs(alpha_s);
+  Real w_min = std::numeric_limits<Real>::max();
+  Real particle_b_max = 0.0;
+  int invalid_particles = 0;
+  if (npart > 0) {
+    bool prescribed = (source == RelativisticFieldSource::prescribed_test);
+    Kokkos::parallel_reduce("part_relativistic_particle_envelope",
+      Kokkos::RangePolicy<>(DevExeSpace(), 0, npart),
+      KOKKOS_LAMBDA(const int p, Real &local_w_min, Real &local_b_max,
+                    Real &local_e_max, Real &local_alpha_max,
+                    int &local_invalid) {
+        relativistic::Vector3 w{pr(IPWX,p), pr(IPWY,p), pr(IPWZ,p)};
+        Real wmag = relativistic::ScaledNorm3(w);
+        Real alpha = Kokkos::abs(pr(IPALPHA,p));
+        if (!relativistic::IsFinite(w) || !relativistic::IsFinite(wmag) ||
+            !relativistic::IsFinite(alpha) || alpha <= 0.0) {
+          local_invalid = 1;
+          return;
+        }
+        local_w_min = Kokkos::min(local_w_min, wmag);
+        local_alpha_max = Kokkos::max(local_alpha_max, alpha);
+        if (prescribed) {
+          relativistic::Vector3 b{pr(IPBX,p), pr(IPBY,p), pr(IPBZ,p)};
+          relativistic::Vector3 ce{pr(IPCEX,p), pr(IPCEY,p), pr(IPCEZ,p)};
+          Real bmag = relativistic::ScaledNorm3(b);
+          Real emag = relativistic::ScaledNorm3(ce);
+          if (!relativistic::IsFinite(b) || !relativistic::IsFinite(ce) ||
+              !relativistic::IsFinite(bmag) || !relativistic::IsFinite(emag)) {
+            local_invalid = 1;
+            return;
+          }
+          local_b_max = Kokkos::max(local_b_max, bmag);
+          local_e_max = Kokkos::max(local_e_max, emag);
+        }
+      }, Kokkos::Min<Real>(w_min), Kokkos::Max<Real>(particle_b_max),
+         Kokkos::Max<Real>(e_max), Kokkos::Max<Real>(alpha_max),
+         Kokkos::Max<int>(invalid_particles));
+  }
+  b_max = std::max(b_max, particle_b_max);
+
+  int particle_count = npart;
+#if MPI_PARALLEL_ENABLED
+  Real maxima[4] = {u_max, b_max, e_max, alpha_max};
+  Real minima[3] = {dx_min, block_length_min, w_min};
+  int invalid = std::max(invalid_fields, invalid_particles);
+  MPI_Allreduce(MPI_IN_PLACE, maxima, 4, MPI_ATHENA_REAL, MPI_MAX, MPI_COMM_WORLD);
+  MPI_Allreduce(MPI_IN_PLACE, minima, 3, MPI_ATHENA_REAL, MPI_MIN, MPI_COMM_WORLD);
+  MPI_Allreduce(MPI_IN_PLACE, &invalid, 1, MPI_INT, MPI_MAX, MPI_COMM_WORLD);
+  MPI_Allreduce(MPI_IN_PLACE, &particle_count, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+  u_max = maxima[0];
+  b_max = maxima[1];
+  e_max = maxima[2];
+  alpha_max = maxima[3];
+  dx_min = minima[0];
+  block_length_min = minima[1];
+  w_min = minima[2];
+  invalid_fields = invalid;
+  invalid_particles = invalid;
+#endif
+  if (particle_count == 0) {w_min = 0.0;}
+  if (source == RelativisticFieldSource::mhd_ideal) {
+    if (!relativistic::CheckedProduct(u_max, b_max, e_max)) {
+      FatalRelativisticBound("relativistic MHD envelope overflowed Umax*Bmax");
+    }
+    if (u_max >= c_model) {
+      FatalRelativisticBound(
+          "Particle pusher 'relativistic_hc' failed with status 201: "
+          "sampled MHD envelope has |u_fluid| >= c_model");
+    }
+  }
+  if (invalid_fields > 0 || invalid_particles > 0 ||
+      !std::isfinite(dx_min) || dx_min <= 0.0 ||
+      !std::isfinite(block_length_min) || block_length_min <= 0.0 ||
+      !std::isfinite(b_max) || b_max < 0.0 ||
+      !std::isfinite(e_max) || e_max < 0.0 ||
+      !std::isfinite(alpha_max) || alpha_max <= 0.0 ||
+      !std::isfinite(w_min) || w_min < 0.0) {
+    FatalRelativisticBound(
+        "invalid relativistic particle timestep envelope:"
+        " invalid_fields=" + std::to_string(invalid_fields) +
+        " invalid_particles=" + std::to_string(invalid_particles) +
+        " dx_min=" + std::to_string(dx_min) +
+        " block_length_min=" + std::to_string(block_length_min) +
+        " b_max=" + std::to_string(b_max) +
+        " e_max=" + std::to_string(e_max) +
+        " alpha_max=" + std::to_string(alpha_max) +
+        " w_min=" + std::to_string(w_min) +
+        " u_max=" + std::to_string(u_max) +
+        " c_model=" + std::to_string(c_model));
+  }
+  return RelativisticEnvelope{
+      dx_min, block_length_min, b_max, e_max, alpha_max, w_min};
+}
+
+Real RelativisticOuterTimestepBound(const RelativisticEnvelope &envelope,
+                                   bool subcycle, int subcycle_max_steps,
+                                   Real cell_fraction, Real block_fraction,
+                                   Real gyro_angle_max, Real electric_kick_max,
+                                   Real c_model) {
+  Real alpha_e = 0.0;
+  Real alpha_b = 0.0;
+  Real outer_bound = 0.0;
+  Real bound = std::min(cell_fraction*envelope.dx_min/c_model,
+                        block_fraction*envelope.block_length_min/c_model);
+  if (envelope.e_max > 0.0) {
+    if (!relativistic::CheckedProduct(envelope.alpha_max, envelope.e_max,
+                                      alpha_e)) {
+      FatalRelativisticBound("relativistic outer electric bound overflowed");
+    }
+    bound = std::min(bound, electric_kick_max/alpha_e);
+  }
+  if (envelope.b_max > 0.0) {
+    if (!relativistic::CheckedProduct(envelope.alpha_max, envelope.b_max,
+                                      alpha_b)) {
+      FatalRelativisticBound("relativistic outer gyro bound overflowed");
+    }
+    bound = std::min(bound, gyro_angle_max/alpha_b);
+  }
+  Real ncap = subcycle ? static_cast<Real>(subcycle_max_steps) : 1.0;
+  if (!relativistic::CheckedProduct(ncap, bound, outer_bound) ||
+      outer_bound <= 0.0) {
+    FatalRelativisticBound("invalid relativistic outer particle timestep bound");
+  }
+  return outer_bound;
+}
+
 } // namespace
 
 //----------------------------------------------------------------------------------------
@@ -642,6 +855,68 @@ int Particles::ComputeSubcycleSteps(Real dt, int &cell_steps, int &block_steps,
 }
 
 //----------------------------------------------------------------------------------------
+// ComputeRelativisticSubcycleSteps()
+// Use one conservative MPI-global schedule for the full frozen-field outer step.
+
+int Particles::ComputeRelativisticSubcycleSteps(Real dt, int &cell_steps,
+                                                int &block_steps, int &gyro_steps,
+                                                int &electric_steps) {
+  cell_steps = 1;
+  block_steps = 1;
+  gyro_steps = 1;
+  electric_steps = 1;
+  if (!subcycle) {return 1;}
+
+  const auto envelope = ComputeRelativisticEnvelope(
+      pmy_pack, prtcl_rdata, nprtcl_thispack, relativistic_field_source,
+      alpha_s, c_model);
+  const Real abs_dt = std::abs(dt);
+  Real c_dt = 0.0;
+  if (!relativistic::CheckedProduct(c_model, abs_dt, c_dt)) {
+    FatalRelativisticBound("relativistic crossing subcycle request overflowed");
+  }
+  cell_steps = StepsForRatio(
+      c_dt/(subcycle_cell_fraction*envelope.dx_min));
+  block_steps = StepsForRatio(
+      c_dt/(subcycle_meshblock_fraction*envelope.block_length_min));
+  Real alpha_e = 0.0;
+  Real kick = 0.0;
+  if (!relativistic::CheckedProduct(envelope.alpha_max, envelope.e_max, alpha_e) ||
+      !relativistic::CheckedProduct(alpha_e, abs_dt, kick)) {
+    FatalRelativisticBound("relativistic electric-kick subcycle request overflowed");
+  }
+  Real w_floor = std::max(0.0, envelope.w_min - kick);
+  Real gamma_floor = std::hypot(1.0, w_floor/c_model);
+  if (!std::isfinite(gamma_floor) || gamma_floor < 1.0) {
+    FatalRelativisticBound("invalid conservative relativistic gamma floor");
+  }
+  if (envelope.b_max > 0.0) {
+    Real alpha_b = 0.0;
+    Real gyro_request = 0.0;
+    if (!relativistic::CheckedProduct(
+            envelope.alpha_max, envelope.b_max, alpha_b) ||
+        !relativistic::CheckedProduct(alpha_b, abs_dt, gyro_request)) {
+      FatalRelativisticBound("relativistic gyro subcycle request overflowed");
+    }
+    gyro_steps = StepsForRatio(
+        gyro_request/(subcycle_gyro_fraction*gamma_floor));
+  }
+  if (envelope.e_max > 0.0) {
+    electric_steps = StepsForRatio(kick/subcycle_electric_kick_max);
+  }
+
+  int nsub = std::max(std::max(cell_steps, block_steps),
+                      std::max(gyro_steps, electric_steps));
+  if (nsub > subcycle_max_steps) {
+    FatalRelativisticBound(
+        "Relativistic particle subcycling requires " + std::to_string(nsub) +
+        " substeps, but <particles>/subcycle_max_steps = " +
+        std::to_string(subcycle_max_steps) + "; cap clipping is unsupported");
+  }
+  return std::max(1, nsub);
+}
+
+//----------------------------------------------------------------------------------------
 // LogSubcycle()
 // Optional diagnostic reporting the active particle subcycle constraint.
 
@@ -662,6 +937,67 @@ void Particles::LogSubcycle(int nsub, int cell_steps, int block_steps, int gyro_
             << " cell_steps=" << cell_steps
             << " meshblock_steps=" << block_steps
             << " gyro_steps=" << gyro_steps << std::endl;
+}
+
+//----------------------------------------------------------------------------------------
+// LogRelativisticSubcycle()
+// Optional diagnostic reporting the active acceleration-aware constraint.
+
+void Particles::LogRelativisticSubcycle(int nsub, int cell_steps, int block_steps,
+                                        int gyro_steps, int electric_steps) {
+  if (!log_performance || global_variable::my_rank != 0) {return;}
+  const char *constraint = "cell";
+  int active = cell_steps;
+  if (block_steps > active) {
+    constraint = "meshblock";
+    active = block_steps;
+  }
+  if (gyro_steps > active) {
+    constraint = "gyro";
+    active = gyro_steps;
+  }
+  if (electric_steps > active) {
+    constraint = "electric_kick";
+  }
+  std::cout << "Particle relativistic subcycling: steps=" << nsub
+            << " active_constraint=" << constraint
+            << " cell_steps=" << cell_steps
+            << " meshblock_steps=" << block_steps
+            << " gyro_steps=" << gyro_steps
+            << " electric_steps=" << electric_steps << std::endl;
+}
+
+//----------------------------------------------------------------------------------------
+// MarkRelativisticTimestepBoundDirty()
+
+void Particles::MarkRelativisticTimestepBoundDirty() {
+  if (pusher == ParticlesPusher::relativistic_hc &&
+      !relativistic_timestep_bound_override) {
+    relativistic_timestep_bound_dirty = true;
+  }
+}
+
+//----------------------------------------------------------------------------------------
+// RefreshRelativisticTimestepBound()
+
+void Particles::RefreshRelativisticTimestepBound() {
+  if (pusher != ParticlesPusher::relativistic_hc) {return;}
+  if (relativistic_timestep_bound_override) {return;}
+#if MPI_PARALLEL_ENABLED
+  int dirty = relativistic_timestep_bound_dirty ? 1 : 0;
+  MPI_Allreduce(MPI_IN_PLACE, &dirty, 1, MPI_INT, MPI_MAX, MPI_COMM_WORLD);
+  if (dirty == 0) {return;}
+#else
+  if (!relativistic_timestep_bound_dirty) {return;}
+#endif
+  const auto envelope = ComputeRelativisticEnvelope(
+      pmy_pack, prtcl_rdata, nprtcl_thispack, relativistic_field_source,
+      alpha_s, c_model);
+  dtnew = RelativisticOuterTimestepBound(
+      envelope, subcycle, subcycle_max_steps, subcycle_cell_fraction,
+      subcycle_meshblock_fraction, subcycle_gyro_fraction,
+      subcycle_electric_kick_max, c_model);
+  relativistic_timestep_bound_dirty = false;
 }
 
 //----------------------------------------------------------------------------------------
@@ -699,10 +1035,21 @@ TaskStatus Particles::Push(Driver *pdriver, int stage) {
   bool &three_d = pmy_pack->pmesh->three_d;
   auto &pr = prtcl_rdata;
   Real dt = pmy_pack->pmesh->dt;
+  last_push_dt = dt;
   int gids = pmy_pack->gids;
   int cell_steps, block_steps, gyro_steps;
-  int nsub = ComputeSubcycleSteps(dt, cell_steps, block_steps, gyro_steps);
-  LogSubcycle(nsub, cell_steps, block_steps, gyro_steps);
+  int electric_steps = 1;
+  int nsub = 1;
+  if (pusher == ParticlesPusher::relativistic_hc) {
+    nsub = ComputeRelativisticSubcycleSteps(
+        dt, cell_steps, block_steps, gyro_steps, electric_steps);
+    LogRelativisticSubcycle(
+        nsub, cell_steps, block_steps, gyro_steps, electric_steps);
+  } else {
+    nsub = ComputeSubcycleSteps(dt, cell_steps, block_steps, gyro_steps);
+    LogSubcycle(nsub, cell_steps, block_steps, gyro_steps);
+  }
+  last_subcycle_steps = nsub;
   Real dt_sub = dt/static_cast<Real>(nsub);
 
   for (int sub=0; sub<nsub; ++sub) {
@@ -757,6 +1104,7 @@ TaskStatus Particles::Push(Driver *pdriver, int stage) {
     }
   }
 
+  MarkRelativisticTimestepBoundDirty();
   CheckMotionBounds("particle push");
   LogPerformance("push", nprtcl_thispack, 0, 0, 0, 0);
   return TaskStatus::complete;

@@ -279,7 +279,8 @@ void WriteCoupledRuntimeWitness(ParameterInput *pin, Mesh *pm) {
          << "\tdx\tdy\tdz\tdb\tlegacy_ipm\tfinal_live_u1\tfinal_live_u2"
          << "\tfinal_live_u3\tfinal_live_b1\tfinal_live_b2\tfinal_live_b3"
          << "\tfinal_live_cE1\tfinal_live_cE2\tfinal_live_cE3"
-         << "\tfinal_live_cE_dot_b\n";
+         << "\tfinal_live_cE_dot_b\tparticle_dtnew\tlast_subcycle_steps"
+         << "\tlast_push_dt\n";
   stream << std::setprecision(std::numeric_limits<Real>::max_digits10)
          << pm->ncycle << '\t' << pm->time << '\t' << pi_h(PGID,0) << '\t'
          << pi_h(PTAG,0) << '\t'
@@ -292,7 +293,9 @@ void WriteCoupledRuntimeWitness(ParameterInput *pin, Mesh *pm) {
          << kinetic_energy << '\t' << pr_h(IPDX,0) << '\t' << pr_h(IPDY,0) << '\t'
          << pr_h(IPDZ,0) << '\t' << pr_h(IPDB,0) << '\t' << pr_h(IPM,0);
   for (int n=0; n<10; ++n) {stream << '\t' << live_h(n);}
-  stream << '\n';
+  stream << '\t' << pmbp->ppart->dtnew << '\t'
+         << pmbp->ppart->last_subcycle_steps << '\t'
+         << pmbp->ppart->last_push_dt << '\n';
 }
 
 } // namespace
@@ -302,6 +305,13 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   pgen_final_func = &WriteCoupledRuntimeWitness;
   if (restart || !IsCoupledMHDIdeal(pmy_mesh_->pmb_pack)) {return;}
   InitializeLiveMHDFields(pin, pmy_mesh_);
+  pmy_mesh_->pmb_pack->ppart->MarkRelativisticTimestepBoundDirty();
+  const Real dtnew_override =
+      pin->GetOrAddReal("problem", "runtime_particle_dtnew_override", -1.0);
+  if (dtnew_override > 0.0) {
+    pmy_mesh_->pmb_pack->ppart->dtnew = dtnew_override;
+    pmy_mesh_->pmb_pack->ppart->relativistic_timestep_bound_dirty = false;
+  }
   PoisonStoredParticleFields(pin, pmy_mesh_);
   WritePrepushWitness(pin, pmy_mesh_);
   if (pin->GetOrAddBoolean("problem", "relativistic_coupled_manufactured_test", false)) {

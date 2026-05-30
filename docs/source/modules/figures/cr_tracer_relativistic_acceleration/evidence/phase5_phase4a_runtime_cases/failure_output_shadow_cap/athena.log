@@ -1,0 +1,12 @@
+
+Root grid = 1 x 1 x 1 MeshBlocks
+Total number of MeshBlocks = 1
+Number of logical  levels of refinement = 0 (1 levels total)
+Number of physical levels of refinement = 0 (1 levels total)
+Number of parallel ranks = 1
+
+Setup complete, executing task list(s)...
+
+elapsed=4.081660e-04 cycle=0 time=0.000000e+00 dt=2.000000e-01
+### FATAL ERROR in /Users/dbf75/.codex/worktrees/e354/athenak-DF/src/particles/particles_pushers.cpp at line 298
+Particle pusher 'relativistic_hc' failed with status 105

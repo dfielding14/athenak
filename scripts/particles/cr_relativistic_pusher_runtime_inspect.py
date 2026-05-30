@@ -337,7 +337,8 @@ def main():
 
     conjugate = _run(binary, input_path, args.work_dir, "conjugate_root", _flags(
         time__tlim=0.25, time__nlim=1, time__cfl_number=100.0,
-        particles__cfl_part=100.0, problem__w0x=0.2, problem__B0z=12.0))
+        particles__cfl_part=100.0, problem__w0x=0.2, problem__B0z=12.0,
+        problem__runtime_particle_dtnew_override=1000000.0))
     expected_w, expected_dx, sigma = _hc_magnetic_step(
         (0.2, 0.0, 0.0), (0.0, 0.0, 12.0), 1.0, 1.0, conjugate["time"])
     if not sigma < 0.0:

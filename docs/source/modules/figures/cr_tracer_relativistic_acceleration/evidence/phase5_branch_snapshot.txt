@@ -1,0 +1,54 @@
+Phase-5 branch snapshot
+=======================
+UTC timestamp: 2026-05-30T07:19:01Z
+Branch: feature/CR_tracers_relativistic_acceleration
+HEAD before Phase-5 commit: 4d0fef6e41996ebdd10368a614bf310706d58599
+
+Status before Phase-5 commit:
+ M docs/source/modules/cr_tracer_relativistic_acceleration_ledger.md
+ M inputs/unit_tests/cr_relativistic_coupled_runtime_test.athinput
+ M inputs/unit_tests/cr_relativistic_pusher_runtime.athinput
+ M scripts/particles/cr_relativistic_coupled_runtime_inspect.py
+ M scripts/particles/cr_relativistic_pusher_runtime_inspect.py
+ M src/mesh/mesh.cpp
+ M src/mesh/mesh_refinement.cpp
+ M src/particles/particles.cpp
+ M src/particles/particles.hpp
+ M src/particles/particles_pushers.cpp
+ M src/particles/particles_tasks.cpp
+ M src/pgen/part_random.cpp
+ M src/pgen/unit_tests/cr_relativistic_coupled_runtime_test.cpp
+ M tst/test_suite/particles/test_particles_cr_relativistic_contract_cpu.py
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/cr_relativistic_phase5_preregistered_criteria.json
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase5_accuracy_cpu.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase5_accuracy_mpi_cpu.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase5_branch_snapshot.txt
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase5_build_commands.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase5_contract_build.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase5_coupled_mpi_build.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase5_coupled_mpi_rejection.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase5_coupled_rebuild.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase5_debug_analyzer.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase5_debug_build.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase5_debug_configure.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase5_legacy_cpu.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase5_legacy_mpi_cpu.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase5_negative_control_metrics.json
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase5_negative_controls.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase5_parser_contract.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase5_phase4a_rebuild.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase5_phase4a_runtime_analyzer.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase5_phase4a_runtime_cases/
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase5_phase4a_runtime_metrics.json
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase5_phase4b_runtime_analyzer.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase5_phase4b_runtime_cases/
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase5_phase4b_runtime_metrics.json
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase5_style.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase5_subcycle_runtime_analyzer.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase5_subcycle_runtime_cases/
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase5_subcycle_runtime_metrics.json
+?? scripts/particles/__pycache__/
+?? scripts/particles/cr_relativistic_subcycle_negative_controls.py
+?? scripts/particles/cr_relativistic_subcycle_runtime_inspect.py
+?? tst/test_suite/__pycache__/
+?? tst/test_suite/particles/__pycache__/

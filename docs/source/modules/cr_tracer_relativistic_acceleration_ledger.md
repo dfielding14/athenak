@@ -3043,3 +3043,165 @@ before the fixes are accepted.
     `src/particles/particles_tasks.cpp`, `src/pgen/part_random.cpp`,
     timestep-focused tests and evidence, and conditionally
     `src/mesh/mesh.cpp` after an explicit ownership review.
+
+## DR-030: Phase-5 Shared Bound Ownership And Reopened Write Manifest
+
+- Date: 2026-05-30
+- Status: accepted before Phase-5 production edits
+- Question: where should the accepted `DR-011` global subcycle schedule and
+  `DR-016` dirty-aware outer timestep refresh live, and which previously
+  closed files must reopen to implement the lifecycle contract without
+  silently widening physics scope?
+- Selected implementation:
+  - keep the schedule and shared refresh implementation in
+    `src/particles/particles_pushers.cpp`;
+  - retain one pessimistic MPI-global subcycle count for the full outer step
+    from the accepted grid-envelope formula; do not introduce per-rank,
+    per-particle, or post-kick adaptive collective schedules;
+  - spatially re-gather the frozen-`t^n` fields at every relativistic particle
+    substep midpoint through the already accepted coupled pusher;
+  - use `src/particles/particles_tasks.cpp` to refresh after the completed MHD
+    time integrator and use `src/mesh/mesh.cpp` as the defensive final consumer
+    check immediately before the particle `dtnew` value is consumed;
+  - mark the bound dirty at the end of particle push and after particle AMR
+    remap, but refresh AMR-dependent fields only in
+    `src/mesh/mesh_refinement.cpp` after face-field repair and primitive
+    reconstruction;
+  - reopen `src/particles/particles.cpp` only for new-mode parser validation,
+    dirty-state initialization, and the too-early AMR-remap dirty marker;
+  - expose the last selected subcycle count as a diagnostic harness witness,
+    without changing legacy output meanings.
+  - compute coupled envelopes over unique active leaf cells.  The qualified
+    mode is strictly periodic, so boundary-filled ghost cells are duplicates;
+    including pre-fill harness ghost extrapolations would make initialization
+    order affect the physical envelope.
+- Alternatives rejected for this phase:
+  - refreshing inside `RemapAfterAMR()` is too early because repaired magnetic
+    fields and reconstructed primitives are not available yet;
+  - relying only on an after-integrator task is insufficient because
+    initialization and future AMR callers need a defensive consumer check;
+  - adding fractional momentum or kinetic-energy constraints is deferred as
+    accepted in `DR-011`: both need an independently reviewed nonsingular
+    scale near rest.
+- Phase-5 reopened write manifest:
+  - `src/particles/particles.hpp`;
+  - `src/particles/particles.cpp`;
+  - `src/particles/particles_pushers.cpp`;
+  - `src/particles/particles_tasks.cpp`;
+  - `src/mesh/mesh.cpp`;
+  - `src/mesh/mesh_refinement.cpp`;
+  - `src/pgen/part_random.cpp`;
+  - `src/pgen/unit_tests/cr_relativistic_coupled_runtime_test.cpp`;
+  - timestep-focused scripts, criteria, evidence, and this append-only ledger.
+- Inflection point:
+  - stop before `RG-006` if current-field consumption cannot be demonstrated
+    at initialization, after MHD evolution, and after the AMR repair hook, or
+    if the global schedule requires cap clipping rather than a clear abort.
+
+## DR-031: Phase-5 Reviewer Rebound And Test-Harness Isolation
+
+- Date: 2026-05-30
+- Status: accepted after independent HOLD findings and corrected replay
+- Independent HOLD findings:
+  - exact-integer ratios in the inherited `StepsForRatio()` helper used `<=`
+    and requested one excess substep;
+  - an initial draft refreshed `dtnew` inside `Push()` before the final
+    task-list exchange;
+  - the coupled test pgen refreshed before the driver's initial boundary fill,
+    masking the required defensive-consumer recomputation;
+  - broad activation tests did not bind every isolated component count;
+  - the first overflow probe tested integer saturation, not checked-product
+    overflow;
+  - the standalone prescribed-field kernel oracle inherited the new outer
+    refresh and lost its historical controlled timestep ladder.
+- Corrected choices:
+  - use a mathematically exact ceiling helper and saturate only unreasonable
+    nonfinite or integer-range requests;
+  - mark dirty at the end of `Push()` without recomputing there;
+  - let the coupled pgen mark dirty only, so `Driver::Initialize()` fills
+    boundaries and reconstructs primitives before `Mesh::NewTimeStep()`
+    defensively refreshes and consumes the initial bound;
+  - bind exact crossing, gyro, electric-kick, gamma-floor, and total schedule
+    counts in the Phase-5 analyzer;
+  - require a true finite-input electric-kick overflow abort before integer
+    conversion;
+  - preserve the standalone prescribed-field kernel oracle through a narrowly
+    compiled `unit_tests/cr_relativistic_pusher_runtime_test`-only timestep
+    override.  This bypass is test-only and does not apply to coupled or
+    production execution.
+- Mutation controls:
+  - reject eight weakened-source variants: exact-ceil regression, removed cap
+    preflight, lost checked multiplication, lost gamma floor, lost midpoint
+    regather placement, lost post-integrator refresh, premature initialization
+    refresh, and refresh inside `Push()`.
+- Alternatives retained:
+  - fractional-momentum and fractional-kinetic-energy controls remain rejected
+    pending an independently reviewed nonsingular near-rest scale;
+  - per-rank and per-particle adaptive schedules remain deferred because the
+    accepted collective exchange requires one shared schedule;
+  - actual MPI, same-level migration, SMR, and AMR execution qualification
+    remain Phase-8 work.
+
+## RG-006: Is The Temporal Model Still Defensible?
+
+- Date: 2026-05-30
+- Verdict: `PROCEED` for the bounded passive first-order model
+- Reflection:
+  - Phase-5 substeps spatially re-gather the accepted frozen-`t^n` primitive
+    velocity and cell-centered magnetic field at every particle midpoint;
+  - the schedule remains one pessimistic full-outer-step MPI-global envelope,
+    so electric acceleration cannot silently weaken the gyro bound during the
+    outer step;
+  - the next-step `dtnew` cache is refreshed only after current fields exist,
+    with lifecycle hooks after the MHD integrator, after AMR repair and
+    primitive reconstruction, and defensively before mesh consumption;
+  - this does not widen the Phase-4b temporal claim beyond first-order
+    evolving-field accuracy.
+- Revisit trigger:
+  - if target science requires stage-centered evolving fields or materially
+    tighter schedules, stop and design a separately reviewed stage-coupled
+    follow-up rather than mixing stage fields into this passive path.
+
+## CP-5 Acceleration-Aware Subcycling And Outer Refresh
+
+- Date: 2026-05-30
+- Verdict: `PROCEED`
+- Accepted scope:
+  - retain the Phase-4b passive, one-MeshBlock, serial, uniform-level,
+    normalized ideal-MHD execution fence;
+  - add one pessimistic full-outer-step acceleration-aware subcycle schedule
+    from model-speed crossing, MeshBlock-bound, relativistic gyro-angle, and
+    electric-kick constraints;
+  - abort before first drift when the global request exceeds the configured
+    cap; never clip relativistic requests;
+  - spatially re-gather frozen-`t^n` coupled fields at every substep midpoint;
+  - refresh dirty outer bounds after current fields exist and defensively at
+    mesh consumption.
+- Accepted evidence:
+  - release and Kokkos bounds-check Phase-5 analyzers pass all `36/36`
+    criteria, including `12` lifecycle source-contract assertions;
+  - all `8/8` deliberate weakening mutations are rejected;
+  - retained prescribed Phase-4a and coupled Phase-4b analyzers pass;
+  - parser contract replay passes `117` cases;
+  - fixed-energy compatibility regressions pass CPU `20 + 12`, MPI CPU
+    `4 + 5`, style `2`, and whitespace checks;
+  - the explicit two-rank relativistic coupled execution fence still rejects
+    MPI before Phase-8 qualification.
+- Independent review disposition:
+  - the architecture review corrected ownership, rejected early remap refresh,
+    preserved the `c_model == 1` coupled fence, and prevented legacy parser
+    tightening;
+  - the test-adversary HOLD exposed the inherited exact-ceil bug, masked
+    initialization consumption, incomplete isolated-bound checks, weak
+    overflow probe, and missing mutation controls;
+  - the lifecycle HOLD removed the premature refresh inside `Push()`;
+  - both fresh post-rebound reviewers returned `PROCEED`.
+- Deferred residual risks:
+  - same-level migration, periodic wrap, MPI, SMR, and AMR execution remain
+    Phase-8 work;
+  - restart schema remains Phase-6 work;
+  - explicit production diagnostics remain Phase-7 work;
+  - GPU and public documentation overlay remain Phase-9 work.
+- Next permitted edit set:
+  - Phase 6 only: versioned relativistic restart writer, reader, inspector,
+    restart-focused tests and evidence, plus append-only ledger updates.

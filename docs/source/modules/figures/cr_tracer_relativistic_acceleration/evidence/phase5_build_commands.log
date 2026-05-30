@@ -1,0 +1,74 @@
+Phase-5 acceleration-aware subcycling and outer timestep refresh replay commands
+===============================================================================
+
+Repository root for every section:
+  cd /Users/dbf75/.codex/worktrees/e354/athenak-DF
+
+Release coupled runtime build:
+  cmake -S . -B /tmp/athenak-cr-phase4b-coupled-runtime \
+    -D PROBLEM=unit_tests/cr_relativistic_coupled_runtime_test \
+    -D Kokkos_ENABLE_SERIAL=ON
+  cmake --build /tmp/athenak-cr-phase4b-coupled-runtime -j 6
+
+Release Phase-5 analyzer:
+  python3 scripts/particles/cr_relativistic_subcycle_runtime_inspect.py \
+    --binary /tmp/athenak-cr-phase4b-coupled-runtime/src/athena \
+    --input inputs/unit_tests/cr_relativistic_coupled_runtime_test.athinput \
+    --criteria docs/source/modules/figures/cr_tracer_relativistic_acceleration/cr_relativistic_phase5_preregistered_criteria.json \
+    --work-dir docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase5_subcycle_runtime_cases \
+    --metrics docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase5_subcycle_runtime_metrics.json
+
+Mutation controls:
+  python3 scripts/particles/cr_relativistic_subcycle_negative_controls.py \
+    --metrics docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase5_negative_control_metrics.json
+
+Kokkos bounds-check replay:
+  cmake -S . -B /tmp/athenak-cr-phase5-coupled-debug \
+    -D PROBLEM=unit_tests/cr_relativistic_coupled_runtime_test \
+    -D Kokkos_ENABLE_SERIAL=ON \
+    -D Kokkos_ENABLE_DEBUG_BOUNDS_CHECK=ON
+  cmake --build /tmp/athenak-cr-phase5-coupled-debug -j 6
+  python3 scripts/particles/cr_relativistic_subcycle_runtime_inspect.py \
+    --binary /tmp/athenak-cr-phase5-coupled-debug/src/athena \
+    --input inputs/unit_tests/cr_relativistic_coupled_runtime_test.athinput \
+    --criteria docs/source/modules/figures/cr_tracer_relativistic_acceleration/cr_relativistic_phase5_preregistered_criteria.json \
+    --work-dir /tmp/athenak-cr-phase5-debug-cases \
+    --metrics /tmp/athenak-cr-phase5-debug-metrics.json
+
+Retained prescribed and coupled analyzers:
+  python3 scripts/particles/cr_relativistic_pusher_runtime_inspect.py \
+    --binary /tmp/athenak-cr-phase4a-pusher-runtime/src/athena \
+    --input inputs/unit_tests/cr_relativistic_pusher_runtime.athinput \
+    --criteria docs/source/modules/figures/cr_tracer_relativistic_acceleration/cr_relativistic_phase4a_preregistered_criteria.json \
+    --work-dir docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase5_phase4a_runtime_cases \
+    --metrics docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase5_phase4a_runtime_metrics.json
+  python3 scripts/particles/cr_relativistic_coupled_runtime_inspect.py \
+    --binary /tmp/athenak-cr-phase4b-coupled-runtime/src/athena \
+    --input inputs/unit_tests/cr_relativistic_coupled_runtime_test.athinput \
+    --prescribed-input inputs/unit_tests/cr_relativistic_pusher_runtime.athinput \
+    --criteria docs/source/modules/figures/cr_tracer_relativistic_acceleration/cr_relativistic_phase4b_preregistered_criteria.json \
+    --work-dir docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase5_phase4b_runtime_cases \
+    --metrics docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase5_phase4b_runtime_metrics.json
+
+Parser, legacy, style, and MPI fence:
+  cd /tmp/athenak-cr-phase4b-contract/src
+  /Users/dbf75/.uv/envs/interactive/.venv/bin/python -m pytest -q \
+    /Users/dbf75/.codex/worktrees/e354/athenak-DF/tst/test_suite/particles/test_particles_cr_relativistic_contract_cpu.py
+  cd /Users/dbf75/.codex/worktrees/e354/athenak-DF/tst
+  /Users/dbf75/.uv/envs/interactive/.venv/bin/python run_test_suite.py \
+    --test test_suite/particles/test_particles_cr_cpu.py --cpu
+  /Users/dbf75/.uv/envs/interactive/.venv/bin/python run_test_suite.py \
+    --test test_suite/particles/test_particles_cr_accuracy_cpu.py --cpu
+  /Users/dbf75/.uv/envs/interactive/.venv/bin/python run_test_suite.py \
+    --test test_suite/particles/test_particles_cr_mpicpu.py --mpicpu
+  /Users/dbf75/.uv/envs/interactive/.venv/bin/python run_test_suite.py \
+    --test test_suite/particles/test_particles_cr_accuracy_mpicpu.py --mpicpu
+  /Users/dbf75/.uv/envs/interactive/.venv/bin/python -m pytest -q \
+    test_suite/style/test_style.py
+  cd /Users/dbf75/.codex/worktrees/e354/athenak-DF
+  mpirun -n 2 /tmp/athenak-cr-phase4b-coupled-mpi/src/athena \
+    -i inputs/unit_tests/cr_relativistic_coupled_runtime_test.athinput \
+    mesh/nx1=16 meshblock/nx1=8
+
+Whitespace:
+  git diff --check

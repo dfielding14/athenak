@@ -163,6 +163,10 @@ void MeshRefinement::AdaptiveMeshRefinement(Driver *pdriver, ParameterInput *pin
     if (pmbp->pz4c != nullptr) {
       (void) pmbp->pz4c->NewTimeStep(pdriver, pdriver->nexp_stages);
     }
+    if (pmbp->ppart != nullptr) {
+      pmbp->ppart->MarkRelativisticTimestepBoundDirty();
+      pmbp->ppart->RefreshRelativisticTimestepBound();
+    }
 
     nmb_created += nnew;
     nmb_deleted += ndel;

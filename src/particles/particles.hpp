@@ -58,6 +58,7 @@ struct ParticlesTaskIDs {
   TaskID recvp;
   TaskID csend;
   TaskID crecv;
+  TaskID newdt;
 };
 
 namespace particles {
@@ -96,8 +97,13 @@ class Particles {
   Real subcycle_cell_fraction;
   Real subcycle_meshblock_fraction;
   Real subcycle_gyro_fraction;
+  Real subcycle_electric_kick_max;
   Real c_model;
   Real alpha_s;
+  bool relativistic_timestep_bound_dirty;
+  bool relativistic_timestep_bound_override;
+  int last_subcycle_steps;
+  Real last_push_dt;
   ParticlesConsistencyMode consistency_mode;
   ParticlesAMRRemapMode amr_remap_mode;
   ParticlesExchangeMode exchange_mode;
@@ -127,10 +133,18 @@ class Particles {
   int ComputeSubcycleSteps(Real dt, int &cell_steps, int &block_steps,
                            int &gyro_steps);
   void LogSubcycle(int nsub, int cell_steps, int block_steps, int gyro_steps);
+  int ComputeRelativisticSubcycleSteps(Real dt, int &cell_steps,
+                                       int &block_steps, int &gyro_steps,
+                                       int &electric_steps);
+  void LogRelativisticSubcycle(int nsub, int cell_steps, int block_steps,
+                               int gyro_steps, int electric_steps);
+  void MarkRelativisticTimestepBoundDirty();
+  void RefreshRelativisticTimestepBound();
   void ExchangeAfterSubcycle();
   void RemapAfterAMR();
   void AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> tl);
   TaskStatus Push(Driver *pdriver, int stage);
+  TaskStatus NewTimeStep(Driver *pdriver, int stage);
   TaskStatus NewGID(Driver *pdriver, int stage);
   TaskStatus SendCnt(Driver *pdriver, int stage);
   TaskStatus InitRecv(Driver *pdriver, int stage);

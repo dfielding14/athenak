@@ -77,3 +77,4 @@ B0y                         = 0.0
 B0z                         = 0.0
 B_profile                   = uniform
 runtime_poison_live_mhd      = false
+runtime_particle_dtnew_override = -1.0

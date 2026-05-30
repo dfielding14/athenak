@@ -1,0 +1,8 @@
+
+Root grid = 1 x 1 x 1 MeshBlocks
+Total number of MeshBlocks = 1
+Number of logical  levels of refinement = 0 (1 levels total)
+Number of physical levels of refinement = 0 (1 levels total)
+Number of parallel ranks = 1
+### FATAL ERROR in /Users/dbf75/.codex/worktrees/e354/athenak-DF/src/particles/particles.cpp at line 401
+Particle pusher 'relativistic_hc' requires <particles>/subcycle_strict = true; cap clipping is unsupported

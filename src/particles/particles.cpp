@@ -11,6 +11,7 @@
 #include <cstdio>
 #include <cstdint>
 #include <iostream>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -32,6 +33,7 @@ namespace particles {
 
 Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
     pmy_pack(ppack),
+    dtnew(std::numeric_limits<float>::max()),
     check_consistency(false),
     check_motion_bounds(false),
     log_performance(false),
@@ -43,8 +45,13 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
     subcycle_cell_fraction(0.5),
     subcycle_meshblock_fraction(0.5),
     subcycle_gyro_fraction(0.25),
+    subcycle_electric_kick_max(0.1),
     c_model(0.0),
     alpha_s(0.0),
+    relativistic_timestep_bound_dirty(true),
+    relativistic_timestep_bound_override(false),
+    last_subcycle_steps(1),
+    last_push_dt(0.0),
     consistency_mode(ParticlesConsistencyMode::none),
     amr_remap_mode(ParticlesAMRRemapMode::device_table),
     exchange_mode(ParticlesExchangeMode::alltoall_counts),
@@ -111,6 +118,14 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
   subcycle_meshblock_fraction =
       pin->GetOrAddReal("particles","subcycle_meshblock_fraction",0.5);
   subcycle_gyro_fraction = pin->GetOrAddReal("particles","subcycle_gyro_fraction",0.25);
+  bool has_relativistic_electric_kick_max =
+      pin->DoesParameterExist("particles","subcycle_electric_kick_max");
+  bool has_deferred_momentum_fraction =
+      pin->DoesParameterExist("particles","subcycle_momentum_fraction");
+  bool has_deferred_kinetic_fraction =
+      pin->DoesParameterExist("particles","subcycle_kinetic_energy_fraction");
+  subcycle_electric_kick_max =
+      pin->GetOrAddReal("particles","subcycle_electric_kick_max",0.1);
   subcycle_strict = pin->GetOrAddBoolean("particles","subcycle_strict",true);
   if (subcycle_max_steps < 1) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -155,6 +170,9 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
       pin->DoesParameterExist("particles","relativistic_mhd_temporal_mode") ||
       pin->DoesParameterExist("particles","c_model") ||
       pin->DoesParameterExist("particles","alpha_s") ||
+      has_relativistic_electric_kick_max ||
+      has_deferred_momentum_fraction ||
+      has_deferred_kinetic_fraction ||
       pin->DoesParameterExist("particles","relativistic_background");
   bool has_relativistic_problem_key =
       pin->DoesParameterExist("problem","relativistic_initial_state") ||
@@ -379,11 +397,19 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
                   << "<mhd>/eos = ideal" << std::endl;
         std::exit(EXIT_FAILURE);
       }
-      if (subcycle) {
+      if (subcycle && !subcycle_strict) {
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                  << std::endl << "Particle pusher 'relativistic_hc' execution rejects "
-                  << "<particles>/subcycle until the "
-                  << "acceleration-aware Phase-5 redesign" << std::endl;
+                  << std::endl << "Particle pusher 'relativistic_hc' requires "
+                  << "<particles>/subcycle_strict = true; cap clipping is unsupported"
+                  << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      if (has_deferred_momentum_fraction || has_deferred_kinetic_fraction) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "Particle pusher 'relativistic_hc' does not support "
+                  << "<particles>/subcycle_momentum_fraction or "
+                  << "<particles>/subcycle_kinetic_energy_fraction; both require a "
+                  << "separately reviewed nonsingular near-rest scale" << std::endl;
         std::exit(EXIT_FAILURE);
       }
       if (!(pin->DoesParameterExist("particles","interpolation")) ||
@@ -486,8 +512,8 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
           c_model != 1.0) {
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                   << std::endl << "relativistic_field_source = mhd_ideal currently "
-                  << "requires <particles>/c_model = 1.0 until the acceleration-aware "
-                  << "Phase-5 timestep redesign is qualified" << std::endl;
+                  << "requires <particles>/c_model = 1.0 until non-unit coupled "
+                  << "normalization is separately qualified" << std::endl;
         std::exit(EXIT_FAILURE);
       }
       if (!(pin->DoesParameterExist("particles","alpha_s"))) {
@@ -501,6 +527,18 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                   << std::endl << "<particles>/alpha_s must be finite and nonzero for "
                   << "particle pusher 'relativistic_hc'" << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      if (!std::isfinite(subcycle_cell_fraction) ||
+          !std::isfinite(subcycle_meshblock_fraction) ||
+          !std::isfinite(subcycle_gyro_fraction) ||
+          !std::isfinite(subcycle_electric_kick_max) ||
+          subcycle_cell_fraction > 0.5 || subcycle_meshblock_fraction > 0.5 ||
+          subcycle_electric_kick_max <= 0.0) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "Particle pusher 'relativistic_hc' requires finite "
+                  << "subcycle fractions, cell and MeshBlock fractions <= 0.5, and "
+                  << "<particles>/subcycle_electric_kick_max > 0" << std::endl;
         std::exit(EXIT_FAILURE);
       }
       pusher = ParticlesPusher::relativistic_hc;
@@ -1222,6 +1260,7 @@ void Particles::RemapAfterAMR() {
 #endif
   LogPerformance("amr_remap", 0, pb->nprtcl_send, pb->nprtcl_recv, nremapped, 0);
   CheckConsistency("AMR remap");
+  MarkRelativisticTimestepBoundDirty();
 }
 
 } // namespace particles

@@ -17,7 +17,7 @@ FIELDS = (
     "b1 b2 b3 work alpha gamma kinetic dx dy dz db legacy_ipm "
     "final_live_u1 final_live_u2 final_live_u3 final_live_b1 final_live_b2 "
     "final_live_b3 final_live_cE1 final_live_cE2 final_live_cE3 "
-    "final_live_cE_dot_b"
+    "final_live_cE_dot_b particle_dtnew last_subcycle_steps last_push_dt"
 ).split()
 COMPARISON_FIELDS = (
     "cycle time x y z vx vy vz wx wy wz cE1 cE2 cE3 "

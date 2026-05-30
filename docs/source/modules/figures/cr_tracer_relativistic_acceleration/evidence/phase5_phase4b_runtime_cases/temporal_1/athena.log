@@ -1,0 +1,39 @@
+
+Root grid = 1 x 1 x 1 MeshBlocks
+Total number of MeshBlocks = 1
+Number of logical  levels of refinement = 0 (1 levels total)
+Number of physical levels of refinement = 0 (1 levels total)
+Number of parallel ranks = 1
+
+Setup complete, executing task list(s)...
+
+elapsed=6.677080e-04 cycle=0 time=0.000000e+00 dt=7.729344e-03
+elapsed=1.147541e-03 cycle=1 time=7.729344e-03 dt=7.733439e-03
+elapsed=1.605791e-03 cycle=2 time=1.546278e-02 dt=7.737615e-03
+elapsed=2.066625e-03 cycle=3 time=2.320040e-02 dt=7.741871e-03
+elapsed=2.528000e-03 cycle=4 time=3.094227e-02 dt=7.746196e-03
+elapsed=2.988500e-03 cycle=5 time=3.868846e-02 dt=7.750580e-03
+elapsed=3.445833e-03 cycle=6 time=4.643904e-02 dt=7.755025e-03
+elapsed=3.903375e-03 cycle=7 time=5.419407e-02 dt=7.759524e-03
+elapsed=4.361291e-03 cycle=8 time=6.195359e-02 dt=7.764066e-03
+elapsed=4.818083e-03 cycle=9 time=6.971766e-02 dt=7.768647e-03
+elapsed=5.277000e-03 cycle=10 time=7.748631e-02 dt=7.773270e-03
+elapsed=5.733250e-03 cycle=11 time=8.525958e-02 dt=7.777929e-03
+elapsed=6.190333e-03 cycle=12 time=9.303751e-02 dt=7.782621e-03
+elapsed=6.648208e-03 cycle=13 time=1.008201e-01 dt=7.787343e-03
+elapsed=7.105125e-03 cycle=14 time=1.086075e-01 dt=7.792091e-03
+elapsed=7.562041e-03 cycle=15 time=1.163996e-01 dt=7.796861e-03
+elapsed=8.087666e-03 cycle=16 time=1.241964e-01 dt=7.801648e-03
+elapsed=8.587125e-03 cycle=17 time=1.319981e-01 dt=7.806449e-03
+elapsed=9.066041e-03 cycle=18 time=1.398045e-01 dt=7.811259e-03
+elapsed=9.539625e-03 cycle=19 time=1.476158e-01 dt=2.384224e-03
+elapsed=1.022692e-02 cycle=20 time=1.500000e-01 dt=4.768448e-03
+
+Terminating on time limit
+time=1.500000e-01 cycle=20
+tlim=1.500000e-01 nlim=1000
+
+MeshBlock-cycles = 20
+cpu time used  = 9.567208e-03
+zone-cycles/cpu_second = 1.070323e+06
+particle-updates/cpu_second = 2.090474e+03

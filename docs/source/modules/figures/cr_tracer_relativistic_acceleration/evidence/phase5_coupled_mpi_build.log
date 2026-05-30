@@ -1,0 +1,49 @@
+[  2%] Built target kokkossimd
+[ 11%] Built target kokkoscore
+[ 13%] Built target kokkoscontainers
+[ 13%] Built target AlwaysCheckGit
+[ 14%] Built target impl_git_version
+[ 14%] Building CXX object src/CMakeFiles/athena.dir/bvals/bvals_part.cpp.o
+[ 15%] Building CXX object src/CMakeFiles/athena.dir/bvals/bvals.cpp.o
+[ 15%] Building CXX object src/CMakeFiles/athena.dir/mesh/mesh.cpp.o
+[ 15%] Building CXX object src/CMakeFiles/athena.dir/mesh/meshblock_pack.cpp.o
+[ 15%] Building CXX object src/CMakeFiles/athena.dir/mesh/mesh_refinement.cpp.o
+[ 15%] Building CXX object src/CMakeFiles/athena.dir/outputs/derived_variables.cpp.o
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/mesh/mesh.cpp:371:23: warning: variable length arrays in C++ are a Clang extension [-Wvla-cxx-extension]
+  371 |     int nb_per_plevel[max_level];      // NOLINT(runtime/arrays)
+      |                       ^~~~~~~~~
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/mesh/mesh.cpp:371:23: note: implicit use of 'this' pointer is only allowed within the evaluation of a call to a 'constexpr' member function
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/mesh/mesh.cpp:372:27: warning: variable length arrays in C++ are a Clang extension [-Wvla-cxx-extension]
+  372 |     float cost_per_plevel[max_level];  // NOLINT(runtime/arrays)
+      |                           ^~~~~~~~~
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/mesh/mesh.cpp:372:27: note: implicit use of 'this' pointer is only allowed within the evaluation of a call to a 'constexpr' member function
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/mesh/mesh.cpp:393:21: warning: variable length arrays in C++ are a Clang extension [-Wvla-cxx-extension]
+  393 |     int nb_per_rank[global_variable::nranks];    // NOLINT(runtime/arrays)
+      |                     ^~~~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/mesh/mesh.cpp:393:21: note: read of non-const variable 'nranks' is not allowed in a constant expression
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/globals.hpp:12:21: note: declared here
+   12 | extern int my_rank, nranks;
+      |                     ^
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/mesh/mesh.cpp:394:23: warning: variable length arrays in C++ are a Clang extension [-Wvla-cxx-extension]
+  394 |     int cost_per_rank[global_variable::nranks];  // NOLINT(runtime/arrays)
+      |                       ^~~~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/mesh/mesh.cpp:394:23: note: read of non-const variable 'nranks' is not allowed in a constant expression
+/Users/dbf75/.codex/worktrees/e354/athenak-DF/src/globals.hpp:12:21: note: declared here
+   12 | extern int my_rank, nranks;
+      |                     ^
+4 warnings generated.
+[ 16%] Building CXX object src/CMakeFiles/athena.dir/outputs/df_prtcl.cpp.o
+[ 16%] Building CXX object src/CMakeFiles/athena.dir/outputs/dxhist_prtcl.cpp.o
+[ 17%] Building CXX object src/CMakeFiles/athena.dir/outputs/pos_prtcl.cpp.o
+[ 17%] Building CXX object src/CMakeFiles/athena.dir/outputs/rst_prtcl.cpp.o
+[ 18%] Building CXX object src/CMakeFiles/athena.dir/outputs/track_prtcl.cpp.o
+[ 19%] Building CXX object src/CMakeFiles/athena.dir/outputs/vtk_prtcl.cpp.o
+[ 19%] Building CXX object src/CMakeFiles/athena.dir/particles/particles.cpp.o
+[ 20%] Building CXX object src/CMakeFiles/athena.dir/particles/particles_pushers.cpp.o
+[ 21%] Building CXX object src/CMakeFiles/athena.dir/particles/particles_tasks.cpp.o
+[ 22%] Building CXX object src/CMakeFiles/athena.dir/pgen/pgen.cpp.o
+[ 22%] Building CXX object src/CMakeFiles/athena.dir/pgen/part_random.cpp.o
+[ 23%] Building CXX object src/CMakeFiles/athena.dir/utils/derived_vars.cpp.o
+[ 24%] Building CXX object src/CMakeFiles/athena.dir/pgen/unit_tests/cr_relativistic_coupled_runtime_test.cpp.o
+[ 24%] Linking CXX executable athena
+[100%] Built target athena

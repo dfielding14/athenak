@@ -1,0 +1,9 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.13.13, pytest-8.4.1, pluggy-1.6.0
+rootdir: /Users/dbf75/.codex/worktrees/e354/athenak-DF/tst
+plugins: anyio-4.9.0, xdist-3.8.0, jaxtyping-0.3.7, cov-6.2.1, Faker-40.1.2
+collected 20 items
+
+../../test_suite/particles/test_particles_cr_cpu.py .................... [100%]
+
+============================== 20 passed in 0.92s ==============================

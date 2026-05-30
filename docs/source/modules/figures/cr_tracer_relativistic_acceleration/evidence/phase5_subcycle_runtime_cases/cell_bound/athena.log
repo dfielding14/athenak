@@ -1,0 +1,22 @@
+
+Root grid = 1 x 1 x 1 MeshBlocks
+Total number of MeshBlocks = 1
+Number of logical  levels of refinement = 0 (1 levels total)
+Number of physical levels of refinement = 0 (1 levels total)
+Number of parallel ranks = 1
+
+Setup complete, executing task list(s)...
+
+elapsed=5.431670e-04 cycle=0 time=0.000000e+00 dt=3.000000e-01
+Particle relativistic subcycling: steps=5 active_constraint=cell cell_steps=5 meshblock_steps=1 gyro_steps=1 electric_steps=1
+Particle performance push: pushed=1 sent=0 received=0 remapped=0 diagnostics=0 messages=0 bytes=0
+elapsed=1.104167e-03 cycle=1 time=3.000000e-01 dt=6.000000e-01
+
+Terminating on cycle limit
+time=3.000000e-01 cycle=1
+tlim=3.000000e-01 nlim=1
+
+MeshBlock-cycles = 1
+cpu time used  = 5.633330e-04
+zone-cycles/cpu_second = 9.088763e+05
+particle-updates/cpu_second = 1.775149e+03

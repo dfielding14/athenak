@@ -51,8 +51,19 @@ void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> t
   id.recvp  = tl["before_timeintegrator"]->AddTask(&Particles::RecvP, this, id.sendp);
   id.crecv  = tl["before_timeintegrator"]->AddTask(&Particles::ClearRecv, this, id.recvp);
   id.csend  = tl["before_timeintegrator"]->AddTask(&Particles::ClearSend, this, id.crecv);
+  id.newdt  = tl["after_timeintegrator"]->AddTask(&Particles::NewTimeStep, this, none);
 
   return;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn TaskList Particles::NewTimeStep
+//! \brief Refresh the relativistic particle bound after evolved grid fields are current.
+
+TaskStatus Particles::NewTimeStep(Driver *pdrive, int stage) {
+  MarkRelativisticTimestepBoundDirty();
+  RefreshRelativisticTimestepBound();
+  return TaskStatus::complete;
 }
 
 //----------------------------------------------------------------------------------------
