@@ -37,6 +37,7 @@ from control_plane_common import record_for_role, sha256_bytes
 from control_plane_common import require_below, require_canonical_path_below
 from control_plane_common import require_not_symlink, require_read_only, sha256
 from control_plane_common import require_ledger_paths, require_storage_policy_unlock_snapshot
+from control_plane_common import scheduler_account_matches_authorized
 from control_plane_common import utc_datetime, validate_clean_candidate_bundle
 from control_plane_common import verify_installed_control_plane
 from control_plane_common import launch_contract_sha256, validate_launch_contract
@@ -172,9 +173,9 @@ def _scheduler_job_output(job_id: str) -> str:
     )
 
 
-def _verify_scheduler_job(job_id: str, reservation_id: str) -> None:
+def _verify_scheduler_job_binding(job_id: str, reservation_id: str) -> dict[str, str]:
     output = _scheduler_job_output(job_id).strip()
-    fields = {}
+    fields: dict[str, str] = {}
     for item in output.split():
         key, separator, value = item.partition("=")
         if separator:
@@ -183,8 +184,13 @@ def _verify_scheduler_job(job_id: str, reservation_id: str) -> None:
         raise ValueError("Slurm job identity does not match the requested attachment")
     if fields.get("Comment") != f"pic-reservation={reservation_id}":
         raise ValueError("Slurm job comment does not bind the PIC reservation")
-    if fields.get("Account") != AUTHORIZED_ACCOUNT:
+    if not scheduler_account_matches_authorized(fields.get("Account")):
         raise ValueError("Slurm job account does not match the authorized PIC account")
+    return fields
+
+
+def _verify_scheduler_job(job_id: str, reservation_id: str) -> None:
+    fields = _verify_scheduler_job_binding(job_id, reservation_id)
     if fields.get("JobState") not in {"PENDING", "CONFIGURING", "RUNNING", "COMPLETING"}:
         raise ValueError("Slurm job is not in an attachable scheduler state")
 
@@ -246,6 +252,30 @@ def _matching_pending_marker(path: Path, reservation_id: str) -> dict[str, objec
     if marker.get("reservation_id") != reservation_id:
         raise ValueError("Pending marker belongs to another reservation")
     return marker
+
+
+def _require_current_reservation_marker(
+    marker: dict[str, object],
+    reservation: dict[str, object],
+    *,
+    control_plane_version: str,
+) -> None:
+    expected = {
+        "schema_version": 2,
+        "state": marker.get("state"),
+        "reservation_id": reservation["reservation_id"],
+        "submission_id": reservation["submission_id"],
+        "manifest_path": reservation["manifest_path"],
+        "manifest_sha256": reservation["manifest_sha256"],
+        "control_plane_version": control_plane_version,
+    }
+    if marker.get("state") in {"scheduler_job_id_received", "submitted_not_attached"}:
+        expected["job_id"] = marker.get("job_id")
+    if (
+        reservation.get("control_plane_version") != control_plane_version
+        or marker != expected
+    ):
+        raise ValueError("Pending marker does not match the current reservation")
 
 
 def _clear_matching_pending_marker(path: Path, reservation_id: str) -> None:
@@ -902,12 +932,13 @@ def reserve(
         _write_pending_marker(
             expected_marker,
             {
-                "schema_version": 1,
+                "schema_version": 2,
                 "state": "reservation_intent",
                 "reservation_id": reservation,
                 "submission_id": manifest["submission_id"],
                 "manifest_path": str(manifest_path),
                 "manifest_sha256": manifest_sha256,
+                "control_plane_version": version,
             },
         )
         result = _append_locked(
@@ -921,12 +952,13 @@ def reserve(
         _write_pending_marker(
             expected_marker,
             {
-                "schema_version": 1,
+                "schema_version": 2,
                 "state": "reserved_not_submitted",
                 "reservation_id": reservation,
                 "submission_id": manifest["submission_id"],
                 "manifest_path": str(manifest_path),
                 "manifest_sha256": manifest_sha256,
+                "control_plane_version": version,
             },
         )
         return result
@@ -989,6 +1021,11 @@ def transition(
                 or marker.get("job_id") != job_id
             ):
                 raise ValueError("Scheduler attachment does not match the pending marker")
+            _require_current_reservation_marker(
+                marker,
+                latest,
+                control_plane_version=str(inventory["version"]),
+            )
             _verify_scheduler_job(job_id, reservation_id)
         elif event_type == "reservation_cancelled":
             marker = _matching_pending_marker(
@@ -998,6 +1035,11 @@ def transition(
                 raise ValueError(
                     "Cannot cancel a reservation after scheduler submission"
                 )
+            _require_current_reservation_marker(
+                marker,
+                latest,
+                control_plane_version=str(inventory["version"]),
+            )
         event = transition_payload(latest)
         event.update({"event_type": event_type, "state": state})
         if job_id:
@@ -1059,6 +1101,11 @@ def mark_dispatch_started(
         marker = _matching_pending_marker(marker_path, reservation_id)
         if marker is None or marker.get("state") != "reserved_not_submitted":
             raise ValueError("Expected a reserved-not-submitted recovery marker")
+        _require_current_reservation_marker(
+            marker,
+            reservation,
+            control_plane_version=str(inventory["version"]),
+        )
         marker["state"] = "scheduler_dispatch_started"
         _write_pending_marker(marker_path, marker)
 
@@ -1082,15 +1129,28 @@ def mark_submitted(
     )
     mirror_jsonl = authorized_project_home_root / "ledger" / "node_hours.jsonl"
     with ledger_lock(ledger_jsonl, mirror_jsonl):
-        _verify_installed_control_plane_pair(
+        inventory = _verify_installed_control_plane_pair(
             control_plane_dir,
             authorized_pic_root=authorized_pic_root,
             authorized_project_home_root=authorized_project_home_root,
         )
         marker_path = _pending_marker_path(authorized_pic_root)
+        records = _records_with_matching_mirror(
+            ledger_jsonl,
+            authorized_pic_root / "ledger" / "mirror_receipts.jsonl",
+            mirror_jsonl,
+        )
+        reservation = latest_reservations(records).get(reservation_id)
+        if reservation is None or reservation.get("state") != "reserved":
+            raise ValueError("Expected a live reserved scheduler submission")
         marker = _matching_pending_marker(marker_path, reservation_id)
         if marker is None:
             raise ValueError("Expected a pending scheduler-submission recovery marker")
+        _require_current_reservation_marker(
+            marker,
+            reservation,
+            control_plane_version=str(inventory["version"]),
+        )
         if marker.get("state") == "submitted_not_attached":
             if marker.get("job_id") != job_id:
                 raise ValueError("Scheduler job differs from pending attachment marker")
@@ -1134,7 +1194,7 @@ def repair_reservation_attachments(
         authorized_project_home_root=authorized_project_home_root,
     )
     with ledger_lock(ledger_jsonl, mirror_jsonl):
-        _verify_installed_control_plane_pair(
+        inventory = _verify_installed_control_plane_pair(
             control_plane_dir,
             authorized_pic_root=authorized_pic_root,
             authorized_project_home_root=authorized_project_home_root,
@@ -1152,11 +1212,35 @@ def repair_reservation_attachments(
         marker = _matching_pending_marker(marker_path, reservation_id)
         if marker is None:
             raise ValueError("Missing pending marker for attachment repair")
+        if latest is not None:
+            if latest.get("control_plane_version") != inventory["version"]:
+                raise ValueError("Reservation belongs to another control-plane version")
+            _require_current_reservation_marker(
+                marker,
+                latest,
+                control_plane_version=str(inventory["version"]),
+            )
+            _require_reservation_policy_snapshot(
+                latest,
+                authorized_pic_root=authorized_pic_root,
+                authorized_project_home_root=authorized_project_home_root,
+            )
         if (
             latest is not None
             and latest.get("event_type") == "job_id_attached"
             and latest.get("state") == "submitted"
         ):
+            if any(
+                latest.get(field)
+                for field in [
+                    "terminal_recovery_handoff_path",
+                    "terminal_recovery_handoff_sha256",
+                    "terminal_recovery_mode",
+                ]
+            ):
+                raise ValueError(
+                    "Terminal-recovery attachment must resume through its successor reconciler"
+                )
             _clear_matching_pending_marker(marker_path, reservation_id)
             return "cleared_completed_attachment_pending_marker"
         if (
@@ -1174,6 +1258,20 @@ def repair_reservation_attachments(
             _clear_matching_pending_marker(marker_path, reservation_id)
             return "cleared_completed_reconciliation_pending_marker"
         if latest is None:
+            if (
+                marker.get("schema_version") != 2
+                or marker.get("control_plane_version") != inventory["version"]
+                or set(marker) != {
+                    "schema_version",
+                    "state",
+                    "reservation_id",
+                    "submission_id",
+                    "manifest_path",
+                    "manifest_sha256",
+                    "control_plane_version",
+                }
+            ):
+                raise ValueError("Reservation intent belongs to another control-plane version")
             if marker.get("state") != "reservation_intent":
                 raise ValueError("Only an unappended reservation intent may be cleared")
             for name in ["reservation_id.txt", "manifest_sha256.txt"]:

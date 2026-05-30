@@ -39,6 +39,7 @@ CONTROL_PLANE_FILES = [
     "run_installed_control_plane_job.sh",
     "run_control_plane.py",
     "submit_frontier_job.sh",
+    "terminal_recovery_handoff.py",
     "validate_and_reserve_frontier_job.py",
     "verify_compute_node_snapshot.py",
     "write_orion_build_profile.py",

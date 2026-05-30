@@ -21,7 +21,10 @@ from unittest.mock import patch
 import uuid
 
 import install_control_plane
+import reconcile_frontier_job
+import terminal_recovery_handoff
 from control_plane_common import atomic_write_bytes, durable_mkdir_parents
+from control_plane_common import CONTROL_PLANE_FILES, inventory_digest, make_tree_read_only
 from control_plane_common import durable_replace_tree
 from control_plane_common import git_archive_commit_from_bytes
 from control_plane_common import git_commit_tree_from_bytes
@@ -30,6 +33,7 @@ from control_plane_common import read_stable_regular_file_below, remove_tree
 from control_plane_common import require_ledger_paths
 from control_plane_common import launch_contract_sha256, record_for_role, sha256
 from control_plane_common import source_bundle_sha256
+from control_plane_common import scheduler_account_matches_authorized
 from control_plane_common import stable_serialization_anchor
 from control_plane_common import trusted_git_command, trusted_git_environment
 from control_plane_common import trusted_slurm_environment
@@ -50,6 +54,7 @@ from launch_trampoline import _TASK_LOCAL_EXEC, launch
 from ledger import accounting, genesis_anchor_paths, validate_primary_chain
 from promote_active_policy import _promotion_lock, promote
 from reconcile_frontier_job import reconcile
+from terminal_recovery_handoff import create_handoff
 from validate_and_reserve_frontier_job import _clear_matching_pending_marker
 from validate_and_reserve_frontier_job import _require_scheduler_output_path
 from validate_and_reserve_frontier_job import mark_dispatch_started, mark_submitted
@@ -150,6 +155,75 @@ class SnapshotTests(unittest.TestCase):
 
     def _utc(self, value: datetime) -> str:
         return value.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+    def _publish_test_control_plane_successor(self, root: Path) -> Path:
+        staging = root / "control_plane" / "test-successor-staging"
+        shutil.copytree(self.control_plane_dir, staging)
+        for path in staging.iterdir():
+            path.chmod(path.stat().st_mode | 0o200)
+        schema = staging / "control_plane.schema.json"
+        schema.write_text(
+            schema.read_text(encoding="utf-8") + "\n",
+            encoding="utf-8",
+        )
+        records = [
+            {"path": name, "sha256": sha256(staging / name)}
+            for name in CONTROL_PLANE_FILES
+        ]
+        digest = inventory_digest(records)
+        (staging / "inventory.json").write_text(
+            json.dumps(
+                {"schema_version": 1, "version": digest, "files": records},
+                indent=2,
+                sort_keys=True,
+            ) + "\n",
+            encoding="utf-8",
+        )
+        make_tree_read_only(
+            staging,
+            executable_names={
+                path.name for path in staging.iterdir()
+                if path.suffix in {".py", ".sh"}
+            },
+        )
+        destination = staging.with_name(digest)
+        staging.rename(destination)
+        return destination
+
+    def _promote_test_control_plane_successor(self, successor: Path) -> None:
+        self._write_policy(
+            installed_control_plane_version=successor.name,
+            staged_control_plane_candidate_version=successor.name,
+        )
+        promote(
+            self.policy,
+            control_plane_dir=successor,
+            authorized_pic_root=self.pic_root,
+            authorized_project_home_root=self.project_home_root,
+        )
+
+    def _create_test_terminal_recovery_handoff(
+        self,
+        successor: Path,
+        *,
+        authorize_purged_cancelled_zero_execution: bool = False,
+    ) -> Path:
+        return create_handoff(
+            job_id="12345",
+            ledger_jsonl=self.ledger,
+            ledger_csv=self.csv,
+            receipts_jsonl=self.receipts,
+            mirror_jsonl=self.mirror,
+            authorize_purged_cancelled_zero_execution=(
+                authorize_purged_cancelled_zero_execution
+            ),
+            attest_reviewed_purged_reservation_job_binding=(
+                authorize_purged_cancelled_zero_execution
+            ),
+            control_plane_dir=successor,
+            authorized_pic_root=self.pic_root,
+            authorized_project_home_root=self.project_home_root,
+        )
 
     def _write_timeout(self, *, expires_delta: timedelta = timedelta(hours=1)) -> None:
         now = datetime.now(timezone.utc)
@@ -1136,6 +1210,33 @@ class SnapshotTests(unittest.TestCase):
         for path in [policy, mirror_policy, promotion, mirror_promotion]:
             self.assertFalse(bool(path.stat().st_mode & 0o222))
 
+    def test_policy_promotion_rejects_broken_pending_marker_symlink(self) -> None:
+        marker = self.pic_root / "ledger" / "pending_submission.json"
+        marker.symlink_to(self.root / "missing-pending-marker")
+        with self.assertRaises(ValueError):
+            self._promote_policy()
+
+    def test_policy_promotion_rejects_paired_ledger_parent_symlink_transplant(
+        self,
+    ) -> None:
+        manifest_path = self._create_manifest()
+        self._reserve(manifest_path)
+        ledger_parent = self.pic_root / "ledger"
+        mirror_parent = self.project_home_root / "ledger"
+        detached_ledger = self.root / "detached-ledger"
+        detached_mirror = self.root / "detached-mirror"
+        empty_ledger = self.root / "empty-ledger"
+        empty_mirror = self.root / "empty-mirror"
+        ledger_parent.rename(detached_ledger)
+        mirror_parent.rename(detached_mirror)
+        empty_ledger.mkdir()
+        empty_mirror.mkdir()
+        ledger_parent.symlink_to(empty_ledger, target_is_directory=True)
+        mirror_parent.symlink_to(empty_mirror, target_is_directory=True)
+        with self.assertRaises((NotADirectoryError, ValueError)):
+            self._promote_policy()
+        self.assertTrue((detached_ledger / "pending_submission.json").is_file())
+
     def test_policy_promotion_parent_swap_fails_without_writing_replacement(self) -> None:
         import promote_active_policy
 
@@ -1913,7 +2014,9 @@ PY
                 require_reserved=True,
             )
 
-    def test_dispatch_start_rechecks_policy_generation_and_retains_accounting(self) -> None:
+    def test_policy_promotion_rejects_reserved_submission_and_retains_accounting(
+        self,
+    ) -> None:
         manifest_path = self._create_manifest()
         reservation = self._reserve(manifest_path)
         reservation_id = str(reservation["reservation_id"])
@@ -1923,11 +2026,11 @@ PY
             self.policy.read_text(encoding="utf-8") + "\n",
             encoding="utf-8",
         )
-        self._promote_policy()
         with self.assertRaises(ValueError):
-            self._mark_dispatch_started(reservation_id)
+            self._promote_policy()
         totals = accounting(validate_primary_chain(self.ledger))
         self.assertGreater(totals["currently_reserved_node_hours"], 0.0)
+        self._mark_dispatch_started(reservation_id)
 
     def test_dispatch_started_reservation_cannot_be_cancelled_or_repaired(self) -> None:
         manifest_path = self._create_manifest()
@@ -1965,6 +2068,66 @@ PY
                 authorized_pic_root=self.pic_root,
                 authorized_project_home_root=self.project_home_root,
             )
+
+    def test_current_generation_paths_reject_marker_control_plane_mutation(self) -> None:
+        manifest_path = self._create_manifest()
+        reservation = self._reserve(manifest_path)
+        reservation_id = str(reservation["reservation_id"])
+        marker_path = self.pic_root / "ledger" / "pending_submission.json"
+        marker = json.loads(marker_path.read_text(encoding="utf-8"))
+        marker["control_plane_version"] = "0" * 64
+        marker_path.chmod(0o600)
+        marker_path.write_text(json.dumps(marker), encoding="utf-8")
+        marker_path.chmod(0o400)
+        with self.assertRaises(ValueError):
+            self._mark_dispatch_started(reservation_id)
+        with self.assertRaises(ValueError):
+            repair_reservation_attachments(
+                reservation_id=reservation_id,
+                ledger_jsonl=self.ledger,
+                ledger_csv=self.csv,
+                receipts_jsonl=self.receipts,
+                mirror_jsonl=self.mirror,
+                control_plane_dir=self.control_plane_dir,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+        retained = json.loads(marker_path.read_text(encoding="utf-8"))
+        self.assertEqual(retained["state"], "reserved_not_submitted")
+
+    def test_successor_cannot_mark_prior_generation_submission(self) -> None:
+        manifest_path = self._create_manifest()
+        reservation = self._reserve(manifest_path)
+        reservation_id = str(reservation["reservation_id"])
+        self._mark_dispatch_started(reservation_id)
+        successor = self._publish_test_control_plane_successor(self.pic_root)
+        project_home_successor = self._publish_test_control_plane_successor(
+            self.project_home_root
+        )
+        self.assertEqual(successor.name, project_home_successor.name)
+        scheduler = (
+            f"JobId=12345 JobState=PENDING Account=ast207 "
+            f"Comment=pic-reservation={reservation_id}"
+        )
+        with patch(
+            "validate_and_reserve_frontier_job._scheduler_job_output",
+            return_value=scheduler,
+        ):
+            with self.assertRaises(ValueError):
+                mark_submitted(
+                    reservation_id=reservation_id,
+                    job_id="12345",
+                    ledger_jsonl=self.ledger,
+                    control_plane_dir=successor,
+                    authorized_pic_root=self.pic_root,
+                    authorized_project_home_root=self.project_home_root,
+                )
+        marker = json.loads(
+            (self.pic_root / "ledger" / "pending_submission.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(marker["state"], "scheduler_dispatch_started")
 
     def test_scheduler_output_is_restricted_to_dedicated_log_path(self) -> None:
         expected = self.pic_root / "logs" / "slurm" / "%x.%j.log"
@@ -2322,6 +2485,58 @@ PY
         self.assertFalse((self.pic_root / "ledger" / "pending_submission.json").exists())
         self.assertEqual(len(validate_primary_chain(self.ledger)), 1)
 
+    def test_unappended_intent_repair_rejects_successor_control_plane(self) -> None:
+        manifest_path = self._create_manifest()
+        with patch(
+            "validate_and_reserve_frontier_job._append_locked",
+            side_effect=RuntimeError("simulated primary append interruption"),
+        ):
+            with self.assertRaises(RuntimeError):
+                self._reserve(manifest_path)
+        successor = self._publish_test_control_plane_successor(self.pic_root)
+        project_home_successor = self._publish_test_control_plane_successor(
+            self.project_home_root
+        )
+        self.assertEqual(successor.name, project_home_successor.name)
+        with self.assertRaises(ValueError):
+            repair_reservation_attachments(
+                reservation_id="89c76745-6c37-47f7-9847-800a98a47c9b",
+                ledger_jsonl=self.ledger,
+                ledger_csv=self.csv,
+                receipts_jsonl=self.receipts,
+                mirror_jsonl=self.mirror,
+                control_plane_dir=successor,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+        self.assertTrue((self.pic_root / "ledger" / "pending_submission.json").is_file())
+
+    def test_reserved_attachment_repair_rejects_successor_control_plane(self) -> None:
+        manifest_path = self._create_manifest()
+        with patch(
+            "validate_and_reserve_frontier_job._write_reservation_attachments",
+            side_effect=RuntimeError("simulated attachment interruption"),
+        ):
+            with self.assertRaises(RuntimeError):
+                self._reserve(manifest_path)
+        successor = self._publish_test_control_plane_successor(self.pic_root)
+        project_home_successor = self._publish_test_control_plane_successor(
+            self.project_home_root
+        )
+        self.assertEqual(successor.name, project_home_successor.name)
+        with self.assertRaises(ValueError):
+            repair_reservation_attachments(
+                reservation_id="89c76745-6c37-47f7-9847-800a98a47c9b",
+                ledger_jsonl=self.ledger,
+                ledger_csv=self.csv,
+                receipts_jsonl=self.receipts,
+                mirror_jsonl=self.mirror,
+                control_plane_dir=successor,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+        self.assertTrue((self.pic_root / "ledger" / "pending_submission.json").is_file())
+
     def test_completed_cancellation_stranded_marker_is_recoverable(self) -> None:
         manifest_path = self._create_manifest()
         reservation = self._reserve(manifest_path)
@@ -2355,6 +2570,46 @@ PY
         )
         self.assertEqual(result, "cleared_completed_cancellation_pending_marker")
         self.assertFalse((self.pic_root / "ledger" / "pending_submission.json").exists())
+
+    def test_attachment_repair_rejects_stale_policy_generation(self) -> None:
+        manifest_path = self._create_manifest()
+        reservation = self._reserve(manifest_path)
+        reservation_id = str(reservation["reservation_id"])
+        transition(
+            reservation_id=reservation_id,
+            event_type="reservation_cancelled",
+            state="cancelled",
+            ledger_jsonl=self.ledger,
+            ledger_csv=self.csv,
+            receipts_jsonl=self.receipts,
+            mirror_jsonl=self.mirror,
+            control_plane_dir=self.control_plane_dir,
+            authorized_pic_root=self.pic_root,
+            authorized_project_home_root=self.project_home_root,
+        )
+        successor = self._publish_test_control_plane_successor(self.pic_root)
+        project_home_successor = self._publish_test_control_plane_successor(
+            self.project_home_root
+        )
+        self.assertEqual(successor.name, project_home_successor.name)
+        self._promote_test_control_plane_successor(successor)
+        marker_path = self.pic_root / "ledger" / "pending_submission.json"
+        marker_path.write_text(
+            json.dumps({"reservation_id": reservation_id}),
+            encoding="utf-8",
+        )
+        with self.assertRaises(ValueError):
+            repair_reservation_attachments(
+                reservation_id=reservation_id,
+                ledger_jsonl=self.ledger,
+                ledger_csv=self.csv,
+                receipts_jsonl=self.receipts,
+                mirror_jsonl=self.mirror,
+                control_plane_dir=self.control_plane_dir,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+        self.assertTrue(marker_path.is_file())
 
     def test_completed_attachment_stranded_marker_is_recoverable(self) -> None:
         manifest_path = self._create_manifest()
@@ -2607,6 +2862,53 @@ PY
                     authorized_project_home_root=self.project_home_root,
                 )
 
+    def test_attach_accepts_scheduler_canonical_lowercase_account(self) -> None:
+        manifest_path = self._create_manifest()
+        reservation = self._reserve(manifest_path)
+        reservation_id = str(reservation["reservation_id"])
+        scheduler = (
+            f"JobId=12345 JobState=PENDING Account=ast207 "
+            f"Comment=pic-reservation={reservation_id}"
+        )
+        with patch(
+            "validate_and_reserve_frontier_job._scheduler_job_output",
+            return_value=scheduler,
+        ):
+            self._mark_dispatch_started(reservation_id)
+            mark_submitted(
+                reservation_id=reservation_id,
+                job_id="12345",
+                ledger_jsonl=self.ledger,
+                control_plane_dir=self.control_plane_dir,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+
+    def test_scheduler_account_matching_is_closed_to_canonical_spellings(self) -> None:
+        self.assertTrue(scheduler_account_matches_authorized("AST207"))
+        self.assertTrue(scheduler_account_matches_authorized("ast207"))
+        for value in ["Ast207", "ast207-extra", "", None]:
+            self.assertFalse(scheduler_account_matches_authorized(value))
+
+    def test_submission_directive_rejects_lowercase_account(self) -> None:
+        self._write(
+            "job.sh",
+            "#!/bin/bash\n#SBATCH -A ast207\n#SBATCH -p batch\n#SBATCH -q debug\n"
+            f"#SBATCH -o {self.pic_root}/logs/slurm/%x.%j.log\n"
+            "#SBATCH -N 1\n#SBATCH -t 00:10:00\n",
+        )
+        self._write_policy()
+        self._promote_policy()
+        with self.assertRaises(ValueError):
+            self._reserve(self._create_manifest())
+
+    def test_policy_rejects_lowercase_account(self) -> None:
+        policy = json.loads(self.policy.read_text(encoding="utf-8"))
+        policy["frontier"]["account"] = "ast207"
+        self.policy.write_text(json.dumps(policy), encoding="utf-8")
+        with self.assertRaises(ValueError):
+            self._promote_policy()
+
     def test_reconcile_queries_slurm_and_rejects_comment_mismatch(self) -> None:
         manifest_path = self._create_manifest()
         reservation = self._reserve(manifest_path)
@@ -2628,6 +2930,226 @@ PY
                     control_plane_dir=self.control_plane_dir,
                     authorized_pic_root=self.pic_root,
                     authorized_project_home_root=self.project_home_root,
+                )
+
+    def test_scheduler_accounting_accepts_empty_comment_and_lowercase_account(self) -> None:
+        import reconcile_frontier_job
+
+        with patch(
+            "reconcile_frontier_job._verify_scheduler_job_binding"
+        ) as scheduler_binding:
+            with patch.object(
+                reconcile_frontier_job.subprocess,
+                "check_output",
+                return_value="12345|CANCELLED by 18664|0|0||ast207\n",
+            ):
+                self.assertEqual(
+                    reconcile_frontier_job._scheduler_result("12345", "reservation"),
+                    ("CANCELLED", 0, 0),
+                )
+        scheduler_binding.assert_called_once_with("12345", "reservation")
+        with patch(
+            "reconcile_frontier_job._verify_scheduler_job_binding",
+            side_effect=ValueError("missing scheduler binding"),
+        ):
+            with patch.object(
+                reconcile_frontier_job.subprocess,
+                "check_output",
+                return_value="12345|CANCELLED|0|0||ast207\n",
+            ):
+                with self.assertRaises(ValueError):
+                    reconcile_frontier_job._scheduler_result("12345", "reservation")
+        with patch.object(
+            reconcile_frontier_job.subprocess,
+            "check_output",
+            return_value="12345|CANCELLED|0|0||wrong\n",
+        ):
+            with self.assertRaises(ValueError):
+                reconcile_frontier_job._scheduler_result("12345", "reservation")
+
+    def test_purged_cancelled_zero_execution_snapshot_is_exact(self) -> None:
+        row = (
+            "12345|run_installed_control_plane_job.sh|CANCELLED by 18664|0|0||"
+            "ast207|2026-05-30T15:47:31|None|2026-05-30T15:47:31|0:0\n"
+        )
+
+        def scheduler_output(command: list[str], **kwargs: object) -> str:
+            if command[0] == TRUSTED_SCONTROL:
+                raise subprocess.CalledProcessError(
+                    1,
+                    command,
+                    stderr="slurm_load_jobs error: Invalid job id specified\n",
+                )
+            if command[0] == TRUSTED_SQUEUE:
+                return ""
+            self.assertEqual(command[0], TRUSTED_SACCT)
+            return row
+
+        with patch.object(
+            terminal_recovery_handoff.subprocess,
+            "check_output",
+            side_effect=scheduler_output,
+        ):
+            snapshot = (
+                terminal_recovery_handoff.require_purged_cancelled_zero_execution_snapshot(
+                    "12345"
+                )
+            )
+        self.assertEqual(
+            snapshot["mode"],
+            terminal_recovery_handoff.PURGED_CANCELLED_ZERO_EXECUTION_MODE,
+        )
+        self.assertEqual(snapshot["start"], "None")
+        self.assertEqual(snapshot["elapsed_raw"], 0)
+        self.assertEqual(snapshot["allocated_nodes"], 0)
+
+    def test_purged_cancelled_zero_execution_snapshot_rejects_broader_shapes(
+        self,
+    ) -> None:
+        fields = [
+            "12345",
+            "run_installed_control_plane_job.sh",
+            "CANCELLED by 18664",
+            "0",
+            "0",
+            "",
+            "ast207",
+            "2026-05-30T15:47:31",
+            "None",
+            "2026-05-30T15:47:31",
+            "0:0",
+        ]
+
+        def purged_scontrol(command: list[str], **kwargs: object) -> str:
+            if command[0] == TRUSTED_SCONTROL:
+                raise subprocess.CalledProcessError(
+                    1,
+                    command,
+                    stderr="slurm_load_jobs error: Invalid job id specified\n",
+                )
+            if command[0] == TRUSTED_SQUEUE:
+                return ""
+            return "|".join(fields) + "\n"
+
+        for index, value in [
+            (1, "other.sh"),
+            (2, "COMPLETED"),
+            (3, "1"),
+            (4, "1"),
+            (5, "pic-reservation=reservation"),
+            (6, "wrong"),
+            (8, "2026-05-30T15:47:31"),
+            (9, "2026-05-30T15:47:32"),
+            (10, "1:0"),
+        ]:
+            with self.subTest(index=index, value=value):
+                original = fields[index]
+                fields[index] = value
+                try:
+                    with patch.object(
+                        terminal_recovery_handoff.subprocess,
+                        "check_output",
+                        side_effect=purged_scontrol,
+                    ):
+                        with self.assertRaises(ValueError):
+                            terminal_recovery_handoff.require_purged_cancelled_zero_execution_snapshot(
+                                "12345"
+                            )
+                finally:
+                    fields[index] = original
+        with patch.object(
+            terminal_recovery_handoff.subprocess,
+            "check_output",
+            side_effect=subprocess.CalledProcessError(
+                1,
+                [TRUSTED_SCONTROL],
+                stderr="slurm_load_jobs error: Access/permission denied\n",
+            ),
+        ):
+            with self.assertRaises(ValueError):
+                terminal_recovery_handoff.require_purged_cancelled_zero_execution_snapshot(
+                    "12345"
+                )
+
+    def test_purged_cancelled_zero_execution_snapshot_rejects_queue_and_duplicate_rows(
+        self,
+    ) -> None:
+        row = (
+            "12345|run_installed_control_plane_job.sh|CANCELLED by 18664|0|0||"
+            "ast207|2026-05-30T15:47:31|None|2026-05-30T15:47:31|0:0\n"
+        )
+        queued = ""
+        accounting = row
+
+        def scheduler_output(command: list[str], **kwargs: object) -> str:
+            if command[0] == TRUSTED_SCONTROL:
+                raise subprocess.CalledProcessError(
+                    1,
+                    command,
+                    stderr="slurm_load_jobs error: Invalid job id specified\n",
+                )
+            if command[0] == TRUSTED_SQUEUE:
+                return queued
+            self.assertEqual(command[0], TRUSTED_SACCT)
+            return accounting
+
+        with patch.object(
+            terminal_recovery_handoff.subprocess,
+            "check_output",
+            side_effect=scheduler_output,
+        ):
+            queued = "12345\n"
+            with self.assertRaises(ValueError):
+                terminal_recovery_handoff.require_purged_cancelled_zero_execution_snapshot(
+                    "12345"
+                )
+            queued = ""
+            accounting = row + row
+            with self.assertRaises(ValueError):
+                terminal_recovery_handoff.require_purged_cancelled_zero_execution_snapshot(
+                    "12345"
+                )
+
+    def test_purged_cancelled_zero_execution_snapshot_accepts_exact_squeue_purge_only(
+        self,
+    ) -> None:
+        row = (
+            "12345|run_installed_control_plane_job.sh|CANCELLED by 18664|0|0||"
+            "ast207|2026-05-30T15:47:31|None|2026-05-30T15:47:31|0:0\n"
+        )
+        queue_stderr = "slurm_load_jobs error: Invalid job id specified\n"
+
+        def scheduler_output(command: list[str], **kwargs: object) -> str:
+            if command[0] == TRUSTED_SCONTROL:
+                raise subprocess.CalledProcessError(
+                    1,
+                    command,
+                    stderr="slurm_load_jobs error: Invalid job id specified\n",
+                )
+            if command[0] == TRUSTED_SQUEUE:
+                raise subprocess.CalledProcessError(
+                    1,
+                    command,
+                    stderr=queue_stderr,
+                )
+            self.assertEqual(command[0], TRUSTED_SACCT)
+            return row
+
+        with patch.object(
+            terminal_recovery_handoff.subprocess,
+            "check_output",
+            side_effect=scheduler_output,
+        ):
+            snapshot = (
+                terminal_recovery_handoff.require_purged_cancelled_zero_execution_snapshot(
+                    "12345"
+                )
+            )
+            self.assertEqual(snapshot["job_id"], "12345")
+            queue_stderr = "slurm_load_jobs error: Access/permission denied\n"
+            with self.assertRaises(ValueError):
+                terminal_recovery_handoff.require_purged_cancelled_zero_execution_snapshot(
+                    "12345"
                 )
 
     def test_reconcile_recovers_terminal_submitted_not_attached_job(self) -> None:
@@ -2676,6 +3198,51 @@ PY
         manifest_path = self._create_manifest()
         reservation = self._reserve(manifest_path)
         reservation_id = str(reservation["reservation_id"])
+        scheduler = (
+            f"JobId=12345 JobState=CANCELLED Account=AST207 "
+            f"Comment=pic-reservation={reservation_id}"
+        )
+        with patch(
+            "validate_and_reserve_frontier_job._scheduler_job_output",
+            return_value=scheduler,
+        ):
+            self._mark_dispatch_started(reservation_id)
+            with self.assertRaises(ValueError):
+                mark_submitted(
+                    reservation_id=reservation_id,
+                    job_id="12345",
+                    ledger_jsonl=self.ledger,
+                    control_plane_dir=self.control_plane_dir,
+                    authorized_pic_root=self.pic_root,
+                    authorized_project_home_root=self.project_home_root,
+                )
+            marker = json.loads(
+                (self.pic_root / "ledger" / "pending_submission.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            self.assertEqual(marker["state"], "scheduler_job_id_received")
+            with patch(
+                "reconcile_frontier_job._scheduler_result",
+                return_value=("CANCELLED", 0, 1),
+            ):
+                result = reconcile(
+                    job_id="12345",
+                    ledger_jsonl=self.ledger,
+                    ledger_csv=self.csv,
+                    receipts_jsonl=self.receipts,
+                    mirror_jsonl=self.mirror,
+                    control_plane_dir=self.control_plane_dir,
+                    authorized_pic_root=self.pic_root,
+                    authorized_project_home_root=self.project_home_root,
+                )
+        self.assertEqual(result["state"], "CANCELLED")
+        self.assertFalse((self.pic_root / "ledger" / "pending_submission.json").exists())
+
+    def test_reconcile_received_job_id_rejects_scheduler_binding_mismatch(self) -> None:
+        manifest_path = self._create_manifest()
+        reservation = self._reserve(manifest_path)
+        reservation_id = str(reservation["reservation_id"])
         with patch(
             "validate_and_reserve_frontier_job._scheduler_job_output",
             return_value=(
@@ -2693,28 +3260,96 @@ PY
                     authorized_pic_root=self.pic_root,
                     authorized_project_home_root=self.project_home_root,
                 )
-        marker = json.loads(
-            (self.pic_root / "ledger" / "pending_submission.json").read_text(
-                encoding="utf-8"
-            )
-        )
-        self.assertEqual(marker["state"], "scheduler_job_id_received")
         with patch(
-            "reconcile_frontier_job._scheduler_result",
-            return_value=("CANCELLED", 0, 1),
+            "validate_and_reserve_frontier_job._scheduler_job_output",
+            return_value="JobId=12345 JobState=CANCELLED Account=ast207 Comment=wrong",
         ):
-            result = reconcile(
-                job_id="12345",
-                ledger_jsonl=self.ledger,
-                ledger_csv=self.csv,
-                receipts_jsonl=self.receipts,
-                mirror_jsonl=self.mirror,
-                control_plane_dir=self.control_plane_dir,
-                authorized_pic_root=self.pic_root,
-                authorized_project_home_root=self.project_home_root,
-            )
-        self.assertEqual(result["state"], "CANCELLED")
-        self.assertFalse((self.pic_root / "ledger" / "pending_submission.json").exists())
+            with patch("reconcile_frontier_job._scheduler_result") as scheduler_result:
+                with self.assertRaises(ValueError):
+                    reconcile(
+                        job_id="12345",
+                        ledger_jsonl=self.ledger,
+                        ledger_csv=self.csv,
+                        receipts_jsonl=self.receipts,
+                        mirror_jsonl=self.mirror,
+                        control_plane_dir=self.control_plane_dir,
+                        authorized_pic_root=self.pic_root,
+                        authorized_project_home_root=self.project_home_root,
+                    )
+        scheduler_result.assert_not_called()
+
+    def test_successor_retry_requires_verified_prior_pair_before_marker_clear(
+        self,
+    ) -> None:
+        manifest_path = self._create_manifest()
+        reservation = self._reserve(manifest_path)
+        reservation_id = str(reservation["reservation_id"])
+        scheduler = (
+            f"JobId=12345 JobState=CANCELLED Account=ast207 "
+            f"Comment=pic-reservation={reservation_id}"
+        )
+        with patch(
+            "validate_and_reserve_frontier_job._scheduler_job_output",
+            return_value=scheduler,
+        ):
+            self._mark_dispatch_started(reservation_id)
+            with self.assertRaises(ValueError):
+                mark_submitted(
+                    reservation_id=reservation_id,
+                    job_id="12345",
+                    ledger_jsonl=self.ledger,
+                    control_plane_dir=self.control_plane_dir,
+                    authorized_pic_root=self.pic_root,
+                    authorized_project_home_root=self.project_home_root,
+                )
+        successor = self._publish_test_control_plane_successor(self.pic_root)
+        project_home_successor = self._publish_test_control_plane_successor(
+            self.project_home_root
+        )
+        self.assertEqual(successor.name, project_home_successor.name)
+        handoff = self._create_test_terminal_recovery_handoff(successor)
+        with patch(
+            "validate_and_reserve_frontier_job._scheduler_job_output",
+            return_value=scheduler,
+        ):
+            with patch(
+                "reconcile_frontier_job._scheduler_result",
+                return_value=("CANCELLED", 0, 1),
+            ):
+                reconcile(
+                    job_id="12345",
+                    ledger_jsonl=self.ledger,
+                    ledger_csv=self.csv,
+                    receipts_jsonl=self.receipts,
+                    mirror_jsonl=self.mirror,
+                    control_plane_dir=successor,
+                    authorized_pic_root=self.pic_root,
+                    authorized_project_home_root=self.project_home_root,
+                    terminal_recovery_handoff=handoff,
+                )
+        marker_path = self.pic_root / "ledger" / "pending_submission.json"
+        marker_path.write_text(
+            json.dumps({"reservation_id": reservation["reservation_id"]}),
+            encoding="utf-8",
+        )
+        self.project_home_control_plane_dir.rename(
+            self.project_home_control_plane_dir.with_name("missing-retry-prior-control-plane")
+        )
+        with patch("reconcile_frontier_job._scheduler_result") as scheduler_result:
+            with self.assertRaises(ValueError):
+                reconcile(
+                    job_id="12345",
+                    ledger_jsonl=self.ledger,
+                    ledger_csv=self.csv,
+                    receipts_jsonl=self.receipts,
+                    mirror_jsonl=self.mirror,
+                    control_plane_dir=successor,
+                    authorized_pic_root=self.pic_root,
+                    authorized_project_home_root=self.project_home_root,
+                    terminal_recovery_handoff=handoff,
+                )
+        scheduler_result.assert_not_called()
+        self.assertTrue(marker_path.is_file())
 
     def test_reconcile_terminal_retry_clears_stranded_marker_without_reaccounting(
         self,
@@ -2757,6 +3392,51 @@ PY
         self.assertEqual(second["event_sha256"], first["event_sha256"])
         self.assertFalse(marker_path.exists())
 
+    def test_reconcile_terminal_retry_rejects_stale_policy_generation(self) -> None:
+        manifest_path = self._create_manifest()
+        reservation = self._reserve(manifest_path)
+        reservation_id = str(reservation["reservation_id"])
+        self._attach(reservation_id)
+        with patch(
+            "reconcile_frontier_job._scheduler_result",
+            return_value=("COMPLETED", 300, 1),
+        ):
+            reconcile(
+                job_id="12345",
+                ledger_jsonl=self.ledger,
+                ledger_csv=self.csv,
+                receipts_jsonl=self.receipts,
+                mirror_jsonl=self.mirror,
+                control_plane_dir=self.control_plane_dir,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+        successor = self._publish_test_control_plane_successor(self.pic_root)
+        project_home_successor = self._publish_test_control_plane_successor(
+            self.project_home_root
+        )
+        self.assertEqual(successor.name, project_home_successor.name)
+        self._promote_test_control_plane_successor(successor)
+        marker_path = self.pic_root / "ledger" / "pending_submission.json"
+        marker_path.write_text(
+            json.dumps({"reservation_id": reservation_id}),
+            encoding="utf-8",
+        )
+        with patch("reconcile_frontier_job._scheduler_result") as scheduler_result:
+            with self.assertRaises(ValueError):
+                reconcile(
+                    job_id="12345",
+                    ledger_jsonl=self.ledger,
+                    ledger_csv=self.csv,
+                    receipts_jsonl=self.receipts,
+                    mirror_jsonl=self.mirror,
+                    control_plane_dir=self.control_plane_dir,
+                    authorized_pic_root=self.pic_root,
+                    authorized_project_home_root=self.project_home_root,
+                )
+        scheduler_result.assert_not_called()
+        self.assertTrue(marker_path.is_file())
+
     def test_reconcile_requires_paired_installed_generation_before_scheduler_query(
         self,
     ) -> None:
@@ -2779,6 +3459,820 @@ PY
                     authorized_project_home_root=self.project_home_root,
                 )
         scheduler_result.assert_not_called()
+
+    def test_successor_reconcile_accepts_verified_prior_installed_generation(self) -> None:
+        manifest_path = self._create_manifest()
+        reservation = self._reserve(manifest_path)
+        reservation_id = str(reservation["reservation_id"])
+        scheduler = (
+            f"JobId=12345 JobState=CANCELLED Account=ast207 "
+            f"Comment=pic-reservation={reservation_id}"
+        )
+        with patch(
+            "validate_and_reserve_frontier_job._scheduler_job_output",
+            return_value=scheduler,
+        ):
+            self._mark_dispatch_started(reservation_id)
+            with self.assertRaises(ValueError):
+                mark_submitted(
+                    reservation_id=reservation_id,
+                    job_id="12345",
+                    ledger_jsonl=self.ledger,
+                    control_plane_dir=self.control_plane_dir,
+                    authorized_pic_root=self.pic_root,
+                    authorized_project_home_root=self.project_home_root,
+                )
+            successor = self._publish_test_control_plane_successor(self.pic_root)
+            project_home_successor = self._publish_test_control_plane_successor(
+                self.project_home_root
+            )
+            self.assertEqual(successor.name, project_home_successor.name)
+            handoff = self._create_test_terminal_recovery_handoff(successor)
+            with patch(
+                "reconcile_frontier_job._scheduler_result",
+                return_value=("CANCELLED", 0, 1),
+            ):
+                result = reconcile(
+                    job_id="12345",
+                    ledger_jsonl=self.ledger,
+                    ledger_csv=self.csv,
+                    receipts_jsonl=self.receipts,
+                    mirror_jsonl=self.mirror,
+                    control_plane_dir=successor,
+                    authorized_pic_root=self.pic_root,
+                    authorized_project_home_root=self.project_home_root,
+                    terminal_recovery_handoff=handoff,
+                )
+        self.assertEqual(result["state"], "CANCELLED")
+        self.assertEqual(result["control_plane_version"], self.control_plane_version)
+        self.assertEqual(result["reconciled_by_control_plane_version"], successor.name)
+        records = validate_primary_chain(self.ledger)
+        self.assertEqual(records[-2]["attached_by_control_plane_version"], successor.name)
+        self.assertEqual(records[-1]["terminal_recovery_handoff_path"], str(handoff))
+        self.assertIn("terminal_recovery_handoff_sha256", self.csv.read_text())
+        self._promote_test_control_plane_successor(successor)
+
+    def test_successor_reconcile_accepts_authorized_purged_zero_execution_cancellation(
+        self,
+    ) -> None:
+        manifest_path = self._create_manifest()
+        reservation = self._reserve(manifest_path)
+        reservation_id = str(reservation["reservation_id"])
+        scheduler = (
+            f"JobId=12345 JobState=CANCELLED Account=ast207 "
+            f"Comment=pic-reservation={reservation_id}"
+        )
+        with patch(
+            "validate_and_reserve_frontier_job._scheduler_job_output",
+            return_value=scheduler,
+        ):
+            self._mark_dispatch_started(reservation_id)
+            with self.assertRaises(ValueError):
+                mark_submitted(
+                    reservation_id=reservation_id,
+                    job_id="12345",
+                    ledger_jsonl=self.ledger,
+                    control_plane_dir=self.control_plane_dir,
+                    authorized_pic_root=self.pic_root,
+                    authorized_project_home_root=self.project_home_root,
+                )
+        successor = self._publish_test_control_plane_successor(self.pic_root)
+        project_home_successor = self._publish_test_control_plane_successor(
+            self.project_home_root
+        )
+        self.assertEqual(successor.name, project_home_successor.name)
+        with self.assertRaises(ValueError):
+            create_handoff(
+                job_id="12345",
+                ledger_jsonl=self.ledger,
+                ledger_csv=self.csv,
+                receipts_jsonl=self.receipts,
+                mirror_jsonl=self.mirror,
+                authorize_purged_cancelled_zero_execution=True,
+                control_plane_dir=successor,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+        with self.assertRaises(ValueError):
+            create_handoff(
+                job_id="12345",
+                ledger_jsonl=self.ledger,
+                ledger_csv=self.csv,
+                receipts_jsonl=self.receipts,
+                mirror_jsonl=self.mirror,
+                attest_reviewed_purged_reservation_job_binding=True,
+                control_plane_dir=successor,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+        full_row = (
+            "12345|run_installed_control_plane_job.sh|CANCELLED by 18664|0|0||"
+            "ast207|2026-05-30T15:47:31|None|2026-05-30T15:47:31|0:0\n"
+        )
+        short_row = "12345|CANCELLED by 18664|0|0||ast207\n"
+
+        def scheduler_output(command: list[str], **kwargs: object) -> str:
+            if command[0] == TRUSTED_SCONTROL:
+                raise subprocess.CalledProcessError(
+                    1,
+                    command,
+                    stderr="slurm_load_jobs error: Invalid job id specified\n",
+                )
+            if command[0] == TRUSTED_SQUEUE:
+                return ""
+            self.assertEqual(command[0], TRUSTED_SACCT)
+            return short_row if "JobIDRaw,State,ElapsedRaw" in command[-1] else full_row
+
+        with patch.object(
+            terminal_recovery_handoff.subprocess,
+            "check_output",
+            side_effect=scheduler_output,
+        ):
+            handoff = self._create_test_terminal_recovery_handoff(
+                successor,
+                authorize_purged_cancelled_zero_execution=True,
+            )
+            result = reconcile(
+                job_id="12345",
+                ledger_jsonl=self.ledger,
+                ledger_csv=self.csv,
+                receipts_jsonl=self.receipts,
+                mirror_jsonl=self.mirror,
+                control_plane_dir=successor,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+                terminal_recovery_handoff=handoff,
+            )
+        self.assertEqual(result["state"], "CANCELLED")
+        self.assertEqual(
+            result["terminal_recovery_mode"],
+            terminal_recovery_handoff.PURGED_CANCELLED_ZERO_EXECUTION_MODE,
+        )
+        self.assertFalse((self.pic_root / "ledger" / "pending_submission.json").exists())
+        records = validate_primary_chain(self.ledger)
+        self.assertEqual(records[-2]["terminal_recovery_mode"], result["terminal_recovery_mode"])
+        self.assertIn("terminal_recovery_mode", self.csv.read_text())
+
+    def test_successor_purged_reconcile_retry_uses_frozen_scheduler_snapshot(
+        self,
+    ) -> None:
+        manifest_path = self._create_manifest()
+        reservation = self._reserve(manifest_path)
+        reservation_id = str(reservation["reservation_id"])
+        scheduler = (
+            f"JobId=12345 JobState=CANCELLED Account=ast207 "
+            f"Comment=pic-reservation={reservation_id}"
+        )
+        with patch(
+            "validate_and_reserve_frontier_job._scheduler_job_output",
+            return_value=scheduler,
+        ):
+            self._mark_dispatch_started(reservation_id)
+            with self.assertRaises(ValueError):
+                mark_submitted(
+                    reservation_id=reservation_id,
+                    job_id="12345",
+                    ledger_jsonl=self.ledger,
+                    control_plane_dir=self.control_plane_dir,
+                    authorized_pic_root=self.pic_root,
+                    authorized_project_home_root=self.project_home_root,
+                )
+        successor = self._publish_test_control_plane_successor(self.pic_root)
+        project_home_successor = self._publish_test_control_plane_successor(
+            self.project_home_root
+        )
+        self.assertEqual(successor.name, project_home_successor.name)
+        full_row = (
+            "12345|run_installed_control_plane_job.sh|CANCELLED by 18664|0|0||"
+            "ast207|2026-05-30T15:47:31|None|2026-05-30T15:47:31|0:0\n"
+        )
+        short_row = "12345|CANCELLED by 18664|0|0||ast207\n"
+
+        def scheduler_output(command: list[str], **kwargs: object) -> str:
+            if command[0] == TRUSTED_SCONTROL:
+                raise subprocess.CalledProcessError(
+                    1,
+                    command,
+                    stderr="slurm_load_jobs error: Invalid job id specified\n",
+                )
+            if command[0] == TRUSTED_SQUEUE:
+                return ""
+            self.assertEqual(command[0], TRUSTED_SACCT)
+            return short_row if "JobIDRaw,State,ElapsedRaw" in command[-1] else full_row
+
+        with patch.object(
+            terminal_recovery_handoff.subprocess,
+            "check_output",
+            side_effect=scheduler_output,
+        ):
+            handoff = self._create_test_terminal_recovery_handoff(
+                successor,
+                authorize_purged_cancelled_zero_execution=True,
+            )
+            with patch(
+                "reconcile_frontier_job._clear_matching_pending_marker",
+                side_effect=RuntimeError("simulated marker cleanup interruption"),
+            ):
+                with self.assertRaises(RuntimeError):
+                    reconcile(
+                        job_id="12345",
+                        ledger_jsonl=self.ledger,
+                        ledger_csv=self.csv,
+                        receipts_jsonl=self.receipts,
+                        mirror_jsonl=self.mirror,
+                        control_plane_dir=successor,
+                        authorized_pic_root=self.pic_root,
+                        authorized_project_home_root=self.project_home_root,
+                        terminal_recovery_handoff=handoff,
+                    )
+        marker_path = self.pic_root / "ledger" / "pending_submission.json"
+        self.assertTrue(marker_path.is_file())
+        interrupted_records = validate_primary_chain(self.ledger)
+        with patch.object(
+            terminal_recovery_handoff.subprocess,
+            "check_output",
+            side_effect=AssertionError("retry must use the frozen scheduler snapshot"),
+        ):
+            with patch("reconcile_frontier_job._scheduler_result") as scheduler_result:
+                result = reconcile(
+                    job_id="12345",
+                    ledger_jsonl=self.ledger,
+                    ledger_csv=self.csv,
+                    receipts_jsonl=self.receipts,
+                    mirror_jsonl=self.mirror,
+                    control_plane_dir=successor,
+                    authorized_pic_root=self.pic_root,
+                    authorized_project_home_root=self.project_home_root,
+                    terminal_recovery_handoff=handoff,
+                )
+        scheduler_result.assert_not_called()
+        self.assertEqual(result["event_type"], "reconciliation")
+        self.assertFalse(marker_path.exists())
+        self.assertEqual(validate_primary_chain(self.ledger), interrupted_records)
+
+    def test_successor_purged_reconcile_resumes_after_terminal_append_failure(
+        self,
+    ) -> None:
+        manifest_path = self._create_manifest()
+        reservation = self._reserve(manifest_path)
+        reservation_id = str(reservation["reservation_id"])
+        scheduler = (
+            f"JobId=12345 JobState=CANCELLED Account=ast207 "
+            f"Comment=pic-reservation={reservation_id}"
+        )
+        with patch(
+            "validate_and_reserve_frontier_job._scheduler_job_output",
+            return_value=scheduler,
+        ):
+            self._mark_dispatch_started(reservation_id)
+            with self.assertRaises(ValueError):
+                mark_submitted(
+                    reservation_id=reservation_id,
+                    job_id="12345",
+                    ledger_jsonl=self.ledger,
+                    control_plane_dir=self.control_plane_dir,
+                    authorized_pic_root=self.pic_root,
+                    authorized_project_home_root=self.project_home_root,
+                )
+        successor = self._publish_test_control_plane_successor(self.pic_root)
+        project_home_successor = self._publish_test_control_plane_successor(
+            self.project_home_root
+        )
+        self.assertEqual(successor.name, project_home_successor.name)
+        full_row = (
+            "12345|run_installed_control_plane_job.sh|CANCELLED by 18664|0|0||"
+            "ast207|2026-05-30T15:47:31|None|2026-05-30T15:47:31|0:0\n"
+        )
+        short_row = "12345|CANCELLED by 18664|0|0||ast207\n"
+
+        def scheduler_output(command: list[str], **kwargs: object) -> str:
+            if command[0] == TRUSTED_SCONTROL:
+                raise subprocess.CalledProcessError(
+                    1,
+                    command,
+                    stderr="slurm_load_jobs error: Invalid job id specified\n",
+                )
+            if command[0] == TRUSTED_SQUEUE:
+                return ""
+            self.assertEqual(command[0], TRUSTED_SACCT)
+            return short_row if "JobIDRaw,State,ElapsedRaw" in command[-1] else full_row
+
+        real_append = reconcile_frontier_job.append_primary_event_locked
+        append_count = 0
+
+        def fail_second_append(*args: object, **kwargs: object) -> dict[str, object]:
+            nonlocal append_count
+            append_count += 1
+            if append_count == 2:
+                raise RuntimeError("simulated terminal reconciliation interruption")
+            return real_append(*args, **kwargs)
+
+        with patch.object(
+            terminal_recovery_handoff.subprocess,
+            "check_output",
+            side_effect=scheduler_output,
+        ):
+            handoff = self._create_test_terminal_recovery_handoff(
+                successor,
+                authorize_purged_cancelled_zero_execution=True,
+            )
+            with patch(
+                "reconcile_frontier_job.append_primary_event_locked",
+                side_effect=fail_second_append,
+            ):
+                with self.assertRaises(RuntimeError):
+                    reconcile(
+                        job_id="12345",
+                        ledger_jsonl=self.ledger,
+                        ledger_csv=self.csv,
+                        receipts_jsonl=self.receipts,
+                        mirror_jsonl=self.mirror,
+                        control_plane_dir=successor,
+                        authorized_pic_root=self.pic_root,
+                        authorized_project_home_root=self.project_home_root,
+                        terminal_recovery_handoff=handoff,
+                    )
+        marker_path = self.pic_root / "ledger" / "pending_submission.json"
+        self.assertTrue(marker_path.is_file())
+        interrupted_records = validate_primary_chain(self.ledger)
+        self.assertEqual(interrupted_records[-1]["event_type"], "job_id_attached")
+        with patch.object(
+            terminal_recovery_handoff.subprocess,
+            "check_output",
+            side_effect=AssertionError("retry must use the frozen scheduler snapshot"),
+        ):
+            with patch(
+                "reconcile_frontier_job._scheduler_result",
+                side_effect=AssertionError("retry must not query scheduler accounting"),
+            ):
+                result = reconcile(
+                    job_id="12345",
+                    ledger_jsonl=self.ledger,
+                    ledger_csv=self.csv,
+                    receipts_jsonl=self.receipts,
+                    mirror_jsonl=self.mirror,
+                    control_plane_dir=successor,
+                    authorized_pic_root=self.pic_root,
+                    authorized_project_home_root=self.project_home_root,
+                    terminal_recovery_handoff=handoff,
+                )
+        self.assertEqual(result["event_type"], "reconciliation")
+        self.assertFalse(marker_path.exists())
+        records = validate_primary_chain(self.ledger)
+        self.assertEqual(
+            [record["event_type"] for record in records].count("job_id_attached"),
+            1,
+        )
+        self.assertEqual(
+            [record["event_type"] for record in records].count("reconciliation"),
+            1,
+        )
+
+    def test_successor_reconcile_resumes_after_attachment_append_failure(self) -> None:
+        manifest_path = self._create_manifest()
+        reservation = self._reserve(manifest_path)
+        reservation_id = str(reservation["reservation_id"])
+        scheduler = (
+            f"JobId=12345 JobState=CANCELLED Account=ast207 "
+            f"Comment=pic-reservation={reservation_id}"
+        )
+        with patch(
+            "validate_and_reserve_frontier_job._scheduler_job_output",
+            return_value=scheduler,
+        ):
+            self._mark_dispatch_started(reservation_id)
+            with self.assertRaises(ValueError):
+                mark_submitted(
+                    reservation_id=reservation_id,
+                    job_id="12345",
+                    ledger_jsonl=self.ledger,
+                    control_plane_dir=self.control_plane_dir,
+                    authorized_pic_root=self.pic_root,
+                    authorized_project_home_root=self.project_home_root,
+                )
+        successor = self._publish_test_control_plane_successor(self.pic_root)
+        project_home_successor = self._publish_test_control_plane_successor(
+            self.project_home_root
+        )
+        self.assertEqual(successor.name, project_home_successor.name)
+        handoff = self._create_test_terminal_recovery_handoff(successor)
+        real_append = reconcile_frontier_job.append_primary_event_locked
+        append_count = 0
+
+        def fail_second_append(*args: object, **kwargs: object) -> dict[str, object]:
+            nonlocal append_count
+            append_count += 1
+            if append_count == 2:
+                raise RuntimeError("simulated terminal reconciliation interruption")
+            return real_append(*args, **kwargs)
+
+        with patch(
+            "validate_and_reserve_frontier_job._scheduler_job_output",
+            return_value=scheduler,
+        ):
+            with patch(
+                "reconcile_frontier_job._scheduler_result",
+                return_value=("CANCELLED", 0, 1),
+            ):
+                with patch(
+                    "reconcile_frontier_job.append_primary_event_locked",
+                    side_effect=fail_second_append,
+                ):
+                    with self.assertRaises(RuntimeError):
+                        reconcile(
+                            job_id="12345",
+                            ledger_jsonl=self.ledger,
+                            ledger_csv=self.csv,
+                            receipts_jsonl=self.receipts,
+                            mirror_jsonl=self.mirror,
+                            control_plane_dir=successor,
+                            authorized_pic_root=self.pic_root,
+                            authorized_project_home_root=self.project_home_root,
+                            terminal_recovery_handoff=handoff,
+                        )
+        marker_path = self.pic_root / "ledger" / "pending_submission.json"
+        self.assertTrue(marker_path.is_file())
+        interrupted_records = validate_primary_chain(self.ledger)
+        self.assertEqual(
+            [record["event_type"] for record in interrupted_records].count(
+                "job_id_attached"
+            ),
+            1,
+        )
+        with self.assertRaises(ValueError):
+            repair_reservation_attachments(
+                reservation_id=reservation_id,
+                ledger_jsonl=self.ledger,
+                ledger_csv=self.csv,
+                receipts_jsonl=self.receipts,
+                mirror_jsonl=self.mirror,
+                control_plane_dir=self.control_plane_dir,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+        self.assertTrue(marker_path.is_file())
+        with patch(
+            "validate_and_reserve_frontier_job._scheduler_job_output",
+            return_value=scheduler,
+        ):
+            with patch(
+                "reconcile_frontier_job._scheduler_result",
+                return_value=("CANCELLED", 0, 1),
+            ):
+                result = reconcile(
+                    job_id="12345",
+                    ledger_jsonl=self.ledger,
+                    ledger_csv=self.csv,
+                    receipts_jsonl=self.receipts,
+                    mirror_jsonl=self.mirror,
+                    control_plane_dir=successor,
+                    authorized_pic_root=self.pic_root,
+                    authorized_project_home_root=self.project_home_root,
+                    terminal_recovery_handoff=handoff,
+                )
+        self.assertEqual(result["state"], "CANCELLED")
+        self.assertFalse(marker_path.exists())
+        records = validate_primary_chain(self.ledger)
+        self.assertEqual(
+            [record["event_type"] for record in records].count("job_id_attached"),
+            1,
+        )
+        self.assertEqual(
+            [record["event_type"] for record in records].count("reconciliation"),
+            1,
+        )
+
+    def test_successor_reconcile_retry_clears_marker_after_terminal_append(
+        self,
+    ) -> None:
+        manifest_path = self._create_manifest()
+        reservation = self._reserve(manifest_path)
+        reservation_id = str(reservation["reservation_id"])
+        scheduler = (
+            f"JobId=12345 JobState=CANCELLED Account=ast207 "
+            f"Comment=pic-reservation={reservation_id}"
+        )
+        with patch(
+            "validate_and_reserve_frontier_job._scheduler_job_output",
+            return_value=scheduler,
+        ):
+            self._mark_dispatch_started(reservation_id)
+            with self.assertRaises(ValueError):
+                mark_submitted(
+                    reservation_id=reservation_id,
+                    job_id="12345",
+                    ledger_jsonl=self.ledger,
+                    control_plane_dir=self.control_plane_dir,
+                    authorized_pic_root=self.pic_root,
+                    authorized_project_home_root=self.project_home_root,
+                )
+        successor = self._publish_test_control_plane_successor(self.pic_root)
+        project_home_successor = self._publish_test_control_plane_successor(
+            self.project_home_root
+        )
+        self.assertEqual(successor.name, project_home_successor.name)
+        handoff = self._create_test_terminal_recovery_handoff(successor)
+        with patch(
+            "validate_and_reserve_frontier_job._scheduler_job_output",
+            return_value=scheduler,
+        ):
+            with patch(
+                "reconcile_frontier_job._scheduler_result",
+                return_value=("CANCELLED", 0, 1),
+            ):
+                with patch(
+                    "reconcile_frontier_job._clear_matching_pending_marker",
+                    side_effect=RuntimeError("simulated marker cleanup interruption"),
+                ):
+                    with self.assertRaises(RuntimeError):
+                        reconcile(
+                            job_id="12345",
+                            ledger_jsonl=self.ledger,
+                            ledger_csv=self.csv,
+                            receipts_jsonl=self.receipts,
+                            mirror_jsonl=self.mirror,
+                            control_plane_dir=successor,
+                            authorized_pic_root=self.pic_root,
+                            authorized_project_home_root=self.project_home_root,
+                            terminal_recovery_handoff=handoff,
+                        )
+        marker_path = self.pic_root / "ledger" / "pending_submission.json"
+        self.assertTrue(marker_path.is_file())
+        interrupted_records = validate_primary_chain(self.ledger)
+        with patch("reconcile_frontier_job._scheduler_result") as scheduler_result:
+            result = reconcile(
+                job_id="12345",
+                ledger_jsonl=self.ledger,
+                ledger_csv=self.csv,
+                receipts_jsonl=self.receipts,
+                mirror_jsonl=self.mirror,
+                control_plane_dir=successor,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+                terminal_recovery_handoff=handoff,
+            )
+        scheduler_result.assert_not_called()
+        self.assertFalse(marker_path.exists())
+        self.assertEqual(result["event_type"], "reconciliation")
+        self.assertEqual(validate_primary_chain(self.ledger), interrupted_records)
+
+    def test_successor_reconcile_rejects_missing_prior_pair_before_scheduler_query(
+        self,
+    ) -> None:
+        manifest_path = self._create_manifest()
+        reservation = self._reserve(manifest_path)
+        self._attach(str(reservation["reservation_id"]))
+        successor = self._publish_test_control_plane_successor(self.pic_root)
+        project_home_successor = self._publish_test_control_plane_successor(
+            self.project_home_root
+        )
+        self.assertEqual(successor.name, project_home_successor.name)
+        self.project_home_control_plane_dir.rename(
+            self.project_home_control_plane_dir.with_name("missing-prior-control-plane")
+        )
+        with patch("reconcile_frontier_job._scheduler_result") as scheduler_result:
+            with self.assertRaises(ValueError):
+                reconcile(
+                    job_id="12345",
+                    ledger_jsonl=self.ledger,
+                    ledger_csv=self.csv,
+                    receipts_jsonl=self.receipts,
+                    mirror_jsonl=self.mirror,
+                    control_plane_dir=successor,
+                    authorized_pic_root=self.pic_root,
+                    authorized_project_home_root=self.project_home_root,
+                    terminal_recovery_handoff=(
+                        self.pic_root / "policy" / "recovery_handoffs" / f"{uuid.uuid4()}.json"
+                    ),
+                )
+        scheduler_result.assert_not_called()
+
+    def test_successor_reconcile_requires_explicit_prior_version_before_scheduler_query(
+        self,
+    ) -> None:
+        manifest_path = self._create_manifest()
+        reservation = self._reserve(manifest_path)
+        reservation_id = str(reservation["reservation_id"])
+        scheduler = (
+            f"JobId=12345 JobState=CANCELLED Account=ast207 "
+            f"Comment=pic-reservation={reservation_id}"
+        )
+        with patch(
+            "validate_and_reserve_frontier_job._scheduler_job_output",
+            return_value=scheduler,
+        ):
+            self._mark_dispatch_started(reservation_id)
+            with self.assertRaises(ValueError):
+                mark_submitted(
+                    reservation_id=reservation_id,
+                    job_id="12345",
+                    ledger_jsonl=self.ledger,
+                    control_plane_dir=self.control_plane_dir,
+                    authorized_pic_root=self.pic_root,
+                    authorized_project_home_root=self.project_home_root,
+                )
+        successor = self._publish_test_control_plane_successor(self.pic_root)
+        project_home_successor = self._publish_test_control_plane_successor(
+            self.project_home_root
+        )
+        self.assertEqual(successor.name, project_home_successor.name)
+        with patch("reconcile_frontier_job._scheduler_result") as scheduler_result:
+            with self.assertRaises(ValueError):
+                reconcile(
+                    job_id="12345",
+                    ledger_jsonl=self.ledger,
+                    ledger_csv=self.csv,
+                    receipts_jsonl=self.receipts,
+                    mirror_jsonl=self.mirror,
+                    control_plane_dir=successor,
+                    authorized_pic_root=self.pic_root,
+                    authorized_project_home_root=self.project_home_root,
+                )
+        scheduler_result.assert_not_called()
+
+    def test_policy_promotion_rejects_pending_terminal_recovery(self) -> None:
+        manifest_path = self._create_manifest()
+        reservation = self._reserve(manifest_path)
+        reservation_id = str(reservation["reservation_id"])
+        scheduler = (
+            f"JobId=12345 JobState=CANCELLED Account=ast207 "
+            f"Comment=pic-reservation={reservation_id}"
+        )
+        with patch(
+            "validate_and_reserve_frontier_job._scheduler_job_output",
+            return_value=scheduler,
+        ):
+            self._mark_dispatch_started(reservation_id)
+            with self.assertRaises(ValueError):
+                mark_submitted(
+                    reservation_id=reservation_id,
+                    job_id="12345",
+                    ledger_jsonl=self.ledger,
+                    control_plane_dir=self.control_plane_dir,
+                    authorized_pic_root=self.pic_root,
+                    authorized_project_home_root=self.project_home_root,
+                )
+        successor = self._publish_test_control_plane_successor(self.pic_root)
+        project_home_successor = self._publish_test_control_plane_successor(
+            self.project_home_root
+        )
+        self.assertEqual(successor.name, project_home_successor.name)
+        with self.assertRaises(ValueError):
+            self._promote_test_control_plane_successor(successor)
+
+    def test_successor_reconcile_rejects_received_marker_field_mutation(
+        self,
+    ) -> None:
+        manifest_path = self._create_manifest()
+        reservation = self._reserve(manifest_path)
+        reservation_id = str(reservation["reservation_id"])
+        scheduler = (
+            f"JobId=12345 JobState=CANCELLED Account=ast207 "
+            f"Comment=pic-reservation={reservation_id}"
+        )
+        with patch(
+            "validate_and_reserve_frontier_job._scheduler_job_output",
+            return_value=scheduler,
+        ):
+            self._mark_dispatch_started(reservation_id)
+            with self.assertRaises(ValueError):
+                mark_submitted(
+                    reservation_id=reservation_id,
+                    job_id="12345",
+                    ledger_jsonl=self.ledger,
+                    control_plane_dir=self.control_plane_dir,
+                    authorized_pic_root=self.pic_root,
+                    authorized_project_home_root=self.project_home_root,
+                )
+        successor = self._publish_test_control_plane_successor(self.pic_root)
+        project_home_successor = self._publish_test_control_plane_successor(
+            self.project_home_root
+        )
+        self.assertEqual(successor.name, project_home_successor.name)
+        handoff = self._create_test_terminal_recovery_handoff(successor)
+        marker_path = self.pic_root / "ledger" / "pending_submission.json"
+        canonical_marker = json.loads(marker_path.read_text(encoding="utf-8"))
+        records_before = validate_primary_chain(self.ledger)
+        marker_path.chmod(0o600)
+        mutations = [
+            ("schema_version", 3),
+            ("state", "submitted_not_attached"),
+            ("reservation_id", "wrong"),
+            ("submission_id", "wrong"),
+            ("manifest_path", "wrong"),
+            ("manifest_sha256", "0" * 64),
+            ("job_id", "wrong"),
+            ("extra", "wrong"),
+        ]
+        for key, value in mutations:
+            marker = dict(canonical_marker)
+            marker[key] = value
+            marker_path.write_text(json.dumps(marker), encoding="utf-8")
+            with patch("reconcile_frontier_job._scheduler_result") as scheduler_result:
+                with self.assertRaises(ValueError):
+                    reconcile(
+                        job_id="12345",
+                        ledger_jsonl=self.ledger,
+                        ledger_csv=self.csv,
+                        receipts_jsonl=self.receipts,
+                        mirror_jsonl=self.mirror,
+                        control_plane_dir=successor,
+                        authorized_pic_root=self.pic_root,
+                        authorized_project_home_root=self.project_home_root,
+                        terminal_recovery_handoff=handoff,
+                    )
+            scheduler_result.assert_not_called()
+        marker_path.write_text(json.dumps(canonical_marker), encoding="utf-8")
+        marker_path.chmod(0o400)
+        self.assertEqual(validate_primary_chain(self.ledger), records_before)
+
+    def test_successor_only_allows_terminal_reconciliation_for_prior_generation(
+        self,
+    ) -> None:
+        manifest_path = self._create_manifest()
+        reservation = self._reserve(manifest_path)
+        reservation_id = str(reservation["reservation_id"])
+        successor = self._publish_test_control_plane_successor(self.pic_root)
+        project_home_successor = self._publish_test_control_plane_successor(
+            self.project_home_root
+        )
+        self.assertEqual(successor.name, project_home_successor.name)
+        records_before = validate_primary_chain(self.ledger)
+        with self.assertRaises(ValueError):
+            mark_dispatch_started(
+                reservation_id=reservation_id,
+                ledger_jsonl=self.ledger,
+                ledger_csv=self.csv,
+                receipts_jsonl=self.receipts,
+                mirror_jsonl=self.mirror,
+                control_plane_dir=successor,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+        with self.assertRaises(ValueError):
+            reservation_bound_manifest(
+                manifest_path,
+                reservation_id,
+                ledger_jsonl=self.ledger,
+                receipts_jsonl=self.receipts,
+                mirror_jsonl=self.mirror,
+                control_plane_dir=successor,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+                require_reserved=True,
+            )
+        self.assertEqual(validate_primary_chain(self.ledger), records_before)
+
+    def test_successor_reconcile_rejects_active_prior_job_without_append(self) -> None:
+        manifest_path = self._create_manifest()
+        reservation = self._reserve(manifest_path)
+        reservation_id = str(reservation["reservation_id"])
+        scheduler = (
+            f"JobId=12345 JobState=CANCELLED Account=ast207 "
+            f"Comment=pic-reservation={reservation_id}"
+        )
+        with patch(
+            "validate_and_reserve_frontier_job._scheduler_job_output",
+            return_value=scheduler,
+        ):
+            self._mark_dispatch_started(reservation_id)
+            with self.assertRaises(ValueError):
+                mark_submitted(
+                    reservation_id=reservation_id,
+                    job_id="12345",
+                    ledger_jsonl=self.ledger,
+                    control_plane_dir=self.control_plane_dir,
+                    authorized_pic_root=self.pic_root,
+                    authorized_project_home_root=self.project_home_root,
+                )
+        successor = self._publish_test_control_plane_successor(self.pic_root)
+        project_home_successor = self._publish_test_control_plane_successor(
+            self.project_home_root
+        )
+        self.assertEqual(successor.name, project_home_successor.name)
+        handoff = self._create_test_terminal_recovery_handoff(successor)
+        records_before = validate_primary_chain(self.ledger)
+        with patch(
+            "validate_and_reserve_frontier_job._scheduler_job_output",
+            return_value=scheduler,
+        ):
+            with patch(
+                "reconcile_frontier_job._scheduler_result",
+                return_value=("RUNNING", 0, 1),
+            ):
+                with self.assertRaises(ValueError):
+                    reconcile(
+                        job_id="12345",
+                        ledger_jsonl=self.ledger,
+                        ledger_csv=self.csv,
+                        receipts_jsonl=self.receipts,
+                        mirror_jsonl=self.mirror,
+                        control_plane_dir=successor,
+                        authorized_pic_root=self.pic_root,
+                        authorized_project_home_root=self.project_home_root,
+                        terminal_recovery_handoff=handoff,
+                    )
+        self.assertEqual(validate_primary_chain(self.ledger), records_before)
 
     def test_registered_science_rejects_pending_clean_candidate_freeze(self) -> None:
         self._write_science_config(authorize=False)

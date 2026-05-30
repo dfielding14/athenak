@@ -536,9 +536,48 @@ After the job reaches a terminal Slurm state, run:
 ```
 
 Reconciliation queries `sacct` itself and accepts only the allocation row whose
-job ID, `AST207` account and `pic-reservation=<reservation-id>` comment match
-the mirrored reservation. Caller-supplied terminal state, time and nodes are
-not accepted.
+job ID and scheduler-reported account match the mirrored reservation. Frontier
+may report the configured `AST207` account canonically as `ast207`. A non-empty
+`sacct` comment must exactly match `pic-reservation=<reservation-id>`. If
+`sacct` omits the comment, reconciliation fails closed unless a fresh `scontrol`
+query proves the exact job ID, account and reservation comment binding.
+Caller-supplied terminal state, time and nodes are not accepted.
+
+An immutable successor controller may reconcile a stranded terminal
+`scheduler_job_id_received` marker from a prior installed generation only
+through an immutable mirrored handoff created by the successor's installed
+`terminal_recovery_handoff.py` tool. Supply the resulting Orion path as
+`--terminal-recovery-handoff <path>`. The prior Orion and Project Home
+controller copies and active policy snapshot must remain immutable and valid,
+and the marker must exactly match the reserved ledger event. Paired reviewed
+installation is the explicit successor-authorization boundary: do not invoke a
+stale installed generation to create a recovery handoff.
+
+If `scontrol` already purged a stranded held cancellation, stop for reviewed
+recovery. The successor handoff tool has one explicit exceptional mode:
+
+```bash
+"${CONTROL_PLANE[@]}" terminal_recovery_handoff.py \
+  --job-id <job-id> \
+  --ledger-jsonl "${PIC_ROOT}/ledger/node_hours.jsonl" \
+  --ledger-csv "${PIC_ROOT}/ledger/node_hours.csv" \
+  --receipts-jsonl "${PIC_ROOT}/ledger/mirror_receipts.jsonl" \
+  --mirror-jsonl "${PROJECT_HOME_MIRROR_ROOT}/ledger/node_hours.jsonl" \
+  --authorize-purged-cancelled-zero-execution \
+  --attest-reviewed-purged-reservation-job-binding
+```
+
+That mode fails closed unless fresh `sacct`, `scontrol` and `squeue` queries
+prove the trusted wrapper job name, exact scheduler-record purge response,
+empty live queue, `CANCELLED` state, zero elapsed seconds, zero allocated
+nodes, empty accounting comment, authorized account, no start time, equal
+submit and end times, and `0:0` exit code. The immutable mirrored handoff
+freezes that accounting snapshot. It does not authorize broader
+missing-`scontrol` recovery. A purged record cannot independently prove which
+reservation produced the scheduler job ID, so the second flag records a
+required reviewed operator attestation for that exact reservation-to-job
+binding in the immutable mirrored handoff. Do not use the exceptional mode
+without preserving and reviewing the submission incident evidence.
 
 If `pending_submission.json` remains, stop new submissions. Its durable states
 include `reserved_not_submitted`, `scheduler_dispatch_started`,

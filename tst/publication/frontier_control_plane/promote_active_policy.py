@@ -29,9 +29,48 @@ from control_plane_common import require_no_symlink_components_below
 from control_plane_common import require_storage_policy_unlock_snapshot
 from control_plane_common import stable_serialization_anchor
 from control_plane_common import validate_storage_policy, verify_installed_control_plane
+from ledger import _path_exists, _pinned_parent_directories
+from ledger import latest_reservations, validate_mirrored_state
 
 
 SCRIPT_DIR = Path(__file__).absolute().parent
+
+
+def _require_no_outstanding_submissions(
+    authorized_pic_root: Path,
+    authorized_project_home_root: Path,
+) -> None:
+    ledger_root = Path(os.path.abspath(authorized_pic_root)) / "ledger"
+    project_ledger_root = Path(os.path.abspath(authorized_project_home_root)) / "ledger"
+    marker = ledger_root / "pending_submission.json"
+    ledger = ledger_root / "node_hours.jsonl"
+    receipts = ledger_root / "mirror_receipts.jsonl"
+    mirror = project_ledger_root / "node_hours.jsonl"
+    paths = [ledger, receipts, mirror]
+    resolved_mirror = mirror.resolve()
+    with _pinned_parent_directories([marker, *paths, resolved_mirror]):
+        if _path_exists(marker):
+            raise ValueError("Policy promotion is blocked by a pending scheduler submission")
+        existing = [_path_exists(path) for path in paths]
+        if not any(existing):
+            return
+        if not all(existing):
+            raise ValueError("Policy promotion is blocked by incomplete mirrored ledger state")
+        try:
+            records = validate_mirrored_state(ledger, receipts, mirror)
+        except ValueError as lexical_error:
+            if resolved_mirror == mirror:
+                raise
+            try:
+                records = validate_mirrored_state(ledger, receipts, resolved_mirror)
+            except ValueError:
+                raise lexical_error
+        outstanding = [
+            record for record in latest_reservations(records).values()
+            if record.get("state") in {"reserved", "submitted"}
+        ]
+        if outstanding:
+            raise ValueError("Policy promotion is blocked by an outstanding reservation")
 
 
 def _require_same_directory(path: Path, descriptor: int) -> None:
@@ -215,6 +254,9 @@ def promote(
     mirror_policy_parent = Path(os.path.abspath(authorized_project_home_root)) / "policy"
     durable_mkdir_parents(mirror_policy_parent, root=authorized_project_home_root)
     with _promotion_lock(authorized_pic_root) as policy_descriptor:
+        _require_no_outstanding_submissions(
+            authorized_pic_root, authorized_project_home_root
+        )
         mirror_policy_descriptor = open_directory_below(
             mirror_policy_parent, root=authorized_project_home_root
         )

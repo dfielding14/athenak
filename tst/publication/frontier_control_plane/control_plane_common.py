@@ -67,6 +67,16 @@ AUTHORIZED_LONG_TERM_STORAGE_RISK = (
 AUTHORIZED_LONG_TERM_STORAGE_BLOCKS = [
     "terminal_durable_retention_signoff_pending_external_review",
 ]
+
+
+def scheduler_account_matches_authorized(value: object) -> bool:
+    """Accept the configured account or Slurm's canonical lowercase spelling."""
+    return isinstance(value, str) and value in {
+        AUTHORIZED_ACCOUNT,
+        AUTHORIZED_ACCOUNT.lower(),
+    }
+
+
 TRUSTED_GIT = "/usr/bin/git"
 TRUSTED_GIT_OPTIONS = [
     "-c",
@@ -321,6 +331,7 @@ CONTROL_PLANE_FILES = [
     "run_installed_control_plane_job.sh",
     "run_control_plane.py",
     "submit_frontier_job.sh",
+    "terminal_recovery_handoff.py",
     "validate_and_reserve_frontier_job.py",
     "verify_compute_node_snapshot.py",
     "write_orion_build_profile.py",
