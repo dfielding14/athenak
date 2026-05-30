@@ -10,7 +10,7 @@
 | Plan-revision baseline | Clean `PIC` branch at commit `1f7aeff19e55a909d2c8dd9c26d2eafe09673ef6`, tracking `origin/PIC` |
 | Production verdict at review time | **Not production-ready. Paper reproduction is blocked by model-level implementation gaps.** |
 | Supersedes | All scope, terminology, pass criteria, operational instructions and sign-off language in `tst/publication/PIC_LARGE_MACHINE_VALIDATION.md`; that retired note is historical evidence only |
-| Required execution root on Frontier | `/lustre/orion/ast207/proj-shared/dfielding/PIC` |
+| Required execution root on Frontier | Run every Frontier simulation under `/lustre/orion/ast207/proj-shared/dfielding/PIC`. No alternate simulation directory is authorized. |
 | Frontier scheduling constraint | Prefer the `debug` QOS only for eligible short non-production work when the user has no `debug` job in any state; otherwise use the `normal` QOS on the `batch` partition. Keep AthenaK PIC submissions serial across both QOS classes. |
 | Total Frontier testing budget | 4000 node-hours maximum, tracked before and after every submitted job. Stop and ask the user for permission before increasing the cap. |
 
@@ -74,8 +74,10 @@ then should Frontier be used for GPU, AMR, scaling, and publication simulations.
    dispersion relation, conservation budget, spectrum, or shock diagnostic.
 5. Any current dirty-tree changes must be reviewed and curated into small,
    justified commits before being used as a production baseline.
-6. On Frontier, all simulation, build, log, metric, ledger, and artifact paths
-   must remain below `/lustre/orion/ast207/proj-shared/dfielding/PIC`.
+6. Run every Frontier simulation under
+   `/lustre/orion/ast207/proj-shared/dfielding/PIC`. No alternate simulation
+   directory is authorized. All build, log, metric, ledger, runtime-status and
+   artifact paths must remain below that same root.
 7. On Frontier, prefer `debug` only for eligible short non-production work when
    the user has no `debug` job in any state. Otherwise submit to the `normal`
    QOS on the `batch` partition. Keep AthenaK PIC submissions serial across both
@@ -1660,7 +1662,8 @@ future agents must:
 ### Mandatory Resource And Accounting Policy
 
 1. Set `PIC_ROOT=/lustre/orion/ast207/proj-shared/dfielding/PIC` for every
-   Frontier action. Do not run simulations in another project directory.
+   Frontier action. Run every simulation under that exact root. Do not launch,
+   execute, continue or write simulation output in another project directory.
 2. Use the `batch` partition. Prefer `#SBATCH -q debug` only for eligible short
    non-production work when the user has no `debug` job in any state; otherwise
    use `#SBATCH -q normal`. A `debug` request must not exceed `02:00:00`.
