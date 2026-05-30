@@ -33,12 +33,13 @@
     "verified_byte_identical_to_live_immutable_stderr": true
   },
   "reviewed_validator_binding": {
+    "source_commit": "6fa926a9bf113edf6258a7555aeab4ac450ca06b",
     "support_module": "tst/publication/frontier_f1_structured_artifacts.py",
     "support_module_sha256": "cf090115bcdfd143f67b12339115102b57e74cf3205b1ebb1521c144c3415a5a",
     "gyro_analyzer": "tst/publication/frontier_f1_gpu_relativistic_gyro_analysis.py",
-    "gyro_analyzer_sha256": "411337175b5d3a2506939833656142a766dfac00b54ae8c1f7b34ca28e0ed905",
+    "gyro_analyzer_sha256": "e9a5c93aea3e2cc288e07fc2adbc93ab22c49df74c1e83dfaf5cd694eced7d68",
     "paper_coupling_analyzer": "tst/publication/frontier_f1_gpu_paper_coupling_analysis.py",
-    "paper_coupling_analyzer_sha256": "803c5e4ad369ef1deb37ad1a58dc7080b1c732f88600e21d5b421b446ddcab0f"
+    "paper_coupling_analyzer_sha256": "f9c23bddf0ad0ac991baced9ffc7cf94e9b9776993962f2ece042e41aec9556b"
   },
-  "disposition": "pass_historical_transcript_bound_to_local_fixture_retry_requires_separate_v3_policy_activation"
+  "disposition": "pass_historical_transcript_bound_to_local_fixture_retry_requires_separate_v2_policy_activation"
 }

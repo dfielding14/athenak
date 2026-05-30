@@ -1,0 +1,379 @@
+{
+  "artifact_dir": "/lustre/orion/ast207/proj-shared/dfielding/PIC/runs/f1_gpu_relativistic_gyro/13f053df-e488-4394-82a4-585c02d92063",
+  "campaign": "f1_gpu_relativistic_gyro",
+  "clean_candidate_manifest_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/clean_candidates/31be2cd6-19db-4246-9857-06fc2f523c19/clean_candidate_manifest.json",
+  "clean_candidate_manifest_sha256": "3174515d1578f0310e8ce4b0bf214050f8b4d95ff4af3c694b44eb466b7dff41",
+  "control_plane_inventory": [
+    {
+      "path": "clean_candidate.schema.json",
+      "sha256": "230b107ed048065b1269d6485e45614dce694e461f0c4b5798ebc2b6e638661b"
+    },
+    {
+      "path": "control_plane.schema.json",
+      "sha256": "f9629c810d3c728c1e6837e55a3b58f572df64241cfbaf3e2a4ae95cda6d47ad"
+    },
+    {
+      "path": "control_plane_common.py",
+      "sha256": "f9fe83334d1cee5cb0ffc107314fbe1adfe873d445c6ba63bf4a21713e696050"
+    },
+    {
+      "path": "create_clean_candidate_freeze.py",
+      "sha256": "dbc0b256ac60098c83389b9997726fff9f4c157b3ad0517b377af940e8dc814b"
+    },
+    {
+      "path": "create_pre_submit_manifest.py",
+      "sha256": "7ca6c4009e3d8c912393dc8ddfa49efcc2d40a8e7836aee3586d34b35a4d20df"
+    },
+    {
+      "path": "frontier_pic_environment.sh",
+      "sha256": "7ff6cff3e263e8b4552bcbac1d5b55a85264a2a7af5565bbc9856584e35402c1"
+    },
+    {
+      "path": "initialize_frontier_ledger.py",
+      "sha256": "9f2add84d80e9fc487e6655c2280454507e728781169113390ecc152867fd5a5"
+    },
+    {
+      "path": "launch_trampoline.py",
+      "sha256": "2d3b9f1db9c30e402c217620ba40f6f7edac6356b184b0746a8d0972002f397f"
+    },
+    {
+      "path": "launch_with_frontier_profile.sh",
+      "sha256": "625d4fe1e7d7cfa5a9782b66ae266230da42e17e593f3501d08ab4d045af4a34"
+    },
+    {
+      "path": "ledger.py",
+      "sha256": "1dba994420a0defd83f73979ec85c2d3d14709a6d4afbb27569781640d45c42f"
+    },
+    {
+      "path": "promote_active_policy.py",
+      "sha256": "e8d6e527d54d38068e3eee4c6ed52570310c6316095df95a8ffcdb0098cfa3a5"
+    },
+    {
+      "path": "reconcile_frontier_job.py",
+      "sha256": "cfd0080fbe1a9885250899046eee1e7d3fdfdb17f6a81e179f85f0265fb80d69"
+    },
+    {
+      "path": "run_installed_control_plane_job.sh",
+      "sha256": "0784f29d3c9f03b9f404efcb19853bd0e6c681568974480d43242578d69291e1"
+    },
+    {
+      "path": "run_control_plane.py",
+      "sha256": "cc478aa324ab62c2b93b4684b97067a3ef4fc08dc48698303f12b192db4c8f8f"
+    },
+    {
+      "path": "submit_frontier_job.sh",
+      "sha256": "10916e1e59a8890186e2b2dfc8b2aa585ea0c6178df33a1d1334305b65ff0500"
+    },
+    {
+      "path": "terminal_recovery_handoff.py",
+      "sha256": "7fbcff2a94fd2c6eac6f689a6199271507aabdbf07cacc52b29abe04283a0813"
+    },
+    {
+      "path": "validate_and_reserve_frontier_job.py",
+      "sha256": "40b1b9064a8e8e95d3bef64d8f28ec0ccdb1562a693000acb8ff9d6eb51058a0"
+    },
+    {
+      "path": "verify_compute_node_snapshot.py",
+      "sha256": "57e94e5ba0e390d005a2da9ebff2a0e97eca794e4ac111ed82b77433d38a7dea"
+    },
+    {
+      "path": "write_orion_build_profile.py",
+      "sha256": "56d845a4c8b322400f1b43c597cdc8bfbe1bd4c0606b59bf7637d0eba768a0df"
+    }
+  ],
+  "control_plane_version": "4ccde8dfe557fbb6450c15b2ee68d41d2ac0711d5d56d79e775fa75178177bd3",
+  "evidence_class": "frontier_f1_clean_candidate_gpu_pusher_oracle",
+  "git_commit": "4cceb5d4e9b78e7058d7a696653d56604f94bd53",
+  "job_script_executable_env": "PIC_EXECUTABLE",
+  "launch_contract": {
+    "actions": [
+      {
+        "action_id": "f1-gyro",
+        "arguments": [
+          {
+            "literal": "-i"
+          },
+          {
+            "snapshot_role": "input-deck"
+          },
+          {
+            "literal": "-d"
+          },
+          {
+            "artifact_directory": "output"
+          },
+          {
+            "literal": "job/basename=f1_gpu_relativistic_gyro"
+          },
+          {
+            "literal": "time/nlim=2"
+          }
+        ],
+        "kind": "athena",
+        "resources": {
+          "cpus_per_task": 7,
+          "gpu_bind": "closest",
+          "gpus_per_task": 1,
+          "nodes": 1,
+          "tasks": 1
+        },
+        "stderr_artifact": "athena_stderr.txt",
+        "stdout_artifact": "athena_stdout.txt"
+      }
+    ],
+    "executor": "trusted_trampoline_athena_argv_v1",
+    "post_actions": [
+      {
+        "action_id": "require-gyro-stdout",
+        "artifact": "athena_stdout.txt",
+        "kind": "artifact_nonempty"
+      },
+      {
+        "action_id": "sha-gyro-stdout",
+        "artifact": "athena_stdout.txt",
+        "kind": "artifact_sha256",
+        "output_artifact": "athena_stdout.sha256"
+      }
+    ],
+    "pre_actions": [],
+    "schema_version": 1
+  },
+  "physical_mode": "paper_test_particle",
+  "pic_root": "/lustre/orion/ast207/proj-shared/dfielding/PIC",
+  "qos_selection_reason": "debug_available",
+  "queue_snapshot_sha256": "d3bae5ba96a8dc8989338f3588afbbef814963d51cb61447fdc30a40135d378b",
+  "registered_science_authorization_id": "f1-clean-gyro-mpich-stderr-v2",
+  "registered_short_nonproduction": true,
+  "schema_version": 1,
+  "selected_qos": "debug",
+  "site_policy_checked_utc": "2026-05-30T22:55:55Z",
+  "snapshot_files": [
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/manifests/f1_gpu_relativistic_gyro/13f053df-e488-4394-82a4-585c02d92063/snapshot/pre_submit_config.json",
+      "role": "pre-submit-config",
+      "sha256": "6dc3338e46c420d575d3844059612c9a943dbebef23329d2f3817a02b66a1810",
+      "source_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/jobs/f1_gpu_relativistic_gyro/13f053df-e488-4394-82a4-585c02d92063/pre_submit_config.json",
+      "source_sha256": "6dc3338e46c420d575d3844059612c9a943dbebef23329d2f3817a02b66a1810"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/manifests/f1_gpu_relativistic_gyro/13f053df-e488-4394-82a4-585c02d92063/snapshot/clean_candidate_manifest.json",
+      "role": "clean-candidate-manifest",
+      "sha256": "3174515d1578f0310e8ce4b0bf214050f8b4d95ff4af3c694b44eb466b7dff41",
+      "source_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/clean_candidates/31be2cd6-19db-4246-9857-06fc2f523c19/clean_candidate_manifest.json",
+      "source_sha256": "3174515d1578f0310e8ce4b0bf214050f8b4d95ff4af3c694b44eb466b7dff41"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/manifests/f1_gpu_relativistic_gyro/13f053df-e488-4394-82a4-585c02d92063/snapshot/job.sh",
+      "role": "job-script",
+      "sha256": "961f1253dc4d9428c53b89c158a457946eb8171e11fa6be4aa13be8ddd4b7c7e",
+      "source_path": "/autofs/nccs-svm1_home2/dfielding/athenak-pic/tst/publication/frontier_f1_structured_gpu_relativistic_gyro_job.sh",
+      "source_sha256": "961f1253dc4d9428c53b89c158a457946eb8171e11fa6be4aa13be8ddd4b7c7e"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/manifests/f1_gpu_relativistic_gyro/13f053df-e488-4394-82a4-585c02d92063/snapshot/athena",
+      "role": "executable",
+      "sha256": "bea2a418faf582e0b7e8a2830494fa156ddddb18763dde21d344a4cba14a60d8",
+      "source_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/clean_candidates/31be2cd6-19db-4246-9857-06fc2f523c19/athena",
+      "source_sha256": "bea2a418faf582e0b7e8a2830494fa156ddddb18763dde21d344a4cba14a60d8"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/manifests/f1_gpu_relativistic_gyro/13f053df-e488-4394-82a4-585c02d92063/snapshot/pic_relativistic_gyro_paper.athinput",
+      "role": "input-deck",
+      "sha256": "994acc009bf7455d3666db44da2c8825b6124ce025a2e3547bef6e7c75992c8e",
+      "source_path": "/autofs/nccs-svm1_home2/dfielding/athenak-pic/inputs/tests/pic_relativistic_gyro_paper.athinput",
+      "source_sha256": "994acc009bf7455d3666db44da2c8825b6124ce025a2e3547bef6e7c75992c8e"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/manifests/f1_gpu_relativistic_gyro/13f053df-e488-4394-82a4-585c02d92063/snapshot/frontier_pic_environment.sh",
+      "role": "environment-profile",
+      "sha256": "7ff6cff3e263e8b4552bcbac1d5b55a85264a2a7af5565bbc9856584e35402c1",
+      "source_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/control_plane/4ccde8dfe557fbb6450c15b2ee68d41d2ac0711d5d56d79e775fa75178177bd3/frontier_pic_environment.sh",
+      "source_sha256": "7ff6cff3e263e8b4552bcbac1d5b55a85264a2a7af5565bbc9856584e35402c1"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/manifests/f1_gpu_relativistic_gyro/13f053df-e488-4394-82a4-585c02d92063/snapshot/timeout_margin.json",
+      "role": "timeout-margin",
+      "sha256": "c74c21a4f31f68b3be37dcda73cf542f1e12c707f619a19e43c772f994f8bd14",
+      "source_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/jobs/f1_gpu_relativistic_gyro/13f053df-e488-4394-82a4-585c02d92063/timeout_margin.json",
+      "source_sha256": "c74c21a4f31f68b3be37dcda73cf542f1e12c707f619a19e43c772f994f8bd14"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/manifests/f1_gpu_relativistic_gyro/13f053df-e488-4394-82a4-585c02d92063/snapshot/verify_compute_node_snapshot.py",
+      "role": "compute-node-verifier",
+      "sha256": "57e94e5ba0e390d005a2da9ebff2a0e97eca794e4ac111ed82b77433d38a7dea",
+      "source_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/control_plane/4ccde8dfe557fbb6450c15b2ee68d41d2ac0711d5d56d79e775fa75178177bd3/verify_compute_node_snapshot.py",
+      "source_sha256": "57e94e5ba0e390d005a2da9ebff2a0e97eca794e4ac111ed82b77433d38a7dea"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/manifests/f1_gpu_relativistic_gyro/13f053df-e488-4394-82a4-585c02d92063/snapshot/control_plane_common.py",
+      "role": "compute-node-verifier-library",
+      "sha256": "f9fe83334d1cee5cb0ffc107314fbe1adfe873d445c6ba63bf4a21713e696050",
+      "source_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/control_plane/4ccde8dfe557fbb6450c15b2ee68d41d2ac0711d5d56d79e775fa75178177bd3/control_plane_common.py",
+      "source_sha256": "f9fe83334d1cee5cb0ffc107314fbe1adfe873d445c6ba63bf4a21713e696050"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/manifests/f1_gpu_relativistic_gyro/13f053df-e488-4394-82a4-585c02d92063/snapshot/control_plane/clean_candidate.schema.json",
+      "role": "control-plane-clean_candidate.schema.json",
+      "sha256": "230b107ed048065b1269d6485e45614dce694e461f0c4b5798ebc2b6e638661b",
+      "source_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/control_plane/4ccde8dfe557fbb6450c15b2ee68d41d2ac0711d5d56d79e775fa75178177bd3/clean_candidate.schema.json",
+      "source_sha256": "230b107ed048065b1269d6485e45614dce694e461f0c4b5798ebc2b6e638661b"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/manifests/f1_gpu_relativistic_gyro/13f053df-e488-4394-82a4-585c02d92063/snapshot/control_plane/control_plane.schema.json",
+      "role": "control-plane-control_plane.schema.json",
+      "sha256": "f9629c810d3c728c1e6837e55a3b58f572df64241cfbaf3e2a4ae95cda6d47ad",
+      "source_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/control_plane/4ccde8dfe557fbb6450c15b2ee68d41d2ac0711d5d56d79e775fa75178177bd3/control_plane.schema.json",
+      "source_sha256": "f9629c810d3c728c1e6837e55a3b58f572df64241cfbaf3e2a4ae95cda6d47ad"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/manifests/f1_gpu_relativistic_gyro/13f053df-e488-4394-82a4-585c02d92063/snapshot/control_plane/control_plane_common.py",
+      "role": "control-plane-control_plane_common.py",
+      "sha256": "f9fe83334d1cee5cb0ffc107314fbe1adfe873d445c6ba63bf4a21713e696050",
+      "source_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/control_plane/4ccde8dfe557fbb6450c15b2ee68d41d2ac0711d5d56d79e775fa75178177bd3/control_plane_common.py",
+      "source_sha256": "f9fe83334d1cee5cb0ffc107314fbe1adfe873d445c6ba63bf4a21713e696050"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/manifests/f1_gpu_relativistic_gyro/13f053df-e488-4394-82a4-585c02d92063/snapshot/control_plane/create_clean_candidate_freeze.py",
+      "role": "control-plane-create_clean_candidate_freeze.py",
+      "sha256": "dbc0b256ac60098c83389b9997726fff9f4c157b3ad0517b377af940e8dc814b",
+      "source_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/control_plane/4ccde8dfe557fbb6450c15b2ee68d41d2ac0711d5d56d79e775fa75178177bd3/create_clean_candidate_freeze.py",
+      "source_sha256": "dbc0b256ac60098c83389b9997726fff9f4c157b3ad0517b377af940e8dc814b"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/manifests/f1_gpu_relativistic_gyro/13f053df-e488-4394-82a4-585c02d92063/snapshot/control_plane/create_pre_submit_manifest.py",
+      "role": "control-plane-create_pre_submit_manifest.py",
+      "sha256": "7ca6c4009e3d8c912393dc8ddfa49efcc2d40a8e7836aee3586d34b35a4d20df",
+      "source_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/control_plane/4ccde8dfe557fbb6450c15b2ee68d41d2ac0711d5d56d79e775fa75178177bd3/create_pre_submit_manifest.py",
+      "source_sha256": "7ca6c4009e3d8c912393dc8ddfa49efcc2d40a8e7836aee3586d34b35a4d20df"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/manifests/f1_gpu_relativistic_gyro/13f053df-e488-4394-82a4-585c02d92063/snapshot/control_plane/frontier_pic_environment.sh",
+      "role": "control-plane-frontier_pic_environment.sh",
+      "sha256": "7ff6cff3e263e8b4552bcbac1d5b55a85264a2a7af5565bbc9856584e35402c1",
+      "source_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/control_plane/4ccde8dfe557fbb6450c15b2ee68d41d2ac0711d5d56d79e775fa75178177bd3/frontier_pic_environment.sh",
+      "source_sha256": "7ff6cff3e263e8b4552bcbac1d5b55a85264a2a7af5565bbc9856584e35402c1"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/manifests/f1_gpu_relativistic_gyro/13f053df-e488-4394-82a4-585c02d92063/snapshot/control_plane/initialize_frontier_ledger.py",
+      "role": "control-plane-initialize_frontier_ledger.py",
+      "sha256": "9f2add84d80e9fc487e6655c2280454507e728781169113390ecc152867fd5a5",
+      "source_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/control_plane/4ccde8dfe557fbb6450c15b2ee68d41d2ac0711d5d56d79e775fa75178177bd3/initialize_frontier_ledger.py",
+      "source_sha256": "9f2add84d80e9fc487e6655c2280454507e728781169113390ecc152867fd5a5"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/manifests/f1_gpu_relativistic_gyro/13f053df-e488-4394-82a4-585c02d92063/snapshot/control_plane/launch_trampoline.py",
+      "role": "control-plane-launch_trampoline.py",
+      "sha256": "2d3b9f1db9c30e402c217620ba40f6f7edac6356b184b0746a8d0972002f397f",
+      "source_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/control_plane/4ccde8dfe557fbb6450c15b2ee68d41d2ac0711d5d56d79e775fa75178177bd3/launch_trampoline.py",
+      "source_sha256": "2d3b9f1db9c30e402c217620ba40f6f7edac6356b184b0746a8d0972002f397f"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/manifests/f1_gpu_relativistic_gyro/13f053df-e488-4394-82a4-585c02d92063/snapshot/control_plane/launch_with_frontier_profile.sh",
+      "role": "control-plane-launch_with_frontier_profile.sh",
+      "sha256": "625d4fe1e7d7cfa5a9782b66ae266230da42e17e593f3501d08ab4d045af4a34",
+      "source_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/control_plane/4ccde8dfe557fbb6450c15b2ee68d41d2ac0711d5d56d79e775fa75178177bd3/launch_with_frontier_profile.sh",
+      "source_sha256": "625d4fe1e7d7cfa5a9782b66ae266230da42e17e593f3501d08ab4d045af4a34"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/manifests/f1_gpu_relativistic_gyro/13f053df-e488-4394-82a4-585c02d92063/snapshot/control_plane/ledger.py",
+      "role": "control-plane-ledger.py",
+      "sha256": "1dba994420a0defd83f73979ec85c2d3d14709a6d4afbb27569781640d45c42f",
+      "source_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/control_plane/4ccde8dfe557fbb6450c15b2ee68d41d2ac0711d5d56d79e775fa75178177bd3/ledger.py",
+      "source_sha256": "1dba994420a0defd83f73979ec85c2d3d14709a6d4afbb27569781640d45c42f"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/manifests/f1_gpu_relativistic_gyro/13f053df-e488-4394-82a4-585c02d92063/snapshot/control_plane/promote_active_policy.py",
+      "role": "control-plane-promote_active_policy.py",
+      "sha256": "e8d6e527d54d38068e3eee4c6ed52570310c6316095df95a8ffcdb0098cfa3a5",
+      "source_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/control_plane/4ccde8dfe557fbb6450c15b2ee68d41d2ac0711d5d56d79e775fa75178177bd3/promote_active_policy.py",
+      "source_sha256": "e8d6e527d54d38068e3eee4c6ed52570310c6316095df95a8ffcdb0098cfa3a5"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/manifests/f1_gpu_relativistic_gyro/13f053df-e488-4394-82a4-585c02d92063/snapshot/control_plane/reconcile_frontier_job.py",
+      "role": "control-plane-reconcile_frontier_job.py",
+      "sha256": "cfd0080fbe1a9885250899046eee1e7d3fdfdb17f6a81e179f85f0265fb80d69",
+      "source_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/control_plane/4ccde8dfe557fbb6450c15b2ee68d41d2ac0711d5d56d79e775fa75178177bd3/reconcile_frontier_job.py",
+      "source_sha256": "cfd0080fbe1a9885250899046eee1e7d3fdfdb17f6a81e179f85f0265fb80d69"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/manifests/f1_gpu_relativistic_gyro/13f053df-e488-4394-82a4-585c02d92063/snapshot/control_plane/run_installed_control_plane_job.sh",
+      "role": "control-plane-run_installed_control_plane_job.sh",
+      "sha256": "0784f29d3c9f03b9f404efcb19853bd0e6c681568974480d43242578d69291e1",
+      "source_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/control_plane/4ccde8dfe557fbb6450c15b2ee68d41d2ac0711d5d56d79e775fa75178177bd3/run_installed_control_plane_job.sh",
+      "source_sha256": "0784f29d3c9f03b9f404efcb19853bd0e6c681568974480d43242578d69291e1"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/manifests/f1_gpu_relativistic_gyro/13f053df-e488-4394-82a4-585c02d92063/snapshot/control_plane/run_control_plane.py",
+      "role": "control-plane-run_control_plane.py",
+      "sha256": "cc478aa324ab62c2b93b4684b97067a3ef4fc08dc48698303f12b192db4c8f8f",
+      "source_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/control_plane/4ccde8dfe557fbb6450c15b2ee68d41d2ac0711d5d56d79e775fa75178177bd3/run_control_plane.py",
+      "source_sha256": "cc478aa324ab62c2b93b4684b97067a3ef4fc08dc48698303f12b192db4c8f8f"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/manifests/f1_gpu_relativistic_gyro/13f053df-e488-4394-82a4-585c02d92063/snapshot/control_plane/submit_frontier_job.sh",
+      "role": "control-plane-submit_frontier_job.sh",
+      "sha256": "10916e1e59a8890186e2b2dfc8b2aa585ea0c6178df33a1d1334305b65ff0500",
+      "source_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/control_plane/4ccde8dfe557fbb6450c15b2ee68d41d2ac0711d5d56d79e775fa75178177bd3/submit_frontier_job.sh",
+      "source_sha256": "10916e1e59a8890186e2b2dfc8b2aa585ea0c6178df33a1d1334305b65ff0500"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/manifests/f1_gpu_relativistic_gyro/13f053df-e488-4394-82a4-585c02d92063/snapshot/control_plane/terminal_recovery_handoff.py",
+      "role": "control-plane-terminal_recovery_handoff.py",
+      "sha256": "7fbcff2a94fd2c6eac6f689a6199271507aabdbf07cacc52b29abe04283a0813",
+      "source_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/control_plane/4ccde8dfe557fbb6450c15b2ee68d41d2ac0711d5d56d79e775fa75178177bd3/terminal_recovery_handoff.py",
+      "source_sha256": "7fbcff2a94fd2c6eac6f689a6199271507aabdbf07cacc52b29abe04283a0813"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/manifests/f1_gpu_relativistic_gyro/13f053df-e488-4394-82a4-585c02d92063/snapshot/control_plane/validate_and_reserve_frontier_job.py",
+      "role": "control-plane-validate_and_reserve_frontier_job.py",
+      "sha256": "40b1b9064a8e8e95d3bef64d8f28ec0ccdb1562a693000acb8ff9d6eb51058a0",
+      "source_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/control_plane/4ccde8dfe557fbb6450c15b2ee68d41d2ac0711d5d56d79e775fa75178177bd3/validate_and_reserve_frontier_job.py",
+      "source_sha256": "40b1b9064a8e8e95d3bef64d8f28ec0ccdb1562a693000acb8ff9d6eb51058a0"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/manifests/f1_gpu_relativistic_gyro/13f053df-e488-4394-82a4-585c02d92063/snapshot/control_plane/verify_compute_node_snapshot.py",
+      "role": "control-plane-verify_compute_node_snapshot.py",
+      "sha256": "57e94e5ba0e390d005a2da9ebff2a0e97eca794e4ac111ed82b77433d38a7dea",
+      "source_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/control_plane/4ccde8dfe557fbb6450c15b2ee68d41d2ac0711d5d56d79e775fa75178177bd3/verify_compute_node_snapshot.py",
+      "source_sha256": "57e94e5ba0e390d005a2da9ebff2a0e97eca794e4ac111ed82b77433d38a7dea"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/manifests/f1_gpu_relativistic_gyro/13f053df-e488-4394-82a4-585c02d92063/snapshot/control_plane/write_orion_build_profile.py",
+      "role": "control-plane-write_orion_build_profile.py",
+      "sha256": "56d845a4c8b322400f1b43c597cdc8bfbe1bd4c0606b59bf7637d0eba768a0df",
+      "source_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/control_plane/4ccde8dfe557fbb6450c15b2ee68d41d2ac0711d5d56d79e775fa75178177bd3/write_orion_build_profile.py",
+      "source_sha256": "56d845a4c8b322400f1b43c597cdc8bfbe1bd4c0606b59bf7637d0eba768a0df"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/manifests/f1_gpu_relativistic_gyro/13f053df-e488-4394-82a4-585c02d92063/snapshot/analysis/000-frontier_f1_gpu_relativistic_gyro_analysis.py",
+      "role": "analysis-script-000",
+      "sha256": "e9a5c93aea3e2cc288e07fc2adbc93ab22c49df74c1e83dfaf5cd694eced7d68",
+      "source_path": "/autofs/nccs-svm1_home2/dfielding/athenak-pic/tst/publication/frontier_f1_gpu_relativistic_gyro_analysis.py",
+      "source_sha256": "e9a5c93aea3e2cc288e07fc2adbc93ab22c49df74c1e83dfaf5cd694eced7d68"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/manifests/f1_gpu_relativistic_gyro/13f053df-e488-4394-82a4-585c02d92063/snapshot/analysis/frontier_f1_structured_artifacts.py",
+      "role": "analysis-script-001",
+      "sha256": "cf090115bcdfd143f67b12339115102b57e74cf3205b1ebb1521c144c3415a5a",
+      "source_path": "/autofs/nccs-svm1_home2/dfielding/athenak-pic/tst/publication/frontier_f1_structured_artifacts.py",
+      "source_sha256": "cf090115bcdfd143f67b12339115102b57e74cf3205b1ebb1521c144c3415a5a"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/manifests/f1_gpu_relativistic_gyro/13f053df-e488-4394-82a4-585c02d92063/snapshot/queue_snapshot.txt",
+      "role": "queue-snapshot",
+      "sha256": "d3bae5ba96a8dc8989338f3588afbbef814963d51cb61447fdc30a40135d378b",
+      "source_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/jobs/f1_gpu_relativistic_gyro/13f053df-e488-4394-82a4-585c02d92063/queue_snapshot.txt",
+      "source_sha256": "d3bae5ba96a8dc8989338f3588afbbef814963d51cb61447fdc30a40135d378b"
+    }
+  ],
+  "submission_id": "13f053df-e488-4394-82a4-585c02d92063",
+  "submission_scope": "registered_science",
+  "test_id": "pic_relativistic_gyro_paper",
+  "timeout_margin": {
+    "athena_walltime_seconds": 600,
+    "environment_profile_sha256": "7ff6cff3e263e8b4552bcbac1d5b55a85264a2a7af5565bbc9856584e35402c1",
+    "expires_utc": "2026-05-31T10:55:55Z",
+    "measured_utc": "2026-05-30T22:55:55Z",
+    "scheduler_walltime_seconds": 900
+  }
+}

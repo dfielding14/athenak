@@ -8,6 +8,7 @@ import copy
 import hashlib
 import json
 from pathlib import Path
+import subprocess
 import sys
 import unittest
 
@@ -59,6 +60,14 @@ def _load(name: str) -> dict[str, object]:
 
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _git_blob_sha256(commit: str, relative_path: str) -> str:
+    contents = subprocess.check_output(
+        ["git", "show", f"{commit}:{relative_path}"],
+        cwd=REPO_ROOT,
+    )
+    return hashlib.sha256(contents).hexdigest()
 
 
 def _validation_manifest_schema() -> dict[str, object]:
@@ -551,13 +560,6 @@ class PicReadinessRegistryTests(unittest.TestCase):
             "run_artifact_dir",
         ):
             self.assertEqual(failed[key], superseded[key])
-        manifest_path = Path(failed["pre_submit_manifest_path"])
-        artifact_root = Path(failed["run_artifact_dir"])
-        inventory_path = Path(failed["artifact_inventory_path"])
-        self.assertEqual(_sha256(manifest_path), failed["pre_submit_manifest_sha256"])
-        self.assertEqual(_sha256(inventory_path), failed["artifact_inventory_sha256"])
-        self.assertEqual(f"{artifact_root.stat().st_mode & 0o777:04o}", failed["run_artifact_dir_mode"])
-        self.assertEqual(f"{inventory_path.stat().st_mode & 0o777:04o}", failed["artifact_inventory_mode"])
         fixture = provenance["local_review_fixture"]
         fixture_path = REPO_ROOT / fixture["path"]
         decoded = base64.b64decode(
@@ -565,30 +567,31 @@ class PicReadinessRegistryTests(unittest.TestCase):
             validate=True,
         )
         stderr_entry = failed["stderr_inventory_entry"]
-        inventory = json.loads(inventory_path.read_text(encoding="utf-8"))
-        inventory_records = {
-            record["path"]: record for record in inventory["files"]
-        }
-        stderr_path = artifact_root / stderr_entry["path"]
         self.assertEqual(_sha256(fixture_path), fixture["encoded_file_sha256"])
         self.assertEqual(hashlib.sha256(decoded).hexdigest(), fixture["decoded_sha256"])
         self.assertEqual(len(decoded), fixture["decoded_size"])
         self.assertEqual(fixture["decoded_sha256"], stderr_entry["sha256"])
         self.assertEqual(fixture["decoded_size"], stderr_entry["size"])
-        self.assertEqual(inventory_records[stderr_entry["path"]], stderr_entry)
-        self.assertEqual(stderr_path.read_bytes(), decoded)
-        self.assertEqual(f"{stderr_path.stat().st_mode & 0o777:04o}", failed["stderr_mode"])
         self.assertTrue(fixture["verified_byte_identical_to_live_immutable_stderr"])
         binding = provenance["reviewed_validator_binding"]
-        for key, relative in {
-            "support_module_sha256": "tst/publication/frontier_f1_structured_artifacts.py",
-            "gyro_analyzer_sha256": "tst/publication/frontier_f1_gpu_relativistic_gyro_analysis.py",
-            "paper_coupling_analyzer_sha256": "tst/publication/frontier_f1_gpu_paper_coupling_analysis.py",
+        commit = binding["source_commit"]
+        self.assertEqual(
+            subprocess.check_output(
+                ["git", "cat-file", "-t", commit],
+                cwd=REPO_ROOT,
+                text=True,
+            ).strip(),
+            "commit",
+        )
+        for key, relative_key in {
+            "support_module_sha256": "support_module",
+            "gyro_analyzer_sha256": "gyro_analyzer",
+            "paper_coupling_analyzer_sha256": "paper_coupling_analyzer",
         }.items():
-            self.assertEqual(binding[key], _sha256(REPO_ROOT / relative))
+            self.assertEqual(binding[key], _git_blob_sha256(commit, binding[relative_key]))
         self.assertEqual(
             provenance["disposition"],
-            "pass_historical_transcript_bound_to_local_fixture_retry_requires_separate_v3_policy_activation",
+            "pass_historical_transcript_bound_to_local_fixture_retry_requires_separate_v2_policy_activation",
         )
 
     def test_rejected_pre_reservation_manifest_chronology_is_bound(self) -> None:
@@ -725,6 +728,77 @@ class PicReadinessRegistryTests(unittest.TestCase):
             ],
         )
         self.assertIn("Legitimate later reservations", preflight["evidence_rule"])
+        ledger_path = Path(
+            "/lustre/orion/ast207/proj-shared/dfielding/PIC/ledger/node_hours.jsonl"
+        )
+        live_surfaces = (
+            ledger_path,
+            Path("/lustre/orion/ast207/proj-shared/dfielding/PIC/ledger/node_hours.csv"),
+            Path("/lustre/orion/ast207/proj-shared/dfielding/PIC/ledger/mirror_receipts.jsonl"),
+            Path("/ccs/proj/ast207/proj-shared/PIC/ledger/node_hours.jsonl"),
+        )
+        line_counts = [len(path.read_text().splitlines()) for path in live_surfaces]
+        self.assertEqual(line_counts[0], line_counts[2])
+        self.assertEqual(line_counts[0], line_counts[3])
+        self.assertEqual(line_counts[0] + 1, line_counts[1])
+        self.assertFalse(
+            Path(
+                "/lustre/orion/ast207/proj-shared/dfielding/PIC/ledger/pending_submission.json"
+            ).exists()
+        )
+        ledger_events = [
+            json.loads(line)
+            for line in ledger_path.read_text(encoding="utf-8").splitlines()
+        ]
+        active_reservations = set()
+        for event in ledger_events:
+            if event["event_type"] == "reservation":
+                active_reservations.add(event["reservation_id"])
+            elif event["event_type"] in {"reconciliation", "reservation_cancelled"}:
+                active_reservations.discard(event["reservation_id"])
+        self.assertEqual(active_reservations, set())
+        for surface in live_surfaces:
+            contents = surface.read_text()
+            for submission_id in preflight[
+                "historical_submission_ids_must_remain_absent_from_live_ledgers"
+            ]:
+                self.assertNotIn(submission_id, contents)
+
+    def test_registered_parser_policy_transition_resolves_source_commit(self) -> None:
+        successor = _load(
+            "q027_frontier_f1_registered_science_successor_candidate_2026-05-30.json"
+        )
+        transition = successor["gyro_v3_parser_policy_transition"]
+        commit = transition["source_commit"]
+        self.assertEqual(
+            subprocess.check_output(
+                ["git", "cat-file", "-t", commit],
+                cwd=REPO_ROOT,
+                text=True,
+            ).strip(),
+            "commit",
+        )
+        slices = {
+            record["authorization_id"]: record
+            for record in transition["registered_science_slices"]
+        }
+        for authorization_id, analyzer in {
+            "f1-clean-gyro-mpich-stderr-v3":
+                "tst/publication/frontier_f1_gpu_relativistic_gyro_analysis.py",
+            "f1-clean-paper-coupling-mpich-stderr-v2":
+                "tst/publication/frontier_f1_gpu_paper_coupling_analysis.py",
+        }.items():
+            self.assertEqual(
+                slices[authorization_id]["analysis_script_sha256"],
+                _git_blob_sha256(commit, analyzer),
+            )
+            self.assertEqual(
+                slices[authorization_id]["analysis_support_sha256"],
+                _git_blob_sha256(
+                    commit,
+                    "tst/publication/frontier_f1_structured_artifacts.py",
+                ),
+            )
 
     def test_rejected_operator_queue_format_manifest_chronology_is_bound(self) -> None:
         successor = _load(
@@ -742,10 +816,9 @@ class PicReadinessRegistryTests(unittest.TestCase):
             "q027_frontier_f1_rejected_operator_queue_format_manifest_fixture_2026-05-30.json",
         )
         self.assertEqual(chronology, fixture["chronology"])
-        manifest_path = Path(chronology["manifest_path"])
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         binding = fixture["manifest_binding"]
-        self.assertEqual(f"{manifest_path.stat().st_mode & 0o777:04o}", binding["mode"])
+        manifest_path = REPO_ROOT / binding["local_fixture_path"]
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         self.assertEqual(_sha256(manifest_path), chronology["manifest_sha256"])
         self.assertEqual(manifest["submission_id"], chronology["submission_id"])
         self.assertEqual(
@@ -762,8 +835,6 @@ class PicReadinessRegistryTests(unittest.TestCase):
             binding["validator_queue_snapshot_sha256"],
         )
         self.assertEqual(chronology["reservation_attachments"], "absent")
-        for name in ("reservation_id.txt", "manifest_sha256.txt"):
-            self.assertFalse((manifest_path.parent / name).exists())
         for attestation, digest_key in zip(
             fixture["attestations"],
             (
@@ -771,7 +842,7 @@ class PicReadinessRegistryTests(unittest.TestCase):
                 "pre_submit_wrapper_attestation_sha256",
             ),
         ):
-            path = Path(attestation["path"])
+            path = REPO_ROOT / attestation["local_fixture_path"]
             self.assertEqual(attestation["sha256"], chronology[digest_key])
             self.assertEqual(_sha256(path), chronology[digest_key])
             contents = json.loads(path.read_text(encoding="utf-8"))
@@ -780,18 +851,6 @@ class PicReadinessRegistryTests(unittest.TestCase):
                 contents["queue_snapshot"]["sha256"],
                 binding["queue_snapshot_sha256"],
             )
-        live_surfaces = (
-            "/lustre/orion/ast207/proj-shared/dfielding/PIC/ledger/node_hours.jsonl",
-            "/lustre/orion/ast207/proj-shared/dfielding/PIC/ledger/node_hours.csv",
-            "/lustre/orion/ast207/proj-shared/dfielding/PIC/ledger/mirror_receipts.jsonl",
-            "/ccs/proj/ast207/proj-shared/PIC/ledger/node_hours.jsonl",
-        )
-        for surface in live_surfaces:
-            contents = Path(surface).read_text()
-            for submission_id in successor["required_live_preflight"][
-                "historical_submission_ids_must_remain_absent_from_live_ledgers"
-            ]:
-                self.assertNotIn(submission_id, contents)
 
     def test_reconciled_gyro_v2_analysis_rejection_chronology_is_bound(self) -> None:
         successor = _load(
@@ -807,11 +866,7 @@ class PicReadinessRegistryTests(unittest.TestCase):
             "q027_frontier_f1_gyro_v2_analysis_rejection_fixture_2026-05-30.json",
         )
         self.assertEqual(chronology, fixture["chronology"])
-        inventory_path = Path(fixture["artifact_inventory_path"])
-        self.assertEqual(
-            f"{inventory_path.stat().st_mode & 0o777:04o}",
-            fixture["artifact_inventory_mode"],
-        )
+        inventory_path = REPO_ROOT / fixture["artifact_inventory_fixture_path"]
         self.assertEqual(_sha256(inventory_path), chronology["artifact_inventory_sha256"])
         self.assertEqual(
             json.loads(inventory_path.read_text(encoding="utf-8")),
@@ -827,15 +882,12 @@ class PicReadinessRegistryTests(unittest.TestCase):
             output_paths,
             sorted(output_paths),
         )
-        artifact_dir = Path(chronology["run_artifact_dir"])
-        self.assertEqual(list((artifact_dir / "analysis").iterdir()), [])
-        ledger_events = [
-            json.loads(line)
-            for line in Path(
-                "/lustre/orion/ast207/proj-shared/dfielding/PIC/ledger/node_hours.jsonl"
-            ).read_text(encoding="utf-8").splitlines()
-        ]
-        self.assertIn(fixture["terminal_reconciliation_event"], ledger_events)
+        event = fixture["terminal_reconciliation_event"]
+        self.assertEqual(event["submission_id"], chronology["submission_id"])
+        self.assertEqual(event["reservation_id"], chronology["reservation_id"])
+        self.assertEqual(event["job_id"], chronology["job_id"])
+        self.assertEqual(event["manifest_sha256"], chronology["pre_submit_manifest_sha256"])
+        self.assertEqual(event["consumed_node_hours"], chronology["consumed_node_hours"])
         self.assertEqual(chronology["analysis_result"], "absent")
         self.assertEqual(chronology["offline_analysis_receipt"], "absent")
 

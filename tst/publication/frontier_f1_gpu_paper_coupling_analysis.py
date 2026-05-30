@@ -55,7 +55,7 @@ MOMENTUM_TOLERANCE = 2.0e-6
 ENERGY_TOLERANCE = 3.0e-5
 PARTICLE_MOMENTUM_LIVENESS_MINIMUM = 1.0e-3
 COEFFICIENT_INVARIANCE_TOLERANCE = 1.0e-12
-RUNTIME_TOKENS = (
+RUNTIME_TERMS = (
     "physical_mode=paper_mhd_pic",
     "state=momentum_p_over_m",
     "C=3 ",
@@ -213,7 +213,7 @@ def parse_athena_binary_bytes(contents: bytes, *, label: str) -> dict[str, objec
     if b":" not in variables_line:
         raise ValueError(f"Malformed variable list in Athena binary output: {label}")
     variables = [
-        token.decode("ascii") for token in variables_line.split(b":", 1)[1].split()
+        field.decode("ascii") for field in variables_line.split(b":", 1)[1].split()
     ]
     if nvars != len(variables) or not variables:
         raise ValueError(f"Inconsistent variable count in Athena binary output: {label}")
@@ -372,9 +372,9 @@ def require_runtime_identity(stdout: str, label: str) -> str:
     if len(traces) != 1:
         raise ValueError(f"Expected one PIC runtime identity trace for {label}")
     trace = traces[0]
-    for token in RUNTIME_TOKENS:
-        if token not in trace:
-            raise ValueError(f"Missing runtime identity token for {label}: {token}")
+    for term in RUNTIME_TERMS:
+        if term not in trace:
+            raise ValueError(f"Missing runtime identity term for {label}: {term}")
     return trace
 
 

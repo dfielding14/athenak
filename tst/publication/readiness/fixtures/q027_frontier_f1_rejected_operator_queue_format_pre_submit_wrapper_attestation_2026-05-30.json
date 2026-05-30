@@ -1,0 +1,31 @@
+{
+  "control_plane_version": "4ccde8dfe557fbb6450c15b2ee68d41d2ac0711d5d56d79e775fa75178177bd3",
+  "mirrored_ledger_line_counts": {
+    "counts": {
+      "/ccs/proj/ast207/proj-shared/PIC/ledger/node_hours.jsonl": 34,
+      "/lustre/orion/ast207/proj-shared/dfielding/PIC/ledger/mirror_receipts.jsonl": 34,
+      "/lustre/orion/ast207/proj-shared/dfielding/PIC/ledger/node_hours.jsonl": 34
+    },
+    "path": "mirrored_ledger_line_counts.txt",
+    "sha256": "905daf0751a09ebf844e648a9798d64dd326afa6bded135fe00b67e97b961a6a"
+  },
+  "operator_statement": "Reviewed same-account process snapshot immediately before registered submission; no competing process is authorized to mutate the PIC roots throughout registered launch and publication until the frozen artifact inventory is durably published.",
+  "pending_submission_marker": {
+    "path": "pending_submission_marker.txt",
+    "sha256": "7925d3e9a9613a093e5eb4054b32aa39de910d2b03ba7e8046c3b4550b8de1e4",
+    "value": "absent"
+  },
+  "phase": "pre_submit_wrapper",
+  "queue_snapshot": {
+    "path": "queue_snapshot.txt",
+    "sha256": "d3bae5ba96a8dc8989338f3588afbbef814963d51cb61447fdc30a40135d378b"
+  },
+  "record_type": "q027_frontier_registered_science_same_account_isolation_attestation",
+  "recorded_utc": "2026-05-30T22:56:15Z",
+  "registered_science_authorization_id": "f1-clean-gyro-mpich-stderr-v2",
+  "same_account_process_snapshot": {
+    "path": "same_account_process_snapshot.txt",
+    "sha256": "a6eb4d56f16ca2ad95f42fcdefdbcbc1af2059597e454dfa2c7b717c0b18455e"
+  },
+  "schema_version": 1
+}

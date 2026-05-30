@@ -38,6 +38,7 @@
     "remediation": "Register gyro v3 with the exact deterministic output tree and emitted particle VTK schema. Preserve the unused paper-coupling v2 authorization ID while strengthening its analyzer binding before the first serialized execution boundary."
   },
   "artifact_inventory_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/runs/f1_gpu_relativistic_gyro/8245b90f-f2cd-437c-bd5e-64564fe2b9ba/artifact_inventory.json",
+  "artifact_inventory_fixture_path": "tst/publication/readiness/fixtures/q027_frontier_f1_gyro_v2_artifact_inventory_2026-05-30.json",
   "artifact_inventory_mode": "0444",
   "artifact_inventory": {
     "files": [

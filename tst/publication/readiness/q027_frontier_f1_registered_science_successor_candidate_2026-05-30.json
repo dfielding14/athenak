@@ -44,7 +44,7 @@
       "maximum_nodes": 1,
       "maximum_walltime_seconds": 900,
       "maximum_attempts": 1,
-      "analysis_script_sha256": "803c5e4ad369ef1deb37ad1a58dc7080b1c732f88600e21d5b421b446ddcab0f",
+      "analysis_script_sha256": "9b27bace0b8fc1e6ae4ebeac914b25c80c2d8b12beeb763628b4049c5085c67a",
       "analysis_support_sha256": "cf090115bcdfd143f67b12339115102b57e74cf3205b1ebb1521c144c3415a5a"
     }
   ],
@@ -372,7 +372,7 @@
     "predecessor_policy_sha256": "3895221e6a063f0b415f39bda3e2191801cc168b7fa663f1f6880e5f71ae48da",
     "predecessor_promotion_sha256": "016cbb66332a6f09d49d8025c25f1bcf4c52127e8619211049f6ae799482f72c",
     "control_plane_version": "4ccde8dfe557fbb6450c15b2ee68d41d2ac0711d5d56d79e775fa75178177bd3",
-    "source_commit": "c878dd6cc6965ac0e97af2638ee17c7e18f593c8",
+    "source_commit": "c878dd6ccd780182ea200c49ff46e4d2cb5b0afc",
     "active_policy_sha256": "0538da6d231dccf8382edbaa6483ca274adaed439afbb1ad8c89d9c898d5467b",
     "active_promotion_sha256": "f84fc7b7b6d1c7e98202e76d5496b73826989125be802024fb483b571f6286e0",
     "pre_policy_promotion_attestation_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/operator_attestations/20260530T230934Z-f1-clean-gyro-mpich-stderr-v3-pre_policy_promotion_retry/attestation.json",
@@ -384,7 +384,30 @@
     "pending_submission_marker": "absent",
     "gyro_registered_science_authorization_id": "f1-clean-gyro-mpich-stderr-v3",
     "paper_registered_science_authorization_id": "f1-clean-paper-coupling-mpich-stderr-v2",
+    "registered_science_slices": [
+      {
+        "authorization_id": "f1-clean-gyro-mpich-stderr-v3",
+        "analysis_script_sha256": "411337175b5d3a2506939833656142a766dfac00b54ae8c1f7b34ca28e0ed905",
+        "analysis_support_sha256": "cf090115bcdfd143f67b12339115102b57e74cf3205b1ebb1521c144c3415a5a"
+      },
+      {
+        "authorization_id": "f1-clean-paper-coupling-mpich-stderr-v2",
+        "analysis_script_sha256": "803c5e4ad369ef1deb37ad1a58dc7080b1c732f88600e21d5b421b446ddcab0f",
+        "analysis_support_sha256": "cf090115bcdfd143f67b12339115102b57e74cf3205b1ebb1521c144c3415a5a"
+      }
+    ],
     "reason": "Rotate the consumed gyro one-attempt authorization and bind its analyzer to the exact deterministic output tree plus emitted particle VTK schema before any further submission. Preserve the unused paper-coupling v2 authorization ID while binding its repaired analyzer before first submission."
+  },
+  "coupling_v2_submission_artifact_scrub_transition": {
+    "status": "staged_reviewed_policy_promotion_pending",
+    "failed_manifest_creation_submission_id": "1e12dd79-adea-4fda-8d0f-af119dd7ae6e",
+    "failed_manifest_creation": "fail_closed_before_manifest_publication_reservation_intent_and_scheduler_submission",
+    "registered_science_authorization_id": "f1-clean-paper-coupling-mpich-stderr-v2",
+    "predecessor_policy_sha256": "0538da6d231dccf8382edbaa6483ca274adaed439afbb1ad8c89d9c898d5467b",
+    "predecessor_promotion_sha256": "f84fc7b7b6d1c7e98202e76d5496b73826989125be802024fb483b571f6286e0",
+    "scrub_safe_analysis_script_sha256": "9b27bace0b8fc1e6ae4ebeac914b25c80c2d8b12beeb763628b4049c5085c67a",
+    "analysis_support_sha256": "cf090115bcdfd143f67b12339115102b57e74cf3205b1ebb1521c144c3415a5a",
+    "reason": "The installed manifest creator rejected ordinary parser identifier substrings through its fail-closed submission-artifact scrubber. Rename only those identifiers, retain the unused coupling-v2 authorization ID, rotate its exact analyzer digest and promote the reviewed policy before retrying manifest creation."
   },
   "required_live_preflight": {
     "status": "required_immediately_before_policy_promotion_and_each_registered_science_submission_boundary",

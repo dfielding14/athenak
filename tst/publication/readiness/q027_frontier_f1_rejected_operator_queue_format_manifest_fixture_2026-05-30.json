@@ -24,6 +24,7 @@
   },
   "manifest_binding": {
     "mode": "0444",
+    "local_fixture_path": "tst/publication/readiness/fixtures/q027_frontier_f1_rejected_operator_queue_format_pre_submit_manifest_2026-05-30.json",
     "queue_snapshot_format": "%i|%a|%P|%q|%T|%j|%k",
     "queue_snapshot_sha256": "d3bae5ba96a8dc8989338f3588afbbef814963d51cb61447fdc30a40135d378b",
     "validator_queue_snapshot_format": "%i|%P|%q|%T|%j|%k",
@@ -33,11 +34,13 @@
     {
       "phase": "pre_manifest",
       "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/operator_attestations/20260530T225555Z-f1-clean-gyro-mpich-stderr-v2-pre_manifest/attestation.json",
+      "local_fixture_path": "tst/publication/readiness/fixtures/q027_frontier_f1_rejected_operator_queue_format_pre_manifest_attestation_2026-05-30.json",
       "sha256": "343c0b51e3ab474fd2a4087c432aadbdcfc8061bbe8295a21c570e32b6bd65f8"
     },
     {
       "phase": "pre_submit_wrapper",
       "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/operator_attestations/20260530T225615Z-f1-clean-gyro-mpich-stderr-v2-pre_submit_wrapper/attestation.json",
+      "local_fixture_path": "tst/publication/readiness/fixtures/q027_frontier_f1_rejected_operator_queue_format_pre_submit_wrapper_attestation_2026-05-30.json",
       "sha256": "1857d29babc300a05f72bf51e92e7abd85dbf99fc2ddc892bbb78e2ae248415a"
     }
   ]

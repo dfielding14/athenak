@@ -632,6 +632,12 @@ class FrontierF1StructuredAnalysisTests(unittest.TestCase):
                 for cycle in range(4):
                     expected[f"{output_dir}/bin/{basename}.{file_id}.{cycle:05d}.bin"] = {}
         registered_case_output_paths(expected, "coeff0")
+        for label in ("coeff0", "coeff7"):
+            omitted = dict(expected)
+            del omitted[f"output/{label}/f1_gpu_paper_coupling_{label}-errs.dat"]
+            with self.subTest(missing_error_table=label):
+                with self.assertRaisesRegex(ValueError, "differs"):
+                    registered_case_output_paths(omitted, label)
         expected["output/coeff0/bin/unregistered.bin"] = {}
         with self.assertRaisesRegex(ValueError, "differs"):
             registered_case_output_paths(expected, "coeff0")
