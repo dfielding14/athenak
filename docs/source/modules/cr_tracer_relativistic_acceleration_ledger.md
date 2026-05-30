@@ -25,16 +25,16 @@ The historical Phase-0 entries use these intentionally conservative statuses:
 | --- | --- | --- |
 | Ledger date | `2026-05-30` | Record the date of each accepted update. |
 | Working branch | `feature/CR_tracers_relativistic_acceleration` | Stop if the working branch changes unexpectedly. |
-| Working branch HEAD at latest accepted commit | `aa8663e8a5d49e26c206363d028b52d0e350a91f` | Refresh after every accepted commit. |
+| Working branch HEAD at latest accepted evidence seal | `0f0dcd9ff1a662431b821c0b0f1be74834938073`; the later closure-record descendant changes handoff documentation only | Refresh after every accepted evidence seal and identify later closure-only descendants explicitly. |
 | Frozen feature base | `64a4d1be8da1c22d1328cc47280195b3747fa0ab` from `feature/CR_tracers_followup_architecture` | Change only through an accepted `DR-000` update. |
 | Intended eventual integration target | `origin/development` at `c6a73b08e60807f8b925164c5e7edd5cb820c8ae` | Refresh the target SHA and merge-tree audit after target updates and before handoff. |
 | Current implementation phase | `Phase 9: GPU disposition, documentation, public overlay, and final handoff` | Keep the temporal claim explicitly first-order for evolving fields until a separately reviewed stage-coupled widening exists. |
 | Allowed write manifest | Phase-9 documentation and retained qualification evidence only: `docs/source/modules/particles.md`, bounded handoff documents, append-only ledger updates, and evidence artifacts | Do not widen solver-coupled MPI/SMR/AMR execution, nonperiodic boundaries, changed-rank redistribution, or physics semantics in the handoff phase. |
-| Last accepted checkpoint | `CP-6 AMR And MPI PROCEED`: bounded periodic `prescribed_test` MPI, same-level multiblock, static-SMR, adaptive-AMR, and same-topology continuation qualification accepted on `addd12d4` after source and evidence rebounds | Record each milestone commit before opening the next phase. |
-| Open blocking findings | Corrected Phase-9 evidence seal and fresh cold-review rebound remain open; public docs preview overlay and workstation GPU disposition are complete | Keep the live list current.  Do not proceed while a blocker for the next edit set remains open. |
+| Last accepted checkpoint | `CP-7 Final Cold Review PROCEED`: four fresh lanes accepted immutable Phase-9 evidence seal `0f0dcd9ff1a662431b821c0b0f1be74834938073` after provenance-ordering rebound | Record each milestone commit before opening the next phase. |
+| Open blocking findings | None for the bounded stacked handoff.  Seven `development` merge-tree overlaps remain explicit follow-up integration work. | Keep the live list current.  Do not proceed while a blocker for the next edit set remains open. |
 | CPU/MPI qualification status | Phase-8 accepted source `addd12d4` plus Phase-9 candidate replay: frozen registration `62/62`; release and debug-bounds migration replay `62/62` across `21` cases each; mutation controls `17/17`, `88/88`, `8/8`, and coupled-oracle controls rejected; release and debug restart, diagnostic, subcycle, coupled, and all-format replays passed; parser `172/172`; legacy CPU plus accuracy `20/20` and `12/12`; legacy MPI CPU plus accuracy `4/4` and `5/5`; style `2/2`; deep AMR `divB` `1/1`; bounded periodic `prescribed_test` MPI/SMR/AMR opening accepted; solver-coupled `mhd_ideal` MPI/SMR/AMR remains fail-closed; single precision remains blocked before CR source by inherited repository narrowing errors | Rerun and archive qualification at each accepted milestone. |
 | GPU qualification status | Workstation disposition archived; unavailable locally and explicitly unclaimed | GPU qualification is optional for `MERGE READY` on this workstation, but it remains a separate unqualified residual risk.  Do not claim `GPU QUALIFIED` without accelerator evidence on an accepted SHA. |
-| Merge-ready status | Not eligible | Requires Phase-9 qualification, public docs overlay, `RG-010`, and `CP-7 Final Cold Review`. |
+| Merge-ready status | `MERGE READY` for the bounded stacked handoff on accepted immutable Phase-9 seal `0f0dcd9ff1a662431b821c0b0f1be74834938073`; direct integration into `development` remains deferred | Preserve the seven-path integration constraint and rerun the full matrix on the dedicated integration branch. |
 
 ## Historical Branch And Base Facts At Ledger Creation
 
@@ -4861,3 +4861,84 @@ before the fixes are accepted.
   - require another fresh exact-SHA cold review;
   - stop again on any blocking finding before recording `RG-010`, `CP-7`, or
     `MERGE READY`.
+
+## RG-010: Final Scope And Scientific Readiness Review
+
+- Date: 2026-05-30
+- Status: `PROCEED`
+- Accepted immutable Phase-9 evidence seal:
+  `0f0dcd9ff1a662431b821c0b0f1be74834938073`
+- Scope findings:
+  - the branch remains passive: relativistic tracers do not feed momentum or
+    energy back into the fluid;
+  - legacy `drift` and `boris` semantics remain available and qualified;
+  - relativistic units, `w = gamma v`, `c_model`, `alpha_s`, sampled `cE`, and
+    direct sampled-field work are explicit;
+  - the Higuera-Cary pusher, trilinear gather, acceleration, deceleration,
+    subcycling, restart, diagnostics, migration, and adversarial controls have
+    independent retained evidence;
+  - typed-v2 same-topology restart continuation is qualified and changed-rank
+    redistribution remains deterministic fail-closed;
+  - diagnostic schemas are versioned, field-relative zero-`B` cases reject,
+    and the retained output dictionary is scientifically interpretable;
+  - all blocking Phase-9 rebound findings have explicit dispositions in
+    `DR-065` through `DR-071`;
+  - deferred features are explicit and bounded in the handoff.
+- Scientific-readiness boundary:
+  - this is a passive full-orbit test-particle model, not MHD-PIC, SRMHD,
+    guiding-center certification, or production scientific-readiness
+    certification;
+  - `GPU QUALIFIED` remains unclaimed because this workstation has no
+    configured CUDA or HIP Kokkos backend;
+  - solver-coupled MPI/SMR/AMR widening, nonperiodic boundaries, changed-rank
+    restart redistribution, stage-coupled temporal sampling, single precision,
+    and multi-node performance remain follow-up work.
+- Integration boundary:
+  - direct merge into `development` remains deferred;
+  - the dedicated integration branch must reconcile
+    `src/main.cpp`, `src/mesh/mesh.cpp`, `src/mesh/mesh.hpp`,
+    `src/outputs/outputs.cpp`, `src/outputs/outputs.hpp`,
+    `src/outputs/restart.cpp`, and `src/pgen/pgen.cpp`, then rerun the complete
+    qualification matrix.
+
+## CP-7 Final Cold Review
+
+- Date: 2026-05-30
+- Status: `PROCEED`
+- Accepted immutable Phase-9 evidence seal:
+  `0f0dcd9ff1a662431b821c0b0f1be74834938073`
+- Fresh independent lanes:
+  - physics and source-boundary lane: `PROCEED`;
+  - evidence-durability adversary lane: `PROCEED`;
+  - integration-risk lane: `PROCEED` after removal and recheck of ignored
+    `.pytest_cache` directories;
+  - documentation and closure-contract lane: `PROCEED`.
+- Accepted evidence checks:
+  - local `HEAD`, tracking ref, and live remote branch matched the reviewed
+    immutable seal during each lane;
+  - independent raw-byte provenance-envelope walk passed `41/41`, including
+    the final expanded privacy-log bytes;
+  - repository-relative outer manifest passed `88/88` in the original and
+    relocated roots with byte-identical verification logs;
+  - deterministic portable archive passed dual fresh extraction replay with
+    `56` safe normalized members and `33/33` internal manifest bindings;
+  - strict frozen-`gh-pages` overlay passed with warnings as errors and
+    `40/40` inventory bindings;
+  - public-overlay privacy scan covers all copied source files and passes;
+  - exact wrapper, README, and GPU-disposition here-document producers match
+    their retained artifacts;
+  - tracked solver-coupled and typed-v2 restart-resume public decks execute;
+  - bounded Phase-9 whitespace and active-worktree cache hygiene pass;
+  - live merge-tree replay reproduces the seven declared integration paths.
+- Verdict:
+  - `CPU/MPI QUALIFIED`: yes, within the bounded handoff scope;
+  - `GPU QUALIFIED`: no, explicitly unclaimed;
+  - `MERGE READY`: yes, for the bounded stacked handoff on immutable seal
+    `0f0dcd9ff1a662431b821c0b0f1be74834938073`;
+  - direct merge into `development`: no, pending the dedicated reviewed
+    integration branch.
+- Closure-record rule:
+  - the successor documentation-only commit records this accepted immutable
+    seal and verdict;
+  - cold-review that exact pushed closure-record descendant and rerun its
+    strict documentation overlay before publication or integration.

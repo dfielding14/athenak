@@ -15,10 +15,11 @@ The workstation qualification verdict is:
 
 - `CPU/MPI QUALIFIED`: yes, within the bounded scope below;
 - `GPU QUALIFIED`: no, unavailable locally and explicitly unclaimed;
-- `MERGE READY`: pending the final Phase-9 provenance-ordering seal,
-  `RG-010`, and `CP-7 Final Cold Review`.  The strict public documentation
-  overlay has passed as a development-preview render, not as a stable-site
-  publication.
+- `MERGE READY`: yes, for the bounded stacked handoff on reviewed immutable
+  Phase-9 evidence seal `0f0dcd9ff1a662431b821c0b0f1be74834938073`.
+  Direct integration into `development` remains a separate reviewed step.
+  The strict public documentation overlay passed as a development-preview
+  render, not as a stable-site publication.
 
 ## Branch Facts
 
@@ -38,8 +39,10 @@ The workstation qualification verdict is:
 | Pushed documentation-durability seal SHA reviewed on rebound | `88d631e4943648fe83f0624cb30291fa52ab4296` |
 | Pushed capture-completeness seal SHA held on cold review | `1a7086add5fffd55356109b99e6a66fcd0b43486` |
 | Pushed public-overlay privacy seal SHA held on local audit | `3667e3e1748f297615a8954306b5382ca7f476c2` |
-| Final provenance-ordering review target | Resolve and record the exact pushed branch-tip SHA after this documentation-only reseal.  A commit cannot embed its own SHA; `CP-7` must name the reviewed immutable tip explicitly. |
-| Next reviewed packet range | `64a4d1be8da1c22d1328cc47280195b3747fa0ab..refs/remotes/origin/feature/CR_tracers_relativistic_acceleration` resolved after the final documentation-only reseal |
+| Accepted Phase-9 provenance-ordering candidate SHA | `892091d968c783aa8c36904f7f67730d1fd1567f` |
+| Accepted Phase-9 evidence seal SHA | `0f0dcd9ff1a662431b821c0b0f1be74834938073` |
+| Accepted reviewed packet range | `64a4d1be8da1c22d1328cc47280195b3747fa0ab..0f0dcd9ff1a662431b821c0b0f1be74834938073` |
+| Closure record rule | This handoff update is a documentation-only descendant that records the accepted immutable seal.  Resolve its pushed SHA with `git rev-parse HEAD` and cold-review that exact descendant before publication or integration. |
 | Decision ledger | `cr_tracer_relativistic_acceleration_ledger.md` |
 
 ## Physical Model
