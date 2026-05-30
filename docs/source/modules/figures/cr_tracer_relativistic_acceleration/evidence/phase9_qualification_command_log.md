@@ -570,6 +570,7 @@ test "$MERGE_TREE_STATUS" -eq 1
   echo 'previous_portability_rebound_seal=aa66f6c27531116e12554631281c8f2ed07d93c6'
   echo 'previous_documentation_durability_seal=88d631e4943648fe83f0624cb30291fa52ab4296'
   echo 'previous_capture_completeness_seal=1a7086add5fffd55356109b99e6a66fcd0b43486'
+  echo 'previous_public_overlay_privacy_seal=3667e3e1748f297615a8954306b5382ca7f476c2'
   echo 'origin_development=c6a73b08e60807f8b925164c5e7edd5cb820c8ae'
   echo 'origin_gh_pages=4833aa9341e19861297e330ff02aabfd8001935c'
 } > "$EVID/phase9_branch_snapshot.txt"
@@ -598,16 +599,17 @@ successor evidence-seal tip before recording `CP-7 PROCEED`.
 
 ## Provenance Envelope, Outer Manifest, And Privacy Audit
 
-The retained envelope is regenerated after the overlay, public smoke, merge
-tree, whitespace check, and portable archive have reached their final bytes.
-Its `result_artifacts` map records SHA-256 digests of the retained replay
-surfaces.  Its `portable_binary` entry binds the only binary archived for
-offline reconstruction.  Ephemeral workstation build hashes are not claimed
-as reconstructable envelope evidence.  The following verification and
-outer-seal commands then run from the repository root:
+The retained envelope is finalized after the overlay, public smoke, merge tree,
+whitespace check, portable archive, and deterministic privacy log have reached
+their final bytes.  Its `result_artifacts` map records SHA-256 digests of the
+retained replay surfaces.  Its `portable_binary` entry binds the only binary
+archived for offline reconstruction.  Ephemeral workstation build hashes are
+not claimed as reconstructable envelope evidence.  The following verification
+and outer-seal commands then run from the repository root:
 
 ```bash
 PHASE9_PRESEAL_CANDIDATE=$(git rev-parse HEAD)
+write_provenance_envelope() {
 python3 - "$EVID/phase9_provenance_envelope.json" "$PHASE9_PRESEAL_CANDIDATE" <<'PY'
 import hashlib
 import json
@@ -654,7 +656,9 @@ with tarfile.open(envelope["portable_bundle"]["path"], "r:gz") as archive:
 envelope["portable_binary"]["sha256"] = hashlib.sha256(payload).hexdigest()
 path.write_text(json.dumps(envelope, indent=2, sort_keys=True) + "\n")
 PY
+}
 
+verify_provenance_envelope() {
 python3 - "$EVID/phase9_provenance_envelope.json" <<'PY' \
   > "$EVID/phase9_provenance_envelope_verify.log"
 import hashlib
@@ -684,6 +688,7 @@ assert actual == binary["sha256"], (
 checked += 1
 print(f"PASS: provenance envelope verified {checked} retained artifacts")
 PY
+}
 
 write_outer_manifest() {
   find "$EVID_REL" -maxdepth 1 -type f -name 'phase9_*' \
@@ -730,16 +735,20 @@ write_privacy_scan() {
   } > "$EVID/phase9_artifact_privacy_scan.log"
 }
 
-# First create both verification logs, then generate and bind the privacy log.
-# The final scan runs after every retained text artifact exists. Its stable
-# deterministic PASS output leaves the manifest valid.
+# First create both outer-verification logs.  Then generate the deterministic
+# privacy log before binding it into the provenance envelope.  The final
+# privacy scan runs again after the finalized envelope and manifest exist; its
+# byte-identical PASS output leaves both bindings valid.
 rm -f "$EVID/phase9_artifact_privacy_scan.log"
 write_outer_manifest
 verify_outer_manifest
 write_privacy_scan
+write_provenance_envelope
+verify_provenance_envelope
 write_outer_manifest
 verify_outer_manifest
 write_privacy_scan
+verify_provenance_envelope
 verify_outer_manifest
 ```
 

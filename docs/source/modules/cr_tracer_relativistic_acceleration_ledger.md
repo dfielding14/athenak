@@ -4824,3 +4824,40 @@ before the fixes are accepted.
   - require another fresh exact-SHA cold review;
   - stop again on any blocking finding before recording `RG-010`, `CP-7`, or
     `MERGE READY`.
+
+## DR-071: Phase-9 Public-Overlay Rebound Provenance Ordering Correction
+
+- Date: 2026-05-30
+- Status: documentation-only provenance-ordering correction prepared for
+  final cold review
+- Public-overlay privacy seal audited:
+  `3667e3e1748f297615a8954306b5382ca7f476c2`
+- Local exact-tip audit result: `HOLD`.
+- Finding:
+  - the expanded deterministic `phase9_artifact_privacy_scan.log` was written
+    after `phase9_provenance_envelope.json` and its retained verifier log, so
+    the envelope bound the previous privacy-log digest even though the final
+    outer manifest correctly bound the expanded privacy-log bytes;
+  - the mismatch was isolated to the privacy-log entry and reproduced by an
+    independent envelope verifier rather than inferred from the retained
+    one-line verification log.
+- Corrected choices:
+  - express provenance-envelope generation and verification as replay
+    functions;
+  - create both outer-verification logs first, write the deterministic privacy
+    log, finalize and verify the envelope against that privacy-log digest,
+    regenerate and verify the outer manifest, then rerun the deterministic
+    privacy scan and both verifiers;
+  - require an independent envelope digest walk after the reseal rather than
+    accepting the retained verifier log alone.
+- Alternatives rejected:
+  - preserving the stale envelope because the outer manifest passed would
+    conflate two distinct evidence layers;
+  - removing the privacy-log binding from the envelope would make the durable
+    provenance claim weaker precisely where the public-overlay boundary was
+    expanded.
+- Inflection point:
+  - reseal and push the provenance-ordering correction;
+  - require another fresh exact-SHA cold review;
+  - stop again on any blocking finding before recording `RG-010`, `CP-7`, or
+    `MERGE READY`.
