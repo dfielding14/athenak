@@ -18,11 +18,31 @@
 #include "parameter_input.hpp"
 #include "pgen/pgen.hpp"
 
+namespace {
+
+void StarParticleTestAcceleration(Mesh *pm, particles::Particles *ppart,
+                                  const Real time, const Real *x, const Real *y,
+                                  const Real *z, Real *ax, Real *ay, Real *az,
+                                  const int npart) {
+  (void)pm;
+  (void)ppart;
+  (void)y;
+  (void)z;
+  (void)az;
+  for (int p=0; p<npart; ++p) {
+    ax[p] += x[p];
+    ay[p] += time;
+  }
+}
+
+} // namespace
+
 //----------------------------------------------------------------------------------------
 //! \fn ProblemGenerator::StarParticleTest()
 //! \brief Initializes a uniform gas box with one denser central cell.
 
 void ProblemGenerator::StarParticleTest(ParameterInput *pin, const bool restart) {
+  user_star_particle_accel_func = StarParticleTestAcceleration;
   if (restart) return;
 
   MeshBlockPack *pmbp = pmy_mesh_->pmb_pack;

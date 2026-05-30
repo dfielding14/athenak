@@ -47,3 +47,43 @@ def test_star_particle_outflow_removal():
     row = _last_history_row("star_particle_outflow.part.hst")
     assert int(round(row[2])) == 0
     assert math.isclose(row[3], 0.0, rel_tol=0.0, abs_tol=1.0e-12)
+
+
+def test_star_particle_exact_outer_boundary_removal():
+    """A star particle landing exactly on xmax should be removed cleanly."""
+    for path in Path(".").glob("star_particle_outflow_exact.*.hst"):
+        path.unlink()
+    assert testutils.run(
+        "inputs/particles/star_particle_outflow.athinput",
+        [
+            "job/basename=star_particle_outflow_exact",
+            "particles/particle_file=inputs/particles/star_particles_outflow_exact.tbl",
+        ],
+    )
+    row = _last_history_row("star_particle_outflow_exact.part.hst")
+    assert int(round(row[2])) == 0
+    assert math.isclose(row[3], 0.0, rel_tol=0.0, abs_tol=1.0e-12)
+
+
+def test_star_particle_rejects_multi_meshblock_crossing():
+    """A particle timestep that skips MeshBlocks should fail clearly."""
+    particle_file = Path("star_particle_multi_block_crossing.tbl")
+    particle_file.write_text(
+        "# x y z vx vy vz mass t_create\n"
+        "0.125 0.5 0.5 20.0 0.0 0.0 1.0 0.0\n"
+    )
+    try:
+        assert not testutils.run_command(
+            [
+                "./athena",
+                "-i",
+                "inputs/particles/star_particle_outflow.athinput",
+                "job/basename=star_particle_multi_block_crossing",
+                "mesh/nx1=16",
+                "meshblock/nx1=4",
+                "problem/pressure=0.0001",
+                f"particles/particle_file={particle_file}",
+            ]
+        )
+    finally:
+        particle_file.unlink(missing_ok=True)

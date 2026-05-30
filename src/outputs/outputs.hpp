@@ -369,6 +369,27 @@ class ParticleVTKOutput : public BaseTypeOutput {
 };
 
 //----------------------------------------------------------------------------------------
+//! \class ParticleRestartOutput
+//  \brief derived BaseTypeOutput class for sidecar particle restart data
+
+class ParticleRestartOutput : public BaseTypeOutput {
+ public:
+  ParticleRestartOutput(ParameterInput *pin, Mesh *pm, OutputParameters oparams);
+  void LoadOutputData(Mesh *pm) override;
+  void WriteOutputFile(Mesh *pm, ParameterInput *pin) override;
+ protected:
+  int nprtcl_thisrank = 0;
+  int nprtcl_total = 0;
+  int nrdata = 0;
+  int nidata = 0;
+  int local_max_tag = -1;
+  Real local_star_mass_formed_total = 0.0;
+  Real local_star_mass_accreted_total = 0.0;
+  HostArray2D<Real> outpart_rdata;
+  HostArray2D<int>  outpart_idata;
+};
+
+//----------------------------------------------------------------------------------------
 //! \class MeshBinaryOutput
 //  \brief derived BaseTypeOutput class for binary mesh data (nbf format in pegasus++)
 class MeshBinaryOutput : public BaseTypeOutput {

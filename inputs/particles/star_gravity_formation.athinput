@@ -1,0 +1,86 @@
+# AthenaK input file for formation plus external gravity regression tests
+
+<comment>
+problem = StarGravityFormation
+
+<job>
+basename = star_gravity_formation
+
+<mesh>
+nghost = 2
+nx1 = 4
+x1min = 0.0
+x1max = 1.0
+ix1_bc = outflow
+ox1_bc = outflow
+
+nx2 = 4
+x2min = 0.0
+x2max = 1.0
+ix2_bc = outflow
+ox2_bc = outflow
+
+nx3 = 4
+x3min = 0.0
+x3max = 1.0
+ix3_bc = outflow
+ox3_bc = outflow
+
+<meshblock>
+nx1 = 4
+nx2 = 4
+nx3 = 4
+
+<time>
+evolution = dynamic
+integrator = rk1
+cfl_number = 0.4
+nlim = 1
+tlim = 0.01
+ndiag = 1
+
+<hydro>
+eos = ideal
+gamma = 1.6666666666666667
+rsolver = llf
+reconstruct = plm
+
+<particles>
+particle_type = star
+pusher = gravity
+dt = 0.01
+star_init = none
+star_formation = true
+star_formation_density_threshold = 5.0
+star_formation_particle_mass = 0.02
+star_formation_density_floor = 1.0
+star_formation_max_per_cycle = 1
+star_accretion = false
+
+<star_gravity>
+enabled = true
+grav_constant = 1.0
+self_gravity = false
+force_method = direct
+integrator = kdk
+softening_length = 0.0
+timestep_mode = fixed
+max_timestep = 0.01
+external_acceleration = constant
+external_accel_x = 0.0
+external_accel_y = -1.0
+external_accel_z = 0.0
+
+<problem>
+pgen_name = star_particle_test
+base_density = 1.0
+peak_density = 10.0
+pressure = 1.0
+x1c = 0.625
+x2c = 0.625
+x3c = 0.625
+
+<output1>
+file_type = hst
+dt = 0.01
+data_format = %24.16e

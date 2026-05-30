@@ -21,6 +21,12 @@ using UserSrctermFnPtr = void (*)(Mesh* pm, const Real bdt);
 using UserRefinementFnPtr = void (*)(MeshBlockPack* pmbp);
 using UserHistoryFnPtr = void (*)(HistoryData *pdata, Mesh *pm);
 
+namespace particles {class Particles;}
+using UserStarParticleAccelerationFnPtr =
+    void (*)(Mesh *pm, particles::Particles *ppart, const Real time, const Real *x,
+             const Real *y, const Real *z, Real *ax, Real *ay, Real *az,
+             const int npart);
+
 //----------------------------------------------------------------------------------------
 //! \class ProblemGenerator
 
@@ -53,6 +59,7 @@ class ProblemGenerator {
   UserSrctermFnPtr user_srcs_func=nullptr;
   UserRefinementFnPtr user_ref_func=nullptr;
   UserHistoryFnPtr user_hist_func=nullptr;
+  UserStarParticleAccelerationFnPtr user_star_particle_accel_func=nullptr;
 
   // predefined problem generator functions (default test suite)
   void CallProblemGenerator(ParameterInput *pin, bool is_restart);

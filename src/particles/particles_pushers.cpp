@@ -50,6 +50,15 @@ TaskStatus Particles::Push(Driver *pdriver, int stage) {
       });
 
     break;
+  case ParticlesPusher::gravity:
+    if (star_gravity_enabled) {
+      if (star_gravity_integrator == StarGravityIntegrator::kdk) {
+        GravityKDKDrift();
+      } else if (star_gravity_integrator == StarGravityIntegrator::rk4) {
+        GravityRK4Step();
+      }
+    }
+    break;
   default:
     break;
   }

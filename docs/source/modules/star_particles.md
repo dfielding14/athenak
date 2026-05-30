@@ -82,6 +82,11 @@ of the gas above `star_accretion_density_floor`, then adds that mass to the part
 Momentum, total energy, and scalar conserved variables are removed in the same fraction
 so the gas velocity and composition remain unchanged by the sink operation.
 
+The stencil crosses MeshBlock and MPI rank boundaries.  Every rank evaluates its owned
+active cells against the same replicated star snapshot, and the removed mass and
+momentum are reduced back to the owning star.  Stable particle-tag order makes
+overlapping stencils independent of rank-local storage order.
+
 ## Boundary Behavior
 
 Star particles use the existing particle boundary task list.  Particles that cross an
@@ -89,7 +94,47 @@ internal MeshBlock boundary are moved to the new owning MeshBlock and, under MPI
 owning rank.  Particles that leave the root mesh through a non-periodic boundary are
 removed from the particle arrays and from the global particle counts.  Periodic and
 shear-periodic boundaries retain the wrapped-particle behavior of the base particle
-module.
+module.  A particle update must cross at most one MeshBlock in each direction.  AthenaK
+stops with an explicit error if `<particles>/dt` is too large for that requirement.
+
+## Gravity
+
+The gravity-aware particle pusher is documented separately in
+`star_particle_gravity.md`.  In brief, `pusher = gravity` and a `<star_gravity>` block
+allow star particles to feel exact direct star-star gravity and configured external
+accelerations.  This is separate from hydro/MHD source terms: stars do not automatically
+inherit a pgen's gas source term unless the pgen explicitly provides a star-particle
+acceleration callback.
+
+## Sidecar Restarts
+
+Star particles are restartable with a particle sidecar output:
+
+```ini
+<output2>
+file_type = rst
+dt = 0.1
+
+<output3>
+file_type = rst_prtcl
+dt = 0.1
+```
+
+The mesh state remains in `rst/<basename>.<file_number>.rst`; particle real/int arrays
+and star bookkeeping totals are stored in
+`rst_prtcl/<basename>.<file_number>.rst_prtcl`.  Restart with:
+
+```bash
+./athena -r rst/my_run.00010.rst \
+  particles/star_init=restart \
+  particles/particle_restart_file=rst_prtcl/my_run.00010.rst_prtcl
+```
+
+The sidecar loader validates time and cycle against the mesh restart, restores tags
+without reassignment, recomputes particle MeshBlock ownership from the current geometry,
+and refreshes the next dynamic star tag before any new formation.  Particle sidecars are
+written before mesh restart files regardless of output-block order, so resumed runs
+continue with the next unused sidecar number.
 
 ## History Output
 
@@ -131,4 +176,6 @@ This implementation is intentionally conservative.  The host-side formation and
 accretion scan is straightforward and portable, and the task ordering keeps all gas
 updates before the hydro time integrator.  More specialized star-formation criteria,
 feedback, stochastic creation, or device-side large-scale formation scans can be added
-on top of this branch without changing the file initialization path.
+on top of this branch without changing the file initialization path.  Neighboring-cell
+accretion currently replicates a compact star snapshot on each rank; a distributed sink
+search is a future optimization for very large star counts.

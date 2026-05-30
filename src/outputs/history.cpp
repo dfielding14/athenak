@@ -282,11 +282,48 @@ void HistoryOutput::LoadParticleHistoryData(HistoryData *pdata, Mesh *pm) {
   pdata->label[1] = "part-mass";
   pdata->label[2] = "formed";
   pdata->label[3] = "accreted";
+  if (ppart->star_gravity_enabled) {
+    pdata->nhist = 19;
+    pdata->label[4] = "grav-dt";
+    pdata->label[5] = "star-ekin";
+    pdata->label[6] = "star-epot";
+    pdata->label[7] = "star-etot";
+    pdata->label[8] = "star-px";
+    pdata->label[9] = "star-py";
+    pdata->label[10] = "star-pz";
+    pdata->label[11] = "star-lx";
+    pdata->label[12] = "star-ly";
+    pdata->label[13] = "star-lz";
+    pdata->label[14] = "star-com-x";
+    pdata->label[15] = "star-com-y";
+    pdata->label[16] = "star-com-z";
+    pdata->label[17] = "star-amax";
+    pdata->label[18] = "star-rmin";
+  }
 
   pdata->hdata[0] = static_cast<Real>(pm->nprtcl_thisrank);
   pdata->hdata[1] = 0.0;
   pdata->hdata[2] = ppart->star_mass_formed_total;
   pdata->hdata[3] = ppart->star_mass_accreted_total;
+  if (ppart->star_gravity_enabled) {
+    Real root_weight = (global_variable::my_rank == 0) ? 1.0 : 0.0;
+    pdata->hdata[4] = root_weight*ppart->star_gravity_diag_dt;
+    pdata->hdata[5] = root_weight*ppart->star_gravity_diag_ekin;
+    pdata->hdata[6] = root_weight*ppart->star_gravity_diag_epot;
+    pdata->hdata[7] = root_weight*(ppart->star_gravity_diag_ekin +
+                                   ppart->star_gravity_diag_epot);
+    pdata->hdata[8] = root_weight*ppart->star_gravity_diag_px;
+    pdata->hdata[9] = root_weight*ppart->star_gravity_diag_py;
+    pdata->hdata[10] = root_weight*ppart->star_gravity_diag_pz;
+    pdata->hdata[11] = root_weight*ppart->star_gravity_diag_lx;
+    pdata->hdata[12] = root_weight*ppart->star_gravity_diag_ly;
+    pdata->hdata[13] = root_weight*ppart->star_gravity_diag_lz;
+    pdata->hdata[14] = root_weight*ppart->star_gravity_diag_com_x;
+    pdata->hdata[15] = root_weight*ppart->star_gravity_diag_com_y;
+    pdata->hdata[16] = root_weight*ppart->star_gravity_diag_com_z;
+    pdata->hdata[17] = root_weight*ppart->star_gravity_diag_amax;
+    pdata->hdata[18] = root_weight*ppart->star_gravity_diag_rmin;
+  }
   for (int n=pdata->nhist; n<NHISTORY_VARIABLES; ++n) {
     pdata->hdata[n] = 0.0;
   }

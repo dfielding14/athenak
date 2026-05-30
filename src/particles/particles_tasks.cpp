@@ -40,8 +40,24 @@ void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> t
   id.recvp  = tl["before_timeintegrator"]->AddTask(&Particles::RecvP, this, id.sendp);
   id.crecv  = tl["before_timeintegrator"]->AddTask(&Particles::ClearRecv, this, id.recvp);
   id.csend  = tl["before_timeintegrator"]->AddTask(&Particles::ClearSend, this, id.crecv);
+  id.gravity_finish = tl["before_timeintegrator"]->AddTask(&Particles::FinishGravity,
+                                                           this, id.csend);
 
   return;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn TaskList Particles::FinishGravity
+//! \brief Completes gravity integration and updates particle gravity diagnostics.
+
+TaskStatus Particles::FinishGravity(Driver *pdrive, int stage) {
+  if (particle_type == ParticleType::star && star_gravity_enabled) {
+    if (star_gravity_integrator == StarGravityIntegrator::kdk) {
+      GravityKDKFinalKick();
+    }
+    UpdateGravityDiagnosticsAndTimestep();
+  }
+  return TaskStatus::complete;
 }
 
 //----------------------------------------------------------------------------------------

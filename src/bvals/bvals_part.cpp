@@ -86,8 +86,10 @@ TaskStatus ParticlesBoundaryValues::SetNewPrtclGID() {
 
   Kokkos::View<int> atom_count("atom_count");
   Kokkos::View<int> atom_destroy_count("atom_destroy_count");
+  Kokkos::View<int> atom_invalid_count("atom_invalid_count");
   Kokkos::deep_copy(atom_count, 0);
   Kokkos::deep_copy(atom_destroy_count, 0);
+  Kokkos::deep_copy(atom_invalid_count, 0);
 
   Kokkos::realloc(sendlist, npart);
   Kokkos::realloc(destroylist, npart);
@@ -120,18 +122,20 @@ TaskStatus ParticlesBoundaryValues::SetNewPrtclGID() {
       bool nonperiodic_mesh_exit =
           (x1 < meshsize.x1min &&
            !IsPeriodicParticleBoundary(mb_bcs.d_view(m,BoundaryFace::inner_x1))) ||
-          (x1 > meshsize.x1max &&
+          (x1 >= meshsize.x1max &&
            !IsPeriodicParticleBoundary(mb_bcs.d_view(m,BoundaryFace::outer_x1))) ||
           (x2 < meshsize.x2min &&
            !IsPeriodicParticleBoundary(mb_bcs.d_view(m,BoundaryFace::inner_x2))) ||
-          (x2 > meshsize.x2max &&
+          (x2 >= meshsize.x2max &&
            !IsPeriodicParticleBoundary(mb_bcs.d_view(m,BoundaryFace::outer_x2))) ||
           (x3 < meshsize.x3min &&
            !IsPeriodicParticleBoundary(mb_bcs.d_view(m,BoundaryFace::inner_x3))) ||
-          (x3 > meshsize.x3max &&
+          (x3 >= meshsize.x3max &&
            !IsPeriodicParticleBoundary(mb_bcs.d_view(m,BoundaryFace::outer_x3)));
 
-      if (nonperiodic_mesh_exit) {
+      if (!nonperiodic_mesh_exit && (abs(ix) > 1 || abs(iy) > 1 || abs(iz) > 1)) {
+        Kokkos::atomic_increment(&atom_invalid_count());
+      } else if (nonperiodic_mesh_exit) {
         MarkForDestruction(&atom_destroy_count(), pdestroyl, p);
       } else if (iz == 0) {
         if (iy == 0) {
@@ -196,22 +200,30 @@ TaskStatus ParticlesBoundaryValues::SetNewPrtclGID() {
       // reset x,y,z positions if particle crosses Mesh boundary using periodic BCs
       if (!nonperiodic_mesh_exit && x1 < meshsize.x1min) {
         pr(IPX,p) += (meshsize.x1max - meshsize.x1min);
-      } else if (!nonperiodic_mesh_exit && x1 > meshsize.x1max) {
+      } else if (!nonperiodic_mesh_exit && x1 >= meshsize.x1max) {
         pr(IPX,p) -= (meshsize.x1max - meshsize.x1min);
       }
       if (!nonperiodic_mesh_exit && x2 < meshsize.x2min) {
         pr(IPY,p) += (meshsize.x2max - meshsize.x2min);
-      } else if (!nonperiodic_mesh_exit && x2 > meshsize.x2max) {
+      } else if (!nonperiodic_mesh_exit && x2 >= meshsize.x2max) {
         pr(IPY,p) -= (meshsize.x2max - meshsize.x2min);
       }
       if (!nonperiodic_mesh_exit && x3 < meshsize.x3min) {
         pr(IPZ,p) += (meshsize.x3max - meshsize.x3min);
-      } else if (!nonperiodic_mesh_exit && x3 > meshsize.x3max) {
+      } else if (!nonperiodic_mesh_exit && x3 >= meshsize.x3max) {
         pr(IPZ,p) -= (meshsize.x3max - meshsize.x3min);
       }
     }
   });
   Kokkos::fence();
+  int invalid_count = 0;
+  Kokkos::deep_copy(invalid_count, atom_invalid_count);
+  if (invalid_count > 0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << invalid_count << " particle(s) crossed more than one "
+              << "MeshBlock in a single update. Reduce <particles>/dt." << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
   Kokkos::deep_copy(nprtcl_send, atom_count);
   Kokkos::deep_copy(nprtcl_destroy, atom_destroy_count);
   Kokkos::resize(sendlist, nprtcl_send);

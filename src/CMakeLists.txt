@@ -98,6 +98,7 @@ add_executable(
         outputs/formatted_table.cpp
         outputs/history.cpp
         outputs/restart.cpp
+        outputs/rst_prtcl.cpp
         outputs/spherical_surface.cpp
         outputs/coarsened_binary.cpp
         outputs/track_prtcl.cpp
@@ -105,6 +106,7 @@ add_executable(
         outputs/vtk_prtcl.cpp
 
         particles/particles.cpp
+        particles/particles_gravity.cpp
         particles/particles_pushers.cpp
         particles/particles_tasks.cpp
         outputs/pdf.cpp

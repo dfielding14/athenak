@@ -11,6 +11,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "athena.hpp"
 #include "parameter_input.hpp"
@@ -20,10 +21,15 @@
 // forward declarations
 
 // constants that enumerate ParticlesPusher options
-enum class ParticlesPusher {drift, leap_frog, lagrangian_tracer, lagrangian_mc};
+enum class ParticlesPusher {drift, gravity, leap_frog, lagrangian_tracer, lagrangian_mc};
 
 // constants that enumerate ParticleTypes
 enum class ParticleType {cosmic_ray, star};
+enum class StarGravityForceMethod {direct, tree};
+enum class StarGravityIntegrator {kdk, rk4};
+enum class StarGravityExternalMode {none, constant, point_mass, user};
+enum class StarGravityTimestepMode {fixed, acceleration, pair_orbit};
+enum class StarGravityPeriodicMode {domain, minimum_image, error};
 
 //----------------------------------------------------------------------------------------
 //! \struct ParticlesTaskIDs
@@ -40,6 +46,7 @@ struct ParticlesTaskIDs {
   TaskID recvp;
   TaskID csend;
   TaskID crecv;
+  TaskID gravity_finish;
 };
 
 namespace particles {
@@ -68,6 +75,7 @@ class Particles {
 
   // Star-particle controls
   bool star_init_from_file = false;
+  bool star_init_from_restart = false;
   bool star_formation_enabled = false;
   bool star_accretion_enabled = false;
   bool star_remove_gas_on_formation = true;
@@ -84,6 +92,45 @@ class Particles {
   Real star_mass_formed_total = 0.0;
   Real star_mass_accreted_total = 0.0;
 
+  // Star-particle gravity controls and diagnostics
+  bool star_gravity_enabled = false;
+  bool star_gravity_self_enabled = true;
+  bool star_gravity_exact_diagnostics = true;
+  bool star_gravity_conserve_accretion_momentum = true;
+  StarGravityForceMethod star_gravity_force_method = StarGravityForceMethod::direct;
+  StarGravityIntegrator star_gravity_integrator = StarGravityIntegrator::kdk;
+  StarGravityExternalMode star_gravity_external_mode = StarGravityExternalMode::none;
+  StarGravityTimestepMode star_gravity_timestep_mode = StarGravityTimestepMode::fixed;
+  StarGravityPeriodicMode star_gravity_periodic_mode = StarGravityPeriodicMode::domain;
+  Real star_gravity_constant = 0.0;
+  Real star_gravity_softening = 0.0;
+  Real star_gravity_timestep_eta = 0.02;
+  Real star_gravity_max_timestep = -1.0;
+  Real star_gravity_tree_theta = 0.7;
+  Real star_gravity_base_timestep = 0.0;
+  Real star_gravity_external_ax = 0.0;
+  Real star_gravity_external_ay = 0.0;
+  Real star_gravity_external_az = 0.0;
+  Real star_gravity_external_mass = 0.0;
+  Real star_gravity_external_x = 0.0;
+  Real star_gravity_external_y = 0.0;
+  Real star_gravity_external_z = 0.0;
+  Real star_gravity_external_softening = 0.0;
+  Real star_gravity_diag_dt = 0.0;
+  Real star_gravity_diag_ekin = 0.0;
+  Real star_gravity_diag_epot = 0.0;
+  Real star_gravity_diag_px = 0.0;
+  Real star_gravity_diag_py = 0.0;
+  Real star_gravity_diag_pz = 0.0;
+  Real star_gravity_diag_lx = 0.0;
+  Real star_gravity_diag_ly = 0.0;
+  Real star_gravity_diag_lz = 0.0;
+  Real star_gravity_diag_com_x = 0.0;
+  Real star_gravity_diag_com_y = 0.0;
+  Real star_gravity_diag_com_z = 0.0;
+  Real star_gravity_diag_amax = 0.0;
+  Real star_gravity_diag_rmin = 0.0;
+
   // Boundary communication buffers and functions for particles
   ParticlesBoundaryValues *pbval_part;
 
@@ -96,6 +143,7 @@ class Particles {
   TaskStatus FormStars(Driver *pdriver, int stage);
   TaskStatus AccreteStars(Driver *pdriver, int stage);
   TaskStatus Push(Driver *pdriver, int stage);
+  TaskStatus FinishGravity(Driver *pdriver, int stage);
   TaskStatus NewGID(Driver *pdriver, int stage);
   TaskStatus SendCnt(Driver *pdriver, int stage);
   TaskStatus InitRecv(Driver *pdriver, int stage);
@@ -107,9 +155,27 @@ class Particles {
  private:
   MeshBlockPack* pmy_pack;  // ptr to MeshBlockPack containing this Particles
 
+  void ParseStarGravity(ParameterInput *pin);
   void LoadStarsFromFile(ParameterInput *pin);
+  void LoadStarsFromRestart(ParameterInput *pin);
+  int FindLocalMeshBlockForPosition(Real x, Real y, Real z) const;
   void RefreshNextStarTag();
   void UpdateParticleCounts();
+  void GravityKDKDrift();
+  void GravityKDKFinalKick();
+  void GravityRK4Step();
+  void UpdateGravityDiagnosticsAndTimestep();
+  void ComputeStarGravityAcceleration(const std::vector<Real> &x,
+                                      const std::vector<Real> &y,
+                                      const std::vector<Real> &z,
+                                      const std::vector<Real> &mass,
+                                      const std::vector<int> &tag,
+                                      Real eval_time,
+                                      std::vector<Real> &ax,
+                                      std::vector<Real> &ay,
+                                      std::vector<Real> &az,
+                                      Real *min_pair=nullptr,
+                                      Real *potential_energy=nullptr);
 };
 
 } // namespace particles
