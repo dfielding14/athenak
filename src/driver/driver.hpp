@@ -44,7 +44,7 @@ class Driver {
   Real delta[4];                   // weights for updating the intermediate stage (u1)
   Real a_twid[4][4], a_impl;       // matrix elements for implicit stages in ImEx
   Real cfl_limit;                  // maximum CFL number for integrator
-  Real gamma;                      // gamma value for the IMEX_new integrator
+  Real gamma;                      // gamma value for the imex2+ integrator
   Kokkos::Timer* pwall_clock_;     // timer for tracking the wall clock
   Real wall_time;
 
@@ -56,6 +56,7 @@ class Driver {
   void InitBoundaryValuesAndPrimitives(Mesh *pm);
 
  private:
+  bool gravity_current_ = false; // potential matches current conserved density
   Kokkos::Timer run_time_;      // generalized timer for cpu/gpu/etc
   std::uint64_t nmb_updated_;   // running total of MB updated during run
   std::uint64_t npart_updated_; // running total of particles updated during run

@@ -10,11 +10,12 @@ input files and binary-output parser used by the tests.
 |---|---|---|
 | Periodic Jeans solve | hydro/MHD convergence and analytic potential | potential slice, error slice, pointwise comparison |
 | Hydro/MHD equivalence | zero-field MHD equals hydro gravity | hydro/MHD slice and difference map |
-| Source coupling | momentum update against analytic Jeans force | momentum-increment slice and residual |
+| Source coupling | momentum update against analytic Jeans force and final-density Poisson residual | momentum-increment and Poisson-residual slices |
 | Isolated boundaries | binary uniform-sphere multipole potential and force | potential slice, residual, radial error |
 | Restart | two cycles straight versus one cycle plus restart plus one cycle | density/momentum difference maps |
 | Controls and profiling | threshold mode, fixed iterations, root placement, profile phases | defect and timing plots |
 | Static refined hierarchy | BE collapse smoke on a static refined mesh | density and potential slices |
+| Dynamic AMR regrid | bounded experimental refine smoke | density and potential slices |
 | Invalid inputs | fatal diagnostics for bad user contracts | failure table |
 | MPI | 2-rank/4-rank Jeans, root placement, multipole reduction | MPI summary plot |
 | GPU | CUDA smoke hooks when available | GPU-node artifact pending in this local run |
@@ -23,38 +24,44 @@ input files and binary-output parser used by the tests.
 
 | Group | Metric | Value |
 |---|---:|---:|
-| `periodic_jeans` | `relative_l2` | 2.9981e-03 |
+| `periodic_jeans` | `relative_l2` | 1.2442e-03 |
+| `periodic_jeans` | `initial_output_relative_l2` | 3.2189e-03 |
 | `hydro_mhd_equivalence` | `max_abs_phi_difference` | 0.0000e+00 |
 | `source_oracle` | `mom1` | 3.1975e-03 |
 | `source_oracle` | `mom2` | 3.1975e-03 |
 | `source_oracle` | `mom3` | 3.1975e-03 |
-| `binary_multipole` | `potential_relative_l2` | 8.8270e-04 |
+| `source_oracle` | `final_poisson_relative_l2` | 4.3131e-04 |
+| `binary_multipole` | `potential_relative_l2` | 9.0233e-04 |
 | `binary_multipole` | `force_cosine` | 9.9997e-01 |
 | `restart_equivalence` | `dens` | 0.0000e+00 |
 | `restart_equivalence` | `mom1` | 5.6843e-14 |
 | `restart_equivalence` | `mom2` | 5.6843e-14 |
 | `restart_equivalence` | `mom3` | 5.6843e-14 |
-| `controls_profile` | `threshold_final_defect` | 8.6078e-09 |
-| `controls_profile` | `fixed_iteration_final_defect` | 5.2331e-06 |
+| `controls_profile` | `threshold_final_defect` | 8.5756e-09 |
+| `controls_profile` | `fixed_iteration_final_defect` | 5.2246e-06 |
 | `controls_profile` | `root_on_host_max_abs_phi_difference` | 0.0000e+00 |
-| `controls_profile` | `profile_seconds.source_load` | 1.7425e-04 |
-| `controls_profile` | `profile_seconds.setup` | 1.2063e-04 |
-| `controls_profile` | `profile_seconds.root_transfer` | 3.3792e-05 |
-| `controls_profile` | `profile_seconds.smooth` | 9.6504e-04 |
-| `controls_profile` | `profile_seconds.boundary` | 3.9799e-03 |
-| `controls_profile` | `profile_seconds.restrict_prolong` | 3.5307e-03 |
-| `controls_profile` | `profile_seconds.solve_total` | 1.0501e-02 |
-| `controls_profile` | `profile_seconds.result_retrieve` | 1.7613e-04 |
-| `controls_profile` | `profile_seconds.total` | 1.1161e-02 |
+| `controls_profile` | `profile_seconds.source_load` | 1.8437e-04 |
+| `controls_profile` | `profile_seconds.setup` | 1.2679e-04 |
+| `controls_profile` | `profile_seconds.root_transfer` | 3.1998e-05 |
+| `controls_profile` | `profile_seconds.smooth` | 1.0262e-03 |
+| `controls_profile` | `profile_seconds.boundary` | 4.1680e-03 |
+| `controls_profile` | `profile_seconds.restrict_prolong` | 3.6048e-03 |
+| `controls_profile` | `profile_seconds.solve_total` | 1.1007e-02 |
+| `controls_profile` | `profile_seconds.result_retrieve` | 1.8992e-04 |
+| `controls_profile` | `profile_seconds.total` | 1.1714e-02 |
 | `be_static_refined` | `physical_refinement_levels` | 1 |
-| `be_static_refined` | `phi_min` | -4.7904e-01 |
-| `be_static_refined` | `phi_max` | -2.0731e-01 |
+| `be_static_refined` | `phi_min` | -4.7881e-01 |
+| `be_static_refined` | `phi_max` | -2.0732e-01 |
 | `be_static_refined` | `density_min` | 4.9997e-01 |
 | `be_static_refined` | `density_max` | 3.7222e+00 |
-| `mpi` | `2_rank_jeans_relative_l2` | 2.9981e-03 |
-| `mpi` | `4_rank_jeans_relative_l2` | 2.9981e-03 |
+| `dynamic_amr_regrid` | `final_meshblocks` | 64 |
+| `dynamic_amr_regrid` | `created_meshblocks` | 56 |
+| `dynamic_amr_regrid` | `deleted_meshblocks` | 0 |
+| `dynamic_amr_regrid` | `final_defect` | 6.2932e-07 |
+| `mpi` | `2_rank_jeans_relative_l2` | 1.2442e-03 |
+| `mpi` | `4_rank_jeans_relative_l2` | 1.2442e-03 |
 | `mpi` | `root_host_device_max_abs_phi_difference` | 0.0000e+00 |
-| `mpi` | `binary_multipole_relative_l2` | 8.0070e-04 |
+| `mpi` | `binary_multipole_relative_l2` | 8.1163e-04 |
 
 ## Periodic Jeans Potential
 
@@ -105,6 +112,13 @@ input files and binary-output parser used by the tests.
 :width: 100%
 ```
 
+## Dynamic AMR Regrid Smoke
+
+```{figure} ../_static/selfgravity/dynamic_amr_regrid.png
+:alt: Dynamic AMR self-gravity regrid smoke slices
+:width: 100%
+```
+
 ## Failure-Mode Tests
 
 | Failure case | Expected fatal diagnostic |
@@ -115,6 +129,7 @@ input files and binary-output parser used by the tests.
 | bad mporder | `gravity/mporder must be 2 or 4` |
 | missing gravity block | `self_gravity source terms require` |
 | missing convergence control | `Set either gravity/threshold or gravity/niteration` |
+| two-fluid self-gravity | `Self-gravity currently supports one fluid` |
 
 
 ## MPI Coverage
@@ -134,7 +149,17 @@ test.
 
 GPU smoke tests are defined in `tst/test_suite/selfgravity/test_selfgravity_gpu.py`.
 This local artifact does not include CUDA results because no CUDA compiler/device
-was available in the generation environment. On a CUDA node, run the regression
-suite with `python run_test_suite.py --gpu --test test_suite/selfgravity/test_selfgravity_gpu.py`,
-then regenerate this page with `python docs/scripts/generate_selfgravity_validation.py
---build-cpu --with-mpi --build-mpi --with-gpu --build-gpu`.
+was available in the generation environment. On a CUDA node, run:
+
+```bash
+cd tst
+python run_test_suite.py --gpu \
+    --test test_suite/selfgravity/test_selfgravity_gpu.py
+```
+
+Then regenerate this page with:
+
+```bash
+python docs/scripts/generate_selfgravity_validation.py \
+    --build-cpu --with-mpi --build-mpi --with-gpu --build-gpu
+```

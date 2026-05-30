@@ -135,6 +135,20 @@ void MultigridDriver::ResetProfileCounters() {
   profile_result_time_ = 0.0;
 }
 
+void MultigridDriver::StartProfilePhase(Kokkos::Timer &timer) {
+  if (profile_enabled_) {
+    Kokkos::fence();
+    timer.reset();
+  }
+}
+
+void MultigridDriver::StopProfilePhase(Kokkos::Timer &timer, double &counter) {
+  if (profile_enabled_) {
+    Kokkos::fence();
+    counter += timer.seconds();
+  }
+}
+
 
 //----------------------------------------------------------------------------------------
 //! \fn void MultigridDriver::SyncRootToHost()
@@ -484,6 +498,7 @@ void MultigridDriver::BuildRootFlatBuffers() {
 
 void MultigridDriver::TransferFromBlocksToRoot(bool initflag) {
   Kokkos::Timer profile_timer;
+  StartProfilePhase(profile_timer);
   const int nv = nvar_;
   auto rootbuf = rootbuf_;
   const auto &src = mglevels_->src_[0].d_view;
@@ -548,7 +563,7 @@ void MultigridDriver::TransferFromBlocksToRoot(bool initflag) {
   mgroot_->current_level_ = nrootlevel_ - 1;
   root_sync_state_ = RootSyncState::HOST_MODIFIED;
   if (nreflevel_ == 0) SyncRootToDevice();
-  if (profile_enabled_) profile_root_transfer_time_ += profile_timer.seconds();
+  StopProfilePhase(profile_timer, profile_root_transfer_time_);
   return;
 }
 
@@ -559,13 +574,14 @@ void MultigridDriver::TransferFromBlocksToRoot(bool initflag) {
 
 void MultigridDriver::TransferFromRootToBlocks(bool folddata) {
   Kokkos::Timer profile_timer;
+  StartProfilePhase(profile_timer);
   SyncRootToHost();
   if (nreflevel_ > 0) {
     RestrictOctetsBeforeTransfer();
     SetOctetBoundariesBeforeTransfer(folddata);
   }
   mglevels_->SetFromRootGrid(folddata);
-  if (profile_enabled_) profile_root_transfer_time_ += profile_timer.seconds();
+  StopProfilePhase(profile_timer, profile_root_transfer_time_);
   return;
 }
 

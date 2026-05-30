@@ -328,9 +328,8 @@ void Driver::Initialize(Mesh *pmesh, ParameterInput *pin, Outputs *pout, bool re
   InitBoundaryValuesAndPrimitives(pmesh);
 
   //---- Step 2.  Compute time step (if problem involves time evolution)
-  // NOTE: For new simulations (!res_flag), the initial conditions haven't been set yet
-  // by the ProblemGenerator, so we can't compute a proper timestep for MHD here.
-  // The timestep will be computed properly on the first cycle.
+  // NOTE: Initial conditions have already been set by the ProblemGenerator before this
+  // function is called, so the timestep and initial derived fields can be computed here.
   hydro::Hydro *phydro = pmesh->pmb_pack->phydro;
   mhd::MHD *pmhd = pmesh->pmb_pack->pmhd;
   radiation::Radiation *prad = pmesh->pmb_pack->prad;
@@ -352,7 +351,15 @@ void Driver::Initialize(Mesh *pmesh, ParameterInput *pin, Outputs *pout, bool re
     pmesh->NewTimeStep(tlim);
   }
 
-  //---- Step 3.  Cycle through output Types and load data / write files.
+  //---- Step 3.  Solve self-gravity for initial-condition outputs and the first RK stage.
+  // The potential is derived from the conserved density and is not populated by the
+  // ProblemGenerator or restart reader.
+  if (pmesh->pmb_pack->pgrav != nullptr) {
+    pmesh->pmb_pack->pgrav->SolveStage(this, 0, pmesh->dt);
+    gravity_current_ = true;
+  }
+
+  //---- Step 4.  Cycle through output Types and load data / write files.
   if (!res_flag) { // only write outputs at the beginning of the run
     Kokkos::fence();
     double load_time = 0.0;
@@ -382,7 +389,7 @@ void Driver::Initialize(Mesh *pmesh, ParameterInput *pin, Outputs *pout, bool re
     }
   }
 
-  //---- Step 4.  Initialize various counters, timers, etc.
+  //---- Step 5.  Initialize various counters, timers, etc.
   run_time_.reset();
   nmb_updated_ = 0;
 
@@ -392,7 +399,7 @@ void Driver::Initialize(Mesh *pmesh, ParameterInput *pin, Outputs *pout, bool re
   if (pionn != nullptr) {
     if (nimp_stages == 0) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-          << std::endl << "IonNetral MHD can only be run with ImEx integrators."
+          << std::endl << "Ion-neutral MHD can only be run with ImEx integrators."
           << std::endl;
       std::exit(EXIT_FAILURE);
     }
@@ -415,6 +422,7 @@ void Driver::Initialize(Mesh *pmesh, ParameterInput *pin, Outputs *pout, bool re
 //! performs outputs. Updates counters like (ncycle, time, etc.)
 
 void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
+  gravity::Gravity *pgrav = pmesh->pmb_pack->pgrav;
   if (global_variable::my_rank == 0) {
     std::cout << "\nSetup complete, executing task list(s)...\n" << std::endl;
   }
@@ -437,16 +445,25 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
       // time-integrator tasks for each stage of integrator
       for (int stage=1; stage<=(nexp_stages); ++stage) {
         ExecuteTaskList(pmesh, "before_stagen", stage);
-        // solve gravity at each RK stage so the potential is consistent
-        // with the current density (required for 2nd-order accuracy)
-        if (pmesh->pmb_pack->pgrav != nullptr)
-            {pmesh->pmb_pack->pgrav->SolveStage(this, stage, pmesh->dt);}
+        // Solve gravity when the density has changed.  The stage-one solve can reuse the
+        // potential prepared after initialization, the prior cycle, or an AMR regrid.
+        if (pgrav != nullptr && !gravity_current_) {
+          pgrav->SolveStage(this, stage, pmesh->dt);
+          gravity_current_ = true;
+        }
         ExecuteTaskList(pmesh, "stagen", stage);
+        if (pgrav != nullptr) {gravity_current_ = false;}
         ExecuteTaskList(pmesh, "after_stagen", stage);
       }
 
       // Work after time integrator indicated by "1" in stage
       ExecuteTaskList(pmesh, "after_timeintegrator", 1);
+      // Refresh gravity data after the final RK update.  This keeps output fields
+      // consistent with the density and prepares the next cycle's stage-one solve.
+      if (pgrav != nullptr && !gravity_current_) {
+        pgrav->SolveStage(this, nexp_stages + 1, pmesh->dt);
+        gravity_current_ = true;
+      }
       // Work outside of TaskLists:
       // increment time, ncycle, etc.
       pmesh->time = pmesh->time + pmesh->dt;
@@ -499,7 +516,17 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
       }
 
       // AMR
-      if (pmesh->adaptive) {pmesh->pmr->AdaptiveMeshRefinement(this, pin);}
+      if (pmesh->adaptive) {
+        int nmb_created = pmesh->pmr->nmb_created;
+        int nmb_deleted = pmesh->pmr->nmb_deleted;
+        pmesh->pmr->AdaptiveMeshRefinement(this, pin);
+        if (pgrav != nullptr &&
+            (nmb_created != pmesh->pmr->nmb_created ||
+             nmb_deleted != pmesh->pmr->nmb_deleted)) {
+          pgrav->SolveStage(this, 0, pmesh->dt);
+          gravity_current_ = true;
+        }
+      }
       // compute new timestep AFTER all Meshblocks refined/derefined
       pmesh->NewTimeStep(tlim);
 
@@ -507,7 +534,6 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
       if (wall_time > 0.) {
         elapsed_time = UpdateWallClock();
       }
-
     }  // end while
   }    // end of (time_evolution != tstatic) clause
   return;

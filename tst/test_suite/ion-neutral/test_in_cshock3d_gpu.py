@@ -10,9 +10,9 @@ import test_suite.testutils as testutils
 import athena_read
 
 # Threshold errors for test
-errors = {("imex2"): (0.75), ("imex3"): (0.85)}
+errors = {("imex2"): (0.75), ("imex2+"): (0.75), ("imex3"): (0.85)}
 
-_int = ["imex2", "imex3"]
+_int = ["imex2", "imex2+", "imex3"]
 _res = [128]
 input_file = "inputs/cshock.athinput"
 

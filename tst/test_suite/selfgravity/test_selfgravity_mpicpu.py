@@ -28,8 +28,8 @@ def test_mpi_periodic_jeans_converges_mpicpu(ranks):
         output = sg.parse_binary_output(sg.latest_binary_output(basename, "grav_phi"))
         phi, x1, x2, x3 = sg.concatenate_field(output, "grav_phi")
         k_wave, four_pi_g, _ = sg.jeans_geometry(n_jeans=0.5)
-        analytic = -four_pi_g * 1.0e-3 / (k_wave*k_wave)
-        analytic *= np.sin(k_wave*sg.jeans_phase(x1, x2, x3))
+        analytic = -four_pi_g * 1.0e-3 / (k_wave * k_wave)
+        analytic *= np.sin(k_wave * sg.jeans_phase(x1, x2, x3))
         assert sg.relative_l2((phi - np.mean(phi)) - analytic, analytic) < 4.0e-2
     finally:
         sg.cleanup_outputs(basename)
@@ -55,7 +55,9 @@ def test_mpi_root_host_and_device_paths_match_mpicpu():
             expect_jeans_banner=True,
             max_final_defect=2.0e-8,
         )
-        device = sg.parse_binary_output(sg.latest_binary_output(device_basename, "grav_phi"))
+        device = sg.parse_binary_output(
+            sg.latest_binary_output(device_basename, "grav_phi")
+        )
         host = sg.parse_binary_output(sg.latest_binary_output(host_basename, "grav_phi"))
         device_phi, _, _, _ = sg.concatenate_field(device, "grav_phi")
         host_phi, _, _, _ = sg.concatenate_field(host, "grav_phi")
@@ -76,13 +78,13 @@ def test_mpi_multipole_binary_reduction_mpicpu():
         )
         output = sg.parse_binary_output(sg.latest_binary_output(basename, "grav_phi"))
         phi, x1, x2, x3 = sg.concatenate_field(output, "grav_phi")
-        gconst = 1.0/(4.0*math.pi)
+        gconst = 1.0 / (4.0 * math.pi)
         radius = 0.10
-        r1 = np.sqrt((x1 - 0.15)**2 + x2*x2 + x3*x3)
-        r2 = np.sqrt((x1 + 0.15)**2 + x2*x2 + x3*x3)
-        analytic = -gconst*1.0/np.maximum(r1, 1.0e-300)
-        analytic += -gconst*0.5/np.maximum(r2, 1.0e-300)
-        mask = (r1 > 2.0*radius) & (r2 > 2.0*radius)
+        r1 = np.sqrt((x1 - 0.15) ** 2 + x2 * x2 + x3 * x3)
+        r2 = np.sqrt((x1 + 0.15) ** 2 + x2 * x2 + x3 * x3)
+        analytic = -gconst * 1.0 / np.maximum(r1, 1.0e-300)
+        analytic += -gconst * 0.5 / np.maximum(r2, 1.0e-300)
+        mask = (r1 > 2.0 * radius) & (r2 > 2.0 * radius)
         assert np.all(phi[mask] < 0.0)
         assert sg.relative_l2(phi[mask] - analytic[mask], analytic[mask]) < 4.0e-1
     finally:

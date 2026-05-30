@@ -150,7 +150,9 @@ The main knobs are:
 
 With `profile = true`, each solve prints source loading, setup, root transfer,
 smoothing, boundary exchange, restriction/prolongation, result retrieval, and
-total solve timings. Use this before changing smoother counts or root placement.
+total solve timings. Profiling mode synchronizes measured accelerator phases so
+the phase breakdown is diagnostic; leave it disabled for performance runs. Use
+this before changing smoother counts or root placement.
 
 ## Output
 
@@ -162,6 +164,10 @@ file_type = bin
 variable = grav_phi
 dt = 1.0
 ```
+
+The initial-condition output contains a solved potential. Evolved runs refresh
+the potential before each explicit RK source evaluation and after each completed
+timestep, so output fields remain consistent with the written density.
 
 For source-term checks, write conserved fluid variables:
 
@@ -178,7 +184,7 @@ The visual validation report at
 [Self-Gravity Validation Results](self_gravity_validation.md) shows the
 figure-producing versions of these tests, including potential slices,
 source-term residuals, restart differences, isolated-boundary errors, static
-refined BE slices, and MPI quantitative summaries.
+refined BE slices, bounded dynamic-AMR slices, and MPI quantitative summaries.
 
 The regression suite includes:
 
@@ -187,11 +193,14 @@ The regression suite includes:
 - hydro/MHD zero-field gravity equivalence;
 - binary uniform-sphere potential and force comparison with multipole BCs;
 - source-term momentum update comparison against the analytic Jeans force;
+- final-output discrete Poisson residual against the written density;
 - restart equivalence for two cycles run straight versus one cycle plus restart;
 - `root_on_host = false` and `root_on_host = true` comparisons;
 - fixed-iteration mode;
 - startup failure tests for invalid self-gravity inputs;
+- cycle-zero output verification and a two-fluid rejection regression;
 - static refined-hierarchy BE collapse smoke;
+- bounded dynamic AMR refine smoke;
 - MPI 2-rank and 4-rank Jeans tests;
 - MPI multipole binary reduction test;
 - GPU smoke tests for Jeans and root-host/device equivalence when a CUDA build is
@@ -240,6 +249,6 @@ Use this order:
   the potential.
 - Exactly one fluid module is supported per self-gravity solve.
 - Periodic solves remove the mean source term.
-- The tested multilevel path is a static refined hierarchy. Dynamically moving
-  AMR with self-gravity should be treated as experimental until it has its own
-  refinement/regrid regression.
+- Static refined hierarchies and a bounded dynamic refine smoke are covered.
+  Dynamically moving AMR with self-gravity remains experimental until it has
+  stricter accuracy and repeated refine/derefine regressions.

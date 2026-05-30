@@ -30,17 +30,20 @@ def run_athena(
     command = []
     if mpi_ranks is not None:
         command = ["mpirun", "-np", str(mpi_ranks)]
-    command.extend([
-        "./athena",
-        "-i",
-        str(REPO_ROOT / input_file),
-        f"job/basename={basename}",
-        "gravity/show_defect=true",
-    ])
+    command.extend(
+        [
+            "./athena",
+            "-i",
+            str(REPO_ROOT / input_file),
+            f"job/basename={basename}",
+            "gravity/show_defect=true",
+        ]
+    )
     if extra_args:
         command.extend(extra_args)
-    result = subprocess.run(command, stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE, text=True, check=False)
+    result = subprocess.run(
+        command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False
+    )
     combined = result.stdout + result.stderr
     assert result.returncode == 0, combined
     assert "nan" not in combined.lower()
@@ -58,8 +61,9 @@ def run_restart(restart_file, extra_args=None):
     command = ["./athena", "-r", str(restart_file)]
     if extra_args:
         command.extend(extra_args)
-    result = subprocess.run(command, stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE, text=True, check=False)
+    result = subprocess.run(
+        command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False
+    )
     combined = result.stdout + result.stderr
     assert result.returncode == 0, combined
     assert "nan" not in combined.lower()
@@ -70,8 +74,9 @@ def expect_failure(input_file, extra_args=None, expected_text=None):
     command = ["./athena", "-i", str(REPO_ROOT / input_file)]
     if extra_args:
         command.extend(extra_args)
-    result = subprocess.run(command, stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE, text=True, check=False)
+    result = subprocess.run(
+        command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False
+    )
     combined = result.stdout + result.stderr
     assert result.returncode != 0, combined
     if expected_text is not None:
@@ -104,6 +109,14 @@ def latest_binary_output(basename, output_id=None):
         paths = [path for path in paths if output_id in path.name]
     assert paths, f"No binary outputs found for {basename}"
     return paths[-1]
+
+
+def first_binary_output(basename, output_id=None):
+    paths = sorted(Path("bin").glob(f"{basename}*.bin"))
+    if output_id is not None:
+        paths = [path for path in paths if output_id in path.name]
+    assert paths, f"No binary outputs found for {basename}"
+    return paths[0]
 
 
 def latest_restart_output(basename):
@@ -147,7 +160,9 @@ def parse_binary_output(path):
             indices = struct.unpack("<10i", index_bytes)
             bounds_raw = stream.read(6 * loc_size)
             assert len(bounds_raw) == 6 * loc_size, f"Truncated block bounds in {path}"
-            bounds = np.frombuffer(bounds_raw, dtype=real_dtype, count=6).astype(np.float64)
+            bounds = np.frombuffer(bounds_raw, dtype=real_dtype, count=6).astype(
+                np.float64
+            )
             ois, oie, ojs, oje, oks, oke, lx1, lx2, lx3, level = indices
             nx = oie - ois + 1
             ny = oje - ojs + 1
@@ -157,14 +172,16 @@ def parse_binary_output(path):
             assert len(data_raw) == count * var_size, f"Truncated block data in {path}"
             data = np.frombuffer(data_raw, dtype=var_dtype, count=count)
             data = data.astype(np.float64).reshape((nvars, nz, ny, nx))
-            blocks.append({
-                "bounds": bounds,
-                "indices": indices,
-                "logical_location": (lx1, lx2, lx3),
-                "level": level,
-                "labels": labels,
-                "data": data,
-            })
+            blocks.append(
+                {
+                    "bounds": bounds,
+                    "indices": indices,
+                    "logical_location": (lx1, lx2, lx3),
+                    "level": level,
+                    "labels": labels,
+                    "data": data,
+                }
+            )
 
     metadata["time"] = float(metadata.get("time", 0.0))
     metadata["cycle"] = int(metadata.get("cycle", 0))
@@ -174,9 +191,9 @@ def parse_binary_output(path):
 def block_centers(block):
     x1min, x1max, x2min, x2max, x3min, x3max = block["bounds"]
     nz, ny, nx = block["data"].shape[1:]
-    x1 = np.linspace(x1min, x1max, nx, endpoint=False) + 0.5*(x1max - x1min)/nx
-    x2 = np.linspace(x2min, x2max, ny, endpoint=False) + 0.5*(x2max - x2min)/ny
-    x3 = np.linspace(x3min, x3max, nz, endpoint=False) + 0.5*(x3max - x3min)/nz
+    x1 = np.linspace(x1min, x1max, nx, endpoint=False) + 0.5 * (x1max - x1min) / nx
+    x2 = np.linspace(x2min, x2max, ny, endpoint=False) + 0.5 * (x2max - x2min) / ny
+    x3 = np.linspace(x3min, x3max, nz, endpoint=False) + 0.5 * (x3max - x3min) / nz
     x3g, x2g, x1g = np.meshgrid(x3, x2, x1, indexing="ij")
     return x1g, x2g, x3g
 
@@ -237,24 +254,25 @@ def uniform_grid_field(output, name):
 
 def jeans_geometry(lengths=(1.0, 1.0, 1.0), n_jeans=0.5, rho0=1.0, cs=1.0):
     lx1, lx2, lx3 = lengths
-    ang3 = math.atan(lx1/lx2)
+    ang3 = math.atan(lx1 / lx2)
     sin_a3 = math.sin(ang3)
     cos_a3 = math.cos(ang3)
-    ang2 = math.atan(0.5*(lx1*cos_a3 + lx2*sin_a3)/lx3)
+    ang2 = math.atan(0.5 * (lx1 * cos_a3 + lx2 * sin_a3) / lx3)
     sin_a2 = math.sin(ang2)
     cos_a2 = math.cos(ang2)
-    wavelength = min(lx1*cos_a2*cos_a3, lx2*cos_a2*sin_a3, lx3*sin_a2)
-    k_wave = 2.0*math.pi/wavelength
-    four_pi_g = (n_jeans*k_wave*cs)**2/rho0
-    direction = np.array([cos_a2*cos_a3, cos_a2*sin_a3, sin_a2])
+    wavelength = min(lx1 * cos_a2 * cos_a3, lx2 * cos_a2 * sin_a3, lx3 * sin_a2)
+    k_wave = 2.0 * math.pi / wavelength
+    four_pi_g = (n_jeans * k_wave * cs) ** 2 / rho0
+    direction = np.array([cos_a2 * cos_a3, cos_a2 * sin_a3, sin_a2])
     return k_wave, four_pi_g, direction
 
 
 def jeans_phase(x1, x2, x3):
     _, _, direction = jeans_geometry()
-    return direction[0]*x1 + direction[1]*x2 + direction[2]*x3
+    return direction[0] * x1 + direction[1] * x2 + direction[2] * x3
 
 
 def relative_l2(error, reference):
     return np.linalg.norm(error.ravel()) / max(
-        np.linalg.norm(reference.ravel()), 1.0e-300)
+        np.linalg.norm(reference.ravel()), 1.0e-300
+    )

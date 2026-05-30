@@ -476,6 +476,8 @@ class MultigridDriver {
   double profile_smooth_time_, profile_boundary_time_, profile_restrict_prolong_time_;
   double profile_solve_time_, profile_result_time_;
   void ResetProfileCounters();
+  void StartProfilePhase(Kokkos::Timer &timer);
+  void StopProfilePhase(Kokkos::Timer &timer, double &counter);
 
   // Source masking (zero source outside mask_radius_)
   Real mask_radius_;

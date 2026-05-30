@@ -548,7 +548,7 @@ int main(int argc, char *argv[]) {
 
   //--- Step 7. --------------------------------------------------------------------------
   // Execute Driver.
-  //    1. Initial conditions set in Driver::Initialize()
+  //    1. Initial derived fields and outputs prepared in Driver::Initialize()
   //    2. TaskList(s) executed in Driver::Execute()
   //    3. Any final analysis or diagnostics run in Driver::Finalize()
 
