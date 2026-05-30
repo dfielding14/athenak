@@ -360,6 +360,37 @@ def validate_debug_input(path: Path) -> None:
         )
 
 
+def input_parameter_keys(path: Path) -> set[str]:
+    """Return block-qualified parameters declared by one Athena input deck."""
+
+    block = None
+    keys: set[str] = set()
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.split("#", 1)[0].strip()
+        block_match = re.fullmatch(r"<([^>]+)>", line)
+        if block_match is not None:
+            block = block_match.group(1).strip()
+            continue
+        parameter_match = re.match(r"([^=\s]+)\s*=", line)
+        if block is not None and parameter_match is not None:
+            keys.add(f"{block}/{parameter_match.group(1)}")
+    return keys
+
+
+def validate_overrides(path: Path, overrides: list[str]) -> None:
+    """Require command-line overrides to target parameters present in the deck."""
+
+    keys = input_parameter_keys(path)
+    for override in overrides:
+        if "=" not in override:
+            raise ValueError(f"override must use block/name=value: {override}")
+        key, _ = override.split("=", 1)
+        if key not in keys:
+            raise ValueError(
+                f"override targets parameter absent from input deck: {key}"
+            )
+
+
 def quote(value: str | Path) -> str:
     """Quote a shell literal in a generated submission script."""
 
@@ -522,6 +553,7 @@ def prepare(args: argparse.Namespace) -> Path:
             restart_path, root, "restart file", args.allow_local_root
         )
     validate_debug_input(input_path)
+    validate_overrides(input_path, args.override)
     nodes = args.nodes
     if nodes < 1:
         raise ValueError("--nodes must be positive")
@@ -1125,9 +1157,18 @@ def self_test() -> int:
             rejected_walltime = True
         if not rejected_walltime:
             raise ValueError("self-test failed to reject long debug walltime")
+        arguments.walltime = "00:30:00"
+        arguments.run_name = "bad_missing_override"
+        arguments.override = ["mhd/limiter_hardwall=true"]
+        try:
+            prepare(arguments)
+        except ValueError:
+            pass
+        else:
+            raise ValueError("self-test failed to reject an absent override key")
+        arguments.override = []
         production = Path(directory) / "cgl_lf_paper_standard_beta10.athinput"
         production.write_text("<problem>\npaper_grade = true\n", encoding="utf-8")
-        arguments.walltime = "00:30:00"
         arguments.run_name = "bad_production"
         arguments.input_file = str(production)
         rejected_production = False
