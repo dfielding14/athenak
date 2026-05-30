@@ -29,7 +29,9 @@ DEFAULT_CRITERIA = (
     / "docs/source/modules/figures/cr_tracer_relativistic_acceleration"
     / "cr_relativistic_phase6_preregistered_criteria.json"
 )
-EXPECTED_CRITERIA_SHA256 = "123701e93374eb61bdd5921f6d4b07eb3899a3aaabae36db632930da980fb269"
+EXPECTED_CRITERIA_SHA256 = (
+    "123701e93374eb61bdd5921f6d4b07eb3899a3aaabae36db632930da980fb269"
+)
 EXPECTED_CRITERION_IDS = tuple(f"P6-{number:02d}" for number in range(1, 22))
 sys.path.insert(0, str(SCRIPT_DIR))
 import cr_tracer_inspect as tracer_inspect  # noqa: E402
@@ -82,7 +84,8 @@ def _validate_criteria(report: dict, criteria_path: Path) -> None:
     )
     _require(
         criteria.get("status") ==
-        "reviewer_rebound_freeze_after_third_restart_specialist_hold_before_corrected_replay",
+        "reviewer_rebound_freeze_after_third_restart_specialist_hold_before_"
+        "corrected_replay",
         f"{criteria_path}: criteria status is not the expected reviewer-rebound freeze",
     )
     _require(
@@ -97,7 +100,10 @@ def _validate_criteria(report: dict, criteria_path: Path) -> None:
     }
     criterion_ids = [criterion.get("id") for criterion in criteria["criteria"]]
     _require(
-        all(isinstance(criterion_id, str) and criterion_id for criterion_id in criterion_ids),
+        all(
+            isinstance(criterion_id, str) and criterion_id
+            for criterion_id in criterion_ids
+        ),
         f"{criteria_path}: every criterion requires a non-empty ID",
     )
     _require(
@@ -112,7 +118,10 @@ def _validate_criteria(report: dict, criteria_path: Path) -> None:
         metric = criterion["metric"]
         _require(metric in metrics, f"{criteria_path}: missing metric {metric!r}")
         operator = criterion["operator"]
-        _require(operator in operators, f"{criteria_path}: unsupported operator {operator!r}")
+        _require(
+            operator in operators,
+            f"{criteria_path}: unsupported operator {operator!r}",
+        )
         _require(
             operators[operator](metrics[metric], criterion["limit"]),
             f"{criterion['id']}: {metric}={metrics[metric]!r} does not satisfy "
@@ -181,11 +190,18 @@ def _inspect_checkpoint(checkpoint: Checkpoint) -> dict:
     decoded = tracer_inspect.read_prst_file(checkpoint.shard)
     _require(
         decoded["format_version"] == "AKPRST-v2.0",
-        f"{checkpoint.shard}: expected typed-v2 output, found {decoded['format_version']}",
+        f"{checkpoint.shard}: expected typed-v2 output, "
+        f"found {decoded['format_version']}",
     )
     _require(decoded["rank"] == 0, f"{checkpoint.shard}: expected serial rank zero")
-    _require(checkpoint.mesh.is_file(), f"{checkpoint.shard}: missing paired mesh restart")
-    _require(checkpoint.witness.is_file(), f"{checkpoint.shard}: missing paired mesh witness")
+    _require(
+        checkpoint.mesh.is_file(),
+        f"{checkpoint.shard}: missing paired mesh restart",
+    )
+    _require(
+        checkpoint.witness.is_file(),
+        f"{checkpoint.shard}: missing paired mesh witness",
+    )
     return decoded
 
 
@@ -205,7 +221,10 @@ def _native_mesh_state_payload(path: Path) -> bytes:
     blob = path.read_bytes()
     marker = b"<par_end>\n"
     marker_offset = blob.find(marker)
-    _require(marker_offset >= 0, f"{path}: native mesh restart parameter terminator is missing")
+    _require(
+        marker_offset >= 0,
+        f"{path}: native mesh restart parameter terminator is missing",
+    )
     return blob[marker_offset + len(marker):]
 
 
@@ -233,7 +252,9 @@ def _run_success(binary: Path, case_dir: Path, arguments: Sequence[str],
     )
     output = _write_log(case_dir, result)
     if result.returncode:
-        raise RuntimeError(f"{label}: Athena failed with exit code {result.returncode}:\n{output}")
+        raise RuntimeError(
+            f"{label}: Athena failed with exit code {result.returncode}:\n{output}"
+        )
 
 
 def _run_expected_failure(binary: Path, case_dir: Path, arguments: Sequence[str],
@@ -266,7 +287,8 @@ def _copy_checkpoint(checkpoint: Checkpoint, destination: Path) -> None:
         shutil.copy2(checkpoint.root / relative, target)
 
 
-def _copy_unique_checkpoints(checkpoints: Sequence[Checkpoint], destination: Path) -> None:
+def _copy_unique_checkpoints(checkpoints: Sequence[Checkpoint],
+                             destination: Path) -> None:
     seen: set[int] = set()
     for checkpoint in checkpoints:
         if checkpoint.number in seen:
@@ -280,7 +302,9 @@ def _restart_arguments(particle_checkpoint: Checkpoint,
                        extra: Sequence[str] = (),
                        particle_shard_relative: Optional[Path] = None) -> list[str]:
     mesh_checkpoint = mesh_checkpoint or particle_checkpoint
-    particle_shard_relative = particle_shard_relative or particle_checkpoint.shard_relative
+    particle_shard_relative = (
+        particle_shard_relative or particle_checkpoint.shard_relative
+    )
     return [
         "-r",
         str(mesh_checkpoint.mesh_relative),
@@ -409,9 +433,9 @@ def _negative_control(binary: Path, input_path: Path, root: Path, timeout: float
     return _run_expected_failure(binary, case_dir, arguments, timeout, name, expected)
 
 
-def _inspector_negative_control(root: Path, name: str, checkpoint: Checkpoint,
-                                expected: str,
-                                mutate: Callable[[Path, Checkpoint], None]) -> dict[str, str]:
+def _inspector_negative_control(
+        root: Path, name: str, checkpoint: Checkpoint, expected: str,
+        mutate: Callable[[Path, Checkpoint], None]) -> dict[str, str]:
     case_dir = _fresh_case(root, name)
     _copy_checkpoint(checkpoint, case_dir)
     mutate(case_dir, checkpoint)
@@ -428,10 +452,12 @@ def _inspector_negative_control(root: Path, name: str, checkpoint: Checkpoint,
     except ValueError as error:
         _require(
             expected.lower() in str(error).lower(),
-            f"{name}: expected inspector rejection containing {expected!r}, got {error}",
+            f"{name}: expected inspector rejection containing {expected!r}, "
+            f"got {error}",
         )
         return {"id": name, "status": "PASS", "expected_diagnostic": expected}
-    raise RuntimeError(f"{name}: expected inspector rejection containing {expected!r}")
+    raise RuntimeError(
+        f"{name}: expected inspector rejection containing {expected!r}")
 
 
 @contextlib.contextmanager
@@ -451,7 +477,9 @@ def _runtime_root(work_dir: Optional[Path]) -> Iterator[Path]:
 def _qualify(binary: Path, input_path: Path, criteria_path: Path,
              root: Path, timeout: float) -> dict:
     source_dir = _fresh_case(root, "source_uninterrupted")
-    _run_success(binary, source_dir, ["-i", str(input_path)], timeout, "source_uninterrupted")
+    _run_success(
+        binary, source_dir, ["-i", str(input_path)], timeout,
+        "source_uninterrupted")
     source_checkpoints = _discover_checkpoints(source_dir)
     _require(
         len(source_checkpoints) >= 2,
@@ -484,16 +512,20 @@ def _qualify(binary: Path, input_path: Path, criteria_path: Path,
     continued = continuation_by_number[reference.number]
     continued_decoded = _inspect_checkpoint(continued)
     _require(
-        _particle_signature(continued_decoded) == _particle_signature(source_decoded[reference.number]),
+        _particle_signature(continued_decoded) ==
+        _particle_signature(source_decoded[reference.number]),
         "paired_continuation: decoded particle state differs from uninterrupted source",
     )
     _require(
         continued.shard.read_bytes() == reference.shard.read_bytes(),
-        "paired_continuation: final particle shard is not byte-identical to uninterrupted source",
+        "paired_continuation: final particle shard is not byte-identical to "
+        "uninterrupted source",
     )
     _require(
-        _native_mesh_state_payload(continued.mesh) == _native_mesh_state_payload(reference.mesh),
-        "paired_continuation: final mesh state payload is not byte-identical to uninterrupted source",
+        _native_mesh_state_payload(continued.mesh) ==
+        _native_mesh_state_payload(reference.mesh),
+        "paired_continuation: final mesh state payload is not byte-identical "
+        "to uninterrupted source",
     )
 
     negative_controls = [
@@ -651,7 +683,8 @@ def _qualify(binary: Path, input_path: Path, criteria_path: Path,
         "binary": str(binary),
         "input": str(input_path),
         "source": {
-            "checkpoint_numbers": [checkpoint.number for checkpoint in source_checkpoints],
+            "checkpoint_numbers": [
+                checkpoint.number for checkpoint in source_checkpoints],
             "checkpoint_count": len(source_checkpoints),
             "final_particle_count": source_decoded[reference.number]["count"],
             "final_format": source_decoded[reference.number]["format_version"],
@@ -669,12 +702,14 @@ def _qualify(binary: Path, input_path: Path, criteria_path: Path,
         "inspector_negative_control_count": len(inspector_negative_controls),
         "metrics": {
             "source_checkpoint_count": len(source_checkpoints),
-            "source_final_format": source_decoded[reference.number]["format_version"],
+            "source_final_format":
+                source_decoded[reference.number]["format_version"],
             "continuation_decoded_particle_state_equal": True,
             "continuation_particle_shard_byte_identical": True,
             "continuation_mesh_state_payload_byte_identical": True,
             "copied_artifact_negative_control_count": len(negative_controls),
-            "inspector_negative_control_count": len(inspector_negative_controls),
+            "inspector_negative_control_count":
+                len(inspector_negative_controls),
             **{f"{name}_rejected": value for name, value in rejected.items()},
             **{f"{name}_rejected": value for name, value in inspector_rejected.items()},
         },
@@ -697,7 +732,9 @@ def _write_json(path_text: Optional[str], report: dict) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Qualify serial relativistic CR paired typed-v2 restart runtime behavior."
+        description=(
+            "Qualify serial relativistic CR paired typed-v2 restart runtime "
+            "behavior.")
     )
     parser.add_argument("--binary", required=True, type=Path)
     parser.add_argument("--input", type=Path, default=DEFAULT_INPUT)
@@ -710,7 +747,9 @@ def main() -> int:
     parser.add_argument(
         "--json",
         metavar="PATH",
-        help="write the machine-readable qualification report to PATH, or '-' for stdout",
+        help=(
+            "write the machine-readable qualification report to PATH, or '-' "
+            "for stdout"),
     )
     parser.add_argument("--timeout", type=float, default=30.0)
     args = parser.parse_args()
@@ -729,14 +768,19 @@ def main() -> int:
     try:
         _require(binary.is_file(), f"{binary}: --binary is not a file")
         _require(input_path.is_file(), f"{input_path}: --input is not a file")
-        _require(criteria_path.is_file(), f"{criteria_path}: --criteria is not a file")
+        _require(
+            criteria_path.is_file(),
+            f"{criteria_path}: --criteria is not a file")
         _require(args.timeout > 0.0, "--timeout must be positive")
         with _runtime_root(args.work_dir) as root:
-            report = _qualify(binary, input_path, criteria_path, root, args.timeout)
-    except Exception as error:  # Keep CLI failure output concise; case logs retain detail.
+            report = _qualify(
+                binary, input_path, criteria_path, root, args.timeout)
+    except Exception as error:
         report["error"] = str(error)
         _write_json(args.json, report)
-        print(f"CR relativistic Phase-6 runtime qualification FAIL: {error}", file=sys.stderr)
+        print(
+            f"CR relativistic Phase-6 runtime qualification FAIL: {error}",
+            file=sys.stderr)
         return 1
 
     _write_json(args.json, report)
@@ -751,7 +795,9 @@ def main() -> int:
         f"{report['paired_continuation']['compared_checkpoint']:05d}, "
         "decoded state equal and particle shard byte-identical"
     )
-    print(f"  copied-artifact negative controls rejected: {report['negative_control_count']}")
+    print(
+        "  copied-artifact negative controls rejected: "
+        f"{report['negative_control_count']}")
     print(
         "  inspector negative controls rejected: "
         f"{report['inspector_negative_control_count']}"

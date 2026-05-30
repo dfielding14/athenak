@@ -1,0 +1,64 @@
+branch feature/CR_tracers_relativistic_acceleration
+head 7fbd841ad2a2d9cfb57b7ad6c7cafe3888010d2e
+base 64a4d1be8da1c22d1328cc47280195b3747fa0ab
+
+tracked-phase7-files
+ef58a7ce970d220831130667b73d97d1d701fe0acecd6a616190c021bf416a5e  docs/source/modules/cr_tracer_relativistic_acceleration_ledger.md
+1608e681952fa5d0133d8fc2ae1b0681fa17a09a667272340446625dccfba0d1  docs/source/modules/figures/cr_tracer_relativistic_acceleration/cr_relativistic_phase7_preregistered_criteria.json
+dd485054762d0afc76fc4cfbc7e30405581f242e6262e576bd2fd3ff8f3a4538  inputs/unit_tests/cr_relativistic_diagnostics_runtime.athinput
+695e701a662e6b2827c1ff17a86160a397afa1ffdc573374d003fa4a27bb91b6  scripts/particles/cr_relativistic_all_formats_inspect.py
+d7d19e5576b2c26f87d4dce9507b445463b7742a4b7c2c3a2f8eb43941d41518  scripts/particles/cr_relativistic_diagnostics_negative_controls.py
+fa269591f40c9c9102ad020279a7e8fadbb4057bd7244115423b04218f6a3619  scripts/particles/cr_relativistic_diagnostics_runtime_inspect.py
+55ad9826039c5221835cffc773e960eea5afbedeb9f0ab16581e084e7ce4583e  scripts/particles/cr_relativistic_diagnostics_writer_adversarial.py
+a7cd21e8acadd9a790932ff615643a0e2056ef4b235f24cc82877a8ec0abc8d0  scripts/particles/cr_relativistic_restart_runtime_inspect.py
+968a4e3c94712a1a3589482439960119049d366dd3a9217061655e24ce26ccc5  scripts/particles/cr_tracer_inspect.py
+9030651cc0630e721d1c433049e15050629dc4d62cd63633aa9438367ae59115  src/outputs/df_prtcl.cpp
+e1f5ffc5d72ac4938f1cec8b7654edb1689102bfdaad0bc5f1a064c83152b9c3  src/outputs/dxhist_prtcl.cpp
+1256c3ebf25b8c3197955a67bc3ddbd0e3e204ec77cab0b824629eb7ebc8723f  src/outputs/pos_prtcl.cpp
+bc0b63573c2010f76bd1500455ad4a34f3ffce07a299d6d7b50c15eba1e491bb  src/particles/README.md
+f7967e176e54be47fc474baca2432f5d70caebcc4fb6fd0a1a96527659ac806b  src/particles/particles.cpp
+008788e9f92425c8568d9d6ab19e03063ea8d0f908685950d1cf352cf1979360  tst/test_suite/particles/test_particles_cr_relativistic_contract_cpu.py
+
+status
+ M docs/source/modules/cr_tracer_relativistic_acceleration_ledger.md
+AM scripts/particles/cr_relativistic_all_formats_inspect.py
+ M scripts/particles/cr_relativistic_restart_runtime_inspect.py
+ M scripts/particles/cr_tracer_inspect.py
+ M src/outputs/df_prtcl.cpp
+ M src/outputs/dxhist_prtcl.cpp
+ M src/outputs/pos_prtcl.cpp
+ M src/particles/README.md
+ M src/particles/particles.cpp
+ M tst/test_suite/particles/test_particles_cr_relativistic_contract_cpu.py
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/cr_relativistic_phase7_preregistered_criteria.json
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/cr_relativistic_phase8_preregistered_criteria.json
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase7_all_formats_inspector.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase7_all_formats_runtime.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase7_branch_snapshot.txt
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase7_diagnostics_metrics.json
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase7_diagnostics_negative_controls.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase7_diagnostics_runtime.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase7_diff_check.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase7_evidence_sha256.txt
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase7_evidence_verify.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase7_legacy_accuracy_cpu.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase7_legacy_accuracy_mpicpu.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase7_legacy_cpu.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase7_legacy_mpicpu.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase7_mpicpu_build.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase7_parser_contract.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase7_restart_runtime_analyzer.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase7_serial_build.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase7_style.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase7_writer_adversarial_runtime.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase8_pre_fence_metrics.json
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase8_pre_fence_negative_controls.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase8_pre_fence_registration.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase8_pre_fence_runtime.log
+?? inputs/unit_tests/cr_relativistic_diagnostics_runtime.athinput
+?? inputs/unit_tests/cr_relativistic_migration_runtime.athinput
+?? scripts/particles/cr_relativistic_diagnostics_negative_controls.py
+?? scripts/particles/cr_relativistic_diagnostics_runtime_inspect.py
+?? scripts/particles/cr_relativistic_diagnostics_writer_adversarial.py
+?? scripts/particles/cr_relativistic_migration_negative_controls.py
+?? scripts/particles/cr_relativistic_migration_runtime_inspect.py

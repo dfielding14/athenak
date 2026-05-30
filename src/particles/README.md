@@ -96,10 +96,12 @@ prtcl_rst_flag = 1
 prtcl_res_file = prst/rank_00000000/basename.00042.prst
 ```
 
-For MPI particle restarts, the input may name the rank-zero file.  The reader
-replaces `rank_00000000` with each rank's local restart directory name.  The
-mesh configuration must be compatible with the saved particle `PGID` values; a
-full mesh restart is separate from this particle-only `prst` path.
+For legacy `drift` and `boris` MPI particle restarts, the input may name the
+rank-zero file.  The reader replaces `rank_00000000` with each rank's local
+restart directory name.  The mesh configuration must be compatible with the
+saved particle `PGID` values; a full mesh restart is separate from this legacy
+particle-only `prst` path.  `relativistic_hc` instead requires the paired
+typed-v2 contract described under Particle Outputs.
 
 ## Input Blocks
 
@@ -230,17 +232,19 @@ This opt-in contract is intentionally narrow:
   is frozen.  The parser fixture uses the constructor-required
   `<mhd>/rsolver = advect`; no positive-cycle ideal-MHD evolution claim is
   authorized.
-- Legacy particle restart input, legacy output blocks, staged relativistic keys
-  under legacy pushers, and unqualified coupled physics blocks are rejected
-  before execution.
+- Legacy particle restart input, unqualified output blocks, staged relativistic
+  keys under legacy pushers, and unqualified coupled physics blocks are rejected
+  before execution.  The qualified relativistic diagnostic allowlist is
+  documented under Particle Outputs.
 - Nonzero MHD passive-scalar counts and configured MHD diffusion coefficients
   remain outside the parser-only qualification boundary and are rejected.
 - The superseded `relativistic_background` spelling is rejected explicitly.
   Select `relativistic_field_source` instead; no background mode is inferred.
 - Positive-cycle `relativistic_hc` runs execute only the prescribed-field
   Higuera-Cary map unless the separate experimental solver-coupled schema is
-  selected.  Relativistic subcycling, restart, outputs, and wider sampled-MHD
-  coupling remain fail-closed until their owning qualification phases.
+  selected.  Relativistic subcycling, typed restart, and the bounded diagnostic
+  allowlist are qualified separately.  Wider sampled-MHD coupling remains
+  fail-closed until its owning qualification phase.
 - MPI, static mesh refinement, and adaptive mesh refinement remain fail-closed
   until their owning migration qualification phase.
 - `problem/relativistic_gather_diagnostic_only = true` is reserved for the
@@ -280,15 +284,16 @@ c_model                        = 1.0
   `mhd_ideal`.
 - The coupled selector retains the 3D strictly periodic, serial uniform-level,
   exactly-one-MeshBlock, Newtonian ideal-MHD boundary.  It currently requires
-  normalized `c_model = 1.0` until acceleration-aware timestep qualification.
-  Restart, outputs, subcycling, MHD diffusion, source blocks, passive scalars,
-  and unqualified coupled modules remain rejected.
+  normalized `c_model = 1.0` until non-unit coupled normalization is separately
+  qualified.  MHD diffusion, source blocks, passive scalars, and unqualified
+  coupled modules remain rejected.
 
 Do not infer relativistic semantics from legacy `boris`, `IPM`, restart, or
 output fields.  The relativistic path appends authoritative `w`, sampled `cE`,
 direct work, and signed `alpha_s` fields while retaining synchronized
-legacy-prefix velocity shadows.  Restart schemas, relativistic outputs,
-subcycling, and wider sampled-MHD coupling remain gated follow-up work.
+legacy-prefix velocity shadows.  Typed restart, acceleration-aware subcycling,
+and the bounded diagnostic schema are qualified independently; wider
+sampled-MHD coupling remains gated follow-up work.
 
 `inputs/particles/cr_tracer_relativistic_contract.athinput` is the
 bounded parser and single-cycle smoke fixture.  Its default `nlim = 0` keeps
@@ -352,8 +357,8 @@ resolution.  This is a pusher/gather test, not an MHD evolution test.
 Legacy `drift` and `boris` cosmic-ray tracer particles allocate 14 real fields
 and 3 integer fields.  The staged `relativistic_hc` prescribed-test and
 experimental `mhd_ideal` paths allocate 22 real fields and the same 3 integer
-fields.  Their appended fields are deliberately not serialized until the
-restart-schema phase.
+fields.  The typed-v2 relativistic restart schema serializes the full
+relativistic state; legacy restart payloads retain their original layout.
 
 Integer fields:
 
@@ -368,7 +373,8 @@ Real fields:
 - `IPM`: particle gyro parameter.
 - `IPBX`, `IPBY`, `IPBZ`: magnetic field sampled by the pusher.
 - `IPDX`, `IPDY`, `IPDZ`: accumulated displacement.
-- `IPDB`: accumulated displacement parallel to the sampled magnetic field.
+- `IPDB`: accumulated midpoint sum of each displacement increment dotted with
+  the corresponding sampled magnetic-field unit vector, `sum(dx dot Bhat)`.
 
 Appended `relativistic_hc` real fields:
 
@@ -434,12 +440,36 @@ particle counts are assigned to the new parent.  `particle_load_weight = 0.0`
 preserves the original mesh-only behavior and is the right baseline for
 performance comparisons.
 
-## Legacy Outputs
+## Particle Outputs
 
-The following particle outputs remain available for legacy `drift` and
-`boris`.  Both staged `relativistic_hc` field-source paths currently reject
-every output block before initial output emission; relativistic output
-semantics remain gated follow-up work.
+Legacy `drift` and `boris` retain their existing output behavior.  The
+`relativistic_hc` diagnostic schema is deliberately narrower: `ppd`, `df`,
+`dxh`, `drh`, `dparh`, `pmom`, `pspec`, `pspec2`, `psamp`, and paired
+`prst`/`rst` are allowed.  Relativistic `trk`, `pvtk`, generic derived particle
+outputs, `prtcl_d`, and the advertised-but-unimplemented `prtcl_all` path remain
+rejected by the parent allowlist.
+
+For `relativistic_hc`, retained diagnostic headers include
+`schema=akcr_particle_output_v1`, `mode=relativistic_hc`, `units=code_model`,
+`c_model`, and `alpha_s`.  Histogram and table headers add field-specific units
+and layouts.  Binary histogram headers include species count, bin count, range,
+and reduction mode so stored counts remain interpretable without reconstructing
+the input deck.  Positions and displacements use code length, physical velocity
+shadows and authoritative `w` use code velocity, sampled `cE = -u x B` uses
+code velocity times code magnetic field, signed `alpha_s` uses inverse code time
+per code magnetic field, and
+`kinetic_energy_model = (gamma - 1) c_model^2` and accumulated `work` use code
+velocity squared.  `gamma` and `r_larmor_over_dx_min` are dimensionless.
+Histogram counts are particle counts.
+
+The general reduced-model formulas are
+`gamma = sqrt(1 + |w|^2 / c_model^2)`, `v = w / gamma`, and
+`kinetic_energy_model = (gamma - 1) c_model^2`.  Each Higuera-Cary substep adds
+`alpha_s dt cE dot (w_old + w_new) / (gamma_old + gamma_new)` to `work`.
+This is the direct sampled-field quadrature used for the documented
+work-energy closure, including deliberate non-unit `c_model` choices.
+
+The following legacy-only outputs remain available for `drift` and `boris`:
 
 - `pvtk`: particle VTK output.
 - `trk`: tracked-particle output.
@@ -447,10 +477,21 @@ semantics remain gated follow-up work.
 The cosmic-ray tracer branch adds particle-oriented output types:
 
 - `ppd`: compact species and position dump.  Each particle contributes
-  `(species, x, y, z)` as floats.
-- `prst`: per-rank particle restart dump.  The header stores
+  `(species, x, y, z)` as float32 values.  In `relativistic_hc`, the writer
+  fails before artifact creation unless every position remains finite after
+  float32 conversion and every nonnegative signed species identity round-trips
+  exactly through float32 serialization.
+- `prst` for legacy `drift` and `boris`: per-rank particle restart dump.  The
+  header stores
   `(time, dt, particles_this_rank)` as `Real`, followed by 17 `Real` values per
   particle containing `PGID`, `PTAG`, `PSP`, and the 14 real particle fields.
+- paired `prst`/`rst` for `relativistic_hc`: a typed-v2 particle shard and
+  manifest plus the native mesh restart and `.rst.rmeta` witness.  The shard
+  stores typed `PGID`, `PTAG`, and `PSP` plus all 22 real relativistic fields.
+  The manifest and witness bind rank count, mesh topology, cycle, time,
+  timestep, byte counts, checksums, and checkpoint identity.  Restoration
+  requires the complete paired bundle and deterministically rejects rank-count
+  changes pending separately reviewed redistribution support.
 - `df`: pitch-angle cosine histogram.  Use `nbin`, `vmin`, and `vmax` to set the
   binning range.
 - `pspec`: per-species spectrum.  Set `quantity` to `p`, `E`, `logE`, `mu`, or
@@ -462,7 +503,9 @@ The cosmic-ray tracer branch adds particle-oriented output types:
   `vmin`, and `vmax` to set the binning range.
 - `drh`: scalar displacement histogram for
   `sqrt(IPDX^2 + IPDY^2 + IPDZ^2)`.
-- `dparh`: parallel-displacement histogram using `IPDB`.
+- `dparh`: parallel-displacement histogram using `IPDB`.  This is the
+  accumulated midpoint sum `sum(dx dot Bhat)`, not total displacement projected
+  onto the final sampled magnetic field.
 - `pmom`: reduced per-species moments including count, `<mu>`, `<mu^2>`,
   `3<mu^2>-1`, displacement moments, parallel-displacement moments, `<v^2>`,
   flux/current proxies `<v_i>`, pressure-tensor proxies `<v_i v_j>`, and
@@ -489,6 +532,13 @@ field during the diagnostic write.
 `f(v_parallel,v_perp)`.  It uses the same stored particle velocities and
 sampled pusher fields as `pspec`.
 
+For `relativistic_hc`, field-relative diagnostics fail closed when the sampled
+magnetic-field magnitude is zero.  This applies to pitch-angle histograms and
+moments, parallel and perpendicular velocity diagnostics, the physical
+velocity magnetic-moment proxy, and `r_larmor_over_dx_min`.  A zero sentinel
+would be scientifically ambiguous because it would conflate an undefined
+field direction with a resolved perpendicular value.
+
 `psamp` is for selected-field analysis and debugging, not restart.  It always
 writes `rank`, `pgid`, `tag`, and `species`, then the user-selected `fields`.
 Stored fields are `x`, `y`, `z`, `vx`, `vy`, `vz`, `mass`, `bx`, `by`, `bz`,
@@ -496,6 +546,35 @@ Stored fields are `x`, `y`, `z`, `vx`, `vy`, `vz`, `mass`, `bx`, `by`, `bz`,
 `mu`, `vpar`, `vperp`, and `magnetic_moment`.  Use `sample_stride = 1` for all
 particles, or a larger stride for a stable subset.  Use `species = -1` for all
 species.
+
+For `relativistic_hc`, `pspec`, `pspec2`, and `psamp` require explicit
+configuration rather than legacy defaults.  Relativistic `pspec` accepts only
+the canonical quantities `speed`, `wmag`, `kinetic_energy_model`,
+`log10_kinetic_energy_model`, `mu`, and
+`velocity_magnetic_moment_proxy`.  The final quantity remains the explicitly
+named physical-velocity diagnostic `v_perp^2 / B`.  Ambiguous legacy names such
+as `p`, `E`, `energy`, `logE`, and `magnetic_moment` are rejected rather than
+silently reinterpreted.
+
+The relativistic `log10_kinetic_energy_model` spectrum stores
+`log10(max(kinetic_energy_model, log10_floor))`.  The writer records
+`log10_floor` and declares `log10_floor_units=code_velocity_squared`, matching
+the untransformed `kinetic_energy_model = c_model^2 * (gamma - 1)` quantity.
+
+Relativistic `pspec2` accepts only `mu_speed`, `mu_wmag`,
+`mu_kinetic_energy_model`, and `vpar_vperp`.  The `vpar_vperp` axes remain
+physical-velocity diagnostics.  Legacy aliases such as `mu_p`, `mu_E`, and
+`v_parallel_v_perp` are rejected for `relativistic_hc`.
+
+Relativistic `psamp` requires an explicit `fields` list.  It preserves
+unambiguous physical fields and adds `wx`, `wy`, `wz`, `wmag`, `gamma`,
+`kinetic_energy_model`, `cex`, `cey`, `cez`, `work`, `alpha_s`, and
+  `r_larmor_over_dx_min`.  The last field is the output-side applicability
+  diagnostic `w_perp / (abs(alpha_s) B dx_min)` using the owning MeshBlock's
+  smallest cell width.  It fails closed when `B = 0`; it does not emit a zero
+  applicability sentinel.  The ambiguous legacy `p`, `energy`, `e`, `mass`,
+  `m`, and `magnetic_moment` fields are rejected for `relativistic_hc`, as are
+  duplicate canonical fields after alias normalization.
 
 ## Consistency Checks
 
@@ -530,13 +609,16 @@ steps within one mesh timestep.
 ## Readback Utility
 
 `scripts/particles/cr_tracer_inspect.py` reads `prst`, `ppd`, `psamp`, `df`,
-`pspec`, `pspec2`, `dxh`, `drh`, `dparh`, and `pmom` outputs.  It reports totals by rank
-and species, reports particles per MeshBlock `PGID`, reports restart format
-metadata, validates optional `*.prst.pmeta` sidecar payload sizes and checksums,
-verifies particle restart file lengths, checks finite positions and velocities,
-checks unique tags within each species, validates reduced histogram sums,
-reports sampled-field totals and field names, and can assert expected
-total/species counts.
+`pspec`, `pspec2`, `dxh`, `drh`, `dparh`, and `pmom` outputs.  It reports totals
+by rank and species, reports particles per MeshBlock `PGID`, reports restart
+format metadata, validates optional legacy `*.prst.pmeta` sidecar payload sizes
+and checksums, validates typed-v2 shard manifests and paired `.rst.rmeta`
+witnesses, verifies particle restart file lengths, checks finite positions and
+velocities, checks unique tags within each species, validates reduced histogram
+sums, reports sampled-field totals and field names, and can assert expected
+total/species counts.  For `mode=relativistic_hc`, the offline inspector rejects
+the same ambiguous sample and spectrum aliases as the writer rather than
+silently reinterpreting malformed artifacts.
 
 Typical commands:
 

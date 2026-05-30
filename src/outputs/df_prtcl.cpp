@@ -15,6 +15,8 @@
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
+#include <limits>
+#include <set>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -23,11 +25,139 @@
 #include "globals.hpp"
 #include "mesh/mesh.hpp"
 #include "particles/particles.hpp"
+#include "particles/relativistic_state.hpp"
 #include "outputs.hpp"
 
 #if MPI_PARALLEL_ENABLED
 #include <mpi.h>
 #endif
+
+namespace {
+
+constexpr Real kParticleSpectrumLogFloor = 1.0e-30;
+
+bool IsRelativisticParticleOutput(const particles::Particles *pp) {
+  return pp->pusher == ParticlesPusher::relativistic_hc;
+}
+
+void WriteRelativisticParticleMetadata(FILE *pfile, const particles::Particles *pp) {
+  if (!IsRelativisticParticleOutput(pp)) {return;}
+  std::fprintf(pfile,
+      "# metadata: schema=akcr_particle_output_v1 mode=relativistic_hc "
+      "units=code_model c_model=%.17e alpha_s=%.17e\n",
+      pp->c_model, pp->alpha_s);
+}
+
+[[noreturn]] void FatalParticleDiagnostic(const std::string &message) {
+  std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+            << std::endl << message << std::endl;
+  std::exit(EXIT_FAILURE);
+}
+
+void RequireHistogramGeometry(const std::string &block_name, const std::string &kind,
+                              const int nbin, const Real vmin, const Real vmax) {
+  if (nbin <= 0 || !std::isfinite(vmin) || !std::isfinite(vmax) ||
+      !std::isfinite(vmax - vmin) || vmax <= vmin) {
+    FatalParticleDiagnostic(kind + " output block '" + block_name +
+        "' requires positive nbin and finite non-overflowing vmax > vmin");
+  }
+}
+
+KOKKOS_INLINE_FUNCTION
+int HistogramBin(const Real value, const Real vmin, const Real vmax, const int nbin) {
+  if (value <= vmin) {return 0;}
+  if (value >= vmax) {return nbin - 1;}
+  return static_cast<int>((value - vmin)/(vmax - vmin)*nbin);
+}
+
+template<typename RealView>
+KOKKOS_INLINE_FUNCTION
+particles::relativistic::Vector3 ParticleW(const RealView &pr, const int p) {
+  return {pr(IPWX,p), pr(IPWY,p), pr(IPWZ,p)};
+}
+
+template<typename RealView>
+KOKKOS_INLINE_FUNCTION
+Real ParticlePhysicalSpeed(const RealView &pr, const int p) {
+  return particles::relativistic::ScaledNorm3(
+      {pr(IPVX,p), pr(IPVY,p), pr(IPVZ,p)});
+}
+
+template<typename RealView>
+KOKKOS_INLINE_FUNCTION
+Real ParticleBmag(const RealView &pr, const int p) {
+  return particles::relativistic::ScaledNorm3(
+      {pr(IPBX,p), pr(IPBY,p), pr(IPBZ,p)});
+}
+
+template<typename RealView>
+KOKKOS_INLINE_FUNCTION
+Real ParticleParallelVelocity(const RealView &pr, const int p, const Real bmag) {
+  if (bmag <= 0.0) {return 0.0;}
+  return pr(IPVX,p)*(pr(IPBX,p)/bmag) + pr(IPVY,p)*(pr(IPBY,p)/bmag) +
+         pr(IPVZ,p)*(pr(IPBZ,p)/bmag);
+}
+
+KOKKOS_INLINE_FUNCTION
+Real PerpendicularMagnitude(const particles::relativistic::Vector3 &value,
+                            const Real bx, const Real by, const Real bz,
+                            const Real bmag) {
+  if (bmag <= 0.0) {return 0.0;}
+  Real bhx = bx/bmag;
+  Real bhy = by/bmag;
+  Real bhz = bz/bmag;
+  particles::relativistic::Vector3 cross{
+    value.y*bhz - value.z*bhy,
+    value.z*bhx - value.x*bhz,
+    value.x*bhy - value.y*bhx
+  };
+  return particles::relativistic::ScaledNorm3(cross);
+}
+
+KOKKOS_INLINE_FUNCTION
+Real PositiveSquareRatio(const Real numerator, const Real denominator) {
+  if (!Kokkos::isfinite(numerator) || numerator < 0.0 ||
+      !Kokkos::isfinite(denominator) || denominator <= 0.0) {
+    return std::numeric_limits<Real>::quiet_NaN();
+  }
+  if (numerator == 0.0) {return 0.0;}
+  Real numerator_exponent = Kokkos::logb(numerator);
+  Real denominator_exponent = Kokkos::logb(denominator);
+  Real numerator_scaled = numerator/Kokkos::exp2(numerator_exponent);
+  Real denominator_scaled = denominator/Kokkos::exp2(denominator_exponent);
+  Real scaled = numerator_scaled*numerator_scaled/denominator_scaled;
+  Real scaled_exponent = Kokkos::logb(scaled);
+  scaled /= Kokkos::exp2(scaled_exponent);
+  return scaled*Kokkos::exp2(
+      2.0*numerator_exponent - denominator_exponent + scaled_exponent);
+}
+
+template<typename RealView>
+KOKKOS_INLINE_FUNCTION
+Real ParticlePitchAngleCosine(const RealView &pr, const int p, const Real speed,
+                              const Real bmag) {
+  if (speed <= 0.0 || bmag <= 0.0) {return 0.0;}
+  return ParticleParallelVelocity(pr, p, bmag)/speed;
+}
+
+template<typename RealView>
+KOKKOS_INLINE_FUNCTION
+Real ParticlePerpendicularVelocity(const RealView &pr, const int p, const Real bmag) {
+  return PerpendicularMagnitude(
+      {pr(IPVX,p), pr(IPVY,p), pr(IPVZ,p)},
+      pr(IPBX,p), pr(IPBY,p), pr(IPBZ,p), bmag);
+}
+
+template<typename RealView>
+KOKKOS_INLINE_FUNCTION
+Real ParticleVelocityMagneticMomentProxy(const RealView &pr, const int p,
+                                         const Real bmag) {
+  if (bmag <= 0.0) {return 0.0;}
+  Real vperp = ParticlePerpendicularVelocity(pr, p, bmag);
+  return PositiveSquareRatio(vperp, bmag);
+}
+
+} // namespace
 
 ParticleDFOutput::ParticleDFOutput(ParameterInput *pin, Mesh *pm, OutputParameters op) :
   BaseTypeOutput(pin, pm, op) {
@@ -36,6 +166,7 @@ ParticleDFOutput::ParticleDFOutput(ParameterInput *pin, Mesh *pm, OutputParamete
   nbin = pin->GetOrAddInteger(op.block_name,"nbin",100);
   vmin = pin->GetOrAddReal(op.block_name,"vmin",-1.0);
   vmax = pin->GetOrAddReal(op.block_name,"vmax",1.0);
+  RequireHistogramGeometry(op.block_name, "df", nbin, vmin, vmax);
   Kokkos::realloc(host_histogram, nspec, nbin);
   df_single_file_per_rank = pin->GetOrAddInteger(op.block_name,
                                                  "df_single_file_per_rank",0);
@@ -58,25 +189,37 @@ void ParticleDFOutput::LoadOutputData(Mesh *pm) {
   Real vmin_ = vmin;
   Real vmax_ = vmax;
   int nbin_ = nbin;
+  bool relativistic_mode = IsRelativisticParticleOutput(pp);
 
   DvceArray2D<int> local_histogram("local_df_hist", nspecies, nbin);
+  DvceArray1D<int> relativistic_failure("local_df_hist_failure", 1);
   Kokkos::deep_copy(local_histogram, 0);
+  Kokkos::deep_copy(relativistic_failure, 0);
   par_for("part_df_hist",DevExeSpace(),0,(npart-1), KOKKOS_LAMBDA(const int p) {
-    Real bmag = sqrt(SQR(pr(IPBX,p)) + SQR(pr(IPBY,p)) + SQR(pr(IPBZ,p)));
-    Real vmag = sqrt(SQR(pr(IPVX,p)) + SQR(pr(IPVY,p)) + SQR(pr(IPVZ,p)));
-    Real mu = 0.0;
-    if (bmag > 0.0 && vmag > 0.0) {
-      mu = (pr(IPVX,p)*pr(IPBX,p) + pr(IPVY,p)*pr(IPBY,p) +
-            pr(IPVZ,p)*pr(IPBZ,p))/(vmag*bmag);
+    Real bmag = ParticleBmag(pr, p);
+    Real vmag = ParticlePhysicalSpeed(pr, p);
+    if (!particles::relativistic::IsFinite(bmag) ||
+        !particles::relativistic::IsFinite(vmag) ||
+        (relativistic_mode && (bmag <= 0.0 || vmag <= 0.0))) {
+      Kokkos::atomic_max(&relativistic_failure(0), 1);
+      return;
+    }
+    Real mu = ParticlePitchAngleCosine(pr, p, vmag, bmag);
+    if (!particles::relativistic::IsFinite(mu)) {
+      Kokkos::atomic_max(&relativistic_failure(0), 1);
+      return;
     }
     int spec = pi(PSP,p);
     spec = (spec < 0) ? 0 : spec;
     spec = (spec > nspecies - 1) ? nspecies - 1 : spec;
-    int ip = static_cast<int>((mu - vmin_)/(vmax_ - vmin_)*nbin_);
-    ip = (ip < 0) ? 0 : ip;
-    ip = (ip > nbin_ - 1) ? nbin_ - 1 : ip;
+    int ip = HistogramBin(mu, vmin_, vmax_, nbin_);
     Kokkos::atomic_add(&local_histogram(spec,ip),1);
   });
+  auto relativistic_failure_h =
+      Kokkos::create_mirror_view_and_copy(HostMemSpace(), relativistic_failure);
+  if (relativistic_failure_h(0) != 0) {
+    FatalParticleDiagnostic("particle df derived quantity evaluation failed");
+  }
   Kokkos::deep_copy(host_histogram, local_histogram);
 #if MPI_PARALLEL_ENABLED
   if (reduce_histogram) {
@@ -123,6 +266,17 @@ void ParticleDFOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
       std::exit(EXIT_FAILURE);
     }
     std::fprintf(pfile,"%s\n",msg.str().c_str());
+    particles::Particles *pp = pm->pmb_pack->ppart;
+    if (IsRelativisticParticleOutput(pp)) {
+      WriteRelativisticParticleMetadata(pfile, pp);
+      std::fprintf(pfile,
+          "# metadata: quantity=mu quantity_units=dimensionless "
+          "histogram_units=particle_count nspecies=%d nbin=%d "
+          "vmin=%.17e vmax=%.17e reduce=%d\n",
+          pp->nspecies, nbin, vmin, vmax, reduce_histogram ? 1 : 0);
+      std::fprintf(pfile,
+          "# layout: species-major int32 histogram; mu=dot(v,B)/(|v||B|)\n");
+    }
     std::fclose(pfile);
   }
 
@@ -225,47 +379,56 @@ void ParticleMomentsOutput::LoadOutputData(Mesh *pm) {
   int nspecies = pp->nspecies;
   auto &pr = pp->prtcl_rdata;
   auto &pi = pp->prtcl_idata;
+  bool relativistic_mode = IsRelativisticParticleOutput(pp);
 
   DvceArray2D<Real> local_moments("local_particle_moments", nspecies, nmoment);
+  DvceArray1D<int> relativistic_failure("local_particle_moments_failure", 1);
   Kokkos::deep_copy(local_moments, 0.0);
+  Kokkos::deep_copy(relativistic_failure, 0);
   par_for("part_moments",DevExeSpace(),0,(npart-1), KOKKOS_LAMBDA(const int p) {
     int spec = pi(PSP,p);
     spec = (spec < 0) ? 0 : spec;
     spec = (spec > nspecies - 1) ? nspecies - 1 : spec;
-    Real bmag = sqrt(SQR(pr(IPBX,p)) + SQR(pr(IPBY,p)) + SQR(pr(IPBZ,p)));
+    Real bmag = ParticleBmag(pr, p);
     Real speed2 = SQR(pr(IPVX,p)) + SQR(pr(IPVY,p)) + SQR(pr(IPVZ,p));
-    Real vmag = sqrt(speed2);
-    Real mu = 0.0;
-    if (bmag > 0.0 && vmag > 0.0) {
-      mu = (pr(IPVX,p)*pr(IPBX,p) + pr(IPVY,p)*pr(IPBY,p) +
-            pr(IPVZ,p)*pr(IPBZ,p))/(vmag*bmag);
+    Real vmag = ParticlePhysicalSpeed(pr, p);
+    Real mu = ParticlePitchAngleCosine(pr, p, vmag, bmag);
+    Real values[] = {
+      mu, mu*mu,
+      pr(IPDX,p), pr(IPDY,p), pr(IPDZ,p),
+      SQR(pr(IPDX,p)), SQR(pr(IPDY,p)), SQR(pr(IPDZ,p)),
+      pr(IPDB,p), SQR(pr(IPDB,p)), speed2,
+      pr(IPVX,p), pr(IPVY,p), pr(IPVZ,p),
+      SQR(pr(IPVX,p)), SQR(pr(IPVY,p)), SQR(pr(IPVZ,p)),
+      pr(IPVX,p)*pr(IPVY,p), pr(IPVX,p)*pr(IPVZ,p),
+      pr(IPVY,p)*pr(IPVZ,p), pr(IPDX,p)*pr(IPDY,p),
+      pr(IPDX,p)*pr(IPDZ,p), pr(IPDY,p)*pr(IPDZ,p)
+    };
+    if (relativistic_mode) {
+      if (!particles::relativistic::IsFinite(bmag) ||
+          !particles::relativistic::IsFinite(vmag) ||
+          bmag <= 0.0 || vmag <= 0.0) {
+        Kokkos::atomic_max(&relativistic_failure(0), 1);
+        return;
+      }
+      for (int n=0; n<kParticleMomentCount - 1; ++n) {
+        if (!particles::relativistic::IsFinite(values[n])) {
+          Kokkos::atomic_max(&relativistic_failure(0), 1);
+          return;
+        }
+      }
     }
 
     Kokkos::atomic_add(&local_moments(spec,PMOM_COUNT),1.0);
-    Kokkos::atomic_add(&local_moments(spec,PMOM_MU),mu);
-    Kokkos::atomic_add(&local_moments(spec,PMOM_MU2),mu*mu);
-    Kokkos::atomic_add(&local_moments(spec,PMOM_DX),pr(IPDX,p));
-    Kokkos::atomic_add(&local_moments(spec,PMOM_DY),pr(IPDY,p));
-    Kokkos::atomic_add(&local_moments(spec,PMOM_DZ),pr(IPDZ,p));
-    Kokkos::atomic_add(&local_moments(spec,PMOM_DX2),SQR(pr(IPDX,p)));
-    Kokkos::atomic_add(&local_moments(spec,PMOM_DY2),SQR(pr(IPDY,p)));
-    Kokkos::atomic_add(&local_moments(spec,PMOM_DZ2),SQR(pr(IPDZ,p)));
-    Kokkos::atomic_add(&local_moments(spec,PMOM_DPAR),pr(IPDB,p));
-    Kokkos::atomic_add(&local_moments(spec,PMOM_DPAR2),SQR(pr(IPDB,p)));
-    Kokkos::atomic_add(&local_moments(spec,PMOM_SPEED2),speed2);
-    Kokkos::atomic_add(&local_moments(spec,PMOM_VX),pr(IPVX,p));
-    Kokkos::atomic_add(&local_moments(spec,PMOM_VY),pr(IPVY,p));
-    Kokkos::atomic_add(&local_moments(spec,PMOM_VZ),pr(IPVZ,p));
-    Kokkos::atomic_add(&local_moments(spec,PMOM_VX2),SQR(pr(IPVX,p)));
-    Kokkos::atomic_add(&local_moments(spec,PMOM_VY2),SQR(pr(IPVY,p)));
-    Kokkos::atomic_add(&local_moments(spec,PMOM_VZ2),SQR(pr(IPVZ,p)));
-    Kokkos::atomic_add(&local_moments(spec,PMOM_VXVY),pr(IPVX,p)*pr(IPVY,p));
-    Kokkos::atomic_add(&local_moments(spec,PMOM_VXVZ),pr(IPVX,p)*pr(IPVZ,p));
-    Kokkos::atomic_add(&local_moments(spec,PMOM_VYVZ),pr(IPVY,p)*pr(IPVZ,p));
-    Kokkos::atomic_add(&local_moments(spec,PMOM_DXDY),pr(IPDX,p)*pr(IPDY,p));
-    Kokkos::atomic_add(&local_moments(spec,PMOM_DXDZ),pr(IPDX,p)*pr(IPDZ,p));
-    Kokkos::atomic_add(&local_moments(spec,PMOM_DYDZ),pr(IPDY,p)*pr(IPDZ,p));
+    for (int n=1; n<kParticleMomentCount; ++n) {
+      Kokkos::atomic_add(&local_moments(spec,n),values[n-1]);
+    }
   });
+  auto relativistic_failure_h =
+      Kokkos::create_mirror_view_and_copy(HostMemSpace(), relativistic_failure);
+  if (relativistic_failure_h(0) != 0) {
+    FatalParticleDiagnostic("relativistic_hc pmom derived quantity evaluation failed");
+  }
   Kokkos::deep_copy(host_moments, local_moments);
 #if MPI_PARALLEL_ENABLED
   if (reduce_moments) {
@@ -308,6 +471,17 @@ void ParticleMomentsOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   std::fprintf(pfile,
       "\n# AthenaK particle moments at time= %.17e  nranks= %d  cycle= %d\n",
       pm->time, global_variable::nranks, pm->ncycle);
+  particles::Particles *pp = pm->pmb_pack->ppart;
+  if (IsRelativisticParticleOutput(pp)) {
+    WriteRelativisticParticleMetadata(pfile, pp);
+    std::fprintf(pfile,
+        "# metadata: quantity_basis=physical_velocity_shadow "
+        "mu_units=dimensionless displacement_units=code_length "
+        "displacement_second_moment_units=code_length_squared "
+        "velocity_units=code_velocity "
+        "velocity_second_moment_units=code_velocity_squared "
+        "dparallel_definition=accumulated_midpoint_sum_dx_dot_Bhat\n");
+  }
   std::fprintf(pfile,
       "# columns: species count mean_mu mean_mu2 anisotropy mean_dx mean_dy mean_dz "
       "mean_dx2 mean_dy2 mean_dz2 mean_dparallel mean_dparallel2 mean_speed2\n");
@@ -358,12 +532,31 @@ void ParticleMomentsOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
 namespace {
 
 enum ParticleSpectrumQuantity {
-  PSPEC_P=0,
-  PSPEC_E=1,
-  PSPEC_LOGE=2,
+  PSPEC_SPEED=0,
+  PSPEC_LEGACY_ENERGY=1,
+  PSPEC_LEGACY_LOGE=2,
   PSPEC_MU=3,
-  PSPEC_MAGNETIC_MOMENT=4
+  PSPEC_VELOCITY_MAGNETIC_MOMENT_PROXY=4,
+  PSPEC_WMAG=5,
+  PSPEC_KINETIC_ENERGY_MODEL=6,
+  PSPEC_LOG10_KINETIC_ENERGY_MODEL=7
 };
+
+const char *ParticleSpectrumQuantityUnits(const int quantity) {
+  if (quantity == PSPEC_MU) {return "dimensionless";}
+  if (quantity == PSPEC_LEGACY_ENERGY ||
+      quantity == PSPEC_KINETIC_ENERGY_MODEL) {
+    return "code_velocity_squared";
+  }
+  if (quantity == PSPEC_LEGACY_LOGE ||
+      quantity == PSPEC_LOG10_KINETIC_ENERGY_MODEL) {
+    return "log10_code_velocity_squared";
+  }
+  if (quantity == PSPEC_VELOCITY_MAGNETIC_MOMENT_PROXY) {
+    return "code_velocity_squared_per_code_B";
+  }
+  return "code_velocity";
+}
 
 } // namespace
 
@@ -371,25 +564,63 @@ ParticleSpectrumOutput::ParticleSpectrumOutput(ParameterInput *pin, Mesh *pm,
                                                OutputParameters op) :
   BaseTypeOutput(pin, pm, op) {
   int nspec = pm->pmb_pack->ppart->nspecies;
+  bool relativistic_mode =
+      IsRelativisticParticleOutput(pm->pmb_pack->ppart);
   mkdir("pspec",0775);
 
-  quantity_name = pin->GetOrAddString(op.block_name,"quantity","p");
-  if (quantity_name == "p" || quantity_name == "dNdp") {
-    spectrum_quantity = PSPEC_P;
+  if (relativistic_mode &&
+      !pin->DoesParameterExist(op.block_name,"quantity")) {
+    FatalParticleDiagnostic("relativistic_hc pspec output block '" +
+        op.block_name + "' requires explicit quantity");
+  }
+  quantity_name = relativistic_mode ?
+      pin->GetString(op.block_name,"quantity") :
+      pin->GetOrAddString(op.block_name,"quantity","p");
+  if (relativistic_mode) {
+    if (quantity_name == "speed") {
+      spectrum_quantity = PSPEC_SPEED;
+    } else if (quantity_name == "wmag") {
+      spectrum_quantity = PSPEC_WMAG;
+    } else if (quantity_name == "kinetic_energy_model") {
+      spectrum_quantity = PSPEC_KINETIC_ENERGY_MODEL;
+    } else if (quantity_name == "log10_kinetic_energy_model") {
+      spectrum_quantity = PSPEC_LOG10_KINETIC_ENERGY_MODEL;
+    } else if (quantity_name == "mu") {
+      spectrum_quantity = PSPEC_MU;
+    } else if (quantity_name == "velocity_magnetic_moment_proxy") {
+      spectrum_quantity = PSPEC_VELOCITY_MAGNETIC_MOMENT_PROXY;
+    } else if (quantity_name == "p" || quantity_name == "dNdp" ||
+               quantity_name == "E" || quantity_name == "energy" ||
+               quantity_name == "dNdE" || quantity_name == "logE" ||
+               quantity_name == "dNdlogE" ||
+               quantity_name == "magnetic_moment") {
+      FatalParticleDiagnostic("relativistic_hc pspec output block '" +
+          op.block_name + "' rejects ambiguous quantity alias '" +
+          quantity_name + "'");
+    } else {
+      FatalParticleDiagnostic("Unknown relativistic_hc pspec quantity '" +
+          quantity_name + "' in output block '" + op.block_name + "'");
+    }
+  } else if (quantity_name == "p" || quantity_name == "dNdp") {
+    spectrum_quantity = PSPEC_SPEED;
     quantity_name = "p";
+  } else if (quantity_name == "speed") {
+    spectrum_quantity = PSPEC_SPEED;
   } else if (quantity_name == "E" || quantity_name == "energy" ||
              quantity_name == "dNdE") {
-    spectrum_quantity = PSPEC_E;
+    spectrum_quantity = PSPEC_LEGACY_ENERGY;
     quantity_name = "E";
   } else if (quantity_name == "logE" || quantity_name == "dNdlogE") {
-    spectrum_quantity = PSPEC_LOGE;
+    spectrum_quantity = PSPEC_LEGACY_LOGE;
     quantity_name = "logE";
   } else if (quantity_name == "mu") {
     spectrum_quantity = PSPEC_MU;
     quantity_name = "mu";
   } else if (quantity_name == "magnetic_moment") {
-    spectrum_quantity = PSPEC_MAGNETIC_MOMENT;
+    spectrum_quantity = PSPEC_VELOCITY_MAGNETIC_MOMENT_PROXY;
     quantity_name = "magnetic_moment";
+  } else if (quantity_name == "velocity_magnetic_moment_proxy") {
+    spectrum_quantity = PSPEC_VELOCITY_MAGNETIC_MOMENT_PROXY;
   } else {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl << "Unknown pspec quantity '" << quantity_name
@@ -403,22 +634,19 @@ ParticleSpectrumOutput::ParticleSpectrumOutput(ParameterInput *pin, Mesh *pm,
   if (spectrum_quantity == PSPEC_MU) {
     default_vmin = -1.0;
     default_vmax = 1.0;
-  } else if (spectrum_quantity == PSPEC_LOGE) {
+  } else if (spectrum_quantity == PSPEC_LEGACY_LOGE ||
+             spectrum_quantity == PSPEC_LOG10_KINETIC_ENERGY_MODEL) {
     default_vmin = -12.0;
     default_vmax = 1.0;
-  } else if (spectrum_quantity == PSPEC_E) {
+  } else if (spectrum_quantity == PSPEC_LEGACY_ENERGY ||
+             spectrum_quantity == PSPEC_KINETIC_ENERGY_MODEL) {
     default_vmax = 2.0;
-  } else if (spectrum_quantity == PSPEC_MAGNETIC_MOMENT) {
+  } else if (spectrum_quantity == PSPEC_VELOCITY_MAGNETIC_MOMENT_PROXY) {
     default_vmax = 4.0;
   }
   vmin = pin->GetOrAddReal(op.block_name,"vmin",default_vmin);
   vmax = pin->GetOrAddReal(op.block_name,"vmax",default_vmax);
-  if (vmax <= vmin) {
-    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl << "pspec output block '" << op.block_name
-              << "' requires vmax > vmin" << std::endl;
-    std::exit(EXIT_FAILURE);
-  }
+  RequireHistogramGeometry(op.block_name, "pspec", nbin, vmin, vmax);
 
   Kokkos::realloc(host_histogram, nspec, nbin);
   single_file_per_rank = pin->GetOrAddInteger(op.block_name,
@@ -444,9 +672,14 @@ void ParticleSpectrumOutput::LoadOutputData(Mesh *pm) {
   Real vmax_ = vmax;
   int nbin_ = nbin;
   int quantity_ = spectrum_quantity;
+  bool relativistic_mode = IsRelativisticParticleOutput(pp);
+  Real c_model = pp->c_model;
+  Real log_floor = kParticleSpectrumLogFloor;
 
   DvceArray2D<int> local_histogram("local_particle_spectrum", nspecies, nbin);
+  DvceArray1D<int> relativistic_failure("local_particle_spectrum_failure", 1);
   Kokkos::deep_copy(local_histogram, 0);
+  Kokkos::deep_copy(relativistic_failure, 0);
   par_for("part_spectrum_hist",DevExeSpace(),0,(npart-1),
   KOKKOS_LAMBDA(const int p) {
     int spec = pi(PSP,p);
@@ -454,31 +687,69 @@ void ParticleSpectrumOutput::LoadOutputData(Mesh *pm) {
     spec = (spec > nspecies - 1) ? nspecies - 1 : spec;
 
     Real speed2 = SQR(pr(IPVX,p)) + SQR(pr(IPVY,p)) + SQR(pr(IPVZ,p));
-    Real speed = sqrt(speed2);
+    Real speed = relativistic_mode ? ParticlePhysicalSpeed(pr, p) : sqrt(speed2);
     Real energy = 0.5*speed2;
-    Real bmag = sqrt(SQR(pr(IPBX,p)) + SQR(pr(IPBY,p)) + SQR(pr(IPBZ,p)));
-    Real dotvb = pr(IPVX,p)*pr(IPBX,p) + pr(IPVY,p)*pr(IPBY,p) +
-                 pr(IPVZ,p)*pr(IPBZ,p);
+    Real bmag = relativistic_mode ? ParticleBmag(pr, p) :
+                sqrt(SQR(pr(IPBX,p)) + SQR(pr(IPBY,p)) + SQR(pr(IPBZ,p)));
+    Real vpar = ParticleParallelVelocity(pr, p, bmag);
+    Real vperp = ParticlePerpendicularVelocity(pr, p, bmag);
+    if (quantity_ == PSPEC_MU &&
+        (!particles::relativistic::IsFinite(speed) ||
+         !particles::relativistic::IsFinite(bmag) ||
+         !particles::relativistic::IsFinite(vpar) ||
+         (relativistic_mode && (speed <= 0.0 || bmag <= 0.0)))) {
+      Kokkos::atomic_max(&relativistic_failure(0), 1);
+      return;
+    }
+    if (quantity_ == PSPEC_VELOCITY_MAGNETIC_MOMENT_PROXY &&
+        (!particles::relativistic::IsFinite(bmag) ||
+         !particles::relativistic::IsFinite(vperp) ||
+         (relativistic_mode && bmag <= 0.0))) {
+      Kokkos::atomic_max(&relativistic_failure(0), 1);
+      return;
+    }
     Real value = speed;
-    if (quantity_ == PSPEC_E) {
+    if (quantity_ == PSPEC_LEGACY_ENERGY) {
       value = energy;
-    } else if (quantity_ == PSPEC_LOGE) {
-      Real safe_energy = (energy > 1.0e-30) ? energy : 1.0e-30;
+    } else if (quantity_ == PSPEC_LEGACY_LOGE) {
+      Real safe_energy = (energy > log_floor) ? energy : log_floor;
       value = log10(safe_energy);
     } else if (quantity_ == PSPEC_MU) {
-      value = (bmag > 0.0 && speed > 0.0) ? dotvb/(speed*bmag) : 0.0;
-    } else if (quantity_ == PSPEC_MAGNETIC_MOMENT) {
-      Real vpar = (bmag > 0.0) ? dotvb/bmag : 0.0;
-      Real vperp2 = speed2 - vpar*vpar;
-      vperp2 = (vperp2 > 0.0) ? vperp2 : 0.0;
-      value = (bmag > 0.0) ? vperp2/bmag : 0.0;
+      value = ParticlePitchAngleCosine(pr, p, speed, bmag);
+    } else if (quantity_ == PSPEC_VELOCITY_MAGNETIC_MOMENT_PROXY) {
+      value = ParticleVelocityMagneticMomentProxy(pr, p, bmag);
+    } else if (quantity_ == PSPEC_WMAG) {
+      value = particles::relativistic::ScaledNorm3(ParticleW(pr, p));
+      if (!particles::relativistic::IsFinite(value)) {
+        Kokkos::atomic_max(&relativistic_failure(0), 1);
+        return;
+      }
+    } else if (quantity_ == PSPEC_KINETIC_ENERGY_MODEL ||
+               quantity_ == PSPEC_LOG10_KINETIC_ENERGY_MODEL) {
+      auto status = particles::relativistic::KineticEnergyFromW(
+          ParticleW(pr, p), c_model, value);
+      if (status != particles::relativistic::StateStatus::success) {
+        Kokkos::atomic_max(&relativistic_failure(0), 1 + static_cast<int>(status));
+        return;
+      }
+      if (quantity_ == PSPEC_LOG10_KINETIC_ENERGY_MODEL) {
+        Real safe_energy = (value > log_floor) ? value : log_floor;
+        value = log10(safe_energy);
+      }
+    }
+    if (!particles::relativistic::IsFinite(value)) {
+      Kokkos::atomic_max(&relativistic_failure(0), 1);
+      return;
     }
 
-    int ip = static_cast<int>((value - vmin_)/(vmax_ - vmin_)*nbin_);
-    ip = (ip < 0) ? 0 : ip;
-    ip = (ip > nbin_ - 1) ? nbin_ - 1 : ip;
+    int ip = HistogramBin(value, vmin_, vmax_, nbin_);
     Kokkos::atomic_add(&local_histogram(spec,ip),1);
   });
+  auto relativistic_failure_h =
+      Kokkos::create_mirror_view_and_copy(HostMemSpace(), relativistic_failure);
+  if (relativistic_failure_h(0) != 0) {
+    FatalParticleDiagnostic("relativistic_hc pspec derived quantity evaluation failed");
+  }
   Kokkos::deep_copy(host_histogram, local_histogram);
 #if MPI_PARALLEL_ENABLED
   if (reduce_histogram) {
@@ -524,8 +795,23 @@ void ParticleSpectrumOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
         "\n# AthenaK particle spectrum at time= %.17e  nranks= %d  cycle= %d\n",
         pm->time, global_variable::nranks, pm->ncycle);
     std::fprintf(pfile,
-        "# metadata: quantity=%s nbin=%d vmin=%.17e vmax=%.17e reduce=%d\n",
-        quantity_name.c_str(), nbin, vmin, vmax, reduce_histogram ? 1 : 0);
+        "# metadata: quantity=%s nspecies=%d nbin=%d vmin=%.17e vmax=%.17e "
+        "reduce=%d\n",
+        quantity_name.c_str(), pm->pmb_pack->ppart->nspecies, nbin, vmin, vmax,
+        reduce_histogram ? 1 : 0);
+    particles::Particles *pp = pm->pmb_pack->ppart;
+    if (IsRelativisticParticleOutput(pp)) {
+      WriteRelativisticParticleMetadata(pfile, pp);
+      std::fprintf(pfile,
+          "# metadata: quantity_units=%s histogram_units=particle_count\n",
+          ParticleSpectrumQuantityUnits(spectrum_quantity));
+      if (spectrum_quantity == PSPEC_LOG10_KINETIC_ENERGY_MODEL) {
+        std::fprintf(pfile,
+            "# metadata: log10_floor=%.17e "
+            "log10_floor_units=code_velocity_squared\n",
+            kParticleSpectrumLogFloor);
+      }
+    }
     std::fprintf(pfile,"# layout: species-major int32 histogram\n");
     std::fclose(pfile);
   }
@@ -573,10 +859,21 @@ void ParticleSpectrumOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
 namespace {
 
 enum ParticleJointSpectrumQuantity {
-  PSPEC2_MU_P=0,
-  PSPEC2_MU_E=1,
-  PSPEC2_VPAR_VPERP=2
+  PSPEC2_MU_SPEED=0,
+  PSPEC2_MU_LEGACY_ENERGY=1,
+  PSPEC2_VPAR_VPERP=2,
+  PSPEC2_MU_WMAG=3,
+  PSPEC2_MU_KINETIC_ENERGY_MODEL=4
 };
+
+const char *ParticleJointSpectrumAxis1Units(const int quantity) {
+  return (quantity == PSPEC2_VPAR_VPERP) ? "code_velocity" : "dimensionless";
+}
+
+const char *ParticleJointSpectrumAxis2Units(const int quantity) {
+  return (quantity == PSPEC2_MU_KINETIC_ENERGY_MODEL) ?
+      "code_velocity_squared" : "code_velocity";
+}
 
 } // namespace
 
@@ -584,16 +881,47 @@ ParticleJointSpectrumOutput::ParticleJointSpectrumOutput(ParameterInput *pin, Me
                                                          OutputParameters op) :
   BaseTypeOutput(pin, pm, op) {
   int nspec = pm->pmb_pack->ppart->nspecies;
+  bool relativistic_mode =
+      IsRelativisticParticleOutput(pm->pmb_pack->ppart);
   mkdir("pspec2",0775);
 
-  quantity_name = pin->GetOrAddString(op.block_name,"quantity","mu_p");
-  if (quantity_name == "mu_p" || quantity_name == "mu,p" ||
-      quantity_name == "f_mu_p") {
-    spectrum_quantity = PSPEC2_MU_P;
+  if (relativistic_mode &&
+      !pin->DoesParameterExist(op.block_name,"quantity")) {
+    FatalParticleDiagnostic("relativistic_hc pspec2 output block '" +
+        op.block_name + "' requires explicit quantity");
+  }
+  quantity_name = relativistic_mode ?
+      pin->GetString(op.block_name,"quantity") :
+      pin->GetOrAddString(op.block_name,"quantity","mu_p");
+  if (relativistic_mode) {
+    if (quantity_name == "mu_speed") {
+      spectrum_quantity = PSPEC2_MU_SPEED;
+    } else if (quantity_name == "mu_wmag") {
+      spectrum_quantity = PSPEC2_MU_WMAG;
+    } else if (quantity_name == "mu_kinetic_energy_model") {
+      spectrum_quantity = PSPEC2_MU_KINETIC_ENERGY_MODEL;
+    } else if (quantity_name == "vpar_vperp") {
+      spectrum_quantity = PSPEC2_VPAR_VPERP;
+    } else if (quantity_name == "mu_p" || quantity_name == "mu,p" ||
+               quantity_name == "f_mu_p" || quantity_name == "mu_E" ||
+               quantity_name == "mu,e" || quantity_name == "f_mu_E" ||
+               quantity_name == "v_parallel_v_perp") {
+      FatalParticleDiagnostic("relativistic_hc pspec2 output block '" +
+          op.block_name + "' rejects ambiguous quantity alias '" +
+          quantity_name + "'");
+    } else {
+      FatalParticleDiagnostic("Unknown relativistic_hc pspec2 quantity '" +
+          quantity_name + "' in output block '" + op.block_name + "'");
+    }
+  } else if (quantity_name == "mu_p" || quantity_name == "mu,p" ||
+             quantity_name == "f_mu_p") {
+    spectrum_quantity = PSPEC2_MU_SPEED;
     quantity_name = "mu_p";
+  } else if (quantity_name == "mu_speed") {
+    spectrum_quantity = PSPEC2_MU_SPEED;
   } else if (quantity_name == "mu_E" || quantity_name == "mu,e" ||
              quantity_name == "f_mu_E") {
-    spectrum_quantity = PSPEC2_MU_E;
+    spectrum_quantity = PSPEC2_MU_LEGACY_ENERGY;
     quantity_name = "mu_E";
   } else if (quantity_name == "vpar_vperp" ||
              quantity_name == "v_parallel_v_perp") {
@@ -627,10 +955,14 @@ ParticleJointSpectrumOutput::ParticleJointSpectrumOutput(ParameterInput *pin, Me
   vmax1 = pin->GetOrAddReal(op.block_name,"vmax1",default_vmax1);
   vmin2 = pin->GetOrAddReal(op.block_name,"vmin2",default_vmin2);
   vmax2 = pin->GetOrAddReal(op.block_name,"vmax2",default_vmax2);
-  if (vmax1 <= vmin1 || vmax2 <= vmin2) {
+  if (!std::isfinite(vmin1) || !std::isfinite(vmax1) ||
+      !std::isfinite(vmin2) || !std::isfinite(vmax2) ||
+      !std::isfinite(vmax1 - vmin1) || !std::isfinite(vmax2 - vmin2) ||
+      vmax1 <= vmin1 || vmax2 <= vmin2) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl << "pspec2 output block '" << op.block_name
-              << "' requires vmax1 > vmin1 and vmax2 > vmin2" << std::endl;
+              << "' requires finite non-overflowing vmax1 > vmin1 and "
+              << "vmax2 > vmin2" << std::endl;
     std::exit(EXIT_FAILURE);
   }
 
@@ -661,10 +993,14 @@ void ParticleJointSpectrumOutput::LoadOutputData(Mesh *pm) {
   int nbin1_ = nbin1;
   int nbin2_ = nbin2;
   int quantity_ = spectrum_quantity;
+  bool relativistic_mode = IsRelativisticParticleOutput(pp);
+  Real c_model = pp->c_model;
 
   DvceArray3D<int> local_histogram("local_particle_joint_spectrum",
                                    nspecies, nbin1, nbin2);
+  DvceArray1D<int> relativistic_failure("local_particle_joint_spectrum_failure", 1);
   Kokkos::deep_copy(local_histogram, 0);
+  Kokkos::deep_copy(relativistic_failure, 0);
   par_for("part_joint_spectrum_hist",DevExeSpace(),0,(npart-1),
   KOKKOS_LAMBDA(const int p) {
     int spec = pi(PSP,p);
@@ -672,33 +1008,61 @@ void ParticleJointSpectrumOutput::LoadOutputData(Mesh *pm) {
     spec = (spec > nspecies - 1) ? nspecies - 1 : spec;
 
     Real speed2 = SQR(pr(IPVX,p)) + SQR(pr(IPVY,p)) + SQR(pr(IPVZ,p));
-    Real speed = sqrt(speed2);
+    Real speed = relativistic_mode ? ParticlePhysicalSpeed(pr, p) : sqrt(speed2);
     Real energy = 0.5*speed2;
-    Real bmag = sqrt(SQR(pr(IPBX,p)) + SQR(pr(IPBY,p)) + SQR(pr(IPBZ,p)));
-    Real dotvb = pr(IPVX,p)*pr(IPBX,p) + pr(IPVY,p)*pr(IPBY,p) +
-                 pr(IPVZ,p)*pr(IPBZ,p);
-    Real mu = (bmag > 0.0 && speed > 0.0) ? dotvb/(speed*bmag) : 0.0;
-    Real vpar = (bmag > 0.0) ? dotvb/bmag : 0.0;
-    Real vperp2 = speed2 - vpar*vpar;
-    vperp2 = (vperp2 > 0.0) ? vperp2 : 0.0;
+    Real bmag = relativistic_mode ? ParticleBmag(pr, p) :
+                sqrt(SQR(pr(IPBX,p)) + SQR(pr(IPBY,p)) + SQR(pr(IPBZ,p)));
+    Real vpar = ParticleParallelVelocity(pr, p, bmag);
+    Real vperp = ParticlePerpendicularVelocity(pr, p, bmag);
+    if (!particles::relativistic::IsFinite(speed) ||
+        !particles::relativistic::IsFinite(bmag) ||
+        !particles::relativistic::IsFinite(vpar) ||
+        (relativistic_mode && (speed <= 0.0 || bmag <= 0.0))) {
+      Kokkos::atomic_max(&relativistic_failure(0), 1);
+      return;
+    }
+    Real mu = ParticlePitchAngleCosine(pr, p, speed, bmag);
 
     Real value1 = mu;
     Real value2 = speed;
-    if (quantity_ == PSPEC2_MU_E) {
+    if (quantity_ == PSPEC2_MU_LEGACY_ENERGY) {
+      if (!particles::relativistic::IsFinite(speed2)) {
+        Kokkos::atomic_max(&relativistic_failure(0), 1);
+        return;
+      }
       value2 = energy;
+    } else if (quantity_ == PSPEC2_MU_WMAG) {
+      value2 = particles::relativistic::ScaledNorm3(ParticleW(pr, p));
+      if (!particles::relativistic::IsFinite(value2)) {
+        Kokkos::atomic_max(&relativistic_failure(0), 1);
+        return;
+      }
+    } else if (quantity_ == PSPEC2_MU_KINETIC_ENERGY_MODEL) {
+      auto status = particles::relativistic::KineticEnergyFromW(
+          ParticleW(pr, p), c_model, value2);
+      if (status != particles::relativistic::StateStatus::success) {
+        Kokkos::atomic_max(&relativistic_failure(0), 1 + static_cast<int>(status));
+        return;
+      }
     } else if (quantity_ == PSPEC2_VPAR_VPERP) {
       value1 = vpar;
-      value2 = sqrt(vperp2);
+      value2 = vperp;
+    }
+    if (!particles::relativistic::IsFinite(value1) ||
+        !particles::relativistic::IsFinite(value2)) {
+      Kokkos::atomic_max(&relativistic_failure(0), 1);
+      return;
     }
 
-    int i1 = static_cast<int>((value1 - vmin1_)/(vmax1_ - vmin1_)*nbin1_);
-    int i2 = static_cast<int>((value2 - vmin2_)/(vmax2_ - vmin2_)*nbin2_);
-    i1 = (i1 < 0) ? 0 : i1;
-    i1 = (i1 > nbin1_ - 1) ? nbin1_ - 1 : i1;
-    i2 = (i2 < 0) ? 0 : i2;
-    i2 = (i2 > nbin2_ - 1) ? nbin2_ - 1 : i2;
+    int i1 = HistogramBin(value1, vmin1_, vmax1_, nbin1_);
+    int i2 = HistogramBin(value2, vmin2_, vmax2_, nbin2_);
     Kokkos::atomic_add(&local_histogram(spec,i1,i2),1);
   });
+  auto relativistic_failure_h =
+      Kokkos::create_mirror_view_and_copy(HostMemSpace(), relativistic_failure);
+  if (relativistic_failure_h(0) != 0) {
+    FatalParticleDiagnostic("relativistic_hc pspec2 derived quantity evaluation failed");
+  }
   Kokkos::deep_copy(host_histogram, local_histogram);
 #if MPI_PARALLEL_ENABLED
   if (reduce_histogram) {
@@ -744,10 +1108,18 @@ void ParticleJointSpectrumOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin)
         "\n# AthenaK particle joint spectrum at time= %.17e  nranks= %d  cycle= %d\n",
         pm->time, global_variable::nranks, pm->ncycle);
     std::fprintf(pfile,
-        "# metadata: quantity=%s nbin1=%d nbin2=%d vmin1=%.17e vmax1=%.17e "
-        "vmin2=%.17e vmax2=%.17e reduce=%d\n",
-        quantity_name.c_str(), nbin1, nbin2, vmin1, vmax1, vmin2, vmax2,
-        reduce_histogram ? 1 : 0);
+        "# metadata: quantity=%s nspecies=%d nbin1=%d nbin2=%d "
+        "vmin1=%.17e vmax1=%.17e vmin2=%.17e vmax2=%.17e reduce=%d\n",
+        quantity_name.c_str(), pm->pmb_pack->ppart->nspecies, nbin1, nbin2,
+        vmin1, vmax1, vmin2, vmax2, reduce_histogram ? 1 : 0);
+    particles::Particles *pp = pm->pmb_pack->ppart;
+    if (IsRelativisticParticleOutput(pp)) {
+      WriteRelativisticParticleMetadata(pfile, pp);
+      std::fprintf(pfile,
+          "# metadata: axis1_units=%s axis2_units=%s histogram_units=particle_count\n",
+          ParticleJointSpectrumAxis1Units(spectrum_quantity),
+          ParticleJointSpectrumAxis2Units(spectrum_quantity));
+    }
     std::fprintf(pfile,"# layout: species-major int32 histogram, bin1 then bin2\n");
     std::fclose(pfile);
   }
@@ -804,12 +1176,16 @@ enum ParticleSampleFieldKind {
 
 enum ParticleSampleDerivedIndex {
   PSAMP_SPEED=0,
-  PSAMP_ENERGY=1,
+  PSAMP_LEGACY_ENERGY=1,
   PSAMP_BMAG=2,
   PSAMP_MU=3,
   PSAMP_VPAR=4,
   PSAMP_VPERP=5,
-  PSAMP_MAGNETIC_MOMENT=6
+  PSAMP_VELOCITY_MAGNETIC_MOMENT_PROXY=6,
+  PSAMP_WMAG=7,
+  PSAMP_GAMMA=8,
+  PSAMP_KINETIC_ENERGY_MODEL=9,
+  PSAMP_R_LARMOR_OVER_DX_MIN=10
 };
 
 std::string NormalizeParticleSampleField(std::string name) {
@@ -839,8 +1215,15 @@ bool ParticleSampleSelected(int species, int tag, int sample_species,
 }
 
 ParticleSampleField MakeParticleSampleField(const std::string &name,
-                                            const std::string &block_name) {
+                                            const std::string &block_name,
+                                            const bool relativistic_mode) {
   std::string field = NormalizeParticleSampleField(name);
+  if (relativistic_mode &&
+      (field == "p" || field == "energy" || field == "e" ||
+       field == "mass" || field == "m" || field == "magnetic_moment")) {
+    FatalParticleDiagnostic("relativistic_hc psamp output block '" + block_name +
+        "' rejects ambiguous field alias '" + name + "'");
+  }
   if (field == "x" || field == "x1") {
     return ParticleSampleField("x", PSAMP_REAL_FIELD, IPX);
   } else if (field == "y" || field == "x2") {
@@ -872,7 +1255,7 @@ ParticleSampleField MakeParticleSampleField(const std::string &name,
   } else if (field == "speed" || field == "p") {
     return ParticleSampleField("speed", PSAMP_DERIVED_FIELD, PSAMP_SPEED);
   } else if (field == "energy" || field == "e") {
-    return ParticleSampleField("energy", PSAMP_DERIVED_FIELD, PSAMP_ENERGY);
+    return ParticleSampleField("energy", PSAMP_DERIVED_FIELD, PSAMP_LEGACY_ENERGY);
   } else if (field == "bmag") {
     return ParticleSampleField("bmag", PSAMP_DERIVED_FIELD, PSAMP_BMAG);
   } else if (field == "mu") {
@@ -883,7 +1266,36 @@ ParticleSampleField MakeParticleSampleField(const std::string &name,
     return ParticleSampleField("vperp", PSAMP_DERIVED_FIELD, PSAMP_VPERP);
   } else if (field == "magnetic_moment") {
     return ParticleSampleField("magnetic_moment", PSAMP_DERIVED_FIELD,
-                               PSAMP_MAGNETIC_MOMENT);
+                               PSAMP_VELOCITY_MAGNETIC_MOMENT_PROXY);
+  } else if (field == "velocity_magnetic_moment_proxy") {
+    return ParticleSampleField("velocity_magnetic_moment_proxy", PSAMP_DERIVED_FIELD,
+                               PSAMP_VELOCITY_MAGNETIC_MOMENT_PROXY);
+  } else if (relativistic_mode && (field == "wx" || field == "w1")) {
+    return ParticleSampleField("wx", PSAMP_REAL_FIELD, IPWX);
+  } else if (relativistic_mode && (field == "wy" || field == "w2")) {
+    return ParticleSampleField("wy", PSAMP_REAL_FIELD, IPWY);
+  } else if (relativistic_mode && (field == "wz" || field == "w3")) {
+    return ParticleSampleField("wz", PSAMP_REAL_FIELD, IPWZ);
+  } else if (relativistic_mode && (field == "cex" || field == "ce1")) {
+    return ParticleSampleField("cex", PSAMP_REAL_FIELD, IPCEX);
+  } else if (relativistic_mode && (field == "cey" || field == "ce2")) {
+    return ParticleSampleField("cey", PSAMP_REAL_FIELD, IPCEY);
+  } else if (relativistic_mode && (field == "cez" || field == "ce3")) {
+    return ParticleSampleField("cez", PSAMP_REAL_FIELD, IPCEZ);
+  } else if (relativistic_mode && field == "work") {
+    return ParticleSampleField("work", PSAMP_REAL_FIELD, IPWORK);
+  } else if (relativistic_mode && (field == "alpha_s" || field == "alpha")) {
+    return ParticleSampleField("alpha_s", PSAMP_REAL_FIELD, IPALPHA);
+  } else if (relativistic_mode && field == "wmag") {
+    return ParticleSampleField("wmag", PSAMP_DERIVED_FIELD, PSAMP_WMAG);
+  } else if (relativistic_mode && field == "gamma") {
+    return ParticleSampleField("gamma", PSAMP_DERIVED_FIELD, PSAMP_GAMMA);
+  } else if (relativistic_mode && field == "kinetic_energy_model") {
+    return ParticleSampleField("kinetic_energy_model", PSAMP_DERIVED_FIELD,
+                               PSAMP_KINETIC_ENERGY_MODEL);
+  } else if (relativistic_mode && field == "r_larmor_over_dx_min") {
+    return ParticleSampleField("r_larmor_over_dx_min", PSAMP_DERIVED_FIELD,
+                               PSAMP_R_LARMOR_OVER_DX_MIN);
   }
 
   std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -892,7 +1304,30 @@ ParticleSampleField MakeParticleSampleField(const std::string &name,
   std::exit(EXIT_FAILURE);
 }
 
-Real ParticleSampleDerivedValue(const HostArray2D<Real> &pr, int p, int index) {
+Real PositiveRatio3(const Real numerator, const Real denominator1,
+                    const Real denominator2, const Real denominator3) {
+  if (!std::isfinite(numerator) || numerator < 0.0 ||
+      !std::isfinite(denominator1) || denominator1 <= 0.0 ||
+      !std::isfinite(denominator2) || denominator2 <= 0.0 ||
+      !std::isfinite(denominator3) || denominator3 <= 0.0) {
+    return std::numeric_limits<Real>::quiet_NaN();
+  }
+  if (numerator == 0.0) {return 0.0;}
+  int numerator_exponent = 0;
+  int denominator1_exponent = 0;
+  int denominator2_exponent = 0;
+  int denominator3_exponent = 0;
+  Real scaled = std::frexp(numerator, &numerator_exponent);
+  scaled /= std::frexp(denominator1, &denominator1_exponent);
+  scaled /= std::frexp(denominator2, &denominator2_exponent);
+  scaled /= std::frexp(denominator3, &denominator3_exponent);
+  int exponent = numerator_exponent - denominator1_exponent -
+                 denominator2_exponent - denominator3_exponent;
+  return std::ldexp(scaled, exponent);
+}
+
+Real ParticleSampleDerivedValue(const HostArray2D<Real> &pr, int p, int index,
+                                Real c_model, Real dx_min) {
   Real vx = pr(IPVX,p);
   Real vy = pr(IPVY,p);
   Real vz = pr(IPVZ,p);
@@ -900,29 +1335,79 @@ Real ParticleSampleDerivedValue(const HostArray2D<Real> &pr, int p, int index) {
   Real by = pr(IPBY,p);
   Real bz = pr(IPBZ,p);
   Real speed2 = SQR(vx) + SQR(vy) + SQR(vz);
-  Real speed = std::sqrt(speed2);
-  Real bmag = std::sqrt(SQR(bx) + SQR(by) + SQR(bz));
-  Real dotvb = vx*bx + vy*by + vz*bz;
-  Real vpar = (bmag > 0.0) ? dotvb/bmag : 0.0;
-  Real vperp2 = speed2 - vpar*vpar;
-  vperp2 = (vperp2 > 0.0) ? vperp2 : 0.0;
+  Real speed = particles::relativistic::ScaledNorm3({vx, vy, vz});
+  Real bmag = particles::relativistic::ScaledNorm3({bx, by, bz});
+  Real vpar = (bmag > 0.0) ?
+      vx*(bx/bmag) + vy*(by/bmag) + vz*(bz/bmag) : 0.0;
+  Real vperp = PerpendicularMagnitude({vx, vy, vz}, bx, by, bz, bmag);
+  Real invalid = std::numeric_limits<Real>::quiet_NaN();
 
   if (index == PSAMP_SPEED) {
-    return speed;
-  } else if (index == PSAMP_ENERGY) {
-    return 0.5*speed2;
+    return std::isfinite(speed) ? speed : invalid;
+  } else if (index == PSAMP_LEGACY_ENERGY) {
+    return std::isfinite(speed2) ? 0.5*speed2 : invalid;
   } else if (index == PSAMP_BMAG) {
-    return bmag;
+    return std::isfinite(bmag) ? bmag : invalid;
   } else if (index == PSAMP_MU) {
-    return (bmag > 0.0 && speed > 0.0) ? dotvb/(speed*bmag) : 0.0;
+    if (!std::isfinite(speed) || !std::isfinite(bmag) || !std::isfinite(vpar) ||
+        speed <= 0.0 || bmag <= 0.0) {
+      return invalid;
+    }
+    return (bmag > 0.0 && speed > 0.0) ? vpar/speed : 0.0;
   } else if (index == PSAMP_VPAR) {
+    if (!std::isfinite(speed) || !std::isfinite(bmag) || !std::isfinite(vpar) ||
+        bmag <= 0.0) {
+      return invalid;
+    }
     return vpar;
   } else if (index == PSAMP_VPERP) {
-    return std::sqrt(vperp2);
-  } else if (index == PSAMP_MAGNETIC_MOMENT) {
-    return (bmag > 0.0) ? vperp2/bmag : 0.0;
+    if (!std::isfinite(bmag) || !std::isfinite(vperp) || bmag <= 0.0) {
+      return invalid;
+    }
+    return vperp;
+  } else if (index == PSAMP_VELOCITY_MAGNETIC_MOMENT_PROXY) {
+    if (!std::isfinite(bmag) || !std::isfinite(vperp) || bmag <= 0.0) {
+      return invalid;
+    }
+    return PositiveSquareRatio(vperp, bmag);
+  } else if (index == PSAMP_WMAG) {
+    return particles::relativistic::ScaledNorm3(ParticleW(pr, p));
+  } else if (index == PSAMP_GAMMA) {
+    Real gamma = 0.0;
+    auto status = particles::relativistic::GammaFromW(ParticleW(pr, p), c_model, gamma);
+    return (status == particles::relativistic::StateStatus::success) ?
+        gamma : std::numeric_limits<Real>::quiet_NaN();
+  } else if (index == PSAMP_KINETIC_ENERGY_MODEL) {
+    Real energy = 0.0;
+    auto status =
+        particles::relativistic::KineticEnergyFromW(ParticleW(pr, p), c_model, energy);
+    return (status == particles::relativistic::StateStatus::success) ?
+        energy : std::numeric_limits<Real>::quiet_NaN();
+  } else if (index == PSAMP_R_LARMOR_OVER_DX_MIN) {
+    Real alpha = std::abs(pr(IPALPHA,p));
+    Real wperp = PerpendicularMagnitude(ParticleW(pr, p), bx, by, bz, bmag);
+    if (!std::isfinite(bmag) || bmag <= 0.0 ||
+        !std::isfinite(alpha) || alpha <= 0.0 ||
+        !std::isfinite(dx_min) || dx_min <= 0.0 ||
+        !std::isfinite(wperp)) {
+      return invalid;
+    }
+    return PositiveRatio3(wperp, bmag, alpha, dx_min);
   }
   return 0.0;
+}
+
+Real ParticleSampleDxMin(Mesh *pm, int pgid) {
+  int m = pm->FindMeshBlockIndex(pgid);
+  if (m < 0) {
+    FatalParticleDiagnostic("psamp could not map local particle PGID to a MeshBlock");
+  }
+  const auto &size = pm->pmb_pack->pmb->mb_size.h_view(m);
+  Real dx_min = std::min(size.dx1, std::min(size.dx2, size.dx3));
+  if (!std::isfinite(dx_min) || dx_min <= 0.0) {
+    FatalParticleDiagnostic("psamp MeshBlock cell widths must be finite and positive");
+  }
+  return dx_min;
 }
 
 } // namespace
@@ -940,6 +1425,8 @@ ParticleSampleOutput::ParticleSampleOutput(ParameterInput *pin, Mesh *pm,
   sample_species = pin->GetOrAddInteger(op.block_name,"species",-1);
   sample_stride = pin->GetOrAddInteger(op.block_name,"sample_stride",1);
   sample_offset = pin->GetOrAddInteger(op.block_name,"sample_offset",0);
+  bool relativistic_mode =
+      IsRelativisticParticleOutput(pm->pmb_pack->ppart);
   if (sample_stride <= 0) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl << "psamp output block '" << op.block_name
@@ -953,10 +1440,18 @@ ParticleSampleOutput::ParticleSampleOutput(ParameterInput *pin, Mesh *pm,
     std::exit(EXIT_FAILURE);
   }
 
-  std::string field_text = pin->GetOrAddString(op.block_name, "fields",
-      "x,y,z,vx,vy,vz,bx,by,bz,dx,dy,dz,dpar,mass");
+  if (relativistic_mode &&
+      !pin->DoesParameterExist(op.block_name,"fields")) {
+    FatalParticleDiagnostic("relativistic_hc psamp output block '" +
+        op.block_name + "' requires explicit fields");
+  }
+  std::string field_text = relativistic_mode ?
+      pin->GetString(op.block_name,"fields") :
+      pin->GetOrAddString(op.block_name, "fields",
+          "x,y,z,vx,vy,vz,bx,by,bz,dx,dy,dz,dpar,mass");
   std::stringstream field_stream(field_text);
   std::string field_name;
+  std::set<std::string> canonical_fields;
   while (std::getline(field_stream, field_name, ',')) {
     std::string normalized = NormalizeParticleSampleField(field_name);
     if (normalized.empty()) {
@@ -966,7 +1461,15 @@ ParticleSampleOutput::ParticleSampleOutput(ParameterInput *pin, Mesh *pm,
         normalized == "tag" || normalized == "species") {
       continue;
     }
-    sample_fields.push_back(MakeParticleSampleField(field_name, op.block_name));
+    ParticleSampleField sample_field =
+        MakeParticleSampleField(field_name, op.block_name, relativistic_mode);
+    if (relativistic_mode &&
+        !canonical_fields.insert(sample_field.label).second) {
+      FatalParticleDiagnostic("relativistic_hc psamp output block '" +
+          op.block_name + "' contains duplicate canonical field '" +
+          sample_field.label + "'");
+    }
+    sample_fields.push_back(sample_field);
   }
   if (sample_fields.empty()) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -1023,6 +1526,18 @@ void ParticleSampleOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
       "sample_count=%d field_count=%zu\n",
       sample_species, sample_stride, sample_offset, sample_count,
       sample_fields.size());
+  particles::Particles *pp = pm->pmb_pack->ppart;
+  if (IsRelativisticParticleOutput(pp)) {
+    WriteRelativisticParticleMetadata(pfile, pp);
+    std::fprintf(pfile,
+        "# metadata: position_units=code_length velocity_units=code_velocity "
+        "w_units=code_velocity cE_units=code_velocity_times_code_B "
+        "gamma_units=dimensionless "
+        "kinetic_energy_model_units=code_velocity_squared "
+        "work_units=code_velocity_squared "
+        "alpha_s_units=inverse_code_time_per_code_B "
+        "r_larmor_over_dx_min_units=dimensionless\n");
+  }
   std::fprintf(pfile,
       "# selection: splitmix64(species,tag) %% sample_stride == sample_offset\n");
   std::fprintf(pfile, "# columns: rank pgid tag species");
@@ -1039,11 +1554,23 @@ void ParticleSampleOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
                                 sample_offset)) {
       continue;
     }
-    std::fprintf(pfile, "%d %d %d %d", global_variable::my_rank, pgid, tag, spec);
+    std::vector<Real> sample_values;
+    sample_values.reserve(sample_fields.size());
     for (const auto &field : sample_fields) {
+      Real dx_min = (field.kind == PSAMP_DERIVED_FIELD &&
+                     field.index == PSAMP_R_LARMOR_OVER_DX_MIN) ?
+                    ParticleSampleDxMin(pm, pgid) : 0.0;
       Real value = (field.kind == PSAMP_REAL_FIELD)
                  ? outpart_rdata(field.index,p)
-                 : ParticleSampleDerivedValue(outpart_rdata, p, field.index);
+                 : ParticleSampleDerivedValue(outpart_rdata, p, field.index,
+                                              pp->c_model, dx_min);
+      if (IsRelativisticParticleOutput(pp) && !std::isfinite(value)) {
+        FatalParticleDiagnostic("relativistic_hc psamp derived field evaluation failed");
+      }
+      sample_values.push_back(value);
+    }
+    std::fprintf(pfile, "%d %d %d %d", global_variable::my_rank, pgid, tag, spec);
+    for (const Real value : sample_values) {
       std::fprintf(pfile, " %.17e", value);
     }
     std::fprintf(pfile, "\n");

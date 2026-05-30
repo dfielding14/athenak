@@ -1,0 +1,8 @@
+[  2%] Built target kokkossimd
+[ 12%] Built target kokkoscore
+[ 13%] Built target kokkoscontainers
+[ 13%] Built target AlwaysCheckGit
+[ 14%] Built target impl_git_version
+[ 15%] Building CXX object src/CMakeFiles/athena.dir/outputs/pos_prtcl.cpp.o
+[ 15%] Linking CXX executable athena
+[100%] Built target athena

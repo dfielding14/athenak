@@ -1,0 +1,157 @@
+# AthenaK input for serial relativistic CR Phase-7 diagnostics qualification
+
+<comment>
+problem   = serial relativistic CR diagnostic meanings and restart persistence
+
+<job>
+basename  = cr_relativistic_diagnostics
+
+<mesh>
+nghost    = 2
+nx1       = 8
+x1min     = -1.0
+x1max     = 1.0
+ix1_bc    = periodic
+ox1_bc    = periodic
+
+nx2       = 8
+x2min     = -1.0
+x2max     = 1.0
+ix2_bc    = periodic
+ox2_bc    = periodic
+
+nx3       = 8
+x3min     = -1.0
+x3max     = 1.0
+ix3_bc    = periodic
+ox3_bc    = periodic
+
+<meshblock>
+nx1       = 8
+nx2       = 8
+nx3       = 8
+
+<time>
+evolution  = kinematic
+integrator = rk2
+cfl_number = 0.2
+nlim       = 2
+tlim       = 0.2
+ndiag      = 1
+
+<mhd>
+eos         = ideal
+reconstruct = plm
+rsolver     = advect
+gamma       = 1.666666667
+
+<particles>
+particle_type             = cosmic_ray
+ppc                       = 0.001953125
+nspecies                  = 1
+pusher                    = relativistic_hc
+interpolation             = trilinear
+relativistic_field_source = prescribed_test
+c_model                   = 1.0
+alpha_s                   = 1.0
+cfl_part                  = 0.05
+min_mass                  = 1.0
+subcycle                   = true
+subcycle_strict            = true
+subcycle_max_steps         = 32
+subcycle_cell_fraction     = 0.5
+subcycle_meshblock_fraction = 0.5
+subcycle_gyro_fraction     = 0.25
+subcycle_electric_kick_max = 0.1
+
+<problem>
+pgen_name                  = part_random
+particle_position          = fixed
+particle_x1                = 0.17
+particle_x2                = -0.13
+particle_x3                = 0.11
+particle_velocity          = uniform
+relativistic_initial_state = w
+w0x                        = 0.2
+w0y                        = 0.0
+w0z                        = 0.0
+cE0x                       = 0.3
+cE0y                       = 0.0
+cE0z                       = 0.0
+B0x                        = 0.2
+B0y                        = 0.0
+B0z                        = 0.0
+B_profile                  = uniform
+prtcl_rst_flag             = 0
+prtcl_res_file             = prst/rank_00000000/cr_relativistic_diagnostics.00000.prst
+
+<output1>
+file_type = psamp
+dcycle    = 1
+species   = -1
+sample_stride = 1
+sample_offset = 0
+fields    = vx,vy,vz,wx,wy,wz,wmag,gamma,kinetic_energy_model,cex,cey,cez,work,alpha_s,r_larmor_over_dx_min
+
+<output2>
+file_type = pspec
+dcycle    = 1
+quantity  = wmag
+nbin      = 8
+vmin      = 0.0
+vmax      = 0.8
+
+<output3>
+file_type = prst
+dcycle    = 1
+
+<output4>
+file_type = rst
+dcycle    = 1
+
+<output5>
+file_type = ppd
+dcycle    = 1
+
+<output6>
+file_type = df
+dcycle    = 1
+nbin      = 8
+vmin      = -1.0
+vmax      = 1.0
+
+<output7>
+file_type = dxh
+dcycle    = 1
+nbin      = 8
+vmin      = -1.0
+vmax      = 1.0
+
+<output8>
+file_type = drh
+dcycle    = 1
+nbin      = 8
+vmin      = 0.0
+vmax      = 1.0
+
+<output9>
+file_type = dparh
+dcycle    = 1
+nbin      = 8
+vmin      = -1.0
+vmax      = 1.0
+
+<output10>
+file_type = pmom
+dcycle    = 1
+
+<output11>
+file_type = pspec2
+dcycle    = 1
+quantity  = mu_wmag
+nbin1     = 8
+nbin2     = 8
+vmin1     = -1.0
+vmax1     = 1.0
+vmin2     = 0.0
+vmax2     = 1.0

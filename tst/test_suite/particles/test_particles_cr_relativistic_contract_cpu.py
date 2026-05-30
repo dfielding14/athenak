@@ -589,6 +589,212 @@ def test_relativistic_hc_rejects_uncoordinated_restart_outputs_cpu(
     _assert_fatal(result, expected_substring)
 
 
+@pytest.mark.parametrize(
+    "output_text",
+    [
+        "\n<output1>\nfile_type = ppd\ndt = 0.01\n",
+        "\n<output1>\nfile_type = df\ndt = 0.01\n",
+        "\n<output1>\nfile_type = dxh\ndt = 0.01\n",
+        "\n<output1>\nfile_type = drh\ndt = 0.01\n",
+        "\n<output1>\nfile_type = dparh\ndt = 0.01\n",
+        "\n<output1>\nfile_type = pmom\ndt = 0.01\n",
+        "\n<output1>\nfile_type = pspec\ndt = 0.01\nquantity = wmag\n",
+        "\n<output1>\nfile_type = pspec2\ndt = 0.01\nquantity = mu_wmag\n",
+        "\n<output1>\nfile_type = psamp\ndt = 0.01\n"
+        "fields = wx,wy,wz,wmag,gamma,kinetic_energy_model,cex,cey,cez,work,alpha_s\n",
+    ],
+    ids=["ppd", "df", "dxh", "drh", "dparh", "pmom", "pspec", "pspec2", "psamp"],
+)
+def test_relativistic_hc_allows_qualified_diagnostic_outputs_cpu(tmp_path, output_text):
+    """Phase-7 retained diagnostic formats are reachable through an explicit allowlist."""
+    result = _run_relativistic(
+        tmp_path, ["problem/v0x=0.2"], append_text=output_text)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize(
+    ("output_text", "expected_substring"),
+    [
+        ("\n<output1>\nfile_type = df\ndt = 0.01\n",
+         "particle df derived quantity evaluation failed"),
+        ("\n<output1>\nfile_type = pmom\ndt = 0.01\n",
+         "relativistic_hc pmom derived quantity evaluation failed"),
+        ("\n<output1>\nfile_type = pspec\ndt = 0.01\nquantity = mu\n",
+         "relativistic_hc pspec derived quantity evaluation failed"),
+        ("\n<output1>\nfile_type = pspec2\ndt = 0.01\nquantity = mu_wmag\n",
+         "relativistic_hc pspec2 derived quantity evaluation failed"),
+        (
+            "\n<output1>\nfile_type = psamp\ndt = 0.01\n"
+            "fields = r_larmor_over_dx_min\n",
+            "relativistic_hc psamp derived field evaluation failed",
+        ),
+    ],
+    ids=["df", "pmom", "pspec-mu", "pspec2-mu-wmag", "psamp-larmor-ratio"],
+)
+def test_relativistic_hc_field_relative_diagnostics_reject_zero_b_cpu(
+        tmp_path, output_text, expected_substring):
+    """Field-relative diagnostics fail closed instead of emitting a zero sentinel."""
+    result = _run_relativistic(
+        tmp_path,
+        [
+            "problem/v0x=0.2",
+            "problem/B0x=0.0",
+            "problem/B0y=0.0",
+            "problem/B0z=0.0",
+        ],
+        append_text=output_text,
+    )
+    _assert_fatal(result, expected_substring)
+
+
+@pytest.mark.parametrize(
+    ("output_text", "expected_substring"),
+    [
+        ("\n<output1>\nfile_type = df\ndt = 0.01\nnbin = 0\n", "positive nbin"),
+        (
+            "\n<output1>\nfile_type = df\ndt = 0.01\nvmin = 1\nvmax = 1\n",
+            "non-overflowing vmax > vmin",
+        ),
+        (
+            "\n<output1>\nfile_type = df\ndt = 0.01\nvmin = -1e308\n"
+            "vmax = 1e308\n",
+            "non-overflowing vmax > vmin",
+        ),
+        ("\n<output1>\nfile_type = dxh\ndt = 0.01\nnbin = 0\n", "positive nbin"),
+        (
+            "\n<output1>\nfile_type = dxh\ndt = 0.01\nvmin = -1e308\n"
+            "vmax = 1e308\n",
+            "non-overflowing vmax > vmin",
+        ),
+        ("\n<output1>\nfile_type = drh\ndt = 0.01\nnbin = 0\n", "positive nbin"),
+        (
+            "\n<output1>\nfile_type = drh\ndt = 0.01\nvmin = -1e308\n"
+            "vmax = 1e308\n",
+            "non-overflowing vmax > vmin",
+        ),
+        (
+            "\n<output1>\nfile_type = dparh\ndt = 0.01\nvmin = nan\n",
+            "non-overflowing vmax > vmin",
+        ),
+        (
+            "\n<output1>\nfile_type = dparh\ndt = 0.01\nvmin = -1e308\n"
+            "vmax = 1e308\n",
+            "non-overflowing vmax > vmin",
+        ),
+        (
+            "\n<output1>\nfile_type = pspec\ndt = 0.01\nquantity = wmag\nnbin = 0\n",
+            "positive nbin",
+        ),
+        (
+            "\n<output1>\nfile_type = pspec\ndt = 0.01\nquantity = wmag\n"
+            "vmin = -1e308\nvmax = 1e308\n",
+            "non-overflowing vmax > vmin",
+        ),
+        (
+            "\n<output1>\nfile_type = pspec2\ndt = 0.01\nquantity = mu_wmag\n"
+            "vmax1 = nan\n",
+            "non-overflowing vmax1 > vmin1",
+        ),
+        (
+            "\n<output1>\nfile_type = pspec2\ndt = 0.01\nquantity = mu_wmag\n"
+            "vmin1 = -1e308\nvmax1 = 1e308\n",
+            "non-overflowing vmax1 > vmin1",
+        ),
+        (
+            "\n<output1>\nfile_type = pspec2\ndt = 0.01\nquantity = mu_wmag\n"
+            "vmin2 = -1e308\nvmax2 = 1e308\n",
+            "and vmax2 > vmin2",
+        ),
+    ],
+    ids=["df-zero-bin", "df-empty-range", "df-overflow-range", "dxh-zero-bin",
+         "dxh-overflow-range", "drh-zero-bin", "drh-overflow-range",
+         "dparh-nonfinite-range", "dparh-overflow-range", "pspec-zero-bin",
+         "pspec-overflow-range", "pspec2-nonfinite-range",
+         "pspec2-axis1-overflow-range", "pspec2-axis2-overflow-range"],
+)
+def test_relativistic_hc_rejects_invalid_diagnostic_histogram_geometry_cpu(
+        tmp_path, output_text, expected_substring):
+    """Histogram outputs fail before allocating or indexing invalid geometry."""
+    result = _run_relativistic(tmp_path, append_text=output_text)
+    _assert_fatal(result, expected_substring)
+
+
+def test_relativistic_hc_diagnostics_validate_dependencies_before_fallbacks_cpu():
+    """Retained diagnostic fallbacks cannot hide invalid derived dependencies."""
+    source = (ROOT / "src" / "outputs" / "df_prtcl.cpp").read_text()
+    assert "quantity_ == PSPEC_VELOCITY_MAGNETIC_MOMENT_PROXY" in source
+    assert "!particles::relativistic::IsFinite(vpar)" in source
+    assert "Real invalid = std::numeric_limits<Real>::quiet_NaN();" in source
+    assert "!std::isfinite(dx_min) || dx_min <= 0.0" in source
+    assert "psamp MeshBlock cell widths must be finite and positive" in source
+
+
+@pytest.mark.parametrize(
+    "output_text",
+    [
+        "\n<output1>\nfile_type = trk\ndt = 0.01\n",
+        "\n<output1>\nfile_type = pvtk\ndt = 0.01\n",
+        "\n<output1>\nfile_type = bin\ndt = 0.01\nvariable = prtcl_d\n",
+        "\n<output1>\nfile_type = bin\ndt = 0.01\nvariable = prtcl_all\n",
+    ],
+    ids=["trk", "pvtk", "generic-prtcl-d", "generic-prtcl-all"],
+)
+def test_relativistic_hc_rejects_unqualified_diagnostic_outputs_cpu(
+        tmp_path, output_text):
+    """Unsafe visualization and generic particle-derived outputs remain fail-closed."""
+    result = _run_relativistic(tmp_path, append_text=output_text)
+    _assert_fatal(result, "diagnostic contract rejects")
+
+
+@pytest.mark.parametrize(
+    "output_text",
+    [
+        "\n<output1>\nfile_type = pspec\ndt = 0.01\n",
+        "\n<output1>\nfile_type = pspec2\ndt = 0.01\n",
+        "\n<output1>\nfile_type = psamp\ndt = 0.01\n",
+    ],
+    ids=["pspec", "pspec2", "psamp"],
+)
+def test_relativistic_hc_requires_explicit_diagnostic_schema_cpu(tmp_path, output_text):
+    """Relativistic spectra and samples cannot inherit legacy ambiguous defaults."""
+    result = _run_relativistic(tmp_path, append_text=output_text)
+    _assert_fatal(result, "requires explicit")
+
+
+@pytest.mark.parametrize(
+    "quantity",
+    ["p", "dNdp", "E", "energy", "dNdE", "logE", "dNdlogE"],
+)
+def test_relativistic_hc_rejects_ambiguous_pspec_aliases_cpu(tmp_path, quantity):
+    """Legacy spectrum aliases retain legacy meaning and cannot be reinterpreted."""
+    output = f"\n<output1>\nfile_type = pspec\ndt = 0.01\nquantity = {quantity}\n"
+    result = _run_relativistic(tmp_path, append_text=output)
+    _assert_fatal(result, "ambiguous")
+
+
+@pytest.mark.parametrize("quantity", ["mu_p", "mu_E"])
+def test_relativistic_hc_rejects_ambiguous_pspec2_aliases_cpu(tmp_path, quantity):
+    """Legacy joint-spectrum aliases retain nonrelativistic proxy meanings."""
+    output = f"\n<output1>\nfile_type = pspec2\ndt = 0.01\nquantity = {quantity}\n"
+    result = _run_relativistic(tmp_path, append_text=output)
+    _assert_fatal(result, "ambiguous")
+
+
+@pytest.mark.parametrize("field", ["p", "energy", "e", "mass", "m", "magnetic_moment"])
+def test_relativistic_hc_rejects_ambiguous_psamp_aliases_cpu(tmp_path, field):
+    """Relativistic samples reject speed, energy-proxy, and overloaded-IPM aliases."""
+    output = f"\n<output1>\nfile_type = psamp\ndt = 0.01\nfields = x,{field}\n"
+    result = _run_relativistic(tmp_path, append_text=output)
+    _assert_fatal(result, "ambiguous")
+
+
+def test_relativistic_hc_rejects_duplicate_psamp_canonical_fields_cpu(tmp_path):
+    """Alias normalization cannot create duplicate sample columns silently."""
+    output = "\n<output1>\nfile_type = psamp\ndt = 0.01\nfields = x,x1\n"
+    result = _run_relativistic(tmp_path, append_text=output)
+    _assert_fatal(result, "duplicate")
+
+
 def test_legacy_pushers_reject_relativistic_only_keys_cpu(tmp_path):
     """Legacy pushers must not silently ignore staged relativistic parameters."""
     flags = [

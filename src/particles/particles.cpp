@@ -213,10 +213,21 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
           ++qualified_rst;
           continue;
         }
+        if (file_type.compare("ppd") == 0 ||
+            file_type.compare("df") == 0 ||
+            file_type.compare("dxh") == 0 ||
+            file_type.compare("drh") == 0 ||
+            file_type.compare("dparh") == 0 ||
+            file_type.compare("pmom") == 0 ||
+            file_type.compare("pspec") == 0 ||
+            file_type.compare("pspec2") == 0 ||
+            file_type.compare("psamp") == 0) {
+          continue;
+        }
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                   << std::endl << "Particle pusher 'relativistic_hc' staged "
-                  << "contract rejects <" << it->block_name
-                  << "> until non-restart relativistic outputs are qualified"
+                  << "diagnostic contract rejects <" << it->block_name
+                  << "> file_type = " << file_type
                   << std::endl;
         std::exit(EXIT_FAILURE);
       }

@@ -1,0 +1,21 @@
+PASS: pmom scaled-norm success
+PASS: pmom pre-accumulation pre-artifact rejection
+PASS: df scaled-norm success
+PASS: pspec mu scaled-speed success
+PASS: pspec magnetic-moment proxy stability success
+PASS: pspec tiny-B proxy stability success
+PASS: pspec2 scaled-speed success
+PASS: pspec2 vperp stability success
+PASS: psamp vperp stability success
+PASS: psamp tiny-B proxy stability success
+PASS: psamp row-atomic pre-artifact rejection
+PASS: psamp applicability-ratio scaled success
+PASS: df zero-field pre-artifact rejection
+PASS: pmom zero-field pre-artifact rejection
+PASS: pspec zero-field pre-artifact rejection
+PASS: pspec2 zero-field pre-artifact rejection
+PASS: psamp zero-field pre-artifact rejection
+PASS: ppd non-finite float32 position pre-artifact rejection
+PASS: pspec zero-state logarithmic-floor writer artifact: log10_floor=1e-30 log10_floor_units=code_velocity_squared occupied_bin=9
+PASS: ppd float32 species predicate compile-bound: static_assert exact=16777216 lossy_rejected=16777217 exact=2147483520
+PASS: retained relativistic writer adversarial probes (20/20)

@@ -1,0 +1,17 @@
+docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase7_all_formats_inspector.log: OK
+docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase7_all_formats_runtime.log: OK
+docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase7_branch_snapshot.txt: OK
+docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase7_diagnostics_metrics.json: OK
+docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase7_diagnostics_negative_controls.log: OK
+docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase7_diagnostics_runtime.log: OK
+docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase7_diff_check.log: OK
+docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase7_legacy_accuracy_cpu.log: OK
+docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase7_legacy_accuracy_mpicpu.log: OK
+docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase7_legacy_cpu.log: OK
+docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase7_legacy_mpicpu.log: OK
+docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase7_mpicpu_build.log: OK
+docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase7_parser_contract.log: OK
+docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase7_restart_runtime_analyzer.log: OK
+docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase7_serial_build.log: OK
+docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase7_style.log: OK
+docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase7_writer_adversarial_runtime.log: OK

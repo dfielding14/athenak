@@ -9,6 +9,7 @@
 #include <sys/stat.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <iostream>
@@ -19,11 +20,53 @@
 #include "globals.hpp"
 #include "mesh/mesh.hpp"
 #include "particles/particles.hpp"
+#include "particles/relativistic_state.hpp"
 #include "outputs.hpp"
 
 #if MPI_PARALLEL_ENABLED
 #include <mpi.h>
 #endif
+
+namespace {
+
+bool IsRelativisticParticleOutput(const particles::Particles *pp) {
+  return pp->pusher == ParticlesPusher::relativistic_hc;
+}
+
+void WriteRelativisticParticleMetadata(FILE *pfile, const particles::Particles *pp) {
+  if (!IsRelativisticParticleOutput(pp)) {return;}
+  std::fprintf(pfile,
+      "# metadata: schema=akcr_particle_output_v1 mode=relativistic_hc "
+      "units=code_model c_model=%.17e alpha_s=%.17e\n",
+      pp->c_model, pp->alpha_s);
+}
+
+void RequireHistogramGeometry(const std::string &block_name, const std::string &kind,
+                              const int nbin, const Real vmin, const Real vmax) {
+  if (nbin <= 0 || !std::isfinite(vmin) || !std::isfinite(vmax) ||
+      !std::isfinite(vmax - vmin) || vmax <= vmin) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << kind << " output block '" << block_name
+              << "' requires positive nbin and finite non-overflowing vmax > vmin"
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+}
+
+KOKKOS_INLINE_FUNCTION
+int HistogramBin(const Real value, const Real vmin, const Real vmax, const int nbin) {
+  if (value <= vmin) {return 0;}
+  if (value >= vmax) {return nbin - 1;}
+  return static_cast<int>((value - vmin)/(vmax - vmin)*nbin);
+}
+
+[[noreturn]] void FatalParticleDiagnostic(const std::string &message) {
+  std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+            << std::endl << message << std::endl;
+  std::exit(EXIT_FAILURE);
+}
+
+} // namespace
 
 ParticleDxHistOutput::ParticleDxHistOutput(ParameterInput *pin, Mesh *pm,
                                            OutputParameters op) :
@@ -33,6 +76,7 @@ ParticleDxHistOutput::ParticleDxHistOutput(ParameterInput *pin, Mesh *pm,
   nbin = pin->GetOrAddInteger(op.block_name,"nbin",100);
   vmin = pin->GetOrAddReal(op.block_name,"vmin",-1.0);
   vmax = pin->GetOrAddReal(op.block_name,"vmax",1.0);
+  RequireHistogramGeometry(op.block_name, "dxh", nbin, vmin, vmax);
   Kokkos::realloc(host_histogram, nspec*3, nbin);
   dxhist_single_file_per_rank = pin->GetOrAddInteger(op.block_name,
                                                      "dxhist_single_file_per_rank",0);
@@ -57,19 +101,28 @@ void ParticleDxHistOutput::LoadOutputData(Mesh *pm) {
   int nbin_ = nbin;
 
   DvceArray2D<int> local_histogram("local_dxh_hist", nspecies*3, nbin);
+  DvceArray1D<int> derived_failure("local_dxh_hist_failure", 1);
   Kokkos::deep_copy(local_histogram, 0);
+  Kokkos::deep_copy(derived_failure, 0);
   par_for("part_dxh_hist",DevExeSpace(),0,(npart-1), KOKKOS_LAMBDA(const int p) {
     int spec = pi(PSP,p);
     spec = (spec < 0) ? 0 : spec;
     spec = (spec > nspecies - 1) ? nspecies - 1 : spec;
     Real dx[3] = {pr(IPDX,p), pr(IPDY,p), pr(IPDZ,p)};
     for (int d=0; d<3; ++d) {
-      int ip = static_cast<int>((dx[d] - vmin_)/(vmax_ - vmin_)*nbin_);
-      ip = (ip < 0) ? 0 : ip;
-      ip = (ip > nbin_ - 1) ? nbin_ - 1 : ip;
+      if (!particles::relativistic::IsFinite(dx[d])) {
+        Kokkos::atomic_max(&derived_failure(0), 1);
+        return;
+      }
+      int ip = HistogramBin(dx[d], vmin_, vmax_, nbin_);
       Kokkos::atomic_add(&local_histogram(3*spec + d,ip),1);
     }
   });
+  auto derived_failure_h =
+      Kokkos::create_mirror_view_and_copy(HostMemSpace(), derived_failure);
+  if (derived_failure_h(0) != 0) {
+    FatalParticleDiagnostic("particle dxh derived quantity evaluation failed");
+  }
   Kokkos::deep_copy(host_histogram, local_histogram);
 #if MPI_PARALLEL_ENABLED
   if (reduce_histogram) {
@@ -116,6 +169,17 @@ void ParticleDxHistOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
       std::exit(EXIT_FAILURE);
     }
     std::fprintf(pfile,"%s\n",msg.str().c_str());
+    particles::Particles *pp = pm->pmb_pack->ppart;
+    if (IsRelativisticParticleOutput(pp)) {
+      WriteRelativisticParticleMetadata(pfile, pp);
+      std::fprintf(pfile,
+          "# metadata: quantity=dx_dy_dz quantity_units=code_length "
+          "histogram_units=particle_count nspecies=%d nbin=%d "
+          "vmin=%.17e vmax=%.17e reduce=%d\n",
+          pp->nspecies, nbin, vmin, vmax, reduce_histogram ? 1 : 0);
+      std::fprintf(pfile,
+          "# layout: species-major int32 histograms ordered dx, dy, dz\n");
+    }
     std::fclose(pfile);
   }
 
@@ -177,6 +241,7 @@ ParticleScalarDxHistOutput::ParticleScalarDxHistOutput(ParameterInput *pin, Mesh
   vmin = pin->GetOrAddReal(op.block_name,"vmin",
                            use_parallel_displacement ? -1.0 : 0.0);
   vmax = pin->GetOrAddReal(op.block_name,"vmax",1.0);
+  RequireHistogramGeometry(op.block_name, output_dir, nbin, vmin, vmax);
   Kokkos::realloc(host_histogram, nspec, nbin);
   single_file_per_rank = pin->GetOrAddInteger(
       op.block_name, (output_dir + "_single_file_per_rank").c_str(), 0);
@@ -203,7 +268,9 @@ void ParticleScalarDxHistOutput::LoadOutputData(Mesh *pm) {
   bool use_parallel = use_parallel_displacement;
 
   DvceArray2D<int> local_histogram("local_scalar_dxh_hist", nspecies, nbin);
+  DvceArray1D<int> derived_failure("local_scalar_dxh_hist_failure", 1);
   Kokkos::deep_copy(local_histogram, 0);
+  Kokkos::deep_copy(derived_failure, 0);
   par_for("part_scalar_dxh_hist",DevExeSpace(),0,(npart-1),
   KOKKOS_LAMBDA(const int p) {
     int spec = pi(PSP,p);
@@ -211,13 +278,21 @@ void ParticleScalarDxHistOutput::LoadOutputData(Mesh *pm) {
     spec = (spec > nspecies - 1) ? nspecies - 1 : spec;
     Real val = pr(IPDB,p);
     if (!use_parallel) {
-      val = sqrt(SQR(pr(IPDX,p)) + SQR(pr(IPDY,p)) + SQR(pr(IPDZ,p)));
+      val = particles::relativistic::ScaledNorm3(
+          {pr(IPDX,p), pr(IPDY,p), pr(IPDZ,p)});
     }
-    int ip = static_cast<int>((val - vmin_)/(vmax_ - vmin_)*nbin_);
-    ip = (ip < 0) ? 0 : ip;
-    ip = (ip > nbin_ - 1) ? nbin_ - 1 : ip;
+    if (!particles::relativistic::IsFinite(val)) {
+      Kokkos::atomic_max(&derived_failure(0), 1);
+      return;
+    }
+    int ip = HistogramBin(val, vmin_, vmax_, nbin_);
     Kokkos::atomic_add(&local_histogram(spec,ip),1);
   });
+  auto derived_failure_h =
+      Kokkos::create_mirror_view_and_copy(HostMemSpace(), derived_failure);
+  if (derived_failure_h(0) != 0) {
+    FatalParticleDiagnostic("particle scalar displacement evaluation failed");
+  }
   Kokkos::deep_copy(host_histogram, local_histogram);
 #if MPI_PARALLEL_ENABLED
   if (reduce_histogram) {
@@ -263,6 +338,25 @@ void ParticleScalarDxHistOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) 
       std::exit(EXIT_FAILURE);
     }
     std::fprintf(pfile,"%s\n",msg.str().c_str());
+    particles::Particles *pp = pm->pmb_pack->ppart;
+    if (IsRelativisticParticleOutput(pp)) {
+      WriteRelativisticParticleMetadata(pfile, pp);
+      if (use_parallel_displacement) {
+        std::fprintf(pfile,
+            "# metadata: quantity=dparallel quantity_units=code_length "
+            "histogram_units=particle_count "
+            "definition=accumulated_midpoint_sum_dx_dot_Bhat "
+            "nspecies=%d nbin=%d vmin=%.17e vmax=%.17e reduce=%d\n",
+            pp->nspecies, nbin, vmin, vmax, reduce_histogram ? 1 : 0);
+      } else {
+        std::fprintf(pfile,
+            "# metadata: quantity=displacement_norm quantity_units=code_length "
+            "histogram_units=particle_count nspecies=%d nbin=%d "
+            "vmin=%.17e vmax=%.17e reduce=%d\n",
+            pp->nspecies, nbin, vmin, vmax, reduce_histogram ? 1 : 0);
+      }
+      std::fprintf(pfile,"# layout: species-major int32 histogram\n");
+    }
     std::fclose(pfile);
   }
 

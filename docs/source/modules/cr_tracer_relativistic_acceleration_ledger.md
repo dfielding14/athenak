@@ -3365,3 +3365,649 @@ before the fixes are accepted.
     `src/particles/README.md`, and append-only ledger updates;
   - keep migration infrastructure, MPI widening, AMR algorithms, GPU
     optimization, and public documentation overlay closed.
+
+## DR-034: Phase-7 Explicit Diagnostic Allowlist And Semantic Names
+
+- Date: 2026-05-30
+- Status: accepted before Phase-7 production edits
+- Question: which particle-facing outputs can be interpreted honestly for
+  `relativistic_hc`, and which legacy names must remain isolated rather than
+  silently changing meaning?
+- Selected implementation:
+  - allow `ppd`, `df`, `dxh`, `drh`, `dparh`, `pmom`, `pspec`, `pspec2`,
+    `psamp`, and paired `prst/rst` only;
+  - preserve `ppd` species and position payload meaning;
+  - preserve `df` pitch-angle cosine from physical velocity shadow and sampled
+    magnetic field;
+  - preserve `dxh` physical component displacement, `drh` physical
+    displacement norm, and define `dparh` explicitly as the accumulated
+    midpoint sum of `dx dot Bhat`, not final displacement projected onto final
+    sampled `B`;
+  - preserve `pmom` physical-velocity transport moments with explicit schema,
+    mode, and units metadata;
+  - add canonical relativistic spectrum names: `speed`, `wmag`,
+    `kinetic_energy_model`, `log10_kinetic_energy_model`, `mu`, and an
+    explicitly named velocity-based magnetic-moment proxy;
+  - add canonical relativistic joint-spectrum names: `mu_speed`, `mu_wmag`,
+    `mu_kinetic_energy_model`, and physical-velocity `vpar_vperp`;
+  - add canonical samples for momentum, `gamma`, model kinetic energy,
+    sampled `cE`, accumulated work, signed `alpha_s`, and applicability
+    diagnostics while retaining clearly named physical fields;
+  - reject ambiguous relativistic aliases and defaults: legacy `pspec p`
+    means speed, legacy energy means `0.5 v^2`, legacy `psamp p` means speed,
+    and legacy `psamp mass` emits overloaded `IPM`, which is not physical
+    mass for `relativistic_hc`;
+  - reject `trk`, `pvtk`, generic `prtcl_d`, and advertised-but-unimplemented
+    generic `prtcl_all` for the new mode.
+- Alternatives rejected:
+  - silently redefining old `p`, `E`, `energy`, or `mass` labels would make
+    mixed legacy and relativistic analyses scientifically ambiguous;
+  - repairing tracked-particle, VTK, and generic deposition infrastructure
+    inside the diagnostics phase would mix independent correctness defects
+    into the relativistic semantic opening.
+- Inflection point:
+  - stop before `RG-008` if a metadata-only reader cannot identify every
+    retained field's model meaning and units convention without reading the
+    implementation patch.
+
+## DR-035: Phase-7 Metadata And Histogram-Safety Rebound
+
+- Date: 2026-05-30
+- Status: corrected candidate replayed; independent rebound reviews pending
+- Initial metadata-only HOLD findings:
+  - retained `df`, `dxh`, `drh`, and `dparh` headers did not identify bin
+    geometry, reduction policy, or species count;
+  - `psamp` did not state units for sampled `cE`, `gamma`, signed `alpha_s`,
+    or `r_larmor_over_dx_min`;
+  - the tracked qualifier exercised only `psamp`, one `pspec`, and paired
+    restart, so it could not bind the full retained diagnostic dictionary;
+  - the tracked runtime artifact bundle did not expose `ppd`, `df`, `dxh`,
+    `drh`, `dparh`, `pmom`, `pspec2`, or paired mesh restart artifacts to the
+    independent scientist.
+- Fresh code-adversary HOLD findings:
+  - `df`, `dxh`, `drh`, `dparh`, and `pspec` accepted zero bins; the first four
+    also accepted empty or non-finite ranges before device atomics;
+  - the inspector skipped any binary prefix byte equal to `#`, allowing a
+    valid first little-endian histogram bin count of `35` to be misread as a
+    comment;
+  - scalar histogram and `pmom` inspector paths discarded emitted metadata;
+  - the shared legacy histogram helper no longer checked an optional `pspec`
+    spectrum normalization;
+  - spectrum-derived values could reach floating-point-to-integer bin
+    conversion without one generic finite-state guard.
+- Corrected choices:
+  - emit explicit histogram geometry and reduction metadata for every retained
+    scalar histogram; emit complete sampled-field and moment-family units;
+  - make the tracked diagnostics fixture produce the full retained dictionary
+    and paired typed-v2 restart bundle in one run;
+  - extend the frozen Phase-7 criteria from `27` to `33` checks, adding both
+    applicability-ratio checks, metadata coverage, inspector round trips, and
+    paired restart artifact inspection;
+  - reject nonpositive bin counts, non-finite bounds, and empty histogram
+    ranges before allocation for every retained histogram family;
+  - reject any non-finite derived histogram value before integer bin
+    conversion and device mutation;
+  - parse the final fixed-width binary histogram payload from the record end,
+    then accept only recognized textual metadata and layout prefixes;
+  - add metadata-preserving inspector record APIs while retaining the
+    list-returning compatibility wrappers;
+  - restore optional legacy `pspec` normalization through
+    `validate_histograms()`;
+  - add a leading-count-`35` payload regression, metadata mismatch mutation,
+    and invalid histogram-geometry constructor tests.
+- Alternatives rejected:
+  - keeping metadata only in C++ comments would not satisfy the scientist-facing
+    contract;
+  - widening the parser's comment skipper with more byte heuristics would keep
+    binary/text ambiguity;
+  - limiting geometry validation to relativistic mode would leave the shared
+    output constructors unsafe for legacy callers.
+- Inflection point:
+  - keep Phase 8 closed until a fresh metadata-only scientist and fresh
+    adversarial source reviewer both return `PROCEED` on the replayed bundle.
+
+## DR-036: Phase-7 Second Rebound For Offline Semantics And Safe Binning
+
+- Date: 2026-05-30
+- Status: corrected candidate replayed; second independent rebound pending
+- Metadata-only scientist HOLD findings:
+  - the offline inspector normalized forbidden relativistic sample aliases and
+    accepted forbidden relativistic spectrum and joint-spectrum aliases;
+  - scientist-facing documentation mixed legacy particle-only restart wording
+    with the paired relativistic typed-v2 restart contract;
+  - the qualifier checked artifact existence for intermediate typed-v2
+    checkpoints but decoded only the latest checkpoint;
+  - general non-unit `c_model` formulas and work quadrature remained implicit;
+  - the archived full-format report lacked replay provenance.
+- Source-adversary HOLD findings:
+  - finite out-of-range histogram values were converted to integer bins before
+    clamping, so an extreme normalized coordinate could reach undefined
+    floating-point-to-integer conversion;
+  - `df` and `pspec2` zero-field fallbacks could hide non-finite dependencies;
+  - the binary-prefix regression covered `#` but not whitespace-leading
+    payloads;
+  - Phase-7 source hashes and evidence seal had not yet been archived.
+- Corrected choices:
+  - reject relativistic legacy aliases in offline `psamp`, `pspec`, and
+    `pspec2` parsing, and reject sample metadata that appears after columns;
+  - describe legacy and relativistic restart paths separately in the README,
+    including the typed-v2 shard, manifest, mesh restart, and witness bundle;
+  - document `gamma = sqrt(1 + |w|^2 / c_model^2)`, `v = w / gamma`, model
+    kinetic energy, and the direct substep work quadrature;
+  - add a non-unit `c_model = 2` work-closure runtime replay and extend the
+    frozen criteria from `33` to `43` checks;
+  - decode every typed-v2 checkpoint during retained-dictionary qualification;
+  - make offline all-checkpoint duplicate detection checkpoint-aware so
+    temporal history remains inspectable without weakening same-checkpoint
+    duplicate rejection;
+  - branch on histogram range before integer conversion and reject
+    non-finite dependencies before legitimate zero-field fallbacks;
+  - reject non-finite histogram spans before allocation;
+  - add forbidden-alias, metadata-order, whitespace-leading binary payload,
+    and overflow-range controls;
+  - include replay root, binary, input, criteria path, criteria digest,
+    metrics path, generator label, decoded shard count, and decoded format
+    counts in the full-format archived report.
+- Alternatives rejected:
+  - trusting writer-side rejection alone would allow stale or hand-edited
+    artifacts to be silently reinterpreted offline;
+  - post-cast clamping is not a valid overflow defense;
+  - documenting only the normalized `c_model = 1` formulas would leave the
+    accepted prescribed-test parameter contract underspecified.
+- Inflection point:
+  - keep Phase 8 source widening closed until second-rebound reviewers return
+    `PROCEED` and the path-sorted Phase-7 source snapshot and evidence seal
+    verify.
+
+## DR-037: Phase-7 Spectrum Cardinality Rebound
+
+- Date: 2026-05-30
+- Status: corrected candidate replayed; metadata-only scientist returned `PROCEED`
+- Metadata-only HOLD finding:
+  - retained `pspec` and `pspec2` headers described quantity, axes, bins, range,
+    reduction policy, schema, mode, and units but omitted species cardinality;
+  - the README summary of rejected relativistic `psamp` aliases omitted
+    `magnetic_moment`, although both writer and inspector rejected it.
+- Corrected choices:
+  - emit `nspecies` in retained spectrum and joint-spectrum headers;
+  - validate optional `nspecies` metadata in the offline readers, preserving
+    legacy artifact compatibility while binding the new schema;
+  - require `nspecies = 1` in the tracked relativistic runtime qualifier;
+  - add spectrum and joint-spectrum species-cardinality mutation controls;
+  - align the README alias summary with the executable policy.
+- Alternative rejected:
+  - relying on out-of-band caller knowledge of `nspecies` would violate the
+    metadata-only scientist gate.
+- Inflection point:
+  - rerun the Phase-7 source and metadata-only rebounds after evidence replay;
+    do not open Phase 8 widening on a partially self-describing spectrum
+    schema.
+
+## DR-038: Phase-7 Third Rebound For Zero-Field Diagnostic Fallbacks
+
+- Date: 2026-05-30
+- Status: corrected candidate replayed; provenance rebound pending
+- Fresh source-adversary HOLD findings:
+  - retained `pspec` `mu` and `velocity_magnetic_moment_proxy` paths could
+    replace non-finite dependencies with a finite zero when `B = 0`;
+  - retained `psamp` `mu`, `vpar`, `vperp`,
+    `velocity_magnetic_moment_proxy`, and `r_larmor_over_dx_min` paths could
+    apply the same zero-field fallback before validating all required
+    dependencies;
+  - constructor coverage bound representative invalid histogram geometries
+    but did not require finite non-overflowing spans for every retained
+    histogram family;
+  - the archived all-format metadata report named an ad hoc generator label
+    rather than a tracked replay tool.
+- Corrected choices:
+  - validate `pspec` dependencies before applying zero-field fallbacks;
+  - return a non-finite sentinel from `psamp` derived-field evaluation whenever
+    a required velocity, field, momentum, alpha, or cell-width dependency is
+    invalid, so the retained writer fails closed before emitting a row;
+  - require finite positive MeshBlock cell widths before evaluating the
+    applicability ratio;
+  - extend constructor regressions to cover finite overflowing ranges for
+    every retained histogram family and bind the dependency-order contract;
+  - replace the ad hoc all-format metadata export with a tracked deterministic
+    replay tool.
+- Alternatives rejected:
+  - relying on the final derived value to be non-finite is insufficient because
+    a legitimate zero-field fallback can mask an invalid dependency;
+  - treating the all-format report as a sealed but manually generated artifact
+    would weaken replayability at the scientist-facing gate.
+- Inflection point:
+  - rerun both CPU builds, the complete Phase-7 evidence replay, legacy
+    regressions, and fresh source and metadata-only rebounds before recording
+    `RG-008` or opening Phase 8.
+
+## DR-039: Phase-7 Provenance Reseal After Diagnostic Rebound
+
+- Date: 2026-05-30
+- Status: corrected candidate resealed; superseded by `DR-040` source rebound
+- Fresh metadata-only scientist findings:
+  - the tracked all-format exporter reproduces the archived JSON and the
+    scientist-facing semantics are adequate;
+  - the Phase-7 checksum manifest and source snapshot still described the
+    pre-`DR-038` candidate and therefore failed direct verification;
+  - the new deterministic exporter must be added to the source snapshot.
+- Corrected choices:
+  - regenerate the path-sorted source snapshot after the final `DR-038` replay,
+    including `scripts/particles/cr_relativistic_all_formats_inspect.py`;
+  - regenerate the evidence checksum manifest and archive direct verification;
+  - retain the preregistration manifest's pre-replay status string and frozen
+    SHA-256 intentionally: rewriting a preregistration artifact after replay
+    would erase the evidence that criteria were fixed before the candidate was
+    accepted.
+- Alternative rejected:
+  - changing the frozen criteria status string to describe the replayed state
+    would make the accepted replay validate against a post hoc manifest.
+- Inflection point:
+  - require a narrow metadata-only reseal recheck before recording `RG-008`.
+
+## DR-040: Phase-7 Retained-Writer Adversarial Rebound
+
+- Date: 2026-05-30
+- Status: corrected candidate replayed; superseded by `DR-041` source rebound
+- Fresh source-adversary HOLD findings:
+  - `pmom` used naive magnetic-field squaring and had no relativistic failure
+    channel, so finite extreme fields could emit a scientifically wrong
+    pitch-angle moment;
+  - `ppd` could downcast a finite `Real` position to non-finite `float32`;
+  - `psamp` validated derived values while streaming fields, so a late failure
+    could leave a malformed partial data row;
+  - source-substring checks alone did not bind these writer failure paths.
+- Corrected choices:
+  - use scaled norms and normalized magnetic-field components when constructing
+    retained pitch-angle quantities;
+  - validate every relativistic `pmom` contribution before atomics and fail the
+    output when any retained moment is non-finite;
+  - validate `ppd` float32 representability collectively before opening the
+    artifact;
+  - evaluate and validate a complete `psamp` row before writing its prefix;
+  - add executable adversarial output probes rather than relying only on source
+    substring assertions.
+- Alternatives rejected:
+  - retaining naive dot products divided by extreme magnitudes would preserve
+    avoidable intermediate overflow;
+  - allowing a partially written diagnostic followed by a fatal exit would
+    create an artifact that offline tools cannot interpret safely;
+  - applying `ppd` validation after opening the file would leave an ambiguous
+    partial artifact.
+- Inflection point:
+  - rerun both CPU builds, executable adversarial output probes, complete
+    Phase-7 replay, legacy regressions, source rebound, metadata-only rebound,
+    source snapshot, and evidence reseal before recording `RG-008`.
+
+## DR-041: Phase-7 Retained-Writer Numerical Second Rebound
+
+- Date: 2026-05-30
+- Status: corrected candidate replayed; superseded by `DR-042` source rebound
+- Fresh source-adversary HOLD findings:
+  - retained `df` still computed pitch angle through a raw velocity-field dot
+    product divided by `|v||B|`, so finite extreme fields could overflow an
+    intermediate denominator and emit a scientifically wrong finite bin;
+  - sampled `r_larmor_over_dx_min` squared the momentum magnitude and parallel
+    component, then multiplied `alpha_s*dx_min` before dividing, so avoidable
+    intermediate overflow could silently turn a representable applicability
+    ratio into zero;
+  - the first executable writer probe did not bind `df`, `pmom`
+    reject-before-artifact behavior, or the representable applicability-ratio
+    edge case.
+- Corrected choices:
+  - route retained `df` through the normalized-component pitch-angle helper
+    already shared by the other relativistic outputs;
+  - obtain perpendicular momentum from a normalized-field cross product,
+    avoiding square-subtract cancellation and overflow;
+  - evaluate the three-factor positive applicability ratio with mantissa and
+    exponent decomposition, preserving representable subnormal results without
+    admitting non-finite final values;
+  - extend the tracked writer probe to six cases covering extreme-field
+    `pmom`, `pmom` rejection before artifact creation, extreme-field `df`,
+    late-field `psamp` row atomicity, subnormal applicability-ratio retention,
+    and pre-open `ppd` rejection.
+- Alternatives rejected:
+  - sequential division alone would still depend on factor ordering and could
+    overflow or underflow an intermediate even when the final ratio is
+    representable;
+  - retaining squared perpendicular-momentum reconstruction would keep both
+    avoidable overflow and cancellation near field-aligned states.
+- Inflection point:
+  - replay the corrected Phase-7 evidence and require a fresh source rebound
+    before generating the final source snapshot or recording `RG-008`.
+
+## DR-042: Phase-7 Field-Relative Diagnostic Consolidation
+
+- Date: 2026-05-30
+- Status: corrected candidate replayed; superseded by `DR-043` source rebound
+- Fresh source-adversary HOLD findings:
+  - physical-velocity perpendicular diagnostics still reconstructed
+    `v_perp^2` by subtracting nearly equal squares, creating avoidable
+    cancellation for almost field-aligned particles;
+  - `pspec mu` and `pspec2 mu_wmag` rejected representable diagnostics when an
+    unused raw `speed2` intermediate overflowed;
+  - zero-field pitch-angle and Larmor applicability outputs were encoded as an
+    ordinary zero even though the field-relative diagnostic is undefined.
+- Corrected choices:
+  - compute physical `v_perp` through the normalized-field cross-product
+    helper and reuse it for sampled fields, `pspec`, and `pspec2`;
+  - validate only intermediates required by the selected spectrum quantity;
+  - fail closed for relativistic field-relative diagnostics when the sampled
+    magnetic-field magnitude is zero, including pitch angle, field-relative
+    velocity decomposition, physical velocity magnetic-moment proxy, and
+    `r_larmor_over_dx_min`;
+  - change the Phase-7 prescribed diagnostic fixture from `B = 0` to a nonzero
+    field aligned with the initial momentum and electric field, retaining the
+    analytical acceleration and deceleration trajectories while making every
+    retained field-relative diagnostic scientifically defined;
+  - extend the tracked writer adversarial probe to bind cancellation,
+    scoped-intermediate validation, and zero-field rejection.
+- Alternatives rejected:
+  - documenting a zero-field sentinel would still conflate an undefined field
+    direction with a resolved zero in histograms and moments;
+  - retaining square-subtract reconstruction for physical velocity would leave
+    an avoidable cancellation defect even after the momentum-side repair.
+- Inflection point:
+  - rebuild both CPU binaries, replay all Phase-7 evidence and legacy suites,
+    and require another fresh source rebound before generating the final
+    snapshot or recording `RG-008`.
+
+## DR-043: Phase-7 Proxy Scaling And Offline Histogram Rebound
+
+- Date: 2026-05-30
+- Status: corrected candidate replay pending
+- Fresh source-adversary HOLD findings:
+  - physical-velocity magnetic-moment proxy evaluation used
+    `v_perp*(v_perp/B)`, so a tiny positive `B` could overflow the intermediate
+    quotient even when the documented final `v_perp^2/B` value remained
+    representable;
+  - offline histogram readers accepted impossible negative int32 bins when the
+    remaining bins preserved the expected aggregate count.
+- Corrected choices:
+  - evaluate `v_perp^2/B` through a device-callable exponent-scaled helper
+    built from Kokkos `logb` and `exp2`, normalizing the final mantissa before
+    applying its exponent;
+  - reuse the helper in both device-side `pspec` and host-side `psamp`;
+  - reject negative bins in the shared histogram record decoder before
+    retained-family reshaping or aggregate validation;
+  - add tiny-`B` executable proxy probes for `pspec` and `psamp`, and mutation
+    controls for negative bins in `df`, `dxh`, `drh`, `dparh`, `pspec`, and
+    `pspec2`.
+- Alternatives rejected:
+  - quotient-first and square-first evaluation each fail in a different
+    representable regime;
+  - aggregate-count validation alone cannot distinguish a physical histogram
+    from cancelling negative and positive bin corruption.
+- Inflection point:
+  - rebuild, replay all Phase-7 evidence, and require fresh source and
+    metadata-only rebounds before final snapshot generation or `RG-008`.
+
+## DR-044: Phase-7 Offline Schema Identity Rebound
+
+- Date: 2026-05-30
+- Status: corrected candidate replay pending
+- Fresh source-adversary HOLD findings:
+  - the retained `ppd` reader ignored its header particle count and rounded
+    fractional species identities;
+  - the retained `pmom` reader accepted headerless payloads, rounded
+    fractional species and count identities, and silently selected a suffix
+    when the latest block contained extra rows;
+  - retained histogram readers decoded arbitrary layout declarations without
+    checking the family-specific binary layout.
+- Corrected choices:
+  - bind the `ppd` header particle count to payload cardinality and require
+    finite nonnegative integral species identities;
+  - require a recognizable latest `pmom` header, exact latest-block row count,
+    and finite nonnegative integral species and particle-count identities;
+  - reject contradictory histogram layouts for every retained histogram
+    family, require layouts for `relativistic_hc` histograms, and retain
+    compatibility with legacy histograms that predate layout declarations;
+  - extend mutation controls for count mismatches, fractional identities,
+    headerless moments, extra moment rows, contradictory family layouts, and
+    missing relativistic layout metadata.
+- Alternatives rejected:
+  - rounding stored identities would convert malformed artifacts into
+    plausible scientific records;
+  - requiring layouts for every historical histogram would unnecessarily
+    break legacy inspection even when the older binary layout is unambiguous.
+- Inflection point:
+  - replay all Phase-7 evidence and require fresh source and metadata-only
+    rebounds before final snapshot generation or `RG-008`.
+
+## DR-045: Phase-7 Declared-Modern Metadata Rebound
+
+- Date: 2026-05-30
+- Status: corrected candidate replay pending
+- Fresh source-adversary HOLD findings:
+  - offline readers still accepted artifacts that declared `relativistic_hc`
+    while omitting required schema, units, geometry, or semantic metadata;
+  - `pmom` still admitted a legacy-width row even when its metadata declared
+    the modern relativistic schema;
+  - the shared metadata parser silently discarded malformed standalone tokens;
+  - the first layout validator incorrectly flattened the intentionally
+    distinct `df` and `dxh` writer declarations to a generic scalar layout.
+- Corrected choices:
+  - validate required common and family-specific metadata whenever an artifact
+    declares either `mode=relativistic_hc` or `schema=akcr_particle_output_v1`;
+  - require modern `pmom` rows to carry the complete 26-column retained
+    transport-moment payload while preserving legacy 14-column inspection;
+  - reject malformed standalone metadata tokens and empty values centrally;
+  - bind `df`, `dxh`, scalar histograms, `pspec`, and `pspec2` to their actual
+    emitted family layouts, while retaining positive compatibility controls
+    for layout-free legacy artifacts;
+  - add mutation controls for fractional `pmom` species, malformed metadata,
+    underspecified modern artifacts, modern `pmom` legacy-width rows, and
+    explicit legacy no-layout acceptance.
+- Alternatives rejected:
+  - relying only on the runtime qualifier's complete-metadata checks would
+    leave the reusable offline reader fail-open for independently supplied
+    artifacts;
+  - erasing semantic layout suffixes from the writer would discard useful
+    retained-format documentation to simplify the inspector.
+- Inflection point:
+  - replay the full Phase-7 evidence set and require fresh source and
+    metadata-only rebounds before final snapshot generation or `RG-008`.
+
+## DR-046: Phase-7 Offline Identity Closure
+
+- Date: 2026-05-30
+- Status: corrected candidate replay pending
+- Fresh source-adversary HOLD findings:
+  - direct modern `pmom` inspection accepted duplicate, reordered, or
+    out-of-range species rows even though the higher-level validation wrapper
+    rejected them later;
+  - direct modern `psamp` inspection accepted negative row identities and a
+    stored row rank inconsistent with the shard path;
+  - the first `DR-045` provenance refresh was necessarily superseded by these
+    source-adversary findings.
+- Corrected choices:
+  - require modern `pmom` row `n` to describe species `n` inside the shared
+    record reader, not only in a higher-level optional validator;
+  - require modern `psamp` rank, packet-global ID, tag, and species identities
+    to be nonnegative and require row rank to match the shard path;
+  - add direct mutation controls for duplicate, reordered, and out-of-range
+    modern moment species, every sampled-row negative identity, and sampled
+    shard-rank mismatch.
+- Alternative rejected:
+  - leaving identity checks only in scientist-specific wrappers would make the
+    reusable shared reader unsafe for independent offline consumers.
+- Inflection point:
+  - replay the complete affected evidence set, regenerate provenance from the
+    corrected candidate, and require another fresh source rebound before
+    recording `RG-008`.
+
+## DR-047: Phase-7 Sample-Shard And Spectrum-Semantic Closure
+
+- Date: 2026-05-30
+- Status: corrected candidate replay pending
+- Fresh source-adversary HOLD findings:
+  - direct modern `psamp` inspection inferred rank zero for unsharded files and
+    accepted arbitrary path substrings rather than the writer's canonical
+    `psamp/rank_########/` shard structure;
+  - direct modern `psamp` inspection retained but did not enforce header rank
+    bounds, selector geometry, SplitMix64 selection, selected species, or the
+    writer's signed-integer identity range;
+  - direct modern spectrum readers required unit fields but did not bind those
+    units to the declared relativistic quantity or require the logarithmic
+    spectrum floor.
+- Corrected choices:
+  - require exact canonical modern sample shard paths, a valid header rank
+    count, and shard rank strictly below the declared rank count;
+  - parse and validate modern selector metadata, replay `sample_selected()` for
+    every retained row, and require sampled identities to fit the writer's
+    signed-integer contract;
+  - bind `pspec` and `pspec2` units to their declared relativistic quantities
+    and require a finite positive `log10_floor` for logarithmic spectra;
+  - add direct mutations for malformed shard paths, rank bounds, selector
+    geometry and predicate drift, integer upper bounds, contradictory spectrum
+    units, and missing logarithmic floor metadata.
+- Alternatives rejected:
+  - preserving permissive sample path inference for modern artifacts would
+    admit files the retained writer cannot produce;
+  - treating units as decorative metadata would leave scientifically
+    contradictory spectra readable as valid records.
+- Inflection point:
+  - replay the complete affected Phase-7 evidence set and require another
+    hostile source rebound before regenerating provenance or recording
+    `RG-008`.
+
+## DR-048: Phase-7 Retained-Format Token And Floor-Unit Closure
+
+- Date: 2026-05-30
+- Status: corrected candidate replay pending
+- Fresh source- and metadata-adversary HOLD findings:
+  - direct `ppd` and modern `psamp` readers accepted a leading integer prefix
+    from duplicated or fractional header-count tokens instead of requiring the
+    writer's single complete integer token;
+  - direct modern `ppd` inspection accepted integral float32 species values
+    outside the signed writer identity domain, and the writer did not reject a
+    species identity if its float32 serialization lost exactness;
+  - logarithmic relativistic spectra declared the floor value but not the
+    floor's units, and the user-facing retained-format documentation did not
+    state the exact floored logarithm.
+- Corrected choices:
+  - require exactly one complete nonnegative integer `particles` token in
+    `ppd` headers and one complete positive integer `nranks` token in modern
+    `psamp` headers;
+  - reject modern `ppd` species identities outside the signed writer domain
+    and reject writer-side float32 identity serialization unless the stored
+    value exactly round-trips to the integer species identity;
+  - emit and bind `log10_floor_units=code_velocity_squared`, document
+    `log10(max(kinetic_energy_model, log10_floor))`, and add a positive
+    writer-emitted logarithmic-spectrum probe plus missing and contradictory
+    floor-unit mutation controls.
+- Alternatives rejected:
+  - accepting a syntactically valid integer prefix would admit malformed
+    artifacts that the writer cannot emit;
+  - treating logarithmic-floor units as inferable from the quantity name would
+    leave a scientific interpretation contract implicit.
+- Inflection point:
+  - replay the complete Phase-7 evidence set, require fresh hostile source and
+    metadata rebounds, and regenerate provenance only from the accepted
+    corrected candidate.
+
+## DR-049: Phase-7 Reserved-Token Downgrade Closure
+
+- Date: 2026-05-30
+- Status: corrected candidate replay pending
+- Fresh source-adversary HOLD findings:
+  - direct `ppd` and modern `psamp` header parsing admitted punctuation-prefixed
+    lookalike labels such as `x-particles` and `x-nranks`;
+  - malformed reserved `schema` and `mode` values could silently bypass the
+    modern retained-format validator and downgrade an artifact to permissive
+    legacy inspection.
+- Corrected choices:
+  - recognize reserved header-count labels only at line start or after
+    whitespace;
+  - treat the presence of either reserved `schema` or `mode` metadata key as a
+    request for strict modern validation, then reject any contradictory value;
+  - add direct prefixed-label and malformed-marker downgrade mutations for
+    `ppd`, `psamp`, and `pspec`.
+- Alternative rejected:
+  - retaining exact-value-only modern detection would allow a one-character
+    marker corruption to disable the fail-closed contract.
+- Inflection point:
+  - replay the affected offline suite, regenerate final Phase-7 provenance,
+    and require a fresh hostile rebound before recording `RG-008`.
+
+## DR-050: Phase-7 Digest And Boundary-Probe Closure
+
+- Date: 2026-05-30
+- Status: corrected candidate replay pending
+- Fresh metadata-adversary HOLD findings:
+  - the deterministic all-format exporter bound runtime metrics to binary and
+    input paths but not their bytes;
+  - the writer-emitted logarithmic-spectrum probe checked floor units and
+    cardinality without checking the emitted floor value or expected zero-state
+    bin;
+  - the writer's float32 `ppd` identity branch and parser boundaries needed
+    more direct controls and the README needed the retained serialization rule.
+- Corrected choices:
+  - record and verify SHA-256 digests for the binary, input, and criteria in
+    Phase-7 runtime metrics and all-format export provenance;
+  - bind the zero-state emitted logarithmic spectrum to
+    `log10_floor=1e-30`, its declared units, and the exact occupied bin;
+  - factor the production float32 species predicate into a `constexpr` helper,
+    compile-bind exact and lossy boundaries with `static_assert`, execute a
+    positive large exact float32 reader boundary, and add missing, zero,
+    nonfinite, and out-of-range parser controls;
+  - document that relativistic `ppd` creation fails before artifact creation
+    when float32 serialization loses finite positions or exact signed species
+    identity.
+- Alternative rejected:
+  - adding a hidden runtime-only species override to manufacture an impossible
+    high species ID would widen production input semantics solely for a test;
+    compile-time assertions bind the exact production predicate without such a
+    seam.
+- Inflection point:
+  - replay the full Phase-7 gate, reseal source and evidence manifests, and
+    require final bounded hostile source and provenance rebounds before
+    recording `RG-008`.
+
+## DR-051: Phase-7 Writer-Evidence Enumeration
+
+- Date: 2026-05-30
+- Status: corrected candidate replay pending
+- Fresh metadata-adversary HOLD finding:
+  - the archived writer-adversarial evidence summarized `19/19` without naming
+    the probes, so a later auditor could not verify writer-specific closure
+    from the evidence bundle alone.
+- Corrected choice:
+  - enumerate every writer-adversarial PASS in the archived log, record the
+    exact zero-state logarithmic floor, units, and occupied bin, identify
+    pre-artifact rejection probes explicitly, and archive the compile-bound
+    float32 species predicate boundaries as a distinct twentieth check.
+- Alternative rejected:
+  - treating a single aggregate PASS count as sufficient would make the sealed
+    evidence depend on rereading the test implementation.
+- Inflection point:
+  - rerun the enumerated writer probe, regenerate provenance, and require the
+    final bounded metadata rebound before recording `RG-008`.
+
+## RG-008: Scientists Can Interpret The Retained Outputs
+
+- Date: 2026-05-30
+- Status: `PROCEED`
+- Scope accepted:
+  - relativistic retained writers and direct offline readers now bind explicit
+    schemas, units, layouts, counts, identities, logarithmic-floor semantics,
+    and digest-bound replay provenance;
+  - legacy readers retain their documented compatibility behavior without
+    silently accepting malformed modern declarations.
+- Evidence:
+  - frozen `43`-criterion Phase-7 runtime qualification passes;
+  - `88` direct parser, metadata, and provenance mutations reject;
+  - enumerated writer-adversarial evidence passes `20/20`;
+  - parser contract passes `172` cases;
+  - legacy serial and MPI ladders pass `20 + 12 + 4 + 5` cases;
+  - style passes `2` cases and `git diff --check` is empty;
+  - deterministic all-format export binds binary, input, and criteria
+    SHA-256 digests.
+- Independent review disposition:
+  - source-adversary `HOLD` findings from `DR-045` through `DR-050` were
+    corrected and the final bounded source rebound returned `PROCEED`;
+  - metadata-adversary evidence-enumeration `HOLD` is corrected by `DR-051`
+    and requires one final metadata-only reseal verification before Phase-8
+    source edits.
+- Residual boundary:
+  - MPI, block migration, SMR, AMR, and changed-rank restart policy remain
+    closed until the separately preregistered Phase-8 gate passes.
