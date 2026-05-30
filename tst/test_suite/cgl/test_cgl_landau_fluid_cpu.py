@@ -1166,12 +1166,13 @@ def test_cgl_lf_stage_i_isolates_e02_and_checks_all_shared_root_jobs(tmp_path):
         "mks24_stage_i_E02_modal_driver_reservations.json"
     )
     assert stage_i.COMPLETED_R16_NODE_HOURS == 6.145556
-    assert stage_i.STANDARD_LAYOUT_PILOT_RESERVED_NODE_HOURS == 2.0
-    assert stage_i.CURRENT_STAGE_I_RESERVED_NODE_HOURS == 8.145556
+    assert stage_i.COMPLETED_R02_STANDARD_LAYOUT_PILOT_NODE_HOURS == 0.473333
+    assert stage_i.HIGH_RESOLUTION_PILOT_RESERVED_NODE_HOURS == 8.0
+    assert stage_i.CURRENT_STAGE_I_RESERVED_NODE_HOURS == 14.618889
     with pytest.raises(
-        ValueError, match="authorized only for the R02 standard-layout timing pilot"
+        ValueError, match="authorized only for the R17 high-resolution timing probe"
     ):
-        stage_i.require_authorized_case("R16")
+        stage_i.require_authorized_case("R02")
 
     manifest_path = (
         paths["runs"] / "R16" / "s00" / "manifest" / "prepared_run.json"

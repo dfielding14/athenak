@@ -38,11 +38,14 @@ HISTORICAL_DEBUG_NODE_HOURS = 0.851670
 HISTORICAL_E01_STAGE_I_NODE_HOURS = 9.962778
 EXECUTION_EPOCH = "E02-modal-driver"
 EXECUTION_EPOCH_SLUG = "E02_modal_driver"
-AUTHORIZED_CASE_ID = "R02"
+AUTHORIZED_CASE_ID = "R17"
 COMPLETED_R16_NODE_HOURS = 6.145556
-STANDARD_LAYOUT_PILOT_RESERVED_NODE_HOURS = 2.0
+COMPLETED_R02_STANDARD_LAYOUT_PILOT_NODE_HOURS = 0.473333
+HIGH_RESOLUTION_PILOT_RESERVED_NODE_HOURS = 8.0
 CURRENT_STAGE_I_RESERVED_NODE_HOURS = (
-    COMPLETED_R16_NODE_HOURS + STANDARD_LAYOUT_PILOT_RESERVED_NODE_HOURS
+    COMPLETED_R16_NODE_HOURS
+    + COMPLETED_R02_STANDARD_LAYOUT_PILOT_NODE_HOURS
+    + HIGH_RESOLUTION_PILOT_RESERVED_NODE_HOURS
 )
 MAX_SEGMENT_SECONDS = 24 * 60 * 60
 LEDGER_COLUMNS = (
@@ -165,12 +168,12 @@ def require_current_epoch(manifest: dict[str, object], label: str) -> None:
 
 
 def require_authorized_case(case_id: str) -> None:
-    """Limit the current E02 authorization to the standard-layout timing pilot."""
+    """Limit the current E02 authorization to the high-resolution timing probe."""
 
     if case_id != AUTHORIZED_CASE_ID:
         raise ValueError(
             f"E02 Stage I is authorized only for the {AUTHORIZED_CASE_ID} "
-            "standard-layout timing pilot "
+            "high-resolution timing probe "
             "until the measured matrix reservation is reviewed"
         )
 
@@ -257,7 +260,7 @@ def refresh_summary(paths: dict[str, Path]) -> None:
     stage_remaining = CURRENT_STAGE_I_RESERVED_NODE_HOURS - actual - reserved
     project_remaining = PROJECT_BUDGET_NODE_HOURS - actual - reserved
     lines = [
-        "# MKS24 Stage I Frontier E02 Standard-Layout Pilot Budget",
+        "# MKS24 Stage I Frontier E02 High-Resolution Pilot Budget",
         "",
         f"- Updated UTC: `{utc_now()}`",
         f"- Execution epoch: `{EXECUTION_EPOCH}`",
@@ -268,11 +271,13 @@ def refresh_summary(paths: dict[str, Path]) -> None:
         f"- Historical E01 Stage I use, reported but not charged to E02: "
         f"`{HISTORICAL_E01_STAGE_I_NODE_HOURS:.6f}` node-hours",
         f"- Completed E02 R16 use: `{COMPLETED_R16_NODE_HOURS:.6f}` node-hours",
-        f"- Approved E02 R02 standard-layout timing-pilot reservation: "
-        f"`{STANDARD_LAYOUT_PILOT_RESERVED_NODE_HOURS:.6f}` node-hours",
+        f"- Completed E02 R02 standard-layout timing-pilot use: "
+        f"`{COMPLETED_R02_STANDARD_LAYOUT_PILOT_NODE_HOURS:.6f}` node-hours",
+        f"- Approved E02 R17 high-resolution timing-probe reservation: "
+        f"`{HIGH_RESOLUTION_PILOT_RESERVED_NODE_HOURS:.6f}` node-hours",
         f"- E02 Stage I actual use: `{actual:.6f}` node-hours",
         f"- Active segment reservations: `{reserved:.6f}` node-hours",
-        f"- Unreserved E02 R02 timing-pilot remainder: "
+        f"- Unreserved E02 R17 timing-probe remainder: "
         f"`{stage_remaining:.6f}` node-hours",
         f"- Incremental project remainder after active E02 Stage I use: "
         f"`{project_remaining:.6f}` node-hours",
@@ -308,7 +313,7 @@ def refresh_summary(paths: dict[str, Path]) -> None:
     lines.extend([
         "",
         "Only one E02 Stage I segment may be prepared or submitted at a time. "
-        "The current authorization is an R02 standard-layout timing pilot only. "
+        "The current authorization is an R17 high-resolution timing probe only. "
         "Jobs use the `batch` partition with Frontier's default production "
         "`normal` QOS; the `debug` QOS is not used for paper production.",
         "",
@@ -740,7 +745,7 @@ def prepare(args: argparse.Namespace) -> Path:
             "historical_e01_stage_i_node_hours": HISTORICAL_E01_STAGE_I_NODE_HOURS,
             "stage_i_reserved_node_hours": CURRENT_STAGE_I_RESERVED_NODE_HOURS,
             "stage_i_authorization": (
-                f"{AUTHORIZED_CASE_ID} standard-layout timing pilot only"
+                f"{AUTHORIZED_CASE_ID} high-resolution timing probe only"
             ),
             "sequential_manual_submission_required": True,
         },
