@@ -10,7 +10,7 @@
     "Q-038",
     "Q-042"
   ],
-  "qualification_effect": "local_registered_f1_successor_gyro_first_attempt_reconciled_retry_and_adjacent_path_successor_staged",
+  "qualification_effect": "local_registered_f1_successor_gyro_first_attempt_reconciled_reviewed_retry_policy_active",
   "scope": "Staged successor chronology after the clean-candidate Frontier F0 admission closure. The candidate retains the completed F0 chronology and adds two exact one-attempt registered-science slices: a clean-candidate GPU relativistic-gyro oracle and a clean-candidate GPU paper-mode coupling oracle. The launch trampoline freezes an exact structured artifact tree and immutable inventory. Offline analyzers retain descriptor-pinned tree identity, validate exact inventory closure, publish one immutable result and receipt, and support qualification-time no-write recomputation from the snapshotted analyzer. Qualification retains descriptors for the immutable inventory, result and receipt plus their directory ancestry across recomputation and rechecks path identity and bytes afterward. This candidate does not claim Frontier F1 execution or scientific qualification.",
   "live_predecessor": {
     "record": "tst/publication/readiness/q027_frontier_f0_compute_snapshot_activation_2026-05-30.json",
@@ -24,9 +24,9 @@
   "staged_successor": {
     "control_plane_version": "cbc6fb50937a728098d22cf9e8e11aa2baf421d5549378ef5f1833a65b294fd8",
     "control_plane_inventory_files": 19,
-    "worktree_state": "dirty_candidate_pending_clean_commit_curation",
-    "paired_install_status": "pending_clean_commit_and_paired_install",
-    "active_policy_promotion_status": "pending_paired_install"
+    "worktree_state": "clean_reviewed_commit_559d5e5477cfeafea85fe958e55cdd3406bc8d59",
+    "paired_install_status": "pass_identical_immutable_install",
+    "active_policy_promotion_status": "pass"
   },
   "registered_science_slices": [
     {
@@ -183,7 +183,35 @@
     "active_reservations": 0
   },
   "paired_install_transition": {
-    "status": "pending_clean_commit_and_paired_install"
+    "status": "pass",
+    "installed_utc": "2026-05-30T22:25:05Z",
+    "control_plane_version": "cbc6fb50937a728098d22cf9e8e11aa2baf421d5549378ef5f1833a65b294fd8",
+    "operational_source_commit": "559d5e5477cfeafea85fe958e55cdd3406bc8d59",
+    "orion_install": "/lustre/orion/ast207/proj-shared/dfielding/PIC/control_plane/cbc6fb50937a728098d22cf9e8e11aa2baf421d5549378ef5f1833a65b294fd8",
+    "project_home_install": "/ccs/proj/ast207/proj-shared/PIC/control_plane/cbc6fb50937a728098d22cf9e8e11aa2baf421d5549378ef5f1833a65b294fd8",
+    "inventory_sha256": "f5268721b85690814f0d678a6c519d39a4cb5a224c6f9024668c29cbab4312a9",
+    "anchor_migration": "pass_existing_genesis_preserved_without_append",
+    "genesis_event_sha256": "849bf340986f4d1e1f7cc69c0d2e2845c0313c02d935822113aa8b1df5f1f4c1",
+    "genesis_mirror_ack_sha256": "a3af8af8c3b579ee323850902aad7aab58abde98dff98618ccffd15958dbb296",
+    "orion_ledger_records": 34,
+    "orion_receipt_records": 34,
+    "project_home_ledger_records": 34,
+    "active_reservations": 0,
+    "pending_submission_marker": "absent"
+  },
+  "active_policy_transition": {
+    "status": "pass",
+    "validated_utc": "2026-05-30T22:25:48Z",
+    "control_plane_version": "cbc6fb50937a728098d22cf9e8e11aa2baf421d5549378ef5f1833a65b294fd8",
+    "policy_sha256": "58f855033b426e9a75483fc7d2da53cdc1838465948a9403a94bf7870036f562",
+    "promotion_sha256": "05dfbf327a1e6b64f14359389bec2c426cd4dba713aeaf5e5dd65cce6a0f4f31",
+    "idempotent_post_promotion_validation": "pass",
+    "orion_ledger_records": 34,
+    "orion_receipt_records": 34,
+    "project_home_ledger_records": 34,
+    "cumulative_consumed_node_hours": 0.08138888888888887,
+    "active_reservations": 0,
+    "pending_submission_marker": "absent"
   },
   "superseded_registered_execution": {
     "status": "reconciled_scheduler_pass_scientific_analysis_rejected_retry_registration_required",
@@ -203,16 +231,18 @@
     "remediation": "Register v2 one-attempt slices bound to analyzers that accept only the exact reviewed Cray MPICH informational transcript SHA-256 and reject any byte drift."
   },
   "registered_retry_policy_transition": {
-    "status": "pending_successor_review_commit_paired_install_and_active_policy_promotion",
+    "status": "pass",
     "predecessor_policy_sha256": "ee3923fb678d0bba692a9c3ceaf653e96984afe0bbe5632f761006b36bec92de",
     "predecessor_promotion_sha256": "433d0afcb65af36932217fe51f619119b6c95e0f6832d6ac99f6168e8d00241b",
-    "reason": "Rotate one-attempt authorization IDs and bind the exact reviewed Cray MPICH informational stderr transcript SHA-256 before retry submission."
+    "control_plane_version": "cbc6fb50937a728098d22cf9e8e11aa2baf421d5549378ef5f1833a65b294fd8",
+    "policy_sha256": "58f855033b426e9a75483fc7d2da53cdc1838465948a9403a94bf7870036f562",
+    "promotion_sha256": "05dfbf327a1e6b64f14359389bec2c426cd4dba713aeaf5e5dd65cce6a0f4f31",
+    "reason": "Rotated one-attempt authorization IDs and bound the exact reviewed Cray MPICH informational stderr transcript SHA-256 before retry submission."
   },
   "open_boundaries": [
-    "clean commit curation, paired install and reviewed policy promotion for staged successor cbc6fb50 are pending",
     "archive one reviewed same-account process-isolation attestation from tst/publication/readiness/q027_frontier_registered_science_same_account_isolation_attestation_template_2026-05-30.json immediately before each v2 registered-science submission",
     "the v2 registered Frontier F1 slices have not executed",
     "external reviewer disposition remains pending external review"
   ],
-  "overall_disposition": "local_registered_f1_successor_candidate_only_keep_registered_science_submissions_paused"
+  "overall_disposition": "local_registered_f1_retry_policy_active_attestation_required_before_each_v2_submission"
 }
