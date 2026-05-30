@@ -88,12 +88,26 @@ import os
 import h5py
 import glob
 from numbers import Integral
+import re
+
+
+_SHARD_DIRECTORY_RE = re.compile(r"^(rank|node)_([0-9]+)$")
+
+
+def _partition_info(filename):
+    """Return a strict ``(kind, integer ID)`` pair for a shard path."""
+    shard_name = os.path.basename(os.path.dirname(os.path.abspath(filename)))
+    match = _SHARD_DIRECTORY_RE.fullmatch(shard_name)
+    if match is not None:
+        return match.group(1), int(match.group(2))
+    if shard_name.startswith(("rank_", "node_")):
+        raise ValueError(f"invalid binary shard directory {shard_name!r}")
+    return "shared", None
 
 
 def _is_partitioned_path(filename):
     """Return whether *filename* is under a rank_*/node_* shard directory."""
-    shard_name = os.path.basename(os.path.dirname(os.path.abspath(filename)))
-    return shard_name.startswith("rank_") or shard_name.startswith("node_")
+    return _partition_info(filename)[0] != "shared"
 
 
 def _glob_partition_files(shard_filename):
@@ -101,11 +115,11 @@ def _glob_partition_files(shard_filename):
     shard_filename = os.path.abspath(shard_filename)
     shard_dir = os.path.dirname(shard_filename)
     parent_dir = os.path.dirname(shard_dir)
-    shard_name = os.path.basename(shard_dir)
     base_name = os.path.basename(shard_filename)
-    if shard_name.startswith("rank_"):
+    shard_kind, _ = _partition_info(shard_filename)
+    if shard_kind == "rank":
         pattern = os.path.join(parent_dir, "rank_*", base_name)
-    elif shard_name.startswith("node_"):
+    elif shard_kind == "node":
         pattern = os.path.join(parent_dir, "node_*", base_name)
     else:
         return [shard_filename]
@@ -116,7 +130,105 @@ def _glob_partition_files(shard_filename):
             f"no binary shard files found for {shard_filename!r} "
             f"(pattern {pattern!r})"
         )
+    for candidate in files:
+        candidate_kind, _ = _partition_info(candidate)
+        if candidate_kind != shard_kind:
+            raise ValueError(
+                f"binary shard {candidate!r} does not match {shard_kind!r} inventory"
+            )
     return files
+
+
+def _optional_pheader_int(pheader, key, filename, family):
+    """Parse one additive binary preheader integer without requiring it in old files."""
+    if key not in pheader:
+        return None
+    try:
+        return int(pheader[key])
+    except ValueError as exc:
+        raise ValueError(
+            f"{family} file {filename!r} has invalid {key!r} metadata"
+        ) from exc
+
+
+def _binary_partition_metadata(filename, pheader, family):
+    """Validate optional additive node-shard metadata while preserving old files."""
+    kind, shard_id = _partition_info(filename)
+    distribution = pheader.get("distribution")
+    if distribution is not None:
+        if distribution not in ("shared", "rank", "node"):
+            raise ValueError(
+                f"{family} file {filename!r} has invalid distribution {distribution!r}"
+            )
+        if distribution != kind:
+            raise ValueError(
+                f"{family} file {filename!r} declares distribution={distribution!r} "
+                f"but resides in a {kind!r} layout"
+            )
+    node = _optional_pheader_int(pheader, "node", filename, family)
+    number_of_nodes = _optional_pheader_int(
+        pheader, "number of nodes", filename, family
+    )
+    number_of_meshblocks = _optional_pheader_int(
+        pheader, "number of meshblocks", filename, family
+    )
+    if node is not None:
+        if kind != "node" or node != shard_id:
+            raise ValueError(
+                f"{family} file {filename!r} declares node={node}, "
+                f"but resides in {os.path.basename(os.path.dirname(filename))!r}"
+            )
+    if number_of_nodes is not None:
+        if kind != "node" or number_of_nodes <= 0:
+            raise ValueError(
+                f"{family} file {filename!r} has invalid 'number of nodes' metadata"
+            )
+    if number_of_meshblocks is not None and number_of_meshblocks < 0:
+        raise ValueError(
+            f"{family} file {filename!r} has invalid 'number of meshblocks' metadata"
+        )
+    return {
+        "distribution": distribution if distribution is not None else kind,
+        "node": node,
+        "number_of_nodes": number_of_nodes,
+        "number_of_meshblocks": number_of_meshblocks,
+    }
+
+
+def _validate_binary_sibling_inventory(shard_files, shard_data, family):
+    """Require a complete unique node-ID inventory when new count metadata exists."""
+    node_counts = [item.get("number_of_nodes") for item in shard_data]
+    if all(count is None for count in node_counts):
+        return
+    if any(count is None for count in node_counts) or len(set(node_counts)) != 1:
+        raise ValueError(
+            f"{family} node shard inventory has inconsistent 'number of nodes' metadata"
+        )
+    expected_count = node_counts[0]
+    sibling_ids = []
+    for path, item in zip(shard_files, shard_data):
+        kind, shard_id = _partition_info(path)
+        if kind != "node" or item.get("distribution") != "node":
+            raise ValueError(
+                f"{family} node shard inventory includes non-node file {path!r}"
+            )
+        if item.get("node") is None:
+            raise ValueError(f"{family} node shard {path!r} is missing node metadata")
+        if item["node"] != shard_id:
+            raise ValueError(
+                f"{family} node shard {path!r} declares node={item['node']}, "
+                f"but its directory identifies {shard_id}"
+            )
+        sibling_ids.append(shard_id)
+    if len(set(sibling_ids)) != len(sibling_ids):
+        raise ValueError(f"{family} node shard inventory contains duplicate node IDs")
+    expected_ids = set(range(expected_count))
+    actual_ids = set(sibling_ids)
+    if actual_ids != expected_ids:
+        raise ValueError(
+            f"{family} node shard inventory is incomplete: "
+            f"expected IDs {sorted(expected_ids)!r}, found {sorted(actual_ids)!r}"
+        )
 
 
 def _validate_binary_shard(reference, candidate, path, family):
@@ -158,6 +270,7 @@ def _combine_partitioned_binary(shard_filename, reader, family):
     reference = shard_data[0]
     for path, candidate in zip(shard_files[1:], shard_data[1:]):
         _validate_binary_shard(reference, candidate, path, family)
+    _validate_binary_sibling_inventory(shard_files, shard_data, family)
 
     nonempty = next((item for item in shard_data if item["n_mbs"] > 0), reference)
     nonempty_shape = tuple(nonempty[f"nx{axis}_out_mb"] for axis in (1, 2, 3))
@@ -200,7 +313,7 @@ def _combine_partitioned_binary(shard_filename, reader, family):
     combined["shard_files"] = shard_files
     combined["distribution"] = os.path.basename(
         os.path.dirname(os.path.abspath(shard_filename))
-    ).split("_", 1)[0] if _is_partitioned_path(shard_filename) else "shared"
+        ).split("_", 1)[0] if _is_partitioned_path(shard_filename) else "shared"
     return combined
 
 
@@ -316,6 +429,7 @@ def read_binary(filename, assemble_shards=False):
         cycle = int(pheader["cycle"])
         locsizebytes = int(pheader["size of location"])
         varsizebytes = int(pheader["size of variable"])
+        partition_metadata = _binary_partition_metadata(filename, pheader, "binary")
 
         nvars = int(fp.readline().split(b"=")[-1])
         var_list = [v.decode("utf-8") for v in fp.readline().split()[1:]]
@@ -374,6 +488,15 @@ def read_binary(filename, assemble_shards=False):
             fp, filesize, nghost, locsizebytes, varsizebytes, var_list, "binary"
         )
         mb_count = len(mb_index)
+        if (
+            partition_metadata["number_of_meshblocks"] is not None
+            and partition_metadata["number_of_meshblocks"] != mb_count
+        ):
+            raise ValueError(
+                f"binary file {filename!r} declares "
+                f"{partition_metadata['number_of_meshblocks']} meshblocks, "
+                f"found {mb_count}"
+            )
 
     filedata["header"] = header
     filedata["time"] = time
@@ -404,6 +527,7 @@ def read_binary(filename, assemble_shards=False):
     filedata["mb_logical"] = np.array(mb_logical)
     filedata["mb_geometry"] = np.array(mb_geometry)
     filedata["mb_data"] = mb_data
+    filedata.update(partition_metadata)
 
     return filedata
 
@@ -465,6 +589,9 @@ def read_coarsened_binary(filename, assemble_shards=False):
         locsizebytes = int(pheader["size of location"])
         varsizebytes = int(pheader["size of variable"])
         coarsen_factor = int(pheader["coarsening factor"])
+        partition_metadata = _binary_partition_metadata(
+            filename, pheader, "coarsened binary"
+        )
 
         nvars = int(fp.readline().split(b"=")[-1])
         var_list = [v.decode("utf-8") for v in fp.readline().split()[1:]]
@@ -529,6 +656,15 @@ def read_coarsened_binary(filename, assemble_shards=False):
             "coarsened binary",
         )
         mb_count = len(mb_index)
+        if (
+            partition_metadata["number_of_meshblocks"] is not None
+            and partition_metadata["number_of_meshblocks"] != mb_count
+        ):
+            raise ValueError(
+                f"coarsened binary file {filename!r} declares "
+                f"{partition_metadata['number_of_meshblocks']} meshblocks, "
+                f"found {mb_count}"
+            )
 
     filedata["header"] = header
     filedata["time"] = time
@@ -560,6 +696,7 @@ def read_coarsened_binary(filename, assemble_shards=False):
     filedata["mb_logical"] = np.array(mb_logical)
     filedata["mb_geometry"] = np.array(mb_geometry)
     filedata["mb_data"] = mb_data
+    filedata.update(partition_metadata)
 
     return filedata
 

@@ -15,6 +15,7 @@ import numpy as np
 
 
 _FIRST_LINE_RE = re.compile(r"^Athena spherical slice version=(.+)$")
+_SHARD_DIRECTORY_RE = re.compile(r"^(rank|node)_([0-9]+)$")
 _SUPPORTED_VERSION = "1.0"
 _INT_KEYS = frozenset(
     (
@@ -25,6 +26,9 @@ _INT_KEYS = frozenset(
         "size_of_variable",
         "npoints",
         "rank",
+        "node",
+        "number_of_nodes",
+        "number_of_ranks",
         "single_file_per_rank",
         "header_offset",
     )
@@ -46,13 +50,20 @@ _REQUIRED_KEYS = frozenset(
 )
 
 
-def _shard_kind(path):
+def _partition_info(path):
     directory = os.path.basename(os.path.dirname(os.path.abspath(path)))
-    if directory.startswith("rank_"):
-        return "rank"
-    if directory.startswith("node_"):
-        return "node"
-    return "shared"
+    match = _SHARD_DIRECTORY_RE.fullmatch(directory)
+    if match is not None:
+        return match.group(1), int(match.group(2))
+    if directory.startswith(("rank_", "node_")):
+        raise ValueError(
+            f"invalid spherical-slice shard directory {directory!r} for {path!r}"
+        )
+    return "shared", None
+
+
+def _shard_kind(path):
+    return _partition_info(path)[0]
 
 
 def _glob_partition_files(path):
@@ -68,6 +79,12 @@ def _glob_partition_files(path):
         raise FileNotFoundError(
             f"no spherical-slice {kind} shards found for pattern {pattern!r}"
         )
+    for candidate in files:
+        candidate_kind, _ = _partition_info(candidate)
+        if candidate_kind != kind:
+            raise ValueError(
+                f"spherical-slice shard {candidate!r} does not match {kind!r} inventory"
+            )
     return files
 
 
@@ -99,7 +116,7 @@ def _read_header(handle):
                 f"invalid spherical-slice header text in {handle.name!r}"
             ) from exc
         if line.startswith("variables:"):
-            header["variables"] = line[len("variables:") :].split()
+            header["variables"] = line[len("variables:"):].split()
             continue
         if "=" not in line:
             continue
@@ -135,7 +152,9 @@ def _read_header(handle):
             f"spherical-slice file {handle.name!r} variable count does not match metadata"
         )
     if header["header_offset"] < 0 or header["npoints"] < 0:
-        raise ValueError(f"spherical-slice file {handle.name!r} has a negative size field")
+        raise ValueError(
+            f"spherical-slice file {handle.name!r} has a negative size field"
+        )
     if not np.isfinite(header["time"]) or not np.isfinite(header["radius"]):
         raise ValueError(f"spherical-slice file {handle.name!r} has non-finite metadata")
     return header
@@ -149,12 +168,45 @@ def _distribution_for(header, path):
         raise ValueError(
             f"spherical-slice file {path!r} has invalid distribution {distribution!r}"
         )
-    kind = _shard_kind(path)
+    kind, shard_id = _partition_info(path)
     if kind != distribution:
         raise ValueError(
             f"spherical-slice file {path!r} declares distribution={distribution!r} "
             f"but resides in a {kind!r} layout"
         )
+    expected_layout = "dense" if distribution == "shared" else "sparse_angles"
+    layout = header.get("layout", expected_layout)
+    if layout != expected_layout:
+        raise ValueError(
+            f"spherical-slice file {path!r} declares layout={layout!r}, "
+            f"expected {expected_layout!r} for distribution={distribution!r}"
+        )
+    header["layout"] = layout
+    if distribution == "rank" and "rank" in header and header["rank"] != shard_id:
+        raise ValueError(
+            f"spherical-slice file {path!r} declares rank={header['rank']}, "
+            f"but resides in rank_{shard_id:08d}"
+        )
+    if distribution == "node" and "node" in header and header["node"] != shard_id:
+        raise ValueError(
+            f"spherical-slice file {path!r} declares node={header['node']}, "
+            f"but resides in node_{shard_id:08d}"
+        )
+    for count_key, expected_distribution in (
+        ("number_of_ranks", "rank"),
+        ("number_of_nodes", "node"),
+    ):
+        if count_key in header:
+            if header[count_key] <= 0:
+                raise ValueError(
+                    f"spherical-slice file {path!r} has invalid {count_key}="
+                    f"{header[count_key]}"
+                )
+            if distribution != expected_distribution:
+                raise ValueError(
+                    f"spherical-slice file {path!r} defines {count_key} for "
+                    f"distribution={distribution!r}"
+                )
     return distribution
 
 
@@ -225,6 +277,7 @@ def _read_one(path):
 def _compare_headers(reference, candidate, path):
     for key in (
         "version",
+        "layout",
         "distribution",
         "time",
         "cycle",
@@ -240,6 +293,52 @@ def _compare_headers(reference, candidate, path):
                 f"spherical-slice shard metadata mismatch for {key!r} in {path!r}: "
                 f"{candidate[key]!r} != {reference[key]!r}"
             )
+
+
+def _validate_sibling_inventory(files, headers):
+    distribution = headers[0]["distribution"]
+    if distribution == "shared":
+        return
+    count_key = "number_of_ranks" if distribution == "rank" else "number_of_nodes"
+    id_key = "rank" if distribution == "rank" else "node"
+    count_values = [header.get(count_key) for header in headers]
+    if all(value is None for value in count_values):
+        return
+    if any(value is None for value in count_values) or len(set(count_values)) != 1:
+        raise ValueError(
+            f"spherical-slice {distribution} shard inventory has inconsistent "
+            f"{count_key} metadata"
+        )
+    expected_count = count_values[0]
+    sibling_ids = []
+    for path, header in zip(files, headers):
+        kind, shard_id = _partition_info(path)
+        if kind != distribution:
+            raise ValueError(
+                f"spherical-slice shard {path!r} does not match "
+                f"{distribution!r} inventory"
+            )
+        if id_key not in header:
+            raise ValueError(
+                f"spherical-slice shard {path!r} is missing required {id_key} metadata"
+            )
+        if header[id_key] != shard_id:
+            raise ValueError(
+                f"spherical-slice shard {path!r} declares {id_key}={header[id_key]}, "
+                f"but its directory identifies {shard_id}"
+            )
+        sibling_ids.append(shard_id)
+    if len(set(sibling_ids)) != len(sibling_ids):
+        raise ValueError(
+            f"spherical-slice {distribution} shard inventory contains duplicate IDs"
+        )
+    expected_ids = set(range(expected_count))
+    actual_ids = set(sibling_ids)
+    if actual_ids != expected_ids:
+        raise ValueError(
+            f"spherical-slice {distribution} shard inventory is incomplete: "
+            f"expected IDs {sorted(expected_ids)!r}, found {sorted(actual_ids)!r}"
+        )
 
 
 def read_sphslice_header(path):
@@ -258,12 +357,16 @@ def read_sphslice(path):
     zero-point shard files are valid and are retained during validation.
     """
     files = _glob_partition_files(path)
+    records = []
+    for shard in files:
+        candidate, indices, values = _read_one(shard)
+        records.append((shard, candidate, indices, values))
+
     header = None
     full = None
     covered = None
 
-    for shard in files:
-        candidate, indices, values = _read_one(shard)
+    for shard, candidate, indices, values in records:
         if header is None:
             header = candidate
             surface_points = header["ntheta"] * header["nphi"]
@@ -287,6 +390,7 @@ def read_sphslice(path):
 
     if header is None:
         raise ValueError(f"no spherical-slice data found for {path!r}")
+    _validate_sibling_inventory(files, [record[1] for record in records])
     missing = np.flatnonzero(~covered)
     if missing.size:
         raise ValueError(

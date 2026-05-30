@@ -9,22 +9,82 @@
 
 #include <sys/stat.h>  // mkdir
 
+#include <algorithm>
+#include <cstdint>
 #include <cstdio>      // fwrite(), fclose(), fopen(), fnprintf(), snprintf()
 #include <cstdlib>
 #include <iomanip>
 #include <iostream>
+#include <limits>
 #include <numeric>
 #include <sstream>
 #include <string>
-#include <vector>
 #include <utility>
-#include <algorithm>
+#include <vector>
 
 #include "athena.hpp"
 #include "globals.hpp"
 #include "coordinates/cell_locations.hpp"
 #include "mesh/mesh.hpp"
 #include "outputs.hpp"
+
+namespace {
+
+[[noreturn]] void FatalCoarsenedBinaryError(const std::string &message) {
+  std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+            << std::endl << message << std::endl;
+#if MPI_PARALLEL_ENABLED
+  MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
+#endif
+  std::exit(EXIT_FAILURE);
+}
+
+std::size_t CheckedAdd(std::size_t left, std::size_t right, const char *context) {
+  if (right > std::numeric_limits<std::size_t>::max() - left) {
+    FatalCoarsenedBinaryError(std::string(context) + " size overflow.");
+  }
+  return left + right;
+}
+
+std::size_t CheckedProduct(std::size_t left, std::size_t right, const char *context) {
+  if (left != 0 && right > std::numeric_limits<std::size_t>::max()/left) {
+    FatalCoarsenedBinaryError(std::string(context) + " size overflow.");
+  }
+  return left*right;
+}
+
+std::size_t CountAsSize(int count, const char *context) {
+  if (count < 0) {
+    FatalCoarsenedBinaryError(std::string(context) + " is negative.");
+  }
+  return static_cast<std::size_t>(count);
+}
+
+int CountAsInt(std::size_t count, const char *context) {
+  if (count > static_cast<std::size_t>(std::numeric_limits<int>::max())) {
+    FatalCoarsenedBinaryError(std::string(context) + " exceeds int range.");
+  }
+  return static_cast<int>(count);
+}
+
+std::size_t RankPrefixSum(const std::vector<int> &counts, int rank) {
+  std::size_t prefix = 0;
+  for (int r = 0; r < rank; ++r) {
+    prefix = CheckedAdd(
+        prefix, CountAsSize(counts[r], "coarsened-binary rank MeshBlock count"),
+        "coarsened-binary rank MeshBlock prefix");
+  }
+  return prefix;
+}
+
+void CheckedWrite(IOWrapper &file, const void *data, std::size_t count,
+                  const char *context, bool independent_file) {
+  if (file.Write_any_type(data, count, "byte", independent_file) != count) {
+    FatalCoarsenedBinaryError(std::string(context) + " was not written completely.");
+  }
+}
+
+}  // namespace
 
 //----------------------------------------------------------------------------------------
 // Constructor: also calls BaseTypeOutput base class constructor
@@ -305,6 +365,10 @@ void CoarsenedBinaryOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   bool shard_writer = IsRankSharded(shard_mode) ||
       (IsNodeSharded(shard_mode) && global_variable::node_rank == 0) ||
       (shard_mode == FileShardMode::shared && global_variable::my_rank == 0);
+  if (bin_slice && IsNodeSharded(shard_mode)) {
+    FatalCoarsenedBinaryError(
+        "Sliced node-sharded coarsened-binary output is not supported.");
+  }
 
   std::string fname;
   char number[6];
@@ -346,13 +410,13 @@ void CoarsenedBinaryOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   // 2. Current time
   // 3. List of variables in the file
   // 4. Header (input file information)
-  int nout_mbs = outmbs.size();
+  int nout_mbs = CountAsInt(outmbs.size(), "coarsened-binary MeshBlock count");
   int shard_nout_mbs = IsNodeSharded(shard_mode) ?
       global_variable::NodeSum(nout_mbs) : nout_mbs;
   {std::stringstream msg;
   msg << "Athena binary output version=1.1" << std::endl
       // preheader size includes "size of preheader" line up to "number of variables"
-      << "  size of preheader=" << (IsNodeSharded(shard_mode) ? 10 : 7) << std::endl
+      << "  size of preheader=" << (IsNodeSharded(shard_mode) ? 11 : 7) << std::endl
       << "  time=" << pm->time << std::endl
       << "  cycle=" << pm->ncycle << std::endl
       << "  number of moments=" << number_of_moments << std::endl
@@ -362,6 +426,7 @@ void CoarsenedBinaryOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   if (IsNodeSharded(shard_mode)) {
     msg << "  distribution=node" << std::endl
         << "  node=" << global_variable::node_id << std::endl
+        << "  number of nodes=" << global_variable::nnodes << std::endl
         << "  number of meshblocks=" << shard_nout_mbs << std::endl;
   }
   msg << "  number of variables=" << outvars.size()*number_of_moments << std::endl
@@ -380,24 +445,28 @@ void CoarsenedBinaryOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     }
   }
   msg << std::endl;
+  std::string metadata = msg.str();
   if (shard_writer) {
-    cbinfile.Write_any_type(msg.str().c_str(),msg.str().size(), "byte",
-                            independent_file);
+    CheckedWrite(cbinfile, metadata.data(), metadata.size(),
+                 "coarsened-binary metadata", independent_file);
   }
-  header_offset += msg.str().size();}
+  header_offset = CheckedAdd(header_offset, metadata.size(), "coarsened-binary header");}
   {std::stringstream msg;
   // prepare the input parameters
   std::stringstream ost;
   pin->ParameterDump(ost);
   std::string sbuf=ost.str();
   msg << "  header offset=" << sbuf.size()*sizeof(char)  << std::endl;
+  std::string offset_metadata = msg.str();
   if (shard_writer) {
-    cbinfile.Write_any_type(msg.str().c_str(),msg.str().size(), "byte",
-                            independent_file);
-    cbinfile.Write_any_type(sbuf.c_str(),sbuf.size(), "byte", independent_file);
+    CheckedWrite(cbinfile, offset_metadata.data(), offset_metadata.size(),
+                 "coarsened-binary header-offset metadata", independent_file);
+    CheckedWrite(cbinfile, sbuf.data(), sbuf.size(), "coarsened-binary input header",
+                 independent_file);
   }
-  header_offset += sbuf.size()*sizeof(char);
-  header_offset += msg.str().size();}
+  header_offset = CheckedAdd(header_offset, sbuf.size(), "coarsened-binary header");
+  header_offset = CheckedAdd(header_offset, offset_metadata.size(),
+                             "coarsened-binary header");}
 
   //  5. Data.  An arbitrary number of scalars and vectors can be written (every node
   //  in the OutputData doubly linked lists), all in binary floats format
@@ -414,34 +483,56 @@ void CoarsenedBinaryOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     nout2 = ((outmbs[0].oje - outmbs[0].ojs + 1)/out_params.coarsen_factor);
     nout3 = ((outmbs[0].oke - outmbs[0].oks + 1)/out_params.coarsen_factor);
   }
-  int cells = nout1*nout2*nout3;
+  std::size_t cells = CheckedProduct(
+      CheckedProduct(CountAsSize(nout1, "coarsened-binary x1 extent"),
+                     CountAsSize(nout2, "coarsened-binary x2 extent"),
+                     "coarsened-binary cell count"),
+      CountAsSize(nout3, "coarsened-binary x3 extent"), "coarsened-binary cell count");
 #if MPI_PARALLEL_ENABLED
   if (!IsRankSharded(shard_mode)) {
-    int shard_cells = 0;
-    MPI_Comm comm = IsNodeSharded(shard_mode) ? global_variable::node_comm : MPI_COMM_WORLD;
-    MPI_Allreduce(&cells, &shard_cells, 1, MPI_INT, MPI_MAX, comm);
-    cells = shard_cells;
+    std::uint64_t local_cells = cells;
+    std::uint64_t shard_cells = 0;
+    MPI_Comm comm =
+        IsNodeSharded(shard_mode) ? global_variable::node_comm : MPI_COMM_WORLD;
+    if (MPI_Allreduce(&local_cells, &shard_cells, 1, MPI_UINT64_T, MPI_MAX, comm)
+        != MPI_SUCCESS) {
+      FatalCoarsenedBinaryError(
+          "Could not reduce coarsened-binary MeshBlock cell counts.");
+    }
+    if (shard_cells > std::numeric_limits<std::size_t>::max()) {
+      FatalCoarsenedBinaryError(
+          "coarsened-binary MeshBlock cell count exceeds size_t range.");
+    }
+    cells = static_cast<std::size_t>(shard_cells);
   }
 #endif
 
 
   // ois, oie, ojs, oje, oks, oke + il1, il2, il3, level +
   // x1min, x1max, x2min, x2max, x3min, x3max + data
-  std::size_t data_size = 10*sizeof(int32_t) + 6*sizeof(Real)
-                        + (cells*nout_vars)*sizeof(float);
+  std::size_t value_bytes = CheckedProduct(
+      CheckedProduct(cells, CountAsSize(nout_vars, "coarsened-binary variable count"),
+                     "coarsened-binary MeshBlock values"),
+      sizeof(float), "coarsened-binary MeshBlock values");
+  std::size_t data_size = CheckedAdd(10*sizeof(int32_t) + 6*sizeof(Real),
+                                     value_bytes, "coarsened-binary MeshBlock record");
 
-  int ns_mbs = pm->gids_eachrank[global_variable::my_rank];
-  int nb_mbs = pm->nmb_eachrank[global_variable::my_rank];
-  int node_offset = IsNodeSharded(shard_mode) ?
-      global_variable::NodePrefixSum(nout_mbs) : 0;
+  std::size_t node_offset = IsNodeSharded(shard_mode) ? CountAsSize(
+      global_variable::NodePrefixSum(nout_mbs),
+      "coarsened-binary node MeshBlock prefix") : 0;
+  std::size_t payload_bytes = CheckedProduct(
+      CountAsSize(nout_mbs, "coarsened-binary MeshBlock count"), data_size,
+      "coarsened-binary payload");
 
   // allocate 1D vector of floats used to convert and output data
-  char *data = new char[nb_mbs*data_size];
-  float *single_data = new float[cells];
+  std::vector<char> data(payload_bytes);
+  std::vector<float> single_data(cells);
 
   // Loop over MeshBlocks
   for (int m=0; m<nout_mbs; ++m) {
-    char *pdata=&(data[m*data_size]);
+    char *pdata = data.data() + CheckedProduct(
+        CountAsSize(m, "coarsened-binary local MeshBlock index"), data_size,
+        "coarsened-binary local MeshBlock offset");
     LogicalLocation loc = pm->lloc_eachmb[outmbs[m].mb_gid];
     // of the starting indexes maybe I need to subtract of nghost,
     // divide by coarsen factor, and then add nghost back in
@@ -514,7 +605,7 @@ void CoarsenedBinaryOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     // output variables
     float tmp_data;
     for (int n=0; n<nout_vars; n++) {
-      int cnt=0;
+      std::size_t cnt=0;
       for (int k=oks; k<=oke; k++) {
         for (int j=ojs; j<=oje; j++) {
           for (int i=ois; i<=oie; i++) {
@@ -524,84 +615,36 @@ void CoarsenedBinaryOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
           }
         }
       }
-      memcpy(pdata,single_data,cells*sizeof(float));
-      pdata+=cells*sizeof(float);
+      std::size_t variable_bytes = CheckedProduct(
+          cells, sizeof(float), "coarsened-binary variable payload");
+      memcpy(pdata, single_data.data(), variable_bytes);
+      pdata += variable_bytes;
     }
   }
 
   // now write Coarsenedbinary data
-  // check if elements larger than 2^31
-  if (data_size*nout_mbs<=2147483648) {
-    // now write Coarsenedbinary data in parallel
-    std::size_t myoffset=header_offset;
-    if (shard_mode == FileShardMode::shared) {
-      myoffset += data_size*ns_mbs;
-    } else if (IsNodeSharded(shard_mode)) {
-      myoffset += data_size*node_offset;
-    }
-    cbinfile.Write_any_type_at_all(data,(data_size*nout_mbs),myoffset,"byte",
-                                    independent_file);
-  } else {
-    // check if elements larger than 2^31
-    if (data_size*nout_mbs<=2147483648) {
-      // now write binary data in parallel
-      std::size_t myoffset=header_offset;
-      if (shard_mode == FileShardMode::shared) {
-        myoffset += data_size*ns_mbs;
-      } else if (IsNodeSharded(shard_mode)) {
-        myoffset += data_size*node_offset;
-      }
-      cbinfile.Write_any_type_at_all(data,(data_size*nout_mbs),myoffset,"byte",
-                                      independent_file);
-    } else {
-      // write data over each MeshBlock sequentially and in parallel
-      // calculate max/min number of MeshBlocks across all ranks
-      if (IsNodeSharded(shard_mode)) {
-        noutmbs_max = global_variable::NodeMax(nout_mbs);
-        noutmbs_min = global_variable::NodeMin(nout_mbs);
-      } else {
-        noutmbs_max = pm->nmb_eachrank[0];
-        noutmbs_min = pm->nmb_eachrank[0];
-        for (int i=0; i<(global_variable::nranks); ++i) {
-          noutmbs_max = std::max(noutmbs_max,pm->nmb_eachrank[i]);
-          noutmbs_min = std::min(noutmbs_min,pm->nmb_eachrank[i]);
-        }
-      }
-      for (int m=0;  m<noutmbs_max; ++m) {
-        char *pdata=&(data[m*data_size]);
-        std::size_t myoffset=header_offset + data_size*m;
-        if (shard_mode == FileShardMode::shared) {
-          myoffset += data_size*ns_mbs;
-        } else if (IsNodeSharded(shard_mode)) {
-          myoffset += data_size*node_offset;
-        }
-        // every rank has a MB to write, so write collectively
-        if (m < noutmbs_min) {
-            if (cbinfile.Write_any_type_at_all(pdata,(data_size),myoffset,"byte",
-                                              independent_file) != data_size) {
-            std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "binary data not written correctly to binary file, "
-                << "binary file is broken." << std::endl;
-            exit(EXIT_FAILURE);
-          }
-        // some ranks are finished writing, so use non-collective write
-        } else if (m < nout_mbs) {
-          if (cbinfile.Write_any_type_at(pdata,(data_size),myoffset,"byte",
-                                          independent_file) != data_size) {
-            std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                 << std::endl << "binary data not written correctly to binary file, "
-                 << "binary file is broken." << std::endl;
-            exit(EXIT_FAILURE);
-          }
-        }
-      }
-    }
+  std::size_t block_offset = 0;
+  if (shard_mode == FileShardMode::shared) {
+    block_offset = RankPrefixSum(noutmbs, global_variable::my_rank);
+  } else if (IsNodeSharded(shard_mode)) {
+    block_offset = node_offset;
+  }
+  std::size_t myoffset = CheckedAdd(
+      header_offset,
+      CheckedProduct(data_size, block_offset, "coarsened-binary payload offset"),
+      "coarsened-binary payload offset");
+  char dummy = '\0';
+  const char *payload = data.empty() ? &dummy : data.data();
+  if (cbinfile.Write_any_type_at_all(payload, payload_bytes, myoffset, "byte",
+                                     independent_file) != payload_bytes) {
+    FatalCoarsenedBinaryError("coarsened-binary payload was not written completely.");
   }
 
   // close the output file and clean up ptrs to data
-  cbinfile.Close(independent_file);
-  delete [] data;
-  delete [] single_data;
+  if (cbinfile.Close(independent_file) != 0) {
+    FatalCoarsenedBinaryError(
+        "Could not close coarsened-binary output file '" + fname + "'.");
+  }
 
   // increment counters
   out_params.file_number++;
