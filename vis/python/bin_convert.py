@@ -89,7 +89,158 @@ import h5py
 import glob
 
 
-def read_binary(filename):
+def _is_partitioned_path(filename):
+    """Return whether *filename* is under a rank_*/node_* shard directory."""
+    shard_name = os.path.basename(os.path.dirname(os.path.abspath(filename)))
+    return shard_name.startswith("rank_") or shard_name.startswith("node_")
+
+
+def _glob_partition_files(shard_filename):
+    """Return all sibling files belonging to a rank- or node-sharded output."""
+    shard_filename = os.path.abspath(shard_filename)
+    shard_dir = os.path.dirname(shard_filename)
+    parent_dir = os.path.dirname(shard_dir)
+    shard_name = os.path.basename(shard_dir)
+    base_name = os.path.basename(shard_filename)
+    if shard_name.startswith("rank_"):
+        pattern = os.path.join(parent_dir, "rank_*", base_name)
+    elif shard_name.startswith("node_"):
+        pattern = os.path.join(parent_dir, "node_*", base_name)
+    else:
+        return [shard_filename]
+
+    files = sorted(glob.glob(pattern))
+    if not files:
+        raise FileNotFoundError(
+            f"no binary shard files found for {shard_filename!r} "
+            f"(pattern {pattern!r})"
+        )
+    return files
+
+
+def _validate_binary_shard(reference, candidate, path, family):
+    """Validate metadata that must agree before binary shards can be combined."""
+    keys = (
+        "time",
+        "cycle",
+        "var_names",
+        "nvars",
+        "Nx1",
+        "Nx2",
+        "Nx3",
+        "x1min",
+        "x1max",
+        "x2min",
+        "x2max",
+        "x3min",
+        "x3max",
+        "nx1_mb",
+        "nx2_mb",
+        "nx3_mb",
+    )
+    if family == "coarsened binary":
+        keys += ("number_of_moments",)
+    for key in keys:
+        if candidate[key] != reference[key]:
+            raise ValueError(
+                f"{family} shard metadata mismatch for {key!r} in {path!r}: "
+                f"{candidate[key]!r} != {reference[key]!r}"
+            )
+    if candidate["header"] != reference["header"]:
+        raise ValueError(f"{family} shard metadata mismatch for 'header' in {path!r}")
+
+
+def _combine_partitioned_binary(shard_filename, reader, family):
+    """Combine one binary shard family, retaining valid empty sliced shards."""
+    shard_files = _glob_partition_files(shard_filename)
+    shard_data = [reader(path) for path in shard_files]
+    reference = shard_data[0]
+    for path, candidate in zip(shard_files[1:], shard_data[1:]):
+        _validate_binary_shard(reference, candidate, path, family)
+
+    nonempty = next((item for item in shard_data if item["n_mbs"] > 0), reference)
+    nonempty_shape = tuple(nonempty[f"nx{axis}_out_mb"] for axis in (1, 2, 3))
+    for path, candidate in zip(shard_files, shard_data):
+        if candidate["n_mbs"] == 0:
+            continue
+        candidate_shape = tuple(candidate[f"nx{axis}_out_mb"] for axis in (1, 2, 3))
+        if candidate_shape != nonempty_shape:
+            raise ValueError(
+                f"{family} shard output-shape mismatch in {path!r}: "
+                f"{candidate_shape!r} != {nonempty_shape!r}"
+            )
+    combined = nonempty.copy()
+    combined["mb_index"] = []
+    combined["mb_logical"] = []
+    combined["mb_geometry"] = []
+    combined["mb_data"] = {var: [] for var in reference["var_names"]}
+    for item in shard_data:
+        combined["mb_index"].extend(item["mb_index"])
+        combined["mb_logical"].extend(item["mb_logical"])
+        combined["mb_geometry"].extend(item["mb_geometry"])
+        for var in reference["var_names"]:
+            combined["mb_data"][var].extend(item["mb_data"][var])
+
+    combined["mb_index"] = np.asarray(combined["mb_index"], dtype=np.int64)
+    combined["mb_logical"] = np.asarray(combined["mb_logical"], dtype=np.int32)
+    combined["mb_geometry"] = np.asarray(combined["mb_geometry"])
+    for var in reference["var_names"]:
+        combined["mb_data"][var] = np.asarray(combined["mb_data"][var])
+    combined["n_mbs"] = len(combined["mb_index"])
+    combined["shard_files"] = shard_files
+    combined["distribution"] = os.path.basename(
+        os.path.dirname(os.path.abspath(shard_filename))
+    ).split("_", 1)[0] if _is_partitioned_path(shard_filename) else "shared"
+    return combined
+
+
+def _read_meshblocks(fp, filesize, nghost, locsizebytes, varsizebytes, var_list, family):
+    """Read complete meshblock records and reject partial binary payloads."""
+    dtype_loc = np.float64 if locsizebytes == 8 else np.float32
+    dtype_var = np.float64 if varsizebytes == 8 else np.float32
+    nvars = len(var_list)
+    mb_index = []
+    mb_logical = []
+    mb_geometry = []
+    mb_data = {var: [] for var in var_list}
+    fixed_bytes = 24 + 16 + 6 * locsizebytes
+
+    while fp.tell() < filesize:
+        if filesize - fp.tell() < fixed_bytes:
+            raise ValueError(
+                f"truncated {family} meshblock metadata in {fp.name!r}"
+            )
+        index = np.frombuffer(fp.read(24), dtype=np.int32).astype(np.int64) - nghost
+        logical = np.frombuffer(fp.read(16), dtype=np.int32)
+        geometry = np.frombuffer(fp.read(6 * locsizebytes), dtype=dtype_loc)
+        shape = (
+            int(index[5] - index[4] + 1),
+            int(index[3] - index[2] + 1),
+            int(index[1] - index[0] + 1),
+        )
+        if any(length <= 0 for length in shape):
+            raise ValueError(
+                f"invalid {family} meshblock extent {shape!r} in {fp.name!r}"
+            )
+        value_count = nvars * int(np.prod(shape))
+        value_bytes = value_count * varsizebytes
+        raw_values = fp.read(value_bytes)
+        if len(raw_values) != value_bytes:
+            raise ValueError(
+                f"truncated {family} meshblock values in {fp.name!r}: "
+                f"expected {value_bytes} bytes, found {len(raw_values)}"
+            )
+        values = np.frombuffer(raw_values, dtype=dtype_var).reshape((nvars,) + shape)
+        mb_index.append(index)
+        mb_logical.append(logical)
+        mb_geometry.append(geometry)
+        for vari, var in enumerate(var_list):
+            mb_data[var].append(values[vari])
+
+    return mb_index, mb_logical, mb_geometry, mb_data
+
+
+def read_binary(filename, assemble_shards=False):
     """
     Reads a bin file from filename to dictionary.
 
@@ -100,11 +251,19 @@ def read_binary(filename):
     args:
       filename - string
           filename of bin file to read
+      assemble_shards - bool, optional
+          when True and filename is in a rank_* or node_* directory, discover
+          sibling shards and return their combined meshblocks
 
     returns:
       filedata - dict
           dictionary of fluid file data
     """
+
+    if assemble_shards and _is_partitioned_path(filename):
+        return _combine_partitioned_binary(
+            filename, lambda path: read_binary(path), "binary"
+        )
 
     filedata = {}
 
@@ -151,9 +310,6 @@ def read_binary(filename):
     if varsizebytes not in [4, 8]:
         raise ValueError(f"unsupported variable size (in bytes) {varsizebytes}")
 
-    locfmt = "d" if locsizebytes == 8 else "f"
-    varfmt = "d" if varsizebytes == 8 else "f"
-
     # load grid information from header and validate
     def get_from_header(header, blockname, keyname):
         blockname = blockname.strip()
@@ -188,41 +344,15 @@ def read_binary(filename):
     x3min = float(get_from_header(header, "<mesh>", "x3min"))
     x3max = float(get_from_header(header, "<mesh>", "x3max"))
 
-    # load data from each meshblock
-    n_vars = len(var_list)
-    mb_count = 0
-
-    mb_index = []
-    mb_logical = []
-    mb_geometry = []
-
-    mb_data = {}
-    for var in var_list:
-        mb_data[var] = []
-    while fp.tell() < filesize:
-        mb_index.append(
-            np.frombuffer(fp.read(24), dtype=np.int32).astype(np.int64) - nghost
+    if len(var_list) != nvars:
+        raise ValueError(
+            f"binary variable count mismatch in {filename!r}: "
+            f"declared {nvars}, listed {len(var_list)}"
         )
-        nx1_out = (mb_index[mb_count][1] - mb_index[mb_count][0]) + 1
-        nx2_out = (mb_index[mb_count][3] - mb_index[mb_count][2]) + 1
-        nx3_out = (mb_index[mb_count][5] - mb_index[mb_count][4]) + 1
-        mb_logical.append(np.frombuffer(fp.read(16), dtype=np.int32))
-        mb_geometry.append(
-            np.frombuffer(
-                fp.read(6 * locsizebytes),
-                dtype=np.float64 if locfmt == "d" else np.float32,
-            )
-        )
-
-        data = np.fromfile(
-            fp,
-            dtype=np.float64 if varfmt == "d" else np.float32,
-            count=nx1_out * nx2_out * nx3_out * n_vars,
-        )
-        data = data.reshape(nvars, nx3_out, nx2_out, nx1_out)
-        for vari, var in enumerate(var_list):
-            mb_data[var].append(data[vari])
-        mb_count += 1
+    mb_index, mb_logical, mb_geometry, mb_data = _read_meshblocks(
+        fp, filesize, nghost, locsizebytes, varsizebytes, var_list, "binary"
+    )
+    mb_count = len(mb_index)
 
     fp.close()
 
@@ -247,9 +377,9 @@ def read_binary(filename):
     filedata["nx1_mb"] = nx1
     filedata["nx2_mb"] = nx2
     filedata["nx3_mb"] = nx3
-    filedata["nx1_out_mb"] = (mb_index[0][1] - mb_index[0][0]) + 1
-    filedata["nx2_out_mb"] = (mb_index[0][3] - mb_index[0][2]) + 1
-    filedata["nx3_out_mb"] = (mb_index[0][5] - mb_index[0][4]) + 1
+    filedata["nx1_out_mb"] = (mb_index[0][1] - mb_index[0][0]) + 1 if mb_index else 0
+    filedata["nx2_out_mb"] = (mb_index[0][3] - mb_index[0][2]) + 1 if mb_index else 0
+    filedata["nx3_out_mb"] = (mb_index[0][5] - mb_index[0][4]) + 1 if mb_index else 0
 
     filedata["mb_index"] = np.array(mb_index)
     filedata["mb_logical"] = np.array(mb_logical)
@@ -259,7 +389,7 @@ def read_binary(filename):
     return filedata
 
 
-def read_coarsened_binary(filename):
+def read_coarsened_binary(filename, assemble_shards=False):
     """
     Reads a coarsened bin file from filename to dictionary.
     Originally written by Lev Arzamasskiy (leva@ias.edu) on 11/15/2021
@@ -269,11 +399,19 @@ def read_coarsened_binary(filename):
     args:
       filename - string
           filename of bin file to read
+      assemble_shards - bool, optional
+          when True and filename is in a rank_* or node_* directory, discover
+          sibling shards and return their combined meshblocks
 
     returns:
       filedata - dict
           dictionary of fluid file data
     """
+
+    if assemble_shards and _is_partitioned_path(filename):
+        return _combine_partitioned_binary(
+            filename, lambda path: read_coarsened_binary(path), "coarsened binary"
+        )
 
     filedata = {}
 
@@ -321,9 +459,6 @@ def read_coarsened_binary(filename):
     if varsizebytes not in [4, 8]:
         raise ValueError(f"unsupported variable size (in bytes) {varsizebytes}")
 
-    locfmt = "d" if locsizebytes == 8 else "f"
-    varfmt = "d" if varsizebytes == 8 else "f"
-
     # load grid information from header and validate
     def get_from_header(header, blockname, keyname):
         blockname = blockname.strip()
@@ -358,43 +493,15 @@ def read_coarsened_binary(filename):
     x3min = float(get_from_header(header, "<mesh>", "x3min"))
     x3max = float(get_from_header(header, "<mesh>", "x3max"))
 
-    # load data from each meshblock
-    n_vars = len(var_list)
-    mb_count = 0
-
-    mb_index = []
-    mb_logical = []
-    mb_geometry = []
-
-    mb_data = {}
-    for var in var_list:
-        mb_data[var] = []
-    while fp.tell() < filesize:
-        mb_index_i = (
-            np.frombuffer(fp.read(24), dtype=np.int32).astype(np.int64) - nghost
+    if len(var_list) != nvars:
+        raise ValueError(
+            f"coarsened binary variable count mismatch in {filename!r}: "
+            f"declared {nvars}, listed {len(var_list)}"
         )
-        mb_index.append(mb_index_i)
-        nx1_out = (mb_index_i[1] - mb_index_i[0]) + 1
-        nx2_out = (mb_index_i[3] - mb_index_i[2]) + 1
-        nx3_out = (mb_index_i[5] - mb_index_i[4]) + 1
-
-        mb_logical.append(np.frombuffer(fp.read(16), dtype=np.int32))
-        mb_geometry.append(
-            np.frombuffer(
-                fp.read(6 * locsizebytes),
-                dtype=np.float64 if locfmt == "d" else np.float32,
-            )
-        )
-
-        data = np.fromfile(
-            fp,
-            dtype=np.float64 if varfmt == "d" else np.float32,
-            count=nx1_out * nx2_out * nx3_out * n_vars,
-        )
-        data = data.reshape(nvars, nx3_out, nx2_out, nx1_out)
-        for vari, var in enumerate(var_list):
-            mb_data[var].append(data[vari])
-        mb_count += 1
+    mb_index, mb_logical, mb_geometry, mb_data = _read_meshblocks(
+        fp, filesize, nghost, locsizebytes, varsizebytes, var_list, "coarsened binary"
+    )
+    mb_count = len(mb_index)
 
     fp.close()
 
@@ -420,9 +527,9 @@ def read_coarsened_binary(filename):
     filedata["nx1_mb"] = nx1 // coarsen_factor
     filedata["nx2_mb"] = nx2 // coarsen_factor
     filedata["nx3_mb"] = nx3 // coarsen_factor
-    filedata["nx1_out_mb"] = (mb_index[0][1] - mb_index[0][0]) + 1
-    filedata["nx2_out_mb"] = (mb_index[0][3] - mb_index[0][2]) + 1
-    filedata["nx3_out_mb"] = (mb_index[0][5] - mb_index[0][4]) + 1
+    filedata["nx1_out_mb"] = (mb_index[0][1] - mb_index[0][0]) + 1 if mb_index else 0
+    filedata["nx2_out_mb"] = (mb_index[0][3] - mb_index[0][2]) + 1 if mb_index else 0
+    filedata["nx3_out_mb"] = (mb_index[0][5] - mb_index[0][4]) + 1 if mb_index else 0
 
     filedata["mb_index"] = np.array(mb_index)
     filedata["mb_logical"] = np.array(mb_logical)
@@ -434,171 +541,34 @@ def read_coarsened_binary(filename):
 
 def read_all_ranks_binary(rank0_filename):
     """
-    Reads binary files from all ranks and combines them into a single dictionary.
+    Reads binary files from all rank or node shards into a single dictionary.
 
     args:
       rank0_filename - string
-          filename of the rank 0 binary file
+          filename of any rank/node shard, or a shared binary file
 
     returns:
       combined_filedata - dict
           dictionary of combined fluid file data from all ranks
     """
-    # Determine the directory and base filename pattern
-    # rank0_dir = os.path.dirname(rank0_filename)
-    # rank0_base = os.path.basename(rank0_filename).replace("rank_00000000", "rank_*")
-    # Find all rank files
-    rank_files = sorted(
-        glob.glob(
-            os.path.dirname(rank0_filename).replace("rank_00000000", "rank_*")
-            + "/"
-            + os.path.basename(rank0_filename)
-        )
-    )
-    file_sizes = np.array([os.path.getsize(file) for file in rank_files])
-    if len(np.unique(file_sizes)) > 1:
-        unique_file_sizes = np.unique(file_sizes)
-        larger_file_size = max(unique_file_sizes)
-        rank_files = [
-            file
-            for file, size in zip(rank_files, file_sizes)
-            if size == larger_file_size
-        ]
-
-    # Read the rank 0 file to get the metadata
-    rank0_filedata = read_binary(rank_files[0])
-
-    # Initialize combined filedata with rank 0 data
-    combined_filedata = rank0_filedata.copy()
-
-    # Initialize lists to hold combined data
-    combined_filedata["mb_index"] = []
-    combined_filedata["mb_logical"] = []
-    combined_filedata["mb_geometry"] = []
-    combined_filedata["mb_data"] = {var: [] for var in rank0_filedata["var_names"]}
-
-    # Read data from all ranks
-    for rank_filename in rank_files:
-        rank_filedata = read_binary(rank_filename)
-
-        combined_filedata["mb_index"].extend(rank_filedata["mb_index"])
-        combined_filedata["mb_logical"].extend(rank_filedata["mb_logical"])
-        combined_filedata["mb_geometry"].extend(rank_filedata["mb_geometry"])
-        for var in rank0_filedata["var_names"]:
-            combined_filedata["mb_data"][var].extend(rank_filedata["mb_data"][var])
-
-    # Convert lists to numpy arrays
-    combined_filedata["mb_index"] = np.array(combined_filedata["mb_index"])
-    combined_filedata["mb_logical"] = np.array(combined_filedata["mb_logical"])
-    combined_filedata["mb_geometry"] = np.array(combined_filedata["mb_geometry"])
-    for var in rank0_filedata["var_names"]:
-        combined_filedata["mb_data"][var] = np.array(combined_filedata["mb_data"][var])
-
-    # Ensure all relevant fields are stored
-    combined_filedata["header"] = rank0_filedata["header"]
-    combined_filedata["time"] = rank0_filedata["time"]
-    combined_filedata["cycle"] = rank0_filedata["cycle"]
-    combined_filedata["var_names"] = rank0_filedata["var_names"]
-    combined_filedata["Nx1"] = rank0_filedata["Nx1"]
-    combined_filedata["Nx2"] = rank0_filedata["Nx2"]
-    combined_filedata["Nx3"] = rank0_filedata["Nx3"]
-    combined_filedata["nvars"] = rank0_filedata["nvars"]
-    combined_filedata["x1min"] = rank0_filedata["x1min"]
-    combined_filedata["x1max"] = rank0_filedata["x1max"]
-    combined_filedata["x2min"] = rank0_filedata["x2min"]
-    combined_filedata["x2max"] = rank0_filedata["x2max"]
-    combined_filedata["x3min"] = rank0_filedata["x3min"]
-    combined_filedata["x3max"] = rank0_filedata["x3max"]
-    combined_filedata["n_mbs"] = len(combined_filedata["mb_index"])
-    combined_filedata["nx1_mb"] = rank0_filedata["nx1_mb"]
-    combined_filedata["nx2_mb"] = rank0_filedata["nx2_mb"]
-    combined_filedata["nx3_mb"] = rank0_filedata["nx3_mb"]
-    combined_filedata["nx1_out_mb"] = rank0_filedata["nx1_out_mb"]
-    combined_filedata["nx2_out_mb"] = rank0_filedata["nx2_out_mb"]
-    combined_filedata["nx3_out_mb"] = rank0_filedata["nx3_out_mb"]
-
-    return combined_filedata
+    return _combine_partitioned_binary(rank0_filename, read_binary, "binary")
 
 
 def read_all_ranks_coarsened_binary(rank0_filename):
     """
-    Reads binary files from all ranks and combines them into a single dictionary.
+    Reads coarsened binary files from all rank or node shards.
 
     args:
       rank0_filename - string
-          filename of the rank 0 binary file
+          filename of any rank/node shard, or a shared coarsened binary file
 
     returns:
       combined_filedata - dict
           dictionary of combined fluid file data from all ranks
     """
-    # Determine the directory and base filename pattern
-    # rank0_dir = os.path.dirname(rank0_filename)
-    # rank0_base = os.path.basename(rank0_filename).replace("rank_00000000", "rank_*")
-
-    # Find all rank files
-    rank_files = sorted(
-        glob.glob(
-            os.path.dirname(rank0_filename).replace("rank_00000000", "rank_*")
-            + "/"
-            + os.path.basename(rank0_filename)
-        )
+    return _combine_partitioned_binary(
+        rank0_filename, read_coarsened_binary, "coarsened binary"
     )
-    # print(rank_files)
-
-    # Read the rank 0 file to get the metadata
-    rank0_filedata = read_coarsened_binary(rank0_filename)
-
-    # Initialize combined filedata with rank 0 data
-    combined_filedata = rank0_filedata.copy()
-
-    # Initialize lists to hold combined data
-    combined_filedata["mb_index"] = []
-    combined_filedata["mb_logical"] = []
-    combined_filedata["mb_geometry"] = []
-    combined_filedata["mb_data"] = {var: [] for var in rank0_filedata["var_names"]}
-
-    # Read data from all ranks
-    for rank_filename in rank_files:
-        rank_filedata = read_coarsened_binary(rank_filename)
-
-        combined_filedata["mb_index"].extend(rank_filedata["mb_index"])
-        combined_filedata["mb_logical"].extend(rank_filedata["mb_logical"])
-        combined_filedata["mb_geometry"].extend(rank_filedata["mb_geometry"])
-        for var in rank0_filedata["var_names"]:
-            combined_filedata["mb_data"][var].extend(rank_filedata["mb_data"][var])
-
-    # Convert lists to numpy arrays
-    combined_filedata["mb_index"] = np.array(combined_filedata["mb_index"])
-    combined_filedata["mb_logical"] = np.array(combined_filedata["mb_logical"])
-    combined_filedata["mb_geometry"] = np.array(combined_filedata["mb_geometry"])
-    for var in rank0_filedata["var_names"]:
-        combined_filedata["mb_data"][var] = np.array(combined_filedata["mb_data"][var])
-
-    # Ensure all relevant fields are stored
-    combined_filedata["header"] = rank0_filedata["header"]
-    combined_filedata["time"] = rank0_filedata["time"]
-    combined_filedata["cycle"] = rank0_filedata["cycle"]
-    combined_filedata["var_names"] = rank0_filedata["var_names"]
-    combined_filedata["Nx1"] = rank0_filedata["Nx1"]
-    combined_filedata["Nx2"] = rank0_filedata["Nx2"]
-    combined_filedata["Nx3"] = rank0_filedata["Nx3"]
-    combined_filedata["nvars"] = rank0_filedata["nvars"]
-    combined_filedata["x1min"] = rank0_filedata["x1min"]
-    combined_filedata["x1max"] = rank0_filedata["x1max"]
-    combined_filedata["x2min"] = rank0_filedata["x2min"]
-    combined_filedata["x2max"] = rank0_filedata["x2max"]
-    combined_filedata["x3min"] = rank0_filedata["x3min"]
-    combined_filedata["x3max"] = rank0_filedata["x3max"]
-    combined_filedata["n_mbs"] = len(combined_filedata["mb_index"])
-    combined_filedata["nx1_mb"] = rank0_filedata["nx1_mb"]
-    combined_filedata["nx2_mb"] = rank0_filedata["nx2_mb"]
-    combined_filedata["nx3_mb"] = rank0_filedata["nx3_mb"]
-    combined_filedata["nx1_out_mb"] = rank0_filedata["nx1_out_mb"]
-    combined_filedata["nx2_out_mb"] = rank0_filedata["nx2_out_mb"]
-    combined_filedata["nx3_out_mb"] = rank0_filedata["nx3_out_mb"]
-
-    return combined_filedata
 
 
 def read_binary_as_athdf(
@@ -1958,25 +1928,55 @@ def write_xdmf_for(xdmfname, dumpname, fdata, mode="auto"):
     fp.close()
 
 
-def convert_file(binary_fname):
+def convert_file(binary_fname, assemble_shards=False, coarsened=None):
     """
-    Converts a single file.
+    Converts a binary file, optionally assembling its rank/node shard family.
 
     args:
       binary_filename - string
         filename of bin file to convert
+      assemble_shards - bool, optional
+        assemble sibling rank_* or node_* files before writing output
+      coarsened - bool or None, optional
+        use the coarsened-binary reader; when None, infer from a .cbin suffix
 
     This will create new files "binary_data.bin" -> "binary_data.athdf" and
     "binary_data.athdf.xdmf"
     """
-    athdf_fname = binary_fname.replace(".bin", "") + ".athdf"
+    athdf_fname = os.path.splitext(binary_fname)[0] + ".athdf"
     xdmf_fname = athdf_fname + ".xdmf"
-    filedata = read_binary(binary_fname)
+    if coarsened is None:
+        coarsened = binary_fname.endswith(".cbin")
+    if coarsened:
+        filedata = read_coarsened_binary(binary_fname, assemble_shards=assemble_shards)
+    else:
+        filedata = read_binary(binary_fname, assemble_shards=assemble_shards)
+    if filedata["n_mbs"] == 0:
+        raise ValueError(
+            f"cannot convert {binary_fname!r}: binary output contains no meshblocks"
+        )
     write_athdf(athdf_fname, filedata)
     write_xdmf_for(xdmf_fname, os.path.basename(athdf_fname), filedata)
 
 
+__all__ = [
+    "read_binary",
+    "read_coarsened_binary",
+    "read_all_ranks_binary",
+    "read_all_ranks_coarsened_binary",
+    "read_binary_as_athdf",
+    "read_all_ranks_binary_as_athdf",
+    "read_all_ranks_coarsened_binary_as_athdf",
+    "read_single_rank_binary_as_athdf",
+    "read_coarsened_binary_as_athdf",
+    "write_athdf",
+    "write_xdmf_for",
+    "convert_file",
+]
+
+
 if __name__ == "__main__":
+    import argparse
     import sys
 
     try:
@@ -1988,9 +1988,24 @@ if __name__ == "__main__":
                 print(x)
                 yield x
 
-    if len(sys.argv) < 2:
-        print(f"Usage: {sys.argv[0]} output_file_1.bin [output_file_2.bin [...]]")
-        exit(1)
+    parser = argparse.ArgumentParser(description="Convert AthenaK binary output to ATHDF/XDMF.")
+    parser.add_argument(
+        "--assemble-shards",
+        action="store_true",
+        help="assemble matching rank_* or node_* sibling shards before conversion",
+    )
+    parser.add_argument(
+        "--coarsened",
+        action="store_true",
+        default=None,
+        help="force the coarsened-binary reader (otherwise inferred from .cbin)",
+    )
+    parser.add_argument("binary_files", nargs="+", help="binary files to convert")
+    args = parser.parse_args(sys.argv[1:])
 
-    for binary_fname in tqdm(sys.argv[1:]):
-        convert_file(binary_fname)
+    for binary_fname in tqdm(args.binary_files):
+        convert_file(
+            binary_fname,
+            assemble_shards=args.assemble_shards,
+            coarsened=args.coarsened,
+        )
