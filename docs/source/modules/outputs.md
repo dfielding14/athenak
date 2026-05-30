@@ -36,6 +36,11 @@ through `BaseTypeOutput` subclasses constructed by `Outputs::Outputs`.
 | `log` | `EventLogOutput` | `.log` | `eventlog.cpp` ([src/outputs/outputs.cpp:211], [src/outputs/eventlog.cpp:71]) |
 | `pdf` | `PDFOutput` | `.pdf` + `.header.pdf` | `pdf.cpp` ([src/outputs/outputs.cpp:232], [src/outputs/pdf.cpp:272]) |
 
+Built-in MHD `hst` output supports the bounded active-MHD expanding-box path:
+cell integrals use physical volume and magnetic-energy columns use the derived
+physical face-field view. User-defined history callbacks remain rejected for
+that mode until their physical versus comoving volume contract is explicit.
+
 ## Output Block Parameters
 
 ### Required keys
@@ -72,6 +77,15 @@ Only one `hst`, `log`, and `rst` block is allowed. ([src/outputs/outputs.cpp:367
 | Parameter | Default | Notes |
 |-----------|---------|-------|
 | `single_file_per_rank` | `false` | Emit per-rank files in `bin/rank_XXXXXXXX/` or `rst/rank_XXXXXXXX/`. ([src/outputs/outputs.cpp:345], [src/outputs/restart.cpp:169]) |
+
+Restart publication is fail-closed. Each payload is first written as
+`<name>.rst.partial`, closed, and atomically promoted to `<name>.rst` before its
+`<name>.rst.complete` marker is published. Every checkpoint also has one root
+`rst/<basename>.<NNNNN>.rst.manifest` plus `.manifest.complete` marker. The
+shared-file manifest binds one payload; a per-rank manifest enumerates the
+member payloads under `rst/rank_XXXXXXXX/`. The loader rejects missing or
+incomplete artifacts, `.partial` payloads, checksum mismatches, and paths that
+do not match the manifest.
 
 ### PDF (N-D)
 PDFs support 1–4 dimensions and can be weighted by volume, mass, or a variable.
@@ -124,7 +138,9 @@ quantities assume `x1/x2/x3` map to Cartesian axes. ([src/outputs/derived_variab
 - `cbin`: `cbin_<id>_<factor>/[rank_XXXXXXXX/]<basename>.<id>.<NNNNN>.cbin`.
   ([src/outputs/coarsened_binary.cpp:306])
 - `tab`: `tab/<basename>.<id>.<NNNNN>.tab`. ([src/outputs/formatted_table.cpp:60])
-- `rst`: `rst/<basename>.<NNNNN>.rst` (or `rst/rank_XXXXXXXX/`).
+- `rst`: `rst/<basename>.<NNNNN>.rst` (or
+  `rst/rank_XXXXXXXX/<basename>.<NNNNN>.rst`) plus completion markers and one
+  root manifest.
   ([src/outputs/restart.cpp:169])
 - `hst`: `<basename>.<physics>.hst` (physics suffix per module). ([src/outputs/history.cpp:345])
 - `log`: `<basename>.log`. ([src/outputs/eventlog.cpp:76])

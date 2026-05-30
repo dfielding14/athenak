@@ -447,6 +447,16 @@ TaskStatus Particles::DepositMoments(Driver *pdriver, int stage) {
        (pic_feedback_mode == PICFeedbackMode::coupled) &&
        couple_moments_to_mhd &&
        (couple_moments_momentum_to_mhd || couple_moments_energy_to_mhd));
+  const bool momentum_state_local = UsesRelativisticCRState();
+  const Real light_speed_local = pic_cr_light_speed;
+  const bool deltaf_local = UsesDeltaF();
+  Real physical_density_scale = static_cast<Real>(1.0);
+  if (UsesExpandingBox()) {
+    const auto geom = PICExpandingBoxGeometryAt(
+        pic_expansion_law, pic_expansion_rate_x1, pic_expansion_rate_x2,
+        pic_expansion_rate_x3, pmy_pack->pmesh->time + pmy_pack->pmesh->dt);
+    physical_density_scale = geom.inv_a1*geom.inv_a2*geom.inv_a3;
+  }
 
   auto &size = pmy_pack->pmb->mb_size;
   auto &mb_bcs = pmy_pack->pmb->mb_bcs;
@@ -466,7 +476,12 @@ TaskStatus Particles::DepositMoments(Driver *pdriver, int stage) {
 
       Real weight = pr(IPWT,p);
       if (weight <= static_cast<Real>(0.0)) weight = static_cast<Real>(1.0);
-      const Real q_macro = qscale*weight*qspecies(sp);
+      const Real df_weight = deltaf_local ? pr(IPDFWT,p) : static_cast<Real>(1.0);
+      const Real q_macro =
+          physical_density_scale*qscale*weight*df_weight*qspecies(sp);
+      Real vx, vy, vz;
+      CRVelocityFromState(momentum_state_local, light_speed_local,
+                          pr(IPVX,p), pr(IPVY,p), pr(IPVZ,p), vx, vy, vz);
 
       const int dep_i_min =
           MomentDepositUsesGhostFace(mb_bcs.d_view(m, BoundaryFace::inner_x1))
@@ -498,8 +513,11 @@ TaskStatus Particles::DepositMoments(Driver *pdriver, int stage) {
           is, js, ks, dep_i_min, dep_i_max, dep_j_min, dep_j_max,
           dep_k_min, dep_k_max, multi_d, three_d, is_boris_pusher,
           use_delta_feedback, q_macro,
-          pr(IPVX,p), pr(IPVY,p), pr(IPVZ,p), pr(IPEBDOT,p),
-          pr(IPDPX,p), pr(IPDPY,p), pr(IPDPZ,p), pr(IPDE,p));
+          vx, vy, vz, pr(IPEBDOT,p),
+          physical_density_scale*df_weight*pr(IPDPX,p),
+          physical_density_scale*df_weight*pr(IPDPY,p),
+          physical_density_scale*df_weight*pr(IPDPZ,p),
+          physical_density_scale*df_weight*pr(IPDE,p));
     });
   } else if (deposit_order == 2) {
     par_for("deposit_moments_o2", DevExeSpace(), 0, npart-1,
@@ -512,7 +530,12 @@ TaskStatus Particles::DepositMoments(Driver *pdriver, int stage) {
 
       Real weight = pr(IPWT,p);
       if (weight <= static_cast<Real>(0.0)) weight = static_cast<Real>(1.0);
-      const Real q_macro = qscale*weight*qspecies(sp);
+      const Real df_weight = deltaf_local ? pr(IPDFWT,p) : static_cast<Real>(1.0);
+      const Real q_macro =
+          physical_density_scale*qscale*weight*df_weight*qspecies(sp);
+      Real vx, vy, vz;
+      CRVelocityFromState(momentum_state_local, light_speed_local,
+                          pr(IPVX,p), pr(IPVY,p), pr(IPVZ,p), vx, vy, vz);
 
       const int dep_i_min =
           MomentDepositUsesGhostFace(mb_bcs.d_view(m, BoundaryFace::inner_x1))
@@ -544,8 +567,11 @@ TaskStatus Particles::DepositMoments(Driver *pdriver, int stage) {
           is, js, ks, dep_i_min, dep_i_max, dep_j_min, dep_j_max,
           dep_k_min, dep_k_max, multi_d, three_d, is_boris_pusher,
           use_delta_feedback, q_macro,
-          pr(IPVX,p), pr(IPVY,p), pr(IPVZ,p), pr(IPEBDOT,p),
-          pr(IPDPX,p), pr(IPDPY,p), pr(IPDPZ,p), pr(IPDE,p));
+          vx, vy, vz, pr(IPEBDOT,p),
+          physical_density_scale*df_weight*pr(IPDPX,p),
+          physical_density_scale*df_weight*pr(IPDPY,p),
+          physical_density_scale*df_weight*pr(IPDPZ,p),
+          physical_density_scale*df_weight*pr(IPDE,p));
     });
   }
 
@@ -620,7 +646,8 @@ TaskStatus Particles::DepositMoments(Driver *pdriver, int stage) {
 
     Real weight = pr(IPWT,p);
     if (weight <= static_cast<Real>(0.0)) weight = static_cast<Real>(1.0);
-    Real q_macro = qscale*weight*qspecies(sp);
+    const Real df_weight = deltaf_local ? pr(IPDFWT,p) : static_cast<Real>(1.0);
+    Real q_macro = qscale*weight*df_weight*qspecies(sp);
     Real coeff = q_macro*inv_dt;
 
     Real x1min = size.d_view(m).x1min;
@@ -650,8 +677,9 @@ TaskStatus Particles::DepositMoments(Driver *pdriver, int stage) {
       dzn = static_cast<Real>(0.0);
     }
 
-    Real vy = pr(IPVY,p);
-    Real vz = pr(IPVZ,p);
+    Real vx, vy, vz;
+    CRVelocityFromState(momentum_state_local, light_speed_local,
+                        pr(IPVX,p), pr(IPVY,p), pr(IPVZ,p), vx, vy, vz);
 
     Real dxp1 = ((i1 == i0) ? static_cast<Real>(0.5)*(dxn + dxo)
                             : static_cast<Real>(0.0));
@@ -1017,7 +1045,8 @@ TaskStatus Particles::DepositMoments(Driver *pdriver, int stage) {
 
       Real weight = pr(IPWT,p);
       if (weight <= static_cast<Real>(0.0)) weight = static_cast<Real>(1.0);
-      Real q_macro = qscale*weight*qspecies(sp);
+      const Real df_weight = deltaf_local ? pr(IPDFWT,p) : static_cast<Real>(1.0);
+      Real q_macro = qscale*weight*df_weight*qspecies(sp);
       Real coeff = q_macro*inv_dt;
 
       Real x1min = size.d_view(m).x1min;
@@ -1047,8 +1076,9 @@ TaskStatus Particles::DepositMoments(Driver *pdriver, int stage) {
         dzn = static_cast<Real>(0.0);
       }
 
-      Real vy = pr(IPVY,p);
-      Real vz = pr(IPVZ,p);
+      Real vx, vy, vz;
+      CRVelocityFromState(momentum_state_local, light_speed_local,
+                          pr(IPVX,p), pr(IPVY,p), pr(IPVZ,p), vx, vy, vz);
 
       Real iS_x1[4];
       Real fS_x1[4];

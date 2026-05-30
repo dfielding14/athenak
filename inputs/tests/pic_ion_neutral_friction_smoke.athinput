@@ -1,0 +1,110 @@
+# AthenaXXX input file for the reduced high-frequency ion-neutral friction oracle
+
+<comment>
+problem   = Extended-MHD-PIC reduced ion-neutral friction manufactured-source smoke
+
+<job>
+basename  = pic_ion_neutral_friction_smoke
+
+<mesh>
+nghost    = 2
+nx1       = 8
+x1min     = 0.0
+x1max     = 8.0
+ix1_bc    = periodic
+ox1_bc    = periodic
+
+nx2       = 4
+x2min     = 0.0
+x2max     = 4.0
+ix2_bc    = periodic
+ox2_bc    = periodic
+
+nx3       = 4
+x3min     = 0.0
+x3max     = 4.0
+ix3_bc    = periodic
+ox3_bc    = periodic
+
+<meshblock>
+nx1       = 4
+nx2       = 4
+nx3       = 4
+
+<time>
+evolution  = dynamic
+integrator = rk1
+cfl_number = 0.1
+nlim       = 1
+tlim       = 1.0
+ndiag      = 1
+
+<mhd>
+eos         = ideal
+reconstruct = plm
+rsolver     = llf
+gamma       = 1.66666666667
+
+<particles>
+particle_type           = cosmic_ray
+ppc                     = 0.0
+pusher                  = boris_tsc
+nspecies                = 1
+cr_distribution         = center
+deposit_moments         = false
+deposit_order           = 1
+deposit_qscale          = 1.0
+couple_moments_to_mhd   = false
+couple_j_to_efield_coeff = 1.0
+couple_j_to_efield_representation = cell_centered
+couple_j_deposition_mode = cc_convert
+couple_moments_momentum_to_mhd = false
+couple_moments_energy_to_mhd   = false
+couple_fluid_feedback_order    = mhd_src_terms
+couple_moments_momentum_coeff  = 1.0
+couple_moments_energy_coeff    = 1.0
+cr_vx0                  = 0.0
+cr_vy0                  = 0.0
+cr_vz0                  = 0.0
+pic_physical_mode       = extended_mhd_pic
+pic_background_mode     = coupled
+pic_feedback_mode       = test_particle
+pic_interp_scheme       = tsc
+pic_enable_2d3v         = false
+pic_cr_light_speed      = 3.0
+pic_cr_initial_state    = momentum
+pic_cr_hall_mode        = off
+pic_wave_damping_mode   = off
+pic_ion_neutral_collision_rate = 0.0
+pic_max_cell_cross      = 2
+pic_theta_max           = 0.3
+pic_deltaf_mode         = off
+pic_deltaf_f0           =
+pic_load_balance_cost_per_particle = 0.0
+pic_sort_interval       = 0
+pic_intermediate_arrays = auto
+pic_expanding_box_mode  = off
+pic_expansion_law       = linear
+pic_expansion_rate_x1   = 0.0
+pic_expansion_rate_x2   = 0.0
+pic_expansion_rate_x3   = 0.0
+
+<species0>
+mass   = 1.0
+charge = 0.0
+
+<problem>
+pgen_name = linear_wave
+wave_flag = 1
+amp       = 0.01
+vflow     = 0.2
+along_x1  = true
+along_x2  = false
+along_x3  = false
+
+<output1>
+file_type   = bin
+variable    = mhd_u
+id          = mhd_u
+dcycle      = 1
+ghost_zones = false

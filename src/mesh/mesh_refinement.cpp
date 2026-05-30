@@ -16,10 +16,13 @@
 #include <cmath>     // abs
 #include <algorithm> // sort
 #include <utility>   // pair
+#include <unordered_map>
+#include <vector>
 
 #include "athena.hpp"
 #include "globals.hpp"
 #include "parameter_input.hpp"
+#include "coordinates/cell_locations.hpp"
 #include "mesh.hpp"
 #include "mesh_refinement.hpp"
 
@@ -50,6 +53,45 @@ bool ParticleInMeshBlockSize(const RegionSize &mb, const RegionSize &mesh,
   const bool in_x3 = (x3 >= mb.x3min) &&
                      ((mb.x3max >= mesh.x3max) ? (x3 <= mb.x3max) : (x3 < mb.x3max));
   return in_x1 && in_x2 && in_x3;
+}
+
+bool ParticleInLogicalBlockForCost(const LogicalLocation &lloc, const bool multi_d,
+                                   const bool three_d, const int root_level,
+                                   const int nmb_rootx1, const int nmb_rootx2,
+                                   const int nmb_rootx3, const RegionSize &ms,
+                                   const Real x1, const Real x2, const Real x3) {
+  const int lev = lloc.level;
+  const int nmbx1 = nmb_rootx1 << (lev - root_level);
+  const Real x1min = (lloc.lx1 == 0) ? ms.x1min
+      : LeftEdgeX(lloc.lx1, nmbx1, ms.x1min, ms.x1max);
+  const Real x1max = (lloc.lx1 == (nmbx1 - 1)) ? ms.x1max
+      : LeftEdgeX(lloc.lx1 + 1, nmbx1, ms.x1min, ms.x1max);
+  if ((x1 < x1min) || ((lloc.lx1 == (nmbx1 - 1)) ? (x1 > x1max) : (x1 >= x1max))) {
+    return false;
+  }
+
+  if (multi_d) {
+    const int nmbx2 = nmb_rootx2 << (lev - root_level);
+    const Real x2min = (lloc.lx2 == 0) ? ms.x2min
+        : LeftEdgeX(lloc.lx2, nmbx2, ms.x2min, ms.x2max);
+    const Real x2max = (lloc.lx2 == (nmbx2 - 1)) ? ms.x2max
+        : LeftEdgeX(lloc.lx2 + 1, nmbx2, ms.x2min, ms.x2max);
+    if ((x2 < x2min) || ((lloc.lx2 == (nmbx2 - 1)) ? (x2 > x2max) : (x2 >= x2max))) {
+      return false;
+    }
+  }
+
+  if (three_d) {
+    const int nmbx3 = nmb_rootx3 << (lev - root_level);
+    const Real x3min = (lloc.lx3 == 0) ? ms.x3min
+        : LeftEdgeX(lloc.lx3, nmbx3, ms.x3min, ms.x3max);
+    const Real x3max = (lloc.lx3 == (nmbx3 - 1)) ? ms.x3max
+        : LeftEdgeX(lloc.lx3 + 1, nmbx3, ms.x3min, ms.x3max);
+    if ((x3 < x3min) || ((lloc.lx3 == (nmbx3 - 1)) ? (x3 > x3max) : (x3 >= x3max))) {
+      return false;
+    }
+  }
+  return true;
 }
 
 } // namespace
@@ -573,15 +615,15 @@ void MeshRefinement::RedistAndRefineMeshBlocks(ParameterInput *pin, int nnew, in
   }
 
   // Step 3.
-  // Calculate new load balance. Initialize new cost array with the simplest estimate
-  // possible: all the blocks are equal
-  // TODO(@user): implement variable cost per MeshBlock as needed
+  // Calculate new load balance. The base fluid cost is one per MeshBlock; PIC can add
+  // an explicitly configured per-particle term before ranks are reassigned.
   new_cost_eachmb = new float[new_nmb];
   new_rank_eachmb = new int[new_nmb];
   new_gids_eachrank = new int[global_variable::nranks];
   new_nmb_eachrank = new int[global_variable::nranks];
 
   for (int i=0; i<new_nmb; i++) {new_cost_eachmb[i] = 1.0;}
+  AssignParticleAwareCosts(new_cost_eachmb, new_nmb);
   pm->LoadBalance(new_cost_eachmb, new_rank_eachmb, new_gids_eachrank, new_nmb_eachrank,
                   new_nmb_total);
   if (new_nmb_eachrank[global_variable::my_rank] > pm->nmb_maxperrank) {
@@ -628,7 +670,6 @@ void MeshRefinement::RedistAndRefineMeshBlocks(ParameterInput *pin, int nnew, in
   hydro::Hydro* phydro = pm->pmb_pack->phydro;
   mhd::MHD* pmhd = pm->pmb_pack->pmhd;
   z4c::Z4c* pz4c = pm->pmb_pack->pz4c;
-  auto ppart = pm->pmb_pack->ppart;
   // derefine (if needed)
   if (ndel > 0) {
     if (phydro != nullptr) {
@@ -791,10 +832,9 @@ void MeshRefinement::RedistAndRefineMeshBlocks(ParameterInput *pin, int nnew, in
     saved_pmhd->UpdateAfterAMR(pm->pmb_pack);
   }
 
-  // TODO(dbf75): Audit every retained module and particle-owned helper after
-  // reconstructing child MeshBlocks and coordinates. Refresh retained Views,
-  // neighbor state, and communication buffers through module-specific hooks
-  // where required; pointer reassignment alone is not a complete AMR contract.
+  if (saved_ppart != nullptr) {
+    saved_ppart->UpdateAfterAMR(pm->pmb_pack);
+  }
 
   // Mark newly created blocks (those that were refined)
   // newtoold[n] contains old gid for new gid n
@@ -1628,4 +1668,114 @@ void MeshRefinement::RefineParticles() {
   }
 
   return;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void MeshRefinement::AssignParticleAwareCosts
+//! \brief Add an optional particle-count contribution to each post-AMR MeshBlock cost.
+
+void MeshRefinement::AssignParticleAwareCosts(float *costs, int new_nmb) {
+  auto *ppart = pmy_mesh->pmb_pack->ppart;
+  if ((ppart == nullptr) || (ppart->pic_load_balance_cost_per_particle == 0.0)) {
+    return;
+  }
+
+  // Empty ranks must contribute zero counts to the MPI reduction below.
+  std::vector<int> local_counts(new_nmb, 0);
+  std::vector<int> global_counts(new_nmb, 0);
+  auto host_pr = Kokkos::create_mirror_view_and_copy(
+      HostMemSpace(), ppart->prtcl_rdata);
+  auto host_pi = Kokkos::create_mirror_view_and_copy(
+      HostMemSpace(), ppart->prtcl_idata);
+  const RegionSize &ms = pmy_mesh->mesh_size;
+  std::unordered_map<LogicalLocation, int, LogicalLocationHash> new_gid_by_lloc;
+  new_gid_by_lloc.reserve(static_cast<std::size_t>(new_nmb)*2);
+  for (int gid = 0; gid < new_nmb; ++gid) {
+    new_gid_by_lloc[new_lloc_eachmb[gid]] = gid;
+  }
+
+  for (int p = 0; p < ppart->nprtcl_thispack; ++p) {
+    int gid = -1;
+    const int old_gid = host_pi(PGID, p);
+    if (old_gid < 0 || old_gid >= pmy_mesh->nmb_total) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "Invalid pre-AMR MeshBlock gid " << old_gid << " for particle " << p
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    const LogicalLocation &old_loc = pmy_mesh->lloc_eachmb[old_gid];
+
+    auto same_it = new_gid_by_lloc.find(old_loc);
+    if (same_it != new_gid_by_lloc.end()) {
+      gid = same_it->second;
+    }
+
+    if (gid < 0 && old_loc.level > 0) {
+      const LogicalLocation parent_loc = {
+          old_loc.lx1 >> 1, old_loc.lx2 >> 1, old_loc.lx3 >> 1, old_loc.level - 1};
+      auto parent_it = new_gid_by_lloc.find(parent_loc);
+      if (parent_it != new_gid_by_lloc.end()) {
+        gid = parent_it->second;
+      }
+    }
+
+    if (gid < 0) {
+      for (int ox3 = 0; ox3 <= (pmy_mesh->three_d ? 1 : 0) && gid < 0; ++ox3) {
+        for (int ox2 = 0; ox2 <= (pmy_mesh->multi_d ? 1 : 0) && gid < 0; ++ox2) {
+          for (int ox1 = 0; ox1 <= 1; ++ox1) {
+            const LogicalLocation child_loc = {
+                (old_loc.lx1 << 1) + ox1, (old_loc.lx2 << 1) + ox2,
+                (old_loc.lx3 << 1) + ox3, old_loc.level + 1};
+            auto child_it = new_gid_by_lloc.find(child_loc);
+            if (child_it == new_gid_by_lloc.end()) continue;
+            if (ParticleInLogicalBlockForCost(
+                    child_loc, pmy_mesh->multi_d, pmy_mesh->three_d,
+                    pmy_mesh->root_level, pmy_mesh->nmb_rootx1, pmy_mesh->nmb_rootx2,
+                    pmy_mesh->nmb_rootx3, ms, host_pr(IPX, p), host_pr(IPY, p),
+                    host_pr(IPZ, p))) {
+              gid = child_it->second;
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    // The logical mapping above is O(1) for unchanged and derefined blocks and probes
+    // at most eight children for refinement. Retain a geometric fallback for malformed
+    // or unexpectedly reordered AMR transitions so the failure is explicit.
+    if (gid < 0) {
+      for (int candidate_gid = 0; candidate_gid < new_nmb; ++candidate_gid) {
+        if (ParticleInLogicalBlockForCost(
+                new_lloc_eachmb[candidate_gid], pmy_mesh->multi_d, pmy_mesh->three_d,
+                pmy_mesh->root_level, pmy_mesh->nmb_rootx1, pmy_mesh->nmb_rootx2,
+                pmy_mesh->nmb_rootx3, ms, host_pr(IPX, p), host_pr(IPY, p),
+                host_pr(IPZ, p))) {
+          gid = candidate_gid;
+          break;
+        }
+      }
+    }
+    if (gid >= 0) {
+      ++local_counts[gid];
+    } else {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "Unable to assign an AMR load-balance cost for particle " << p
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+  }
+
+#if MPI_PARALLEL_ENABLED
+  MPI_Allreduce(local_counts.data(), global_counts.data(), new_nmb, MPI_INT, MPI_SUM,
+                MPI_COMM_WORLD);
+#else
+  global_counts = local_counts;
+#endif
+  const float weight = static_cast<float>(ppart->pic_load_balance_cost_per_particle);
+  for (int gid = 0; gid < new_nmb; ++gid) {
+    costs[gid] += weight*static_cast<float>(global_counts[gid]);
+  }
 }

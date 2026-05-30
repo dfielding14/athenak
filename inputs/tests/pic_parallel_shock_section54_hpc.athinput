@@ -85,9 +85,9 @@ pic_feedback_mode                 = coupled
 pic_enable_2d3v                   = true
 pic_sort_interval                 = 16
 pic_intermediate_arrays           = auto
-# The reduced-speed-of-light parameter used in Section 5.4 is not implemented
-# in this nonrelativistic Boris branch. Non-default pic_cr_light_speed values
-# are intentionally rejected rather than silently ignored.
+# This deck remains an engineering proxy until its paper-mode parameters and
+# acceptance oracle are frozen. Explicit paper modes support positive
+# pic_cr_light_speed values through the relativistic p/m state.
 
 <species0>
 mass   = 1.0

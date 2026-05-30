@@ -35,6 +35,10 @@ std::string ParticleIntFieldName(const particles::Particles *pp, const int n) {
       n == static_cast<int>(PSP)) {
     return "species";
   }
+  if (pp->particle_type == ParticleType::cosmic_ray &&
+      n == static_cast<int>(PCRSOURCE)) {
+    return "cr_source";
+  }
   if (pp->particle_type == ParticleType::star &&
       n == static_cast<int>(NSN)) {
     return "sn_id";
@@ -264,6 +268,60 @@ void ParticleVTKOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   }
   delete[] idata;
 
+  // Write provenance, macro weight, and evolving delta-f state for offline diagnostics.
+  if (pp->particle_type == ParticleType::cosmic_ray) {
+    auto write_real_scalar = [&](const int field, const char *name) {
+      std::stringstream msg;
+      if (!have_written_pointdata_header) {
+        have_written_pointdata_header = true;
+        msg << std::endl << std::endl << "POINT_DATA " << npout_total << std::endl;
+      }
+      msg << std::endl << "SCALARS " << name << " float" << std::endl
+          << "LOOKUP_TABLE default" << std::endl;
+      if (global_variable::my_rank == 0) {
+        partfile.Write_any_type_at(msg.str().c_str(), msg.str().size(),
+                                   header_offset, "byte");
+      }
+      header_offset += msg.str().size();
+      for (int p=0; p<npout_thisrank; ++p) {
+        data[p] = static_cast<float>(outpart_rdata(field, p));
+      }
+      if (!big_end) {
+        for (int p=0; p<npout_thisrank; ++p) {
+          Swap4Bytes(&data[p]);
+        }
+      }
+      const std::size_t datasize = sizeof(float);
+      std::size_t myoffset =
+          header_offset + rank_offset[global_variable::my_rank]*datasize;
+      if (npout_min > 0 &&
+          partfile.Write_any_type_at_all(&(data[0]), npout_min, myoffset, "float")
+            != npout_min) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl
+                  << "particle scalar data not written correctly to vtk particle file, "
+                  << "vtk file is broken." << std::endl;
+        exit(EXIT_FAILURE);
+      }
+      myoffset += datasize*npout_min;
+      const int nremain = pm->nprtcl_thisrank - npout_min;
+      if (nremain > 0 &&
+          partfile.Write_any_type_at(&(data[npout_min]), nremain, myoffset, "float")
+            != nremain) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl
+                  << "particle scalar data not written correctly to vtk particle file, "
+                  << "vtk file is broken." << std::endl;
+        exit(EXIT_FAILURE);
+      }
+      header_offset += pm->nprtcl_total*datasize;
+    };
+    write_real_scalar(IPWT, "macro_weight");
+    write_real_scalar(IPT_BIRTH, "birth_time");
+    write_real_scalar(IPF0, "deltaf_f0");
+    write_real_scalar(IPDFWT, "deltaf_weight");
+  }
+
   // Write particle velocity vectors
   {
     std::stringstream msg;
@@ -274,10 +332,17 @@ void ParticleVTKOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     }
     header_offset += msg.str().size();
 
+    const bool momentum_state =
+        pm->pmb_pack->ppart->UsesRelativisticCRState();
+    const Real light_speed = pm->pmb_pack->ppart->pic_cr_light_speed;
     for (int p=0; p<npout_thisrank; ++p) {
-      data[3*p] = static_cast<float>(outpart_rdata(IPVX,p));
-      data[(3*p)+1] = static_cast<float>((pm->multi_d) ? outpart_rdata(IPVY,p) : 0.0);
-      data[(3*p)+2] = static_cast<float>(output_vz ? outpart_rdata(IPVZ,p) : 0.0);
+      Real vx, vy, vz;
+      particles::CRVelocityFromState(momentum_state, light_speed,
+                                     outpart_rdata(IPVX,p), outpart_rdata(IPVY,p),
+                                     outpart_rdata(IPVZ,p), vx, vy, vz);
+      data[3*p] = static_cast<float>(vx);
+      data[(3*p)+1] = static_cast<float>((pm->multi_d) ? vy : 0.0);
+      data[(3*p)+2] = static_cast<float>(output_vz ? vz : 0.0);
     }
     if (!big_end) {
       for (int i=0; i<(3*npout_thisrank); ++i) { Swap4Bytes(&data[i]); }

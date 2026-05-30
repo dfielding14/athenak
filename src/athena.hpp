@@ -64,14 +64,15 @@ enum CRParticlesIndex {
   IPBX=7,  IPBY=8,  IPBZ=9,
   IPDX=10, IPDY=11, IPDZ=12, IPDB=13,
   IPEX=14, IPEY=15, IPEZ=16,
-  IPDPX=17, IPDPY=18, IPDPZ=19, IPDE=20, IPEBDOT=21, IPWT=22
+  IPDPX=17, IPDPY=18, IPDPZ=19, IPDE=20, IPEBDOT=21, IPWT=22,
+  IPF0=23, IPDFWT=24, IPT_BIRTH=25
 };
 
 // additional indices for star particles
 enum StarParticlesIndex {IPT_CREATE=6, IPMASS=7, IPT_NEXT_SN=8};
 
 // integer data indices for particle types
-enum ParticleIntegerIndex {PSP=2, NSN=2};
+enum ParticleIntegerIndex {PSP=2, NSN=2, PCRSOURCE=3};
 
 // integer constants to specify spatial reconstruction methods
 enum ReconstructionMethod {dc, plm, ppm4, ppmx, wenoz};

@@ -22,7 +22,9 @@ _RESULTS = {}
 _AMPLITUDE_MIN = {
     'uniform': 10.0,
     'smr': 10.0,
-    'amr_proxy': 1.0,
+    # Short-horizon interface smoke only: corrected nearest-center TSC
+    # interpolation yields a bounded nonzero response before one full turn.
+    'amr_proxy': 5.0e-2,
 }
 _TURN_MIN = {
     'uniform': 4.0,

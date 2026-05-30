@@ -71,6 +71,7 @@ cr_vy0                        = 0.0
 cr_vz0                        = 0.0
 pic_background_mode           = coupled
 pic_feedback_mode             = test_particle
+pic_load_balance_cost_per_particle = 0.001
 
 <species0>
 mass   = 1.0

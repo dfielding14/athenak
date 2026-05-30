@@ -55,6 +55,7 @@ class IOWrapper {
   std::size_t Read_Reals_at_all(void *buf, IOWrapperSizeT count, IOWrapperSizeT offset,
                                 bool single_file_per_rank = false);
   int Close(bool single_file_per_rank = false);
+  int Sync(bool single_file_per_rank = false);
   int Seek(IOWrapperSizeT offset, bool single_file_per_rank = false);
   IOWrapperSizeT GetPosition(bool single_file_per_rank = false);
 

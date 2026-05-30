@@ -45,6 +45,10 @@ Diagnostics:
 
 Restart:
 - `rst` → `restart.cpp` (`RestartOutput`)
+- Restart output is written to `.partial`, synced, closed, atomically promoted,
+  and accompanied by a checksummed `.complete` marker plus checkpoint
+  `.manifest`. Startup rejects missing or mismatched completion metadata before
+  consuming restart state.
 
 The list above matches the registration in `Outputs::Outputs` (`outputs.cpp`).
 

@@ -19,6 +19,7 @@
 #include "mhd.hpp"
 #include "diffusion/conduction.hpp"
 #include "srcterms/srcterms.hpp"
+#include "particles/particles.hpp"
 
 namespace mhd {
 
@@ -50,6 +51,17 @@ TaskStatus MHD::NewTimeStep(Driver *pdriver, int stage) {
   const int nmkji = (pmy_pack->nmb_thispack)*nx3*nx2*nx1;
   const int nkji = nx3*nx2*nx1;
   const int nji  = nx2*nx1;
+  Real a1 = 1.0, a2 = 1.0, a3 = 1.0;
+  auto *ppart = pmy_pack->ppart;
+  if ((ppart != nullptr) && ppart->UsesExpandingBox()) {
+    const auto geom = particles::PICExpandingBoxGeometryAt(
+        ppart->pic_expansion_law, ppart->pic_expansion_rate_x1,
+        ppart->pic_expansion_rate_x2, ppart->pic_expansion_rate_x3,
+        bphys_time);
+    a1 = geom.a1;
+    a2 = geom.a2;
+    a3 = geom.a3;
+  }
 
   if (pdriver->time_evolution == TimeEvolution::kinematic) {
     // find smallest (dx/v) in each direction for advection problems
@@ -63,9 +75,9 @@ TaskStatus MHD::NewTimeStep(Driver *pdriver, int stage) {
       k += ks;
       j += js;
 
-      min_dt1 = fmin((mbsize.d_view(m).dx1/fabs(w0_(m,IVX,k,j,i))), min_dt1);
-      min_dt2 = fmin((mbsize.d_view(m).dx2/fabs(w0_(m,IVY,k,j,i))), min_dt2);
-      min_dt3 = fmin((mbsize.d_view(m).dx3/fabs(w0_(m,IVZ,k,j,i))), min_dt3);
+      min_dt1 = fmin((a1*mbsize.d_view(m).dx1/fabs(w0_(m,IVX,k,j,i))), min_dt1);
+      min_dt2 = fmin((a2*mbsize.d_view(m).dx2/fabs(w0_(m,IVY,k,j,i))), min_dt2);
+      min_dt3 = fmin((a3*mbsize.d_view(m).dx3/fabs(w0_(m,IVZ,k,j,i))), min_dt3);
     }, Kokkos::Min<Real>(dt1), Kokkos::Min<Real>(dt2),Kokkos::Min<Real>(dt3));
   } else {
     // find smallest dx/(v +/- Cf) in each direction for mhd problems
@@ -124,8 +136,9 @@ TaskStatus MHD::NewTimeStep(Driver *pdriver, int stage) {
         Real &w_by = bcc0_(m,IBY,k,j,i);
         Real &w_bz = bcc0_(m,IBZ,k,j,i);
         Real cf;
-        Real p = eos.IdealGasPressure(w0_(m,IEN,k,j,i));
+        Real p = 0.0;
         if (eos.is_ideal) {
+          p = eos.IdealGasPressure(w0_(m,IEN,k,j,i));
           cf = eos.IdealMHDFastSpeed(w_d, p, w_bx, w_by, w_bz);
         } else {
           cf = eos.IdealMHDFastSpeed(w_d, w_bx, w_by, w_bz);
@@ -147,9 +160,9 @@ TaskStatus MHD::NewTimeStep(Driver *pdriver, int stage) {
         max_dv3 = fabs(w0_(m,IVZ,k,j,i)) + cf;
       }
 
-      min_dt1 = fmin((mbsize.d_view(m).dx1/max_dv1), min_dt1);
-      min_dt2 = fmin((mbsize.d_view(m).dx2/max_dv2), min_dt2);
-      min_dt3 = fmin((mbsize.d_view(m).dx3/max_dv3), min_dt3);
+      min_dt1 = fmin((a1*mbsize.d_view(m).dx1/max_dv1), min_dt1);
+      min_dt2 = fmin((a2*mbsize.d_view(m).dx2/max_dv2), min_dt2);
+      min_dt3 = fmin((a3*mbsize.d_view(m).dx3/max_dv3), min_dt3);
     }, Kokkos::Min<Real>(dt1), Kokkos::Min<Real>(dt2),Kokkos::Min<Real>(dt3));
   }
 

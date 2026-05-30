@@ -6,11 +6,14 @@
 //! \file driver.cpp
 //  \brief implementation of functions in class Driver
 
-#include <iostream>
-#include <iomanip>    // std::setprecision()
-#include <limits>
 #include <algorithm>
+#include <array>
+#include <cmath>
+#include <iomanip>    // std::setprecision()
+#include <iostream>
+#include <limits>
 #include <string> // string
+#include <vector>
 
 #include "athena.hpp"
 #include "globals.hpp"
@@ -28,6 +31,30 @@
 #if MPI_PARALLEL_ENABLED
 #include <mpi.h>
 #endif
+
+namespace {
+
+constexpr int nq017_task_lists = 5;
+constexpr const char* q017_task_list_names[nq017_task_lists] = {
+  "before_timeintegrator",
+  "before_stagen",
+  "stagen",
+  "after_stagen",
+  "after_timeintegrator"
+};
+
+int Q017TaskListIndex(const std::string &name) {
+  for (int n=0; n<nq017_task_lists; ++n) {
+    if (name == q017_task_list_names[n]) {return n;}
+  }
+  return -1;
+}
+
+double Q017FiniteNonnegative(double value) {
+  return (std::isfinite(value) && value >= 0.0)? value : 0.0;
+}
+
+} // namespace
 
 //----------------------------------------------------------------------------------------
 // constructor, initializes data structures and parameters
@@ -62,6 +89,12 @@ Driver::Driver(ParameterInput *pin, Mesh *pmesh, Real wtlim, Kokkos::Timer* ptim
   nmb_updated_(0),
   npart_updated_(0),
   lb_efficiency_(0),
+  q017_task_list_time_(),
+  q017_task_list_calls_(),
+  q017_output_time_(0.0),
+  q017_amr_time_(0.0),
+  q017_output_calls_(0),
+  q017_amr_calls_(0),
   pwall_clock_(ptimer),
   wall_time(wtlim),
   impl_src("ru",1,1,1,1,1,1) {
@@ -271,6 +304,7 @@ Driver::Driver(ParameterInput *pin, Mesh *pmesh, Real wtlim, Kokkos::Timer* ptim
 //! these tasks are to be performed, e.g. which stage of a multi-stage RK integrator.
 
 void Driver::ExecuteTaskList(Mesh *pm, std::string tl, int stage) {
+  Kokkos::Timer q017_timer;
   MeshBlockPack* pmbp = pm->pmb_pack;
   for (int p=0; p<(pm->nmb_packs_thisrank); ++p) {
     if (!(pmbp->tl_map[tl]->Empty())) {pmbp->tl_map[tl]->Reset();}
@@ -286,6 +320,24 @@ void Driver::ExecuteTaskList(Mesh *pm, std::string tl, int stage) {
       }
     }
   }
+  int q017_index = Q017TaskListIndex(tl);
+  if (q017_index >= 0) {
+    q017_task_list_time_[q017_index] += q017_timer.seconds();
+    q017_task_list_calls_[q017_index]++;
+  }
+  return;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn Driver::PublishOutput()
+//! \brief Load and write one output while accumulating low-overhead publication timing.
+
+void Driver::PublishOutput(BaseTypeOutput *out, Mesh *pm, ParameterInput *pin) {
+  Kokkos::Timer q017_timer;
+  out->LoadOutputData(pm);
+  out->WriteOutputFile(pm, pin);
+  q017_output_time_ += q017_timer.seconds();
+  q017_output_calls_++;
   return;
 }
 
@@ -324,16 +376,22 @@ void Driver::Initialize(Mesh *pmesh, ParameterInput *pin, Outputs *pout, bool re
   }
 
   //---- Step 3.  Cycle through output Types and load data / write files.
+  q017_task_list_time_.fill(0.0);
+  q017_task_list_calls_.fill(0);
+  q017_output_time_ = 0.0;
+  q017_amr_time_ = 0.0;
+  q017_output_calls_ = 0;
+  q017_amr_calls_ = 0;
   if (!res_flag) { // only write outputs at the beginning of the run
     for (auto &out : pout->pout_list) {
-      out->LoadOutputData(pmesh);
-      out->WriteOutputFile(pmesh, pin);
+      PublishOutput(out, pmesh, pin);
     }
   }
 
   //---- Step 4.  Initialize various counters, timers, etc.
   run_time_.reset();
   nmb_updated_ = 0;
+  npart_updated_ = 0;
 
   // allocate memory for stiff source terms with ImEx integrators
   // only implemented for ion-neutral two fluid for now
@@ -431,13 +489,17 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
 
         if (((out->out_params.dt > 0.0) && ((time_32 >= next_32) && (time_32<tlim_32))) ||
             ((dcycle_ > 0) && ((pmesh->ncycle)%(dcycle_) == 0)) ) {
-          out->LoadOutputData(pmesh);
-          out->WriteOutputFile(pmesh, pin);
+          PublishOutput(out, pmesh, pin);
         }
       }
 
       // AMR
-      if (pmesh->adaptive) {pmesh->pmr->AdaptiveMeshRefinement(this, pin);}
+      if (pmesh->adaptive) {
+        Kokkos::Timer q017_timer;
+        pmesh->pmr->AdaptiveMeshRefinement(this, pin);
+        q017_amr_time_ += q017_timer.seconds();
+        q017_amr_calls_++;
+      }
       // compute new timestep AFTER all Meshblocks refined/derefined
       pmesh->NewTimeStep(tlim);
 
@@ -459,8 +521,7 @@ void Driver::Finalize(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
   // cycle through output Types and load data / write files
   //  This design allows for asynchronous outputs to implemented in the future.
   for (auto &out : pout->pout_list) {
-    out->LoadOutputData(pmesh);
-    out->WriteOutputFile(pmesh, pin);
+    PublishOutput(out, pmesh, pin);
   }
 
   // call any problem specific functions to do work after main loop
@@ -468,7 +529,7 @@ void Driver::Finalize(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
     (pmesh->pgen->pgen_final_func)(pin, pmesh);
   }
 
-  float exe_time = run_time_.seconds();
+  double exe_time = run_time_.seconds();
 
   if (time_evolution != TimeEvolution::tstatic) {
 #if MPI_PARALLEL_ENABLED
@@ -515,6 +576,162 @@ void Driver::Finalize(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
       std::cout << "particle-updates/cpu_second = " << pups << std::endl;
     }
   }
+  OutputQ017Telemetry(pmesh, exe_time);
+  return;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn Driver::OutputQ017Telemetry()
+//! \brief Emit stable driver telemetry scalars for performance manifests.
+
+void Driver::OutputQ017Telemetry(Mesh *pm, double exe_time) {
+  constexpr int ntimers = nq017_task_lists + 4;
+  constexpr const char* timer_names[ntimers] = {
+    "driver",
+    "task_lists",
+    "task_list.before_timeintegrator",
+    "task_list.before_stagen",
+    "task_list.stagen",
+    "task_list.after_stagen",
+    "task_list.after_timeintegrator",
+    "output_publication",
+    "amr_load_balance"
+  };
+
+  double task_list_time = 0.0;
+  std::uint64_t task_list_calls = 0;
+  for (int n=0; n<nq017_task_lists; ++n) {
+    task_list_time += q017_task_list_time_[n];
+    task_list_calls += q017_task_list_calls_[n];
+  }
+
+  std::array<double, ntimers> local_times = {
+    static_cast<double>(exe_time),
+    task_list_time,
+    static_cast<double>(q017_task_list_time_[0]),
+    static_cast<double>(q017_task_list_time_[1]),
+    static_cast<double>(q017_task_list_time_[2]),
+    static_cast<double>(q017_task_list_time_[3]),
+    static_cast<double>(q017_task_list_time_[4]),
+    static_cast<double>(q017_output_time_),
+    static_cast<double>(q017_amr_time_)
+  };
+  std::array<std::uint64_t, ntimers> local_calls = {
+    1,
+    task_list_calls,
+    q017_task_list_calls_[0],
+    q017_task_list_calls_[1],
+    q017_task_list_calls_[2],
+    q017_task_list_calls_[3],
+    q017_task_list_calls_[4],
+    q017_output_calls_,
+    q017_amr_calls_
+  };
+  std::array<double, ntimers> sum_times = local_times;
+  std::array<double, ntimers> max_times = local_times;
+  std::array<std::uint64_t, ntimers> max_calls = local_calls;
+
+#if MPI_PARALLEL_ENABLED
+  MPI_Reduce(local_times.data(), sum_times.data(), ntimers, MPI_DOUBLE, MPI_SUM, 0,
+             MPI_COMM_WORLD);
+  MPI_Reduce(local_times.data(), max_times.data(), ntimers, MPI_DOUBLE, MPI_MAX, 0,
+             MPI_COMM_WORLD);
+  MPI_Reduce(local_calls.data(), max_calls.data(), ntimers, MPI_UINT64_T, MPI_MAX, 0,
+             MPI_COMM_WORLD);
+#endif
+
+  if (global_variable::my_rank != 0) {return;}
+
+  const int nranks = global_variable::nranks;
+  int min_nmb = std::numeric_limits<int>::max();
+  int max_nmb = 0;
+  int min_nprtcl = std::numeric_limits<int>::max();
+  int max_nprtcl = 0;
+  for (int rank=0; rank<nranks; ++rank) {
+    min_nmb = std::min(min_nmb, pm->nmb_eachrank[rank]);
+    max_nmb = std::max(max_nmb, pm->nmb_eachrank[rank]);
+    int nprtcl = (pm->nprtcl_eachrank == nullptr)? 0 : pm->nprtcl_eachrank[rank];
+    min_nprtcl = std::min(min_nprtcl, nprtcl);
+    max_nprtcl = std::max(max_nprtcl, nprtcl);
+  }
+
+  std::vector<double> cost_eachrank(nranks, 0.0);
+  std::uint64_t invalid_costs = 0;
+  for (int m=0; m<pm->nmb_total; ++m) {
+    double cost = static_cast<double>(pm->cost_eachmb[m]);
+    int rank = pm->rank_eachmb[m];
+    if (!std::isfinite(cost) || cost < 0.0 || rank < 0 || rank >= nranks) {
+      invalid_costs++;
+    } else {
+      cost_eachrank[rank] += cost;
+    }
+  }
+
+  double total_cost = 0.0;
+  double min_cost = std::numeric_limits<double>::max();
+  double max_cost = 0.0;
+  for (int rank=0; rank<nranks; ++rank) {
+    total_cost += cost_eachrank[rank];
+    min_cost = std::min(min_cost, cost_eachrank[rank]);
+    max_cost = std::max(max_cost, cost_eachrank[rank]);
+  }
+
+  double mean_nmb = static_cast<double>(pm->nmb_total)/nranks;
+  double mean_nprtcl = static_cast<double>(pm->nprtcl_total)/nranks;
+  double mean_cost = total_cost/nranks;
+  double nmb_efficiency = (max_nmb > 0)? mean_nmb/max_nmb : 0.0;
+  double nprtcl_efficiency = (max_nprtcl > 0)? mean_nprtcl/max_nprtcl : 0.0;
+  double cost_efficiency = (max_cost > 0.0)? mean_cost/max_cost : 0.0;
+  double cells_per_meshblock = pm->NumberOfMeshBlockCells();
+  double active_cells = static_cast<double>(pm->nmb_total)*cells_per_meshblock;
+  double zonecycles = static_cast<double>(nmb_updated_)*cells_per_meshblock;
+  double zcps = (exe_time > 0.0)? zonecycles/exe_time : 0.0;
+  double pups = (exe_time > 0.0)? static_cast<double>(npart_updated_)/exe_time : 0.0;
+  int nmb_created = pm->adaptive? pm->pmr->nmb_created : 0;
+  int nmb_deleted = pm->adaptive? pm->pmr->nmb_deleted : 0;
+  int nmb_sent = pm->adaptive? pm->pmr->nmb_sent_thisrank : 0;
+
+  std::cout << std::scientific << std::setprecision(17);
+  auto print_scalar = [](const std::string &name, double value) {
+    std::cout << "q017.telemetry." << name << "=" << Q017FiniteNonnegative(value)
+              << std::endl;
+  };
+
+  print_scalar("schema_version", 1.0);
+  print_scalar("mpi.ranks", nranks);
+  for (int n=0; n<ntimers; ++n) {
+    std::string prefix = std::string("timer.") + timer_names[n];
+    print_scalar(prefix + ".seconds_rank_max", max_times[n]);
+    print_scalar(prefix + ".seconds_rank_mean", sum_times[n]/nranks);
+    print_scalar(prefix + ".calls_rank_max", max_calls[n]);
+  }
+  print_scalar("cycles", pm->ncycle);
+  print_scalar("meshblocks.total", pm->nmb_total);
+  print_scalar("meshblocks.rank_min", min_nmb);
+  print_scalar("meshblocks.rank_max", max_nmb);
+  print_scalar("meshblocks.rank_mean", mean_nmb);
+  print_scalar("mesh.cells_per_meshblock", cells_per_meshblock);
+  print_scalar("mesh.active_cells", active_cells);
+  print_scalar("particles.total", pm->nprtcl_total);
+  print_scalar("particles.rank_min", min_nprtcl);
+  print_scalar("particles.rank_max", max_nprtcl);
+  print_scalar("particles.rank_mean", mean_nprtcl);
+  print_scalar("updates.meshblock_cycles", nmb_updated_);
+  print_scalar("updates.particle_updates", npart_updated_);
+  print_scalar("throughput.zone_cycles_per_second", zcps);
+  print_scalar("throughput.particle_updates_per_second", pups);
+  print_scalar("load.meshblock_efficiency", nmb_efficiency);
+  print_scalar("load.particle_efficiency", nprtcl_efficiency);
+  print_scalar("load.cost.total", total_cost);
+  print_scalar("load.cost.rank_min", min_cost);
+  print_scalar("load.cost.rank_max", max_cost);
+  print_scalar("load.cost.rank_mean", mean_cost);
+  print_scalar("load.cost.efficiency", cost_efficiency);
+  print_scalar("load.cost.invalid_meshblocks", invalid_costs);
+  print_scalar("amr.enabled", pm->adaptive);
+  print_scalar("amr.meshblocks_created", nmb_created);
+  print_scalar("amr.meshblocks_deleted", nmb_deleted);
+  print_scalar("amr.meshblocks_communicated", nmb_sent);
   return;
 }
 

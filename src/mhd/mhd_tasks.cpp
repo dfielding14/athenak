@@ -10,6 +10,7 @@
 #include <memory>
 #include <string>
 #include <iostream>
+#include <cmath>
 
 #include "athena.hpp"
 #include "globals.hpp"
@@ -51,19 +52,26 @@ void MHD::AssembleMHDTasks(std::map<std::string, std::shared_ptr<TaskList>> tl) 
   id.recvf     = tl["stagen"]->AddTask(&MHD::RecvFlux, this, id.sendf);
   id.rkupdt    = tl["stagen"]->AddTask(&MHD::RKUpdate, this, id.recvf);
   id.srctrms   = tl["stagen"]->AddTask(&MHD::MHDSrcTerms, this, id.rkupdt);
-  id.sendu_oa  = tl["stagen"]->AddTask(&MHD::SendU_OA, this, id.srctrms);
+  id.picdampu  = tl["stagen"]->AddTask(&MHD::ApplyPICWaveDamping, this, id.srctrms);
+  id.efld      = tl["stagen"]->AddTask(&MHD::CornerE, this, id.picdampu);
+  id.efldsrc   = tl["stagen"]->AddTask(&MHD::EFieldSrc, this, id.efld);
+  id.sende     = tl["stagen"]->AddTask(&MHD::SendE, this, id.efldsrc);
+  id.recve     = tl["stagen"]->AddTask(&MHD::RecvE, this, id.sende);
+  id.ct        = tl["stagen"]->AddTask(&MHD::CT, this, id.recve);
+  id.expboxb   = tl["stagen"]->AddTask(&MHD::ApplyPICExpandingBoxB, this, id.ct);
+  id.expboxu   = tl["stagen"]->AddTask(&MHD::ApplyPICExpandingBoxU, this, id.expboxb);
+  id.expboxfb  = tl["stagen"]->AddTask(&MHD::ApplyPICExpandingBoxFeedback, this,
+                                      id.expboxu);
+  id.expboxdampu = tl["stagen"]->AddTask(&MHD::ApplyPICExpandingBoxWaveDamping, this,
+                                        id.expboxfb);
+  id.sendu_oa  = tl["stagen"]->AddTask(&MHD::SendU_OA, this, id.expboxdampu);
   id.recvu_oa  = tl["stagen"]->AddTask(&MHD::RecvU_OA, this, id.sendu_oa);
   id.restu     = tl["stagen"]->AddTask(&MHD::RestrictU, this, id.recvu_oa);
   id.sendu     = tl["stagen"]->AddTask(&MHD::SendU, this, id.restu);
   id.recvu     = tl["stagen"]->AddTask(&MHD::RecvU, this, id.sendu);
   id.sendu_shr = tl["stagen"]->AddTask(&MHD::SendU_Shr, this, id.recvu);
   id.recvu_shr = tl["stagen"]->AddTask(&MHD::RecvU_Shr, this, id.sendu_shr);
-  id.efld      = tl["stagen"]->AddTask(&MHD::CornerE, this, id.recvu_shr);
-  id.efldsrc   = tl["stagen"]->AddTask(&MHD::EFieldSrc, this, id.efld);
-  id.sende     = tl["stagen"]->AddTask(&MHD::SendE, this, id.efldsrc);
-  id.recve     = tl["stagen"]->AddTask(&MHD::RecvE, this, id.sende);
-  id.ct        = tl["stagen"]->AddTask(&MHD::CT, this, id.recve);
-  id.sendb_oa  = tl["stagen"]->AddTask(&MHD::SendB_OA, this, id.ct);
+  id.sendb_oa  = tl["stagen"]->AddTask(&MHD::SendB_OA, this, id.recvu_shr);
   id.recvb_oa  = tl["stagen"]->AddTask(&MHD::RecvB_OA, this, id.sendb_oa);
   id.restb     = tl["stagen"]->AddTask(&MHD::RestrictB, this, id.recvb_oa);
   id.sendb     = tl["stagen"]->AddTask(&MHD::SendB, this, id.restb);
@@ -173,6 +181,11 @@ TaskStatus MHD::CopyCons(Driver *pdrive, int stage) {
 //! of conserved variables
 
 TaskStatus MHD::Fluxes(Driver *pdrive, int stage) {
+  auto *ppart = pmy_pack->ppart;
+  if ((ppart != nullptr) && ppart->UsesExpandingBox()) {
+    RefreshPICExpandingBoxPhysicalB(pmy_pack->pmesh->time);
+  }
+
   // select which calculate_flux function to call based on rsolver_method
   if (rsolver_method == MHD_RSolver::advect) {
     CalculateFluxes<MHD_RSolver::advect>(pdrive, stage);
@@ -213,6 +226,51 @@ TaskStatus MHD::Fluxes(Driver *pdrive, int stage) {
   }
 
   return TaskStatus::complete;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void MHD::RefreshPICExpandingBoxPhysicalB
+//! \brief Populate physical face fields from divergence-preserving comoving face fluxes.
+
+void MHD::RefreshPICExpandingBoxPhysicalB(const Real time) {
+  auto *ppart = pmy_pack->ppart;
+  if ((ppart == nullptr) || !ppart->UsesExpandingBox()) return;
+  bphys_time = time;
+
+  const auto geom = particles::PICExpandingBoxGeometryAt(
+      ppart->pic_expansion_law, ppart->pic_expansion_rate_x1,
+      ppart->pic_expansion_rate_x2, ppart->pic_expansion_rate_x3, time);
+  const int nmb1 = pmy_pack->nmb_thispack - 1;
+  auto b1 = b0.x1f;
+  auto b2 = b0.x2f;
+  auto b3 = b0.x3f;
+  auto bp1 = bphys.x1f;
+  auto bp2 = bphys.x2f;
+  auto bp3 = bphys.x3f;
+  const int b1k = static_cast<int>(b1.extent(1)) - 1;
+  const int b1j = static_cast<int>(b1.extent(2)) - 1;
+  const int b1i = static_cast<int>(b1.extent(3)) - 1;
+  const int b2k = static_cast<int>(b2.extent(1)) - 1;
+  const int b2j = static_cast<int>(b2.extent(2)) - 1;
+  const int b2i = static_cast<int>(b2.extent(3)) - 1;
+  const int b3k = static_cast<int>(b3.extent(1)) - 1;
+  const int b3j = static_cast<int>(b3.extent(2)) - 1;
+  const int b3i = static_cast<int>(b3.extent(3)) - 1;
+  par_for("pic_expanding_box_physical_b1", DevExeSpace(), 0, nmb1,
+          0, b1k, 0, b1j, 0, b1i,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    bp1(m, k, j, i) = geom.inv_area1*b1(m, k, j, i);
+  });
+  par_for("pic_expanding_box_physical_b2", DevExeSpace(), 0, nmb1,
+          0, b2k, 0, b2j, 0, b2i,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    bp2(m, k, j, i) = geom.inv_area2*b2(m, k, j, i);
+  });
+  par_for("pic_expanding_box_physical_b3", DevExeSpace(), 0, nmb1,
+          0, b3k, 0, b3j, 0, b3i,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    bp3(m, k, j, i) = geom.inv_area3*b3(m, k, j, i);
+  });
 }
 
 //----------------------------------------------------------------------------------------
@@ -290,7 +348,7 @@ TaskStatus MHD::MHDSrcTerms(Driver *pdrive, int stage) {
         ((ppart->pusher == ParticlesPusher::boris_lin) ||
          (ppart->pusher == ParticlesPusher::boris_tsc)) &&
         (ppart->pic_feedback_mode == PICFeedbackMode::coupled);
-    if ((add_mom || add_eng) && apply_feedback_here) {
+    if ((add_mom || add_eng) && apply_feedback_here && !ppart->UsesExpandingBox()) {
       if (add_eng && (nmhd <= IEN)) {
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                   << std::endl
@@ -306,13 +364,51 @@ TaskStatus MHD::MHDSrcTerms(Driver *pdrive, int stage) {
       int nmb1 = pmy_pack->nmb_thispack - 1;
       const Real mom_coef = ppart->couple_moments_momentum_coeff;
       const Real eng_coef = ppart->couple_moments_energy_coeff;
+      const bool use_deltaf = ppart->UsesDeltaF();
+      Real background_density_scale = 1.0;
+      if (ppart->UsesExpandingBox()) {
+        const auto geom = particles::PICExpandingBoxGeometryAt(
+            ppart->pic_expansion_law, ppart->pic_expansion_rate_x1,
+            ppart->pic_expansion_rate_x2, ppart->pic_expansion_rate_x3,
+            pmy_pack->pmesh->time + pmy_pack->pmesh->dt);
+        background_density_scale = geom.inv_a1*geom.inv_a2*geom.inv_a3;
+      }
+      const Real background_rho =
+          background_density_scale*ppart->pic_deltaf_background_rho;
+      const Real background_jx = ppart->pic_deltaf_background_jx;
+      const Real background_jy = ppart->pic_deltaf_background_jy;
+      const Real background_jz = ppart->pic_deltaf_background_jz;
       auto mom = ppart->moments;
       auto bcc = bcc0;
+      auto w = w0;
       auto u = u0;
 
       par_for("prtcl_fluid_feedback_src", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie,
       KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
-        if (use_delta_feedback) {
+        if (use_deltaf) {
+          const Real rho = background_rho +
+              mom(m, particles::Particles::IMOM_RHO, k, j, i);
+          const Real jx = background_jx +
+              mom(m, particles::Particles::IMOM_JX, k, j, i);
+          const Real jy = background_jy +
+              mom(m, particles::Particles::IMOM_JY, k, j, i);
+          const Real jz = background_jz +
+              mom(m, particles::Particles::IMOM_JZ, k, j, i);
+          const Real bx = bcc(m, IBX, k, j, i);
+          const Real by = bcc(m, IBY, k, j, i);
+          const Real bz = bcc(m, IBZ, k, j, i);
+          const Real cex = -(w(m, IVY, k, j, i)*bz - w(m, IVZ, k, j, i)*by);
+          const Real cey = -(w(m, IVZ, k, j, i)*bx - w(m, IVX, k, j, i)*bz);
+          const Real cez = -(w(m, IVX, k, j, i)*by - w(m, IVY, k, j, i)*bx);
+          if (add_mom) {
+            u(m, IM1, k, j, i) -= beta_dt*mom_coef*(rho*cex + jy*bz - jz*by);
+            u(m, IM2, k, j, i) -= beta_dt*mom_coef*(rho*cey + jz*bx - jx*bz);
+            u(m, IM3, k, j, i) -= beta_dt*mom_coef*(rho*cez + jx*by - jy*bx);
+          }
+          if (add_eng) {
+            u(m, IEN, k, j, i) -= beta_dt*eng_coef*(jx*cex + jy*cey + jz*cez);
+          }
+        } else if (use_delta_feedback) {
           if (add_mom) {
             u(m, IM1, k, j, i) -= beta_dt*mom_coef*
                                   mom(m, particles::Particles::IMOM_DPXDT, k, j, i);
@@ -351,6 +447,232 @@ TaskStatus MHD::MHDSrcTerms(Driver *pdrive, int stage) {
     }
   }
 
+  return TaskStatus::complete;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn TaskStatus MHD::ApplyPICWaveDamping
+//! \brief Apply reduced high-frequency ion-neutral friction to transverse ion momentum.
+
+TaskStatus MHD::ApplyPICWaveDamping(Driver *pdrive, int stage) {
+  auto *ppart = pmy_pack->ppart;
+  if ((ppart != nullptr) && ppart->UsesExpandingBox()) {
+    return TaskStatus::complete;
+  }
+  return ApplyPICWaveDampingMap(pdrive, stage);
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn TaskStatus MHD::ApplyPICExpandingBoxWaveDamping
+//! \brief Apply reduced wave damping after the final expanding-box physical-frame sources.
+
+TaskStatus MHD::ApplyPICExpandingBoxWaveDamping(Driver *pdrive, int stage) {
+  auto *ppart = pmy_pack->ppart;
+  if ((ppart == nullptr) || !ppart->UsesExpandingBox()) {
+    return TaskStatus::complete;
+  }
+  return ApplyPICWaveDampingMap(pdrive, stage);
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn TaskStatus MHD::ApplyPICWaveDampingMap
+//! \brief Apply the exact reduced high-frequency ion-neutral friction map.
+
+TaskStatus MHD::ApplyPICWaveDampingMap(Driver *pdrive, int stage) {
+  auto *ppart = pmy_pack->ppart;
+  if ((ppart == nullptr) || !ppart->UsesPICWaveDamping() ||
+      (stage != pdrive->nexp_stages)) {
+    return TaskStatus::complete;
+  }
+  const Real factor = exp(-ppart->pic_ion_neutral_collision_rate*
+                          pmy_pack->pmesh->dt);
+  auto &indcs = pmy_pack->pmesh->mb_indcs;
+  const int is = indcs.is, ie = indcs.ie;
+  const int js = indcs.js, je = indcs.je;
+  const int ks = indcs.ks, ke = indcs.ke;
+  const int nmb1 = pmy_pack->nmb_thispack - 1;
+  const bool ideal = peos->eos_data.is_ideal;
+  auto u = u0;
+  par_for("pic_ion_neutral_friction", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    const Real den = u(m, IDN, k, j, i);
+    const Real my0 = u(m, IM2, k, j, i);
+    const Real mz0 = u(m, IM3, k, j, i);
+    u(m, IM2, k, j, i) *= factor;
+    u(m, IM3, k, j, i) *= factor;
+    if (ideal) {
+      const Real transverse_ekin_loss =
+          0.5*(1.0 - factor*factor)*(my0*my0 + mz0*mz0)/den;
+      u(m, IEN, k, j, i) -= transverse_ekin_loss;
+    }
+  });
+  return TaskStatus::complete;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn TaskStatus MHD::ApplyPICExpandingBoxU
+//! \brief Rescale fluid conserved variables for a uniform anisotropic expanding box.
+
+TaskStatus MHD::ApplyPICExpandingBoxU(Driver *pdrive, int stage) {
+  auto *ppart = pmy_pack->ppart;
+  if ((ppart == nullptr) || !ppart->UsesExpandingBox() ||
+      (stage != pdrive->nexp_stages)) {
+    return TaskStatus::complete;
+  }
+  // Apply the exact expansion flow once after the RK and CT updates. Treating
+  // this split flow as a stage-local source map over-expands multistage
+  // integrators.
+  const Real bdt = pmy_pack->pmesh->dt;
+  const Real t0 = pmy_pack->pmesh->time;
+  const Real t1 = t0 + bdt;
+  const auto geom0 = particles::PICExpandingBoxGeometryAt(
+      ppart->pic_expansion_law, ppart->pic_expansion_rate_x1,
+      ppart->pic_expansion_rate_x2, ppart->pic_expansion_rate_x3, t0);
+  const auto geom1 = particles::PICExpandingBoxGeometryAt(
+      ppart->pic_expansion_law, ppart->pic_expansion_rate_x1,
+      ppart->pic_expansion_rate_x2, ppart->pic_expansion_rate_x3, t1);
+  const Real r1 = geom0.a1/geom1.a1;
+  const Real r2 = geom0.a2/geom1.a2;
+  const Real r3 = geom0.a3/geom1.a3;
+  const Real rvol = r1*r2*r3;
+  const bool ideal = peos->eos_data.is_ideal;
+  const Real gamma = peos->eos_data.gamma;
+  auto &indcs = pmy_pack->pmesh->mb_indcs;
+  const int is = indcs.is, ie = indcs.ie;
+  const int js = indcs.js, je = indcs.je;
+  const int ks = indcs.ks, ke = indcs.ke;
+  const int nmb1 = pmy_pack->nmb_thispack - 1;
+  const int scalar_start = nmhd;
+  const int scalar_end = nmhd + nscalars;
+  auto u = u0;
+  auto b1 = b0.x1f;
+  auto b2 = b0.x2f;
+  auto b3 = b0.x3f;
+
+  par_for("pic_expanding_box_u", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    const Real den0 = u(m, IDN, k, j, i);
+    const Real mx0 = u(m, IM1, k, j, i);
+    const Real my0 = u(m, IM2, k, j, i);
+    const Real mz0 = u(m, IM3, k, j, i);
+    const Real den1 = rvol*den0;
+    const Real mx1 = rvol*r1*mx0;
+    const Real my1 = rvol*r2*my0;
+    const Real mz1 = rvol*r3*mz0;
+    if (ideal) {
+      const Real bx = 0.5*(b1(m, k, j, i) + b1(m, k, j, i+1));
+      const Real by = 0.5*(b2(m, k, j, i) + b2(m, k, j+1, i));
+      const Real bz = 0.5*(b3(m, k, j, i) + b3(m, k+1, j, i));
+      const Real ekin0 = 0.5*(mx0*mx0 + my0*my0 + mz0*mz0)/den0;
+      const Real emag0 = 0.5*(bx*bx*geom0.inv_area1*geom0.inv_area1 +
+                              by*by*geom0.inv_area2*geom0.inv_area2 +
+                              bz*bz*geom0.inv_area3*geom0.inv_area3);
+      const Real etherm0 = u(m, IEN, k, j, i) - ekin0 - emag0;
+      const Real ekin1 = 0.5*(mx1*mx1 + my1*my1 + mz1*mz1)/den1;
+      const Real emag1 = 0.5*(bx*bx*geom1.inv_area1*geom1.inv_area1 +
+                              by*by*geom1.inv_area2*geom1.inv_area2 +
+                              bz*bz*geom1.inv_area3*geom1.inv_area3);
+      u(m, IEN, k, j, i) = pow(rvol, gamma)*etherm0 + ekin1 + emag1;
+    }
+    u(m, IDN, k, j, i) = den1;
+    u(m, IM1, k, j, i) = mx1;
+    u(m, IM2, k, j, i) = my1;
+    u(m, IM3, k, j, i) = mz1;
+    for (int n = scalar_start; n < scalar_end; ++n) {
+      u(m, n, k, j, i) *= rvol;
+    }
+  });
+  return TaskStatus::complete;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn TaskStatus MHD::ApplyPICExpandingBoxFeedback
+//! \brief Apply qualified feedback after mapping gas state to the final physical frame.
+
+TaskStatus MHD::ApplyPICExpandingBoxFeedback(Driver *pdrive, int stage) {
+  auto *ppart = pmy_pack->ppart;
+  if ((ppart == nullptr) || !ppart->UsesExpandingBox() ||
+      !ppart->couple_moments_to_mhd || (stage != pdrive->nexp_stages)) {
+    return TaskStatus::complete;
+  }
+  const bool add_mom = ppart->couple_moments_momentum_to_mhd;
+  const bool add_eng = ppart->couple_moments_energy_to_mhd;
+  if (!(add_mom || add_eng)) return TaskStatus::complete;
+
+  const Real dt = pmy_pack->pmesh->dt;
+  const Real mom_coef = ppart->couple_moments_momentum_coeff;
+  const Real eng_coef = ppart->couple_moments_energy_coeff;
+  const bool use_deltaf = ppart->UsesDeltaF();
+  const auto geom = particles::PICExpandingBoxGeometryAt(
+      ppart->pic_expansion_law, ppart->pic_expansion_rate_x1,
+      ppart->pic_expansion_rate_x2, ppart->pic_expansion_rate_x3,
+      pmy_pack->pmesh->time + dt);
+  const Real background_rho =
+      geom.inv_a1*geom.inv_a2*geom.inv_a3*ppart->pic_deltaf_background_rho;
+  auto &indcs = pmy_pack->pmesh->mb_indcs;
+  const int is = indcs.is, ie = indcs.ie;
+  const int js = indcs.js, je = indcs.je;
+  const int ks = indcs.ks, ke = indcs.ke;
+  const int nmb1 = pmy_pack->nmb_thispack - 1;
+  auto mom = ppart->moments;
+  auto u = u0;
+  auto b1 = b0.x1f;
+  auto b2 = b0.x2f;
+  auto b3 = b0.x3f;
+
+  par_for("prtcl_expanding_box_feedback", DevExeSpace(), 0, nmb1,
+          ks, ke, js, je, is, ie,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    if (use_deltaf) {
+      const Real den = u(m, IDN, k, j, i);
+      const Real vx = u(m, IM1, k, j, i)/den;
+      const Real vy = u(m, IM2, k, j, i)/den;
+      const Real vz = u(m, IM3, k, j, i)/den;
+      const Real bx = static_cast<Real>(0.5)*
+          (b1(m, k, j, i) + b1(m, k, j, i+1))*geom.inv_area1;
+      const Real by = static_cast<Real>(0.5)*
+          (b2(m, k, j, i) + b2(m, k, j+1, i))*geom.inv_area2;
+      const Real bz = static_cast<Real>(0.5)*
+          (b3(m, k, j, i) + b3(m, k+1, j, i))*geom.inv_area3;
+      const Real cex = -(vy*bz - vz*by);
+      const Real cey = -(vz*bx - vx*bz);
+      const Real cez = -(vx*by - vy*bx);
+      const Real rho = background_rho +
+          mom(m, particles::Particles::IMOM_RHO, k, j, i);
+      const Real jx = mom(m, particles::Particles::IMOM_JX, k, j, i);
+      const Real jy = mom(m, particles::Particles::IMOM_JY, k, j, i);
+      const Real jz = mom(m, particles::Particles::IMOM_JZ, k, j, i);
+      if (add_mom) {
+        u(m, IM1, k, j, i) -= dt*mom_coef*(rho*cex + jy*bz - jz*by);
+        u(m, IM2, k, j, i) -= dt*mom_coef*(rho*cey + jz*bx - jx*bz);
+        u(m, IM3, k, j, i) -= dt*mom_coef*(rho*cez + jx*by - jy*bx);
+      }
+      if (add_eng) {
+        u(m, IEN, k, j, i) -= dt*eng_coef*(jx*cex + jy*cey + jz*cez);
+      }
+    } else {
+      if (add_mom) {
+        u(m, IM1, k, j, i) -= dt*mom_coef*
+                              mom(m, particles::Particles::IMOM_DPXDT, k, j, i);
+        u(m, IM2, k, j, i) -= dt*mom_coef*
+                              mom(m, particles::Particles::IMOM_DPYDT, k, j, i);
+        u(m, IM3, k, j, i) -= dt*mom_coef*
+                              mom(m, particles::Particles::IMOM_DPZDT, k, j, i);
+      }
+      if (add_eng) {
+        u(m, IEN, k, j, i) -= dt*eng_coef*
+                              mom(m, particles::Particles::IMOM_DEDT, k, j, i);
+      }
+    }
+  });
+  return TaskStatus::complete;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn TaskStatus MHD::ApplyPICExpandingBoxB
+//! \brief Keep raw face fields as divergence-preserving comoving magnetic fluxes.
+
+TaskStatus MHD::ApplyPICExpandingBoxB(Driver *pdrive, int stage) {
   return TaskStatus::complete;
 }
 
@@ -452,7 +774,7 @@ TaskStatus MHD::EFieldSrc(Driver *pdrive, int stage) {
 
   // PR2: add deposited particle current to edge-centered electric fields.
   auto *ppart = pmy_pack->ppart;
-  if ((ppart != nullptr) && ppart->couple_moments_to_mhd) {
+  if ((ppart != nullptr) && ppart->AddsCRCurrentToCT()) {
     auto &indcs = pmy_pack->pmesh->mb_indcs;
     int is = indcs.is, ie = indcs.ie;
     int js = indcs.js, je = indcs.je;
@@ -579,7 +901,7 @@ TaskStatus MHD::EFieldSrc(Driver *pdrive, int stage) {
         ((ppart->pusher == ParticlesPusher::boris_lin) ||
          (ppart->pusher == ParticlesPusher::boris_tsc)) &&
         (ppart->pic_feedback_mode == PICFeedbackMode::coupled);
-    if (add_mom || add_eng) {
+    if ((add_mom || add_eng) && !ppart->UsesExpandingBox()) {
       if (add_eng && (nmhd <= IEN)) {
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                   << std::endl
@@ -596,14 +918,52 @@ TaskStatus MHD::EFieldSrc(Driver *pdrive, int stage) {
       int nmb1 = pmy_pack->nmb_thispack - 1;
       const Real mom_coef = ppart->couple_moments_momentum_coeff;
       const Real eng_coef = ppart->couple_moments_energy_coeff;
+      const bool use_deltaf = ppart->UsesDeltaF();
+      Real background_density_scale = 1.0;
+      if (ppart->UsesExpandingBox()) {
+        const auto geom = particles::PICExpandingBoxGeometryAt(
+            ppart->pic_expansion_law, ppart->pic_expansion_rate_x1,
+            ppart->pic_expansion_rate_x2, ppart->pic_expansion_rate_x3,
+            pmy_pack->pmesh->time + pmy_pack->pmesh->dt);
+        background_density_scale = geom.inv_a1*geom.inv_a2*geom.inv_a3;
+      }
+      const Real background_rho =
+          background_density_scale*ppart->pic_deltaf_background_rho;
+      const Real background_jx = ppart->pic_deltaf_background_jx;
+      const Real background_jy = ppart->pic_deltaf_background_jy;
+      const Real background_jz = ppart->pic_deltaf_background_jz;
       auto mom = ppart->moments;
       auto bcc = bcc0;
+      auto w = w0;
       auto u = u0;
 
       par_for("prtcl_fluid_feedback_src_efield", DevExeSpace(), 0, nmb1,
               ks, ke, js, je, is, ie,
       KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
-        if (use_delta_feedback) {
+        if (use_deltaf) {
+          const Real rho = background_rho +
+              mom(m, particles::Particles::IMOM_RHO, k, j, i);
+          const Real jx = background_jx +
+              mom(m, particles::Particles::IMOM_JX, k, j, i);
+          const Real jy = background_jy +
+              mom(m, particles::Particles::IMOM_JY, k, j, i);
+          const Real jz = background_jz +
+              mom(m, particles::Particles::IMOM_JZ, k, j, i);
+          const Real bx = bcc(m, IBX, k, j, i);
+          const Real by = bcc(m, IBY, k, j, i);
+          const Real bz = bcc(m, IBZ, k, j, i);
+          const Real cex = -(w(m, IVY, k, j, i)*bz - w(m, IVZ, k, j, i)*by);
+          const Real cey = -(w(m, IVZ, k, j, i)*bx - w(m, IVX, k, j, i)*bz);
+          const Real cez = -(w(m, IVX, k, j, i)*by - w(m, IVY, k, j, i)*bx);
+          if (add_mom) {
+            u(m, IM1, k, j, i) -= beta_dt*mom_coef*(rho*cex + jy*bz - jz*by);
+            u(m, IM2, k, j, i) -= beta_dt*mom_coef*(rho*cey + jz*bx - jx*bz);
+            u(m, IM3, k, j, i) -= beta_dt*mom_coef*(rho*cez + jx*by - jy*bx);
+          }
+          if (add_eng) {
+            u(m, IEN, k, j, i) -= beta_dt*eng_coef*(jx*cex + jy*cey + jz*cez);
+          }
+        } else if (use_delta_feedback) {
           if (add_mom) {
             u(m, IM1, k, j, i) -= beta_dt*mom_coef*
                                   mom(m, particles::Particles::IMOM_DPXDT, k, j, i);
@@ -640,6 +1000,36 @@ TaskStatus MHD::EFieldSrc(Driver *pdrive, int stage) {
         }
       });
     }
+  }
+
+  if ((ppart != nullptr) && ppart->UsesExpandingBox()) {
+    const auto geom = particles::PICExpandingBoxGeometryAt(
+        ppart->pic_expansion_law, ppart->pic_expansion_rate_x1,
+        ppart->pic_expansion_rate_x2, ppart->pic_expansion_rate_x3,
+        pmy_pack->pmesh->time);
+    auto &indcs = pmy_pack->pmesh->mb_indcs;
+    const int is = indcs.is, ie = indcs.ie;
+    const int js = indcs.js, je = indcs.je;
+    const int ks = indcs.ks, ke = indcs.ke;
+    const int nmb1 = pmy_pack->nmb_thispack - 1;
+    auto e1 = efld.x1e;
+    auto e2 = efld.x2e;
+    auto e3 = efld.x3e;
+    par_for("pic_expanding_box_emf1", DevExeSpace(), 0, nmb1, ks, ke+1,
+            js, je+1, is, ie,
+    KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+      e1(m, k, j, i) *= geom.a1;
+    });
+    par_for("pic_expanding_box_emf2", DevExeSpace(), 0, nmb1, ks, ke+1,
+            js, je, is, ie+1,
+    KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+      e2(m, k, j, i) *= geom.a2;
+    });
+    par_for("pic_expanding_box_emf3", DevExeSpace(), 0, nmb1, ks, ke,
+            js, je+1, is, ie+1,
+    KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+      e3(m, k, j, i) *= geom.a3;
+    });
   }
 
   return TaskStatus::complete;
@@ -795,7 +1185,15 @@ TaskStatus MHD::ConToPrim(Driver *pdrive, int stage) {
   int n1m1 = indcs.nx1 + 2*ng - 1;
   int n2m1 = (indcs.nx2 > 1)? (indcs.nx2 + 2*ng - 1) : 0;
   int n3m1 = (indcs.nx3 > 1)? (indcs.nx3 + 2*ng - 1) : 0;
-  peos->ConsToPrim(u0, b0, w0, bcc0, false, 0, n1m1, 0, n2m1, 0, n3m1);
+  auto *ppart = pmy_pack->ppart;
+  const bool expanding_box = ((ppart != nullptr) && ppart->UsesExpandingBox());
+  Real state_time = pmy_pack->pmesh->time;
+  if (expanding_box && (stage == pdrive->nexp_stages)) {
+    state_time += pmy_pack->pmesh->dt;
+  }
+  if (expanding_box) RefreshPICExpandingBoxPhysicalB(state_time);
+  const DvceFaceFld4D<Real> &bfc = expanding_box ? bphys : b0;
+  peos->ConsToPrim(u0, bfc, w0, bcc0, false, 0, n1m1, 0, n2m1, 0, n3m1);
   return TaskStatus::complete;
 }
 

@@ -48,6 +48,16 @@ TaskStatus MHD::RKUpdate(Driver *pdriver, int stage) {
   auto flx2 = uflx.x2f;
   auto flx3 = uflx.x3f;
   auto &mbsize = pmy_pack->pmb->mb_size;
+  Real inv_a1 = 1.0, inv_a2 = 1.0, inv_a3 = 1.0;
+  if ((ppart != nullptr) && ppart->UsesExpandingBox()) {
+    const auto geom = particles::PICExpandingBoxGeometryAt(
+        ppart->pic_expansion_law, ppart->pic_expansion_rate_x1,
+        ppart->pic_expansion_rate_x2, ppart->pic_expansion_rate_x3,
+        pmy_pack->pmesh->time);
+    inv_a1 = geom.inv_a1;
+    inv_a2 = geom.inv_a2;
+    inv_a3 = geom.inv_a3;
+  }
 
   // hierarchical parallel loop that updates conserved variables to intermediate step
   // using weights and fractional time step appropriate to stages of time-integrator used
@@ -61,7 +71,8 @@ TaskStatus MHD::RKUpdate(Driver *pdriver, int stage) {
 
     // compute dF1/dx1
     par_for_inner(member, is, ie, [&](const int i) {
-      divf(i) = (flx1(m,n,k,j,i+1) - flx1(m,n,k,j,i))/mbsize.d_view(m).dx1;
+      divf(i) = inv_a1*(flx1(m,n,k,j,i+1) - flx1(m,n,k,j,i))/
+                mbsize.d_view(m).dx1;
     });
     member.team_barrier();
 
@@ -69,7 +80,8 @@ TaskStatus MHD::RKUpdate(Driver *pdriver, int stage) {
     // Fluxes must be summed in pairs to symmetrize round-off error in each dir
     if (multi_d) {
       par_for_inner(member, is, ie, [&](const int i) {
-        divf(i) += (flx2(m,n,k,j+1,i) - flx2(m,n,k,j,i))/mbsize.d_view(m).dx2;
+        divf(i) += inv_a2*(flx2(m,n,k,j+1,i) - flx2(m,n,k,j,i))/
+                   mbsize.d_view(m).dx2;
       });
       member.team_barrier();
     }
@@ -78,7 +90,8 @@ TaskStatus MHD::RKUpdate(Driver *pdriver, int stage) {
     // Fluxes must be summed in pairs to symmetrize round-off error in each dir
     if (three_d) {
       par_for_inner(member, is, ie, [&](const int i) {
-        divf(i) += (flx3(m,n,k+1,j,i) - flx3(m,n,k,j,i))/mbsize.d_view(m).dx3;
+        divf(i) += inv_a3*(flx3(m,n,k+1,j,i) - flx3(m,n,k,j,i))/
+                   mbsize.d_view(m).dx3;
       });
       member.team_barrier();
     }

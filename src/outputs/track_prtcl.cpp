@@ -64,6 +64,9 @@ void TrackedParticleOutput::LoadOutputData(Mesh *pm) {
   auto &pi = pm->pmb_pack->ppart->prtcl_idata;
   int ntrack_ = ntrack;
   int ntrack_thisrank_ = ntrack_thisrank;
+  const bool momentum_state =
+      pm->pmb_pack->ppart->UsesRelativisticCRState();
+  const Real light_speed = pm->pmb_pack->ppart->pic_cr_light_speed;
 
   // Create device-side counters
   Kokkos::View<int> d_counter("counter");
@@ -80,9 +83,11 @@ void TrackedParticleOutput::LoadOutputData(Mesh *pm) {
         tracked_prtcl.d_view(index).x   = pr(IPX,p);
         tracked_prtcl.d_view(index).y   = pr(IPY,p);
         tracked_prtcl.d_view(index).z   = pr(IPZ,p);
-        tracked_prtcl.d_view(index).vx  = pr(IPVX,p);
-        tracked_prtcl.d_view(index).vy  = pr(IPVY,p);
-        tracked_prtcl.d_view(index).vz  = pr(IPVZ,p);
+        particles::CRVelocityFromState(momentum_state, light_speed,
+                                       pr(IPVX,p), pr(IPVY,p), pr(IPVZ,p),
+                                       tracked_prtcl.d_view(index).vx,
+                                       tracked_prtcl.d_view(index).vy,
+                                       tracked_prtcl.d_view(index).vz);
       } else {
         Kokkos::atomic_fetch_add(&d_overflow(),1);
       }
@@ -139,7 +144,9 @@ void TrackedParticleOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     msg << std::endl << "# AthenaK tracked particle data at time= " << pm->time
         << "  nranks= " << global_variable::nranks
         << "  cycle=" << pm->ncycle
-        << "  ntracked_prtcls=" << ntrack << std::endl;
+        << "  ntracked_prtcls=" << ntrack
+        << "  row_index=ptag"
+        << "  columns=x,y,z,vx,vy,vz" << std::endl;
     FILE *pfile;
     if ((pfile = std::fopen(fname.c_str(),"a")) == nullptr) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__

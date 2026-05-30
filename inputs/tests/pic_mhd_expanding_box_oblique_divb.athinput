@@ -1,0 +1,104 @@
+# AthenaXXX input file for oblique expanding-box magnetic-flux storage checks
+
+<comment>
+problem   = PIC expanding-box oblique divergence-preserving magnetic flux oracle
+
+<job>
+basename  = pic_mhd_expanding_box_oblique_divb
+
+<mesh>
+nghost    = 2
+nx1       = 16
+x1min     = 0.0
+x1max     = 1.0
+ix1_bc    = periodic
+ox1_bc    = periodic
+
+nx2       = 16
+x2min     = 0.0
+x2max     = 1.0
+ix2_bc    = periodic
+ox2_bc    = periodic
+
+nx3       = 16
+x3min     = 0.0
+x3max     = 1.0
+ix3_bc    = periodic
+ox3_bc    = periodic
+
+<meshblock>
+nx1       = 16
+nx2       = 16
+nx3       = 16
+
+<time>
+evolution  = dynamic
+integrator = rk2
+cfl_number = 0.1
+nlim       = 1
+tlim       = 1.0
+ndiag      = 1
+
+<mhd>
+eos         = ideal
+reconstruct = plm
+rsolver     = llf
+gamma       = 1.66666666667
+
+<particles>
+particle_type           = cosmic_ray
+ppc                     = 0.0
+pusher                  = boris_tsc
+nspecies                = 1
+cr_distribution         = center
+deposit_moments         = false
+couple_moments_to_mhd   = false
+cr_vx0                  = 0.0
+cr_vy0                  = 0.0
+cr_vz0                  = 0.0
+pic_physical_mode       = paper_test_particle
+pic_background_mode     = passive_mhd
+pic_feedback_mode       = test_particle
+pic_interp_scheme       = tsc
+pic_cr_light_speed      = 3.0
+pic_cr_initial_state    = momentum
+pic_cr_hall_mode        = off
+pic_max_cell_cross      = 2
+pic_theta_max           = 0.3
+pic_deltaf_mode         = off
+pic_sort_interval       = 0
+pic_intermediate_arrays = auto
+pic_expanding_box_mode  = on
+pic_expansion_law       = linear
+pic_expansion_rate_x1   = 0.05
+pic_expansion_rate_x2   = 0.10
+pic_expansion_rate_x3   = 0.15
+
+<species0>
+mass   = 1.0
+charge = 1.0
+
+<problem>
+pgen_name   = cpaw
+b_par       = 1.0
+b_perp      = 0.1
+pres        = 0.1
+v_par       = 0.0
+right_polar = true
+along_x1    = false
+along_x2    = false
+along_x3    = false
+
+<output1>
+file_type   = bin
+variable    = mhd_bcc
+id          = mhd_bcc
+dcycle      = 1
+ghost_zones = false
+
+<output2>
+file_type   = bin
+variable    = mhd_divb
+id          = mhd_divb
+dcycle      = 1
+ghost_zones = false

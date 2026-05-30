@@ -76,6 +76,9 @@ Historical data can also be captured via `<output*>` blocks with `file_type = hs
 | `rst` | Restart checkpoints | `basename.NNNNN.rst` |
 
 For parallel I/O, set `single_file_per_rank = true` inside the output block.
+Restart checkpoints are published with completion markers and one root
+manifest. Keep those sidecars with the `.rst` payloads; standalone payloads and
+`.partial` files are intentionally rejected.
 
 ## Performance Tips
 
@@ -90,6 +93,6 @@ For parallel I/O, set `single_file_per_rank = true` inside the output block.
 | CFL timestep becomes tiny | Lower `time/cfl_number` or refine the mesh to resolve steep gradients |
 | Out-of-memory errors | Reduce MeshBlock size (`mesh/nx*`), use more MPI ranks, or decrease output frequency |
 | NaNs in solution | Check initial conditions, equation-of-state parameters, and try a more diffusive reconstruction/solver |
-| Cannot open restart | Ensure the restart build matches the original configuration (MPI count, physics modules). Use `./build/src/athena -n -r file.rst` to validate |
+| Cannot open restart | Ensure the restart build matches the original configuration (MPI count, physics modules), and keep the root manifest and completion markers with every payload. Use `./build/src/athena -n -r file.rst` to validate |
 
 For additional diagnostics, rerun with `-v 2` (verbose logging) or enable Kokkos profiling (`export KOKKOS_PROFILE_LIBRARY=...`).

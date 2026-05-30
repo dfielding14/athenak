@@ -99,20 +99,64 @@ Format rules are enforced by `src/parameter_input.cpp`:
     `speciesN/vx0`, `speciesN/vy0`, `speciesN/vz0` (fallback to global
     `particles/cr_v*0` when omitted).
 - Staged PIC runtime-control overrides (parse/guard stage):
+  - `particles/pic_physical_mode = engineering|paper_test_particle|paper_mhd_pic|
+    extended_mhd_pic`; explicit paper/extension modes store CR `p/m`
   - `particles/pic_background_mode = coupled|passive_mhd|no_mhd`
   - `particles/pic_feedback_mode = coupled|test_particle`
   - `particles/pic_interp_scheme = tsc`
-  - `particles/pic_cr_light_speed = 1.0` only; non-default reduced-speed
-    values are reserved and rejected
+  - `particles/pic_cr_light_speed > 0` selects the artificial CR light speed in
+    momentum-state modes; `particles/pic_cr_initial_state = velocity|momentum`
+    controls initializer interpretation
+  - `particles/pic_cr_hall_mode = off|current_to_ct_experimental`
+  - `particles/pic_wave_damping_mode = off|ion_neutral_friction` with
+    non-negative `particles/pic_ion_neutral_collision_rate`
   - `particles/pic_max_cell_cross` (bounded by the smallest active MeshBlock
     dimension), `particles/pic_theta_max`
-  - `particles/pic_deltaf_mode = off|on` (with
-    `particles/pic_deltaf_f0 = kappa_iso|uniform_quiet`)
+  - `particles/pic_deltaf_mode = off|quiet_start|on|physical` (with
+    `particles/pic_deltaf_f0 = uniform|uniform_quiet|kappa_iso|kappa_drift|
+    kappa_aniso`)
+  - `particles/pic_deltaf_adapt_mode =
+    off|global_bikappa_moments_experimental` with non-negative
+    `particles/pic_deltaf_adapt_interval`
   - `particles/pic_sort_interval`
   - `particles/pic_random_seed` for deterministic random particle placement
   - `particles/pic_intermediate_arrays = auto|off`
   - `particles/pic_expanding_box_mode = off|on`
+  - `particles/pic_expansion_law = linear|reciprocal_linear|exponential`
   - `particles/pic_expansion_rate_x1/x2/x3` (require expanding-box mode on)
+- `inputs/tests/pic_mhd_expanding_box_uniform.athinput`
+  - Zero-particle passive-MHD carrier used to verify the uniform expanding-box
+    analytical invariants for density, velocity, pressure/internal energy,
+    total energy, magnetic-field components, and built-in physical-volume MHD
+    history integrals.
+- `inputs/tests/pic_mhd_expanding_box_adaptive_damping_smoke.athinput`
+  - Admitted cell-centered adaptive physical delta-f source smoke combining
+    active MHD, anisotropic expansion, a nonzero analytic background density,
+    reduced static-neutral damping, and built-in MHD history output. It checks
+    endpoint source normalization and ordering, not opposite-impulse
+    conservation or CRPAI transport calibration.
+- `inputs/tests/pic_extended_hall_ct_smoke.athinput`
+  - Explicit `extended_mhd_pic` one-cycle manufactured-source carrier used to
+    verify that the experimental Hall CT increment is nonzero and odd in
+    `particles/couple_j_to_efield_coeff`. It is not Hall Bell qualification.
+- `inputs/tests/pic_ion_neutral_friction_smoke.athinput`
+  - Explicit `extended_mhd_pic` manufactured-source carrier used to verify the
+    exact reduced static-neutral transverse momentum factor and energy sink.
+    It is not ion-neutral-damped CRSI qualification.
+- `inputs/tests/pic_adaptive_deltaf_smoke.athinput`
+  - Explicit `extended_mhd_pic` two-species expanding-box carrier used to
+    verify the adaptive global bi-kappa `xi`/`p0` fit, restart state, and
+    parser guards. It is not CRPAI transport calibration.
+- `inputs/tests/pic_q016_particle_provenance.athinput`
+  - Bounded serial-host parallel-shock carrier used to verify persistent
+    initial and shock-injected CR provenance, restart preservation, MeshBlock
+    migration, and independently reconstructed species/cohort spectra. It is
+    not a qualifying shock campaign.
+- `inputs/tests/pic_q009_repeated_amr_lifetime.athinput`
+  - Bounded serial-host repeated refine/derefine lifetime stress. The harness
+    alternates six AMR transitions through restart continuations and verifies
+    stable particle identity plus refreshed ownership. It is not MPI, HIP or
+    scientific-AMR qualification.
 - Passive-mode guard overrides used by regressions:
   - `particles/pic_background_mode = coupled|passive_mhd|no_mhd`
   - `particles/pic_feedback_mode = test_particle`
@@ -202,7 +246,8 @@ Format rules are enforced by `src/parameter_input.cpp`:
   - Restart/safety coverage deck used by
     `particles/pic_restart_safety_guards` for restart A/B equivalence across
     `no_mhd`, `passive_mhd`, and `coupled_edge_direct` runtime modes, plus
-    deterministic unsupported-combination guard checks.
+    deterministic unsupported-combination guard checks, schema-7 adaptive-state
+    reconciliation, and star-potential override rejection.
 
 ### Orszag-Tang Problem Controls Used by Shock Campaigns
 - Built-in `pgen_name=orszag_tang` now accepts optional `<problem>` knobs:

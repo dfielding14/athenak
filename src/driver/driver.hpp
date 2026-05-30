@@ -12,6 +12,8 @@
 // pgen class contains analysis routines that are run at end of execution, they can be
 // called in Finalize().
 
+#include <array>
+#include <cstdint>
 #include <ctime>
 #include <memory>
 #include <string>
@@ -59,7 +61,15 @@ class Driver {
   std::uint64_t nmb_updated_;   // running total of MB updated during run
   std::uint64_t npart_updated_; // running total of particles updated during run
   float lb_efficiency_;         // measure of how efficient was load balancing
+  std::array<double, 5> q017_task_list_time_;
+  std::array<std::uint64_t, 5> q017_task_list_calls_;
+  double q017_output_time_;
+  double q017_amr_time_;
+  std::uint64_t q017_output_calls_;
+  std::uint64_t q017_amr_calls_;
   void OutputCycleDiagnostics(Mesh *pm);
+  void OutputQ017Telemetry(Mesh *pm, double exe_time);
+  void PublishOutput(BaseTypeOutput *out, Mesh *pm, ParameterInput *pin);
   Real UpdateWallClock();
 };
 #endif // DRIVER_DRIVER_HPP_

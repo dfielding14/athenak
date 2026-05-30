@@ -20,6 +20,7 @@
 #include "globals.hpp"
 #include "parameter_input.hpp"
 #include "mesh/mesh.hpp"
+#include "coordinates/coordinates.hpp"
 #include "mhd/mhd.hpp"
 #include "bvals/bvals.hpp"
 #include "particles.hpp"
@@ -277,6 +278,14 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
     }
   }
 
+  if (particle_type == ParticleType::star && pmy_pack->punit == nullptr) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "<particles>/particle_type=star requires a <units> block."
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+
   // select pusher algorithm
   {
     std::string ppush = pin->GetString("particles","pusher");
@@ -348,9 +357,9 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
       {
         // CR payload now always carries sampled B/cE and per-step feedback deltas.
         track_displacement = pin->GetOrAddBoolean("particles","track_displacement",false);
-        nrdata = IPWT + 1;
+        nrdata = IPT_BIRTH + 1;
 
-        nidata = 3;  // PGID, PTAG, PSP (species)
+        nidata = 4;  // PGID, PTAG, PSP (species), PCRSOURCE
         break;
       }
     case ParticleType::star:
@@ -363,12 +372,36 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
       break;
   }
 
+  // A publication run selects one coherent physical model. The engineering
+  // default preserves the historical independent-toggle interface.
+  std::string pic_physical_mode_str = pin->GetOrAddString(
+      "particles", "pic_physical_mode", "engineering");
+  if (pic_physical_mode_str.compare("engineering") == 0) {
+    pic_physical_mode = PICPhysicalMode::engineering;
+  } else if (pic_physical_mode_str.compare("paper_test_particle") == 0) {
+    pic_physical_mode = PICPhysicalMode::paper_test_particle;
+  } else if (pic_physical_mode_str.compare("paper_mhd_pic") == 0) {
+    pic_physical_mode = PICPhysicalMode::paper_mhd_pic;
+  } else if (pic_physical_mode_str.compare("extended_mhd_pic") == 0) {
+    pic_physical_mode = PICPhysicalMode::extended_mhd_pic;
+  } else {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Unsupported value for <particles>/pic_physical_mode: "
+              << pic_physical_mode_str << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  const bool paper_coupled_mode =
+      (pic_physical_mode == PICPhysicalMode::paper_mhd_pic);
+
   // PR1 deposition controls
-  deposit_moments = pin->GetOrAddBoolean("particles", "deposit_moments", false);
+  deposit_moments = pin->GetOrAddBoolean("particles", "deposit_moments",
+                                         paper_coupled_mode);
   deposit_order = pin->GetOrAddInteger("particles", "deposit_order", 1);
   deposit_qscale = pin->GetOrAddReal("particles", "deposit_qscale", 1.0);
   couple_moments_to_mhd = pin->GetOrAddBoolean("particles",
-                                               "couple_moments_to_mhd", false);
+                                               "couple_moments_to_mhd",
+                                               paper_coupled_mode);
   couple_j_to_efield_coeff = pin->GetOrAddReal("particles",
                                                 "couple_j_to_efield_coeff", 1.0);
   std::string j_repr = pin->GetOrAddString("particles",
@@ -417,9 +450,9 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
     std::exit(EXIT_FAILURE);
   }
   couple_moments_momentum_to_mhd = pin->GetOrAddBoolean(
-      "particles", "couple_moments_momentum_to_mhd", false);
+      "particles", "couple_moments_momentum_to_mhd", paper_coupled_mode);
   couple_moments_energy_to_mhd = pin->GetOrAddBoolean(
-      "particles", "couple_moments_energy_to_mhd", false);
+      "particles", "couple_moments_energy_to_mhd", paper_coupled_mode);
   couple_moments_momentum_coeff = pin->GetOrAddReal(
       "particles", "couple_moments_momentum_coeff", 1.0);
   couple_moments_energy_coeff = pin->GetOrAddReal(
@@ -429,6 +462,41 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
   cr_vz0 = pin->GetOrAddReal("particles", "cr_vz0", 0.0);
 
   // Staged PR5+ PIC runtime controls (parse + validation only at this step)
+  std::string pic_cr_hall_mode_str = pin->GetOrAddString(
+      "particles", "pic_cr_hall_mode", "off");
+  if (pic_cr_hall_mode_str.compare("off") == 0) {
+    pic_cr_hall_mode = PICCRHallMode::off;
+  } else if (pic_cr_hall_mode_str.compare("current_to_ct_experimental") == 0) {
+    pic_cr_hall_mode = PICCRHallMode::current_to_ct_experimental;
+  } else {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Unsupported value for <particles>/pic_cr_hall_mode: "
+              << pic_cr_hall_mode_str << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  std::string pic_wave_damping_mode_str = pin->GetOrAddString(
+      "particles", "pic_wave_damping_mode", "off");
+  if (pic_wave_damping_mode_str.compare("off") == 0) {
+    pic_wave_damping_mode = PICWaveDampingMode::off;
+  } else if (pic_wave_damping_mode_str.compare("ion_neutral_friction") == 0) {
+    pic_wave_damping_mode = PICWaveDampingMode::ion_neutral_friction;
+  } else {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Unsupported value for <particles>/pic_wave_damping_mode: "
+              << pic_wave_damping_mode_str << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  pic_ion_neutral_collision_rate = pin->GetOrAddReal(
+      "particles", "pic_ion_neutral_collision_rate", 0.0);
+  if (pic_ion_neutral_collision_rate < 0.0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "<particles>/pic_ion_neutral_collision_rate must be >= 0"
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
   std::string pic_background_mode_str = pin->GetOrAddString(
       "particles", "pic_background_mode", "coupled");
   if (pic_background_mode_str.compare("coupled") == 0) {
@@ -492,13 +560,37 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
               << "<particles>/pic_cr_light_speed must be > 0" << std::endl;
     std::exit(EXIT_FAILURE);
   }
-  if (std::abs(pic_cr_light_speed - 1.0) >
-      64.0*std::numeric_limits<Real>::epsilon()) {
+  const char *pic_cr_initial_state_default =
+      (pic_physical_mode == PICPhysicalMode::engineering) ? "velocity" : "momentum";
+  std::string pic_cr_initial_state_str = pin->GetOrAddString(
+      "particles", "pic_cr_initial_state", pic_cr_initial_state_default);
+  if (pic_cr_initial_state_str.compare("velocity") == 0) {
+    pic_cr_initial_state = PICCRInitialState::velocity;
+  } else if (pic_cr_initial_state_str.compare("momentum") == 0) {
+    pic_cr_initial_state = PICCRInitialState::momentum;
+  } else {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
-              << "<particles>/pic_cr_light_speed is reserved for a future "
-              << "reduced-speed-of-light pusher; only the default value 1.0 "
-              << "is currently supported." << std::endl;
+              << "Unsupported value for <particles>/pic_cr_initial_state: "
+              << pic_cr_initial_state_str << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if ((pic_physical_mode == PICPhysicalMode::engineering) &&
+      (pic_cr_initial_state != PICCRInitialState::velocity)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "<particles>/pic_physical_mode=engineering requires "
+              << "<particles>/pic_cr_initial_state=velocity" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if ((pic_physical_mode == PICPhysicalMode::engineering) &&
+      (std::abs(pic_cr_light_speed - 1.0) >
+       16.0*std::numeric_limits<Real>::epsilon())) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "<particles>/pic_cr_light_speed is reserved in "
+              << "<particles>/pic_physical_mode=engineering; select a momentum-state "
+              << "physical mode to change particle mechanics" << std::endl;
     std::exit(EXIT_FAILURE);
   }
 
@@ -541,8 +633,13 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
       "particles", "pic_deltaf_mode", "off");
   if (pic_deltaf_mode_str.compare("off") == 0) {
     pic_deltaf_mode = PICDeltaFMode::off;
+  } else if (pic_deltaf_mode_str.compare("quiet_start") == 0) {
+    pic_deltaf_mode = PICDeltaFMode::quiet_start;
   } else if (pic_deltaf_mode_str.compare("on") == 0) {
-    pic_deltaf_mode = PICDeltaFMode::on;
+    pic_deltaf_mode = (pic_physical_mode == PICPhysicalMode::engineering) ?
+        PICDeltaFMode::quiet_start : PICDeltaFMode::physical;
+  } else if (pic_deltaf_mode_str.compare("physical") == 0) {
+    pic_deltaf_mode = PICDeltaFMode::physical;
   } else {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
@@ -552,21 +649,84 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
   }
 
   pic_deltaf_f0 = pin->GetOrAddString("particles", "pic_deltaf_f0", "");
-  if ((pic_deltaf_mode == PICDeltaFMode::on) && pic_deltaf_f0.empty()) {
+  if ((pic_deltaf_mode != PICDeltaFMode::off) && pic_deltaf_f0.empty()) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
-              << "<particles>/pic_deltaf_mode=on requires "
-              << "<particles>/pic_deltaf_f0 to select a staged quiet start"
+              << "<particles>/pic_deltaf_mode requires "
+              << "<particles>/pic_deltaf_f0 to select a background distribution"
               << std::endl;
     std::exit(EXIT_FAILURE);
   }
-  if ((pic_deltaf_mode == PICDeltaFMode::on) &&
-      !(pic_deltaf_f0.compare("kappa_iso") == 0 ||
-        pic_deltaf_f0.compare("uniform_quiet") == 0)) {
+  if ((pic_deltaf_mode != PICDeltaFMode::off) &&
+      !(pic_deltaf_f0.compare("uniform") == 0 ||
+        pic_deltaf_f0.compare("uniform_quiet") == 0 ||
+        pic_deltaf_f0.compare("kappa_iso") == 0 ||
+        pic_deltaf_f0.compare("kappa_drift") == 0 ||
+        pic_deltaf_f0.compare("kappa_aniso") == 0)) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
               << "Unsupported value for <particles>/pic_deltaf_f0: "
               << pic_deltaf_f0 << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if (pic_deltaf_f0.compare("kappa_iso") == 0) {
+    pic_deltaf_background = PICDeltaFBackground::kappa_iso;
+  } else if (pic_deltaf_f0.compare("kappa_drift") == 0) {
+    pic_deltaf_background = PICDeltaFBackground::kappa_drift;
+  } else if (pic_deltaf_f0.compare("kappa_aniso") == 0) {
+    pic_deltaf_background = PICDeltaFBackground::kappa_aniso;
+  } else {
+    pic_deltaf_background = PICDeltaFBackground::uniform;
+  }
+  pic_deltaf_p0 = pin->GetOrAddReal("particles", "pic_deltaf_p0", 1.0);
+  pic_deltaf_kappa = pin->GetOrAddReal("particles", "pic_deltaf_kappa", 1.25);
+  pic_deltaf_drift_x1 = pin->GetOrAddReal("particles", "pic_deltaf_drift_x1", 0.0);
+  pic_deltaf_drift_x2 = pin->GetOrAddReal("particles", "pic_deltaf_drift_x2", 0.0);
+  pic_deltaf_drift_x3 = pin->GetOrAddReal("particles", "pic_deltaf_drift_x3", 0.0);
+  pic_deltaf_aniso_x1 = pin->GetOrAddReal("particles", "pic_deltaf_aniso_x1", 1.0);
+  pic_deltaf_aniso_x2 = pin->GetOrAddReal("particles", "pic_deltaf_aniso_x2", 1.0);
+  pic_deltaf_aniso_x3 = pin->GetOrAddReal("particles", "pic_deltaf_aniso_x3", 1.0);
+  pic_deltaf_background_rho = pin->GetOrAddReal(
+      "particles", "pic_deltaf_background_rho", 0.0);
+  pic_deltaf_background_jx = pin->GetOrAddReal(
+      "particles", "pic_deltaf_background_jx", 0.0);
+  pic_deltaf_background_jy = pin->GetOrAddReal(
+      "particles", "pic_deltaf_background_jy", 0.0);
+  pic_deltaf_background_jz = pin->GetOrAddReal(
+      "particles", "pic_deltaf_background_jz", 0.0);
+  std::string pic_deltaf_adapt_mode_str = pin->GetOrAddString(
+      "particles", "pic_deltaf_adapt_mode", "off");
+  if (pic_deltaf_adapt_mode_str.compare("off") == 0) {
+    pic_deltaf_adapt_mode = PICDeltaFAdaptMode::off;
+  } else if (pic_deltaf_adapt_mode_str.compare(
+                 "global_bikappa_moments_experimental") == 0) {
+    pic_deltaf_adapt_mode =
+        PICDeltaFAdaptMode::global_bikappa_moments_experimental;
+  } else {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Unsupported value for <particles>/pic_deltaf_adapt_mode: "
+              << pic_deltaf_adapt_mode_str << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  pic_deltaf_adapt_interval = pin->GetOrAddReal(
+      "particles", "pic_deltaf_adapt_interval", 0.0);
+  if (pic_deltaf_adapt_interval < 0.0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "<particles>/pic_deltaf_adapt_interval must be >= 0"
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  pic_deltaf_adaptive_p0 = pic_deltaf_p0;
+  if (UsesDeltaF() &&
+      (pic_deltaf_p0 <= 0.0 || pic_deltaf_kappa <= 0.0 ||
+       pic_deltaf_aniso_x1 <= 0.0 || pic_deltaf_aniso_x2 <= 0.0 ||
+       pic_deltaf_aniso_x3 <= 0.0 || pic_deltaf_background_rho < 0.0)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Physical delta-f requires positive p0, kappa, anisotropy "
+              << "scales and non-negative background charge density" << std::endl;
     std::exit(EXIT_FAILURE);
   }
 
@@ -575,6 +735,16 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
               << "<particles>/pic_sort_interval must be >= 0" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+
+  pic_load_balance_cost_per_particle = pin->GetOrAddReal(
+      "particles", "pic_load_balance_cost_per_particle", 0.0);
+  if (pic_load_balance_cost_per_particle < 0.0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "<particles>/pic_load_balance_cost_per_particle must be >= 0"
+              << std::endl;
     std::exit(EXIT_FAILURE);
   }
 
@@ -614,6 +784,22 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
     std::exit(EXIT_FAILURE);
   }
 
+  std::string pic_expansion_law_str = pin->GetOrAddString(
+      "particles", "pic_expansion_law", "linear");
+  if (pic_expansion_law_str.compare("linear") == 0) {
+    pic_expansion_law = PICExpansionLaw::linear;
+  } else if (pic_expansion_law_str.compare("reciprocal_linear") == 0) {
+    pic_expansion_law = PICExpansionLaw::reciprocal_linear;
+  } else if (pic_expansion_law_str.compare("exponential") == 0) {
+    pic_expansion_law = PICExpansionLaw::exponential;
+  } else {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Unsupported value for <particles>/pic_expansion_law: "
+              << pic_expansion_law_str << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+
   pic_expansion_rate_x1 = pin->GetOrAddReal("particles", "pic_expansion_rate_x1", 0.0);
   pic_expansion_rate_x2 = pin->GetOrAddReal("particles", "pic_expansion_rate_x2", 0.0);
   pic_expansion_rate_x3 = pin->GetOrAddReal("particles", "pic_expansion_rate_x3", 0.0);
@@ -629,6 +815,143 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
               << "<particles>/pic_expansion_rate_x1/x2/x3 require "
               << "<particles>/pic_expanding_box_mode=on" << std::endl;
     std::exit(EXIT_FAILURE);
+  }
+  if (pic_expanding_box_mode == PICExpandingBoxMode::on) {
+    const Real tstart = pmy_pack->pmesh->time;
+    const Real tlim = pin->GetOrAddReal("time", "tlim", tstart);
+    const std::array<Real, 2> times = {tstart, tlim};
+    const std::array<Real, 3> rates = {
+        pic_expansion_rate_x1, pic_expansion_rate_x2, pic_expansion_rate_x3};
+    for (const Real time : times) {
+      for (const Real rate : rates) {
+        const Real scale = PICScaleFactor(pic_expansion_law, rate, time);
+        if (!std::isfinite(scale) || scale <= 0.0) {
+          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                    << std::endl
+                    << "<particles>/pic_expansion_law and rate must produce finite, "
+                    << "positive scale factors through <time>/tlim" << std::endl;
+          std::exit(EXIT_FAILURE);
+        }
+      }
+    }
+  }
+
+  if (UsesExpandingBox() && pin->DoesBlockExist("shearing_box")) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "<particles>/pic_expanding_box_mode=on does not support "
+              << "<shearing_box> or orbital advection" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  const bool uses_expanding_mhd = (UsesExpandingBox() && pin->DoesBlockExist("mhd"));
+  if (uses_expanding_mhd) {
+    auto reject_expanding_mhd = [](const char *reason) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "<particles>/pic_expanding_box_mode=on with active MHD "
+                << "does not support " << reason << std::endl;
+      std::exit(EXIT_FAILURE);
+    };
+    if (!pmy_pack->pmesh->strictly_periodic) {
+      reject_expanding_mhd("non-periodic boundaries");
+    }
+    if (pmy_pack->pmesh->multilevel) {
+      reject_expanding_mhd("SMR or AMR meshes");
+    }
+    if (pmy_pack->pcoord->is_special_relativistic ||
+        pmy_pack->pcoord->is_general_relativistic ||
+        pmy_pack->pcoord->is_dynamical_relativistic) {
+      reject_expanding_mhd("relativistic coordinate paths");
+    }
+    if (pin->GetString("mhd", "eos").compare("ideal") != 0) {
+      reject_expanding_mhd("<mhd>/eos values other than ideal");
+    }
+    if (pin->GetString("time", "evolution").compare("dynamic") != 0) {
+      reject_expanding_mhd("<time>/evolution values other than dynamic");
+    }
+    if ((particle_type != ParticleType::cosmic_ray) ||
+        ((pusher != ParticlesPusher::boris_lin) &&
+         (pusher != ParticlesPusher::boris_tsc))) {
+      reject_expanding_mhd("particle types or pushers other than cosmic-ray Boris pushers");
+    }
+    if (pin->GetReal("particles", "ppc") > 0.0) {
+      const Real tstart = pmy_pack->pmesh->time;
+      const Real tlim = pin->GetReal("time", "tlim");
+      const auto geom_start = PICExpandingBoxGeometryAt(
+          pic_expansion_law, pic_expansion_rate_x1, pic_expansion_rate_x2,
+          pic_expansion_rate_x3, tstart);
+      const auto geom_end = PICExpandingBoxGeometryAt(
+          pic_expansion_law, pic_expansion_rate_x1, pic_expansion_rate_x2,
+          pic_expansion_rate_x3, tlim);
+      if ((geom_end.a1 < geom_start.a1) || (geom_end.a2 < geom_start.a2) ||
+          (geom_end.a3 < geom_start.a3)) {
+        reject_expanding_mhd("contracting scale factors with active particles");
+      }
+    }
+    if ((pmy_pack->pmhd != nullptr) && pmy_pack->pmhd->use_fofc) {
+      reject_expanding_mhd("<mhd>/fofc=true");
+    }
+    if (pin->DoesParameterExist("mhd", "viscosity") ||
+        pin->DoesParameterExist("mhd", "ohmic_resistivity") ||
+        pin->DoesParameterExist("mhd", "conductivity") ||
+        pin->DoesParameterExist("mhd", "tdep_conductivity")) {
+      reject_expanding_mhd("MHD viscosity, resistivity, or conductivity");
+    }
+    if (pin->DoesBlockExist("hydro") || pin->DoesBlockExist("radiation") ||
+        pin->DoesBlockExist("ion-neutral") || pin->DoesBlockExist("adm") ||
+        pin->DoesBlockExist("z4c") || pin->DoesBlockExist("turb_driving") ||
+        pin->DoesBlockExist("initial_turb")) {
+      reject_expanding_mhd("coupled fluid, radiation, relativity, or turbulence blocks");
+    }
+    if (couple_moments_to_mhd &&
+        ((couple_j_to_efield_representation ==
+          CoupledCurrentRepresentation::edge_staggered) ||
+         (couple_j_deposition_mode ==
+          CoupledCurrentDepositionMode::direct_staggered))) {
+      reject_expanding_mhd("staggered or direct CR-current deposition");
+    }
+    if (UsesDeltaF() &&
+        ((pic_deltaf_background_jx != 0.0) ||
+         (pic_deltaf_background_jy != 0.0) ||
+         (pic_deltaf_background_jz != 0.0))) {
+      reject_expanding_mhd("nonzero delta-f background current");
+    }
+    const bool uses_coupled_feedback =
+        (couple_moments_to_mhd || couple_moments_momentum_to_mhd ||
+         couple_moments_energy_to_mhd);
+    const bool common_coupled_feedback =
+        (deposit_moments && couple_moments_to_mhd &&
+         couple_moments_momentum_to_mhd && couple_moments_energy_to_mhd &&
+         (pic_background_mode == PICBackgroundMode::coupled) &&
+         (pic_feedback_mode == PICFeedbackMode::coupled) &&
+         (couple_fluid_feedback_order == CoupledFluidFeedbackOrder::mhd_src_terms) &&
+         (couple_j_to_efield_representation ==
+          CoupledCurrentRepresentation::cell_centered) &&
+         (couple_j_deposition_mode == CoupledCurrentDepositionMode::cc_convert) &&
+         (pic_cr_hall_mode == PICCRHallMode::off));
+    const bool qualified_conservative_feedback =
+        (common_coupled_feedback && !UsesDeltaF());
+    const bool experimental_adaptive_deltaf_feedback =
+        (common_coupled_feedback && UsesAdaptiveDeltaF() &&
+         (pic_physical_mode == PICPhysicalMode::extended_mhd_pic));
+    const bool admitted_coupled_feedback =
+        (qualified_conservative_feedback || experimental_adaptive_deltaf_feedback);
+    if (uses_coupled_feedback && !admitted_coupled_feedback) {
+      reject_expanding_mhd("particle feedback outside the admitted cell-centered "
+                           "source splits");
+    }
+    if (UsesPICWaveDamping() && !admitted_coupled_feedback) {
+      reject_expanding_mhd("reduced ion-neutral friction without an admitted "
+                           "cell-centered source split");
+    }
+    if (pic_background_mode == PICBackgroundMode::no_mhd) {
+      reject_expanding_mhd("<particles>/pic_background_mode=no_mhd with an active "
+                           "<mhd> block");
+    }
+    if (pin->DoesParameterExist("problem", "user_hist") &&
+        pin->GetBoolean("problem", "user_hist")) {
+      reject_expanding_mhd("user-defined history callbacks");
+    }
   }
 
   if ((pic_feedback_mode == PICFeedbackMode::test_particle) &&
@@ -800,6 +1123,155 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
               << "MHD in PR2" << std::endl;
     std::exit(EXIT_FAILURE);
   }
+  if ((pic_physical_mode != PICPhysicalMode::engineering) &&
+      (particle_type != ParticleType::cosmic_ray)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "<particles>/pic_physical_mode=" << pic_physical_mode_str
+              << " requires <particles>/particle_type=cosmic_ray" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if ((pic_physical_mode != PICPhysicalMode::engineering) &&
+      (pusher != ParticlesPusher::boris_tsc)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "<particles>/pic_physical_mode=" << pic_physical_mode_str
+              << " requires <particles>/pusher=boris_tsc" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if ((pic_physical_mode != PICPhysicalMode::extended_mhd_pic) &&
+      (pic_cr_hall_mode != PICCRHallMode::off)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "<particles>/pic_cr_hall_mode=" << pic_cr_hall_mode_str
+              << " requires <particles>/pic_physical_mode=extended_mhd_pic"
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if ((pic_physical_mode != PICPhysicalMode::extended_mhd_pic) &&
+      (pic_wave_damping_mode != PICWaveDampingMode::off)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "<particles>/pic_wave_damping_mode=" << pic_wave_damping_mode_str
+              << " requires <particles>/pic_physical_mode=extended_mhd_pic"
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if ((pic_physical_mode != PICPhysicalMode::extended_mhd_pic) &&
+      UsesAdaptiveDeltaF()) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "<particles>/pic_deltaf_adapt_mode=" << pic_deltaf_adapt_mode_str
+              << " requires <particles>/pic_physical_mode=extended_mhd_pic"
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if (UsesAdaptiveDeltaF() &&
+      (!UsesDeltaF() ||
+       (pic_deltaf_background != PICDeltaFBackground::kappa_aniso) ||
+       (pic_expanding_box_mode != PICExpandingBoxMode::on) ||
+       (pic_deltaf_adapt_interval <= 0.0) ||
+       (pic_deltaf_kappa <= 1.0) ||
+       (pic_deltaf_drift_x1 != 0.0) || (pic_deltaf_drift_x2 != 0.0) ||
+       (pic_deltaf_drift_x3 != 0.0) ||
+       (pic_deltaf_aniso_x1 != 1.0) || (pic_deltaf_aniso_x2 != 1.0) ||
+       (pic_deltaf_aniso_x3 != 1.0))) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "<particles>/pic_deltaf_adapt_mode="
+              << "global_bikappa_moments_experimental requires physical "
+              << "kappa_aniso delta-f, expanding-box mode, positive adapt interval, "
+              << "kappa > 1, zero drift, and unit configured anisotropy scales"
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if ((pic_wave_damping_mode == PICWaveDampingMode::ion_neutral_friction) &&
+      (pic_ion_neutral_collision_rate <= 0.0)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "<particles>/pic_wave_damping_mode=ion_neutral_friction requires "
+              << "<particles>/pic_ion_neutral_collision_rate > 0" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if ((pic_wave_damping_mode == PICWaveDampingMode::ion_neutral_friction) &&
+      ((pic_background_mode != PICBackgroundMode::coupled) ||
+       !(pin->DoesBlockExist("mhd")))) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "<particles>/pic_wave_damping_mode=ion_neutral_friction requires "
+              << "an active coupled <mhd> background" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if (pic_physical_mode == PICPhysicalMode::paper_test_particle) {
+    if ((pic_feedback_mode != PICFeedbackMode::test_particle) ||
+        couple_moments_to_mhd || couple_moments_momentum_to_mhd ||
+        couple_moments_energy_to_mhd) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "<particles>/pic_physical_mode=paper_test_particle requires "
+                << "test-particle feedback with all particle-to-MHD coupling "
+                << "toggles disabled" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+  }
+  if (pic_physical_mode == PICPhysicalMode::paper_mhd_pic) {
+    if ((pic_background_mode != PICBackgroundMode::coupled) ||
+        (pic_feedback_mode != PICFeedbackMode::coupled) ||
+        !deposit_moments || !couple_moments_to_mhd ||
+        !couple_moments_momentum_to_mhd || !couple_moments_energy_to_mhd) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "<particles>/pic_physical_mode=paper_mhd_pic requires coupled "
+                << "MHD background, coupled feedback, moment deposition, and "
+                << "conservative momentum and energy feedback" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    if ((couple_j_to_efield_representation ==
+         CoupledCurrentRepresentation::edge_staggered) ||
+        (couple_j_deposition_mode ==
+         CoupledCurrentDepositionMode::direct_staggered)) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "<particles>/pic_physical_mode=paper_mhd_pic rejects "
+                << "direct-current CT induction options; use the ideal-MHD "
+                << "paper induction path" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+  }
+  if ((pic_cr_hall_mode == PICCRHallMode::current_to_ct_experimental) &&
+      !couple_moments_to_mhd) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "<particles>/pic_cr_hall_mode=current_to_ct_experimental "
+              << "requires <particles>/couple_moments_to_mhd=true" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+
+  if ((global_variable::my_rank == 0) &&
+      (particle_type == ParticleType::cosmic_ray)) {
+    const char *state_name = UsesRelativisticCRState() ? "momentum_p_over_m" :
+                                                        "velocity";
+    const char *induction_name = AddsCRCurrentToCT() ? "cr_current_to_ct" :
+                                                       "ideal_mhd_only";
+    std::cout << "PIC runtime model: physical_mode=" << pic_physical_mode_str
+              << " state=" << state_name
+              << " C=" << pic_cr_light_speed
+              << " background=" << pic_background_mode_str
+              << " feedback=" << pic_feedback_mode_str
+              << " induction=" << induction_name
+              << " deposition=tsc"
+              << " deltaf=" << pic_deltaf_mode_str
+              << " deltaf_adapt=" << pic_deltaf_adapt_mode_str
+              << " deltaf_adapt_interval=" << pic_deltaf_adapt_interval
+              << " expanding_box=" << pic_expanding_box_mode_str
+              << " expansion_law=" << pic_expansion_law_str
+              << " wave_damping=" << pic_wave_damping_mode_str
+              << " nu_in=" << pic_ion_neutral_collision_rate
+              << " lb_cost_per_particle=" << pic_load_balance_cost_per_particle
+              << " max_cell_cross=" << pic_max_cell_cross
+              << " theta_max=" << pic_theta_max
+              << " restart_schema=" << PIC_RESTART_SCHEMA_VERSION << std::endl;
+  }
 
   Kokkos::realloc(prtcl_rdata, nrdata, nprtcl_thispack);
   Kokkos::realloc(prtcl_idata, nidata, nprtcl_thispack);
@@ -895,6 +1367,45 @@ Particles::~Particles() {
 }
 
 //----------------------------------------------------------------------------------------
+//! \fn void Particles::UpdateAfterAMR
+//! \brief Refresh the retained pack pointer and validate particle-owned AMR capacity.
+
+void Particles::UpdateAfterAMR(MeshBlockPack *new_pp) {
+  pmy_pack = new_pp;
+  const int nmb = pmy_pack->nmb_thispack;
+  auto require_meshblock_capacity = [nmb](const int allocated, const char *name) {
+    if (allocated < nmb) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "Particle AMR refresh found insufficient " << name
+                << " MeshBlock capacity: allocated=" << allocated
+                << " required=" << nmb << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+  };
+
+  if (deposit_moments) {
+    require_meshblock_capacity(moments.extent_int(0), "moment");
+    if (pmy_pack->pmesh->multilevel) {
+      require_meshblock_capacity(coarse_moments.extent_int(0), "coarse-moment");
+    }
+    if (x1_old.extent_int(0) < nprtcl_thispack) {
+      Kokkos::resize(x1_old, nprtcl_thispack);
+      Kokkos::resize(x2_old, nprtcl_thispack);
+      Kokkos::resize(x3_old, nprtcl_thispack);
+    }
+    if (j_edge_x1e.extent_int(0) > 0) {
+      require_meshblock_capacity(j_edge_x1e.extent_int(0), "edge-current");
+    }
+  }
+  if (pic_background_mode == PICBackgroundMode::no_mhd) {
+    require_meshblock_capacity(pic_no_mhd_bcc0.extent_int(0), "no-MHD-field");
+  }
+  // Boundary helpers retain this Particles object or the stable MeshBlockPack pointer.
+  // Their kernels resolve the reconstructed MeshBlock and neighbor state dynamically.
+}
+
+//----------------------------------------------------------------------------------------
 // InitializeCosmicRays()
 // Initializes cosmic ray particles with species support
 
@@ -935,6 +1446,18 @@ void Particles::InitializeCosmicRays(ParameterInput *pin) {
                 << "<" << block << ">/mass must be > 0" << std::endl;
       std::exit(EXIT_FAILURE);
     }
+    if (UsesRelativisticCRState() &&
+        (pic_cr_initial_state == PICCRInitialState::velocity)) {
+      const Real v2 = h_vx0(s)*h_vx0(s) + h_vy0(s)*h_vy0(s) + h_vz0(s)*h_vz0(s);
+      if (v2 >= pic_cr_light_speed*pic_cr_light_speed) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl
+                  << "<" << block << ">/vx0,vy0,vz0 must define |v| < "
+                  << "<particles>/pic_cr_light_speed when "
+                  << "<particles>/pic_cr_initial_state=velocity" << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+    }
   }
 
   Kokkos::deep_copy(species_mass, h_mass);
@@ -963,7 +1486,7 @@ void Particles::InitializeCosmicRays(ParameterInput *pin) {
     std::exit(EXIT_FAILURE);
   }
   const bool deltaf_quiet_start =
-      (random_dist && pic_deltaf_mode == PICDeltaFMode::on);
+      (random_dist && pic_deltaf_mode != PICDeltaFMode::off);
   const bool track_disp_local = track_displacement;  // avoid capturing 'this'
   const int nx1_local = indcs.nx1;                   // avoid capturing host refs
   const int nx2_local = indcs.nx2;
@@ -998,6 +1521,21 @@ void Particles::InitializeCosmicRays(ParameterInput *pin) {
   auto species_vz0_local = species_vz0;
   const bool deltaf_quiet_start_local = deltaf_quiet_start;
   const int pic_random_seed_local = pic_random_seed;
+  const bool momentum_state_local = UsesRelativisticCRState();
+  const bool initialize_from_velocity =
+      (pic_cr_initial_state == PICCRInitialState::velocity);
+  const Real light_speed_local = pic_cr_light_speed;
+  const PICDeltaFBackground deltaf_background_local = pic_deltaf_background;
+  const bool adaptive_deltaf_local = UsesAdaptiveDeltaF();
+  const Real deltaf_p0_local = pic_deltaf_p0;
+  const Real deltaf_kappa_local = pic_deltaf_kappa;
+  const Real deltaf_drift_x1_local = pic_deltaf_drift_x1;
+  const Real deltaf_drift_x2_local = pic_deltaf_drift_x2;
+  const Real deltaf_drift_x3_local = pic_deltaf_drift_x3;
+  const Real deltaf_aniso_x1_local = pic_deltaf_aniso_x1;
+  const Real deltaf_aniso_x2_local = pic_deltaf_aniso_x2;
+  const Real deltaf_aniso_x3_local = pic_deltaf_aniso_x3;
+  const Real birth_time_local = pmy_pack->pmesh->time;
   // Make sure geometry is available on device
   size.template sync<DevExeSpace>();
   auto size_view = size;
@@ -1023,6 +1561,7 @@ void Particles::InitializeCosmicRays(ParameterInput *pin) {
     pi(PGID,p) = gid;
     pi(PTAG,p) = p;
     pi(PSP,p) = pinmb % nspecies_local;  // Round-robin species assignment per block
+    pi(PCRSOURCE,p) = static_cast<int>(CRParticleSource::initial);
 
     // Choose position within the mesh block
     Real rx = 0.5, ry = 0.5, rz = 0.5;
@@ -1103,9 +1642,19 @@ void Particles::InitializeCosmicRays(ParameterInput *pin) {
 
     // Set species-dependent initialization values
     int species = pi(PSP,p);
-    pr(IPVX,p) = species_vx0_local(species);
-    pr(IPVY,p) = species_vy0_local(species);
-    pr(IPVZ,p) = species_vz0_local(species);
+    Real state_x = species_vx0_local(species);
+    Real state_y = species_vy0_local(species);
+    Real state_z = species_vz0_local(species);
+    if (momentum_state_local && initialize_from_velocity) {
+      const Real v2 = state_x*state_x + state_y*state_y + state_z*state_z;
+      const Real gamma = 1.0/sqrt(1.0 - v2/(light_speed_local*light_speed_local));
+      state_x *= gamma;
+      state_y *= gamma;
+      state_z *= gamma;
+    }
+    pr(IPVX,p) = state_x;
+    pr(IPVY,p) = state_y;
+    pr(IPVZ,p) = state_z;
     pr(IPM,p) = species_charge_local(species) / species_mass_local(species);
 
     // Initialize B-field components to zero
@@ -1123,6 +1672,19 @@ void Particles::InitializeCosmicRays(ParameterInput *pin) {
     pr(IPWT,p) = (size_view.d_view(m).dx1*
                   size_view.d_view(m).dx2*
                   size_view.d_view(m).dx3)/root_cell_vol;
+    if (adaptive_deltaf_local) {
+      pr(IPF0,p) = PICAdaptiveDeltaFBackgroundValue(
+          deltaf_kappa_local, deltaf_p0_local, deltaf_p0_local, 1.0,
+          1.0, 1.0, 1.0, state_x, state_y, state_z);
+    } else {
+      pr(IPF0,p) = PICDeltaFBackgroundValue(
+          deltaf_background_local, deltaf_p0_local, deltaf_kappa_local,
+          deltaf_drift_x1_local, deltaf_drift_x2_local, deltaf_drift_x3_local,
+          deltaf_aniso_x1_local, deltaf_aniso_x2_local, deltaf_aniso_x3_local,
+          1.0, 1.0, 1.0, state_x, state_y, state_z);
+    }
+    pr(IPDFWT,p) = 0.0;
+    pr(IPT_BIRTH,p) = birth_time_local;
 
     // Initialize displacement tracking if enabled
     if (track_disp_local) {
@@ -1221,6 +1783,8 @@ void Particles::NewTimeStep() {
   const int gids = pmy_pack->gids;
   const int nmb = pmy_pack->nmb_thispack;
   const Real max_cell_cross = static_cast<Real>(pic_max_cell_cross);
+  const bool momentum_state_local = UsesRelativisticCRState();
+  const Real light_speed_local = pic_cr_light_speed;
   auto &size = pmy_pack->pmb->mb_size;
   auto &pi = prtcl_idata;
   auto &pr = prtcl_rdata;
@@ -1236,9 +1800,12 @@ void Particles::NewTimeStep() {
         if (m < 0 || m >= nmb) return;
 
         Real candidate = max_dt;
-        Real vx = fabs(pr(IPVX, p));
-        Real vy = fabs(pr(IPVY, p));
-        Real vz = fabs(pr(IPVZ, p));
+        Real vx, vy, vz;
+        CRVelocityFromState(momentum_state_local, light_speed_local,
+                            pr(IPVX, p), pr(IPVY, p), pr(IPVZ, p), vx, vy, vz);
+        vx = fabs(vx);
+        vy = fabs(vy);
+        vz = fabs(vz);
 
         if (vx > 0.0) {
           candidate = fmin(candidate, max_cell_cross*size_view.d_view(m).dx1/vx);

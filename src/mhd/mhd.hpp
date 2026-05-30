@@ -53,6 +53,10 @@ struct MHDTaskIDs {
   TaskID recvf;
   TaskID rkupdt;
   TaskID srctrms;
+  TaskID picdampu;
+  TaskID expboxu;
+  TaskID expboxfb;
+  TaskID expboxdampu;
   TaskID sendu_oa;
   TaskID recvu_oa;
   TaskID restu;
@@ -65,6 +69,7 @@ struct MHDTaskIDs {
   TaskID sende;
   TaskID recve;
   TaskID ct;
+  TaskID expboxb;
   TaskID sendb_oa;
   TaskID recvb_oa;
   TaskID restb;
@@ -100,7 +105,9 @@ class MHD {
   DvceArray5D<Real> u0;    // conserved variables
   DvceArray5D<Real> w0;    // primitive variables
   DvceFaceFld4D<Real> b0;  // face-centered magnetic fields
+  DvceFaceFld4D<Real> bphys;  // physical face fields derived from expanding-box fluxes
   DvceArray5D<Real> bcc0;  // cell-centered magnetic fields
+  Real bphys_time = 0.0;   // geometry time represented by bphys and bcc0
 
   DvceArray5D<Real> coarse_u0;    // conserved variables on 2x coarser grid (for SMR/AMR)
   DvceArray5D<Real> coarse_w0;    // primitive variables on 2x coarser grid (for SMR/AMR)
@@ -160,6 +167,12 @@ class MHD {
   TaskStatus RecvFlux(Driver *d, int stage);
   TaskStatus RKUpdate(Driver *d, int stage);
   TaskStatus MHDSrcTerms(Driver *d, int stage);
+  TaskStatus ApplyPICWaveDamping(Driver *d, int stage);
+  TaskStatus ApplyPICWaveDampingMap(Driver *d, int stage);
+  TaskStatus ApplyPICExpandingBoxWaveDamping(Driver *d, int stage);
+  TaskStatus ApplyPICExpandingBoxU(Driver *d, int stage);
+  TaskStatus ApplyPICExpandingBoxFeedback(Driver *d, int stage);
+  void RefreshPICExpandingBoxPhysicalB(Real time);
   TaskStatus SendU_OA(Driver *d, int stage);
   TaskStatus RecvU_OA(Driver *d, int stage);
   TaskStatus RestrictU(Driver *d, int stage);
@@ -172,6 +185,7 @@ class MHD {
   TaskStatus SendE(Driver *d, int stage);
   TaskStatus RecvE(Driver *d, int stage);
   TaskStatus CT(Driver *d, int stage);
+  TaskStatus ApplyPICExpandingBoxB(Driver *d, int stage);
   TaskStatus SendB_OA(Driver *d, int stage);
   TaskStatus RecvB_OA(Driver *d, int stage);
   TaskStatus RestrictB(Driver *d, int stage);
@@ -195,7 +209,7 @@ class MHD {
   void FOFC(Driver *d, int stage);
 
   DvceArray5D<Real> utest, bcctest;  // scratch arrays for FOFC
-  
+
   // Update the MeshBlockPack pointer and resize arrays after AMR
   void UpdateAfterAMR(MeshBlockPack *new_pp);
 

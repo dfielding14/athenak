@@ -15,6 +15,7 @@
 #include "mesh/mesh.hpp"
 #include "mhd.hpp"
 #include "eos/eos.hpp"
+#include "particles/particles.hpp"
 #include "reconstruct/dc.hpp"
 #include "reconstruct/plm.hpp"
 #include "reconstruct/ppm.hpp"
@@ -58,6 +59,8 @@ void MHD::CalculateFluxes(Driver *pdriver, int stage) {
   auto &coord_ = pmy_pack->pcoord->coord_data;
   auto &w0_ = w0;
   auto &b0_ = bcc0;
+  const bool expanding_box =
+      ((pmy_pack->ppart != nullptr) && pmy_pack->ppart->UsesExpandingBox());
 
   //--------------------------------------------------------------------------------------
   // i-direction
@@ -68,7 +71,7 @@ void MHD::CalculateFluxes(Driver *pdriver, int stage) {
   auto &flx1_ = uflx.x1f;
   auto &e31_ = e3x1;
   auto &e21_ = e2x1;
-  auto &bx_ = b0.x1f;
+  auto &bx_ = expanding_box ? bphys.x1f : b0.x1f;
 
   // set the loop limits for 1D/2D/3D problems
   int jl,ju,kl,ku;
@@ -166,7 +169,7 @@ void MHD::CalculateFluxes(Driver *pdriver, int stage) {
     scr_size = (ScrArray2D<Real>::shmem_size(nvars, ncells1) +
                 ScrArray2D<Real>::shmem_size(3, ncells1)) * 3;
     auto &flx2_ = uflx.x2f;
-    auto &by_ = b0.x2f;
+    auto &by_ = expanding_box ? bphys.x2f : b0.x2f;
     auto &e12_ = e1x2;
     auto &e32_ = e3x2;
 
@@ -291,7 +294,7 @@ void MHD::CalculateFluxes(Driver *pdriver, int stage) {
     scr_size = (ScrArray2D<Real>::shmem_size(nvars, ncells1) +
                 ScrArray2D<Real>::shmem_size(3, ncells1)) * 3;
     auto &flx3_ = uflx.x3f;
-    auto &bz_ = b0.x3f;
+    auto &bz_ = expanding_box ? bphys.x3f : b0.x3f;
     auto &e23_ = e2x3;
     auto &e13_ = e1x3;
 

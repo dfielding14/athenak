@@ -31,6 +31,7 @@
 #include <memory>
 #include <cstdio> // sscanf
 #include <fstream>  // Include this for std::ifstream
+#include <vector>
 
 // Athena headers
 #include "athena.hpp"
@@ -39,6 +40,7 @@
 #include "parameter_input.hpp"
 #include "mesh/mesh.hpp"
 #include "outputs/outputs.hpp"
+#include "outputs/restart_utils.hpp"
 #include "driver/driver.hpp"
 #include "srcterms/turb_driver.hpp"
 #include "hydro/hydro.hpp"
@@ -63,6 +65,31 @@
 //! \brief Athena main program
 
 namespace {
+
+void RequireCompletedRestartArtifacts(const std::vector<std::string> &paths) {
+  int valid = 1;
+  std::string error;
+  if (global_variable::my_rank == 0) {
+    for (const auto &path : paths) {
+      if (!restart_utils::VerifyRestartArtifact(path, error)) {
+        valid = 0;
+        break;
+      }
+    }
+  }
+#if MPI_PARALLEL_ENABLED
+  MPI_Bcast(&valid, 1, MPI_INT, 0, MPI_COMM_WORLD);
+#endif
+  if (valid == 0) {
+    if (global_variable::my_rank == 0) {
+      std::cerr << "### FATAL ERROR: " << error << std::endl;
+    }
+#if MPI_PARALLEL_ENABLED
+    MPI_Abort(MPI_COMM_WORLD, 1);
+#endif
+    std::exit(EXIT_FAILURE);
+  }
+}
 
 void InitializePrimitivesForKick(Mesh *pm) {
   if (pm == nullptr) {
@@ -145,7 +172,7 @@ void ApplyInitialTurbulenceKick(Mesh *pm, ParameterInput *pin) {
 
 int main(int argc, char *argv[]) {
   std::string input_file, restart_file, run_dir;
-  std::string restart_base_dir, restart_file_name;
+  std::string restart_base_dir, restart_file_name, restart_prefix;
   bool iarg_flag = false;  // set to true if -i <file> argument is on cmdline
   bool marg_flag = false;  // set to true if -m        argument is on cmdline
   bool narg_flag = false;  // set to true if -n        argument is on cmdline
@@ -347,6 +374,12 @@ int main(int argc, char *argv[]) {
       restart_file_name = restart_file;
     }
 
+    restart_prefix = restart_base_dir.empty() ? "" : restart_base_dir + "/";
+    const std::string manifest_file = single_file_per_rank ?
+        restart_prefix + restart_file_name + ".manifest" :
+        restart_file + ".manifest";
+    RequireCompletedRestartArtifacts({manifest_file, restart_file});
+
     // Now use restart_file for opening the file
     std::ifstream file_check(restart_file);
     if (!file_check.good()) {
@@ -357,7 +390,6 @@ int main(int argc, char *argv[]) {
     // read parameters from restart file
     restartfile.Open(restart_file.c_str(),IOWrapper::FileMode::read,single_file_per_rank);
     pinput->LoadFromFile(restartfile, single_file_per_rank);
-    IOWrapperSizeT headeroffset = restartfile.GetPosition(single_file_per_rank);
   }
 
   // read parameters from input file.  If both -r and -i are specified, this will
@@ -394,6 +426,16 @@ int main(int argc, char *argv[]) {
     pmesh->BuildTreeFromScratch(pinput);
   } else {
     pmesh->BuildTreeFromRestart(pinput, restartfile, single_file_per_rank);
+    if (single_file_per_rank) {
+      std::vector<std::string> member_files;
+      for (int rank = 0; rank < pmesh->restart_meta.original_nranks; ++rank) {
+        char rank_dir[20];
+        std::snprintf(rank_dir, sizeof(rank_dir), "rank_%08d", rank);
+        member_files.emplace_back(restart_prefix + rank_dir + "/" +
+                                  restart_file_name);
+      }
+      RequireCompletedRestartArtifacts(member_files);
+    }
   }
 
   //  If code was run with -m option, write mesh structure to file and quit.

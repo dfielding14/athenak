@@ -51,7 +51,8 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
 
   // read parameters from input file
   MeshBlockPack *pmbp = pmy_mesh_->pmb_pack;
-  EOS_Data &eos = pmbp->pmhd->peos->eos_data;
+  EOS_Data &eos = (pmbp->pmhd != nullptr) ? pmbp->pmhd->peos->eos_data
+                                          : pmbp->phydro->peos->eos_data;
   Real d0 = pin->GetReal("problem", "d0");
   Real p0 = 1.0;
   if (eos.is_ideal) {
@@ -94,13 +95,16 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
                 << "Shearing box source terms are not enabled." << std::endl;
       exit(EXIT_FAILURE);
     }
-    if (!pmbp->phydro->shearing_box) {
+    if (!pmbp->phydro->psrc->shearing_box) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
                 << "shwave problem generator only works in shearing box"
                 << std::endl;
       exit(EXIT_FAILURE);
     }
+    Real gm1 = eos.gamma - 1.0;
+    Real iso_cs = eos.iso_cs;
+    auto u0 = pmbp->phydro->u0;
     if (ipert == 1) {
       Real rvx = 0.1*iso_cs;
       par_for("shwave1_c", DevExeSpace(), 0,(pmbp->nmb_thispack-1),ks,ke,js,je,is,ie,
@@ -114,10 +118,18 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
         }
       });
     } else if (ipert == 2) {
-      Real rvx = amp*iso_cs*std::cos(kx*x1 + ky*x2);
-      Real rvy = amp*iso_cs*(ky/kx)*std::cos(kx*x1 + ky*x2);
       par_for("shwave2_c", DevExeSpace(), 0,(pmbp->nmb_thispack-1),ks,ke,js,je,is,ie,
       KOKKOS_LAMBDA(int m, int k, int j, int i) {
+        Real &x1min = size.d_view(m).x1min;
+        Real &x1max = size.d_view(m).x1max;
+        Real x1v = CellCenterX(i-is, nx1, x1min, x1max);
+
+        Real &x2min = size.d_view(m).x2min;
+        Real &x2max = size.d_view(m).x2max;
+        Real x2v = CellCenterX(j-js, nx2, x2min, x2max);
+
+        Real rvx = amp*iso_cs*std::cos(kx*x1v + ky*x2v);
+        Real rvy = amp*iso_cs*(ky/kx)*std::cos(kx*x1v + ky*x2v);
         u0(m,IDN,k,j,i) = d0;
         u0(m,IM1,k,j,i) = -d0*rvx;
         u0(m,IM2,k,j,i) = -d0*rvy;
@@ -141,7 +153,7 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
                 << "Shearing box source terms are not enabled." << std::endl;
       exit(EXIT_FAILURE);
     }
-    if (!pmbp->pmhd->shearing_box) {
+    if (!pmbp->pmhd->psrc->shearing_box) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
                 << "jgg problem generator only works in shearing box"
@@ -158,7 +170,7 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
     Real gm1 = eos.gamma - 1.0;
     auto u0 = pmbp->pmhd->u0;
     auto b0 = pmbp->pmhd->b0;
-    Real omega0 = pmbp->pmhd->psb->omega0;
+    Real omega0 = pmbp->pmhd->psrc->omega0;
 
     Real B02 = p0/beta;
     Real k2 = SQR(kx)+SQR(ky)+SQR(kz);
@@ -205,8 +217,8 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
     int ncells2 = indcs.nx2 + 2*(indcs.ng);
     int ncells3 = indcs.nx3 + 2*(indcs.ng);
     Kokkos::realloc(a1,(pmbp->nmb_thispack),ncells3,ncells2,ncells1);
-    Kokkos::realloc(a1,(pmbp->nmb_thispack),ncells3,ncells2,ncells1);
-    Kokkos::realloc(a1,(pmbp->nmb_thispack),ncells3,ncells2,ncells1);
+    Kokkos::realloc(a2,(pmbp->nmb_thispack),ncells3,ncells2,ncells1);
+    Kokkos::realloc(a3,(pmbp->nmb_thispack),ncells3,ncells2,ncells1);
 
     par_for("shwave3_a1", DevExeSpace(), 0,(pmbp->nmb_thispack-1),ks,ke+1,js,je+1,is,ie,
     KOKKOS_LAMBDA(int m, int k, int j, int i) {
@@ -297,10 +309,10 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
       KOKKOS_LAMBDA(int m, int k, int j, int i) {
         Real &b1m = b0.x1f(m,k,j,i);
         Real &b1p = b0.x1f(m,k,j,i+1);
-        Real &b2m = b0.x1f(m,k,j,i);
-        Real &b2p = b0.x1f(m,k,j+1,i);
-        Real &b3m = b0.x1f(m,k,j,i);
-        Real &b3p = b0.x1f(m,k+1,j,i);
+        Real &b2m = b0.x2f(m,k,j,i);
+        Real &b2p = b0.x2f(m,k,j+1,i);
+        Real &b3m = b0.x3f(m,k,j,i);
+        Real &b3p = b0.x3f(m,k+1,j,i);
         u0(m,IEN,k,j,i) += 0.125*(SQR(b1m+b1p)+SQR(b2m+b2p)+SQR(b3m+b3p));
       });
     }

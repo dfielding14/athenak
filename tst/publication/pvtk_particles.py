@@ -8,6 +8,11 @@ from typing import Dict
 
 import numpy as np
 
+_VTK_SCALAR_DTYPES = {
+    "float": np.dtype(">f4"),
+    "int": np.dtype(">i4"),
+}
+
 
 @dataclass
 class ParticleVTKData:
@@ -67,21 +72,29 @@ def read_particle_vtk(path: str | Path) -> ParticleVTKData:
             continue
         if line.startswith("SCALARS "):
             tokens = line.split()
-            if len(tokens) < 2:
+            if len(tokens) < 3:
                 raise ValueError("Malformed SCALARS header")
             name = tokens[1]
+            scalar_type = tokens[2]
+            if scalar_type not in _VTK_SCALAR_DTYPES:
+                raise ValueError(f"Unsupported SCALARS type: {scalar_type}")
+            dtype = _VTK_SCALAR_DTYPES[scalar_type]
             look, idx = _read_line(blob, idx)
             if not look.startswith("LOOKUP_TABLE"):
                 raise ValueError("Expected LOOKUP_TABLE after SCALARS header")
-            nbytes = 4 * point_data_count
+            nbytes = dtype.itemsize * point_data_count
             if idx + nbytes > len(blob):
                 raise ValueError("Unexpected EOF in SCALARS data block")
             values = np.frombuffer(
                 blob,
-                dtype=">f4",
+                dtype=dtype,
                 count=point_data_count,
                 offset=idx,
-            ).astype(np.float64)
+            )
+            if scalar_type == "float":
+                values = values.astype(np.float64)
+            else:
+                values = values.astype(np.int64)
             scalars[name] = values
             idx += nbytes
             continue

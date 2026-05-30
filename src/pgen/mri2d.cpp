@@ -30,6 +30,7 @@
 #include "hydro/hydro.hpp"
 #include "mhd/mhd.hpp"
 #include "shearing_box/shearing_box.hpp"
+#include "srcterms/srcterms.hpp"
 #include "pgen.hpp"
 
 #include <Kokkos_Random.hpp>
@@ -77,7 +78,7 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
                 << "Shearing box source terms not enabled for mri2d problem" << std::endl;
       exit(EXIT_FAILURE);
     }
-    if (!pmbp->pmhd->shearing_box || pmbp->pmhd->psb->shearing_box_r_phi) {
+    if (!pmbp->pmhd->psrc->shearing_box || pmbp->pmhd->psrc->shearing_box_r_phi) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
                 << "hb3 problem generator only works in 2D (x-z) shearing box"
@@ -126,7 +127,7 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
                 << "Shearing box source terms not enabled for mri2d problem" << std::endl;
       exit(EXIT_FAILURE);
     }
-    if (!pmbp->phydro->shearing_box || pmbp->phydro->psb->shearing_box_r_phi) {
+    if (!pmbp->phydro->psrc->shearing_box || pmbp->phydro->psrc->shearing_box_r_phi) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
                 << "hb3 problem generator only works in 2D (x-z) shearing box"

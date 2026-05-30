@@ -9,6 +9,9 @@
 //  \brief definitions for Particles class
 
 #include <array>
+#include <cmath>
+#include <cstddef>
+#include <cstdint>
 #include <map>
 #include <memory>
 #include <string>
@@ -43,16 +46,26 @@ enum class CoupledFluidFeedbackOrder { mhd_src_terms, efield_src };
 // constants for staged PIC runtime controls used by PR5+ test-suite expansion
 enum class PICBackgroundMode { coupled, passive_mhd, no_mhd };
 enum class PICFeedbackMode { coupled, test_particle };
+enum class PICPhysicalMode { engineering, paper_test_particle, paper_mhd_pic,
+                             extended_mhd_pic };
+enum class PICCRHallMode { off, current_to_ct_experimental };
+enum class PICWaveDampingMode { off, ion_neutral_friction };
+enum class PICCRInitialState { velocity, momentum };
 enum class PICInterpolationScheme { tsc };
-enum class PICDeltaFMode { off, on };
+enum class PICDeltaFMode { off, quiet_start, physical };
+enum class PICDeltaFBackground { uniform, kappa_iso, kappa_drift, kappa_aniso };
+enum class PICDeltaFAdaptMode { off, global_bikappa_moments_experimental };
 enum class PICIntermediateArraysMode { auto_mode, off };
 enum class PICExpandingBoxMode { off, on };
+enum class PICExpansionLaw { linear, reciprocal_linear, exponential };
+enum class CRParticleSource { initial = 0, shock_injected = 1 };
 
 //----------------------------------------------------------------------------------------
 //! \struct ParticlesTaskIDs
 //  \brief container to hold TaskIDs of all particles tasks
 
 struct ParticlesTaskIDs {
+  TaskID adapt_deltaf;
   TaskID push;
   TaskID newgid;
   TaskID count;
@@ -82,6 +95,93 @@ struct ParticlesTaskIDs {
 };
 
 namespace particles {
+
+KOKKOS_INLINE_FUNCTION
+Real CRLorentzFactor(const Real ux, const Real uy, const Real uz,
+                     const Real light_speed) {
+  return sqrt(1.0 + (ux*ux + uy*uy + uz*uz)/(light_speed*light_speed));
+}
+
+KOKKOS_INLINE_FUNCTION
+Real CRKineticEnergy(const bool momentum_state, const Real light_speed,
+                    const Real sx, const Real sy, const Real sz) {
+  if (momentum_state) {
+    return (CRLorentzFactor(sx, sy, sz, light_speed) - 1.0)*
+           light_speed*light_speed;
+  }
+  return 0.5*(sx*sx + sy*sy + sz*sz);
+}
+
+KOKKOS_INLINE_FUNCTION
+void CRVelocityFromState(const bool momentum_state, const Real light_speed,
+                         const Real sx, const Real sy, const Real sz,
+                         Real &vx, Real &vy, Real &vz) {
+  const Real inv_gamma = momentum_state ?
+      1.0/CRLorentzFactor(sx, sy, sz, light_speed) : 1.0;
+  vx = sx*inv_gamma;
+  vy = sy*inv_gamma;
+  vz = sz*inv_gamma;
+}
+
+KOKKOS_INLINE_FUNCTION
+Real PICScaleFactor(const PICExpansionLaw law, const Real initial_rate,
+                    const Real time) {
+  if (law == PICExpansionLaw::linear) {
+    return 1.0 + initial_rate*time;
+  }
+  if (law == PICExpansionLaw::reciprocal_linear) {
+    return 1.0/(1.0 + initial_rate*time);
+  }
+  return exp(initial_rate*time);
+}
+
+struct PICExpandingBoxGeometry {
+  Real a1, a2, a3;
+  Real inv_a1, inv_a2, inv_a3;
+  Real inv_area1, inv_area2, inv_area3;
+};
+
+KOKKOS_INLINE_FUNCTION
+PICExpandingBoxGeometry PICExpandingBoxGeometryAt(
+    const PICExpansionLaw law, const Real rate_x1, const Real rate_x2,
+    const Real rate_x3, const Real time) {
+  const Real a1 = PICScaleFactor(law, rate_x1, time);
+  const Real a2 = PICScaleFactor(law, rate_x2, time);
+  const Real a3 = PICScaleFactor(law, rate_x3, time);
+  return {a1, a2, a3, 1.0/a1, 1.0/a2, 1.0/a3,
+          1.0/(a2*a3), 1.0/(a1*a3), 1.0/(a1*a2)};
+}
+
+KOKKOS_INLINE_FUNCTION
+Real PICDeltaFBackgroundValue(
+    const PICDeltaFBackground background, const Real p0, const Real kappa,
+    const Real drift_x1, const Real drift_x2, const Real drift_x3,
+    const Real aniso_x1, const Real aniso_x2, const Real aniso_x3,
+    const Real scale_x1, const Real scale_x2, const Real scale_x3,
+    const Real sx, const Real sy, const Real sz) {
+  if (background == PICDeltaFBackground::uniform) return 1.0;
+  const Real px = (scale_x1*sx - drift_x1)/aniso_x1;
+  const Real py = (scale_x2*sy - drift_x2)/aniso_x2;
+  const Real pz = (scale_x3*sz - drift_x3)/aniso_x3;
+  const Real shape = 1.0 + (px*px + py*py + pz*pz)/(kappa*p0*p0);
+  return fmax(pow(shape, -(kappa + 1.0)), static_cast<Real>(1.0e-30));
+}
+
+KOKKOS_INLINE_FUNCTION
+Real PICAdaptiveDeltaFBackgroundValue(
+    const Real kappa, const Real reference_p0, const Real fitted_p0,
+    const Real xi, const Real scale_x1, const Real scale_x2,
+    const Real scale_x3, const Real sx, const Real sy, const Real sz) {
+  const Real xi2 = xi*xi;
+  const Real xi4 = xi2*xi2;
+  const Real volume = scale_x1*scale_x2*scale_x3;
+  const Real shape =
+      1.0 + (xi4*sx*sx + xi2*(sy*sy + sz*sz))/(kappa*fitted_p0*fitted_p0);
+  const Real normalization =
+      (xi4/volume)*pow(reference_p0/fitted_p0, static_cast<Real>(3.0));
+  return fmax(normalization*pow(shape, -(kappa + 1.0)),
+              static_cast<Real>(1.0e-30));
+}
 
 //----------------------------------------------------------------------------------------
 //! \class Particles
@@ -130,20 +230,45 @@ class Particles {
   Real couple_moments_energy_coeff = 1.0;       // energy feedback coefficient
   PICBackgroundMode pic_background_mode = PICBackgroundMode::coupled;
   PICFeedbackMode pic_feedback_mode = PICFeedbackMode::coupled;
+  PICPhysicalMode pic_physical_mode = PICPhysicalMode::engineering;
+  PICCRHallMode pic_cr_hall_mode = PICCRHallMode::off;
+  PICWaveDampingMode pic_wave_damping_mode = PICWaveDampingMode::off;
+  PICCRInitialState pic_cr_initial_state = PICCRInitialState::velocity;
   PICInterpolationScheme pic_interp_scheme = PICInterpolationScheme::tsc;
   bool pic_enable_2d3v = false;    // keep vz/Bz channels active when nx3==1
   PICDeltaFMode pic_deltaf_mode = PICDeltaFMode::off;
+  PICDeltaFBackground pic_deltaf_background = PICDeltaFBackground::uniform;
+  PICDeltaFAdaptMode pic_deltaf_adapt_mode = PICDeltaFAdaptMode::off;
   PICIntermediateArraysMode pic_intermediate_arrays_mode =
       PICIntermediateArraysMode::auto_mode;
   PICExpandingBoxMode pic_expanding_box_mode = PICExpandingBoxMode::off;
-  Real pic_cr_light_speed = 1.0;  // reserved; only default value is supported
+  PICExpansionLaw pic_expansion_law = PICExpansionLaw::linear;
+  Real pic_cr_light_speed = 1.0;  // artificial CR light speed in momentum-state modes
+  Real pic_ion_neutral_collision_rate = 0.0; // reduced high-frequency IN damping rate
   int pic_max_cell_cross = 2;     // particle cell-crossing timestep limit
   Real pic_theta_max = 0.3;       // Boris gyro-angle timestep limit
   int pic_sort_interval = 0;      // staged sorting cadence (0 disables re-sorting)
   int pic_random_seed = 0;        // deterministic seed for random CR placement
+  Real pic_load_balance_cost_per_particle = 0.0; // optional AMR balancing cost weight
   Real pic_expansion_rate_x1 = 0.0;
   Real pic_expansion_rate_x2 = 0.0;
   Real pic_expansion_rate_x3 = 0.0;
+  Real pic_deltaf_p0 = 1.0;
+  Real pic_deltaf_kappa = 1.25;
+  Real pic_deltaf_adapt_interval = 0.0;
+  Real pic_deltaf_adaptive_xi = 1.0;
+  Real pic_deltaf_adaptive_p0 = 1.0;
+  std::int64_t pic_deltaf_adapt_last_bucket = -1;
+  Real pic_deltaf_drift_x1 = 0.0;
+  Real pic_deltaf_drift_x2 = 0.0;
+  Real pic_deltaf_drift_x3 = 0.0;
+  Real pic_deltaf_aniso_x1 = 1.0;
+  Real pic_deltaf_aniso_x2 = 1.0;
+  Real pic_deltaf_aniso_x3 = 1.0;
+  Real pic_deltaf_background_rho = 0.0;
+  Real pic_deltaf_background_jx = 0.0;
+  Real pic_deltaf_background_jy = 0.0;
+  Real pic_deltaf_background_jz = 0.0;
   Real pic_no_mhd_bx = 0.0;
   Real pic_no_mhd_by = 0.0;
   Real pic_no_mhd_bz = 0.0;
@@ -168,14 +293,14 @@ class Particles {
   DvceArray1D<Real> x1_old, x2_old, x3_old;
 
   // Constants for rk4_gravity pusher
-  Real r_scale;
-  Real rho_scale;
-  Real m_gal;
-  Real a_gal;
-  Real z_gal;
-  Real r_200;
-  Real rho_mean;
-  Real par_grav_dx;
+  Real r_scale = 0.0;
+  Real rho_scale = 0.0;
+  Real m_gal = 0.0;
+  Real a_gal = 0.0;
+  Real z_gal = 0.0;
+  Real r_200 = 0.0;
+  Real rho_mean = 0.0;
+  Real par_grav_dx = 1.0e-6;
 
   // Boundary communication buffers and functions for particles
   ParticlesBoundaryValues *pbval_part;
@@ -187,8 +312,10 @@ class Particles {
 
   // functions...
   void CreateParticleTags(ParameterInput *pin);
+  void UpdateAfterAMR(MeshBlockPack *new_pp);
   void AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> tl);
   TaskStatus Push(Driver *pdriver, int stage);
+  TaskStatus AdaptDeltaF(Driver *pdriver, int stage);
   TaskStatus NewGID(Driver *pdriver, int stage);
   TaskStatus SendCnt(Driver *pdriver, int stage);
   TaskStatus InitRecv(Driver *pdriver, int stage);
@@ -222,6 +349,143 @@ class Particles {
   TaskStatus PushCosmicRays(Driver *pdriver, int stage);
   TaskStatus PushStars(Driver *pdriver, int stage);
   void NewTimeStep();
+  bool UsesRelativisticCRState() const {
+    return pic_physical_mode != PICPhysicalMode::engineering;
+  }
+  bool UsesDeltaF() const {
+    return pic_deltaf_mode == PICDeltaFMode::physical;
+  }
+  bool UsesAdaptiveDeltaF() const {
+    return pic_deltaf_adapt_mode ==
+           PICDeltaFAdaptMode::global_bikappa_moments_experimental;
+  }
+  bool UsesExpandingBox() const {
+    return pic_expanding_box_mode == PICExpandingBoxMode::on;
+  }
+  bool UsesPICWaveDamping() const {
+    return pic_wave_damping_mode == PICWaveDampingMode::ion_neutral_friction;
+  }
+  static constexpr int PIC_RESTART_SCHEMA_VERSION = 7;
+  static constexpr int NPIC_RESTART_MODEL_INTS = 31;
+  static constexpr int NPIC_RESTART_CONFIG_REALS = 34;
+  static constexpr int NPIC_RESTART_MODEL_REALS = 37;
+  std::uint64_t RestartSpeciesConfigHash() const {
+    std::uint64_t hash = 14695981039346656037ULL;
+    auto hash_bytes = [&hash](const auto &value) {
+      const auto *bytes = reinterpret_cast<const unsigned char *>(&value);
+      for (std::size_t n=0; n<sizeof(value); ++n) {
+        hash ^= bytes[n];
+        hash *= 1099511628211ULL;
+      }
+    };
+    const int restart_nspecies =
+        (particle_type == ParticleType::cosmic_ray) ? nspecies : 0;
+    hash_bytes(restart_nspecies);
+    if (particle_type == ParticleType::cosmic_ray) {
+      auto h_mass = Kokkos::create_mirror_view_and_copy(HostMemSpace(), species_mass);
+      auto h_charge = Kokkos::create_mirror_view_and_copy(HostMemSpace(), species_charge);
+      for (int s=0; s<nspecies; ++s) {
+        hash_bytes(h_mass(s));
+        hash_bytes(h_charge(s));
+      }
+    }
+    return hash;
+  }
+  void FillRestartModelMetadata(
+      std::array<int, NPIC_RESTART_MODEL_INTS> &model_ints,
+      std::array<Real, NPIC_RESTART_MODEL_REALS> &model_reals) const {
+    const std::uint64_t species_hash = RestartSpeciesConfigHash();
+    model_ints = {static_cast<int>(pic_deltaf_mode),
+                  static_cast<int>(pic_deltaf_background),
+                  static_cast<int>(pic_expanding_box_mode),
+                  static_cast<int>(pic_expansion_law),
+                  static_cast<int>(pic_wave_damping_mode),
+                  static_cast<int>(pic_deltaf_adapt_mode),
+                  static_cast<int>(particle_type),
+                  static_cast<int>(pusher),
+                  (particle_type == ParticleType::cosmic_ray) ? nspecies : 0,
+                  (particle_type == ParticleType::cosmic_ray && track_displacement) ? 1 : 0,
+                  deposit_moments ? 1 : 0,
+                  deposit_order,
+                  couple_moments_to_mhd ? 1 : 0,
+                  static_cast<int>(couple_j_to_efield_representation),
+                  static_cast<int>(couple_j_deposition_mode),
+                  static_cast<int>(couple_fluid_feedback_order),
+                  couple_moments_momentum_to_mhd ? 1 : 0,
+                  couple_moments_energy_to_mhd ? 1 : 0,
+                  static_cast<int>(pic_background_mode),
+                  static_cast<int>(pic_feedback_mode),
+                  static_cast<int>(pic_cr_hall_mode),
+                  static_cast<int>(pic_cr_initial_state),
+                  static_cast<int>(pic_interp_scheme),
+                  pic_enable_2d3v ? 1 : 0,
+                  static_cast<int>(pic_intermediate_arrays_mode),
+                  pic_max_cell_cross,
+                  pic_sort_interval,
+                  pic_random_seed,
+                  static_cast<int>(species_hash & 0x3fffffULL),
+                  static_cast<int>((species_hash >> 22) & 0x3fffffULL),
+                  static_cast<int>((species_hash >> 44) & 0xfffffULL)};
+    model_reals = {pic_expansion_rate_x1, pic_expansion_rate_x2,
+                   pic_expansion_rate_x3, pic_deltaf_p0, pic_deltaf_kappa,
+                   pic_deltaf_drift_x1, pic_deltaf_drift_x2, pic_deltaf_drift_x3,
+                   pic_deltaf_aniso_x1, pic_deltaf_aniso_x2, pic_deltaf_aniso_x3,
+                   pic_deltaf_background_rho, pic_deltaf_background_jx,
+                   pic_deltaf_background_jy, pic_deltaf_background_jz,
+                   pic_no_mhd_bx, pic_no_mhd_by, pic_no_mhd_bz,
+                   pic_ion_neutral_collision_rate, pic_deltaf_adapt_interval,
+                   deposit_qscale, couple_j_to_efield_coeff,
+                   couple_moments_momentum_coeff, couple_moments_energy_coeff,
+                   pic_theta_max, pic_load_balance_cost_per_particle,
+                   r_scale, rho_scale, m_gal, a_gal, z_gal, r_200, rho_mean,
+                   par_grav_dx,
+                   pic_deltaf_adaptive_xi, pic_deltaf_adaptive_p0,
+                   static_cast<Real>(pic_deltaf_adapt_last_bucket)};
+  }
+  bool MatchesRestartModelMetadata(
+      const std::array<int, NPIC_RESTART_MODEL_INTS> &model_ints,
+      const std::array<Real, NPIC_RESTART_MODEL_REALS> &model_reals) const {
+    std::array<int, NPIC_RESTART_MODEL_INTS> expected_ints;
+    std::array<Real, NPIC_RESTART_MODEL_REALS> expected_reals;
+    FillRestartModelMetadata(expected_ints, expected_reals);
+    if (model_ints != expected_ints) return false;
+    for (int n=0; n<NPIC_RESTART_CONFIG_REALS; ++n) {
+      if (model_reals[n] != expected_reals[n]) return false;
+    }
+    return true;
+  }
+  bool RestoreRestartModelState(
+      const std::array<Real, NPIC_RESTART_MODEL_REALS> &model_reals) {
+    if (!UsesAdaptiveDeltaF()) return true;
+    constexpr int xi_index = NPIC_RESTART_CONFIG_REALS;
+    constexpr int p0_index = NPIC_RESTART_CONFIG_REALS + 1;
+    constexpr int bucket_index = NPIC_RESTART_CONFIG_REALS + 2;
+    const Real xi = model_reals[xi_index];
+    const Real p0 = model_reals[p0_index];
+    const Real bucket_real = model_reals[bucket_index];
+    const std::int64_t bucket = static_cast<std::int64_t>(bucket_real);
+    if (!std::isfinite(xi) || xi <= 0.0 ||
+        !std::isfinite(p0) || p0 <= 0.0 ||
+        !std::isfinite(bucket_real) || static_cast<Real>(bucket) != bucket_real ||
+        bucket < -1) {
+      return false;
+    }
+    if (pic_deltaf_adapt_last_bucket >= 0 &&
+        (pic_deltaf_adaptive_xi != xi || pic_deltaf_adaptive_p0 != p0 ||
+         pic_deltaf_adapt_last_bucket != bucket)) {
+      return false;
+    }
+    pic_deltaf_adaptive_xi = xi;
+    pic_deltaf_adaptive_p0 = p0;
+    pic_deltaf_adapt_last_bucket = bucket;
+    return true;
+  }
+  bool AddsCRCurrentToCT() const {
+    return couple_moments_to_mhd &&
+           ((pic_physical_mode == PICPhysicalMode::engineering) ||
+            ((pic_physical_mode == PICPhysicalMode::extended_mhd_pic) &&
+             (pic_cr_hall_mode == PICCRHallMode::current_to_ct_experimental)));
+  }
 
  private:
   MeshBlockPack *pmy_pack; // ptr to MeshBlockPack containing this Particles

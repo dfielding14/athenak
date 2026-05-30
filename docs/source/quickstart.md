@@ -144,6 +144,19 @@ cmake --build build-cuda -j $(sysctl -n hw.ncpu 2>/dev/null || nproc)
 ./athena -r Sod.00010.rst
 ```
 
+Current AthenaK restart publication is deliberately fail-closed. A shared-file
+checkpoint consists of `rst/<basename>.<NNNNN>.rst` plus its adjacent
+`.rst.complete`, `.rst.manifest`, and `.rst.manifest.complete` sidecars. A
+per-rank checkpoint instead publishes one root
+`rst/<basename>.<NNNNN>.rst.manifest` plus `.manifest.complete`, and one
+`rst/rank_XXXXXXXX/<basename>.<NNNNN>.rst` payload plus `.complete` marker for
+every member rank. Start a per-rank restart from one member path, for example
+`rst/rank_00000000/<basename>.<NNNNN>.rst`.
+
+AthenaK validates completion markers and manifest-bound payload checksums before
+loading a checkpoint. A `.partial` payload or legacy standalone `.rst` file is
+intentionally rejected rather than treated as a verified restart artifact.
+
 ### Change Problem Type
 ```bash
 # Run a different built-in problem without rebuilding

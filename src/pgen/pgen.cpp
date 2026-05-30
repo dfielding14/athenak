@@ -8,6 +8,7 @@
 //! Default constructor calls problem generator function, while  constructor for restarts
 //! reads data from restart file, as well as re-initializing problem-specific data.
 
+#include <array>
 #include <cstdio>
 #include <iostream>
 #include <string>
@@ -51,6 +52,11 @@ struct ParticleRestartSectionMeta {
   int edge1_cnt = 0;
   int edge2_cnt = 0;
   int edge3_cnt = 0;
+  int state_kind = -1;
+  int physical_mode = -1;
+  Real cr_light_speed = 0.0;
+  std::array<int, particles::Particles::NPIC_RESTART_MODEL_INTS> model_ints;
+  std::array<Real, particles::Particles::NPIC_RESTART_MODEL_REALS> model_reals;
   IOWrapperSizeT npart_section = 0;
   IOWrapperSizeT pr_real_offset = 0;
   IOWrapperSizeT pr_int_offset = 0;
@@ -95,7 +101,7 @@ void LoadParticleRestartDataSingleFile(Mesh *pm,
   if (ppart == nullptr) return;
 
   constexpr std::uint64_t kPicMagic = 0x5049435253543031ULL;
-  constexpr int kPicVersion = 1;
+  constexpr int kPicVersion = particles::Particles::PIC_RESTART_SCHEMA_VERSION;
 
   const RestartMetaData &meta = pm->restart_meta;
   if (meta.file_name.empty()) {
@@ -172,10 +178,14 @@ void LoadParticleRestartDataSingleFile(Mesh *pm,
   int ref_edge1_cnt = 0;
   int ref_edge2_cnt = 0;
   int ref_edge3_cnt = 0;
+  int ref_state_kind = -1;
+  int ref_physical_mode = -1;
+  Real ref_cr_light_speed = 0.0;
+  std::array<int, particles::Particles::NPIC_RESTART_MODEL_INTS> ref_model_ints;
+  std::array<Real, particles::Particles::NPIC_RESTART_MODEL_REALS> ref_model_reals;
 
   for (int r=0; r<meta.original_nranks; ++r) {
     auto &reqs = requests[r];
-    if (reqs.empty()) continue;
 
     IOWrapper srcfile;
     srcfile.Open(rank_paths[r].c_str(), IOWrapper::FileMode::read, true);
@@ -228,6 +238,35 @@ void LoadParticleRestartDataSingleFile(Mesh *pm,
     read_int_meta(sm.edge1_cnt, "edge1_cnt");
     read_int_meta(sm.edge2_cnt, "edge2_cnt");
     read_int_meta(sm.edge3_cnt, "edge3_cnt");
+    read_int_meta(sm.state_kind, "state_kind");
+    read_int_meta(sm.physical_mode, "physical_mode");
+    if (srcfile.Read_Reals_at(&sm.cr_light_speed, 1, rd_offset, true) != 1) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "Failed to read particle restart metadata field 'cr_light_speed' "
+                << "from source restart file '" << rank_paths[r] << "'."
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    rd_offset += sizeof(Real);
+    if (srcfile.Read_bytes_at(sm.model_ints.data(), sizeof(int), sm.model_ints.size(),
+                              rd_offset, true) != sm.model_ints.size()) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "Failed to read particle restart extension-model integer metadata "
+                << "from source restart file '" << rank_paths[r] << "'." << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    rd_offset += sm.model_ints.size()*sizeof(int);
+    if (srcfile.Read_Reals_at(sm.model_reals.data(), sm.model_reals.size(), rd_offset,
+                              true) != sm.model_reals.size()) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "Failed to read particle restart extension-model numerical metadata "
+                << "from source restart file '" << rank_paths[r] << "'." << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    rd_offset += sm.model_reals.size()*sizeof(Real);
 
     if (srcfile.Read_bytes_at(&sm.npart_section, sizeof(IOWrapperSizeT), 1, rd_offset,
                               true) != 1) {
@@ -260,6 +299,19 @@ void LoadParticleRestartDataSingleFile(Mesh *pm,
                 << std::endl
                 << "Particle restart data layout mismatch in source restart "
                 << "file '" << rank_paths[r] << "'." << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    const int expected_state_kind = ppart->UsesRelativisticCRState() ? 1 : 0;
+    const int expected_physical_mode = static_cast<int>(ppart->pic_physical_mode);
+    if (sm.state_kind != expected_state_kind ||
+        sm.physical_mode != expected_physical_mode ||
+        sm.cr_light_speed != ppart->pic_cr_light_speed ||
+        !ppart->MatchesRestartModelMetadata(sm.model_ints, sm.model_reals) ||
+        !ppart->RestoreRestartModelState(sm.model_reals)) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "Particle restart physical-model metadata mismatch in source "
+                << "restart file '" << rank_paths[r] << "'." << std::endl;
       std::exit(EXIT_FAILURE);
     }
     if (sm.rst_nout1 != nout1 || sm.rst_nout2 != nout2 || sm.rst_nout3 != nout3) {
@@ -301,12 +353,22 @@ void LoadParticleRestartDataSingleFile(Mesh *pm,
       ref_edge1_cnt = sm.edge1_cnt;
       ref_edge2_cnt = sm.edge2_cnt;
       ref_edge3_cnt = sm.edge3_cnt;
+      ref_state_kind = sm.state_kind;
+      ref_physical_mode = sm.physical_mode;
+      ref_cr_light_speed = sm.cr_light_speed;
+      ref_model_ints = sm.model_ints;
+      ref_model_reals = sm.model_reals;
     } else if (sm.has_moments != ref_has_moments ||
                sm.has_edge != ref_has_edge ||
                sm.moment_cnt != ref_moment_cnt ||
                sm.edge1_cnt != ref_edge1_cnt ||
                sm.edge2_cnt != ref_edge2_cnt ||
-               sm.edge3_cnt != ref_edge3_cnt) {
+               sm.edge3_cnt != ref_edge3_cnt ||
+               sm.state_kind != ref_state_kind ||
+               sm.physical_mode != ref_physical_mode ||
+               sm.cr_light_speed != ref_cr_light_speed ||
+               sm.model_ints != ref_model_ints ||
+               sm.model_reals != ref_model_reals) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
                 << "Particle restart metadata is inconsistent across source restart "
@@ -913,7 +975,7 @@ void LoadParticleRestartData(Mesh *pm,
   }
 
   constexpr std::uint64_t kPicMagic = 0x5049435253543031ULL;
-  constexpr int kPicVersion = 1;
+  constexpr int kPicVersion = particles::Particles::PIC_RESTART_SCHEMA_VERSION;
 
   IOWrapperSizeT section_offset = headeroffset + data_stride*pm->nmb_total;
 
@@ -958,6 +1020,11 @@ void LoadParticleRestartData(Mesh *pm,
   int edge1_cnt = 0;
   int edge2_cnt = 0;
   int edge3_cnt = 0;
+  int state_kind = -1;
+  int physical_mode = -1;
+  Real cr_light_speed = 0.0;
+  std::array<int, particles::Particles::NPIC_RESTART_MODEL_INTS> model_ints;
+  std::array<Real, particles::Particles::NPIC_RESTART_MODEL_REALS> model_reals;
   IOWrapperSizeT npart_section = 0;
 
   auto read_int_meta = [&](int &val, IOWrapperSizeT off, const char *name) {
@@ -1001,6 +1068,51 @@ void LoadParticleRestartData(Mesh *pm,
   rd_offset += sizeof(int);
   read_int_meta(edge3_cnt, rd_offset, "edge3_cnt");
   rd_offset += sizeof(int);
+  read_int_meta(state_kind, rd_offset, "state_kind");
+  rd_offset += sizeof(int);
+  read_int_meta(physical_mode, rd_offset, "physical_mode");
+  rd_offset += sizeof(int);
+  if (global_variable::my_rank == 0) {
+    if (resfile.Read_Reals_at(&cr_light_speed, 1, rd_offset, false) != 1) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "Failed to read particle restart metadata field 'cr_light_speed'."
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+  }
+#if MPI_PARALLEL_ENABLED
+  MPI_Bcast(&cr_light_speed, 1, MPI_ATHENA_REAL, 0, MPI_COMM_WORLD);
+#endif
+  rd_offset += sizeof(Real);
+  if (global_variable::my_rank == 0) {
+    if (resfile.Read_bytes_at(model_ints.data(), sizeof(int), model_ints.size(),
+                              rd_offset, false) != model_ints.size()) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "Failed to read particle restart extension-model integer metadata."
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+  }
+#if MPI_PARALLEL_ENABLED
+  MPI_Bcast(model_ints.data(), model_ints.size(), MPI_INT, 0, MPI_COMM_WORLD);
+#endif
+  rd_offset += model_ints.size()*sizeof(int);
+  if (global_variable::my_rank == 0) {
+    if (resfile.Read_Reals_at(model_reals.data(), model_reals.size(), rd_offset, false)
+          != model_reals.size()) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "Failed to read particle restart extension-model numerical metadata."
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+  }
+#if MPI_PARALLEL_ENABLED
+  MPI_Bcast(model_reals.data(), model_reals.size(), MPI_ATHENA_REAL, 0, MPI_COMM_WORLD);
+#endif
+  rd_offset += model_reals.size()*sizeof(Real);
 
   if (global_variable::my_rank == 0) {
     if (resfile.Read_bytes_at(&npart_section, sizeof(IOWrapperSizeT), 1, rd_offset,
@@ -1035,6 +1147,18 @@ void LoadParticleRestartData(Mesh *pm,
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
               << "Particle restart data layout mismatch." << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  const int expected_state_kind = ppart->UsesRelativisticCRState() ? 1 : 0;
+  const int expected_physical_mode = static_cast<int>(ppart->pic_physical_mode);
+  if (state_kind != expected_state_kind ||
+      physical_mode != expected_physical_mode ||
+      cr_light_speed != ppart->pic_cr_light_speed ||
+      !ppart->MatchesRestartModelMetadata(model_ints, model_reals) ||
+      !ppart->RestoreRestartModelState(model_reals)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Particle restart physical-model metadata mismatch." << std::endl;
     std::exit(EXIT_FAILURE);
   }
   if (rst_nout1 != nout1 || rst_nout2 != nout2 || rst_nout3 != nout3) {

@@ -2,6 +2,15 @@
 
 Use the checkboxes below to track progress. Whenever you update a document, record the findings in `docs/documentation_audit_log.md` **before** checking the box.
 
+## Current Rebuild Status (2026-05-30)
+
+- [x] Rebuilt and reviewed the current Sphinx HTML site with the declared
+  requirements in isolated `/tmp/athenak-pic-docs-venv`. The available system
+  Sphinx 2.3.1 stack is missing the required `myst_parser` extension, so use
+  that isolated dependency environment for the current source candidate.
+- [x] Removed the stale glossary navigation entry. No glossary page exists in
+  the current 58-page site.
+
 ## Sphinx Site (docs/build/html)
 
 - [x] Landing Page — `docs/build/html/index.html` (`_sources/index.rst.txt`)
@@ -13,7 +22,6 @@ Use the checkboxes below to track progress. Whenever you update a document, reco
 - [x] Troubleshooting — `docs/build/html/troubleshooting.html` (`_sources/troubleshooting.md.txt`)
 - [x] Kokkos Guide — `docs/build/html/kokkos_guide.html` (`_sources/kokkos_guide.md.txt`)
 - [x] Contributing Docs — `docs/build/html/contributing_docs.html` (`_sources/contributing_docs.md.txt`)
-- [x] Glossary — `docs/build/html/glossary.html` (`_sources/glossary.rst.txt`)
 - [x] CGM Cooling Flow (Metals) — `docs/build/html/cgm_cooling_flow_metals.html` (`_sources/cgm_cooling_flow_metals.md.txt`)
 
 ### Examples
@@ -49,7 +57,7 @@ Use the checkboxes below to track progress. Whenever you update a document, reco
 - [ ] Diffusion Module — `docs/build/html/modules/diffusion.html`
 - [x] Source Terms Module — `docs/build/html/modules/srcterms.html`
 - [x] Outputs Module — `docs/build/html/modules/outputs.html`
-- [ ] Particles Module — `docs/build/html/modules/particles.html`
+- [x] Particles Module — `docs/build/html/modules/particles.html`
 - [ ] Radiation Module — `docs/build/html/modules/radiation.html`
 - [ ] Reconstruction Module — `docs/build/html/modules/reconstruction.html`
 - [ ] Riemann Solvers Module — `docs/build/html/modules/riemann_solvers.html`
@@ -68,5 +76,13 @@ Use the checkboxes below to track progress. Whenever you update a document, reco
 
 - [ ] Search Page — `docs/build/html/search.html`
 - [ ] General Index — `docs/build/html/genindex.html`
+
+### Engineering Notes
+
+- [x] MHD-PIC Clean-Launch Runbook — `docs/build/html/engineering/pic_clean_launch_runbook.html`
+- [x] MHD-PIC Supported Toolchains — `docs/build/html/engineering/pic_supported_toolchains.html`
+- [x] MHD-PIC Runtime Model Contract — `docs/build/html/engineering/pic_mhd_model_contract.html`
+- [x] MHD-PIC AMR Lifetime and Interface Policy — `docs/build/html/engineering/pic_amr_lifetime_and_interface_policy.html`
+- [x] MHD-PIC Q-016 Bounded Particle Provenance and Spectra — `docs/build/html/engineering/pic_q016_particle_provenance_spectra.html`
 
 > _Reminder_: The repository stores pre-built HTML alongside `_sources/*.txt` extracts. Update the Markdown/ReST sources under `docs/source/` wherever possible so future rebuilds stay consistent.

@@ -49,7 +49,7 @@ source_suffix = {
 }
 
 templates_path = ["_templates"]
-exclude_patterns: list[str] = ["_build", "Thumbs.db", ".DS_Store"]
+exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
 autosummary_generate = True
 autodoc_default_options = {
@@ -61,7 +61,7 @@ autodoc_default_options = {
 todo_include_todos = True
 
 nitpicky = True
-nitpick_ignore: list[tuple[str, str]] = []
+nitpick_ignore = []
 
 intersphinx_mapping = {
     "python": ("https://docs.python.org/3", None),
@@ -85,13 +85,13 @@ _resolved_theme = _THEME_ALIASES.get(_theme_key, "press")
 
 if _resolved_theme == "sphinx_rtd_theme":
   html_theme = "sphinx_rtd_theme"
-  html_theme_options: dict[str, object] = {
+  html_theme_options = {
       "collapse_navigation": False,
       "navigation_depth": 3,
   }
 else:
   html_theme = "press"
-  html_theme_options: dict[str, object] = {}
+  html_theme_options = {}
 
 html_static_path = ["_static"]
 

@@ -39,6 +39,12 @@ nlim       = 3
 tlim       = 3.0
 ndiag      = 1
 
+<units>
+length_cgs = 1.0
+mass_cgs   = 1.0
+time_cgs   = 1.0
+mu         = 1.0
+
 <mhd>
 eos         = ideal
 reconstruct = plm
@@ -85,6 +91,15 @@ vflow     = 0.0
 along_x1  = true
 along_x2  = false
 along_x3  = false
+
+<potential>
+r_scale   = 1.0
+rho_scale = 1.0
+mass_gal  = 1.0
+scale_gal = 1.0
+z_gal     = 0.1
+r_200     = 10.0
+rho_mean  = 1.0e-3
 
 <output1>
 file_type   = bin

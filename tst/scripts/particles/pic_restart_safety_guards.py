@@ -1,9 +1,12 @@
 import glob
+import json
 import logging
 import os
+import re
 import shutil
 import struct
 import subprocess
+import tempfile
 
 import numpy as np
 import scripts.utils.athena as athena
@@ -22,10 +25,14 @@ _RESTART_GUARDS = {}
 _TRACK_GUARDS = {}
 _PUSHER_GUARDS = {}
 _EDGE_GUARDS = {}
+_SKIPPED_DRILLS = {}
 _PIC_RESTART_MAGIC = 0x5049435253543031
 _REAL_BYTES = 8
 _PSP_INDEX = 2
 _MOMENT_COUNT_META_INDEX = 9
+_MODEL_INT_COUNT = 31
+_MODEL_REAL_COUNT = 37
+_EXPECTED_RESTART_SCHEMA = 7
 
 _CASES = {
     'no_mhd': [
@@ -126,8 +133,8 @@ def _remove_outputs(basename):
     exe_dir = _athena_exe_dir()
     for pattern in [
             os.path.join(exe_dir, 'bin', basename + '.*.bin'),
-            os.path.join(exe_dir, 'rst', basename + '.*.rst'),
-            os.path.join(exe_dir, 'rst', 'rank_*', basename + '.*.rst'),
+            os.path.join(exe_dir, 'rst', basename + '.*.rst*'),
+            os.path.join(exe_dir, 'rst', 'rank_*', basename + '.*.rst*'),
             os.path.join(exe_dir, 'trk', basename + '.trk')]:
         for fname in glob.glob(pattern):
             os.remove(fname)
@@ -145,12 +152,17 @@ def _build_command(nproc, arguments, restart_file=None, input_deck=_INPUT_DECK):
     return command
 
 
-def _execute(label, nproc, arguments, restart_file=None, input_deck=_INPUT_DECK):
+def _execute(label, nproc, arguments, restart_file=None, input_deck=_INPUT_DECK,
+             env=None, timeout=None):
     command = _build_command(nproc, arguments, restart_file=restart_file,
                              input_deck=input_deck)
     logger.info('Executing %s: %s', label, ' '.join(command))
+    child_env = os.environ.copy()
+    if env is not None:
+        child_env.update(env)
     proc = subprocess.run(command, cwd=_athena_exe_dir(),
-                          capture_output=True, text=True)
+                          capture_output=True, text=True, env=child_env,
+                          timeout=timeout)
     output = (proc.stdout or '') + (proc.stderr or '')
     return proc.returncode, output
 
@@ -170,6 +182,59 @@ def _run_expect_fail(label, nproc, arguments, reason):
         raise RuntimeError('Unexpected failure reason for ' + label + '\n'
                            'Expected substring: ' + reason + '\n'
                            'Output:\n' + output)
+
+
+def _latest_restart_path(basename, per_rank=False):
+    if per_rank:
+        pattern = os.path.join(_athena_exe_dir(), 'rst', 'rank_00000000',
+                               basename + '.*.rst')
+    else:
+        pattern = os.path.join(_athena_exe_dir(), 'rst', basename + '.*.rst')
+    matches = sorted(glob.glob(pattern))
+    if not matches:
+        raise RuntimeError('No restart files found for pattern: ' + pattern)
+    return matches[-1], os.path.relpath(matches[-1], _athena_exe_dir())
+
+
+def _assert_incomplete_restart_only(basename, per_rank=False):
+    if per_rank:
+        directory = os.path.join(_athena_exe_dir(), 'rst', 'rank_00000000')
+    else:
+        directory = os.path.join(_athena_exe_dir(), 'rst')
+    partials = glob.glob(os.path.join(directory, basename + '.*.rst.partial'))
+    published = glob.glob(os.path.join(directory, basename + '.*.rst'))
+    if not partials:
+        raise RuntimeError('Expected incomplete restart residue for ' + basename)
+    if published:
+        raise RuntimeError('Incomplete restart unexpectedly published for ' + basename)
+
+
+def _fault_injector_env(injector, fault):
+    preload = injector
+    if os.environ.get('LD_PRELOAD'):
+        preload += ':' + os.environ['LD_PRELOAD']
+    return {
+        'ATHENAK_RESTART_FAULT': fault,
+        'LD_PRELOAD': preload,
+    }
+
+
+def _build_fault_injector(output_dir):
+    source = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                          'restart_fault_injector.c')
+    library = os.path.join(output_dir, 'restart_fault_injector.so')
+    compiler = os.environ.get('CC', 'cc')
+    command = [compiler, '-shared', '-fPIC', '-O2', '-o', library, source, '-ldl']
+    proc = subprocess.run(command, capture_output=True, text=True)
+    if proc.returncode != 0:
+        raise RuntimeError('Unable to build restart fault injector\n' +
+                           (proc.stdout or '') + (proc.stderr or ''))
+    return library
+
+
+def _skip_drill(name, reason):
+    logger.warning('Skipping %s drill: %s', name, reason)
+    _SKIPPED_DRILLS[name] = reason
 
 
 def _find_particle_restart_section(data, restart_path):
@@ -195,6 +260,43 @@ def _corrupt_particle_restart_metadata_int(restart_path, meta_index, bad_value):
         fp.write(data)
 
 
+def _fnv1a64(path):
+    value = 14695981039346656037
+    with open(path, 'rb') as fp:
+        while True:
+            payload = fp.read(1024 * 1024)
+            if not payload:
+                break
+            for byte in payload:
+                value ^= byte
+                value = (value * 1099511628211) & 0xffffffffffffffff
+    return value
+
+
+def _write_completion_marker(path):
+    with open(path + '.complete', 'w', encoding='ascii') as fp:
+        fp.write('ATHENAK_RESTART_COMPLETE_V1\n')
+        fp.write('size=' + str(os.path.getsize(path)) + '\n')
+        fp.write('fnv1a64=' + format(_fnv1a64(path), '016x') + '\n')
+
+
+def _write_shared_restart_publication(path):
+    _write_completion_marker(path)
+    manifest_path = path + '.manifest'
+    manifest = {
+        'schema': 'ATHENAK_RESTART_MANIFEST_V1',
+        'members': [{
+            'path': os.path.relpath(path, _athena_exe_dir()),
+            'size': os.path.getsize(path),
+            'fnv1a64': format(_fnv1a64(path), '016x'),
+        }],
+    }
+    with open(manifest_path, 'w', encoding='ascii') as fp:
+        json.dump(manifest, fp, indent=2, sort_keys=True)
+        fp.write('\n')
+    _write_completion_marker(manifest_path)
+
+
 def _corrupt_first_particle_species(restart_path, bad_species):
     with open(restart_path, 'rb') as fp:
         data = bytearray(fp.read())
@@ -202,15 +304,20 @@ def _corrupt_first_particle_species(restart_path, bad_species):
     section = _find_particle_restart_section(data, restart_path)
 
     offset = section + struct.calcsize('<Q')
-    meta_fmt = '<13i'
+    meta_fmt = '<15i'
     (version, nmb_section, nrdata, nidata, _nout1, _nout2, _nout3,
      _has_moments, _has_edge, _moment_cnt, _edge1_cnt, _edge2_cnt,
-     _edge3_cnt) = struct.unpack_from(meta_fmt, data, offset)
+     _edge3_cnt, _state_kind, _physical_mode) = struct.unpack_from(
+         meta_fmt, data, offset)
     offset += struct.calcsize(meta_fmt)
+    offset += _REAL_BYTES  # cr_light_speed
+    offset += _MODEL_INT_COUNT * struct.calcsize('<i')
+    offset += _MODEL_REAL_COUNT * _REAL_BYTES
     npart_section = struct.unpack_from('<Q', data, offset)[0]
     offset += struct.calcsize('<Q')
 
-    if version != 1 or nmb_section <= 0 or nrdata <= 0 or nidata <= _PSP_INDEX:
+    if (version != _EXPECTED_RESTART_SCHEMA or nmb_section <= 0 or nrdata <= 0
+            or nidata <= _PSP_INDEX):
         raise RuntimeError('Unexpected particle restart metadata in ' + restart_path)
     if npart_section <= 0:
         raise RuntimeError('Cannot corrupt species in an empty particle restart')
@@ -269,6 +376,7 @@ def _run_corrupt_moment_count_restart_guard():
         raise RuntimeError('Expected restart file not found: ' + full_src)
     shutil.copyfile(full_src, full_dst)
     _corrupt_particle_restart_metadata_int(full_dst, _MOMENT_COUNT_META_INDEX, 123456)
+    _write_shared_restart_publication(full_dst)
 
     code, output = _execute(base + '_restart_run', 1,
                             ['job/basename=' + base_rst, 'time/nlim=2'] + case_args,
@@ -281,6 +389,390 @@ def _run_corrupt_moment_count_restart_guard():
                            'Expected substring: ' + expected + '\n'
                            'Output:\n' + output)
     _RESTART_GUARDS['bad_moment_count'] = True
+
+
+def _run_schema_version_restart_guard():
+    base = 'pic_rst_safe_guard_bad_schema'
+    base_seg = base + '_seg'
+    base_rst = base + '_rst'
+    base_bad = base + '_corrupt'
+
+    for name in [base_seg, base_rst, base_bad]:
+        _remove_outputs(name)
+
+    case_args = _CASES['no_mhd']
+    _run_success(base + '_seg_run', 1,
+                 ['job/basename=' + base_seg, 'time/nlim=1'] + case_args)
+
+    src_rst_path = os.path.join('rst', base_seg + '.00000.rst')
+    dst_rst_path = os.path.join('rst', base_bad + '.00000.rst')
+    full_src = os.path.join(_athena_exe_dir(), src_rst_path)
+    full_dst = os.path.join(_athena_exe_dir(), dst_rst_path)
+    if not os.path.exists(full_src):
+        raise RuntimeError('Expected restart file not found: ' + full_src)
+    shutil.copyfile(full_src, full_dst)
+    _corrupt_particle_restart_metadata_int(
+        full_dst, meta_index=0, bad_value=_EXPECTED_RESTART_SCHEMA + 1)
+    _write_shared_restart_publication(full_dst)
+
+    code, output = _execute(base + '_restart_run', 1,
+                            ['job/basename=' + base_rst, 'time/nlim=2'] + case_args,
+                            restart_file=dst_rst_path)
+    expected = 'Unsupported particle restart version'
+    if code == 0:
+        raise RuntimeError('Expected schema-version restart failure, but command passed')
+    if expected not in output:
+        raise RuntimeError('Unexpected schema-version restart failure reason\n'
+                           'Expected substring: ' + expected + '\n'
+                           'Output:\n' + output)
+    _RESTART_GUARDS['bad_schema_version'] = True
+
+
+def _run_checksum_restart_guard():
+    base = 'pic_rst_safe_guard_bad_checksum'
+    base_seg = base + '_seg'
+    base_rst = base + '_rst'
+    base_bad = base + '_corrupt'
+
+    for name in [base_seg, base_rst, base_bad]:
+        _remove_outputs(name)
+
+    case_args = _CASES['no_mhd']
+    _run_success(base + '_seg_run', 1,
+                 ['job/basename=' + base_seg, 'time/nlim=1'] + case_args)
+
+    src_rst_path = os.path.join('rst', base_seg + '.00000.rst')
+    dst_rst_path = os.path.join('rst', base_bad + '.00000.rst')
+    full_src = os.path.join(_athena_exe_dir(), src_rst_path)
+    full_dst = os.path.join(_athena_exe_dir(), dst_rst_path)
+    if not os.path.exists(full_src):
+        raise RuntimeError('Expected restart file not found: ' + full_src)
+    shutil.copyfile(full_src, full_dst)
+    _write_shared_restart_publication(full_dst)
+    with open(full_dst, 'ab') as fp:
+        fp.write(b'corrupt-checksum-fixture')
+
+    code, output = _execute(base + '_restart_run', 1,
+                            ['job/basename=' + base_rst, 'time/nlim=2'] + case_args,
+                            restart_file=dst_rst_path)
+    expected = 'restart checksum mismatch for completed artifact'
+    if code == 0:
+        raise RuntimeError('Expected corrupted restart failure, but command passed')
+    if expected not in output:
+        raise RuntimeError('Unexpected corrupted restart failure reason\\n'
+                           'Expected substring: ' + expected + '\\n'
+                           'Output:\\n' + output)
+    _RESTART_GUARDS['bad_checksum'] = True
+
+
+def _run_bound_restart_override_guard():
+    base = 'pic_rst_safe_guard_bound_jcoef'
+    base_seg = base + '_seg'
+    base_rst = base + '_rst'
+
+    for name in [base_seg, base_rst]:
+        _remove_outputs(name)
+
+    case_args = _CASES['coupled_edge_direct']
+    _run_success(base + '_seg_run', 1,
+                 ['job/basename=' + base_seg, 'time/nlim=1'] + case_args)
+
+    rst_path = os.path.join('rst', base_seg + '.00000.rst')
+    full_rst_path = os.path.join(_athena_exe_dir(), rst_path)
+    if not os.path.exists(full_rst_path):
+        raise RuntimeError('Expected restart file not found: ' + full_rst_path)
+
+    code, output = _execute(
+        base + '_restart_run', 1,
+        ['job/basename=' + base_rst,
+         'time/nlim=2'] + case_args + ['particles/couple_j_to_efield_coeff=2.0'],
+        restart_file=rst_path)
+    expected = 'Particle restart physical-model metadata mismatch'
+    if code == 0:
+        raise RuntimeError('Expected bound restart override failure, but command passed')
+    if expected not in output:
+        raise RuntimeError('Unexpected bound restart override failure reason\n'
+                           'Expected substring: ' + expected + '\n'
+                           'Output:\n' + output)
+    _RESTART_GUARDS['bound_j_to_efield_coeff_override'] = True
+
+
+def _copy_shared_restart_publication(src, dst):
+    shutil.copyfile(src, dst)
+    _write_shared_restart_publication(dst)
+
+
+def _rewrite_manifest(path, update):
+    manifest_path = path + '.manifest'
+    with open(manifest_path, encoding='ascii') as fp:
+        manifest = json.load(fp)
+    update(manifest)
+    with open(manifest_path, 'w', encoding='ascii') as fp:
+        json.dump(manifest, fp, indent=2, sort_keys=True)
+        fp.write('\n')
+    _write_completion_marker(manifest_path)
+
+
+def _run_restart_expect_fail(label, restart_file, arguments, expected):
+    code, output = _execute(label, 1, arguments, restart_file=restart_file)
+    if code == 0:
+        raise RuntimeError('Expected restart publication failure, but command passed')
+    if expected not in output:
+        raise RuntimeError('Unexpected restart publication failure reason\n'
+                           'Expected substring: ' + expected + '\n'
+                           'Output:\n' + output)
+
+
+def _run_publication_failure_path_guards():
+    base = 'pic_rst_safe_guard_publication'
+    base_seed = base + '_seed'
+    case_args = _CASES['no_mhd']
+    _remove_outputs(base_seed)
+    _run_success(base + '_seed_run', 1,
+                 ['job/basename=' + base_seed, 'time/nlim=1'] + case_args)
+
+    src_rst_path = os.path.join('rst', base_seed + '.00000.rst')
+    full_src = os.path.join(_athena_exe_dir(), src_rst_path)
+    if not os.path.exists(full_src):
+        raise RuntimeError('Expected restart file not found: ' + full_src)
+
+    def prepare_fixture(tag):
+        fixture_base = base + '_' + tag
+        _remove_outputs(fixture_base)
+        dst_rst_path = os.path.join('rst', fixture_base + '.00000.rst')
+        full_dst = os.path.join(_athena_exe_dir(), dst_rst_path)
+        _copy_shared_restart_publication(full_src, full_dst)
+        return fixture_base, dst_rst_path, full_dst
+
+    fixture_base, rst_path, full_dst = prepare_fixture('missing_marker')
+    os.remove(full_dst + '.complete')
+    _run_restart_expect_fail(
+        fixture_base, rst_path,
+        ['job/basename=' + fixture_base + '_rst', 'time/nlim=2'] + case_args,
+        'restart completion marker is missing')
+    _RESTART_GUARDS['missing_completion_marker'] = True
+
+    fixture_base, rst_path, full_dst = prepare_fixture('truncated_marker')
+    with open(full_dst + '.complete', 'w', encoding='ascii') as fp:
+        fp.write('ATHENAK_RESTART_COMPLETE_V1\nsize=')
+    _run_restart_expect_fail(
+        fixture_base, rst_path,
+        ['job/basename=' + fixture_base + '_rst', 'time/nlim=2'] + case_args,
+        'restart completion marker is malformed')
+    _RESTART_GUARDS['truncated_completion_marker'] = True
+
+    fixture_base, rst_path, full_dst = prepare_fixture('truncated_payload')
+    os.truncate(full_dst, max(1, os.path.getsize(full_dst) // 2))
+    _run_restart_expect_fail(
+        fixture_base, rst_path,
+        ['job/basename=' + fixture_base + '_rst', 'time/nlim=2'] + case_args,
+        'restart checksum mismatch for completed artifact')
+    _RESTART_GUARDS['truncated_payload'] = True
+
+    fixture_base, rst_path, full_dst = prepare_fixture('missing_manifest_marker')
+    os.remove(full_dst + '.manifest.complete')
+    _run_restart_expect_fail(
+        fixture_base, rst_path,
+        ['job/basename=' + fixture_base + '_rst', 'time/nlim=2'] + case_args,
+        'restart completion marker is missing')
+    _RESTART_GUARDS['missing_manifest_completion_marker'] = True
+
+    fixture_base, rst_path, full_dst = prepare_fixture('manifest_wrong_path')
+    payload_name = os.path.basename(full_dst)
+    _rewrite_manifest(
+        full_dst,
+        lambda manifest: manifest['members'][0].update({
+            'path': os.path.join('rst', 'rank_00000000', payload_name),
+        }))
+    _run_restart_expect_fail(
+        fixture_base, rst_path,
+        ['job/basename=' + fixture_base + '_rst', 'time/nlim=2'] + case_args,
+        'restart manifest does not bind requested artifact')
+    _RESTART_GUARDS['manifest_wrong_path'] = True
+
+    fixture_base, rst_path, full_dst = prepare_fixture('manifest_wrong_digest')
+    _rewrite_manifest(
+        full_dst,
+        lambda manifest: manifest['members'][0].update({
+            'fnv1a64': '0000000000000000',
+        }))
+    _run_restart_expect_fail(
+        fixture_base, rst_path,
+        ['job/basename=' + fixture_base + '_rst', 'time/nlim=2'] + case_args,
+        'restart manifest digest mismatch for member')
+    _RESTART_GUARDS['manifest_wrong_digest'] = True
+
+    published = glob.glob(os.path.join(_athena_exe_dir(), 'rst',
+                                       base_seed + '.*.rst'))
+    sequence = max(int(path.rsplit('.', 2)[-2]) for path in published) + 1
+    newer = os.path.join(_athena_exe_dir(), 'rst',
+                         base_seed + '.' + format(sequence, '05d') + '.rst')
+    shutil.copyfile(full_src, newer + '.partial')
+    with open(newer + '.partial', 'ab') as fp:
+        fp.write(b'interrupted-restart-publication')
+    with open(newer + '.complete.partial', 'w', encoding='ascii') as fp:
+        fp.write('ATHENAK_RESTART_COMPLETE_V1\n')
+    with open(newer + '.manifest.partial', 'w', encoding='ascii') as fp:
+        fp.write('{"schema": "ATHENAK_RESTART_MANIFEST_V1", "members": [')
+    prior_digest = _fnv1a64(full_src)
+    _run_success(
+        base + '_interrupted_prior_restart', 1,
+        ['job/basename=' + base + '_prior_rst', 'time/nlim=2'] + case_args,
+        restart_file=src_rst_path)
+    if _fnv1a64(full_src) != prior_digest:
+        raise RuntimeError(
+            'Prior completed restart changed after interrupted publication')
+    if os.path.exists(newer):
+        raise RuntimeError('Interrupted publication unexpectedly exposed a final restart')
+    _RESTART_GUARDS['interrupted_publication_preserves_prior'] = True
+
+
+def _run_preload_failure_guard(injector, fault, guard, expected):
+    base = 'pic_rst_safe_guard_' + guard
+    _remove_outputs(base)
+    code, output = _execute(
+        base, 1,
+        ['job/basename=' + base,
+         'time/nlim=1',
+         'output7/single_file_per_rank=true'] + _CASES['no_mhd'],
+        env=_fault_injector_env(injector, fault),
+        timeout=30)
+    if code == 0:
+        raise RuntimeError('Expected injected restart failure for ' + guard)
+    if expected not in output:
+        raise RuntimeError('Unexpected injected restart failure reason for ' + guard +
+                           '\nExpected substring: ' + expected + '\nOutput:\n' + output)
+    _assert_incomplete_restart_only(base, per_rank=True)
+    _RESTART_GUARDS[guard] = True
+
+
+def _run_killed_writer_restart_guard(injector):
+    base = 'pic_rst_safe_guard_killed_writer'
+    base_seed = base + '_seed'
+    base_recovered = base + '_recovered'
+    for name in [base_seed, base_recovered]:
+        _remove_outputs(name)
+
+    common = ['output7/single_file_per_rank=true'] + _CASES['no_mhd']
+    _run_success(base + '_seed_run', 1,
+                 ['job/basename=' + base_seed, 'time/nlim=1'] + common)
+    prior_full, prior_rst = _latest_restart_path(base_seed, per_rank=True)
+    prior_digest = _fnv1a64(prior_full)
+    prior_published = set(glob.glob(os.path.join(
+        _athena_exe_dir(), 'rst', 'rank_00000000', base_seed + '.*.rst')))
+
+    code, _ = _execute(
+        base + '_injected_run', 1,
+        ['job/basename=' + base_seed, 'time/nlim=2'] + common,
+        restart_file=prior_rst,
+        env=_fault_injector_env(injector, 'kill_writer'),
+        timeout=30)
+    if code == 0:
+        raise RuntimeError('Expected killed restart writer, but command passed')
+
+    published = set(glob.glob(os.path.join(
+        _athena_exe_dir(), 'rst', 'rank_00000000', base_seed + '.*.rst')))
+    partials = glob.glob(os.path.join(
+        _athena_exe_dir(), 'rst', 'rank_00000000', base_seed + '.*.rst.partial'))
+    if published != prior_published:
+        raise RuntimeError('Killed writer unexpectedly changed published restart set')
+    if not partials or not any(os.path.getsize(path) > 0 for path in partials):
+        raise RuntimeError('Killed writer did not leave non-empty incomplete residue')
+    if _fnv1a64(prior_full) != prior_digest:
+        raise RuntimeError('Killed writer changed the prior completed restart')
+
+    _run_success(
+        base + '_prior_restart', 1,
+        ['job/basename=' + base_recovered,
+         'time/nlim=2',
+         'output7/dcycle=0'] + common,
+        restart_file=prior_rst)
+    _RESTART_GUARDS['killed_writer_preserves_prior'] = True
+
+
+def _run_preload_restart_guards():
+    build_dir = tempfile.mkdtemp(prefix='pic_restart_fault_', dir=_athena_exe_dir())
+    try:
+        try:
+            injector = _build_fault_injector(build_dir)
+        except RuntimeError as err:
+            reason = str(err)
+            for guard in [
+                    'short_header_write',
+                    'stdio_fseek_failure',
+                    'killed_writer_preserves_prior']:
+                _skip_drill(guard, reason)
+            return
+        _run_preload_failure_guard(
+            injector, 'short_header_write', 'short_header_write',
+            'Failed to write restart header to partial artifact')
+        _run_preload_failure_guard(
+            injector, 'fseek_failure', 'stdio_fseek_failure',
+            'Error seeking before writing data')
+        _run_killed_writer_restart_guard(injector)
+    finally:
+        shutil.rmtree(build_dir)
+
+
+def _run_full_device_restart_target_guard():
+    guard = 'dev_full_publication_failure'
+    if not os.path.exists('/dev/full'):
+        _skip_drill(guard, '/dev/full is not available on this host')
+        return
+
+    base = 'pic_rst_safe_guard_dev_full'
+    run_dir = tempfile.mkdtemp(prefix=base + '_', dir=_athena_exe_dir())
+    rank_dir = os.path.join(run_dir, 'rst', 'rank_00000000')
+    os.makedirs(rank_dir)
+    partial = os.path.join(rank_dir, base + '.00000.rst.partial')
+    os.symlink('/dev/full', partial)
+    try:
+        code, output = _execute(
+            base, 1,
+            ['-d', run_dir,
+             'job/basename=' + base,
+             'time/nlim=1',
+             'output7/single_file_per_rank=true'] + _CASES['no_mhd'],
+            timeout=30)
+        if code == 0:
+            raise RuntimeError('Expected /dev/full restart publication failure')
+        expected = [
+            'Failed to write restart header to partial artifact',
+            'Error seeking before writing data',
+            'Failed to sync or close restart partial artifact',
+        ]
+        if not any(reason in output for reason in expected):
+            raise RuntimeError('Unexpected /dev/full restart failure reason\n'
+                               'Output:\n' + output)
+        if os.path.exists(partial[:-len('.partial')]):
+            raise RuntimeError('/dev/full restart unexpectedly published final artifact')
+        _RESTART_GUARDS[guard] = True
+    finally:
+        shutil.rmtree(run_dir)
+
+
+def _run_unwritable_restart_target_guard():
+    base = 'pic_rst_safe_guard_unwritable_target'
+    run_dir = tempfile.mkdtemp(prefix=base + '_', dir=_athena_exe_dir())
+    rst_dir = os.path.join(run_dir, 'rst')
+    os.mkdir(rst_dir)
+    os.chmod(rst_dir, 0o555)
+    try:
+        code, output = _execute(
+            base, 1,
+            ['-d', run_dir,
+             'job/basename=' + base,
+             'time/nlim=1'] + _CASES['no_mhd'])
+        if code == 0:
+            raise RuntimeError('Expected unwritable restart-target failure, but command '
+                               'passed')
+        if '.rst.partial' not in output or 'could not be opened' not in output:
+            raise RuntimeError('Unexpected unwritable restart-target failure reason\n'
+                               'Output:\n' + output)
+        _RESTART_GUARDS['unwritable_target'] = True
+    finally:
+        os.chmod(rst_dir, 0o755)
+        shutil.rmtree(run_dir)
 
 
 def _run_corrupt_species_restart_guard():
@@ -304,6 +796,7 @@ def _run_corrupt_species_restart_guard():
         raise RuntimeError('Expected restart file not found: ' + full_src)
     shutil.copyfile(full_src, full_dst)
     _corrupt_first_particle_species(full_dst, bad_species=99)
+    _write_shared_restart_publication(full_dst)
 
     code, output = _execute(base + '_restart_run', 1,
                             ['job/basename=' + base_rst, 'time/nlim=2'] + case_args,
@@ -391,6 +884,56 @@ def _run_pusher_type_guards():
     _PUSHER_GUARDS['star_boris'] = True
 
 
+def _run_star_gravity_restart_override_guard():
+    _write_star_particle_file()
+    base = 'pic_rst_safe_guard_star_gravity'
+    base_seg = base + '_seg'
+    base_rst = base + '_rst'
+    for name in [base_seg, base_rst]:
+        _remove_outputs(name)
+
+    common = [
+        'particles/particle_type=star',
+        'particles/star_particle_file=pic_guard_star_particles.txt',
+        'particles/pusher=rk4_gravity',
+        'particles/deposit_moments=false',
+        'particles/couple_moments_to_mhd=false',
+        'particles/couple_moments_momentum_to_mhd=false',
+        'particles/couple_moments_energy_to_mhd=false',
+        'output1/dcycle=0',
+        'output2/dcycle=0',
+        'output3/dcycle=0',
+        'output4/dcycle=0',
+        'output5/dcycle=0',
+        'output6/dcycle=0',
+        'output8/dcycle=0',
+    ]
+    _run_success(base + '_segment', 1,
+                 ['job/basename=' + base_seg, 'time/nlim=1'] + common)
+    rst_path = os.path.join('rst', base_seg + '.00000.rst')
+    full_rst_path = os.path.join(_athena_exe_dir(), rst_path)
+    if not os.path.exists(full_rst_path):
+        raise RuntimeError('Expected restart file not found: ' + full_rst_path)
+
+    _run_success(base + '_unchanged_restart', 1,
+                 ['job/basename=' + base_rst, 'time/nlim=2'] + common,
+                 restart_file=rst_path)
+    code, output = _execute(
+        base + '_changed_restart', 1,
+        ['job/basename=' + base_rst + '_changed', 'time/nlim=2',
+         'potential/mass_gal=2.0'] + common,
+        restart_file=rst_path)
+    expected = 'Particle restart physical-model metadata mismatch'
+    if code == 0:
+        raise RuntimeError('Expected star-gravity restart override failure, but command '
+                           'passed')
+    if expected not in output:
+        raise RuntimeError('Unexpected star-gravity restart override failure reason\n'
+                           'Expected substring: ' + expected + '\n'
+                           'Output:\n' + output)
+    _RESTART_GUARDS['star_gravity_bound_override'] = True
+
+
 def _latest_output_file(basename, file_id):
     pattern = os.path.join(_athena_exe_dir(), 'bin',
                            basename + '.' + file_id + '.*.bin')
@@ -472,6 +1015,58 @@ def _measure_case(basename):
         'bcc3_l2': _l2_quantity(bcc_data, 'bcc3'),
         'tracked': _read_tracked_snapshot(basename),
     }
+
+
+def _run_soft_wallclock_continuation_parity():
+    guard = 'soft_wallclock_continuation_parity'
+    base = 'pic_rst_safe_soft_wallclock'
+    base_full = base + '_full'
+    base_seg = base + '_seg'
+    base_rst = base + '_rst'
+    for name in [base_full, base_seg, base_rst]:
+        _remove_outputs(name)
+
+    coarse_outputs = ['output' + str(index) + '/dcycle=1000000'
+                      for index in range(1, 9)]
+    common = ['time/tlim=1000000',
+              'time/ndiag=1000000'] + coarse_outputs + _CASES['no_mhd']
+    code, output = _execute(
+        base + '_segment', 1,
+        ['-t', '00:00:01',
+         'job/basename=' + base_seg,
+         'time/nlim=100000'] + common,
+        timeout=30)
+    if code != 0:
+        raise RuntimeError('Soft wallclock segment failed\n' + output)
+    if 'Terminating on wall clock limit' not in output:
+        _skip_drill(guard, 'soft -t run did not terminate on the wallclock limit')
+        return
+
+    cycles = re.findall(r'time=.* cycle=([0-9]+)', output)
+    if not cycles:
+        raise RuntimeError('Unable to parse soft wallclock termination cycle')
+    target_cycle = int(cycles[-1]) + 2
+    _, restart_path = _latest_restart_path(base_seg)
+
+    for label, arguments, restart_file in [
+            (base + '_full_run',
+             ['job/basename=' + base_full,
+              'time/nlim=' + str(target_cycle)] + common,
+             None),
+            (base + '_restart_run',
+             ['job/basename=' + base_rst,
+              'time/nlim=' + str(target_cycle)] + common,
+             restart_path)]:
+        code, output = _execute(label, 1, arguments, restart_file=restart_file,
+                                timeout=30)
+        if code != 0:
+            raise RuntimeError('Command failed for ' + label + '\n' + output)
+
+    _RESULTS[base] = {
+        'full': _measure_case(base_full),
+        'restart': _measure_case(base_rst),
+    }
+    _RESTART_GUARDS[guard] = True
 
 
 def _run_restart_triplet(case_tag, nproc, case_args):
@@ -622,9 +1217,18 @@ def run(**kwargs):
                          guard['reason'])
     _run_corrupt_species_restart_guard()
     _run_corrupt_moment_count_restart_guard()
+    _run_schema_version_restart_guard()
+    _run_checksum_restart_guard()
+    _run_bound_restart_override_guard()
+    _run_publication_failure_path_guards()
+    _run_preload_restart_guards()
+    _run_full_device_restart_target_guard()
+    _run_unwritable_restart_target_guard()
+    _run_soft_wallclock_continuation_parity()
     _run_missing_tracked_particle_guard()
     _run_tracked_output_requires_particles_guard()
     _run_pusher_type_guards()
+    _run_star_gravity_restart_override_guard()
     _run_direct_inflow_edge_current_bc_guard()
 
     if mpi_enabled:
@@ -666,6 +1270,38 @@ def analyze():
     ok = bool(_RESTART_GUARDS.get('bad_moment_count', False)) and ok
     if not _RESTART_GUARDS.get('bad_moment_count', False):
         logger.error('Missing corrupted restart moment-count guard result')
+    ok = bool(_RESTART_GUARDS.get('bad_schema_version', False)) and ok
+    if not _RESTART_GUARDS.get('bad_schema_version', False):
+        logger.error('Missing corrupted restart schema-version guard result')
+    ok = bool(_RESTART_GUARDS.get('bad_checksum', False)) and ok
+    if not _RESTART_GUARDS.get('bad_checksum', False):
+        logger.error('Missing corrupted restart checksum guard result')
+    ok = bool(_RESTART_GUARDS.get('bound_j_to_efield_coeff_override', False)) and ok
+    if not _RESTART_GUARDS.get('bound_j_to_efield_coeff_override', False):
+        logger.error('Missing bound restart J-to-E coefficient override guard result')
+    publication_guards = [
+        'missing_completion_marker',
+        'truncated_completion_marker',
+        'truncated_payload',
+        'missing_manifest_completion_marker',
+        'manifest_wrong_path',
+        'manifest_wrong_digest',
+        'interrupted_publication_preserves_prior',
+        'short_header_write',
+        'stdio_fseek_failure',
+        'dev_full_publication_failure',
+        'killed_writer_preserves_prior',
+        'unwritable_target',
+        'soft_wallclock_continuation_parity',
+    ]
+    for guard in publication_guards:
+        if guard in _SKIPPED_DRILLS:
+            logger.warning('Restart publication drill skipped: %s: %s',
+                           guard, _SKIPPED_DRILLS[guard])
+            continue
+        ok = bool(_RESTART_GUARDS.get(guard, False)) and ok
+        if not _RESTART_GUARDS.get(guard, False):
+            logger.error('Missing restart publication guard result: %s', guard)
     ok = bool(_TRACK_GUARDS.get('missing_tag', False)) and ok
     if not _TRACK_GUARDS.get('missing_tag', False):
         logger.error('Missing tracked-particle missing-tag guard result')
@@ -678,6 +1314,9 @@ def analyze():
     ok = bool(_PUSHER_GUARDS.get('star_boris', False)) and ok
     if not _PUSHER_GUARDS.get('star_boris', False):
         logger.error('Missing star/Boris pusher guard result')
+    ok = bool(_RESTART_GUARDS.get('star_gravity_bound_override', False)) and ok
+    if not _RESTART_GUARDS.get('star_gravity_bound_override', False):
+        logger.error('Missing bound star-gravity restart override guard result')
     ok = bool(_EDGE_GUARDS.get('direct_inflow_rejected', False)) and ok
     if not _EDGE_GUARDS.get('direct_inflow_rejected', False):
         logger.error('Missing direct edge-current inflow guard result')

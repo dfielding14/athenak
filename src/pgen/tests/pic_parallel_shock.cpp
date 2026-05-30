@@ -18,12 +18,14 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <iomanip>
 #include <iostream>
 #include <limits>
 #include <map>
 #include <random>
+#include <sstream>
 #include <string>
 #include <tuple>
 #include <utility>
@@ -117,6 +119,124 @@ Real ps_mass_reservoir_global = 0.0;
 bool ps_tag_seeded = false;
 std::int64_t ps_next_tag = 0;
 ParameterInput *ps_pin = nullptr;
+
+void HashParallelShockRestartBytes(std::uint64_t &hash, const void *data,
+                                   const std::size_t size) {
+  constexpr std::uint64_t fnv_prime = 1099511628211ULL;
+  const auto *bytes = static_cast<const unsigned char *>(data);
+  for (std::size_t n = 0; n < size; ++n) {
+    hash ^= static_cast<std::uint64_t>(bytes[n]);
+    hash *= fnv_prime;
+  }
+}
+
+template <typename T>
+void HashParallelShockRestartControl(std::uint64_t &hash, const char *name,
+                                     const T &value) {
+  while (*name != '\0') {
+    HashParallelShockRestartBytes(hash, name, 1);
+    ++name;
+  }
+  constexpr unsigned char separator = 0;
+  HashParallelShockRestartBytes(hash, &separator, sizeof(separator));
+  HashParallelShockRestartBytes(hash, &value, sizeof(value));
+}
+
+std::string ParallelShockRestartControlFingerprint() {
+  constexpr std::uint64_t fnv_offset_basis = 14695981039346656037ULL;
+  std::uint64_t hash = fnv_offset_basis;
+  constexpr char schema[] = "athenak_pic_parallel_shock_restart_controls_v1";
+  HashParallelShockRestartBytes(hash, schema, sizeof(schema));
+
+  // Diagnostics cadence and initial-only seed noise do not alter continuation.
+  HashParallelShockRestartControl(hash, "ps_rho0", ps_rho0);
+  HashParallelShockRestartControl(hash, "ps_p0", ps_p0);
+  HashParallelShockRestartControl(hash, "ps_u0", ps_u0);
+  HashParallelShockRestartControl(hash, "ps_b0", ps_b0);
+  HashParallelShockRestartControl(hash, "ps_eta", ps_eta);
+  HashParallelShockRestartControl(hash, "ps_vinj_over_u0", ps_vinj_over_u0);
+  HashParallelShockRestartControl(hash, "ps_inject_half_width_cells",
+                                  ps_inject_half_width_cells);
+  HashParallelShockRestartControl(hash, "ps_inject_t_start", ps_inject_t_start);
+  HashParallelShockRestartControl(hash, "ps_inject_t_stop", ps_inject_t_stop);
+  HashParallelShockRestartControl(hash, "ps_refine_curv", ps_refine_curv);
+  HashParallelShockRestartControl(hash, "ps_derefine_curv", ps_derefine_curv);
+  HashParallelShockRestartControl(hash, "ps_rho_floor_frac", ps_rho_floor_frac);
+  HashParallelShockRestartControl(hash, "ps_p_floor_frac", ps_p_floor_frac);
+  HashParallelShockRestartControl(hash, "ps_enable_injection",
+                                  static_cast<int>(ps_enable_injection));
+  HashParallelShockRestartControl(hash, "ps_enable_subtraction",
+                                  static_cast<int>(ps_enable_subtraction));
+  HashParallelShockRestartControl(hash, "ps_enable_curvature_amr",
+                                  static_cast<int>(ps_enable_curvature_amr));
+  HashParallelShockRestartControl(hash, "ps_inject_species", ps_inject_species);
+  HashParallelShockRestartControl(hash, "ps_inject_seed", ps_inject_seed);
+  HashParallelShockRestartControl(hash, "ps_particle_mass", ps_particle_mass);
+  HashParallelShockRestartControl(hash, "ps_particle_charge", ps_particle_charge);
+  HashParallelShockRestartControl(hash, "ps_particle_q_over_m",
+                                  ps_particle_q_over_m);
+  HashParallelShockRestartControl(hash, "ps_particle_macro_mass",
+                                  ps_particle_macro_mass);
+
+  HashParallelShockRestartControl(hash, "ps_enable_frame_tracking",
+                                  static_cast<int>(ps_enable_frame_tracking));
+  HashParallelShockRestartControl(hash, "ps_frame_mode",
+                                  static_cast<int>(ps_frame_mode));
+  HashParallelShockRestartControl(hash, "ps_frame_t_start", ps_frame_t_start);
+  HashParallelShockRestartControl(hash, "ps_frame_t_ramp", ps_frame_t_ramp);
+  HashParallelShockRestartControl(hash, "ps_frame_vfrac", ps_frame_vfrac);
+  HashParallelShockRestartControl(hash, "ps_frame_dv_max", ps_frame_dv_max);
+  HashParallelShockRestartControl(hash, "ps_frame_apply_to_particles",
+                                  static_cast<int>(ps_frame_apply_to_particles));
+  HashParallelShockRestartControl(hash, "ps_frame_apply_to_inflow",
+                                  static_cast<int>(ps_frame_apply_to_inflow));
+  HashParallelShockRestartControl(hash, "ps_frame_require_uniform",
+                                  static_cast<int>(ps_frame_require_uniform));
+  HashParallelShockRestartControl(hash, "ps_recenter_x_target",
+                                  ps_recenter_x_target);
+  HashParallelShockRestartControl(hash, "ps_recenter_x_trigger",
+                                  ps_recenter_x_trigger);
+  HashParallelShockRestartControl(hash, "ps_recenter_dx1", ps_recenter_dx1);
+  HashParallelShockRestartControl(hash, "ps_recenter_shift_cells",
+                                  ps_recenter_shift_cells);
+  HashParallelShockRestartControl(hash, "ps_recenter_vshock_model",
+                                  ps_recenter_vshock_model);
+
+  HashParallelShockRestartControl(hash, "ps_shock_speed", ps_shock_speed);
+  HashParallelShockRestartControl(hash, "ps_xshock0", ps_xshock0);
+  HashParallelShockRestartControl(hash, "ps_use_2d3v",
+                                  static_cast<int>(ps_use_2d3v));
+
+  std::ostringstream fingerprint;
+  fingerprint << "v1:" << std::hex << std::setfill('0') << std::setw(16) << hash;
+  return fingerprint.str();
+}
+
+void ValidateAndStoreParallelShockRestartControls(ParameterInput *pin,
+                                                  const bool restart) {
+  constexpr char block[] = "problem";
+  constexpr char parameter[] = "ps_restart_control_fingerprint";
+  const std::string current = ParallelShockRestartControlFingerprint();
+  if (restart) {
+    if (!pin->DoesParameterExist(block, parameter)) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "pic_parallel_shock restart metadata is missing the "
+                << "continuation-control fingerprint." << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    const std::string checkpointed = pin->GetString(block, parameter);
+    if (checkpointed != current) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "pic_parallel_shock restart continuation-control fingerprint "
+                << "mismatch; injection/frame controls must not be overridden."
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+  }
+  pin->SetString(block, parameter, current);
+}
 
 inline bool FrameModeVelocity() {
   return ps_frame_mode == PSFrameMode::velocity;
@@ -238,6 +358,30 @@ inline Real EstimateShockSpeed(const Real gamma, const Real rho0, const Real p0,
   return u0/(r - 1.0);
 }
 
+void EncodeCRStateFromVelocity(const particles::Particles *ppart,
+                               const Real vx, const Real vy, const Real vz,
+                               Real &state_x, Real &state_y, Real &state_z) {
+  state_x = vx;
+  state_y = vy;
+  state_z = vz;
+  if (!ppart->UsesRelativisticCRState()) return;
+
+  const Real light_speed = ppart->pic_cr_light_speed;
+  const Real v2 = vx*vx + vy*vy + vz*vz;
+  if (v2 >= light_speed*light_speed) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock injected velocity must satisfy |v| < "
+              << "<particles>/pic_cr_light_speed in a momentum-state mode."
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  const Real gamma = 1.0/std::sqrt(1.0 - v2/(light_speed*light_speed));
+  state_x *= gamma;
+  state_y *= gamma;
+  state_z *= gamma;
+}
+
 void ApplyFrameShiftToFluid(Mesh *pm, const Real dvx) {
   if (dvx == 0.0) return;
   MeshBlockPack *pmbp = pm->pmb_pack;
@@ -272,6 +416,14 @@ void ApplyFrameShiftToParticles(Mesh *pm, const Real dvx) {
 
   auto *ppart = pmbp->ppart;
   if (ppart->nprtcl_thispack <= 0) return;
+  if (ppart->UsesRelativisticCRState()) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock particle frame shifting is not yet defined "
+              << "for momentum-state modes; disable "
+              << "<problem>/ps_frame_apply_to_particles." << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
   auto &prtcl_rdata = ppart->prtcl_rdata;
   par_for("ps_frame_shift_particles", DevExeSpace(), 0, ppart->nprtcl_thispack - 1,
   KOKKOS_LAMBDA(const int p) {
@@ -806,11 +958,16 @@ void ParallelShockSource(Mesh *pm, const Real bdt) {
     }
     const Real inv_vol = 1.0/part.vol;
     const Real mass_rho = ps_particle_macro_mass*inv_vol;
+    Real state_x, state_y, state_z;
+    EncodeCRStateFromVelocity(ppart, part.vx, part.vy, part.vz,
+                              state_x, state_y, state_z);
     dit->second.dm += mass_rho;
-    dit->second.dmx += mass_rho*part.vx;
-    dit->second.dmy += mass_rho*part.vy;
-    dit->second.dmz += mass_rho*part.vz;
-    dit->second.de += 0.5*mass_rho*(SQR(part.vx) + SQR(part.vy) + SQR(part.vz));
+    dit->second.dmx += mass_rho*state_x;
+    dit->second.dmy += mass_rho*state_y;
+    dit->second.dmz += mass_rho*state_z;
+    dit->second.de += mass_rho*particles::CRKineticEnergy(
+        ppart->UsesRelativisticCRState(), ppart->pic_cr_light_speed,
+        state_x, state_y, state_z);
   }
 
   const int old_npart = ppart->nprtcl_thispack;
@@ -829,15 +986,29 @@ void ParallelShockSource(Mesh *pm, const Real bdt) {
     h_pi_new(PGID, n) = injected[n].gid;
     h_pi_new(PSP, n) = ps_inject_species;
     h_pi_new(PTAG, n) = static_cast<int>(tag_base + ninj_before + n);
+    h_pi_new(PCRSOURCE, n) = static_cast<int>(CRParticleSource::shock_injected);
 
     h_pr_new(IPX, n) = injected[n].x1;
     h_pr_new(IPY, n) = injected[n].x2;
     h_pr_new(IPZ, n) = injected[n].x3;
-    h_pr_new(IPVX, n) = injected[n].vx;
-    h_pr_new(IPVY, n) = injected[n].vy;
-    h_pr_new(IPVZ, n) = injected[n].vz;
+    EncodeCRStateFromVelocity(ppart, injected[n].vx, injected[n].vy, injected[n].vz,
+                              h_pr_new(IPVX, n), h_pr_new(IPVY, n), h_pr_new(IPVZ, n));
     h_pr_new(IPM, n) = ps_particle_q_over_m;
     h_pr_new(IPWT, n) = 1.0;
+    const Real a1 = particles::PICScaleFactor(
+        ppart->pic_expansion_law, ppart->pic_expansion_rate_x1, pm->time);
+    const Real a2 = particles::PICScaleFactor(
+        ppart->pic_expansion_law, ppart->pic_expansion_rate_x2, pm->time);
+    const Real a3 = particles::PICScaleFactor(
+        ppart->pic_expansion_law, ppart->pic_expansion_rate_x3, pm->time);
+    h_pr_new(IPF0, n) = particles::PICDeltaFBackgroundValue(
+        ppart->pic_deltaf_background, ppart->pic_deltaf_p0, ppart->pic_deltaf_kappa,
+        ppart->pic_deltaf_drift_x1, ppart->pic_deltaf_drift_x2,
+        ppart->pic_deltaf_drift_x3, ppart->pic_deltaf_aniso_x1,
+        ppart->pic_deltaf_aniso_x2, ppart->pic_deltaf_aniso_x3, a1, a2, a3,
+        h_pr_new(IPVX, n), h_pr_new(IPVY, n), h_pr_new(IPVZ, n));
+    h_pr_new(IPDFWT, n) = 0.0;
+    h_pr_new(IPT_BIRTH, n) = pm->time;
   }
 
   Kokkos::resize(ppart->prtcl_idata, ppart->nidata, new_npart);
@@ -1429,6 +1600,7 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
   ps_xshock0 = pmy_mesh_->mesh_size.x1min;
   ps_recenter_dx1 = pmy_mesh_->mesh_size.dx1;
   ps_use_2d3v = (pmy_mesh_->two_d && pmbp->ppart->pic_enable_2d3v);
+  ValidateAndStoreParallelShockRestartControls(pin, restart);
   ps_mass_reservoir_global = restart ?
       pin->GetOrAddReal("problem", "ps_mass_reservoir_global", 0.0) : 0.0;
   ps_tag_seeded = false;
@@ -1549,13 +1721,17 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
   const Real ph_bz_2 = ps_seed_noise_phase_bz[1];
   const Real ph_bz_3 = ps_seed_noise_phase_bz[2];
   const Real ph_bz_4 = ps_seed_noise_phase_bz[3];
+  const Real upstream_rho0 = ps_rho0;
+  const Real upstream_p0 = ps_p0;
+  const Real upstream_u0 = ps_u0;
+  const Real upstream_b0 = ps_b0;
 
   // Set uniform upstream state (flow toward the reflecting wall).
   par_for("pgen_pic_parallel_shock", DevExeSpace(), 0, pmbp->nmb_thispack - 1,
           ks, ke, js, je, is, ie,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
-    u0(m, IDN, k, j, i) = ps_rho0;
-    u0(m, IM1, k, j, i) = -ps_rho0*ps_u0;
+    u0(m, IDN, k, j, i) = upstream_rho0;
+    u0(m, IM1, k, j, i) = -upstream_rho0*upstream_u0;
     u0(m, IM2, k, j, i) = 0.0;
     u0(m, IM3, k, j, i) = 0.0;
 
@@ -1579,10 +1755,10 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
       dbz = seed_noise_amp*seed_noise_norm*nbz;
     }
 
-    b0.x1f(m, k, j, i) = ps_b0;
+    b0.x1f(m, k, j, i) = upstream_b0;
     b0.x2f(m, k, j, i) = dby;
     b0.x3f(m, k, j, i) = dbz;
-    if (i == ie) b0.x1f(m, k, j, i + 1) = ps_b0;
+    if (i == ie) b0.x1f(m, k, j, i + 1) = upstream_b0;
     if (j == je) b0.x2f(m, k, j + 1, i) = dby;
     if (k == ke) b0.x3f(m, k + 1, j, i) = dbz;
   });
@@ -1597,7 +1773,7 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
                      SQR(u0(m, IM2, k, j, i)) +
                      SQR(u0(m, IM3, k, j, i)))/u0(m, IDN, k, j, i);
     Real emag = 0.5*(SQR(bx) + SQR(by) + SQR(bz));
-    u0(m, IEN, k, j, i) = ps_p0/gm1 + ekin + emag;
+    u0(m, IEN, k, j, i) = upstream_p0/gm1 + ekin + emag;
   });
 
   // Keep size data synced for host-side injection cell selection.

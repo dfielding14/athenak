@@ -1,0 +1,104 @@
+# BOUNDED Q-016 HOST REGRESSION: not publication or Frontier qualification evidence.
+# Exercises initial and shock-injected CR provenance, MeshBlock migration, PVTK, and restart.
+
+<comment>
+problem   = Q-016 bounded particle provenance and spectra restart fixture
+
+<job>
+basename  = pic_q016_particle_provenance
+
+<mesh>
+nghost    = 2
+nx1       = 8
+x1min     = 0.0
+x1max     = 4.0
+ix1_bc    = reflect
+ox1_bc    = inflow
+
+nx2       = 4
+x2min     = 0.0
+x2max     = 1.0
+ix2_bc    = periodic
+ox2_bc    = periodic
+
+nx3       = 1
+x3min     = 0.0
+x3max     = 1.0
+ix3_bc    = periodic
+ox3_bc    = periodic
+
+<meshblock>
+nx1       = 4
+nx2       = 4
+nx3       = 1
+
+<time>
+evolution  = dynamic
+integrator = rk2
+cfl_number = 0.2
+nlim       = 8
+tlim       = 1.0
+ndiag      = 1
+
+<mhd>
+eos         = ideal
+reconstruct = plm
+rsolver     = llf
+gamma       = 1.66666666667
+
+<particles>
+particle_type                 = cosmic_ray
+ppc                           = 0.5
+pusher                        = drift
+nspecies                      = 2
+cr_distribution               = center
+deposit_moments               = false
+deposit_qscale                = 1.0e-3
+couple_moments_to_mhd         = false
+couple_moments_momentum_to_mhd = false
+couple_moments_energy_to_mhd  = false
+cr_vx0                        = 8.0
+cr_vy0                        = 0.0
+cr_vz0                        = 0.0
+pic_background_mode           = coupled
+pic_feedback_mode             = test_particle
+pic_max_cell_cross            = 2
+
+<species0>
+mass   = 1.0
+charge = 1.0
+
+<species1>
+mass   = 2.0
+charge = 1.0
+
+<problem>
+pgen_name                     = pic_parallel_shock
+ps_rho0                       = 1.0
+ps_p0                         = 0.10
+ps_u0                         = 3.0
+ps_b0                         = 1.0
+ps_eta                        = 0.1
+ps_vinj_over_u0               = 3.16227766017
+ps_inject_half_width_cells    = 0.5
+ps_inject_t_start             = 0.0
+ps_inject_t_stop              = 1.0e9
+ps_enable_injection           = true
+ps_enable_gas_subtraction     = false
+ps_enable_curvature_amr       = false
+ps_inject_species             = 1
+ps_inject_seed                = 16016
+ps_enable_frame_tracking      = false
+ps_frame_diag_dcycle          = 200
+
+<output1>
+file_type   = pvtk
+variable    = prtcl_all
+id          = prtcl_all
+dcycle      = 1
+
+<output2>
+file_type   = rst
+id          = rst
+dcycle      = 2
+single_file_per_rank = false

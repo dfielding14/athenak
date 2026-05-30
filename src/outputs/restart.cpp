@@ -9,6 +9,7 @@
 #include <sys/stat.h>  // mkdir
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <cstring>
 #include <cstdio>      // fwrite(), fclose(), fopen(), fnprintf(), snprintf()
@@ -33,6 +34,7 @@
 #include "radiation/radiation.hpp"
 #include "srcterms/turb_driver.hpp"
 #include "particles/particles.hpp"
+#include "outputs/restart_utils.hpp"
 //#include "outputs.hpp"
 
 #if MPI_PARALLEL_ENABLED
@@ -174,14 +176,14 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   }
   bool single_file_per_rank = out_params.single_file_per_rank;
   std::string fname;
+  char number[7];
+  std::snprintf(number, sizeof(number), ".%05d", out_params.file_number);
   if (single_file_per_rank) {
     // Generate a directory and filename for each rank
     // create filename: "rst/rank_YYYYYYY/file_basename" + "." + XXXXX + ".rst"
     // where YYYYYYY = 8-digit rank number
     // where XXXXX = 5-digit file_number
     char rank_dir[20];
-    char number[7];
-    std::snprintf(number, sizeof(number), ".%05d", out_params.file_number);
     std::snprintf(rank_dir, sizeof(rank_dir), "rank_%08d/", global_variable::my_rank);
     fname = std::string("rst/") + std::string(rank_dir) + out_params.file_basename
       + number + ".rst";
@@ -193,10 +195,11 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     // Existing behavior: single restart file
     // create filename: "rst/file_basename" + "." + XXXXX + ".rst"
     // where XXXXX = 5-digit file_number
-    char number[7];
-    std::snprintf(number, sizeof(number), ".%05d", out_params.file_number);
     fname = std::string("rst/") + out_params.file_basename + number + ".rst";
   }
+  const std::string partial_fname = fname + ".partial";
+  const std::string manifest_fname =
+      std::string("rst/") + out_params.file_basename + number + ".rst.manifest";
   // increment counters now so values for *next* dump are stored in restart file
   out_params.file_number++;
   if (out_params.last_time < 0.0) {
@@ -218,48 +221,44 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
 
   // open file and  write the header; this part is serial
   IOWrapper resfile;
-  resfile.Open(fname.c_str(), IOWrapper::FileMode::write, single_file_per_rank);
+  resfile.Open(partial_fname.c_str(), IOWrapper::FileMode::write,
+               single_file_per_rank);
+  auto write_header_bytes = [&](const void *buffer, IOWrapperSizeT count) {
+    if (resfile.Write_any_type(buffer, count, "byte", single_file_per_rank) != count) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "Failed to write restart header to partial artifact '"
+                << partial_fname << "'." << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+  };
   if (global_variable::my_rank == 0 || single_file_per_rank) {
     // output the input parameters (input file)
-    resfile.Write_any_type(sbuf.c_str(), sbuf.size(), "byte", single_file_per_rank);
+    write_header_bytes(sbuf.c_str(), sbuf.size());
 
     // output Mesh information
-    resfile.Write_any_type(&(pm->nmb_total), (sizeof(int)), "byte",
-                            single_file_per_rank);
-    resfile.Write_any_type(&(pm->root_level), (sizeof(int)), "byte",
-                            single_file_per_rank);
-    resfile.Write_any_type(&(pm->mesh_size), (sizeof(RegionSize)), "byte",
-                            single_file_per_rank);
-    resfile.Write_any_type(&(pm->mesh_indcs), (sizeof(RegionIndcs)), "byte",
-                            single_file_per_rank);
-    resfile.Write_any_type(&(pm->mb_indcs), (sizeof(RegionIndcs)), "byte",
-                            single_file_per_rank);
-    resfile.Write_any_type(&(pm->time), (sizeof(Real)), "byte",
-                            single_file_per_rank);
-    resfile.Write_any_type(&(pm->dt), (sizeof(Real)), "byte",
-                            single_file_per_rank);
-    resfile.Write_any_type(&(pm->ncycle), (sizeof(int)), "byte",
-                            single_file_per_rank);
-    resfile.Write_any_type(&(global_variable::nranks), (sizeof(int)), "byte",
-                            single_file_per_rank);
+    write_header_bytes(&(pm->nmb_total), sizeof(int));
+    write_header_bytes(&(pm->root_level), sizeof(int));
+    write_header_bytes(&(pm->mesh_size), sizeof(RegionSize));
+    write_header_bytes(&(pm->mesh_indcs), sizeof(RegionIndcs));
+    write_header_bytes(&(pm->mb_indcs), sizeof(RegionIndcs));
+    write_header_bytes(&(pm->time), sizeof(Real));
+    write_header_bytes(&(pm->dt), sizeof(Real));
+    write_header_bytes(&(pm->ncycle), sizeof(int));
+    write_header_bytes(&(global_variable::nranks), sizeof(int));
   }
   //--- STEP 2.  Root process writes list of logical locations and cost of MeshBlocks
   // This data read in Mesh::BuildTreeFromRestart()
 
   if (global_variable::my_rank == 0 || single_file_per_rank) {
-    resfile.Write_any_type(&(pm->lloc_eachmb[0]),(pm->nmb_total)*sizeof(LogicalLocation),
-                           "byte", single_file_per_rank);
-    resfile.Write_any_type(&(pm->cost_eachmb[0]), (pm->nmb_total)*sizeof(float),
-                           "byte", single_file_per_rank);
-    resfile.Write_any_type(&(pm->rank_eachmb[0]), (pm->nmb_total)*sizeof(int),
-                           "byte", single_file_per_rank);
+    write_header_bytes(&(pm->lloc_eachmb[0]), (pm->nmb_total)*sizeof(LogicalLocation));
+    write_header_bytes(&(pm->cost_eachmb[0]), (pm->nmb_total)*sizeof(float));
+    write_header_bytes(&(pm->rank_eachmb[0]), (pm->nmb_total)*sizeof(int));
     if (global_variable::nranks > 0) {
-      resfile.Write_any_type(&(pm->gids_eachrank[0]),
-                             (global_variable::nranks)*sizeof(int),
-                             "byte", single_file_per_rank);
-      resfile.Write_any_type(&(pm->nmb_eachrank[0]),
-                             (global_variable::nranks)*sizeof(int),
-                             "byte", single_file_per_rank);
+      write_header_bytes(&(pm->gids_eachrank[0]),
+                         (global_variable::nranks)*sizeof(int));
+      write_header_bytes(&(pm->nmb_eachrank[0]),
+                         (global_variable::nranks)*sizeof(int));
     }
   }
 
@@ -267,20 +266,17 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   if (global_variable::my_rank == 0 || single_file_per_rank) {
     // store z4c information
     if (pz4c != nullptr) {
-      resfile.Write_any_type(&(pz4c->last_output_time), sizeof(Real), "byte",
-                             single_file_per_rank);
+      write_header_bytes(&(pz4c->last_output_time), sizeof(Real));
     }
     // output puncture tracker data
     if (nco > 0) {
       for (auto & pt : pz4c->ptracker) {
-        resfile.Write_any_type(pt.GetPos(), 3*sizeof(Real), "byte",
-                               single_file_per_rank);
+        write_header_bytes(pt.GetPos(), 3*sizeof(Real));
       }
     }
     // turbulence driver internal RNG
     if (pturb != nullptr) {
-      resfile.Write_any_type(&(pturb->rstate), sizeof(RNG_State), "byte",
-                             single_file_per_rank);
+      write_header_bytes(&(pturb->rstate), sizeof(RNG_State));
     }
   }
 
@@ -311,8 +307,7 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     data_size += nout1*nout2*nout3*nadm*sizeof(Real);   // adm u_adm
   }
   if (global_variable::my_rank == 0 || single_file_per_rank) {
-    resfile.Write_any_type(&(data_size), sizeof(IOWrapperSizeT), "byte",
-                            single_file_per_rank);
+    write_header_bytes(&(data_size), sizeof(IOWrapperSizeT));
   }
 
   // calculate size of data written in Steps 1-2 above
@@ -649,7 +644,7 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   particles::Particles *ppart = pm->pmb_pack->ppart;
   if (ppart != nullptr) {
     constexpr std::uint64_t kPicMagic = 0x5049435253543031ULL;
-    constexpr int kPicVersion = 1;
+    constexpr int kPicVersion = particles::Particles::PIC_RESTART_SCHEMA_VERSION;
 
     const int nmb_local = pm->nmb_thisrank;
     const int gids_local = pm->gids_eachrank[global_variable::my_rank];
@@ -665,6 +660,12 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     const int edge1_cnt = (nout3 + 1)*(nout2 + 1)*nout1;
     const int edge2_cnt = (nout3 + 1)*nout2*(nout1 + 1);
     const int edge3_cnt = nout3*(nout2 + 1)*(nout1 + 1);
+    const int state_kind = ppart->UsesRelativisticCRState() ? 1 : 0;
+    const int physical_mode = static_cast<int>(ppart->pic_physical_mode);
+    const Real cr_light_speed = ppart->pic_cr_light_speed;
+    std::array<int, particles::Particles::NPIC_RESTART_MODEL_INTS> model_ints;
+    std::array<Real, particles::Particles::NPIC_RESTART_MODEL_REALS> model_reals;
+    ppart->FillRestartModelMetadata(model_ints, model_reals);
 
     if (requires_moments && !has_moments) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -783,6 +784,16 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     section_offset += sizeof(int);
     const IOWrapperSizeT edge3_cnt_offset = section_offset;
     section_offset += sizeof(int);
+    const IOWrapperSizeT state_kind_offset = section_offset;
+    section_offset += sizeof(int);
+    const IOWrapperSizeT physical_mode_offset = section_offset;
+    section_offset += sizeof(int);
+    const IOWrapperSizeT cr_light_speed_offset = section_offset;
+    section_offset += sizeof(Real);
+    const IOWrapperSizeT model_ints_offset = section_offset;
+    section_offset += model_ints.size()*sizeof(int);
+    const IOWrapperSizeT model_reals_offset = section_offset;
+    section_offset += model_reals.size()*sizeof(Real);
     const IOWrapperSizeT npart_offset = section_offset;
     section_offset += sizeof(IOWrapperSizeT);
     const IOWrapperSizeT mb_count_offset = section_offset;
@@ -840,6 +851,18 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
                                     single_file_per_rank) != 1 ||
           resfile.Write_any_type_at(&edge3_cnt, 1, edge3_cnt_offset, "int",
                                     single_file_per_rank) != 1 ||
+          resfile.Write_any_type_at(&state_kind, 1, state_kind_offset, "int",
+                                    single_file_per_rank) != 1 ||
+          resfile.Write_any_type_at(&physical_mode, 1, physical_mode_offset, "int",
+                                    single_file_per_rank) != 1 ||
+          resfile.Write_any_type_at(&cr_light_speed, 1, cr_light_speed_offset, "Real",
+                                    single_file_per_rank) != 1 ||
+          resfile.Write_any_type_at(model_ints.data(), model_ints.size(),
+                                    model_ints_offset, "int",
+                                    single_file_per_rank) != model_ints.size() ||
+          resfile.Write_any_type_at(model_reals.data(), model_reals.size(),
+                                    model_reals_offset, "Real",
+                                    single_file_per_rank) != model_reals.size() ||
           resfile.Write_any_type_at(&npart_section, sizeof(IOWrapperSizeT),
                                     npart_offset, "byte", single_file_per_rank)
             != sizeof(IOWrapperSizeT)) {
@@ -944,8 +967,65 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     }
   }
 
-  // close file, clean up
-  resfile.Close(single_file_per_rank);
+  // Sync, close, and publish only complete artifacts. Previous checkpoints use
+  // distinct sequence names and remain available until this promotion succeeds.
+  const int sync_status = resfile.Sync(single_file_per_rank);
+  const int close_status = resfile.Close(single_file_per_rank);
+  if (sync_status != 0 || close_status != 0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Failed to sync or close restart partial artifact '" << partial_fname
+              << "'." << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+#if MPI_PARALLEL_ENABLED
+  MPI_Barrier(MPI_COMM_WORLD);
+#endif
+
+  restart_utils::FileDigest local_digest;
+  if (single_file_per_rank || global_variable::my_rank == 0) {
+    restart_utils::PublishRestartArtifact(partial_fname, fname);
+    local_digest = restart_utils::ComputeFileDigest(fname);
+    restart_utils::WriteCompletionMarker(fname, local_digest);
+  }
+#if MPI_PARALLEL_ENABLED
+  MPI_Barrier(MPI_COMM_WORLD);
+#endif
+
+  std::vector<std::pair<std::string, restart_utils::FileDigest>> members;
+  if (single_file_per_rank) {
+#if MPI_PARALLEL_ENABLED
+    std::array<std::uint64_t, 2> local_values = {
+        local_digest.size, local_digest.fnv1a64};
+    std::vector<std::uint64_t> gathered;
+    if (global_variable::my_rank == 0) {
+      gathered.resize(2*global_variable::nranks);
+    }
+    MPI_Gather(local_values.data(), 2, MPI_UINT64_T, gathered.data(), 2, MPI_UINT64_T,
+               0, MPI_COMM_WORLD);
+    if (global_variable::my_rank == 0) {
+      for (int rank = 0; rank < global_variable::nranks; ++rank) {
+        char rank_dir[20];
+        std::snprintf(rank_dir, sizeof(rank_dir), "rank_%08d/", rank);
+        restart_utils::FileDigest digest;
+        digest.size = gathered[2*rank];
+        digest.fnv1a64 = gathered[2*rank + 1];
+        members.emplace_back(std::string("rst/") + rank_dir +
+                             out_params.file_basename + number + ".rst", digest);
+      }
+    }
+#else
+    members.emplace_back(fname, local_digest);
+#endif
+  } else if (global_variable::my_rank == 0) {
+    members.emplace_back(fname, local_digest);
+  }
+  if (global_variable::my_rank == 0) {
+    restart_utils::WriteRestartManifest(manifest_fname, members);
+  }
+#if MPI_PARALLEL_ENABLED
+  MPI_Barrier(MPI_COMM_WORLD);
+#endif
 
   return;
 }

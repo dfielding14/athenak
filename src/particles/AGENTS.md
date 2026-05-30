@@ -42,24 +42,31 @@ Index constants are defined in `athena.hpp`:
   - `PGID`: owning MeshBlock global ID
   - `PTAG`: unique tag
   - `PSP` (cosmic rays) or `NSN` (stars): species or SN count (same index value)
+  - `PCRSOURCE` (cosmic rays): persistent source cohort (`initial` or
+    `shock_injected`)
 - **Real indices** (for `prtcl_rdata`):
-  - `IPX, IPVX, IPY, IPVY, IPZ, IPVZ`: position and velocity
+  - `IPX, IPVX, IPY, IPVY, IPZ, IPVZ`: position plus velocity in
+    `pic_physical_mode=engineering`, or position plus mass-normalized momentum
+    `p/m` in explicit paper/extension modes
   - Cosmic rays (`CRParticlesIndex`): `IPM` (q/m), `IPBX/IPBY/IPBZ` (sampled B),
     `IPDX/IPDY/IPDZ` (displacement), `IPDB` (parallel displacement),
     `IPEX/IPEY/IPEZ` (sampled midpoint `cE`), `IPDPX/IPDPY/IPDPZ` (per-step
     momentum-rate feedback channels), `IPDE` (per-step energy-rate channel),
     `IPEBDOT` (midpoint frozen-in orthogonality diagnostic `cE dot B`),
-    `IPWT` (relative macro-particle weight)
+    `IPWT` (relative macro-particle weight), `IPF0` (initial analytic delta-f
+    background value), `IPDFWT` (evolving delta-f perturbation weight),
+    `IPT_BIRTH` (persistent creation time)
   - Stars (`StarParticlesIndex`): `IPT_CREATE`, `IPMASS`, `IPT_NEXT_SN`
 
 The number of real slots (`nrdata`) is chosen at construction time:
 - Cosmic rays:
-  - Always provisioned as `nrdata = IPWT + 1` so midpoint E+B, coupled feedback
-    diagnostics, and per-particle macro weights are available in all staged PIC
-    modes.
+  - Always provisioned as `nrdata = IPT_BIRTH + 1` so midpoint E+B, coupled
+    feedback diagnostics, per-particle macro weights, delta-f state, and birth
+    time are available in all staged PIC modes.
 - Stars: `nrdata = 9` (positions, velocities, and three star fields).
 
-`nidata` is always 3 (`PGID`, `PTAG`, and `PSP` or `NSN`).
+`nidata` is 4 for cosmic rays (`PGID`, `PTAG`, `PSP`, and `PCRSOURCE`) and 3
+for stars (`PGID`, `PTAG`, and `NSN`).
 
 ---
 
@@ -94,6 +101,8 @@ The number of real slots (`nrdata`) is chosen at construction time:
 
 ### Stars (`particle_type = star`)
 - **3D only**. Constructor aborts if `three_d` is false.
+- A `<units>` block is required because the analytic potential converts code
+  units through `Units`.
 - Particles are loaded from `star_particle_file` with 8 columns per line:
   `x y z vx vy vz t_create mass` (comments starting with `#` are skipped).
 - Each rank reads the file and keeps only particles inside its local MeshBlocks.
@@ -189,28 +198,68 @@ but these are not wired in the constructor.
 - `pic_interp_scheme`: `tsc` (default and currently only valid value).
 - `pic_enable_2d3v`: required for Boris pushers on 2D meshes; the reduced
   2D/2V Lorentz-force path is not implemented.
-- `pic_cr_light_speed` is reserved for a future reduced-speed-of-light pusher;
-  only the default value `1.0` is accepted.
+- `pic_physical_mode`: `engineering`, `paper_test_particle`, `paper_mhd_pic`,
+  or `extended_mhd_pic`. Only explicit paper/extension modes reinterpret CR
+  state slots as mass-normalized momentum `p/m`.
+- `pic_cr_light_speed`: positive artificial CR light speed used by
+  momentum-state modes. `pic_cr_initial_state` selects whether initializer
+  components are interpreted as `velocity` or `momentum`.
+- `pic_cr_hall_mode=current_to_ct_experimental` is restricted to
+  `extended_mhd_pic`; paper mode keeps frozen-in ideal-MHD induction. The
+  experimental source is `cE_CT = cE_ideal + alpha_H P_edge[J_CR]`, with
+  `alpha_H=particles/couple_j_to_efield_coeff`. It is a source-isolation path,
+  not a derived or qualified Hall Bell model.
+- `pic_wave_damping_mode=ion_neutral_friction` is restricted to
+  `extended_mhd_pic` with active coupled MHD and positive
+  `pic_ion_neutral_collision_rate`. It applies the exact static-neutral
+  transverse momentum factor `exp(-nu_in dt)` once after explicit RK for
+  static boxes or after endpoint physical-frame feedback for expanding boxes,
+  and removes the lost ion kinetic energy from ideal-MHD total energy.
 - `pic_max_cell_cross` (default `2`) and `pic_theta_max` (default `0.3`)
   with positivity guards. `pic_max_cell_cross` must not exceed the smallest
   active MeshBlock dimension because particle exchange is nearest-neighbor.
-- `pic_deltaf_mode`: `off` (default) or `on`; `on` requires
-  `pic_deltaf_f0` to be explicitly set to `kappa_iso` or `uniform_quiet`.
-  - staged behavior: with `cr_distribution=random`, `pic_deltaf_mode=on`
-    applies deterministic low-discrepancy quiet-start particle placement for
-    reduced sampling noise in proxy instability tests. It does not yet apply a
-    full delta-f particle-weight evolution or otherwise use `pic_deltaf_f0` in
-    moment deposition.
+- `pic_deltaf_mode`: `off` (default), `quiet_start`, `on`, or `physical`; every
+  enabled mode requires an explicit `pic_deltaf_f0` background.
+  - `quiet_start` applies deterministic low-discrepancy placement for reduced
+    sampling noise without changing deposited moments.
+  - In paper/extension modes, `on` aliases `physical`: `IPF0` stores the
+    analytic reference distribution, `IPDFWT` evolves its perturbation weight,
+    and deposition uses that weight.
+- `pic_deltaf_adapt_mode=global_bikappa_moments_experimental` enables the
+  extension-only x1-parallel global bi-kappa fit at positive
+  `pic_deltaf_adapt_interval`. It requires physical `kappa_aniso` delta-f,
+  expanding-box mode, `kappa > 1`, zero drift, and unit configured anisotropy.
+  Restart schema version 7 preserves fitted `xi`, fitted `p0`, cadence
+  bucket.
 - `pic_sort_interval` (default `0`, must be `>= 0`).
 - `pic_random_seed` (default `0`, must be `>= 0`) controls deterministic
   `cr_distribution=random` particle placement.
+- `pic_load_balance_cost_per_particle` (default `0.0`, must be `>= 0`) adds an
+  opt-in particle-count contribution to each post-AMR MeshBlock load cost.
 - `pic_intermediate_arrays`: `auto` (default) or `off`.
 - `pic_expanding_box_mode`: `off` (default) or `on`.
+- `pic_expansion_law`: `linear` (default), `reciprocal_linear`, or
+  `exponential`.
 - `pic_expansion_rate_x1/x2/x3` default to `0.0`; non-zero expansion rates
-  require `pic_expanding_box_mode=on`.
-  - staged behavior: when expanding-box mode is on, Boris pushers apply
-    per-component half-step source scaling around the Boris update using
-    `exp(-0.5*dt*pic_expansion_rate_xi)`.
+  require `pic_expanding_box_mode=on`, and enabled scale factors must remain
+  finite and positive through `<time>/tlim`.
+  - When expanding-box mode is on, Boris pushers apply exact scale-factor
+    half-step ratios around the Boris update and drift in comoving coordinates.
+    MHD tasks rescale gas conserved variables, retain raw face-centered arrays
+    as divergence-preserving comoving magnetic fluxes, derive physical face
+    fields for MHD consumers, and map edge EMFs before constrained transport.
+  - Active-MHD expanding-box mode is deliberately fail-closed for unqualified
+    compositions, including AMR, non-periodic boundaries, relativistic
+    coordinates, nonideal MHD, fluid/radiation/relativity/turbulence blocks,
+    staggered/direct current deposition, Hall-current induction, nonzero
+    analytic delta-f background current, and user-defined history callbacks.
+    The qualified non-delta-f coupled split uses cell-centered `cc_convert` moments,
+    conservative momentum and energy feedback, `mhd_src_terms` ordering,
+    physical-volume deposition, final-frame particle EM impulses, built-in
+    physical-volume MHD `hst`, and optional reduced ion-neutral wave damping.
+    The admitted adaptive physical delta-f extension retains a separate
+    endpoint-normalized analytic `rho E + J x B` source path; nonadaptive
+    expanding-MHD delta-f feedback remains rejected.
 - `pic_no_mhd_bx`, `pic_no_mhd_by`, `pic_no_mhd_bz` define uniform no-MHD
   Boris background fields for the particle-owned carrier.
 - `passive_mhd` currently requires:
@@ -224,6 +273,8 @@ but these are not wired in the constructor.
     `couple_moments_momentum_to_mhd`, `couple_moments_energy_to_mhd`)
   - Boris pushers use `pic_no_mhd_bcc0` instead of `pmhd->bcc0`; the
     particle-owned carrier is allocated to AMR `max_nmb_per_rank` capacity.
+- After AMR child reconstruction, `Particles::UpdateAfterAMR` refreshes the
+  retained pack pointer and validates particle-owned MeshBlock array capacity.
 
 ### Runtime guards (constructor)
 - Coupling requires `deposit_moments=true` and an active `<mhd>` block.
@@ -268,8 +319,9 @@ Notes from `bvals_part.cpp`:
 ## Task List Integration
 `Particles::AssembleTasks` always wires:
 - `before_timeintegrator` push/deposition chain:
-  `SaveOldPositions -> Push -> ZeroMoments -> InitRecvMoments -> DepositMoments ->
-  SendMoments -> RecvMoments -> ClearRecvMoments -> ClearSendMoments`
+  `AdaptDeltaF -> SaveOldPositions -> Push -> ZeroMoments -> InitRecvMoments ->
+  DepositMoments -> SendMoments -> RecvMoments -> ClearRecvMoments ->
+  ClearSendMoments`
 
 Particle migration communication depends on coupling mode:
 - uncoupled/default: `NewGID -> SendCnt -> InitRecv -> SendP -> RecvP ->
@@ -294,6 +346,9 @@ In coupled mode, moment wrappers are also inserted into `stagen` on stage 1:
 ## Outputs and Diagnostics (references)
 - `outputs/vtk_prtcl.cpp` and `outputs/track_prtcl.cpp` consume `prtcl_rdata` and
   `prtcl_idata` for particle dumps and tracked particles.
+- Particle VTK output emits explicit `gid`, `ptag`, `species`, `cr_source`,
+  `macro_weight`, `birth_time`, `deltaf_f0`, and `deltaf_weight` scalar
+  diagnostics.
 - `trk` output selects particles by nonnegative `PTAG < <output>/nparticles` and
   writes big-endian float32 position/velocity rows at tag-derived offsets.
 - Derived variable `prtcl_d` (in `outputs/derived_variables.cpp`) bins particle

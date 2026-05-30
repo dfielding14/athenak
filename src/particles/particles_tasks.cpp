@@ -6,12 +6,21 @@
 //! \file particles_tasks.cpp
 //! \brief functions that control Particles tasks stored in tasklists in MeshBlockPack
 
+#include <algorithm>
+#include <cmath>
+#include <cstdlib>
+#include <cstdint>
+#include <iomanip>
+#include <limits>
 #include <map>
 #include <memory>
 #include <string>
 #include <iostream>
 
 #include "athena.hpp"
+#if MPI_PARALLEL_ENABLED
+#include <mpi.h>
+#endif
 #include "globals.hpp"
 #include "parameter_input.hpp"
 #include "tasklist/task_list.hpp"
@@ -21,6 +30,114 @@
 #include "particles.hpp"
 
 namespace particles {
+//----------------------------------------------------------------------------------------
+//! \fn TaskStatus Particles::AdaptDeltaF
+//! \brief Fit the global adaptive bi-kappa reference state before a particle push.
+
+TaskStatus Particles::AdaptDeltaF(Driver *pdriver, int stage) {
+  (void)pdriver;
+  (void)stage;
+  if (!UsesAdaptiveDeltaF()) return TaskStatus::complete;
+
+  constexpr Real pi = static_cast<Real>(3.141592653589793238462643383279502884L);
+  const Real time = pmy_pack->pmesh->time;
+  const Real bucket_roundoff =
+      static_cast<Real>(64.0)*std::numeric_limits<Real>::epsilon()*
+      std::max(static_cast<Real>(1.0), std::abs(time/pic_deltaf_adapt_interval));
+  const std::int64_t bucket = static_cast<std::int64_t>(
+      std::floor(time/pic_deltaf_adapt_interval + bucket_roundoff));
+  if (bucket == pic_deltaf_adapt_last_bucket) return TaskStatus::complete;
+
+  auto &pr = prtcl_rdata;
+  Real total_weight = 0.0;
+  Real perpendicular_moment = 0.0;
+  Real parallel_moment = 0.0;
+  Kokkos::parallel_reduce(
+      "ParticlesAdaptDeltaFFirstMoments",
+      Kokkos::RangePolicy<>(DevExeSpace(), 0, nprtcl_thispack),
+      KOKKOS_LAMBDA(const int &p, Real &weight_sum, Real &perpendicular_sum,
+                    Real &parallel_sum) {
+        const Real weight = pr(IPWT, p);
+        if (weight <= 0.0) return;
+        weight_sum += weight;
+        perpendicular_sum += weight*sqrt(pr(IPVY, p)*pr(IPVY, p) +
+                                         pr(IPVZ, p)*pr(IPVZ, p));
+        parallel_sum += weight*fabs(pr(IPVX, p));
+      },
+      Kokkos::Sum<Real>(total_weight),
+      Kokkos::Sum<Real>(perpendicular_moment),
+      Kokkos::Sum<Real>(parallel_moment));
+
+#if MPI_PARALLEL_ENABLED
+  Real local_first_moments[3] = {
+      total_weight, perpendicular_moment, parallel_moment};
+  Real global_first_moments[3];
+  MPI_Allreduce(local_first_moments, global_first_moments, 3, MPI_ATHENA_REAL,
+                MPI_SUM, MPI_COMM_WORLD);
+  total_weight = global_first_moments[0];
+  perpendicular_moment = global_first_moments[1];
+  parallel_moment = global_first_moments[2];
+#endif
+
+  if (!std::isfinite(total_weight) || total_weight <= 0.0 ||
+      !std::isfinite(perpendicular_moment) || perpendicular_moment <= 0.0 ||
+      !std::isfinite(parallel_moment) || parallel_moment <= 0.0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Adaptive delta-f global bi-kappa fit requires finite, positive "
+              << "particle weight and non-degenerate parallel/perpendicular moments"
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+
+  const Real xi = (static_cast<Real>(2.0)/pi)*
+                  perpendicular_moment/parallel_moment;
+  const Real xi2 = xi*xi;
+  const Real xi4 = xi2*xi2;
+  Real shape_moment = 0.0;
+  Kokkos::parallel_reduce(
+      "ParticlesAdaptDeltaFShapeMoment",
+      Kokkos::RangePolicy<>(DevExeSpace(), 0, nprtcl_thispack),
+      KOKKOS_LAMBDA(const int &p, Real &shape_sum) {
+        const Real weight = pr(IPWT, p);
+        if (weight <= 0.0) return;
+        shape_sum += weight*sqrt(xi4*pr(IPVX, p)*pr(IPVX, p) +
+                                 xi2*(pr(IPVY, p)*pr(IPVY, p) +
+                                      pr(IPVZ, p)*pr(IPVZ, p)));
+      },
+      Kokkos::Sum<Real>(shape_moment));
+
+#if MPI_PARALLEL_ENABLED
+  MPI_Allreduce(MPI_IN_PLACE, &shape_moment, 1, MPI_ATHENA_REAL,
+                MPI_SUM, MPI_COMM_WORLD);
+#endif
+
+  const Real kappa = pic_deltaf_kappa;
+  const Real prefactor =
+      sqrt(pi*kappa)*(kappa - static_cast<Real>(1.0))*std::tgamma(kappa - 0.5)/
+      (static_cast<Real>(2.0)*std::tgamma(kappa + static_cast<Real>(1.0)));
+  const Real p0 = prefactor*shape_moment/total_weight;
+  if (!std::isfinite(xi) || xi <= 0.0 ||
+      !std::isfinite(p0) || p0 <= 0.0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Adaptive delta-f global bi-kappa fit produced an invalid state"
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+
+  pic_deltaf_adaptive_xi = xi;
+  pic_deltaf_adaptive_p0 = p0;
+  pic_deltaf_adapt_last_bucket = bucket;
+  if (global_variable::my_rank == 0) {
+    std::cout << std::setprecision(17)
+              << "PIC adaptive delta-f fit: time=" << time
+              << " bucket=" << bucket << " xi=" << xi << " p0=" << p0
+              << std::endl;
+  }
+  return TaskStatus::complete;
+}
+
 //----------------------------------------------------------------------------------------
 //! \fn  void Particles::AssembleHydroTasks
 //! \brief Adds hydro tasks to appropriate task lists used by time integrators.
@@ -40,8 +157,10 @@ void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> t
   id.convert_j_edge = none;
 
   // particle integration done in "before_timeintegrator" task list
+  id.adapt_deltaf = tl["before_timeintegrator"]->AddTask(&Particles::AdaptDeltaF,
+                                                         this, none);
   id.save_old = tl["before_timeintegrator"]->AddTask(&Particles::SaveOldPositions,
-                                                      this, none);
+                                                      this, id.adapt_deltaf);
   id.push = tl["before_timeintegrator"]->AddTask(&Particles::Push, this, id.save_old);
   id.zero_mom = tl["before_timeintegrator"]->AddTask(&Particles::ZeroMoments, this,
                                                       id.push);

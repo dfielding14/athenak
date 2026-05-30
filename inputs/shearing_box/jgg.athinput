@@ -1,7 +1,7 @@
 # AthenaXXX input file for Liska & Wendroff implosion test
 
 <comment>
-problem   = MHD shwave test 
+problem   = hydro shwave test
 reference = Johnson, 2007, ApJ, 660, 1375, Johnson et al., 2008, ApJS, 177, 373
 
 <job>
@@ -34,7 +34,7 @@ nx3       = 32          # Number of cells in each MeshBlock, X3-dir
 
 <time>
 evolution  = dynamic   # dynamic/kinematic/static
-integrator = vl2       # time integration algorithm
+integrator = rk2       # time integration algorithm
 cfl_number = 0.3       # The Courant, Friedrichs, & Lewy (CFL) Number
 nlim       = -1        # cycle limit
 tlim       = 3.0       # time limit
@@ -60,4 +60,3 @@ nwz       = 1      #
 ipert     = 2      #
 beta      = 20     #
 error_output = 0   #
-

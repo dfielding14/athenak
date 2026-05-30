@@ -31,6 +31,7 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
     u0("cons",1,1,1,1,1),
     w0("prim",1,1,1,1,1),
     b0("B_fc",1,1,1,1),
+    bphys("B_fc_physical",1,1,1,1),
     bcc0("B_cc",1,1,1,1,1),
     coarse_u0("ccons",1,1,1,1,1),
     coarse_w0("cprim",1,1,1,1,1),
@@ -136,6 +137,9 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
     Kokkos::realloc(b0.x1f, nmb, ncells3, ncells2, ncells1+1);
     Kokkos::realloc(b0.x2f, nmb, ncells3, ncells2+1, ncells1);
     Kokkos::realloc(b0.x3f, nmb, ncells3+1, ncells2, ncells1);
+    Kokkos::realloc(bphys.x1f, nmb, ncells3, ncells2, ncells1+1);
+    Kokkos::realloc(bphys.x2f, nmb, ncells3, ncells2+1, ncells1);
+    Kokkos::realloc(bphys.x3f, nmb, ncells3+1, ncells2, ncells1);
   }
 
   // allocate memory for conserved variables on coarse mesh

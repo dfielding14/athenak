@@ -101,7 +101,6 @@ modules/pgen
 - [Input Parameters](reference/input_parameters.md) — authoritative block/parameter catalogue
 - [File Reference](reference/file_reference.md) — generated API & file index
 - [API Reference](reference/api_reference.md) — autodoc coverage
-- [Glossary](glossary.rst) — AthenaK terminology in one place
 
 ```{toctree}
 :hidden:
@@ -111,7 +110,6 @@ modules/pgen
 reference/input_parameters
 reference/file_reference
 reference/api_reference
-glossary
 ```
 
 ## Migration Guides
@@ -183,6 +181,11 @@ contributing_docs
 Internal design dossiers and ongoing investigations live here:
 
 - AMR turbulence evolution, divergence control, particle merging, and more.
+- [MHD-PIC Runtime Model Contract](engineering/pic_mhd_model_contract.md)
+- [MHD-PIC AMR Lifetime And Interface Policy](engineering/pic_amr_lifetime_and_interface_policy.md)
+- [Q-016 Bounded Particle Provenance And Spectra](engineering/pic_q016_particle_provenance_spectra.md)
+- [MHD-PIC Clean-Launch Runbook](engineering/pic_clean_launch_runbook.md)
+- [MHD-PIC Supported Toolchains](engineering/pic_supported_toolchains.md)
 
 ```{toctree}
 :hidden:
@@ -198,6 +201,11 @@ engineering/face_field_correction_implementation
 engineering/particle_merge_cr_pushers
 engineering/particle_merge_implementation
 engineering/particle_merge_unified_data
+engineering/pic_amr_lifetime_and_interface_policy
+engineering/pic_mhd_model_contract
+engineering/pic_q016_particle_provenance_spectra
+engineering/pic_clean_launch_runbook
+engineering/pic_supported_toolchains
 ```
 
 Need to fix something or found a discrepancy? Please log it in `documentation_audit_log.md` and submit a pull request!

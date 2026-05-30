@@ -41,6 +41,9 @@ This parses the file, applies overrides, and prints any warnings without startin
 - Lower `time/cfl_number` to improve stability.
 - Increase resolution around discontinuities (refine or reduce MeshBlock size).
 - Inspect the history output (`*.hst`) for rapidly growing gradients.
+- Built-in MHD `hst` output is available for the bounded active-MHD
+  expanding-box path with physical-volume integrals. User-defined history
+  callbacks remain unsupported for that mode.
 
 ### NaNs or negative density/pressure
 - Verify `<hydro>` / `<mhd>` parameters (EOS, floors) match the problem.
@@ -64,7 +67,7 @@ This parses the file, applies overrides, and prints any warnings without startin
 ## Output & Restart Tips
 
 - History tables (`file_type = hst`) are helpful for tracking conserved quantities.
-- Restart dumps (`file_type = rst`) allow `./build/src/athena -r basename.NNNNN.rst` to resume runs; ensure the restart build was configured with the same modules.
+- Restart dumps (`file_type = rst`) allow `./build/src/athena -r basename.NNNNN.rst` to resume runs; ensure the restart build was configured with the same modules and keep the root manifest and completion markers with every payload.
 - The `-t hh:mm:ss` command-line flag sets a wall-clock limit—combine it with a restart output stream to survive queue timeouts.
 
 ## When to Ask for Help

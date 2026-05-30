@@ -20,6 +20,7 @@
 #include "eos/eos.hpp"
 #include "hydro/hydro.hpp"
 #include "mhd/mhd.hpp"
+#include "particles/particles.hpp"
 #include "z4c/z4c.hpp"
 #include "outputs.hpp"
 
@@ -233,8 +234,9 @@ void HistoryOutput::LoadZ4cHistoryData(HistoryData *pdata, Mesh *pm) {
 //  Data is stored in a Real array defined in derived class.
 
 void HistoryOutput::LoadMHDHistoryData(HistoryData *pdata, Mesh *pm) {
-  auto &eos_data = pm->pmb_pack->pmhd->peos->eos_data;
-  int &nmhd_ = pm->pmb_pack->pmhd->nmhd;
+  auto *pmhd = pm->pmb_pack->pmhd;
+  auto &eos_data = pmhd->peos->eos_data;
+  int &nmhd_ = pmhd->nmhd;
 
   // set number of and names of history variables for mhd
   if (eos_data.is_ideal) {
@@ -257,10 +259,20 @@ void HistoryOutput::LoadMHDHistoryData(HistoryData *pdata, Mesh *pm) {
   pdata->label[nmhd_+5] = "3-ME";
 
   // capture class variabels for kernel
-  auto &u0_ = pm->pmb_pack->pmhd->u0;
-  auto &bx1f = pm->pmb_pack->pmhd->b0.x1f;
-  auto &bx2f = pm->pmb_pack->pmhd->b0.x2f;
-  auto &bx3f = pm->pmb_pack->pmhd->b0.x3f;
+  auto &u0_ = pmhd->u0;
+  auto *ppart = pm->pmb_pack->ppart;
+  const bool expanding_box = ((ppart != nullptr) && ppart->UsesExpandingBox());
+  Real physical_volume_scale = 1.0;
+  if (expanding_box) {
+    pmhd->RefreshPICExpandingBoxPhysicalB(pm->time);
+    const auto geom = particles::PICExpandingBoxGeometryAt(
+        ppart->pic_expansion_law, ppart->pic_expansion_rate_x1,
+        ppart->pic_expansion_rate_x2, ppart->pic_expansion_rate_x3, pm->time);
+    physical_volume_scale = geom.a1*geom.a2*geom.a3;
+  }
+  auto bx1f = expanding_box ? pmhd->bphys.x1f : pmhd->b0.x1f;
+  auto bx2f = expanding_box ? pmhd->bphys.x2f : pmhd->b0.x2f;
+  auto bx3f = expanding_box ? pmhd->bphys.x3f : pmhd->b0.x3f;
   auto &size = pm->pmb_pack->pmb->mb_size;
   int &nhist_ = pdata->nhist;
 
@@ -283,7 +295,8 @@ void HistoryOutput::LoadMHDHistoryData(HistoryData *pdata, Mesh *pm) {
     k += ks;
     j += js;
 
-    Real vol = size.d_view(m).dx1*size.d_view(m).dx2*size.d_view(m).dx3;
+    Real vol = physical_volume_scale*
+               size.d_view(m).dx1*size.d_view(m).dx2*size.d_view(m).dx3;
 
     // MHD conserved variables:
     array_sum::GlobalSum hvars;

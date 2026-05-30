@@ -389,13 +389,18 @@ void InterpolateTSCFields(const RegionIndcs indcs, const SizeView size,
   Real fy = (y - size.d_view(m).x2min) / dx2 - 0.5;
   Real fz = three_d ? (z - size.d_view(m).x3min) / dx3 - 0.5 : 0.0;
 
-  int ic = static_cast<int>(floor(fx)) + indcs.is;
-  int jc = static_cast<int>(floor(fy)) + indcs.js;
-  int kc = three_d ? static_cast<int>(floor(fz)) + indcs.ks : indcs.ks;
+  // Anchor the three-point TSC stencil on the nearest cell center. Using
+  // floor(f) drops one support point when a particle moves just below a center.
+  Real fic = floor(fx + 0.5);
+  Real fjc = floor(fy + 0.5);
+  Real fkc = three_d ? floor(fz + 0.5) : 0.0;
+  int ic = static_cast<int>(fic) + indcs.is;
+  int jc = static_cast<int>(fjc) + indcs.js;
+  int kc = three_d ? static_cast<int>(fkc) + indcs.ks : indcs.ks;
 
-  Real di = fx - floor(fx);
-  Real dj = fy - floor(fy);
-  Real dk = three_d ? fz - floor(fz) : 0.0;
+  Real di = fx - fic;
+  Real dj = fy - fjc;
+  Real dk = three_d ? (fz - fkc) : 0.0;
 
   auto weight = [](Real d) {
     Real ad = fabs(d);
@@ -503,9 +508,46 @@ TaskStatus Particles::PushCosmicRays(Driver *pdriver, int stage) {
   const Real inv_dt = (dt > 0.0) ? (1.0/dt) : 0.0;
   const bool expanding_box_local =
       (pic_expanding_box_mode == PICExpandingBoxMode::on);
+  const PICExpansionLaw expansion_law_local = pic_expansion_law;
   const Real exp_rate_x1_local = pic_expansion_rate_x1;
   const Real exp_rate_x2_local = pic_expansion_rate_x2;
   const Real exp_rate_x3_local = pic_expansion_rate_x3;
+  const bool momentum_state_local = UsesRelativisticCRState();
+  const Real light_speed_local = pic_cr_light_speed;
+  const bool deltaf_local = UsesDeltaF();
+  const bool adaptive_deltaf_local = UsesAdaptiveDeltaF();
+  const PICDeltaFBackground deltaf_background_local = pic_deltaf_background;
+  const Real deltaf_p0_local = pic_deltaf_p0;
+  const Real deltaf_kappa_local = pic_deltaf_kappa;
+  const Real deltaf_adaptive_xi_local = pic_deltaf_adaptive_xi;
+  const Real deltaf_adaptive_p0_local = pic_deltaf_adaptive_p0;
+  const Real deltaf_drift_x1_local = pic_deltaf_drift_x1;
+  const Real deltaf_drift_x2_local = pic_deltaf_drift_x2;
+  const Real deltaf_drift_x3_local = pic_deltaf_drift_x3;
+  const Real deltaf_aniso_x1_local = pic_deltaf_aniso_x1;
+  const Real deltaf_aniso_x2_local = pic_deltaf_aniso_x2;
+  const Real deltaf_aniso_x3_local = pic_deltaf_aniso_x3;
+  const Real time_start = pmy_pack->pmesh->time;
+  const Real time_mid = time_start + 0.5*dt;
+  const Real time_end = time_start + dt;
+  const Real a1_start = expanding_box_local ? PICScaleFactor(
+      expansion_law_local, exp_rate_x1_local, time_start) : 1.0;
+  const Real a2_start = expanding_box_local ? PICScaleFactor(
+      expansion_law_local, exp_rate_x2_local, time_start) : 1.0;
+  const Real a3_start = expanding_box_local ? PICScaleFactor(
+      expansion_law_local, exp_rate_x3_local, time_start) : 1.0;
+  const Real a1_mid = expanding_box_local ? PICScaleFactor(
+      expansion_law_local, exp_rate_x1_local, time_mid) : 1.0;
+  const Real a2_mid = expanding_box_local ? PICScaleFactor(
+      expansion_law_local, exp_rate_x2_local, time_mid) : 1.0;
+  const Real a3_mid = expanding_box_local ? PICScaleFactor(
+      expansion_law_local, exp_rate_x3_local, time_mid) : 1.0;
+  const Real a1_end = expanding_box_local ? PICScaleFactor(
+      expansion_law_local, exp_rate_x1_local, time_end) : 1.0;
+  const Real a2_end = expanding_box_local ? PICScaleFactor(
+      expansion_law_local, exp_rate_x2_local, time_end) : 1.0;
+  const Real a3_end = expanding_box_local ? PICScaleFactor(
+      expansion_law_local, exp_rate_x3_local, time_end) : 1.0;
 
   // Midpoint E+B Boris pusher
   par_for(
@@ -517,12 +559,12 @@ TaskStatus Particles::PushCosmicRays(Driver *pdriver, int stage) {
         Real x = pr(IPX, p);
         Real y = pr(IPY, p);
         Real z = (nx3_local > 1) ? pr(IPZ, p) : 0.0;
-        Real vx = pr(IPVX, p);
-        Real vy = pr(IPVY, p);
-        Real vz = use_vz_component ? pr(IPVZ, p) : 0.0;
-        Real vx_old = vx;
-        Real vy_old = vy;
-        Real vz_old = vz;
+        Real state_x = pr(IPVX, p);
+        Real state_y = pr(IPVY, p);
+        Real state_z = use_vz_component ? pr(IPVZ, p) : 0.0;
+        Real vx, vy, vz;
+        CRVelocityFromState(momentum_state_local, light_speed_local,
+                            state_x, state_y, state_z, vx, vy, vz);
         Real q_over_m = pr(IPM, p);
         int sp = pi(PSP, p);
         if (sp < 0 || sp >= nspecies_local) return;
@@ -531,22 +573,23 @@ TaskStatus Particles::PushCosmicRays(Driver *pdriver, int stage) {
         Real m_macro = qscale*weight*mspecies(sp);
 
         if (expanding_box_local) {
-          // Apply half-step expansion/compression source update around Boris.
-          Real sx = exp(-0.5*dt*exp_rate_x1_local);
-          Real sy = exp(-0.5*dt*exp_rate_x2_local);
-          Real sz = exp(-0.5*dt*exp_rate_x3_local);
-          vx *= sx;
-          vy *= sy;
+          state_x *= a1_start/a1_mid;
+          state_y *= a2_start/a2_mid;
           if (use_vz_component) {
-            vz *= sz;
+            state_z *= a3_start/a3_mid;
           }
+          CRVelocityFromState(momentum_state_local, light_speed_local,
+                              state_x, state_y, state_z, vx, vy, vz);
         }
+        const Real state_x_before_em = state_x;
+        const Real state_y_before_em = state_y;
+        const Real state_z_before_em = state_z;
 
         // Drift to midpoint with old velocity.
         Real dt_half = 0.5*dt;
-        Real x_mid = x + dt_half*vx;
-        Real y_mid = y + dt_half*vy;
-        Real z_mid = z + dt_half*vz;
+        Real x_mid = x + dt_half*vx/a1_mid;
+        Real y_mid = y + dt_half*vy/a2_mid;
+        Real z_mid = z + dt_half*vz/a3_mid;
 
         // Interpolate midpoint B and fluid velocity for frozen-in cE = -u x B.
         Real Bx = 0.0, By = 0.0, Bz = 0.0;
@@ -565,72 +608,87 @@ TaskStatus Particles::PushCosmicRays(Driver *pdriver, int stage) {
           Bz = 0.0;
           Uz = 0.0;
         }
+        if (expanding_box_local && no_mhd_mode) {
+          const Real volume_mid = a1_mid*a2_mid*a3_mid;
+          Bx *= a1_mid/volume_mid;
+          By *= a2_mid/volume_mid;
+          Bz *= a3_mid/volume_mid;
+        }
 
         Real cEx = -(Uy*Bz - Uz*By);
         Real cEy = -(Uz*Bx - Ux*Bz);
         Real cEz = -(Ux*By - Uy*Bx);
         if (!use_vz_component) cEz = 0.0;
 
-        Real v_old_sq = vx_old*vx_old + vy_old*vy_old + vz_old*vz_old;
-
         // Half electric acceleration
         Real qdt_2m = q_over_m*dt_half;
-        vx += qdt_2m*cEx;
-        vy += qdt_2m*cEy;
-        vz += qdt_2m*cEz;
+        state_x += qdt_2m*cEx;
+        state_y += qdt_2m*cEy;
+        state_z += qdt_2m*cEz;
 
         // Magnetic rotation
-        Real tx = qdt_2m*Bx;
-        Real ty = qdt_2m*By;
-        Real tz = qdt_2m*Bz;
+        const Real inv_gamma_minus = momentum_state_local ?
+            1.0/CRLorentzFactor(state_x, state_y, state_z, light_speed_local) : 1.0;
+        Real tx = qdt_2m*Bx*inv_gamma_minus;
+        Real ty = qdt_2m*By*inv_gamma_minus;
+        Real tz = qdt_2m*Bz*inv_gamma_minus;
         Real t2 = tx*tx + ty*ty + tz*tz;
-        Real sx = 2.0*tx/(1.0 + t2);
-        Real sy = 2.0*ty/(1.0 + t2);
-        Real sz = 2.0*tz/(1.0 + t2);
+        Real rot_x = 2.0*tx/(1.0 + t2);
+        Real rot_y = 2.0*ty/(1.0 + t2);
+        Real rot_z = 2.0*tz/(1.0 + t2);
 
-        Real vpx = vx + (vy*tz - vz*ty);
-        Real vpy = vy + (vz*tx - vx*tz);
-        Real vpz = vz + (vx*ty - vy*tx);
+        Real state_px = state_x + (state_y*tz - state_z*ty);
+        Real state_py = state_y + (state_z*tx - state_x*tz);
+        Real state_pz = state_z + (state_x*ty - state_y*tx);
 
-        vx += vpy*sz - vpz*sy;
-        vy += vpz*sx - vpx*sz;
-        vz += vpx*sy - vpy*sx;
+        state_x += state_py*rot_z - state_pz*rot_y;
+        state_y += state_pz*rot_x - state_px*rot_z;
+        state_z += state_px*rot_y - state_py*rot_x;
 
         // Half electric acceleration
-        vx += qdt_2m*cEx;
-        vy += qdt_2m*cEy;
-        vz += qdt_2m*cEz;
+        state_x += qdt_2m*cEx;
+        state_y += qdt_2m*cEy;
+        state_z += qdt_2m*cEz;
+        Real feedback_state_x_before = state_x_before_em;
+        Real feedback_state_y_before = state_y_before_em;
+        Real feedback_state_z_before = state_z_before_em;
 
         if (expanding_box_local) {
-          Real sx = exp(-0.5*dt*exp_rate_x1_local);
-          Real sy = exp(-0.5*dt*exp_rate_x2_local);
-          Real sz = exp(-0.5*dt*exp_rate_x3_local);
-          vx *= sx;
-          vy *= sy;
+          state_x *= a1_mid/a1_end;
+          state_y *= a2_mid/a2_end;
+          feedback_state_x_before *= a1_mid/a1_end;
+          feedback_state_y_before *= a2_mid/a2_end;
           if (use_vz_component) {
-            vz *= sz;
+            state_z *= a3_mid/a3_end;
+            feedback_state_z_before *= a3_mid/a3_end;
           }
         }
+        const Real feedback_energy_before =
+            CRKineticEnergy(momentum_state_local, light_speed_local,
+                            feedback_state_x_before, feedback_state_y_before,
+                            feedback_state_z_before);
+        const Real feedback_energy_after =
+            CRKineticEnergy(momentum_state_local, light_speed_local,
+                            state_x, state_y, state_z);
+        CRVelocityFromState(momentum_state_local, light_speed_local,
+                            state_x, state_y, state_z, vx, vy, vz);
 
         // Complete drift from midpoint to full-step position, then apply wall
         // reflection. Feedback diagnostics below remain the EM-push delta only.
-        Real x_new = x_mid + dt_half*vx;
-        Real y_new = y_mid + dt_half*vy;
-        Real z_new = (nx3_local > 1) ? (z_mid + dt_half*vz) : 0.0;
-        const Real vx_em = vx;
-        const Real vy_em = vy;
-        const Real vz_em = vz;
+        Real x_new = x_mid + dt_half*vx/a1_mid;
+        Real y_new = y_mid + dt_half*vy/a2_mid;
+        Real z_new = (nx3_local > 1) ? (z_mid + dt_half*vz/a3_mid) : 0.0;
         ApplyReflectiveParticleBCs(m, size_view, mb_bcs_view, multi_d_local,
                                    (nx3_local > 1), x_new, y_new, z_new,
-                                   vx, vy, vz);
+                                   state_x, state_y, state_z);
         pr(IPX, p) = x_new;
         pr(IPY, p) = y_new;
         pr(IPZ, p) = z_new;
 
-        // Store updated velocity
-        pr(IPVX, p) = vx;
-        pr(IPVY, p) = vy;
-        pr(IPVZ, p) = use_vz_component ? vz : 0.0;
+        // Store velocity in engineering mode and p/m in physical PIC modes.
+        pr(IPVX, p) = state_x;
+        pr(IPVY, p) = state_y;
+        pr(IPVZ, p) = use_vz_component ? state_z : 0.0;
 
         // Store sampled midpoint EM fields at particle.
         pr(IPBX, p) = Bx;
@@ -640,15 +698,30 @@ TaskStatus Particles::PushCosmicRays(Driver *pdriver, int stage) {
         pr(IPEY, p) = cEy;
         pr(IPEZ, p) = use_vz_component ? cEz : 0.0;
 
-        Real v_new_sq = vx_em*vx_em + vy_em*vy_em + vz_em*vz_em;
-        pr(IPDPX, p) = m_macro*(vx_em - vx_old)*inv_dt;
-        pr(IPDPY, p) = m_macro*(vy_em - vy_old)*inv_dt;
-        pr(IPDPZ, p) = m_macro*(vz_em - vz_old)*inv_dt;
-        pr(IPDE, p) = 0.5*m_macro*(v_new_sq - v_old_sq)*inv_dt;
+        pr(IPDPX, p) = m_macro*(state_x - feedback_state_x_before)*inv_dt;
+        pr(IPDPY, p) = m_macro*(state_y - feedback_state_y_before)*inv_dt;
+        pr(IPDPZ, p) = m_macro*(state_z - feedback_state_z_before)*inv_dt;
+        pr(IPDE, p) = m_macro*(feedback_energy_after - feedback_energy_before)*inv_dt;
         pr(IPEBDOT, p) = cEx*Bx + cEy*By + cEz*Bz;
+        if (deltaf_local) {
+          const Real f0_current = adaptive_deltaf_local ?
+              PICAdaptiveDeltaFBackgroundValue(
+                  deltaf_kappa_local, deltaf_p0_local, deltaf_adaptive_p0_local,
+                  deltaf_adaptive_xi_local, a1_end, a2_end, a3_end,
+                  state_x, state_y, state_z) :
+              PICDeltaFBackgroundValue(
+                  deltaf_background_local, deltaf_p0_local, deltaf_kappa_local,
+                  deltaf_drift_x1_local, deltaf_drift_x2_local,
+                  deltaf_drift_x3_local, deltaf_aniso_x1_local,
+                  deltaf_aniso_x2_local, deltaf_aniso_x3_local,
+                  a1_end, a2_end, a3_end, state_x, state_y, state_z);
+          pr(IPDFWT, p) = 1.0 - f0_current/pr(IPF0, p);
+        }
 
         // Update displacement tracking if enabled
         if (track_displacement_local) {
+          CRVelocityFromState(momentum_state_local, light_speed_local,
+                              state_x, state_y, state_z, vx, vy, vz);
           pr(IPDX, p) += dt*vx;
           pr(IPDY, p) += dt*vy;
           if (use_vz_component) {

@@ -32,6 +32,14 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
               << std::endl;
     exit(EXIT_FAILURE);
   }
+  if (pmbp->ppart->UsesRelativisticCRState()) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Random particles test initializes velocity slots directly and "
+              << "supports only <particles>/pic_physical_mode=engineering"
+              << std::endl;
+    exit(EXIT_FAILURE);
+  }
 
   // capture variables for the kernel
   auto &mbsize = pmy_mesh_->pmb_pack->pmb->mb_size;

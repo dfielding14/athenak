@@ -6,6 +6,7 @@
 //! \file io_wrapper.cpp
 //! \brief functions that provide wrapper for MPI-IO versus serial input/output
 
+#include <unistd.h>
 #include <cstdio>
 #include <cstdlib>
 #include <iomanip>
@@ -410,7 +411,10 @@ std::size_t IOWrapper::Write_any_type_at(const void *buf, IOWrapperSizeT cnt,
       std::exit(EXIT_FAILURE);
     }
     // Write data using standard C functions
-    std::fseek(reinterpret_cast<FILE*>(fh_), offset, SEEK_SET);
+    if (std::fseek(reinterpret_cast<FILE*>(fh_), offset, SEEK_SET) != 0) {
+      perror("Error seeking before writing data");
+      return 0;
+    }
     std::size_t written = std::fwrite(buf, datasize, cnt, reinterpret_cast<FILE*>(fh_));
     if (written != cnt) {
       std::cerr << "Error writing data. Expected to write " << cnt
@@ -469,7 +473,10 @@ std::size_t IOWrapper::Write_any_type_at(const void *buf, IOWrapperSizeT cnt,
     std::exit(EXIT_FAILURE);
   }
   // Write data using standard C functions
-  std::fseek(fh_, offset, SEEK_SET);
+  if (std::fseek(fh_, offset, SEEK_SET) != 0) {
+    perror("Error seeking before writing data");
+    return 0;
+  }
   std::size_t written = std::fwrite(buf, datasize, cnt, fh_);
   if (written != cnt) {
     std::cerr << "Error writing data. Expected to write " << cnt
@@ -508,7 +515,10 @@ std::size_t IOWrapper::Write_any_type_at_all(const void *buf, IOWrapperSizeT cnt
       std::exit(EXIT_FAILURE);
     }
     // Write data using standard C functions
-    std::fseek(reinterpret_cast<FILE*>(fh_), offset, SEEK_SET);
+    if (std::fseek(reinterpret_cast<FILE*>(fh_), offset, SEEK_SET) != 0) {
+      perror("Error seeking before writing data");
+      return 0;
+    }
     std::size_t written = std::fwrite(buf, datasize, cnt, reinterpret_cast<FILE*>(fh_));
     if (written != cnt) {
       std::cerr << "Error writing data. Expected to write " << cnt
@@ -567,7 +577,10 @@ std::size_t IOWrapper::Write_any_type_at_all(const void *buf, IOWrapperSizeT cnt
     std::exit(EXIT_FAILURE);
   }
   // Write data using standard C functions
-  std::fseek(fh_, offset, SEEK_SET);
+  if (std::fseek(fh_, offset, SEEK_SET) != 0) {
+    perror("Error seeking before writing data");
+    return 0;
+  }
   std::size_t written = std::fwrite(buf, datasize, cnt, fh_);
   if (written != cnt) {
     std::cerr << "Error writing data. Expected to write " << cnt
@@ -590,6 +603,23 @@ int IOWrapper::Close(bool single_file_per_rank) {
   }
 #else
   return std::fclose(fh_);
+#endif
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn int IOWrapper::Sync(bool single_file_per_rank)
+//  \brief flush buffered output to stable storage before atomic publication
+
+int IOWrapper::Sync(bool single_file_per_rank) {
+#if MPI_PARALLEL_ENABLED
+  if (!single_file_per_rank) {
+    return MPI_File_sync(fh_);
+  } else {
+    FILE *file = reinterpret_cast<FILE*>(fh_);
+    return (std::fflush(file) == 0) ? fsync(fileno(file)) : EOF;
+  }
+#else
+  return (std::fflush(fh_) == 0) ? fsync(fileno(fh_)) : EOF;
 #endif
 }
 
