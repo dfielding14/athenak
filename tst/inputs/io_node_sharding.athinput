@@ -1,0 +1,120 @@
+# Focused MPI producer for shared, per-rank, and per-node output comparisons.
+
+<job>
+basename = io_node
+
+<mesh>
+nghost = 2
+nx1 = 16
+x1min = -0.5
+x1max = 0.5
+ix1_bc = outflow
+ox1_bc = outflow
+nx2 = 8
+x2min = -0.5
+x2max = 0.5
+ix2_bc = periodic
+ox2_bc = periodic
+nx3 = 8
+x3min = -0.5
+x3max = 0.5
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 8
+nx2 = 8
+nx3 = 8
+
+<time>
+evolution = dynamic
+integrator = rk2
+cfl_number = 0.8
+nlim = 1
+tlim = 0.01
+ndiag = 1
+output_timing = false
+final_output_policy = none
+
+<hydro>
+eos = ideal
+reconstruct = plm
+rsolver = llf
+gamma = 1.4
+
+<problem>
+pgen_name = shock_tube
+shock_dir = 1
+xshock = 0.0
+dl = 1.0
+pl = 1.0
+ul = 0.0
+vl = 0.0
+wl = 0.0
+dr = 0.125
+pr = 0.1
+ur = 0.0
+vr = 0.0
+wr = 0.0
+
+<output1>
+file_type = bin
+id = full
+variable = hydro_w_d
+single_file_per_rank = false
+single_file_per_node = false
+dt = 1.0
+
+<output2>
+file_type = bin
+id = slice
+variable = hydro_w_d
+slice_x1 = 0.25
+single_file_per_rank = false
+single_file_per_node = false
+dt = 1.0
+
+<output3>
+file_type = cbin
+id = coarse
+variable = hydro_w_d
+coarsen_factor = 2
+compute_moments = false
+single_file_per_rank = false
+single_file_per_node = false
+dt = 1.0
+
+<output4>
+file_type = pdf
+id = node_pdf
+variable_1 = coord_x
+nbin1 = 4
+bin1_min = -0.5
+bin1_max = 0.5
+scale1 = linear
+variable_2 = hydro_w_d
+nbin2 = 4
+bin2_min = 0.0
+bin2_max = 2.0
+scale2 = linear
+weight = volume
+single_file_per_rank = false
+single_file_per_node = false
+dt = 1.0
+
+<output5>
+file_type = sphslice
+id = density
+variable = hydro_w_d
+slice_r = 0.25
+ntheta = 4
+nphi = 8
+single_file_per_rank = false
+single_file_per_node = false
+dt = 1.0
+
+<output6>
+file_type = rst
+single_file_per_rank = false
+single_file_per_node = false
+dt = 1.0

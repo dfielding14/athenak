@@ -1,0 +1,72 @@
+# Minimal deterministic legacy two-dimensional PDF producer for origin/main at 886dd2a1.
+
+<job>
+basename = io_legacy_pdf_2d
+
+<mesh>
+nghost = 2
+nx1 = 16
+x1min = -0.5
+x1max = 0.5
+ix1_bc = outflow
+ox1_bc = outflow
+nx2 = 4
+x2min = -0.5
+x2max = 0.5
+ix2_bc = periodic
+ox2_bc = periodic
+nx3 = 4
+x3min = -0.5
+x3max = 0.5
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 16
+nx2 = 4
+nx3 = 4
+
+<time>
+evolution = dynamic
+integrator = rk2
+cfl_number = 0.8
+nlim = 1
+tlim = 0.01
+ndiag = 1
+
+<hydro>
+eos = ideal
+reconstruct = plm
+rsolver = llf
+gamma = 1.4
+
+<problem>
+pgen_name = shock_tube
+shock_dir = 1
+xshock = 0.0
+dl = 1.0
+pl = 1.0
+ul = 0.0
+vl = 0.0
+wl = 0.0
+dr = 0.125
+pr = 0.1
+ur = 0.0
+vr = 0.0
+wr = 0.0
+
+<output1>
+file_type = pdf
+variable = hydro_w_d
+variable_2 = hydro_w_vx
+id = pdf_legacy_2d
+bin_min = 0.0
+bin_max = 2.0
+nbin = 8
+logscale = false
+bin2_min = -1.0
+bin2_max = 1.0
+nbin2 = 4
+logscale2 = false
+mass_weighted = false
+dt = 1.0
