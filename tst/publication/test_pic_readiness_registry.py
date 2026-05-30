@@ -466,7 +466,7 @@ class PicReadinessRegistryTests(unittest.TestCase):
             "f1-clean-paper-coupling-mpich-stderr-v2": (
                 "frontier_f1_clean_paper_coupling_launch_contract.json"
             ),
-            "f2-parser-multirank-runtime-metadata-v1": (
+            "f2-parser-multirank-runtime-metadata-v2": (
                 "frontier_f2_multirank_runtime_metadata_launch_contract.json"
             ),
         }
@@ -564,7 +564,7 @@ class PicReadinessRegistryTests(unittest.TestCase):
                     REPO_ROOT / "tst/publication/frontier_f1_structured_artifacts.py",
                 ],
             },
-            "f2-parser-multirank-runtime-metadata-v1": {
+            "f2-parser-multirank-runtime-metadata-v2": {
                 "job_script_sha256": (
                     REPO_ROOT
                     / "tst/publication/frontier_f2_structured_multirank_runtime_metadata_job.sh"

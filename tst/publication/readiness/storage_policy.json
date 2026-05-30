@@ -67,7 +67,7 @@
       "clean_candidate_manifest_sha256": "3174515d1578f0310e8ce4b0bf214050f8b4d95ff4af3c694b44eb466b7dff41"
     },
     {
-      "authorization_id": "f2-parser-multirank-runtime-metadata-v1",
+      "authorization_id": "f2-parser-multirank-runtime-metadata-v2",
       "status": "authorized",
       "campaign": "f2_multirank_runtime_metadata",
       "test_id": "pic_parser_contract_guards",
@@ -83,11 +83,11 @@
       "input_deck_sha256": "e14ac149dc3f8c6fb3d5400f6e330063e6f72f2ed2f54691ade8c65ce5173a45",
       "environment_profile_sha256": "7ff6cff3e263e8b4552bcbac1d5b55a85264a2a7af5565bbc9856584e35402c1",
       "analysis_script_sha256": [
-        "b59e2da84c0c83eefbbdb655a6b55f2e57be765bb1973f65754484fb256a94f7",
+        "8c240ef0a2d9431f5cbb37b1f6d8639ab77a83d2dd8c61870568c30ef1cc115a",
         "cf090115bcdfd143f67b12339115102b57e74cf3205b1ebb1521c144c3415a5a"
       ],
       "executable_sha256": "bea2a418faf582e0b7e8a2830494fa156ddddb18763dde21d344a4cba14a60d8",
-      "launch_contract_sha256": "05ecc15d519b9f74c9dc0a0f9c7b38f730f8397843f73a164cb24a91178f075d",
+      "launch_contract_sha256": "ff3dd988bf8148c8d89b1586fdd254e14501007972f1ca25efc1992a06415429",
       "clean_candidate_manifest_sha256": "3174515d1578f0310e8ce4b0bf214050f8b4d95ff4af3c694b44eb466b7dff41"
     }
   ],

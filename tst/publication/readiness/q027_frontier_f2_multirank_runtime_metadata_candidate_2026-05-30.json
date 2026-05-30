@@ -9,8 +9,8 @@
     "Q-027",
     "Q-038"
   ],
-  "qualification_effect": "f2_multirank_runtime_metadata_policy_staged_live_promotion_and_execution_pending",
-  "scope": "Stage one bounded clean-candidate Frontier F2 engineering slice for the remaining Q-002 multi-rank Athena runtime-metadata boundary. The slice reuses the immutable clean candidate and installed non-restart control plane, runs exactly eight GPU-bound MPI ranks on one Frontier node, checks the parser-contract deck at one cycle, and publishes descriptor-bound artifacts for offline analysis. It does not qualify a paper claim, a broader F2 row, multi-node operation or a production campaign.",
+  "qualification_effect": "f2_multirank_runtime_metadata_v1_rejected_v2_policy_staged_live_promotion_and_execution_pending",
+  "scope": "Stage the repaired bounded clean-candidate Frontier F2 engineering slice for the remaining Q-002 multi-rank Athena runtime-metadata boundary. The slice reuses the immutable clean candidate and installed non-restart control plane, runs exactly eight GPU-bound MPI ranks on one Frontier node, checks the parser-contract deck at one cycle, routes Athena diagnostics below the registered artifact tree, and requires that frozen output during offline analysis. It does not qualify a paper claim, a broader F2 row, multi-node operation or a production campaign.",
   "predecessor": {
     "record": "tst/publication/readiness/q027_frontier_f1_registered_science_successor_candidate_2026-05-30.json",
     "active_policy_sha256": "559a4b1ebc13425e53e40b544cf92931d11271ec0a07f678b680f68bf5c00052",
@@ -18,10 +18,10 @@
     "terminal_ledger_records": 43,
     "cumulative_consumed_node_hours": 0.09388888888888887
   },
-  "implementation_source_commit": "51ed1ad613d39bc90649e5a80922cdb22d090dc4",
-  "staged_policy_sha256": "9e9bd4d8fd8546e3d17b2b9e10b673e2200485aea1d61a0c3f48e2f6d3837fea",
+  "implementation_source_commit": "d59b8ebf332cbd9f6c2b0fb65f5d6cf071c26e09",
+  "staged_policy_sha256": "446db26aeed7dd63330ed1cffbaa7198d073364336c6c83826028a55736890dc",
   "registered_science_slice": {
-    "authorization_id": "f2-parser-multirank-runtime-metadata-v1",
+    "authorization_id": "f2-parser-multirank-runtime-metadata-v2",
     "status": "authorized",
     "campaign": "f2_multirank_runtime_metadata",
     "test_id": "pic_parser_contract_guards",
@@ -36,10 +36,10 @@
     "job_script_sha256": "e825d2c153b789706d2c293d04a34e1db08b0dc2a8e0043d1e88183f0b029b87",
     "input_deck_sha256": "e14ac149dc3f8c6fb3d5400f6e330063e6f72f2ed2f54691ade8c65ce5173a45",
     "environment_profile_sha256": "7ff6cff3e263e8b4552bcbac1d5b55a85264a2a7af5565bbc9856584e35402c1",
-    "analysis_script_sha256": "b59e2da84c0c83eefbbdb655a6b55f2e57be765bb1973f65754484fb256a94f7",
+    "analysis_script_sha256": "8c240ef0a2d9431f5cbb37b1f6d8639ab77a83d2dd8c61870568c30ef1cc115a",
     "analysis_support_sha256": "cf090115bcdfd143f67b12339115102b57e74cf3205b1ebb1521c144c3415a5a",
     "executable_sha256": "bea2a418faf582e0b7e8a2830494fa156ddddb18763dde21d344a4cba14a60d8",
-    "launch_contract_sha256": "05ecc15d519b9f74c9dc0a0f9c7b38f730f8397843f73a164cb24a91178f075d",
+    "launch_contract_sha256": "ff3dd988bf8148c8d89b1586fdd254e14501007972f1ca25efc1992a06415429",
     "clean_candidate_manifest_sha256": "3174515d1578f0310e8ce4b0bf214050f8b4d95ff4af3c694b44eb466b7dff41"
   },
   "reviewed_mpich_stderr_contract": {
@@ -47,14 +47,33 @@
     "reuse_disposition": "deliberate_fail_closed_reuse_of_rank_zero_cray_mpich_environment_transcript",
     "scope": "The reviewed transcript contains rank-zero Cray MPICH version, processor, environment and thread-safety diagnostics and no communicator-size-dependent field. The F2 analyzer rejects any byte drift before result publication; an unexpected eight-rank transcript therefore fails closed and is not accepted as evidence."
   },
-  "submission_state": "blocked_until_curated_policy_binding_commit_live_preflight_operator_attestation_and_mirrored_policy_promotion",
+  "rejected_v1_execution": {
+    "authorization_id": "f2-parser-multirank-runtime-metadata-v1",
+    "submission_id": "d0ed8212-23e6-4ddc-85c4-fed6fd9fa3ea",
+    "reservation_id": "67e5af75-d10b-4c52-9bc0-2d92af8f480e",
+    "job_id": "4746310",
+    "state": "COMPLETED",
+    "consumed_node_hours": 0.0030555555555555557,
+    "terminal_ledger_records": 46,
+    "cumulative_consumed_node_hours": 0.09694444444444443,
+    "active_policy_sha256": "9e9bd4d8fd8546e3d17b2b9e10b673e2200485aea1d61a0c3f48e2f6d3837fea",
+    "active_promotion_sha256": "089c6c37b33df0c9f49e338d28efd346d88d212b24de20b87fdd24d52153a9d5",
+    "pre_submit_manifest_sha256": "e426a6707044ce531300f436177455a064c198eeb4f7eb3af973681c4cdf1f35",
+    "artifact_inventory_sha256": "dbf6eae8316b27c31b7c7fb0297398509c3d511fee089bbb5f198afb20e93c39",
+    "analysis_result_sha256": "804cda179d4c971e02cc03df7df9ec73d744a733796a451ab0eca85f1fdb05be",
+    "offline_analysis_receipt_sha256": "457060c54fddaff70b65e8ab284ef36efb697d20d2057968cf316e10e0bf5728",
+    "escaped_output_archive": "/lustre/orion/ast207/proj-shared/dfielding/PIC/reference_artifacts/q027_f2_v1_escaped_output_2026-05-30",
+    "escaped_output_sha256": "df1a5f2a771947324955a839d3e9fed8cf6be490d0e473857835dde4228ae580",
+    "disposition": "rejected_before_evidence_acceptance_because_launch_contract_omitted_artifact_output_directory_and_athena_error_history_escaped_the_registered_run_tree"
+  },
+  "submission_state": "blocked_until_v2_curated_policy_binding_commit_live_preflight_operator_attestation_and_mirrored_policy_promotion",
   "open_boundaries": [
-    "curate and commit the staged policy binding",
+    "curate and commit the staged v2 policy binding",
     "run the live zero-reservation no-marker rejected-UUID preflight",
     "archive a reviewed same-account process-isolation attestation before policy promotion and again before manifest creation and submission",
     "promote the mirrored reviewed policy through installed control plane 4ccde8df",
-    "submit only the single serialized F2 runtime-metadata slice",
+    "submit only the single serialized F2 runtime-metadata v2 slice",
     "external reviewer disposition remains pending external review"
   ],
-  "overall_disposition": "f2_q002_multirank_runtime_metadata_source_policy_staged_live_promotion_and_execution_pending"
+  "overall_disposition": "f2_q002_multirank_runtime_metadata_v1_rejected_v2_source_policy_staged_live_promotion_and_execution_pending"
 }
