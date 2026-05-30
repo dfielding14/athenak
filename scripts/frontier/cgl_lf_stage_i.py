@@ -34,6 +34,7 @@ import uuid
 
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
+PRODUCTION_UTILITY_RELATIVE = Path("scripts/frontier/cgl_lf_stage_i.py")
 DEFAULT_ROOT = Path("/lustre/orion/ast207/proj-shared/dfielding/CGL")
 DEFAULT_MATRIX = ROOT_DIR / "inputs/cgl_lf_paper/mks24_stage_i_manifest.json"
 ACCOUNT = "AST207"
@@ -1745,18 +1746,30 @@ def production_utility_provenance(allow_uncommitted: bool = False
 
     script_path = Path(__file__).resolve()
     relative = str(script_path.relative_to(ROOT_DIR))
+    if Path(relative) != PRODUCTION_UTILITY_RELATIVE:
+        raise ValueError("production utility path is inconsistent")
     revision = subprocess.run(
-        ["git", "-C", str(ROOT_DIR), "rev-parse", "HEAD"],
+        ["git", "-C", str(ROOT_DIR), "rev-parse", "--verify", "HEAD"],
         check=True, capture_output=True, text=True,
     ).stdout.strip()
+    if GIT_REVISION_PATTERN.fullmatch(revision) is None:
+        raise ValueError("production utility revision is invalid")
+    tracked = subprocess.run(
+        ["git", "-C", str(ROOT_DIR), "ls-files", "--error-unmatch", "--", relative],
+        check=False, capture_output=True, text=True,
+    )
+    if tracked.returncode != 0:
+        raise ValueError("production utility is not tracked by Git")
     committed = True
     for diff_args in (["diff", "--quiet", "--"], ["diff", "--cached", "--quiet", "--"]):
         result = subprocess.run(
             ["git", "-C", str(ROOT_DIR), *diff_args, relative],
             check=False,
         )
-        if result.returncode != 0:
+        if result.returncode == 1:
             committed = False
+        elif result.returncode != 0:
+            raise ValueError("cannot determine production utility worktree status")
     if not committed and not allow_uncommitted:
         raise ValueError(
             "production utility must be committed before preparing a segment"
@@ -1769,14 +1782,25 @@ def production_utility_provenance(allow_uncommitted: bool = False
     }
 
 
-def authenticate_production_utility(record: object,
-                                    allow_uncommitted: bool = False) -> None:
+def authenticate_production_utility(
+    record: object,
+    *,
+    source_bundle: object = None,
+    allow_uncommitted: bool = False,
+    allow_historical: bool = False,
+) -> None:
     """Revalidate the retained production helper used to prepare a segment."""
 
     if not isinstance(record, dict):
         raise ValueError("prepared manifest lacks production utility provenance")
     path = Path(str(record.get("path", ""))).resolve()
     if path != Path(__file__).resolve():
+        raise ValueError("prepared production utility path is inconsistent")
+    try:
+        relative = path.relative_to(ROOT_DIR)
+    except ValueError as error:
+        raise ValueError("prepared production utility path is inconsistent") from error
+    if relative != PRODUCTION_UTILITY_RELATIVE:
         raise ValueError("prepared production utility path is inconsistent")
     revision = record.get("revision")
     if not isinstance(revision, str) or GIT_REVISION_PATTERN.fullmatch(revision) is None:
@@ -1785,7 +1809,54 @@ def authenticate_production_utility(record: object,
         allow_uncommitted and record.get("committed") is False
     ):
         raise ValueError("prepared production utility is not committed")
-    require_file_sha256(path, record.get("sha256"), "production utility")
+    expected = record.get("sha256")
+    if not isinstance(expected, str) or SHA256_PATTERN.fullmatch(expected) is None:
+        raise ValueError("prepared production utility checksum is invalid")
+    current = production_utility_provenance(allow_uncommitted=allow_uncommitted)
+    if current["sha256"] == expected:
+        return
+    if not allow_historical:
+        require_file_sha256(path, expected, "production utility")
+        return
+    if source_bundle is None and allow_uncommitted:
+        require_file_sha256(path, expected, "production utility")
+        return
+    if not isinstance(source_bundle, dict):
+        raise ValueError(
+            "recorded manifest lacks historical production utility bundle provenance"
+        )
+    bundle_path = Path(str(source_bundle.get("path", ""))).resolve()
+    require_file_sha256(bundle_path, source_bundle.get("sha256"), "source bundle")
+    revisions = source_bundle.get("verified_revisions")
+    if (
+        not isinstance(revisions, list)
+        or revision not in revisions
+    ):
+        raise ValueError(
+            "recorded source bundle lacks the historical production utility revision"
+        )
+    with tempfile.TemporaryDirectory(prefix="cgl_lf_utility_verify_") as directory:
+        repository = Path(directory) / "source.git"
+        try:
+            subprocess.run(
+                ["git", "clone", "--bare", "--quiet",
+                 str(bundle_path), str(repository)],
+                check=True, capture_output=True, text=True,
+            )
+        except subprocess.CalledProcessError as error:
+            raise ValueError(
+                f"recorded source bundle cannot be cloned: {bundle_path}"
+            ) from error
+        historical = subprocess.run(
+            ["git", "-C", str(repository), "show",
+             f"{revision}:{PRODUCTION_UTILITY_RELATIVE}"],
+            check=False, capture_output=True,
+        )
+    if (
+        historical.returncode != 0
+        or hashlib.sha256(historical.stdout).hexdigest() != expected
+    ):
+        raise ValueError(f"prepared production utility checksum has changed: {path}")
 
 
 def read_build_provenance(executable: Path,
@@ -2061,7 +2132,8 @@ def validate_prepared_resources(manifest: dict[str, object],
 
 def authenticate_prepared_execution(manifest: dict[str, object],
                                     manifest_path: Path,
-                                    allow_legacy_local: bool = False) -> None:
+                                    allow_legacy_local: bool = False,
+                                    allow_historical_utility: bool = False) -> None:
     """Authenticate every prepared artifact used by one production launch."""
 
     command = manifest.get("command")
@@ -2099,8 +2171,12 @@ def authenticate_prepared_execution(manifest: dict[str, object],
         prepared_time_tlim_target(manifest)
     validate_prepared_continuation_target(manifest)
     validate_prepared_resources(manifest, canonical_production=not allow_legacy_local)
+    bundle = command.get("source_bundle")
     authenticate_production_utility(
-        command.get("production_utility"), allow_uncommitted=allow_legacy_local
+        command.get("production_utility"),
+        source_bundle=bundle,
+        allow_uncommitted=allow_legacy_local,
+        allow_historical=allow_historical_utility,
     )
     batch_script = Path(str(paths.get("batch_script", ""))).resolve()
     if batch_script != (manifest_path.parent / "cgl_lf_stage_i.sbatch").resolve():
@@ -2166,7 +2242,6 @@ def authenticate_prepared_execution(manifest: dict[str, object],
             raise ValueError(
                 "prepared E03 qualification approval does not match the executable"
             )
-    bundle = command.get("source_bundle")
     if bundle is None:
         if not allow_legacy_local:
             raise ValueError("prepared manifest lacks source bundle provenance")
@@ -2719,6 +2794,7 @@ def verify_continuation_restart(
     authenticate_prepared_execution(
         parent, parent_manifest_path,
         allow_legacy_local=parent_root != DEFAULT_ROOT.expanduser().resolve(),
+        allow_historical_utility=True,
     )
     if parent_root == DEFAULT_ROOT.expanduser().resolve():
         parent_paths = layout(parent_root)
@@ -2970,9 +3046,13 @@ def check_submit(args: argparse.Namespace) -> int:
         args, manifest_path, manifest, run_slurm_test=True
     )
     print("Non-authoritative preview passed. Re-run the checks atomically with:")
+    acknowledgements = "".join(
+        " " + shlex.quote(f"--allow-shared-root-campaign={campaign}")
+        for campaign in sorted(set(getattr(args, "allow_shared_root_campaign", [])))
+    )
     print(
         "  python3 scripts/frontier/cgl_lf_stage_i.py submit "
-        f"--manifest {shlex.quote(str(manifest_path))}"
+        f"--manifest {shlex.quote(str(manifest_path))}{acknowledgements}"
     )
     print(f"Prepared script: {script}")
     return 0
@@ -3691,6 +3771,7 @@ def inspect_segment(args: argparse.Namespace) -> int:
     authenticate_prepared_execution(
         manifest, manifest_path,
         allow_legacy_local=offline_local_root,
+        allow_historical_utility=True,
     )
     if manifest.get("state") not in {"submitted", "recorded"}:
         raise ValueError("only a submitted or recorded segment may be inspected")
@@ -3902,6 +3983,7 @@ def record(args: argparse.Namespace) -> int:
     authenticate_prepared_execution(
         manifest, manifest_path,
         allow_legacy_local=offline_local_root,
+        allow_historical_utility=True,
     )
     if manifest.get("state") != "submitted":
         raise ValueError("only a submitted segment can be accounted")
@@ -4044,7 +4126,8 @@ def accepted_case_segments(paths: dict[str, Path],
                 f"retained segment lacks qualifying inspection: {manifest_path}"
             )
         authenticate_prepared_execution(
-            manifest, manifest_path, allow_legacy_local=allow_legacy_local
+            manifest, manifest_path, allow_legacy_local=allow_legacy_local,
+            allow_historical_utility=True,
         )
         require_reserved_execution_intent(
             reservation_for_manifest(reservations, manifest_path),
@@ -4506,7 +4589,8 @@ def cancel(args: argparse.Namespace) -> int:
             reservation, manifest, allow_legacy_local=offline_local_root
         )
         authenticate_prepared_execution(
-            manifest, manifest_path, allow_legacy_local=offline_local_root
+            manifest, manifest_path, allow_legacy_local=offline_local_root,
+            allow_historical_utility=True,
         )
         cancellation_mode = "authenticated"
     reservation["state"] = "cancelled"
@@ -4698,6 +4782,7 @@ def reconcile_report(root: Path) -> dict[str, object]:
                 authenticate_prepared_execution(
                     manifest, manifest_path,
                     allow_legacy_local=offline_local_root,
+                    allow_historical_utility=True,
                 )
             except (OSError, ValueError, KeyError, TypeError) as error:
                 issues.append(f"prepared artifact drift for {manifest_path}: {error}")

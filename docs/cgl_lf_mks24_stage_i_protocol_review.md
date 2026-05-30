@@ -9,9 +9,11 @@ case inventory for the AthenaK reproduction of Majeski, Kunz, and Squire
 not scientifically signed off. An independent source-to-code audit found
 that the retained production driver does not exactly implement the published
 forcing semantics. Prohibit every new `E02` preparation or submission,
-preserve its outputs as pipeline and cost evidence, implement and qualify
-explicit MKS24 forcing policies, then start a fresh execution epoch from
-`t = 0`.
+preserve its outputs as pipeline and cost evidence, and use the now-qualified
+explicit E03 forcing policies. The reviewed token is retained, reconciliation
+passed. Fresh `R02/s00_rankio_t0_t0p1` job `4745922` was then submitted from
+`t = 0`, formally inspected, and recorded `accepted` at exact `t = 0.1` for
+`0.188889` node-hours.
 
 The `900.000000` node-hour `E02` value is an authorized measurement-based
 projected envelope, not a fully measured matrix cost. It no longer authorizes
@@ -26,6 +28,12 @@ with SHA-256
 The immutable production executable was built from revision
 `462b9dbd53e085dea46c2478b567781576d7d03e` and has SHA-256
 `df87684e9d2b7af33b36c2757779d15de87b84ef051ca9c4489f2efa358f5c48`.
+That E02 executable remains historical pipeline and cost evidence only.
+Corrected E03 qualification is closed for revision
+`9e07542281e4e6d125582f253df3ad2e3b8b154d`, executable SHA-256
+`68f243f9204df388b24365ae65a567f6f567dbe422a6d7a43b9fb4a499ef118c`,
+and retained source-bundle SHA-256
+`c39d55809989d20aa5438711803f4fd43237fa9284c7e15183e84fdd693d3687`.
 
 ## Source-To-Code Contract
 
@@ -39,9 +47,28 @@ The immutable production executable was built from revision
 | Hard-wall limiter | `MKS24.tex:467` uses nominal `nu_lim = 1e10 v_A/L_perp` as a hard wall | Standard decks set `mhd/limiter_nu_coll = 1.0e10` and `mhd/limiter_hardwall = true`; `src/eos/cgl_mhd.cpp:75-94` parses the controls; `src/eos/cgl_physics.hpp:49` applies the algebraic projection and `src/diffusion/cgl_landau_fluid.cpp:77` suppresses LF coefficients when the threshold policy requires it | Matched production policy. The hard wall combines algebraic projection with threshold-dependent LF-coefficient suppression; it is not a claim to resolve microinstability kinetics. |
 | Periodic elongated box | `MKS24.tex:467` specifies `[L_x,L_y,L_z] = [1,1,2]` with `L_z = L_parallel` and standard `192 x 192 x 384` resolution | Canonical standard decks set mesh extents `[1,1,2]` and resolution `192 x 192 x 384` | Matched. |
 | Final time | `MKS24.tex:467` requires at least `t_f = 10 L_perp/v_A` | Canonical matrix decks set `time/tlim = 10.0`; accepted continuations may shorten only the submitted segment target and must preserve the same inspected lineage | Matched. |
-| OU forcing | `MKS24.tex:469` specifies velocity forcing, `d_t E_K = 0.32`, `t_corr = L_parallel/v_A = 2`, forced shell `[1,3]` in units of `2*pi/L_parallel`, and `k^-2` power | The archived E02 decks set `dedt = 0.32`, `tcorr = 2.0`, `physical_k_shell = true`, `k_shell_unit = pi`, `nlow = 1`, `nhigh = 3`, and `expo = 2.0`, but omit `spectrum = power_law`; the E02 executable therefore applies its `parabolic` default to random roles. The corrected worktree sets `spectrum = power_law` explicitly in every paper deck. | **Blocked pending corrected-build qualification:** preserve the E02 finding as historical audit evidence, qualify the corrected worktree, and start a fresh epoch. |
-| Forcing families | `MKS24.tex:469` distinguishes unconstrained random three-component forcing from planar Alfvenic forcing with `grad_perp dot u_perp = 0` | The archived E02 executable applies the generic projection to all paper roles. Random roles are therefore projected rather than unconstrained; planar roles use a full-`abs(k)^2` denominator and do not generally satisfy perpendicular incompressibility for retained `k_z != 0` modes. The corrected worktree adds restart-retained `mks24_random_unprojected` and `mks24_alfvenic_perpendicular` policies, enforces `sol_fraction = 1` for the latter, and sets the matching policy explicitly in every paper deck. | **Blocked pending corrected-build qualification:** preserve generic defaults for non-paper users, qualify the corrected policies, and start a fresh epoch. |
-| Modal forcing restart identity | Required for segmented AthenaK production | `src/srcterms/turb_driver.cpp:1630-1728`, `src/outputs/restart.cpp:294-354`, and `src/pgen/pgen.cpp:175-215` retain and validate modal forcing state. The corrected worktree also records `time/restart_time` in every restart parameter dump so the E03 helper can authenticate the selected terminal restart against the inspected physical time before continuation. | Modal-state mechanics were qualified in the archived `E02-modal-driver` epoch. The forcing-correct E03 executable and its explicit restart-time gate still require Frontier qualification. |
+| OU forcing | `MKS24.tex:469` specifies velocity forcing, `d_t E_K = 0.32`, `t_corr = L_parallel/v_A = 2`, forced shell `[1,3]` in units of `2*pi/L_parallel`, and `k^-2` power | The archived E02 decks set `dedt = 0.32`, `tcorr = 2.0`, `physical_k_shell = true`, `k_shell_unit = pi`, `nlow = 1`, `nhigh = 3`, and `expo = 2.0`, but omit `spectrum = power_law`; the E02 executable therefore applies its `parabolic` default to random roles. The corrected E03 decks set `spectrum = power_law` explicitly in every paper deck. | Qualified for E03 by explicit-deck audit and corrected-policy jobs `g024` and `g025`; preserve the E02 discrepancy as historical stop-line evidence. |
+| Forcing families | `MKS24.tex:469` distinguishes unconstrained random three-component forcing from planar Alfvenic forcing with `grad_perp dot u_perp = 0` | The archived E02 executable applies the generic projection to all paper roles. Random roles are therefore projected rather than unconstrained; planar roles use a full-`abs(k)^2` denominator and do not generally satisfy perpendicular incompressibility for retained `k_z != 0` modes. Corrected E03 adds restart-retained `mks24_random_unprojected` and `mks24_alfvenic_perpendicular` policies, enforces `sol_fraction = 1` for the latter, and sets the matching policy explicitly in every paper deck. | Qualified for E03: `g024` retains zero `f_z` and vanishing perpendicular divergence for retained `k_z != 0` modes; `g025` retains nonzero `f_z` and unprojected full divergence. Generic defaults remain available for non-paper users. |
+| Modal forcing restart identity | Required for segmented AthenaK production | `src/srcterms/turb_driver.cpp:1630-1728`, `src/outputs/restart.cpp:294-354`, and `src/pgen/pgen.cpp:175-215` retain and validate modal forcing state. Corrected E03 also records `time/restart_time` in every restart parameter dump so the helper can authenticate the selected terminal restart against inspected physical time before continuation. | Qualified for E03 by `g026`/`g027`: the resumed eight-sibling checkpoint crosses an OU refresh and matches the uninterrupted reference within retained-format tolerances. |
+
+## Corrected E03 Qualification Disposition
+
+Corrected immutable Frontier qualification is closed by reviewed jobs `g024`
+through `g031`. `g024` and `g025` qualify explicit planar and random forcing;
+`g026`/`g027` close restart identity across an OU refresh; `g028` closes
+one-rank/eight-rank GPU decomposition identity; `g029c` closes passive-Delta
+semantics; `g030b` reaches exact `t = 2.0` with zero strict counters,
+terminal `lf_hwproj = 10084905222`, forcing-work relative residual
+`1.8681072370071585e-12`, nine shared snapshots, five checkpoints, and
+fourteen MPI-I/O records; `g031` closes standard-layout startup, one-node
+memory fit, and ranked retained-output sizing only. Canonical `g031` evidence
+JSON SHA-256 is
+`a16415c5f9c557a0dad35936c0bb0e89658da9e3b78a4d86852ead4e006f0d98`.
+The full reviewed `g024`--`g031` checksum set is recorded in F-078 of
+`docs/cgl_lf_mks24_reproduction_implementation_plan.md`. Reviewed approval
+token SHA-256
+`e3fec9f35da42121b902f41ef752021f375aab38bc34c5ff75ae8780bfbca635`
+was retained atomically at `2026-05-30T21:33:31+00:00`.
 
 ## Frozen Matrix Review
 
@@ -94,8 +121,11 @@ AthenaK CGL-LF result (`MKS24.tex:621,626`).
 
 ## Manuscript Appendix Work
 
-The simulation protocol is blocked on forcing correction. The manuscript also
-still needs compact derivation prose. That prose must:
+The corrected E03 simulation protocol entry gate is closed through Frontier
+qualification and token retention. Fresh mapped production has started with
+accepted `R02/s00_rankio_t0_t0p1` job `4745922` through exact `t = 0.1`.
+The manuscript also still needs
+compact derivation prose. That prose must:
 
 1. State the 3+1 `q_perp` and `q_parallel` closure and the cold-electron,
    isotropic-background assumptions from `MKS24.tex:230-239`.
@@ -121,9 +151,11 @@ still needs compact derivation prose. That prose must:
 10. Reproduce the larger-density-fluctuation ordering and identify which
     conclusions no longer follow.
 
-These appendix items are writing requirements. The forcing discrepancy
-separately requires a corrected production executable, requalification, and a
-fresh execution epoch.
+These appendix items remain writing requirements. The forcing discrepancy
+separately required a corrected production executable, requalification, and a
+fresh execution epoch; the corrected E03 disposition above closes that entry
+gate without admitting any E02 restart or any E02 output as a paper-production
+result.
 
 ## Operational Handoff
 
@@ -134,7 +166,27 @@ detailed evidence log. The canonical Frontier root is
 exploratory `beta25-accel05-gamma10001-purecgl-256` campaign record untouched;
 explicitly acknowledge it only after a read-only isolation review. Do not
 prepare or submit any new `E02-modal-driver` segment. Preserve the
-accepted `E02` products as pipeline and cost evidence. After forcing
-correction and replacement-driver qualification, start a fresh epoch from
-`t = 0`, run one formally inspected segment at a time, and complete `R17`
-last.
+accepted `E02` products as pipeline and cost evidence. Corrected E03
+qualification is closed. The reviewed E03 approval token is retained and
+reconciliation passed. Fresh `R02/s00_rankio_t0_t0p1` job `4745922` was
+formally inspected and recorded `accepted` at exact `t = 0.1`, using
+`0.188889` node-hours. Commit and archive the F-079/F-080 controller-provenance
+transition before preparing its continuation. Then run one formally inspected
+segment at a time and complete `R17` last.
+
+The first R02 preflight exposed a nonblocking preview-rendering defect:
+`check-submit` enforced the reviewed shared-root acknowledgement but omitted it
+from the printed follow-up command. Atomic submission retained the required
+acknowledgement, so job `4745922` is valid. F-079 records the corrected
+equals-style rendering and parser-round-trip regression required before any
+later submission.
+
+Applying that fix after the pilot record exposed a second lifecycle boundary:
+one mutable live-helper checksum cannot authenticate both retained history and
+future helper revisions. F-080 requires the executing controller itself to be
+tracked, clean, and committed. New preparation and submission remain strict
+against live helper bytes. Lifecycle accounting, inspection, reconciliation,
+continuation-parent validation, and retained-lineage bundling may authenticate
+an earlier helper blob only from that segment's checksum-bound retained source
+bundle. Commit the transition, archive a new source bundle, and reconcile
+before preparing the R02 continuation.

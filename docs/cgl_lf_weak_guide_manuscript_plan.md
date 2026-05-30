@@ -1,7 +1,9 @@
 # MKS24 Reproduction-First CGL-LF Manuscript and Later Extension Plan
 
-Status: execution plan, revised 2026-05-30 after a read-only Frontier-root
-audit on 2026-05-29 EDT (2026-05-30 UTC). The first paper-production
+Status: execution plan, revised 2026-05-30 after the F-078 corrected-build
+token retention and accepted fresh E03 R02 pilot transition. The preceding
+read-only Frontier-root audit was completed on 2026-05-29 EDT (2026-05-30
+UTC). The first paper-production
 segment, mapped case `R16/s00_t0_t2`, completed on Frontier as job `4674731`
 on 2026-05-25 and was recorded only as a clean partial diagnostic result
 (`t = 1.66204848945`, `1.253333` node-hours), not an accepted scientific
@@ -46,14 +48,13 @@ safety counters and complete terminal ranked products, and used `1.282778`
 node-hours. On 2026-05-29 it was recorded `rejected` for current reproduction
 admission because the merged turbulent-driver replacement changes forcing
 evolution and restart state/layout. The pre-replacement restart lineage
-cannot continue under the replacement executable. Stage I actual use is now
-`9.962778` node-hours with no active reservation; further production requires
-replacement-driver qualification, an immutable production build, and a fresh
-lineage from `t = 0`.
-The cleanest recovery is a new execution epoch, not an attempt to salvage the
+cannot continue under the replacement executable. At that E01 stop line,
+Stage I actual use was `9.962778` node-hours with no active reservation. The
+recovery decision was a new execution epoch, not an attempt to salvage the
 pre-replacement lineage. Preserve the existing `R16` tree, inspections, and
-ledger as immutable historical epoch `E01-pre-modal-driver`. Create a separate
-`E02-modal-driver` namespace and ledger before the next MKS24 submission. That
+ledger as immutable historical epoch `E01-pre-modal-driver`. The separate
+`E02-modal-driver` namespace and ledger were created before the next MKS24
+submission. That
 namespace, its initial pilot-only reservation, and its shared-root submission
 checks are committed through `7fae0bcf`. Fresh replacement-driver `E02`
 jobs `4743735`, `4743933`, `4743988`, `4744019`, `4744056`, `4744120`,
@@ -94,8 +95,11 @@ enforce `grad_perp dot u_perp = 0` for retained `k_z != 0` modes. Job
 Stop-line evidence JSON SHA-256 is
 `de85c443c3bc9bab795f7f1903e5de224d7d86b553ac40e9dd7249986c3df211`.
 Preserve all E02 products as pipeline and cost evidence, but prohibit every
-new E02 preparation or submission. Implement and qualify explicit MKS24
-forcing policies, then start a fresh execution epoch from `t = 0`.
+new E02 preparation or submission. F-078 closes explicit-policy
+implementation and corrected-build qualification. The reviewed E03 token is
+retained, reconciliation passed, and fresh `R02/s00_rankio_t0_t0p1` job
+`4745922` was submitted from `t = 0`, formally inspected, and recorded
+`accepted` at exact `t = 0.1` for `0.188889` node-hours.
 Reset the planning ceiling for that new epoch to an incremental `4000`
 node-hours while continuing to report the historical `0.851670` debug and
 `9.962778` Stage I node-hours. A reset is an accounting boundary for future
@@ -104,24 +108,50 @@ The corrected worktree now selects explicit restart-retained
 `mks24_random_unprojected` and `mks24_alfvenic_perpendicular` forcing
 policies, sets `spectrum = power_law` in every paper deck, records an
 authoritative `time/restart_time` marker in new restart dumps, and isolates
-future work beneath `E03-forcing-policy`. The E03 helper fails closed until a
-reviewed qualification token binds the immutable corrected executable and
-revision. No E03 preparation is authorized until that executable completes
-Frontier qualification and the token is retained. The schema-v2 panel-status
+future work beneath `E03-forcing-policy`. The E03 helper was configured to
+fail closed until a reviewed qualification token bound the immutable corrected
+executable and revision. No E03 preparation was authorized until that
+executable completed Frontier qualification and the token was retained. The
+schema-v2 panel-status
 inventory separately retains eleven admitted comparison families, eleven
 reference-blocked rows, and the external Figure 10 model boundary; admitted
 comparisons remain `not_run` until reviewed numeric criteria are recorded.
 The independent E03 helper audit is closed after targeted replay and recovery
-probes. The clean-build qualification ladder remains pending. Its staged
-one-rank policy smokes retain full-field force outputs so the HIP executable
-can demonstrate nonzero Cartesian `f_z` and full divergence for
-`mks24_random_unprojected`, and zero `f_z` plus vanishing perpendicular
-divergence for retained `k_z != 0` modes under
-`mks24_alfvenic_perpendicular`. The staged random and Alfvenic input SHA-256
-digests are respectively
-`33a712e85dc2bf522daa56bd7d9e08bb0a32f4e2a2a6d2b49d1e2918922c2a0a`
-and
-`0c8bd9f66981ecf6852135db999a0cb2192d866ce128ec3c68944b1045905fda`.
+probes. Corrected immutable Frontier qualification is also closed for revision
+`9e07542281e4e6d125582f253df3ad2e3b8b154d`, executable SHA-256
+`68f243f9204df388b24365ae65a567f6f567dbe422a6d7a43b9fb4a499ef118c`,
+and retained source-bundle SHA-256
+`c39d55809989d20aa5438711803f4fd43237fa9284c7e15183e84fdd693d3687`.
+Jobs `g024` and `g025` qualify the explicit planar-Alfvenic and unprojected
+random policies. `g026` supplies an uninterrupted eight-rank reference;
+`g027` resumes authenticated restart siblings at
+`time/restart_time = 0.00968183`, crosses an OU refresh, and matches the
+reference within retained-format tolerances; `g028` closes one-rank/eight-rank
+decomposition identity. After two pre-submit wording corrections, `g029c`
+qualifies passive-Delta semantics. `g030b` reaches exact `t = 2.0` with zero
+strict counters, terminal `lf_hwproj = 10084905222`, forcing-work relative
+residual `1.8681072370071585e-12`, nine shared snapshots, five shared
+checkpoints, and fourteen MPI-I/O records. `g031` launches the standard
+`192 x 192 x 384` layout with 27 meshblocks per GPU rank, reaches exact
+`t = 0.01`, retains complete initial/final eight-sibling ranked products, and
+closes startup, one-node memory-fit, and retained-output sizing only.
+Canonical `g031` evidence JSON SHA-256 is
+`a16415c5f9c557a0dad35936c0bb0e89658da9e3b78a4d86852ead4e006f0d98`;
+the supplemental independently generated record remains retained with
+SHA-256
+`e000a789d10e749b476d09a1be5e6526f0f0dc2dbe0e46c47b0ef09bc0f56ff6`.
+Reviewed approval token SHA-256
+`e3fec9f35da42121b902f41ef752021f375aab38bc34c5ff75ae8780bfbca635`
+was retained atomically at `2026-05-30T21:33:31+00:00`; it binds the corrected
+revision and executable. Reconciliation then passed, and fresh E03
+`R02/s00_rankio_t0_t0p1` job `4745922` was submitted from `t = 0`, formally
+inspected, and recorded `accepted` at exact `t = 0.1` for `0.188889`
+node-hours. Its record-time `segment_inspection.json` and embedded
+`scientific_inspection` payload SHA-256 are
+`f4b0a31304e31610ec9ec83133f79b747fb0d8cf0f9b3b013febc1cddc2ae784`;
+the forcing-work relative residual is `1.920820308941694e-11`, strict LF
+safety counters remain zero, and complete initial/final eight-sibling ranked
+snapshot and restart groups are retained.
 Commits `d210cdd5`, `eab6e12b`, and `7fae0bcf` retain bundle-backed source
 provenance, complete rank-local debug-restart archival, an all-user-job debug
 preflight, reviewed top-level shared-root acknowledgement, and prepare-time
@@ -577,12 +607,12 @@ work is:
 | --- | --- | --- |
 | Freeze MKS24 case inventory | `inputs/cgl_lf_paper/mks24_stage_i_manifest.json` and guarded workflow `paper-mks24-stage-i` define sixteen source-mapped executions, reuse aliases, and exclude the unmapped active-Alfvenic beta-1 deck. | Preserve the committed manifest and validate it against every submitted input bundle. |
 | Close reference-data boundary | Many dimensionless curves/surfaces are extracted; dimensional panels remain blocked. | Author/archive data, explicit transform proof, or manuscript-scoped blocked-panel decision. |
-| Verify numerical model identity | Corrected collisions, limiter threshold selection, forcing work, passive feedback, and reduced/GPU gates are recorded. `docs/cgl_lf_mks24_stage_i_protocol_review.md` records the pinned source-to-code stop-the-line audit. | Correct the forcing-policy discrepancies, rerun the formal review, and preserve passing required tests before a fresh execution epoch. |
-| Replacement-driver qualification | The merged modal OU driver records `TurbulenceRestartMetadata` and authoritative modal state. Immutable `E02` build revision `462b9dbd53e085dea46c2478b567781576d7d03e` with SHA-256 `df87684e9d2b7af33b36c2757779d15de87b84ef051ca9c4489f2efa358f5c48` remains retained as pipeline and cost evidence. Focused post-merge local serial (`39 passed`) and scheduled MPI CPU (`2 passed`) gates are retained. Reduced startup `g015`, natural-cycle rank-local restart comparison `g018`, one-rank versus eight-rank decomposition comparison `g019`, passive-Alfvénic smoke `g020`, active-random smoke `g021`, reduced nonlinear hard-wall run `g022`, and standard-layout rank-local sizing run `g023` pass with zero strict counters. Fresh rank-local E02 R16 reaches exact `t = 10.0`; E02 R02 reaches `t = 2.5`; E02 R17 timing reaches `t = 0.10`. | Preserve E02 only as pipeline and cost evidence. Add explicit MKS24 forcing policies, build and qualify a replacement executable, and start a fresh epoch from `t = 0`. |
-| Execution-epoch isolation | Commit `462b9dbd` makes `scripts/frontier/cgl_lf_stage_i.py` record new work beneath `runs/mks24-stage-i/E02-modal-driver/`, use `mks24_stage_i_E02_modal_driver_*` accounting files, tag manifests and job names with the epoch, and reject cross-epoch restart ancestry and bundle discovery. The old `runs/mks24-stage-i/R16` tree remains outside discovery. | Retain its passing offline epoch-isolation regression before any Frontier submission. |
+| Verify numerical model identity | Corrected collisions, limiter threshold selection, forcing work, passive feedback, and reduced/GPU gates are recorded. `docs/cgl_lf_mks24_stage_i_protocol_review.md` preserves the E02 stop line and records the corrected E03 disposition. | Preserve strict inspection for fresh mapped production from `t = 0`. |
+| Replacement-driver qualification | Immutable E02 build revision `462b9dbd53e085dea46c2478b567781576d7d03e` remains pipeline and cost evidence only. Corrected E03 revision `9e07542281e4e6d125582f253df3ad2e3b8b154d` and executable SHA-256 `68f243f9204df388b24365ae65a567f6f567dbe422a6d7a43b9fb4a499ef118c` pass `g024`--`g031`: explicit planar/random policies, post-refresh restart identity, decomposition identity, passive semantics, nonlinear hard wall, and standard-layout sizing. Fresh R02 pilot job `4745922` is accepted through exact `t = 0.1`. | Preserve the retained token, commit and archive the F-079/F-080 controller-provenance transition, and continue only from the authenticated R02 checkpoint. |
+| Execution-epoch isolation | `scripts/frontier/cgl_lf_stage_i.py` records new work beneath `runs/mks24-stage-i/E03-forcing-policy/`, uses `mks24_stage_i_E03_forcing_policy_*` accounting files, requires the reviewed token, tags manifests and jobs with the epoch, and rejects cross-epoch restart ancestry and bundle discovery. E01 and E02 trees remain outside E03 discovery. | Preserve passing offline isolation/recovery regressions and clean `reconcile` before every E03 submission. |
 | Shared-root coordination | `/lustre/orion/ast207/proj-shared/dfielding/CGL` also contains exploratory non-MKS24 runs. A read-only audit found cancelled job `4743020` and two-node debug job `4743106` beneath `runs/beta25-accel05-*`; neither is Stage I evidence. Slurm now records `4743106` as `COMPLETED 0:0`, but its top-level campaign manifest remains stale at `state = running`. The helper therefore continues to require explicit acknowledgement after a read-only isolation review. | Before every Stage I prepare and submit action, inspect all user jobs and all active CGL-root campaign records. Do not modify the stale exploratory manifest. Do not overlap Stage I with another root-writing CGL campaign unless an explicit isolation and concurrency review authorizes it. Account exploratory runs separately from the MKS24 ledgers. |
-| Retained source provenance | The campaign-root working checkout was intentionally replaced by Git bundles on 2026-05-29. Both launchers now permit a clean external source checkout while requiring a checksummed in-root `--source-bundle` that contains the prepared revision. The debug helper also retains complete sibling rank restart sets rather than only rank zero, rejects every queued user job, scans active top-level CGL-root records before submission, and rejects absent override targets before reservation. Commits `d210cdd5`, `eab6e12b`, and `7fae0bcf` implement F-060/F-061; `g023` used indexed bundle `athenak-feature-cgl-through-e4249794.bundle` with SHA-256 `492c178e67feb0c3b8ceae674e4766a48fa43415c459e3465b055464971326a4`, containing the immutable executable revision. Fresh initial E02 R16 pilot jobs used indexed bundle `athenak-feature-cgl-through-d93abefb.bundle` with SHA-256 `4a3653afdf8394daad5b4c2f7c0542c5017437d89d60bcbb91e51abde0e6240a`. Completed R02 timing jobs used indexed bundle `athenak-feature-cgl-through-c5bd782b.bundle` with SHA-256 `e25e86ec61f743fdfce76ec8f942cc3093620aa99b0576851211b3b7cc7a74c1`. Completed R17 timing jobs used indexed bundle `athenak-feature-cgl-through-cd63f81e.bundle` with SHA-256 `361b3d45a0ecaca29cd84d17c231db965bab5c90fd18e652b6b5fedff4fa2b67`. | Retain the passing bundle/rank-local/shared-root/override self-tests and use the latest indexed bundle for each continuation. |
-| Production accounting path | `scripts/frontier/cgl_lf_stage_i.py` is separate from the debug-only utility, validates mapped cases and aliases, uses `batch` with default production `normal` QOS, archives executable/input, retained-bundle, and production-utility provenance, enforces sequential Stage I reservations, rejects normal-QOS requests above two hours before restart archival, and requires an inspection record before an output may be recorded as `accepted` or retained as a clean partial prefix. Rank-local output sets are retained and checksum-verified as grouped products. Continuations may use only the inspected terminal restart set from a parent with matching epoch, case, input digest, and executable digest. The E02 tree records R16 through exact `t = 10.0`, R02 through `t = 2.5`, R17 timing through `t = 0.10`, and aborted stop-the-line job `4745498`. | Keep E02 preparation fail closed. Correct and qualify the MKS24 forcing policy, then create a fresh execution epoch before resuming the matrix. |
+| Retained source provenance | Both launchers require a checksummed in-root `--source-bundle` containing the prepared revision. The corrected retained bundle is `athenak-feature-cgl-through-9e075422.bundle` with SHA-256 `c39d55809989d20aa5438711803f4fd43237fa9284c7e15183e84fdd693d3687`; its clean detached source is the qualified revision. The helpers retain complete sibling restart sets, reject absent override targets before reservation, and reject queued user jobs plus unacknowledged active top-level records during submission preflight. F-080 keeps `prepared` and `submitted` manifests strict against live helper bytes while authenticating each `recorded` historical helper blob from its checksum-bound retained bundle. | Commit the F-080 controller transition, archive a new bundle containing its revision, rerun reconciliation, and require helper authentication of retained corrected artifacts at every E03 lifecycle transition. |
+| Production accounting path | `scripts/frontier/cgl_lf_stage_i.py` validates mapped cases and aliases, uses `batch` with default production `normal` QOS, requires the E03 approval token, archives executable/input/bundle/utility provenance, submits atomically under lock, enforces sequential reservations, rejects requests above two hours, authenticates restart markers, and requires formal inspection before record. E03 started empty by design and now records accepted R02 pilot job `4745922` at `0.188889` node-hours. | Commit and archive the F-079/F-080 controller-provenance transition, then continue sequentially with `R17` last. |
 | Production analysis/plot orchestration | Existing analyzer and MKS24 extractors implement many products; `paper-analyze` composes repeated checksum-qualified split reference manifests while rejecting duplicate product identifiers, and commit `449e297b` adds explicit partial-case comparison recording plus header-only snapshot-window selection; `cgl_lf_stage_i.py bundle-case` follows the explicit accepted restart lineage, merges sampled histories that need not repeat authenticated restart boundary rows while bounding gaps by their retained cadence and boundary timesteps, and links time-deduplicated shared or rank-local snapshot sets only after a case reaches its required final time, while `bundle-campaign` requires all sixteen completed mapped cases for cross-case comparisons. | Workflow command regenerating the per-panel gate table and retained figures from accepted output bundles. |
 | Manuscript conversion | Illustrated validation note exists. | TeX manuscript structured around reproduction claims, blocked boundaries, and only later an extension. |
 
@@ -598,19 +628,21 @@ Historical allocation remains visible. The F-076 forcing-contract audit now
 requires another fresh epoch from `t = 0`; no new `E02` submission is
 authorized.
 
-Any `1000` node-hour debug ceiling and `1068.888889` Stage I reservation
-retained in the earlier implementation record describe the archived
-pre-replacement campaign. They do not authorize new submissions and must not
-be silently copied into `E02`.
+The live debug-helper ceiling remains `1000` node-hours and currently records
+all qualification epochs. The earlier `1068.888889` Stage I reservation is
+archived pre-replacement planning history; it does not authorize new
+submissions and must not be silently copied into E03.
 
 | Allocation record | Calculation basis | Node-hours |
 | --- | --- | ---: |
 | Historical debug qualification | Retained pre-replacement CGL-LF debug ledger | `0.851670` |
 | Fresh replacement-driver debug qualification used so far | Retained `g014` through `g023`, including the failed preflight execution and inconclusive clipped-boundary comparator | `0.510280` |
-| Current recorded debug total | Historical debug qualification plus fresh replacement-driver debug use | `1.361950` |
+| Corrected E03 qualification | Retained `g024` through `g031`, including explicit forcing policies, post-refresh restart identity, decomposition, passive semantics, nonlinear hard wall, and standard-layout sizing | `0.485834` |
+| Current recorded debug total | Historical debug qualification plus E02 replacement-driver and corrected E03 debug use | `1.847784` |
+| Accepted corrected E03 R02 pilot | Job `4745922`; one node; exact `t = 0.1`; formally inspected and recorded with no active reservation | `0.188889` |
 | Separately retained scheduled MPI CPU local-gate allocation | Job `4743666`; not charged through the debug-helper ledger | `0.002222` |
 | Historical `E01-pre-modal-driver` Stage I | Retained production segments through rejected job `4686032` | `9.962778` |
-| Historical archive total | Reported for provenance; not charged against the fresh planning reset | `10.814448` |
+| Pre-E02 historical subtotal | Historical debug qualification plus `E01-pre-modal-driver` Stage I; reported for provenance, not charged against the fresh planning reset | `10.814448` |
 | Historical `E02-modal-driver` project ceiling | Superseded incremental ceiling for archived replacement-driver qualification and Stage I work | `4000.000000` |
 | Historical initial `E02` replacement-driver qualification envelope | Smallest-discriminating local and Frontier debug reruns before archived production recosting | `50.000000` |
 | Archived `E02` `R16` pipeline run | Seven accepted jobs through exact `t = 10.0`; zero strict counters; completed analyzer pipeline check | `6.145556` |
@@ -650,8 +682,10 @@ epoch:
    `f823ef6993045d5d90f016f7052518a353f348f7f83b9efdc19d32ee097f0c59`.
    Continue to use the most recent measured late-time rate conservatively.
 9. Prepare or submit no additional `E02` segment.
-10. Implement and qualify explicit MKS24 forcing policies, then create a fresh
-    execution epoch from `t = 0`.
+10. Preserve the completed corrected-policy qualification and retained
+    approval token. Fresh mapped work began from `R02/s00_rankio_t0_t0p1`
+    job `4745922` at `t = 0`; it is accepted through exact `t = 0.1` for
+    `0.188889` node-hours.
 11. In that fresh epoch, execute no more than one production segment at a time,
     review strict counters, work accounting, storage, and measured cost after
     every segment, complete R17 last, and stop to recost if projected Stage I
@@ -921,8 +955,9 @@ first mapped lineage through exact `t = 1.0`, and job `4744518` continues it
 through exact `t = 1.5`. Job `4744913` continues it through exact `t = 2.0`.
 Job `4745305` continues it through exact `t = 2.5`. F-076 then supersedes the
 E02 continuation authorization: preserve these products as pipeline and cost
-evidence, correct the forcing contract, qualify a replacement executable, and
-start a fresh epoch from `t = 0`.
+evidence. The F-078-qualified corrected executable and retained token now bind
+fresh `R02/s00_rankio_t0_t0p1` job `4745922`, accepted from `t = 0` through
+exact `t = 0.1`.
 
 Progress on 2026-05-30: `g014` retained an input-parse failure because its
 archived sizing deck lacked the `mhd/limiter_hardwall` key targeted by a
@@ -1177,7 +1212,7 @@ Stage I is inserted ahead of it. After Stage I:
 | A. Reproduction specification audit | Verify pinned MKS24 source, sixteen-run mapped alias map, disposition of the unmapped active-Alfvenic beta-1 definition, closure/forcing/limiter identity, and figure/status table. | Reviewed Stage I protocol. | A published simulation role or observable remains unidentified. |
 | B. Reference-data closure | Resolve dimensional panel normalization/data boundary and the Figure 10 external-model decision. | Qualified reference manifests or explicit scoped limitation. | A "complete" claim would depend on unqualified data. |
 | C. Production readiness | Retain and commit the bundle-backed source-provenance follow-up; validate required local/GPU/restart/work-accounting tests for the replacement driver; complete debug qualification of the corrected immutable build. | Passing readiness review, canonical corrected-epoch qualification token, and fail-closed corrected-epoch ledger. | Numerical gates, retained provenance, epoch isolation, qualification approval, or submission controls fail. |
-| D. MKS24 production | Preserve completed E02 R16 and R02/R17 timing products only as pipeline and cost evidence. Correct and qualify explicit MKS24 forcing policies, start a fresh epoch from `t = 0`, then execute the sixteen mapped Stage I runs plus the beta-1 case only if Phase A assigns it a published role; complete R17 last and run one segment at a time with reviews. | Accepted corrected-epoch run bundles and measured ledger/storage. | Forcing fidelity, safety, stationarity, accounting, storage, or budget gate fails. |
+| D. MKS24 production | Preserve completed E02 R16 and R02/R17 timing products only as pipeline and cost evidence. The reviewed E03 token and clean reconciliation now bind fresh `R02/s00_rankio_t0_t0p1` job `4745922`, accepted from `t = 0` through exact `t = 0.1` for `0.188889` node-hours. Commit and archive the F-079/F-080 controller-provenance transition, then execute the sixteen mapped Stage I runs plus the beta-1 case only if Phase A assigns it a published role. Complete R17 last and run one segment at a time with reviews. | Accepted corrected-epoch run bundles and measured ledger/storage. | Forcing fidelity, safety, stationarity, accounting, storage, or budget gate fails. |
 | E. MKS24 analysis | Generate each required product and complete the figure-by-figure status table. | Quantitative reproduction report. | Any claimed result lacks qualified comparison evidence. |
 | F. Reproduction manuscript | Transform the TeX note into a buildable Stage I manuscript. | Manuscript and reproducibility package. | Claims exceed the accepted status table. |
 | G. Extension decision | Recalculate the Stage II design using measured Stage I results/costs. | Approved extension matrix or deferred-work record. | Insufficient budget or unresolved baseline reproduction. |
@@ -1265,9 +1300,17 @@ As of the read-only Frontier-root audit on 2026-05-29 EDT
    invalidated further direct-reproduction use of E02. Job `4745498` was
    cancelled after `498` seconds and recorded `aborted`, consuming `0.138333`
    node-hours. E02 cumulative use is `15.628610` node-hours with no active
-   reservation. Preserve E02 as pipeline and cost evidence; correct and
-   qualify explicit MKS24 forcing policies, then start a fresh epoch from
-   `t = 0`.
+   reservation. Preserve E02 as pipeline and cost evidence. Corrected E03
+   Frontier qualification jobs `4745621`, `4745643`, `4745651`, `4745756`,
+   `4745825`, `4745843`, `4745848`, and `4745890` now pass as `g024` through
+   `g031` against immutable executable SHA-256
+   `68f243f9204df388b24365ae65a567f6f567dbe422a6d7a43b9fb4a499ef118c`.
+   The reviewed E03 approval token was retained and the initially empty
+   canonical E03 ledger reconciled cleanly. Fresh
+   `R02/s00_rankio_t0_t0p1` job `4745922` was submitted from `t = 0`,
+   formally inspected, and recorded `accepted` at exact `t = 0.1` for
+   `0.188889` node-hours. Commit and archive the F-079/F-080 controller-provenance
+   transition before preparing its continuation.
 
 ## 13. Reproducibility Record
 

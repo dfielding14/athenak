@@ -5,6 +5,7 @@ import hashlib
 import importlib.util
 import json
 from pathlib import Path
+import shlex
 import shutil
 import subprocess
 import sys
@@ -1450,7 +1451,193 @@ def test_cgl_lf_stage_i_requires_retained_source_bundle_provenance(tmp_path):
         )
 
 
-def test_cgl_lf_stage_i_isolates_epoch_and_checks_all_shared_root_jobs(tmp_path):
+def test_cgl_lf_stage_i_authenticates_historical_production_utility(
+    tmp_path, monkeypatch
+):
+    spec = importlib.util.spec_from_file_location(
+        "cgl_lf_stage_i_historical_utility_test", PAPER_STAGE_I_TOOL
+    )
+    assert spec is not None and spec.loader is not None
+    stage_i = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = stage_i
+    spec.loader.exec_module(stage_i)
+
+    repository = tmp_path / "source"
+    script = repository / "scripts" / "frontier" / "stage_i.py"
+    script.parent.mkdir(parents=True)
+    subprocess.run(["git", "init", "--quiet"], cwd=repository, check=True)
+    subprocess.run(
+        ["git", "config", "user.email", "test@example.invalid"],
+        cwd=repository, check=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "CGL-LF test"],
+        cwd=repository, check=True,
+    )
+    script.write_text("historical helper\n")
+    subprocess.run(["git", "add", "."], cwd=repository, check=True)
+    subprocess.run(
+        ["git", "commit", "--quiet", "-m", "historical"], cwd=repository, check=True
+    )
+    historical_revision = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=repository,
+        check=True, capture_output=True, text=True,
+    ).stdout.strip()
+    historical_sha = hashlib.sha256(script.read_bytes()).hexdigest()
+    bundle = tmp_path / "historical.bundle"
+    subprocess.run(
+        ["git", "bundle", "create", str(bundle), "--all"],
+        cwd=repository, check=True,
+    )
+    bundle_record = {
+        "path": str(bundle),
+        "sha256": hashlib.sha256(bundle.read_bytes()).hexdigest(),
+        "verified_revisions": [historical_revision],
+    }
+
+    script.write_text("current helper\n")
+    subprocess.run(["git", "add", "."], cwd=repository, check=True)
+    subprocess.run(
+        ["git", "commit", "--quiet", "-m", "current"], cwd=repository, check=True
+    )
+    monkeypatch.setattr(stage_i, "ROOT_DIR", repository)
+    monkeypatch.setattr(stage_i, "__file__", str(script))
+    monkeypatch.setattr(
+        stage_i, "PRODUCTION_UTILITY_RELATIVE", Path("scripts/frontier/stage_i.py")
+    )
+    record = {
+        "path": str(script),
+        "revision": historical_revision,
+        "sha256": historical_sha,
+        "committed": True,
+    }
+    with pytest.raises(ValueError, match="checksum has changed"):
+        stage_i.authenticate_production_utility(record)
+    stage_i.authenticate_production_utility(
+        record, source_bundle=bundle_record, allow_historical=True
+    )
+    script.write_text("dirty current helper\n")
+    with pytest.raises(ValueError, match="must be committed"):
+        stage_i.authenticate_production_utility(
+            record, source_bundle=bundle_record, allow_historical=True
+        )
+    with pytest.raises(ValueError, match="must be committed"):
+        stage_i.authenticate_production_utility(record)
+    subprocess.run(
+        ["git", "checkout", "--", "scripts/frontier/stage_i.py"],
+        cwd=repository, check=True,
+    )
+    monkeypatch.setattr(
+        stage_i, "PRODUCTION_UTILITY_RELATIVE", Path("scripts/frontier/wrong.py")
+    )
+    with pytest.raises(ValueError, match="path is inconsistent"):
+        stage_i.authenticate_production_utility(
+            record, source_bundle=bundle_record, allow_historical=True
+        )
+    monkeypatch.setattr(
+        stage_i, "PRODUCTION_UTILITY_RELATIVE", Path("scripts/frontier/stage_i.py")
+    )
+    with pytest.raises(ValueError, match="checksum has changed"):
+        stage_i.authenticate_production_utility(
+            {**record, "sha256": "0" * 64},
+            source_bundle=bundle_record,
+            allow_historical=True,
+        )
+    with pytest.raises(ValueError, match="lacks the historical"):
+        stage_i.authenticate_production_utility(
+            record,
+            source_bundle={**bundle_record, "verified_revisions": []},
+            allow_historical=True,
+        )
+
+    manifest_dir = tmp_path / "run" / "manifest"
+    manifest_dir.mkdir(parents=True)
+    batch_script = manifest_dir / "cgl_lf_stage_i.sbatch"
+    batch_digest = "a" * 64
+    batch_script.write_text(f"BATCH_SCRIPT_SHA256={batch_digest}\n")
+    input_file = manifest_dir / "submitted_input.athinput"
+    matrix_file = manifest_dir / "mks24_stage_i_manifest.json"
+    executable = tmp_path / "athena"
+    input_file.write_text("input\n")
+    matrix_file.write_text("{}\n")
+    executable.write_text("#!/bin/sh\n")
+    executable.chmod(0o755)
+    manifest_path = manifest_dir / "prepared_run.json"
+    manifest = {
+        "state": "recorded",
+        "command": {
+            "batch_script_sha256": batch_digest,
+            "input_file": str(input_file),
+            "input_sha256": stage_i.sha256(input_file),
+            "matrix_file": str(matrix_file),
+            "matrix_sha256": stage_i.sha256(matrix_file),
+            "executable": str(executable),
+            "executable_sha256": stage_i.sha256(executable),
+            "restart_files": [],
+            "production_utility": record,
+            "source_bundle": bundle_record,
+            "input_revision": historical_revision,
+            "executable_revision": historical_revision,
+        },
+        "paths": {"batch_script": str(batch_script)},
+    }
+    monkeypatch.setattr(stage_i, "validate_prepared_continuation_target", lambda _: None)
+    monkeypatch.setattr(stage_i, "validate_prepared_resources", lambda *_args, **_kw: None)
+    monkeypatch.setattr(stage_i, "normalized_batch_script_sha256", lambda _: batch_digest)
+    monkeypatch.setattr(
+        stage_i, "generated_batch_script",
+        lambda *_: batch_script.read_text(),
+    )
+    stage_i.authenticate_prepared_execution(
+        manifest, manifest_path, allow_legacy_local=True,
+        allow_historical_utility=True,
+    )
+    stage_i.authenticate_prepared_execution(
+        {**manifest, "state": "submitted"},
+        manifest_path,
+        allow_legacy_local=True,
+        allow_historical_utility=True,
+    )
+    with pytest.raises(ValueError, match="checksum has changed"):
+        stage_i.authenticate_prepared_execution(
+            {**manifest, "state": "prepared"},
+            manifest_path,
+            allow_legacy_local=True,
+        )
+    monkeypatch.setattr(stage_i, "generated_batch_script", lambda *_: "changed\n")
+    with pytest.raises(ValueError, match="differs from retained launch intent"):
+        stage_i.authenticate_prepared_execution(
+            manifest, manifest_path, allow_legacy_local=True,
+            allow_historical_utility=True,
+        )
+    monkeypatch.setattr(
+        stage_i, "generated_batch_script",
+        lambda *_: batch_script.read_text(),
+    )
+    for state in ("prepared", "submitted", "recorded"):
+        with pytest.raises(ValueError, match="checksum has changed"):
+            stage_i.authenticate_prepared_execution(
+                {**manifest, "state": state},
+                manifest_path,
+                allow_legacy_local=True,
+                allow_historical_utility=False,
+            )
+
+    bundle.write_bytes(bundle.read_bytes() + b"tampered\n")
+    with pytest.raises(ValueError, match="source bundle checksum has changed"):
+        stage_i.authenticate_production_utility(
+            record, source_bundle=bundle_record, allow_historical=True
+        )
+    with pytest.raises(ValueError, match="source bundle checksum has changed"):
+        stage_i.authenticate_prepared_execution(
+            manifest, manifest_path, allow_legacy_local=True,
+            allow_historical_utility=True,
+        )
+
+
+def test_cgl_lf_stage_i_isolates_epoch_and_checks_all_shared_root_jobs(
+    tmp_path, capsys
+):
     spec = importlib.util.spec_from_file_location(
         "cgl_lf_stage_i_epoch_test", PAPER_STAGE_I_TOOL
     )
@@ -1516,6 +1703,7 @@ def test_cgl_lf_stage_i_isolates_epoch_and_checks_all_shared_root_jobs(tmp_path)
         allow_shared_root_campaign=[],
     )
     assert stage_i.check_submit(args) == 0
+    assert "--allow-shared-root-campaign" not in capsys.readouterr().out
 
     queue.write_text("123|batch|RUNNING|unrelated_job\n")
     with pytest.raises(ValueError, match="another user job is queued"):
@@ -1532,8 +1720,20 @@ def test_cgl_lf_stage_i_isolates_epoch_and_checks_all_shared_root_jobs(tmp_path)
     })
     with pytest.raises(ValueError, match="shared-root campaign records"):
         stage_i.check_submit(args)
-    args.allow_shared_root_campaign = ["exploratory"]
+    args.allow_shared_root_campaign = [
+        "exploratory", "beta 25", "-reviewed", "exploratory",
+    ]
     assert stage_i.check_submit(args) == 0
+    submit_line = next(
+        line.strip() for line in capsys.readouterr().out.splitlines()
+        if line.strip().startswith(
+            "python3 scripts/frontier/cgl_lf_stage_i.py submit "
+        )
+    )
+    parsed = stage_i.parser().parse_args(shlex.split(submit_line)[2:])
+    assert parsed.allow_shared_root_campaign == [
+        "-reviewed", "beta 25", "exploratory",
+    ]
 
     manifest = json.loads(manifest_path.read_text())
     manifest["execution_epoch"] = "E01-pre-modal-driver"
