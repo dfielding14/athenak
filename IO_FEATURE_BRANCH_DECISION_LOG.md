@@ -751,6 +751,58 @@ decision.
 | Evidence | `ROB-033` through `ROB-038`; correction-focused topology audits; `src/mesh/build_tree.cpp`; `tst/inputs/io_restart_metadata.athinput`; corruption and positive regressions in `tst/test_suite/io/test_io_finalization_timing_cpu.py`; focused serial restart/layout set returned `41 passed`; focused MPI restart set returned `58 passed`; full serial matrix returned `238 passed`; full MPI matrix returned `67 passed`; style returned `2 passed`; fixture checksum verification passed for all `27` artifacts. |
 | Follow-up | Retain the restart-specific preflight locally. Revisit a more general tree validation API only if later non-restart paths need the same boundary. |
 
+### D-072: Use A Narrow Shared MPI Failure Utility
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted for `RCP-02` implementation |
+| Decision | Add a header-only shared MPI utility that renders MPI failures with `MPI_Error_string()` on a best-effort basis, falls back to the numeric code if rendering itself fails, checks actionable branch-added and inherited-but-touched MPI returns, and aborts `MPI_COMM_WORLD` for MPI-sensitive fatal paths. Treat `MPI_Comm_free(node_comm)` failure as fatal during normal teardown and clear the handle only after successful release. Keep intentional `MPI_Abort()` shutdown calls simple. |
+| Reason | The diff-driven inventory found fragmented checks and unchecked returns across communicator lifecycle, metadata collectives, output reductions, timing, and restart publication. World abort prevents a node-local or rank-local failure from stranding peers in a later collective. |
+| Alternatives | Keep file-local helpers; check only newly added calls; return errors from deep output paths; broaden the checkpoint into all inherited MPI startup and shutdown code. |
+| Why not | File-local helpers duplicate rendering and miss collective-participation hazards. Deep error propagation is a larger interface redesign. Inherited startup and finalization cleanup is outside the narrow output checkpoint unless a touched path depends on it. |
+| Reversal path | Promote the header-only helper into a compiled utility if later users require non-inline state or policy. Keep the rendering fallback and simple world-abort semantics. |
+| Evidence | `ROB-039`; `ROB-040`; pre-edit MPI auditor classified `83` direct call sites across `13` touched source files. |
+| Follow-up | Re-audit every diff-touched MPI call after implementation and preserve wrapper partial-IO propagation where callers deliberately inspect counts. |
+
+### D-074: Use Checked Directories, Owned Temporaries, And Exclusive Node Generations
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted for `RCP-02` implementation |
+| Decision | Add a narrow output-filesystem helper for checked directory creation, deterministic temporary names, owned-temporary cleanup, and rename publication. Accept an existing directory, reject a conflicting non-directory path, and report permission errors. Adopt private temporary plus rename publication for `.bin`, `.cbin`, modern PDF, `sphslice`, and every restart layout while preserving legacy PDF append bytes and behavior. For node restarts, reserve a generation token exclusively before writing and clean only attempt-owned reservation or temporary artifacts. Do not sweep ambient directories. |
+| Reason | Current publication guarantees differ by format, raw `mkdir()` failures are ignored, and clock-derived node generations are not exclusive. A small shared helper removes repeated error-prone filesystem code without hiding communicator ordering. |
+| Alternatives | Promise crash-durable publication; retain direct-public `.bin`, `.cbin`, and shared restart writes; sweep stale files broadly; change legacy PDF publication. |
+| Why not | Crash durability requires payload and directory sync ordering that is not implemented or qualified. Direct writes expose incomplete public files. Broad sweeps can remove unrelated work. Legacy PDF compatibility is frozen byte-for-byte. |
+| Reversal path | Add a separate durability feature with sync semantics and filesystem qualification if required. Raise or alter generation policy only with fault-injection coverage. |
+| Evidence | `ROB-006`; `ROB-041`; `ROB-042`; pre-edit filesystem-publication audit. |
+| Follow-up | Add stale-temporary, directory-conflict, rename-failure, generation-collision, and payload-before-manifest regressions. |
+
+### D-086: Render Minimum-Five-Digit Sequences Without Truncation
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted for `RCP-02` implementation |
+| Decision | Replace fixed `%05d` sequence buffers with one dynamic renderer. Preserve a minimum width of five ASCII digits, emit wider values without truncation, reject negative counters before publication, and use a checked advance helper. Keep persisted counters as `int` for compatibility; the maximum emittable value is `INT_MAX - 1` because every successful output advances and persists the next counter. Change Python PDF inference to accept `[0-9]{5,}` while preserving historical five-digit names. |
+| Reason | Existing fixed buffers deterministically reuse the `10000` namespace at `100000` and `100001`. Widening alone is incomplete because negative values and signed overflow remain unsafe. |
+| Alternatives | Reject every value above `99999`; migrate persisted counters to an unsigned or wider type; widen buffers independently at each writer. |
+| Why not | A five-digit maximum is an unnecessary operational limit, a persisted type migration is broader than needed, and piecemeal buffers can drift. |
+| Reversal path | Migrate persisted counters to a wider integer in a separate compatibility-reviewed change if runs need more than `INT_MAX - 1` numbered publications. |
+| Evidence | `ROB-017`; `ROB-024`; independent sequence inventory across table, VTK, particle VTK, Cartesian-grid, spherical-surface, `.bin`, `.cbin`, PDF, `sphslice`, and restart writers. |
+| Follow-up | Add exact `99999`, `100000`, and `100001` naming tests plus negative and exhausted-counter rejection before publication. |
+
+### D-087: Reserve Deterministic Output Families Before Writer Construction
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted for `RCP-02` implementation |
+| Decision | Preflight active output blocks before constructing writers. Register typed public-target templates using `{SEQ}` and `{PARTITION}` placeholders so blocks collide even when initial counters or cadences differ. Cover `.bin`, `.cbin`, modern and legacy PDF data or metadata overlap, `sphslice`, restart manifests, and inherited deterministic numbered or append families where their keys are straightforward. Permit genuinely disjoint shared, rank, and node roots and distinct `.cbin` factors. Reject unsafe generated `id` components and PDF directory components. Preserve historical basename handling except for the existing stricter node-restart safe-leaf rule. |
+| Reason | Constructors currently create directories while parsing blocks and no namespace map exists. Modern PDF directories omit the first axis variable, allowing same-`id` blocks with different histogram definitions to overwrite one another. Generated `id` and PDF directory fragments can also escape intended paths. |
+| Alternatives | Detect only exact current filenames; reject all non-leaf basenames globally; refactor every writer around a new path object immediately. |
+| Why not | Current-filename checks miss future overlap, global basename tightening risks historical configurations without evidence, and a broad path-object rewrite exceeds this checkpoint. |
+| Reversal path | Expand safe-component rules or promote shared writer path renderers after compatibility evidence. Keep family reservations before any writer constructor side effects. |
+| Evidence | `ROB-021`; `ROB-043`; independent filesystem and namespace audits. |
+| Follow-up | Add duplicate-family rejection and allowed-control regressions, including same explicit PDF `id` with different variables, bins, scales, or weights. |
+
 ## Pending Decision Queue
 
 Resolve these before merge readiness:

@@ -583,7 +583,7 @@ resolutions, and re-audit results required by `IO_FEATURE_BRANCH_GUIDE.md`.
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | RCP-00 | Locally closed | D-069, D-070, D-071, D-073, D-075, D-081, D-083, D-085 | Runtime baseline; format/tooling baseline; documentation/process baseline | `e40621d8` guide freeze | Fresh floors registered below | Three baseline reports accepted | R-00 recorded below | External CUDA and multi-node topology remain unavailable locally |
 | RCP-01 | Locally closed | D-070, D-071, D-085, D-091, D-092, D-093 | Focused layout auditor accepted | `3b96e2d1` | Full serial `238 passed`; full MPI `67 passed`; style `2 passed`; fixtures `27` verified; exact pre-edit byte comparisons pass | Arithmetic, compatibility, topology, admission, and single-issue re-auditors accepted after corrections | R-01 recorded below | Signed output-sequence domain remains queued for RCP-02 |
-| RCP-02 | Not started | D-072, D-073, D-074, D-086, D-087 pending |  |  |  |  |  |  |
+| RCP-02 | Implementing | D-072, D-073, D-074, D-086, D-087 accepted | MPI call inventory; filesystem-publication inventory; sequence and namespace inventory accepted |  |  |  |  |  |
 | RCP-03 | Not started | D-075 accepted direction; D-088 pending |  |  |  |  |  |  |
 | RCP-04 | Not started | D-076, D-077, D-078, D-089 pending |  |  |  |  |  |  |
 | RCP-05 | Not started | D-079 pending |  |  |  |  |  |  |
@@ -617,6 +617,11 @@ cleanup claims.
 | ROB-036 | P1 | Serialized restart dimensions can disagree with dimension flags derived from the persisted parameter dump, allowing self-consistent but incompatible header metadata into tree and physics setup | RCP-01 |
 | ROB-037 | P2 | Adaptive `num_levels` still narrows through `atoi()` inside `GetOrAddInteger()` before wide logical-level validation unless mesh construction parses the textual value directly | RCP-01 |
 | ROB-038 | P1 | Inactive coarse MeshBlock axes can retain noncanonical serialized bounds even though scratch construction initializes them to `0/0` | RCP-01 |
+| ROB-039 | P1 | Branch-added and inherited-but-touched MPI calls still have unchecked returns or fragmented low-context reporting across node communicator setup, output timing, reductions, and restart publication | RCP-02 |
+| ROB-040 | P1 | Rank-local fatal exits in touched output and restart-read paths can strand peers in later world or node collectives, including output-timing reduction and restart metadata broadcasts | RCP-02 |
+| ROB-041 | P1 | `.bin`, `.cbin`, and shared or per-rank restart writers publish directly to public paths while modern PDF, `sphslice`, and node restart use temporary-file rename publication | RCP-02 |
+| ROB-042 | P2 | Node-restart generation names are clock-derived without exclusive reservation; collision and rename-failure paths can reuse or strand owned temporary artifacts | RCP-02 |
+| ROB-043 | P2 | Output path components are not validated consistently before writers create directories and public namespaces | RCP-02 |
 
 The `ROB-017` inventory is expanded to include inherited table and VTK writers in
 addition to `.bin`, `.cbin`, PDF, `sphslice`, and restart output.
@@ -748,3 +753,18 @@ The local matrix does not satisfy these production gates:
 | Full local verification | Full serial IO plus CPU smoke of the GPU-selectable regression returned `238 passed`; full MPI IO returned `67 passed`; repository style returned `2 passed`; fixture checksum verification passed for all `27` artifacts; targeted py_compile and `git diff --check` returned no output. |
 | Independent acceptance | Fresh single-issue re-auditor returned `ACCEPTED` after inspecting inactive coarse-axis bounds, active-axis checks, dimensional agreement, and checked adaptive-level parsing. |
 | Status | `RCP-01` is locally closed. Commit the coherent checkpoint before starting `RCP-02`. |
+
+### 2026-05-29: RCP-02 Pre-Edit MPI And Publication Audit
+
+| Field | Record |
+| --- | --- |
+| Independent auditors | A diff-driven MPI auditor, a filesystem-publication auditor, and a sequence or namespace auditor completed read-only passes before implementation. Their recommendations agree on the narrow helper boundaries and compatibility constraints recorded below. |
+| MPI inventory | The diff-driven auditor classified `83` direct `MPI_*` call sites across `13` touched source files: `45` branch-added and in scope, `9` inherited-but-touched requiring disposition, `18` inherited and outside the narrow checkpoint scope, and `11` fatal-shutdown calls that must remain simple. |
+| MPI blockers | Add `ROB-039` and `ROB-040`. Node communicator metadata and teardown, timing reductions, PDF reductions, and node-restart publication contain unchecked calls. Rank-local exits in touched output and restart-read paths can strand peers before later collectives. |
+| Publication inventory | `.bin`, `.cbin`, and shared or per-rank restart write public targets directly. Modern PDF and `sphslice` write deterministic temporary paths and rename. Node restart publishes payload temporaries before a manifest temporary. No audited path uses payload sync plus containing-directory sync, so the truthful guarantee is namespace atomicity rather than crash durability. |
+| Publication blockers | Add `ROB-041` through `ROB-043`. Directory creation is unchecked, node-restart generations lack exclusive reservation, deterministic temporary files need explicit stale-file semantics, and generated path components are not validated consistently. |
+| Sequence inventory | Fixed `%05d` buffers truncate at `100000` in `.bin`, `.cbin`, PDF, `sphslice`, restart, table, VTK, particle VTK, Cartesian-grid, and spherical-surface writers. Existing `ROB-017` and `ROB-024` remain open. Python PDF header inference additionally hardcodes exactly five digits. |
+| Namespace inventory | Existing `ROB-021` remains open. Construction has no deterministic target registry. Keys must cover `.bin`, `.cbin`, modern and legacy PDF overlap, `sphslice`, and restart. PDF directories omit the first axis variable, so blocks with the same explicit `id` can collide even when histogram semantics differ. |
+| Accepted helper boundary | Add a narrow shared MPI helper for best-effort error rendering, checked returns, and simple world abort. Add a narrow output-filesystem helper for checked directories, minimum-five-digit unbounded sequence rendering, checked counter advancement, temporary naming, rename publication, and safe generated path components. Keep communicator participation and publication ordering visible at call sites. |
+| Compatibility boundary | Preserve legacy PDF bytes and direct append behavior. Preserve names below `100000`. Widen tokens at and above `100000`. Do not promise crash durability. Preserve inherited non-feature writer formats while migrating their sequence rendering away from fixed buffers. |
+| Stop-gate status | Reconnaissance recorded. Implementation may begin, but `RCP-02` remains open until focused tests and two independent post-edit audits accept the result. |
