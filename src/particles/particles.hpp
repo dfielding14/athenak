@@ -359,6 +359,9 @@ class Particles {
     q017_particle_time_[n] += seconds;
     q017_particle_calls_[n]++;
   }
+  std::uint64_t Q017DirectViewAllocationBytes() const;
+  std::uint64_t Q017OwnedKokkosViewAllocationBytes() const;
+  void ObserveQ017OwnedKokkosViewAllocationBytes(std::uint64_t transient_bytes=0);
   void OutputQ017Telemetry() const;
   bool UsesRelativisticCRState() const {
     return pic_physical_mode != PICPhysicalMode::engineering;
@@ -505,6 +508,7 @@ class Particles {
       static_cast<int>(Q017ParticleTimer::count);
   std::array<double, nq017_particle_timers> q017_particle_time_{};
   std::array<std::uint64_t, nq017_particle_timers> q017_particle_calls_{};
+  std::uint64_t q017_owned_kokkos_view_high_water_bytes_ = 0;
 };
 
 } // namespace particles

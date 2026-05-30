@@ -89,6 +89,21 @@ MeshBoundaryValues::~MeshBoundaryValues() {
 #endif
 }
 
+std::uint64_t MeshBoundaryValues::Q017OwnedKokkosViewAllocationBytes() const {
+  std::uint64_t bytes =
+      static_cast<std::uint64_t>(u_in.d_view.span() + b_in.d_view.span() +
+                                 i_in.d_view.span()) * sizeof(Real);
+  for (const auto &buffer : sendbuf) {
+    bytes += static_cast<std::uint64_t>(buffer.vars.span() + buffer.flux.span()) *
+             sizeof(Real);
+  }
+  for (const auto &buffer : recvbuf) {
+    bytes += static_cast<std::uint64_t>(buffer.vars.span() + buffer.flux.span()) *
+             sizeof(Real);
+  }
+  return bytes;
+}
+
 //----------------------------------------------------------------------------------------
 //! \fn void MeshBoundaryValues::InitializeBuffers
 //! \brief initialize each element of send/recv MeshBoundaryBuffers fixed-length arrays
@@ -258,4 +273,18 @@ particles::ParticlesBoundaryValues::~ParticlesBoundaryValues() {
 #if MPI_PARALLEL_ENABLED
   MPI_Comm_free(&mpi_comm_part);
 #endif
+}
+
+std::uint64_t
+particles::ParticlesBoundaryValues::Q017OwnedKokkosViewAllocationBytes() const {
+  std::uint64_t bytes =
+      static_cast<std::uint64_t>(sendlist.d_view.span() + destroylist.d_view.span()) *
+      sizeof(ParticleLocationData);
+#if MPI_PARALLEL_ENABLED
+  bytes += static_cast<std::uint64_t>(prtcl_rsendbuf.span() + prtcl_rrecvbuf.span()) *
+           sizeof(Real);
+  bytes += static_cast<std::uint64_t>(prtcl_isendbuf.span() + prtcl_irecvbuf.span()) *
+           sizeof(int);
+#endif
+  return bytes;
 }

@@ -8,6 +8,7 @@
 //! \file mesh_refinement.hpp
 //! \brief defines MeshRefinement class containing data and functions controlling SMR/AMR
 
+#include <cstdint>
 #include <vector>
 
 #include "particles/particles_data_structs.hpp"
@@ -162,6 +163,9 @@ class MeshRefinement {
   void InitPartRecv();
   void RefineParticles();
   void AssignParticleAwareCosts(float *costs, int new_nmb);
+
+  std::uint64_t Q017OwnedKokkosViewAllocationBytes() const;
+  void ObserveQ017OwnedKokkosViewAllocationBytes(std::uint64_t transient_bytes=0);
 
   // initialize interpolation weights
   void InitInterpWghts();

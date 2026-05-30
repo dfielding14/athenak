@@ -1,0 +1,92 @@
+{
+  "record_type": "q017_owned_helper_allocation_high_water_local",
+  "date": "2026-05-30",
+  "qualification_effect": "bounded_local_owned_helper_allocation_observability_only",
+  "predecessor_record": "tst/publication/readiness/q017_particle_observability_local_2026-05-30.json",
+  "dirty_batch_start_commit": "2db6b0605f8c8e7f946cb520a8674ac2a6f7b646",
+  "source_state": "dirty_worktree_successor_started_from_recorded_commit_with_concurrent_unrelated_head_advances_not_frozen_subject_commit",
+  "scope": "Successor local Q-017 observability tranche. Final stdout scalars add snapshots and rank-local high-water marks for a bounded set of device-addressable Kokkos view spans owned by AthenaK: direct Particles views, particle migration helpers, moment-boundary helpers, and MeshRefinement AMR/load-balance helpers where those allocations are visible at owned architecture boundaries. This is not a total GPU-memory, allocator-residency, or temporally concurrent multi-rank peak claim.",
+  "changed_files": [
+    "src/bvals/bvals.hpp",
+    "src/bvals/bvals.cpp",
+    "src/mesh/mesh_refinement.hpp",
+    "src/mesh/load_balance.cpp",
+    "src/particles/particles.hpp",
+    "src/particles/particles_tasks.cpp",
+    "tst/scripts/particles/pic_q017_driver_telemetry.py",
+    "tst/publication/readiness/q017_owned_helper_allocation_high_water_local_2026-05-30.json"
+  ],
+  "telemetry_contract": {
+    "stdout_prefix": "q017.telemetry.particle_memory.athenak_owned_tracked_kokkos_views.",
+    "fields": [
+      "allocated_snapshot_bytes_total",
+      "allocated_snapshot_bytes_rank_max",
+      "allocated_high_water_bytes_rank_sum",
+      "allocated_high_water_bytes_rank_max"
+    ],
+    "tracked_storage": [
+      "Particles direct device-view spans",
+      "ParticlesBoundaryValues migration send, destroy, and MPI buffer device-view spans",
+      "MeshBoundaryValues moment and edge-current boundary device-view spans",
+      "MeshRefinement interpolation, AMR/load-balance, and particle-redistribution device-view spans",
+      "MeshRefinement particle-remapping transient device-view spans while they remain observable in CreateParticleLists"
+    ],
+    "excluded_storage": [
+      "Kokkos runtime allocator overhead and cached allocations",
+      "device allocations owned outside the tracked Particles, boundary, and MeshRefinement objects",
+      "host-only STL vectors, host-only arrays, and MPI request arrays",
+      "a temporally concurrent aggregate multi-rank peak"
+    ],
+    "rank_semantics": "allocated_snapshot_bytes_total is a final concurrent rank sum. allocated_high_water_bytes_rank_sum is the sum of independent rank-local high-water marks and is deliberately not named total or peak.",
+    "sampling_semantics": "High-water samples are taken after owned particle migration helper calls, after owned AMR/load-balance persistent reallocations, after particle-array growth during AMR redistribution, and while CreateParticleLists transient device views remain alive. Final output also compares against the current tracked snapshot."
+  },
+  "focused_runtime_measurements": [
+    {
+      "configuration": "Debug serial Kokkos SERIAL one rank",
+      "direct_view_snapshot_bytes": 3414224,
+      "tracked_snapshot_bytes": 44924492,
+      "tracked_high_water_bytes_rank_max": 44924492
+    },
+    {
+      "configuration": "Debug MPI-enabled Kokkos SERIAL one rank",
+      "direct_view_snapshot_bytes": 3414224,
+      "tracked_snapshot_bytes": 44924540,
+      "tracked_high_water_bytes_rank_max": 44924540
+    }
+  ],
+  "verification": [
+    {
+      "command": "git diff --check -- src/bvals/bvals.hpp src/bvals/bvals.cpp src/mesh/mesh_refinement.hpp src/mesh/load_balance.cpp src/particles/particles.hpp src/particles/particles_tasks.cpp tst/scripts/particles/pic_q017_driver_telemetry.py",
+      "status": "pass"
+    },
+    {
+      "command": "python3 -m json.tool tst/publication/readiness/q017_owned_helper_allocation_high_water_local_2026-05-30.json >/dev/null && ! rg -n '[ \\t]+$' tst/publication/readiness/q017_owned_helper_allocation_high_water_local_2026-05-30.json",
+      "status": "pass"
+    },
+    {
+      "configuration": "Debug serial Kokkos SERIAL",
+      "command": "cmake --build /tmp/athenak-pic-q017-build -j8",
+      "status": "pass"
+    },
+    {
+      "configuration": "Debug MPI-enabled Kokkos SERIAL",
+      "command": "cmake --build /tmp/athenak-pic-q017-mpi-build -j8",
+      "status": "pass"
+    },
+    {
+      "configuration": "Debug serial focused Q-017 runtime",
+      "command": "cd tst && PYTHONDONTWRITEBYTECODE=1 ATHENA_Q017_EXE_DIR=/tmp/athenak-pic-q017-build/src python3 -c \"import scripts.particles.pic_q017_driver_telemetry as t; t.run(); raise SystemExit(0 if t.analyze() else 1)\"",
+      "status": "pass"
+    },
+    {
+      "configuration": "Debug MPI-enabled one-rank focused Q-017 runtime",
+      "command": "cd tst && PYTHONDONTWRITEBYTECODE=1 ATHENA_Q017_EXE_DIR=/tmp/athenak-pic-q017-mpi-build/src python3 -c \"import scripts.particles.pic_q017_driver_telemetry as t; t.run(); raise SystemExit(0 if t.analyze() else 1)\"",
+      "status": "pass"
+    }
+  ],
+  "remaining_q017_gaps": [
+    "Frontier HIP measurements must characterize the tracked high-water fields under registered GPU-aware MPI enabled-versus-disabled and multi-rank scaling runs.",
+    "A total GPU-memory claim remains out of scope because allocator overhead, runtime caching, and untracked subsystem allocations are intentionally excluded."
+  ],
+  "q017_disposition": "bounded_local_owned_helper_allocation_high_water_implemented_with_frontier_measurement_and_total_gpu_memory_claim_open"
+}

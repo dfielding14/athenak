@@ -70,6 +70,10 @@ _REQUIRED_NAMES = {
     'particle_memory.resident_records.bytes_total',
     'particle_memory.direct_views.allocated_snapshot_bytes_total',
     'particle_memory.direct_views.allocated_snapshot_bytes_rank_max',
+    'particle_memory.athenak_owned_tracked_kokkos_views.allocated_snapshot_bytes_total',
+    'particle_memory.athenak_owned_tracked_kokkos_views.allocated_snapshot_bytes_rank_max',
+    'particle_memory.athenak_owned_tracked_kokkos_views.allocated_high_water_bytes_rank_sum',
+    'particle_memory.athenak_owned_tracked_kokkos_views.allocated_high_water_bytes_rank_max',
     'particle_memory.invalid_records',
     'particle_memory.species.0.count',
     'particle_memory.species.0.resident_bytes',
@@ -121,6 +125,11 @@ def _check_equal(name, expected):
     return measured == expected
 
 
+def _check_relation(description, condition):
+    logger.info('%s: %s', description, condition)
+    return condition
+
+
 def run(**kwargs):
     logger.debug('Running test ' + __name__)
     _RESULTS.clear()
@@ -170,6 +179,28 @@ def analyze():
     ok = _check_equal('particle_memory.root_level', 1.0) and ok
     ok = _check_equal('particle_memory.max_level', 2.0) and ok
     ok = _check_equal('particle_memory.resident_records.bytes_total', 53760.0) and ok
+    direct_total = _RESULTS['particle_memory.direct_views.allocated_snapshot_bytes_total']
+    direct_rank_max = _RESULTS['particle_memory.direct_views.allocated_snapshot_bytes_rank_max']
+    owned_total = _RESULTS[
+        'particle_memory.athenak_owned_tracked_kokkos_views.allocated_snapshot_bytes_total']
+    owned_rank_max = _RESULTS[
+        'particle_memory.athenak_owned_tracked_kokkos_views.allocated_snapshot_bytes_rank_max']
+    owned_high_water_sum = _RESULTS[
+        'particle_memory.athenak_owned_tracked_kokkos_views.'
+        'allocated_high_water_bytes_rank_sum']
+    owned_high_water_max = _RESULTS[
+        'particle_memory.athenak_owned_tracked_kokkos_views.'
+        'allocated_high_water_bytes_rank_max']
+    ok = _check_relation('owned snapshot includes helper spans',
+                         owned_total > direct_total) and ok
+    ok = _check_relation('one-rank direct snapshot reduction is exact',
+                         direct_total == direct_rank_max) and ok
+    ok = _check_relation('one-rank owned snapshot reduction is exact',
+                         owned_total == owned_rank_max) and ok
+    ok = _check_relation('one-rank owned high-water reduction is exact',
+                         owned_high_water_sum == owned_high_water_max) and ok
+    ok = _check_relation('owned high-water dominates final snapshot',
+                         owned_high_water_max >= owned_rank_max) and ok
     ok = _check_equal('particle_memory.invalid_records', 0.0) and ok
     ok = _check_equal('particle_memory.species.0.count', 120.0) and ok
     ok = _check_equal('particle_memory.species.1.count', 120.0) and ok

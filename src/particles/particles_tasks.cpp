@@ -26,6 +26,7 @@
 #include "parameter_input.hpp"
 #include "tasklist/task_list.hpp"
 #include "mesh/mesh.hpp"
+#include "mesh/mesh_refinement.hpp"
 #include "bvals/bvals.hpp"
 #include "mhd/mhd.hpp"
 #include "particles.hpp"
@@ -439,6 +440,7 @@ TaskStatus Particles::NewGID(Driver *pdrive, int stage) {
   Q017Fence();
   Kokkos::Timer q017_timer;
   TaskStatus tstat = pbval_part->SetNewPrtclGID();
+  ObserveQ017OwnedKokkosViewAllocationBytes();
   Q017Fence();
   AccumulateQ017Timer(Q017ParticleTimer::migration, q017_timer.seconds());
   return tstat;
@@ -453,6 +455,7 @@ TaskStatus Particles::SendCnt(Driver *pdrive, int stage) {
   Q017Fence();
   Kokkos::Timer q017_timer;
   TaskStatus tstat = pbval_part->CountSendsAndRecvs();
+  ObserveQ017OwnedKokkosViewAllocationBytes();
   Q017Fence();
   AccumulateQ017Timer(Q017ParticleTimer::migration, q017_timer.seconds());
   return tstat;
@@ -467,6 +470,7 @@ TaskStatus Particles::InitRecv(Driver *pdrive, int stage) {
   Q017Fence();
   Kokkos::Timer q017_timer;
   TaskStatus tstat = pbval_part->InitPrtclRecv();
+  ObserveQ017OwnedKokkosViewAllocationBytes();
   Q017Fence();
   AccumulateQ017Timer(Q017ParticleTimer::migration, q017_timer.seconds());
   return tstat;
@@ -480,6 +484,7 @@ TaskStatus Particles::SendP(Driver *pdrive, int stage) {
   Q017Fence();
   Kokkos::Timer q017_timer;
   TaskStatus tstat = pbval_part->PackAndSendPrtcls();
+  ObserveQ017OwnedKokkosViewAllocationBytes();
   Q017Fence();
   AccumulateQ017Timer(Q017ParticleTimer::migration, q017_timer.seconds());
   return tstat;
@@ -493,6 +498,7 @@ TaskStatus Particles::RecvP(Driver *pdrive, int stage) {
   Q017Fence();
   Kokkos::Timer q017_timer;
   TaskStatus tstat = pbval_part->RecvAndUnpackPrtcls();
+  ObserveQ017OwnedKokkosViewAllocationBytes();
   Q017Fence();
   AccumulateQ017Timer(Q017ParticleTimer::migration, q017_timer.seconds());
   return tstat;
@@ -508,6 +514,7 @@ TaskStatus Particles::ClearSend(Driver *pdrive, int stage) {
   Q017Fence();
   Kokkos::Timer q017_timer;
   TaskStatus tstat = pbval_part->ClearPrtclSend();
+  ObserveQ017OwnedKokkosViewAllocationBytes();
   Q017Fence();
   AccumulateQ017Timer(Q017ParticleTimer::migration, q017_timer.seconds());
   return tstat;
@@ -522,14 +529,55 @@ TaskStatus Particles::ClearRecv(Driver *pdrive, int stage) {
   Q017Fence();
   Kokkos::Timer q017_timer;
   TaskStatus tstat = pbval_part->ClearPrtclRecv();
+  ObserveQ017OwnedKokkosViewAllocationBytes();
   Q017Fence();
   AccumulateQ017Timer(Q017ParticleTimer::migration, q017_timer.seconds());
   return tstat;
 }
 
 //----------------------------------------------------------------------------------------
+//! \fn std::uint64_t Particles::Q017DirectViewAllocationBytes()
+//! \brief Return the device-addressable allocation span for direct particle views.
+
+std::uint64_t Particles::Q017DirectViewAllocationBytes() const {
+  return static_cast<std::uint64_t>(prtcl_rdata.span())*sizeof(Real) +
+         static_cast<std::uint64_t>(prtcl_idata.span())*sizeof(int) +
+         static_cast<std::uint64_t>(species_mass.span())*sizeof(Real) +
+         static_cast<std::uint64_t>(species_charge.span())*sizeof(Real) +
+         static_cast<std::uint64_t>(species_vx0.span())*sizeof(Real) +
+         static_cast<std::uint64_t>(species_vy0.span())*sizeof(Real) +
+         static_cast<std::uint64_t>(species_vz0.span())*sizeof(Real) +
+         static_cast<std::uint64_t>(moments.span())*sizeof(Real) +
+         static_cast<std::uint64_t>(coarse_moments.span())*sizeof(Real) +
+         static_cast<std::uint64_t>(j_edge_x1e.span())*sizeof(Real) +
+         static_cast<std::uint64_t>(j_edge_x2e.span())*sizeof(Real) +
+         static_cast<std::uint64_t>(j_edge_x3e.span())*sizeof(Real) +
+         static_cast<std::uint64_t>(x1_old.span())*sizeof(Real) +
+         static_cast<std::uint64_t>(x2_old.span())*sizeof(Real) +
+         static_cast<std::uint64_t>(x3_old.span())*sizeof(Real) +
+         static_cast<std::uint64_t>(pic_no_mhd_bcc0.span())*sizeof(Real);
+}
+
+std::uint64_t Particles::Q017OwnedKokkosViewAllocationBytes() const {
+  std::uint64_t bytes = Q017DirectViewAllocationBytes();
+  if (pbval_part != nullptr) bytes += pbval_part->Q017OwnedKokkosViewAllocationBytes();
+  if (pbval_mom != nullptr) bytes += pbval_mom->Q017OwnedKokkosViewAllocationBytes();
+  if (pbval_jedge != nullptr) bytes += pbval_jedge->Q017OwnedKokkosViewAllocationBytes();
+  if (pmy_pack->pmesh->pmr != nullptr) {
+    bytes += pmy_pack->pmesh->pmr->Q017OwnedKokkosViewAllocationBytes();
+  }
+  return bytes;
+}
+
+void Particles::ObserveQ017OwnedKokkosViewAllocationBytes(std::uint64_t transient_bytes) {
+  q017_owned_kokkos_view_high_water_bytes_ =
+      std::max(q017_owned_kokkos_view_high_water_bytes_,
+               Q017OwnedKokkosViewAllocationBytes() + transient_bytes);
+}
+
+//----------------------------------------------------------------------------------------
 //! \fn void Particles::OutputQ017Telemetry()
-//! \brief Emit final-only particle timers and resident-memory telemetry.
+//! \brief Emit final-only particle timers and AthenaK-owned allocation telemetry.
 
 void Particles::OutputQ017Telemetry() const {
   constexpr const char* timer_names[nq017_particle_timers] = {
@@ -545,23 +593,10 @@ void Particles::OutputQ017Telemetry() const {
       static_cast<std::uint64_t>(nidata)*sizeof(int);
   const std::uint64_t resident_bytes =
       static_cast<std::uint64_t>(nprtcl_thispack)*record_bytes;
-  const std::uint64_t allocated_bytes =
-      static_cast<std::uint64_t>(prtcl_rdata.span())*sizeof(Real) +
-      static_cast<std::uint64_t>(prtcl_idata.span())*sizeof(int) +
-      static_cast<std::uint64_t>(species_mass.span())*sizeof(Real) +
-      static_cast<std::uint64_t>(species_charge.span())*sizeof(Real) +
-      static_cast<std::uint64_t>(species_vx0.span())*sizeof(Real) +
-      static_cast<std::uint64_t>(species_vy0.span())*sizeof(Real) +
-      static_cast<std::uint64_t>(species_vz0.span())*sizeof(Real) +
-      static_cast<std::uint64_t>(moments.span())*sizeof(Real) +
-      static_cast<std::uint64_t>(coarse_moments.span())*sizeof(Real) +
-      static_cast<std::uint64_t>(j_edge_x1e.span())*sizeof(Real) +
-      static_cast<std::uint64_t>(j_edge_x2e.span())*sizeof(Real) +
-      static_cast<std::uint64_t>(j_edge_x3e.span())*sizeof(Real) +
-      static_cast<std::uint64_t>(x1_old.span())*sizeof(Real) +
-      static_cast<std::uint64_t>(x2_old.span())*sizeof(Real) +
-      static_cast<std::uint64_t>(x3_old.span())*sizeof(Real) +
-      static_cast<std::uint64_t>(pic_no_mhd_bcc0.span())*sizeof(Real);
+  const std::uint64_t allocated_bytes = Q017DirectViewAllocationBytes();
+  const std::uint64_t owned_allocated_bytes = Q017OwnedKokkosViewAllocationBytes();
+  const std::uint64_t owned_high_water_bytes =
+      std::max(owned_allocated_bytes, q017_owned_kokkos_view_high_water_bytes_);
 
   std::vector<std::uint64_t> species_counts(nsp, 0);
   std::vector<std::uint64_t> level_counts(nlevels, 0);
@@ -598,6 +633,10 @@ void Particles::OutputQ017Telemetry() const {
   std::uint64_t total_resident_bytes = resident_bytes;
   std::uint64_t total_allocated_bytes = allocated_bytes;
   std::uint64_t max_allocated_bytes = allocated_bytes;
+  std::uint64_t total_owned_allocated_bytes = owned_allocated_bytes;
+  std::uint64_t max_owned_allocated_bytes = owned_allocated_bytes;
+  std::uint64_t sum_owned_high_water_bytes = owned_high_water_bytes;
+  std::uint64_t max_owned_high_water_bytes = owned_high_water_bytes;
   std::uint64_t total_invalid_records = invalid_records;
   std::vector<std::uint64_t> global_species_counts = species_counts;
   std::vector<std::uint64_t> global_level_counts = level_counts;
@@ -615,6 +654,14 @@ void Particles::OutputQ017Telemetry() const {
              MPI_COMM_WORLD);
   MPI_Reduce(&allocated_bytes, &max_allocated_bytes, 1, MPI_UINT64_T, MPI_MAX, 0,
              MPI_COMM_WORLD);
+  MPI_Reduce(&owned_allocated_bytes, &total_owned_allocated_bytes, 1, MPI_UINT64_T,
+             MPI_SUM, 0, MPI_COMM_WORLD);
+  MPI_Reduce(&owned_allocated_bytes, &max_owned_allocated_bytes, 1, MPI_UINT64_T,
+             MPI_MAX, 0, MPI_COMM_WORLD);
+  MPI_Reduce(&owned_high_water_bytes, &sum_owned_high_water_bytes, 1, MPI_UINT64_T,
+             MPI_SUM, 0, MPI_COMM_WORLD);
+  MPI_Reduce(&owned_high_water_bytes, &max_owned_high_water_bytes, 1, MPI_UINT64_T,
+             MPI_MAX, 0, MPI_COMM_WORLD);
   MPI_Reduce(&invalid_records, &total_invalid_records, 1, MPI_UINT64_T, MPI_SUM, 0,
              MPI_COMM_WORLD);
   if (nsp > 0) {
@@ -647,6 +694,18 @@ void Particles::OutputQ017Telemetry() const {
                total_allocated_bytes);
   print_scalar("particle_memory.direct_views.allocated_snapshot_bytes_rank_max",
                max_allocated_bytes);
+  print_scalar("particle_memory.athenak_owned_tracked_kokkos_views."
+               "allocated_snapshot_bytes_total",
+               total_owned_allocated_bytes);
+  print_scalar("particle_memory.athenak_owned_tracked_kokkos_views."
+               "allocated_snapshot_bytes_rank_max",
+               max_owned_allocated_bytes);
+  print_scalar("particle_memory.athenak_owned_tracked_kokkos_views."
+               "allocated_high_water_bytes_rank_sum",
+               sum_owned_high_water_bytes);
+  print_scalar("particle_memory.athenak_owned_tracked_kokkos_views."
+               "allocated_high_water_bytes_rank_max",
+               max_owned_high_water_bytes);
   print_scalar("particle_memory.invalid_records", total_invalid_records);
   for (int sp=0; sp<nsp; ++sp) {
     const std::string prefix = "particle_memory.species." + std::to_string(sp);

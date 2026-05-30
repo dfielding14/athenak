@@ -80,6 +80,36 @@ bool ParticleInLogicalBlock(const LogicalLocation &lloc, const bool multi_d,
 
 } // namespace
 
+std::uint64_t MeshRefinement::Q017OwnedKokkosViewAllocationBytes() const {
+  std::uint64_t bytes =
+      static_cast<std::uint64_t>(refine_flag.d_view.span()) * sizeof(int) +
+      static_cast<std::uint64_t>(weights.prolong_2nd.d_view.span() +
+                                 weights.restrict_2nd.d_view.span() +
+                                 weights.prolong_4th.d_view.span() +
+                                 weights.restrict_4th_edge.d_view.span() +
+                                 weights.restrict_4th.d_view.span()) * sizeof(Real);
+#if MPI_PARALLEL_ENABLED
+  bytes += static_cast<std::uint64_t>(sendbuf.d_view.span() + recvbuf.d_view.span()) *
+           sizeof(AMRBuffer);
+  bytes += static_cast<std::uint64_t>(send_data.span() + recv_data.span() +
+                                     prtcl_rsendbuf.span() + prtcl_rrecvbuf.span()) *
+           sizeof(Real);
+  bytes += static_cast<std::uint64_t>(prtcl_isendbuf.span() + prtcl_irecvbuf.span()) *
+           sizeof(int);
+  bytes += static_cast<std::uint64_t>(prtcl_sendlist.d_view.span()) *
+           sizeof(ParticleLocationData);
+#endif
+  return bytes;
+}
+
+void MeshRefinement::ObserveQ017OwnedKokkosViewAllocationBytes(
+    std::uint64_t transient_bytes) {
+  auto *ppart = pmy_mesh->pmb_pack->ppart;
+  if (ppart != nullptr) {
+    ppart->ObserveQ017OwnedKokkosViewAllocationBytes(transient_bytes);
+  }
+}
+
 //----------------------------------------------------------------------------------------
 //! \fn void Mesh::LoadBalance(double *clist, int *rlist, int *slist, int *nlist, int nb)
 //! \brief Calculate distribution of MeshBlocks across ranks based on input cost list
@@ -322,6 +352,7 @@ void MeshRefinement::InitRecvAMR(int nleaf) {
     int ndata = recvbuf.h_view((nmb_recv-1)).offset + recvbuf.h_view((nmb_recv-1)).cnt;
     Kokkos::realloc(recv_data, ndata);
   }
+  ObserveQ017OwnedKokkosViewAllocationBytes();
 
   // Step 3. (InitRecvAMR)
   // loop over new MBs on this rank, post non-blocking recvs
@@ -582,6 +613,7 @@ void MeshRefinement::PackAndSendAMR(int nleaf) {
     int ndata = sendbuf.h_view((nmb_send-1)).offset + sendbuf.h_view((nmb_send-1)).cnt;
     Kokkos::realloc(send_data, ndata);
   }
+  ObserveQ017OwnedKokkosViewAllocationBytes();
 
   // Step 3. (PackAndSendAMR)
   // Pack data into send buffers in parallel
@@ -1150,6 +1182,7 @@ void MeshRefinement::PackAMRBuffersParticles() {
   // Allocate send buffer
   Kokkos::realloc(prtcl_rsendbuf, nrdata*nprtcl_send);
   Kokkos::realloc(prtcl_isendbuf, nidata*nprtcl_send);
+  ObserveQ017OwnedKokkosViewAllocationBytes();
 
   // sendlist on device is already sorted by destrank in CountSendAndRecvs()
   // Use sendlist on device to load particles into send buffer ordered by dest_rank
@@ -1250,6 +1283,7 @@ void MeshRefinement::UnpackAMRBuffersParticles() {
   if (nprtcl_recv > nprtcl_send) {
     Kokkos::resize(ppart->prtcl_idata, ppart->nidata, new_npart);
     Kokkos::resize(ppart->prtcl_rdata, ppart->nrdata, new_npart);
+    ObserveQ017OwnedKokkosViewAllocationBytes();
   }
 
   // unpack particles into positions of sent particles or at end of arrays
@@ -1520,6 +1554,13 @@ void MeshRefinement::CreateParticleLists() {
   Kokkos::deep_copy(atom_count, counter);
   Kokkos::View<int> unresolved_count("unresolved_count");
   Kokkos::deep_copy(unresolved_count, 0);
+  const std::uint64_t transient_bytes =
+      static_cast<std::uint64_t>(new_rank.d_view.span() + old_to_new.d_view.span() +
+                                 old_refined.d_view.span() + atom_count.span() +
+                                 unresolved_count.span()) * sizeof(int) +
+      static_cast<std::uint64_t>(new_lloc.d_view.span()) * sizeof(LogicalLocation) +
+      static_cast<std::uint64_t>(old_child_gid.d_view.span()) * sizeof(int);
+  ObserveQ017OwnedKokkosViewAllocationBytes(transient_bytes);
 
   const auto ms = pmy_mesh->mesh_size;
   const int nmb_rootx1 = pmy_mesh->nmb_rootx1;
@@ -1662,6 +1703,7 @@ void MeshRefinement::InitPartRecv() {
       // Allocate particle receive buffers
       Kokkos::realloc(prtcl_rrecvbuf, ppart->nrdata * nprtcl_recv);
       Kokkos::realloc(prtcl_irecvbuf, ppart->nidata * nprtcl_recv);
+      ObserveQ017OwnedKokkosViewAllocationBytes();
 
       // Initialize MPI request vectors
       prtcl_rrecv_req.clear();

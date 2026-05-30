@@ -26,6 +26,7 @@ enum class CCCommMode {ghost_fill, synchronize};
 enum class CCRecvOp {assign, accumulate};
 
 #include <algorithm>
+#include <cstdint>
 #include <vector>
 
 #include "athena.hpp"
@@ -117,6 +118,8 @@ class MeshBoundaryValues {
  public:
   MeshBoundaryValues(MeshBlockPack *ppack, ParameterInput *pin, bool z4c);
   ~MeshBoundaryValues();
+
+  std::uint64_t Q017OwnedKokkosViewAllocationBytes() const;
 
   // data for all 56 buffers in most general 3D case. Not all elements used in most cases.
   // However each MeshBoundaryBuffer is lightweight, so the convenience of fixed array
@@ -229,6 +232,8 @@ class ParticlesBoundaryValues {
  public:
   ParticlesBoundaryValues(particles::Particles *ppart, ParameterInput *pin);
   ~ParticlesBoundaryValues();
+
+  std::uint64_t Q017OwnedKokkosViewAllocationBytes() const;
 
   int nprtcl_send, nprtcl_recv, nprtcl_destroy;
   DualArray1D<ParticleLocationData> sendlist;
