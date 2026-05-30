@@ -44,7 +44,7 @@
       "maximum_nodes": 1,
       "maximum_walltime_seconds": 900,
       "maximum_attempts": 1,
-      "analysis_script_sha256": "40dc7567aff8faa4b1db9c922a2d489ae098b902d2347420179d6dbaed046d40",
+      "analysis_script_sha256": "803c5e4ad369ef1deb37ad1a58dc7080b1c732f88600e21d5b421b446ddcab0f",
       "analysis_support_sha256": "cf090115bcdfd143f67b12339115102b57e74cf3205b1ebb1521c144c3415a5a"
     }
   ],
@@ -55,7 +55,7 @@
     "the launch lifecycle scopes deterministic umask 022 artifact creation and restores the inherited process value after success or failure",
     "the gyro analyzer requires the exact deterministic cycle-zero through cycle-three particle VTK output family, measures the registered cycle-two artifact and rejects wildcard output drift",
     "qualification traverses the lexical PIC root, runs/, manifests/ and snapshot/ below a stable account serialization anchor without following aliases, pins the pre-submit-manifest ancestry before reading it, retains that manifest descriptor plus the run tree, immutable inventory, analysis result, offline receipt, their directory ancestry and snapshotted analyzer/helper descriptors, binds the immutable inventory digest into the child, executes the exact analyzer bytes through /proc/self/fd and rejects pre-submit-manifest, source, evidence-file, run-root or PIC-root replacement around no-write recomputation",
-    "the paper-mode coupling analyzer requires the exact registered cycle-zero through cycle-three output families for both coefficient cases, measures the registered cycle-two artifacts and rejects wildcard output drift",
+    "the paper-mode coupling analyzer requires each deterministic linear-wave error table plus the exact registered cycle-zero through cycle-three particle-VTK and Athena-binary output families for both coefficient cases, measures the registered cycle-two artifacts and rejects wildcard output drift",
     "both particle-VTK analyzers require the canonical emitted prefix, binary points, POINT_DATA marker, all schema-7 scalar fields and velocity payload without reordering or suffix drift",
     "the registered analyzers accept Athena stderr only when it is byte-identical to the reviewed Cray MPICH informational transcript and reject additional diagnostics, warnings or setting drift"
   ],
@@ -66,11 +66,11 @@
     },
     "publication_standalone_tests": {
       "status": "pass",
-      "tests_run": 114
+      "tests_run": 115
     },
     "focused_frontier_chain_tests": {
       "status": "pass",
-      "tests_run": 45,
+      "tests_run": 46,
       "command": "python3 -m unittest tst.publication.test_frontier_f1_structured_analysis tst.publication.test_pic_qualification_manifest"
     },
     "registered_science_concurrency_regression": {
@@ -364,7 +364,7 @@
       "particle_count": 64,
       "max_abs_velocity_error": 5.808176634092277e-09
     },
-    "remediation": "Register gyro v3 with the exact deterministic output tree and emitted particle VTK schema. Preserve the unused paper-coupling v2 authorization unchanged until its serialized execution boundary."
+    "remediation": "Register gyro v3 with the exact deterministic output tree and emitted particle VTK schema. Preserve the unused paper-coupling v2 authorization ID while strengthening its analyzer binding before the first serialized execution boundary."
   },
   "superseded_gyro_v2_registered_execution_fixture": "tst/publication/readiness/q027_frontier_f1_gyro_v2_analysis_rejection_fixture_2026-05-30.json",
   "gyro_v3_parser_policy_transition": {

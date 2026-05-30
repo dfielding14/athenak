@@ -420,8 +420,11 @@ def registered_case_output_paths(
     basename = "f1_gpu_paper_coupling_" + label
     output_dir = f"output/{label}"
     expected = [
-        f"{output_dir}/pvtk/{basename}.prtcl_all.{cycle:05d}.part.vtk"
-        for cycle in range(4)
+        f"{output_dir}/{basename}-errs.dat",
+        *[
+            f"{output_dir}/pvtk/{basename}.prtcl_all.{cycle:05d}.part.vtk"
+            for cycle in range(4)
+        ],
     ]
     expected.extend(
         f"{output_dir}/bin/{basename}.{file_id}.{cycle:05d}.bin"
@@ -432,6 +435,7 @@ def registered_case_output_paths(
     for registered_label in ("coeff0", "coeff7"):
         registered_basename = "f1_gpu_paper_coupling_" + registered_label
         registered_dir = f"output/{registered_label}"
+        registered_paths.append(f"{registered_dir}/{registered_basename}-errs.dat")
         registered_paths.extend(
             f"{registered_dir}/pvtk/{registered_basename}.prtcl_all.{cycle:05d}.part.vtk"
             for cycle in range(4)

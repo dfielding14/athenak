@@ -787,7 +787,11 @@ class PicReadinessRegistryTests(unittest.TestCase):
             "/ccs/proj/ast207/proj-shared/PIC/ledger/node_hours.jsonl",
         )
         for surface in live_surfaces:
-            self.assertNotIn(chronology["submission_id"], Path(surface).read_text())
+            contents = Path(surface).read_text()
+            for submission_id in successor["required_live_preflight"][
+                "historical_submission_ids_must_remain_absent_from_live_ledgers"
+            ]:
+                self.assertNotIn(submission_id, contents)
 
     def test_reconciled_gyro_v2_analysis_rejection_chronology_is_bound(self) -> None:
         successor = _load(

@@ -157,19 +157,6 @@ class FrontierF1StructuredAnalysisTests(unittest.TestCase):
             + suffix
         )
 
-    def _legacy_particle_vtk(self, *, suffix: bytes = b"") -> bytes:
-        return (
-            b"# AthenaK particle data at time= 0.0 nranks=1 cycle=0\n"
-            b"POINTS 0 float\n"
-            b"\nSCALARS gid int\nLOOKUP_TABLE default\n"
-            b"\nSCALARS ptag int\nLOOKUP_TABLE default\n"
-            b"\nSCALARS species int\nLOOKUP_TABLE default\n"
-            b"\nSCALARS deltaf_f0 float\nLOOKUP_TABLE default\n"
-            b"\nSCALARS deltaf_weight float\nLOOKUP_TABLE default\n"
-            b"\nVECTORS vel float\n"
-            + suffix
-        )
-
     def test_structured_contexts_pass(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -638,10 +625,11 @@ class FrontierF1StructuredAnalysisTests(unittest.TestCase):
         for label in ("coeff0", "coeff7"):
             basename = "f1_gpu_paper_coupling_" + label
             output_dir = f"output/{label}"
-            for cycle in range(3):
+            expected[f"{output_dir}/{basename}-errs.dat"] = {}
+            for cycle in range(4):
                 expected[f"{output_dir}/pvtk/{basename}.prtcl_all.{cycle:05d}.part.vtk"] = {}
             for file_id in ("mhd_bcc", "mhd_u_e", "mhd_u_m1", "mhd_u_m2", "mhd_u_m3"):
-                for cycle in range(3):
+                for cycle in range(4):
                     expected[f"{output_dir}/bin/{basename}.{file_id}.{cycle:05d}.bin"] = {}
         registered_case_output_paths(expected, "coeff0")
         expected["output/coeff0/bin/unregistered.bin"] = {}
@@ -655,7 +643,7 @@ class FrontierF1StructuredAnalysisTests(unittest.TestCase):
                     registered_case_output_paths(expected, "coeff0")
                 del expected[path]
         del expected[
-            "output/coeff0/pvtk/f1_gpu_paper_coupling_coeff0.prtcl_all.00002.part.vtk"
+            "output/coeff0/pvtk/f1_gpu_paper_coupling_coeff0.prtcl_all.00003.part.vtk"
         ]
         with self.assertRaisesRegex(ValueError, "differs"):
             registered_case_output_paths(expected, "coeff0")
@@ -710,10 +698,10 @@ class FrontierF1StructuredAnalysisTests(unittest.TestCase):
             )
 
     def test_coupling_particle_vtk_parser_rejects_suffix(self) -> None:
-        parse_coupling_vtk(self._legacy_particle_vtk(), label="particles.vtk")
+        parse_coupling_vtk(self._particle_vtk(), label="particles.vtk")
         with self.assertRaisesRegex(ValueError, "suffix"):
             parse_coupling_vtk(
-                self._legacy_particle_vtk(suffix=b"forged"),
+                self._particle_vtk(suffix=b"forged"),
                 label="particles.vtk",
             )
 

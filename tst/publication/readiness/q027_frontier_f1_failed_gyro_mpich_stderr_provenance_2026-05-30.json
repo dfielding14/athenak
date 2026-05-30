@@ -38,7 +38,7 @@
     "gyro_analyzer": "tst/publication/frontier_f1_gpu_relativistic_gyro_analysis.py",
     "gyro_analyzer_sha256": "411337175b5d3a2506939833656142a766dfac00b54ae8c1f7b34ca28e0ed905",
     "paper_coupling_analyzer": "tst/publication/frontier_f1_gpu_paper_coupling_analysis.py",
-    "paper_coupling_analyzer_sha256": "40dc7567aff8faa4b1db9c922a2d489ae098b902d2347420179d6dbaed046d40"
+    "paper_coupling_analyzer_sha256": "803c5e4ad369ef1deb37ad1a58dc7080b1c732f88600e21d5b421b446ddcab0f"
   },
   "disposition": "pass_historical_transcript_bound_to_local_fixture_retry_requires_separate_v3_policy_activation"
 }
