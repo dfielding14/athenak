@@ -12,9 +12,9 @@
     "inputs/tests/pic_q006_paper_multispecies_oscillation_uniform_runtime_local.athinput": "5b8d81aa4914247ba82f065c791d736e7f041ebcb56bc409fd312e17b39f8f01",
     "inputs/tests/pic_q006_paper_multispecies_oscillation_smr_runtime_local.athinput": "ec94c9ac5dddcdfc600e0831b2d6a2a39238b34e42da09203948d1eb3c3fb5eb",
     "inputs/tests/pic_q006_paper_multispecies_oscillation_audited_amr_runtime_local.athinput": "9baa6cad1995c359f86401be2ce69580d9b5292a5959925b9abadb1d4f4b3847",
-    "tst/publication/immutable_orion_tree.py": "287b779d672227e31458496873d646eb892f9ed7fff171627ed11f5f892f208c",
-    "tst/publication/analyze_q006_paper_multispecies_oscillation_runtime_local.py": "b540f54f09db0fbc57f9e5bd004ca25c05948b5994bb07a37003ccabfe82d18b",
-    "tst/publication/test_analyze_q006_paper_multispecies_oscillation_runtime_local.py": "fb0ac81fed75eb1b79cb1d2b904b6925ceda9a7454f6fd68c5e91ff8cc8a398f"
+    "tst/publication/immutable_orion_tree.py": "9252de2149e1808b1e757c54d8d7021ad7d3fd037f5a255c2dca6856dec5ee4b",
+    "tst/publication/analyze_q006_paper_multispecies_oscillation_runtime_local.py": "b860f17ef6975f8976faaa37308c439e24edb518f2cf1bf9f0c56d45fd6b33fe",
+    "tst/publication/test_analyze_q006_paper_multispecies_oscillation_runtime_local.py": "48e8cc0c1df8837817ad941d69a1ce50460b3fa209bf1118c7350c45699833e6"
   },
   "shared_parser_contract": {
     "src/particles/particles.cpp": "adds a narrow paper_mhd_pic exact-isothermal full-f momentum-only allowance while preserving the historical exact-isothermal delta-f allowance",

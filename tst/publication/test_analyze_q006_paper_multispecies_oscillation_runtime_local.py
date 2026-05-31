@@ -279,6 +279,22 @@ class Q006PaperMultispeciesOscillationRuntimeLocalTests(unittest.TestCase):
                             path, int(alias.strip()), "parser returncode"
                         )
 
+    def test_runtime_command_sidecar_requires_canonical_text(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "command.txt"
+            argv = ["/retained/bin/athena", "-i", "/retained/deck.athinput", "time/nlim=0"]
+            path.write_text(" ".join(argv) + "\n", encoding="utf-8")
+            q006._require_canonical_command_sidecar(path, argv, "runtime command")
+            for alias in (
+                "  ".join(argv) + "\n",
+                " ".join(argv),
+                "THIS CONTRADICTS THE JSON INVOCATION\n",
+            ):
+                with self.subTest(alias=alias):
+                    path.write_text(alias, encoding="utf-8")
+                    with self.assertRaisesRegex(q006.AuditError, "sidecar drifted"):
+                        q006._require_canonical_command_sidecar(path, argv, "runtime command")
+
     def test_readiness_sidecar_binds_only_new_q006_runtime_local_files(self) -> None:
         sidecar = json.loads(SIDECAR.read_text(encoding="utf-8"))
         self.assertEqual(sidecar["gate"], "Q-006")

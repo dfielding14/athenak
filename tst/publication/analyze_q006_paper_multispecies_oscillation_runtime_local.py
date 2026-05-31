@@ -12,6 +12,7 @@ import math
 import os
 from pathlib import Path
 import re
+import shlex
 import stat
 import sys
 from typing import Any
@@ -479,6 +480,14 @@ def _require_canonical_returncode_sidecar(path: Path, expected: int, label: str)
     """Require the one canonical textual encoding for a retained return code."""
     _require(
         type(expected) is int and path.read_text(encoding="utf-8") == f"{expected}\n",
+        f"{label} sidecar drifted",
+    )
+
+
+def _require_canonical_command_sidecar(path: Path, argv: list[str], label: str) -> None:
+    """Require one canonical shell rendering of a retained argv list."""
+    _require(
+        path.read_text(encoding="utf-8") == f"{shlex.join(argv)}\n",
         f"{label} sidecar drifted",
     )
 
@@ -1169,6 +1178,11 @@ def _validate_runtime_invocations(root: Path, pinned: dict[str, Any]) -> dict[st
         _validate_serial_invocation_identity(invocation, pinned, label=label)
         _require(invocation.get("cwd") == str(run), f"{label}: invocation cwd drifted")
         _require(invocation.get("argv") == expected["argv"], f"{label}: invocation argv drifted")
+        _require_canonical_command_sidecar(
+            _contained_regular_file(root, run / "command.txt"),
+            expected["argv"],
+            f"{label}: runtime command",
+        )
         _require_exact_int(invocation.get("returncode"), 0, f"{label}: invocation returncode")
         _require(invocation.get("selected_environment") == {"PYTHONDONTWRITEBYTECODE": "1"},
                  f"{label}: selected environment drifted")

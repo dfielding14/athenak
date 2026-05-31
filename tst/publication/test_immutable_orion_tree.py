@@ -58,12 +58,12 @@ def _serial_host_build_evidence_texts(profile: dict[str, object]) -> dict[str, s
             "#define MPI_PARALLEL_ENABLED 0\n"
             "#define OPENMP_PARALLEL_ENABLED 0\n"
         ),
-        "build/configure_command.txt": configure,
+        "build/configure_command.txt": f"{configure}\n",
         "build/configure_compile_commands_refresh_command.txt": (
-            f"{configure} -DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
+            f"{configure} -DCMAKE_EXPORT_COMPILE_COMMANDS=ON\n"
         ),
-        "build/build_command.txt": f"{build} -- -j4",
-        "build/verbose_clean_rebuild_command.txt": f"{build} --verbose --clean-first -- -j4",
+        "build/build_command.txt": f"{build} -- -j4\n",
+        "build/verbose_clean_rebuild_command.txt": f"{build} --verbose --clean-first -- -j4\n",
         "build/configure.log": "configured\n",
         "build/build.log": "built\n",
         "build/configure_compile_commands_refresh.log": "refreshed\n",
@@ -727,6 +727,53 @@ class ImmutableOrionTreeTests(unittest.TestCase):
                 with self.subTest(name=name, value=value):
                     with self.assertRaisesRegex(ValueError, "primitive type drifted"):
                         validate({**profile, name: value})
+
+    def test_serial_host_build_evidence_rejects_contradictory_and_noncanonical_text(self) -> None:
+        root = Path("/tmp/retained-profile-test")
+        profile = {
+            "schema_version": 1,
+            "profile": "bounded_serial_host_clean_build_provenance_only",
+            "qualifying_evidence": False,
+            "mpi": False,
+            "gpu": False,
+            "frontier_scheduler": False,
+            "kronos": False,
+        }
+        baseline = _serial_host_build_evidence_texts(profile)
+
+        def validate(texts: dict[str, str]) -> None:
+            def read(path: Path, **_: object) -> str:
+                return texts[path.relative_to(root).as_posix()]
+
+            with mock.patch.object(immutable_orion_tree, "_read_regular_text", side_effect=read):
+                immutable_orion_tree.validate_serial_host_build_evidence(root)
+
+        validate(baseline)
+        for relative, suffix, message in (
+            ("build/CMakeCache.txt", "Athena_ENABLE_MPI:BOOL=ON\n", "CMake cache binding"),
+            ("build/config.hpp", "#define MPI_PARALLEL_ENABLED 1\n", "config.hpp binding"),
+        ):
+            with self.subTest(relative=relative):
+                with self.assertRaisesRegex(ValueError, message):
+                    validate({**baseline, relative: baseline[relative] + suffix})
+        relative = "build/configure_command.txt"
+        with self.assertRaisesRegex(ValueError, "command sidecar is noncanonical"):
+            validate({**baseline, relative: baseline[relative].replace(" -S ", "  -S ")})
+
+    def test_inventory_parser_rejects_noncanonical_serialization(self) -> None:
+        canonical = f"{'a' * 64}  payload.txt\n"
+        self.assertEqual(
+            immutable_orion_tree._parse_inventory(
+                canonical, error_type=ValueError, label="inventory test"
+            ),
+            {"payload.txt": "a" * 64},
+        )
+        for alias in (canonical.removesuffix("\n"), canonical.replace("\n", "\r\n")):
+            with self.subTest(alias=alias):
+                with self.assertRaisesRegex(ValueError, "serialization is noncanonical"):
+                    immutable_orion_tree._parse_inventory(
+                        alias, error_type=ValueError, label="inventory test"
+                    )
 
     def test_exact_primitive_type_guard_rejects_nested_provenance_aliases(self) -> None:
         expected = {

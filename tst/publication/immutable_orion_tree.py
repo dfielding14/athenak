@@ -488,16 +488,35 @@ def validate_serial_host_build_evidence(
         "Kokkos_ENABLE_HIP:BOOL=OFF",
         "Kokkos_ENABLE_SERIAL:BOOL=ON",
     ):
-        if expected not in cache:
-            _raise(error_type, label, f"retained CMake cache is missing {expected!r}")
+        key = expected.partition("=")[0]
+        matches = [line for line in cache.splitlines() if line.partition("=")[0] == key]
+        if matches != [expected]:
+            _raise(error_type, label, f"retained CMake cache binding drifted for {key!r}")
     config = read("build/config.hpp")
     for expected in ("#define MPI_PARALLEL_ENABLED 0", "#define OPENMP_PARALLEL_ENABLED 0"):
-        if expected not in config:
-            _raise(error_type, label, f"retained config.hpp is missing {expected!r}")
-    configure = shlex.split(read("build/configure_command.txt"))
-    refresh = shlex.split(read("build/configure_compile_commands_refresh_command.txt"))
-    build = shlex.split(read("build/build_command.txt"))
-    rebuild = shlex.split(read("build/verbose_clean_rebuild_command.txt"))
+        key = expected.split(maxsplit=2)[1]
+        matches = [
+            line
+            for line in config.splitlines()
+            if line.split(maxsplit=2)[:2] == ["#define", key]
+        ]
+        if matches != [expected]:
+            _raise(error_type, label, f"retained config.hpp binding drifted for {key!r}")
+
+    def canonical_command(relative: str) -> list[str]:
+        text = read(relative)
+        try:
+            argv = shlex.split(text)
+        except ValueError as error:
+            _raise(error_type, label, f"retained command sidecar is invalid: {relative}: {error}")
+        if text != f"{shlex.join(argv)}\n":
+            _raise(error_type, label, f"retained command sidecar is noncanonical: {relative}")
+        return argv
+
+    configure = canonical_command("build/configure_command.txt")
+    refresh = canonical_command("build/configure_compile_commands_refresh_command.txt")
+    build = canonical_command("build/build_command.txt")
+    rebuild = canonical_command("build/verbose_clean_rebuild_command.txt")
     if (
         len(configure) != 6
         or configure[:2] != ["cmake", "-S"]
@@ -1204,6 +1223,9 @@ def _parse_inventory(
         ordered_paths.append(relative)
     if ordered_paths != sorted(ordered_paths):
         _raise(error_type, label, "retained inventory paths are not sorted")
+    canonical = "".join(f"{expected[path]}  {path}\n" for path in ordered_paths)
+    if text != canonical:
+        _raise(error_type, label, "retained inventory serialization is noncanonical")
     return expected
 
 
