@@ -124,6 +124,7 @@
     "ledger_tail_sha256": "538a5623cd672009bc903d6fc17b20b4dc7b503cae3e560aa362ebe0f3615b95",
     "legacy_read_only_trees": {
       "q023_bell_smoke": {
+        "anchored_sealed_snapshot": true,
         "file_count": 61,
         "inventory_sha256": "29a0a14bbbd0e879e2cb6fb321758904a8fe8d5783612992f0de2585dca842d5",
         "recursively_read_only": true,
@@ -133,7 +134,16 @@
     "node_hour_cap": 10000.0,
     "q007_adjacent_analysis_sha256": "bd1eb4dc58773b088ad3e97e8cf50bcd5fbda2aee61907767f52c10c34351113",
     "q023_bell_continued_mhd_sha256": "0b1b419a1252cd8b82d517b448261ee7aa7b69984f36adfaa66dcd6b08b07943",
-    "q023_bell_initial_mhd_sha256": "e074f28151ec5abf42f2c77c5f4daf33d98ad5e86ab8146db785d2ed67feab30"
+    "q023_bell_initial_mhd_sha256": "e074f28151ec5abf42f2c77c5f4daf33d98ad5e86ab8146db785d2ed67feab30",
+    "verified_tree_sizes_bytes": {
+      "pin": 27868190,
+      "q006": 1229462619,
+      "q007": 117631531,
+      "q008": 35098365,
+      "q011": 60033,
+      "q011 successor": 11252,
+      "q023_bell": 423948820
+    }
   },
   "ledger": {
     "accounting_record_count": 23,
@@ -733,9 +743,9 @@
   },
   "validation_summary": {
     "counts": [
-      710,
+      711,
       359,
-      90,
+      91,
       170,
       88
     ],
