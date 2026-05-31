@@ -25,7 +25,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 SIDECAR = (
     REPO_ROOT
     / "tst/publication/readiness/"
-    "q011_injection_distribution_runtime_local_successor_2026-05-31.json"
+    "q011_injection_distribution_runtime_local_successor_v2_2026-05-31.json"
 )
 
 
@@ -80,7 +80,7 @@ def _emitted_payload(count: int = 512, timestep: float = 0.5) -> ParticleVTKData
     tags = np.arange(count, dtype=np.int64)
     replay = q011._expected_cycle_one_payload(tags, timestep)
     return ParticleVTKData(
-        points=replay["points"],
+        points=replay["points"].astype(np.float32).astype(np.float64),
         scalars={
             "gid": np.zeros(count, dtype=np.int64),
             "species": np.zeros(count, dtype=np.int64),
@@ -91,7 +91,7 @@ def _emitted_payload(count: int = 512, timestep: float = 0.5) -> ParticleVTKData
             "deltaf_f0": np.ones(count),
             "deltaf_weight": np.zeros(count),
         },
-        vectors={"vel": replay["velocity"]},
+        vectors={"vel": replay["velocity"].astype(np.float32).astype(np.float64)},
     )
 
 
@@ -135,6 +135,7 @@ class Q011InjectionDistributionRuntimeLocalTests(unittest.TestCase):
         )
         replay = report["exact_cycle_one_emission_replay"]
         self.assertGreater(replay["reflected_particle_count"], 0)
+        self.assertTrue(replay["serialized_float32_payload_exact"])
         self.assertEqual(replay["maximum_absolute_point_residual"], 0.0)
         self.assertEqual(replay["maximum_absolute_velocity_residual"], 0.0)
         self.assertEqual(
@@ -369,6 +370,34 @@ class Q011InjectionDistributionRuntimeLocalTests(unittest.TestCase):
         with self.assertRaisesRegex(q011.AuditError, "exact integers"):
             q011.analyze_particle_payload(
                 ParticleVTKData(payload.points, scalars, payload.vectors)
+            )
+
+    def test_payload_rejects_weight_and_deltaf_metadata_drift(self) -> None:
+        payload = _payload()
+        for name, value, expected in (
+            ("gid", 1, "carrier gid zero"),
+            ("macro_weight", 2.0, "macro weights must be one"),
+            ("deltaf_f0", 2.0, "delta-f f0 values must be one"),
+            ("deltaf_weight", 1.0, "delta-f weights must be zero"),
+        ):
+            with self.subTest(name=name):
+                scalars = {**payload.scalars, name: payload.scalars[name].copy()}
+                scalars[name][0] = value
+                with self.assertRaisesRegex(q011.AuditError, expected):
+                    q011.analyze_particle_payload(
+                        ParticleVTKData(payload.points, scalars, payload.vectors)
+                    )
+
+    def test_cycle_one_payload_rejects_single_float32_ulp_drift(self) -> None:
+        payload = _emitted_payload()
+        points = payload.points.copy()
+        points[0, 1] = np.nextafter(
+            np.float32(points[0, 1]), np.float32(np.inf), dtype=np.float32
+        )
+        with self.assertRaisesRegex(q011.AuditError, "float32 points drifted"):
+            q011.analyze_particle_payload(
+                ParticleVTKData(points, payload.scalars, payload.vectors),
+                cycle_one_timestep=0.5,
             )
 
     def test_runtime_header_rejects_wrong_cycle_rank_and_variable(self) -> None:

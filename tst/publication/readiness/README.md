@@ -373,6 +373,11 @@ qualify any scientific claim by itself.
   physical cycle while cached gas subtraction replays with RK-stage weights.
   Floor behavior, momentum-shell mapping, cohort ordering, removed-cohort sink
   accounting, MPI, AMR, HIP, Frontier and campaign qualification remain open.
+- `q011_parallel_shock_rk_stage_budget_successor_v2_2026-05-31.json`:
+  current-source bounded serial-host successor after floor, momentum-shell,
+  cohort-ordering, sink-ledger, restart-schema-2 and MPI-aware fatal-path
+  hardening. Registered MPI, AMR, HIP, Frontier, physical calibration and the
+  full Section 5.4 campaign remain open.
 - `q034_unsupported_capability_successor_2026-05-30.json`: successor
   fail-closed active-MHD expanding-box unsupported-composition addendum.
 - `q042_post_repair_architecture_docs_successor_2026-05-30.json`: successor

@@ -16,6 +16,7 @@
 #include <cstdlib>
 #include <iomanip>
 #include <iostream>
+#include <limits>
 #include <sstream>
 #include <string>
 
@@ -128,7 +129,8 @@ void ParticleVTKOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   {
     std::stringstream msg;
     msg << "# vtk DataFile Version 2.0" << std::endl
-        << "# AthenaK particle data at time= " << pm->time
+        << "# AthenaK particle data at time= "
+        << std::setprecision(std::numeric_limits<Real>::max_digits10) << pm->time
         << "  nranks= " << global_variable::nranks
         << "  cycle=" << pm->ncycle
         << "  variables=" << out_params.variable << std::endl

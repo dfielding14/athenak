@@ -1,0 +1,48 @@
+{
+  "record_type": "q011_parallel_shock_rk_stage_budget_successor",
+  "schema_version": 1,
+  "date": "2026-05-31",
+  "predecessor_record": "tst/publication/readiness/q011_parallel_shock_rk_stage_budget_successor_2026-05-31.json",
+  "gate": "Q-011",
+  "qualification_effect": "none_bounded_serial_host_regression_only",
+  "claim_closure": false,
+  "frontier_authorization": "not_bound",
+  "scope": "Current-source bounded serial-host successor for the Section 5.4 parallel-shock RK-stage budget probe after source-transaction, momentum-shell, floor, startup-cohort sink-ledger, restart-schema-2 and MPI-aware fatal-path hardening. The retained predecessor artifacts remain immutable chronology. This current-source rerun demonstrates integrator-invariant bounded mechanics only; it does not qualify MPI, AMR, HIP, Frontier, physical calibration or the full shock campaign.",
+  "source_bindings": {
+    "src/pgen/tests/pic_parallel_shock.cpp": "dddad5c0063edc114741cbfa3ffc1207e5159cbf32bbfe371927bc7bb9a3c5ba",
+    "inputs/tests/pic_parallel_shock_rk_stage_budget.athinput": "30f5551c501367f669298bcab97877b460cf7ace08979029599a68de8df8bdaf",
+    "tst/scripts/particles/pic_parallel_shock_rk_stage_budget.py": "193bf64e22bfaecfefaba05ab6ab5b6a1afbec0b72de4f193a03d2daf5e77ef2",
+    "tst/scripts/particles/pic_parallel_shock_startup_cohort_sink_restart.py": "8c4f809edc0d8182640bf86a2e819047bcc03d5258189874fb5a6e26a131bd3b"
+  },
+  "current_source_verification": {
+    "command": "cd tst && ATHENA_PIC_PARALLEL_SHOCK_RK_EXE_DIR=/tmp/athenak-pic-codex-host/src PYTHONDONTWRITEBYTECODE=1 python3 -B scripts/particles/pic_parallel_shock_rk_stage_budget.py",
+    "status": "pass",
+    "integrators": ["rk1", "rk2", "rk3"],
+    "subtraction_variants": [false, true],
+    "particle_count": 240,
+    "residual_reservoir": 3.00024e-13,
+    "gas_mass_removed": 0.2400054931640625,
+    "integrator_invariant_particle_count": true,
+    "integrator_invariant_reservoir": true,
+    "integrator_invariant_gas_mass_removed": true
+  },
+  "paired_restart_schema_verification": {
+    "command": "cd tst && ATHENA_PIC_PARALLEL_SHOCK_STARTUP_COHORT_EXE_DIR=/tmp/athenak-pic-codex-host/src PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. python3 -B scripts/particles/pic_parallel_shock_startup_cohort_sink_restart.py",
+    "status": "pass",
+    "restart_schema": 2,
+    "ledger_complete": true,
+    "tag_seeded": true,
+    "full_vs_restart_particle_payload": "exact"
+  },
+  "retained_predecessor_artifacts": {
+    "role": "immutable_chronology_only",
+    "record": "tst/publication/readiness/q011_parallel_shock_rk_stage_budget_successor_2026-05-31.json"
+  },
+  "remaining_blockers": [
+    "Complete registered MPI, AMR, HIP and Frontier qualification slices.",
+    "Close physical units, macro-mass and downstream-particles-per-cell calibration.",
+    "Run the registered Sun-and-Bai Section 5.4 coarse-uniform, three-level-AMR and fine-uniform campaign.",
+    "Complete independent raw-artifact recomputation and external review."
+  ],
+  "q011_disposition": "bounded_current_source_rk_stage_budget_and_restart_schema_regressions_passed_full_q011_qualification_open"
+}

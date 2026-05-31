@@ -29,7 +29,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 DECK = REPO_ROOT / "inputs/tests/pic_q011_injection_distribution_runtime_local.athinput"
 SOURCE = REPO_ROOT / "src/pgen/tests/pic_parallel_shock.cpp"
 EXPECTED_DECK_SHA256 = "6e84e34a91e48b4933f26ee1c3354e95139ff89ddf75ec1b358a7a7d3c1d1c17"
-EXPECTED_SOURCE_SHA256 = "0ec2e1eec3786bce12be2e40fb53b34d553955e9ad7b58fb64b0a912e8d15c7b"
+EXPECTED_SOURCE_SHA256 = "dddad5c0063edc114741cbfa3ffc1207e5159cbf32bbfe371927bc7bb9a3c5ba"
 ORION_BULK_ROOT = Path("/lustre/orion/ast207/proj-shared/dfielding/PIC")
 ARTIFACT_ROLE = "bounded_serial_host_runtime_diagnostic_only"
 QUALIFICATION_EFFECT = "none"
@@ -337,15 +337,26 @@ def analyze_particle_payload(
     count = points.shape[0]
     _require(128 <= count <= 1024, "runtime injection count must remain bounded in [128, 1024]")
 
+    gids = _integer_scalar(data, "gid")
     tags = _integer_scalar(data, "ptag")
     species = _integer_scalar(data, "species")
     source = _integer_scalar(data, "cr_source")
+    macro_weight = _scalar(data, "macro_weight").astype(np.float64)
     birth_time = _scalar(data, "birth_time").astype(np.float64)
+    deltaf_f0 = _scalar(data, "deltaf_f0").astype(np.float64)
+    deltaf_weight = _scalar(data, "deltaf_weight").astype(np.float64)
+    _require(np.all(gids == 0), "runtime particles must remain in carrier gid zero")
     _require(np.all(np.isfinite(birth_time)), "runtime birth times must be finite")
+    _require(np.all(np.isfinite(macro_weight)), "runtime macro weights must be finite")
+    _require(np.all(np.isfinite(deltaf_f0)), "runtime delta-f f0 values must be finite")
+    _require(np.all(np.isfinite(deltaf_weight)), "runtime delta-f weights must be finite")
     _require(np.array_equal(tags, np.arange(count)), "runtime tags must be serial from zero")
     _require(np.all(species == 0), "runtime injection must use species zero")
     _require(np.all(source == 1), "runtime particles must be shock_injected provenance")
+    _require(np.all(macro_weight == 1.0), "runtime macro weights must be one")
     _require(np.all(birth_time == 0.0), "runtime particles must be born at source time zero")
+    _require(np.all(deltaf_f0 == 1.0), "runtime delta-f f0 values must be one")
+    _require(np.all(deltaf_weight == 0.0), "runtime delta-f weights must be zero")
 
     x1_expected = float(deck["clamped_surface_output_x1"])
     shock_speed = float(deck["shock_speed"])
@@ -370,20 +381,23 @@ def analyze_particle_payload(
             "cycle-one replay timestep must be finite and positive",
         )
         replay = _expected_cycle_one_payload(tags, cycle_one_timestep)
-        point_residual = np.abs(points - replay["points"])
-        velocity_residual = np.abs(velocity - replay["velocity"])
+        expected_points = replay["points"].astype(np.float32).astype(np.float64)
+        expected_velocity = replay["velocity"].astype(np.float32).astype(np.float64)
+        point_residual = np.abs(points - expected_points)
+        velocity_residual = np.abs(velocity - expected_velocity)
         _require(
-            float(np.max(point_residual)) <= 2.0e-6,
-            "runtime emitted points drifted from exact cycle-one replay",
+            np.array_equal(points, expected_points),
+            "runtime emitted float32 points drifted from exact cycle-one replay",
         )
         _require(
-            float(np.max(velocity_residual)) <= 1.0e-5,
-            "runtime emitted velocity drifted from exact cycle-one replay",
+            np.array_equal(velocity, expected_velocity),
+            "runtime emitted float32 velocity drifted from exact cycle-one replay",
         )
         relative_velocity = injection_speed * replay["direction"]
         replay_report = {
             "timestep": cycle_one_timestep,
             "reflected_particle_count": int(np.count_nonzero(replay["reflected"])),
+            "serialized_float32_payload_exact": True,
             "maximum_absolute_point_residual": float(np.max(point_residual)),
             "maximum_absolute_velocity_residual": float(np.max(velocity_residual)),
         }
@@ -437,8 +451,12 @@ def analyze_particle_payload(
         "particle_count": count,
         "provenance": {
             "cr_source": "shock_injected",
+            "gid": 0,
             "species": 0,
+            "macro_weight": 1.0,
             "birth_time": 0.0,
+            "deltaf_f0": 1.0,
+            "deltaf_weight": 0.0,
             "serial_tag_min": int(tags[0]),
             "serial_tag_max": int(tags[-1]),
         },

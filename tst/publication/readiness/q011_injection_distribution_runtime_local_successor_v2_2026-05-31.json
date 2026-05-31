@@ -1,0 +1,113 @@
+{
+  "record_type": "q011_injection_distribution_runtime_local_successor",
+  "schema_version": 1,
+  "date": "2026-05-31",
+  "gate": "Q-011",
+  "qualification_effect": "none",
+  "claim_closure": false,
+  "frontier_authorization": "not_bound",
+  "supersedes_for_current_source": "q011_injection_distribution_runtime_local_successor_2026-05-31.json",
+  "scope": "Q-011-only bounded serial-host audit after hardening restart continuation state and particle-VTK timestamp precision. The retained cycle-one particle payload exactly replays tagged source sampling, push, transverse wrap, reflecting-wall handling, float32 serialization, and all expected scalar provenance fields. This is not a paper-shock campaign, physical calibration, AMR qualification, GPU evidence, Frontier evidence, or external-review closure.",
+  "artifact_bindings": {
+    "inputs/tests/pic_q011_injection_distribution_runtime_local.athinput": "6e84e34a91e48b4933f26ee1c3354e95139ff89ddf75ec1b358a7a7d3c1d1c17",
+    "tst/publication/immutable_orion_tree.py": "2782efa7a362bca4d660fe7dc9e4e8e5a853d016881c78ab3a8114664dd5acf4",
+    "tst/publication/analyze_q011_injection_distribution_runtime_local.py": "014b0b5af237ce7913854f981411037e073b787bab1dc8293cf14fda54136cff",
+    "tst/publication/test_analyze_q011_injection_distribution_runtime_local.py": "039d1343d3cdd90f97f658eee464347d74340516cc683a89f8131607066309eb"
+  },
+  "committed_generator_binding": {
+    "path": "src/pgen/tests/pic_parallel_shock.cpp",
+    "sha256": "dddad5c0063edc114741cbfa3ffc1207e5159cbf32bbfe371927bc7bb9a3c5ba",
+    "sampler": "full_sphere_isotropic_monoenergetic_relative_to_ideal_surface",
+    "placement": "single_half_open_carrier_cell_with_x1_at_clamped_surface",
+    "cycle_ordering": "inject_before_push_then_publish_emitted_cycle_one_state",
+    "restart_ledger_schema": 2
+  },
+  "host_execution": {
+    "launch_style": "direct_serial_host_execution",
+    "executable": "/lustre/orion/ast207/proj-shared/dfielding/PIC/local-readiness/integrated-serial-host-binary-shock-successor-20260531-v2/bin/athena",
+    "executable_sha256": "62a1224d1037bfe3372c0c463eecbf34295097c59de9b56c5d5944e8356ade27",
+    "pinned_executable_root": "/lustre/orion/ast207/proj-shared/dfielding/PIC/local-readiness/integrated-serial-host-binary-shock-successor-20260531-v2",
+    "pinned_executable_root_inventory_sha256": "755f37e43684127df5e40b00e91097144a4ef88c015dff020695c5ce0a252a61",
+    "mpi_used": false,
+    "slurm_used": false,
+    "frontier_used": false,
+    "kronos_used": false,
+    "bulk_artifacts_strictly_below": "/lustre/orion/ast207/proj-shared/dfielding/PIC"
+  },
+  "bounded_runtime_probe": {
+    "status": "pass",
+    "qualification_effect": "none",
+    "audit_method": "exact_tagged_sampler_cycle_one_replay_with_bounded_isotropy_statistics",
+    "artifact_root": "/lustre/orion/ast207/proj-shared/dfielding/PIC/local-readiness/q011-injection-distribution-runtime-local-successor-20260531-v2",
+    "runtime_audit_root": "/lustre/orion/ast207/proj-shared/dfielding/PIC/local-readiness/q011-injection-distribution-runtime-local-successor-audit-20260531-v3",
+    "runtime_audit_report": {
+      "path": "runtime_audit_report.json",
+      "sha256": "da5cebea8b5e77d65f327128987af413357efaab52802724090c8affc899a316"
+    },
+    "audited_pvtk": {
+      "path": "runtime/pvtk/pic_q011_exact_current.prtcl_all.00001.part.vtk",
+      "sha256": "dcdd20066526a2c9b47c79290df49ea09d39eb86afb725a9f5776659a24671b3",
+      "particle_count": 309,
+      "source": "shock_injected",
+      "birth_time": 0.0,
+      "serial_tag_range": [0, 308]
+    },
+    "pvtk_execution_metadata": {
+      "nranks": 1,
+      "cycle": 1,
+      "variables": "prtcl_all",
+      "time": 0.009677419354838708
+    },
+    "exact_cycle_one_emission_replay": {
+      "serialized_float32_payload_exact": true,
+      "reflected_particle_count": 155,
+      "maximum_absolute_point_residual": 0.0,
+      "maximum_absolute_velocity_residual": 0.0
+    },
+    "scalar_provenance_replay": {
+      "gid": 0,
+      "cr_source": "shock_injected",
+      "species": 0,
+      "macro_weight": 1.0,
+      "birth_time": 0.0,
+      "deltaf_f0": 1.0,
+      "deltaf_weight": 0.0
+    },
+    "monoenergetic_full_sphere_sampler": {
+      "maximum_absolute_relative_speed_residual": 2.842170943040401e-14,
+      "maximum_absolute_relative_momentum_residual": 4.263256414560601e-14,
+      "direction_mean": [-0.05061174963065988, -0.024327155854604904, -0.018803554686182587],
+      "direction_second_moment": [0.3319700180489117, 0.3550445993630183, 0.3129853825880701],
+      "octant_counts": [42, 44, 44, 39, 35, 34, 33, 38]
+    },
+    "tree_freeze": {
+      "inventory_path": "artifact_inventory.sha256",
+      "inventory_sha256": "6da6a8ae7588407d5cada3338ad410fc6ced83fc43138086cede25481acf4109",
+      "inventoried_file_count": 5,
+      "recursively_read_only": true,
+      "writable_entries": 0
+    },
+    "audit_tree_freeze": {
+      "inventory_path": "artifact_inventory.sha256",
+      "inventory_sha256": "b714c0ebf1be2206b712db324d54da5ef58c22f910ac446de130cb415865b54f",
+      "inventoried_file_count": 2,
+      "recursively_read_only": true,
+      "writable_entries": 0
+    }
+  },
+  "verification": {
+    "focused_command": "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. python3 -B -m unittest tst.publication.test_analyze_q011_injection_distribution_runtime_local",
+    "direct_serial_host_runtime": "pass_one_cycle",
+    "independent_frozen_tree_verify": "pass",
+    "pinned_executable_tree_verify": "pass",
+    "post_push_exact_float32_tagged_sampler_replay": "pass",
+    "full_scalar_provenance_replay": "pass"
+  },
+  "explicit_gaps": [
+    "physical gas-pressure, unit-normalization, macro-mass and downstream-ppc calibration",
+    "AMR versus fine-uniform residual qualification",
+    "GPU, HIP, MPI, decomposition and Frontier qualification",
+    "independent raw-artifact recompute and external review"
+  ],
+  "q011_disposition": "bounded_local_exact_serialized_injection_distribution_runtime_audit_only_full_q011_qualification_open"
+}
