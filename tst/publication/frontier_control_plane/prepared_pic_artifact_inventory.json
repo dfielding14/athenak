@@ -1,0 +1,403 @@
+{
+  "analyzers": [
+    {
+      "path": "tst/publication/analyze_pic_shock_storyline.py",
+      "sha256": "94f9db3ae56a23e4991b18b00f1c2b323f4b3553cf674d5007f6c760e5155b41"
+    },
+    {
+      "path": "tst/publication/analyze_q006_paper_multispecies_oscillation.py",
+      "sha256": "a471417e002bdda2f7e3d357847938d1bf1887bbd3c46d0d90162bc2b61fc517"
+    },
+    {
+      "path": "tst/publication/analyze_q006_paper_multispecies_oscillation_runtime_local.py",
+      "sha256": "1a2d9e1206b25dc5bd28e012f3fb524ad84cdf2065184021a3c8a0df28092be5"
+    },
+    {
+      "path": "tst/publication/analyze_q007_paper_deltaf_linear_preparation.py",
+      "sha256": "3b23641010866b9759a1317b30d2305d5de3ff62e6059fe3925d09dc1d2d86f4"
+    },
+    {
+      "path": "tst/publication/analyze_q011_injection_distribution_runtime_local.py",
+      "sha256": "592ad2fa69ecbf1d8316ab9f5e9be6354d7995150a65ef0cbd3ac6d797a2f007"
+    },
+    {
+      "path": "tst/publication/analyze_q023_paper_bell_linear.py",
+      "sha256": "bc997159339d708fb8b1e3d2f6062ea5d8e6dc59e038f1cdc98ebe5427881f63"
+    },
+    {
+      "path": "tst/publication/analyze_q029_hall_bell_linear.py",
+      "sha256": "ad3411ad07bcc771c6bddc7ebaaca129c60aa5675df2aa151961a7eab07a94c1"
+    },
+    {
+      "path": "tst/publication/analyze_q029_hall_bell_linear_raw.py",
+      "sha256": "18d47ed8630a7187e628f28966ed572eafb2ba735bc66c400755ffdbf626e6e8"
+    },
+    {
+      "path": "tst/publication/analyze_q029_hall_extension_candidate.py",
+      "sha256": "b745bcb105532311b3abf3db4b02c2b5eca029923cdf6026ea6c61b312e663c3"
+    },
+    {
+      "path": "tst/publication/analyze_q032_plotnikov_damped_crsi_candidate.py",
+      "sha256": "25ba6993f84d4670042c6cfc316708689a6171c0d9718de9e114ff8c4fedf820"
+    },
+    {
+      "path": "tst/publication/analyze_q033_crpai_transport_calibration_candidate.py",
+      "sha256": "7c88a2c5fa3516e43217df34ee601db3b83abf90042f10754812232c40e53383"
+    },
+    {
+      "path": "tst/publication/analyze_q033_crpai_transport_runtime_local.py",
+      "sha256": "0e027541ff3e6764ddbbb86b3750ad66ee3a6a0339d0e9cb74c6eeb2616348d7"
+    }
+  ],
+  "paper_decks": [
+    {
+      "path": "inputs/tests/pic_adaptive_deltaf_smoke.athinput",
+      "sha256": "9ba47abb50e67fbf3db11a75722d7c522ff18aafb59d164537414a2f05d995f3"
+    },
+    {
+      "path": "inputs/tests/pic_amr_shock_lb_publication_hpc.athinput",
+      "sha256": "a1278fb7abd1c1178b9dd8ae84093718bca9f89364fdc12c092f7110e0c9a2b7"
+    },
+    {
+      "path": "inputs/tests/pic_amr_shock_lb_publication_local.athinput",
+      "sha256": "d7f0a9b1db7abed53a84f159532efa3dc9fdfde42a51f10fa9dc446b16e34f20"
+    },
+    {
+      "path": "inputs/tests/pic_amr_shock_lb_smoke.athinput",
+      "sha256": "657141eefbca92e52b34a260de8c604340209a55307aa7cabe98d061e134906d"
+    },
+    {
+      "path": "inputs/tests/pic_bell_growth_proxy.athinput",
+      "sha256": "e565ce0f49e5cc81124598a2f7a4c6815ef302cca0a696fb3d3512bc405c6877"
+    },
+    {
+      "path": "inputs/tests/pic_bell_growth_publication.athinput",
+      "sha256": "72e767aad00fdfbc4098a074cceb40d09727575e08d58c0797c7e74db981d309"
+    },
+    {
+      "path": "inputs/tests/pic_boris_midpoint_eb.athinput",
+      "sha256": "6404e182a61709636ca827595aad2415095570439233cf4fc61990adf8dc6ce3"
+    },
+    {
+      "path": "inputs/tests/pic_compressing_box_proxy.athinput",
+      "sha256": "1bfa4c5791304408efb655d12f8b0e9c42bdcc7af0bfb8f483fb3486aaa91d67"
+    },
+    {
+      "path": "inputs/tests/pic_crpai_oblate_proxy.athinput",
+      "sha256": "ab04a038834a04fcf62bafcad5d7ad94c7d802f622a71bd3a416f32d8e24a9bb"
+    },
+    {
+      "path": "inputs/tests/pic_crpai_oblate_publication.athinput",
+      "sha256": "795ae55f6975a07fe17a44d92397ae5c16449134356315f18ffe0b0504123c77"
+    },
+    {
+      "path": "inputs/tests/pic_crpai_prolate_proxy.athinput",
+      "sha256": "48d09c781eca3fbfc93931f1562008411e56d1a3f10f72f87dccda4f1cc6cb51"
+    },
+    {
+      "path": "inputs/tests/pic_crpai_prolate_publication.athinput",
+      "sha256": "a0f3b89a18c849ddca749a723c4d077b518fa275bbef9f5197c854908183d235"
+    },
+    {
+      "path": "inputs/tests/pic_crsi_deltaf_proxy.athinput",
+      "sha256": "5a498bd5f90b7cf1774a4fc2967b14ae71dc176e521849d20d8948f3f3c987bd"
+    },
+    {
+      "path": "inputs/tests/pic_crsi_deltaf_publication.athinput",
+      "sha256": "49457e7caf28911924ef43112948d847a5c7d6c5a557d5c881deec8a3184a7a4"
+    },
+    {
+      "path": "inputs/tests/pic_deposit_conservation.athinput",
+      "sha256": "15df280ba2aaf33418ab3c0a30109877210cfb3ed832f7a5cbb825f24378120d"
+    },
+    {
+      "path": "inputs/tests/pic_em_vacuum_wave.athinput",
+      "sha256": "96d2c715d81fa31ba37068544d031550bbd31b88d13098eb8ffdce4469971c04"
+    },
+    {
+      "path": "inputs/tests/pic_entity_deposit_mink.athinput",
+      "sha256": "0717925e0976993e66c3ce8dc8eae3f7441d18962bc509351feb2027a8e8515b"
+    },
+    {
+      "path": "inputs/tests/pic_entity_deposit_reflect.athinput",
+      "sha256": "75050d89081ffc2681674ef3d44bc0c69e9f5bc10b813cd218a54e5f012b9a2e"
+    },
+    {
+      "path": "inputs/tests/pic_expanding_box_proxy.athinput",
+      "sha256": "fab3f27f8ab1e55a4a897892a1c84a1e5885e6f75869b503d768527d3fad68d7"
+    },
+    {
+      "path": "inputs/tests/pic_extended_hall_ct_smoke.athinput",
+      "sha256": "22e6b44a5aa4e346746f565a16e319f0a03126d15c9497bb6b61a9c13585f97f"
+    },
+    {
+      "path": "inputs/tests/pic_ion_neutral_friction_smoke.athinput",
+      "sha256": "ea79b464cf4c3bc1d9b148a36a4dff350f290c2d19ef016299c778d155705e3b"
+    },
+    {
+      "path": "inputs/tests/pic_langmuir_frequency_proxy.athinput",
+      "sha256": "18565037fd87cf24f5d2eed21596b81247735d046b39481d2af3c33c814c7e33"
+    },
+    {
+      "path": "inputs/tests/pic_mhd_coupling_guard_edge_relativistic.athinput",
+      "sha256": "767bd8ecf81a9f9a17049e5987fb5e0c4e276b7c0166e79839b0b1614d9486db"
+    },
+    {
+      "path": "inputs/tests/pic_mhd_coupling_guard_hydro.athinput",
+      "sha256": "3a064457f7272691e4dad75cbdaa7b70c228a9275130ff811d1c193d7318b256"
+    },
+    {
+      "path": "inputs/tests/pic_mhd_coupling_guard_isothermal.athinput",
+      "sha256": "d56e0514e68577900ce9e86305b12ff202e28c73abffb92b31ce37e8bf243eb8"
+    },
+    {
+      "path": "inputs/tests/pic_mhd_coupling_guard_nonperiodic_unsupported.athinput",
+      "sha256": "ba0bb552f137e8de0e87b8c089aeaed7dd4f6b2fb022a4ff52494262bfb78bb6"
+    },
+    {
+      "path": "inputs/tests/pic_mhd_coupling_guard_nr.athinput",
+      "sha256": "5a8a1ea6100da34ab3d74179f1fce24199e9546bd6afa161f6484803d91a572e"
+    },
+    {
+      "path": "inputs/tests/pic_mhd_coupling_guard_radiation.athinput",
+      "sha256": "065c4c0ae4838f4bc2180d489993583f001e3bfb9ed730b92f3d5263e458915c"
+    },
+    {
+      "path": "inputs/tests/pic_mhd_coupling_multilevel.athinput",
+      "sha256": "0b3202d0ff4a5e09194d609501ea6f84b820604337463f7ba5cedfb00abb2a7c"
+    },
+    {
+      "path": "inputs/tests/pic_mhd_coupling_nonperiodic.athinput",
+      "sha256": "9da02c19d6784386b8cf4baa0f0c1f16d1518bb2c520ec8628a5e0ed7bbdd3ef"
+    },
+    {
+      "path": "inputs/tests/pic_mhd_coupling_nonperiodic_default_mode.athinput",
+      "sha256": "04fdd0819cd18ff27cc75cbd65eec7d458a5549664909286d6aeff338c788876"
+    },
+    {
+      "path": "inputs/tests/pic_mhd_current_coupling.athinput",
+      "sha256": "de719572e9646563025653cea2ea65e3194b2e30cb00f6cf7706a90d0884598b"
+    },
+    {
+      "path": "inputs/tests/pic_mhd_current_coupling_default_mode.athinput",
+      "sha256": "e3b86c08eb45d72f0508f8f7fac8ea8c91735dde891a0d145a248657c3a791b6"
+    },
+    {
+      "path": "inputs/tests/pic_mhd_expanding_box_adaptive_damping_smoke.athinput",
+      "sha256": "52122a6100eba205191abea2c0f560f26c30f5ca97272b7fd7dd1cfc01832ba5"
+    },
+    {
+      "path": "inputs/tests/pic_mhd_expanding_box_cpaw_history_preparation.athinput",
+      "sha256": "08885c1001d94085567b324162b4721e1c82f0ab135a68056d6953f58d4c3c80"
+    },
+    {
+      "path": "inputs/tests/pic_mhd_expanding_box_cpaw_local.athinput",
+      "sha256": "18075115d71be1e9cf17a34bf1d931d708a694a5226e5de987e0e1e3ae8f1e5e"
+    },
+    {
+      "path": "inputs/tests/pic_mhd_expanding_box_oblique_divb.athinput",
+      "sha256": "55b67893db2ba32311b971158a41d9abfe5e023cc0b0143e4f76e5bc8b2dd75d"
+    },
+    {
+      "path": "inputs/tests/pic_mhd_expanding_box_uniform.athinput",
+      "sha256": "ff831aed4b65177e7bd42a008e5b3709604e15ff0f617128de5fdc4e3f5de745"
+    },
+    {
+      "path": "inputs/tests/pic_mhd_passive_mode.athinput",
+      "sha256": "a5be4926558fe5a87d9905002d2b4bbbb3837ad3963c83d3276a0ad1346a1720"
+    },
+    {
+      "path": "inputs/tests/pic_mhd_restart_fidelity.athinput",
+      "sha256": "47aa22cd9ff6829c15e7b76ebbe32003a80e8aa47fb6bb19e671a4a1e0576cd9"
+    },
+    {
+      "path": "inputs/tests/pic_multispecies_osc_amr_proxy.athinput",
+      "sha256": "72e40d44ba37dd2b85b35bd627b1b06f157a319173fc1fedbe07b718a0788110"
+    },
+    {
+      "path": "inputs/tests/pic_multispecies_osc_amr_publication.athinput",
+      "sha256": "c97a88b7df01d6bdd10e64153673481b917c208fbaa68a58fc1017eba1e26e8b"
+    },
+    {
+      "path": "inputs/tests/pic_multispecies_osc_smr.athinput",
+      "sha256": "45a5c2c419e2f27736dd7cb30ba8997e8ee17f46355e85940facab2affa32aa9"
+    },
+    {
+      "path": "inputs/tests/pic_multispecies_osc_smr_publication.athinput",
+      "sha256": "7a7aa883480b732b3c5cefed48eb9583f31c62f33f151b0c441496dbd1721309"
+    },
+    {
+      "path": "inputs/tests/pic_multispecies_osc_uniform.athinput",
+      "sha256": "7bc6182e4d754e79eb810b96efe957015d788eacf0e3c471660fbe8d302db79f"
+    },
+    {
+      "path": "inputs/tests/pic_multispecies_osc_uniform_publication.athinput",
+      "sha256": "81154d20d8d276c7a92db46cd544160e2d63f1dc565066828d7a757654859bcd"
+    },
+    {
+      "path": "inputs/tests/pic_no_mhd_boris.athinput",
+      "sha256": "0e9fcc7ff7cdb712235b97df04fc3c99b5b205f57e9591347f48c0ee64460bc6"
+    },
+    {
+      "path": "inputs/tests/pic_paper_coupling_conservation.athinput",
+      "sha256": "d0dc2e23a2085c9ad54479240f3f65c4b28f6d565d8bf4279c9865b40d095fc5"
+    },
+    {
+      "path": "inputs/tests/pic_parallel_shock_amr_fiducial.athinput",
+      "sha256": "9fff2b589b3dd22a358fe9416605d47a7dcff2fec3045488546ebe917ccf63ed"
+    },
+    {
+      "path": "inputs/tests/pic_parallel_shock_coarse_uniform.athinput",
+      "sha256": "29841599178a47e26fb8b165e1b84aba13e874cddc4e98e44b36f1de2d6ae8aa"
+    },
+    {
+      "path": "inputs/tests/pic_parallel_shock_fine_uniform.athinput",
+      "sha256": "4f3aad8083a151d5fac254c77cb122bbd9692c108b4463fc897141a4e3fba2be"
+    },
+    {
+      "path": "inputs/tests/pic_parallel_shock_section54_hpc.athinput",
+      "sha256": "e755cf96f97e6078343d793015699bf958cf5c22809c7be1fa37aab7a1a83290"
+    },
+    {
+      "path": "inputs/tests/pic_parser_contract_guards.athinput",
+      "sha256": "e14ac149dc3f8c6fb3d5400f6e330063e6f72f2ed2f54691ade8c65ce5173a45"
+    },
+    {
+      "path": "inputs/tests/pic_q006_paper_multispecies_oscillation_audited_amr_candidate.athinput",
+      "sha256": "a2f9b4187628ae5e54d5850b1bf233410faae26d8e2cdd8fd5f3dab8e8356891"
+    },
+    {
+      "path": "inputs/tests/pic_q006_paper_multispecies_oscillation_audited_amr_runtime_local.athinput",
+      "sha256": "9baa6cad1995c359f86401be2ce69580d9b5292a5959925b9abadb1d4f4b3847"
+    },
+    {
+      "path": "inputs/tests/pic_q006_paper_multispecies_oscillation_smr_candidate.athinput",
+      "sha256": "3259351127019c8012e21ebcfd94f24e223429efff6a5414424b1508574bf8a8"
+    },
+    {
+      "path": "inputs/tests/pic_q006_paper_multispecies_oscillation_smr_runtime_local.athinput",
+      "sha256": "ec94c9ac5dddcdfc600e0831b2d6a2a39238b34e42da09203948d1eb3c3fb5eb"
+    },
+    {
+      "path": "inputs/tests/pic_q006_paper_multispecies_oscillation_uniform_candidate.athinput",
+      "sha256": "b1c121306666d0f898c00af589158c9a56704a38460b5ad5e568a55bc29094b5"
+    },
+    {
+      "path": "inputs/tests/pic_q006_paper_multispecies_oscillation_uniform_runtime_local.athinput",
+      "sha256": "5b8d81aa4914247ba82f065c791d736e7f041ebcb56bc409fd312e17b39f8f01"
+    },
+    {
+      "path": "inputs/tests/pic_q007_paper_crpai_linear_oblate_preparation.athinput",
+      "sha256": "b092941d81eef7a8f76d2541789035e9ac7e0cfa42b9db4fdef12a2a44ea5b3c"
+    },
+    {
+      "path": "inputs/tests/pic_q007_paper_crpai_linear_prolate_preparation.athinput",
+      "sha256": "f98aa8faad0c50be696e14db0d33fb2c22bc1b4e7a3c7ba8fa51f67fbb71fa69"
+    },
+    {
+      "path": "inputs/tests/pic_q007_paper_crsi_linear_preparation.athinput",
+      "sha256": "d1e6b774bef0556a298b88d4a4e989572bd88622d57a14dd54700856f9d3770c"
+    },
+    {
+      "path": "inputs/tests/pic_q009_coupled_boundary_lifetime.athinput",
+      "sha256": "382aca7642a2ca554b75c1d6fb45b2edbc9a1c8035416611b5e4e70db2268205"
+    },
+    {
+      "path": "inputs/tests/pic_q009_coupled_inflow_lifetime.athinput",
+      "sha256": "6ae0c7418ef47e12ff488824bd602a579fd0aa11256db74c22c0110a8744b2b9"
+    },
+    {
+      "path": "inputs/tests/pic_q009_repeated_amr_lifetime.athinput",
+      "sha256": "d7683e43d56dc81eac4e154ea02599604288e5009923d54deaa6e536da409200"
+    },
+    {
+      "path": "inputs/tests/pic_q011_injection_distribution_runtime_local.athinput",
+      "sha256": "6e84e34a91e48b4933f26ee1c3354e95139ff89ddf75ec1b358a7a7d3c1d1c17"
+    },
+    {
+      "path": "inputs/tests/pic_q016_particle_provenance.athinput",
+      "sha256": "f1a284922beea1fa04eb2f09b49dfea208f91bae247e6a961e78213857cf7235"
+    },
+    {
+      "path": "inputs/tests/pic_q017_driver_telemetry.athinput",
+      "sha256": "8aac59b7316da649cebaeb2350c10c558dc481df460adf3d62c3867d30f2ca60"
+    },
+    {
+      "path": "inputs/tests/pic_q023_paper_bell_linear_1d_candidate.athinput",
+      "sha256": "b84fb1b046d3174c3ce6bdd5f9067173dccd0636557d57c047331bf0a42eb4d5"
+    },
+    {
+      "path": "inputs/tests/pic_q023_paper_bell_linear_2d_candidate.athinput",
+      "sha256": "b8a11ce7f7227210392de133bf52f71c265d86ab5ade73bf89a45a6449a3a23c"
+    },
+    {
+      "path": "inputs/tests/pic_q023_paper_bell_linear_3d_candidate.athinput",
+      "sha256": "a0fda35a71542e3c411c574a4c5069cbbae3776f02aa10dd44176a3102664103"
+    },
+    {
+      "path": "inputs/tests/pic_q029_extended_hall_normalization_candidate.athinput",
+      "sha256": "dc159e5f9a80aec8bb94723b69f5de9edaafd624889ac7ea9a88518b46e6bb80"
+    },
+    {
+      "path": "inputs/tests/pic_q029_hall_bell_linear_1d_candidate.athinput",
+      "sha256": "6a72d8f557d540cd4916353df665aa309c6bc0f900fa8fb0ec04549d5ac0acc9"
+    },
+    {
+      "path": "inputs/tests/pic_q029_hall_bell_linear_2d_candidate.athinput",
+      "sha256": "72ba6d20676cd0fd24f02c34669f00b54801d05060cb4b0a2395a65fa71f3d1c"
+    },
+    {
+      "path": "inputs/tests/pic_q029_hall_bell_linear_3d_candidate.athinput",
+      "sha256": "488c5ed3ee121d98dca9291c1a188bd5cb65c8af256057739b18c4d11a7c0a28"
+    },
+    {
+      "path": "inputs/tests/pic_q032_plotnikov_damped_crsi_candidate.athinput",
+      "sha256": "ae471a610d8c2c50367c58df372361c1dfeec08644224789f9cba8a55df722a9"
+    },
+    {
+      "path": "inputs/tests/pic_q032_reduced_static_neutral_runtime_local.athinput",
+      "sha256": "2210b7d3f9a49b81163e5ac3484660199374ceed4876b04acf72a24053b4ee62"
+    },
+    {
+      "path": "inputs/tests/pic_q033_crpai_transport_calibration_candidate.athinput",
+      "sha256": "77ffeb7bdfd1f1f2299db7e4ee257d105b580a6bd554cd244e6d9e0c8214ce58"
+    },
+    {
+      "path": "inputs/tests/pic_q033_crpai_transport_runtime_local.athinput",
+      "sha256": "ce60c5dc8c98499f6abb7913bbed6ce12ae5d95807aa2108bf2e09bfe6ffc4df"
+    },
+    {
+      "path": "inputs/tests/pic_refinement_boundary_amr_proxy.athinput",
+      "sha256": "05235701f265acecbec59bb2e8738dd000dbefb405edf1b62d0c9ad80e768179"
+    },
+    {
+      "path": "inputs/tests/pic_refinement_boundary_smr_proxy.athinput",
+      "sha256": "1a83eaf75e98505da648c2e6c65e38548e4cf448efdb9c558e28ba4b101eade3"
+    },
+    {
+      "path": "inputs/tests/pic_relativistic_gyro_paper.athinput",
+      "sha256": "994acc009bf7455d3666db44da2c8825b6124ce025a2e3547bef6e7c75992c8e"
+    },
+    {
+      "path": "inputs/tests/pic_restart_safety_guards.athinput",
+      "sha256": "4b6f6dd59d6dd7a50de20f7f72b780868b1eb5a7ecbde45fce89584410a9d324"
+    },
+    {
+      "path": "inputs/tests/pic_two_stream_growth_proxy.athinput",
+      "sha256": "670a7decbaa1ea10b22356d4517ad2d779fdba7a8df6050b4d88d6e29174d2f9"
+    },
+    {
+      "path": "inputs/tests/pic_two_stream_growth_publication.athinput",
+      "sha256": "058e1c02c1aad48f0109746b1cdde937446f768cc6fb8955459a6eee98e22a0a"
+    },
+    {
+      "path": "inputs/tests/pic_weibel_growth_proxy.athinput",
+      "sha256": "0e5f6619bb2d483d8a46f80eacde04c2b779ef79f3df739368d5d89c570f9912"
+    },
+    {
+      "path": "inputs/tests/pic_weibel_growth_publication.athinput",
+      "sha256": "8a5c959cd2d6ef037e449bb6078dd11ce0323064fb8f746d204b174c68a45155"
+    }
+  ],
+  "schema_version": 1
+}

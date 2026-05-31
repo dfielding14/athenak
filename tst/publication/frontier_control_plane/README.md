@@ -302,8 +302,15 @@ Create one candidate freeze from those derived Orion artifacts:
   --source-root /ccs/home/dfielding/athenak-pic \
   --executable "${PIC_ROOT}/bin/<git-commit12>/<profile>/athena" \
   --build-profile "${PIC_ROOT}/bin/<git-commit12>/<profile>/build_profile.json" \
-  --build-profile-id hip-mpi-release-paper-pic
+  --build-profile-id hip-mpi-release-paper-pic \
+  --prepared-artifact-inventory \
+    tst/publication/frontier_control_plane/prepared_pic_artifact_inventory.json
 ```
+
+Regenerate and review `prepared_pic_artifact_inventory.json` before the source
+commit is frozen. Freeze creation reads that committed JSON from `source.tar`
+and revalidates every listed PIC deck and publication analyzer checksum from
+archived bytes.
 
 The generated input build profile is structured JSON and binds the generated
 `git archive`, raw commit object, recursive-submodule source closure, exact

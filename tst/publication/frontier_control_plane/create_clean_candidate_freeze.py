@@ -23,6 +23,7 @@ from control_plane_common import direct_submodule_gitlinks, git_commit_tree_from
 from control_plane_common import git_tree_sha1_from_archive
 from control_plane_common import durable_mkdir_parents
 from control_plane_common import make_tree_read_only
+from control_plane_common import prepared_artifact_manifest_from_source_archive
 from control_plane_common import read_json, read_json_bytes
 from control_plane_common import read_stable_regular_file_below
 from control_plane_common import require_production_build_provenance
@@ -339,6 +340,7 @@ def create_freeze(
     executable: Path,
     build_profile: Path,
     build_profile_id: str,
+    prepared_artifact_inventory: str,
     freeze_id: str | None = None,
     control_plane_dir: Path = SCRIPT_DIR,
     authorized_pic_root: Path = AUTHORIZED_PIC_ROOT,
@@ -410,6 +412,10 @@ def create_freeze(
             != tree
         ):
             raise ValueError("Generated source archive tree differs from HEAD")
+        prepared_artifacts = prepared_artifact_manifest_from_source_archive(
+            staged_archive.read_bytes(),
+            inventory_path=prepared_artifact_inventory,
+        )
         archive_sha256 = sha256(staged_archive)
         staged_commit = temporary / "source.commit"
         staged_commit.write_bytes(_git_bytes(source_root, "cat-file", "commit", commit))
@@ -588,9 +594,10 @@ def create_freeze(
         frozen_profile = freeze_dir / staged_profile.name
         frozen_executable = freeze_dir / staged_executable.name
         manifest = {
-            "schema_version": 3,
+            "schema_version": 4,
             "freeze_id": identifier,
             "created_utc": _utc_now(),
+            "prepared_artifacts": prepared_artifacts,
             "source": {
                 "archive_path": str(archive),
                 "archive_sha256": archive_sha256,
@@ -634,6 +641,16 @@ def main() -> None:
     parser.add_argument("--executable", required=True, type=Path)
     parser.add_argument("--build-profile", required=True, type=Path)
     parser.add_argument("--build-profile-id", required=True)
+    parser.add_argument(
+        "--prepared-artifact-inventory",
+        required=True,
+        help=(
+            "committed source-relative JSON path; record paths are source-relative; format: "
+            '{"schema_version":1,"paper_decks":[{"path":"inputs/tests/example.athinput",'
+            '"sha256":"<64 lowercase hex>"}],"analyzers":[{"path":"tst/publication/'
+            'analyze_example.py","sha256":"<64 lowercase hex>"}]}'
+        ),
+    )
     parser.add_argument("--freeze-id")
     args = parser.parse_args()
     create_freeze(
@@ -641,6 +658,7 @@ def main() -> None:
         executable=args.executable,
         build_profile=args.build_profile,
         build_profile_id=args.build_profile_id,
+        prepared_artifact_inventory=args.prepared_artifact_inventory,
         freeze_id=args.freeze_id,
     )
 

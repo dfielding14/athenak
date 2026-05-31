@@ -91,8 +91,16 @@ export BIN_DIR="${PIC_ROOT}/bin/${GIT_COMMIT}/${CONFIG}"
   --source-root "$SRC_DIR" \
   --executable "${BIN_DIR}/athena" \
   --build-profile "${BIN_DIR}/build_profile.json" \
-  --build-profile-id hip-mpi-release-paper-pic
+  --build-profile-id hip-mpi-release-paper-pic \
+  --prepared-artifact-inventory \
+    tst/publication/frontier_control_plane/prepared_pic_artifact_inventory.json
 ```
+
+Before committing a candidate, regenerate
+`tst/publication/frontier_control_plane/prepared_pic_artifact_inventory.json`
+with `generate_prepared_pic_artifact_inventory.py` and review its diff. The
+freeze re-derives the committed inventory from `source.tar`, so a stale deck or
+analyzer checksum fails closed.
 
 `write_orion_build_profile.py` accepts no operator-selected executable, output,
 build-directory, log, command-file, or provenance-input paths. For

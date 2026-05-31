@@ -559,7 +559,30 @@ class SnapshotTests(unittest.TestCase):
         source_root.mkdir()
         subprocess.run(["git", "init", str(source_root)], check=True, capture_output=True)
         (source_root / "tracked.txt").write_text("tracked\n", encoding="utf-8")
-        subprocess.run(["git", "-C", str(source_root), "add", "tracked.txt"], check=True)
+        prepared = source_root / "prepared"
+        prepared.mkdir()
+        deck = prepared / "paper.athinput"
+        deck.write_text("<job>\nbasename = prepared-paper\n", encoding="utf-8")
+        analyzer = prepared / "analyze_paper.py"
+        analyzer.write_text("print('prepared analysis')\n", encoding="utf-8")
+        (prepared / "prepared_artifacts.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "paper_decks": [
+                        {"path": "prepared/paper.athinput", "sha256": sha256(deck)}
+                    ],
+                    "analyzers": [
+                        {"path": "prepared/analyze_paper.py", "sha256": sha256(analyzer)}
+                    ],
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        subprocess.run(["git", "-C", str(source_root), "add", "."], check=True)
         subprocess.run(
             [
                 "git",
@@ -577,6 +600,9 @@ class SnapshotTests(unittest.TestCase):
             capture_output=True,
         )
         return source_root
+
+    def _prepared_artifact_inventory(self) -> str:
+        return "prepared/prepared_artifacts.json"
 
     def _profile_writer_arguments(
         self, source_root: Path, profile_id: str = "test-profile"
@@ -743,6 +769,7 @@ class SnapshotTests(unittest.TestCase):
             executable=executable,
             build_profile=profile,
             build_profile_id="hip-mpi-release-paper-pic",
+            prepared_artifact_inventory=self._prepared_artifact_inventory(),
             freeze_id="03a7bd9a-7d4c-4e37-a12b-46de3817eff2",
             control_plane_dir=self.control_plane_dir,
             authorized_pic_root=self.pic_root,
@@ -5622,13 +5649,36 @@ PY
             self._reserve(manifest_path)
 
     def test_registered_science_accepts_exact_authorized_clean_candidate(self) -> None:
-        self._write_science_config(authorize=True)
+        candidate = self._write_science_config(authorize=True)
         manifest_path = self._create_manifest()
         reservation = self._reserve(manifest_path)
         candidate_sha256 = str(reservation["clean_candidate_manifest_sha256"])
         self.assertEqual(len(candidate_sha256), 64)
         self.assertEqual(reservation["submission_scope"], "registered_science")
+        prepared = json.loads(candidate.read_text(encoding="utf-8"))["prepared_artifacts"]
+        self.assertEqual(prepared["inventory_path"], self._prepared_artifact_inventory())
+        self.assertEqual(len(prepared["paper_decks"]), 1)
+        self.assertEqual(len(prepared["analyzers"]), 1)
         self.assertIn("clean_candidate_manifest_sha256", self.csv.read_text())
+
+    def test_registered_science_rejects_prepared_artifact_manifest_tamper(self) -> None:
+        candidate = self._write_science_config(authorize=True)
+        value = json.loads(candidate.read_text(encoding="utf-8"))
+        value["prepared_artifacts"]["paper_decks"][0]["sha256"] = "0" * 64
+        candidate.parent.chmod(0o755)
+        candidate.chmod(0o644)
+        candidate.write_text(json.dumps(value), encoding="utf-8")
+        candidate.chmod(0o444)
+        candidate.parent.chmod(0o555)
+        self._update_registered_science_candidate_sha(candidate)
+        self._write_policy(
+            science_submission_freeze=self._authorized_science_freeze(candidate),
+            admission_smoke_overrides={"status": "closed_after_pass"},
+        )
+        self._promote_policy()
+        manifest_path = self._create_manifest()
+        with self.assertRaisesRegex(ValueError, "differs from archived source inventory"):
+            self._reserve(manifest_path)
 
     def test_registered_science_accepts_historical_candidate_receipt_after_successor(
         self,
@@ -6007,6 +6057,7 @@ PY
             executable=executable,
             build_profile=profile,
             build_profile_id="test-profile",
+            prepared_artifact_inventory=self._prepared_artifact_inventory(),
             control_plane_dir=self.control_plane_dir,
             authorized_pic_root=self.pic_root,
         )
@@ -6014,6 +6065,27 @@ PY
         self.assertEqual(candidate["source"]["worktree_status"], "clean")
         self.assertEqual(candidate["source"]["submodule_status"], "absent")
         self.assertEqual(candidate["build"]["executable_sha256"], sha256(executable))
+        self.assertEqual(
+            candidate["prepared_artifacts"],
+            {
+                "inventory_path": self._prepared_artifact_inventory(),
+                "inventory_sha256": sha256(
+                    source_root / self._prepared_artifact_inventory()
+                ),
+                "paper_decks": [
+                    {
+                        "path": "prepared/paper.athinput",
+                        "sha256": sha256(source_root / "prepared" / "paper.athinput"),
+                    }
+                ],
+                "analyzers": [
+                    {
+                        "path": "prepared/analyze_paper.py",
+                        "sha256": sha256(source_root / "prepared" / "analyze_paper.py"),
+                    }
+                ],
+            },
+        )
         self.assertFalse(
             bool(Path(str(candidate["source"]["commit_path"])).stat().st_mode & 0o222)
         )
@@ -6029,6 +6101,43 @@ PY
                 candidate["source"]["git_commit"],
             )
         self.assertFalse(list(manifest_path.parent.parent.glob(".tmp-*")))
+
+    def test_clean_candidate_creator_rejects_missing_prepared_archive_member(self) -> None:
+        source_root = self._clean_source("missing-prepared-member-source")
+        inventory = source_root / self._prepared_artifact_inventory()
+        value = json.loads(inventory.read_text(encoding="utf-8"))
+        value["paper_decks"][0]["path"] = "prepared/missing.athinput"
+        inventory.write_text(json.dumps(value), encoding="utf-8")
+        subprocess.run(["git", "-C", str(source_root), "add", "."], check=True)
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(source_root),
+                "-c",
+                "user.name=PIC Test",
+                "-c",
+                "user.email=pic-test@example.invalid",
+                "commit",
+                "-m",
+                "reference missing prepared deck",
+            ],
+            check=True,
+            capture_output=True,
+        )
+        executable, profile = self._build_profile(
+            source_root, self.pic_root / "missing-prepared-member-build", "test-profile"
+        )
+        with self.assertRaisesRegex(ValueError, "not an exact regular member"):
+            create_freeze(
+                source_root=source_root,
+                executable=executable,
+                build_profile=profile,
+                build_profile_id="test-profile",
+                prepared_artifact_inventory=self._prepared_artifact_inventory(),
+                control_plane_dir=self.control_plane_dir,
+                authorized_pic_root=self.pic_root,
+            )
 
     def test_clean_candidate_creator_stages_captured_orion_input_bytes(self) -> None:
         source_root = self._clean_source("captured-input-source")
@@ -6068,6 +6177,7 @@ PY
                 executable=executable,
                 build_profile=profile,
                 build_profile_id="test-profile",
+                prepared_artifact_inventory=self._prepared_artifact_inventory(),
                 control_plane_dir=self.control_plane_dir,
                 authorized_pic_root=self.pic_root,
             )
@@ -6374,6 +6484,7 @@ PY
                 executable=executable,
                 build_profile=profile,
                 build_profile_id="test-profile",
+                prepared_artifact_inventory=self._prepared_artifact_inventory(),
                 control_plane_dir=self.control_plane_dir,
                 authorized_pic_root=self.pic_root,
             )
@@ -6393,6 +6504,7 @@ PY
                 executable=executable,
                 build_profile=profile,
                 build_profile_id="test-profile",
+                prepared_artifact_inventory=self._prepared_artifact_inventory(),
                 control_plane_dir=self.control_plane_dir,
                 authorized_pic_root=self.pic_root,
             )
@@ -6413,6 +6525,7 @@ PY
                     executable=executable,
                     build_profile=profile,
                     build_profile_id="test-profile",
+                    prepared_artifact_inventory=self._prepared_artifact_inventory(),
                     control_plane_dir=self.control_plane_dir,
                     authorized_pic_root=self.pic_root,
                 )
@@ -6429,6 +6542,7 @@ PY
             executable=executable,
             build_profile=profile,
             build_profile_id="test-profile",
+            prepared_artifact_inventory=self._prepared_artifact_inventory(),
             control_plane_dir=self.control_plane_dir,
             authorized_pic_root=self.pic_root,
             authorized_source_root=source_root,
@@ -6509,6 +6623,7 @@ PY
                 executable=executable,
                 build_profile=profile,
                 build_profile_id="test-profile",
+                prepared_artifact_inventory=self._prepared_artifact_inventory(),
                 control_plane_dir=self.control_plane_dir,
                 authorized_pic_root=self.pic_root,
                 authorized_source_root=source_root,
@@ -6587,6 +6702,7 @@ PY
             executable=executable,
             build_profile=profile,
             build_profile_id="test-profile",
+            prepared_artifact_inventory=self._prepared_artifact_inventory(),
             control_plane_dir=self.control_plane_dir,
             authorized_pic_root=self.pic_root,
         )
@@ -7009,6 +7125,7 @@ PY
                 executable=executable,
                 build_profile=profile,
                 build_profile_id="alias-profile",
+                prepared_artifact_inventory=self._prepared_artifact_inventory(),
                 freeze_id=str(uuid.uuid4()),
                 control_plane_dir=self.control_plane_dir,
                 authorized_pic_root=self.pic_root,
@@ -7069,6 +7186,7 @@ PY
                     executable=executable,
                     build_profile=profile,
                     build_profile_id="must-reject-alias",
+                    prepared_artifact_inventory=self._prepared_artifact_inventory(),
                     control_plane_dir=alias,
                     authorized_pic_root=self.pic_root,
                 )
@@ -7396,6 +7514,22 @@ PY
             schema["properties"]["build"]["properties"]["profile_id"],
             {"const": "hip-mpi-release-paper-pic"},
         )
+
+    def test_clean_candidate_schema_requires_prepared_artifact_inventories(self) -> None:
+        schema = json.loads(
+            (self.control_plane_dir / "clean_candidate.schema.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(schema["properties"]["schema_version"], {"const": 4})
+        self.assertIn("prepared_artifacts", schema["required"])
+        prepared = schema["properties"]["prepared_artifacts"]
+        self.assertEqual(
+            set(prepared["required"]),
+            {"inventory_path", "inventory_sha256", "paper_decks", "analyzers"},
+        )
+        self.assertEqual(prepared["properties"]["paper_decks"]["minItems"], 1)
+        self.assertEqual(prepared["properties"]["analyzers"]["minItems"], 1)
 
     def test_production_semantics_reject_self_authored_profile_receipt_chain(self) -> None:
         from control_plane_common import AUTHORIZED_PIC_ROOT

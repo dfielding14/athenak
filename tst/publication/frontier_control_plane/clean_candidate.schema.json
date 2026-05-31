@@ -8,12 +8,33 @@
     "schema_version",
     "freeze_id",
     "created_utc",
+    "prepared_artifacts",
     "source",
     "build"
   ],
+  "$defs": {
+    "preparedArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "pattern": "^(?!/)(?!.*//)(?!.*(?:^|/)\\.\\.?(?:/|$))[^\\s/]+(?:/[^\\s/]+)*$"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    }
+  },
   "properties": {
     "schema_version": {
-      "const": 3
+      "const": 4
     },
     "freeze_id": {
       "type": "string",
@@ -23,6 +44,44 @@
       "type": "string",
       "format": "date-time",
       "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,6})?Z$"
+    },
+    "prepared_artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "inventory_path",
+        "inventory_sha256",
+        "paper_decks",
+        "analyzers"
+      ],
+      "properties": {
+        "inventory_path": {
+          "type": "string",
+          "pattern": "^(?!/)(?!.*//)(?!.*(?:^|/)\\.\\.?(?:/|$))[^\\s/]+(?:/[^\\s/]+)*$"
+        },
+        "inventory_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "paper_decks": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4096,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/preparedArtifact"
+          }
+        },
+        "analyzers": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4096,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/preparedArtifact"
+          }
+        }
+      }
     },
     "source": {
       "type": "object",

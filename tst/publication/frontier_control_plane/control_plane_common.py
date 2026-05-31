@@ -662,6 +662,127 @@ def canonical_relative_posix_path(value: object, *, field: str) -> PurePosixPath
     return path
 
 
+def _source_archive_regular_files(data: bytes) -> dict[str, bytes]:
+    """Return exact regular-file members from one validated source archive."""
+    records: dict[str, bytes] = {}
+    names: set[str] = set()
+    with tarfile.open(fileobj=io.BytesIO(data), mode="r:*") as stream:
+        for member in stream.getmembers():
+            path = PurePosixPath(member.name)
+            canonical_name = path.as_posix()
+            if path.is_absolute() or not path.parts or any(
+                part in {"", ".", ".."} for part in path.parts
+            ) or member.name != canonical_name:
+                raise ValueError(f"Unsafe path in source archive: {member.name!r}")
+            if canonical_name in names:
+                raise ValueError(f"Duplicate path in source archive: {member.name!r}")
+            names.add(canonical_name)
+            if not member.isfile():
+                continue
+            extracted = stream.extractfile(member)
+            if extracted is None:
+                raise ValueError(f"Cannot read source-archive member: {member.name!r}")
+            records[canonical_name] = extracted.read()
+    return records
+
+
+def _prepared_artifact_records(
+    value: object, *, field: str, source_files: dict[str, bytes]
+) -> list[dict[str, str]]:
+    if not isinstance(value, list) or not 1 <= len(value) <= 4096:
+        raise ValueError(f"{field} must contain between 1 and 4096 records")
+    records: list[dict[str, str]] = []
+    for raw in value:
+        if not isinstance(raw, dict) or set(raw) != {"path", "sha256"}:
+            raise ValueError(f"{field} record is malformed")
+        path = canonical_relative_posix_path(
+            raw.get("path"), field=f"{field} path"
+        ).as_posix()
+        digest = str(raw.get("sha256", ""))
+        if re.fullmatch(r"[0-9a-f]{64}", digest) is None:
+            raise ValueError(f"{field} SHA-256 is malformed: {path}")
+        data = source_files.get(path)
+        if data is None:
+            raise ValueError(
+                f"{field} path is not an exact regular member of the source archive: {path}"
+            )
+        if sha256_bytes(data) != digest:
+            raise ValueError(f"{field} archived-byte checksum mismatch: {path}")
+        records.append({"path": path, "sha256": digest})
+    paths = [record["path"] for record in records]
+    if paths != sorted(set(paths)):
+        raise ValueError(f"{field} must use unique canonical path order")
+    return records
+
+
+def prepared_artifact_manifest_from_source_archive(
+    source_archive: bytes, *, inventory_path: object
+) -> dict[str, object]:
+    """Derive one prepared-artifact manifest from a committed source inventory."""
+    source_files = _source_archive_regular_files(source_archive)
+    normalized_inventory_path = canonical_relative_posix_path(
+        inventory_path, field="Prepared-artifact inventory path"
+    ).as_posix()
+    inventory_bytes = source_files.get(normalized_inventory_path)
+    if inventory_bytes is None:
+        raise ValueError(
+            "Prepared-artifact inventory path is not an exact regular member "
+            f"of the source archive: {normalized_inventory_path}"
+        )
+    inventory = read_json_bytes(
+        inventory_bytes, label=f"prepared-artifact inventory {normalized_inventory_path}"
+    )
+    if set(inventory) != {"schema_version", "paper_decks", "analyzers"}:
+        raise ValueError("Prepared-artifact inventory has unexpected fields")
+    if inventory.get("schema_version") != 1:
+        raise ValueError("Unsupported prepared-artifact inventory schema")
+    paper_decks = _prepared_artifact_records(
+        inventory.get("paper_decks"),
+        field="Prepared paper-deck inventory",
+        source_files=source_files,
+    )
+    analyzers = _prepared_artifact_records(
+        inventory.get("analyzers"),
+        field="Prepared analyzer inventory",
+        source_files=source_files,
+    )
+    paths = [record["path"] for record in paper_decks + analyzers]
+    if normalized_inventory_path in paths or len(paths) != len(set(paths)):
+        raise ValueError(
+            "Prepared-artifact paths must be distinct from each other and the inventory"
+        )
+    return {
+        "inventory_path": normalized_inventory_path,
+        "inventory_sha256": sha256_bytes(inventory_bytes),
+        "paper_decks": paper_decks,
+        "analyzers": analyzers,
+    }
+
+
+def validate_prepared_artifact_closure(
+    value: object, *, source_archive: bytes
+) -> dict[str, object]:
+    """Revalidate candidate-level prepared artifacts against archived source bytes."""
+    if not isinstance(value, dict) or set(value) != {
+        "inventory_path",
+        "inventory_sha256",
+        "paper_decks",
+        "analyzers",
+    }:
+        raise ValueError("Clean-candidate prepared-artifact attestation has unexpected fields")
+    inventory_sha256 = str(value.get("inventory_sha256", ""))
+    if re.fullmatch(r"[0-9a-f]{64}", inventory_sha256) is None:
+        raise ValueError("Prepared-artifact inventory SHA-256 is malformed")
+    expected = prepared_artifact_manifest_from_source_archive(
+        source_archive, inventory_path=value.get("inventory_path")
+    )
+    if value != expected:
+        raise ValueError(
+            "Clean-candidate prepared-artifact manifest differs from archived source inventory"
+        )
+    return expected
+
+
 def _git_object_sha1(kind: str, data: bytes) -> bytes:
     header = f"{kind} {len(data)}\0".encode("ascii")
     return hashlib.sha1(header + data).digest()
@@ -874,9 +995,16 @@ def validate_clean_candidate_bundle(
             else authorized_source_root
         )
     )
-    if set(candidate) != {"schema_version", "freeze_id", "created_utc", "source", "build"}:
+    if set(candidate) != {
+        "schema_version",
+        "freeze_id",
+        "created_utc",
+        "prepared_artifacts",
+        "source",
+        "build",
+    }:
         raise ValueError("Clean-candidate manifest has unexpected top-level fields")
-    if candidate.get("schema_version") != 3:
+    if candidate.get("schema_version") != 4:
         raise ValueError("Unsupported clean-candidate manifest schema")
     source = candidate.get("source")
     build = candidate.get("build")
@@ -1015,6 +1143,9 @@ def validate_clean_candidate_bundle(
         != git_tree
     ):
         raise ValueError("Clean-candidate source archive does not match its Git tree")
+    validate_prepared_artifact_closure(
+        candidate.get("prepared_artifacts"), source_archive=source_archive
+    )
     bundle_digest = source_bundle_sha256(
         source_digest, source_commit_digest, profile_records
     )
