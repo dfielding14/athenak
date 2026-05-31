@@ -373,9 +373,19 @@ def _use_staged_tree(logical_root: Path, staged_tree: Any):
         _STAGED_TREES.reset(token)
 
 
-def _tree_io_path(path: Path) -> Path:
+def _tree_file_io_path(path: Path) -> Path:
+    """Route one retained regular file through the active sealed snapshot."""
     for logical_root, staged_tree in reversed(_STAGED_TREES.get()):
-        routed = staged_tree.io_path(logical_root, path)
+        routed = staged_tree.file_io_path(logical_root, path)
+        if routed != path:
+            return routed
+    return path
+
+
+def _tree_directory_io_path(path: Path) -> Path:
+    """Route one retained directory through the active topology snapshot."""
+    for logical_root, staged_tree in reversed(_STAGED_TREES.get()):
+        routed = staged_tree.directory_io_path(logical_root, path)
         if routed != path:
             return routed
     return path
@@ -1282,8 +1292,8 @@ def _authorized_orion_runtime_root(path: Path) -> Path:
 
 def _contained_regular_file(root: Path, path: Path) -> Path:
     """Require one self-contained regular artifact below its retained root."""
-    io_root = _tree_io_path(root)
-    io_path = _tree_io_path(path)
+    io_root = _tree_directory_io_path(root)
+    io_path = _tree_file_io_path(path)
     if is_sealed_snapshot_member(io_path):
         try:
             path.relative_to(root)
@@ -1718,6 +1728,7 @@ def _validate_pinned_executable_binding(root: Path) -> dict[str, Any]:
     if (
         not isinstance(binding, dict)
         or set(binding) != PINNED_EXECUTABLE_BINDING_KEYS
+        or type(binding.get("schema_version")) is not int
         or binding.get("schema_version") != 1
     ):
         raise ContractError("Q-007 pinned executable binding schema drifted")
@@ -1802,7 +1813,7 @@ def _validate_pinned_executable_binding(root: Path) -> dict[str, Any]:
     expected_pin_files = PIN_RETAINED_EVIDENCE | {
         INVENTORY_NAME, FREEZE_RECEIPT_NAME, PIN_PROVENANCE_RECEIPT_NAME, "bin/athena",
     }
-    io_pinned_root = _tree_io_path(pinned_root)
+    io_pinned_root = _tree_directory_io_path(pinned_root)
     measured_pin_files = _tree_relative_files(pinned_root)
     if measured_pin_files != expected_pin_files:
         raise ContractError("Q-007 pinned executable tree file topology drifted")
@@ -1840,7 +1851,7 @@ def _validate_pinned_executable_binding(root: Path) -> dict[str, Any]:
     )
     validate_serial_host_build_evidence(
         io_pinned_root,
-        file_resolver=lambda relative: _tree_io_path(pinned_root / relative),
+        file_resolver=lambda relative: _tree_file_io_path(pinned_root / relative),
         error_type=ContractError,
         label="Q-007 pinned executable serial-host build evidence",
     )
@@ -1910,6 +1921,7 @@ def _validate_runtime_invocations(root: Path, pinned: dict[str, Any]) -> dict[st
         if (
             not isinstance(invocation, dict)
             or set(invocation) != RUNTIME_INVOCATION_KEYS
+            or type(invocation.get("schema_version")) is not int
             or invocation.get("schema_version") != 1
         ):
             raise ContractError(f"{label}: Q-007 invocation schema drifted")

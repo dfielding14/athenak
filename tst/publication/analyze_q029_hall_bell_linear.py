@@ -540,7 +540,11 @@ def analyze_launch_preparation_bundle(bundle: dict[str, Any]) -> dict[str, Any]:
     """Analyze only variant preparation and never emit Hall-Bell qualification."""
     if not isinstance(bundle, dict) or set(bundle) != _BUNDLE_KEYS:
         raise ContractError("Q-029 launch-preparation bundle keys do not match")
-    if bundle["schema_version"] != 1 or bundle["campaign_id"] != CAMPAIGN_ID:
+    if (
+        type(bundle["schema_version"]) is not int
+        or bundle["schema_version"] != 1
+        or bundle["campaign_id"] != CAMPAIGN_ID
+    ):
         raise ContractError("Q-029 launch-preparation bundle identity mismatch")
     if bundle["artifact_role"] != ARTIFACT_ROLE:
         raise ContractError("Q-029 bundle is not source-local launch preparation")

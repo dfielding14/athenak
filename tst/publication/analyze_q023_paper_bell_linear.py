@@ -1064,7 +1064,8 @@ def analyze_trace_bundle(
     if set(bundle) != {"schema_version", "campaign_id", "qualifying_seed", "records"}:
         raise ContractError("Bell extracted-trace bundle keys do not match the contract")
     if (
-        bundle["schema_version"] != TRACE_SCHEMA_VERSION
+        type(bundle["schema_version"]) is not int
+        or bundle["schema_version"] != TRACE_SCHEMA_VERSION
         or bundle["campaign_id"] != CAMPAIGN_ID
     ):
         raise ContractError("Bell extracted-trace bundle identity mismatch")

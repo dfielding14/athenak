@@ -742,7 +742,7 @@ def prepared_artifact_manifest_from_source_archive(
     )
     if set(inventory) != {"schema_version", "paper_decks", "analyzers"}:
         raise ValueError("Prepared-artifact inventory has unexpected fields")
-    if inventory.get("schema_version") != 1:
+    if type(inventory.get("schema_version")) is not int or inventory.get("schema_version") != 1:
         raise ValueError("Unsupported prepared-artifact inventory schema")
     paper_decks = _prepared_artifact_records(
         inventory.get("paper_decks"),
@@ -1034,7 +1034,7 @@ def validate_clean_candidate_bundle(
         "build",
     }:
         raise ValueError("Clean-candidate manifest has unexpected top-level fields")
-    if candidate.get("schema_version") != 4:
+    if type(candidate.get("schema_version")) is not int or candidate.get("schema_version") != 4:
         raise ValueError("Unsupported clean-candidate manifest schema")
     source = candidate.get("source")
     build = candidate.get("build")
@@ -2009,7 +2009,7 @@ def validate_launch_contract(value: object) -> dict[str, object]:
             "Launch contract must contain only schema_version, executor, "
             "pre_actions, actions and post_actions"
         )
-    if value.get("schema_version") != 1:
+    if type(value.get("schema_version")) is not int or value.get("schema_version") != 1:
         raise ValueError("Unsupported launch-contract schema")
     if value.get("executor") != TRUSTED_LAUNCH_EXECUTOR:
         raise ValueError("Launch contract does not select the trusted Athena executor")

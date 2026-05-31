@@ -103,7 +103,10 @@ def _authorization(
         "jobs",
     }:
         raise ValueError("Manual-accounting authorization has an unsupported shape")
-    if authorization.get("schema_version") != 1:
+    if (
+        type(authorization.get("schema_version")) is not int
+        or authorization.get("schema_version") != 1
+    ):
         raise ValueError("Manual-accounting authorization schema is unsupported")
     authorization_id = authorization.get("authorization_id")
     if (

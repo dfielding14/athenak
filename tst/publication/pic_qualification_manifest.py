@@ -765,7 +765,11 @@ def _require_frontier_completed_evidence_binding(
         result = read_json_bytes(
             evidence["analysis_result"], label="Frontier structured analysis result"
         )
-        if result.get("schema_version") != 1 or result.get("status") != "pass":
+        if (
+            type(result.get("schema_version")) is not int
+            or result.get("schema_version") != 1
+            or result.get("status") != "pass"
+        ):
             raise ValueError("Frontier structured analysis result is not a passing result")
         receipt = read_json_bytes(
             evidence["offline_analysis_receipt"], label="Frontier offline analysis receipt"

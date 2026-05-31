@@ -2,13 +2,13 @@
   "record_type": "phase0_curated_candidate_successor",
   "schema_version": 1,
   "date": "2026-05-31",
-  "status": "successor_topology_race_repair_committed_pending_review_install_and_freeze",
+  "status": "successor_containment_and_schema_repair_pending_review_install_and_freeze",
   "qualification_effect": "none",
   "live_paired_control_plane_version": "6f3458ca5c412b866f579d67dde51d73497b65629f6e7a35e10a3af84d7ecd8b",
-  "successor_source_control_plane_version": "273da436765b471f2bf21aa5d109d47b4af905f611c01d604b08015a48ef5acd",
+  "successor_source_control_plane_version": "35e240ad4ff600c6e9ee2eeb64068e3d14bcb0751c0429214a7697ad5e54b2ec",
   "prepared_artifacts": {
     "inventory_path": "tst/publication/frontier_control_plane/prepared_pic_artifact_inventory.json",
-    "inventory_sha256": "75f06573b2b313a7c258bd5ab4234e03b18c238c90882daf03f47f78c85a6ba1",
+    "inventory_sha256": "73ac23929eaeb543a8a4c6ffc7788142769f8fdcb6a91340a3738ba8a4a27921",
     "paper_deck_count": 87,
     "publication_analyzer_count": 12,
     "closure_policy": "canonical inventory path plus exact archived inputs/tests/pic*.athinput and tst/publication/analyze_*.py membership"
@@ -22,7 +22,9 @@
     "sealed snapshot topology maps are compared back to the verified retained tree before handoff",
     "multi-pass source archive, dependency archive and ELF validators inspect mutation-checked sealed byte copies",
     "Q-006 and Q-007 reject unrelated sealed descriptors that were not routed by an active retained-tree snapshot",
-    "active retained-tree snapshots reject unknown post-handoff members while preserving verified topology-only directories",
+    "active retained-tree snapshots reject unknown post-handoff members and use separate sealed-file and topology-directory routing APIs",
+    "release-sensitive retained metadata text is consumed only from sealed descriptor-backed snapshot members",
+    "control-plane and publication schema-version guards require exact integers and reject Python boolean or float aliases",
     "transition policy clears historical registered-science slices and marks the schema-v4 clean-candidate freeze pending"
   ],
   "remaining_phase0_actions": [

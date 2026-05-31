@@ -362,6 +362,7 @@ def _load_preparation_record(path: Path = PREPARATION_RECORD) -> dict[str, Any]:
     _require_exact_keys(record, _PREPARATION_KEYS, "Q-029 preparation record")
     if (
         record["record_type"] != "q029_hall_bell_linear_source_local_preparation"
+        or type(record["schema_version"]) is not int
         or record["schema_version"] != 1
         or record["gate"] != "Q-029"
         or record["campaign_id"] != CAMPAIGN_ID
@@ -901,7 +902,8 @@ def validate_raw_trace_bundle(
     """Replay exact artifacts and reject extracted-bundle schema or value drift."""
     _require_exact_keys(bundle, _BUNDLE_KEYS, "Q-029 projected raw-trace bundle")
     if (
-        bundle["schema_version"] != SCHEMA_VERSION
+        type(bundle["schema_version"]) is not int
+        or bundle["schema_version"] != SCHEMA_VERSION
         or bundle["campaign_id"] != CAMPAIGN_ID
         or bundle["artifact_role"] != ARTIFACT_ROLE
         or bundle["qualification_effect"] != QUALIFICATION_EFFECT

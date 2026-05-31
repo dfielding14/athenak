@@ -558,7 +558,11 @@ def analyze_synthetic_contract_bundle(bundle: dict[str, Any]) -> dict[str, Any]:
     deck = validate_candidate_deck()
     if not isinstance(bundle, dict) or set(bundle) != _BUNDLE_KEYS:
         raise ContractError("Q-033 synthetic bundle keys do not match the contract")
-    if bundle["schema_version"] != 1 or bundle["campaign_id"] != CAMPAIGN_ID:
+    if (
+        type(bundle["schema_version"]) is not int
+        or bundle["schema_version"] != 1
+        or bundle["campaign_id"] != CAMPAIGN_ID
+    ):
         raise ContractError("Q-033 synthetic bundle identity mismatch")
     if bundle["artifact_role"] != ARTIFACT_ROLE:
         raise ContractError("Q-033 bundle is not synthetic transport-contract input")

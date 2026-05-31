@@ -269,7 +269,8 @@ def validate_materialization_request(request: Any) -> list[dict[str, Any]]:
     if set(request) != _REQUEST_KEYS:
         raise ContractError("Q-023 materialization request fields do not match")
     if (
-        request["schema_version"] != SCHEMA_VERSION
+        type(request["schema_version"]) is not int
+        or request["schema_version"] != SCHEMA_VERSION
         or request["campaign_id"] != CAMPAIGN_ID
         or request["artifact_role"] != ARTIFACT_ROLE
     ):

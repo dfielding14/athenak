@@ -319,7 +319,7 @@ def _verify_manifest(
         control_plane_dir, authorized_pic_root=authorized_pic_root
     )
     manifest = read_json(manifest_path)
-    if manifest.get("schema_version") != 1:
+    if type(manifest.get("schema_version")) is not int or manifest.get("schema_version") != 1:
         raise ValueError("Unsupported pre-submit manifest schema")
     pic_root = Path(str(manifest["pic_root"])).resolve()
     if pic_root != authorized_pic_root.resolve():
@@ -1359,7 +1359,8 @@ def repair_reservation_attachments(
             return "cleared_completed_reconciliation_pending_marker"
         if latest is None:
             if (
-                marker.get("schema_version") != 2
+                type(marker.get("schema_version")) is not int
+                or marker.get("schema_version") != 2
                 or marker.get("control_plane_version") != inventory["version"]
                 or set(marker) != {
                     "schema_version",

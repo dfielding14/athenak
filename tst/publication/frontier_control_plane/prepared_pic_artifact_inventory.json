@@ -10,11 +10,11 @@
     },
     {
       "path": "tst/publication/analyze_q006_paper_multispecies_oscillation_runtime_local.py",
-      "sha256": "32a724ed7ccaa26473bb5d580c9a2f5ac0a41260430269ac72be94e1e91be3c2"
+      "sha256": "73c87209e216fae28aa27c547ea5f09a27f4620ea681ab13f4d6cff820021858"
     },
     {
       "path": "tst/publication/analyze_q007_paper_deltaf_linear_preparation.py",
-      "sha256": "96edd2bba902e30d5ebd7089992131917f426a9ae39f797d824360aefee82525"
+      "sha256": "64e7efd689b3cecbd5f06e9432e3011620509ddd77339d970a74c2336f2cfdde"
     },
     {
       "path": "tst/publication/analyze_q011_injection_distribution_runtime_local.py",
@@ -22,27 +22,27 @@
     },
     {
       "path": "tst/publication/analyze_q023_paper_bell_linear.py",
-      "sha256": "bc997159339d708fb8b1e3d2f6062ea5d8e6dc59e038f1cdc98ebe5427881f63"
+      "sha256": "f08fcf115754cb4f2fc50816e4df2bf90418b93161b854cd7c60471f0e42c0dc"
     },
     {
       "path": "tst/publication/analyze_q029_hall_bell_linear.py",
-      "sha256": "ad3411ad07bcc771c6bddc7ebaaca129c60aa5675df2aa151961a7eab07a94c1"
+      "sha256": "5a8d713b344873ef0cd74efb529d3ba5d638c2f1f5d8ffb834fe8ac14f9a4aa4"
     },
     {
       "path": "tst/publication/analyze_q029_hall_bell_linear_raw.py",
-      "sha256": "18d47ed8630a7187e628f28966ed572eafb2ba735bc66c400755ffdbf626e6e8"
+      "sha256": "92a36b87ddfb8ee28487edced573549d2996554c90eb61f3adc21d6b8d981808"
     },
     {
       "path": "tst/publication/analyze_q029_hall_extension_candidate.py",
-      "sha256": "6d5c4c287dcd834ad3e4212677b2d417d5eac0834ae51444c6f1b64cf2636626"
+      "sha256": "ea88929fb6d8cef9d273e1762ec0b3fec90edc16d760df82e8f068f0d4075fd5"
     },
     {
       "path": "tst/publication/analyze_q032_plotnikov_damped_crsi_candidate.py",
-      "sha256": "9b4b0b00f37ec1c8d63cffaaf1a1680665a3c5559b18dd327899d9780e57fd2c"
+      "sha256": "9eb56aede164c4aa0f2a27f6c7bebc93a292ed5546aa1bcb456cd4e618003c64"
     },
     {
       "path": "tst/publication/analyze_q033_crpai_transport_calibration_candidate.py",
-      "sha256": "4bc59655126c937a5eaafcff51dc3d1fd1191b733868124c7e79553db4db72ad"
+      "sha256": "a5a3c006a2f5fa9a83097cd16d8f29fe9d4320b2da3e92c0675621bafdb88663"
     },
     {
       "path": "tst/publication/analyze_q033_crpai_transport_runtime_local.py",

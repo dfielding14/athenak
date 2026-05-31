@@ -405,8 +405,41 @@ class ImmutableOrionTreeTests(unittest.TestCase):
                         analyze_q007_paper_deltaf_linear_preparation,
                     ):
                         with analyzer._use_staged_tree(tree, snapshot):
-                            with self.assertRaisesRegex(ValueError, "snapshot member is absent"):
+                            with self.assertRaisesRegex(ValueError, "snapshot regular member is absent"):
                                 analyzer._contained_regular_file(tree, tree / "injected.txt")
+            finally:
+                _make_writable_tree(tree)
+
+    def test_q006_and_q007_reject_verified_directory_replaced_by_regular_file(self) -> None:
+        from tst.publication import analyze_q006_paper_multispecies_oscillation_runtime_local
+        from tst.publication import analyze_q007_paper_deltaf_linear_preparation
+
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            tree = base / "retained"
+            tree.mkdir()
+            (tree / "topology-only").mkdir()
+            try:
+                report = immutable_orion_tree.freeze_tree(
+                    tree,
+                    _RECEIPT,
+                    authorized_root=base,
+                )
+                with immutable_orion_tree.staged_verified_frozen_tree(
+                    tree,
+                    report["inventory_sha256"],
+                    authorized_root=base,
+                ) as (_, snapshot):
+                    replaced = snapshot.staged_root / "topology-only"
+                    replaced.rmdir()
+                    replaced.write_text("attacker bytes\n", encoding="utf-8")
+                    for analyzer in (
+                        analyze_q006_paper_multispecies_oscillation_runtime_local,
+                        analyze_q007_paper_deltaf_linear_preparation,
+                    ):
+                        with analyzer._use_staged_tree(tree, snapshot):
+                            with self.assertRaisesRegex(ValueError, "regular member is absent"):
+                                analyzer._contained_regular_file(tree, tree / "topology-only")
             finally:
                 _make_writable_tree(tree)
 
@@ -597,32 +630,32 @@ class ImmutableOrionTreeTests(unittest.TestCase):
                 )
             self.assertTrue(report["passed"])
 
-    def test_metadata_text_read_rejects_inplace_rewrite_during_read(self) -> None:
+    def test_metadata_text_read_requires_sealed_snapshot_member(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "metadata.json"
             path.write_text('{"state": "original"}\n', encoding="utf-8")
-            original_read = immutable_orion_tree.os.read
-            rewritten = False
-
-            def rewrite_after_first_chunk(fd: int, count: int) -> bytes:
-                nonlocal rewritten
-                payload = original_read(fd, count)
-                if payload and not rewritten:
-                    path.write_text('{"state": "replacement"}\n', encoding="utf-8")
-                    rewritten = True
-                return payload
-
-            with mock.patch.object(
-                immutable_orion_tree.os,
-                "read",
-                side_effect=rewrite_after_first_chunk,
-            ):
-                with self.assertRaisesRegex(ValueError, "changed while reading"):
+            with self.assertRaisesRegex(ValueError, "not a sealed snapshot member"):
+                immutable_orion_tree._read_regular_text(
+                    path,
+                    error_type=ValueError,
+                    label="metadata test",
+                )
+            fd = immutable_orion_tree._sealed_memfd(
+                path.read_bytes(),
+                path.stat().st_mode,
+                name="metadata-test",
+            )
+            try:
+                self.assertEqual(
                     immutable_orion_tree._read_regular_text(
-                        path,
+                        Path("/proc/self/fd") / str(fd),
                         error_type=ValueError,
                         label="metadata test",
-                    )
+                    ),
+                    '{"state": "original"}\n',
+                )
+            finally:
+                os.close(fd)
 
 
 if __name__ == "__main__":

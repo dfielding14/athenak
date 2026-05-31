@@ -61,11 +61,12 @@ scheduler-pretimeout, and Frontier-filesystem drills remain open.
 The bounded local analytical, conservation, restart and portability tranches
 are archived. The reviewed Orion-only storage policy, paired immutable control
 plane and mirrored ledger genesis were initialized by predecessor snapshots.
-Strict successor `6f3458ca` passed fresh independent adversarial audits and
-paired immutable promotion. New Frontier submissions remain paused until their
-applicable prerequisite gates close and a reviewed campaign-specific immutable
-registration is promoted. Run only registered, budget-tracked Frontier
-campaigns.
+The historically installed `6f3458ca` control-plane generation is chronology
+only and must not launch a new Frontier job. New Frontier submissions remain
+prohibited until the reviewed successor is installed on both paired roots,
+promoted, bound to a canonical clean-candidate freeze and authorized by a
+campaign-specific immutable registration. After that transition, run only
+registered, budget-tracked Frontier campaigns.
 
 ## Non-Negotiable Rules For Future Agents
 

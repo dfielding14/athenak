@@ -206,7 +206,9 @@ def _read_regular_text(
     error_type: type[ValueError],
     label: str,
 ) -> str:
-    """Read one self-contained regular UTF-8 file without following its final link."""
+    """Read one sealed regular UTF-8 snapshot member."""
+    if not _is_sealed_memfd_reference(path):
+        _raise(error_type, label, f"retained metadata file is not a sealed snapshot member: {path}")
     fd = _open_self_contained_regular(path, error_type=error_type, label=label)
     try:
         payload, _ = _read_open_regular_bytes(fd, path, error_type=error_type, label=label)
@@ -613,23 +615,37 @@ class VerifiedFrozenTree:
             )
         return Path("/proc/self/fd") / str(self._fds[text])
 
-    def io_path(self, logical_root: Path, path: Path) -> Path:
-        """Route one logical or staged member to a sealed file or topology-only directory."""
+    def _relative_for_io(self, logical_root: Path, path: Path) -> Path | None:
+        """Return the captured-tree label for one logical or staged path."""
         try:
-            relative = path.relative_to(logical_root)
+            return path.relative_to(logical_root)
         except ValueError:
             try:
-                relative = path.relative_to(self.staged_root)
+                return path.relative_to(self.staged_root)
             except ValueError:
-                return path
+                return None
+
+    def file_io_path(self, logical_root: Path, path: Path) -> Path:
+        """Route one captured regular member to an immutable procfs handle."""
+        relative = self._relative_for_io(logical_root, path)
+        if relative is None:
+            return path
+        if relative == Path("."):
+            raise ValueError("sealed snapshot regular member is absent: .")
+        self._relative_text(relative)
+        return self.member_path(relative)
+
+    def directory_io_path(self, logical_root: Path, path: Path) -> Path:
+        """Route one captured topology-only directory to its staging path."""
+        relative = self._relative_for_io(logical_root, path)
+        if relative is None:
+            return path
         if relative == Path("."):
             return self.staged_root
         self._relative_text(relative)
-        if self.has_file(relative):
-            return self.member_path(relative)
         if self.has_directory(relative):
             return self.staged_root / relative
-        raise ValueError(f"sealed snapshot member is absent: {relative.as_posix()}")
+        raise ValueError(f"sealed snapshot directory is absent: {relative.as_posix()}")
 
     def logical_path_for_io(self, logical_root: Path, path: str | Path) -> Path | None:
         """Map a staged-directory or sealed-fd label back to its retained logical label."""

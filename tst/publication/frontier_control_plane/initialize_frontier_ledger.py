@@ -138,6 +138,7 @@ def migrate_anchor_from_active_policy(
             "project_home_policy_path",
             "policy_sha256",
         }
+        or type(promotion.get("schema_version")) is not int
         or promotion.get("schema_version") != 1
         or not re.fullmatch(
             r"[0-9a-f]{64}", str(promotion.get("control_plane_version", ""))

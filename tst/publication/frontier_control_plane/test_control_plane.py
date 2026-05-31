@@ -37,6 +37,7 @@ from control_plane_common import git_tree_sha1_from_archive
 from control_plane_common import read_stable_regular_file_below, remove_tree
 from control_plane_common import require_ledger_paths
 from control_plane_common import launch_contract_sha256, record_for_role, sha256
+from control_plane_common import prepared_artifact_manifest_from_source_archive
 from control_plane_common import source_bundle_sha256
 from control_plane_common import scheduler_account_matches_authorized
 from control_plane_common import stable_serialization_anchor
@@ -3517,6 +3518,14 @@ PY
                 with self.assertRaises(ValueError):
                     validate_launch_contract(contract)
 
+    def test_launch_contract_rejects_noninteger_schema_version(self) -> None:
+        for value in (True, 1.0, "1"):
+            with self.subTest(value=value):
+                contract = self._launch_contract()
+                contract["schema_version"] = value
+                with self.assertRaisesRegex(ValueError, "launch-contract schema"):
+                    validate_launch_contract(contract)
+
     def test_launch_contract_rejects_noncanonical_artifact_paths(self) -> None:
         for value in ("output/./stdout.txt", "output//stdout.txt", "output/"):
             with self.subTest(value=value):
@@ -6147,6 +6156,40 @@ PY
                 control_plane_dir=self.control_plane_dir,
                 authorized_pic_root=self.pic_root,
             )
+
+    def test_prepared_artifact_inventory_rejects_noninteger_schema_version(self) -> None:
+        source_root = self._clean_source("prepared-schema-source")
+        inventory_path = source_root / self._prepared_artifact_inventory()
+        original = json.loads(inventory_path.read_text(encoding="utf-8"))
+        for value in (True, 1.0, "1"):
+            with self.subTest(value=value):
+                inventory = {**original, "schema_version": value}
+                inventory_path.write_text(json.dumps(inventory), encoding="utf-8")
+                subprocess.run(["git", "-C", str(source_root), "add", "."], check=True)
+                subprocess.run(
+                    [
+                        "git",
+                        "-C",
+                        str(source_root),
+                        "-c",
+                        "user.name=PIC Test",
+                        "-c",
+                        "user.email=pic-test@example.invalid",
+                        "commit",
+                        "-m",
+                        f"prepared schema {value!r}",
+                    ],
+                    check=True,
+                    capture_output=True,
+                )
+                source_archive = subprocess.check_output(
+                    ["git", "-C", str(source_root), "archive", "HEAD"]
+                )
+                with self.assertRaisesRegex(ValueError, "inventory schema"):
+                    prepared_artifact_manifest_from_source_archive(
+                        source_archive,
+                        inventory_path=self._prepared_artifact_inventory(),
+                    )
 
     def test_clean_candidate_creator_rejects_omitted_eligible_prepared_analyzer(self) -> None:
         source_root = self._clean_source("omitted-prepared-analyzer-source")
