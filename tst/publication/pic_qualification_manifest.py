@@ -1074,9 +1074,10 @@ def validate_qualification_manifest(
 
     claim_registry = _load_object(CLAIMS_PATH)
     validate_schema(claim_registry, CLAIMS_REGISTRY_SCHEMA)
-    known_claim_ids = {
-        claim["claim_id"] for claim in claim_registry["claims"]
-    }
+    registry_claim_ids = [claim["claim_id"] for claim in claim_registry["claims"]]
+    if len(registry_claim_ids) != len(set(registry_claim_ids)):
+        raise ValueError("claims registry claim IDs must be unique")
+    known_claim_ids = set(registry_claim_ids)
     unknown_claim_ids = set(manifest["claim_ids"]) - known_claim_ids
     if unknown_claim_ids:
         raise ValueError(f"manifest references unknown claims: {unknown_claim_ids}")

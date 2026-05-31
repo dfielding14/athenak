@@ -37,9 +37,9 @@ AUDIT_METHOD = "deterministic_bounded_statistics_not_exact_rng_replay"
 INVENTORY_NAME = "artifact_inventory.sha256"
 FREEZE_RECEIPT_NAME = "freeze_receipt.json"
 _PVTK_EXECUTION_PATTERN = re.compile(
-    rb"^# vtk DataFile Version 2\.0\r?\n"
-    rb"# AthenaK particle data at time=\s*([^ \r\n]+)\s+"
-    rb"nranks=\s*([0-9]+)\s+cycle=([0-9]+)\s+variables=([^\r\n]+)\r?\n"
+    rb"^# vtk DataFile Version 2\.0\n"
+    rb"# AthenaK particle data at time= ([^ \n]+)  "
+    rb"nranks= (0|[1-9][0-9]*)  cycle=(0|[1-9][0-9]*)  variables=([^\n]+)\n"
 )
 
 _EXPECTED_DECK_VALUES = {
@@ -422,7 +422,7 @@ def _read_pvtk_execution_metadata(path: Path) -> dict[str, Any]:
     time = float(match.group(1))
     nranks = int(match.group(2))
     cycle = int(match.group(3))
-    variables = match.group(4).decode("ascii").strip()
+    variables = match.group(4).decode("ascii")
     _require(math.isfinite(time), "PVTK execution time must be finite")
     _require(nranks == 1, "bounded runtime artifact must report nranks=1")
     _require(cycle == 1, "bounded runtime artifact must report cycle=1")

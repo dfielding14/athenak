@@ -844,6 +844,8 @@ def _analyze_record(
     dimension = record["dimension"]
     if type(dimension) is not int or dimension not in DIMENSIONS:
         raise ContractError("dimension must be one of the preregistered integer values")
+    if type(record["epsilon"]) not in (int, float):
+        raise ContractError("epsilon must be a preregistered JSON number")
     epsilon = float(record["epsilon"])
     expected_phase, expected_growth = theoretical_dispersion(epsilon)
     provenance = _validate_raw_provenance(

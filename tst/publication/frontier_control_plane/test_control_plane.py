@@ -343,6 +343,92 @@ class SnapshotTests(unittest.TestCase):
             "authorized_project_home_root": self.project_home_root,
         }
 
+    def _append_registered_probe(
+        self,
+        *,
+        final_event_type: str = "reservation_cancelled",
+        job_id: str = "987654",
+    ) -> dict[str, object]:
+        reservation_id = str(uuid.uuid4())
+        reservation = {
+            "event_type": "reservation",
+            "reservation_id": reservation_id,
+            "submission_id": str(uuid.uuid4()),
+            "control_plane_version": self.control_plane_version,
+            "git_commit": "a" * 40,
+            "campaign": "manual-accounting-fixture",
+            "test_id": "registered-probe",
+            "partition": "batch",
+            "qos": "debug",
+            "qos_selection_reason": "schema-valid manual-accounting fixture",
+            "queue_snapshot_sha256": "b" * 64,
+            "site_policy_checked_utc": "2026-05-31T00:00:00Z",
+            "requested_nodes": 1,
+            "requested_walltime": "00:01:00",
+            "reserved_node_hours": 1.0 / 60.0,
+            "artifact_dir": str(self.pic_root / "runs" / "registered-probe"),
+            "state": "reserved",
+            "reconciled": False,
+        }
+        appended = append_primary_event(
+            self.ledger,
+            self.csv,
+            self.receipts,
+            self.mirror,
+            reservation,
+            mirror_transport="filesystem_copy",
+        )
+        if final_event_type == "reservation":
+            return appended
+        transition_record: dict[str, object] = {
+            **ledger.transition_payload(appended),
+            "event_type": (
+                "job_id_attached"
+                if final_event_type == "reconciliation"
+                else final_event_type
+            ),
+            "state": (
+                "cancelled"
+                if final_event_type == "reservation_cancelled"
+                else "submitted"
+            ),
+        }
+        if final_event_type == "reservation_cancelled":
+            transition_record["notes"] = "schema-valid manual-accounting fixture"
+        elif final_event_type in {"job_id_attached", "reconciliation"}:
+            transition_record["job_id"] = job_id
+        else:
+            raise ValueError(f"Unsupported registered probe event: {final_event_type}")
+        appended = append_primary_event(
+            self.ledger,
+            self.csv,
+            self.receipts,
+            self.mirror,
+            transition_record,
+            mirror_transport="filesystem_copy",
+        )
+        if final_event_type != "reconciliation":
+            return appended
+        return append_primary_event(
+            self.ledger,
+            self.csv,
+            self.receipts,
+            self.mirror,
+            {
+                **ledger.transition_payload(appended),
+                "event_type": "reconciliation",
+                "job_id": job_id,
+                "state": "COMPLETED",
+                "reconciled": True,
+                "scheduler_reported_allocated_nodes": 1,
+                "billed_nodes": 1,
+                "elapsed_seconds": 0,
+                "consumed_node_hours": 0.0,
+                "cumulative_consumed_node_hours": 0.0,
+            },
+            mirror_transport="filesystem_copy",
+        )
+
     def _retry_manual_accounting_and_require_clean_markers(
         self, arguments: dict[str, Path]
     ) -> list[dict[str, object]]:
@@ -4090,6 +4176,39 @@ PY
                 manifest_sha256=str(reservation["manifest_sha256"]),
             )
 
+    def test_reservation_lookup_rejects_noncanonical_lf_attachment_bytes(self) -> None:
+        manifest_path = self._create_manifest()
+        reservation = self._reserve(manifest_path)
+        attachment = manifest_path.parent / "reservation_id.txt"
+        attachment.chmod(0o644)
+        attachment.write_bytes(attachment.read_bytes() + b"\n")
+        attachment.chmod(0o444)
+        with self.assertRaisesRegex(ValueError, "Reservation ID"):
+            reservation_bound_manifest(
+                manifest_path,
+                str(reservation["reservation_id"]),
+                ledger_jsonl=self.ledger,
+                receipts_jsonl=self.receipts,
+                mirror_jsonl=self.mirror,
+                control_plane_dir=self.control_plane_dir,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+
+    def test_compute_verify_rejects_noncanonical_lf_attachment_bytes(self) -> None:
+        manifest_path = self._create_manifest()
+        reservation = self._reserve(manifest_path)
+        attachment = manifest_path.parent / "manifest_sha256.txt"
+        attachment.chmod(0o644)
+        attachment.write_bytes(attachment.read_bytes() + b"\n")
+        attachment.chmod(0o444)
+        with self.assertRaisesRegex(ValueError, "Manifest checksum"):
+            verify(
+                manifest_path,
+                reservation_id=str(reservation["reservation_id"]),
+                manifest_sha256=str(reservation["manifest_sha256"]),
+            )
+
     def test_attachment_repair_rejects_matching_symlink_alias(self) -> None:
         manifest_path = self._create_manifest()
         with patch(
@@ -5898,6 +6017,39 @@ PY
         ]
         self.assertIn("registered_science_authorization_id", prohibited)
 
+    def test_manifest_schema_closes_root_timeout_and_snapshot_records(self) -> None:
+        schema = json.loads(
+            (self.control_plane_dir / "control_plane.schema.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertFalse(schema["additionalProperties"])
+        self.assertFalse(schema["properties"]["timeout_margin"]["additionalProperties"])
+        self.assertFalse(
+            schema["$defs"]["snapshot_file_record"]["additionalProperties"]
+        )
+        for key in [
+            "control_plane_inventory",
+            "campaign",
+            "test_id",
+            "git_commit",
+            "evidence_class",
+            "physical_mode",
+            "artifact_dir",
+            "queue_snapshot_sha256",
+        ]:
+            self.assertIn(key, schema["properties"])
+
+    def test_reservation_rejects_extra_pre_submit_manifest_root_field(self) -> None:
+        manifest_path = self._create_manifest()
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["unreviewed"] = True
+        manifest_path.chmod(0o644)
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+        manifest_path.chmod(0o444)
+        with self.assertRaisesRegex(ValueError, "root schema"):
+            self._reserve(manifest_path)
+
     def test_registered_science_rejects_policy_digest_mismatch(self) -> None:
         candidate = self._write_science_config(authorize=True)
         self._write_policy(
@@ -6361,6 +6513,16 @@ PY
         toolchain.write_bytes(b"\xff")
         with self.assertRaises(ValueError):
             write_profile(**arguments)
+        for alias in (
+            b" Frontier test toolchain\n",
+            b"Frontier test toolchain \n",
+            b"Frontier test toolchain",
+            b"Frontier test toolchain\n\n",
+        ):
+            with self.subTest(alias=alias):
+                toolchain.write_bytes(alias)
+                with self.assertRaises(ValueError):
+                    write_profile(**arguments)
         toolchain.write_text("Frontier test toolchain\n", encoding="utf-8")
         outside = self.root / "outside-profile-writer"
         outside.mkdir()
@@ -7036,6 +7198,110 @@ PY
                 with self.assertRaises(ValueError):
                     self._promote_policy()
 
+    def test_policy_accepts_closed_production_storage_metadata_shape(self) -> None:
+        self._write_policy(
+            status="passed_user_authorized_orion_only_storage",
+            last_preflight_utc="2026-05-30T22:52:40Z",
+            historical_project_home_bulk_artifacts=(
+                "chronology_only_superseded_by_orion_policy_copies_do_not_add_new_bulk_artifacts"
+            ),
+            ledger_genesis_authorization=(
+                "user_removed_kronos_dependency_and_selected_orion_only_bulk_evidence_root"
+            ),
+            orion_simulation_root_preflight={
+                "status": "passed",
+                "path": str(self.pic_root),
+                "method": "local_create_write_sync_remove_probe",
+            },
+            project_home_preflight={
+                "status": "passed",
+                "method": "local_create_write_sync_remove_probe",
+            },
+        )
+        self._promote_policy()
+
+    def test_policy_rejects_unknown_nested_storage_fields_and_boolean_metadata_aliases(
+        self,
+    ) -> None:
+        for mutate in [
+            lambda policy: policy["olcf_side_storage"].update(unreviewed=True),
+            lambda policy: policy["long_term_storage"].update(unreviewed=True),
+            lambda policy: policy["olcf_side_storage"][
+                "orion_simulation_root_preflight"
+            ].update(unreviewed=True),
+            lambda policy: policy["olcf_side_storage"].update(status=True),
+            lambda policy: policy.update(reviewer=True),
+        ]:
+            with self.subTest(mutate=mutate):
+                self._write_policy()
+                policy = json.loads(self.policy.read_text(encoding="utf-8"))
+                mutate(policy)
+                self.policy.write_text(json.dumps(policy), encoding="utf-8")
+                with self.assertRaises(ValueError):
+                    self._promote_policy()
+
+    def test_policy_rejects_digest_and_registered_text_coercion_aliases(self) -> None:
+        integer_digest = int("1" * 64)
+        for mutate in [
+            lambda policy: policy["olcf_side_storage"]["ledger_genesis"].update(
+                event_sha256=integer_digest
+            ),
+            lambda policy: policy["frontier_admission_smoke"].update(
+                job_script_sha256=integer_digest
+            ),
+            lambda policy: policy["frontier_admission_smoke"].update(
+                analysis_script_sha256=[integer_digest]
+            ),
+        ]:
+            with self.subTest(mutate=mutate):
+                self._write_policy()
+                policy = json.loads(self.policy.read_text(encoding="utf-8"))
+                mutate(policy)
+                self.policy.write_text(json.dumps(policy), encoding="utf-8")
+                with self.assertRaises(ValueError):
+                    self._promote_policy()
+        self._write_policy(
+            science_submission_freeze={
+                "status": "authorized",
+                "manifest_path": str(
+                    self.pic_root
+                    / "clean_candidates"
+                    / str(uuid.uuid4())
+                    / "clean_candidate_manifest.json"
+                ),
+                "manifest_sha256": integer_digest,
+                "build_profile_control_plane_version": self.control_plane_version,
+            }
+        )
+        with self.assertRaises(ValueError):
+            self._promote_policy()
+        self._write_science_config(authorize=True)
+        for field, value in [
+            ("authorization_id", 1),
+            ("campaign", True),
+            ("job_script_sha256", integer_digest),
+            ("analysis_script_sha256", [integer_digest]),
+        ]:
+            with self.subTest(field=field):
+                self._write_policy(
+                    science_submission_freeze=self.science_submission_freeze,
+                    admission_smoke_overrides={"status": "closed_after_pass"},
+                )
+                policy = json.loads(self.policy.read_text(encoding="utf-8"))
+                policy["registered_science_slices"][0][field] = value
+                self.policy.write_text(json.dumps(policy), encoding="utf-8")
+                with self.assertRaises(ValueError):
+                    self._promote_policy()
+
+    def test_policy_promotion_rejects_retained_genesis_rollback_or_fabrication(self) -> None:
+        self._write_policy(ledger_genesis_allowed=True, ledger_genesis=None)
+        with self.assertRaisesRegex(ValueError, "retained ledger bindings"):
+            self._promote_policy()
+        fabricated = {**self._closed_genesis, "event_sha256": "1" * 64}
+        self._write_policy(ledger_genesis_allowed=False, ledger_genesis=fabricated)
+        with self.assertRaisesRegex(ValueError, "retained ledger bindings"):
+            self._promote_policy()
+
     def test_initializer_rejects_non_filesystem_copy_argument(self) -> None:
         with self.assertRaises(ValueError):
             initialize_from_policy(
@@ -7103,11 +7369,10 @@ PY
         with self.assertRaises(ValueError):
             self._create_manifest()
 
-    def test_reservation_rejects_locked_storage_policy(self) -> None:
+    def test_policy_promotion_rejects_locked_storage_policy(self) -> None:
         self._write_policy(ledger_genesis_allowed=True, ledger_genesis=None)
-        self._promote_policy()
-        with self.assertRaises(ValueError):
-            self._reserve(self._create_manifest())
+        with self.assertRaisesRegex(ValueError, "retained ledger bindings"):
+            self._promote_policy()
 
     def test_reservation_rejects_unreviewed_ledger_mirror_transport(self) -> None:
         self._write_policy(project_home_ledger_mirror_transport="dtn_rsync")
@@ -8159,14 +8424,7 @@ PY
             ]
         )
         self._promote_policy()
-        append_primary_event(
-            self.ledger,
-            self.csv,
-            self.receipts,
-            self.mirror,
-            {"event_type": "historical_probe"},
-            mirror_transport="filesystem_copy",
-        )
+        self._append_registered_probe()
         with patch.object(
             reconcile_manual_frontier_allocations.subprocess,
             "check_output",
@@ -8351,14 +8609,7 @@ PY
     ) -> None:
         authorization = self._write_manual_accounting_authorization()
         arguments = self._manual_accounting_arguments(authorization)
-        append_primary_event(
-            self.ledger,
-            self.csv,
-            self.receipts,
-            self.mirror,
-            {"event_type": "historical_probe"},
-            mirror_transport="filesystem_copy",
-        )
+        self._append_registered_probe()
         self._strand_manual_accounting_after_orion_append(arguments)
         local_marker, _ = incomplete_manual_accounting_marker_paths(
             self.ledger, self.mirror
@@ -8367,7 +8618,7 @@ PY
             json.loads(local_marker.read_text(encoding="utf-8"))[
                 "pre_tranche_sequence_number"
             ],
-            2,
+            3,
         )
         lines = self.mirror.read_text(encoding="utf-8").splitlines()
         self.mirror.write_text(lines[0] + "\n", encoding="utf-8")
@@ -8386,14 +8637,7 @@ PY
     ) -> None:
         authorization = self._write_manual_accounting_authorization()
         arguments = self._manual_accounting_arguments(authorization)
-        append_primary_event(
-            self.ledger,
-            self.csv,
-            self.receipts,
-            self.mirror,
-            {"event_type": "historical_probe"},
-            mirror_transport="filesystem_copy",
-        )
+        self._append_registered_probe()
         self._strand_manual_accounting_after_orion_append(arguments)
         local_marker, _ = incomplete_manual_accounting_marker_paths(
             self.ledger, self.mirror
@@ -8402,7 +8646,7 @@ PY
             json.loads(local_marker.read_text(encoding="utf-8"))[
                 "pre_tranche_sequence_number"
             ],
-            2,
+            3,
         )
         lines = self.receipts.read_text(encoding="utf-8").splitlines()
         self.receipts.write_text(lines[0] + "\n", encoding="utf-8")
@@ -8468,7 +8712,7 @@ PY
         self._strand_manual_accounting_after_orion_append(arguments)
         lines = self.ledger.read_text(encoding="utf-8").splitlines()
         record = json.loads(lines[-1])
-        record["event_type"] = "historical_probe"
+        record["job_id"] = "4746335"
         record["event_sha256"] = ledger.record_sha256(record, "event_sha256")
         self.ledger.write_text(
             "".join(line + "\n" for line in lines[:-1])
@@ -8711,14 +8955,7 @@ PY
         local_marker.unlink()
         assert mirror_marker is not None
         mirror_marker.unlink()
-        append_primary_event(
-            self.ledger,
-            self.csv,
-            self.receipts,
-            self.mirror,
-            {"event_type": "historical_probe"},
-            mirror_transport="filesystem_copy",
-        )
+        self._append_registered_probe()
         with patch.object(
             reconcile_manual_frontier_allocations.subprocess,
             "check_output",
@@ -8856,22 +9093,7 @@ PY
 
     def test_manual_direct_srun_accounting_rejects_active_reservation(self) -> None:
         authorization = self._write_manual_accounting_authorization()
-        append_primary_event(
-            self.ledger,
-            self.csv,
-            self.receipts,
-            self.mirror,
-            {
-                "event_type": "reservation",
-                "reservation_id": str(uuid.uuid4()),
-                "state": "reserved",
-                "reconciled": False,
-                "requested_nodes": 1,
-                "requested_walltime": "01:00:00",
-                "reserved_node_hours": 1.0,
-            },
-            mirror_transport="filesystem_copy",
-        )
+        self._append_registered_probe(final_event_type="reservation")
         with patch.object(
             reconcile_manual_frontier_allocations.subprocess,
             "check_output",
@@ -8891,16 +9113,9 @@ PY
 
     def test_manual_direct_srun_accounting_rejects_prior_job_event(self) -> None:
         authorization = self._write_manual_accounting_authorization()
-        append_primary_event(
-            self.ledger,
-            self.csv,
-            self.receipts,
-            self.mirror,
-            {
-                "event_type": "historical_probe",
-                "job_id": "4746332",
-            },
-            mirror_transport="filesystem_copy",
+        self._append_registered_probe(
+            final_event_type="reconciliation",
+            job_id="4746332",
         )
         with patch.object(
             reconcile_manual_frontier_allocations.subprocess,

@@ -67,6 +67,14 @@ AUTHORIZED_LONG_TERM_STORAGE_RISK = (
 AUTHORIZED_LONG_TERM_STORAGE_BLOCKS = [
     "terminal_durable_retention_signoff_pending_external_review",
 ]
+AUTHORIZED_OLCF_SIDE_STORAGE_STATUS = "passed_user_authorized_orion_only_storage"
+AUTHORIZED_HISTORICAL_PROJECT_HOME_BULK_ARTIFACTS = (
+    "chronology_only_superseded_by_orion_policy_copies_do_not_add_new_bulk_artifacts"
+)
+AUTHORIZED_LEDGER_GENESIS_AUTHORIZATION = (
+    "user_removed_kronos_dependency_and_selected_orion_only_bulk_evidence_root"
+)
+AUTHORIZED_STORAGE_PREFLIGHT_METHOD = "local_create_write_sync_remove_probe"
 PREPARED_ARTIFACT_INVENTORY_PATH = (
     "tst/publication/frontier_control_plane/prepared_pic_artifact_inventory.json"
 )
@@ -78,6 +86,10 @@ def scheduler_account_matches_authorized(value: object) -> bool:
         AUTHORIZED_ACCOUNT,
         AUTHORIZED_ACCOUNT.lower(),
     }
+
+
+def _is_lowercase_sha256(value: object) -> bool:
+    return isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value) is not None
 
 
 TRUSTED_GIT = "/usr/bin/git"
@@ -1349,7 +1361,9 @@ def read_json(path: Path) -> dict[str, object]:
 
 
 def utc_datetime(value: object, *, field: str) -> datetime:
-    text = str(value)
+    if not isinstance(value, str):
+        raise ValueError(f"{field} must be a canonical RFC-3339 UTC timestamp")
+    text = value
     if re.fullmatch(
         r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}"
         r"(?:\.[0-9]{1,6})?Z",
@@ -2242,7 +2256,18 @@ def verify_snapshot_files(manifest: dict[str, object], *, root: Path) -> None:
             "source_sha256",
         }:
             raise ValueError("Malformed snapshot file record")
-        path = Path(str(record["path"]))
+        if (
+            not isinstance(record["role"], str)
+            or not record["role"]
+            or not isinstance(record["path"], str)
+            or not record["path"]
+            or not isinstance(record["source_path"], str)
+            or not record["source_path"]
+            or not _is_lowercase_sha256(record["sha256"])
+            or not _is_lowercase_sha256(record["source_sha256"])
+        ):
+            raise ValueError("Malformed snapshot file record")
+        path = Path(record["path"])
         require_canonical_path_below(path, root)
         data = read_stable_regular_file_below(path, root)
         if sha256_bytes(data) != record.get("sha256"):
@@ -2499,6 +2524,11 @@ def validate_storage_policy(
         or not set(policy) <= allowed_policy_keys
     ):
         raise ValueError("Storage policy root schema is malformed")
+    for key in ["authorization_date", "authorized_by", "reviewer"]:
+        if key in policy and (
+            not isinstance(policy[key], str) or not policy[key].strip()
+        ):
+            raise ValueError(f"Storage policy root metadata {key} must be non-empty text")
     frontier = policy.get("frontier")
     storage = policy.get("olcf_side_storage")
     long_term = policy.get("long_term_storage")
@@ -2517,6 +2547,58 @@ def validate_storage_policy(
             "Storage policy is missing Frontier, OLCF-side storage, science-freeze, "
             "admission-smoke, or registered-science data"
         )
+    required_storage_keys = {
+        "installed_control_plane_version",
+        "staged_control_plane_candidate_version",
+        "installed_control_plane_lifecycle",
+        "orion_simulation_root_preflight",
+        "project_home_mirror_root",
+        "project_home_usage",
+        "project_home_retention_role",
+        "project_home_ledger_mirror_transport",
+        "project_home_preflight",
+        "orion_bulk_evidence_root",
+        "orion_bulk_evidence_usage",
+        "orion_retention_role",
+        "manual_accounting_authorizations",
+        "ledger_genesis_allowed",
+    }
+    allowed_storage_keys = required_storage_keys | {
+        "status",
+        "last_preflight_utc",
+        "historical_project_home_bulk_artifacts",
+        "ledger_genesis_authorization",
+        "ledger_genesis",
+    }
+    if (
+        not required_storage_keys <= set(storage)
+        or not set(storage) <= allowed_storage_keys
+    ):
+        raise ValueError("Storage policy OLCF-side storage schema is malformed")
+    if set(long_term) != {"status", "selected_destination", "risk", "blocks"}:
+        raise ValueError("Storage policy long-term storage schema is malformed")
+    if (
+        "status" in storage
+        and storage["status"] != AUTHORIZED_OLCF_SIDE_STORAGE_STATUS
+    ):
+        raise ValueError("Storage policy OLCF-side storage status is not authorized")
+    if "last_preflight_utc" in storage:
+        utc_datetime(
+            storage["last_preflight_utc"],
+            field="olcf_side_storage.last_preflight_utc",
+        )
+    if (
+        "historical_project_home_bulk_artifacts" in storage
+        and storage["historical_project_home_bulk_artifacts"]
+        != AUTHORIZED_HISTORICAL_PROJECT_HOME_BULK_ARTIFACTS
+    ):
+        raise ValueError("Storage policy historical Project Home artifact role is not authorized")
+    if (
+        "ledger_genesis_authorization" in storage
+        and storage["ledger_genesis_authorization"]
+        != AUTHORIZED_LEDGER_GENESIS_AUTHORIZATION
+    ):
+        raise ValueError("Storage policy ledger-genesis authorization is not authorized")
     expected_frontier = {
         "account": authorized_account,
         "partition": AUTHORIZED_PARTITION,
@@ -2549,8 +2631,11 @@ def validate_storage_policy(
         and frontier["qos_policy"] != "debug_preferred_normal_fallback"
     ):
         raise ValueError("Storage policy Frontier QoS policy is not authorized")
-    if Path(str(storage.get("project_home_mirror_root", ""))).resolve() != (
-        authorized_project_home_root.resolve()
+    project_home_mirror_root = storage.get("project_home_mirror_root")
+    if (
+        not isinstance(project_home_mirror_root, str)
+        or Path(project_home_mirror_root).resolve()
+        != authorized_project_home_root.resolve()
     ):
         raise ValueError("Storage policy Project Home mirror root is not authorized")
     if storage.get("project_home_usage") != AUTHORIZED_PROJECT_HOME_USAGE:
@@ -2564,8 +2649,10 @@ def validate_storage_policy(
         raise ValueError("Only filesystem_copy Project Home ledger mirroring is authorized")
     if storage.get("project_home_ledger_mirror_transport") != ledger_mirror_transport:
         raise ValueError("Storage policy does not authorize the ledger mirror transport")
-    if Path(str(storage.get("orion_bulk_evidence_root", ""))).resolve() != (
-        authorized_pic_root.resolve()
+    orion_bulk_evidence_root = storage.get("orion_bulk_evidence_root")
+    if (
+        not isinstance(orion_bulk_evidence_root, str)
+        or Path(orion_bulk_evidence_root).resolve() != authorized_pic_root.resolve()
     ):
         raise ValueError("Storage policy Orion bulk-evidence root is not authorized")
     if storage.get("orion_bulk_evidence_usage") != AUTHORIZED_ORION_BULK_EVIDENCE_USAGE:
@@ -2574,21 +2661,41 @@ def validate_storage_policy(
         raise ValueError("Storage policy Orion retention role is not authorized")
     if long_term.get("status") != AUTHORIZED_LONG_TERM_STORAGE_STATUS:
         raise ValueError("Storage policy must preserve the Orion-only durability risk")
-    if Path(str(long_term.get("selected_destination", ""))).resolve() != (
-        authorized_pic_root.resolve()
+    selected_destination = long_term.get("selected_destination")
+    if (
+        not isinstance(selected_destination, str)
+        or Path(selected_destination).resolve() != authorized_pic_root.resolve()
     ):
         raise ValueError("Storage policy long-term destination is not authorized")
     if long_term.get("risk") != AUTHORIZED_LONG_TERM_STORAGE_RISK:
         raise ValueError("Storage policy long-term risk statement is not authorized")
     if long_term.get("blocks") != AUTHORIZED_LONG_TERM_STORAGE_BLOCKS:
         raise ValueError("Storage policy long-term terminal block is not authorized")
-    for key in [
-        "orion_simulation_root_preflight",
-        "project_home_preflight",
+    for key, expected_path in [
+        ("orion_simulation_root_preflight", authorized_pic_root.resolve()),
+        ("project_home_preflight", authorized_project_home_root.resolve()),
     ]:
         record = storage.get(key)
-        if not isinstance(record, dict) or record.get("status") != "passed":
+        if (
+            not isinstance(record, dict)
+            or "status" not in record
+            or not set(record) <= {"status", "path", "method"}
+            or record.get("status") != "passed"
+        ):
             raise ValueError(f"Storage policy {key} has not passed")
+        if (
+            "path" in record
+            and (
+                not isinstance(record["path"], str)
+                or Path(record["path"]).resolve() != expected_path
+            )
+        ):
+            raise ValueError(f"Storage policy {key}.path is not authorized")
+        if (
+            "method" in record
+            and record["method"] != AUTHORIZED_STORAGE_PREFLIGHT_METHOD
+        ):
+            raise ValueError(f"Storage policy {key}.method is not authorized")
     manual_authorizations = storage.get("manual_accounting_authorizations")
     if not isinstance(manual_authorizations, list) or len(manual_authorizations) > 16:
         raise ValueError("Storage policy manual-accounting authorizations are malformed")
@@ -2614,17 +2721,22 @@ def validate_storage_policy(
             or authorization_id in manual_authorization_ids
         ):
             raise ValueError("Storage policy manual-accounting authorization ID is invalid")
+        if not isinstance(authorization.get("path"), str):
+            raise ValueError("Storage policy manual-accounting authorization path is invalid")
         path = require_canonical_path_below(
-            Path(str(authorization.get("path", ""))), manual_authorization_root
+            Path(authorization["path"]), manual_authorization_root
         )
         project_home_authorization_root = (
             Path(os.path.abspath(authorized_project_home_root))
             / "policy"
             / "manual_accounting_authorizations"
         )
+        if not isinstance(authorization.get("project_home_path"), str):
+            raise ValueError(
+                "Storage policy manual-accounting authorization mirror path is invalid"
+            )
         project_home_path = require_canonical_path_below(
-            Path(str(authorization.get("project_home_path", ""))),
-            project_home_authorization_root,
+            Path(authorization["project_home_path"]), project_home_authorization_root
         )
         if path.name != f"{authorization_id}.json" or path in manual_authorization_paths:
             raise ValueError("Storage policy manual-accounting authorization path is invalid")
@@ -2667,12 +2779,10 @@ def validate_storage_policy(
         if genesis.get("status") != "initialized":
             raise ValueError("Storage policy ledger genesis is not initialized")
         utc_datetime(genesis.get("timestamp"), field="ledger_genesis.timestamp")
-        if not re.fullmatch(
-            r"[0-9a-f]{64}", str(genesis.get("control_plane_version", ""))
-        ):
+        if not _is_lowercase_sha256(genesis.get("control_plane_version")):
             raise ValueError("Storage policy ledger genesis control-plane version is malformed")
         for field in ["event_sha256", "mirror_ack_sha256"]:
-            if not re.fullmatch(r"[0-9a-f]{64}", str(genesis.get(field, ""))):
+            if not _is_lowercase_sha256(genesis.get(field)):
                 raise ValueError(f"Storage policy ledger_genesis.{field} is malformed")
         if genesis.get("mirror_transport") != AUTHORIZED_LEDGER_MIRROR_TRANSPORT:
             raise ValueError("Storage policy ledger genesis mirror transport is invalid")
@@ -2698,17 +2808,18 @@ def validate_storage_policy(
             "build_profile_control_plane_version",
         }:
             raise ValueError("Authorized science freeze must identify one exact manifest")
-        manifest_path = Path(str(science_freeze["manifest_path"]))
+        if not isinstance(science_freeze["manifest_path"], str):
+            raise ValueError("Authorized science-freeze manifest path is malformed")
+        manifest_path = Path(science_freeze["manifest_path"])
         require_canonical_path_below(
             manifest_path, authorized_pic_root / "clean_candidates"
         )
         if manifest_path.name != "clean_candidate_manifest.json":
             raise ValueError("Authorized science-freeze manifest has an invalid path")
-        if not re.fullmatch(r"[0-9a-f]{64}", str(science_freeze["manifest_sha256"])):
+        if not _is_lowercase_sha256(science_freeze["manifest_sha256"]):
             raise ValueError("Authorized science-freeze manifest digest is malformed")
-        if not re.fullmatch(
-            r"[0-9a-f]{64}",
-            str(science_freeze["build_profile_control_plane_version"]),
+        if not _is_lowercase_sha256(
+            science_freeze["build_profile_control_plane_version"]
         ):
             raise ValueError(
                 "Authorized science-freeze build-profile control-plane version is malformed"
@@ -2739,9 +2850,10 @@ def validate_storage_policy(
             "clean_candidate_manifest_sha256",
         }:
             raise ValueError("Storage policy registered-science authorization is malformed")
-        identifier = str(registered_slice["authorization_id"])
+        identifier = registered_slice["authorization_id"]
         if (
-            not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,63}", identifier)
+            not isinstance(identifier, str)
+            or not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,63}", identifier)
             or identifier in identifiers
         ):
             raise ValueError("Storage policy registered-science authorization ID is invalid")
@@ -2749,7 +2861,10 @@ def validate_storage_policy(
         if registered_slice["status"] != AUTHORIZED_REGISTERED_SCIENCE_SLICE_STATUS:
             raise ValueError("Storage policy registered-science slice is not authorized")
         for key in ["campaign", "test_id", "evidence_class", "physical_mode"]:
-            if not str(registered_slice[key]).strip():
+            if (
+                not isinstance(registered_slice[key], str)
+                or not registered_slice[key].strip()
+            ):
                 raise ValueError(f"Storage policy registered-science {key} is empty")
         if registered_slice["runtime_profile"] != "frontier_minimum_supported":
             raise ValueError("Storage policy registered-science runtime profile is invalid")
@@ -2769,14 +2884,14 @@ def validate_storage_policy(
             "launch_contract_sha256",
             "clean_candidate_manifest_sha256",
         ]:
-            if not re.fullmatch(r"[0-9a-f]{64}", str(registered_slice[key])):
+            if not _is_lowercase_sha256(registered_slice[key]):
                 raise ValueError(f"Storage policy registered-science {key} is malformed")
         analysis_sha256 = registered_slice["analysis_script_sha256"]
         if (
             not isinstance(analysis_sha256, list)
             or not 1 <= len(analysis_sha256) <= 16
             or any(
-                not re.fullmatch(r"[0-9a-f]{64}", str(digest))
+                not _is_lowercase_sha256(digest)
                 for digest in analysis_sha256
             )
         ):
@@ -2843,13 +2958,13 @@ def validate_storage_policy(
         "executable_sha256",
         "launch_contract_sha256",
     ]:
-        if not re.fullmatch(r"[0-9a-f]{64}", str(admission_smoke.get(key, ""))):
+        if not _is_lowercase_sha256(admission_smoke.get(key)):
             raise ValueError(f"Storage policy frontier_admission_smoke.{key} is malformed")
     analysis_sha256 = admission_smoke.get("analysis_script_sha256")
     if (
         not isinstance(analysis_sha256, list)
         or len(analysis_sha256) != 1
-        or not re.fullmatch(r"[0-9a-f]{64}", str(analysis_sha256[0]))
+        or not _is_lowercase_sha256(analysis_sha256[0])
     ):
         raise ValueError(
             "Storage policy frontier_admission_smoke.analysis_script_sha256 is malformed"

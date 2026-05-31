@@ -68,6 +68,34 @@ TIMEOUT_MARGIN_KEYS = {
     "measured_utc",
     "expires_utc",
 }
+PRE_SUBMIT_MANIFEST_REQUIRED_KEYS = {
+    "schema_version",
+    "control_plane_version",
+    "control_plane_inventory",
+    "submission_id",
+    "pic_root",
+    "campaign",
+    "test_id",
+    "submission_scope",
+    "job_script_executable_env",
+    "launch_contract",
+    "git_commit",
+    "evidence_class",
+    "physical_mode",
+    "selected_qos",
+    "qos_selection_reason",
+    "site_policy_checked_utc",
+    "registered_short_nonproduction",
+    "artifact_dir",
+    "queue_snapshot_sha256",
+    "timeout_margin",
+    "snapshot_files",
+}
+REGISTERED_SCIENCE_MANIFEST_KEYS = {
+    "clean_candidate_manifest_path",
+    "clean_candidate_manifest_sha256",
+    "registered_science_authorization_id",
+}
 
 
 def _strict_json_equal(left: object, right: object) -> bool:
@@ -344,16 +372,44 @@ def _verify_manifest(
     manifest = read_json(manifest_path)
     if type(manifest.get("schema_version")) is not int or manifest.get("schema_version") != 1:
         raise ValueError("Unsupported pre-submit manifest schema")
-    pic_root = Path(str(manifest["pic_root"])).resolve()
+    scope = manifest.get("submission_scope")
+    if scope not in SUBMISSION_SCOPES:
+        raise ValueError("Manifest does not declare a recognized submission scope")
+    expected_manifest_keys = PRE_SUBMIT_MANIFEST_REQUIRED_KEYS | (
+        REGISTERED_SCIENCE_MANIFEST_KEYS if scope == REGISTERED_SCIENCE_SCOPE else set()
+    )
+    if set(manifest) != expected_manifest_keys:
+        raise ValueError("Pre-submit manifest root schema is malformed")
+    for key in [
+        "control_plane_version",
+        "submission_id",
+        "pic_root",
+        "campaign",
+        "test_id",
+        "submission_scope",
+        "job_script_executable_env",
+        "git_commit",
+        "evidence_class",
+        "physical_mode",
+        "selected_qos",
+        "qos_selection_reason",
+        "site_policy_checked_utc",
+        "artifact_dir",
+        "queue_snapshot_sha256",
+    ]:
+        if not isinstance(manifest.get(key), str) or not manifest[key]:
+            raise ValueError(f"Pre-submit manifest {key} must be non-empty text")
+    if type(manifest.get("registered_short_nonproduction")) is not bool:
+        raise ValueError("Pre-submit manifest short-job flag must be a boolean")
+    if re.fullmatch(r"[0-9a-f]{64}", manifest["queue_snapshot_sha256"]) is None:
+        raise ValueError("Pre-submit manifest queue snapshot digest is malformed")
+    pic_root = Path(manifest["pic_root"]).resolve()
     if pic_root != authorized_pic_root.resolve():
         raise ValueError(f"Manifest PIC root is not authorized: {pic_root}")
     if manifest.get("control_plane_version") != inventory["version"]:
         raise ValueError("Manifest control-plane version is not the active frozen version")
     if manifest.get("control_plane_inventory") != inventory["files"]:
         raise ValueError("Manifest control-plane inventory does not match installed files")
-    scope = manifest.get("submission_scope")
-    if scope not in SUBMISSION_SCOPES:
-        raise ValueError("Manifest does not declare a recognized submission scope")
     require_canonical_path_below(manifest_path, pic_root / "manifests")
     require_read_only(manifest_path)
     _require_run_artifact_dir(manifest)
@@ -401,10 +457,10 @@ def _mapping(record: dict[str, object], key: str) -> dict[str, object]:
 
 
 def _text(record: dict[str, object], key: str) -> str:
-    value = str(record.get(key, "")).strip()
-    if not value:
+    value = record.get(key)
+    if not isinstance(value, str) or not value.strip():
         raise ValueError(f"Clean-candidate manifest has no {key}")
-    return value
+    return value.strip()
 
 
 def _digest(record: dict[str, object], key: str) -> str:
@@ -527,7 +583,12 @@ def _verify_clean_candidate(
     )
     if candidate_path != policy_candidate_path:
         raise ValueError("Science manifest does not reference the policy-authorized freeze")
-    candidate_sha256 = str(manifest["clean_candidate_manifest_sha256"])
+    candidate_sha256 = manifest["clean_candidate_manifest_sha256"]
+    if (
+        not isinstance(candidate_sha256, str)
+        or re.fullmatch(r"[0-9a-f]{64}", candidate_sha256) is None
+    ):
+        raise ValueError("Science manifest clean-candidate digest is malformed")
     if candidate_sha256 != freeze_policy.get("manifest_sha256"):
         raise ValueError("Science manifest digest is not authorized by storage policy")
 
@@ -687,7 +748,9 @@ def _registered_science_authorization(
     *,
     candidate_sha256: str,
 ) -> tuple[str, int]:
-    identifier = str(manifest["registered_science_authorization_id"])
+    identifier = manifest["registered_science_authorization_id"]
+    if not isinstance(identifier, str):
+        raise ValueError("Registered science authorization ID is malformed")
     records = policy.get("registered_science_slices")
     if not isinstance(records, list):
         raise ValueError("Storage policy does not carry registered-science slices")
@@ -1574,14 +1637,14 @@ def reservation_bound_manifest(
         require_not_symlink(attachment)
         if not attachment.is_file():
             raise ValueError("Missing immutable reservation attachment")
-        if attachment.read_text(encoding="utf-8").strip() != reservation_id:
+        if attachment.read_bytes() != (reservation_id + "\n").encode("utf-8"):
             raise ValueError("Reservation ID does not match immutable attachment")
         require_read_only(attachment)
         manifest_digest_path = manifest_path.parent / "manifest_sha256.txt"
         require_not_symlink(manifest_digest_path)
         if not manifest_digest_path.is_file():
             raise ValueError("Missing immutable manifest checksum attachment")
-        if manifest_digest_path.read_text(encoding="utf-8").strip() != manifest_digest:
+        if manifest_digest_path.read_bytes() != (manifest_digest + "\n").encode("utf-8"):
             raise ValueError("Manifest checksum attachment differs from reservation ledger")
         require_read_only(manifest_digest_path)
         return manifest, reservation

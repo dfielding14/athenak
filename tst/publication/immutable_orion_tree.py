@@ -71,6 +71,27 @@ def require_exact_primitive_types(
             )
 
 
+def loads_json_reject_duplicate_keys(
+    text: str,
+    *,
+    error_type: type[ValueError] = ValueError,
+    label: str = "immutable-tree retained JSON",
+) -> Any:
+    """Decode retained JSON while rejecting duplicate object members."""
+    def reject_duplicates(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        payload: dict[str, Any] = {}
+        for name, value in pairs:
+            if name in payload:
+                _raise(error_type, label, f"retained JSON object key is duplicated: {name!r}")
+            payload[name] = value
+        return payload
+
+    try:
+        return json.loads(text, object_pairs_hook=reject_duplicates)
+    except json.JSONDecodeError as error:
+        _raise(error_type, label, f"retained JSON is invalid: {error}")
+
+
 def _is_sealed_memfd_reference(path: Path) -> bool:
     """Return whether one procfs fd path names a fully sealed regular memfd."""
     if path.parent != Path("/proc/self/fd") or not path.name.isdigit():
@@ -457,11 +478,16 @@ def validate_serial_host_build_evidence(
         path = root / relative if file_resolver is None else Path(file_resolver(relative))
         return _read_regular_text(path, error_type=error_type, label=label)
 
-    try:
-        profile = json.loads(read("build/build_profile.json"))
-        compile_commands = json.loads(read("build/compile_commands.json"))
-    except json.JSONDecodeError as error:
-        _raise(error_type, label, f"retained build JSON is invalid: {error}")
+    profile = loads_json_reject_duplicate_keys(
+        read("build/build_profile.json"),
+        error_type=error_type,
+        label=f"{label} build profile",
+    )
+    compile_commands = loads_json_reject_duplicate_keys(
+        read("build/compile_commands.json"),
+        error_type=error_type,
+        label=f"{label} compile commands",
+    )
     expected_profile = {
         "schema_version": 1,
         "profile": "bounded_serial_host_clean_build_provenance_only",
@@ -481,6 +507,37 @@ def validate_serial_host_build_evidence(
         _raise(error_type, label, "retained serial-host build profile drifted")
     if not isinstance(compile_commands, list) or not compile_commands:
         _raise(error_type, label, "retained compile commands must be a nonempty list")
+    for index, command in enumerate(compile_commands):
+        if not isinstance(command, dict):
+            _raise(error_type, label, f"retained compile command {index} must be an object")
+        keys = set(command)
+        if (
+            not {"directory", "file"} <= keys
+            or not keys <= {"directory", "file", "command", "arguments", "output"}
+            or ("command" in command) == ("arguments" in command)
+            or not isinstance(command["directory"], str)
+            or not command["directory"]
+            or not Path(command["directory"]).is_absolute()
+            or not isinstance(command["file"], str)
+            or not command["file"]
+            or (
+                "command" in command
+                and (not isinstance(command["command"], str) or not command["command"])
+            )
+            or (
+                "arguments" in command
+                and (
+                    not isinstance(command["arguments"], list)
+                    or not command["arguments"]
+                    or not all(isinstance(item, str) and item for item in command["arguments"])
+                )
+            )
+            or (
+                "output" in command
+                and (not isinstance(command["output"], str) or not command["output"])
+            )
+        ):
+            _raise(error_type, label, f"retained compile command {index} is malformed")
     cache = read("build/CMakeCache.txt")
     for expected in (
         "Athena_ENABLE_MPI:BOOL=OFF",
@@ -489,16 +546,21 @@ def validate_serial_host_build_evidence(
         "Kokkos_ENABLE_SERIAL:BOOL=ON",
     ):
         key = expected.partition("=")[0]
-        matches = [line for line in cache.splitlines() if line.partition("=")[0] == key]
+        variable = key.partition(":")[0]
+        matches = [
+            line
+            for line in cache.splitlines()
+            if line.partition("=")[0].partition(":")[0] == variable
+        ]
         if matches != [expected]:
-            _raise(error_type, label, f"retained CMake cache binding drifted for {key!r}")
+            _raise(error_type, label, f"retained CMake cache binding drifted for {variable!r}")
     config = read("build/config.hpp")
     for expected in ("#define MPI_PARALLEL_ENABLED 0", "#define OPENMP_PARALLEL_ENABLED 0"):
         key = expected.split(maxsplit=2)[1]
         matches = [
             line
             for line in config.splitlines()
-            if line.split(maxsplit=2)[:2] == ["#define", key]
+            if re.match(rf"^\s*#\s*(?:define|undef)\s+{re.escape(key)}(?:\s|$)", line)
         ]
         if matches != [expected]:
             _raise(error_type, label, f"retained config.hpp binding drifted for {key!r}")
@@ -1064,9 +1126,13 @@ def _validate_receipt_payload(
         _raise(error_type, label, "retained freeze receipt must be a JSON object")
     expected = {
         "schema_version": 1,
+        "artifact_role": receipt.get("artifact_role"),
+        "qualification_effect": receipt.get("qualification_effect"),
         "inventory_excludes": INVENTORY_NAME,
         "freeze_policy": "remove all owner, group and other write bits recursively",
     }
+    if set(receipt) != set(expected):
+        _raise(error_type, label, "retained freeze receipt keys drifted")
     if type(receipt.get("schema_version")) is not int:
         _raise(error_type, label, "retained freeze receipt schema_version drifted")
     for name, value in expected.items():
@@ -1636,12 +1702,11 @@ def _verify_frozen_tree_anchored(
     receipt_entry = entries.get(FREEZE_RECEIPT_NAME)
     if receipt_entry is None or receipt_entry.entry_type != "file":
         _raise(error_type, label, "retained freeze receipt metadata file is absent")
-    try:
-        receipt = json.loads(
-            _decode_metadata(receipt_entry, FREEZE_RECEIPT_NAME, error_type=error_type, label=label)
-        )
-    except json.JSONDecodeError as error:
-        _raise(error_type, label, f"retained freeze receipt is not valid JSON: {error}")
+    receipt = loads_json_reject_duplicate_keys(
+        _decode_metadata(receipt_entry, FREEZE_RECEIPT_NAME, error_type=error_type, label=label),
+        error_type=error_type,
+        label=f"{label} retained freeze receipt",
+    )
     receipt = _validate_receipt_payload(receipt, error_type=error_type, label=label)
     measured_payloads = {
         relative: entry.sha256

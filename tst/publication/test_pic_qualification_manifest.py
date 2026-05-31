@@ -727,6 +727,25 @@ class PicQualificationManifestTests(unittest.TestCase):
                 ):
                     self._assert_rejected(self.manifest)
 
+    def test_claim_registry_rejects_duplicate_claim_ids_before_set_collapse(self) -> None:
+        registry = qualification_manifest._load_object(
+            qualification_manifest.CLAIMS_PATH
+        )
+        malformed = copy.deepcopy(registry)
+        malformed["claims"].append(copy.deepcopy(malformed["claims"][0]))
+        original_load_object = qualification_manifest._load_object
+
+        def load_object(path: Path) -> dict[str, object]:
+            if path == qualification_manifest.CLAIMS_PATH:
+                return malformed
+            return original_load_object(path)
+
+        with patch.object(
+            qualification_manifest, "_load_object", side_effect=load_object
+        ):
+            with self.assertRaisesRegex(ValueError, "claim IDs must be unique"):
+                validate_qualification_manifest(self.manifest, verify_files=False)
+
     def test_duplicate_json_keys_are_rejected(self) -> None:
         with self.assertRaises(ValueError):
             _load_object_bytes(b'{"schema_version": 1, "schema_version": 2}',

@@ -207,6 +207,12 @@ class Q023PaperBellLinearTests(unittest.TestCase):
         with self.assertRaisesRegex(bell.ContractError, "duplicate"):
             bell.analyze_trace_bundle(bundle)
 
+    def test_epsilon_numeric_string_fails_closed(self) -> None:
+        bundle = _bundle()
+        bundle["records"][0]["epsilon"] = "0.1"
+        with self.assertRaisesRegex(bell.ContractError, "JSON number"):
+            bell.analyze_trace_bundle(bundle)
+
     def test_phase_interval_outside_frozen_rule_fails_closed(self) -> None:
         bundle = _bundle()
         bundle["records"][0]["phase_interval"][0] = 1.0

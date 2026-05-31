@@ -47,7 +47,10 @@ def _serial_host_build_evidence_texts(profile: dict[str, object]) -> dict[str, s
     build = "cmake --build /tmp/build --target athena"
     return {
         "build/build_profile.json": json.dumps(profile),
-        "build/compile_commands.json": '[{"command": "c++"}]',
+        "build/compile_commands.json": (
+            '[{"directory": "/tmp/build", "command": "c++ -c source.cpp", '
+            '"file": "/tmp/source/source.cpp"}]'
+        ),
         "build/CMakeCache.txt": (
             "Athena_ENABLE_MPI:BOOL=OFF\n"
             "CMAKE_BUILD_TYPE:STRING=Release\n"
@@ -700,6 +703,19 @@ class ImmutableOrionTreeTests(unittest.TestCase):
                         label="receipt test",
                     )
 
+    def test_freeze_receipt_rejects_extra_keys_and_duplicate_json_members(self) -> None:
+        with self.assertRaisesRegex(ValueError, "keys drifted"):
+            immutable_orion_tree._validate_receipt_payload(
+                {**_RECEIPT, "unexpected": "alias"},
+                error_type=ValueError,
+                label="receipt test",
+            )
+        with self.assertRaisesRegex(ValueError, "duplicated"):
+            immutable_orion_tree.loads_json_reject_duplicate_keys(
+                '{"schema_version": 1, "schema_version": 1}',
+                label="receipt test",
+            )
+
     def test_serial_host_profile_rejects_numeric_boolean_aliases(self) -> None:
         root = Path("/tmp/retained-profile-test")
         profile = {
@@ -751,7 +767,10 @@ class ImmutableOrionTreeTests(unittest.TestCase):
         validate(baseline)
         for relative, suffix, message in (
             ("build/CMakeCache.txt", "Athena_ENABLE_MPI:BOOL=ON\n", "CMake cache binding"),
+            ("build/CMakeCache.txt", "Athena_ENABLE_MPI:STRING=OFF\n", "CMake cache binding"),
             ("build/config.hpp", "#define MPI_PARALLEL_ENABLED 1\n", "config.hpp binding"),
+            ("build/config.hpp", "# define MPI_PARALLEL_ENABLED 0\n", "config.hpp binding"),
+            ("build/config.hpp", "#undef MPI_PARALLEL_ENABLED\n", "config.hpp binding"),
         ):
             with self.subTest(relative=relative):
                 with self.assertRaisesRegex(ValueError, message):
@@ -759,6 +778,44 @@ class ImmutableOrionTreeTests(unittest.TestCase):
         relative = "build/configure_command.txt"
         with self.assertRaisesRegex(ValueError, "command sidecar is noncanonical"):
             validate({**baseline, relative: baseline[relative].replace(" -S ", "  -S ")})
+
+    def test_serial_host_build_evidence_requires_structural_compile_commands(self) -> None:
+        root = Path("/tmp/retained-profile-test")
+        profile = {
+            "schema_version": 1,
+            "profile": "bounded_serial_host_clean_build_provenance_only",
+            "qualifying_evidence": False,
+            "mpi": False,
+            "gpu": False,
+            "frontier_scheduler": False,
+            "kronos": False,
+        }
+        baseline = _serial_host_build_evidence_texts(profile)
+
+        def validate(compile_commands: object) -> None:
+            texts = {
+                **baseline,
+                "build/compile_commands.json": json.dumps(compile_commands),
+            }
+
+            def read(path: Path, **_: object) -> str:
+                return texts[path.relative_to(root).as_posix()]
+
+            with mock.patch.object(immutable_orion_tree, "_read_regular_text", side_effect=read):
+                immutable_orion_tree.validate_serial_host_build_evidence(root)
+
+        for commands in (
+            [{"command": "c++"}],
+            [{"directory": "relative", "command": "c++", "file": "source.cpp"}],
+            [{"directory": "/tmp/build", "command": "c++", "arguments": ["c++"],
+              "file": "source.cpp"}],
+            [{"directory": "/tmp/build", "arguments": [], "file": "source.cpp"}],
+            [{"directory": "/tmp/build", "command": "c++", "file": "source.cpp",
+              "unexpected": "alias"}],
+        ):
+            with self.subTest(commands=commands):
+                with self.assertRaisesRegex(ValueError, "compile command 0 is malformed"):
+                    validate(commands)
 
     def test_inventory_parser_rejects_noncanonical_serialization(self) -> None:
         canonical = f"{'a' * 64}  payload.txt\n"

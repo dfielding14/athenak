@@ -134,6 +134,64 @@ MANUAL_ACCOUNTING_EVENT_FIELDS = {
     "reconciled",
     "notes",
 }
+CHAIN_EVENT_FIELDS = {
+    "sequence_number",
+    "previous_event_sha256",
+    "event_sha256",
+    "timestamp",
+    "event_type",
+}
+GENESIS_EVENT_FIELDS = CHAIN_EVENT_FIELDS | {
+    "state",
+    "notes",
+    "control_plane_version",
+}
+RESERVATION_PAYLOAD_BASE_FIELDS = {
+    "reservation_id",
+    "submission_id",
+    "control_plane_version",
+    "git_commit",
+    "campaign",
+    "test_id",
+    "partition",
+    "qos",
+    "qos_selection_reason",
+    "queue_snapshot_sha256",
+    "site_policy_checked_utc",
+    "requested_nodes",
+    "requested_walltime",
+    "reserved_node_hours",
+    "artifact_dir",
+    "state",
+    "reconciled",
+}
+RESERVATION_PAYLOAD_BOUND_FIELDS = {
+    "active_policy_sha256",
+    "active_promotion_sha256",
+    "clean_candidate_manifest_sha256",
+    "executable_sha256",
+    "job_script_sha256",
+    "manifest_path",
+    "manifest_sha256",
+    "submission_scope",
+}
+RESERVATION_PAYLOAD_OPTIONAL_FIELDS = RESERVATION_PAYLOAD_BOUND_FIELDS | {
+    "registered_science_authorization_id",
+}
+RECONCILIATION_PAYLOAD_FIELDS = {
+    "scheduler_reported_allocated_nodes",
+    "billed_nodes",
+    "elapsed_seconds",
+    "consumed_node_hours",
+    "cumulative_consumed_node_hours",
+}
+MIRROR_RECEIPT_FIELDS = {
+    "mirrored_event_sha256",
+    "mirror_destination",
+    "mirror_transport",
+    "mirror_acknowledged_utc",
+    "mirror_ack_sha256",
+}
 REGISTERED_RESERVATION_EVENT_TYPES = {
     "reservation",
     "job_id_attached",
@@ -350,6 +408,18 @@ def _validate_receipt_provenance(
     mirror_jsonl: Path,
     mirror_transport: str,
 ) -> None:
+    if (
+        set(receipt) != MIRROR_RECEIPT_FIELDS
+        or not _is_lowercase_sha256(receipt.get("mirrored_event_sha256"))
+        or type(receipt.get("mirror_destination")) is not str
+        or not receipt["mirror_destination"]
+        or type(receipt.get("mirror_transport")) is not str
+        or not receipt["mirror_transport"]
+        or type(receipt.get("mirror_acknowledged_utc")) is not str
+        or not receipt["mirror_acknowledged_utc"]
+        or not _is_lowercase_sha256(receipt.get("mirror_ack_sha256"))
+    ):
+        raise ValueError("Mirror receipt schema is invalid")
     if receipt.get("mirror_destination") != str(mirror_jsonl):
         raise ValueError("Mirror receipt destination does not match configured mirror")
     if receipt.get("mirror_transport") != mirror_transport:
@@ -410,7 +480,8 @@ def require_explicit_genesis(records: list[dict[str, object]]) -> None:
     if (
         genesis.get("event_type") != "genesis"
         or genesis.get("state") != "initialized"
-        or not genesis.get("control_plane_version")
+        or type(genesis.get("control_plane_version")) is not str
+        or not genesis["control_plane_version"]
     ):
         raise ValueError("Frontier PIC ledger does not start with a valid genesis event")
     if any(record.get("event_type") == "genesis" for record in records[1:]):
@@ -438,6 +509,63 @@ def _is_lowercase_sha256(value: object) -> bool:
         and len(value) == 64
         and all(character in "0123456789abcdef" for character in value)
     )
+
+
+def _registered_event_field_bounds(event_type: str) -> tuple[set[str], set[str]]:
+    base = CHAIN_EVENT_FIELDS | RESERVATION_PAYLOAD_BASE_FIELDS
+    optional = RESERVATION_PAYLOAD_OPTIONAL_FIELDS
+    if event_type == "reservation":
+        return base, base | optional
+    if event_type == "reservation_cancelled":
+        return base, base | optional | {"notes"}
+    if event_type == "job_id_attached":
+        required = base | {"job_id"}
+        return required, (
+            required
+            | optional
+            | {"attached_by_control_plane_version"}
+            | TERMINAL_RECOVERY_FIELDS
+        )
+    if event_type == "reconciliation":
+        required = base | {"job_id"} | RECONCILIATION_PAYLOAD_FIELDS
+        return required, (
+            required
+            | optional
+            | {
+                "attached_by_control_plane_version",
+                "reconciled_by_control_plane_version",
+            }
+            | TERMINAL_RECOVERY_FIELDS
+        )
+    raise ValueError(f"Unsupported registered ledger event type: {event_type}")
+
+
+def _require_closed_primary_event_schema(record: dict[str, object]) -> None:
+    event_type = record.get("event_type")
+    if type(event_type) is not str or event_type not in {
+        "genesis",
+        "reservation",
+        "job_id_attached",
+        "reservation_cancelled",
+        "reconciliation",
+        "manual_allocation_reconciliation",
+    }:
+        raise ValueError("Ledger event type is missing or unsupported")
+    if type(record.get("timestamp")) is not str or not record["timestamp"]:
+        raise ValueError("Ledger event timestamp must be a nonempty string")
+    if event_type == "genesis":
+        required_fields = allowed_fields = GENESIS_EVENT_FIELDS
+    elif event_type == "manual_allocation_reconciliation":
+        required_fields = allowed_fields = MANUAL_ACCOUNTING_EVENT_FIELDS
+    else:
+        required_fields, allowed_fields = _registered_event_field_bounds(event_type)
+    if not required_fields <= set(record) or not set(record) <= allowed_fields:
+        raise ValueError(f"{event_type} ledger event schema is unsupported")
+    if event_type == "genesis" and (
+        type(record.get("control_plane_version")) is not str
+        or not record["control_plane_version"]
+    ):
+        raise ValueError("Genesis control-plane version must be a nonempty string")
 
 
 def slurm_walltime_seconds(value: object) -> int:
@@ -759,6 +887,7 @@ def _validate_terminal_recovery_handoff_bytes(
 
 def _validate_accounting_records(records: list[dict[str, object]]) -> None:
     for index, record in enumerate(records):
+        _require_closed_primary_event_schema(record)
         event_type = record.get("event_type")
         if "reconciled" in record and type(record["reconciled"]) is not bool:
             raise ValueError("Ledger reconciled status must be boolean")

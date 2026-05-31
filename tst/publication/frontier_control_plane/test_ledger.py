@@ -94,11 +94,38 @@ class LedgerTests(unittest.TestCase):
         return {
             "event_type": "reservation",
             "reservation_id": reservation_id,
+            "submission_id": "submission-1",
+            "control_plane_version": "a" * 64,
+            "active_policy_sha256": "b" * 64,
+            "active_promotion_sha256": "c" * 64,
+            "git_commit": "d" * 40,
+            "campaign": "test-campaign",
+            "test_id": "test-id",
+            "manifest_path": str(
+                self.root
+                / "orion"
+                / "manifests"
+                / "test-campaign"
+                / "submission-1"
+                / "manifest.json"
+            ),
+            "submission_scope": "registered_science",
+            "registered_science_authorization_id": "test-authorization",
+            "clean_candidate_manifest_sha256": "e" * 64,
+            "partition": "batch",
+            "qos": "normal",
+            "qos_selection_reason": "test",
+            "queue_snapshot_sha256": "f" * 64,
+            "manifest_sha256": "1" * 64,
+            "job_script_sha256": "2" * 64,
+            "executable_sha256": "3" * 64,
+            "site_policy_checked_utc": "2026-05-31T00:00:00Z",
             "state": "reserved",
             "reconciled": False,
             "requested_nodes": 1,
             "requested_walltime": "00:01:00",
             "reserved_node_hours": 1.0 / 60.0,
+            "artifact_dir": str(self.root / "artifacts" / "submission-1"),
         }
 
     def _recovery_handoff(
@@ -202,6 +229,7 @@ class LedgerTests(unittest.TestCase):
 
     def test_reserve_attach_reconcile_and_csv_projection(self) -> None:
         common = {
+            **transition_payload(self._reservation_event()),
             "reservation_id": "reservation-1",
             "submission_id": "submission-1",
             "submission_scope": "registered_science",
@@ -265,7 +293,7 @@ class LedgerTests(unittest.TestCase):
     def test_manual_direct_srun_reconciliation_rejects_under_bound_event(
         self,
     ) -> None:
-        with self.assertRaisesRegex(ValueError, "semantics are invalid"):
+        with self.assertRaisesRegex(ValueError, "schema is unsupported"):
             self.append(
                 {
                     "event_type": "manual_allocation_reconciliation",
@@ -287,6 +315,7 @@ class LedgerTests(unittest.TestCase):
 
     def test_registered_reconciliation_rejects_inconsistent_usage(self) -> None:
         common = {
+            **transition_payload(self._reservation_event()),
             "reservation_id": "reservation-1",
             "submission_id": "submission-1",
             "submission_scope": "registered_science",
@@ -334,6 +363,7 @@ class LedgerTests(unittest.TestCase):
 
     def test_registered_reconciliation_rejects_duplicate_terminal_event(self) -> None:
         common = {
+            **transition_payload(self._reservation_event()),
             "reservation_id": "reservation-1",
             "submission_id": "submission-1",
             "requested_nodes": 2,
@@ -451,7 +481,7 @@ class LedgerTests(unittest.TestCase):
                     "state": "cancelled",
                 }
             )
-        with self.assertRaisesRegex(ValueError, "Unknown reservation-bearing"):
+        with self.assertRaisesRegex(ValueError, "missing or unsupported"):
             self.append(
                 {
                     "event_type": "opaque",
@@ -600,10 +630,13 @@ class LedgerTests(unittest.TestCase):
                         "event_type": "job_id_attached",
                         "job_id": "1234",
                         "state": "submitted",
+                        "attached_by_control_plane_version": "b" * 64,
                         **fields,
                     }
                 )
-                with self.assertRaisesRegex(ValueError, "provenance"):
+                with self.assertRaisesRegex(
+                    ValueError, "schema is unsupported|provenance"
+                ):
                     self.append(attachment)
 
         attachment = transition_payload(reservation)
@@ -631,6 +664,7 @@ class LedgerTests(unittest.TestCase):
                 "event_type": "reconciliation",
                 "state": "COMPLETED",
                 "reconciled": True,
+                "reconciled_by_control_plane_version": "b" * 64,
                 "scheduler_reported_allocated_nodes": 1,
                 "billed_nodes": 1,
                 "elapsed_seconds": 60,
@@ -653,6 +687,7 @@ class LedgerTests(unittest.TestCase):
                 "event_type": "job_id_attached",
                 "job_id": "1234",
                 "state": "submitted",
+                "attached_by_control_plane_version": "b" * 64,
                 "terminal_recovery_handoff_path": str(
                     self.root
                     / "orion"
@@ -729,6 +764,7 @@ class LedgerTests(unittest.TestCase):
                 "event_type": "reconciliation",
                 "state": "COMPLETED",
                 "reconciled": True,
+                "reconciled_by_control_plane_version": "b" * 64,
                 "scheduler_reported_allocated_nodes": 1,
                 "billed_nodes": 1,
                 "elapsed_seconds": 3600,
@@ -765,6 +801,7 @@ class LedgerTests(unittest.TestCase):
                 "event_type": "reconciliation",
                 "state": "CANCELLED",
                 "reconciled": True,
+                "reconciled_by_control_plane_version": "b" * 64,
                 "scheduler_reported_allocated_nodes": 0,
                 "billed_nodes": 1,
                 "elapsed_seconds": 0,
@@ -887,6 +924,24 @@ class LedgerTests(unittest.TestCase):
         event = self._manual_accounting_event()
         event["billed_nodes"] = True
         with self.assertRaisesRegex(ValueError, "usage is invalid"):
+            self.append(event)
+
+    def test_append_rejects_unknown_event_type(self) -> None:
+        original = self.ledger.read_bytes()
+        with self.assertRaisesRegex(ValueError, "missing or unsupported"):
+            self.append({"event_type": "opaque"})
+        self.assertEqual(self.ledger.read_bytes(), original)
+
+    def test_append_rejects_missing_event_type(self) -> None:
+        original = self.ledger.read_bytes()
+        with self.assertRaisesRegex(ValueError, "missing or unsupported"):
+            self.append({})
+        self.assertEqual(self.ledger.read_bytes(), original)
+
+    def test_registered_reservation_rejects_under_bound_schema(self) -> None:
+        event = self._reservation_event()
+        event.pop("artifact_dir")
+        with self.assertRaisesRegex(ValueError, "schema is unsupported"):
             self.append(event)
 
     def test_mirror_head_divergence_fails_closed(self) -> None:
@@ -1189,6 +1244,61 @@ class LedgerTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "Invalid sequence number"):
                     validate_primary_chain(forged)
 
+    def test_primary_chain_rejects_rehashed_genesis_aliases_and_extra_fields(
+        self,
+    ) -> None:
+        from ledger import canonical_json, record_sha256
+
+        canonical = json.loads(self.ledger.read_text(encoding="utf-8"))
+        mutations = [
+            ("boolean-version", "control_plane_version", True, "nonempty string"),
+            ("numeric-version", "control_plane_version", 1, "nonempty string"),
+            ("extra-field", "unsupported_extra", "forged", "schema is unsupported"),
+        ]
+        for name, field, value, message in mutations:
+            with self.subTest(name=name):
+                forged_record = dict(canonical)
+                forged_record[field] = value
+                forged_record["event_sha256"] = record_sha256(
+                    forged_record, "event_sha256"
+                )
+                forged = self.root / f"forged-genesis-{name}.jsonl"
+                forged.write_text(
+                    canonical_json(forged_record) + "\n", encoding="utf-8"
+                )
+                with self.assertRaisesRegex(ValueError, message):
+                    validate_primary_chain(forged)
+
+    def test_receipts_reject_rehashed_extra_field_and_boolean_ack_timestamp(
+        self,
+    ) -> None:
+        from ledger import canonical_json, record_sha256
+
+        primary = validate_primary_chain(self.ledger)
+        canonical = json.loads(self.receipts.read_text(encoding="utf-8"))
+        mutations = [
+            ("extra-field", "unsupported_extra", "forged"),
+            ("boolean-acknowledged-utc", "mirror_acknowledged_utc", True),
+        ]
+        for name, field, value in mutations:
+            with self.subTest(name=name):
+                forged_receipt = dict(canonical)
+                forged_receipt[field] = value
+                forged_receipt["mirror_ack_sha256"] = record_sha256(
+                    forged_receipt, "mirror_ack_sha256"
+                )
+                forged = self.root / f"forged-receipt-{name}.jsonl"
+                forged.write_text(
+                    canonical_json(forged_receipt) + "\n", encoding="utf-8"
+                )
+                with self.assertRaisesRegex(ValueError, "receipt schema is invalid"):
+                    validate_receipts(
+                        forged,
+                        primary,
+                        mirror_jsonl=self.mirror,
+                        mirror_transport="filesystem_copy",
+                    )
+
     def test_repair_copies_missing_mirror_suffix_and_receipt(self) -> None:
         self.append(self._reservation_event())
         self._drop_last_line(self.mirror)
@@ -1341,7 +1451,7 @@ class LedgerTests(unittest.TestCase):
 
         with patch("ledger._append_jsonl", side_effect=swap_parent_then_append):
             with self.assertRaises(ValueError):
-                self.append({"event_type": "must_fail_closed"})
+                self.append(self._reservation_event())
         self.assertTrue(swapped)
         self.assertEqual(list(ledger_parent.iterdir()), [])
         self.assertEqual(

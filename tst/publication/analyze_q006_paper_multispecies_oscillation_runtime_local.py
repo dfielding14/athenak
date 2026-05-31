@@ -23,6 +23,7 @@ if __package__:
     from .immutable_orion_tree import authorized_tree_root
     from .immutable_orion_tree import freeze_tree as freeze_immutable_tree
     from .immutable_orion_tree import is_sealed_snapshot_member
+    from .immutable_orion_tree import loads_json_reject_duplicate_keys
     from .immutable_orion_tree import require_exact_primitive_types
     from .immutable_orion_tree import staged_verified_frozen_tree
     from .immutable_orion_tree import validate_executable_elf
@@ -35,6 +36,7 @@ else:
     from immutable_orion_tree import authorized_tree_root
     from immutable_orion_tree import freeze_tree as freeze_immutable_tree
     from immutable_orion_tree import is_sealed_snapshot_member
+    from immutable_orion_tree import loads_json_reject_duplicate_keys
     from immutable_orion_tree import require_exact_primitive_types
     from immutable_orion_tree import staged_verified_frozen_tree
     from immutable_orion_tree import validate_executable_elf
@@ -157,9 +159,9 @@ PARSER_INVOCATION_KEYS = {
     "slurm_used",
 }
 _PVTK_EXECUTION_PATTERN = re.compile(
-    rb"^# vtk DataFile Version 2\.0\r?\n"
-    rb"# AthenaK particle data at time=\s*([^ \r\n]+)\s+"
-    rb"nranks=\s*([0-9]+)\s+cycle=([0-9]+)\s+variables=([^\r\n]+)\r?\n"
+    rb"^# vtk DataFile Version 2\.0\n"
+    rb"# AthenaK particle data at time= ([^ \n]+)  "
+    rb"nranks= (0|[1-9][0-9]*)  cycle=(0|[1-9][0-9]*)  variables=([^\n]+)\n"
 )
 SOURCE = REPO_ROOT / "src/pgen/tests/q006_paper_multispecies_oscillation_runtime_local.cpp"
 PARTICLES_SOURCE = REPO_ROOT / "src/particles/particles.cpp"
@@ -492,6 +494,21 @@ def _require_canonical_command_sidecar(path: Path, argv: list[str], label: str) 
     )
 
 
+def _require_canonical_json_argv_sidecar(path: Path, argv: list[str], label: str) -> None:
+    """Require one canonical JSON rendering of a retained argv list."""
+    text = path.read_text(encoding="utf-8")
+    _require(
+        text == f"{json.dumps(argv, indent=2)}\n"
+        and _load_retained_json_text(text, label) == argv,
+        f"{label} drifted",
+    )
+
+
+def _load_retained_json_text(text: str, label: str) -> Any:
+    """Decode retained JSON without accepting duplicate object keys."""
+    return loads_json_reject_duplicate_keys(text, error_type=AuditError, label=label)
+
+
 def _require_schema_version(value: Any, expected: int, label: str) -> None:
     """Reject Python boolean and float aliases for JSON schema integers."""
     _require(
@@ -600,7 +617,10 @@ def validate_decks() -> list[dict[str, Any]]:
 
 def validate_historical_preparation_bindings() -> dict[str, Any]:
     """Require every committed preparation artifact to retain its frozen hash."""
-    sidecar = json.loads(PREPARATION_SIDECAR.read_text(encoding="utf-8"))
+    sidecar = _load_retained_json_text(
+        PREPARATION_SIDECAR.read_text(encoding="utf-8"),
+        "Q-006 preparation sidecar",
+    )
     bindings = sidecar["artifact_bindings"]
     for relative, expected in bindings.items():
         _require(_sha256(REPO_ROOT / relative) == expected,
@@ -775,7 +795,7 @@ def _read_pvtk_execution_metadata(path: Path) -> dict[str, Any]:
     time = float(match.group(1))
     nranks = int(match.group(2))
     cycle = int(match.group(3))
-    variables = match.group(4).decode("ascii").strip()
+    variables = match.group(4).decode("ascii")
     _require(math.isfinite(time), "PVTK execution time must be finite")
     _require(nranks == 1, "bounded Q-006 PVTK artifact must report nranks=1")
     _require(variables == "prtcl_all",
@@ -818,7 +838,9 @@ def _authorized_retained_root(root: str | Path) -> Path:
 def _validate_runtime_freeze_receipt(root: Path) -> str:
     """Require the retained Q-006 tree to carry its exact nonqualifying role."""
     path = _contained_regular_file(root, root / FREEZE_RECEIPT_NAME)
-    receipt = json.loads(path.read_text(encoding="utf-8"))
+    receipt = _load_retained_json_text(
+        path.read_text(encoding="utf-8"), "Q-006 freeze receipt"
+    )
     _require_schema_version(receipt, 1, "Q-006 freeze receipt")
     expected = {
         "schema_version": 1,
@@ -827,8 +849,7 @@ def _validate_runtime_freeze_receipt(root: Path) -> str:
         "inventory_excludes": INVENTORY_NAME,
         "freeze_policy": "remove all owner, group and other write bits recursively",
     }
-    for name, value in expected.items():
-        _require(receipt.get(name) == value, f"Q-006 freeze receipt {name} drifted")
+    _require_exact_match(receipt, expected, "Q-006 freeze receipt")
     return _sha256(path)
 
 
@@ -918,7 +939,9 @@ def extract_runtime_snapshot(
 def _validate_pinned_executable_binding(root: Path) -> dict[str, Any]:
     """Verify the source-archived executable lineage retained beside the probe."""
     binding_path = _contained_regular_file(root, root / PINNED_EXECUTABLE_BINDING_NAME)
-    initial_binding = json.loads(binding_path.read_text(encoding="utf-8"))
+    initial_binding = _load_retained_json_text(
+        binding_path.read_text(encoding="utf-8"), "pinned executable binding"
+    )
     initial_pinned_root = _authorized_retained_root(initial_binding["pinned_executable_root"])
     if not _has_staged_tree(initial_pinned_root):
         with staged_verified_frozen_tree(
@@ -930,7 +953,9 @@ def _validate_pinned_executable_binding(root: Path) -> dict[str, Any]:
         ) as (_, staged_root), _use_staged_tree(initial_pinned_root, staged_root):
             return _validate_pinned_executable_binding(root)
     path = _contained_regular_file(root, root / PINNED_EXECUTABLE_BINDING_NAME)
-    binding = json.loads(path.read_text(encoding="utf-8"))
+    binding = _load_retained_json_text(
+        path.read_text(encoding="utf-8"), "pinned executable binding"
+    )
     _require(isinstance(binding, dict) and set(binding) == PINNED_EXECUTABLE_BINDING_KEYS,
              "pinned executable binding schema drifted")
     _require_schema_version(binding, 1, "pinned executable binding")
@@ -958,7 +983,9 @@ def _validate_pinned_executable_binding(root: Path) -> dict[str, Any]:
         label="Q-006 pinned executable",
     )
     receipt_path = _contained_regular_file(pinned_root, pinned_root / FREEZE_RECEIPT_NAME)
-    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    receipt = _load_retained_json_text(
+        receipt_path.read_text(encoding="utf-8"), "pinned executable receipt"
+    )
     _require_schema_version(receipt, 1, "pinned executable receipt")
     expected_receipt = {
         "schema_version": 1,
@@ -975,7 +1002,9 @@ def _validate_pinned_executable_binding(root: Path) -> dict[str, Any]:
     provenance_path = _contained_regular_file(
         pinned_root, pinned_root / PIN_PROVENANCE_RECEIPT_NAME
     )
-    provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+    provenance = _load_retained_json_text(
+        provenance_path.read_text(encoding="utf-8"), "pinned executable provenance receipt"
+    )
     _require_schema_version(provenance, 1, "pinned executable provenance receipt")
     source = provenance.get("source_archive")
     _require(isinstance(source, dict) and source.get("path")
@@ -1024,9 +1053,12 @@ def _validate_pinned_executable_binding(root: Path) -> dict[str, Any]:
         error_type=AuditError,
         label="Q-006 pinned executable source archive",
     )
-    archive_validation = json.loads(_contained_regular_file(
-        pinned_root, pinned_root / "source/archive_validation.json"
-    ).read_text(encoding="utf-8"))
+    archive_validation = _load_retained_json_text(
+        _contained_regular_file(
+            pinned_root, pinned_root / "source/archive_validation.json"
+        ).read_text(encoding="utf-8"),
+        "pinned executable source archive validation receipt",
+    )
     _require_schema_version(archive_validation, 1, "pinned executable archive validation")
     expected_archive_validation = {
         **archive_report,
@@ -1041,9 +1073,12 @@ def _validate_pinned_executable_binding(root: Path) -> dict[str, Any]:
         expected_archive_validation,
         "pinned executable source archive validation receipt",
     )
-    dependency_manifest = json.loads(_contained_regular_file(
-        pinned_root, pinned_root / "source/shared_dependency_sha256.json"
-    ).read_text(encoding="utf-8"))
+    dependency_manifest = _load_retained_json_text(
+        _contained_regular_file(
+            pinned_root, pinned_root / "source/shared_dependency_sha256.json"
+        ).read_text(encoding="utf-8"),
+        "pinned executable shared dependency manifest",
+    )
     validate_source_archive_dependencies(
         archive,
         dependency_manifest,
@@ -1057,9 +1092,12 @@ def _validate_pinned_executable_binding(root: Path) -> dict[str, Any]:
         error_type=AuditError,
         label="Q-006 pinned executable serial-host build evidence",
     )
-    preflight = json.loads(_contained_regular_file(
-        pinned_root, pinned_root / "build/clean_directory_preflight.json"
-    ).read_text(encoding="utf-8"))
+    preflight = _load_retained_json_text(
+        _contained_regular_file(
+            pinned_root, pinned_root / "build/clean_directory_preflight.json"
+        ).read_text(encoding="utf-8"),
+        "pinned executable clean-directory preflight",
+    )
     _require_schema_version(preflight, 1, "pinned executable clean-directory preflight")
     _require(
         isinstance(preflight, dict)
@@ -1088,7 +1126,7 @@ def _validate_pinned_executable_binding(root: Path) -> dict[str, Any]:
 def _load_rooted_json(root: Path, path: Path) -> tuple[Path, Any]:
     """Load one root-contained JSON sidecar after enforcing regular-file policy."""
     rooted = _contained_regular_file(root, path)
-    return rooted, json.loads(rooted.read_text(encoding="utf-8"))
+    return rooted, _load_retained_json_text(rooted.read_text(encoding="utf-8"), str(path))
 
 
 def _relative_file_hashes(
@@ -1368,11 +1406,10 @@ def _validate_parser_contract_suite(root: Path, pinned: dict[str, Any]) -> dict[
         tokens = expected_text if isinstance(expected_text, list) else [expected_text]
         _require(all(isinstance(token, str) and token in stdout + stderr for token in tokens),
                  f"{label}: parser expected diagnostic or token drifted")
-        _require(
-            json.loads(_contained_regular_file(root, case / "command.json").read_text(
-                encoding="utf-8"
-            )) == argv,
-            f"{label}: parser command sidecar drifted",
+        _require_canonical_json_argv_sidecar(
+            _contained_regular_file(root, case / "command.json"),
+            argv,
+            f"{label}: parser command sidecar",
         )
         _require_canonical_returncode_sidecar(
             _contained_regular_file(root, case / "returncode.txt"),
@@ -1548,7 +1585,9 @@ def verify_retained_probe(
         _validate_retained_topology(retained, _validate_pinned_executable_binding(retained))
         measured = build_retained_probe_report(retained)
         summary = _contained_regular_file(retained, retained / PROBE_SUMMARY_NAME)
-        expected = json.loads(summary.read_text(encoding="utf-8"))
+        expected = _load_retained_json_text(
+            summary.read_text(encoding="utf-8"), "Q-006 retained probe summary"
+        )
         _require_schema_version(expected, 1, "retained Q-006 probe summary")
         _require_exact_match(expected, measured, "retained Q-006 probe summary")
         return {"tree_freeze": tree, "summary_sha256": _sha256(summary), "summary": measured}

@@ -157,7 +157,9 @@ def write_profile(
     )
     _validate_source_status_inputs(source_root, provenance_payloads)
     toolchain = _reviewed_utf8(
-        provenance_payloads["toolchain"], label="Toolchain description"
+        provenance_payloads["toolchain"],
+        label="Toolchain description",
+        require_canonical_lf=True,
     )
     invocations = json.loads(
         _reviewed_utf8(

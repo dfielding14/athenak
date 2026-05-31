@@ -30,7 +30,7 @@ from control_plane_common import require_storage_policy_unlock_snapshot
 from control_plane_common import stable_serialization_anchor
 from control_plane_common import validate_storage_policy, verify_installed_control_plane
 from ledger import _path_exists, _pinned_parent_directories
-from ledger import latest_reservations, validate_mirrored_state
+from ledger import latest_reservations, validate_mirrored_state, validate_receipts
 from ledger import require_no_incomplete_manual_accounting_marker
 
 
@@ -38,6 +38,7 @@ SCRIPT_DIR = Path(__file__).absolute().parent
 
 
 def _require_no_outstanding_submissions(
+    policy: dict[str, object],
     authorized_pic_root: Path,
     authorized_project_home_root: Path,
 ) -> None:
@@ -54,9 +55,19 @@ def _require_no_outstanding_submissions(
             raise ValueError("Policy promotion is blocked by a pending scheduler submission")
         existing = [_path_exists(path) for path in paths]
         if not any(existing):
+            storage = policy["olcf_side_storage"]
+            if (
+                not isinstance(storage, dict)
+                or storage.get("ledger_genesis_allowed") is not True
+                or storage.get("ledger_genesis") is not None
+            ):
+                raise ValueError(
+                    "Fresh-root policy promotion requires pending ledger genesis"
+                )
             return
         if not all(existing):
             raise ValueError("Policy promotion is blocked by incomplete mirrored ledger state")
+        validated_mirror = mirror
         try:
             records = validate_mirrored_state(ledger, receipts, mirror)
         except ValueError as lexical_error:
@@ -64,6 +75,7 @@ def _require_no_outstanding_submissions(
                 raise
             try:
                 records = validate_mirrored_state(ledger, receipts, resolved_mirror)
+                validated_mirror = resolved_mirror
             except ValueError:
                 raise lexical_error
         outstanding = [
@@ -72,6 +84,29 @@ def _require_no_outstanding_submissions(
         ]
         if outstanding:
             raise ValueError("Policy promotion is blocked by an outstanding reservation")
+        receipts_records = validate_receipts(
+            receipts,
+            records,
+            mirror_jsonl=validated_mirror,
+            mirror_transport="filesystem_copy",
+        )
+        storage = policy["olcf_side_storage"]
+        expected_genesis = {
+            "status": "initialized",
+            "timestamp": records[0]["timestamp"],
+            "control_plane_version": records[0]["control_plane_version"],
+            "event_sha256": records[0]["event_sha256"],
+            "mirror_transport": receipts_records[0]["mirror_transport"],
+            "mirror_ack_sha256": receipts_records[0]["mirror_ack_sha256"],
+        }
+        if (
+            not isinstance(storage, dict)
+            or storage.get("ledger_genesis_allowed") is not False
+            or storage.get("ledger_genesis") != expected_genesis
+        ):
+            raise ValueError(
+                "Policy promotion ledger genesis does not match retained ledger bindings"
+            )
 
 
 def _require_same_directory(path: Path, descriptor: int) -> None:
@@ -262,7 +297,7 @@ def promote(
             / "node_hours.jsonl",
         )
         _require_no_outstanding_submissions(
-            authorized_pic_root, authorized_project_home_root
+            policy, authorized_pic_root, authorized_project_home_root
         )
         mirror_policy_descriptor = open_directory_below(
             mirror_policy_parent, root=authorized_project_home_root

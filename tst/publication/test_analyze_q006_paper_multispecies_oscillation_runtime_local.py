@@ -7,6 +7,7 @@ import hashlib
 import json
 from pathlib import Path
 import stat
+import struct
 import subprocess
 import sys
 import tempfile
@@ -16,7 +17,7 @@ from unittest import mock
 import numpy as np
 
 from tst.publication import analyze_q006_paper_multispecies_oscillation_runtime_local as q006
-from tst.publication.pvtk_particles import ParticleVTKData
+from tst.publication.pvtk_particles import ParticleVTKData, read_particle_vtk
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -294,6 +295,90 @@ class Q006PaperMultispeciesOscillationRuntimeLocalTests(unittest.TestCase):
                     path.write_text(alias, encoding="utf-8")
                     with self.assertRaisesRegex(q006.AuditError, "sidecar drifted"):
                         q006._require_canonical_command_sidecar(path, argv, "runtime command")
+
+    def test_parser_command_json_sidecar_requires_canonical_serialization(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "command.json"
+            argv = ["/retained/bin/athena", "-i", "/retained/deck.athinput", "time/nlim=0"]
+            path.write_text(json.dumps(argv, indent=2) + "\n", encoding="utf-8")
+            q006._require_canonical_json_argv_sidecar(path, argv, "parser command sidecar")
+            for alias in (
+                json.dumps(argv) + "\n",
+                json.dumps(argv, indent=4) + "\n",
+                json.dumps(argv, indent=2),
+            ):
+                with self.subTest(alias=alias):
+                    path.write_text(alias, encoding="utf-8")
+                    with self.assertRaisesRegex(q006.AuditError, "drifted"):
+                        q006._require_canonical_json_argv_sidecar(
+                            path, argv, "parser command sidecar"
+                        )
+
+    def test_q006_freeze_receipt_requires_closed_shape_and_unique_json_keys(self) -> None:
+        expected = {
+            "schema_version": 1,
+            "artifact_role": q006.ARTIFACT_ROLE,
+            "qualification_effect": q006.QUALIFICATION_EFFECT,
+            "inventory_excludes": q006.INVENTORY_NAME,
+            "freeze_policy": "remove all owner, group and other write bits recursively",
+        }
+        with self.assertRaisesRegex(q006.AuditError, "object keys drifted"):
+            q006._require_exact_match({**expected, "unexpected": "alias"}, expected, "receipt")
+        with self.assertRaisesRegex(q006.AuditError, "duplicated"):
+            q006._load_retained_json_text(
+                '{"schema_version": 1, "schema_version": 1}',
+                "Q-006 freeze receipt",
+            )
+
+    def test_pvtk_execution_header_rejects_spacing_and_line_ending_aliases(self) -> None:
+        canonical = (
+            b"# vtk DataFile Version 2.0\n"
+            b"# AthenaK particle data at time= 0  nranks= 1  cycle=0  "
+            b"variables=prtcl_all\nBINARY\n"
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "snapshot.vtk"
+            path.write_bytes(canonical)
+            self.assertEqual(q006._read_pvtk_execution_metadata(path)["cycle"], 0)
+            for alias in (
+                canonical.replace(b"\n", b"\r\n"),
+                canonical.replace(b"time= 0", b"time=  0"),
+                canonical.replace(b"nranks= 1", b"nranks=  1"),
+                canonical.replace(b"nranks= 1", b"nranks= 01"),
+                canonical.replace(b"cycle=0", b"cycle= 0"),
+                canonical.replace(b"cycle=0", b"cycle=00"),
+                canonical.replace(b"variables=prtcl_all", b"variables=prtcl_all "),
+            ):
+                with self.subTest(alias=alias):
+                    path.write_bytes(alias)
+                    with self.assertRaisesRegex(q006.AuditError, "header|variables"):
+                        q006._read_pvtk_execution_metadata(path)
+
+    def test_particle_vtk_reader_rejects_noncanonical_counts_and_line_endings(self) -> None:
+        canonical = (
+            b"# vtk DataFile Version 2.0\n"
+            b"# fixture\n"
+            b"BINARY\n"
+            b"DATASET UNSTRUCTURED_GRID\n"
+            b"\nPOINTS 1 float\n"
+            + struct.pack(">3f", 0.0, 0.0, 0.0)
+            + b"\n\nPOINT_DATA 1\n"
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "snapshot.vtk"
+            path.write_bytes(canonical)
+            self.assertEqual(read_particle_vtk(path).points.shape, (1, 3))
+            for alias in (
+                canonical.replace(b"\n", b"\r\n"),
+                canonical.replace(b"POINTS 1", b"POINTS 01"),
+                canonical.replace(b"POINTS 1", b"POINTS  1"),
+                canonical.replace(b"POINT_DATA 1", b"POINT_DATA 01"),
+                canonical.replace(b"POINT_DATA 1", b"POINT_DATA  1"),
+            ):
+                with self.subTest(alias=alias):
+                    path.write_bytes(alias)
+                    with self.assertRaises(ValueError):
+                        read_particle_vtk(path)
 
     def test_readiness_sidecar_binds_only_new_q006_runtime_local_files(self) -> None:
         sidecar = json.loads(SIDECAR.read_text(encoding="utf-8"))

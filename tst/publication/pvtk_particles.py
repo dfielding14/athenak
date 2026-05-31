@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import re
 from typing import Dict
 
 import numpy as np
@@ -12,6 +13,11 @@ _VTK_SCALAR_DTYPES = {
     "float": np.dtype(">f4"),
     "int": np.dtype(">i4"),
 }
+_CANONICAL_COUNT = rb"(?:0|[1-9][0-9]*)"
+_POINTS_PATTERN = re.compile(rb"POINTS (" + _CANONICAL_COUNT + rb") float")
+_POINT_DATA_PATTERN = re.compile(rb"POINT_DATA (" + _CANONICAL_COUNT + rb")")
+_SCALARS_PATTERN = re.compile(rb"SCALARS ([A-Za-z_][A-Za-z0-9_]*) ([A-Za-z_][A-Za-z0-9_]*)")
+_VECTORS_PATTERN = re.compile(rb"VECTORS ([A-Za-z_][A-Za-z0-9_]*) ([A-Za-z_][A-Za-z0-9_]*)")
 
 
 @dataclass
@@ -25,7 +31,10 @@ def _read_line(blob: bytes, idx: int) -> tuple[str, int]:
     end = blob.find(b"\n", idx)
     if end < 0:
         raise ValueError("Malformed VTK file: missing line terminator")
-    line = blob[idx:end].decode("ascii").strip()
+    raw_line = blob[idx:end]
+    if b"\r" in raw_line:
+        raise ValueError("Malformed VTK file: noncanonical line ending")
+    line = raw_line.decode("ascii")
     return line, end + 1
 
 
@@ -41,12 +50,10 @@ def read_particle_vtk(path: str | Path) -> ParticleVTKData:
     while idx < len(blob):
         line, idx = _read_line(blob, idx)
         if line.startswith("POINTS "):
-            tokens = line.split()
-            if len(tokens) != 3 or tokens[2] != "float":
+            match = _POINTS_PATTERN.fullmatch(line.encode("ascii"))
+            if match is None:
                 raise ValueError("Malformed POINTS header")
-            npoints = int(tokens[1])
-            if npoints < 0:
-                raise ValueError("POINTS count must be non-negative")
+            npoints = int(match.group(1))
             break
     if npoints is None:
         raise ValueError("POINTS section not found")
@@ -68,23 +75,23 @@ def read_particle_vtk(path: str | Path) -> ParticleVTKData:
         if not line:
             continue
         if line.startswith("POINT_DATA "):
-            tokens = line.split()
             if point_data_count is not None:
                 raise ValueError("Duplicate POINT_DATA section")
-            if len(tokens) != 2:
+            match = _POINT_DATA_PATTERN.fullmatch(line.encode("ascii"))
+            if match is None:
                 raise ValueError("Malformed POINT_DATA header")
-            point_data_count = int(tokens[1])
+            point_data_count = int(match.group(1))
             if point_data_count != npoints:
                 raise ValueError("POINT_DATA count does not match POINTS count")
             continue
         if line.startswith("SCALARS "):
             if point_data_count is None:
                 raise ValueError("SCALARS section appears before POINT_DATA")
-            tokens = line.split()
-            if len(tokens) != 3:
+            match = _SCALARS_PATTERN.fullmatch(line.encode("ascii"))
+            if match is None:
                 raise ValueError("Malformed SCALARS header")
-            name = tokens[1]
-            scalar_type = tokens[2]
+            name = match.group(1).decode("ascii")
+            scalar_type = match.group(2).decode("ascii")
             if name in scalars or name in vectors:
                 raise ValueError(f"Duplicate SCALARS section: {name}")
             if scalar_type not in _VTK_SCALAR_DTYPES:
@@ -112,11 +119,11 @@ def read_particle_vtk(path: str | Path) -> ParticleVTKData:
         if line.startswith("VECTORS "):
             if point_data_count is None:
                 raise ValueError("VECTORS section appears before POINT_DATA")
-            tokens = line.split()
-            if len(tokens) != 3:
+            match = _VECTORS_PATTERN.fullmatch(line.encode("ascii"))
+            if match is None:
                 raise ValueError("Malformed VECTORS header")
-            name = tokens[1]
-            vector_type = tokens[2]
+            name = match.group(1).decode("ascii")
+            vector_type = match.group(2).decode("ascii")
             if name in vectors or name in scalars:
                 raise ValueError(f"Duplicate VECTORS section: {name}")
             if vector_type != "float":

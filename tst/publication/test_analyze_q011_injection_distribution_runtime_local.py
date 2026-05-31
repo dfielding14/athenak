@@ -343,6 +343,30 @@ class Q011InjectionDistributionRuntimeLocalTests(unittest.TestCase):
                     with self.assertRaisesRegex(q011.AuditError, expected):
                         q011._read_pvtk_execution_metadata(pvtk)
 
+    def test_runtime_header_rejects_spacing_and_line_ending_aliases(self) -> None:
+        canonical = (
+            b"# vtk DataFile Version 2.0\n"
+            b"# AthenaK particle data at time= 0.5  nranks= 1  cycle=1  "
+            b"variables=prtcl_all\nBINARY\n"
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            pvtk = Path(directory) / "snapshot.part.vtk"
+            pvtk.write_bytes(canonical)
+            self.assertEqual(q011._read_pvtk_execution_metadata(pvtk)["cycle"], 1)
+            for alias in (
+                canonical.replace(b"\n", b"\r\n"),
+                canonical.replace(b"time= 0.5", b"time=  0.5"),
+                canonical.replace(b"nranks= 1", b"nranks=  1"),
+                canonical.replace(b"nranks= 1", b"nranks= 01"),
+                canonical.replace(b"cycle=1", b"cycle= 1"),
+                canonical.replace(b"cycle=1", b"cycle=01"),
+                canonical.replace(b"variables=prtcl_all", b"variables=prtcl_all "),
+            ):
+                with self.subTest(alias=alias):
+                    pvtk.write_bytes(alias)
+                    with self.assertRaisesRegex(q011.AuditError, "header|variables"):
+                        q011._read_pvtk_execution_metadata(pvtk)
+
     def test_freezer_rejects_reserved_symlink_before_outside_overwrite(self) -> None:
         original_root = q011.ORION_BULK_ROOT
         with tempfile.TemporaryDirectory() as directory:

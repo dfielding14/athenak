@@ -90,14 +90,24 @@ def _authorized_source_path(source_root: Path, authorized_source_root: Path) -> 
     return resolved_source_root
 
 
-def _reviewed_utf8(data: bytes, *, label: str) -> str:
+def _reviewed_utf8(
+    data: bytes, *, label: str, require_canonical_lf: bool = False
+) -> str:
     try:
-        text = data.decode("utf-8").strip()
+        text = data.decode("utf-8")
     except UnicodeDecodeError as error:
         raise ValueError(f"{label} must be UTF-8 text") from error
-    if not text:
+    if require_canonical_lf:
+        if not text.endswith("\n") or text.endswith("\n\n"):
+            raise ValueError(f"{label} must use one final LF terminator")
+        canonical = text.removesuffix("\n")
+        if not canonical or canonical.strip() != canonical:
+            raise ValueError(f"{label} must not contain surrounding whitespace")
+        return canonical
+    canonical = text.strip()
+    if not canonical:
         raise ValueError(f"{label} must not be blank")
-    return text
+    return canonical
 
 
 def _require_exact_schema_version(value: dict[str, object], *, expected: int, label: str) -> None:
@@ -524,7 +534,9 @@ def create_freeze(
             "source_commit_sha256": commit_sha256,
             "source_bundle_sha256": bundle_sha256,
             "toolchain": _reviewed_utf8(
-                provenance_payloads["toolchain"], label="Toolchain description"
+                provenance_payloads["toolchain"],
+                label="Toolchain description",
+                require_canonical_lf=True,
             ),
             "build_invocations_sha256": build_invocations_sha256,
             "executable_sha256": executable_sha256,
