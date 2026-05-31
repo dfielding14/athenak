@@ -87,6 +87,7 @@ struct RestartMetaData {
   std::vector<int> gids_eachrank;
   std::vector<int> nmb_eachrank;
   std::vector<int> rank_eachmb;
+  std::vector<int> ncyc_since_ref;
 };
 
 // Equality operator for LogicalLocation (needed for unordered_map)

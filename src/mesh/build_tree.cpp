@@ -18,6 +18,7 @@
 #include "coordinates/cell_locations.hpp"
 #include "hydro/hydro.hpp"
 #include "mhd/mhd.hpp"
+#include "outputs/restart_utils.hpp"
 
 #if MPI_PARALLEL_ENABLED
 #include <mpi.h>
@@ -506,6 +507,85 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
                 restart_meta.original_nranks*sizeof(int), MPI_CHAR, 0, MPI_COMM_WORLD);
     }
 #endif
+  }
+
+  restart_meta.ncyc_since_ref.clear();
+  std::uint64_t mesh_metadata_magic = 0;
+  if (global_variable::my_rank == 0 || single_file_per_rank) {
+    const IOWrapperSizeT extension_offset = resfile.GetPosition(single_file_per_rank);
+    if (resfile.Read_bytes_at(&mesh_metadata_magic, 1, sizeof(mesh_metadata_magic),
+                              extension_offset, single_file_per_rank)
+        != sizeof(mesh_metadata_magic)) {
+      mesh_metadata_magic = 0;
+    }
+    if (resfile.Seek(extension_offset, single_file_per_rank) != 0) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "Unable to restore restart stream position after mesh-metadata peek."
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+  }
+#if MPI_PARALLEL_ENABLED
+  if (!single_file_per_rank) {
+    MPI_Bcast(&mesh_metadata_magic, sizeof(mesh_metadata_magic), MPI_CHAR, 0,
+              MPI_COMM_WORLD);
+  }
+#endif
+  if (mesh_metadata_magic == restart_utils::kMeshMetadataMagic) {
+    int mesh_metadata_version = 0;
+    int has_refinement_cooldown = 0;
+    if (global_variable::my_rank == 0 || single_file_per_rank) {
+      if (resfile.Read_bytes(&mesh_metadata_magic, 1, sizeof(mesh_metadata_magic),
+                             single_file_per_rank) != sizeof(mesh_metadata_magic)
+          || resfile.Read_bytes(&mesh_metadata_version, sizeof(int), 1,
+                                single_file_per_rank) != 1
+          || resfile.Read_bytes(&has_refinement_cooldown, sizeof(int), 1,
+                                single_file_per_rank) != 1) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl
+                  << "Mesh restart metadata read is incomplete, restart file is broken."
+                  << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+    }
+#if MPI_PARALLEL_ENABLED
+    if (!single_file_per_rank) {
+      MPI_Bcast(&mesh_metadata_version, 1, MPI_INT, 0, MPI_COMM_WORLD);
+      MPI_Bcast(&has_refinement_cooldown, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    }
+#endif
+    if (mesh_metadata_version != restart_utils::kMeshMetadataVersion
+        || (has_refinement_cooldown != 0 && has_refinement_cooldown != 1)) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "Unsupported mesh restart metadata version="
+                << mesh_metadata_version << " or refinement-cooldown flag="
+                << has_refinement_cooldown << "." << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    if (has_refinement_cooldown == 0) {
+      // Keep the empty vector as the backward-compatible constructor signal.
+    } else {
+      restart_meta.ncyc_since_ref.assign(nmb_total, 0);
+      if (global_variable::my_rank == 0 || single_file_per_rank) {
+        if (resfile.Read_bytes(restart_meta.ncyc_since_ref.data(), sizeof(int),
+                               nmb_total, single_file_per_rank)
+            != static_cast<unsigned int>(nmb_total)) {
+          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                    << std::endl
+                    << "MeshBlock refinement cooldown list read from restart file is "
+                    << "incorrect, restart file is broken." << std::endl;
+          std::exit(EXIT_FAILURE);
+        }
+      }
+#if MPI_PARALLEL_ENABLED
+      if (!single_file_per_rank) {
+        MPI_Bcast(restart_meta.ncyc_since_ref.data(), nmb_total*sizeof(int),
+                  MPI_CHAR, 0, MPI_COMM_WORLD);
+      }
+#endif
+    }
   }
 
   // rebuild the MeshBlockTree

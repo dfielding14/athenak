@@ -15,6 +15,9 @@
 
 namespace restart_utils {
 
+inline constexpr std::uint64_t kMeshMetadataMagic = 0x4154484b4d455348ULL;
+inline constexpr int kMeshMetadataVersion = 1;
+
 struct FileDigest {
   std::uint64_t size = 0;
   std::uint64_t fnv1a64 = 0;

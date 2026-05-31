@@ -21,6 +21,7 @@ using UserSrctermFnPtr = void (*)(Mesh* pm, const Real bdt);
 using UserRefinementFnPtr = void (*)(MeshBlockPack* pmbp);
 using UserHistoryFnPtr = void (*)(HistoryData *pdata, Mesh *pm);
 using UserWorkInLoopFnPtr = void (*)(Mesh* pm);
+using UserWorkBeforeLoopFnPtr = void (*)(Mesh* pm);
 
 //----------------------------------------------------------------------------------------
 //! \class ProblemGenerator
@@ -57,6 +58,7 @@ class ProblemGenerator {
   UserSrctermFnPtr user_srcs_func=nullptr;
   UserRefinementFnPtr user_ref_func=nullptr;
   UserHistoryFnPtr user_hist_func=nullptr;
+  UserWorkBeforeLoopFnPtr user_work_before_loop_func=nullptr;
   UserWorkInLoopFnPtr user_work_in_loop_func=nullptr;
 
   // predefined problem generator functions (default test suite)

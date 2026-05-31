@@ -55,6 +55,22 @@ double Q017FiniteNonnegative(double value) {
   return (std::isfinite(value) && value >= 0.0)? value : 0.0;
 }
 
+bool OutputIsDue(const BaseTypeOutput *out, const Mesh *pm, const Real tlim) {
+  // Compare at floating point (32-bit) precision to reduce effect of round off.
+  const float time_32 = static_cast<float>(pm->time);
+  const float next_32 =
+      static_cast<float>(out->out_params.last_time + out->out_params.dt);
+  const float tlim_32 = static_cast<float>(tlim);
+  const int dcycle = out->out_params.dcycle;
+  return ((out->out_params.dt > 0.0) &&
+          ((time_32 >= next_32) && (time_32 < tlim_32))) ||
+         ((dcycle > 0) && ((pm->ncycle)%dcycle == 0));
+}
+
+bool IsRestartOutput(const BaseTypeOutput *out) {
+  return out->out_params.file_type == "rst";
+}
+
 } // namespace
 
 //----------------------------------------------------------------------------------------
@@ -438,6 +454,11 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
            (elapsed_time < wall_time)) {
       if (global_variable::my_rank == 0) {OutputCycleDiagnostics(pmesh);}
 
+      // Problem-specific edits that must be visible to particle push/deposition.
+      if (pmesh->pgen->user_work_before_loop_func != nullptr) {
+        (pmesh->pgen->user_work_before_loop_func)(pmesh);
+      }
+
       // Execute TaskLists
       // Work before time integrator indicated by "0" in stage
       ExecuteTaskList(pmesh, "before_timeintegrator", 0);
@@ -482,14 +503,7 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
 
       // Test for/make outputs
       for (auto &out : pout->pout_list) {
-        // compare at floating point (32-bit) precision to reduce effect of round off
-        float time_32 = static_cast<float>(pmesh->time);
-        float next_32 = static_cast<float>(out->out_params.last_time+out->out_params.dt);
-        float tlim_32 = static_cast<float>(tlim);
-        int &dcycle_ = out->out_params.dcycle;
-
-        if (((out->out_params.dt > 0.0) && ((time_32 >= next_32) && (time_32<tlim_32))) ||
-            ((dcycle_ > 0) && ((pmesh->ncycle)%(dcycle_) == 0)) ) {
+        if (!IsRestartOutput(out) && OutputIsDue(out, pmesh, tlim)) {
           PublishOutput(out, pmesh, pin);
         }
       }
@@ -503,6 +517,15 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
       }
       // compute new timestep AFTER all Meshblocks refined/derefined
       pmesh->NewTimeStep(tlim);
+
+      // Checkpoints must serialize the committed topology and the timestep that
+      // the next cycle will use. Diagnostics remain above to preserve their
+      // existing end-of-cycle timing.
+      for (auto &out : pout->pout_list) {
+        if (IsRestartOutput(out) && OutputIsDue(out, pmesh, tlim)) {
+          PublishOutput(out, pmesh, pin);
+        }
+      }
 
       // Update wall clock time if needed.
       if (wall_time > 0.) {

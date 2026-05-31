@@ -149,10 +149,21 @@ MeshRefinement::MeshRefinement(Mesh *pm, ParameterInput *pin) :
     nderef_rsum = new int[global_variable::nranks];
   }
 
-  // be sure Views are initialized to zero
+  if (!pm->restart_meta.ncyc_since_ref.empty() &&
+      pm->restart_meta.ncyc_since_ref.size() !=
+      static_cast<std::size_t>(pm->nmb_total)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Adaptive restart cooldown metadata has the wrong size."
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+
+  // Initialize Views, restoring the AMR cooldown state on new-schema restarts.
   for (int m=0; m<(pm->nmb_total); ++m) {
     refine_flag.h_view(m) = 0;
-    ncyc_since_ref(m) = 0;
+    ncyc_since_ref(m) = (pm->restart_meta.ncyc_since_ref.empty()) ?
+        0 : pm->restart_meta.ncyc_since_ref[m];
   }
   refine_flag.template modify<HostMemSpace>();
   refine_flag.template sync<DevExeSpace>();

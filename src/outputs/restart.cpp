@@ -260,6 +260,15 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
       write_header_bytes(&(pm->nmb_eachrank[0]),
                          (global_variable::nranks)*sizeof(int));
     }
+    const std::uint64_t mesh_metadata_magic = restart_utils::kMeshMetadataMagic;
+    const int mesh_metadata_version = restart_utils::kMeshMetadataVersion;
+    const int has_refinement_cooldown = pm->adaptive ? 1 : 0;
+    write_header_bytes(&mesh_metadata_magic, sizeof(mesh_metadata_magic));
+    write_header_bytes(&mesh_metadata_version, sizeof(mesh_metadata_version));
+    write_header_bytes(&has_refinement_cooldown, sizeof(has_refinement_cooldown));
+    if (pm->adaptive) {
+      write_header_bytes(pm->pmr->ncyc_since_ref.data(), pm->nmb_total*sizeof(int));
+    }
   }
 
   //--- STEP 3.  Root process writes internal state of objects that require it
@@ -315,7 +324,9 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
                              sizeof(RegionSize) + 2*sizeof(RegionIndcs);
   IOWrapperSizeT step2size = (pm->nmb_total)*(sizeof(LogicalLocation) + sizeof(float)
                            + sizeof(int))
-                           + (global_variable::nranks)*2*sizeof(int);
+                           + (global_variable::nranks)*2*sizeof(int)
+                           + sizeof(std::uint64_t) + 2*sizeof(int);
+  if (pm->adaptive) step2size += pm->nmb_total*sizeof(int);
 
   IOWrapperSizeT step3size = 3*nco*sizeof(Real);
   if (pz4c != nullptr) step3size += sizeof(Real);
