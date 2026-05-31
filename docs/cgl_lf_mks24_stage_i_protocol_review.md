@@ -35,6 +35,10 @@ Authenticated `R02/s06_rankio_t2p5_t3` job `4746773` is formally and
 independently inspected and recorded `accepted` through exact `t = 3.0` for
 `1.077500` node-hours, bringing corrected E03 Stage I use to `6.195834`
 node-hours.
+Authenticated `R02/s07_rankio_t3_t3p5` job `4746953` is formally and
+independently inspected and recorded `accepted` through exact `t = 3.5` for
+`1.151111` node-hours, bringing corrected E03 Stage I use to `7.346945`
+node-hours.
 
 The `900.000000` node-hour `E02` value is an authorized measurement-based
 projected envelope, not a fully measured matrix cost. It no longer authorizes
@@ -152,6 +156,8 @@ accepted lineage through exact `t = 2.0`. Authenticated job `4746663` now
 extends that accepted lineage through exact `t = 2.5`.
 Authenticated job `4746773` now extends that accepted lineage through exact
 `t = 3.0`.
+Authenticated job `4746953` now extends that accepted lineage through exact
+`t = 3.5`.
 The manuscript also still needs
 compact derivation prose. That prose must:
 
@@ -264,9 +270,24 @@ Corrected E03 use is `6.195834` node-hours. Retained corrected recost
 evidence JSON SHA-256 is
 `d2c5e27553426beb03c8c1882bd6473b682029c6ba67acd32bb06c5fb9a3ff01`;
 it projects at most `732.734445` matrix node-hours inside the `900.000000`
-envelope, leaving `167.265555` node-hours of margin. Archive and catalog the
-current committed controller state, reconcile, then prepare only
-`R02/s07_rankio_t3_t3p5` from the
+envelope, leaving `167.265555` node-hours of margin. Retained F-089 evidence
+historically authorized only the bounded `t = 3.0`--`3.5` continuation.
+Authenticated `R02/s07_rankio_t3_t3p5` job `4746953` is now accepted through
+exact `t = 3.5` for `1.151111` node-hours. Its sampled-history forcing-work
+relative residual is `2.6602098521945525e-13`; strict LF failure counters
+remain zero; terminal `lf_hwproj = 192268745176`; complete two-group
+eight-rank snapshots and terminal eight-rank restart siblings are retained.
+Corrected E03 use is `7.346945` node-hours. Retained corrected recost
+evidence JSON SHA-256 is
+`468e787db48d98661cd3ffe125829a78f135bb7ca4c9104c766a00b693f586a3`;
+it projects at most `753.345556` matrix node-hours inside the `900.000000`
+envelope, leaving `146.654444` node-hours of margin. The accepted clean
+segment took `4144` seconds, above the prior `4000`-second operational guard.
+Linnaeus independently approved one bounded `s08` continuation under an
+explicit `4500`-second ceiling that retains `300` seconds before the Athena
+timeout and cannot ratchet automatically. Archive and catalog the current
+committed controller state, reconcile, then prepare only
+`R02/s08_rankio_t3p5_t4` from the
 authenticated terminal siblings. Inspect, account, reconcile, and recost
 before any further extension. Finish R02, execute R03--R16 sequentially, and
 complete `R17` last.
@@ -293,7 +314,8 @@ was accepted as job `4746154`; later authenticated continuations `4746182`
 and `4746356` reach exact `t = 1.5`; authenticated continuation `4746435`
 reaches exact `t = 2.0`; authenticated continuation `4746663` now reaches
 exact `t = 2.5`; authenticated continuation `4746773` now reaches exact
-`t = 3.0`. Use only job `4746773`'s
+`t = 3.0`; authenticated continuation `4746953` now reaches exact `t = 3.5`.
+Use only job `4746953`'s
 authenticated terminal checkpoint for the next bounded R02 continuation.
 Commits `9480e62764528a3f40066d22a192f0e99b369891`
 and `ef1e42fa088203ac9ef6ec8e47e668db4fb95a3c` additionally require the live
