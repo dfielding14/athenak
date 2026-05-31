@@ -1,0 +1,274 @@
+{
+  "record_type": "q023_paper_bell_linear_source_local_implementation",
+  "schema_version": 1,
+  "date": "2026-05-31",
+  "predecessor_record": "tst/publication/readiness/q023_paper_bell_linear_source_local_implementation_2026-05-30.json",
+  "gate": "Q-023",
+  "campaign_id": "Q023-PAPER-BELL-LINEAR",
+  "slice_start_head": "30fa1c7d2a7d50ff2ecaeb7643ccf6eaa9e4ebc0",
+  "required_restart_repair_ancestor": "41e064da87d48da0f9d5412e753e5efe6e22ec66",
+  "transition_source_commit": "87ad92d1f215b7066e6d7dc1d192069dfd61dacc",
+  "status": "source_local_1d2d3d_combined_observable_runnable_preparation_only",
+  "qualification_effect": "none",
+  "frontier_authorization": "not_bound",
+  "section52_qualification": "not_claimed",
+  "registered_builtin_generator": "q023_paper_bell_linear",
+  "paper_reference": {
+    "source": "Sun and Bai (2023) Section 5.2",
+    "fastest_mode": "k=k0",
+    "dispersion": "omega/(k0*U_A)=epsilon+i*sqrt(1-epsilon^2)",
+    "eigenmode": "delta_u=delta_B/sqrt(rho)*exp(i*(-asin(epsilon)-pi/2))",
+    "direction": "x1_physical_1d_on_transverse_invariant_thin_2d3v_carrier_diagonal_in_native_2d_and_3d",
+    "uniform_particle_count": "two_particles_per_cell"
+  },
+  "source_local_preparation_choices": {
+    "uniform_pressure": 1.0,
+    "eigenmode_amplitude": 1e-06,
+    "output": "raw_mhd_w_bcc_each_cycle_combined_magnetic_and_fluid_velocity_mode_preparation_only",
+    "qualification_limit": "local_preparation_values_only_not_a_section52_qualification_claim"
+  },
+  "physical_1d_carrier_contract": {
+    "semantics": "transverse_invariant_thin_2d3v_carrier",
+    "mesh": {
+      "nx1": 32,
+      "nx2": 4,
+      "nx3": 1
+    },
+    "reason": "AthenaK particle support intentionally requires a 2D or 3D mesh; the extra transverse cells are invariant carrier cells and do not broaden the physical 1D claim."
+  },
+  "restart_semantics": "revalidate_exact_q023_contract_then_return_without_reinitializing_loaded_state",
+  "raw_mode_trace_extraction": "tst/publication/analyze_q023_paper_bell_linear.py",
+  "raw_trace_contract": {
+    "signed_phase_frequency": "required_without_absolute_value",
+    "raw_artifact_provenance": "approved_materialized_variant_id_exact_pinned_deck_sha256_explicit_authorized_artifact_root_and_each_normalized_root_relative_raw_artifact_path_sha256_required",
+    "synthetic_fixture_analysis": "top_level_explicit_test_only_scientific_contract_pass_separate_and_passed_false_not_a_materialized_source_local_candidate_pass",
+    "approved_source_local_materialized_variants": [
+      {
+        "variant_id": "Q023-SOURCE-LOCAL-BASELINE-1D-EPSILON-0P4",
+        "dimension": 1,
+        "epsilon": 0.4,
+        "deck_path": "inputs/tests/pic_q023_paper_bell_linear_1d_candidate.athinput",
+        "deck_sha256": "b84fb1b046d3174c3ce6bdd5f9067173dccd0636557d57c047331bf0a42eb4d5",
+        "raw_geometry": {
+          "nx": [
+            32,
+            4,
+            1
+          ],
+          "xmin": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "extent": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      },
+      {
+        "variant_id": "Q023-SOURCE-LOCAL-BASELINE-2D-EPSILON-0P4",
+        "dimension": 2,
+        "epsilon": 0.4,
+        "deck_path": "inputs/tests/pic_q023_paper_bell_linear_2d_candidate.athinput",
+        "deck_sha256": "b8a11ce7f7227210392de133bf52f71c265d86ab5ade73bf89a45a6449a3a23c",
+        "raw_geometry": {
+          "nx": [
+            64,
+            32,
+            1
+          ],
+          "xmin": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "extent": [
+            2.23606797749979,
+            1.118033988749895,
+            1.0
+          ]
+        }
+      },
+      {
+        "variant_id": "Q023-SOURCE-LOCAL-BASELINE-3D-EPSILON-0P4",
+        "dimension": 3,
+        "epsilon": 0.4,
+        "deck_path": "inputs/tests/pic_q023_paper_bell_linear_3d_candidate.athinput",
+        "deck_sha256": "a0fda35a71542e3c411c574a4c5069cbbae3776f02aa10dd44176a3102664103",
+        "raw_geometry": {
+          "nx": [
+            128,
+            64,
+            32
+          ],
+          "xmin": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "extent": [
+            4.58257569495584,
+            2.29128784747792,
+            1.14564392373896
+          ]
+        }
+      }
+    ],
+    "paper_velocity_observable_boundary": {
+      "paper_benchmark_observable": "paper_literal_delta_u_y_spatial_sine_fit_phase_and_volume_averaged_absolute_delta_u_growth_estimator_frozen_source_local",
+      "primary_source_local_candidate_endpoints": [
+        "paper_literal_delta_u_y_spatial_sine_fit_signed_phase_frequency",
+        "paper_literal_volume_averaged_absolute_delta_u_exponential_growth"
+      ],
+      "supplemental_source_local_diagnostics": [
+        "projected_circular_magnetic_mode_growth_phase_and_polarization",
+        "projected_circular_fluid_velocity_mode_growth_phase_and_polarization",
+        "projected_velocity_to_magnetic_ratio"
+      ],
+      "current_retained_output": "raw_mhd_w_bcc_combined_magnetic_and_fluid_velocity_modes",
+      "source_local_velocity_cross_check": "retained_cycle_zero_projected_velocity_to_magnetic_ratio_initialization_diagnostic_pass",
+      "source_local_velocity_magnetic_ratio_diagnostic_limit": 0.05,
+      "source_local_velocity_magnetic_ratio_diagnostic_effect": "nonqualifying_source_local_diagnostic_only",
+      "section52_qualification_eligible": false,
+      "paper_literal_estimator_qualification_effect": "source_local_contract_only_not_section52_qualification",
+      "reviewer_semantic_decisions_still_open": [
+        "freeze delta_u as u-u_bg with deck-fixed u_bg=(0,0,0), or approve a different reviewed definition",
+        "retain deterministic centered particle loading with deterministic tolerance handling, or approve randomized seeded loading with the preregistered eight-seed aggregation",
+        "approve the physical-1D transverse-invariant thin 2D3V carrier"
+      ],
+      "required_before_qualification": "materialize_exact_convergence_variants_bind_clean_candidate_and_registered_frontier_execution_run_independent_recompute_and_complete_external_review"
+    }
+  },
+  "source_local_artifacts": [
+    {
+      "path": "src/pgen/tests/q023_paper_bell_linear.cpp",
+      "sha256": "66a1bb952ca8b9d91d17896c1ebb94b18fa276be24767a99f635466cbe8638eb"
+    },
+    {
+      "path": "src/pgen/tests/q023_paper_bell_linear.hpp",
+      "sha256": "afa7b8243b1d402faa9592137050d0e6870a06ce25f61e17d010af3fc5a080e6"
+    },
+    {
+      "path": "src/pgen/pgen.cpp",
+      "sha256": "c5719bed9ae5ba823794829d17e0df6dd4f020a6f29d894a7ff70f65432c4532"
+    },
+    {
+      "path": "src/pgen/pgen.hpp",
+      "sha256": "be5578291d7ec1c38c518e00f5fed85dc79838af8da958d6badab94d6655b61b"
+    },
+    {
+      "path": "src/CMakeLists.txt",
+      "sha256": "e9cd518abc209ad0f7e84d8694fad199a98406de2033b8b9cad8af4adb5567b9"
+    },
+    {
+      "path": "src/pgen/AGENTS.md",
+      "sha256": "4ec3638b606a1a83e266573da52ce561abfee03a10585bdd0e133c19f35cf337"
+    },
+    {
+      "path": "inputs/tests/pic_q023_paper_bell_linear_1d_candidate.athinput",
+      "sha256": "b84fb1b046d3174c3ce6bdd5f9067173dccd0636557d57c047331bf0a42eb4d5"
+    },
+    {
+      "path": "inputs/tests/pic_q023_paper_bell_linear_2d_candidate.athinput",
+      "sha256": "b8a11ce7f7227210392de133bf52f71c265d86ab5ade73bf89a45a6449a3a23c"
+    },
+    {
+      "path": "inputs/tests/pic_q023_paper_bell_linear_3d_candidate.athinput",
+      "sha256": "a0fda35a71542e3c411c574a4c5069cbbae3776f02aa10dd44176a3102664103"
+    },
+    {
+      "path": "tst/publication/analyze_q023_paper_bell_linear.py",
+      "sha256": "f128958a9eee9be53b106aed0fb8cc0efa9d05efae6811c3b7046d11f8ac7ce6"
+    },
+    {
+      "path": "tst/publication/test_analyze_q023_paper_bell_linear.py",
+      "sha256": "dc67c2274bdaffb6a7317e877e217f4fae7047ca70568b0ddfbfa5b70fd8a9d4"
+    },
+    {
+      "path": "tst/publication/q023_paper_bell_linear_host_harness.cpp",
+      "sha256": "895df9ed44e3ecc8290698424d004b14ade5d7e7997e6c84bf941b0387ca43b4"
+    },
+    {
+      "path": "tst/publication/test_q023_paper_bell_linear_host_harness.py",
+      "sha256": "20e5e358173b044973e9dc2e3ce24f328ea3e2a58cadfe537fcbd7b970ebe982"
+    }
+  ],
+  "source_local_runtime_smoke": {
+    "qualification_effect": "bounded_source_local_preparation_smoke_only",
+    "artifact_root": "/lustre/orion/ast207/proj-shared/dfielding/PIC/local-readiness/q023-bell-combined-observable-smoke-20260530",
+    "retention": {
+      "file_count": 61,
+      "inventory_algorithm": "sha256(sorted lines of '<file_sha256>  <root-relative-path>\\n')",
+      "inventory_sha256": "29a0a14bbbd0e879e2cb6fb321758904a8fe8d5783612992f0de2585dca842d5",
+      "writable_entries": 0,
+      "status": "pass_recursively_read_only"
+    },
+    "predecessor_magnetic_only_artifact_root": "/lustre/orion/ast207/proj-shared/dfielding/PIC/local-readiness/q023-bell-thin-carrier-smoke-header-refactor-20260530",
+    "source_local_velocity_magnetic_ratio_diagnostic_limit": 0.05,
+    "source_local_velocity_magnetic_ratio_diagnostic_effect": "nonqualifying_source_local_diagnostic_only",
+    "debug_executable": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/local-readiness/q023-bell-combined-observable-smoke-20260530/debug-executable/athena",
+      "sha256": "f43ec79efb4f2292314914f02f39736c928cedd7ce4e67cbf357677f1f6a55b4"
+    },
+    "cycle_zero_initializations": [
+      {
+        "dimension": 1,
+        "carrier_shape": [
+          1,
+          4,
+          32
+        ],
+        "selected_raw_mhd_w_bcc_path": "1d/bin/pic_q023_paper_bell_linear_1d_candidate.mhd_w_bcc.00000.bin",
+        "selected_raw_mhd_w_bcc_sha256": "376b9197fe804d99ce44c8a3c64f6bce39b15fb057fc932b5c3fdc44963e177d",
+        "source_local_velocity_magnetic_ratio_absolute_error": 0.0016082023878473274,
+        "result": "pass"
+      },
+      {
+        "dimension": 2,
+        "carrier_shape": [
+          1,
+          32,
+          64
+        ],
+        "selected_raw_mhd_w_bcc_path": "2d/bin/pic_q023_paper_bell_linear_2d_candidate.mhd_w_bcc.00000.bin",
+        "selected_raw_mhd_w_bcc_sha256": "e074f28151ec5abf42f2c77c5f4daf33d98ad5e86ab8146db785d2ed67feab30",
+        "source_local_velocity_magnetic_ratio_absolute_error": 0.0026451134816128517,
+        "result": "pass"
+      },
+      {
+        "dimension": 3,
+        "carrier_shape": [
+          32,
+          64,
+          128
+        ],
+        "selected_raw_mhd_w_bcc_path": "3d/bin/pic_q023_paper_bell_linear_3d_candidate.mhd_w_bcc.00000.bin",
+        "selected_raw_mhd_w_bcc_sha256": "ec12b1e12a3e224eed6ca524c8487fe021fb7e22937e6ccfa8f38fe8f807e2f8",
+        "source_local_velocity_magnetic_ratio_absolute_error": 0.002984367264437341,
+        "result": "pass"
+      }
+    ],
+    "restart_continuation": {
+      "dimension": 2,
+      "loaded_restart_path": "restart2d/rst/pic_q023_paper_bell_linear_restart2d.00001.rst",
+      "loaded_restart_sha256": "aed7fad053e5d0f55e43125d26ccaca3618147ca4c27edf833c5f1369a99e879",
+      "selected_continuation_raw_mhd_w_bcc_path": "restart2d/bin/pic_q023_paper_bell_linear_restart2d_cont.mhd_w_bcc.00003.bin",
+      "selected_continuation_raw_mhd_w_bcc_sha256": "0b1b419a1252cd8b82d517b448261ee7aa7b69984f36adfaa66dcd6b08b07943",
+      "final_cycle": 1,
+      "final_time": 0.0015625,
+      "result": "pass"
+    }
+  },
+  "remaining_open_dependencies": [
+    "Commit and freeze an exact clean candidate containing this source-local tranche.",
+    "Review and retain the exact transverse-invariant nx2=4 thin 2D3V carrier for the physical 1D preparation.",
+    "Materialize exact epsilon, sensitivity, seed, timestep, and time-limit variants before output inspection.",
+    "Preserve the frozen source-local paper-literal delta_u_y spatial sine-fit phase and volume-averaged absolute delta_u growth estimator contract.",
+    "Expand the bounded source-local smokes into exact epsilon, resolution, timestep, seed and convergence variants before qualifying execution.",
+    "Bind a clean Frontier executable and authorized Orion artifact root only through the reviewed control plane.",
+    "Freeze a registered campaign record before a qualifying run.",
+    "Run registered Frontier execution, independent raw-artifact recompute, and external review before any Section 5.2 qualification claim."
+  ]
+}

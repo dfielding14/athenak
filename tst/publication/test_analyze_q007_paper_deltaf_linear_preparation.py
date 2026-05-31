@@ -23,7 +23,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 SIDECAR = (
     REPO_ROOT
     / "tst/publication/readiness/"
-    "q007_paper_deltaf_linear_source_local_preparation_2026-05-30.json"
+    "q007_paper_deltaf_linear_source_local_preparation_successor_2026-05-31.json"
 )
 
 

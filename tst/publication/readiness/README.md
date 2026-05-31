@@ -41,6 +41,9 @@ qualify any scientific claim by itself.
   retained recursively read-only below Orion. Long-horizon residual tolerances,
   true-AMR policy qualification, MPI, GPU, Frontier and external review remain
   open.
+- `q006_paper_multispecies_oscillation_runtime_local_successor_2026-05-31.json`:
+  chronology-preserving successor receipt rebinding the retained Q-006 evidence
+  after the shared restart callback registration changed `src/pgen/pgen.hpp`.
 - `q015_entity_differential_2026-05-30.json`: frozen-source Entity
   exact-overlap differential evidence and explicit non-overlap boundaries.
 - `q022_independent_comparison_preregistration_2026-05-30.json` and
@@ -76,6 +79,10 @@ qualify any scientific claim by itself.
   `delta_u_y` spatial sine-fit phase and volume-averaged absolute `delta_u`
   growth estimator. Clean freeze, exact variants, convergence, registered
   execution, independent recompute and external review remain open.
+- `q023_paper_bell_linear_source_local_implementation_successor_2026-05-31.json`:
+  chronology-preserving successor receipt rebinding the retained Q-023
+  source-local evidence after the shared restart callback registration changed
+  `src/pgen/pgen.hpp`.
 - `materialize_q023_paper_bell_linear_variants.py`: deterministic source-local
   Q-023 Section 5.2 preparation materializer. It emits the fixed 405-deck
   epsilon, dimensionality, resolution, local-CFL and PPC matrix only as a
@@ -287,6 +294,10 @@ qualify any scientific claim by itself.
   explicit source-local conventions; paper-run provenance, growth-fit
   qualification, CRPAI handedness review and runtime replay, MPI, GPU, Frontier
   and external review remain open.
+- `q007_paper_deltaf_linear_source_local_preparation_successor_2026-05-31.json`:
+  chronology-preserving successor receipt rebinding the retained Q-007
+  source-local evidence after the shared restart callback registration changed
+  `src/pgen/pgen.hpp`.
 - `q009_amr_lifetime_policy_successor_2026-05-30.json`: bounded local AMR
   retained-state inventory and `paper_smooth` interface-policy decision with
   the coupled-boundary, MPI and HIP lifetime matrix intentionally open.
@@ -347,6 +358,9 @@ qualify any scientific claim by itself.
   finite-Mach surface as an explicitly separate engineering option. Open
   qualifying-distribution, calibration and campaign
   fields prevent accidental promotion to scientific evidence.
+- `q011_parallel_shock_section54_paper_preparation_successor_2026-05-31.json`:
+  chronology-preserving successor receipt rebinding the preparation contract
+  after the stage-invariant shock-source repair and its static analyzer update.
 - `q011_injection_distribution_runtime_local_2026-05-30.json`: bounded direct
   serial-host runtime audit of the committed Section 5.4 injection path. The
   recursively read-only Orion payload checks actual PVTK provenance, clamped

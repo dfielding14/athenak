@@ -1,0 +1,203 @@
+{
+  "record_type": "q011_parallel_shock_section54_paper_preparation",
+  "date": "2026-05-31",
+  "predecessor_record": "tst/publication/readiness/q011_parallel_shock_section54_paper_preparation_2026-05-30.json",
+  "gate": "Q-011",
+  "qualification_effect": "preparation_only",
+  "scope": "Exact-byte Section 5.4 preparation deck and fail-closed analyzer contract only. This record contains no campaign results and does not qualify the paper-shock claim.",
+  "predecessor": "tst/publication/readiness/q011_parallel_shock_controls_successor_2026-05-30.json",
+  "artifacts": [
+    {
+      "path": "inputs/publication/pic_parallel_shock_section54_paper.athinput",
+      "sha256": "c5110a3ed90c0f28eb315a4b4faeb432f3b980f3a7083cd3527cbcc0497856d6"
+    },
+    {
+      "path": "src/pgen/tests/pic_parallel_shock.cpp",
+      "sha256": "0ec2e1eec3786bce12be2e40fb53b34d553955e9ad7b58fb64b0a912e8d15c7b"
+    },
+    {
+      "path": "tst/scripts/particles/pic_parallel_shock_section54_paper.py",
+      "sha256": "d07ad52847f2c7e59d87556b4b09a32e73008850b4571f45baa5a8c896b3496a"
+    },
+    {
+      "path": "tst/publication/test_pic_q011_parallel_shock_section54_paper.py",
+      "sha256": "1dbad6f28785398628df30ec03bfc30fb491a7786675f56cc023ab409eee6376"
+    }
+  ],
+  "paper_section_contract": {
+    "source": "docs/reference_paper/arXiv-2304.10568v1/mnras_template.tex Section 5.4",
+    "physical_mode": "paper_mhd_pic",
+    "dimensions": "2D3V",
+    "geometry": "reflecting_left_wall_parallel_Bx_periodic_y",
+    "domain_c_over_omega_pi": [
+      48000.0,
+      3120.0
+    ],
+    "mach_alfven": 30.0,
+    "gas_gamma": 1.6666666666666667,
+    "injection_efficiency": 0.001,
+    "injection_p_over_m_over_u0": 3.1622776601683795,
+    "shock_surface_model": "ideal_surface",
+    "shock_surface_speed_over_ua0": 10.0,
+    "shock_surface_equation": "u_sh_prime = (Gamma - 1) * u0 / 2",
+    "shock_surface_carrier_selection": "single_half_open_cell_with_surface_x1",
+    "injection_mass_budget_sweep_speed": "u0 + u_sh_prime",
+    "injection_distribution": "monoenergetic_full_sphere_isotropic_relative_to_ideal_surface",
+    "light_speed_over_ua0": 10000.0,
+    "exclude_birth_time_before_omega0_inverse": 45.0,
+    "early_injected_particle_removal": "one_time_restart_persisted_runtime_state_removal",
+    "amr_cell_sizes_c_over_omega_pi": [
+      12.0,
+      6.0,
+      3.0
+    ],
+    "amr_refine_curvature_threshold": 1.0,
+    "amr_derefine_curvature_threshold": 0.1,
+    "snapshot_times_omega0_inverse": [
+      500.0,
+      1200.0
+    ]
+  },
+  "analyzer_contract": {
+    "required_candidate_bindings": [
+      "clean_candidate_git_commit",
+      "clean_frontier_executable_sha256",
+      "input_deck_sha256",
+      "analyzer_sha256",
+      "authorized_orion_artifact_root"
+    ],
+    "particle_filters": {
+      "source": "shock_injected",
+      "birth_time_min_omega0_inverse": 45.0,
+      "region": "downstream"
+    },
+    "primary_observables": [
+      "shock_position",
+      "upstream_magnetic_amplification_at_t500",
+      "downstream_weighted_energy_spectra_at_t500_and_t1200",
+      "late_energy_spectrum_power_law_slope_at_t1200",
+      "morphology"
+    ],
+    "required_snapshot_times_omega0_inverse": [
+      500.0,
+      1200.0
+    ],
+    "required_grid_variants": [
+      "coarse_uniform",
+      "three_level_amr_root_12_finest_3",
+      "fine_uniform"
+    ],
+    "required_raw_artifacts_per_snapshot": [
+      "rho_bin",
+      "bmag_bin",
+      "j2_bin",
+      "prtcl_all_pvtk"
+    ],
+    "required_run_artifacts": [
+      "stdout_with_q017_telemetry",
+      "restart_checkpoint",
+      "attempt_status_and_failure_artifacts"
+    ],
+    "required_seeds": [
+      23050101,
+      23050102,
+      23050103,
+      23050104,
+      23050105,
+      23050106,
+      23050107,
+      23050108
+    ],
+    "result_metrics_recorded": false,
+    "campaign_output_inspection": "blocked_pending_open_items"
+  },
+  "preparation_choices_not_qualification_results": {
+    "gas_pressure_ps_p0": 0.1,
+    "deposit_qscale": 0.0009,
+    "pic_load_balance_cost_per_particle": 0.0,
+    "field_and_particle_output_dt_omega0_inverse": 100.0
+  },
+  "open_items": [
+    "A bounded local shock-surface injection distribution audit passed; the qualifying campaign-bound audit remains open.",
+    "Gas pressure and unit-normalization mapping audit remains open.",
+    "Downstream 40/640 ppc macro-mass calibration remains open.",
+    "Frontier load-balance cost tuning remains open.",
+    "Snapshot-time selection tolerance remains open.",
+    "Downstream spectrum fit energy interval remains open.",
+    "AMR versus fine-uniform residual tolerances remain open.",
+    "Clean candidate executable, Orion root, and Frontier campaign remain open.",
+    "Independent raw-artifact recompute and external review remain open."
+  ],
+  "local_verification": {
+    "static_analyzer_contract": "passed locally",
+    "python_syntax": "passed locally",
+    "python_style": "flake8 unavailable; manual line-length and diff checks passed",
+    "athena_parser_startup": "passed locally with reduced mesh overrides and nlim=0; no campaign execution",
+    "tiny_override_runtime_cohort_removal_smoke": {
+      "status": "passed locally as a bounded nonqualifying diagnostic",
+      "artifact_root": "/lustre/orion/ast207/proj-shared/dfielding/PIC/local-readiness/q011-cohort-removal-smoke-20260530",
+      "overrides": "single reduced serial mesh cycle with eta=1, deposit_qscale=0.1 and ps_remove_birth_time_before=1.0e-12",
+      "restart_ps_removed_excluded_early_cohort": 1,
+      "restart_ps_next_tag": 5,
+      "final_particle_count": 0,
+      "qualification_effect": "none"
+    },
+    "restart_boundary_cohort_removal_smoke": {
+      "status": "passed locally as a bounded nonqualifying three-stage diagnostic",
+      "artifact_root": "/lustre/orion/ast207/proj-shared/dfielding/PIC/local-readiness/q011-cohort-removal-restart-boundary-bounded-smoke-20260530",
+      "overrides": "reduced serial 8x10x1 mesh and physical extents, eta=1, deposit_qscale=0.1, gas subtraction disabled and ps_remove_birth_time_before=0.015",
+      "stages": [
+        {
+          "name": "restart_before_threshold",
+          "cycle": 1,
+          "ps_removed_excluded_early_cohort": 0,
+          "ps_next_tag": 58,
+          "final_particle_count": 58
+        },
+        {
+          "name": "restart_crossing_threshold",
+          "cycle": 2,
+          "ps_removed_excluded_early_cohort": 1,
+          "ps_next_tag": 96,
+          "final_particle_count": 0
+        },
+        {
+          "name": "restart_after_threshold",
+          "cycle": 3,
+          "ps_removed_excluded_early_cohort": 1,
+          "ps_next_tag": 131,
+          "final_particle_count": 35
+        }
+      ],
+      "file_count": 38,
+      "inventory_algorithm": "sha256(sorted lines of '<file_sha256>  <root-relative-path>\\n')",
+      "inventory_sha256": "4cabd54420092e2d4199821385a8f09d96af888411ae1bf29ddb3c102a41270b",
+      "writable_entries": 0,
+      "qualification_effect": "none"
+    },
+    "excluded_oversized_override_probe": {
+      "status": "excluded_from_evidence_and_stopped",
+      "artifact_root": "/lustre/orion/ast207/proj-shared/dfielding/PIC/local-readiness/q011-cohort-removal-restart-boundary-smoke-20260530",
+      "reason": "The rejected diagnostic reduced mesh counts without reducing manuscript-scale physical extents. Its first coarse step advanced to 58.0645 and generated an oversized swept-area tag budget, so the continuation was stopped before completion. The recursively read-only partial tree is retained only as rejected chronology.",
+      "file_count": 20,
+      "writable_entries": 0,
+      "qualification_effect": "none"
+    }
+  },
+  "execution_policy": {
+    "frontier_campaign_execution": "open_not_run",
+    "allowed_compute_platforms": [
+      "Frontier"
+    ],
+    "allowed_bulk_storage_systems": [
+      "Orion"
+    ],
+    "authorized_orion_bulk_root": "/lustre/orion/ast207/proj-shared/dfielding/PIC",
+    "forbidden_storage_systems": [
+      "Kronos"
+    ],
+    "kronos_use": "prohibited_not_used"
+  },
+  "result_metrics": [],
+  "q011_disposition": "preparation_frozen_frontier_campaign_and_qualification_open"
+}

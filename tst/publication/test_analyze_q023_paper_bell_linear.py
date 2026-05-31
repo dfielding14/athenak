@@ -26,7 +26,7 @@ DRAFTS = (
 )
 SIDECAR = (
     REPO_ROOT
-    / "tst/publication/readiness/q023_paper_bell_linear_source_local_implementation_2026-05-30.json"
+    / "tst/publication/readiness/q023_paper_bell_linear_source_local_implementation_successor_2026-05-31.json"
 )
 PAPER_INPUT_IDS = {
     "Q023-INPUT-PAPER-BELL-LINEAR-1D-CANDIDATE",
