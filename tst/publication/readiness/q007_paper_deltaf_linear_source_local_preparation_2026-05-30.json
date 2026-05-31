@@ -1,0 +1,168 @@
+{
+  "record_type": "q007_paper_deltaf_linear_source_local_preparation",
+  "schema_version": 1,
+  "date": "2026-05-30",
+  "gate": "Q-007",
+  "status": "source_local_true_deltaf_parser_and_analytic_mapping_preparation_only",
+  "qualification_effect": "none_source_local_true_deltaf_preparation_only",
+  "claim_closure": false,
+  "frontier_authorization": "not_bound",
+  "scope": "Bounded nonqualifying Q-007 source-local preparation for the Sun and Bai true-delta-f linear CRSI and CRPAI mappings. This tranche adds a narrowly guarded exact-isothermal paper_mhd_pic physical-delta-f parser allowance, separately named CRSI and CRPAI cycle-zero generators, one CRSI and two CRPAI thin-2D3V cycle-zero decks, and static analytical regressions for the normalized kappa distributions, resonant scale, Q2 factor, and low-density growth approximations. The decks deliberately allocate only eight placeholder particles and reject evolution. They do not implement the paper log-bin weighted loading, random-phase four-branch wave spectrum, a full Q1 dispersion runtime oracle, runtime qualification, Frontier authorization, or claim closure.",
+  "manuscript_anchor": {
+    "reference_id": "sun_bai_2023_arxiv_2304.10568v1",
+    "source": "docs/reference_paper/arXiv-2304.10568v1/mnras_template.tex",
+    "sections": [
+      "5.5.1 The CR streaming instability",
+      "5.5.2 The CR pressure anisotropy instability"
+    ],
+    "paper_literal_mappings": {
+      "crsi": {
+        "distribution": "normalized isotropic kappa",
+        "vd_over_ua": 2.0,
+        "mncr_over_rho0": 0.0001,
+        "light_speed_over_ua": 300.0,
+        "p0_over_m": 300.0,
+        "kappa": 1.25,
+        "isothermal_cs_over_ua": 1.0,
+        "domain_ua_over_omega0": 96000.0,
+        "dx_ua_over_omega0": 10.0,
+        "momentum_bin_count": 8,
+        "particles_per_cell_per_bin": 256,
+        "seed_amplitude": 0.001
+      },
+      "crpai": {
+        "distribution": "normalized anisotropic kappa",
+        "mncr_over_rho0": 0.0001,
+        "light_speed_over_ua": 30000.0,
+        "p0_over_m": 300.0,
+        "kappa": 1.75,
+        "xi": [0.99, 1.01],
+        "dx_ua_over_omega0": 20.0,
+        "seed_intensity_kIk": 0.000001
+      }
+    }
+  },
+  "narrow_parser_allowance": {
+    "path": "src/particles/particles.cpp",
+    "scope": "paper_mhd_pic plus physical delta-f plus isothermal MHD only",
+    "requires_coupled_mhd_background": true,
+    "requires_coupled_feedback": true,
+    "requires_moment_deposition": true,
+    "requires_momentum_feedback": true,
+    "requires_energy_feedback": false,
+    "rejects_energy_feedback_for_isothermal_mhd": true,
+    "preserves_existing_ideal_mhd_paper_energy_feedback_requirement": true
+  },
+  "generators": [
+    {
+      "name": "q007_paper_crsi_linear_preparation",
+      "method": "ProblemGenerator::Q007PaperCRSILinearPreparation",
+      "source": "src/pgen/tests/q007_paper_deltaf_linear.cpp",
+      "role": "cycle_zero_parser_and_static_mapping_preparation_only"
+    },
+    {
+      "name": "q007_paper_crpai_linear_preparation",
+      "method": "ProblemGenerator::Q007PaperCRPAILinearPreparation",
+      "source": "src/pgen/tests/q007_paper_deltaf_linear.cpp",
+      "role": "cycle_zero_parser_and_signed_branch_static_mapping_preparation_only"
+    }
+  ],
+  "deck_freezes": [
+    {
+      "path": "inputs/tests/pic_q007_paper_crsi_linear_preparation.athinput",
+      "case": "crsi",
+      "cycle_zero_only": true,
+      "source_local_placeholder_particles_total": 8
+    },
+    {
+      "path": "inputs/tests/pic_q007_paper_crpai_linear_prolate_preparation.athinput",
+      "case": "crpai_prolate_xi_0p99",
+      "cycle_zero_only": true,
+      "source_local_placeholder_particles_total": 8
+    },
+    {
+      "path": "inputs/tests/pic_q007_paper_crpai_linear_oblate_preparation.athinput",
+      "case": "crpai_oblate_xi_1p01",
+      "cycle_zero_only": true,
+      "source_local_placeholder_particles_total": 8
+    }
+  ],
+  "artifact_bindings": {
+    "src/pgen/tests/q007_paper_deltaf_linear.hpp": "ff801113e3caf0b58ae8fbf7c2ed52444cc6a4290dec0439ceb0d3f4bac70cc7",
+    "src/pgen/tests/q007_paper_deltaf_linear.cpp": "fa46e96ba0fcf33d4dcca8138f458aa844f6637c85a6c201b70c4425dc0e337b",
+    "inputs/tests/pic_q007_paper_crsi_linear_preparation.athinput": "7d0c22130998663aa15f9e8ea45797f4b3dc95f8e5ae7c62fc4d2d2d13cea861",
+    "inputs/tests/pic_q007_paper_crpai_linear_prolate_preparation.athinput": "d479bd3dfb46b211026f16c6fe6320ede9fddd47e2407bc7274323f42464c8d7",
+    "inputs/tests/pic_q007_paper_crpai_linear_oblate_preparation.athinput": "f7cc51b22b84f7a11dd378b1f86bbc7098f9768b10993718c2c0bc6f1de3ebf9",
+    "tst/publication/analyze_q007_paper_deltaf_linear_preparation.py": "0eb78f653b5e912f5152713962808c4fd76986bc9a25e31db602261abea8bf78",
+    "tst/publication/test_analyze_q007_paper_deltaf_linear_preparation.py": "5713cba41305cd9340a927ec17fddab93265dfca2c19c00764768a41e17f12ad"
+  },
+  "shared_registration_contract": {
+    "src/CMakeLists.txt": "includes pgen/tests/q007_paper_deltaf_linear.cpp",
+    "src/pgen/pgen.hpp": "declares both Q-007 preparation methods",
+    "src/pgen/pgen.cpp": "dispatches both Q-007 preparation names for fresh and restart construction"
+  },
+  "analyzer_contract": {
+    "path": "tst/publication/analyze_q007_paper_deltaf_linear_preparation.py",
+    "artifact_role": "section55_section56_true_deltaf_preparation_not_qualifying_evidence",
+    "validates_exact_cycle_zero_deck_contracts": true,
+    "validates_narrow_parser_allowance": true,
+    "validates_normalized_isotropic_kappa_mapping": true,
+    "validates_normalized_anisotropic_kappa_mapping": true,
+    "validates_resonant_scale_and_q2": true,
+    "validates_low_density_crsi_approximation": true,
+    "validates_low_density_crpai_signed_branch_approximation": true,
+    "assigns_crpai_handedness_labels": false,
+    "accepts_runtime_artifacts": false,
+    "always_emits_qualifying_evidence": false
+  },
+  "nonqualification_boundary": {
+    "deck_source_freeze": true,
+    "true_deltaf_parser_path": true,
+    "exact_isothermal_mhd_cycle_zero_startup": true,
+    "paper_log_bin_weighted_loading": false,
+    "paper_random_phase_four_branch_wave_spectrum": false,
+    "runtime_evolution": false,
+    "full_q1_dispersion_runtime_oracle": false,
+    "crpai_handedness_mapping_reviewed": false,
+    "mpi_qualification": false,
+    "gpu_qualification": false,
+    "frontier_authorization": false,
+    "external_review": false,
+    "qualifying_evidence": false
+  },
+  "crpai_handedness_review_boundary": {
+    "status": "blocked_pending_independent_review",
+    "reason": "The manuscript prose and the nearby figure caption assign the prolate and oblate handedness labels inconsistently. This tranche freezes signed analytical branches only and does not resolve or claim the label mapping."
+  },
+  "verification": {
+    "focused_command": "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. python3 -B -m unittest tst.publication.test_analyze_q007_paper_deltaf_linear_preparation",
+    "focused_result": "pass_8_tests",
+    "analyzer_command": "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. python3 -B tst/publication/analyze_q007_paper_deltaf_linear_preparation.py",
+    "analyzer_result": "pass",
+    "python_compile": "pass",
+    "json_parse": "pass",
+    "integrated_serial_non_mpi_compile": "pass_debug_builtin_pgens",
+    "cycle_zero_startup": "pass_all_three_decks",
+    "runtime_evolution_rejection": "pass_nlim_1_fails_closed"
+  },
+  "explicitly_not_claimed": [
+    "paper log-bin weighted momentum loading",
+    "paper random-phase forward/backward left/right Alfvén-wave seed spectrum",
+    "runtime evolution evidence",
+    "full Q1 dispersion runtime oracle",
+    "reviewed CRPAI handedness label mapping",
+    "clean-candidate freeze",
+    "MPI or decomposition qualification",
+    "Frontier HIP or GPU qualification",
+    "Frontier launch authorization",
+    "external-review closure",
+    "Q-007 closure or scientific runtime qualification"
+  ],
+  "residual_work": [
+    "Implement and independently review the eight-log-bin weighted particle loader with 256 particles per cell per bin before admitting runtime evolution.",
+    "Implement and independently review the paper random-phase forward/backward left/right Alfvén-wave seed spectrum.",
+    "Freeze and independently recompute the full Q1 plus Q2 dispersion oracle and resolve the manuscript handedness-label discrepancy.",
+    "Prepare clean-candidate MPI, HIP/GPU, Frontier and external-review transitions separately."
+  ],
+  "q007_disposition": "source_local_true_deltaf_parser_and_analytic_mapping_preparation_only_no_runtime_qualification_claim"
+}

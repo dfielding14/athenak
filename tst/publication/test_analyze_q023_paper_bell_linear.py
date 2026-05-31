@@ -51,6 +51,9 @@ def _record(dimension: int, epsilon: float) -> dict[str, object]:
     velocity_phase_interval, velocity_phase_change = bell._fixed_interval_phase_trace(
         time, velocity_right
     )
+    paper_phase_interval, paper_phase_change = bell._fixed_interval_phase_trace(
+        time, velocity_right
+    )
     return {
         "dimension": dimension,
         "epsilon": epsilon,
@@ -68,12 +71,17 @@ def _record(dimension: int, epsilon: float) -> dict[str, object]:
         "phase_change": phase_change.tolist(),
         "velocity_phase_interval": velocity_phase_interval.tolist(),
         "velocity_phase_change": velocity_phase_change.tolist(),
+        "paper_delta_u_y_sine_fit_real": velocity_right.real.tolist(),
+        "paper_delta_u_y_sine_fit_imag": velocity_right.imag.tolist(),
+        "paper_delta_u_y_phase_interval": paper_phase_interval.tolist(),
+        "paper_delta_u_y_phase_change": paper_phase_change.tolist(),
+        "paper_volume_averaged_abs_delta_u": np.abs(velocity_right).tolist(),
     }
 
 
 def _bundle() -> dict[str, object]:
     return {
-        "schema_version": 1,
+        "schema_version": bell.TRACE_SCHEMA_VERSION,
         "campaign_id": bell.CAMPAIGN_ID,
         "qualifying_seed": bell.QUALIFYING_SEEDS[0],
         "records": [
@@ -280,6 +288,14 @@ class Q023PaperBellLinearTests(unittest.TestCase):
         )
         self.assertTrue(report["velocity_magnetic_ratio_pass"])
         self.assertLess(report["velocity_magnetic_ratio_max_absolute_error"], 2.0e-12)
+        self.assertAlmostEqual(
+            report["paper_literal_measured_growth_rate_over_k0_ua"], growth
+        )
+        self.assertAlmostEqual(
+            report["paper_literal_measured_phase_frequency_over_k0_ua"], epsilon
+        )
+        self.assertTrue(report["paper_literal_growth_pass"])
+        self.assertTrue(report["paper_literal_phase_pass"])
 
         with tempfile.TemporaryDirectory() as directory:
             artifact_root = Path(directory).resolve()
@@ -371,6 +387,54 @@ class Q023PaperBellLinearTests(unittest.TestCase):
         self.assertFalse(report["scientific_contract_pass"])
         failed = report["records"][0]
         self.assertFalse(failed["velocity_magnetic_ratio_pass"])
+
+    def test_paper_literal_delta_u_y_phase_must_match_retained_sine_fit(self) -> None:
+        bundle = _bundle()
+        bundle["records"][0]["paper_delta_u_y_phase_change"][0] += 0.25
+        with self.assertRaisesRegex(
+            bell.ContractError, "paper-literal delta_u_y phase changes"
+        ):
+            bell.analyze_trace_bundle(bundle)
+
+    def test_wrong_paper_literal_delta_u_y_propagation_sign_is_scientific_failure(
+        self,
+    ) -> None:
+        bundle = _bundle()
+        record = bundle["records"][0]
+        time = np.asarray(record["normalized_time"])
+        sine_fit = np.conjugate(
+            np.asarray(record["paper_delta_u_y_sine_fit_real"])
+            + 1.0j * np.asarray(record["paper_delta_u_y_sine_fit_imag"])
+        )
+        record["paper_delta_u_y_sine_fit_real"] = sine_fit.real.tolist()
+        record["paper_delta_u_y_sine_fit_imag"] = sine_fit.imag.tolist()
+        interval, change = bell._fixed_interval_phase_trace(time, sine_fit)
+        record["paper_delta_u_y_phase_interval"] = interval.tolist()
+        record["paper_delta_u_y_phase_change"] = change.tolist()
+        report = bell.analyze_trace_bundle(bundle)
+        self.assertFalse(report["scientific_contract_pass"])
+        failed = report["records"][0]
+        self.assertLess(
+            failed["paper_literal_measured_phase_frequency_over_k0_ua"], 0.0
+        )
+        self.assertFalse(failed["paper_literal_phase_pass"])
+
+    def test_paper_literal_volume_averaged_abs_delta_u_growth_is_required(self) -> None:
+        bundle = _bundle()
+        record = bundle["records"][0]
+        record["paper_volume_averaged_abs_delta_u"] = (
+            2.0 * np.asarray(record["paper_volume_averaged_abs_delta_u"])
+        ).tolist()
+        report = bell.analyze_trace_bundle(bundle)
+        self.assertTrue(report["scientific_contract_pass"])
+        self.assertTrue(report["records"][0]["paper_literal_growth_pass"])
+
+        record["paper_volume_averaged_abs_delta_u"] = [1.0] * len(
+            record["normalized_time"]
+        )
+        report = bell.analyze_trace_bundle(bundle)
+        self.assertFalse(report["scientific_contract_pass"])
+        self.assertFalse(report["records"][0]["paper_literal_growth_pass"])
 
     def test_binary_extraction_rejects_unapproved_variant(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -479,14 +543,17 @@ class Q023PaperBellLinearTests(unittest.TestCase):
         self.assertIn("Q023-INPUT-BELL-PROXY", inputs)
         self.assertEqual(
             campaign["local_analyzer_ids"],
-            ["Q023-ANALYZER-PAPER-BELL-LINEAR-CANDIDATE"],
+            [
+                "Q023-ANALYZER-PAPER-BELL-LINEAR-CANDIDATE",
+                "Q023-MATERIALIZER-PAPER-BELL-LINEAR-VARIANTS",
+            ],
         )
         analyzer = analyzers["Q023-ANALYZER-PAPER-BELL-LINEAR-CANDIDATE"]
         sidecar = json.loads(SIDECAR.read_text(encoding="utf-8"))
         sidecar_artifacts = {
             item["path"]: item["sha256"] for item in sidecar["source_local_artifacts"]
         }
-        # The shared registration remains frozen until this mixed worktree is clean.
+        # The candidate analyzer digest remains consistent across both registries.
         self.assertEqual(sidecar_artifacts[analyzer["path"]], analyzer["sha256"])
         for input_id in PAPER_INPUT_IDS:
             candidate = inputs[input_id]
@@ -535,8 +602,17 @@ class Q023PaperBellLinearTests(unittest.TestCase):
             boundary["current_retained_output"],
             "raw_mhd_w_bcc_combined_magnetic_and_fluid_velocity_modes",
         )
+        self.assertEqual(
+            boundary["paper_benchmark_observable"],
+            "paper_literal_delta_u_y_spatial_sine_fit_phase_and_volume_averaged_"
+            "absolute_delta_u_growth_estimator_frozen_source_local",
+        )
+        self.assertEqual(
+            boundary["paper_literal_estimator_qualification_effect"],
+            "source_local_contract_only_not_section52_qualification",
+        )
         self.assertIn(
-            "paper_literal_delta_u_y_phase",
+            "registered_frontier_execution",
             boundary["required_before_qualification"],
         )
 

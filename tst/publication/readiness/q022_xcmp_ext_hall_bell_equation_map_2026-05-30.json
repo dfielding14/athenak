@@ -1,0 +1,26 @@
+{
+  "schema_version": 2,
+  "map_status": "blocked_pending_reference_specific_mapping_and_external_review",
+  "comparison_id": "XCMP-EXT-HALL-BELL",
+  "dataset_provenance_id": "Q022-DATASET-XCMP-EXT-HALL-BELL",
+  "reference_ids": ["bai_2015_arxiv_1412.1087"],
+  "athenak_physical_mode": "extended_mhd_pic current_to_ct_experimental pending reviewed Bai mapping",
+  "matched_equations": [],
+  "intentional_mismatches": [],
+  "unit_map": {},
+  "normalization_map": {},
+  "parameter_overlap": {},
+  "excluded_regimes": [],
+  "source_records": [
+    "tst/publication/readiness/q022_athenak_paper_mhd_pic_equation_profile_2026-05-30.json",
+    "tst/publication/readiness/q022_external_reference_private_ingest_2026-05-30.json",
+    "tst/publication/readiness/q022_dataset_provenance_manifest_2026-05-30.json",
+    "tst/publication/readiness/q029_experimental_hall_normalization_derivation_2026-05-30.md"
+  ],
+  "blocked_inputs": [
+    "The implemented additive CT-current source normalization is a source-local contract only; a reference-specific Bai equation, normalization, parameter-overlap, and excluded-regime map has not been supplied.",
+    "The reviewed physical Hall coefficient grid, Hall-Bell applicability envelope, and shock-front applicability decision remain open.",
+    "The required external reviewer disposition is pending."
+  ],
+  "reviewer_disposition": "pending external review"
+}

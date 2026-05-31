@@ -47,6 +47,9 @@ These are the only problems selectable with `problem/pgen_name` when
 - `orszag_tang` -> `tests/orszag_tang.cpp` (`ProblemGenerator::OrszagTang`)
 - `pic_parallel_shock` -> `tests/pic_parallel_shock.cpp`
   (`ProblemGenerator::PICParallelShock`)
+- `q006_paper_multispecies_oscillation` ->
+  `tests/q006_paper_multispecies_oscillation.cpp`
+  (`ProblemGenerator::Q006PaperMultispeciesOscillation`)
 - `q023_paper_bell_linear` -> `tests/q023_paper_bell_linear.cpp`
   (`ProblemGenerator::Q023PaperBellLinear`)
 - `q029_hall_bell_linear` -> `tests/q029_hall_bell_linear.cpp`
@@ -54,6 +57,9 @@ These are the only problems selectable with `problem/pgen_name` when
 - `q032_reduced_static_neutral_local` ->
   `tests/q032_reduced_static_neutral_local.cpp`
   (`ProblemGenerator::Q032ReducedStaticNeutralLocal`)
+- `q033_crpai_transport_runtime_local` ->
+  `tests/q033_crpai_transport_runtime_local.cpp`
+  (`ProblemGenerator::Q033CRPAITransportRuntimeLocal`)
 - `rad_linear_wave` -> `tests/rad_linear_wave.cpp`
   (`ProblemGenerator::RadiationLinearWave`)
 - `shock_tube` -> `tests/shock_tube.cpp` (`ProblemGenerator::ShockTube`)

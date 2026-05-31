@@ -202,6 +202,19 @@
       "reference_data_status": "orion_private_copy_checksum_verified_data_extraction_open"
     },
     {
+      "comparison_id": "XCMP-EXT-HALL-BELL",
+      "claim_ids": ["CLAIM-EXT-HALL-BELL-001"],
+      "reference_ids": ["bai_2015_arxiv_1412.1087"],
+      "observable_families": ["derived_hall_dispersion", "nonlinear_amplification", "hall_applicability", "shock_front_metrics"],
+      "equation_map_status": "blocked_pending_reference_specific_mapping_and_external_review",
+      "normalization_map_status": "blocked_pending_reference_specific_mapping_and_external_review",
+      "equation_normalization_map": "tst/publication/readiness/q022_xcmp_ext_hall_bell_equation_map_2026-05-30.json",
+      "dataset_provenance_id": "Q022-DATASET-XCMP-EXT-HALL-BELL",
+      "tolerance_table_status": "blocked_pending_reference_dataset_extraction_and_external_review",
+      "tolerance_table": "tst/publication/readiness/q022_xcmp_ext_hall_bell_tolerance_table_2026-05-30.json",
+      "reference_data_status": "orion_private_copy_checksum_verified_data_extraction_open"
+    },
+    {
       "comparison_id": "XCMP-EXT-CRPAI-TRANSPORT",
       "claim_ids": ["CLAIM-EXT-CRPAI-TRANSPORT-001", "CLAIM-STATEART-CRPAI-SCATTERING-001"],
       "reference_ids": ["sun_bai_zhao_2024_arxiv_2409.08592"],

@@ -1439,12 +1439,20 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm) :
     OrszagTang(pin, false);
   } else if (pgen_fun_name.compare("pic_parallel_shock") == 0) {
     PICParallelShock(pin, false);
+  } else if (pgen_fun_name.compare("q006_paper_multispecies_oscillation") == 0) {
+    Q006PaperMultispeciesOscillation(pin, false);
+  } else if (pgen_fun_name.compare("q007_paper_crsi_linear_preparation") == 0) {
+    Q007PaperCRSILinearPreparation(pin, false);
+  } else if (pgen_fun_name.compare("q007_paper_crpai_linear_preparation") == 0) {
+    Q007PaperCRPAILinearPreparation(pin, false);
   } else if (pgen_fun_name.compare("q023_paper_bell_linear") == 0) {
     Q023PaperBellLinear(pin, false);
   } else if (pgen_fun_name.compare("q029_hall_bell_linear") == 0) {
     Q029HallBellLinear(pin, false);
   } else if (pgen_fun_name.compare("q032_reduced_static_neutral_local") == 0) {
     Q032ReducedStaticNeutralLocal(pin, false);
+  } else if (pgen_fun_name.compare("q033_crpai_transport_runtime_local") == 0) {
+    Q033CRPAITransportRuntimeLocal(pin, false);
   } else if (pgen_fun_name.compare("rad_linear_wave") == 0) {
     RadiationLinearWave(pin, false);
   } else if (pgen_fun_name.compare("shock_tube") == 0) {
@@ -2077,12 +2085,20 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
     OrszagTang(pin, true);
   } else if (pgen_fun_name.compare("pic_parallel_shock") == 0) {
     PICParallelShock(pin, true);
+  } else if (pgen_fun_name.compare("q006_paper_multispecies_oscillation") == 0) {
+    Q006PaperMultispeciesOscillation(pin, true);
+  } else if (pgen_fun_name.compare("q007_paper_crsi_linear_preparation") == 0) {
+    Q007PaperCRSILinearPreparation(pin, true);
+  } else if (pgen_fun_name.compare("q007_paper_crpai_linear_preparation") == 0) {
+    Q007PaperCRPAILinearPreparation(pin, true);
   } else if (pgen_fun_name.compare("q023_paper_bell_linear") == 0) {
     Q023PaperBellLinear(pin, true);
   } else if (pgen_fun_name.compare("q029_hall_bell_linear") == 0) {
     Q029HallBellLinear(pin, true);
   } else if (pgen_fun_name.compare("q032_reduced_static_neutral_local") == 0) {
     Q032ReducedStaticNeutralLocal(pin, true);
+  } else if (pgen_fun_name.compare("q033_crpai_transport_runtime_local") == 0) {
+    Q033CRPAITransportRuntimeLocal(pin, true);
   } else if (pgen_fun_name.compare("rad_linear_wave") == 0) {
     RadiationLinearWave(pin, true);
   } else if (pgen_fun_name.compare("shock_tube") == 0) {

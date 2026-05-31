@@ -40,6 +40,46 @@ class PicQ011ParallelShockSection54PaperTests(unittest.TestCase):
         self.assertEqual(values["amr_cell_sizes_c_over_omega_pi"], [12.0, 6.0, 3.0])
         self.assertEqual(values["snapshot_times_omega0_inverse"], [500.0, 1200.0])
         self.assertEqual(values["exclude_birth_time_before_omega0_inverse"], 45.0)
+        self.assertEqual(values["shock_surface_model"], "ideal_surface")
+        self.assertEqual(
+            values["injection_distribution"],
+            "monoenergetic_full_sphere_isotropic_relative_to_ideal_surface",
+        )
+        derivation = contract["deck"]["shock_surface_derivation"]
+        self.assertEqual(derivation["selected_model"], "ideal_surface")
+        self.assertAlmostEqual(derivation["ideal_surface_speed_over_ua0"], 10.0)
+        self.assertAlmostEqual(
+            derivation["finite_mach_engineering_option_speed_over_ua0"],
+            10.007408779453616,
+        )
+        self.assertAlmostEqual(
+            derivation["upstream_relative_sweep_speed_over_ua0"],
+            40.00000000005,
+        )
+        self.assertEqual(
+            derivation["shock_surface_carrier_selection"],
+            "single_half_open_cell_with_surface_x1",
+        )
+        self.assertEqual(
+            derivation["early_injected_particle_removal"],
+            "runtime_state_removal_for_birth_time_below_45",
+        )
+        self.assertAlmostEqual(
+            derivation["ideal_surface_positions_c_over_omega_pi"]["t500"],
+            5000.000000025,
+        )
+        self.assertAlmostEqual(
+            derivation["ideal_surface_positions_c_over_omega_pi"]["t1200"],
+            12000.00000006,
+        )
+        self.assertNotIn(
+            "finite_mach_shock_speed_estimate_to_ideal_surface_mapping_audit",
+            contract["open_items"],
+        )
+        self.assertIn(
+            "executed_shock_surface_injection_distribution_audit",
+            contract["open_items"],
+        )
         self.assertTrue(contract["open_items"])
         self.assertEqual(contract["result_metrics"], [])
 
@@ -63,6 +103,7 @@ class PicQ011ParallelShockSection54PaperTests(unittest.TestCase):
             "required_grid_variants",
             "required_raw_artifacts_per_snapshot",
             "required_run_artifacts",
+            "required_seeds",
         ):
             with self.subTest(field=field):
                 self.assertEqual(frozen[field], contract[field])

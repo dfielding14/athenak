@@ -32,7 +32,7 @@ _SOURCE_BINDINGS = {
     "src/particles/particles.hpp":
         "452e6091ad6f1ce50156c770d304ac36020cb53927cc1e40ba6af73e7c3bb462",
     "src/particles/particles.cpp":
-        "06f80ec9a93f027ff5a24a2631754603c7ea3f83cfbcdbd8e5b9a32be711fa79",
+        "83bc366df553a70fc1470f9ed461dc98e8d7506fb9327d4b5d5abb97484f1637",
     "docs/source/engineering/pic_mhd_model_contract.md":
         "ebad2e21725ea15eb301e03f32d8ca8fab9c6503aec90cd7090be4637402ed64",
 }

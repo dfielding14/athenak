@@ -8,15 +8,19 @@
   "artifacts": [
     {
       "path": "inputs/publication/pic_parallel_shock_section54_paper.athinput",
-      "sha256": "c56bcdc56713eb9bee253a05c9221364e1fb75a1022d201e6eed9ada0fd2b353"
+      "sha256": "c5110a3ed90c0f28eb315a4b4faeb432f3b980f3a7083cd3527cbcc0497856d6"
+    },
+    {
+      "path": "src/pgen/tests/pic_parallel_shock.cpp",
+      "sha256": "6e1f7b7d91c7a8b61898b9b29697e76e804319279426684366e227efeb87bf96"
     },
     {
       "path": "tst/scripts/particles/pic_parallel_shock_section54_paper.py",
-      "sha256": "260ad7a799e862c80d6eb7a1d852a84234107903e736dba2d05ecdcb741cbea5"
+      "sha256": "117ed743a721533c0f438f2037e1d9c5e48e9e1457bb29a37210bcd8560f6af0"
     },
     {
       "path": "tst/publication/test_pic_q011_parallel_shock_section54_paper.py",
-      "sha256": "1005849bc842e3c7166afe15b87cd79bcc324db5b4eb21317bee561c19651de6"
+      "sha256": "b0db6ce15ea8779435dc9a0b9457714adacad0630fff2dfc07d54cdb77e5503a"
     }
   ],
   "paper_section_contract": {
@@ -32,8 +36,15 @@
     "gas_gamma": 1.6666666666666667,
     "injection_efficiency": 0.001,
     "injection_p_over_m_over_u0": 3.1622776601683795,
+    "shock_surface_model": "ideal_surface",
+    "shock_surface_speed_over_ua0": 10.0,
+    "shock_surface_equation": "u_sh_prime = (Gamma - 1) * u0 / 2",
+    "shock_surface_carrier_selection": "single_half_open_cell_with_surface_x1",
+    "injection_mass_budget_sweep_speed": "u0 + u_sh_prime",
+    "injection_distribution": "monoenergetic_full_sphere_isotropic_relative_to_ideal_surface",
     "light_speed_over_ua0": 10000.0,
     "exclude_birth_time_before_omega0_inverse": 45.0,
+    "early_injected_particle_removal": "one_time_restart_persisted_runtime_state_removal",
     "amr_cell_sizes_c_over_omega_pi": [
       12.0,
       6.0,
@@ -106,8 +117,7 @@
     "field_and_particle_output_dt_omega0_inverse": 100.0
   },
   "open_items": [
-    "Exact shock-surface injection distribution audit remains open.",
-    "Finite-Mach shock-speed estimate to ideal surface mapping audit remains open.",
+    "Executed shock-surface injection distribution audit remains open.",
     "Gas pressure and unit-normalization mapping audit remains open.",
     "Downstream 40/640 ppc macro-mass calibration remains open.",
     "Frontier load-balance cost tuning remains open.",
@@ -121,7 +131,57 @@
     "static_analyzer_contract": "passed locally",
     "python_syntax": "passed locally",
     "python_style": "flake8 unavailable; manual line-length and diff checks passed",
-    "athena_parser_startup": "passed locally with reduced mesh overrides and nlim=0; no campaign execution"
+    "athena_parser_startup": "passed locally with reduced mesh overrides and nlim=0; no campaign execution",
+    "tiny_override_runtime_cohort_removal_smoke": {
+      "status": "passed locally as a bounded nonqualifying diagnostic",
+      "artifact_root": "/lustre/orion/ast207/proj-shared/dfielding/PIC/local-readiness/q011-cohort-removal-smoke-20260530",
+      "overrides": "single reduced serial mesh cycle with eta=1, deposit_qscale=0.1 and ps_remove_birth_time_before=1.0e-12",
+      "restart_ps_removed_excluded_early_cohort": 1,
+      "restart_ps_next_tag": 5,
+      "final_particle_count": 0,
+      "qualification_effect": "none"
+    },
+    "restart_boundary_cohort_removal_smoke": {
+      "status": "passed locally as a bounded nonqualifying three-stage diagnostic",
+      "artifact_root": "/lustre/orion/ast207/proj-shared/dfielding/PIC/local-readiness/q011-cohort-removal-restart-boundary-bounded-smoke-20260530",
+      "overrides": "reduced serial 8x10x1 mesh and physical extents, eta=1, deposit_qscale=0.1, gas subtraction disabled and ps_remove_birth_time_before=0.015",
+      "stages": [
+        {
+          "name": "restart_before_threshold",
+          "cycle": 1,
+          "ps_removed_excluded_early_cohort": 0,
+          "ps_next_tag": 58,
+          "final_particle_count": 58
+        },
+        {
+          "name": "restart_crossing_threshold",
+          "cycle": 2,
+          "ps_removed_excluded_early_cohort": 1,
+          "ps_next_tag": 96,
+          "final_particle_count": 0
+        },
+        {
+          "name": "restart_after_threshold",
+          "cycle": 3,
+          "ps_removed_excluded_early_cohort": 1,
+          "ps_next_tag": 131,
+          "final_particle_count": 35
+        }
+      ],
+      "file_count": 38,
+      "inventory_algorithm": "sha256(sorted lines of '<file_sha256>  <root-relative-path>\\n')",
+      "inventory_sha256": "4cabd54420092e2d4199821385a8f09d96af888411ae1bf29ddb3c102a41270b",
+      "writable_entries": 0,
+      "qualification_effect": "none"
+    },
+    "excluded_oversized_override_probe": {
+      "status": "excluded_from_evidence_and_stopped",
+      "artifact_root": "/lustre/orion/ast207/proj-shared/dfielding/PIC/local-readiness/q011-cohort-removal-restart-boundary-smoke-20260530",
+      "reason": "The rejected diagnostic reduced mesh counts without reducing manuscript-scale physical extents. Its first coarse step advanced to 58.0645 and generated an oversized swept-area tag budget, so the continuation was stopped before completion. The recursively read-only partial tree is retained only as rejected chronology.",
+      "file_count": 20,
+      "writable_entries": 0,
+      "qualification_effect": "none"
+    }
   },
   "execution_policy": {
     "frontier_campaign_execution": "open_not_run",

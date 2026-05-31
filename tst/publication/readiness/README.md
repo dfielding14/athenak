@@ -19,6 +19,11 @@ qualify any scientific claim by itself.
   serial-runtime evidence collected before the Frontier execution gate.
 - `q005_q006_local_analytical_2026-05-30.json`: bounded serial-host Bell and
   oscillation engineering-proxy characterization with non-closure limits.
+- `q006_paper_multispecies_oscillation_source_local_preparation_2026-05-30.json`:
+  separately named registered Section 5.3 uniform, SMR and deterministic
+  audited-AMR source-local preparation. The integrated host build passes, but
+  the ideal-EOS compatibility boundary, retained runtime matrix and
+  long-horizon paper-frequency qualification remain open.
 - `q015_entity_differential_2026-05-30.json`: frozen-source Entity
   exact-overlap differential evidence and explicit non-overlap boundaries.
 - `q022_independent_comparison_preregistration_2026-05-30.json` and
@@ -50,9 +55,15 @@ qualify any scientific claim by itself.
   transverse-invariant thin 2D3V carrier. Successor `mhd_w_bcc` smokes retain
   magnetic and fluid-velocity modes in 1D/2D/3D plus a 2D restart continuation;
   their projected velocity-to-magnetic ratio is a nonqualifying source-local
-  diagnostic. The paper-literal velocity estimator or a reviewed supplemental
-  estimator decision, convergence, registered execution, independent recompute
-  and external review remain open.
+  diagnostic. The source-local analyzer separately freezes the paper-literal
+  `delta_u_y` spatial sine-fit phase and volume-averaged absolute `delta_u`
+  growth estimator. Clean freeze, exact variants, convergence, registered
+  execution, independent recompute and external review remain open.
+- `materialize_q023_paper_bell_linear_variants.py`: deterministic source-local
+  Q-023 Section 5.2 preparation materializer. It emits the fixed 405-deck
+  epsilon, dimensionality, resolution, local-CFL and PPC matrix only as a
+  descriptor-relative direct child of `tst/.codex`, keeps centered loading as an explicit unresolved review
+  boundary and refuses qualification claims or execution authorization.
 - `q029_hall_bell_linear_source_local_preparation_2026-05-30.json`: bounded
   source-local 1D/2D/3D launch preparation for the separately named
   experimental Hall-current generator. The guarded shared Q-023 seed-carrier
@@ -63,6 +74,17 @@ qualify any scientific claim by itself.
   combined `mhd_w_bcc` 1D/2D/3D smokes and exact serial 2D uninterrupted versus
   restart-continuation array parity pass; Hall-Bell dispersion, nonlinear,
   Frontier and decomposition qualification remain open.
+- `q029_hall_bell_q022_prerequisite_successor_2026-05-30.json`: Q-029-only
+  fail-closed binding for the dedicated `XCMP-EXT-HALL-BELL` Q-022 route. The
+  Bai provenance, equation-map and empty tolerance-table placeholders remain
+  blocked pending physical mapping, extracted data and external review.
+- `q029_hall_bell_linear_raw_extractor_source_local_2026-05-30.json`:
+  Q-029-only source-local replay of the recursively read-only Orion preparation
+  artifacts. It pins the decoder, rejects special inventory entries and
+  decodes digest-verified byte copies while retaining combined magnetic and fluid-velocity geometric
+  seed-carrier projections with provenance while explicitly omitting a
+  physical Bai oracle, reviewed coefficient grid and numeric qualification
+  tolerance.
 - `q029_hall_extension_parser_hardening_successor_2026-05-30.json`,
   `q032_plotnikov_damped_crsi_parser_hardening_successor_2026-05-30.json` and
   `q033_crpai_transport_calibration_parser_hardening_successor_2026-05-30.json`:
@@ -74,11 +96,22 @@ qualify any scientific claim by itself.
   current Q-033 nonqualifying successor binding the exact blocked Q-022
   Sun-Bai-Zhao provenance, equation-map and empty tolerance-table placeholders
   into the synthetic bundle. It remains launch-blocked preparation only.
+- `q033_crpai_transport_runtime_local_2026-05-30.json`: bounded separately
+  named source-local CRPAI runtime carrier with deterministic seeded
+  transverse modes, antipodal prolate particle pairs and immutable local
+  extraction. Physical transport calibration, Q-022 closure, MPI, Frontier
+  and review remain open.
 - `q032_reduced_static_neutral_runtime_local_2026-05-30.json`: bounded
   source-local thin-2D3V runtime carrier for the exact static-neutral
   transverse-friction map. The retained Orion-local control-versus-damped
   probe passes with residuals below `1.0e-7`; Plotnikov applicability and
   matched damped-CRSI qualification remain open.
+- `q032_plotnikov_reduced_map_applicability_derivation_2026-05-30.md`: bounded
+  nonqualifying Q-032 applicability draft separating the implemented
+  `exp(-nu_in dt)` transverse source sink from the conditional high-frequency
+  wave-amplitude and wave-energy damping asymptotes. Plotnikov equation
+  mapping, phase-scrambling disposition, extracted data and tolerances remain
+  fail-closed.
 - `q032_q033_two_rank_mpi_host_successor_2026-05-30.json`: rejected chronology
   for direct-PALS parallel launches on one login host without a Slurm
   allocation. OLCF policy forbids parallel login-node launches, so the retained
@@ -204,6 +237,11 @@ qualify any scientific claim by itself.
   56 rows, zero active reservations and no pending PIC marker.
 - `q008_expanding_box_local_oracles_2026-05-30.json`: bounded serial-host
   expanding-box gyro-history and one-step CPAW source-map oracle evidence.
+- `q008_expanding_box_cpaw_history_convergence_preparation_2026-05-30.json`:
+  bounded serial-host exponential-profile Appendix-A CPAW four-crossing-time
+  history and resolution-convergence preparation matrix retained below Orion.
+  Literal linear and reciprocal-linear profiles, portability and qualification
+  remain open.
 - `q008_expanding_box_comoving_flux_successor_2026-05-30.json`: successor
   bounded serial-host comoving-flux repair, oblique-divB oracle and active-MHD
   fail-closed guard evidence.
@@ -216,6 +254,11 @@ qualify any scientific claim by itself.
   successor bounded serial-host uninterrupted-versus-restarted endpoint
   parity for the selected active-MHD expanding adaptive-delta-f plus damping
   carrier. Frontier, MPI and physical-transport qualification remain open.
+- `q007_paper_deltaf_linear_source_local_preparation_2026-05-30.json`:
+  bounded source-local exact-isothermal true-delta-f CRSI/CRPAI cycle-zero
+  preparation carriers and paper-literal static mappings. The paper log-bin
+  weighted loader, random-phase four-branch wave spectrum, runtime dispersion,
+  CRPAI handedness review and qualification remain open.
 - `q009_amr_lifetime_policy_successor_2026-05-30.json`: bounded local AMR
   retained-state inventory and `paper_smooth` interface-policy decision with
   the coupled-boundary, MPI and HIP lifetime matrix intentionally open.
@@ -269,8 +312,13 @@ qualify any scientific claim by itself.
   parallel-shock scaffold and schema-6 continuation-control evidence.
 - `q011_parallel_shock_section54_paper_preparation_2026-05-30.json`: frozen
   Section 5.4 preparation-only deck and fail-closed analyzer contract for the
-  future registered Frontier campaign. Open calibration fields and campaign
-  execution prevent accidental promotion to scientific evidence.
+  future registered Frontier campaign. The source-local pgen now selects the
+  manuscript ideal shock surface and full-sphere isotropic monoenergetic
+  injection, upstream-relative swept-mass budget, unique half-open carrier
+  cell and restart-persisted removal of the startup cohort while retaining the
+  finite-Mach surface as an explicitly separate engineering option. Open
+  executed-distribution, calibration and campaign
+  fields prevent accidental promotion to scientific evidence.
 - `q034_unsupported_capability_successor_2026-05-30.json`: successor
   fail-closed active-MHD expanding-box unsupported-composition addendum.
 - `q042_post_repair_architecture_docs_successor_2026-05-30.json`: successor

@@ -1,0 +1,104 @@
+# AthenaXXX input file for Q008 Appendix-A CPAW history preparation
+
+<comment>
+problem   = Q008 bounded serial-host exponential expanding-box CPAW history preparation
+
+<job>
+basename  = pic_mhd_expanding_box_cpaw_history_preparation
+
+<mesh>
+nghost    = 2
+nx1       = 128
+x1min     = 0.0
+x1max     = 1.0
+ix1_bc    = periodic
+ox1_bc    = periodic
+
+nx2       = 4
+x2min     = 0.0
+x2max     = 1.0
+ix2_bc    = periodic
+ox2_bc    = periodic
+
+nx3       = 4
+x3min     = 0.0
+x3max     = 1.0
+ix3_bc    = periodic
+ox3_bc    = periodic
+
+<meshblock>
+nx1       = 128
+nx2       = 4
+nx3       = 4
+
+<time>
+evolution  = dynamic
+integrator = rk2
+cfl_number = 0.3
+nlim       = -1
+tlim       = 4.0
+ndiag      = 128
+
+<mhd>
+eos         = ideal
+reconstruct = plm
+rsolver     = llf
+gamma       = 1.66666666667
+
+<particles>
+particle_type           = cosmic_ray
+ppc                     = 0.0
+pusher                  = boris_tsc
+nspecies                = 1
+cr_distribution         = center
+deposit_moments         = false
+deposit_order           = 1
+deposit_qscale          = 1.0
+couple_moments_to_mhd   = false
+cr_vx0                  = 0.0
+cr_vy0                  = 0.0
+cr_vz0                  = 0.0
+pic_physical_mode       = paper_test_particle
+pic_background_mode     = coupled
+pic_feedback_mode       = test_particle
+pic_interp_scheme       = tsc
+pic_cr_light_speed      = 3.0
+pic_cr_initial_state    = momentum
+pic_cr_hall_mode        = off
+pic_max_cell_cross      = 2
+pic_theta_max           = 0.3
+pic_deltaf_mode         = off
+pic_sort_interval       = 0
+pic_intermediate_arrays = auto
+pic_expanding_box_mode  = on
+pic_expansion_law       = exponential
+pic_expansion_rate_x1   = 0.0
+pic_expansion_rate_x2   = 0.0
+pic_expansion_rate_x3   = 0.0
+
+<species0>
+mass   = 1.0
+charge = 1.0
+
+<problem>
+pgen_name   = cpaw
+b_par       = 1.0
+b_perp      = 0.1
+pres        = 0.1
+v_par       = 0.0
+right_polar = true
+along_x1    = true
+along_x2    = false
+along_x3    = false
+
+<output1>
+file_type   = bin
+variable    = mhd_w_bcc
+id          = mhd_w_bcc
+dt          = 0.125
+ghost_zones = false
+
+<output2>
+file_type   = hst
+dt          = 0.125
+data_format = %20.12e

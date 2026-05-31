@@ -1,0 +1,202 @@
+# Q-007 Sun and Bai Section 5.5.2 CRPAI source-local oblate preparation only.
+# This exact-isothermal true-delta-f cycle-zero carrier has eight placeholder
+# particles. It is not the paper loading, runtime evidence, or an authorized deck.
+
+<comment>
+problem   = Q007 paper CRPAI oblate true-delta-f source-local preparation
+
+<job>
+basename  = pic_q007_paper_crpai_linear_oblate_preparation
+
+<mesh>
+nghost    = 2
+nx1       = 32
+x1min     = 0.0
+x1max     = 640.0
+ix1_bc    = periodic
+ox1_bc    = periodic
+
+nx2       = 4
+x2min     = 0.0
+x2max     = 4.0
+ix2_bc    = periodic
+ox2_bc    = periodic
+
+nx3       = 1
+x3min     = 0.0
+x3max     = 1.0
+ix3_bc    = periodic
+ox3_bc    = periodic
+
+<meshblock>
+nx1       = 32
+nx2       = 4
+nx3       = 1
+
+<mesh_refinement>
+refinement = none
+num_levels = 1
+
+<time>
+evolution  = dynamic
+integrator = rk2
+cfl_number = 0.1
+nlim       = 0
+tlim       = 0.0
+ndiag      = 1
+
+<mhd>
+eos             = isothermal
+iso_sound_speed = 1.0
+reconstruct     = plm
+rsolver         = llf
+
+<coord>
+special_rel = false
+general_rel = false
+
+<particles>
+particle_type                     = cosmic_ray
+ppc                               = 0.0625
+pusher                            = boris_tsc
+nspecies                          = 8
+cr_distribution                   = center
+deposit_moments                   = true
+deposit_order                     = 1
+deposit_qscale                    = 1.0
+couple_moments_to_mhd             = true
+couple_j_to_efield_coeff          = 1.0
+couple_j_to_efield_representation = cell_centered
+couple_j_deposition_mode          = cc_convert
+couple_moments_momentum_to_mhd    = true
+couple_moments_energy_to_mhd      = false
+couple_fluid_feedback_order       = mhd_src_terms
+couple_moments_momentum_coeff     = 1.0
+couple_moments_energy_coeff       = 1.0
+cr_vx0                            = 0.0
+cr_vy0                            = 0.0
+cr_vz0                            = 0.0
+pic_physical_mode                 = paper_mhd_pic
+pic_background_mode               = coupled
+pic_feedback_mode                 = coupled
+pic_interp_scheme                 = tsc
+pic_enable_2d3v                   = true
+pic_cr_light_speed                = 30000.0
+pic_cr_initial_state              = momentum
+pic_cr_hall_mode                  = off
+pic_wave_damping_mode             = off
+pic_max_cell_cross                = 1
+pic_theta_max                     = 0.3
+pic_deltaf_mode                   = physical
+pic_deltaf_f0                     = kappa_aniso
+pic_deltaf_p0                     = 300.0
+pic_deltaf_kappa                  = 1.75
+pic_deltaf_drift_x1               = 0.0
+pic_deltaf_drift_x2               = 0.0
+pic_deltaf_drift_x3               = 0.0
+pic_deltaf_aniso_x1               = 1.0
+pic_deltaf_aniso_x2               = 0.9900990099009901
+pic_deltaf_aniso_x3               = 0.9900990099009901
+pic_deltaf_background_rho         = 1.0e-4
+pic_deltaf_background_jx          = 0.0
+pic_deltaf_background_jy          = 0.0
+pic_deltaf_background_jz          = 0.0
+pic_deltaf_adapt_mode             = off
+pic_deltaf_adapt_interval         = 0.0
+pic_sort_interval                 = 0
+pic_intermediate_arrays           = auto
+pic_expanding_box_mode            = off
+
+<species0>
+mass = 1.0
+charge = 1.0
+vx0 = 0.0
+vy0 = 0.0
+vz0 = 0.0
+<species1>
+mass = 1.0
+charge = 1.0
+vx0 = 0.0
+vy0 = 0.0
+vz0 = 0.0
+<species2>
+mass = 1.0
+charge = 1.0
+vx0 = 0.0
+vy0 = 0.0
+vz0 = 0.0
+<species3>
+mass = 1.0
+charge = 1.0
+vx0 = 0.0
+vy0 = 0.0
+vz0 = 0.0
+<species4>
+mass = 1.0
+charge = 1.0
+vx0 = 0.0
+vy0 = 0.0
+vz0 = 0.0
+<species5>
+mass = 1.0
+charge = 1.0
+vx0 = 0.0
+vy0 = 0.0
+vz0 = 0.0
+<species6>
+mass = 1.0
+charge = 1.0
+vx0 = 0.0
+vy0 = 0.0
+vz0 = 0.0
+<species7>
+mass = 1.0
+charge = 1.0
+vx0 = 0.0
+vy0 = 0.0
+vz0 = 0.0
+
+<problem>
+pgen_name = q007_paper_crpai_linear_preparation
+
+<q007_paper_crpai_linear_preparation>
+campaign_id                           = Q007-PAPER-CRPAI-LINEAR-PREPARATION
+section_anchor                        = sun_bai_2023_section_5_5_2_crpai
+deck_role                             = cycle_zero_true_deltaf_parser_and_analytic_mapping_preparation_only
+qualification_effect                  = none
+frontier_authorization                = not_bound
+runtime_evolution                     = blocked_cycle_zero_only
+physical_loading                      = blocked_missing_paper_log_bin_weighted_loader
+initial_wave_spectrum                 = blocked_missing_random_phase_four_branch_loader
+theory_runtime_comparison             = blocked_missing_runtime_artifacts_and_independent_review
+paper_momentum_bin_count              = 8
+paper_particles_per_cell_per_bin      = 256
+source_local_placeholder_particles_total = 8
+paper_rho0                            = 1.0
+paper_b0                              = 1.0
+paper_ua                              = 1.0
+paper_mncr_over_rho0                  = 1.0e-4
+paper_domain_x1                       = 96000.0
+paper_dx                              = 20.0
+source_local_x1                       = 640.0
+paper_light_speed                     = 30000.0
+paper_p0                              = 300.0
+paper_kappa                           = 1.75
+paper_xi                              = 1.01
+paper_seed_amplitude                  = 1.0e-3
+case_role                             = crpai_oblate_xi_1p01_signed_branch_mapping_only
+source_local_gas_vx                   = 0.0
+handedness_mapping                    = blocked_pending_manuscript_text_caption_review
+
+<output1>
+file_type   = bin
+variable    = mhd_w_bcc
+id          = mhd_w_bcc
+dcycle      = 1
+ghost_zones = false
+
+<output2>
+file_type   = pvtk
+variable    = prtcl_all
+id          = prtcl_all
+dcycle      = 1

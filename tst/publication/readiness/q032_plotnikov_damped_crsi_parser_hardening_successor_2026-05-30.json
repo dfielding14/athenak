@@ -40,19 +40,19 @@
   },
   "artifact_bindings": {
     "inputs/tests/pic_q032_plotnikov_damped_crsi_candidate.athinput": "ae471a610d8c2c50367c58df372361c1dfeec08644224789f9cba8a55df722a9",
-    "tst/publication/analyze_q032_plotnikov_damped_crsi_candidate.py": "3daf28fada05c38020c498d03f463294a234a6614bfd99896e3f839a5422a9c7",
+    "tst/publication/analyze_q032_plotnikov_damped_crsi_candidate.py": "ff2d1dc87a00c741a9545c75ab19689f2706ae9528bb4beaa08cbade634900d3",
     "tst/publication/test_analyze_q032_plotnikov_damped_crsi_candidate.py": "ea089092e243bdcaa7d6b29cbb684943a49c741f4d9ceb880d0b9fb0021739ac",
     "tst/publication/readiness/q032_reduced_static_neutral_plotnikov_boundary_2026-05-30.md": "a820d63754cfe8446dd892ec16345e95180c7e617ed95bd564b4e53a7845d5a6"
   },
   "implementation_source_bindings": {
     "src/mhd/mhd_tasks.cpp": "339326c2cc8913c321affeafc618a8fea6cbd9133ea6b26a9b58daa2baafa6d2",
     "src/particles/particles.hpp": "452e6091ad6f1ce50156c770d304ac36020cb53927cc1e40ba6af73e7c3bb462",
-    "src/particles/particles.cpp": "06f80ec9a93f027ff5a24a2631754603c7ea3f83cfbcdbd8e5b9a32be711fa79",
+    "src/particles/particles.cpp": "83bc366df553a70fc1470f9ed461dc98e8d7506fb9327d4b5d5abb97484f1637",
     "docs/source/engineering/pic_mhd_model_contract.md": "ebad2e21725ea15eb301e03f32d8ca8fab9c6503aec90cd7090be4637402ed64"
   },
   "prerequisite_record_bindings": {
     "tst/publication/readiness/q022_external_reference_private_ingest_2026-05-30.json": "78287ea54d8350445cfad62e72f6efc2845f720580d070d075897d889ae3a214",
-    "tst/publication/readiness/q022_dataset_provenance_manifest_2026-05-30.json": "dd6dd6e3187b8e5e06bfbce6f0da4cfc0623d79143a55d7ebbcc797b21b38c78",
+    "tst/publication/readiness/q022_dataset_provenance_manifest_2026-05-30.json": "925ab235f4ed5141468a8643e999d37e9d1a075c528df1987b577e2deb90bc27",
     "tst/publication/readiness/q022_xcmp_ext_crsi_in_damping_equation_map_2026-05-30.json": "87ed9f5fac74cf9ce7be567a1e57cfecae6e2b3374e1bc4e4ed74d2bbe3c8c9b",
     "tst/publication/readiness/q022_xcmp_ext_crsi_in_damping_tolerance_table_2026-05-30.json": "3ac72c052fc465bd54c92750a96e3ee6ee1d39a79eec2f9c52eda3eb5cc5dfd7",
     "tst/publication/readiness/q032_q033_extension_local_scans_2026-05-30.json": "8338ee08f311ce353186a514549cec1227d17de300557645655158ee73da3dc4"

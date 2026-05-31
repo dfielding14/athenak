@@ -1,0 +1,158 @@
+{
+  "record_type": "q006_paper_multispecies_oscillation_source_local_preparation",
+  "schema_version": 1,
+  "date": "2026-05-30",
+  "gate": "Q-006",
+  "campaign_id": "Q006-PAPER-MULTISPECIES-OSCILLATION",
+  "status": "source_local_deck_and_source_freeze_preparation_only",
+  "qualification_effect": "none_source_local_deck_and_source_freeze_preparation_only",
+  "claim_closure": false,
+  "frontier_authorization": "not_bound",
+  "scope": "Bounded source-local Sun and Bai Section 5.3 oscillation preparation only. This tranche adds and registers a separately named guarded problem-generator source, cycle-zero uniform and SMR deck freezes, an audited deterministic AMR callback preparation deck, and a static plus analytical analyzer. It does not claim compiled runtime evidence, execute a campaign, qualify long-horizon frequency agreement, establish true-AMR policy behavior, qualify MPI or GPU behavior, authorize Frontier work, or close external review.",
+  "manuscript_anchor": {
+    "reference_id": "sun_bai_2023_arxiv_2304.10568v1",
+    "source": "docs/reference_paper/arXiv-2304.10568v1/mnras_template.tex",
+    "section": "5.3 Oscillation of gas with electrons and positrons",
+    "paper_state": {
+      "periodic_carrier": "3D",
+      "rho": 1.0,
+      "magnetic_field": [0.0, 0.0, 1.0],
+      "paper_eos": "isothermal",
+      "paper_cs": 1.0,
+      "species": [
+        {"role": "electron", "q_over_mc": -1.0, "mass_density_over_rho": 1.5, "ppc": 64, "initial_velocity": [0.0, 0.1, 0.0]},
+        {"role": "positron", "q_over_mc": 1.0, "mass_density_over_rho": 1.5, "ppc": 64, "initial_velocity": [0.0, 0.1, 0.0]}
+      ],
+      "gas_initial_velocity": [0.0, -0.3, 0.0],
+      "omega": 1.0,
+      "artificial_c": 1000.0,
+      "dt_omega_target": 0.1,
+      "oscillation_omega": 2.0,
+      "oscillation_period": 3.141592653589793
+    }
+  },
+  "runtime_compatibility_boundary": {
+    "exact_section53_isothermal_runtime_supported": false,
+    "reason": "The current coupled particle energy-feedback path rejects isothermal MHD, while paper_mhd_pic requires conservative momentum and energy feedback.",
+    "prepared_runtime_eos": "ideal",
+    "prepared_gamma": 1.6666666666666667,
+    "prepared_pressure": 0.6,
+    "prepared_pressure_semantics": "rho*paper_cs^2/gamma preserves initial adiabatic sound speed 1 for the compatibility preparation",
+    "qualification_effect": "none"
+  },
+  "generator": {
+    "name": "q006_paper_multispecies_oscillation",
+    "method": "ProblemGenerator::Q006PaperMultispeciesOscillation",
+    "source": "src/pgen/tests/q006_paper_multispecies_oscillation.cpp",
+    "registration_status": "parent_integrated_shared_registration",
+    "restart_semantics": "revalidate exact source-local deck contract, re-enroll audited AMR callback when selected, then return without reinitializing loaded state"
+  },
+  "particle_normalization": {
+    "athenak_aggregate_ppc": 128.0,
+    "round_robin_species_count": 2,
+    "paper_ppc_per_species": 64.0,
+    "species_mass": 1.0,
+    "deposit_qscale": 0.0234375,
+    "species_mass_density_each": 1.5,
+    "species_charge_to_mass": [-1.0, 1.0],
+    "initial_charge_density_sum": 0.0,
+    "initial_center_of_mass_momentum_density": 0.0
+  },
+  "deck_freezes": {
+    "uniform": {
+      "path": "inputs/tests/pic_q006_paper_multispecies_oscillation_uniform_candidate.athinput",
+      "role": "source_local_uniform_deck_freeze_preparation_only_not_authorized",
+      "cycle_zero_only": true
+    },
+    "smr": {
+      "path": "inputs/tests/pic_q006_paper_multispecies_oscillation_smr_candidate.athinput",
+      "role": "source_local_smr_deck_freeze_preparation_only_not_authorized",
+      "refined_root_volume_fraction": 0.125,
+      "cycle_zero_only": true
+    },
+    "audited_amr_preparation": {
+      "path": "inputs/tests/pic_q006_paper_multispecies_oscillation_audited_amr_candidate.athinput",
+      "role": "source_local_audited_amr_deck_freeze_preparation_only_not_authorized",
+      "policy": "deterministic_audited_randomized_preparation_10_refine_60_derefine_not_qualified",
+      "seed": 60053,
+      "refine_probability": 0.1,
+      "derefine_probability": 0.6,
+      "cycle_zero_only": true,
+      "runtime_exercised": false,
+      "true_amr_policy_qualification": false
+    }
+  },
+  "artifact_bindings": {
+    "src/pgen/tests/q006_paper_multispecies_oscillation.cpp": "d4f72b5a0a9ba6555bb51d33beb2ef499e7b6d236521ce2f9864626cbd909df9",
+    "inputs/tests/pic_q006_paper_multispecies_oscillation_uniform_candidate.athinput": "b1c121306666d0f898c00af589158c9a56704a38460b5ad5e568a55bc29094b5",
+    "inputs/tests/pic_q006_paper_multispecies_oscillation_smr_candidate.athinput": "3259351127019c8012e21ebcfd94f24e223429efff6a5414424b1508574bf8a8",
+    "inputs/tests/pic_q006_paper_multispecies_oscillation_audited_amr_candidate.athinput": "a2f9b4187628ae5e54d5850b1bf233410faae26d8e2cdd8fd5f3dab8e8356891",
+    "tst/publication/analyze_q006_paper_multispecies_oscillation.py": "a471417e002bdda2f7e3d357847938d1bf1887bbd3c46d0d90162bc2b61fc517",
+    "tst/publication/test_analyze_q006_paper_multispecies_oscillation.py": "b97db1cab593c631248f033e2ad3af8ce76fbf41cd1dbe94d7f97e76d389faa5"
+  },
+  "analyzer_contract": {
+    "path": "tst/publication/analyze_q006_paper_multispecies_oscillation.py",
+    "artifact_role": "section53_source_local_preparation_not_qualifying_evidence",
+    "validates_exact_deck_contracts": true,
+    "validates_static_source_contract": true,
+    "validates_section53_frequency_formula": true,
+    "validates_center_of_mass_formula": true,
+    "validates_macro_particle_density_formula": true,
+    "validates_smr_one_eighth_volume_fraction": true,
+    "validates_audited_amr_policy_preparation": true,
+    "accepts_runtime_artifacts": false,
+    "always_emits_qualifying_evidence": false
+  },
+  "nonqualification_boundary": {
+    "deck_source_freeze": true,
+    "qualifying_evidence": false,
+    "exact_section53_isothermal_runtime": false,
+    "long_horizon_runtime_evidence": false,
+    "true_amr_policy_qualification": false,
+    "mpi_qualification": false,
+    "gpu_qualification": false,
+    "frontier_authorization": false,
+    "external_review": false
+  },
+  "shared_registration_contract": {
+    "owner": "parent",
+    "status": "integrated",
+    "src/CMakeLists.txt": "registered",
+    "src/pgen/pgen.hpp": "declared",
+    "src/pgen/pgen.cpp": "fresh_and_restart_dispatch_registered"
+  },
+  "parent_registration_steps": [],
+  "verification": {
+    "focused_command": "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. python3 -m unittest tst.publication.test_analyze_q006_paper_multispecies_oscillation",
+    "focused_result": "pass",
+    "analyzer_command": "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. python3 tst/publication/analyze_q006_paper_multispecies_oscillation.py",
+    "analyzer_result": "pass",
+    "integrated_serial_non_mpi_compile": "pass",
+    "integrated_uniform_cycle_zero_startup": {
+      "status": "pass_nonqualifying_startup_only",
+      "artifact_root": "/lustre/orion/ast207/proj-shared/dfielding/PIC/local-readiness/q006-uniform-startup-check-20260530",
+      "runtime_cycles": 0,
+      "qualification_effect": "none"
+    },
+    "git_diff_check": "pass"
+  },
+  "explicitly_not_claimed": [
+    "compiled q006_paper_multispecies_oscillation runtime evidence",
+    "exact isothermal Section 5.3 runtime support",
+    "long-horizon oscillation-frequency agreement",
+    "SMR runtime parity",
+    "true-AMR runtime policy behavior or parity",
+    "MPI or decomposition qualification",
+    "Frontier HIP or GPU qualification",
+    "Frontier launch authorization",
+    "external-review closure"
+  ],
+  "residual_work": [
+    "Compile and review a clean candidate before any runtime materialization.",
+    "Resolve or explicitly review the ideal-EOS compatibility boundary before an exact Section 5.3 claim.",
+    "Run retained long-horizon uniform, SMR, and true-AMR campaigns with declared frequency and conservation tolerances.",
+    "Run controlled MPI decomposition and GPU matrices separately.",
+    "Obtain external review before claim closure."
+  ],
+  "q006_disposition": "source_local_deck_and_source_freeze_preparation_only_no_qualification_claim"
+}

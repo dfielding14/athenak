@@ -205,6 +205,16 @@ Format rules are enforced by `src/parameter_input.cpp`:
     by an exact transverse-invariant `nx2=4` thin 2D3V carrier because the
     particle module intentionally supports 2D/3D meshes. These decks are not
     authorized qualifying campaign inputs until clean freeze and registration.
+- `inputs/tests/pic_q006_paper_multispecies_oscillation_{uniform,smr,audited_amr}_candidate.athinput`
+  - Source-local Sun and Bai Section 5.3 deck freezes using the dedicated
+    guarded generator. They preserve the manuscript loading and initial sound
+    speed while explicitly retaining the current ideal-MHD compatibility
+    boundary. Long-horizon frequency, true-AMR, MPI, GPU and review gates stay
+    open.
+- `inputs/tests/pic_q033_crpai_transport_runtime_local.athinput`
+  - Bounded source-local thin-2D3V Q-033 runtime successor with deterministic
+    antipodal CR initialization and seeded transverse wave carrier. It is not
+    physical CRPAI transport calibration or execution authorization.
 - `inputs/tests/pic_multispecies_osc_uniform.athinput`
   - Multi-species (`q=+/-1`) coupled oscillation baseline on a uniform mesh.
 - `inputs/tests/pic_multispecies_osc_smr.athinput`

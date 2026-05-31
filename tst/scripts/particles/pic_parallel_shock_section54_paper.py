@@ -17,6 +17,7 @@ _INPUT_DECK = (
     / "publication"
     / "pic_parallel_shock_section54_paper.athinput"
 )
+_PGEN_SOURCE = _REPO_ROOT / "src" / "pgen" / "tests" / "pic_parallel_shock.cpp"
 _RESULTS = {}
 
 _EXPECTED_VALUES = {
@@ -65,7 +66,9 @@ _EXPECTED_VALUES = {
     ("problem", "ps_b0"): "1.0",
     ("problem", "ps_eta"): "1.0e-3",
     ("problem", "ps_vinj_over_u0"): "3.16227766017",
+    ("problem", "ps_shock_speed_model"): "ideal_surface",
     ("problem", "ps_inject_t_start"): "0.0",
+    ("problem", "ps_remove_birth_time_before"): "45.0",
     ("problem", "ps_enable_injection"): "true",
     ("problem", "ps_enable_gas_subtraction"): "true",
     ("problem", "ps_enable_curvature_amr"): "true",
@@ -94,7 +97,7 @@ _EXPECTED_VALUES = {
 }
 
 _OPEN_ITEMS = [
-    "exact_shock_surface_injection_distribution_audit",
+    "executed_shock_surface_injection_distribution_audit",
     "gas_pressure_and_unit_normalization_audit",
     "downstream_40_640_ppc_macro_mass_calibration",
     "frontier_load_balance_cost_tuning",
@@ -153,10 +156,63 @@ def _require_exact_values(blocks: dict[str, dict[str, str]]) -> None:
         raise ContractError("Q-011 deck contract mismatch:\n" + "\n".join(mismatches))
 
 
+def _require_source_contract() -> None:
+    source = _PGEN_SOURCE.read_text(encoding="utf-8")
+    required_fragments = [
+        "enum class PSShockSpeedModel { finite_mach, ideal_surface };",
+        'pin->GetOrAddString(\n      "problem", "ps_shock_speed_model", "finite_mach")',
+        "IdealSurfaceShockSpeed(gamma, ps_u0)",
+        'pin->GetOrAddReal(\n      "problem", "ps_remove_birth_time_before", -1.0)',
+        "const Real sweep_speed = ps_u0 + ps_shock_speed;",
+        "xshock >= x1c - half_width && xshock < x1c + half_width",
+        "part.x1 = xshock;",
+        "RemoveExcludedEarlyInjectedParticles(pm);",
+        "const Real mu = 2.0*Uniform01(rng) - 1.0;",
+        "const Real phi = 2.0*M_PI*Uniform01(rng);",
+    ]
+    missing = [fragment for fragment in required_fragments if fragment not in source]
+    if missing:
+        raise ContractError(
+            "Q-011 source-local shock-surface contract mismatch:\n"
+            + "\n".join(missing)
+        )
+
+
+def _shock_surface_derivation(blocks: dict[str, dict[str, str]]) -> dict[str, object]:
+    gamma = float(blocks["mhd"]["gamma"])
+    u0 = float(blocks["problem"]["ps_u0"])
+    rho0 = float(blocks["problem"]["ps_rho0"])
+    p0 = float(blocks["problem"]["ps_p0"])
+    ideal_surface_speed = 0.5 * (gamma - 1.0) * u0
+    sound_speed_squared = gamma * p0 / rho0
+    mach_squared = u0 * u0 / sound_speed_squared
+    compression_ratio = (
+        (gamma + 1.0) * mach_squared
+        / ((gamma - 1.0) * mach_squared + 2.0)
+    )
+    finite_mach_speed = u0 / (compression_ratio - 1.0)
+    upstream_relative_sweep_speed = u0 + ideal_surface_speed
+    return {
+        "selected_model": "ideal_surface",
+        "paper_equation": "u_sh_prime = (Gamma - 1) * u0 / 2",
+        "ideal_surface_speed_over_ua0": ideal_surface_speed,
+        "finite_mach_engineering_option_speed_over_ua0": finite_mach_speed,
+        "upstream_relative_sweep_speed_over_ua0": upstream_relative_sweep_speed,
+        "ideal_surface_positions_c_over_omega_pi": {
+            "t500": ideal_surface_speed * 500.0,
+            "t1200": ideal_surface_speed * 1200.0,
+        },
+        "injection_distribution": "monoenergetic_full_sphere_isotropic_relative_to_ideal_surface",
+        "shock_surface_carrier_selection": "single_half_open_cell_with_surface_x1",
+        "early_injected_particle_removal": "runtime_state_removal_for_birth_time_below_45",
+    }
+
+
 def validate_deck(path: Path = _INPUT_DECK) -> dict[str, object]:
     """Validate sourced values and explicit AthenaK preparation choices."""
     blocks = parse_athinput(path)
     _require_exact_values(blocks)
+    _require_source_contract()
     dx_root = (
         (float(blocks["mesh"]["x1max"]) - float(blocks["mesh"]["x1min"]))
         / float(blocks["mesh"]["nx1"])
@@ -183,6 +239,8 @@ def validate_deck(path: Path = _INPUT_DECK) -> dict[str, object]:
         "amr_cell_sizes_c_over_omega_pi": cell_sizes,
         "mach_alfven": mach_alfven,
         "light_speed_over_ua0": light_speed_over_ua0,
+        "shock_surface_derivation": _shock_surface_derivation(blocks),
+        "pgen_source_sha256": _sha256(_PGEN_SOURCE),
     }
 
 
@@ -208,6 +266,10 @@ def build_preparation_contract() -> dict[str, object]:
             "amr_refine_curvature_threshold": 1.0,
             "amr_derefine_curvature_threshold": 0.1,
             "snapshot_times_omega0_inverse": [500.0, 1200.0],
+            "shock_surface_model": "ideal_surface",
+            "injection_distribution": (
+                "monoenergetic_full_sphere_isotropic_relative_to_ideal_surface"
+            ),
         },
         "artifact_manifest_contract": {
             "required_candidate_bindings": [
@@ -217,7 +279,7 @@ def build_preparation_contract() -> dict[str, object]:
                 "analyzer_sha256",
                 "authorized_orion_artifact_root",
             ],
-            "qualifying_seed_list": [
+            "required_seeds": [
                 23050101,
                 23050102,
                 23050103,

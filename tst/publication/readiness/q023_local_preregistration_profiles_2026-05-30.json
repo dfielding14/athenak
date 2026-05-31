@@ -557,7 +557,7 @@
           "observable": "source_local_projected_fluid_velocity_to_magnetic_mode_ratio",
           "absolute_tolerance": 0.05,
           "qualification_effect": "nonqualifying_source_local_diagnostic_only",
-          "rationale": "Preparation-only cross-check for retained mhd_w_bcc velocity observables. The paper-literal delta_u_y phase and volume-averaged absolute delta_u growth estimator or a reviewed supplemental-estimator decision remains open before qualification."
+          "rationale": "Preparation-only cross-check for retained mhd_w_bcc projected velocity observables. The source-local analyzer separately freezes the paper-literal delta_u_y spatial sine-fit phase and volume-averaged absolute delta_u growth estimator; clean freeze, exact variants, registered execution, independent recomputation and external review remain open before qualification."
         }
       ]
     },
@@ -675,8 +675,14 @@
     {
       "analyzer_id": "Q023-ANALYZER-PAPER-BELL-LINEAR-CANDIDATE",
       "path": "tst/publication/analyze_q023_paper_bell_linear.py",
-      "sha256": "84b04b22f6b28ed5313a6598113357f6f2c9cc6611c9407a5e7e4dc72670461f",
-      "qualification_limit": "source_local_section52_signed_combined_magnetic_and_projected_fluid_velocity_raw_trace_candidate_only_approved_materialized_geometry_exact_raw_artifact_provenance_and_nonqualifying_velocity_cross_check_bound_paper_literal_velocity_estimator_or_reviewed_supplemental_estimator_decision_clean_freeze_convergence_registered_execution_independent_recompute_and_external_review_open"
+      "sha256": "bc997159339d708fb8b1e3d2f6062ea5d8e6dc59e038f1cdc98ebe5427881f63",
+      "qualification_limit": "source_local_section52_signed_combined_magnetic_and_projected_fluid_velocity_raw_trace_candidate_with_paper_literal_delta_u_y_spatial_sine_fit_phase_and_volume_averaged_absolute_delta_u_growth_estimator_only_approved_materialized_geometry_exact_raw_artifact_provenance_nonqualifying_velocity_cross_check_clean_freeze_convergence_registered_execution_independent_recompute_and_external_review_open"
+    },
+    {
+      "analyzer_id": "Q023-MATERIALIZER-PAPER-BELL-LINEAR-VARIANTS",
+      "path": "tst/publication/materialize_q023_paper_bell_linear_variants.py",
+      "sha256": "365434f245946bd7306bf0a13fcbe24a2ef9e9625124ab26f2ff00ee7c55fadd",
+      "qualification_limit": "source_local_deterministic_405_deck_preparation_materializer_only_centered_loading_review_boundary_clean_candidate_freeze_registered_execution_and_external_review_open"
     },
     {
       "analyzer_id": "Q023-ANALYZER-SHOCK-LOCAL",
@@ -713,6 +719,18 @@
       "path": "tst/scripts/particles/pic_extended_hall_ct_smoke.py",
       "sha256": "ef329f42473c91724d9cce7684133de9de69d9bba42a31720d7e97b531bd8e34",
       "qualification_limit": "manufactured_source_smoke_only_not_hall_bell_qualification"
+    },
+    {
+      "analyzer_id": "Q023-ANALYZER-Q029-HALL-BELL-GRID",
+      "path": "tst/publication/analyze_q029_hall_bell_linear.py",
+      "sha256": "ad3411ad07bcc771c6bddc7ebaaca129c60aa5675df2aa151961a7eab07a94c1",
+      "qualification_limit": "source_local_positive_chi_h_launch_preparation_grid_only_reviewed_physical_grid_and_qualifying_hall_dispersion_analyzer_missing"
+    },
+    {
+      "analyzer_id": "Q023-ANALYZER-Q029-HALL-BELL-RAW-PROJECTIONS",
+      "path": "tst/publication/analyze_q029_hall_bell_linear_raw.py",
+      "sha256": "18d47ed8630a7187e628f28966ed572eafb2ba735bc66c400755ffdbf626e6e8",
+      "qualification_limit": "source_local_exact_orion_raw_geometric_seed_carrier_projections_only_not_physical_bai_oracle_not_hall_dispersion_qualification"
     },
     {
       "analyzer_id": "Q023-ANALYZER-IN-DAMPING-LOCAL",
@@ -793,6 +811,24 @@
       "path": "inputs/tests/pic_extended_hall_ct_smoke.athinput",
       "sha256": "22e6b44a5aa4e346746f565a16e319f0a03126d15c9497bb6b61a9c13585f97f",
       "qualification_limit": "manufactured_source_smoke_only"
+    },
+    {
+      "input_id": "Q023-INPUT-Q029-HALL-BELL-LINEAR-1D-CANDIDATE",
+      "path": "inputs/tests/pic_q029_hall_bell_linear_1d_candidate.athinput",
+      "sha256": "6a72d8f557d540cd4916353df665aa309c6bc0f900fa8fb0ec04549d5ac0acc9",
+      "qualification_limit": "source_local_positive_chi_h_launch_preparation_only_not_hall_bell_qualification"
+    },
+    {
+      "input_id": "Q023-INPUT-Q029-HALL-BELL-LINEAR-2D-CANDIDATE",
+      "path": "inputs/tests/pic_q029_hall_bell_linear_2d_candidate.athinput",
+      "sha256": "72ba6d20676cd0fd24f02c34669f00b54801d05060cb4b0a2395a65fa71f3d1c",
+      "qualification_limit": "source_local_positive_chi_h_launch_preparation_only_not_hall_bell_qualification"
+    },
+    {
+      "input_id": "Q023-INPUT-Q029-HALL-BELL-LINEAR-3D-CANDIDATE",
+      "path": "inputs/tests/pic_q029_hall_bell_linear_3d_candidate.athinput",
+      "sha256": "488c5ed3ee121d98dca9291c1a188bd5cb65c8af256057739b18c4d11a7c0a28",
+      "qualification_limit": "source_local_positive_chi_h_launch_preparation_only_not_hall_bell_qualification"
     },
     {
       "input_id": "Q023-INPUT-IN-DAMPING-SMOKE",

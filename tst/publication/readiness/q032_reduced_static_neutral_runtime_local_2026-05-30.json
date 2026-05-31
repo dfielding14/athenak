@@ -15,12 +15,12 @@
     "carrier": {
       "semantics": "transverse_invariant_thin_2d3v_x1_parallel_alfven",
       "mesh": {
-        "nx1": "32 serial or 16 two-way x1",
+        "nx1": 32,
         "nx2": 4,
         "nx3": 1
       },
       "meshblock": {
-        "nx1": 32,
+        "nx1": "32 serial or 16 two-way x1",
         "nx2": 4,
         "nx3": 1
       },
@@ -45,11 +45,11 @@
     }
   },
   "owned_artifact_bindings": {
-    "src/particles/particles.cpp": "06f80ec9a93f027ff5a24a2631754603c7ea3f83cfbcdbd8e5b9a32be711fa79",
+    "src/particles/particles.cpp": "83bc366df553a70fc1470f9ed461dc98e8d7506fb9327d4b5d5abb97484f1637",
     "src/pgen/tests/q032_reduced_static_neutral_local.cpp": "9d3547b6796fe492fb01e1eb4ada60a54c6dcebeeefc99b7214e899a32540951",
     "inputs/tests/pic_q032_reduced_static_neutral_runtime_local.athinput": "2210b7d3f9a49b81163e5ac3484660199374ceed4876b04acf72a24053b4ee62",
     "tst/scripts/particles/pic_q032_reduced_static_neutral_runtime_local.py": "2181fc926bcad29324193c1a5d6ae66bb8d1629d9ea3900a4bee77a73fde6100",
-    "tst/publication/test_q032_reduced_static_neutral_runtime_local.py": "b36d97a92c0ead94650f1863cd7bfaec1a59c0ced490806d4ac790cce34534bd"
+    "tst/publication/test_q032_reduced_static_neutral_runtime_local.py": "891d148ae7b550a290a054da36980c912a4c8ab5014347aa886890c6317c5cdc"
   },
   "shared_registration_contract": {
     "src/CMakeLists.txt": "includes pgen/tests/q032_reduced_static_neutral_local.cpp",

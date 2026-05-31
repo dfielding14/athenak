@@ -1250,15 +1250,22 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
     }
   }
   if (pic_physical_mode == PICPhysicalMode::paper_mhd_pic) {
+    const bool exact_isothermal_deltaf_paper_feedback =
+        (pin->GetString("mhd", "eos").compare("isothermal") == 0) &&
+        UsesDeltaF() && !couple_moments_energy_to_mhd;
     if ((pic_background_mode != PICBackgroundMode::coupled) ||
         (pic_feedback_mode != PICFeedbackMode::coupled) ||
         !deposit_moments || !couple_moments_to_mhd ||
-        !couple_moments_momentum_to_mhd || !couple_moments_energy_to_mhd) {
+        !couple_moments_momentum_to_mhd ||
+        (!couple_moments_energy_to_mhd &&
+         !exact_isothermal_deltaf_paper_feedback)) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
                 << "<particles>/pic_physical_mode=paper_mhd_pic requires coupled "
                 << "MHD background, coupled feedback, moment deposition, and "
-                << "conservative momentum and energy feedback" << std::endl;
+                << "conservative momentum feedback. Energy feedback is required "
+                << "for ideal MHD; exact isothermal paper delta-f uses momentum-only "
+                << "feedback with energy feedback disabled." << std::endl;
       std::exit(EXIT_FAILURE);
     }
     if ((couple_j_to_efield_representation ==

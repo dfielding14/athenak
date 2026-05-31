@@ -34,7 +34,7 @@ _SOURCE_BINDINGS = {
     "src/particles/particles.hpp":
         "452e6091ad6f1ce50156c770d304ac36020cb53927cc1e40ba6af73e7c3bb462",
     "src/particles/particles.cpp":
-        "06f80ec9a93f027ff5a24a2631754603c7ea3f83cfbcdbd8e5b9a32be711fa79",
+        "83bc366df553a70fc1470f9ed461dc98e8d7506fb9327d4b5d5abb97484f1637",
     "docs/source/engineering/pic_mhd_model_contract.md":
         "ebad2e21725ea15eb301e03f32d8ca8fab9c6503aec90cd7090be4637402ed64",
 }
@@ -64,7 +64,7 @@ _PREREQUISITE_BINDINGS = {
     "tst/publication/readiness/q022_external_reference_private_ingest_2026-05-30.json":
         "78287ea54d8350445cfad62e72f6efc2845f720580d070d075897d889ae3a214",
     "tst/publication/readiness/q022_dataset_provenance_manifest_2026-05-30.json":
-        "dd6dd6e3187b8e5e06bfbce6f0da4cfc0623d79143a55d7ebbcc797b21b38c78",
+        "925ab235f4ed5141468a8643e999d37e9d1a075c528df1987b577e2deb90bc27",
     "tst/publication/readiness/q022_xcmp_ext_crsi_in_damping_equation_map_2026-05-30.json":
         "87ed9f5fac74cf9ce7be567a1e57cfecae6e2b3374e1bc4e4ed74d2bbe3c8c9b",
     "tst/publication/readiness/q022_xcmp_ext_crsi_in_damping_tolerance_table_2026-05-30.json":

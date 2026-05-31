@@ -110,6 +110,16 @@
       "blocked_input_ids": ["Q022-BLOCK-EXTRACTED-DATASET-ROOT-ABSENT", "Q022-BLOCK-REFERENCE-SPECIFIC-EXTRACTION", "Q022-BLOCK-EXTERNAL-REVIEW"]
     },
     {
+      "dataset_id": "Q022-DATASET-XCMP-EXT-HALL-BELL",
+      "comparison_id": "XCMP-EXT-HALL-BELL",
+      "reference_ids": ["bai_2015_arxiv_1412.1087"],
+      "source_records": ["tst/publication/readiness/q022_external_reference_private_ingest_2026-05-30.json"],
+      "extraction_status": "blocked_extraction_input_unavailable",
+      "redistribution_basis": "pending external review",
+      "reviewer_disposition": "pending external review",
+      "blocked_input_ids": ["Q022-BLOCK-EXTRACTED-DATASET-ROOT-ABSENT", "Q022-BLOCK-REFERENCE-SPECIFIC-EXTRACTION", "Q022-BLOCK-EXTERNAL-REVIEW"]
+    },
+    {
       "dataset_id": "Q022-DATASET-XCMP-EXT-CRPAI-TRANSPORT",
       "comparison_id": "XCMP-EXT-CRPAI-TRANSPORT",
       "reference_ids": ["sun_bai_zhao_2024_arxiv_2409.08592"],

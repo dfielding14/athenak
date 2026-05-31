@@ -80,10 +80,13 @@ Real ps_xshock0 = 0.0;
 Real ps_inject_half_width_cells = 0.5;
 Real ps_inject_t_start = 0.0;
 Real ps_inject_t_stop = 1.0e99;
+Real ps_remove_birth_time_before = -1.0;
 Real ps_seed_noise_amp = 0.0;
 int ps_seed_noise_seed = 1234;
 std::array<Real, 4> ps_seed_noise_phase_by = {{0.0, 0.0, 0.0, 0.0}};
 std::array<Real, 4> ps_seed_noise_phase_bz = {{0.0, 0.0, 0.0, 0.0}};
+enum class PSShockSpeedModel { finite_mach, ideal_surface };
+PSShockSpeedModel ps_shock_speed_model = PSShockSpeedModel::finite_mach;
 Real ps_refine_curv = 1.0;
 Real ps_derefine_curv = 0.1;
 Real ps_rho_floor_frac = 1.0e-6;
@@ -116,6 +119,7 @@ Real ps_particle_charge = 1.0;
 Real ps_particle_q_over_m = 1.0;
 Real ps_particle_macro_mass = 1.0;
 Real ps_mass_reservoir_global = 0.0;
+bool ps_removed_excluded_early_cohort = false;
 bool ps_tag_seeded = false;
 std::int64_t ps_next_tag = 0;
 ParameterInput *ps_pin = nullptr;
@@ -159,6 +163,10 @@ std::string ParallelShockRestartControlFingerprint() {
                                   ps_inject_half_width_cells);
   HashParallelShockRestartControl(hash, "ps_inject_t_start", ps_inject_t_start);
   HashParallelShockRestartControl(hash, "ps_inject_t_stop", ps_inject_t_stop);
+  HashParallelShockRestartControl(hash, "ps_remove_birth_time_before",
+                                  ps_remove_birth_time_before);
+  HashParallelShockRestartControl(hash, "ps_shock_speed_model",
+                                  static_cast<int>(ps_shock_speed_model));
   HashParallelShockRestartControl(hash, "ps_refine_curv", ps_refine_curv);
   HashParallelShockRestartControl(hash, "ps_derefine_curv", ps_derefine_curv);
   HashParallelShockRestartControl(hash, "ps_rho_floor_frac", ps_rho_floor_frac);
@@ -358,6 +366,13 @@ inline Real EstimateShockSpeed(const Real gamma, const Real rho0, const Real p0,
   return u0/(r - 1.0);
 }
 
+inline Real IdealSurfaceShockSpeed(const Real gamma, const Real u0) {
+  // Sun & Bai Section 5.4 injects at x = u_sh' t with
+  // u_sh' = (Gamma - 1) u0 / 2 in the reflecting-wall frame.
+  if (gamma <= 1.0 || u0 <= 0.0) return 0.0;
+  return 0.5*(gamma - 1.0)*u0;
+}
+
 void EncodeCRStateFromVelocity(const particles::Particles *ppart,
                                const Real vx, const Real vy, const Real vz,
                                Real &state_x, Real &state_y, Real &state_z) {
@@ -442,6 +457,8 @@ void FatalParticleMigrationError(const char *message) {
 void StoreRuntimeStateForRestart() {
   if (ps_pin == nullptr) return;
   ps_pin->SetReal("problem", "ps_mass_reservoir_global", ps_mass_reservoir_global);
+  ps_pin->SetBoolean("problem", "ps_removed_excluded_early_cohort",
+                     ps_removed_excluded_early_cohort);
   if (!ps_tag_seeded) return;
   if (ps_next_tag < 0 ||
       ps_next_tag > static_cast<std::int64_t>(std::numeric_limits<int>::max())) {
@@ -598,6 +615,56 @@ void ApplyRecenteringShiftToParticles(Mesh *pm, const Real xshift) {
     Kokkos::deep_copy(i_sub, i_src);
   }
   ppart->nprtcl_thispack = np_new;
+}
+
+void RemoveExcludedEarlyInjectedParticles(Mesh *pm) {
+  if (ps_removed_excluded_early_cohort || ps_remove_birth_time_before < 0.0 ||
+      pm->time + pm->dt < ps_remove_birth_time_before) {
+    return;
+  }
+  MeshBlockPack *pmbp = pm->pmb_pack;
+  if (pmbp == nullptr || pmbp->ppart == nullptr) return;
+
+  auto *ppart = pmbp->ppart;
+  const int np_old = ppart->nprtcl_thispack;
+  const int nr = ppart->nrdata;
+  const int ni = ppart->nidata;
+  auto h_pr_old = Kokkos::create_mirror_view_and_copy(HostMemSpace(),
+                                                       ppart->prtcl_rdata);
+  auto h_pi_old = Kokkos::create_mirror_view_and_copy(HostMemSpace(),
+                                                       ppart->prtcl_idata);
+  HostArray2D<Real> h_pr_new("ps_pr_filtered", nr, np_old);
+  HostArray2D<int> h_pi_new("ps_pi_filtered", ni, np_old);
+
+  int np_new = 0;
+  for (int p = 0; p < np_old; ++p) {
+    const bool remove =
+        h_pi_old(PCRSOURCE, p) == static_cast<int>(CRParticleSource::shock_injected) &&
+        h_pr_old(IPT_BIRTH, p) < ps_remove_birth_time_before;
+    if (remove) continue;
+    for (int q = 0; q < nr; ++q) h_pr_new(q, np_new) = h_pr_old(q, p);
+    for (int q = 0; q < ni; ++q) h_pi_new(q, np_new) = h_pi_old(q, p);
+    ++np_new;
+  }
+
+  Kokkos::resize(ppart->prtcl_rdata, nr, np_new);
+  Kokkos::resize(ppart->prtcl_idata, ni, np_new);
+  if (np_new > 0) {
+    auto r_sub = Kokkos::subview(ppart->prtcl_rdata, Kokkos::ALL,
+                                 std::make_pair(0, np_new));
+    auto i_sub = Kokkos::subview(ppart->prtcl_idata, Kokkos::ALL,
+                                 std::make_pair(0, np_new));
+    auto r_src = Kokkos::subview(h_pr_new, Kokkos::ALL,
+                                 std::make_pair(0, np_new));
+    auto i_src = Kokkos::subview(h_pi_new, Kokkos::ALL,
+                                 std::make_pair(0, np_new));
+    Kokkos::deep_copy(r_sub, r_src);
+    Kokkos::deep_copy(i_sub, i_src);
+  }
+  ppart->nprtcl_thispack = np_new;
+  ps_removed_excluded_early_cohort = true;
+  StoreRuntimeStateForRestart();
+  pm->CountParticles();
 }
 
 void ApplyRecenteringShift(Mesh *pm, const int nshift) {
@@ -792,7 +859,7 @@ void ParallelShockSource(Mesh *pm, const Real bdt) {
         const Real x2c = x2min + (static_cast<Real>(j - js) + 0.5)*dx2;
         for (int i = is; i <= ie; ++i) {
           const Real x1c = x1min + (static_cast<Real>(i - is) + 0.5)*dx1;
-          if (std::abs(x1c - xshock) > half_width) continue;
+          if (!(xshock >= x1c - half_width && xshock < x1c + half_width)) continue;
 
           ShockCell cell;
           cell.m = m;
@@ -822,7 +889,8 @@ void ParallelShockSource(Mesh *pm, const Real bdt) {
 
   int ninj_global = 0;
   if (area_global > 0.0) {
-    const Real swept_mass = ps_eta*ps_rho0*ps_shock_speed*bdt*area_global;
+    const Real sweep_speed = ps_u0 + ps_shock_speed;
+    const Real swept_mass = ps_eta*ps_rho0*sweep_speed*bdt*area_global;
     const Real mass_budget = ps_mass_reservoir_global + swept_mass;
     if (mass_budget > 0.0) {
       ninj_global = static_cast<int>(std::floor(mass_budget/ps_particle_macro_mass));
@@ -907,16 +975,15 @@ void ParallelShockSource(Mesh *pm, const Real bdt) {
     Real diry = 0.0;
     Real dirz = 0.0;
     if (three_d || ps_use_2d3v) {
-      // Half-space isotropy toward +x keeps injected particles away from the
-      // reflecting wall in this minimal benchmark implementation.
-      const Real mu = Uniform01(rng);
+      // Section 5.4 requires isotropy relative to the ideal shock surface.
+      const Real mu = 2.0*Uniform01(rng) - 1.0;
       const Real phi = 2.0*M_PI*Uniform01(rng);
       const Real st = std::sqrt(std::max(static_cast<Real>(0.0), 1.0 - mu*mu));
       dirx = mu;
       diry = st*std::cos(phi);
       dirz = st*std::sin(phi);
     } else {
-      const Real phi = M_PI*(Uniform01(rng) - 0.5);
+      const Real phi = 2.0*M_PI*Uniform01(rng);
       dirx = std::cos(phi);
       diry = std::sin(phi);
       dirz = 0.0;
@@ -929,7 +996,7 @@ void ParallelShockSource(Mesh *pm, const Real bdt) {
     part.j = cell.j;
     part.i = cell.i;
     part.vol = cell.vol;
-    part.x1 = cell.x1c + (Uniform01(rng) - 0.5)*cell.dx1;
+    part.x1 = xshock;
     part.x2 = cell.x2c + (Uniform01(rng) - 0.5)*cell.dx2;
     part.x3 = three_d ? (cell.x3c + (Uniform01(rng) - 0.5)*cell.dx3) : 0.0;
     part.x1 = ClampInsideDomain(part.x1, x1min, x1max);
@@ -1339,6 +1406,7 @@ void MaybePrintFeedbackDiagnostics(Mesh *pm) {
 void ParallelShockWorkInLoop(Mesh *pm) {
   if (pm == nullptr || pm->dt <= 0.0) return;
   if (ps_frame_diag_dcycle < 1) ps_frame_diag_dcycle = 1;
+  RemoveExcludedEarlyInjectedParticles(pm);
 
   if (!ps_enable_frame_tracking) {
     MaybePrintFeedbackDiagnostics(pm);
@@ -1478,6 +1546,10 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
       "problem", "ps_inject_half_width_cells", 0.5);
   ps_inject_t_start = pin->GetOrAddReal("problem", "ps_inject_t_start", 0.0);
   ps_inject_t_stop = pin->GetOrAddReal("problem", "ps_inject_t_stop", 1.0e99);
+  ps_remove_birth_time_before = pin->GetOrAddReal(
+      "problem", "ps_remove_birth_time_before", -1.0);
+  std::string shock_speed_model = pin->GetOrAddString(
+      "problem", "ps_shock_speed_model", "finite_mach");
   ps_seed_noise_amp = pin->GetOrAddReal("problem", "ps_seed_noise_amp", 0.0);
   ps_seed_noise_seed = pin->GetOrAddInteger("problem", "ps_seed_noise_seed", 1234);
   ps_refine_curv = pin->GetOrAddReal("problem", "ps_refine_curv", 1.0);
@@ -1528,6 +1600,24 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
               << std::endl
               << "pic_parallel_shock requires ps_seed_noise_amp >= 0."
               << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if (std::abs(ps_inject_half_width_cells - 0.5) > 1.0e-15) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock requires ps_inject_half_width_cells = 0.5 "
+              << "for a unique shock-surface carrier cell." << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if (shock_speed_model == "finite_mach") {
+    ps_shock_speed_model = PSShockSpeedModel::finite_mach;
+  } else if (shock_speed_model == "ideal_surface") {
+    ps_shock_speed_model = PSShockSpeedModel::ideal_surface;
+  } else {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "ps_shock_speed_model must be 'finite_mach' or "
+              << "'ideal_surface'." << std::endl;
     std::exit(EXIT_FAILURE);
   }
   if (ps_frame_t_ramp < 0.0 || ps_frame_vfrac < 0.0 || ps_frame_dv_max < 0.0) {
@@ -1587,9 +1677,11 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
     std::exit(EXIT_FAILURE);
   }
 
-  // Analytic finite-Mach shock-speed estimate in the reflecting-wall frame.
+  // Select the source-local surface model in the reflecting-wall frame.
   Real gamma = pmbp->pmhd->peos->eos_data.gamma;
-  ps_shock_speed = EstimateShockSpeed(gamma, ps_rho0, ps_p0, ps_u0);
+  ps_shock_speed = (ps_shock_speed_model == PSShockSpeedModel::ideal_surface) ?
+      IdealSurfaceShockSpeed(gamma, ps_u0) :
+      EstimateShockSpeed(gamma, ps_rho0, ps_p0, ps_u0);
   if (ps_shock_speed <= 0.0) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
@@ -1603,6 +1695,9 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
   ValidateAndStoreParallelShockRestartControls(pin, restart);
   ps_mass_reservoir_global = restart ?
       pin->GetOrAddReal("problem", "ps_mass_reservoir_global", 0.0) : 0.0;
+  ps_removed_excluded_early_cohort = restart ?
+      pin->GetOrAddBoolean("problem", "ps_removed_excluded_early_cohort", false) :
+      false;
   ps_tag_seeded = false;
   ps_next_tag = 0;
   if (restart && pin->DoesParameterExist("problem", "ps_next_tag")) {

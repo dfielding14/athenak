@@ -9,12 +9,12 @@
   "scope": "Q-033-only fail-closed successor for a future adaptive-delta-f physical-damping CRPAI transport-calibration extension. This successor preserves the intentionally unrunnable synthetic-contract-only candidate and binds its Q-022 Sun-Bai-Zhao provenance, equation-map and tolerance-table placeholders exactly. Those placeholders remain blocked and empty; this record does not extract reference data, calibrate physical transport, qualify a campaign or authorize execution.",
   "artifact_bindings": {
     "inputs/tests/pic_q033_crpai_transport_calibration_candidate.athinput": "77ffeb7bdfd1f1f2299db7e4ee257d105b580a6bd554cd244e6d9e0c8214ce58",
-    "tst/publication/analyze_q033_crpai_transport_calibration_candidate.py": "f2ff4c6e889a3d2813eabc740818777129097672ab468ddefb297d7fdbc8a78c",
+    "tst/publication/analyze_q033_crpai_transport_calibration_candidate.py": "c33f6695cd7bb1185cd3fcc993bc4d371ab5fad9d30487938d93f548b9869888",
     "tst/publication/test_analyze_q033_crpai_transport_calibration_candidate.py": "8360a4754d53da110291c499f92a9031978cae2f6e622cb739983a3d47a771f9",
     "tst/publication/readiness/q033_crpai_transport_calibration_applicability_2026-05-30.md": "0ced16ab8fbe21425bec91df093a936118d0365d45a27760caf6f80e8398713a"
   },
   "implementation_source_bindings": {
-    "src/particles/particles.cpp": "06f80ec9a93f027ff5a24a2631754603c7ea3f83cfbcdbd8e5b9a32be711fa79",
+    "src/particles/particles.cpp": "83bc366df553a70fc1470f9ed461dc98e8d7506fb9327d4b5d5abb97484f1637",
     "src/particles/particles.hpp": "452e6091ad6f1ce50156c770d304ac36020cb53927cc1e40ba6af73e7c3bb462",
     "src/particles/particles_tasks.cpp": "8310e80ffdb2739ecc60b6d65ef9eae78573aeba8f55fa1981ff98b4801c8946",
     "src/particles/particles_pushers.cpp": "7cd3ac4b6fc95529d3097a3799b74f064a7e865c8b7be08f830a60dbee103330",
@@ -33,7 +33,7 @@
   },
   "q022_prerequisite_bindings": {
     "tst/publication/readiness/q022_external_reference_private_ingest_2026-05-30.json": "78287ea54d8350445cfad62e72f6efc2845f720580d070d075897d889ae3a214",
-    "tst/publication/readiness/q022_dataset_provenance_manifest_2026-05-30.json": "dd6dd6e3187b8e5e06bfbce6f0da4cfc0623d79143a55d7ebbcc797b21b38c78",
+    "tst/publication/readiness/q022_dataset_provenance_manifest_2026-05-30.json": "925ab235f4ed5141468a8643e999d37e9d1a075c528df1987b577e2deb90bc27",
     "tst/publication/readiness/q022_xcmp_ext_crpai_transport_equation_map_2026-05-30.json": "584cbee640b15e1e67a18d5652012e3280bfcbd4bf81e9a6a9bca873b114c786",
     "tst/publication/readiness/q022_xcmp_ext_crpai_transport_tolerance_table_2026-05-30.json": "de47d2b7f6d75f21b92aaf0806596b8e444992ef1ae568d50366d62ee730dd81"
   },

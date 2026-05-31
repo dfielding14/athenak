@@ -130,6 +130,14 @@ class Q032ReducedStaticNeutralRuntimeLocalTests(unittest.TestCase):
             sidecar["generator"]["carrier"]["fluid_task_path"],
             "newtonian_single_fluid_mhd_source_task_only",
         )
+        self.assertEqual(
+            sidecar["generator"]["carrier"]["mesh"],
+            {"nx1": 32, "nx2": 4, "nx3": 1},
+        )
+        self.assertEqual(
+            sidecar["generator"]["carrier"]["meshblock"],
+            {"nx1": "32 serial or 16 two-way x1", "nx2": 4, "nx3": 1},
+        )
         expected_paths = {
             str(PARTICLES.relative_to(REPO_ROOT)),
             str(SOURCE.relative_to(REPO_ROOT)),

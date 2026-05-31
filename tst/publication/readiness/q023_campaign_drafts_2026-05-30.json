@@ -38,8 +38,9 @@
         "dimensionality"
       ],
       "estimators": [
-        "per_seed_fixed_theory_window_exponential_growth_fit",
-        "per_seed_fixed_interval_spatial_phase_fit",
+        "primary_per_seed_fixed_theory_window_exponential_fit_of_volume_averaged_absolute_delta_u",
+        "primary_per_seed_fixed_interval_spatial_sine_fit_signed_phase_of_delta_u_y",
+        "supplemental_projected_circular_magnetic_and_velocity_mode_cross_checks",
         "median_across_qualifying_seeds",
         "bca_bootstrap_across_qualifying_seeds"
       ],
@@ -56,7 +57,8 @@
         "Q023-INPUT-PAPER-BELL-LINEAR-3D-CANDIDATE"
       ],
       "local_analyzer_ids": [
-        "Q023-ANALYZER-PAPER-BELL-LINEAR-CANDIDATE"
+        "Q023-ANALYZER-PAPER-BELL-LINEAR-CANDIDATE",
+        "Q023-MATERIALIZER-PAPER-BELL-LINEAR-VARIANTS"
       ],
       "reference_values": {
         "status": "frozen_analytical_formula",
@@ -80,8 +82,8 @@
       "open_dependencies": [
         "Freeze the source-local registered generator, runnable preparation decks, and raw mode-trace analytical analyzer into an exact clean candidate.",
         "Review the physical-1D transverse-invariant thin 2D3V carrier and retain its exact nx2=4 contract before attempting qualifying variants.",
-        "Materialize the epsilon, sensitivity, seed, and timestep variants before output inspection.",
-        "Preserve the bound source-local mhd_w_bcc projected fluid-velocity cross-check as nonqualifying preparation evidence; freeze the paper-literal delta_u_y phase and volume-averaged absolute delta_u growth estimator or a reviewed supplemental-estimator decision before Section 5.2 qualification.",
+        "Use the source-local deterministic materializer to stage the 405 epsilon, dimensionality, resolution, timestep, and PPC preparation variants; retain the unresolved centered-loading review boundary before any qualifying freeze or output inspection.",
+        "Preserve the bound source-local mhd_w_bcc projected fluid-velocity cross-check as nonqualifying preparation evidence and retain the separately frozen paper-literal delta_u_y spatial sine-fit phase plus volume-averaged absolute delta_u growth estimator contract.",
         "Run bounded source-local preparation smoke checks without promoting them into qualifying evidence.",
         "Bind the clean Frontier executable, authorized Orion artifact root, and registered run."
       ]
@@ -639,10 +641,15 @@
       "exclusion_profile": "Q023-EXCLUSIONS-FAIL-CLOSED",
       "multiplicity_family": "ext_hall_bell_primary_endpoints",
       "local_input_ids": [
-        "Q023-INPUT-HALL-SMOKE"
+        "Q023-INPUT-HALL-SMOKE",
+        "Q023-INPUT-Q029-HALL-BELL-LINEAR-1D-CANDIDATE",
+        "Q023-INPUT-Q029-HALL-BELL-LINEAR-2D-CANDIDATE",
+        "Q023-INPUT-Q029-HALL-BELL-LINEAR-3D-CANDIDATE"
       ],
       "local_analyzer_ids": [
         "Q023-ANALYZER-HALL-SMOKE",
+        "Q023-ANALYZER-Q029-HALL-BELL-GRID",
+        "Q023-ANALYZER-Q029-HALL-BELL-RAW-PROJECTIONS",
         "Q023-ANALYZER-BIN-READER"
       ],
       "reference_values": {
@@ -659,12 +666,12 @@
         "git_commit": "open_clean_candidate_not_frozen",
         "executable_sha256": "open_clean_frontier_executable_not_frozen",
         "qualifying_input_checksums": "open_reviewed_physical_hall_deck_freeze_source_local_positive_grid_decks_bound_nonqualifying",
-        "production_analysis_checksums": "open_qualifying_raw_hall_dispersion_analyzer_source_local_positive_grid_materializer_bound_nonqualifying"
+        "production_analysis_checksums": "open_qualifying_raw_hall_dispersion_analyzer_source_local_positive_grid_materializer_and_exact_orion_raw_projection_scaffold_bound_nonqualifying"
       },
       "open_dependencies": [
         "Derive and review the CR-Hall normalization.",
         "Replace the nonqualifying positive launch-preparation grid with the reviewed physical Hall coefficient grid, exact qualifying decks, windows, and numeric tolerances before qualifying output.",
-        "Create and checksum the independent raw-artifact Hall dispersion analyzer; the existing source-local grid materializer and restart-parity regression are preparation only."
+        "Create and checksum the independent physical raw-artifact Hall dispersion analyzer; the existing source-local grid materializer, exact Orion raw geometric-projection scaffold, and restart-parity regression are preparation only."
       ]
     },
     {

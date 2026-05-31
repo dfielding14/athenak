@@ -33,7 +33,7 @@ SPECTRUM_K_GRID = (1.0, 2.0, 3.0)
 
 _SOURCE_BINDINGS = {
     "src/particles/particles.cpp":
-        "06f80ec9a93f027ff5a24a2631754603c7ea3f83cfbcdbd8e5b9a32be711fa79",
+        "83bc366df553a70fc1470f9ed461dc98e8d7506fb9327d4b5d5abb97484f1637",
     "src/particles/particles.hpp":
         "452e6091ad6f1ce50156c770d304ac36020cb53927cc1e40ba6af73e7c3bb462",
     "src/particles/particles_tasks.cpp":
@@ -104,7 +104,7 @@ _Q022_PREREQUISITE_BINDINGS = {
     "tst/publication/readiness/q022_external_reference_private_ingest_2026-05-30.json":
         "78287ea54d8350445cfad62e72f6efc2845f720580d070d075897d889ae3a214",
     "tst/publication/readiness/q022_dataset_provenance_manifest_2026-05-30.json":
-        "dd6dd6e3187b8e5e06bfbce6f0da4cfc0623d79143a55d7ebbcc797b21b38c78",
+        "925ab235f4ed5141468a8643e999d37e9d1a075c528df1987b577e2deb90bc27",
     "tst/publication/readiness/q022_xcmp_ext_crpai_transport_equation_map_2026-05-30.json":
         "584cbee640b15e1e67a18d5652012e3280bfcbd4bf81e9a6a9bca873b114c786",
     "tst/publication/readiness/q022_xcmp_ext_crpai_transport_tolerance_table_2026-05-30.json":

@@ -68,13 +68,28 @@
       }
     ],
     "paper_velocity_observable_boundary": {
-      "paper_benchmark_observable": "paper_literal_fluid_velocity_mode_growth_and_phase_estimator_open",
+      "paper_benchmark_observable": "paper_literal_delta_u_y_spatial_sine_fit_phase_and_volume_averaged_absolute_delta_u_growth_estimator_frozen_source_local",
+      "primary_source_local_candidate_endpoints": [
+        "paper_literal_delta_u_y_spatial_sine_fit_signed_phase_frequency",
+        "paper_literal_volume_averaged_absolute_delta_u_exponential_growth"
+      ],
+      "supplemental_source_local_diagnostics": [
+        "projected_circular_magnetic_mode_growth_phase_and_polarization",
+        "projected_circular_fluid_velocity_mode_growth_phase_and_polarization",
+        "projected_velocity_to_magnetic_ratio"
+      ],
       "current_retained_output": "raw_mhd_w_bcc_combined_magnetic_and_fluid_velocity_modes",
       "source_local_velocity_cross_check": "retained_cycle_zero_projected_velocity_to_magnetic_ratio_initialization_diagnostic_pass",
       "source_local_velocity_magnetic_ratio_diagnostic_limit": 0.05,
       "source_local_velocity_magnetic_ratio_diagnostic_effect": "nonqualifying_source_local_diagnostic_only",
       "section52_qualification_eligible": false,
-      "required_before_qualification": "freeze_the_paper_literal_delta_u_y_phase_and_volume_averaged_absolute_delta_u_growth_estimator_or_a_reviewed_supplemental_estimator_decision_then_materialize_exact_convergence_variants"
+      "paper_literal_estimator_qualification_effect": "source_local_contract_only_not_section52_qualification",
+      "reviewer_semantic_decisions_still_open": [
+        "freeze delta_u as u-u_bg with deck-fixed u_bg=(0,0,0), or approve a different reviewed definition",
+        "retain deterministic centered particle loading with deterministic tolerance handling, or approve randomized seeded loading with the preregistered eight-seed aggregation",
+        "approve the physical-1D transverse-invariant thin 2D3V carrier"
+      ],
+      "required_before_qualification": "materialize_exact_convergence_variants_bind_clean_candidate_and_registered_frontier_execution_run_independent_recompute_and_complete_external_review"
     }
   },
   "source_local_artifacts": [
@@ -88,19 +103,19 @@
     },
     {
       "path": "src/pgen/pgen.cpp",
-      "sha256": "d4c552c8351e31c6b6254ecaa295f00c581bfa9a5420948d8eee8fd2874ef3a4"
+      "sha256": "fe6232890bbe76053a80f59188f30940d7cc7d4fa3f40f32e790c5f6b82c8279"
     },
     {
       "path": "src/pgen/pgen.hpp",
-      "sha256": "70e10154da779a69e9a754eb4b9d78589097ee9ed15080781af6052b14ca8b2f"
+      "sha256": "c462661118786fdcee5d7dca410027bdde9a5df97f5e150bfe33a593e25ab40c"
     },
     {
       "path": "src/CMakeLists.txt",
-      "sha256": "4c7741293f904c08ad49bd34e3b2a83b75a5e6571e8d6bf096c2bb543b13d62d"
+      "sha256": "2608f171cf7461699ffab513b21e1fbacb0649f3290d0b171e84bc934b89176d"
     },
     {
       "path": "src/pgen/AGENTS.md",
-      "sha256": "7125db22d3d5219ee84e733c044d9493160d1126f46b2eaa1e2dff9b7c081770"
+      "sha256": "4ec3638b606a1a83e266573da52ce561abfee03a10585bdd0e133c19f35cf337"
     },
     {
       "path": "inputs/tests/pic_q023_paper_bell_linear_1d_candidate.athinput",
@@ -116,11 +131,11 @@
     },
     {
       "path": "tst/publication/analyze_q023_paper_bell_linear.py",
-      "sha256": "84b04b22f6b28ed5313a6598113357f6f2c9cc6611c9407a5e7e4dc72670461f"
+      "sha256": "bc997159339d708fb8b1e3d2f6062ea5d8e6dc59e038f1cdc98ebe5427881f63"
     },
     {
       "path": "tst/publication/test_analyze_q023_paper_bell_linear.py",
-      "sha256": "df51ee802cd4d443a84c3879efd5bc1ad10babb6773a7aa24cc132fc0a7be2bb"
+      "sha256": "4a77ccf8327263637832ff14db24fb9ae4a06bf358119cd1f5088bef338b596c"
     },
     {
       "path": "tst/publication/q023_paper_bell_linear_host_harness.cpp",
@@ -189,7 +204,7 @@
     "Commit and freeze an exact clean candidate containing this source-local tranche.",
     "Review and retain the exact transverse-invariant nx2=4 thin 2D3V carrier for the physical 1D preparation.",
     "Materialize exact epsilon, sensitivity, seed, timestep, and time-limit variants before output inspection.",
-    "Freeze the paper-literal delta_u_y phase and volume-averaged absolute delta_u growth estimator or a reviewed supplemental-estimator decision before any Section 5.2 qualification.",
+    "Preserve the frozen source-local paper-literal delta_u_y spatial sine-fit phase and volume-averaged absolute delta_u growth estimator contract.",
     "Expand the bounded source-local smokes into exact epsilon, resolution, timestep, seed and convergence variants before qualifying execution.",
     "Bind a clean Frontier executable and authorized Orion artifact root only through the reviewed control plane.",
     "Freeze a registered campaign record before a qualifying run.",

@@ -1,0 +1,93 @@
+{
+  "record_type": "q033_crpai_transport_runtime_local",
+  "schema_version": 1,
+  "date": "2026-05-30",
+  "gate": "Q-033",
+  "qualification_effect": "none",
+  "claim_closure": false,
+  "frontier_authorization": "not_bound",
+  "scope": "Q-033-only bounded source-local runtime successor. The separately named q033_crpai_transport_runtime_local generator accepts one serial periodic 32x4x1 thin 2D3V Newtonian single-fluid MHD carrier, initializes a deterministic seeded three-mode transverse CT magnetic carrier, overwrites the allocated CR state with a deterministic antipodally paired bounded prolate momentum lattice, and exposes an immutable cycle-local mhd_bcc plus prtcl_all extraction path. The analyzer reports only bounded local seeded-wave and particle-pair diagnostics. It does not apply reference tolerances, calibrate physical transport, close Q-022, claim external review, qualify Frontier, or authorize launch.",
+  "artifact_bindings": {
+    "src/pgen/tests/q033_crpai_transport_runtime_local.cpp": "244a1290abd374f352134d85463ee8e621e9246dcb41bf8e6dcc6ab4195e3a3d",
+    "inputs/tests/pic_q033_crpai_transport_runtime_local.athinput": "ce60c5dc8c98499f6abb7913bbed6ce12ae5d95807aa2108bf2e09bfe6ffc4df",
+    "tst/publication/analyze_q033_crpai_transport_runtime_local.py": "0e027541ff3e6764ddbbb86b3750ad66ee3a6a0339d0e9cb74c6eeb2616348d7",
+    "tst/publication/test_analyze_q033_crpai_transport_runtime_local.py": "accc87495301abbf3e1c34438c2da8391912c9d51cf9c615fdb76ed7d41b8cc3"
+  },
+  "shared_registration_contract": {
+    "src/CMakeLists.txt": "includes pgen/tests/q033_crpai_transport_runtime_local.cpp",
+    "src/pgen/pgen.hpp": "declares ProblemGenerator::Q033CRPAITransportRuntimeLocal",
+    "src/pgen/pgen.cpp": "dispatches q033_crpai_transport_runtime_local for fresh and restart construction"
+  },
+  "reserved_candidate": {
+    "name": "q033_crpai_transport_calibration_open",
+    "registered": false,
+    "status": "intentionally_blocked_and_preserved",
+    "candidate_deck": "inputs/tests/pic_q033_crpai_transport_calibration_candidate.athinput"
+  },
+  "bounded_runtime": {
+    "generator": "q033_crpai_transport_runtime_local",
+    "carrier": "serial_periodic_32x4x1_thin_2d3v_newtonian_single_fluid_mhd",
+    "momentum_distribution": {
+      "semantics": "deterministic_antipodal_bounded_prolate_lattice",
+      "seed": 330034,
+      "pairing": "adjacent serial particle tags carry antipodal mass-normalized momentum states",
+      "physical_calibration": "not_claimed"
+    },
+    "wave_spectrum": {
+      "semantics": "deterministic_seeded_three_mode_transverse_ct_carrier",
+      "seed": 330033,
+      "mode_count": 3,
+      "physical_calibration": "not_claimed"
+    },
+    "extraction_path": {
+      "mhd": "bin/<basename>.mhd_bcc.<cycle>.bin",
+      "particles": "pvtk/<basename>.prtcl_all.<cycle>.part.vtk",
+      "integrity": "sha256_each_input_artifact",
+      "diagnostics": [
+        "cycle-local positive and negative helicity power for seeded modes 1, 2, and 3",
+        "particle count and adjacent antipodal velocity-pair residual",
+        "parallel and perpendicular velocity second moments",
+        "macro-weight, initial delta-f background and evolving delta-f weight ranges"
+      ]
+    }
+  },
+  "analyzer_contract": {
+    "artifact_role": "bounded_source_local_runtime_diagnostic_only",
+    "rejects_unexpected_or_nonfinite_array_payload": true,
+    "rejects_non_thin_carrier_mhd_payload": true,
+    "rejects_non_serial_or_unpaired_particle_tags": true,
+    "applies_reference_mapping": false,
+    "applies_reference_tolerance": false,
+    "emits_qualifying_evidence": false,
+    "emits_physical_calibration_claimed": false,
+    "emits_q022_closure_claimed": false,
+    "emits_external_review_claimed": false,
+    "emits_frontier_qualification_claimed": false,
+    "emits_launch_authorization_claimed": false
+  },
+  "verification": {
+    "focused_command": "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. python3 -B -m unittest tst.publication.test_analyze_q033_crpai_transport_runtime_local",
+    "focused_result": "pass_8_tests",
+    "python_compile": "pass",
+    "json_parse": "pass",
+    "serial_non_mpi_compile": "pass",
+    "serial_non_mpi_runtime": "pass_one_cycle_direct_execution",
+    "immutable_runtime_extraction": "pass_initialized_and_post_step_artifact_pairs"
+  },
+  "explicitly_not_claimed": [
+    "physical CRPAI transport calibration",
+    "physical effective scattering rate nu_eff",
+    "physical anisotropy evolution or saturation",
+    "physical polarization-resolved spectra or scaling law",
+    "Q-022 closure",
+    "external-review closure",
+    "MPI or decomposition qualification",
+    "Frontier qualification or launch authorization"
+  ],
+  "residual_work": [
+    "Keep the reserved q033_crpai_transport_calibration_open candidate unavailable until its independent prerequisites close.",
+    "Review and freeze physical estimators, reference mappings and accepted tolerances in a separate tranche.",
+    "Prepare any clean candidate, MPI or Frontier campaign transition as a separately reviewed authorization step."
+  ],
+  "q033_disposition": "bounded_source_local_runtime_diagnostic_successor_only_no_physical_calibration_or_qualification_claim"
+}

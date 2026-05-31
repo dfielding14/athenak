@@ -17,6 +17,7 @@ import numpy as np
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CAMPAIGN_ID = "Q023-PAPER-BELL-LINEAR"
+TRACE_SCHEMA_VERSION = 2
 EPSILON_VALUES = (0.1, 0.2, 0.4, 0.6, 0.8)
 DIMENSIONS = (1, 2, 3)
 QUALIFYING_SEEDS = (
@@ -169,6 +170,11 @@ _TRACE_KEYS = {
     "phase_change",
     "velocity_phase_interval",
     "velocity_phase_change",
+    "paper_delta_u_y_sine_fit_real",
+    "paper_delta_u_y_sine_fit_imag",
+    "paper_delta_u_y_phase_interval",
+    "paper_delta_u_y_phase_change",
+    "paper_volume_averaged_abs_delta_u",
 }
 _RAW_PROVENANCE_KEYS = {
     "kind",
@@ -600,6 +606,63 @@ def _spatial_modes_from_dataset(
     return magnetic + velocity
 
 
+def _paper_literal_velocity_observables_from_dataset(
+    dataset: dict[str, Any], dimension: int, raw_geometry: dict[str, Any]
+) -> tuple[complex, float]:
+    """Return the Section 5.2 delta-u-y sine fit and volume-averaged |delta u|."""
+    parallel, _, _ = _mode_basis(dimension)
+    coordinates = [
+        np.asarray(dataset[f"x{axis}v"], dtype=float) for axis in (1, 2, 3)
+    ]
+    nx = tuple(raw_geometry["nx"])
+    xmin = tuple(raw_geometry["xmin"])
+    extent = tuple(raw_geometry["extent"])
+    expected_shape = tuple(values.size for values in reversed(coordinates))
+    if tuple(values.size for values in coordinates) != nx:
+        raise ContractError("raw mhd_w_bcc geometry does not match the approved variant")
+    for axis, values in enumerate(coordinates):
+        expected = xmin[axis] + (np.arange(nx[axis], dtype=float) + 0.5) * (
+            extent[axis] / nx[axis]
+        )
+        if not np.allclose(
+            values, expected, rtol=0.0, atol=RAW_GEOMETRY_ABSOLUTE_TOLERANCE
+        ):
+            raise ContractError(
+                "raw mhd_w_bcc geometry does not match the approved variant"
+            )
+    velocity = np.stack(
+        [np.asarray(dataset[name], dtype=float) for name in ("velx", "vely", "velz")]
+    )
+    if velocity.shape[1:] != expected_shape or not np.all(np.isfinite(velocity)):
+        raise ContractError("raw mhd_w_bcc velocity shape or values are invalid")
+    x3, x2, x1 = np.meshgrid(
+        coordinates[2], coordinates[1], coordinates[0], indexing="ij"
+    )
+    spatial_phase = K0 * (
+        parallel[0]*x1 + parallel[1]*x2 + parallel[2]*x3
+    )
+    design = np.column_stack(
+        (np.cos(spatial_phase).ravel(), np.sin(spatial_phase).ravel())
+    )
+    coefficients, _, rank, _ = np.linalg.lstsq(
+        design, velocity[1].ravel(), rcond=None
+    )
+    if rank != 2 or not np.all(np.isfinite(coefficients)):
+        raise ContractError("paper-literal delta_u_y spatial sine fit is singular")
+    phase_fit = complex(coefficients[0], -coefficients[1])
+    if abs(phase_fit) <= np.finfo(float).tiny:
+        raise ContractError("paper-literal delta_u_y spatial sine fit has zero amplitude")
+    volume_averaged_abs_delta_u = float(
+        np.mean(np.sqrt(np.sum(velocity*velocity, axis=0)))
+    )
+    if (
+        not math.isfinite(volume_averaged_abs_delta_u)
+        or volume_averaged_abs_delta_u <= 0.0
+    ):
+        raise ContractError("paper-literal volume-averaged |delta u| must be positive")
+    return phase_fit, volume_averaged_abs_delta_u
+
+
 def extract_trace_record_from_datasets(
     dimension: int,
     epsilon: float,
@@ -623,7 +686,22 @@ def extract_trace_record_from_datasets(
         right, left, velocity_right, velocity_left = _spatial_modes_from_dataset(
             dataset, dimension, provenance["raw_geometry"]
         )
-        rows.append((time*K0*U_A, right, left, velocity_right, velocity_left))
+        paper_phase_fit, paper_abs_delta_u = (
+            _paper_literal_velocity_observables_from_dataset(
+                dataset, dimension, provenance["raw_geometry"]
+            )
+        )
+        rows.append(
+            (
+                time*K0*U_A,
+                right,
+                left,
+                velocity_right,
+                velocity_left,
+                paper_phase_fit,
+                paper_abs_delta_u,
+            )
+        )
     rows.sort(key=lambda item: item[0])
     if not rows:
         raise ContractError("raw mhd_w_bcc extraction requires snapshots")
@@ -632,10 +710,13 @@ def extract_trace_record_from_datasets(
     left = np.asarray([item[2] for item in rows], dtype=complex)
     velocity_right = np.asarray([item[3] for item in rows], dtype=complex)
     velocity_left = np.asarray([item[4] for item in rows], dtype=complex)
+    paper_phase_fit = np.asarray([item[5] for item in rows], dtype=complex)
+    paper_abs_delta_u = np.asarray([item[6] for item in rows], dtype=float)
     interval, change = _fixed_interval_phase_trace(time, right)
     velocity_interval, velocity_change = _fixed_interval_phase_trace(
         time, velocity_right
     )
+    paper_interval, paper_change = _fixed_interval_phase_trace(time, paper_phase_fit)
     return {
         "dimension": dimension,
         "epsilon": epsilon,
@@ -653,6 +734,11 @@ def extract_trace_record_from_datasets(
         "phase_change": change.tolist(),
         "velocity_phase_interval": velocity_interval.tolist(),
         "velocity_phase_change": velocity_change.tolist(),
+        "paper_delta_u_y_sine_fit_real": paper_phase_fit.real.tolist(),
+        "paper_delta_u_y_sine_fit_imag": paper_phase_fit.imag.tolist(),
+        "paper_delta_u_y_phase_interval": paper_interval.tolist(),
+        "paper_delta_u_y_phase_change": paper_change.tolist(),
+        "paper_volume_averaged_abs_delta_u": paper_abs_delta_u.tolist(),
     }
 
 
@@ -767,14 +853,32 @@ def _analyze_record(
     left_amplitude = np.abs(left)
     velocity_right_amplitude = np.abs(velocity_right)
     velocity_left_amplitude = np.abs(velocity_left)
+    paper_abs_delta_u = _finite_array(record, "paper_volume_averaged_abs_delta_u")
+    if paper_abs_delta_u.size != time.size:
+        raise ContractError(
+            "paper-literal volume-averaged |delta u| must match normalized_time length"
+        )
+    paper_delta_u_y_sine_fit = (
+        _finite_array(record, "paper_delta_u_y_sine_fit_real")
+        + 1.0j * _finite_array(record, "paper_delta_u_y_sine_fit_imag")
+    )
+    if paper_delta_u_y_sine_fit.size != time.size:
+        raise ContractError(
+            "paper-literal delta_u_y sine-fit trace must match normalized_time length"
+        )
     measured_growth, growth_r2, fit_mask = _fit_growth(
         time, right_amplitude, expected_growth, label="magnetic"
     )
     velocity_measured_growth, velocity_growth_r2, velocity_fit_mask = _fit_growth(
         time, velocity_right_amplitude, expected_growth, label="fluid-velocity"
     )
+    paper_measured_growth, paper_growth_r2, paper_fit_mask = _fit_growth(
+        time, paper_abs_delta_u, expected_growth, label="paper-literal fluid-velocity"
+    )
     if not np.array_equal(fit_mask, velocity_fit_mask):
         raise ContractError("magnetic and fluid-velocity growth windows must match")
+    if not np.array_equal(fit_mask, paper_fit_mask):
+        raise ContractError("magnetic and paper-literal growth windows must match")
 
     phase_interval = _finite_array(record, "phase_interval")
     phase_change = _finite_array(record, "phase_change")
@@ -832,6 +936,37 @@ def _analyze_record(
     velocity_measured_phase = float(
         np.mean(extracted_velocity_change / extracted_velocity_interval)
     )
+    paper_phase_interval = _finite_array(record, "paper_delta_u_y_phase_interval")
+    paper_phase_change = _finite_array(record, "paper_delta_u_y_phase_change")
+    if paper_phase_interval.size != paper_phase_change.size:
+        raise ContractError(
+            "paper-literal delta_u_y phase interval and phase change arrays "
+            "must have equal length"
+        )
+    if not np.allclose(
+        paper_phase_interval, PHASE_INTERVAL, rtol=0.0, atol=1.0e-14
+    ):
+        raise ContractError(
+            "paper-literal delta_u_y phase intervals must equal pi/(k0*U_A)"
+        )
+    extracted_paper_interval, extracted_paper_change = _fixed_interval_phase_trace(
+        time, paper_delta_u_y_sine_fit
+    )
+    if paper_phase_interval.size != extracted_paper_interval.size or not np.allclose(
+        paper_phase_interval, extracted_paper_interval, rtol=0.0, atol=1.0e-12
+    ):
+        raise ContractError(
+            "paper-literal delta_u_y phase intervals do not match the retained sine-fit trace"
+        )
+    if paper_phase_change.size != extracted_paper_change.size or not np.allclose(
+        paper_phase_change, extracted_paper_change, rtol=0.0, atol=1.0e-10
+    ):
+        raise ContractError(
+            "paper-literal delta_u_y phase changes do not match the retained sine-fit trace"
+        )
+    paper_measured_phase = float(
+        np.mean(extracted_paper_change / extracted_paper_interval)
+    )
     final_fit_index = int(np.flatnonzero(fit_mask)[-1])
     polarization_ratio = float(
         right_amplitude[final_fit_index]
@@ -863,6 +998,10 @@ def _analyze_record(
         velocity_magnetic_ratio_max_absolute_error
         <= SOURCE_LOCAL_VELOCITY_MAGNETIC_RATIO_ABSOLUTE_TOLERANCE
     )
+    paper_growth_pass = _within_both_tolerances(
+        paper_measured_growth, expected_growth
+    )
+    paper_phase_pass = _within_both_tolerances(paper_measured_phase, expected_phase)
     return {
         "dimension": dimension,
         "epsilon": epsilon,
@@ -886,6 +1025,9 @@ def _analyze_record(
             velocity_magnetic_ratio_max_absolute_error,
         "velocity_magnetic_ratio_diagnostic_limit":
             SOURCE_LOCAL_VELOCITY_MAGNETIC_RATIO_ABSOLUTE_TOLERANCE,
+        "paper_literal_measured_growth_rate_over_k0_ua": paper_measured_growth,
+        "paper_literal_growth_fit_r2": paper_growth_r2,
+        "paper_literal_measured_phase_frequency_over_k0_ua": paper_measured_phase,
         "growth_pass": growth_pass,
         "phase_pass": phase_pass,
         "polarization_pass": polarization_pass,
@@ -893,9 +1035,13 @@ def _analyze_record(
         "velocity_phase_pass": velocity_phase_pass,
         "velocity_polarization_pass": velocity_polarization_pass,
         "velocity_magnetic_ratio_pass": velocity_magnetic_ratio_pass,
+        "paper_literal_growth_pass": paper_growth_pass,
+        "paper_literal_phase_pass": paper_phase_pass,
         "velocity_cross_check_qualification_effect":
             "nonqualifying_source_local_diagnostic_only",
-        "retained_velocity_observable_status": "retained_and_cross_checked",
+        "retained_velocity_observable_status":
+            "paper_literal_delta_u_y_phase_and_volume_averaged_abs_delta_u_frozen_"
+            "projected_mode_cross_check_retained",
         "section52_qualification_eligible": False,
         "passed": (
             growth_pass
@@ -905,6 +1051,8 @@ def _analyze_record(
             and velocity_phase_pass
             and velocity_polarization_pass
             and velocity_magnetic_ratio_pass
+            and paper_growth_pass
+            and paper_phase_pass
         ),
     }
 
@@ -915,7 +1063,10 @@ def analyze_trace_bundle(
     """Analyze an exact extracted-trace grid without making a qualification claim."""
     if set(bundle) != {"schema_version", "campaign_id", "qualifying_seed", "records"}:
         raise ContractError("Bell extracted-trace bundle keys do not match the contract")
-    if bundle["schema_version"] != 1 or bundle["campaign_id"] != CAMPAIGN_ID:
+    if (
+        bundle["schema_version"] != TRACE_SCHEMA_VERSION
+        or bundle["campaign_id"] != CAMPAIGN_ID
+    ):
         raise ContractError("Bell extracted-trace bundle identity mismatch")
     qualifying_seed = bundle["qualifying_seed"]
     if type(qualifying_seed) is not int or qualifying_seed not in QUALIFYING_SEEDS:
@@ -961,7 +1112,7 @@ def analyze_trace_bundle(
         )
     )
     return {
-        "schema_version": 1,
+        "schema_version": TRACE_SCHEMA_VERSION,
         "campaign_id": CAMPAIGN_ID,
         "qualifying_seed": qualifying_seed,
         "analysis_input_kind": analysis_input_kind,
