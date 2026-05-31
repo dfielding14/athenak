@@ -23,6 +23,10 @@ corrected E03 Stage I use to `1.943612` node-hours. Authenticated
 `R02/s03_rankio_t1_t1p5` job `4746356` is formally and independently
 inspected and recorded `accepted` through exact `t = 1.5` for `1.048611`
 node-hours, bringing corrected E03 Stage I use to `2.992223` node-hours.
+Authenticated `R02/s04_rankio_t1p5_t2` job `4746435` is formally and
+independently inspected and recorded `accepted` through exact `t = 2.0` for
+`1.063611` node-hours, bringing corrected E03 Stage I use to `4.055834`
+node-hours.
 
 The `900.000000` node-hour `E02` value is an authorized measurement-based
 projected envelope, not a fully measured matrix cost. It no longer authorizes
@@ -135,7 +139,8 @@ qualification and token retention. Fresh mapped production has started with
 accepted R02 jobs `4745922` and `4746154` through exact `t = 0.25`.
 Authenticated job `4746182` now extends that accepted lineage through exact
 `t = 1.0`. Authenticated job `4746356` now extends that accepted lineage
-through exact `t = 1.5`.
+through exact `t = 1.5`. Authenticated job `4746435` now extends that
+accepted lineage through exact `t = 2.0`.
 The manuscript also still needs
 compact derivation prose. That prose must:
 
@@ -216,8 +221,18 @@ hardening is promoted at canonical revision
 `9689c269bf329542815a1b2b137881126964b05c`, helper SHA-256
 `1c633ebb58294938a0a0609742ae8f8d1f88cd15242ffe649578796edeb39375`.
 Focused helper tests, Sphinx warnings-as-errors, syntax, diff, and hardened
-reconciliation pass. Archive and catalog the current committed controller
-state, reconcile, then prepare only `R02/s04_rankio_t1p5_t2` from the
+reconciliation pass. Authenticated `R02/s04_rankio_t1p5_t2` job `4746435`
+is now accepted through exact `t = 2.0` for `1.063611` node-hours. Its
+sampled-history forcing-work relative residual is `3.034159691118515e-12`;
+strict LF failure counters remain zero; terminal `lf_hwproj = 123445535090`;
+complete two-group eight-rank snapshots and terminal eight-rank restart
+siblings are retained. Corrected E03 use is `4.055834` node-hours. Retained
+corrected recost evidence JSON SHA-256 is
+`c382b78ab9e21466648adf9d7ea38d2b407f0e986579f128bdfe6bc44bef79dd`;
+it projects at most `728.845556` matrix node-hours inside the `900.000000`
+envelope, leaving `171.154444` node-hours of margin. Archive and catalog the
+current committed controller state, reconcile, then prepare only
+`R02/s05_rankio_t2_t2p5` from the
 authenticated terminal siblings. Inspect, account, reconcile, and recost
 before any further extension. Finish R02, execute R03--R16 sequentially, and
 complete `R17` last.
@@ -241,7 +256,8 @@ Retained F-080 evidence JSON SHA-256 is
 `46fc1c4054e75f4224302be1895c1b9eaae88097544512ac067c53376e542e34`;
 post-archive reconciliation passes. The first post-transition continuation
 was accepted as job `4746154`; later authenticated continuations `4746182`
-and `4746356` now reach exact `t = 1.5`. Use only job `4746356`'s
+and `4746356` reach exact `t = 1.5`; authenticated continuation `4746435`
+now reaches exact `t = 2.0`. Use only job `4746435`'s
 authenticated terminal checkpoint for the next bounded R02 continuation.
 Commits `9480e62764528a3f40066d22a192f0e99b369891`
 and `ef1e42fa088203ac9ef6ec8e47e668db4fb95a3c` additionally require the live
