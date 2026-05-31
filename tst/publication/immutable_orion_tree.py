@@ -96,6 +96,41 @@ def _open_self_contained_regular(path: Path, *, error_type: type[ValueError], la
     return fd
 
 
+def _regular_identity(status: os.stat_result) -> tuple[int, ...]:
+    """Return the fields that must remain stable across one ordinary-file read."""
+    return (
+        status.st_dev,
+        status.st_ino,
+        status.st_mode,
+        status.st_nlink,
+        status.st_size,
+        status.st_mtime_ns,
+        status.st_ctime_ns,
+    )
+
+
+def _read_open_regular_bytes(
+    fd: int,
+    path: Path,
+    *,
+    error_type: type[ValueError],
+    label: str,
+) -> tuple[bytes, int]:
+    """Read one open regular file while rejecting mutation during the read."""
+    os.lseek(fd, 0, os.SEEK_SET)
+    before = os.fstat(fd)
+    if not stat.S_ISREG(before.st_mode) or before.st_nlink not in (0, 1):
+        _raise(error_type, label, f"retained regular file is unsafe: {path}")
+    payload = bytearray()
+    while chunk := os.read(fd, 1024 * 1024):
+        payload.extend(chunk)
+    after = os.fstat(fd)
+    if _regular_identity(before) != _regular_identity(after):
+        _raise(error_type, label, f"retained regular file changed while reading: {path}")
+    os.lseek(fd, 0, os.SEEK_SET)
+    return bytes(payload), before.st_mode
+
+
 def _sha256_open_regular(
     fd: int,
     path: Path,
@@ -104,27 +139,51 @@ def _sha256_open_regular(
     label: str,
 ) -> str:
     """Hash one already-open regular file and reject mutation during the read."""
-    os.lseek(fd, 0, os.SEEK_SET)
-    before = os.fstat(fd)
-    if not stat.S_ISREG(before.st_mode) or before.st_nlink not in (0, 1):
-        _raise(error_type, label, f"retained regular file is unsafe: {path}")
-    digest = hashlib.sha256()
-    while chunk := os.read(fd, 1024 * 1024):
-        digest.update(chunk)
-    after = os.fstat(fd)
-    identity = lambda value: (  # noqa: E731
-        value.st_dev,
-        value.st_ino,
-        value.st_mode,
-        value.st_nlink,
-        value.st_size,
-        value.st_mtime_ns,
-        value.st_ctime_ns,
+    payload, _ = _read_open_regular_bytes(fd, path, error_type=error_type, label=label)
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _sealed_memfd(payload: bytes, mode: int, *, name: str) -> int:
+    """Materialize immutable bytes into one fully sealed anonymous regular file."""
+    fd = os.memfd_create(name, flags=os.MFD_CLOEXEC | os.MFD_ALLOW_SEALING)
+    try:
+        view = memoryview(payload)
+        while view:
+            written = os.write(fd, view)
+            if written <= 0:
+                raise OSError("short write while materializing sealed regular bytes")
+            view = view[written:]
+        os.fchmod(fd, stat.S_IMODE(mode) & ~_WRITE_BITS)
+        os.lseek(fd, 0, os.SEEK_SET)
+        fcntl.fcntl(fd, fcntl.F_ADD_SEALS, _MEMFD_SEALS)
+    except Exception:
+        os.close(fd)
+        raise
+    return fd
+
+
+def _sealed_regular_copy(
+    path: Path,
+    *,
+    error_type: type[ValueError],
+    label: str,
+) -> tuple[int, str, int]:
+    """Copy one mutation-checked regular file into a sealed descriptor."""
+    source_fd = _open_self_contained_regular(path, error_type=error_type, label=label)
+    try:
+        payload, mode = _read_open_regular_bytes(
+            source_fd,
+            path,
+            error_type=error_type,
+            label=label,
+        )
+    finally:
+        os.close(source_fd)
+    return (
+        _sealed_memfd(payload, mode, name=f"athenak-pic-{path.name}"),
+        hashlib.sha256(payload).hexdigest(),
+        mode,
     )
-    if identity(before) != identity(after):
-        _raise(error_type, label, f"retained regular file changed while reading: {path}")
-    os.lseek(fd, 0, os.SEEK_SET)
-    return digest.hexdigest()
 
 
 def _sha256_regular(
@@ -150,12 +209,7 @@ def _read_regular_text(
     """Read one self-contained regular UTF-8 file without following its final link."""
     fd = _open_self_contained_regular(path, error_type=error_type, label=label)
     try:
-        status = os.fstat(fd)
-        if not stat.S_ISREG(status.st_mode) or status.st_nlink not in (0, 1):
-            _raise(error_type, label, f"retained metadata file is unsafe: {path}")
-        payload = bytearray()
-        while chunk := os.read(fd, 1024 * 1024):
-            payload.extend(chunk)
+        payload, _ = _read_open_regular_bytes(fd, path, error_type=error_type, label=label)
     finally:
         os.close(fd)
     try:
@@ -216,9 +270,8 @@ def validate_source_archive(
 ) -> dict[str, int | str | bool]:
     """Independently reject unsafe or cache-bearing retained source archives."""
     path = Path(archive_path)
-    fd = _open_self_contained_regular(path, error_type=error_type, label=label)
+    fd, measured_sha256, _ = _sealed_regular_copy(path, error_type=error_type, label=label)
     try:
-        measured_sha256 = _sha256_open_regular(fd, path, error_type=error_type, label=label)
         if measured_sha256 != expected_sha256:
             _raise(error_type, label, "source archive SHA-256 drifted")
         names = set()
@@ -285,12 +338,10 @@ def validate_executable_elf(
 ) -> dict[str, str | bool]:
     """Require one retained regular executable with an ELF identity."""
     path = Path(executable_path)
-    fd = _open_self_contained_regular(path, error_type=error_type, label=label)
+    fd, measured_sha256, mode = _sealed_regular_copy(path, error_type=error_type, label=label)
     try:
-        measured_sha256 = _sha256_open_regular(fd, path, error_type=error_type, label=label)
         if measured_sha256 != expected_sha256:
             _raise(error_type, label, "executable SHA-256 drifted")
-        mode = os.fstat(fd).st_mode
         if stat.S_IMODE(mode) & 0o111 != 0o111:
             _raise(error_type, label, "retained executable must retain all execute bits")
         if os.read(fd, 4) != b"\x7fELF":
@@ -327,7 +378,7 @@ def validate_source_archive_dependencies(
         ):
             _raise(error_type, label, f"retained dependency manifest entry is invalid: {name!r}")
     path = Path(archive_path)
-    fd = _open_self_contained_regular(path, error_type=error_type, label=label)
+    fd, _, _ = _sealed_regular_copy(path, error_type=error_type, label=label)
     try:
         try:
             with os.fdopen(os.dup(fd), "rb") as handle:
@@ -555,24 +606,11 @@ class VerifiedFrozenTree:
             raise ValueError(f"sealed snapshot regular member is absent: {text}")
         if text not in self._fds:
             payload, mode = self._loader(text, expected_sha256)
-            fd = os.memfd_create(
-                f"athenak-pic-{Path(text).name}",
-                flags=os.MFD_CLOEXEC | os.MFD_ALLOW_SEALING,
+            self._fds[text] = _sealed_memfd(
+                payload,
+                mode,
+                name=f"athenak-pic-{Path(text).name}",
             )
-            try:
-                view = memoryview(payload)
-                while view:
-                    written = os.write(fd, view)
-                    if written <= 0:
-                        raise OSError("short write while materializing sealed snapshot member")
-                    view = view[written:]
-                os.fchmod(fd, stat.S_IMODE(mode) & ~_WRITE_BITS)
-                os.lseek(fd, 0, os.SEEK_SET)
-                fcntl.fcntl(fd, fcntl.F_ADD_SEALS, _MEMFD_SEALS)
-            except Exception:
-                os.close(fd)
-                raise
-            self._fds[text] = fd
         return Path("/proc/self/fd") / str(self._fds[text])
 
     def io_path(self, logical_root: Path, path: Path) -> Path:
@@ -589,7 +627,9 @@ class VerifiedFrozenTree:
         self._relative_text(relative)
         if self.has_file(relative):
             return self.member_path(relative)
-        return self.staged_root / relative
+        if self.has_directory(relative):
+            return self.staged_root / relative
+        raise ValueError(f"sealed snapshot member is absent: {relative.as_posix()}")
 
     def logical_path_for_io(self, logical_root: Path, path: str | Path) -> Path | None:
         """Map a staged-directory or sealed-fd label back to its retained logical label."""

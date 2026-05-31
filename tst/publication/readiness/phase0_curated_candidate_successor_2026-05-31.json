@@ -20,8 +20,9 @@
     "Q-006 and Q-007 staged-tree routing is context-local rather than process-global",
     "status-figure generator consumes frozen JSON and legacy Q-023 Bell payloads from anchored sealed snapshot members",
     "sealed snapshot topology maps are compared back to the verified retained tree before handoff",
-    "source archive and ELF validators retain one opened descriptor across multi-pass inspection",
+    "multi-pass source archive, dependency archive and ELF validators inspect mutation-checked sealed byte copies",
     "Q-006 and Q-007 reject unrelated sealed descriptors that were not routed by an active retained-tree snapshot",
+    "active retained-tree snapshots reject unknown post-handoff members while preserving verified topology-only directories",
     "transition policy clears historical registered-science slices and marks the schema-v4 clean-candidate freeze pending"
   ],
   "remaining_phase0_actions": [

@@ -378,7 +378,39 @@ class ImmutableOrionTreeTests(unittest.TestCase):
         finally:
             os.close(fd)
 
-    def test_archive_and_elf_validators_reuse_open_descriptor_after_path_swap(self) -> None:
+    def test_q006_and_q007_reject_unknown_file_injected_after_snapshot_handoff(self) -> None:
+        from tst.publication import analyze_q006_paper_multispecies_oscillation_runtime_local
+        from tst.publication import analyze_q007_paper_deltaf_linear_preparation
+
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            tree = base / "retained"
+            tree.mkdir()
+            (tree / "payload.txt").write_text("verified\n", encoding="utf-8")
+            try:
+                report = immutable_orion_tree.freeze_tree(
+                    tree,
+                    _RECEIPT,
+                    authorized_root=base,
+                )
+                with immutable_orion_tree.staged_verified_frozen_tree(
+                    tree,
+                    report["inventory_sha256"],
+                    authorized_root=base,
+                ) as (_, snapshot):
+                    injected = snapshot.staged_root / "injected.txt"
+                    injected.write_text("attacker bytes\n", encoding="utf-8")
+                    for analyzer in (
+                        analyze_q006_paper_multispecies_oscillation_runtime_local,
+                        analyze_q007_paper_deltaf_linear_preparation,
+                    ):
+                        with analyzer._use_staged_tree(tree, snapshot):
+                            with self.assertRaisesRegex(ValueError, "snapshot member is absent"):
+                                analyzer._contained_regular_file(tree, tree / "injected.txt")
+            finally:
+                _make_writable_tree(tree)
+
+    def test_archive_and_elf_validators_inspect_sealed_copy_after_path_swap(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             base = Path(directory)
             source = base / "source.txt"
@@ -390,22 +422,22 @@ class ImmutableOrionTreeTests(unittest.TestCase):
             archive_replacement = base / "source-replacement.tar"
             archive_replacement.write_bytes(b"not a tar archive\n")
             archived_original = base / "source-original.tar"
-            original_hash = immutable_orion_tree._sha256_open_regular
+            original_copy = immutable_orion_tree._sealed_regular_copy
             swapped = False
 
-            def swap_archive_after_hash(*args: object, **kwargs: object):
+            def swap_archive_after_copy(*args: object, **kwargs: object):
                 nonlocal swapped
-                digest = original_hash(*args, **kwargs)
+                copied = original_copy(*args, **kwargs)
                 if not swapped:
                     os.rename(archive, archived_original)
                     os.rename(archive_replacement, archive)
                     swapped = True
-                return digest
+                return copied
 
             with mock.patch.object(
                 immutable_orion_tree,
-                "_sha256_open_regular",
-                side_effect=swap_archive_after_hash,
+                "_sealed_regular_copy",
+                side_effect=swap_archive_after_copy,
             ):
                 report = immutable_orion_tree.validate_source_archive(
                     archive,
@@ -423,19 +455,19 @@ class ImmutableOrionTreeTests(unittest.TestCase):
             archived_executable = base / "original-athena"
             swapped = False
 
-            def swap_executable_after_hash(*args: object, **kwargs: object):
+            def swap_executable_after_copy(*args: object, **kwargs: object):
                 nonlocal swapped
-                digest = original_hash(*args, **kwargs)
+                copied = original_copy(*args, **kwargs)
                 if not swapped:
                     os.rename(executable, archived_executable)
                     os.rename(executable_replacement, executable)
                     swapped = True
-                return digest
+                return copied
 
             with mock.patch.object(
                 immutable_orion_tree,
-                "_sha256_open_regular",
-                side_effect=swap_executable_after_hash,
+                "_sealed_regular_copy",
+                side_effect=swap_executable_after_copy,
             ):
                 report = immutable_orion_tree.validate_executable_elf(
                     executable,
@@ -449,22 +481,21 @@ class ImmutableOrionTreeTests(unittest.TestCase):
             dependency_replacement = base / "dependency-replacement.tar"
             dependency_replacement.write_bytes(b"not a tar archive\n")
             archived_dependency = base / "dependency-original.tar"
-            original_open = immutable_orion_tree._open_self_contained_regular
             swapped = False
 
-            def swap_dependency_after_open(*args: object, **kwargs: object):
+            def swap_dependency_after_copy(*args: object, **kwargs: object):
                 nonlocal swapped
-                fd = original_open(*args, **kwargs)
+                copied = original_copy(*args, **kwargs)
                 if not swapped:
                     os.rename(dependency_archive, archived_dependency)
                     os.rename(dependency_replacement, dependency_archive)
                     swapped = True
-                return fd
+                return copied
 
             with mock.patch.object(
                 immutable_orion_tree,
-                "_open_self_contained_regular",
-                side_effect=swap_dependency_after_open,
+                "_sealed_regular_copy",
+                side_effect=swap_dependency_after_copy,
             ):
                 report = immutable_orion_tree.validate_source_archive_dependencies(
                     dependency_archive,
@@ -472,6 +503,126 @@ class ImmutableOrionTreeTests(unittest.TestCase):
                     {"source.txt"},
                 )
             self.assertTrue(report["passed"])
+
+    def test_multi_pass_validators_inspect_sealed_copy_after_inplace_rewrite(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            original_source = base / "original.txt"
+            original_source.write_text("original\n", encoding="utf-8")
+            replacement_source = base / "replacement.txt"
+            replacement_source.write_text("replacement\n", encoding="utf-8")
+            archive = base / "source.tar"
+            with tarfile.open(archive, "w") as handle:
+                handle.add(original_source, arcname="original.txt")
+            archive_sha256 = hashlib.sha256(archive.read_bytes()).hexdigest()
+            replacement_archive = base / "replacement.tar"
+            with tarfile.open(replacement_archive, "w") as handle:
+                handle.add(replacement_source, arcname="replacement.txt")
+                handle.add(original_source, arcname="original.txt")
+            executable = base / "athena"
+            executable.write_bytes(b"\x7fELForiginal")
+            executable.chmod(0o555)
+            executable_sha256 = hashlib.sha256(executable.read_bytes()).hexdigest()
+            original_copy = immutable_orion_tree._sealed_regular_copy
+            rewritten = False
+
+            def rewrite_archive_after_copy(*args: object, **kwargs: object):
+                nonlocal rewritten
+                copied = original_copy(*args, **kwargs)
+                if not rewritten:
+                    archive.chmod(0o644)
+                    archive.write_bytes(replacement_archive.read_bytes())
+                    rewritten = True
+                return copied
+
+            with mock.patch.object(
+                immutable_orion_tree,
+                "_sealed_regular_copy",
+                side_effect=rewrite_archive_after_copy,
+            ):
+                report = immutable_orion_tree.validate_source_archive(
+                    archive,
+                    archive_sha256,
+                )
+            self.assertEqual(report["member_count"], 1)
+            self.assertEqual(report["regular_file_count"], 1)
+
+            rewritten = False
+
+            def rewrite_executable_after_copy(*args: object, **kwargs: object):
+                nonlocal rewritten
+                copied = original_copy(*args, **kwargs)
+                if not rewritten:
+                    executable.chmod(0o755)
+                    executable.write_bytes(b"not-elf-replacement")
+                    rewritten = True
+                return copied
+
+            with mock.patch.object(
+                immutable_orion_tree,
+                "_sealed_regular_copy",
+                side_effect=rewrite_executable_after_copy,
+            ):
+                report = immutable_orion_tree.validate_executable_elf(
+                    executable,
+                    executable_sha256,
+                )
+            self.assertTrue(report["elf_identity"])
+
+            dependency_archive = base / "dependency.tar"
+            with tarfile.open(dependency_archive, "w") as handle:
+                handle.add(original_source, arcname="source.txt")
+            replacement_dependency = base / "replacement-dependency.tar"
+            with tarfile.open(replacement_dependency, "w") as handle:
+                handle.add(replacement_source, arcname="source.txt")
+            rewritten = False
+
+            def rewrite_dependency_after_copy(*args: object, **kwargs: object):
+                nonlocal rewritten
+                copied = original_copy(*args, **kwargs)
+                if not rewritten:
+                    dependency_archive.write_bytes(replacement_dependency.read_bytes())
+                    rewritten = True
+                return copied
+
+            with mock.patch.object(
+                immutable_orion_tree,
+                "_sealed_regular_copy",
+                side_effect=rewrite_dependency_after_copy,
+            ):
+                report = immutable_orion_tree.validate_source_archive_dependencies(
+                    dependency_archive,
+                    {"source.txt": hashlib.sha256(original_source.read_bytes()).hexdigest()},
+                    {"source.txt"},
+                )
+            self.assertTrue(report["passed"])
+
+    def test_metadata_text_read_rejects_inplace_rewrite_during_read(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "metadata.json"
+            path.write_text('{"state": "original"}\n', encoding="utf-8")
+            original_read = immutable_orion_tree.os.read
+            rewritten = False
+
+            def rewrite_after_first_chunk(fd: int, count: int) -> bytes:
+                nonlocal rewritten
+                payload = original_read(fd, count)
+                if payload and not rewritten:
+                    path.write_text('{"state": "replacement"}\n', encoding="utf-8")
+                    rewritten = True
+                return payload
+
+            with mock.patch.object(
+                immutable_orion_tree.os,
+                "read",
+                side_effect=rewrite_after_first_chunk,
+            ):
+                with self.assertRaisesRegex(ValueError, "changed while reading"):
+                    immutable_orion_tree._read_regular_text(
+                        path,
+                        error_type=ValueError,
+                        label="metadata test",
+                    )
 
 
 if __name__ == "__main__":

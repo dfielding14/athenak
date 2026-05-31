@@ -112,7 +112,7 @@
     "inputs/tests/pic_q007_paper_crsi_linear_preparation.athinput": "d1e6b774bef0556a298b88d4a4e989572bd88622d57a14dd54700856f9d3770c",
     "inputs/tests/pic_q007_paper_crpai_linear_prolate_preparation.athinput": "f98aa8faad0c50be696e14db0d33fb2c22bc1b4e7a3c7ba8fa51f67fbb71fa69",
     "inputs/tests/pic_q007_paper_crpai_linear_oblate_preparation.athinput": "b092941d81eef7a8f76d2541789035e9ac7e0cfa42b9db4fdef12a2a44ea5b3c",
-    "tst/publication/immutable_orion_tree.py": "d4bd765479c441bba5eefbc874fb110c8fdf98fba27ea1f3c9aecfd170177ac0",
+    "tst/publication/immutable_orion_tree.py": "55d88a8fb5092ead6ba8be3a32fbeb9001fe48f416d6544ad269bed4c9b7f25c",
     "tst/publication/analyze_q007_paper_deltaf_linear_preparation.py": "96edd2bba902e30d5ebd7089992131917f426a9ae39f797d824360aefee82525",
     "tst/publication/test_analyze_q007_paper_deltaf_linear_preparation.py": "2d5071651b91921dd50b6073985d367f69e807ab859b09df241196c0bf71ba7f"
   },

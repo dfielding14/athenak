@@ -12,7 +12,7 @@
     "inputs/tests/pic_q006_paper_multispecies_oscillation_uniform_runtime_local.athinput": "5b8d81aa4914247ba82f065c791d736e7f041ebcb56bc409fd312e17b39f8f01",
     "inputs/tests/pic_q006_paper_multispecies_oscillation_smr_runtime_local.athinput": "ec94c9ac5dddcdfc600e0831b2d6a2a39238b34e42da09203948d1eb3c3fb5eb",
     "inputs/tests/pic_q006_paper_multispecies_oscillation_audited_amr_runtime_local.athinput": "9baa6cad1995c359f86401be2ce69580d9b5292a5959925b9abadb1d4f4b3847",
-    "tst/publication/immutable_orion_tree.py": "d4bd765479c441bba5eefbc874fb110c8fdf98fba27ea1f3c9aecfd170177ac0",
+    "tst/publication/immutable_orion_tree.py": "55d88a8fb5092ead6ba8be3a32fbeb9001fe48f416d6544ad269bed4c9b7f25c",
     "tst/publication/analyze_q006_paper_multispecies_oscillation_runtime_local.py": "32a724ed7ccaa26473bb5d580c9a2f5ac0a41260430269ac72be94e1e91be3c2",
     "tst/publication/test_analyze_q006_paper_multispecies_oscillation_runtime_local.py": "7d470170fe0f2dc65e6599e4f1fc8584a4b8a893914fda0df62d19839fb33e14"
   },
