@@ -1,0 +1,120 @@
+# Q-032 SOURCE-LOCAL EXTENSION CANDIDATE ONLY: not authorized and not runnable.
+# This deck freezes the implemented reduced static-neutral friction map below.
+# The Plotnikov applicability map, extracted dataset, reviewed tolerances,
+# dedicated generator, clean candidate, and launch authorization remain open.
+
+<comment>
+problem   = Q032 Plotnikov-comparison damped CRSI source-local candidate
+
+<job>
+basename  = pic_q032_plotnikov_damped_crsi_candidate
+
+<mesh>
+nghost    = 2
+nx1       = 32
+x1min     = 0.0
+x1max     = 1.0
+ix1_bc    = periodic
+ox1_bc    = periodic
+
+nx2       = 1
+x2min     = 0.0
+x2max     = 1.0
+ix2_bc    = periodic
+ox2_bc    = periodic
+
+nx3       = 1
+x3min     = 0.0
+x3max     = 1.0
+ix3_bc    = periodic
+ox3_bc    = periodic
+
+<meshblock>
+nx1       = 32
+nx2       = 1
+nx3       = 1
+
+<time>
+evolution  = dynamic
+integrator = rk2
+cfl_number = 0.1
+nlim       = 0
+tlim       = 0.0
+ndiag      = 1
+
+<mhd>
+eos         = ideal
+reconstruct = plm
+rsolver     = llf
+gamma       = 1.66666666667
+
+<particles>
+particle_type                     = cosmic_ray
+ppc                               = 1.0
+pusher                            = boris_tsc
+nspecies                          = 1
+cr_distribution                   = center
+deposit_moments                   = true
+deposit_order                     = 1
+deposit_qscale                    = 1.0
+couple_moments_to_mhd             = true
+couple_j_to_efield_coeff          = 1.0
+couple_j_to_efield_representation = cell_centered
+couple_j_deposition_mode          = cc_convert
+couple_moments_momentum_to_mhd    = true
+couple_moments_energy_to_mhd      = true
+couple_fluid_feedback_order       = mhd_src_terms
+couple_moments_momentum_coeff     = 1.0
+couple_moments_energy_coeff       = 1.0
+cr_vx0                            = 1.0
+cr_vy0                            = 0.0
+cr_vz0                            = 0.0
+pic_physical_mode                 = extended_mhd_pic
+pic_background_mode               = coupled
+pic_feedback_mode                 = coupled
+pic_interp_scheme                 = tsc
+pic_enable_2d3v                   = false
+pic_cr_light_speed                = 10.0
+pic_cr_initial_state              = momentum
+pic_cr_hall_mode                  = off
+pic_wave_damping_mode             = ion_neutral_friction
+pic_ion_neutral_collision_rate    = 0.7
+pic_max_cell_cross                = 1
+pic_theta_max                     = 0.3
+pic_deltaf_mode                   = off
+pic_load_balance_cost_per_particle = 0.0
+pic_sort_interval                 = 0
+pic_intermediate_arrays           = auto
+pic_expanding_box_mode            = off
+
+<species0>
+mass   = 1.0
+charge = 1.0
+
+<problem>
+pgen_name = q032_plotnikov_damped_crsi_open
+
+<q032_damped_crsi_extension>
+campaign_id               = Q032-EXT-CRSI-IN-DAMPING-CANDIDATE
+comparison_id             = XCMP-EXT-CRSI-IN-DAMPING
+claim_id                  = CLAIM-EXT-CRSI-IN-DAMPING-001
+deck_role                 = launch_blocked_source_local_reduced_map_only_not_plotnikov_evidence
+qualification_effect      = none
+launch_status             = blocked_missing_plotnikov_inputs_review_authorization_and_generator
+implementation_scope      = reduced_static_neutral_high_frequency_transverse_friction_only
+nu_in_parameter           = particles/pic_ion_neutral_collision_rate
+nu_in_fiducial            = 0.7
+attenuation_factor        = exp(-nu_in*dt)
+collision_rate_candidate_grid = 0.0,0.2,0.7,1.4
+synthetic_collision_rate_grid = 0.0,0.7,1.4
+synthetic_dt_grid         = 0.0,0.125,0.5
+plotnikov_reference_id    = plotnikov_ostriker_bai_2021_arxiv_2102.11878
+plotnikov_map             = open_reference_specific_mapping_and_review
+plotnikov_dataset         = open_authorized_orion_extraction_with_uncertainty
+plotnikov_tolerances      = open_externally_reviewed_numeric_rows
+matched_damped_crsi_qualification = open_not_claimed
+unstable_bandwidth        = open_not_claimed
+nonlinear_saturation      = open_not_claimed
+isotropization            = open_not_claimed
+gpu                       = open_not_claimed
+mpi                       = open_not_claimed

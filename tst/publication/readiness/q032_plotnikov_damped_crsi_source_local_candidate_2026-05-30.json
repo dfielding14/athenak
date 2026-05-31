@@ -1,0 +1,123 @@
+{
+  "record_type": "q032_plotnikov_damped_crsi_source_local_candidate",
+  "schema_version": 1,
+  "date": "2026-05-30",
+  "gate": "Q-032",
+  "qualification_effect": "source_local_launch_blocked_preparation_only",
+  "claim_closure": false,
+  "scope": "Q-032-only source-local preparation for the separately named ion-neutral-damped CRSI extension. This tranche freezes the exact existing reduced high-frequency static-neutral transverse-friction map, one intentionally unrunnable Plotnikov-comparison candidate deck, the still-open Q022 comparison prerequisites, and one synthetic-contract-only analyzer. It does not qualify a matched damped-CRSI campaign.",
+  "source_constraints": {
+    "production_source_edited": false,
+    "shared_q023_inventories_edited": false,
+    "plan_edited": false,
+    "new_q032_only_files": true
+  },
+  "implemented_reduced_static_neutral_map": {
+    "mode": "particles/pic_wave_damping_mode=ion_neutral_friction",
+    "collision_rate_parameter": "particles/pic_ion_neutral_collision_rate",
+    "attenuation_factor": "D = exp(-nu_in dt)",
+    "non_expanding_route": "apply_once_after_final_explicit_rk_source_update",
+    "expanding_route": "apply_same_map_once_after_endpoint_physical_frame_feedback",
+    "candidate_route": "non_expanding_only",
+    "conserved_update": {
+      "density": "rho' = rho",
+      "longitudinal_momentum": "M1' = M1",
+      "transverse_momentum_2": "M2' = D M2",
+      "transverse_momentum_3": "M3' = D M3",
+      "ideal_mhd_energy": "E' = E - 0.5 (1 - D^2) (M2^2 + M3^2) / rho",
+      "magnetic_fields": "unchanged_by_this_map"
+    },
+    "explicit_limitations": [
+      "This is a bounded high-frequency static-neutral reduction.",
+      "This is separate from the general two-fluid src/ion-neutral module.",
+      "The map does not evolve neutral density, neutral momentum, ionization, recombination, or backreaction onto a neutral fluid.",
+      "The map does not establish a reference-specific Plotnikov equation or normalization map.",
+      "The map does not establish damped-CRSI qualification."
+    ]
+  },
+  "artifact_bindings": {
+    "inputs/tests/pic_q032_plotnikov_damped_crsi_candidate.athinput": "ae471a610d8c2c50367c58df372361c1dfeec08644224789f9cba8a55df722a9",
+    "tst/publication/analyze_q032_plotnikov_damped_crsi_candidate.py": "aa17006cdf635885cacde8bc8a75bff3f9d68de8d0bf08c0497fcffcdfa33a33",
+    "tst/publication/test_analyze_q032_plotnikov_damped_crsi_candidate.py": "1d2ad55efa9e56c51bf5fec7dee47d315869ef63862e111340ed8b53e951a63d",
+    "tst/publication/readiness/q032_reduced_static_neutral_plotnikov_boundary_2026-05-30.md": "a820d63754cfe8446dd892ec16345e95180c7e617ed95bd564b4e53a7845d5a6"
+  },
+  "implementation_source_bindings": {
+    "src/mhd/mhd_tasks.cpp": "339326c2cc8913c321affeafc618a8fea6cbd9133ea6b26a9b58daa2baafa6d2",
+    "src/particles/particles.hpp": "452e6091ad6f1ce50156c770d304ac36020cb53927cc1e40ba6af73e7c3bb462",
+    "src/particles/particles.cpp": "045632afb67c4ff301979716d822fddc8ded8c2ce1eae4725a0d34e32533e956",
+    "docs/source/engineering/pic_mhd_model_contract.md": "ebad2e21725ea15eb301e03f32d8ca8fab9c6503aec90cd7090be4637402ed64"
+  },
+  "prerequisite_record_bindings": {
+    "tst/publication/readiness/q022_external_reference_private_ingest_2026-05-30.json": "78287ea54d8350445cfad62e72f6efc2845f720580d070d075897d889ae3a214",
+    "tst/publication/readiness/q022_dataset_provenance_manifest_2026-05-30.json": "dd6dd6e3187b8e5e06bfbce6f0da4cfc0623d79143a55d7ebbcc797b21b38c78",
+    "tst/publication/readiness/q022_xcmp_ext_crsi_in_damping_equation_map_2026-05-30.json": "87ed9f5fac74cf9ce7be567a1e57cfecae6e2b3374e1bc4e4ed74d2bbe3c8c9b",
+    "tst/publication/readiness/q022_xcmp_ext_crsi_in_damping_tolerance_table_2026-05-30.json": "3ac72c052fc465bd54c92750a96e3ee6ee1d39a79eec2f9c52eda3eb5cc5dfd7",
+    "tst/publication/readiness/q032_q033_extension_local_scans_2026-05-30.json": "8338ee08f311ce353186a514549cec1227d17de300557645655158ee73da3dc4"
+  },
+  "plotnikov_comparison_boundary": {
+    "comparison_id": "XCMP-EXT-CRSI-IN-DAMPING",
+    "claim_id": "CLAIM-EXT-CRSI-IN-DAMPING-001",
+    "reference_id": "plotnikov_ostriker_bai_2021_arxiv_2102.11878",
+    "dataset_id": "Q022-DATASET-XCMP-EXT-CRSI-IN-DAMPING",
+    "source_reference_status": "private_orion_copy_checksum_verified_reference_source_only",
+    "dataset_status": "blocked_extraction_input_unavailable",
+    "equation_map_status": "blocked_pending_reference_specific_mapping_and_external_review",
+    "tolerance_status": "blocked_pending_reference_dataset_extraction_and_external_review",
+    "numeric_tolerance_rows": [],
+    "reviewer_disposition": "pending external review"
+  },
+  "launch_block": {
+    "candidate_deck_role": "launch_blocked_source_local_reduced_map_only_not_plotnikov_evidence",
+    "candidate_problem_generator": "q032_plotnikov_damped_crsi_open",
+    "problem_generator_status": "intentionally_unavailable",
+    "candidate_nlim": 0,
+    "candidate_tlim": 0.0,
+    "launch_status": "blocked_missing_plotnikov_inputs_review_authorization_and_generator",
+    "analyzer_artifact_role": "source_local_synthetic_static_neutral_contract_only",
+    "analyzer_qualification_effect": "none_source_local_launch_blocked_contract_only",
+    "analyzer_always_emits_qualifying_evidence": false,
+    "analyzer_can_emit_matched_plotnikov_qualification": false
+  },
+  "fail_closed_analyzer_contract": {
+    "requires_exact_implementation_source_checksums": true,
+    "requires_exact_prerequisite_record_checksums": true,
+    "requires_q022_dataset_extraction_to_remain_blocked": true,
+    "requires_q022_equation_map_to_remain_blocked": true,
+    "requires_q022_numeric_tolerance_rows_to_remain_empty": true,
+    "requires_exact_candidate_deck_checksum": true,
+    "requires_candidate_problem_generator_to_remain_unavailable": true,
+    "rejects_unexpected_bundle_fields": true,
+    "rejects_runtime_like_extra_fields": true,
+    "rejects_non_synthetic_artifact_role": true,
+    "rejects_incomplete_or_duplicate_synthetic_grid": true,
+    "numeric_mismatch_effect": "reported_as_source_local_contract_mismatch_not_plotnikov_qualification"
+  },
+  "verification": {
+    "focused_command": "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. python3 -m unittest tst.publication.test_analyze_q032_plotnikov_damped_crsi_candidate",
+    "focused_result": "pass",
+    "python_compile": "pass",
+    "json_parse": "pass",
+    "python_deck_note_line_length_and_all_q032_trailing_whitespace_check": "pass",
+    "production_launch": "not_run_intentionally_launch_blocked"
+  },
+  "explicitly_not_claimed": [
+    "reference-specific Plotnikov equation and normalization map",
+    "extracted reference dataset",
+    "reviewed numeric tolerance rows",
+    "unstable-bandwidth agreement",
+    "damping-rate or growth-rate agreement",
+    "nonlinear saturation agreement",
+    "isotropization agreement",
+    "MPI or decomposition qualification",
+    "Frontier HIP or GPU qualification",
+    "external-review closure"
+  ],
+  "residual_work": [
+    "Complete and independently review the reference-specific Plotnikov equation, normalization, parameter-overlap, and excluded-regime map.",
+    "Extract the authorized Orion comparison dataset with provenance and uncertainty, then freeze externally reviewed numeric tolerance rows.",
+    "Implement and review a dedicated Q-032 runtime generator before preparing any clean launch candidate.",
+    "Freeze qualifying decks, observables, windows, sensitivity matrix, decomposition matrix, Frontier registration, and authorization before any execution.",
+    "Run the matched damped-CRSI campaign and obtain external reviewer disposition before changing the claim status."
+  ],
+  "q032_disposition": "source_local_reduced_map_frozen_plotnikov_candidate_launch_blocked_full_q032_open"
+}
