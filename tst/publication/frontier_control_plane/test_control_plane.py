@@ -7597,6 +7597,8 @@ PY
         self.assertEqual(records[-1]["event_type"], "manual_allocation_reconciliation")
         self.assertEqual(records[-1]["accounting_scope"], "manual_direct_srun_accounting_only")
         self.assertIs(records[-1]["scientific_evidence_eligible"], False)
+        self.assertRegex(str(records[-1]["active_policy_sha256"]), r"^[0-9a-f]{64}$")
+        self.assertRegex(str(records[-1]["active_promotion_sha256"]), r"^[0-9a-f]{64}$")
         self.assertAlmostEqual(
             accounting(records)["cumulative_consumed_node_hours"], 12.0 / 3600.0
         )

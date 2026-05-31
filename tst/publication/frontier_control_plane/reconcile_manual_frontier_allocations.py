@@ -218,6 +218,8 @@ def _event_payload(
     project_home_authorization_path: Path,
     authorization_sha256: str,
     control_plane_version: str,
+    active_policy_sha256: str,
+    active_promotion_sha256: str,
     cumulative: float,
 ) -> dict[str, object]:
     allocated_nodes = int(scheduler["allocated_nodes"])
@@ -236,6 +238,8 @@ def _event_payload(
         "manual_accounting_authorization_sha256": authorization_sha256,
         "accounting_scope": MANUAL_ACCOUNTING_SCOPE,
         "scientific_evidence_eligible": False,
+        "active_policy_sha256": active_policy_sha256,
+        "active_promotion_sha256": active_promotion_sha256,
         "partition": scheduler["partition"],
         "qos": scheduler["qos"],
         "scheduler_reported_allocated_nodes": allocated_nodes,
@@ -297,7 +301,7 @@ def reconcile_manual_allocations(
             authorized_project_home_root=authorized_project_home_root,
         )
         version = str(inventory["version"])
-        policy, _ = require_storage_policy_unlock_snapshot(
+        policy, policy_snapshot = require_storage_policy_unlock_snapshot(
             control_plane_version=version,
             authorized_pic_root=authorized_pic_root,
             authorized_project_home_root=authorized_project_home_root,
@@ -384,6 +388,8 @@ def reconcile_manual_allocations(
                 project_home_authorization_path=project_home_authorization,
                 authorization_sha256=authorization_sha256,
                 control_plane_version=version,
+                active_policy_sha256=policy_snapshot["active_policy_sha256"],
+                active_promotion_sha256=policy_snapshot["active_promotion_sha256"],
                 cumulative=cumulative,
             )
             if index < len(existing):
