@@ -167,6 +167,15 @@ qualify any scientific claim by itself.
   serial Debug and UBSan six-transition coupled PIC/MHD reflecting/outflow
   lifetime stress with stable tags, ownership movement, root-level migration
   and reflection evidence. Multi-rank MPI, HIP and ASan follow-up remain open.
+- `q009_coupled_inflow_lifetime_bounded_local_2026-05-30.json`: preserved
+  fail-closed coupled PIC/MHD x2-inflow sibling characterization that exposed
+  an uninitialized MHD inflow reservoir, restart scratch leak and particle
+  MeshBlock-offset overflow path.
+- `q009_coupled_inflow_lifetime_repaired_bounded_local_2026-05-30.json`:
+  successor bounded serial Debug and host ASan/UBSan x2-inflow repair replay
+  with advancing six-transition AMR lifetime, stable tags, ownership movement
+  and reflection evidence. Multi-rank MPI, HIP and scientific-AMR
+  qualification remain open.
 - `q016_particle_provenance_spectra_local_2026-05-30.json`: bounded serial-host
   schema-7 CR provenance, restart-preservation, MeshBlock-migration and
   independently reconstructed weighted-spectrum evidence.
@@ -178,6 +187,12 @@ qualify any scientific claim by itself.
   species/absolute-level resident-byte and direct particle-view allocated-byte
   snapshot evidence. Synchronized Frontier timings, full peak GPU memory,
   GPU-aware-MPI A/B and scaling remain open.
+- `q017_owned_helper_allocation_high_water_local_2026-05-30.json`: successor
+  bounded serial-host and one-rank MPI-enabled snapshots plus observed
+  rank-local high-water margins for tracked AthenaK-owned particle, boundary
+  and MeshRefinement Kokkos views, including live migration lists and counters.
+  Allocator overhead, runtime caching, total GPU memory, Frontier A/B and
+  multi-rank scaling remain open.
 - `q024_schema6_restart_and_shock_controls_successor_2026-05-30.json`:
   successor bounded serial-host schema-6 restart and parallel-shock
   continuation-control evidence.

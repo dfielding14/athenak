@@ -1,0 +1,109 @@
+{
+  "record_type": "q009_coupled_inflow_lifetime_repaired_bounded_local",
+  "date": "2026-05-30",
+  "gate": "Q-009",
+  "qualification_effect": "bounded_local_repair_evidence_only",
+  "predecessor_blocker": {
+    "path": "tst/publication/readiness/q009_coupled_inflow_lifetime_bounded_local_2026-05-30.json",
+    "sha256": "48cb66be4a04d2165f08c67bbc620d47e45e64f2c46facfb7ee4770da744b8b7",
+    "preserved_as_immutable_chronology": true
+  },
+  "scope": "Successor bounded-local serial-host repair evidence for the Q-009 coupled PIC/MHD x2-inflow sibling. The selected cell-centered coupled path now initializes the linear-wave MHD background inflow reservoir on initial launch and restart, restart scratch buffers no longer leak, and particle MeshBlock offset conversion rejects non-finite or more-distant values before casting. This is not MPI, HIP or scientific-AMR qualification evidence.",
+  "production_repairs": [
+    {
+      "path": "src/pgen/tests/linear_wave.cpp",
+      "sha256": "ba5c9cea00cb05ad3a27ba2c1eab7181102e48777c952b10f43b3ae7fa4169fe",
+      "effect": "initialize configured MHD inflow faces from the linear-wave background before the restart early return; fill energy only for ideal EOS"
+    },
+    {
+      "path": "src/pgen/pgen.cpp",
+      "sha256": "52626e73007c7d16aa6afe30b26650966de19601afac6eabbff232105ae8ebee",
+      "effect": "replace restart RNG and variable-size heap scratch buffers with fixed-size stack storage"
+    },
+    {
+      "path": "src/bvals/bvals_part.cpp",
+      "sha256": "7ed83f573cf9ff260249b68cc2b76ab0ccd143a77a7bb2036fbf72d0442764ce",
+      "effect": "return a destruction sentinel for non-finite or more-distant particle MeshBlock offsets before converting to int"
+    }
+  ],
+  "inflow_sibling": {
+    "input": {
+      "path": "inputs/tests/pic_q009_coupled_inflow_lifetime.athinput",
+      "sha256": "6ae0c7418ef47e12ff488824bd602a579fd0aa11256db74c22c0110a8744b2b9"
+    },
+    "historical_characterization_harness": {
+      "path": "tst/scripts/particles/pic_q009_coupled_inflow_lifetime.py",
+      "sha256": "7cbeabc40c26e0773cd3d08222b594fcae40b6f01254b28eb92a2d5a477ca682"
+    },
+    "repaired_successor_harness": {
+      "path": "tst/scripts/particles/pic_q009_coupled_inflow_lifetime_repaired.py",
+      "sha256": "39e8067808b81ed38a3c69b6b6ca3e6ff86fc27edc9a3ed7bc74ed069f0deaf3"
+    },
+    "supported_physical_boundaries": {
+      "x1": "reflect",
+      "x2": "inflow",
+      "x3": "periodic"
+    },
+    "particle_moment_inflow_contract": "zero_valued_moment_ghosts"
+  },
+  "debug_serial_replay": {
+    "executable": "/tmp/athenak-pic-local-prereq-debug-20260530/src/athena",
+    "command": "cd tst && PYTHONDONTWRITEBYTECODE=1 ATHENA_Q009_COUPLED_INFLOW_EXE_DIR=/tmp/athenak-pic-local-prereq-debug-20260530/src python3 -B -m scripts.particles.pic_q009_coupled_inflow_lifetime_repaired",
+    "result": "pass",
+    "runtime_identity_stable": true,
+    "restart_schema": 7,
+    "restart_continuations": 5,
+    "stage_times": [
+      0.0277917,
+      0.0542192,
+      0.0798879,
+      0.104433,
+      0.128778,
+      0.151974
+    ],
+    "meshblocks": [
+      8,
+      2,
+      8,
+      2,
+      8,
+      2
+    ],
+    "finite_mesh_state": true,
+    "particle_counts": [
+      64,
+      64,
+      64,
+      64,
+      64,
+      64,
+      64
+    ],
+    "ownership_changes_per_transition": [
+      56,
+      55,
+      57,
+      56,
+      59,
+      59
+    ],
+    "reflection_observed": true
+  },
+  "fresh_host_gnu_asan_ubsan_replay": {
+    "build_directory": "/tmp/athenak-pic-q009-coupled-inflow-asan-gnu-direct-20260530",
+    "compiler": "/usr/bin/g++-13 GNU 13.3.1",
+    "build_command": "cmake --build /tmp/athenak-pic-q009-coupled-inflow-asan-gnu-direct-20260530 -j8",
+    "archived_reflect_outflow_command": "cd tst && ASAN_OPTIONS='detect_leaks=1:halt_on_error=1' UBSAN_OPTIONS='halt_on_error=1:print_stacktrace=1' PYTHONDONTWRITEBYTECODE=1 ATHENA_Q009_COUPLED_BOUNDARY_EXE_DIR=/tmp/athenak-pic-q009-coupled-inflow-asan-gnu-direct-20260530/src python3 -B -m scripts.particles.pic_q009_coupled_boundary_lifetime",
+    "archived_reflect_outflow_result": "pass",
+    "repaired_inflow_command": "cd tst && ASAN_OPTIONS='detect_leaks=1:halt_on_error=1' UBSAN_OPTIONS='halt_on_error=1:print_stacktrace=1' PYTHONDONTWRITEBYTECODE=1 ATHENA_Q009_COUPLED_INFLOW_EXE_DIR=/tmp/athenak-pic-q009-coupled-inflow-asan-gnu-direct-20260530/src python3 -B -m scripts.particles.pic_q009_coupled_inflow_lifetime_repaired",
+    "repaired_inflow_result": "pass",
+    "leaksanitizer_reported_errors": 0,
+    "ubsan_reported_errors": 0
+  },
+  "remaining_q009_gaps": [
+    "Multi-rank MPI migration, load-balance and restart lifetime coverage remains open.",
+    "HIP lifetime coverage remains open.",
+    "Scientific AMR qualification for paper campaigns remains open."
+  ],
+  "q009_disposition": "bounded_local_coupled_inflow_restart_and_host_asan_ubsan_repair_pass_with_mpi_hip_and_scientific_amr_open"
+}

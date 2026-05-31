@@ -74,7 +74,13 @@ bool IsPeriodicParticleBoundary(const BoundaryFlag flag) {
 
 KOKKOS_INLINE_FUNCTION
 int ParticleMeshBlockOffset(const Real x, const Real xmin, const Real block_length) {
-  return static_cast<int>(floor((x - xmin + block_length)/block_length)) - 1;
+  const Real shifted_offset = floor((x - xmin + block_length)/block_length);
+  // Callers only route particles in this block or an immediate neighbor.  Return a
+  // destruction sentinel before casting a non-finite or more distant offset to int.
+  if (!(shifted_offset >= 0.0 && shifted_offset <= 2.0)) {
+    return (shifted_offset > 2.0) ? 2 : -2;
+  }
+  return static_cast<int>(shifted_offset) - 1;
 }
 
 template <typename NeighborViewType>
@@ -144,6 +150,8 @@ TaskStatus ParticlesBoundaryValues::SetNewPrtclGID() {
 
   Kokkos::realloc(sendlist, static_cast<int>(npart));
   Kokkos::realloc(destroylist, static_cast<int>(npart));
+  pmy_part->ObserveQ017OwnedKokkosViewAllocationBytes(
+      static_cast<std::uint64_t>(atom_count.span() + atom_d_count.span()) * sizeof(int));
 
   par_for("part_update",DevExeSpace(),0,(npart-1), KOKKOS_LAMBDA(const int p) {
     int m = pi(PGID,p) - gids;

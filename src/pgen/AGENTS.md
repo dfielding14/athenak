@@ -167,6 +167,10 @@ These are the only problems selectable with `problem/pgen_name` when
   edges (`i==ie`, `j==je`, `k==ke`).
 - Restart behavior: `UserProblem(..., true)` is called after restart read; most
   pgens early-return to avoid reinitializing state but still re-enroll callbacks.
+- Built-in `linear_wave` also reconstructs its constant MHD background inflow
+  reservoir before the restart early return. The reservoir is derived boundary
+  state, not a replacement for restart-loaded mesh variables; ideal-EOS energy
+  is filled only when the selected EOS carries an energy variable.
 - Coupled PIC restart section: when `couple_moments_to_mhd=true` and
   `deposit_moments=true`, `pgen.cpp` restores particle real/int arrays, moments,
   and optional edge-current state from the PR3a section for both single-file and

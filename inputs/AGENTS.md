@@ -157,6 +157,12 @@ Format rules are enforced by `src/parameter_input.cpp`:
     alternates six AMR transitions through restart continuations and verifies
     stable particle identity plus refreshed ownership. It is not MPI, HIP or
     scientific-AMR qualification.
+- `inputs/tests/pic_q009_coupled_inflow_lifetime.athinput`
+  - Bounded serial-host coupled PIC/MHD x2-inflow sibling for repeated
+    refine/derefine lifetime replay through restart. It exercises the
+    linear-wave MHD background inflow reservoir and cell-centered
+    zero-valued-moment-ghost contract. It is not MPI, HIP or scientific-AMR
+    qualification.
 - Passive-mode guard overrides used by regressions:
   - `particles/pic_background_mode = coupled|passive_mhd|no_mhd`
   - `particles/pic_feedback_mode = test_particle`

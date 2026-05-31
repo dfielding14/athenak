@@ -9,6 +9,7 @@
   "changed_files": [
     "src/bvals/bvals.hpp",
     "src/bvals/bvals.cpp",
+    "src/bvals/bvals_part.cpp",
     "src/mesh/mesh_refinement.hpp",
     "src/mesh/load_balance.cpp",
     "src/particles/particles.hpp",
@@ -26,7 +27,7 @@
     ],
     "tracked_storage": [
       "Particles direct device-view spans",
-      "ParticlesBoundaryValues migration send, destroy, and MPI buffer device-view spans",
+      "ParticlesBoundaryValues migration send, destroy, and MPI buffer device-view spans plus temporary device counters while live",
       "MeshBoundaryValues moment and edge-current boundary device-view spans",
       "MeshRefinement interpolation, AMR/load-balance, and particle-redistribution device-view spans",
       "MeshRefinement particle-remapping transient device-view spans while they remain observable in CreateParticleLists"
@@ -38,7 +39,7 @@
       "a temporally concurrent aggregate multi-rank peak"
     ],
     "rank_semantics": "allocated_snapshot_bytes_total is a final concurrent rank sum. allocated_high_water_bytes_rank_sum is the sum of independent rank-local high-water marks and is deliberately not named total or peak.",
-    "sampling_semantics": "High-water samples are taken after owned particle migration helper calls, after owned AMR/load-balance persistent reallocations, after particle-array growth during AMR redistribution, and while CreateParticleLists transient device views remain alive. Final output also compares against the current tracked snapshot."
+    "sampling_semantics": "High-water samples are taken while particle migration send and destroy lists plus temporary counters remain live, after owned particle migration helper calls, after owned AMR/load-balance persistent reallocations, after particle-array growth during AMR redistribution, and while CreateParticleLists transient device views remain alive. Final output also compares against the current tracked snapshot."
   },
   "focused_runtime_measurements": [
     {

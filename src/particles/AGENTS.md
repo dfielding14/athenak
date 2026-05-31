@@ -355,10 +355,14 @@ In coupled mode, moment wrappers are also inserted into `stagen` on stage 1:
   counts onto the mesh.
 - Final Q-017 stdout telemetry reports wrapper-boundary `adaptive_deltaf`,
   `push`, `deposition`, and `migration` elapsed timers, fixed-record resident
-  bytes by species and absolute logical mesh-refinement level, and a direct
-  particle-view allocated-byte snapshot. The direct-view snapshot includes
-  view padding but excludes boundary, moment-boundary, AMR, and load-balance
-  helper buffers; it is not a peak GPU-memory measurement.
+  bytes by species and absolute logical mesh-refinement level, a direct
+  particle-view allocated-byte snapshot, and tracked AthenaK-owned Kokkos-view
+  final snapshots plus rank-local high-water marks. Tracked high-water samples
+  include particle migration lists and counters while live, moment-boundary
+  helpers, and visible MeshRefinement helpers. They include view padding but
+  exclude allocator overhead, runtime caching, untracked subsystems and any
+  temporally concurrent aggregate multi-rank peak; they are not total
+  GPU-memory measurements.
 - Set `<particles>/pic_q017_sync_kernel_timers=true` only for dedicated timing
   runs. It fences measured particle boundaries so device elapsed times are
   interpretable, but the synchronization intentionally perturbs execution.

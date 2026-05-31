@@ -98,6 +98,54 @@ Real A3(const Real x1, const Real x2, const Real x3, const LinWaveVariables lw) 
 
   return Az*lw.cos_a2;
 }
+
+//----------------------------------------------------------------------------------------
+//! \fn void InitializeMHDInflowReservoir()
+//! \brief Fill configured MHD inflow faces with the linear-wave background state.
+
+void InitializeMHDInflowReservoir(MeshBlockPack *pmbp, const LinWaveVariables &lwv) {
+  if (pmbp->pmhd == nullptr) return;
+
+  auto &eos = pmbp->pmhd->peos->eos_data;
+  auto &u_in = pmbp->pmhd->pbval_u->u_in;
+  auto &b_in = pmbp->pmhd->pbval_b->b_in;
+  const Real vx = lwv.v1_0*lwv.cos_a2*lwv.cos_a3;
+  const Real vy = lwv.v1_0*lwv.cos_a2*lwv.sin_a3;
+  const Real vz = lwv.v1_0*lwv.sin_a2;
+  const Real bx = lwv.b1_0*lwv.cos_a2*lwv.cos_a3
+                - lwv.b2_0*lwv.sin_a3
+                - lwv.b3_0*lwv.sin_a2*lwv.cos_a3;
+  const Real by = lwv.b1_0*lwv.cos_a2*lwv.sin_a3
+                + lwv.b2_0*lwv.cos_a3
+                - lwv.b3_0*lwv.sin_a2*lwv.sin_a3;
+  const Real bz = lwv.b1_0*lwv.sin_a2 + lwv.b3_0*lwv.cos_a2;
+  Real e0 = 0.0;
+  if (eos.is_ideal) {
+    const Real p0 = 1.0/eos.gamma;
+    e0 = p0/(eos.gamma - 1.0)
+       + 0.5*lwv.d0*(SQR(vx) + SQR(vy) + SQR(vz))
+       + 0.5*(SQR(bx) + SQR(by) + SQR(bz));
+  }
+  bool modified = false;
+  for (int face = 0; face < 6; ++face) {
+    if (pmbp->pmesh->mesh_bcs[face] != BoundaryFlag::inflow) continue;
+    u_in.h_view(IDN, face) = lwv.d0;
+    u_in.h_view(IM1, face) = lwv.d0*vx;
+    u_in.h_view(IM2, face) = lwv.d0*vy;
+    u_in.h_view(IM3, face) = lwv.d0*vz;
+    if (eos.is_ideal) u_in.h_view(IEN, face) = e0;
+    b_in.h_view(IBX, face) = bx;
+    b_in.h_view(IBY, face) = by;
+    b_in.h_view(IBZ, face) = bz;
+    modified = true;
+  }
+  if (modified) {
+    u_in.template modify<HostMemSpace>();
+    u_in.template sync<DevExeSpace>();
+    b_in.template modify<HostMemSpace>();
+    b_in.template sync<DevExeSpace>();
+  }
+}
 } // end anonymous namespace
 
 //----------------------------------------------------------------------------------------
@@ -107,7 +155,6 @@ Real A3(const Real x1, const Real x2, const Real x3, const LinWaveVariables lw) 
 void ProblemGenerator::LinearWave(ParameterInput *pin, const bool restart) {
   // set linear wave errors function
   pgen_final_func = LinearWaveErrors;
-  if (restart) return;
 
   // read global parameters
   int wave_flag = pin->GetInteger("problem", "wave_flag");
@@ -201,6 +248,8 @@ void ProblemGenerator::LinearWave(ParameterInput *pin, const bool restart) {
   int &js = indcs.js; int &je = indcs.je;
   int &ks = indcs.ks; int &ke = indcs.ke;
   MeshBlockPack *pmbp = pmy_mesh_->pmb_pack;
+  InitializeMHDInflowReservoir(pmbp, lwv);
+  if (restart) return;
   auto &size = pmbp->pmb->mb_size;
 
   // initialize Hydro variables ----------------------------------------------------------
