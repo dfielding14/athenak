@@ -1,0 +1,92 @@
+{
+  "record_type": "q016_particle_provenance_spectra_mpi2_orion_local",
+  "date": "2026-05-30",
+  "gate": "Q-016",
+  "qualification_effect": "bounded_controlled_orion_host_mpi_decomposition_evidence_only",
+  "scope": "Controlled two-rank, one-node MPI execution of the bounded Q-016 provenance, restart, MeshBlock-migration and independently reconstructed weighted-spectrum harness from the user-authorized Orion shared build root. This is not registered clean-candidate Frontier HIP evidence, repeated-AMR MPI/HIP lifetime evidence or preregistered shock-campaign qualification.",
+  "orion_shared_build": {
+    "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/local-readiness/q016-mpi-shared-20260530",
+    "executable": "/lustre/orion/ast207/proj-shared/dfielding/PIC/local-readiness/q016-mpi-shared-20260530/src/athena",
+    "executable_sha256": "22678a344aa736aecb312d5947b2211506f313eb203c0f05ccc62a03a9e809ed",
+    "configuration": {
+      "problem_generator": "built_in_pgens",
+      "floating_point_precision": "double",
+      "mpi_parallelism": "ON",
+      "openmp_parallelism": "OFF"
+    }
+  },
+  "source_local_bindings": {
+    "inputs/tests/pic_q016_particle_provenance.athinput": "f1a284922beea1fa04eb2f09b49dfea208f91bae247e6a961e78213857cf7235",
+    "tst/scripts/particles/pic_q016_particle_provenance.py": "2d7997df1dd4ce65c9be1c22ec9b88184781e4b134a823f26466227fa210eb5e",
+    "tst/publication/readiness/q016_particle_provenance_spectra_local_2026-05-30.json": "094f2dea4869ab1abea415a7fda1080f5b4e47a89ba64994b53864dec6241366"
+  },
+  "validated_replay": {
+    "command": "cd tst && PYTHONDONTWRITEBYTECODE=1 ATHENA_Q016_EXE_DIR=/lustre/orion/ast207/proj-shared/dfielding/PIC/local-readiness/q016-mpi-shared-20260530/src ATHENA_Q016_NPROC=2 ATHENA_Q016_LAUNCHER='srun -A ast207 -N 1 -t 00:05:00 --cpu-bind=cores' python3 -B -c 'from scripts.particles import pic_q016_particle_provenance as q; q.run(); ok=q.analyze(); print(\"Q016_ANALYZE_OK\", ok); raise SystemExit(0 if ok else 1)'",
+    "configured_ranks": 2,
+    "jobs": [
+      {
+        "job_id": "4746341",
+        "state": "COMPLETED",
+        "elapsed_seconds": 8,
+        "allocated_nodes": 1,
+        "tasks": 2,
+        "stage": "uninterrupted"
+      },
+      {
+        "job_id": "4746342",
+        "state": "COMPLETED",
+        "elapsed_seconds": 8,
+        "allocated_nodes": 1,
+        "tasks": 2,
+        "stage": "restart_segment"
+      },
+      {
+        "job_id": "4746343",
+        "state": "COMPLETED",
+        "elapsed_seconds": 4,
+        "allocated_nodes": 1,
+        "tasks": 2,
+        "stage": "restart_continuation"
+      }
+    ],
+    "allocated_node_hours": 0.005555555555555556,
+    "analyzer_result": "pass"
+  },
+  "manual_scheduler_chronology": {
+    "accounting_boundary": "These direct srun allocations are recorded locally as a controlled prerequisite deviation and were not inserted into the immutable installed-control-plane ledger.",
+    "failed_tmp_mount_probe": {
+      "job_id": "4746332",
+      "state": "FAILED",
+      "elapsed_seconds": 5,
+      "allocated_nodes": 1,
+      "cause": "The login-node /tmp build root was unavailable on the compute node; no Athena scientific execution occurred."
+    },
+    "shared_root_dry_sequence": [
+      {
+        "job_id": "4746335",
+        "state": "COMPLETED",
+        "elapsed_seconds": 5,
+        "allocated_nodes": 1
+      },
+      {
+        "job_id": "4746336",
+        "state": "COMPLETED",
+        "elapsed_seconds": 7,
+        "allocated_nodes": 1
+      },
+      {
+        "job_id": "4746337",
+        "state": "COMPLETED",
+        "elapsed_seconds": 3,
+        "allocated_nodes": 1
+      }
+    ],
+    "shared_root_dry_sequence_disposition": "The three harness stages completed, but the wrapper called a nonexistent private summary helper before invoking the public analyzer. Preserve as non-qualifying chronology.",
+    "all_manual_q016_allocated_node_hours": 0.011111111111111112
+  },
+  "remaining_q016_gaps": [
+    "Registered clean-candidate Frontier HIP parity remains open.",
+    "Repeated-AMR MPI/HIP lifetime coverage beyond the bounded Q-009 serial successor remains open.",
+    "Preregistered qualifying shock-campaign evidence remains open."
+  ]
+}
