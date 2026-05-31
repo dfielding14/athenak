@@ -1441,6 +1441,10 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm) :
     PICParallelShock(pin, false);
   } else if (pgen_fun_name.compare("q006_paper_multispecies_oscillation") == 0) {
     Q006PaperMultispeciesOscillation(pin, false);
+  } else if (
+      pgen_fun_name.compare("q006_paper_multispecies_oscillation_runtime_local")
+      == 0) {
+    Q006PaperMultispeciesOscillationRuntimeLocal(pin, false);
   } else if (pgen_fun_name.compare("q007_paper_crsi_linear_preparation") == 0) {
     Q007PaperCRSILinearPreparation(pin, false);
   } else if (pgen_fun_name.compare("q007_paper_crpai_linear_preparation") == 0) {
@@ -2087,6 +2091,10 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
     PICParallelShock(pin, true);
   } else if (pgen_fun_name.compare("q006_paper_multispecies_oscillation") == 0) {
     Q006PaperMultispeciesOscillation(pin, true);
+  } else if (
+      pgen_fun_name.compare("q006_paper_multispecies_oscillation_runtime_local")
+      == 0) {
+    Q006PaperMultispeciesOscillationRuntimeLocal(pin, true);
   } else if (pgen_fun_name.compare("q007_paper_crsi_linear_preparation") == 0) {
     Q007PaperCRSILinearPreparation(pin, true);
   } else if (pgen_fun_name.compare("q007_paper_crpai_linear_preparation") == 0) {

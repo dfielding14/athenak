@@ -1,7 +1,7 @@
 # AthenaXXX input file for Q008 Appendix-A CPAW history preparation
 
 <comment>
-problem   = Q008 bounded serial-host exponential expanding-box CPAW history preparation
+problem   = Q008 bounded serial-host expanding-box CPAW history preparation
 
 <job>
 basename  = pic_mhd_expanding_box_cpaw_history_preparation

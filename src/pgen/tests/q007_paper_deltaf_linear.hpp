@@ -10,10 +10,100 @@
 #define PGEN_TESTS_Q007_PAPER_DELTAF_LINEAR_HPP_
 
 #include <cmath>
+#include <cstdint>
 
 namespace q007_paper_deltaf_linear {
 
 constexpr double kPi = 3.141592653589793238462643383279502884;
+constexpr int kMomentumBinCount = 8;
+constexpr int kParticlesPerCellPerBin = 256;
+constexpr int kWaveModeCount = 8;
+
+KOKKOS_INLINE_FUNCTION
+std::uint64_t SplitMix64(std::uint64_t value) {
+  value += 0x9e3779b97f4a7c15ULL;
+  value = (value ^ (value >> 30))*0xbf58476d1ce4e5b9ULL;
+  value = (value ^ (value >> 27))*0x94d049bb133111ebULL;
+  return value ^ (value >> 31);
+}
+
+KOKKOS_INLINE_FUNCTION
+double Uniform01(const int seed, const int item, const int component) {
+  std::uint64_t key = static_cast<std::uint64_t>(seed);
+  key ^= (static_cast<std::uint64_t>(item + 1))*0xbf58476d1ce4e5b9ULL;
+  key ^= (static_cast<std::uint64_t>(component + 1))*0xd2b74407b1ce6e93ULL;
+  return static_cast<double>(SplitMix64(key) >> 11)*
+         (1.0/9007199254740992.0);
+}
+
+KOKKOS_INLINE_FUNCTION
+double LogBinEdge(const double p0, const int edge) {
+  return (p0/500.0)*std::pow(250000.0,
+                             static_cast<double>(edge)/kMomentumBinCount);
+}
+
+KOKKOS_INLINE_FUNCTION
+double LogBinCenter(const double p0, const int bin) {
+  return std::sqrt(LogBinEdge(p0, bin)*LogBinEdge(p0, bin + 1));
+}
+
+KOKKOS_INLINE_FUNCTION
+double LogBinRawShellWeight(const double p0, const double kappa, const int bin) {
+  const double lower = LogBinEdge(p0, bin);
+  const double upper = LogBinEdge(p0, bin + 1);
+  const double center = LogBinCenter(p0, bin);
+  const double shape = std::pow(1.0 + center*center/(kappa*p0*p0),
+                                -(kappa + 1.0));
+  return (upper*upper*upper - lower*lower*lower)*shape;
+}
+
+KOKKOS_INLINE_FUNCTION
+double LogBinFraction(const double p0, const double kappa, const int bin) {
+  double normalization = 0.0;
+  for (int candidate = 0; candidate < kMomentumBinCount; ++candidate) {
+    normalization += LogBinRawShellWeight(p0, kappa, candidate);
+  }
+  return LogBinRawShellWeight(p0, kappa, bin)/normalization;
+}
+
+KOKKOS_INLINE_FUNCTION
+double WavePhase(const int seed, const int mode, const int direction,
+                 const int polarization) {
+  const int branch = 2*(direction > 0) + (polarization > 0);
+  return 2.0*kPi*Uniform01(seed, mode, branch);
+}
+
+KOKKOS_INLINE_FUNCTION
+double WaveBranchAmplitude(const double amplitude, const int mode) {
+  return amplitude/std::sqrt(static_cast<double>(mode));
+}
+
+KOKKOS_INLINE_FUNCTION
+void FourBranchAlfvenState(const double x1, const double length,
+                           const double amplitude, const int seed,
+                           double &by, double &bz, double &uy, double &uz) {
+  by = 0.0;
+  bz = 0.0;
+  uy = 0.0;
+  uz = 0.0;
+  for (int mode = 1; mode <= kWaveModeCount; ++mode) {
+    const double branch_amplitude = WaveBranchAmplitude(amplitude, mode);
+    const double wave_number = 2.0*kPi*static_cast<double>(mode)/length;
+    for (int direction = -1; direction <= 1; direction += 2) {
+      for (int polarization = -1; polarization <= 1; polarization += 2) {
+        const double phase = wave_number*x1 +
+            WavePhase(seed, mode, direction, polarization);
+        const double branch_by = branch_amplitude*std::cos(phase);
+        const double branch_bz =
+            polarization*branch_amplitude*std::sin(phase);
+        by += branch_by;
+        bz += branch_bz;
+        uy -= direction*branch_by;
+        uz -= direction*branch_bz;
+      }
+    }
+  }
+}
 
 inline double KappaNormalization(const double number_density, const double p0,
                                  const double kappa) {

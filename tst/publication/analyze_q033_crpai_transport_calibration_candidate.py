@@ -33,7 +33,7 @@ SPECTRUM_K_GRID = (1.0, 2.0, 3.0)
 
 _SOURCE_BINDINGS = {
     "src/particles/particles.cpp":
-        "83bc366df553a70fc1470f9ed461dc98e8d7506fb9327d4b5d5abb97484f1637",
+        "4b88b1b0a0d83aed824f2af6f2fb77fc5793cdeb9b0e2d65d408535f22e45c44",
     "src/particles/particles.hpp":
         "452e6091ad6f1ce50156c770d304ac36020cb53927cc1e40ba6af73e7c3bb462",
     "src/particles/particles_tasks.cpp":
@@ -47,7 +47,7 @@ _SOURCE_BINDINGS = {
     "src/mhd/mhd_tasks.cpp":
         "339326c2cc8913c321affeafc618a8fea6cbd9133ea6b26a9b58daa2baafa6d2",
     "docs/source/engineering/pic_mhd_model_contract.md":
-        "ebad2e21725ea15eb301e03f32d8ca8fab9c6503aec90cd7090be4637402ed64",
+        "de319a56b34a6be33a41e9da3719d9a06a7646a1ff26748900d746d1b167bf80",
 }
 _SOURCE_REQUIRED_SNIPPETS = {
     "src/particles/particles.cpp": (

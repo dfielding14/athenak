@@ -7,6 +7,14 @@ import scripts.utils.athena as athena
 logger = logging.getLogger('athena' + __name__[7:])
 
 _INPUT_DECK = 'tests/pic_parser_contract_guards.athinput'
+_Q006_RUNTIME_LOCAL_INPUT_DECK = (
+    'tests/pic_q006_paper_multispecies_oscillation_uniform_runtime_local.athinput'
+)
+_Q006_RUNTIME_LOCAL_CASES = {
+    'paper_mhd_pic_isothermal_fullf_momentum_only',
+    'paper_mhd_pic_isothermal_rejects_energy_feedback',
+    'paper_mhd_pic_isothermal_fullf_rejects_non_q006_generator',
+}
 _RESULTS = {}
 
 _PAPER_TEST_PARTICLE = [
@@ -51,6 +59,11 @@ _POSITIVE_CASES = [
     ('extended_mhd_pic', [], ['physical_mode=extended_mhd_pic']),
     ('paper_mhd_pic',
      ['particles/pic_physical_mode=paper_mhd_pic'],
+     ['physical_mode=paper_mhd_pic']),
+    ('paper_mhd_pic_isothermal_fullf_momentum_only',
+     ['particles/pic_physical_mode=paper_mhd_pic',
+      'mhd/eos=isothermal',
+      'particles/couple_moments_energy_to_mhd=false'],
      ['physical_mode=paper_mhd_pic']),
     ('paper_test_particle',
      _PAPER_TEST_PARTICLE,
@@ -119,7 +132,28 @@ _REJECTION_CASES = [
       'particles/couple_moments_momentum_to_mhd=false'],
      '<particles>/pic_physical_mode=paper_mhd_pic requires coupled MHD '
      'background, coupled feedback, moment deposition, and conservative '
-     'momentum and energy feedback'),
+     'momentum feedback'),
+    ('paper_mhd_pic_isothermal_rejects_energy_feedback',
+     ['particles/pic_physical_mode=paper_mhd_pic',
+      'mhd/eos=isothermal',
+      'particles/couple_moments_energy_to_mhd=true',
+      'particles/couple_moments_energy_coeff=1.0'],
+     '<particles>/couple_moments_energy_to_mhd=true requires <mhd>/eos=ideal'),
+    ('paper_mhd_pic_isothermal_fullf_rejects_non_q006_generator',
+     ['particles/pic_physical_mode=paper_mhd_pic',
+      'mhd/eos=isothermal',
+      'particles/couple_moments_energy_to_mhd=false',
+      'problem/pgen_name=linear_wave'],
+     '<particles>/pic_physical_mode=paper_mhd_pic requires coupled MHD '
+     'background, coupled feedback, moment deposition, and conservative '
+     'momentum feedback'),
+    ('paper_mhd_pic_ideal_fullf_rejects_momentum_only',
+     ['particles/pic_physical_mode=paper_mhd_pic',
+      'particles/couple_moments_energy_to_mhd=false',
+      'particles/couple_moments_energy_coeff=0.0'],
+     '<particles>/pic_physical_mode=paper_mhd_pic requires coupled MHD '
+     'background, coupled feedback, moment deposition, and conservative '
+     'momentum feedback'),
     ('paper_mhd_pic_rejects_direct_ct',
      ['particles/pic_physical_mode=paper_mhd_pic',
       'particles/couple_j_to_efield_representation=edge_staggered',
@@ -217,12 +251,14 @@ def _athena_exe_dir():
     return os.path.join(os.getcwd(), 'build', 'src')
 
 
-def _athena_input_path():
-    return '../../' + athena.athena_rel_path + 'inputs/' + _INPUT_DECK
+def _athena_input_path(label):
+    input_deck = (_Q006_RUNTIME_LOCAL_INPUT_DECK
+                  if label in _Q006_RUNTIME_LOCAL_CASES else _INPUT_DECK)
+    return '../../' + athena.athena_rel_path + 'inputs/' + input_deck
 
 
 def _execute(label, arguments):
-    command = ['./athena', '-i', _athena_input_path(), 'time/nlim=0'] + arguments
+    command = ['./athena', '-i', _athena_input_path(label), 'time/nlim=0'] + arguments
     logger.info('Executing %s: %s', label, ' '.join(command))
     proc = subprocess.run(command, cwd=_athena_exe_dir(),
                           capture_output=True, text=True)

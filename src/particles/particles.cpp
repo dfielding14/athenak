@@ -1253,19 +1253,27 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
     const bool exact_isothermal_deltaf_paper_feedback =
         (pin->GetString("mhd", "eos").compare("isothermal") == 0) &&
         UsesDeltaF() && !couple_moments_energy_to_mhd;
+    const bool exact_isothermal_fullf_paper_feedback =
+        (pin->GetString("mhd", "eos").compare("isothermal") == 0) &&
+        !UsesDeltaF() && !couple_moments_energy_to_mhd &&
+        (pin->GetString("problem", "pgen_name").compare(
+             "q006_paper_multispecies_oscillation_runtime_local") == 0);
     if ((pic_background_mode != PICBackgroundMode::coupled) ||
         (pic_feedback_mode != PICFeedbackMode::coupled) ||
         !deposit_moments || !couple_moments_to_mhd ||
         !couple_moments_momentum_to_mhd ||
         (!couple_moments_energy_to_mhd &&
-         !exact_isothermal_deltaf_paper_feedback)) {
+         !exact_isothermal_deltaf_paper_feedback &&
+         !exact_isothermal_fullf_paper_feedback)) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
                 << "<particles>/pic_physical_mode=paper_mhd_pic requires coupled "
                 << "MHD background, coupled feedback, moment deposition, and "
                 << "conservative momentum feedback. Energy feedback is required "
                 << "for ideal MHD; exact isothermal paper delta-f uses momentum-only "
-                << "feedback with energy feedback disabled." << std::endl;
+                << "feedback with energy feedback disabled. Exact isothermal paper "
+                << "full-f uses the same momentum-only feedback contract only in "
+                << "the Q-006 runtime-local generator." << std::endl;
       std::exit(EXIT_FAILURE);
     }
     if ((couple_j_to_efield_representation ==

@@ -117,6 +117,7 @@ add_executable(
         pgen/tests/orszag_tang.cpp
         pgen/tests/pic_parallel_shock.cpp
         pgen/tests/q006_paper_multispecies_oscillation.cpp
+        pgen/tests/q006_paper_multispecies_oscillation_runtime_local.cpp
         pgen/tests/q007_paper_deltaf_linear.cpp
         pgen/tests/q023_paper_bell_linear.cpp
         pgen/tests/q029_hall_bell_linear.cpp

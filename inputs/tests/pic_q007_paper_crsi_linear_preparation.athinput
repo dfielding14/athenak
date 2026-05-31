@@ -1,6 +1,6 @@
 # Q-007 Sun and Bai Section 5.5.1 CRSI source-local preparation only.
-# This exact-isothermal true-delta-f cycle-zero carrier has eight placeholder
-# particles. It is not the paper loading, runtime evidence, or an authorized deck.
+# This exact-isothermal true-delta-f carrier has bounded source-local weighted
+# loading and a two-cycle serial replay. It is not qualifying runtime evidence.
 
 <comment>
 problem   = Q007 paper CRSI linear true-delta-f source-local preparation
@@ -41,8 +41,8 @@ num_levels = 1
 evolution  = dynamic
 integrator = rk2
 cfl_number = 0.1
-nlim       = 0
-tlim       = 0.0
+nlim       = 2
+tlim       = 1.0
 ndiag      = 1
 
 <mhd>
@@ -57,13 +57,13 @@ general_rel = false
 
 <particles>
 particle_type                     = cosmic_ray
-ppc                               = 0.0625
+ppc                               = 2048.0
 pusher                            = boris_tsc
 nspecies                          = 8
 cr_distribution                   = center
 deposit_moments                   = true
 deposit_order                     = 1
-deposit_qscale                    = 1.0
+deposit_qscale                    = 1.0e-4
 couple_moments_to_mhd             = true
 couple_j_to_efield_coeff          = 1.0
 couple_j_to_efield_representation = cell_centered
@@ -162,16 +162,24 @@ pgen_name = q007_paper_crsi_linear_preparation
 <q007_paper_crsi_linear_preparation>
 campaign_id                           = Q007-PAPER-CRSI-LINEAR-PREPARATION
 section_anchor                        = sun_bai_2023_section_5_5_1_crsi
-deck_role                             = cycle_zero_true_deltaf_parser_and_analytic_mapping_preparation_only
+deck_role                             = bounded_two_cycle_serial_runtime_replay_preparation_only
 qualification_effect                  = none
 frontier_authorization                = not_bound
-runtime_evolution                     = blocked_cycle_zero_only
-physical_loading                      = blocked_missing_paper_log_bin_weighted_loader
-initial_wave_spectrum                 = blocked_missing_random_phase_four_branch_loader
-theory_runtime_comparison             = blocked_missing_runtime_artifacts_and_independent_review
+runtime_evolution                     = admitted_two_cycle_serial_replay_only
+physical_loading                      = implemented_source_local_eight_log_bin_ipwt_quadrature
+initial_wave_spectrum                 = implemented_source_local_deterministic_four_branch_carrier
+theory_runtime_comparison             = q1_q2_oracle_preparation_only_no_growth_fit
 paper_momentum_bin_count              = 8
 paper_particles_per_cell_per_bin      = 256
-source_local_placeholder_particles_total = 8
+source_local_particles_per_cell_total = 2048
+source_local_particles_total          = 262144
+weight_encoding                       = ipwt_macro_multiplicity_equivalent_equal_q_over_mc
+loading_quadrature                     = geometric_center_shell_midpoint_normalized_p0_over_500_to_500_p0
+wave_discrete_normalization            = branch_amplitude_A_over_sqrt_mode
+momentum_seed                          = 700701
+wave_seed                              = 700702
+wave_mode_count                        = 8
+runtime_replay_cycle_limit             = 2
 paper_rho0                            = 1.0
 paper_b0                              = 1.0
 paper_ua                              = 1.0

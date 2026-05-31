@@ -13,7 +13,7 @@ The runtime identity is selected with `<particles>/pic_physical_mode`.
 | --- | --- | --- | --- | --- |
 | `engineering` | Backward-compatible development and proxy tests | Historical velocity slots | Legacy opt-in current-to-CT source remains available | Legacy opt-in policies |
 | `paper_test_particle` | Particle-only analytical tests of paper mechanics | Mass-normalized momentum `p/m` | No CR-current CT source | Disabled |
-| `paper_mhd_pic` | Sun & Bai paper reproduction | Mass-normalized momentum `p/m` | Frozen-in `cE = -u x B`; no CR Hall term | Conservative momentum and kinetic-energy deltas |
+| `paper_mhd_pic` | Sun & Bai paper reproduction | Mass-normalized momentum `p/m` | Frozen-in `cE = -u x B`; no CR Hall term | Conservative momentum and kinetic-energy deltas for ideal MHD; exact-isothermal delta-f and the Q-006 runtime-local full-f carrier use momentum-only feedback |
 | `extended_mhd_pic` | Separately named extensions requiring separate qualification | Mass-normalized momentum `p/m` | Extension-specific, never implied by paper mode | Extension-specific and recorded |
 
 `engineering` is not a paper-reproduction mode. It exists to preserve the
@@ -63,8 +63,12 @@ rotation with the Lorentz factor after the first electric half-kick.
 
 For `paper_mhd_pic`, the MHD induction update remains the ideal-MHD constrained
 transport update. Deposited CR current must not be added directly to the CT
-electric field. After a completed particle push, the gas receives the negative
-of the deposited CR momentum and relativistic kinetic-energy changes.
+electric field. After a completed particle push, an ideal-MHD gas receives the
+negative of the deposited CR momentum and relativistic kinetic-energy changes.
+Exact-isothermal paper delta-f uses momentum-only feedback. The separately
+named `q006_paper_multispecies_oscillation_runtime_local` generator admits the
+same momentum-only contract for its bounded full-f Section 5.3 mechanics
+carrier; other exact-isothermal full-f paper-mode compositions fail closed.
 
 ## Stage Ordering
 

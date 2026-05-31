@@ -71,6 +71,8 @@ class ProblemGenerator {
   void OrszagTang(ParameterInput *pin, const bool restart);
   void PICParallelShock(ParameterInput *pin, const bool restart);
   void Q006PaperMultispeciesOscillation(ParameterInput *pin, const bool restart);
+  void Q006PaperMultispeciesOscillationRuntimeLocal(ParameterInput *pin,
+                                                    const bool restart);
   void Q007PaperCRSILinearPreparation(ParameterInput *pin, const bool restart);
   void Q007PaperCRPAILinearPreparation(ParameterInput *pin, const bool restart);
   void Q023PaperBellLinear(ParameterInput *pin, const bool restart);
