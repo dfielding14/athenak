@@ -9,9 +9,9 @@
   "scope": "Q-011-only bounded local runtime audit of the committed pic_parallel_shock generator. One direct serial host execution on a reduced 8x16x1 uniform 2D3V domain emits an untransported shock-injected particle payload. The analyzer checks actual PVTK provenance, clamped shock-surface x1 placement, monoenergetic relative speed and deterministic bounded full-sphere statistics. This is not exact libstdc++ RNG replay, a paper-shock campaign, physical calibration, AMR qualification, GPU evidence, Frontier evidence, or external-review closure.",
   "artifact_bindings": {
     "inputs/tests/pic_q011_injection_distribution_runtime_local.athinput": "6e84e34a91e48b4933f26ee1c3354e95139ff89ddf75ec1b358a7a7d3c1d1c17",
-    "tst/publication/immutable_orion_tree.py": "b5526ee2b7c4d651469b6bd3cea58ffdbe70feaba30c461aa5fb052fe83e10b0",
-    "tst/publication/analyze_q011_injection_distribution_runtime_local.py": "592ad2fa69ecbf1d8316ab9f5e9be6354d7995150a65ef0cbd3ac6d797a2f007",
-    "tst/publication/test_analyze_q011_injection_distribution_runtime_local.py": "a2496b82997d8431289bcfec6356cf1ec874ff68a034d2c6060fafcf612858d5"
+    "tst/publication/immutable_orion_tree.py": "0d736af4f5bcca36e68afb96e6ffebc3a49971e488364f8b1a084f7e0f6be1b2",
+    "tst/publication/analyze_q011_injection_distribution_runtime_local.py": "d408c39c843355ead0d9662e9800db8695ead7e3e9476099ce9dfd2e26d85d17",
+    "tst/publication/test_analyze_q011_injection_distribution_runtime_local.py": "556bd48e32b2bd4338ac4ffa1524c2a5d0473d4b68d02fab0d4abf0adf1a29d4"
   },
   "committed_generator_binding": {
     "path": "src/pgen/tests/pic_parallel_shock.cpp",

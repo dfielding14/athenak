@@ -99,22 +99,30 @@ class PicQualificationManifestTests(unittest.TestCase):
             ],
             check=True, capture_output=True,
         )
-        prepared = source / "prepared"
-        prepared.mkdir()
-        deck = prepared / "paper.athinput"
+        deck_root = source / "inputs/tests"
+        deck_root.mkdir(parents=True)
+        deck = deck_root / "pic_paper.athinput"
         deck.write_text("<job>\nbasename = prepared-paper\n", encoding="utf-8")
-        analyzer = prepared / "analyze_paper.py"
+        analyzer_root = source / "tst/publication"
+        analyzer_root.mkdir(parents=True)
+        analyzer = analyzer_root / "analyze_paper.py"
         analyzer.write_text("print('prepared analysis')\n", encoding="utf-8")
-        inventory = prepared / "prepared_artifacts.json"
+        inventory = (
+            analyzer_root / "frontier_control_plane/prepared_pic_artifact_inventory.json"
+        )
+        inventory.parent.mkdir()
         inventory.write_text(
             json.dumps(
                 {
                     "schema_version": 1,
                     "paper_decks": [
-                        {"path": "prepared/paper.athinput", "sha256": _sha256(deck)}
+                        {"path": "inputs/tests/pic_paper.athinput", "sha256": _sha256(deck)}
                     ],
                     "analyzers": [
-                        {"path": "prepared/analyze_paper.py", "sha256": _sha256(analyzer)}
+                        {
+                            "path": "tst/publication/analyze_paper.py",
+                            "sha256": _sha256(analyzer),
+                        }
                     ],
                 },
                 indent=2,
@@ -262,13 +270,19 @@ class PicQualificationManifestTests(unittest.TestCase):
             "freeze_id": "03a7bd9a-7d4c-4e37-a12b-46de3817eff2",
             "created_utc": "2026-05-30T12:00:00Z",
             "prepared_artifacts": {
-                "inventory_path": "prepared/prepared_artifacts.json",
+                "inventory_path": (
+                    "tst/publication/frontier_control_plane/"
+                    "prepared_pic_artifact_inventory.json"
+                ),
                 "inventory_sha256": _sha256(inventory),
                 "paper_decks": [
-                    {"path": "prepared/paper.athinput", "sha256": _sha256(deck)}
+                    {"path": "inputs/tests/pic_paper.athinput", "sha256": _sha256(deck)}
                 ],
                 "analyzers": [
-                    {"path": "prepared/analyze_paper.py", "sha256": _sha256(analyzer)}
+                    {
+                        "path": "tst/publication/analyze_paper.py",
+                        "sha256": _sha256(analyzer),
+                    }
                 ],
             },
             "source": {

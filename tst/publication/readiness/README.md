@@ -9,6 +9,11 @@ qualify any scientific claim by itself.
 - `storage_policy.json`: authorized Frontier root, budget cap, Project Home
   ledger mirror, user-selected Orion-only bulk-evidence design, and explicit
   terminal durability-risk disposition.
+- `phase0_curated_candidate_successor_2026-05-31.json`: nonqualifying Phase 0
+  successor-source review record. It separates the still-live paired control
+  plane from the next source generation, binds the complete canonical
+  prepared-artifact closure, and records the remaining install and freeze
+  actions.
 - `claims_registry.json`: stable claim IDs and their initial gate dependencies.
 - `findings_registry.json`: initial implementation and operational findings.
 - `external_artifacts.json`: provenance and redistribution inventory for paper,

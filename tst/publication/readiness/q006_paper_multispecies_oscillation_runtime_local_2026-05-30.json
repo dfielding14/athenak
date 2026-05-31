@@ -12,8 +12,8 @@
     "inputs/tests/pic_q006_paper_multispecies_oscillation_uniform_runtime_local.athinput": "5b8d81aa4914247ba82f065c791d736e7f041ebcb56bc409fd312e17b39f8f01",
     "inputs/tests/pic_q006_paper_multispecies_oscillation_smr_runtime_local.athinput": "ec94c9ac5dddcdfc600e0831b2d6a2a39238b34e42da09203948d1eb3c3fb5eb",
     "inputs/tests/pic_q006_paper_multispecies_oscillation_audited_amr_runtime_local.athinput": "9baa6cad1995c359f86401be2ce69580d9b5292a5959925b9abadb1d4f4b3847",
-    "tst/publication/immutable_orion_tree.py": "b5526ee2b7c4d651469b6bd3cea58ffdbe70feaba30c461aa5fb052fe83e10b0",
-    "tst/publication/analyze_q006_paper_multispecies_oscillation_runtime_local.py": "1a2d9e1206b25dc5bd28e012f3fb524ad84cdf2065184021a3c8a0df28092be5",
+    "tst/publication/immutable_orion_tree.py": "0d736af4f5bcca36e68afb96e6ffebc3a49971e488364f8b1a084f7e0f6be1b2",
+    "tst/publication/analyze_q006_paper_multispecies_oscillation_runtime_local.py": "274197b1fb567d49df8540086e18324fef58fa8eb67214c2a475d05939cf12de",
     "tst/publication/test_analyze_q006_paper_multispecies_oscillation_runtime_local.py": "7d470170fe0f2dc65e6599e4f1fc8584a4b8a893914fda0df62d19839fb33e14"
   },
   "shared_parser_contract": {

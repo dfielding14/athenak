@@ -559,21 +559,30 @@ class SnapshotTests(unittest.TestCase):
         source_root.mkdir()
         subprocess.run(["git", "init", str(source_root)], check=True, capture_output=True)
         (source_root / "tracked.txt").write_text("tracked\n", encoding="utf-8")
-        prepared = source_root / "prepared"
-        prepared.mkdir()
-        deck = prepared / "paper.athinput"
+        deck_root = source_root / "inputs/tests"
+        deck_root.mkdir(parents=True)
+        deck = deck_root / "pic_paper.athinput"
         deck.write_text("<job>\nbasename = prepared-paper\n", encoding="utf-8")
-        analyzer = prepared / "analyze_paper.py"
+        analyzer_root = source_root / "tst/publication"
+        analyzer_root.mkdir(parents=True)
+        analyzer = analyzer_root / "analyze_paper.py"
         analyzer.write_text("print('prepared analysis')\n", encoding="utf-8")
-        (prepared / "prepared_artifacts.json").write_text(
+        inventory = (
+            analyzer_root / "frontier_control_plane/prepared_pic_artifact_inventory.json"
+        )
+        inventory.parent.mkdir()
+        inventory.write_text(
             json.dumps(
                 {
                     "schema_version": 1,
                     "paper_decks": [
-                        {"path": "prepared/paper.athinput", "sha256": sha256(deck)}
+                        {"path": "inputs/tests/pic_paper.athinput", "sha256": sha256(deck)}
                     ],
                     "analyzers": [
-                        {"path": "prepared/analyze_paper.py", "sha256": sha256(analyzer)}
+                        {
+                            "path": "tst/publication/analyze_paper.py",
+                            "sha256": sha256(analyzer),
+                        }
                     ],
                 },
                 indent=2,
@@ -602,7 +611,7 @@ class SnapshotTests(unittest.TestCase):
         return source_root
 
     def _prepared_artifact_inventory(self) -> str:
-        return "prepared/prepared_artifacts.json"
+        return "tst/publication/frontier_control_plane/prepared_pic_artifact_inventory.json"
 
     def _profile_writer_arguments(
         self, source_root: Path, profile_id: str = "test-profile"
@@ -6074,14 +6083,14 @@ PY
                 ),
                 "paper_decks": [
                     {
-                        "path": "prepared/paper.athinput",
-                        "sha256": sha256(source_root / "prepared" / "paper.athinput"),
+                        "path": "inputs/tests/pic_paper.athinput",
+                        "sha256": sha256(source_root / "inputs/tests/pic_paper.athinput"),
                     }
                 ],
                 "analyzers": [
                     {
-                        "path": "prepared/analyze_paper.py",
-                        "sha256": sha256(source_root / "prepared" / "analyze_paper.py"),
+                        "path": "tst/publication/analyze_paper.py",
+                        "sha256": sha256(source_root / "tst/publication/analyze_paper.py"),
                     }
                 ],
             },
@@ -6106,7 +6115,7 @@ PY
         source_root = self._clean_source("missing-prepared-member-source")
         inventory = source_root / self._prepared_artifact_inventory()
         value = json.loads(inventory.read_text(encoding="utf-8"))
-        value["paper_decks"][0]["path"] = "prepared/missing.athinput"
+        value["paper_decks"][0]["path"] = "inputs/tests/pic_missing.athinput"
         inventory.write_text(json.dumps(value), encoding="utf-8")
         subprocess.run(["git", "-C", str(source_root), "add", "."], check=True)
         subprocess.run(
@@ -6135,6 +6144,78 @@ PY
                 build_profile=profile,
                 build_profile_id="test-profile",
                 prepared_artifact_inventory=self._prepared_artifact_inventory(),
+                control_plane_dir=self.control_plane_dir,
+                authorized_pic_root=self.pic_root,
+            )
+
+    def test_clean_candidate_creator_rejects_omitted_eligible_prepared_analyzer(self) -> None:
+        source_root = self._clean_source("omitted-prepared-analyzer-source")
+        omitted = source_root / "tst/publication/analyze_omitted.py"
+        omitted.write_text("print('omitted analysis')\n", encoding="utf-8")
+        subprocess.run(["git", "-C", str(source_root), "add", "."], check=True)
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(source_root),
+                "-c",
+                "user.name=PIC Test",
+                "-c",
+                "user.email=pic-test@example.invalid",
+                "commit",
+                "-m",
+                "add omitted eligible analyzer",
+            ],
+            check=True,
+            capture_output=True,
+        )
+        executable, profile = self._build_profile(
+            source_root, self.pic_root / "omitted-prepared-analyzer-build", "test-profile"
+        )
+        with self.assertRaisesRegex(ValueError, "must exactly cover archived"):
+            create_freeze(
+                source_root=source_root,
+                executable=executable,
+                build_profile=profile,
+                build_profile_id="test-profile",
+                prepared_artifact_inventory=self._prepared_artifact_inventory(),
+                control_plane_dir=self.control_plane_dir,
+                authorized_pic_root=self.pic_root,
+            )
+
+    def test_clean_candidate_creator_rejects_alternate_prepared_inventory_path(self) -> None:
+        source_root = self._clean_source("alternate-prepared-inventory-source")
+        canonical = source_root / self._prepared_artifact_inventory()
+        alternate = source_root / "alternate/prepared_artifacts.json"
+        alternate.parent.mkdir()
+        alternate.write_bytes(canonical.read_bytes())
+        subprocess.run(["git", "-C", str(source_root), "add", "."], check=True)
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(source_root),
+                "-c",
+                "user.name=PIC Test",
+                "-c",
+                "user.email=pic-test@example.invalid",
+                "commit",
+                "-m",
+                "add alternate prepared inventory",
+            ],
+            check=True,
+            capture_output=True,
+        )
+        executable, profile = self._build_profile(
+            source_root, self.pic_root / "alternate-prepared-inventory-build", "test-profile"
+        )
+        with self.assertRaisesRegex(ValueError, "must use the canonical source-relative path"):
+            create_freeze(
+                source_root=source_root,
+                executable=executable,
+                build_profile=profile,
+                build_profile_id="test-profile",
+                prepared_artifact_inventory="alternate/prepared_artifacts.json",
                 control_plane_dir=self.control_plane_dir,
                 authorized_pic_root=self.pic_root,
             )

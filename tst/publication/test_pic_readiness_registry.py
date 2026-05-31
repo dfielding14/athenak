@@ -545,8 +545,17 @@ class PicReadinessRegistryTests(unittest.TestCase):
                 for name in CONTROL_PLANE_FILES
             ]
         )
+        phase0_successor = _load("phase0_curated_candidate_successor_2026-05-31.json")
         self.assertEqual(
-            staged_version, storage["staged_control_plane_candidate_version"]
+            staged_version, phase0_successor["successor_source_control_plane_version"]
+        )
+        self.assertEqual(
+            storage["installed_control_plane_version"],
+            storage["staged_control_plane_candidate_version"],
+        )
+        self.assertNotEqual(
+            staged_version,
+            storage["installed_control_plane_version"],
         )
         successor = _load(
             "q027_frontier_f1_registered_science_successor_candidate_2026-05-30.json"

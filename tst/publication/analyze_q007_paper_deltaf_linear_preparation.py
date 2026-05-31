@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import cmath
+from contextlib import contextmanager
 from functools import lru_cache
 import hashlib
 import json
@@ -21,6 +22,7 @@ from scipy.integrate import quad
 if __package__:
     from .immutable_orion_tree import authorized_tree_root
     from .immutable_orion_tree import freeze_tree as freeze_immutable_tree
+    from .immutable_orion_tree import staged_verified_frozen_tree
     from .immutable_orion_tree import validate_executable_elf
     from .immutable_orion_tree import validate_serial_host_build_evidence
     from .immutable_orion_tree import validate_source_archive
@@ -29,6 +31,7 @@ if __package__:
 else:
     from immutable_orion_tree import authorized_tree_root
     from immutable_orion_tree import freeze_tree as freeze_immutable_tree
+    from immutable_orion_tree import staged_verified_frozen_tree
     from immutable_orion_tree import validate_executable_elf
     from immutable_orion_tree import validate_serial_host_build_evidence
     from immutable_orion_tree import validate_source_archive
@@ -350,6 +353,43 @@ _CASES = {
 
 class ContractError(ValueError):
     """Raised when a bounded Q-007 source-local contract fails closed."""
+
+
+_STAGED_TREES: list[tuple[Path, Path]] = []
+
+
+@contextmanager
+def _use_staged_tree(logical_root: Path, staged_root: Path):
+    """Route retained-tree reads through one descriptor-anchored private snapshot."""
+    record = (logical_root, staged_root)
+    _STAGED_TREES.append(record)
+    try:
+        yield
+    finally:
+        _STAGED_TREES.remove(record)
+
+
+def _tree_io_path(path: Path) -> Path:
+    for logical_root, staged_root in reversed(_STAGED_TREES):
+        try:
+            return staged_root / path.relative_to(logical_root)
+        except ValueError:
+            pass
+        try:
+            path.relative_to(staged_root)
+            return path
+        except ValueError:
+            pass
+    return path
+
+
+def _has_staged_tree(root: Path) -> bool:
+    return any(logical_root == root for logical_root, _ in _STAGED_TREES)
+
+
+def _logical_relative(root: Path, path: Path) -> Path:
+    """Return a retained-tree relative label for a staged or retained path."""
+    return _tree_io_path(path).relative_to(_tree_io_path(root))
 
 
 def parse_athinput(path: Path) -> dict[str, dict[str, str]]:
@@ -1191,16 +1231,18 @@ def _authorized_orion_runtime_root(path: Path) -> Path:
 
 def _contained_regular_file(root: Path, path: Path) -> Path:
     """Require one self-contained regular artifact below its retained root."""
-    status = os.lstat(path)
+    io_root = _tree_io_path(root)
+    io_path = _tree_io_path(path)
+    status = os.lstat(io_path)
     if not stat.S_ISREG(status.st_mode):
         raise ContractError(f"runtime artifact must be regular: {path}")
     if status.st_nlink != 1:
         raise ContractError(f"runtime artifact must have one link: {path}")
-    resolved = path.resolve(strict=True)
-    if resolved != path:
+    resolved = io_path.resolve(strict=True)
+    if resolved != io_path:
         raise ContractError(f"runtime artifact path must be canonical: {path}")
     try:
-        resolved.relative_to(root)
+        resolved.relative_to(io_root)
     except ValueError as error:
         raise ContractError(f"runtime artifact must remain below retained root: {path}") from error
     return resolved
@@ -1247,15 +1289,15 @@ def verify_frozen_runtime_tree(
 ) -> dict[str, Any]:
     """Verify exact payload membership, hashes, and recursive read-only modes."""
     root = _authorized_orion_runtime_root(runtime_root)
-    report = verify_immutable_tree(
+    with staged_verified_frozen_tree(
         root,
         expected_inventory_sha256,
         authorized_root=ORION_PIC_ROOT,
         error_type=ContractError,
         label="Q-007 retained runtime tree",
-    )
-    report["freeze_receipt_sha256"] = _validate_runtime_freeze_receipt(root)
-    return report
+    ) as (report, staged_root), _use_staged_tree(root, staged_root):
+        report["freeze_receipt_sha256"] = _validate_runtime_freeze_receipt(root)
+        return report
 
 
 def _read_mhd_w_bcc(path: Path) -> dict[str, Any]:
@@ -1582,12 +1624,13 @@ def _relative_file_hashes(
     root: Path, subtree: Path, *, excluded: tuple[str, ...] = ()
 ) -> dict[str, str]:
     """Hash every regular payload below one retained subtree."""
-    if not subtree.is_dir():
+    io_subtree = _tree_io_path(subtree)
+    if not io_subtree.is_dir():
         raise ContractError(f"retained payload subtree is missing: {subtree}")
     payload = {}
-    for path in sorted(subtree.rglob("*")):
+    for path in sorted(io_subtree.rglob("*")):
         if path.is_file():
-            relative = path.relative_to(subtree).as_posix()
+            relative = path.relative_to(io_subtree).as_posix()
             if relative not in excluded:
                 payload[relative] = _sha256(_contained_regular_file(root, path))
     return payload
@@ -1595,6 +1638,20 @@ def _relative_file_hashes(
 
 def _validate_pinned_executable_binding(root: Path) -> dict[str, Any]:
     """Validate the immutable source-archived executable used for the replay."""
+    binding_path = _contained_regular_file(root, root / PINNED_EXECUTABLE_BINDING_NAME)
+    initial_binding = json.loads(binding_path.read_text(encoding="utf-8"))
+    initial_pinned_root = _authorized_orion_runtime_root(
+        Path(initial_binding["pinned_executable_root"])
+    )
+    if not _has_staged_tree(initial_pinned_root):
+        with staged_verified_frozen_tree(
+            initial_pinned_root,
+            initial_binding["pinned_executable_root_inventory_sha256"],
+            authorized_root=ORION_PIC_ROOT,
+            error_type=ContractError,
+            label="Q-007 pinned executable tree",
+        ) as (_, staged_root), _use_staged_tree(initial_pinned_root, staged_root):
+            return _validate_pinned_executable_binding(root)
     path = _contained_regular_file(root, root / PINNED_EXECUTABLE_BINDING_NAME)
     binding = json.loads(path.read_text(encoding="utf-8"))
     if (
@@ -1622,13 +1679,6 @@ def _validate_pinned_executable_binding(root: Path) -> dict[str, Any]:
     pinned_root = _authorized_orion_runtime_root(Path(binding["pinned_executable_root"]))
     if binding["pinned_executable_path"] != str(pinned_root / "bin/athena"):
         raise ContractError("Q-007 pinned executable binding path drifted")
-    verify_immutable_tree(
-        pinned_root,
-        binding["pinned_executable_root_inventory_sha256"],
-        authorized_root=ORION_PIC_ROOT,
-        error_type=ContractError,
-        label="Q-007 pinned executable tree",
-    )
     executable = _contained_regular_file(pinned_root, Path(binding["pinned_executable_path"]))
     validate_executable_elf(
         executable,
@@ -1691,15 +1741,16 @@ def _validate_pinned_executable_binding(root: Path) -> dict[str, Any]:
     expected_pin_files = PIN_RETAINED_EVIDENCE | {
         INVENTORY_NAME, FREEZE_RECEIPT_NAME, PIN_PROVENANCE_RECEIPT_NAME, "bin/athena",
     }
+    io_pinned_root = _tree_io_path(pinned_root)
     measured_pin_files = {
-        item.relative_to(pinned_root).as_posix()
-        for item in pinned_root.rglob("*") if item.is_file()
+        item.relative_to(io_pinned_root).as_posix()
+        for item in io_pinned_root.rglob("*") if item.is_file()
     }
     if measured_pin_files != expected_pin_files:
         raise ContractError("Q-007 pinned executable tree file topology drifted")
     measured_pin_directories = {
-        item.relative_to(pinned_root).as_posix()
-        for item in pinned_root.rglob("*") if item.is_dir()
+        item.relative_to(io_pinned_root).as_posix()
+        for item in io_pinned_root.rglob("*") if item.is_dir()
     }
     if measured_pin_directories != {"bin", "build", "runtime", "source"}:
         raise ContractError("Q-007 pinned executable tree directory topology drifted")
@@ -1733,7 +1784,7 @@ def _validate_pinned_executable_binding(root: Path) -> dict[str, Any]:
         label="Q-007 pinned executable archived dependencies",
     )
     validate_serial_host_build_evidence(
-        pinned_root,
+        io_pinned_root,
         error_type=ContractError,
         label="Q-007 pinned executable serial-host build evidence",
     )
@@ -1827,12 +1878,15 @@ def _validate_runtime_invocations(root: Path, pinned: dict[str, Any]) -> dict[st
             raise ContractError(f"{label}: Q-007 retained deck drifted from workspace source")
         validate_deck(deck, expected["case"])
         overrides = expected["overrides"]
-        expected_argv = [executable, "-i", str(deck), *overrides]
+        expected_argv = [executable, "-i", str(expected["deck"]), *overrides]
         if invocation.get("argv") != expected_argv:
             raise ContractError(f"{label}: Q-007 invocation argv drifted")
         if invocation.get("cwd") != str(run):
             raise ContractError(f"{label}: Q-007 invocation cwd drifted")
-        if invocation.get("deck") != {"path": str(deck), "sha256": _sha256(deck)}:
+        if invocation.get("deck") != {
+            "path": str(expected["deck"]),
+            "sha256": _sha256(deck),
+        }:
             raise ContractError(f"{label}: Q-007 invocation deck binding drifted")
         if invocation.get("overrides") != overrides:
             raise ContractError(f"{label}: Q-007 invocation overrides drifted")
@@ -1890,9 +1944,10 @@ def _validate_runtime_tree_topology(root: Path) -> None:
         for cycle in cycles:
             expected.add(f"{label}/bin/{basename}.mhd_w_bcc.{cycle:05d}.bin")
             expected.add(f"{label}/pvtk/{basename}.prtcl_all.{cycle:05d}.part.vtk")
+    io_root = _tree_io_path(root)
     measured = {
-        item.relative_to(root).as_posix()
-        for item in root.rglob("*") if item.is_file()
+        item.relative_to(io_root).as_posix()
+        for item in io_root.rglob("*") if item.is_file()
     }
     if measured != expected:
         raise ContractError("Q-007 retained runtime tree file topology drifted")
@@ -1903,8 +1958,8 @@ def _validate_runtime_tree_topology(root: Path) -> None:
         "negative-crpai-nlim1", "decks",
     }
     measured_directories = {
-        item.relative_to(root).as_posix()
-        for item in root.rglob("*") if item.is_dir()
+        item.relative_to(io_root).as_posix()
+        for item in io_root.rglob("*") if item.is_dir()
     }
     if measured_directories != expected_directories:
         raise ContractError("Q-007 retained runtime tree directory topology drifted")
@@ -1915,7 +1970,21 @@ def extract_runtime_replay(
 ) -> dict[str, Any]:
     """Extract retained startup semantics plus the bounded serial CRSI replay."""
     root = _runtime_replay_tree_root(runtime_root)
-    tree = verify_frozen_runtime_tree(root, expected_inventory_sha256)
+    with staged_verified_frozen_tree(
+        root,
+        expected_inventory_sha256,
+        authorized_root=ORION_PIC_ROOT,
+        error_type=ContractError,
+        label="Q-007 retained runtime tree",
+    ) as (tree, staged_root), _use_staged_tree(root, staged_root):
+        tree["freeze_receipt_sha256"] = _validate_runtime_freeze_receipt(root)
+        return _extract_runtime_replay_from_snapshot(root, tree)
+
+
+def _extract_runtime_replay_from_snapshot(
+    root: Path, tree: dict[str, Any]
+) -> dict[str, Any]:
+    """Analyze one descriptor-anchored private snapshot of the retained replay."""
     pinned = _validate_pinned_executable_binding(root)
     invocations = _validate_runtime_invocations(root, pinned)
     _validate_runtime_tree_topology(root)
@@ -1973,7 +2042,7 @@ def extract_runtime_replay(
         "pinned_executable": pinned,
         "runtime_invocations": invocations,
         "artifacts": {
-            label: {"path": str(path.relative_to(root)), "sha256": _sha256(path)}
+            label: {"path": str(_logical_relative(root, path)), "sha256": _sha256(path)}
             for label, path in paths.items()
         },
         "startup_cases": startup_cases,

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 import hashlib
 import json
 import math
@@ -19,6 +20,7 @@ import numpy as np
 if __package__:
     from .immutable_orion_tree import authorized_tree_root
     from .immutable_orion_tree import freeze_tree as freeze_immutable_tree
+    from .immutable_orion_tree import staged_verified_frozen_tree
     from .immutable_orion_tree import validate_executable_elf
     from .immutable_orion_tree import validate_serial_host_build_evidence
     from .immutable_orion_tree import validate_source_archive
@@ -28,6 +30,7 @@ if __package__:
 else:
     from immutable_orion_tree import authorized_tree_root
     from immutable_orion_tree import freeze_tree as freeze_immutable_tree
+    from immutable_orion_tree import staged_verified_frozen_tree
     from immutable_orion_tree import validate_executable_elf
     from immutable_orion_tree import validate_serial_host_build_evidence
     from immutable_orion_tree import validate_source_archive
@@ -344,6 +347,53 @@ class AuditError(ValueError):
     """Raised when a bounded Q-006 runtime-local contract fails closed."""
 
 
+_STAGED_TREES: list[tuple[Path, Path]] = []
+
+
+@contextmanager
+def _use_staged_tree(logical_root: Path, staged_root: Path):
+    """Route retained-tree reads through one descriptor-anchored private snapshot."""
+    record = (logical_root, staged_root)
+    _STAGED_TREES.append(record)
+    try:
+        yield
+    finally:
+        _STAGED_TREES.remove(record)
+
+
+def _tree_io_path(path: Path) -> Path:
+    for logical_root, staged_root in reversed(_STAGED_TREES):
+        try:
+            return staged_root / path.relative_to(logical_root)
+        except ValueError:
+            pass
+        try:
+            path.relative_to(staged_root)
+            return path
+        except ValueError:
+            pass
+    return path
+
+
+def _has_staged_tree(root: Path) -> bool:
+    return any(logical_root == root for logical_root, _ in _STAGED_TREES)
+
+
+def _restore_logical_paths(value: Any) -> Any:
+    """Restore Orion path labels after parsing private staged bytes."""
+    if isinstance(value, dict):
+        return {key: _restore_logical_paths(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_restore_logical_paths(item) for item in value]
+    if isinstance(value, str):
+        for logical_root, staged_root in reversed(_STAGED_TREES):
+            try:
+                return str(logical_root / Path(value).relative_to(staged_root))
+            except ValueError:
+                pass
+    return value
+
+
 def _require(condition: bool, message: str) -> None:
     if not condition:
         raise AuditError(message)
@@ -632,13 +682,15 @@ def _read_pvtk_execution_metadata(path: Path) -> dict[str, Any]:
 
 def _contained_regular_file(root: Path, path: Path) -> Path:
     """Require one self-contained regular artifact below its retained root."""
-    status = os.lstat(path)
+    io_root = _tree_io_path(root)
+    io_path = _tree_io_path(path)
+    status = os.lstat(io_path)
     _require(stat.S_ISREG(status.st_mode), f"runtime artifact must be regular: {path}")
     _require(status.st_nlink == 1, f"runtime artifact must have one link: {path}")
-    resolved = path.resolve(strict=True)
-    _require(resolved == path, f"runtime artifact path must be canonical: {path}")
+    resolved = io_path.resolve(strict=True)
+    _require(resolved == io_path, f"runtime artifact path must be canonical: {path}")
     try:
-        resolved.relative_to(root)
+        resolved.relative_to(io_root)
     except ValueError as error:
         raise AuditError(f"runtime artifact must remain below retained root: {path}") from error
     return resolved
@@ -754,6 +806,18 @@ def extract_runtime_snapshot(
 
 def _validate_pinned_executable_binding(root: Path) -> dict[str, Any]:
     """Verify the source-archived executable lineage retained beside the probe."""
+    binding_path = _contained_regular_file(root, root / PINNED_EXECUTABLE_BINDING_NAME)
+    initial_binding = json.loads(binding_path.read_text(encoding="utf-8"))
+    initial_pinned_root = _authorized_retained_root(initial_binding["pinned_executable_root"])
+    if not _has_staged_tree(initial_pinned_root):
+        with staged_verified_frozen_tree(
+            initial_pinned_root,
+            initial_binding["pinned_executable_root_inventory_sha256"],
+            authorized_root=ORION_BULK_ROOT,
+            error_type=AuditError,
+            label="Q-006 pinned executable tree",
+        ) as (_, staged_root), _use_staged_tree(initial_pinned_root, staged_root):
+            return _validate_pinned_executable_binding(root)
     path = _contained_regular_file(root, root / PINNED_EXECUTABLE_BINDING_NAME)
     binding = json.loads(path.read_text(encoding="utf-8"))
     _require(isinstance(binding, dict) and set(binding) == PINNED_EXECUTABLE_BINDING_KEYS,
@@ -774,13 +838,6 @@ def _validate_pinned_executable_binding(root: Path) -> dict[str, Any]:
     pinned_root = _authorized_retained_root(binding["pinned_executable_root"])
     _require(binding["pinned_executable_path"] == str(pinned_root / "bin/athena"),
              "pinned executable binding path drifted")
-    verify_immutable_tree(
-        pinned_root,
-        binding["pinned_executable_root_inventory_sha256"],
-        authorized_root=ORION_BULK_ROOT,
-        error_type=AuditError,
-        label="Q-006 pinned executable tree",
-    )
     executable = _contained_regular_file(pinned_root, Path(binding["pinned_executable_path"]))
     validate_executable_elf(
         executable,
@@ -841,15 +898,16 @@ def _validate_pinned_executable_binding(root: Path) -> dict[str, Any]:
     expected_pin_files = PIN_RETAINED_EVIDENCE | {
         INVENTORY_NAME, FREEZE_RECEIPT_NAME, PIN_PROVENANCE_RECEIPT_NAME, "bin/athena",
     }
+    io_pinned_root = _tree_io_path(pinned_root)
     measured_pin_files = {
-        item.relative_to(pinned_root).as_posix()
-        for item in pinned_root.rglob("*") if item.is_file()
+        item.relative_to(io_pinned_root).as_posix()
+        for item in io_pinned_root.rglob("*") if item.is_file()
     }
     _require(measured_pin_files == expected_pin_files,
              "pinned executable tree file topology drifted")
     measured_pin_directories = {
-        item.relative_to(pinned_root).as_posix()
-        for item in pinned_root.rglob("*") if item.is_dir()
+        item.relative_to(io_pinned_root).as_posix()
+        for item in io_pinned_root.rglob("*") if item.is_dir()
     }
     _require(measured_pin_directories == {"bin", "build", "runtime", "source"},
              "pinned executable tree directory topology drifted")
@@ -883,7 +941,7 @@ def _validate_pinned_executable_binding(root: Path) -> dict[str, Any]:
         label="Q-006 pinned executable archived dependencies",
     )
     validate_serial_host_build_evidence(
-        pinned_root,
+        io_pinned_root,
         error_type=AuditError,
         label="Q-006 pinned executable serial-host build evidence",
     )
@@ -921,11 +979,12 @@ def _relative_file_hashes(
     root: Path, subtree: Path, *, excluded: tuple[str, ...] = ()
 ) -> dict[str, str]:
     """Hash every regular payload below one retained subtree."""
-    _require(subtree.is_dir(), f"retained payload subtree is missing: {subtree}")
+    io_subtree = _tree_io_path(subtree)
+    _require(io_subtree.is_dir(), f"retained payload subtree is missing: {subtree}")
     payload = {}
-    for path in sorted(subtree.rglob("*")):
+    for path in sorted(io_subtree.rglob("*")):
         if path.is_file():
-            relative = path.relative_to(subtree).as_posix()
+            relative = path.relative_to(io_subtree).as_posix()
             if relative not in excluded:
                 payload[relative] = _sha256(_contained_regular_file(root, path))
     return payload
@@ -993,7 +1052,7 @@ def _validate_runtime_invocations(root: Path, pinned: dict[str, Any]) -> dict[st
     reports = {}
     run_root = root / "runs"
     _require(
-        {path.name for path in run_root.iterdir() if path.is_dir()} == set(cases),
+        {path.name for path in _tree_io_path(run_root).iterdir() if path.is_dir()} == set(cases),
         "Q-006 runtime run membership drifted",
     )
     for label, expected in cases.items():
@@ -1017,13 +1076,19 @@ def _validate_runtime_invocations(root: Path, pinned: dict[str, Any]) -> dict[st
         if "deck" in expected:
             deck = _contained_regular_file(root, expected["deck"])
             _require(invocation.get("restart") is None, f"{label}: unexpected restart record")
-            _require(invocation.get("deck") == {"path": str(deck), "sha256": _sha256(deck)},
+            _require(invocation.get("deck") == {
+                "path": str(expected["deck"]),
+                "sha256": _sha256(deck),
+            },
                      f"{label}: deck binding drifted")
         else:
             source = _contained_regular_file(root, expected["restart"])
             _require(invocation.get("deck") is None, f"{label}: restart deck must be null")
             _require(
-                invocation.get("restart") == {"path": str(source), "sha256": _sha256(source)},
+                invocation.get("restart") == {
+                    "path": str(expected["restart"]),
+                    "sha256": _sha256(source),
+                },
                 f"{label}: restart binding drifted",
             )
         reports[label] = {"invocation_sha256": _sha256(path)}
@@ -1203,7 +1268,7 @@ def _validate_parser_contract_suite(root: Path, pinned: dict[str, Any]) -> dict[
     _require(len(labels) == len(set(labels)), "parser-contract labels must be unique")
     _require(set(labels) == set(expected_by_label), "parser-contract labels drifted")
     case_root = root / "parser_contract_suite/cases"
-    observed = {path.name for path in case_root.iterdir() if path.is_dir()}
+    observed = {path.name for path in _tree_io_path(case_root).iterdir() if path.is_dir()}
     _require(observed == set(labels), "parser-contract case membership drifted")
     return {
         "summary_sha256": _sha256(path),
@@ -1247,7 +1312,8 @@ def _validate_retained_topology(root: Path, pinned: dict[str, Any]) -> None:
             while parent != f"{case}/work":
                 allowed.add(parent)
                 parent = Path(parent).parent.as_posix()
-    measured = {path.relative_to(root).as_posix() for path in root.rglob("*") if path.is_dir()}
+    io_root = _tree_io_path(root)
+    measured = {path.relative_to(io_root).as_posix() for path in io_root.rglob("*") if path.is_dir()}
     _require(measured == allowed, "Q-006 retained directory topology drifted")
     allowed_files = {
         INVENTORY_NAME,
@@ -1283,7 +1349,7 @@ def _validate_retained_topology(root: Path, pinned: dict[str, Any]) -> None:
             for relative in _expected_parser_generated_paths(item["label"], item["positive"])
         )
     measured_files = {
-        path.relative_to(root).as_posix() for path in root.rglob("*") if path.is_file()
+        path.relative_to(io_root).as_posix() for path in io_root.rglob("*") if path.is_file()
     }
     _require(measured_files == allowed_files, "Q-006 retained file topology drifted")
 
@@ -1330,7 +1396,7 @@ def build_retained_probe_report(root: str | Path) -> dict[str, Any]:
                      "uniform startup magnetic maxima drifted")
         reports[label] = report
     pinned = _validate_pinned_executable_binding(retained)
-    return {
+    return _restore_logical_paths({
         "schema_version": 1,
         "campaign_id": CAMPAIGN_ID,
         "artifact_role": ARTIFACT_ROLE,
@@ -1345,7 +1411,7 @@ def build_retained_probe_report(root: str | Path) -> dict[str, Any]:
             "long_horizon", "true_amr_policy_qualification", "mpi", "gpu",
             "frontier", "external_review",
         ],
-    }
+    })
 
 
 def verify_retained_probe(
@@ -1353,13 +1419,20 @@ def verify_retained_probe(
 ) -> dict[str, Any]:
     """Verify one frozen tree and exact regeneration of its fixed probe summary."""
     retained = _authorized_retained_root(root)
-    tree = verify_frozen_tree(retained, expected_inventory_sha256)
-    _validate_retained_topology(retained, _validate_pinned_executable_binding(retained))
-    measured = build_retained_probe_report(retained)
-    summary = _contained_regular_file(retained, retained / PROBE_SUMMARY_NAME)
-    expected = json.loads(summary.read_text(encoding="utf-8"))
-    _require(measured == expected, "retained Q-006 probe summary drifted from raw recompute")
-    return {"tree_freeze": tree, "summary_sha256": _sha256(summary), "summary": measured}
+    with staged_verified_frozen_tree(
+        retained,
+        expected_inventory_sha256,
+        authorized_root=ORION_BULK_ROOT,
+        error_type=AuditError,
+        label="Q-006 retained runtime tree",
+    ) as (tree, staged_root), _use_staged_tree(retained, staged_root):
+        tree["freeze_receipt_sha256"] = _validate_runtime_freeze_receipt(retained)
+        _validate_retained_topology(retained, _validate_pinned_executable_binding(retained))
+        measured = build_retained_probe_report(retained)
+        summary = _contained_regular_file(retained, retained / PROBE_SUMMARY_NAME)
+        expected = json.loads(summary.read_text(encoding="utf-8"))
+        _require(measured == expected, "retained Q-006 probe summary drifted from raw recompute")
+        return {"tree_freeze": tree, "summary_sha256": _sha256(summary), "summary": measured}
 
 
 def static_descriptor() -> dict[str, Any]:
@@ -1386,15 +1459,15 @@ def static_descriptor() -> dict[str, Any]:
 def verify_frozen_tree(root: str | Path, expected_inventory_sha256: str) -> dict[str, Any]:
     """Verify exact inventory hashes, tree membership, and recursive read-only modes."""
     retained = _authorized_retained_root(root)
-    report = verify_immutable_tree(
+    with staged_verified_frozen_tree(
         retained,
         expected_inventory_sha256,
         authorized_root=ORION_BULK_ROOT,
         error_type=AuditError,
         label="Q-006 retained runtime tree",
-    )
-    report["freeze_receipt_sha256"] = _validate_runtime_freeze_receipt(retained)
-    return report
+    ) as (report, staged_root), _use_staged_tree(retained, staged_root):
+        report["freeze_receipt_sha256"] = _validate_runtime_freeze_receipt(retained)
+        return report
 
 
 def freeze_tree(root: str | Path) -> dict[str, Any]:

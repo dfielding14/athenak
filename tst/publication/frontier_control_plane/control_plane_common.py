@@ -67,6 +67,9 @@ AUTHORIZED_LONG_TERM_STORAGE_RISK = (
 AUTHORIZED_LONG_TERM_STORAGE_BLOCKS = [
     "terminal_durable_retention_signoff_pending_external_review",
 ]
+PREPARED_ARTIFACT_INVENTORY_PATH = (
+    "tst/publication/frontier_control_plane/prepared_pic_artifact_inventory.json"
+)
 
 
 def scheduler_account_matches_authorized(value: object) -> bool:
@@ -723,6 +726,11 @@ def prepared_artifact_manifest_from_source_archive(
     normalized_inventory_path = canonical_relative_posix_path(
         inventory_path, field="Prepared-artifact inventory path"
     ).as_posix()
+    if normalized_inventory_path != PREPARED_ARTIFACT_INVENTORY_PATH:
+        raise ValueError(
+            "Prepared-artifact inventory path must use the canonical source-relative path: "
+            f"{PREPARED_ARTIFACT_INVENTORY_PATH}"
+        )
     inventory_bytes = source_files.get(normalized_inventory_path)
     if inventory_bytes is None:
         raise ValueError(
@@ -746,6 +754,28 @@ def prepared_artifact_manifest_from_source_archive(
         field="Prepared analyzer inventory",
         source_files=source_files,
     )
+    expected_paper_decks = sorted(
+        path
+        for path in source_files
+        if path.startswith("inputs/tests/pic")
+        and path.endswith(".athinput")
+        and "/" not in path[len("inputs/tests/") :]
+    )
+    expected_analyzers = sorted(
+        path
+        for path in source_files
+        if path.startswith("tst/publication/analyze_")
+        and path.endswith(".py")
+        and "/" not in path[len("tst/publication/") :]
+    )
+    if [record["path"] for record in paper_decks] != expected_paper_decks:
+        raise ValueError(
+            "Prepared paper-deck inventory must exactly cover archived inputs/tests/pic*.athinput"
+        )
+    if [record["path"] for record in analyzers] != expected_analyzers:
+        raise ValueError(
+            "Prepared analyzer inventory must exactly cover archived tst/publication/analyze_*.py"
+        )
     paths = [record["path"] for record in paper_decks + analyzers]
     if normalized_inventory_path in paths or len(paths) != len(set(paths)):
         raise ValueError(

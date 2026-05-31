@@ -11,6 +11,7 @@ import re
 import shlex
 import stat
 import tarfile
+import tempfile
 from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any, Iterator
@@ -889,6 +890,164 @@ def _open_anchored_root(
         yield root_fd
     finally:
         os.close(root_fd)
+
+
+def _read_anchored_regular_bytes(
+    root_fd: int,
+    relative: str,
+    *,
+    expected_sha256: str,
+    error_type: type[ValueError],
+    label: str,
+) -> tuple[bytes, int]:
+    """Read one immutable member through root-relative descriptors and recheck its digest."""
+    candidate = PurePosixPath(relative)
+    if (
+        not relative
+        or candidate.is_absolute()
+        or relative != candidate.as_posix()
+        or any(part in ("", ".", "..") for part in candidate.parts)
+    ):
+        _raise(error_type, label, f"unsafe retained snapshot member path: {relative!r}")
+    parent_fd = os.dup(root_fd)
+    try:
+        for part in candidate.parts[:-1]:
+            child_fd = os.open(
+                part,
+                os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                dir_fd=parent_fd,
+            )
+            os.close(parent_fd)
+            parent_fd = child_fd
+        fd = os.open(candidate.parts[-1], os.O_RDONLY | os.O_NOFOLLOW, dir_fd=parent_fd)
+    except OSError as error:
+        _raise(error_type, label, f"cannot open retained snapshot member {relative}: {error}")
+    finally:
+        os.close(parent_fd)
+    try:
+        before = os.fstat(fd)
+        if (
+            not stat.S_ISREG(before.st_mode)
+            or before.st_nlink != 1
+            or before.st_mode & _WRITE_BITS
+        ):
+            _raise(error_type, label, f"retained snapshot member is unsafe: {relative}")
+        payload = bytearray()
+        while chunk := os.read(fd, 1024 * 1024):
+            payload.extend(chunk)
+        after = os.fstat(fd)
+        identity = lambda value: (  # noqa: E731
+            value.st_dev,
+            value.st_ino,
+            value.st_mode,
+            value.st_nlink,
+            value.st_size,
+            value.st_mtime_ns,
+            value.st_ctime_ns,
+        )
+        if identity(before) != identity(after):
+            _raise(error_type, label, f"retained snapshot member changed while reading: {relative}")
+        measured_sha256 = hashlib.sha256(payload).hexdigest()
+        if measured_sha256 != expected_sha256:
+            _raise(error_type, label, f"retained snapshot member SHA-256 drifted: {relative}")
+        return bytes(payload), before.st_mode
+    finally:
+        os.close(fd)
+
+
+def _set_staged_tree_owner_write(root: Path, *, enabled: bool) -> None:
+    """Toggle owner write bits so a private staged tree can be consumed and removed."""
+    paths = [root, *root.rglob("*")]
+    for path in reversed(paths) if enabled else paths:
+        mode = path.stat().st_mode
+        path.chmod(mode | stat.S_IWUSR if enabled else mode & ~_WRITE_BITS)
+
+
+@contextmanager
+def staged_verified_frozen_tree(
+    runtime_root: str | Path,
+    expected_inventory_sha256: str,
+    *,
+    authorized_root: Path,
+    error_type: type[ValueError] = ValueError,
+    label: str = "immutable-tree",
+) -> Iterator[tuple[dict[str, Any], Path]]:
+    """Stage descriptor-anchored verified bytes into one private read-only snapshot."""
+    if not _SHA256_PATTERN.fullmatch(expected_inventory_sha256):
+        _raise(error_type, label, "expected inventory SHA-256 must be 64 lowercase hex digits")
+    root = _canonical_authorized_root(
+        runtime_root,
+        authorized_root=authorized_root,
+        error_type=error_type,
+        label=label,
+    )
+    with _open_anchored_root(
+        root,
+        authorized_root=authorized_root,
+        error_type=error_type,
+        label=label,
+    ) as root_fd:
+        report = _verify_frozen_tree_anchored(
+            root,
+            root_fd,
+            expected_inventory_sha256,
+            authorized_root=authorized_root,
+            error_type=error_type,
+            label=label,
+        )
+        inventory_payload, _ = _read_anchored_regular_bytes(
+            root_fd,
+            INVENTORY_NAME,
+            expected_sha256=expected_inventory_sha256,
+            error_type=error_type,
+            label=label,
+        )
+        try:
+            inventory_text = inventory_payload.decode("utf-8")
+        except UnicodeDecodeError as error:
+            _raise(error_type, label, f"retained inventory is not UTF-8: {error}")
+        expected = _parse_inventory(inventory_text, error_type=error_type, label=label)
+        with tempfile.TemporaryDirectory(prefix="athenak-pic-verified-tree-") as directory:
+            staged_root = Path(directory) / "snapshot"
+            staged_root.mkdir()
+            snapshot = _scan_anchored_tree(
+                root_fd,
+                hash_regular=False,
+                error_type=error_type,
+                label=label,
+            )
+            for entry in snapshot.entries:
+                if entry.entry_type == "directory" and entry.relative:
+                    staged_root.joinpath(*PurePosixPath(entry.relative).parts).mkdir(
+                        parents=True,
+                        exist_ok=True,
+                    )
+            records = {INVENTORY_NAME: expected_inventory_sha256, **expected}
+            for relative, digest in records.items():
+                payload, mode = _read_anchored_regular_bytes(
+                    root_fd,
+                    relative,
+                    expected_sha256=digest,
+                    error_type=error_type,
+                    label=label,
+                )
+                destination = staged_root.joinpath(*PurePosixPath(relative).parts)
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.write_bytes(payload)
+                destination.chmod(stat.S_IMODE(mode) & ~_WRITE_BITS)
+            _verify_frozen_tree_anchored(
+                root,
+                root_fd,
+                expected_inventory_sha256,
+                authorized_root=authorized_root,
+                error_type=error_type,
+                label=label,
+            )
+            _set_staged_tree_owner_write(staged_root, enabled=False)
+            try:
+                yield report, staged_root
+            finally:
+                _set_staged_tree_owner_write(staged_root, enabled=True)
 
 
 def _verify_frozen_tree_anchored(

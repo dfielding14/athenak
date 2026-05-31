@@ -143,6 +143,47 @@ class ImmutableOrionTreeTests(unittest.TestCase):
             finally:
                 _make_writable_tree(tree)
 
+    def test_staged_snapshot_rejects_payload_mutation_after_initial_verification(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            tree = base / "retained"
+            tree.mkdir()
+            payload = tree / "payload.txt"
+            payload.write_text("original\n", encoding="utf-8")
+            try:
+                report = immutable_orion_tree.freeze_tree(
+                    tree,
+                    _RECEIPT,
+                    authorized_root=base,
+                )
+                original_verify = immutable_orion_tree._verify_frozen_tree_anchored
+                verify_count = 0
+
+                def mutate_after_initial_verify(*args: object, **kwargs: object):
+                    nonlocal verify_count
+                    verified = original_verify(*args, **kwargs)
+                    verify_count += 1
+                    if verify_count == 1:
+                        payload.chmod(payload.stat().st_mode | stat.S_IWUSR)
+                        payload.write_text("replacement\n", encoding="utf-8")
+                        payload.chmod(payload.stat().st_mode & ~_WRITE_BITS)
+                    return verified
+
+                with mock.patch.object(
+                    immutable_orion_tree,
+                    "_verify_frozen_tree_anchored",
+                    side_effect=mutate_after_initial_verify,
+                ):
+                    with self.assertRaisesRegex(ValueError, "SHA-256 drifted"):
+                        with immutable_orion_tree.staged_verified_frozen_tree(
+                            tree,
+                            report["inventory_sha256"],
+                            authorized_root=base,
+                        ):
+                            self.fail("unsafe post-verification mutation was accepted")
+            finally:
+                _make_writable_tree(tree)
+
 
 if __name__ == "__main__":
     unittest.main()

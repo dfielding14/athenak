@@ -188,6 +188,23 @@ using additional Frontier allocation.
 - No generated simulation output is accidentally versioned.
 - Every later run can point to a single immutable candidate identity.
 
+### Execution Status: In Progress
+
+The first curation pass exposed two freeze-blocking provenance gaps during
+independent review: clean-candidate creation accepted an operator-selected
+prepared-artifact subset, and Q-006, Q-007, and Q-011 analyzers reopened
+retained evidence by pathname after verification. The successor now requires
+the canonical prepared-artifact inventory path, independently derives the
+complete archived PIC-deck and publication-analyzer closure, and stages
+descriptor-anchored verified bytes into private read-only snapshots for
+analysis. The nonqualifying transition record is
+[`phase0_curated_candidate_successor_2026-05-31.json`](readiness/phase0_curated_candidate_successor_2026-05-31.json).
+
+Phase 0 remains open until the stable final diff is independently rereviewed,
+committed, validated from a clean worktree, installed as a paired Orion and
+Project Home control-plane generation, and frozen with its final source,
+executable, deck, and analyzer checksums. No later phase is authorized yet.
+
 ## Phase 1: Close Local Physics and Shock-Calibration Gaps
 
 ### Objective

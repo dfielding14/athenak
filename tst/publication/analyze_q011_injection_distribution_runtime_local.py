@@ -15,10 +15,12 @@ import numpy as np
 
 if __package__:
     from .immutable_orion_tree import freeze_tree as freeze_immutable_tree
+    from .immutable_orion_tree import staged_verified_frozen_tree
     from .immutable_orion_tree import verify_frozen_tree as verify_immutable_tree
     from .pvtk_particles import ParticleVTKData, read_particle_vtk
 else:
     from immutable_orion_tree import freeze_tree as freeze_immutable_tree
+    from immutable_orion_tree import staged_verified_frozen_tree
     from immutable_orion_tree import verify_frozen_tree as verify_immutable_tree
     from pvtk_particles import ParticleVTKData, read_particle_vtk
 
@@ -337,45 +339,56 @@ def extract_runtime_artifact(
     expected_executable_sha256: str,
 ) -> dict[str, Any]:
     """Audit one retained payload only after both frozen trees verify."""
-    runtime_tree = verify_frozen_tree(artifact_root, artifact_inventory_sha256)
+    runtime_root = Path(artifact_root)
     path = _require_frozen_tree_member(
         pvtk_path,
-        root=Path(runtime_tree["root"]),
+        root=runtime_root,
         label="Q-011 runtime PVTK",
     )
-    executable_tree = verify_immutable_tree(
-        executable_root,
+    executable_tree_root = Path(executable_root)
+    executable_path = _require_frozen_tree_member(
+        executable,
+        root=executable_tree_root,
+        label="Q-011 pinned executable",
+    )
+    with staged_verified_frozen_tree(
+        runtime_root,
+        artifact_inventory_sha256,
+        authorized_root=ORION_BULK_ROOT,
+        error_type=AuditError,
+        label="Q-011 retained runtime tree",
+    ) as (runtime_tree, runtime_snapshot), staged_verified_frozen_tree(
+        executable_tree_root,
         executable_root_inventory_sha256,
         authorized_root=ORION_BULK_ROOT,
         error_type=AuditError,
         label="Q-011 pinned executable tree",
-    )
-    executable_path = _require_frozen_tree_member(
-        executable,
-        root=Path(executable_tree["root"]),
-        label="Q-011 pinned executable",
-    )
-    executable_sha256 = _sha256(executable_path)
-    _require(
-        executable_sha256 == expected_executable_sha256,
-        "Q-011 pinned executable SHA-256 drifted",
-    )
-    execution_metadata = _read_pvtk_execution_metadata(path)
-    report = analyze_particle_payload(read_particle_vtk(path))
-    report["immutable_runtime_artifact"] = {
-        "path": str(path),
-        "sha256": _sha256(path),
-    }
-    report["immutable_runtime_tree"] = runtime_tree
-    report["pvtk_execution_metadata"] = execution_metadata
-    report["deck"] = validate_deck()
-    report["source"] = validate_source_contract()
-    report["host_executable"] = {
-        "path": str(executable_path),
-        "sha256": executable_sha256,
-    }
-    report["immutable_executable_tree"] = executable_tree
-    return report
+    ) as (executable_tree, executable_snapshot):
+        staged_path = runtime_snapshot / path.relative_to(runtime_root)
+        staged_executable = executable_snapshot / executable_path.relative_to(
+            executable_tree_root
+        )
+        executable_sha256 = _sha256(staged_executable)
+        _require(
+            executable_sha256 == expected_executable_sha256,
+            "Q-011 pinned executable SHA-256 drifted",
+        )
+        execution_metadata = _read_pvtk_execution_metadata(staged_path)
+        report = analyze_particle_payload(read_particle_vtk(staged_path))
+        report["immutable_runtime_artifact"] = {
+            "path": str(path),
+            "sha256": _sha256(staged_path),
+        }
+        report["immutable_runtime_tree"] = runtime_tree
+        report["pvtk_execution_metadata"] = execution_metadata
+        report["deck"] = validate_deck()
+        report["source"] = validate_source_contract()
+        report["host_executable"] = {
+            "path": str(executable_path),
+            "sha256": executable_sha256,
+        }
+        report["immutable_executable_tree"] = executable_tree
+        return report
 
 
 def _require_frozen_tree_member(

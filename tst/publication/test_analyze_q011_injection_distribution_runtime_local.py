@@ -231,6 +231,63 @@ class Q011InjectionDistributionRuntimeLocalTests(unittest.TestCase):
                 _make_writable_tree(executable_tree)
                 q011.ORION_BULK_ROOT = original_root
 
+    def test_immutable_extractor_rejects_payload_mutation_after_initial_verification(self) -> None:
+        original_root = q011.ORION_BULK_ROOT
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            runtime_tree = base / "runtime"
+            executable_tree = base / "executable"
+            runtime_tree.mkdir()
+            executable_tree.mkdir()
+            pvtk = runtime_tree / "snapshot.part.vtk"
+            executable = executable_tree / "athena"
+            pvtk.write_bytes(
+                b"# vtk DataFile Version 2.0\n"
+                b"# AthenaK particle data at time= 0.5  nranks= 1  cycle=1  "
+                b"variables=prtcl_all\nBINARY\nparticle artifact"
+            )
+            executable.write_bytes(b"host executable")
+            q011.ORION_BULK_ROOT = base
+            try:
+                runtime_freeze = q011.freeze_tree(runtime_tree)
+                executable_freeze = q011.freeze_tree(executable_tree)
+                original_verify = immutable_orion_tree._verify_frozen_tree_anchored
+                verify_count = 0
+
+                def mutate_runtime_payload(*args: object, **kwargs: object):
+                    nonlocal verify_count
+                    verified = original_verify(*args, **kwargs)
+                    verify_count += 1
+                    if verify_count == 1:
+                        pvtk.chmod(pvtk.stat().st_mode | stat.S_IWUSR)
+                        pvtk.write_bytes(b"substituted payload")
+                        pvtk.chmod(pvtk.stat().st_mode & ~stat.S_IWUSR)
+                    return verified
+
+                with mock.patch.object(
+                    immutable_orion_tree,
+                    "_verify_frozen_tree_anchored",
+                    side_effect=mutate_runtime_payload,
+                ):
+                    with self.assertRaisesRegex(q011.AuditError, "SHA-256 drifted"):
+                        q011.extract_runtime_artifact(
+                            pvtk,
+                            artifact_root=runtime_tree,
+                            artifact_inventory_sha256=runtime_freeze["inventory_sha256"],
+                            executable=executable,
+                            executable_root=executable_tree,
+                            executable_root_inventory_sha256=executable_freeze[
+                                "inventory_sha256"
+                            ],
+                            expected_executable_sha256=hashlib.sha256(
+                                b"host executable"
+                            ).hexdigest(),
+                        )
+            finally:
+                _make_writable_tree(runtime_tree)
+                _make_writable_tree(executable_tree)
+                q011.ORION_BULK_ROOT = original_root
+
     def test_inventory_freeze_and_verify_are_orion_scoped(self) -> None:
         original_root = q011.ORION_BULK_ROOT
         with tempfile.TemporaryDirectory() as directory:

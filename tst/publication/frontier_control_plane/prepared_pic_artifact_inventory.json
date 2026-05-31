@@ -10,15 +10,15 @@
     },
     {
       "path": "tst/publication/analyze_q006_paper_multispecies_oscillation_runtime_local.py",
-      "sha256": "1a2d9e1206b25dc5bd28e012f3fb524ad84cdf2065184021a3c8a0df28092be5"
+      "sha256": "274197b1fb567d49df8540086e18324fef58fa8eb67214c2a475d05939cf12de"
     },
     {
       "path": "tst/publication/analyze_q007_paper_deltaf_linear_preparation.py",
-      "sha256": "3b23641010866b9759a1317b30d2305d5de3ff62e6059fe3925d09dc1d2d86f4"
+      "sha256": "60df4afebdba4f0d932b87ef271cfc9d87d94fbf9bde0e9e89e604118d8901c2"
     },
     {
       "path": "tst/publication/analyze_q011_injection_distribution_runtime_local.py",
-      "sha256": "592ad2fa69ecbf1d8316ab9f5e9be6354d7995150a65ef0cbd3ac6d797a2f007"
+      "sha256": "d408c39c843355ead0d9662e9800db8695ead7e3e9476099ce9dfd2e26d85d17"
     },
     {
       "path": "tst/publication/analyze_q023_paper_bell_linear.py",

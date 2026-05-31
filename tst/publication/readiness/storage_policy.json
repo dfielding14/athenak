@@ -98,7 +98,7 @@
     "status": "passed_user_authorized_orion_only_storage",
     "last_preflight_utc": "2026-05-30T22:52:40Z",
     "installed_control_plane_version": "6f3458ca5c412b866f579d67dde51d73497b65629f6e7a35e10a3af84d7ecd8b",
-    "staged_control_plane_candidate_version": "a234c9a021fb4fe10d0533f02016e8b7afa15fd61fb777b0e373d0ff7f446084",
+    "staged_control_plane_candidate_version": "6f3458ca5c412b866f579d67dde51d73497b65629f6e7a35e10a3af84d7ecd8b",
     "installed_control_plane_lifecycle": "paired_installed_reviewed_generation",
     "orion_simulation_root_preflight": {
       "status": "passed",

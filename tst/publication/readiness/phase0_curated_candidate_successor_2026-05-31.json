@@ -1,0 +1,29 @@
+{
+  "record_type": "phase0_curated_candidate_successor",
+  "schema_version": 1,
+  "date": "2026-05-31",
+  "status": "successor_source_review_pending_clean_commit_install_and_freeze",
+  "qualification_effect": "none",
+  "live_paired_control_plane_version": "6f3458ca5c412b866f579d67dde51d73497b65629f6e7a35e10a3af84d7ecd8b",
+  "successor_source_control_plane_version": "273da436765b471f2bf21aa5d109d47b4af905f611c01d604b08015a48ef5acd",
+  "prepared_artifacts": {
+    "inventory_path": "tst/publication/frontier_control_plane/prepared_pic_artifact_inventory.json",
+    "inventory_sha256": "99b0955b7a7640d348ee138e394a69b6f459e360d3bc46e1fb7c39255ca5384e",
+    "paper_deck_count": 87,
+    "publication_analyzer_count": 12,
+    "closure_policy": "canonical inventory path plus exact archived inputs/tests/pic*.athinput and tst/publication/analyze_*.py membership"
+  },
+  "hardening": [
+    "clean-candidate freeze rejects alternate prepared-artifact inventory paths",
+    "clean-candidate freeze rejects omitted eligible PIC decks and publication analyzers",
+    "Q-006, Q-007 and Q-011 retained-tree analyzers consume descriptor-anchored private snapshots",
+    "status-figure generator consumes frozen JSON payloads from descriptor-anchored private snapshots"
+  ],
+  "remaining_phase0_actions": [
+    "complete independent review of the stable final diff",
+    "commit the curated successor and report layer",
+    "rerun the final clean-tree validation matrix",
+    "install the paired successor control plane on Orion and Project Home",
+    "write the final build profile and create the canonical clean-candidate freeze"
+  ]
+}
