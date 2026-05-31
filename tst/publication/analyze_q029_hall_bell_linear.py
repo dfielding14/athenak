@@ -113,8 +113,8 @@ _EXPECTED_DECK_VALUES = {
     ("q029_hall_bell_linear", "timestep"):
         "open_clean_candidate_timestep_freeze",
     ("output1", "file_type"): "bin",
-    ("output1", "variable"): "mhd_bcc",
-    ("output1", "id"): "mhd_bcc",
+    ("output1", "variable"): "mhd_w_bcc",
+    ("output1", "id"): "mhd_w_bcc",
     ("output1", "dcycle"): "1",
     ("output1", "ghost_zones"): "false",
     ("output2", "file_type"): "rst",

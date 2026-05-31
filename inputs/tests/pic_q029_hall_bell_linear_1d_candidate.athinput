@@ -123,8 +123,8 @@ timestep             = open_clean_candidate_timestep_freeze
 
 <output1>
 file_type   = bin
-variable    = mhd_bcc
-id          = mhd_bcc
+variable    = mhd_w_bcc
+id          = mhd_w_bcc
 dcycle      = 1
 ghost_zones = false
 
