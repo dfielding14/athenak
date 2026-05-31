@@ -1,0 +1,49 @@
+{
+  "record_type": "q023_paper_bell_linear_materialized_variants_local",
+  "schema_version": 1,
+  "date": "2026-05-30",
+  "gate": "Q-023",
+  "campaign_id": "Q023-PAPER-BELL-LINEAR",
+  "status": "source_local_preparation_matrix_materialized_and_recursively_read_only",
+  "qualification_effect": "none_source_local_preparation_only",
+  "qualifying_evidence": false,
+  "frontier_authorization": "not_bound",
+  "section52_qualification": "not_claimed",
+  "scope": "Executed source-local staging record for the deterministic 405-deck Section 5.2 preparation matrix. The ignored direct-child tst/.codex tree is a small deck-staging artifact, not bulk simulation output. This record does not bind a clean candidate, authorize execution, inspect output, resolve centered-loading review, or qualify a scientific claim.",
+  "staged_artifact": {
+    "root": "/ccs/home/dfielding/athenak-pic/tst/.codex/q023-paper-bell-linear-materialized-variants",
+    "root_policy": "descriptor_relative_direct_child_below_tst_dot_codex_only",
+    "bulk_output_policy": "not_bulk_simulation_output",
+    "retention": {
+      "file_count": 407,
+      "deck_count": 405,
+      "writable_entries": 0,
+      "status": "pass_recursively_read_only",
+      "inventory_algorithm": "sha256(sorted lines of '<file_sha256>  <root-relative-path>\\n')",
+      "inventory_sha256": "9b2434c6e39b40c60f3eee5e192cdc99f823c9c0aa34a1ede78746a45384a4ed"
+    },
+    "materialization_manifest": {
+      "path": "materialization_manifest.json",
+      "sha256": "8a1ef2a81632fbf402fda90ec0455fab959b276d81fd04e299486733d82b50b2"
+    },
+    "materialization_request": {
+      "path": "materialization_request.json",
+      "sha256": "8e7048235cd6661f95158abc39831be4a446fcbea39e3c1be470b5073a66f114"
+    }
+  },
+  "source_local_artifacts": {
+    "tst/publication/materialize_q023_paper_bell_linear_variants.py": "365434f245946bd7306bf0a13fcbe24a2ef9e9625124ab26f2ff00ee7c55fadd",
+    "tst/publication/test_materialize_q023_paper_bell_linear_variants.py": "3bcd300d92fc569924dfd18eaeb86e2e5121a2061a7f317621b12fea92c47d09"
+  },
+  "loading_policy": {
+    "cr_distribution": "center",
+    "review_status": "unresolved_reviewer_boundary_retain_deterministic_centered_loading_with_deterministic_tolerance_handling_or_approve_randomized_seeded_loading"
+  },
+  "remaining_open_dependencies": [
+    "Bind the source-local preparation matrix into an exact clean-candidate campaign record before qualifying execution.",
+    "Materialize and freeze the preregistered seed dimension and any selected time-limit variants before qualifying output inspection.",
+    "Resolve the centered-loading reviewer boundary.",
+    "Bind a clean Frontier executable and authorized Orion artifact root only through the reviewed control plane.",
+    "Run registered Frontier execution, independent raw-artifact recomputation, and external review before any Section 5.2 qualification claim."
+  ]
+}

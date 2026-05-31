@@ -64,6 +64,11 @@ qualify any scientific claim by itself.
   epsilon, dimensionality, resolution, local-CFL and PPC matrix only as a
   descriptor-relative direct child of `tst/.codex`, keeps centered loading as an explicit unresolved review
   boundary and refuses qualification claims or execution authorization.
+- `q023_paper_bell_linear_materialized_variants_local_2026-05-30.json`:
+  executed recursively read-only source-local staging record for that ignored
+  405-deck matrix. It records exact manifest, request and tree-inventory hashes
+  without treating the small deck-staging tree as bulk simulation output or
+  promoting it into clean-candidate, Frontier or Section 5.2 evidence.
 - `q029_hall_bell_linear_source_local_preparation_2026-05-30.json`: bounded
   source-local 1D/2D/3D launch preparation for the separately named
   experimental Hall-current generator. The guarded shared Q-023 seed-carrier
