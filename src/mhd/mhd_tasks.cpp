@@ -464,7 +464,7 @@ TaskStatus MHD::ApplyPICWaveDamping(Driver *pdrive, int stage) {
 
 //----------------------------------------------------------------------------------------
 //! \fn TaskStatus MHD::ApplyPICExpandingBoxWaveDamping
-//! \brief Apply reduced wave damping after the final expanding-box physical-frame sources.
+//! \brief Apply reduced wave damping after final expanding-box physical-frame sources.
 
 TaskStatus MHD::ApplyPICExpandingBoxWaveDamping(Driver *pdrive, int stage) {
   auto *ppart = pmy_pack->ppart;

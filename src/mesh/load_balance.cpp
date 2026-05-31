@@ -24,7 +24,7 @@
 #include "hydro/hydro.hpp"
 #include "mhd/mhd.hpp"
 #include "z4c/z4c.hpp"
-#include "particles/particles.hpp" 
+#include "particles/particles.hpp"
 
 #if MPI_PARALLEL_ENABLED
 #include <mpi.h>
@@ -43,8 +43,9 @@ bool ParticleInLogicalBlock(const LogicalLocation &lloc, const bool multi_d,
   const int nmbx1 = nmb_rootx1 << (lev - root_level);
   const Real x1min = (lloc.lx1 == 0) ? ms.x1min
                                       : LeftEdgeX(lloc.lx1, nmbx1, ms.x1min, ms.x1max);
-  const Real x1max = (lloc.lx1 == (nmbx1 - 1)) ? ms.x1max
-                                      : LeftEdgeX(lloc.lx1 + 1, nmbx1, ms.x1min, ms.x1max);
+  const Real x1max =
+      (lloc.lx1 == (nmbx1 - 1)) ? ms.x1max
+                                : LeftEdgeX(lloc.lx1 + 1, nmbx1, ms.x1min, ms.x1max);
   const bool in_x1 = (x1 >= x1min) &&
                      ((lloc.lx1 == (nmbx1 - 1)) ? (x1 <= x1max) : (x1 < x1max));
   if (!in_x1) return false;
@@ -1119,7 +1120,7 @@ void MeshRefinement::UnpackAMRBuffersFC(DvceFaceFld4D<Real> &b, DvceFaceFld4D<Re
 
 void MeshRefinement::ClearSendAMR() {
 #if MPI_PARALLEL_ENABLED
-  bool no_errors = true; 
+  bool no_errors = true;
   if (pmy_mesh->pmb_pack->ppart != nullptr) {
     for (int n = 0; n < prtcl_nsends; ++n) {
       if (prtcl_rsend_req[n] != MPI_REQUEST_NULL) {
@@ -1144,7 +1145,7 @@ void MeshRefinement::ClearSendAMR() {
     }
     delete [] send_req;
   }
-  
+
   // Quit if MPI error detected
   if (!(no_errors)) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -1273,8 +1274,10 @@ void MeshRefinement::UnpackAMRBuffersParticles() {
     std::exit(EXIT_FAILURE);
   }
 
-  // Sort particle sendlist by index for hole-filling (already done in CountParticlesPerMeshBlock)
-  std::sort(KE::begin(prtcl_sendlist.h_view), KE::end(prtcl_sendlist.h_view), SortByIndex);
+  // Sort particle sendlist by index for hole-filling
+  // (already done in CountParticlesPerMeshBlock).
+  std::sort(KE::begin(prtcl_sendlist.h_view), KE::end(prtcl_sendlist.h_view),
+            SortByIndex);
   // sync sendlist host array with device.  This results in sorted array on device
   prtcl_sendlist.template modify<HostMemSpace>();
   prtcl_sendlist.template sync<DevExeSpace>();
@@ -1348,7 +1351,7 @@ void MeshRefinement::UnpackAMRBuffersParticles() {
     Kokkos::resize(ppart->prtcl_idata, ppart->nidata, new_npart);
     Kokkos::resize(ppart->prtcl_rdata, ppart->nrdata, new_npart);
   }
-  
+
   // Update particle counts
   ppart->nprtcl_thispack = new_npart;
   pmy_mesh->pmb_pack->pmesh->nprtcl_thisrank = new_npart;
@@ -1359,7 +1362,7 @@ void MeshRefinement::UnpackAMRBuffersParticles() {
   prtcl_rrecv_req.clear();
   prtcl_irecv_req.clear();
   prtcl_nrecvs = 0;
-#endif  
+#endif
 
   return;
 }
@@ -1398,8 +1401,8 @@ void MeshRefinement::CountParticleSendsAndRecvs() {
 
   // Share number of ranks to send to amongst all ranks
   prtcl_nsends_eachrank[global_variable::my_rank] = prtcl_nsends;
-  MPI_Allgather(&prtcl_nsends, 1, MPI_INT, prtcl_nsends_eachrank.data(), 
-		1, MPI_INT, par_comm);
+  MPI_Allgather(&prtcl_nsends, 1, MPI_INT, prtcl_nsends_eachrank.data(),
+                1, MPI_INT, par_comm);
 
   // Now share ParticleMessageData amongst all ranks
   // First create vector of starting indices in full vector
@@ -1414,7 +1417,8 @@ void MeshRefinement::CountParticleSendsAndRecvs() {
   // Load ParticleMessageData on this rank into full vector
   prtcl_sends_allranks.resize(nsends_allranks, ParticleMessageData(0,0,0));
   for (int n=0; n<prtcl_nsends_eachrank[global_variable::my_rank]; ++n) {
-    prtcl_sends_allranks[n + nsends_displ[global_variable::my_rank]] = prtcl_sends_thisrank[n];
+    prtcl_sends_allranks[n + nsends_displ[global_variable::my_rank]] =
+        prtcl_sends_thisrank[n];
   }
 
   // Share tuples using MPI derived data type for tuple of 3*int
@@ -1455,14 +1459,14 @@ void MeshRefinement::CreateParticleLists() {
   if (three_d) nleaf = 8;
 
   // Create device copy of arrays needed for mapping
-  int old_nmb = pmy_mesh->nmb_total; 
-  
+  int old_nmb = pmy_mesh->nmb_total;
+
   // Calculate total number of new MeshBlocks from the new arrays
   int new_nmb = 0;
   for (int n = 0; n < global_variable::nranks; n++) {
     new_nmb += new_nmb_eachrank[n];
   }
-  
+
   DualArray1D<int> new_rank("new_rank_device", new_nmb);
   for (int i = 0; i < new_nmb; i++) {
     new_rank.h_view(i) = new_rank_eachmb[i];
@@ -1544,7 +1548,7 @@ void MeshRefinement::CreateParticleLists() {
   old_refined.template sync<DevExeSpace>();
   old_child_gid.template modify<HostMemSpace>();
   old_child_gid.template sync<DevExeSpace>();
- 
+
   // Set particle sendlist to maximum length first
   Kokkos::realloc(prtcl_sendlist, npart);
   auto sendlist_d = prtcl_sendlist.d_view;
@@ -1648,7 +1652,7 @@ void MeshRefinement::CreateParticleLists() {
     if (dest_rank != myrank) {
       int index = Kokkos::atomic_fetch_add(&atom_count(), 1);
       sendlist_d(index).prtcl_indx = p;
-      sendlist_d(index).dest_gid   = new_gid; 
+      sendlist_d(index).dest_gid   = new_gid;
       sendlist_d(index).dest_rank  = dest_rank;
     }
   });
@@ -1678,13 +1682,13 @@ void MeshRefinement::CreateParticleLists() {
 
 void MeshRefinement::InitPartRecv() {
 #if MPI_PARALLEL_ENABLED
-  // Post particle receives 
+  // Post particle receives
   auto *ppart = pmy_mesh->pmb_pack->ppart;
   bool no_errors = true;
   if (ppart != nullptr) {
     CreateParticleLists();
     CountParticleSendsAndRecvs();
-    
+
     prtcl_recvs_thisrank.clear();
     int nsends_allranks = prtcl_sends_allranks.size();
     for (int n=0; n<nsends_allranks; ++n) {
@@ -1730,7 +1734,7 @@ void MeshRefinement::InitPartRecv() {
         data_start += data_size;
       }
 
-      // Post non-blocking receives for int data  
+      // Post non-blocking receives for int data
       data_start = 0;
       for (int n = 0; n < prtcl_nrecvs; ++n) {
         // calculate amount of data to be passed, get pointer to variables
@@ -1753,7 +1757,8 @@ void MeshRefinement::InitPartRecv() {
   // Check for particle MPI errors
   if (!no_errors) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl << "MPI error in posting particle receives with AMR" << std::endl;
+              << std::endl << "MPI error in posting particle receives with AMR"
+              << std::endl;
     std::exit(EXIT_FAILURE);
   }
 #endif

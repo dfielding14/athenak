@@ -253,7 +253,7 @@ particles::ParticlesBoundaryValues::ParticlesBoundaryValues(
 #endif
     pmy_part(pp) {
 #if MPI_PARALLEL_ENABLED
-  
+
   int npart = pmy_part->nprtcl_thispack;
 
   //resize vectors over number of ranks
