@@ -16,7 +16,10 @@ passed. Fresh `R02/s00_rankio_t0_t0p1` job `4745922` was then submitted from
 `0.188889` node-hours. Authenticated continuation
 `R02/s01_rankio_t0p1_t0p25` job `4746154` is also formally inspected and
 recorded `accepted` through exact `t = 0.25` for `0.289167` node-hours,
-bringing corrected E03 Stage I use to `0.478056` node-hours.
+bringing corrected E03 Stage I use to `0.478056` node-hours. Authenticated
+`R02/s02_rankio_t0p25_t1` job `4746182` is formally inspected and recorded
+`accepted` through exact `t = 1.0` for `1.465556` node-hours, bringing
+corrected E03 Stage I use to `1.943612` node-hours.
 
 The `900.000000` node-hour `E02` value is an authorized measurement-based
 projected envelope, not a fully measured matrix cost. It no longer authorizes
@@ -127,6 +130,8 @@ AthenaK CGL-LF result (`MKS24.tex:621,626`).
 The corrected E03 simulation protocol entry gate is closed through Frontier
 qualification and token retention. Fresh mapped production has started with
 accepted R02 jobs `4745922` and `4746154` through exact `t = 0.25`.
+Authenticated job `4746182` now extends that accepted lineage through exact
+`t = 1.0`.
 The manuscript also still needs
 compact derivation prose. That prose must:
 
@@ -183,9 +188,18 @@ retained. Corrected E03 use is `0.478056` node-hours. Retained recost evidence
 JSON SHA-256 is
 `eb6071cf53d453b2f75707003616ac9cbdfe025d62969d00e34e7948bee3310c`;
 it projects `700.868889` provisional matrix node-hours inside the
-`900.000000` envelope. Prepare only
-`R02/s02_rankio_t0p25_t1` from the authenticated terminal siblings, then
-inspect and recost before any further extension. Complete `R17` last.
+`900.000000` envelope. Authenticated `R02/s02_rankio_t0p25_t1` job `4746182`
+is now accepted through exact `t = 1.0` for `1.465556` node-hours. Its
+sampled-history forcing-work relative residual is
+`8.616579960442532e-12`; strict LF failure counters remain zero; terminal
+`lf_hwproj = 65252911379`; complete terminal eight-rank restart siblings are
+retained. Corrected E03 use is `1.943612` node-hours. Updated recost evidence
+JSON SHA-256 is
+`7d11e8a0004e24417167aeb1f186f8b1f68c8eb9d6206467a708a7cad16cf252`;
+it projects `704.458334` provisional matrix node-hours inside the
+`900.000000` envelope. Prepare only `R02/s03_rankio_t1_t1p5` from the
+authenticated terminal siblings, then inspect and recost before any further
+extension. Complete `R17` last.
 
 The first R02 preflight exposed a nonblocking preview-rendering defect:
 `check-submit` enforced the reviewed shared-root acknowledgement but omitted it
@@ -206,4 +220,11 @@ Retained F-080 evidence JSON SHA-256 is
 `46fc1c4054e75f4224302be1895c1b9eaae88097544512ac067c53376e542e34`;
 post-archive reconciliation passes. The first post-transition continuation is
 accepted as job `4746154`; use only its authenticated `t = 0.25` checkpoint
-for the next bounded R02 continuation.
+for the next bounded R02 continuation. Commits `9480e62764528a3f40066d22a192f0e99b369891`
+and `ef1e42fa088203ac9ef6ec8e47e668db4fb95a3c` additionally require the live
+helper to remain committed during historical authentication, reserve the
+case-level `analysis/` evidence namespace, and reject `--segment analysis`.
+The focused Stage I helper subset passes (`10 passed`). Job `4746182` used
+the verified `athenak-feature-cgl-through-ef1e42fa.bundle` launch bundle with
+SHA-256
+`80c211c41a8de32688c3be577d8c727ec3268c347c2a7c3b2d5143e1c34593ec`.
