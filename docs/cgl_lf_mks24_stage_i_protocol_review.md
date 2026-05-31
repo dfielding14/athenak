@@ -19,7 +19,10 @@ recorded `accepted` through exact `t = 0.25` for `0.289167` node-hours,
 bringing corrected E03 Stage I use to `0.478056` node-hours. Authenticated
 `R02/s02_rankio_t0p25_t1` job `4746182` is formally inspected and recorded
 `accepted` through exact `t = 1.0` for `1.465556` node-hours, bringing
-corrected E03 Stage I use to `1.943612` node-hours.
+corrected E03 Stage I use to `1.943612` node-hours. Authenticated
+`R02/s03_rankio_t1_t1p5` job `4746356` is formally and independently
+inspected and recorded `accepted` through exact `t = 1.5` for `1.048611`
+node-hours, bringing corrected E03 Stage I use to `2.992223` node-hours.
 
 The `900.000000` node-hour `E02` value is an authorized measurement-based
 projected envelope, not a fully measured matrix cost. It no longer authorizes
@@ -131,7 +134,8 @@ The corrected E03 simulation protocol entry gate is closed through Frontier
 qualification and token retention. Fresh mapped production has started with
 accepted R02 jobs `4745922` and `4746154` through exact `t = 0.25`.
 Authenticated job `4746182` now extends that accepted lineage through exact
-`t = 1.0`.
+`t = 1.0`. Authenticated job `4746356` now extends that accepted lineage
+through exact `t = 1.5`.
 The manuscript also still needs
 compact derivation prose. That prose must:
 
@@ -196,10 +200,26 @@ sampled-history forcing-work relative residual is
 retained. Corrected E03 use is `1.943612` node-hours. Updated recost evidence
 JSON SHA-256 is
 `7d11e8a0004e24417167aeb1f186f8b1f68c8eb9d6206467a708a7cad16cf252`;
-it projects `704.458334` provisional matrix node-hours inside the
-`900.000000` envelope. Prepare only `R02/s03_rankio_t1_t1p5` from the
-authenticated terminal siblings, then inspect and recost before any further
-extension. Complete `R17` last.
+preserve it as superseded arithmetic history. The corrected conservative
+projection at exact `t = 1.0` is `704.604815` matrix node-hours. Authenticated
+`R02/s03_rankio_t1_t1p5` job `4746356` is now accepted through exact
+`t = 1.5` for `1.048611` node-hours. Its sampled-history forcing-work
+relative residual is `4.978727845741857e-13`; strict LF failure counters
+remain zero; terminal `lf_hwproj = 106136472818`; complete two-group
+eight-rank snapshots and terminal eight-rank restart siblings are retained.
+Corrected E03 use is `2.992223` node-hours. Retained corrected recost evidence
+JSON SHA-256 is
+`b6fd6e8fcd939ca1baa06411a3cd6f04359b3bc2ff5b2a0097e2cc87b1763fc7`;
+it projects at most `724.645556` matrix node-hours inside the `900.000000`
+envelope, leaving `175.354444` node-hours of margin. F-083/F-084 controller
+hardening is promoted at canonical revision
+`9689c269bf329542815a1b2b137881126964b05c`, helper SHA-256
+`1c633ebb58294938a0a0609742ae8f8d1f88cd15242ffe649578796edeb39375`.
+Focused helper tests, Sphinx warnings-as-errors, syntax, diff, and hardened
+reconciliation pass. Prepare only `R02/s04_rankio_t1p5_t2` from the
+authenticated terminal siblings, then inspect, account, reconcile, and
+recost before any further extension. Finish R02, execute R03--R16
+sequentially, and complete `R17` last.
 
 The first R02 preflight exposed a nonblocking preview-rendering defect:
 `check-submit` enforced the reviewed shared-root acknowledgement but omitted it
