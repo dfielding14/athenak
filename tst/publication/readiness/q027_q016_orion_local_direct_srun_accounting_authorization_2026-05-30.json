@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "authorization_id": "q016-orion-local-direct-srun-accounting-2026-05-30",
+  "accounting_scope": "manual_direct_srun_accounting_only",
+  "scientific_evidence_eligible": false,
+  "jobs": [
+    {
+      "job_id": "4746332",
+      "expected_qos": "normal"
+    },
+    {
+      "job_id": "4746335",
+      "expected_qos": "normal"
+    },
+    {
+      "job_id": "4746336",
+      "expected_qos": "normal"
+    },
+    {
+      "job_id": "4746337",
+      "expected_qos": "normal"
+    },
+    {
+      "job_id": "4746341",
+      "expected_qos": "normal"
+    },
+    {
+      "job_id": "4746342",
+      "expected_qos": "normal"
+    },
+    {
+      "job_id": "4746343",
+      "expected_qos": "normal"
+    }
+  ]
+}
