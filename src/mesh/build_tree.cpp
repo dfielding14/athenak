@@ -378,7 +378,7 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
   std::memcpy(&(restart_meta.original_nranks), &(headerdata[hdos]), sizeof(int));
   delete [] headerdata;
 
-  if (restart_meta.original_nranks < 0) {
+  if (restart_meta.original_nranks <= 0) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
               << "Number of ranks stored in restart file is invalid."
@@ -507,6 +507,38 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
                 restart_meta.original_nranks*sizeof(int), MPI_CHAR, 0, MPI_COMM_WORLD);
     }
 #endif
+  }
+
+  int partition_end = 0;
+  for (int rank = 0; rank < restart_meta.original_nranks; ++rank) {
+    const int start = restart_meta.gids_eachrank[rank];
+    const int count = restart_meta.nmb_eachrank[rank];
+    if (start != partition_end || count < 0 || count > nmb_total - partition_end) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "Restart rank layout is not a contiguous MeshBlock partition."
+                << std::endl;
+      restart_utils::AbortOnFatalError();
+    }
+    partition_end += count;
+  }
+  if (partition_end != nmb_total) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Restart rank layout does not cover every MeshBlock." << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+  for (int gid = 0; gid < nmb_total; ++gid) {
+    const int rank = restart_meta.rank_eachmb[gid];
+    if (rank < 0 || rank >= restart_meta.original_nranks ||
+        gid < restart_meta.gids_eachrank[rank] ||
+        gid >= restart_meta.gids_eachrank[rank] + restart_meta.nmb_eachrank[rank]) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "Restart MeshBlock rank assignment is inconsistent with rank layout."
+                << std::endl;
+      restart_utils::AbortOnFatalError();
+    }
   }
 
   restart_meta.ncyc_since_ref.clear();

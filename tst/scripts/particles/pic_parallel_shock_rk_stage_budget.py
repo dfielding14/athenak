@@ -18,6 +18,7 @@ _MASS_FLUX = 0.10 * 1.0 * (3.0 + 1.0) * 8.0
 _RESULTS = {}
 _FLOOR_REJECTION = {}
 _INTEGRATOR_REJECTION = {}
+_PARAMETER_REJECTIONS = {}
 _FEEDBACK_DIAG_RE = re.compile(
     r'pic_parallel_shock feedback_diag: .*?'
     r'j_rms=\(([^,]+),([^,]+),([^)]+)\).*?'
@@ -179,6 +180,24 @@ def _run_expected_integrator_rejection():
     })
 
 
+def _run_expected_parameter_rejection(label, overrides, reason):
+    basename = 'pic_parallel_shock_rk_stage_budget_' + label
+    _remove_outputs(basename)
+    command = [
+        './athena', '-i', _athena_input_path(),
+        'job/basename=' + basename,
+        'time/integrator=rk1',
+    ] + overrides
+    logger.info('Executing expected rejection: %s', ' '.join(command))
+    proc = subprocess.run(command, cwd=_athena_exe_dir(),
+                          capture_output=True, text=True)
+    output = (proc.stdout or '') + (proc.stderr or '')
+    _PARAMETER_REJECTIONS[label] = {
+        'returncode': proc.returncode,
+        'saw_rejection': reason in output,
+    }
+
+
 def run(**kwargs):
     logger.debug('Running test ' + __name__)
     for integrator in _INTEGRATORS:
@@ -193,6 +212,27 @@ def run(**kwargs):
         }
     _run_expected_floor_rejection()
     _run_expected_integrator_rejection()
+    _run_expected_parameter_rejection(
+        'negative_floor_reject',
+        ['problem/ps_rho_floor_frac=-1.0'],
+        'floor fractions must be finite and non-negative',
+    )
+    _run_expected_parameter_rejection(
+        'nan_floor_reject',
+        ['problem/ps_p_floor_frac=nan'],
+        'floor fractions must be finite and non-negative',
+    )
+    _run_expected_parameter_rejection(
+        'passive_subtraction_reject',
+        [
+            'particles/pic_background_mode=passive_mhd',
+            'particles/pic_feedback_mode=test_particle',
+            'particles/couple_moments_to_mhd=false',
+            'particles/couple_moments_momentum_to_mhd=false',
+            'particles/couple_moments_energy_to_mhd=false',
+        ],
+        'gas subtraction requires <particles>/pic_background_mode=coupled',
+    )
 
 
 def analyze():
@@ -230,6 +270,9 @@ def analyze():
         ok = np.linalg.norm(off['feedback_diag'][:3]) > 0.0 and ok
         ok = np.all(np.isfinite(gas_momentum_removed)) and ok
         ok = np.isfinite(gas_energy_removed) and gas_energy_removed > 0.0 and ok
+        ok = np.max(np.abs(
+            gas_momentum_removed - off['injected_ledger'][2:5])) <= 1.0e-5 and ok
+        ok = abs(gas_energy_removed - off['injected_ledger'][5]) <= 1.0e-5 and ok
         if reference is None:
             reference = (
                 off['next_tag'], off['reservoir'], off['injected_ledger'],
@@ -242,4 +285,7 @@ def analyze():
     ok = _FLOOR_REJECTION.get('saw_floor_rejection', False) and ok
     ok = _INTEGRATOR_REJECTION.get('returncode', 0) != 0 and ok
     ok = _INTEGRATOR_REJECTION.get('saw_integrator_rejection', False) and ok
+    for rejection in _PARAMETER_REJECTIONS.values():
+        ok = rejection.get('returncode', 0) != 0 and ok
+        ok = rejection.get('saw_rejection', False) and ok
     return ok

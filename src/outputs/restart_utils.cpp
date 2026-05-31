@@ -652,4 +652,19 @@ bool VerifyRestartArtifact(const std::string &artifact_path, std::string &error)
   return false;
 }
 
+bool VerifyRestartManifestMemberCount(const std::string &manifest_path,
+                                      std::size_t expected_members,
+                                      std::string &error) {
+  FileDigest manifest_digest;
+  if (!VerifyCompletedArtifact(manifest_path, manifest_digest, error)) return false;
+  RestartManifest manifest;
+  if (!ParseRestartManifest(manifest_path, manifest, error)) return false;
+  if (manifest.members.size() != expected_members) {
+    error = "restart manifest member count does not match checkpoint rank layout: " +
+            manifest_path;
+    return false;
+  }
+  return true;
+}
+
 }  // namespace restart_utils

@@ -17,6 +17,7 @@
 
 #include "athena.hpp"
 #include "io_wrapper.hpp"
+#include "restart_utils.hpp"
 
 //----------------------------------------------------------------------------------------
 //! \fn int IOWrapper::Open(const char* fname, FileMode rw)
@@ -63,11 +64,10 @@ int IOWrapper::Open(const char* fname, FileMode rw, bool single_file_per_rank) {
       int resultlen;
       MPI_Error_string(errcode, msg, &resultlen);
       Kokkos::printf("%.*s\n", resultlen, msg);
-      MPI_Abort(MPI_COMM_WORLD, 1);
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "File '" << fname << "' could not be opened"
                 << std::endl;
-      std::exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
   } else {
     FILE* local_fh;
@@ -76,7 +76,7 @@ int IOWrapper::Open(const char* fname, FileMode rw, bool single_file_per_rank) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "File '" << fname << "' could not be opened"
                 << std::endl;
-      std::exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
     fh_ = reinterpret_cast<IOWrapperFile>(local_fh);
   }
@@ -87,7 +87,7 @@ int IOWrapper::Open(const char* fname, FileMode rw, bool single_file_per_rank) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl << "File '" << fname << "' could not be opened"
               << std::endl;
-    std::exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
   fh_ = local_fh;
 #endif

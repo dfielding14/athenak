@@ -151,6 +151,27 @@ def _run_athena(label, arguments, restart_path=None):
     return output
 
 
+def _run_athena_expect_fail(label, arguments, expected, restart_path=None):
+    command = ["./athena"]
+    if restart_path is None:
+        command += ["-i", _athena_input_path()]
+    else:
+        command += ["-r", os.path.relpath(restart_path, _athena_exe_dir())]
+    command += list(arguments)
+    logger.info("Executing expected rejection %s: %s", label, " ".join(command))
+    proc = subprocess.run(
+        command, cwd=_athena_exe_dir(), capture_output=True, text=True
+    )
+    output = (proc.stdout or "") + (proc.stderr or "")
+    if proc.returncode == 0:
+        raise RuntimeError("Expected rejection passed for " + label)
+    if expected not in output:
+        raise RuntimeError(
+            "Unexpected rejection reason for " + label + "\nExpected substring: "
+            + expected + "\nOutput:\n" + output
+        )
+
+
 def _particle_snapshot(basename):
     path = _latest_file(
         "pvtk", basename + ".prtcl_all.*.part.vtk", "particle VTK"
@@ -287,6 +308,8 @@ def _summary():
                 ("restart", restart_metadata),
             ]
         },
+        "explicit_incomplete_restart_rejected":
+            _RESULTS["explicit_incomplete_restart_rejected"],
         "sink_vs_pre_crossing_particle_absolute_errors": sink_errors,
         "crossed_vs_full_metadata_absolute_errors": _metadata_errors(
             full_metadata, crossed_metadata
@@ -330,6 +353,16 @@ def run(**kwargs):
     crossed_restart = _latest_restart(basenames["crossed"])
     _RESULTS["crossed_metadata"] = _restart_metadata(crossed_restart)
     _RESULTS["crossed_particles"] = _particle_snapshot(basenames["crossed"])
+    _run_athena_expect_fail(
+        "explicit_incomplete_restart",
+        [
+            "job/basename=" + basenames["restart"] + "_incomplete",
+            "problem/ps_cr_ledger_complete=false",
+        ],
+        "pic_parallel_shock restart CR ledger is explicitly incomplete",
+        restart_path=crossed_restart,
+    )
+    _RESULTS["explicit_incomplete_restart_rejected"] = True
 
     full_output = _run_athena(
         "uninterrupted",
@@ -386,6 +419,7 @@ def analyze():
     )
     return (
         summary["cutoff_crossing_exercised"]
+        and summary["explicit_incomplete_restart_rejected"]
         and all(schema == 2 for schema in restart_schemas.values())
         and all(restart_ledgers_complete.values())
         and all(restart_tags_seeded.values())

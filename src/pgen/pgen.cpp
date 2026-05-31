@@ -731,8 +731,7 @@ void LoadSingleFileRestartData(Mesh *pm,
   auto chunk_base = [&](int src_rank, int global_id) -> IOWrapperSizeT {
     int start_gid = meta.gids_eachrank[src_rank];
     int local_index = global_id - start_gid;
-    if (local_index < 0 || (meta.nmb_eachrank[src_rank] > 0 &&
-                            local_index >= meta.nmb_eachrank[src_rank])) {
+    if (local_index < 0 || local_index >= meta.nmb_eachrank[src_rank]) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "Restart metadata inconsistent with MeshBlock ids."
                 << std::endl;

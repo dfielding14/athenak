@@ -68,19 +68,19 @@
 namespace {
 
 std::size_t FindRestartRankDirectory(const std::string &path) {
-  std::size_t begin = 0;
-  while (begin < path.size()) {
-    const std::size_t end = path.find('/', begin);
-    if (end == std::string::npos) {
-      return std::string::npos;
-    }
-    const std::string component = path.substr(begin, end - begin);
-    if (component.size() == 13 && component.compare(0, 5, "rank_") == 0 &&
-        std::all_of(component.begin() + 5, component.end(),
-                    [](unsigned char c) { return std::isdigit(c) != 0; })) {
-      return (begin == 0) ? 0 : begin - 1;
-    }
-    begin = end + 1;
+  const std::size_t filename_sep = path.rfind('/');
+  if (filename_sep == std::string::npos || filename_sep == 0) {
+    return std::string::npos;
+  }
+  const std::size_t parent_sep = path.rfind('/', filename_sep - 1);
+  const std::size_t parent_begin =
+      (parent_sep == std::string::npos) ? 0 : parent_sep + 1;
+  const std::string component =
+      path.substr(parent_begin, filename_sep - parent_begin);
+  if (component.size() == 13 && component.compare(0, 5, "rank_") == 0 &&
+      std::all_of(component.begin() + 5, component.end(),
+                  [](unsigned char c) { return std::isdigit(c) != 0; })) {
+    return (parent_sep == std::string::npos) ? 0 : parent_sep;
   }
   return std::string::npos;
 }
@@ -95,6 +95,25 @@ void RequireCompletedRestartArtifacts(const std::vector<std::string> &paths) {
         break;
       }
     }
+  }
+#if MPI_PARALLEL_ENABLED
+  MPI_Bcast(&valid, 1, MPI_INT, 0, MPI_COMM_WORLD);
+#endif
+  if (valid == 0) {
+    if (global_variable::my_rank == 0) {
+      std::cerr << "### FATAL ERROR: " << error << std::endl;
+    }
+    restart_utils::AbortOnFatalError();
+  }
+}
+
+void RequireRestartManifestMemberCount(const std::string &path,
+                                       std::size_t expected_members) {
+  int valid = 1;
+  std::string error;
+  if (global_variable::my_rank == 0 &&
+      !restart_utils::VerifyRestartManifestMemberCount(path, expected_members, error)) {
+    valid = 0;
   }
 #if MPI_PARALLEL_ENABLED
   MPI_Bcast(&valid, 1, MPI_INT, 0, MPI_COMM_WORLD);
@@ -443,6 +462,9 @@ int main(int argc, char *argv[]) {
   } else {
     pmesh->BuildTreeFromRestart(pinput, restartfile, single_file_per_rank);
     if (single_file_per_rank) {
+      RequireRestartManifestMemberCount(
+          restart_prefix + restart_file_name + ".manifest",
+          static_cast<std::size_t>(pmesh->restart_meta.original_nranks));
       std::vector<std::string> member_files;
       for (int rank = 0; rank < pmesh->restart_meta.original_nranks; ++rank) {
         char rank_dir[20];

@@ -33,6 +33,7 @@ _MOMENT_COUNT_META_INDEX = 9
 _MODEL_INT_COUNT = 31
 _MODEL_REAL_COUNT = 37
 _EXPECTED_RESTART_SCHEMA = 7
+_MESH_METADATA_MAGIC = 0x4154484B4D455348
 
 _CASES = {
     'no_mhd': [
@@ -295,6 +296,122 @@ def _write_shared_restart_publication(path):
         json.dump(manifest, fp, indent=2, sort_keys=True)
         fp.write('\n')
     _write_completion_marker(manifest_path)
+
+
+def _run_extra_shard_manifest_guard():
+    base = 'pic_rst_safe_guard_extra_shard'
+    base_seg = base + '_seg'
+    base_rst = base + '_rst'
+    for name in [base_seg, base_rst]:
+        _remove_outputs(name)
+
+    _run_success(
+        base + '_seg_run', 1,
+        ['job/basename=' + base_seg,
+         'time/nlim=1',
+         'output7/single_file_per_rank=true'] + _CASES['no_mhd'])
+    full_src, rst_path = _latest_restart_path(base_seg, per_rank=True)
+    rank0_dir = os.path.dirname(full_src)
+    rank1_dir = os.path.join(os.path.dirname(rank0_dir), 'rank_00000001')
+    os.makedirs(rank1_dir, exist_ok=True)
+    extra = os.path.join(rank1_dir, os.path.basename(full_src))
+    shutil.copyfile(full_src, extra)
+    shutil.copyfile(full_src + '.complete', extra + '.complete')
+
+    manifest_path = os.path.join(os.path.dirname(rank0_dir),
+                                 os.path.basename(full_src) + '.manifest')
+    with open(manifest_path, encoding='ascii') as fp:
+        manifest = json.load(fp)
+    manifest['members'].append({
+        'path': os.path.relpath(extra, _athena_exe_dir()),
+        'size': os.path.getsize(extra),
+        'fnv1a64': format(_fnv1a64(extra), '016x'),
+    })
+    with open(manifest_path, 'w', encoding='ascii') as fp:
+        json.dump(manifest, fp, indent=2, sort_keys=True)
+        fp.write('\n')
+    _write_completion_marker(manifest_path)
+
+    code, output = _execute(
+        base + '_restart_run', 1,
+        ['job/basename=' + base_rst, 'time/nlim=2'] + _CASES['no_mhd'],
+        restart_file=rst_path)
+    expected = 'restart manifest member count does not match checkpoint rank layout'
+    if code == 0:
+        raise RuntimeError('Expected extra-shard manifest failure, but command passed')
+    if expected not in output:
+        raise RuntimeError('Unexpected extra-shard manifest failure reason\n'
+                           'Expected substring: ' + expected + '\n'
+                           'Output:\n' + output)
+    _RESTART_GUARDS['extra_shard_manifest_member'] = True
+
+
+def _run_inconsistent_rank_layout_guard():
+    base = 'pic_rst_safe_guard_rank_layout'
+    base_seg = base + '_seg'
+    base_rst = base + '_rst'
+    base_bad = base + '_corrupt'
+    for name in [base_seg, base_rst, base_bad]:
+        _remove_outputs(name)
+
+    _run_success(base + '_seg_run', 1,
+                 ['job/basename=' + base_seg, 'time/nlim=1'] + _CASES['no_mhd'])
+    src_rst_path = os.path.join('rst', base_seg + '.00000.rst')
+    dst_rst_path = os.path.join('rst', base_bad + '.00000.rst')
+    full_src = os.path.join(_athena_exe_dir(), src_rst_path)
+    full_dst = os.path.join(_athena_exe_dir(), dst_rst_path)
+    shutil.copyfile(full_src, full_dst)
+    with open(full_dst, 'rb') as fp:
+        data = bytearray(fp.read())
+    marker = struct.pack('<Q', _MESH_METADATA_MAGIC)
+    metadata_offset = data.find(marker)
+    if metadata_offset < struct.calcsize('<i'):
+        raise RuntimeError('Mesh metadata marker not found in ' + full_dst)
+    struct.pack_into('<i', data, metadata_offset - struct.calcsize('<i'), 0)
+    with open(full_dst, 'wb') as fp:
+        fp.write(data)
+    _write_shared_restart_publication(full_dst)
+
+    code, output = _execute(
+        base + '_restart_run', 1,
+        ['job/basename=' + base_rst, 'time/nlim=2'] + _CASES['no_mhd'],
+        restart_file=dst_rst_path)
+    expected = 'Restart rank layout does not cover every MeshBlock'
+    if code == 0:
+        raise RuntimeError('Expected inconsistent rank-layout failure, but command passed')
+    if expected not in output:
+        raise RuntimeError('Unexpected rank-layout failure reason\n'
+                           'Expected substring: ' + expected + '\n'
+                           'Output:\n' + output)
+    _RESTART_GUARDS['inconsistent_rank_layout'] = True
+
+
+def _run_rank_shaped_ancestor_guard():
+    base = 'pic_rst_safe_guard_rank_shaped_ancestor'
+    root = tempfile.mkdtemp(prefix=base + '_', dir=_athena_exe_dir())
+    run_dir = os.path.join(root, 'rank_00000042', 'nested')
+    recovered_dir = os.path.join(root, 'recovered')
+    os.makedirs(run_dir)
+    os.makedirs(recovered_dir)
+    try:
+        code, output = _execute(
+            base + '_seed_run', 1,
+            ['-d', run_dir, 'job/basename=' + base, 'time/nlim=1'] +
+            _CASES['no_mhd'])
+        if code != 0:
+            raise RuntimeError('Unable to seed rank-shaped ancestor guard\n' + output)
+        restart_file = os.path.join(run_dir, 'rst', base + '.00000.rst')
+        code, output = _execute(
+            base + '_restart_run', 1,
+            ['-d', recovered_dir, 'job/basename=' + base + '_rst', 'time/nlim=2'] +
+            _CASES['no_mhd'],
+            restart_file=restart_file)
+        if code != 0:
+            raise RuntimeError('Canonical-looking ancestor directory confused restart '
+                               'shard discovery\n' + output)
+        _RESTART_GUARDS['rank_shaped_ancestor_ignored'] = True
+    finally:
+        shutil.rmtree(root)
 
 
 def _corrupt_first_particle_species(restart_path, bad_species):
@@ -1130,7 +1247,7 @@ def _run_per_rank_watch(nproc, case_args):
         raise RuntimeError('Expected restart file not found: ' + full_rst_path)
 
     code, output = _execute(base + '_restart_run', nproc,
-                            rst_args, restart_file=rst_path)
+                            rst_args, restart_file=rst_path, timeout=30)
     if code == 0:
         rst_measured = _measure_case(base_rst)
         _PER_RANK_WATCH['status'] = 'supported'
@@ -1221,6 +1338,9 @@ def run(**kwargs):
     _run_checksum_restart_guard()
     _run_bound_restart_override_guard()
     _run_publication_failure_path_guards()
+    _run_extra_shard_manifest_guard()
+    _run_inconsistent_rank_layout_guard()
+    _run_rank_shaped_ancestor_guard()
     _run_preload_restart_guards()
     _run_full_device_restart_target_guard()
     _run_unwritable_restart_target_guard()
@@ -1287,6 +1407,9 @@ def analyze():
         'manifest_wrong_path',
         'manifest_wrong_digest',
         'interrupted_publication_preserves_prior',
+        'extra_shard_manifest_member',
+        'inconsistent_rank_layout',
+        'rank_shaped_ancestor_ignored',
         'short_header_write',
         'stdio_fseek_failure',
         'dev_full_publication_failure',
@@ -1337,8 +1460,8 @@ def analyze():
             logger.info('per_rank:tracked_particle_max_abs_err=% .8e', track_err)
             ok = (track_err <= 1.0e-5) and ok
         elif status == 'guarded':
-            logger.info('per-rank restart remains guarded with known reason family')
-            ok = True and ok
+            logger.error('per-rank restart remains guarded and is not release-ready')
+            ok = False
         else:
             logger.error('Unexpected per-rank restart failure:\n%s',
                          _PER_RANK_WATCH.get('reason', '<no output>'))

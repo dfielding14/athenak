@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cerrno>
 #include <cstdint>
 #include <cstring>
 #include <cstdio>      // fwrite(), fclose(), fopen(), fnprintf(), snprintf()
@@ -47,12 +48,22 @@
 RestartOutput::RestartOutput(ParameterInput *pin, Mesh *pm, OutputParameters op) :
   BaseTypeOutput(pin, pm, op) {
   // create directories for outputs. Comments in binary.cpp constructor explain why
-  mkdir("rst",0775);
+  if (mkdir("rst",0775) != 0 && errno != EEXIST) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "Unable to create restart output directory 'rst': "
+              << std::strerror(errno) << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
   bool single_file_per_rank = op.single_file_per_rank;
   if (single_file_per_rank) {
     char rank_dir[20];
     std::snprintf(rank_dir, sizeof(rank_dir), "rst/rank_%08d/", global_variable::my_rank);
-    mkdir(rank_dir, 0775);
+    if (mkdir(rank_dir, 0775) != 0 && errno != EEXIST) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "Unable to create restart rank directory '" << rank_dir
+                << "': " << std::strerror(errno) << std::endl;
+      restart_utils::AbortOnFatalError();
+    }
   }
 }
 

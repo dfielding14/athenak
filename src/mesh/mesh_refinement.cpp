@@ -36,6 +36,7 @@
 #include "restriction.hpp"
 #include "nghbr_index.hpp"
 #include "particles/particles.hpp"
+#include "outputs/restart_utils.hpp"
 
 #if MPI_PARALLEL_ENABLED
 #include <mpi.h>
@@ -156,7 +157,7 @@ MeshRefinement::MeshRefinement(Mesh *pm, ParameterInput *pin) :
               << std::endl
               << "Adaptive restart cooldown metadata has the wrong size."
               << std::endl;
-    std::exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
 
   // Initialize Views, restoring the AMR cooldown state on new-schema restarts.

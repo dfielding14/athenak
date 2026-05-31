@@ -997,16 +997,27 @@ void ApplyParallelShockGasSubtraction(Mesh *pm, const Real stage_weight) {
   const Real gm1 = pmhd->peos->eos_data.gamma - 1.0;
   int local_density_floor_clips = 0;
   int local_pressure_floor_clips = 0;
+  int local_nonfinite_cells = 0;
   Kokkos::parallel_reduce(
     "ps_gas_subtract_validate", Kokkos::RangePolicy<>(DevExeSpace(), 0, nsub),
-  KOKKOS_LAMBDA(const int n, int &density_clips, int &pressure_clips) {
+  KOKKOS_LAMBDA(const int n, int &density_clips, int &pressure_clips,
+                int &nonfinite_cells) {
     const int m = d_m(n);
     const int k = d_k(n);
     const int j = d_j(n);
     const int i = d_i(n);
     const Real dm = d_dm(n);
+    if (!isfinite(dm) || !isfinite(d_dmx(n)) || !isfinite(d_dmy(n)) ||
+        !isfinite(d_dmz(n)) || !isfinite(d_de(n))) {
+      ++nonfinite_cells;
+      return;
+    }
     if (dm <= 0.0) return;
     const Real rho = u0(m, IDN, k, j, i) - dm;
+    if (!isfinite(rho)) {
+      ++nonfinite_cells;
+      return;
+    }
     if (rho < rho_floor) {
       ++density_clips;
       return;
@@ -1020,26 +1031,38 @@ void ApplyParallelShockGasSubtraction(Mesh *pm, const Real stage_weight) {
     const Real bz = 0.5*(b0.x3f(m, k, j, i) + b0.x3f(m, k + 1, j, i));
     const Real kin = 0.5*(SQR(mx) + SQR(my) + SQR(mz))/rho;
     const Real efloor = p_floor/gm1 + kin + 0.5*(SQR(bx) + SQR(by) + SQR(bz));
+    if (!isfinite(mx) || !isfinite(my) || !isfinite(mz) || !isfinite(energy) ||
+        !isfinite(bx) || !isfinite(by) || !isfinite(bz) || !isfinite(efloor)) {
+      ++nonfinite_cells;
+      return;
+    }
     if (energy < efloor) ++pressure_clips;
   }, Kokkos::Sum<int>(local_density_floor_clips),
-     Kokkos::Sum<int>(local_pressure_floor_clips));
+     Kokkos::Sum<int>(local_pressure_floor_clips),
+     Kokkos::Sum<int>(local_nonfinite_cells));
 #if MPI_PARALLEL_ENABLED
   int global_density_floor_clips = 0;
   int global_pressure_floor_clips = 0;
+  int global_nonfinite_cells = 0;
   MPI_Allreduce(&local_density_floor_clips, &global_density_floor_clips, 1,
                 MPI_INT, MPI_SUM, MPI_COMM_WORLD);
   MPI_Allreduce(&local_pressure_floor_clips, &global_pressure_floor_clips, 1,
                 MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+  MPI_Allreduce(&local_nonfinite_cells, &global_nonfinite_cells, 1,
+                MPI_INT, MPI_SUM, MPI_COMM_WORLD);
 #else
   int global_density_floor_clips = local_density_floor_clips;
   int global_pressure_floor_clips = local_pressure_floor_clips;
+  int global_nonfinite_cells = local_nonfinite_cells;
 #endif
-  if (global_density_floor_clips > 0 || global_pressure_floor_clips > 0) {
+  if (global_density_floor_clips > 0 || global_pressure_floor_clips > 0 ||
+      global_nonfinite_cells > 0) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
               << "pic_parallel_shock gas subtraction would violate a fluid floor: "
               << "density_floor_cells=" << global_density_floor_clips
               << " pressure_floor_cells=" << global_pressure_floor_clips
+              << " nonfinite_cells=" << global_nonfinite_cells
               << ". The process is stopping before clipping or checkpoint publication."
               << std::endl;
     restart_utils::AbortOnFatalError();
@@ -1880,14 +1903,44 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
     restart_utils::AbortOnFatalError();
   }
 
-  if (ps_rho0 <= 0.0 || ps_p0 <= 0.0 || ps_u0 <= 0.0 || ps_b0 <= 0.0 || ps_eta < 0.0) {
+  if (!std::isfinite(ps_rho0) || !std::isfinite(ps_p0) || !std::isfinite(ps_u0) ||
+      !std::isfinite(ps_b0) || !std::isfinite(ps_eta) ||
+      ps_rho0 <= 0.0 || ps_p0 <= 0.0 || ps_u0 <= 0.0 || ps_b0 <= 0.0 || ps_eta < 0.0) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
               << "pic_parallel_shock parameters ps_rho0/ps_p0/ps_u0/ps_b0 must be > 0 "
               << "and ps_eta must be >= 0." << std::endl;
     restart_utils::AbortOnFatalError();
   }
-  if (ps_seed_noise_amp < 0.0) {
+  if (!std::isfinite(ps_rho_floor_frac) || !std::isfinite(ps_p_floor_frac) ||
+      ps_rho_floor_frac < 0.0 || ps_p_floor_frac < 0.0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock floor fractions must be finite and non-negative."
+              << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+  if (ps_enable_subtraction &&
+      pmbp->ppart->pic_background_mode != PICBackgroundMode::coupled) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock gas subtraction requires "
+              << "<particles>/pic_background_mode=coupled." << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+  if (!std::isfinite(ps_vinj_over_u0) || ps_vinj_over_u0 <= 0.0 ||
+      !std::isfinite(ps_inject_half_width_cells) ||
+      !std::isfinite(ps_inject_t_start) || !std::isfinite(ps_inject_t_stop) ||
+      ps_inject_t_stop < ps_inject_t_start ||
+      !std::isfinite(ps_remove_birth_time_before)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock injection controls must be finite, "
+              << "ps_vinj_over_u0 must be positive, and the injection interval "
+              << "must be ordered." << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+  if (!std::isfinite(ps_seed_noise_amp) || ps_seed_noise_amp < 0.0) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
               << "pic_parallel_shock requires ps_seed_noise_amp >= 0."
@@ -1912,7 +1965,9 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
               << "'ideal_surface'." << std::endl;
     restart_utils::AbortOnFatalError();
   }
-  if (ps_frame_t_ramp < 0.0 || ps_frame_vfrac < 0.0 || ps_frame_dv_max < 0.0) {
+  if (!std::isfinite(ps_frame_t_start) || !std::isfinite(ps_frame_t_ramp) ||
+      !std::isfinite(ps_frame_vfrac) || !std::isfinite(ps_frame_dv_max) ||
+      ps_frame_t_ramp < 0.0 || ps_frame_vfrac < 0.0 || ps_frame_dv_max < 0.0) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
               << "pic_parallel_shock frame controls require ps_frame_t_ramp >= 0, "
@@ -1955,7 +2010,8 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
   std::string species_block = "species" + std::to_string(ps_inject_species);
   ps_particle_mass = pin->GetOrAddReal(species_block, "mass", 1.0);
   ps_particle_charge = pin->GetOrAddReal(species_block, "charge", 1.0);
-  if (ps_particle_mass <= 0.0) {
+  if (!std::isfinite(ps_particle_mass) || !std::isfinite(ps_particle_charge) ||
+      ps_particle_mass <= 0.0) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl << "Injected species mass must be > 0." << std::endl;
     restart_utils::AbortOnFatalError();
@@ -1963,7 +2019,7 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
   ps_particle_q_over_m = ps_particle_charge/ps_particle_mass;
   Real qscale = pin->GetOrAddReal("particles", "deposit_qscale", 1.0);
   ps_particle_macro_mass = qscale*ps_particle_mass;
-  if (ps_particle_macro_mass <= 0.0) {
+  if (!std::isfinite(ps_particle_macro_mass) || ps_particle_macro_mass <= 0.0) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl << "Computed injected macro-mass must be > 0." << std::endl;
     restart_utils::AbortOnFatalError();
@@ -1974,7 +2030,7 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
   ps_shock_speed = (ps_shock_speed_model == PSShockSpeedModel::ideal_surface) ?
       IdealSurfaceShockSpeed(gamma, ps_u0) :
       EstimateShockSpeed(gamma, ps_rho0, ps_p0, ps_u0);
-  if (ps_shock_speed <= 0.0) {
+  if (!std::isfinite(ps_shock_speed) || ps_shock_speed <= 0.0) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
               << "pic_parallel_shock requires supersonic inflow with positive "
@@ -2014,7 +2070,21 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
     }
     ps_cr_ledger_complete = pin->GetBoolean("problem", "ps_cr_ledger_complete");
   } else {
-    ps_cr_ledger_complete = !restart;
+    if (restart) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "pic_parallel_shock restart requires complete schema-2 CR ledger "
+                << "metadata." << std::endl;
+      restart_utils::AbortOnFatalError();
+    }
+    ps_cr_ledger_complete = true;
+  }
+  if (!ps_cr_ledger_complete) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock restart CR ledger is explicitly incomplete."
+              << std::endl;
+    restart_utils::AbortOnFatalError();
   }
   ps_mass_reservoir_global = restart ?
       pin->GetOrAddReal("problem", "ps_mass_reservoir_global", 0.0) : 0.0;

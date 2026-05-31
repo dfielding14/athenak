@@ -9,6 +9,7 @@
 //! \brief Atomic-publication and integrity helpers for restart artifacts.
 
 #include <cstdint>
+#include <cstddef>
 #include <string>
 #include <utility>
 #include <vector>
@@ -38,6 +39,9 @@ void WriteRestartManifest(
 // Manifest paths validate member layout. Payload paths additionally require a
 // matching manifest member with the payload's size and checksum.
 bool VerifyRestartArtifact(const std::string &artifact_path, std::string &error);
+bool VerifyRestartManifestMemberCount(const std::string &manifest_path,
+                                      std::size_t expected_members,
+                                      std::string &error);
 
 }  // namespace restart_utils
 
