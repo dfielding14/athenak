@@ -146,6 +146,8 @@ Real ps_removed_cr_momentum_x3_global = 0.0;
 Real ps_removed_cr_energy_global = 0.0;
 bool ps_cr_ledger_complete = true;
 bool ps_tag_seeded = false;
+bool ps_tag_progression_validated = false;
+std::int64_t ps_injection_tag_floor = 0;
 std::int64_t ps_next_tag = 0;
 ParameterInput *ps_pin = nullptr;
 
@@ -521,8 +523,95 @@ void FatalParticleMigrationError(const char *message) {
   restart_utils::AbortOnFatalError();
 }
 
+Real ParallelShockLedgerTolerance(const Real lhs, const Real rhs) {
+  const Real scale = std::max({std::abs(lhs), std::abs(rhs),
+                               std::abs(ps_particle_macro_mass)});
+  return 1.0e-6*scale + 64.0*std::numeric_limits<Real>::epsilon();
+}
+
+bool ParallelShockLedgerValuesAgree(const Real lhs, const Real rhs) {
+  return std::abs(lhs - rhs) <= ParallelShockLedgerTolerance(lhs, rhs);
+}
+
+bool ParallelShockLedgerValueExceeds(const Real lhs, const Real rhs) {
+  return lhs > rhs + ParallelShockLedgerTolerance(lhs, rhs);
+}
+
+void ValidateParallelShockRuntimeLedger(const char *context) {
+  const auto invalid_nonnegative_ledger = [](const Real value) {
+    return !std::isfinite(value) || value < 0.0;
+  };
+  const auto invalid_count_ledger = [&](const Real value) {
+    return invalid_nonnegative_ledger(value) || std::floor(value) != value;
+  };
+  const bool invalid_removed_before_sink =
+      !ps_removed_excluded_early_cohort &&
+      (ps_removed_cr_count_global != 0.0 || ps_removed_cr_mass_global != 0.0 ||
+       ps_removed_cr_momentum_x1_global != 0.0 ||
+       ps_removed_cr_momentum_x2_global != 0.0 ||
+       ps_removed_cr_momentum_x3_global != 0.0 ||
+       ps_removed_cr_energy_global != 0.0);
+  const Real expected_injected_mass =
+      ps_injected_cr_count_global*ps_particle_macro_mass;
+  const Real expected_removed_mass =
+      ps_removed_cr_count_global*ps_particle_macro_mass;
+  const auto max_tag = static_cast<std::int64_t>(std::numeric_limits<int>::max());
+  const bool injected_count_fits_tag =
+      std::isfinite(ps_injected_cr_count_global) &&
+      ps_injected_cr_count_global >= 0.0 &&
+      std::floor(ps_injected_cr_count_global) == ps_injected_cr_count_global &&
+      ps_injected_cr_count_global <= static_cast<Real>(max_tag);
+  const auto injected_tag_count = injected_count_fits_tag ?
+      static_cast<std::int64_t>(ps_injected_cr_count_global) : 0;
+  const bool invalid_tag_sum =
+      !injected_count_fits_tag || ps_injection_tag_floor < 0 ||
+      ps_injection_tag_floor > max_tag ||
+      injected_tag_count > max_tag - ps_injection_tag_floor;
+  const bool invalid_tag_window =
+      invalid_tag_sum || ps_next_tag < 0 || ps_next_tag > max_tag ||
+      (!ps_tag_seeded &&
+       (ps_injection_tag_floor != 0 || ps_next_tag != 0 ||
+        ps_injected_cr_count_global != 0.0)) ||
+      (ps_tag_seeded &&
+       (ps_injection_tag_floor + injected_tag_count != ps_next_tag));
+  if (!std::isfinite(ps_particle_macro_mass) || ps_particle_macro_mass <= 0.0 ||
+      !std::isfinite(ps_mass_reservoir_global) ||
+      ps_mass_reservoir_global < 0.0 ||
+      ps_mass_reservoir_global >= ps_particle_macro_mass ||
+      invalid_count_ledger(ps_injected_cr_count_global) ||
+      invalid_nonnegative_ledger(ps_injected_cr_mass_global) ||
+      !std::isfinite(ps_injected_cr_momentum_x1_global) ||
+      !std::isfinite(ps_injected_cr_momentum_x2_global) ||
+      !std::isfinite(ps_injected_cr_momentum_x3_global) ||
+      invalid_nonnegative_ledger(ps_injected_cr_energy_global) ||
+      invalid_count_ledger(ps_removed_cr_count_global) ||
+      invalid_nonnegative_ledger(ps_removed_cr_mass_global) ||
+      !std::isfinite(ps_removed_cr_momentum_x1_global) ||
+      !std::isfinite(ps_removed_cr_momentum_x2_global) ||
+      !std::isfinite(ps_removed_cr_momentum_x3_global) ||
+      invalid_nonnegative_ledger(ps_removed_cr_energy_global) ||
+      invalid_tag_window ||
+      !std::isfinite(expected_injected_mass) ||
+      !std::isfinite(expected_removed_mass) ||
+      !ParallelShockLedgerValuesAgree(ps_injected_cr_mass_global,
+                                      expected_injected_mass) ||
+      !ParallelShockLedgerValuesAgree(ps_removed_cr_mass_global,
+                                      expected_removed_mass) ||
+      ps_removed_cr_count_global > ps_injected_cr_count_global ||
+      ParallelShockLedgerValueExceeds(ps_removed_cr_mass_global,
+                                      ps_injected_cr_mass_global) ||
+      invalid_removed_before_sink) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock " << context
+              << " CR ledger numeric metadata is invalid." << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+}
+
 void StoreRuntimeStateForRestart() {
   if (ps_pin == nullptr) return;
+  ValidateParallelShockRuntimeLedger("runtime");
   ps_pin->SetReal("problem", "ps_mass_reservoir_global", ps_mass_reservoir_global);
   ps_pin->SetReal("problem", "ps_injected_cr_count_global",
                   ps_injected_cr_count_global);
@@ -550,7 +639,7 @@ void StoreRuntimeStateForRestart() {
                   ps_removed_cr_momentum_x3_global);
   ps_pin->SetReal("problem", "ps_removed_cr_energy_global",
                   ps_removed_cr_energy_global);
-  ps_pin->SetInteger("problem", "ps_cr_ledger_schema", 2);
+  ps_pin->SetInteger("problem", "ps_cr_ledger_schema", 3);
   ps_pin->SetBoolean("problem", "ps_cr_ledger_complete", ps_cr_ledger_complete);
   ps_pin->SetBoolean("problem", "ps_tag_seeded", ps_tag_seeded);
   if (ps_next_tag < 0 ||
@@ -561,6 +650,8 @@ void StoreRuntimeStateForRestart() {
               << "restart metadata." << std::endl;
     restart_utils::AbortOnFatalError();
   }
+  ps_pin->SetInteger("problem", "ps_injection_tag_floor",
+                     static_cast<int>(ps_injection_tag_floor));
   ps_pin->SetInteger("problem", "ps_next_tag",
                      static_cast<int>(ps_next_tag));
 }
@@ -913,22 +1004,31 @@ inline Real ClampInsideDomain(const Real x, const Real xmin, const Real xmax) {
 }
 
 void SeedNextTag(particles::Particles *ppart) {
-  if (ps_tag_seeded) return;
+  if (ps_tag_seeded && ps_tag_progression_validated) return;
 
   int local_max = -1;
+  int local_baseline_max = -1;
   int npart = ppart->nprtcl_thispack;
   if (npart > 0) {
     auto h_pi = Kokkos::create_mirror_view_and_copy(HostMemSpace(), ppart->prtcl_idata);
     for (int p = 0; p < npart; ++p) {
       local_max = std::max(local_max, h_pi(PTAG, p));
+      if (h_pi(PCRSOURCE, p) !=
+          static_cast<int>(CRParticleSource::shock_injected)) {
+        local_baseline_max = std::max(local_baseline_max, h_pi(PTAG, p));
+      }
     }
   }
 
 #if MPI_PARALLEL_ENABLED
   int global_max = -1;
+  int global_baseline_max = -1;
   MPI_Allreduce(&local_max, &global_max, 1, MPI_INT, MPI_MAX, MPI_COMM_WORLD);
+  MPI_Allreduce(&local_baseline_max, &global_baseline_max, 1, MPI_INT, MPI_MAX,
+                MPI_COMM_WORLD);
 #else
   int global_max = local_max;
+  int global_baseline_max = local_baseline_max;
 #endif
 
   const std::int64_t start = static_cast<std::int64_t>(global_max) + 1;
@@ -939,8 +1039,23 @@ void SeedNextTag(particles::Particles *ppart) {
               << std::endl;
     restart_utils::AbortOnFatalError();
   }
+  if (ps_tag_seeded) {
+    const std::int64_t baseline_start =
+        static_cast<std::int64_t>(global_baseline_max) + 1;
+    if (ps_next_tag < start || ps_injection_tag_floor < baseline_start) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "pic_parallel_shock persisted CR tag progression is invalid."
+                << std::endl;
+      restart_utils::AbortOnFatalError();
+    }
+    ps_tag_progression_validated = true;
+    return;
+  }
+  ps_injection_tag_floor = start;
   ps_next_tag = start;
   ps_tag_seeded = true;
+  ps_tag_progression_validated = true;
   StoreRuntimeStateForRestart();
 }
 
@@ -1779,6 +1894,10 @@ void ParallelShockWorkInLoop(Mesh *pm) {
 
 void ParallelShockWorkBeforeLoop(Mesh *pm) {
   if (pm == nullptr || pm->dt <= 0.0) return;
+  MeshBlockPack *pmbp = pm->pmb_pack;
+  if (pmbp != nullptr && pmbp->ppart != nullptr) {
+    SeedNextTag(pmbp->ppart);
+  }
   RemoveExcludedEarlyInjectedParticles(pm);
   PrepareParallelShockInjectionTransaction(pm);
 }
@@ -2045,7 +2164,7 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
       restart && pin->DoesParameterExist("problem", "ps_cr_ledger_schema");
   if (has_ledger_schema) {
     const int ledger_schema = pin->GetInteger("problem", "ps_cr_ledger_schema");
-    const std::array<const char *, 17> ledger_fields = {
+    const std::array<const char *, 18> ledger_fields = {
       "ps_cr_ledger_complete", "ps_mass_reservoir_global",
       "ps_injected_cr_count_global", "ps_injected_cr_mass_global",
       "ps_injected_cr_momentum_x1_global", "ps_injected_cr_momentum_x2_global",
@@ -2054,14 +2173,14 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
       "ps_removed_cr_count_global", "ps_removed_cr_mass_global",
       "ps_removed_cr_momentum_x1_global", "ps_removed_cr_momentum_x2_global",
       "ps_removed_cr_momentum_x3_global", "ps_removed_cr_energy_global",
-      "ps_tag_seeded", "ps_next_tag"
+      "ps_tag_seeded", "ps_injection_tag_floor", "ps_next_tag"
     };
     bool ledger_fields_complete = true;
     for (const char *field : ledger_fields) {
       ledger_fields_complete =
           ledger_fields_complete && pin->DoesParameterExist("problem", field);
     }
-    if (ledger_schema != 2 || !ledger_fields_complete) {
+    if (ledger_schema != 3 || !ledger_fields_complete) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
                 << "pic_parallel_shock restart has unsupported or incomplete CR "
@@ -2073,7 +2192,7 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
     if (restart) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
-                << "pic_parallel_shock restart requires complete schema-2 CR ledger "
+                << "pic_parallel_shock restart requires complete schema-3 CR ledger "
                 << "metadata." << std::endl;
       restart_utils::AbortOnFatalError();
     }
@@ -2122,6 +2241,21 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
       pin->GetOrAddReal("problem", "ps_removed_cr_energy_global", 0.0) : 0.0;
   ps_tag_seeded = has_ledger_schema ?
       pin->GetBoolean("problem", "ps_tag_seeded") : false;
+  ps_tag_progression_validated = false;
+  ps_injection_tag_floor = 0;
+  if (has_ledger_schema ||
+      (restart && pin->DoesParameterExist("problem", "ps_injection_tag_floor"))) {
+    const int stored_tag_floor =
+        pin->GetInteger("problem", "ps_injection_tag_floor");
+    if (stored_tag_floor < 0) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "pic_parallel_shock restart metadata has negative "
+                << "ps_injection_tag_floor." << std::endl;
+      restart_utils::AbortOnFatalError();
+    }
+    ps_injection_tag_floor = static_cast<std::int64_t>(stored_tag_floor);
+  }
   ps_next_tag = 0;
   if (has_ledger_schema ||
       (restart && pin->DoesParameterExist("problem", "ps_next_tag"))) {
@@ -2138,6 +2272,7 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
       ps_tag_seeded = true;
     }
   }
+  ValidateParallelShockRuntimeLedger(restart ? "restart" : "runtime");
   StoreRuntimeStateForRestart();
   ConfigureSeedNoisePhases();
 

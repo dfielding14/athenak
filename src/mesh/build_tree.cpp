@@ -378,10 +378,37 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
   std::memcpy(&(restart_meta.original_nranks), &(headerdata[hdos]), sizeof(int));
   delete [] headerdata;
 
-  if (restart_meta.original_nranks <= 0) {
+  if (nmb_total <= 0 || restart_meta.original_nranks <= 0 ||
+      restart_meta.original_nranks > nmb_total) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
-              << "Number of ranks stored in restart file is invalid."
+              << "MeshBlock or rank count stored in restart file is invalid."
+              << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+  const auto checked_add_product = [](IOWrapperSizeT &total, const IOWrapperSizeT count,
+                                      const IOWrapperSizeT width) {
+    constexpr IOWrapperSizeT max = std::numeric_limits<IOWrapperSizeT>::max();
+    if ((count != 0 && width > max/count) || total > max - count*width) return false;
+    total += count*width;
+    return true;
+  };
+  IOWrapperSizeT minimum_size = headeroffset;
+  const IOWrapperSizeT meshblocks = static_cast<IOWrapperSizeT>(nmb_total);
+  const IOWrapperSizeT original_nranks =
+      static_cast<IOWrapperSizeT>(restart_meta.original_nranks);
+  bool valid_minimum_size = checked_add_product(minimum_size, 1, headersize);
+  valid_minimum_size =
+      valid_minimum_size &&
+      checked_add_product(minimum_size, meshblocks, sizeof(LogicalLocation) + sizeof(float));
+  valid_minimum_size =
+      valid_minimum_size && checked_add_product(minimum_size, meshblocks, sizeof(int));
+  valid_minimum_size =
+      valid_minimum_size && checked_add_product(minimum_size, original_nranks, 2*sizeof(int));
+  if (!valid_minimum_size || minimum_size > resfile.GetSize(single_file_per_rank)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Restart artifact is too small for serialized MeshBlock layout."
               << std::endl;
     restart_utils::AbortOnFatalError();
   }
@@ -513,7 +540,7 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
   for (int rank = 0; rank < restart_meta.original_nranks; ++rank) {
     const int start = restart_meta.gids_eachrank[rank];
     const int count = restart_meta.nmb_eachrank[rank];
-    if (start != partition_end || count < 0 || count > nmb_total - partition_end) {
+    if (start != partition_end || count <= 0 || count > nmb_total - partition_end) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
                 << "Restart rank layout is not a contiguous MeshBlock partition."

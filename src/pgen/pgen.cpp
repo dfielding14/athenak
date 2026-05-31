@@ -160,14 +160,12 @@ void LoadParticleRestartDataSingleFile(Mesh *pm,
   }
 
   std::vector<std::string> rank_paths(meta.original_nranks);
+  const std::string base_prefix = meta.base_dir.empty() ? "" :
+      (meta.base_dir == "/" ? "/" : meta.base_dir + "/");
   for (int r=0; r<meta.original_nranks; ++r) {
     char rank_dir[20];
     std::snprintf(rank_dir, sizeof(rank_dir), "rank_%08d", r);
-    if (!meta.base_dir.empty()) {
-      rank_paths[r] = meta.base_dir + "/" + rank_dir + "/" + meta.file_name;
-    } else {
-      rank_paths[r] = std::string(rank_dir) + "/" + meta.file_name;
-    }
+    rank_paths[r] = base_prefix + rank_dir + "/" + meta.file_name;
   }
 
   std::vector<int> local_mb_counts(nmb_local, 0);
@@ -687,14 +685,12 @@ void LoadSingleFileRestartData(Mesh *pm,
   }
 
   std::vector<std::string> rank_paths(meta.original_nranks);
+  const std::string base_prefix = meta.base_dir.empty() ? "" :
+      (meta.base_dir == "/" ? "/" : meta.base_dir + "/");
   for (int r=0; r<meta.original_nranks; ++r) {
     char rank_dir[20];
     std::snprintf(rank_dir, sizeof(rank_dir), "rank_%08d", r);
-    if (!meta.base_dir.empty()) {
-      rank_paths[r] = meta.base_dir + "/" + rank_dir + "/" + meta.file_name;
-    } else {
-      rank_paths[r] = std::string(rank_dir) + "/" + meta.file_name;
-    }
+    rank_paths[r] = base_prefix + rank_dir + "/" + meta.file_name;
   }
 
   const IOWrapperSizeT chunk_stride = data_stride;

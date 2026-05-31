@@ -58,6 +58,7 @@ class IOWrapper {
   int Sync(bool single_file_per_rank = false);
   int Seek(IOWrapperSizeT offset, bool single_file_per_rank = false);
   IOWrapperSizeT GetPosition(bool single_file_per_rank = false);
+  IOWrapperSizeT GetSize(bool single_file_per_rank = false);
 
  private:
   IOWrapperFile fh_;

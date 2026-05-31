@@ -168,8 +168,9 @@ def _execute(label, nproc, arguments, restart_file=None, input_deck=_INPUT_DECK,
     return proc.returncode, output
 
 
-def _run_success(label, nproc, arguments, restart_file=None):
-    code, output = _execute(label, nproc, arguments, restart_file=restart_file)
+def _run_success(label, nproc, arguments, restart_file=None, timeout=None):
+    code, output = _execute(label, nproc, arguments, restart_file=restart_file,
+                            timeout=timeout)
     if code != 0:
         raise RuntimeError('Command failed for ' + label + '\n' + output)
     return output
@@ -376,7 +377,7 @@ def _run_inconsistent_rank_layout_guard():
         base + '_restart_run', 1,
         ['job/basename=' + base_rst, 'time/nlim=2'] + _CASES['no_mhd'],
         restart_file=dst_rst_path)
-    expected = 'Restart rank layout does not cover every MeshBlock'
+    expected = 'Restart rank layout is not a contiguous MeshBlock partition'
     if code == 0:
         raise RuntimeError('Expected inconsistent rank-layout failure, but command passed')
     if expected not in output:
@@ -384,6 +385,129 @@ def _run_inconsistent_rank_layout_guard():
                            'Expected substring: ' + expected + '\n'
                            'Output:\n' + output)
     _RESTART_GUARDS['inconsistent_rank_layout'] = True
+
+
+def _run_oversized_meshblock_count_guard():
+    base = 'pic_rst_safe_guard_oversized_meshblock_count'
+    base_seg = base + '_seg'
+    base_rst = base + '_rst'
+    base_bad = base + '_corrupt'
+    for name in [base_seg, base_rst, base_bad]:
+        _remove_outputs(name)
+
+    _run_success(base + '_seg_run', 1,
+                 ['job/basename=' + base_seg, 'time/nlim=1'] + _CASES['no_mhd'])
+    src_rst_path = os.path.join('rst', base_seg + '.00000.rst')
+    dst_rst_path = os.path.join('rst', base_bad + '.00000.rst')
+    full_src = os.path.join(_athena_exe_dir(), src_rst_path)
+    full_dst = os.path.join(_athena_exe_dir(), dst_rst_path)
+    shutil.copyfile(full_src, full_dst)
+    with open(full_dst, 'rb') as fp:
+        data = bytearray(fp.read())
+    marker = b'<par_end>\n'
+    header_offset = data.find(marker)
+    if header_offset < 0:
+        raise RuntimeError('Restart parameter header marker not found in ' + full_dst)
+    header_offset += len(marker)
+    struct.pack_into('<i', data, header_offset, (1 << 31) - 1)
+    with open(full_dst, 'wb') as fp:
+        fp.write(data)
+    _write_shared_restart_publication(full_dst)
+
+    code, output = _execute(
+        base + '_restart_run', 1,
+        ['job/basename=' + base_rst, 'time/nlim=2'] + _CASES['no_mhd'],
+        restart_file=dst_rst_path,
+        timeout=30)
+    expected = 'Restart artifact is too small for serialized MeshBlock layout'
+    if code == 0:
+        raise RuntimeError('Expected oversized MeshBlock-count failure, but command passed')
+    if expected not in output:
+        raise RuntimeError('Unexpected oversized MeshBlock-count failure reason\n'
+                           'Expected substring: ' + expected + '\n'
+                           'Output:\n' + output)
+    _RESTART_GUARDS['oversized_meshblock_count'] = True
+
+
+def _run_sharded_oversized_meshblock_count_guard():
+    base = 'pic_rst_safe_guard_sharded_oversized_meshblock_count'
+    base_seg = base + '_seg'
+    base_rst = base + '_rst'
+    for name in [base_seg, base_rst]:
+        _remove_outputs(name)
+
+    _run_success(
+        base + '_seg_run', 1,
+        ['job/basename=' + base_seg,
+         'time/nlim=1',
+         'output7/single_file_per_rank=true'] + _CASES['no_mhd'])
+    full_src, rst_path = _latest_restart_path(base_seg, per_rank=True)
+    with open(full_src, 'rb') as fp:
+        data = bytearray(fp.read())
+    marker = b'<par_end>\n'
+    header_offset = data.find(marker)
+    if header_offset < 0:
+        raise RuntimeError('Restart parameter header marker not found in ' + full_src)
+    header_offset += len(marker)
+    struct.pack_into('<i', data, header_offset, (1 << 31) - 1)
+    with open(full_src, 'wb') as fp:
+        fp.write(data)
+    _refresh_sharded_member_publication(full_src)
+
+    code, output = _execute(
+        base + '_restart_run', 1,
+        ['job/basename=' + base_rst, 'time/nlim=2'] + _CASES['no_mhd'],
+        restart_file=rst_path,
+        timeout=30)
+    expected = 'Restart artifact is too small for serialized MeshBlock layout'
+    if code == 0:
+        raise RuntimeError('Expected sharded oversized MeshBlock-count failure, but '
+                           'command passed')
+    if expected not in output:
+        raise RuntimeError('Unexpected sharded oversized MeshBlock-count failure reason\n'
+                           'Expected substring: ' + expected + '\n'
+                           'Output:\n' + output)
+    _RESTART_GUARDS['sharded_oversized_meshblock_count'] = True
+
+
+def _run_zero_block_source_rank_guard():
+    base = 'pic_rst_safe_guard_zero_block_source_rank'
+    base_seg = base + '_seg'
+    base_rst = base + '_rst'
+    for name in [base_seg, base_rst]:
+        _remove_outputs(name)
+
+    _run_success(
+        base + '_seg_run', 2,
+        ['job/basename=' + base_seg,
+         'time/nlim=1',
+         'output7/single_file_per_rank=true'] + _CASES['no_mhd'],
+        timeout=30)
+    full_src, rst_path = _latest_restart_path(base_seg, per_rank=True)
+    with open(full_src, 'rb') as fp:
+        data = bytearray(fp.read())
+    marker = struct.pack('<Q', _MESH_METADATA_MAGIC)
+    metadata_offset = data.find(marker)
+    if metadata_offset < struct.calcsize('<i'):
+        raise RuntimeError('Mesh metadata marker not found in ' + full_src)
+    struct.pack_into('<i', data, metadata_offset - struct.calcsize('<i'), 0)
+    with open(full_src, 'wb') as fp:
+        fp.write(data)
+    _refresh_sharded_member_publication(full_src)
+
+    code, output = _execute(
+        base + '_restart_run', 2,
+        ['job/basename=' + base_rst, 'time/nlim=2'] + _CASES['no_mhd'],
+        restart_file=rst_path,
+        timeout=30)
+    expected = 'Restart rank layout is not a contiguous MeshBlock partition'
+    if code == 0:
+        raise RuntimeError('Expected zero-block source-rank failure, but command passed')
+    if expected not in output:
+        raise RuntimeError('Unexpected zero-block source-rank failure reason\n'
+                           'Expected substring: ' + expected + '\n'
+                           'Output:\n' + output)
+    _RESTART_GUARDS['zero_block_source_rank'] = True
 
 
 def _run_rank_shaped_ancestor_guard():
@@ -630,6 +754,26 @@ def _rewrite_manifest(path, update):
     _write_completion_marker(manifest_path)
 
 
+def _refresh_sharded_member_publication(path):
+    _write_completion_marker(path)
+    manifest_path = os.path.join(
+        os.path.dirname(os.path.dirname(path)),
+        os.path.basename(path) + '.manifest')
+    relative = os.path.relpath(path, _athena_exe_dir())
+    with open(manifest_path, encoding='ascii') as fp:
+        manifest = json.load(fp)
+    matches = [member for member in manifest['members']
+               if member['path'] == relative]
+    if len(matches) != 1:
+        raise RuntimeError('Unable to identify exact sharded manifest member: ' + relative)
+    matches[0]['size'] = os.path.getsize(path)
+    matches[0]['fnv1a64'] = format(_fnv1a64(path), '016x')
+    with open(manifest_path, 'w', encoding='ascii') as fp:
+        json.dump(manifest, fp, indent=2, sort_keys=True)
+        fp.write('\n')
+    _write_completion_marker(manifest_path)
+
+
 def _run_restart_expect_fail(label, restart_file, arguments, expected):
     code, output = _execute(label, 1, arguments, restart_file=restart_file)
     if code == 0:
@@ -827,8 +971,28 @@ def _run_preload_restart_guards():
             injector, 'fseek_failure', 'stdio_fseek_failure',
             'Error seeking before writing data')
         _run_killed_writer_restart_guard(injector)
+        if _athena_mpi_enabled():
+            _run_mpi_rank_local_open_failure_guard(injector)
     finally:
         shutil.rmtree(build_dir)
+
+
+def _run_mpi_rank_local_open_failure_guard(injector):
+    base = 'pic_rst_safe_guard_mpi_rank_local_open_failure'
+    _remove_outputs(base)
+    code, output = _execute(
+        base, 2,
+        ['job/basename=' + base,
+         'time/nlim=1',
+         'output7/single_file_per_rank=true'] + _CASES['no_mhd'],
+        env=_fault_injector_env(injector, 'rank_one_fopen_failure'),
+        timeout=30)
+    if code == 0:
+        raise RuntimeError('Expected rank-local MPI restart open failure, but command passed')
+    if '.rst.partial' not in output or 'could not be opened' not in output:
+        raise RuntimeError('Unexpected rank-local MPI restart open failure reason\n'
+                           'Output:\n' + output)
+    _RESTART_GUARDS['mpi_rank_local_open_failure'] = True
 
 
 def _run_full_device_restart_target_guard():
@@ -1236,10 +1400,10 @@ def _run_per_rank_watch(nproc, case_args):
     rst_args = ['job/basename=' + base_rst,
                 'time/nlim=3'] + case_args
 
-    _run_success(base + '_full_run', nproc, full_args)
+    _run_success(base + '_full_run', nproc, full_args, timeout=30)
     full_measured = _measure_case(base_full)
 
-    _run_success(base + '_seg_run', nproc, seg_args)
+    _run_success(base + '_seg_run', nproc, seg_args, timeout=30)
 
     rst_path = os.path.join('rst', 'rank_00000000', base_seg + '.00000.rst')
     full_rst_path = os.path.join(_athena_exe_dir(), rst_path)
@@ -1340,6 +1504,8 @@ def run(**kwargs):
     _run_publication_failure_path_guards()
     _run_extra_shard_manifest_guard()
     _run_inconsistent_rank_layout_guard()
+    _run_oversized_meshblock_count_guard()
+    _run_sharded_oversized_meshblock_count_guard()
     _run_rank_shaped_ancestor_guard()
     _run_preload_restart_guards()
     _run_full_device_restart_target_guard()
@@ -1352,6 +1518,7 @@ def run(**kwargs):
     _run_direct_inflow_edge_current_bc_guard()
 
     if mpi_enabled:
+        _run_zero_block_source_rank_guard()
         _run_per_rank_watch(2, _CASES['coupled_edge_direct'])
 
 
@@ -1409,6 +1576,8 @@ def analyze():
         'interrupted_publication_preserves_prior',
         'extra_shard_manifest_member',
         'inconsistent_rank_layout',
+        'oversized_meshblock_count',
+        'sharded_oversized_meshblock_count',
         'rank_shaped_ancestor_ignored',
         'short_header_write',
         'stdio_fseek_failure',
@@ -1417,6 +1586,11 @@ def analyze():
         'unwritable_target',
         'soft_wallclock_continuation_parity',
     ]
+    if _athena_mpi_enabled():
+        publication_guards += [
+            'mpi_rank_local_open_failure',
+            'zero_block_source_rank',
+        ]
     for guard in publication_guards:
         if guard in _SKIPPED_DRILLS:
             logger.warning('Restart publication drill skipped: %s: %s',

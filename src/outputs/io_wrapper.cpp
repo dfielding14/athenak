@@ -11,6 +11,7 @@
 #include <cstdlib>
 #include <iomanip>
 #include <iostream>
+#include <limits>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -150,11 +151,11 @@ std::size_t IOWrapper::Read_bytes_at(void *buf, IOWrapperSizeT size,
     if (MPI_Get_count(&status,MPI_BYTE,&nread) == MPI_UNDEFINED) {return 0;}
     return nread/size;
   } else {
-    std::fseek(reinterpret_cast<FILE*>(fh_), offset, SEEK_SET);
+    if (std::fseek(reinterpret_cast<FILE*>(fh_), offset, SEEK_SET) != 0) return 0;
     return std::fread(buf, size, cnt, reinterpret_cast<FILE*>(fh_));
   }
 #else
-  std::fseek(fh_, offset, SEEK_SET);
+  if (std::fseek(fh_, offset, SEEK_SET) != 0) return 0;
   return std::fread(buf, size, cnt, fh_);
 #endif
 }
@@ -184,11 +185,11 @@ std::size_t IOWrapper::Read_bytes_at_all(void *buf, IOWrapperSizeT size,
     if (MPI_Get_count(&status,MPI_BYTE,&nread) == MPI_UNDEFINED) {return 0;}
     return nread/size;
   } else {
-    std::fseek(reinterpret_cast<FILE*>(fh_), offset, SEEK_SET);
+    if (std::fseek(reinterpret_cast<FILE*>(fh_), offset, SEEK_SET) != 0) return 0;
     return std::fread(buf, size, cnt, reinterpret_cast<FILE*>(fh_));
   }
 #else
-  std::fseek(fh_, offset, SEEK_SET);
+  if (std::fseek(fh_, offset, SEEK_SET) != 0) return 0;
   return std::fread(buf, size, cnt, fh_);
 #endif
 }
@@ -246,11 +247,11 @@ std::size_t IOWrapper::Read_Reals_at(void *buf, IOWrapperSizeT cnt,
     if (MPI_Get_count(&status,MPI_ATHENA_REAL,&nread) == MPI_UNDEFINED) {return 0;}
     return nread;
   } else {
-    std::fseek(reinterpret_cast<FILE*>(fh_), offset, SEEK_SET);
+    if (std::fseek(reinterpret_cast<FILE*>(fh_), offset, SEEK_SET) != 0) return 0;
     return std::fread(buf, sizeof(Real), cnt, reinterpret_cast<FILE*>(fh_));
   }
 #else
-  std::fseek(fh_, offset, SEEK_SET);
+  if (std::fseek(fh_, offset, SEEK_SET) != 0) return 0;
   return std::fread(buf, sizeof(Real), cnt, fh_);
 #endif
 }
@@ -279,11 +280,11 @@ std::size_t IOWrapper::Read_Reals_at_all(void *buf, IOWrapperSizeT cnt,
     if (MPI_Get_count(&status,MPI_ATHENA_REAL,&nread) == MPI_UNDEFINED) {return 0;}
     return nread;
   } else {
-    std::fseek(reinterpret_cast<FILE*>(fh_), offset, SEEK_SET);
+    if (std::fseek(reinterpret_cast<FILE*>(fh_), offset, SEEK_SET) != 0) return 0;
     return std::fread(buf, sizeof(Real), cnt, reinterpret_cast<FILE*>(fh_));
   }
 #else
-  std::fseek(fh_, offset, SEEK_SET);
+  if (std::fseek(fh_, offset, SEEK_SET) != 0) return 0;
   return std::fread(buf, sizeof(Real), cnt, fh_);
 #endif
 }
@@ -646,15 +647,41 @@ int IOWrapper::Seek(IOWrapperSizeT offset, bool single_file_per_rank) {
 IOWrapperSizeT IOWrapper::GetPosition(bool single_file_per_rank) {
 #if MPI_PARALLEL_ENABLED
   if (!single_file_per_rank) {
-    MPI_Offset position;
-    MPI_File_get_position(fh_, &position);
-    return position;
+    MPI_Offset position = -1;
+    if (MPI_File_get_position(fh_, &position) != MPI_SUCCESS || position < 0) {
+      return std::numeric_limits<IOWrapperSizeT>::max();
+    }
+    return static_cast<IOWrapperSizeT>(position);
   } else {
-    int64_t pos = ftell(reinterpret_cast<FILE*>(fh_));
-    return pos;
+    const long position = std::ftell(reinterpret_cast<FILE*>(fh_));
+    return (position < 0) ? std::numeric_limits<IOWrapperSizeT>::max() :
+                           static_cast<IOWrapperSizeT>(position);
   }
 #else
-  int64_t pos = ftell(fh_);
-  return pos;
+  const long position = std::ftell(fh_);
+  return (position < 0) ? std::numeric_limits<IOWrapperSizeT>::max() :
+                         static_cast<IOWrapperSizeT>(position);
 #endif
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn IOWrapperSizeT IOWrapper::GetSize(bool single_file_per_rank)
+//  \brief wrapper for {MPI_File_get_size} versus {fseek+ftell}
+
+IOWrapperSizeT IOWrapper::GetSize(bool single_file_per_rank) {
+#if MPI_PARALLEL_ENABLED
+  if (!single_file_per_rank) {
+    MPI_Offset size = -1;
+    if (MPI_File_get_size(fh_, &size) != MPI_SUCCESS || size < 0) return 0;
+    return static_cast<IOWrapperSizeT>(size);
+  }
+  FILE *file = reinterpret_cast<FILE*>(fh_);
+#else
+  FILE *file = fh_;
+#endif
+  const long position = std::ftell(file);
+  if (position < 0 || std::fseek(file, 0, SEEK_END) != 0) return 0;
+  const long size = std::ftell(file);
+  if (std::fseek(file, position, SEEK_SET) != 0 || size < 0) return 0;
+  return static_cast<IOWrapperSizeT>(size);
 }

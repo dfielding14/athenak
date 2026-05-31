@@ -11,6 +11,7 @@
 
 typedef size_t (*fwrite_fn)(const void *, size_t, size_t, FILE *);
 typedef int (*fseek_fn)(FILE *, long, int);
+typedef FILE *(*fopen_fn)(const char *, const char *);
 
 static int injected = 0;
 
@@ -40,6 +41,25 @@ static fseek_fn RealFseek(void) {
     real_fseek = (fseek_fn)dlsym(RTLD_NEXT, "fseek");
   }
   return real_fseek;
+}
+
+static fopen_fn RealFopen(void) {
+  static fopen_fn real_fopen = NULL;
+  if (real_fopen == NULL) {
+    real_fopen = (fopen_fn)dlsym(RTLD_NEXT, "fopen");
+  }
+  return real_fopen;
+}
+
+FILE *fopen(const char *path, const char *mode) {
+  const char *fault = getenv("ATHENAK_RESTART_FAULT");
+  if (fault != NULL && strcmp(fault, "rank_one_fopen_failure") == 0 &&
+      strstr(path, "rank_00000001") != NULL &&
+      strstr(path, ".rst.partial") != NULL) {
+    errno = EACCES;
+    return NULL;
+  }
+  return RealFopen()(path, mode);
 }
 
 size_t fwrite(const void *ptr, size_t size, size_t count, FILE *stream) {

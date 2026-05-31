@@ -391,6 +391,9 @@ int main(int argc, char *argv[]) {
     if (single_file_per_rank) {
       size_t last_slash = restart_file.rfind('/');
       restart_base_dir = restart_file.substr(0, rank_pos);
+      if (rank_pos == 0 && !restart_file.empty() && restart_file.front() == '/') {
+        restart_base_dir = "/";
+      }
       if (last_slash != std::string::npos && last_slash + 1 < restart_file.size()) {
         restart_file_name = restart_file.substr(last_slash + 1);
       } else {
@@ -399,17 +402,16 @@ int main(int argc, char *argv[]) {
 
       char rank_dir[20];
       std::snprintf(rank_dir, sizeof(rank_dir), "rank_%08d", 0);
-      if (!restart_base_dir.empty()) {
-        restart_file = restart_base_dir + "/" + rank_dir + "/" + restart_file_name;
-      } else {
-        restart_file = std::string(rank_dir) + "/" + restart_file_name;
-      }
+      const std::string base_prefix = restart_base_dir.empty() ? "" :
+          (restart_base_dir == "/" ? "/" : restart_base_dir + "/");
+      restart_file = base_prefix + rank_dir + "/" + restart_file_name;
     } else {
       restart_base_dir.clear();
       restart_file_name = restart_file;
     }
 
-    restart_prefix = restart_base_dir.empty() ? "" : restart_base_dir + "/";
+    restart_prefix = restart_base_dir.empty() ? "" :
+        (restart_base_dir == "/" ? "/" : restart_base_dir + "/");
     const std::string manifest_file = single_file_per_rank ?
         restart_prefix + restart_file_name + ".manifest" :
         restart_file + ".manifest";

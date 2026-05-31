@@ -108,8 +108,10 @@ def _restart_metadata(path):
         "ps_removed_excluded_early_cohort",
         *_REMOVED_FLOAT_FIELDS,
         "ps_tag_seeded",
+        "ps_injection_tag_floor",
         "ps_next_tag",
         "ps_mass_reservoir_global",
+        "ps_injected_cr_count_global",
     ]
     missing = [name for name in required if name not in parameters]
     if missing:
@@ -129,8 +131,12 @@ def _restart_metadata(path):
         ),
         **{name: float(parameters[name]) for name in _REMOVED_FLOAT_FIELDS},
         "ps_tag_seeded": _parse_boolean(parameters["ps_tag_seeded"]),
+        "ps_injection_tag_floor": int(parameters["ps_injection_tag_floor"]),
         "ps_next_tag": int(parameters["ps_next_tag"]),
         "ps_mass_reservoir_global": float(parameters["ps_mass_reservoir_global"]),
+        "ps_injected_cr_count_global": float(
+            parameters["ps_injected_cr_count_global"]
+        ),
     }
 
 
@@ -310,6 +316,8 @@ def _summary():
         },
         "explicit_incomplete_restart_rejected":
             _RESULTS["explicit_incomplete_restart_rejected"],
+        "invalid_restart_ledgers_rejected":
+            _RESULTS["invalid_restart_ledgers_rejected"],
         "sink_vs_pre_crossing_particle_absolute_errors": sink_errors,
         "crossed_vs_full_metadata_absolute_errors": _metadata_errors(
             full_metadata, crossed_metadata
@@ -363,6 +371,61 @@ def run(**kwargs):
         restart_path=crossed_restart,
     )
     _RESULTS["explicit_incomplete_restart_rejected"] = True
+    numeric_metadata_error = (
+        "pic_parallel_shock restart CR ledger numeric metadata is invalid"
+    )
+    invalid_ledger_overrides = {
+        "inconsistent_injected_restart_mass": (
+            ["problem/ps_injected_cr_mass_global=0.134"], numeric_metadata_error
+        ),
+        "inconsistent_removed_restart_mass": (
+            ["problem/ps_removed_cr_mass_global=0.134"], numeric_metadata_error
+        ),
+        "non_finite_restart_ledger": (
+            ["problem/ps_mass_reservoir_global=nan"], numeric_metadata_error
+        ),
+        "negative_restart_ledger": (
+            ["problem/ps_removed_cr_count_global=-1"], numeric_metadata_error
+        ),
+        "non_integral_restart_count": (
+            ["problem/ps_injected_cr_count_global=1.5"], numeric_metadata_error
+        ),
+        "out_of_range_restart_reservoir": (
+            ["problem/ps_mass_reservoir_global=" + str(_MACRO_MASS)],
+            numeric_metadata_error,
+        ),
+        "reset_restart_tag_floor": (
+            ["problem/ps_injection_tag_floor=0"], numeric_metadata_error
+        ),
+        "reset_restart_tag_progression": (
+            ["problem/ps_next_tag=0"], numeric_metadata_error
+        ),
+        "rewound_restart_tag_window": (
+            [
+                "time/nlim=4",
+                "problem/ps_injection_tag_floor=0",
+                "problem/ps_next_tag="
+                + str(int(_RESULTS["crossed_metadata"]["ps_injected_cr_count_global"])),
+            ],
+            "pic_parallel_shock persisted CR tag progression is invalid",
+        ),
+        "unseeded_restart_tag_progression": (
+            ["problem/ps_tag_seeded=false"], numeric_metadata_error
+        ),
+    }
+    for label, (overrides, expected) in invalid_ledger_overrides.items():
+        _run_athena_expect_fail(
+            label,
+            [
+                "job/basename=" + basenames["restart"] + "_" + label,
+                *overrides,
+            ],
+            expected,
+            restart_path=crossed_restart,
+        )
+    _RESULTS["invalid_restart_ledgers_rejected"] = sorted(
+        invalid_ledger_overrides
+    )
 
     full_output = _run_athena(
         "uninterrupted",
@@ -420,7 +483,19 @@ def analyze():
     return (
         summary["cutoff_crossing_exercised"]
         and summary["explicit_incomplete_restart_rejected"]
-        and all(schema == 2 for schema in restart_schemas.values())
+        and summary["invalid_restart_ledgers_rejected"] == [
+            "inconsistent_injected_restart_mass",
+            "inconsistent_removed_restart_mass",
+            "negative_restart_ledger",
+            "non_finite_restart_ledger",
+            "non_integral_restart_count",
+            "out_of_range_restart_reservoir",
+            "reset_restart_tag_floor",
+            "reset_restart_tag_progression",
+            "rewound_restart_tag_window",
+            "unseeded_restart_tag_progression",
+        ]
+        and all(schema == 3 for schema in restart_schemas.values())
         and all(restart_ledgers_complete.values())
         and all(restart_tags_seeded.values())
         and diagnostics == {"pre": 0, "crossed": 1, "full": 1, "restart": 0}
