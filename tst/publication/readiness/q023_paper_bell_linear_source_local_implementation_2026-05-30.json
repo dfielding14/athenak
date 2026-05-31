@@ -179,11 +179,11 @@
     },
     {
       "path": "tst/publication/analyze_q023_paper_bell_linear.py",
-      "sha256": "0f60b3e16ce8550bdf133cba4a490a0773d1fa995881cc89651fab4f55e9bdb1"
+      "sha256": "f128958a9eee9be53b106aed0fb8cc0efa9d05efae6811c3b7046d11f8ac7ce6"
     },
     {
       "path": "tst/publication/test_analyze_q023_paper_bell_linear.py",
-      "sha256": "304607c10f026b1e9b39f621caa903435a02fca3abab80ea683ed41a3cb16ca2"
+      "sha256": "962b6bed84b2162efd7c159bfe5f499ff090c37ee2825bb387a85a0ebf9e8055"
     },
     {
       "path": "tst/publication/q023_paper_bell_linear_host_harness.cpp",

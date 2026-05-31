@@ -12,9 +12,9 @@
     "inputs/tests/pic_q006_paper_multispecies_oscillation_uniform_runtime_local.athinput": "5b8d81aa4914247ba82f065c791d736e7f041ebcb56bc409fd312e17b39f8f01",
     "inputs/tests/pic_q006_paper_multispecies_oscillation_smr_runtime_local.athinput": "ec94c9ac5dddcdfc600e0831b2d6a2a39238b34e42da09203948d1eb3c3fb5eb",
     "inputs/tests/pic_q006_paper_multispecies_oscillation_audited_amr_runtime_local.athinput": "9baa6cad1995c359f86401be2ce69580d9b5292a5959925b9abadb1d4f4b3847",
-    "tst/publication/immutable_orion_tree.py": "9252de2149e1808b1e757c54d8d7021ad7d3fd037f5a255c2dca6856dec5ee4b",
-    "tst/publication/analyze_q006_paper_multispecies_oscillation_runtime_local.py": "b860f17ef6975f8976faaa37308c439e24edb518f2cf1bf9f0c56d45fd6b33fe",
-    "tst/publication/test_analyze_q006_paper_multispecies_oscillation_runtime_local.py": "48e8cc0c1df8837817ad941d69a1ce50460b3fa209bf1118c7350c45699833e6"
+    "tst/publication/immutable_orion_tree.py": "2782efa7a362bca4d660fe7dc9e4e8e5a853d016881c78ab3a8114664dd5acf4",
+    "tst/publication/analyze_q006_paper_multispecies_oscillation_runtime_local.py": "4068ec44c92dfc1bfa8e201cf06838020dd4b90580c2f59fc16f90d6ba92b44e",
+    "tst/publication/test_analyze_q006_paper_multispecies_oscillation_runtime_local.py": "fa65530f7132e2ef6b07bdecd7c67694fcf373f4e269ec6a4bc91654d2f3f60b"
   },
   "shared_parser_contract": {
     "src/particles/particles.cpp": "adds a narrow paper_mhd_pic exact-isothermal full-f momentum-only allowance while preserving the historical exact-isothermal delta-f allowance",
@@ -204,7 +204,7 @@
     "src/particles/particles.cpp": "4b88b1b0a0d83aed824f2af6f2fb77fc5793cdeb9b0e2d65d408535f22e45c44",
     "src/pgen/pgen.cpp": "c5719bed9ae5ba823794829d17e0df6dd4f020a6f29d894a7ff70f65432c4532",
     "src/pgen/pgen.hpp": "835ece58c7291533c3c3dd8299331cadfab458aab8a510af442aabac0476e0e9",
-    "tst/publication/pvtk_particles.py": "adaa48ceafc7806a921b78001cf73ace6a4f6014a051826a2b3a8123d57b4413",
+    "tst/publication/pvtk_particles.py": "187254c4ed10ce20ec383e710dadfa2e03e9f45317cce53e5d644c1db2be7339",
     "tst/scripts/particles/pic_parser_contract_guards.py": "0fee2d5342fbd35b2ed73e32c401119a55aaad25d8fa6ec542f037ac892616d4"
   }
 }

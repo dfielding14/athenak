@@ -1350,7 +1350,6 @@ def freeze_runtime_tree(runtime_root: Path) -> dict[str, Any]:
     """Inventory a retained Orion runtime tree and recursively remove write bits."""
     receipt = {
         "schema_version": 1,
-        "gate": "Q-007",
         "artifact_role": "bounded_serial_crsi_runtime_replay_mechanics_only",
         "qualification_effect": QUALIFICATION_EFFECT,
         "inventory_excludes": INVENTORY_NAME,
@@ -1372,7 +1371,6 @@ def _validate_runtime_freeze_receipt(root: Path) -> str:
     _require_schema_version(receipt, 1, "Q-007 freeze receipt")
     expected = {
         "schema_version": 1,
-        "gate": "Q-007",
         "artifact_role": "bounded_serial_crsi_runtime_replay_mechanics_only",
         "qualification_effect": QUALIFICATION_EFFECT,
         "inventory_excludes": INVENTORY_NAME,

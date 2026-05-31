@@ -12,7 +12,7 @@
     },
     {
       "path": "src/pgen/tests/pic_parallel_shock.cpp",
-      "sha256": "509fb2387e3b9933f919b062962158805bacce27e928fa396cd0583e082cbbf9"
+      "sha256": "aaea18b8949c882230402a8b117a2783e9a0a5cc6c049bd87c2109ce59684b95"
     },
     {
       "path": "tst/scripts/particles/pic_parallel_shock_section54_paper.py",
@@ -117,7 +117,7 @@
     "field_and_particle_output_dt_omega0_inverse": 100.0
   },
   "open_items": [
-    "Executed shock-surface injection distribution audit remains open.",
+    "A bounded local shock-surface injection distribution audit passed; the qualifying campaign-bound audit remains open.",
     "Gas pressure and unit-normalization mapping audit remains open.",
     "Downstream 40/640 ppc macro-mass calibration remains open.",
     "Frontier load-balance cost tuning remains open.",

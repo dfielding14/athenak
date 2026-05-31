@@ -18,7 +18,7 @@
     "source_local_bindings": {
         "inputs/tests/pic_q016_particle_provenance.athinput": "f1a284922beea1fa04eb2f09b49dfea208f91bae247e6a961e78213857cf7235",
         "tst/scripts/particles/pic_q016_particle_provenance.py": "2d7997df1dd4ce65c9be1c22ec9b88184781e4b134a823f26466227fa210eb5e",
-        "tst/publication/pvtk_particles.py": "adaa48ceafc7806a921b78001cf73ace6a4f6014a051826a2b3a8123d57b4413",
+        "tst/publication/pvtk_particles.py": "187254c4ed10ce20ec383e710dadfa2e03e9f45317cce53e5d644c1db2be7339",
         "tst/publication/q016_particle_spectra.py": "b84dfadd56a55ffcfd8d626f3b793da4ec61cbc844b4930c251ec60147505c0e",
         "tst/publication/readiness/q016_particle_provenance_spectra_local_2026-05-30.json": "094f2dea4869ab1abea415a7fda1080f5b4e47a89ba64994b53864dec6241366"
     },

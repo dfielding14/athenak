@@ -117,7 +117,8 @@
       "mach_alfven": 30.0,
       "injection_efficiency": 0.001,
       "injection_p_over_m_over_u0": 3.16227766017,
-      "injection_start_omega0_inverse": 45.0,
+      "injection_start_omega0_inverse": 0.0,
+      "remove_birth_time_before_omega0_inverse": 45.0,
       "light_speed_over_ua0": 10000.0,
       "grid_cell_size_c_over_omega_pi": [
         12.0,
@@ -675,7 +676,7 @@
     {
       "analyzer_id": "Q023-ANALYZER-PAPER-BELL-LINEAR-CANDIDATE",
       "path": "tst/publication/analyze_q023_paper_bell_linear.py",
-      "sha256": "0f60b3e16ce8550bdf133cba4a490a0773d1fa995881cc89651fab4f55e9bdb1",
+      "sha256": "f128958a9eee9be53b106aed0fb8cc0efa9d05efae6811c3b7046d11f8ac7ce6",
       "qualification_limit": "source_local_section52_signed_combined_magnetic_and_projected_fluid_velocity_raw_trace_candidate_with_paper_literal_delta_u_y_spatial_sine_fit_phase_and_volume_averaged_absolute_delta_u_growth_estimator_only_approved_materialized_geometry_exact_raw_artifact_provenance_nonqualifying_velocity_cross_check_clean_freeze_convergence_registered_execution_independent_recompute_and_external_review_open"
     },
     {
@@ -747,7 +748,7 @@
     {
       "analyzer_id": "Q023-ANALYZER-PVTK-READER",
       "path": "tst/publication/pvtk_particles.py",
-      "sha256": "adaa48ceafc7806a921b78001cf73ace6a4f6014a051826a2b3a8123d57b4413",
+      "sha256": "187254c4ed10ce20ec383e710dadfa2e03e9f45317cce53e5d644c1db2be7339",
       "qualification_limit": "shared_particle_output_reader_only"
     },
     {

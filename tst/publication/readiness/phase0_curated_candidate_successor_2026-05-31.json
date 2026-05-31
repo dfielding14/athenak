@@ -2,14 +2,14 @@
   "record_type": "phase0_curated_candidate_successor",
   "schema_version": 1,
   "date": "2026-05-31",
-  "status": "successor_expanded_schema_alias_repair_pending_review_install_and_freeze",
+  "status": "successor_expanded_schema_alias_and_shock_rk_repair_pending_review_install_and_freeze",
   "qualification_effect": "none",
   "live_paired_control_plane_version": "6f3458ca5c412b866f579d67dde51d73497b65629f6e7a35e10a3af84d7ecd8b",
-  "successor_source_control_plane_version": "738d28d97e3ca58c1203651237fd91b1f6c0a418023fe9137fdbd7b344eafc68",
+  "successor_source_control_plane_version": "80b1c664fd42d3771df0fa39549568b22c9e78ad3d6e99196ce535a6eb1e1c80",
   "prepared_artifacts": {
     "inventory_path": "tst/publication/frontier_control_plane/prepared_pic_artifact_inventory.json",
-    "inventory_sha256": "4aec3b000cde8d624462b820421117f6ee8b0f044c519603a23a6154e2cac8e3",
-    "paper_deck_count": 87,
+    "inventory_sha256": "b7e0bcf9254a81eeecaea0557d309b6f1e81aa303c7321d41ea4fb6be81f89bf",
+    "paper_deck_count": 88,
     "publication_analyzer_count": 12,
     "closure_policy": "canonical inventory path plus exact archived inputs/tests/pic*.athinput and tst/publication/analyze_*.py membership"
   },
@@ -33,7 +33,9 @@
     "qualification schema const and enum comparisons are JSON-type-aware and the claims registry is closed before claim consumption",
     "retained Q-006 and Q-007 profile, provenance and return-code checks reject primitive aliases recursively",
     "Q-023 and Q-029 Bell retained geometry, dimension and provenance controls reject numeric aliases",
-    "transition policy clears historical registered-science slices and marks the schema-v4 clean-candidate freeze pending"
+    "transition policy clears historical registered-science slices and marks the schema-v4 clean-candidate freeze pending",
+    "parallel-shock particle creation, reservoir consumption and tag advancement commit once per physical cycle while cached gas subtraction replays with RK stage weights",
+    "bounded serial-host shock-source budget regression requires identical created-particle counts, reservoir state and gas mass removal under rk1, rk2 and rk3"
   ],
   "remaining_phase0_actions": [
     "complete independent review of the stable repair boundary and documentation reconciliation",

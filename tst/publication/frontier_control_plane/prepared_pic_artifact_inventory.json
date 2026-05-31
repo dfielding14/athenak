@@ -10,19 +10,19 @@
     },
     {
       "path": "tst/publication/analyze_q006_paper_multispecies_oscillation_runtime_local.py",
-      "sha256": "b860f17ef6975f8976faaa37308c439e24edb518f2cf1bf9f0c56d45fd6b33fe"
+      "sha256": "4068ec44c92dfc1bfa8e201cf06838020dd4b90580c2f59fc16f90d6ba92b44e"
     },
     {
       "path": "tst/publication/analyze_q007_paper_deltaf_linear_preparation.py",
-      "sha256": "f3053d5db1e89cf404f7c1ae71498cf41c4ab9a820f1695969aa5b34169ba890"
+      "sha256": "e6ed7f7dd75d646f9627d574c41cda9f8ed50f0903ea1ec708d4082ac825116c"
     },
     {
       "path": "tst/publication/analyze_q011_injection_distribution_runtime_local.py",
-      "sha256": "e172b09642128d8fc94311a499d6eeaca7999af5322646599cb73a416bac2643"
+      "sha256": "e89e395df5e23bcda3c0e4653bbd7fce325020302c9e7a21b13e89d5e0175f3c"
     },
     {
       "path": "tst/publication/analyze_q023_paper_bell_linear.py",
-      "sha256": "0f60b3e16ce8550bdf133cba4a490a0773d1fa995881cc89651fab4f55e9bdb1"
+      "sha256": "f128958a9eee9be53b106aed0fb8cc0efa9d05efae6811c3b7046d11f8ac7ce6"
     },
     {
       "path": "tst/publication/analyze_q029_hall_bell_linear.py",
@@ -253,6 +253,10 @@
     {
       "path": "inputs/tests/pic_parallel_shock_fine_uniform.athinput",
       "sha256": "4f3aad8083a151d5fac254c77cb122bbd9692c108b4463fc897141a4e3fba2be"
+    },
+    {
+      "path": "inputs/tests/pic_parallel_shock_rk_stage_budget.athinput",
+      "sha256": "fdc0899f0d6ca32682a71db200b4d257f3c213d7f64118b11a43db81fa7c769c"
     },
     {
       "path": "inputs/tests/pic_parallel_shock_section54_hpc.athinput",

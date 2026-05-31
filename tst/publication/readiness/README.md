@@ -345,7 +345,7 @@ qualify any scientific claim by itself.
   injection, upstream-relative swept-mass budget, unique half-open carrier
   cell and restart-persisted removal of the startup cohort while retaining the
   finite-Mach surface as an explicitly separate engineering option. Open
-  executed-distribution, calibration and campaign
+  qualifying-distribution, calibration and campaign
   fields prevent accidental promotion to scientific evidence.
 - `q011_injection_distribution_runtime_local_2026-05-30.json`: bounded direct
   serial-host runtime audit of the committed Section 5.4 injection path. The
@@ -353,6 +353,12 @@ qualify any scientific claim by itself.
   shock-surface placement, monoenergetic surface-relative speed and bounded
   full-sphere statistics. Physical calibration, AMR, MPI, GPU, Frontier,
   independent recompute and external review remain open.
+- `q011_parallel_shock_rk_stage_budget_successor_2026-05-31.json`: bounded
+  serial-host RK1/RK2/RK3 regression proving that irreversible parallel-shock
+  particle creation, reservoir consumption and tag advancement occur once per
+  physical cycle while cached gas subtraction replays with RK-stage weights.
+  Floor behavior, momentum-shell mapping, cohort ordering, removed-cohort sink
+  accounting, MPI, AMR, HIP, Frontier and campaign qualification remain open.
 - `q034_unsupported_capability_successor_2026-05-30.json`: successor
   fail-closed active-MHD expanding-box unsupported-composition addendum.
 - `q042_post_repair_architecture_docs_successor_2026-05-30.json`: successor

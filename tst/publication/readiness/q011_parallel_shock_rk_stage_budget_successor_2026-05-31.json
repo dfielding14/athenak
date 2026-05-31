@@ -1,0 +1,76 @@
+{
+  "record_type": "q011_parallel_shock_rk_stage_budget_successor",
+  "schema_version": 1,
+  "date": "2026-05-31",
+  "gate": "Q-011",
+  "qualification_effect": "none_bounded_serial_host_regression_only",
+  "claim_closure": false,
+  "frontier_authorization": "not_bound",
+  "scope": "Bounded serial-host regression for the Section 5.4 parallel-shock source after making irreversible particle creation, reservoir advancement, and tag advancement occur once per physical Mesh cycle while replaying cached gas subtraction with RK-stage weights. This record demonstrates integrator-invariant bounded mechanics only. It does not qualify floor behavior, momentum-shell interpretation, birth-cycle deposition ordering, startup-cohort sink accounting, MPI, AMR, HIP, Frontier, or the full shock campaign.",
+  "source_bindings": {
+    "src/pgen/tests/pic_parallel_shock.cpp": "aaea18b8949c882230402a8b117a2783e9a0a5cc6c049bd87c2109ce59684b95",
+    "inputs/tests/pic_parallel_shock_rk_stage_budget.athinput": "fdc0899f0d6ca32682a71db200b4d257f3c213d7f64118b11a43db81fa7c769c",
+    "tst/scripts/particles/pic_parallel_shock_rk_stage_budget.py": "a5a6c0787deec00f16948cff270f48dd0b037f88b8abb7b600766cda7dd092fb"
+  },
+  "host_build": {
+    "configuration": {
+      "build_type": "Release",
+      "kokkos_serial": true,
+      "mpi_parallelism": false,
+      "openmp_parallelism": false
+    },
+    "executable_root": "/lustre/orion/ast207/proj-shared/dfielding/PIC/local-readiness/q011-parallel-shock-rk-stage-budget-executable-20260531-v1",
+    "executable_path": "bin/athena",
+    "executable_sha256": "16827c7bda2a1c6b320ecb413178391e8fec2fe22e9cd11b1e6b00877fd85156",
+    "artifact_inventory_sha256": "e88aea226362824392e0796332e48741a054ba9c96242ed19075cbdb10246f94",
+    "recursively_read_only": true
+  },
+  "successful_probe": {
+    "artifact_root": "/lustre/orion/ast207/proj-shared/dfielding/PIC/local-readiness/q011-parallel-shock-rk-stage-budget-successor-20260531-v3",
+    "artifact_inventory_sha256": "ed8aa89b8da3020dd12c4df407aec121bce2b2bfeb939efca30c2e00c28242a5",
+    "total_file_count_including_inventory": 102,
+    "recursively_read_only": true,
+    "writable_entries": 0,
+    "results": {
+      "integrators": [
+        "rk1",
+        "rk2",
+        "rk3"
+      ],
+      "subtraction_variants": [
+        false,
+        true
+      ],
+      "consumed_dt": 0.075,
+      "expected_physical_budget": 0.24,
+      "particle_count": 240,
+      "macro_particle_mass": 0.001,
+      "residual_reservoir": 3.00024e-13,
+      "gas_mass_removed": 0.2400054931640625,
+      "integrator_invariant_particle_count": true,
+      "integrator_invariant_reservoir": true,
+      "integrator_invariant_gas_mass_removed": true,
+      "status": "pass"
+    }
+  },
+  "rejected_attempts_retained_as_chronology": [
+    {
+      "artifact_root": "/lustre/orion/ast207/proj-shared/dfielding/PIC/local-readiness/q011-parallel-shock-rk-stage-budget-successor-20260531-v1",
+      "artifact_inventory_sha256": "a3626ce894347bf914cf7c9f8cc20bf23c472a13ab6f505ccb6458791fb8521a",
+      "reason": "standard tst wrapper failed before build because the login environment provides cmake but not the wrapper's hard-coded cmake3 command"
+    },
+    {
+      "artifact_root": "/lustre/orion/ast207/proj-shared/dfielding/PIC/local-readiness/q011-parallel-shock-rk-stage-budget-successor-20260531-v2",
+      "artifact_inventory_sha256": "8aef4ec1feea7a71ea12349e5d7a77ba9d52688885807e9a37b5891644117c38",
+      "reason": "direct existing-build harness failed because the preceding wrapper attempt had removed tst/build before attempting cmake3"
+    }
+  ],
+  "remaining_blockers": [
+    "Make floor clipping fail closed or provide exact rollback and reservoir return semantics.",
+    "Define and implement the manuscript momentum-shell mapping rather than a velocity-shell approximation.",
+    "Move cohort construction and startup-cohort removal to an ordering point that closes birth-cycle and cutoff-cycle deposition semantics.",
+    "Persist startup-cohort removed mass, momentum, and energy as an explicit sink ledger.",
+    "Add subtraction momentum, energy, floor, restart, MPI, AMR, HIP, and Frontier regressions before campaign authorization."
+  ],
+  "q011_disposition": "bounded_local_rk_stage_budget_regression_passed_full_q011_qualification_open"
+}
