@@ -18,7 +18,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 SIDECAR = (
     REPO_ROOT
     / "tst/publication/readiness/"
-    "q033_crpai_transport_calibration_source_local_candidate_2026-05-30.json"
+    "q033_crpai_transport_calibration_parser_hardening_successor_2026-05-30.json"
 )
 APPLICABILITY = (
     REPO_ROOT

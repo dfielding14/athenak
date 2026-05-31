@@ -1,0 +1,165 @@
+{
+  "record_type": "q029_hall_bell_linear_source_local_preparation",
+  "schema_version": 1,
+  "date": "2026-05-30",
+  "gate": "Q-029",
+  "campaign_id": "Q029-HALL-BELL-LINEAR",
+  "status": "source_local_1d2d3d_launch_preparation_only",
+  "qualification_effect": "none_source_local_launch_preparation_only",
+  "claim_closure": false,
+  "frontier_authorization": "not_bound",
+  "launch_status": "source_local_candidate_only_not_authorized",
+  "scope": "Q-029-only source-local launch preparation for the separately named q029_hall_bell_linear generator and the extended_mhd_pic current_to_ct_experimental path. This tranche freezes three runnable local preparation decks and a positive chi_H variant-materialization analyzer. It does not authorize a launch or qualify linear or nonlinear Hall-Bell physics.",
+  "generator": {
+    "name": "q029_hall_bell_linear",
+    "source": "src/pgen/tests/q029_hall_bell_linear.cpp",
+    "q023_seed_carrier_reuse": "uses the guarded accelerator-safe q023_paper_bell_linear.hpp carrier header shared by the Q-023 and Q-029 compilation units without any textual cpp include",
+    "physical_mode": "extended_mhd_pic",
+    "hall_mode": "current_to_ct_experimental",
+    "initial_eigenmode": "q023_section52_seed_carrier_only_not_hall_dispersion_oracle",
+    "restart_semantics": "revalidate_exact_q029_contract_then_return_without_reinitializing_loaded_state"
+  },
+  "launch_preparation_grid": {
+    "dimensions": [
+      1,
+      2,
+      3
+    ],
+    "epsilon": [
+      0.1,
+      0.2,
+      0.4,
+      0.6,
+      0.8
+    ],
+    "positive_chi_h": [
+      0.25,
+      0.5,
+      1.0
+    ],
+    "fiducial_epsilon": 0.4,
+    "fiducial_chi_h": 0.5,
+    "expected_variant_count": 45,
+    "materialization_overrides": [
+      "job/basename",
+      "q029_hall_bell_linear/epsilon",
+      "q029_hall_bell_linear/chi_h",
+      "particles/cr_vx0",
+      "particles/cr_vy0",
+      "particles/cr_vz0",
+      "particles/pic_cr_light_speed",
+      "particles/couple_j_to_efield_coeff"
+    ],
+    "epsilon_specific_derived_values": [
+      "stream_velocity",
+      "pic_cr_light_speed",
+      "j_cr",
+      "alpha_h"
+    ],
+    "alpha_h_parameter": "particles/couple_j_to_efield_coeff",
+    "chi_h_definition": "alpha_h*j_cr/(u_a*b_g)",
+    "chi_h_grid_semantics": "positive_launch_preparation_only_no_hall_bell_qualification",
+    "physical_1d_carrier": "transverse_invariant_thin_2d3v_nx1_32_nx2_4_nx3_1",
+    "native_dimensions": [
+      2,
+      3
+    ]
+  },
+  "artifact_bindings": {
+    "src/pgen/tests/q023_paper_bell_linear.hpp": "afa7b8243b1d402faa9592137050d0e6870a06ce25f61e17d010af3fc5a080e6",
+    "src/pgen/tests/q023_paper_bell_linear.cpp": "66a1bb952ca8b9d91d17896c1ebb94b18fa276be24767a99f635466cbe8638eb",
+    "src/pgen/tests/q029_hall_bell_linear.cpp": "bbe003dc3621e5dd0ff5bf8905d4898947a9c92277a36bda371a0b24c0da072c",
+    "inputs/tests/pic_q029_hall_bell_linear_1d_candidate.athinput": "7b9f477558adad6daf682b29f5dff306e50ea60c87b1a2d14c81b14bf7e8ea45",
+    "inputs/tests/pic_q029_hall_bell_linear_2d_candidate.athinput": "28c40f19e398a4340d8f32abdacb41c5d4cefbd4e940d2ceb858bc04f8ba5045",
+    "inputs/tests/pic_q029_hall_bell_linear_3d_candidate.athinput": "9adb4d97aceae9fde058ccafacd7a67f1af8e7cdeda4b7fb846e41e463b1a1ce",
+    "tst/publication/analyze_q029_hall_bell_linear.py": "ee76cddb1a3039f700e3a3a455e287883b35c2e1d3ff27c09441005adad2b05a",
+    "tst/publication/test_analyze_q029_hall_bell_linear.py": "985326511c4daee305478fdcd4ee6404c88133aceb0559299514d2737c18a1b0"
+  },
+  "shared_registration_contract": {
+    "src/CMakeLists.txt": "includes pgen/tests/q029_hall_bell_linear.cpp",
+    "src/pgen/pgen.hpp": "declares ProblemGenerator::Q029HallBellLinear",
+    "src/pgen/pgen.cpp": "dispatches q029_hall_bell_linear for fresh and restart construction"
+  },
+  "analyzer_contract": {
+    "path": "tst/publication/analyze_q029_hall_bell_linear.py",
+    "artifact_role": "source_local_hall_bell_launch_preparation_grid_only",
+    "requires_exact_1d2d3d_deck_contracts": true,
+    "requires_exact_global_and_meshblock_geometry": true,
+    "requires_pic_enable_2d3v": true,
+    "requires_fresh_and_restart_registration": true,
+    "requires_guarded_q023_carrier_header_without_cpp_textual_include": true,
+    "emits_epsilon_specific_launch_overrides": true,
+    "rejects_nonfinite_materialization_values": true,
+    "rejects_drifted_stream_light_speed_j_cr_alpha_h_or_overrides": true,
+    "rejects_nonpositive_chi_h": true,
+    "rejects_unexpected_bundle_or_variant_fields": true,
+    "rejects_incomplete_or_duplicate_variant_grid": true,
+    "always_emits_qualifying_evidence": false
+  },
+  "source_local_runtime_smoke": {
+    "qualification_effect": "bounded_source_local_launch_preparation_smoke_only",
+    "artifact_root": "/lustre/orion/ast207/proj-shared/dfielding/PIC/local-readiness/q029-hall-bell-linear-source-local-20260530",
+    "retention": {
+      "file_count": 37,
+      "writable_entries": 0,
+      "status": "pass_recursively_read_only"
+    },
+    "executable_sha256": "908e808e2ca71088ab11c8faca6e951e8deff1b1b811dff282b1190d85185184",
+    "cycle_zero_initializations": [
+      {
+        "dimension": 1,
+        "stdout_sha256": "810091630bb1d8f0289243a61e12ea88a4c7ad283a58fb5ecad7eb5fea2af344",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "selected_raw_mhd_bcc_path": "src/bin/pic_q029_hall_bell_linear_1d_cycle_zero.mhd_bcc.00000.bin",
+        "selected_raw_mhd_bcc_sha256": "78fe1a071e61ff4f878da6dc7e0387cccf3fbe9d427e1f682c5d0cef827140ac",
+        "result": "pass"
+      },
+      {
+        "dimension": 2,
+        "stdout_sha256": "9e196a717a2fad39e082edffc72573fa061c9a1f179bddcda7aceeb785bb5749",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "selected_raw_mhd_bcc_path": "src/bin/pic_q029_hall_bell_linear_2d_cycle_zero.mhd_bcc.00000.bin",
+        "selected_raw_mhd_bcc_sha256": "627362e0f26eb93d8dda6d04202bd6591150b1d825ceb7a5b15af6a59b2de96a",
+        "result": "pass"
+      },
+      {
+        "dimension": 3,
+        "stdout_sha256": "cc38ebf15ea0ea288a653fecad80e7c8362598676d659d9b0b866466ae708292",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "selected_raw_mhd_bcc_path": "src/bin/pic_q029_hall_bell_linear_3d_cycle_zero.mhd_bcc.00000.bin",
+        "selected_raw_mhd_bcc_sha256": "40aaaa52579af851f1f28b2a14d895e57ef0b03d0d991597b6f9c0a2007ea182",
+        "result": "pass"
+      }
+    ]
+  },
+  "nonqualification_boundary": {
+    "artifact_role": "source_local_hall_bell_launch_preparation_grid_only",
+    "qualification_effect": "none_source_local_launch_preparation_only",
+    "qualifying_evidence": false,
+    "hall_bell_qualification": false,
+    "linear_hall_bell_qualification": false,
+    "nonlinear_hall_bell_qualification": false,
+    "timestep": "open_clean_candidate_timestep_freeze"
+  },
+  "verification": {
+    "focused_command": "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. python3 -m unittest tst.publication.test_analyze_q029_hall_bell_linear",
+    "focused_result": "pass",
+    "json_parse": "pass"
+  },
+  "explicitly_not_claimed": [
+    "authorized Frontier launch candidate",
+    "linear Hall-Bell dispersion qualification",
+    "nonlinear Hall-Bell saturation qualification",
+    "Hall-Bell timestep freeze or convergence qualification",
+    "MPI or decomposition qualification",
+    "Frontier HIP or GPU qualification",
+    "external-review closure"
+  ],
+  "residual_work": [
+    "Commit and review an exact clean candidate containing the Q-029 source-local launch-preparation tranche.",
+    "Freeze the clean-candidate timestep and materialize exact epsilon, positive chi_H, sensitivity, seed, resolution, and decomposition variants before any authorized execution.",
+    "Bind a clean Frontier executable, authorized artifact root, registered campaign record, and independent raw-artifact analysis before any qualification claim.",
+    "Run external review before any linear or nonlinear Hall-Bell claim."
+  ],
+  "q029_disposition": "source_local_hall_bell_launch_preparation_only_no_qualification_claim"
+}

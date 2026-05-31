@@ -4,10 +4,12 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib.util
 import json
 import math
 from pathlib import Path
+import re
 from typing import Any, Callable, Sequence
 
 import numpy as np
@@ -34,6 +36,10 @@ ABSOLUTE_TOLERANCE = 0.02
 RELATIVE_TOLERANCE = 0.05
 K0 = 2.0 * math.pi
 U_A = 1.0
+RETAINED_OBSERVABLE_CONTRACT = (
+    "magnetic_mode_preparation_only_velocity_observable_not_retained_"
+    "section52_qualification_blocked"
+)
 
 DECKS = {
     1: REPO_ROOT / "inputs/tests/pic_q023_paper_bell_linear_1d_candidate.athinput",
@@ -44,22 +50,46 @@ DECKS = {
 _EXPECTED_GEOMETRY = {
     1: {
         "nx": (32, 4, 1),
+        "xmin": (0.0, 0.0, 0.0),
         "extent": (1.0, 1.0, 1.0),
         "active_dx": (1.0 / 32.0,),
     },
     2: {
         "nx": (64, 32, 1),
+        "xmin": (0.0, 0.0, 0.0),
         "extent": (math.sqrt(5.0), math.sqrt(1.25), 1.0),
         "active_dx": (math.sqrt(5.0) / 64.0, math.sqrt(1.25) / 32.0),
     },
     3: {
         "nx": (128, 64, 32),
+        "xmin": (0.0, 0.0, 0.0),
         "extent": (math.sqrt(21.0), math.sqrt(5.25), math.sqrt(1.3125)),
         "active_dx": (
             math.sqrt(21.0) / 128.0,
             math.sqrt(5.25) / 64.0,
             math.sqrt(1.3125) / 32.0,
         ),
+    },
+}
+
+_APPROVED_SOURCE_LOCAL_RAW_VARIANTS = {
+    "Q023-SOURCE-LOCAL-BASELINE-1D-EPSILON-0P4": {
+        "dimension": 1,
+        "epsilon": 0.4,
+        "deck": DECKS[1],
+        "deck_sha256": "8fedfac3098f50380377ea52eee610d60aae36a1b420673032779db86c5592be",
+    },
+    "Q023-SOURCE-LOCAL-BASELINE-2D-EPSILON-0P4": {
+        "dimension": 2,
+        "epsilon": 0.4,
+        "deck": DECKS[2],
+        "deck_sha256": "0b45844f18dfe1966e57d1db153bfd3fc9df603596a6828f998e1e87d28fbe66",
+    },
+    "Q023-SOURCE-LOCAL-BASELINE-3D-EPSILON-0P4": {
+        "dimension": 3,
+        "epsilon": 0.4,
+        "deck": DECKS[3],
+        "deck_sha256": "8ae2a2e5afa69c1247e495dd335a075e7a130ead5c0d4645f0af19f9d62c7817",
     },
 }
 
@@ -123,6 +153,7 @@ _EXPECTED_DECK_VALUES = {
 _TRACE_KEYS = {
     "dimension",
     "epsilon",
+    "raw_provenance",
     "normalized_time",
     "right_mode_real",
     "right_mode_imag",
@@ -131,6 +162,18 @@ _TRACE_KEYS = {
     "phase_interval",
     "phase_change",
 }
+_RAW_PROVENANCE_KEYS = {
+    "kind",
+    "variant_id",
+    "deck_path",
+    "deck_sha256",
+    "raw_geometry",
+    "raw_artifacts",
+    "retained_observable_contract",
+}
+_RAW_GEOMETRY_KEYS = {"nx", "xmin", "extent"}
+_RAW_ARTIFACT_KEYS = {"path", "sha256"}
+_SHA256 = re.compile(r"[0-9a-f]{64}")
 
 
 class ContractError(ValueError):
@@ -167,6 +210,185 @@ def parse_athinput(path: Path) -> dict[str, dict[str, str]]:
 def _require_close(label: str, measured: float, expected: float) -> None:
     if not math.isclose(measured, expected, rel_tol=1.0e-14, abs_tol=1.0e-14):
         raise ContractError(f"{label}: expected {expected!r}, measured {measured!r}")
+
+
+def _sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _raw_geometry(dimension: int) -> dict[str, list[float] | list[int]]:
+    geometry = _EXPECTED_GEOMETRY[dimension]
+    return {
+        "nx": list(geometry["nx"]),
+        "xmin": list(geometry["xmin"]),
+        "extent": list(geometry["extent"]),
+    }
+
+
+def synthetic_contract_provenance(dimension: int, epsilon: float) -> dict[str, Any]:
+    """Return explicitly non-qualifying provenance for analytical unit fixtures."""
+    theoretical_dispersion(epsilon)
+    if dimension not in DIMENSIONS:
+        raise ContractError("dimension must be one of the preregistered integer values")
+    return {
+        "kind": "synthetic_contract_fixture",
+        "variant_id": f"Q023-SYNTHETIC-CONTRACT-{dimension}D-EPSILON-{epsilon:g}",
+        "deck_path": "",
+        "deck_sha256": "",
+        "raw_geometry": _raw_geometry(dimension),
+        "raw_artifacts": [],
+        "retained_observable_contract": RETAINED_OBSERVABLE_CONTRACT,
+    }
+
+
+def _validated_variant_deck(variant: dict[str, Any]) -> Path:
+    deck = Path(variant["deck"])
+    expected_digest = variant["deck_sha256"]
+    if not isinstance(expected_digest, str) or _SHA256.fullmatch(expected_digest) is None:
+        raise ContractError("approved raw Bell deck digest pin is malformed")
+    try:
+        digest = _sha256(deck)
+    except OSError as error:
+        raise ContractError("approved raw Bell deck is missing") from error
+    if digest != expected_digest:
+        raise ContractError("approved raw Bell deck digest does not match the pinned value")
+    return deck
+
+
+def _authorized_artifact_root(artifact_root: Path | None) -> Path:
+    if artifact_root is None:
+        raise ContractError("raw Bell materialized provenance requires an explicit artifact root")
+    root = Path(artifact_root)
+    if not root.is_absolute():
+        raise ContractError("raw Bell authorized artifact root must be absolute")
+    try:
+        root = root.resolve(strict=True)
+    except (OSError, RuntimeError) as error:
+        raise ContractError("raw Bell authorized artifact root is missing") from error
+    if not root.is_dir():
+        raise ContractError("raw Bell authorized artifact root must be a directory")
+    return root
+
+
+def _normalized_artifact_file(
+    path: Path, artifact_root: Path, *, provenance_path: bool
+) -> tuple[Path, str]:
+    if provenance_path and path.is_absolute():
+        raise ContractError("raw Bell artifact path must be normalized root-relative")
+    candidate = path if path.is_absolute() else artifact_root / path
+    try:
+        resolved = candidate.resolve(strict=True)
+    except (OSError, RuntimeError) as error:
+        raise ContractError("raw Bell artifact path is missing") from error
+    try:
+        relative = resolved.relative_to(artifact_root)
+    except ValueError as error:
+        raise ContractError("raw Bell artifact path is outside the authorized root") from error
+    if not resolved.is_file():
+        raise ContractError("raw Bell artifact path must identify a file")
+    normalized = relative.as_posix()
+    if provenance_path and path.as_posix() != normalized:
+        raise ContractError("raw Bell artifact path must be normalized root-relative")
+    return resolved, normalized
+
+
+def _source_local_materialized_provenance(
+    dimension: int,
+    epsilon: float,
+    variant_id: str,
+    paths: Sequence[Path],
+    *,
+    artifact_root: Path,
+) -> dict[str, Any]:
+    variant = _APPROVED_SOURCE_LOCAL_RAW_VARIANTS.get(variant_id)
+    if variant is None:
+        raise ContractError("raw Bell variant is not an approved materialized source-local ID")
+    if variant["dimension"] != dimension or variant["epsilon"] != epsilon:
+        raise ContractError("raw Bell variant does not match the requested dimension and epsilon")
+    deck = _validated_variant_deck(variant)
+    root = _authorized_artifact_root(artifact_root)
+    if not paths:
+        raise ContractError("raw Bell source-local extraction requires retained artifact files")
+    artifacts = []
+    retained_paths = set()
+    for path in paths:
+        resolved, relative = _normalized_artifact_file(
+            Path(path), root, provenance_path=False
+        )
+        if relative in retained_paths:
+            raise ContractError("raw Bell artifact path is duplicated")
+        retained_paths.add(relative)
+        artifacts.append({"path": relative, "sha256": _sha256(resolved)})
+    return {
+        "kind": "source_local_materialized_variant",
+        "variant_id": variant_id,
+        "deck_path": str(deck.relative_to(REPO_ROOT)),
+        "deck_sha256": variant["deck_sha256"],
+        "raw_geometry": _raw_geometry(dimension),
+        "raw_artifacts": artifacts,
+        "retained_observable_contract": RETAINED_OBSERVABLE_CONTRACT,
+    }
+
+
+def _validate_raw_provenance(
+    provenance: dict[str, Any],
+    dimension: int,
+    epsilon: float,
+    *,
+    artifact_root: Path | None = None,
+) -> dict[str, Any]:
+    if not isinstance(provenance, dict) or set(provenance) != _RAW_PROVENANCE_KEYS:
+        raise ContractError("raw Bell provenance keys do not match the contract")
+    if provenance["retained_observable_contract"] != RETAINED_OBSERVABLE_CONTRACT:
+        raise ContractError("raw Bell retained-observable contract mismatch")
+    geometry = provenance["raw_geometry"]
+    if (not isinstance(geometry, dict) or set(geometry) != _RAW_GEOMETRY_KEYS or
+            geometry != _raw_geometry(dimension)):
+        raise ContractError("raw Bell provenance geometry is not an approved materialized variant")
+    artifacts = provenance["raw_artifacts"]
+    if not isinstance(artifacts, list):
+        raise ContractError("raw Bell provenance artifacts must be a list")
+
+    kind = provenance["kind"]
+    if kind == "synthetic_contract_fixture":
+        expected = synthetic_contract_provenance(dimension, epsilon)
+        if provenance != expected:
+            raise ContractError("synthetic Bell contract fixture provenance mismatch")
+        return provenance
+    if kind != "source_local_materialized_variant":
+        raise ContractError("raw Bell provenance kind is not recognized")
+
+    variant = _APPROVED_SOURCE_LOCAL_RAW_VARIANTS.get(provenance["variant_id"])
+    if variant is None:
+        raise ContractError("raw Bell variant is not an approved materialized source-local ID")
+    if variant["dimension"] != dimension or variant["epsilon"] != epsilon:
+        raise ContractError("raw Bell variant does not match the retained record")
+    deck = _validated_variant_deck(variant)
+    if provenance["deck_path"] != str(deck.relative_to(REPO_ROOT)):
+        raise ContractError("raw Bell provenance deck path mismatch")
+    if provenance["deck_sha256"] != variant["deck_sha256"]:
+        raise ContractError("raw Bell provenance deck digest mismatch")
+    if not artifacts:
+        raise ContractError("raw Bell source-local provenance requires retained artifacts")
+    root = _authorized_artifact_root(artifact_root)
+    paths = set()
+    for artifact in artifacts:
+        if not isinstance(artifact, dict) or set(artifact) != _RAW_ARTIFACT_KEYS:
+            raise ContractError("raw Bell artifact provenance keys do not match the contract")
+        if not isinstance(artifact["path"], str) or not artifact["path"]:
+            raise ContractError("raw Bell artifact path is malformed")
+        path, relative = _normalized_artifact_file(
+            Path(artifact["path"]), root, provenance_path=True
+        )
+        if relative in paths:
+            raise ContractError("raw Bell artifact path is duplicated")
+        paths.add(relative)
+        digest = artifact["sha256"]
+        if not isinstance(digest, str) or _SHA256.fullmatch(digest) is None:
+            raise ContractError("raw Bell artifact digest is malformed")
+        if digest != _sha256(path):
+            raise ContractError("raw Bell artifact digest mismatch")
+    return provenance
 
 
 def _mode_basis(dimension: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -309,12 +531,26 @@ def _fixed_interval_phase_trace(
 
 
 def _spatial_modes_from_dataset(
-    dataset: dict[str, Any], dimension: int
+    dataset: dict[str, Any], dimension: int, raw_geometry: dict[str, Any]
 ) -> tuple[complex, complex]:
     parallel, transverse_a, transverse_b = _mode_basis(dimension)
     coordinates = [
         np.asarray(dataset[f"x{axis}v"], dtype=float) for axis in (1, 2, 3)
     ]
+    if any(values.ndim != 1 or not np.all(np.isfinite(values))
+           for values in coordinates):
+        raise ContractError("raw mhd_bcc coordinates must be finite one-dimensional arrays")
+    nx = tuple(raw_geometry["nx"])
+    xmin = tuple(raw_geometry["xmin"])
+    extent = tuple(raw_geometry["extent"])
+    if tuple(values.size for values in coordinates) != nx:
+        raise ContractError("raw mhd_bcc geometry does not match the approved variant")
+    for axis, values in enumerate(coordinates):
+        expected = xmin[axis] + (np.arange(nx[axis], dtype=float) + 0.5) * (
+            extent[axis] / nx[axis]
+        )
+        if not np.allclose(values, expected, rtol=0.0, atol=1.0e-13):
+            raise ContractError("raw mhd_bcc geometry does not match the approved variant")
     expected_shape = tuple(values.size for values in reversed(coordinates))
     magnetic = np.stack(
         [np.asarray(dataset[f"bcc{axis}"], dtype=float) for axis in (1, 2, 3)]
@@ -332,10 +568,18 @@ def _spatial_modes_from_dataset(
 
 
 def extract_trace_record_from_datasets(
-    dimension: int, epsilon: float, datasets: Sequence[dict[str, Any]]
+    dimension: int,
+    epsilon: float,
+    datasets: Sequence[dict[str, Any]],
+    *,
+    raw_provenance: dict[str, Any],
+    artifact_root: Path | None = None,
 ) -> dict[str, Any]:
     """Extract one paper Bell trace record from raw mhd_bcc snapshot datasets."""
     theoretical_dispersion(epsilon)
+    provenance = _validate_raw_provenance(
+        raw_provenance, dimension, epsilon, artifact_root=artifact_root
+    )
     rows = []
     for dataset in datasets:
         if "Time" not in dataset:
@@ -343,7 +587,9 @@ def extract_trace_record_from_datasets(
         time = float(dataset["Time"])
         if not math.isfinite(time):
             raise ContractError("raw mhd_bcc dataset Time must be finite")
-        right, left = _spatial_modes_from_dataset(dataset, dimension)
+        right, left = _spatial_modes_from_dataset(
+            dataset, dimension, provenance["raw_geometry"]
+        )
         rows.append((time*K0*U_A, right, left))
     rows.sort(key=lambda item: item[0])
     if not rows:
@@ -355,6 +601,7 @@ def extract_trace_record_from_datasets(
     return {
         "dimension": dimension,
         "epsilon": epsilon,
+        "raw_provenance": provenance,
         "normalized_time": time.tolist(),
         "right_mode_real": right.real.tolist(),
         "right_mode_imag": right.imag.tolist(),
@@ -369,9 +616,18 @@ def extract_trace_record_from_binary_files(
     dimension: int,
     epsilon: float,
     paths: Sequence[Path],
+    variant_id: str,
     reader: Callable[[str], dict[str, Any]] | None = None,
+    *,
+    artifact_root: Path,
 ) -> dict[str, Any]:
     """Read raw Athena binary snapshots and extract one paper Bell trace record."""
+    provenance = _source_local_materialized_provenance(
+        dimension, epsilon, variant_id, paths, artifact_root=artifact_root
+    )
+    root = _authorized_artifact_root(artifact_root)
+    normalized_paths = [root / artifact["path"]
+                        for artifact in provenance["raw_artifacts"]]
     if reader is None:
         module_path = REPO_ROOT / "vis/python/bin_convert_new.py"
         spec = importlib.util.spec_from_file_location("q023_bin_convert_new", module_path)
@@ -381,7 +637,11 @@ def extract_trace_record_from_binary_files(
         spec.loader.exec_module(module)
         reader = module.read_binary_as_athdf
     return extract_trace_record_from_datasets(
-        dimension, epsilon, [reader(str(path)) for path in paths]
+        dimension,
+        epsilon,
+        [reader(str(path)) for path in normalized_paths],
+        raw_provenance=provenance,
+        artifact_root=root,
     )
 
 
@@ -398,7 +658,9 @@ def _within_both_tolerances(measured: float, expected: float) -> bool:
     return absolute_error <= ABSOLUTE_TOLERANCE and relative_error <= RELATIVE_TOLERANCE
 
 
-def _analyze_record(record: dict[str, Any]) -> dict[str, Any]:
+def _analyze_record(
+    record: dict[str, Any], *, artifact_root: Path | None = None
+) -> dict[str, Any]:
     if set(record) != _TRACE_KEYS:
         raise ContractError("Bell extracted-trace record keys do not match the contract")
     dimension = record["dimension"]
@@ -406,6 +668,9 @@ def _analyze_record(record: dict[str, Any]) -> dict[str, Any]:
         raise ContractError("dimension must be one of the preregistered integer values")
     epsilon = float(record["epsilon"])
     expected_phase, expected_growth = theoretical_dispersion(epsilon)
+    provenance = _validate_raw_provenance(
+        record["raw_provenance"], dimension, epsilon, artifact_root=artifact_root
+    )
 
     time = _finite_array(record, "normalized_time")
     if time.size < MIN_GROWTH_SNAPSHOTS or np.any(np.diff(time) <= 0.0):
@@ -455,7 +720,7 @@ def _analyze_record(record: dict[str, Any]) -> dict[str, Any]:
         phase_change, extracted_change, rtol=0.0, atol=1.0e-10
     ):
         raise ContractError("phase changes do not match the retained mode trace")
-    measured_phase = float(np.mean(np.abs(extracted_change / extracted_interval)))
+    measured_phase = float(np.mean(extracted_change / extracted_interval))
     final_fit_index = int(np.flatnonzero(fit_mask)[-1])
     polarization_ratio = float(
         right_amplitude[final_fit_index]
@@ -468,6 +733,8 @@ def _analyze_record(record: dict[str, Any]) -> dict[str, Any]:
     return {
         "dimension": dimension,
         "epsilon": epsilon,
+        "raw_provenance_kind": provenance["kind"],
+        "raw_variant_id": provenance["variant_id"],
         "expected_growth_rate_over_k0_ua": expected_growth,
         "measured_growth_rate_over_k0_ua": measured_growth,
         "growth_fit_r2": growth_r2,
@@ -477,11 +744,15 @@ def _analyze_record(record: dict[str, Any]) -> dict[str, Any]:
         "growth_pass": growth_pass,
         "phase_pass": phase_pass,
         "polarization_pass": polarization_pass,
+        "retained_velocity_observable_status": RETAINED_OBSERVABLE_CONTRACT,
+        "section52_qualification_eligible": False,
         "passed": growth_pass and phase_pass and polarization_pass,
     }
 
 
-def analyze_trace_bundle(bundle: dict[str, Any]) -> dict[str, Any]:
+def analyze_trace_bundle(
+    bundle: dict[str, Any], *, artifact_root: Path | None = None
+) -> dict[str, Any]:
     """Analyze an exact extracted-trace grid without making a qualification claim."""
     if set(bundle) != {"schema_version", "campaign_id", "qualifying_seed", "records"}:
         raise ContractError("Bell extracted-trace bundle keys do not match the contract")
@@ -500,7 +771,7 @@ def analyze_trace_bundle(bundle: dict[str, Any]) -> dict[str, Any]:
     for record in bundle["records"]:
         if not isinstance(record, dict):
             raise ContractError("Bell extracted-trace rows must be objects")
-        report = _analyze_record(record)
+        report = _analyze_record(record, artifact_root=artifact_root)
         key = (report["dimension"], report["epsilon"])
         if key in measured_keys:
             raise ContractError(f"duplicate Bell extracted-trace row {key!r}")
@@ -510,18 +781,45 @@ def analyze_trace_bundle(bundle: dict[str, Any]) -> dict[str, Any]:
         raise ContractError("Bell extracted-trace grid is incomplete or contains extra rows")
 
     reports.sort(key=lambda item: (item["dimension"], item["epsilon"]))
+    provenance_kinds = {report["raw_provenance_kind"] for report in reports}
+    if len(provenance_kinds) != 1:
+        raise ContractError("Bell extracted-trace bundle cannot mix provenance kinds")
+    analysis_input_kind = next(iter(provenance_kinds))
+    synthetic_fixture_analysis = analysis_input_kind == "synthetic_contract_fixture"
+    scientific_contract_pass = all(report["passed"] for report in reports)
+    materialized_source_local_candidate_pass = (
+        not synthetic_fixture_analysis and scientific_contract_pass
+    )
+    qualification_effect = (
+        "none_synthetic_contract_fixture_test_only_not_a_materialized_source_local_"
+        "candidate_pass"
+        if synthetic_fixture_analysis
+        else (
+            "source_local_magnetic_mode_candidate_analysis_only_velocity_observable_"
+            "not_retained_section52_qualification_blocked_clean_candidate_binding_"
+            "registered_frontier_execution_independent_recompute_and_external_review_"
+            "required"
+        )
+    )
     return {
         "schema_version": 1,
         "campaign_id": CAMPAIGN_ID,
         "qualifying_seed": qualifying_seed,
-        "qualification_effect": (
-            "source_local_candidate_analysis_only_clean_candidate_binding_registered_"
-            "frontier_execution_independent_recompute_and_external_review_required"
+        "analysis_input_kind": analysis_input_kind,
+        "analysis_scope": (
+            "synthetic_contract_fixture_test_only"
+            if synthetic_fixture_analysis
+            else "source_local_materialized_magnetic_mode_candidate"
         ),
+        "synthetic_fixture_analysis": synthetic_fixture_analysis,
+        "scientific_contract_pass": scientific_contract_pass,
+        "materialized_source_local_candidate_pass": materialized_source_local_candidate_pass,
+        "qualification_effect": qualification_effect,
+        "section52_qualification_eligible": False,
         "deck_contracts": validate_source_local_candidate_decks(),
         "record_count": len(reports),
         "records": reports,
-        "passed": all(report["passed"] for report in reports),
+        "passed": materialized_source_local_candidate_pass,
     }
 
 
@@ -530,19 +828,30 @@ def main() -> None:
     parser.add_argument("--extract-record", action="store_true")
     parser.add_argument("--dimension", type=int)
     parser.add_argument("--epsilon", type=float)
+    parser.add_argument("--variant-id")
+    parser.add_argument("--artifact-root", type=Path)
     parser.add_argument("paths", type=Path, nargs="+")
     args = parser.parse_args()
     if args.extract_record:
-        if args.dimension is None or args.epsilon is None:
-            parser.error("--extract-record requires --dimension and --epsilon")
+        if (args.dimension is None or args.epsilon is None or
+                args.variant_id is None or args.artifact_root is None):
+            parser.error(
+                "--extract-record requires --dimension, --epsilon, --variant-id "
+                "and --artifact-root"
+            )
         result = extract_trace_record_from_binary_files(
-            args.dimension, args.epsilon, args.paths
+            args.dimension,
+            args.epsilon,
+            args.paths,
+            args.variant_id,
+            artifact_root=args.artifact_root,
         )
     else:
-        if len(args.paths) != 1 or args.dimension is not None or args.epsilon is not None:
+        if (len(args.paths) != 1 or args.dimension is not None or
+                args.epsilon is not None or args.variant_id is not None):
             parser.error("bundle analysis requires exactly one trace-bundle path")
         bundle = json.loads(args.paths[0].read_text(encoding="utf-8"))
-        result = analyze_trace_bundle(bundle)
+        result = analyze_trace_bundle(bundle, artifact_root=args.artifact_root)
     print(json.dumps(result, indent=2, sort_keys=True, allow_nan=False))
 
 

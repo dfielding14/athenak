@@ -34,7 +34,7 @@ _SOURCE_BINDINGS = {
     "src/particles/particles.hpp":
         "452e6091ad6f1ce50156c770d304ac36020cb53927cc1e40ba6af73e7c3bb462",
     "src/particles/particles.cpp":
-        "045632afb67c4ff301979716d822fddc8ded8c2ce1eae4725a0d34e32533e956",
+        "06f80ec9a93f027ff5a24a2631754603c7ea3f83cfbcdbd8e5b9a32be711fa79",
     "docs/source/engineering/pic_mhd_model_contract.md":
         "ebad2e21725ea15eb301e03f32d8ca8fab9c6503aec90cd7090be4637402ed64",
 }
@@ -52,6 +52,8 @@ _SOURCE_REQUIRED_SNIPPETS = {
     "src/particles/particles.cpp": (
         'pic_wave_damping_mode_str.compare("ion_neutral_friction") == 0',
         '"an active coupled <mhd> background"',
+        '"the Newtonian single-fluid MHD source task path; does not support "',
+        '"<ion-neutral> alternate task lists"',
     ),
     "docs/source/engineering/pic_mhd_model_contract.md": (
         "p_ion,perp(t + dt) = p_ion,perp(t) exp(-nu_in dt)",

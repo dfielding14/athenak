@@ -1206,6 +1206,37 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
               << "an active coupled <mhd> background" << std::endl;
     std::exit(EXIT_FAILURE);
   }
+  if (pic_wave_damping_mode == PICWaveDampingMode::ion_neutral_friction) {
+    auto reject_wave_damping_composition = [](const char *reason) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "<particles>/pic_wave_damping_mode=ion_neutral_friction requires "
+                << "the Newtonian single-fluid MHD source task path; does not support "
+                << reason << std::endl;
+      std::exit(EXIT_FAILURE);
+    };
+    if (pin->DoesBlockExist("radiation")) {
+      reject_wave_damping_composition("<radiation> task paths");
+    }
+    if (pin->DoesBlockExist("ion-neutral")) {
+      reject_wave_damping_composition("<ion-neutral> alternate task lists");
+    }
+    if (pin->DoesBlockExist("hydro")) {
+      reject_wave_damping_composition("<hydro> compositions");
+    }
+    if (pin->DoesBlockExist("adm") || pin->DoesBlockExist("z4c")) {
+      reject_wave_damping_composition("dynamical-GR <adm>/<z4c> task paths");
+    }
+    if (pmy_pack->pcoord->is_special_relativistic) {
+      reject_wave_damping_composition("<coord>/special_rel=true");
+    }
+    if (pmy_pack->pcoord->is_general_relativistic) {
+      reject_wave_damping_composition("<coord>/general_rel=true");
+    }
+    if (pmy_pack->pcoord->is_dynamical_relativistic) {
+      reject_wave_damping_composition("dynamical-relativistic coordinates");
+    }
+  }
   if (pic_physical_mode == PICPhysicalMode::paper_test_particle) {
     if ((pic_feedback_mode != PICFeedbackMode::test_particle) ||
         couple_moments_to_mhd || couple_moments_momentum_to_mhd ||

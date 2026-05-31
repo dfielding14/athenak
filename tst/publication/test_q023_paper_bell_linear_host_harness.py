@@ -157,6 +157,23 @@ class Q023PaperBellLinearHostHarnessTests(unittest.TestCase):
         )
         self.assertEqual(smoke["restart_continuation"]["result"], "pass")
         self.assertEqual(smoke["restart_continuation"]["final_cycle"], 1)
+        artifact_root = Path(smoke["artifact_root"])
+        executable = smoke["debug_executable"]
+        self.assertEqual(_sha256(Path(executable["path"])), executable["sha256"])
+        for item in smoke["cycle_zero_initializations"]:
+            self.assertEqual(
+                _sha256(artifact_root / item["selected_raw_mhd_bcc_path"]),
+                item["selected_raw_mhd_bcc_sha256"],
+            )
+        restart = smoke["restart_continuation"]
+        self.assertEqual(
+            _sha256(artifact_root / restart["loaded_restart_path"]),
+            restart["loaded_restart_sha256"],
+        )
+        self.assertEqual(
+            _sha256(artifact_root / restart["selected_continuation_raw_mhd_bcc_path"]),
+            restart["selected_continuation_raw_mhd_bcc_sha256"],
+        )
         for artifact in sidecar["source_local_artifacts"]:
             self.assertEqual(_sha256(REPO_ROOT / artifact["path"]), artifact["sha256"])
         self.assertTrue(

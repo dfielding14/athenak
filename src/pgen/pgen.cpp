@@ -1441,6 +1441,10 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm) :
     PICParallelShock(pin, false);
   } else if (pgen_fun_name.compare("q023_paper_bell_linear") == 0) {
     Q023PaperBellLinear(pin, false);
+  } else if (pgen_fun_name.compare("q029_hall_bell_linear") == 0) {
+    Q029HallBellLinear(pin, false);
+  } else if (pgen_fun_name.compare("q032_reduced_static_neutral_local") == 0) {
+    Q032ReducedStaticNeutralLocal(pin, false);
   } else if (pgen_fun_name.compare("rad_linear_wave") == 0) {
     RadiationLinearWave(pin, false);
   } else if (pgen_fun_name.compare("shock_tube") == 0) {
@@ -2075,6 +2079,10 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
     PICParallelShock(pin, true);
   } else if (pgen_fun_name.compare("q023_paper_bell_linear") == 0) {
     Q023PaperBellLinear(pin, true);
+  } else if (pgen_fun_name.compare("q029_hall_bell_linear") == 0) {
+    Q029HallBellLinear(pin, true);
+  } else if (pgen_fun_name.compare("q032_reduced_static_neutral_local") == 0) {
+    Q032ReducedStaticNeutralLocal(pin, true);
   } else if (pgen_fun_name.compare("rad_linear_wave") == 0) {
     RadiationLinearWave(pin, true);
   } else if (pgen_fun_name.compare("shock_tube") == 0) {

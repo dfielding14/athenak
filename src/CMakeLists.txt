@@ -117,6 +117,8 @@ add_executable(
         pgen/tests/orszag_tang.cpp
         pgen/tests/pic_parallel_shock.cpp
         pgen/tests/q023_paper_bell_linear.cpp
+        pgen/tests/q029_hall_bell_linear.cpp
+        pgen/tests/q032_reduced_static_neutral_local.cpp
         pgen/tests/shock_tube.cpp
         pgen/tests/rad_check_tetrad.cpp
         pgen/tests/rad_hohlraum.cpp

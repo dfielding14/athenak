@@ -33,7 +33,7 @@ SPECTRUM_K_GRID = (1.0, 2.0, 3.0)
 
 _SOURCE_BINDINGS = {
     "src/particles/particles.cpp":
-        "045632afb67c4ff301979716d822fddc8ded8c2ce1eae4725a0d34e32533e956",
+        "06f80ec9a93f027ff5a24a2631754603c7ea3f83cfbcdbd8e5b9a32be711fa79",
     "src/particles/particles.hpp":
         "452e6091ad6f1ce50156c770d304ac36020cb53927cc1e40ba6af73e7c3bb462",
     "src/particles/particles_tasks.cpp":
@@ -54,6 +54,8 @@ _SOURCE_REQUIRED_SNIPPETS = {
         "global_bikappa_moments_experimental requires physical ",
         "reduced ion-neutral friction without an admitted ",
         "cell-centered source split",
+        '"the Newtonian single-fluid MHD source task path; does not support "',
+        '"<ion-neutral> alternate task lists"',
     ),
     "src/particles/particles.hpp": (
         "Real PICAdaptiveDeltaFBackgroundValue(",

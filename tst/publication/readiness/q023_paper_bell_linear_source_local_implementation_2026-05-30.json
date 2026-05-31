@@ -23,7 +23,7 @@
   "source_local_preparation_choices": {
     "uniform_pressure": 1.0,
     "eigenmode_amplitude": 1e-06,
-    "output": "raw_mhd_bcc_each_cycle",
+    "output": "raw_mhd_bcc_each_cycle_magnetic_mode_preparation_only",
     "qualification_limit": "local_preparation_values_only_not_a_section52_qualification_claim"
   },
   "physical_1d_carrier_contract": {
@@ -37,26 +37,67 @@
   },
   "restart_semantics": "revalidate_exact_q023_contract_then_return_without_reinitializing_loaded_state",
   "raw_mode_trace_extraction": "tst/publication/analyze_q023_paper_bell_linear.py",
+  "raw_trace_contract": {
+    "signed_phase_frequency": "required_without_absolute_value",
+    "raw_artifact_provenance": "approved_materialized_variant_id_exact_pinned_deck_sha256_explicit_authorized_artifact_root_and_each_normalized_root_relative_raw_artifact_path_sha256_required",
+    "synthetic_fixture_analysis": "top_level_explicit_test_only_scientific_contract_pass_separate_and_passed_false_not_a_materialized_source_local_candidate_pass",
+    "approved_source_local_materialized_variants": [
+      {
+        "variant_id": "Q023-SOURCE-LOCAL-BASELINE-1D-EPSILON-0P4",
+        "dimension": 1,
+        "epsilon": 0.4,
+        "deck_path": "inputs/tests/pic_q023_paper_bell_linear_1d_candidate.athinput",
+        "deck_sha256": "8fedfac3098f50380377ea52eee610d60aae36a1b420673032779db86c5592be",
+        "raw_geometry": {"nx": [32, 4, 1], "xmin": [0.0, 0.0, 0.0], "extent": [1.0, 1.0, 1.0]}
+      },
+      {
+        "variant_id": "Q023-SOURCE-LOCAL-BASELINE-2D-EPSILON-0P4",
+        "dimension": 2,
+        "epsilon": 0.4,
+        "deck_path": "inputs/tests/pic_q023_paper_bell_linear_2d_candidate.athinput",
+        "deck_sha256": "0b45844f18dfe1966e57d1db153bfd3fc9df603596a6828f998e1e87d28fbe66",
+        "raw_geometry": {"nx": [64, 32, 1], "xmin": [0.0, 0.0, 0.0], "extent": [2.23606797749979, 1.118033988749895, 1.0]}
+      },
+      {
+        "variant_id": "Q023-SOURCE-LOCAL-BASELINE-3D-EPSILON-0P4",
+        "dimension": 3,
+        "epsilon": 0.4,
+        "deck_path": "inputs/tests/pic_q023_paper_bell_linear_3d_candidate.athinput",
+        "deck_sha256": "8ae2a2e5afa69c1247e495dd335a075e7a130ead5c0d4645f0af19f9d62c7817",
+        "raw_geometry": {"nx": [128, 64, 32], "xmin": [0.0, 0.0, 0.0], "extent": [4.58257569495584, 2.29128784747792, 1.14564392373896]}
+      }
+    ],
+    "paper_velocity_observable_boundary": {
+      "paper_benchmark_observable": "retained_fluid_velocity_mode_growth_and_phase",
+      "current_retained_output": "raw_mhd_bcc_magnetic_mode_only",
+      "section52_qualification_eligible": false,
+      "required_before_qualification": "materialize_and_bind_velocity_retaining_raw_output_variants_then_cross_check_velocity_growth_phase_and_polarization_against_the_magnetic_candidate"
+    }
+  },
   "source_local_artifacts": [
     {
       "path": "src/pgen/tests/q023_paper_bell_linear.cpp",
-      "sha256": "76edb3487dd3d2beebc90437b9af8c6d459e9ee987c3cd153f163b0b4be62dc1"
+      "sha256": "66a1bb952ca8b9d91d17896c1ebb94b18fa276be24767a99f635466cbe8638eb"
+    },
+    {
+      "path": "src/pgen/tests/q023_paper_bell_linear.hpp",
+      "sha256": "afa7b8243b1d402faa9592137050d0e6870a06ce25f61e17d010af3fc5a080e6"
     },
     {
       "path": "src/pgen/pgen.cpp",
-      "sha256": "8b27bbac7e04e6ec9b0b6a2efe9ec3f308dd397fe1017d6fb2d784127989a22f"
+      "sha256": "d4c552c8351e31c6b6254ecaa295f00c581bfa9a5420948d8eee8fd2874ef3a4"
     },
     {
       "path": "src/pgen/pgen.hpp",
-      "sha256": "5bdf2d1534bbd08aa4fa7ff4189d2802d5fc221bf8caf2bfd2bec04a8bfa00ae"
+      "sha256": "70e10154da779a69e9a754eb4b9d78589097ee9ed15080781af6052b14ca8b2f"
     },
     {
       "path": "src/CMakeLists.txt",
-      "sha256": "ca01e365e89d1b78a47cce1391da62aab110217d4ab3197bffc2b51c4a297fd0"
+      "sha256": "4c7741293f904c08ad49bd34e3b2a83b75a5e6571e8d6bf096c2bb543b13d62d"
     },
     {
       "path": "src/pgen/AGENTS.md",
-      "sha256": "fdb839c3bf9b384533c34b70efe3cf75ebed2427e147d0b8ec48fa12fd00eeac"
+      "sha256": "7125db22d3d5219ee84e733c044d9493160d1126f46b2eaa1e2dff9b7c081770"
     },
     {
       "path": "inputs/tests/pic_q023_paper_bell_linear_1d_candidate.athinput",
@@ -72,57 +113,57 @@
     },
     {
       "path": "tst/publication/analyze_q023_paper_bell_linear.py",
-      "sha256": "ce0b901b44e5d556d8b4a19051021edccab64ec5c5812c0e48dabb3a6bee34f9"
+      "sha256": "7e21164b3d2c23b92ccaeeec1e3c80cd750f6c332d1b13723faee61d26fbc9f5"
     },
     {
       "path": "tst/publication/test_analyze_q023_paper_bell_linear.py",
-      "sha256": "3c0df75559fbffeb0b5f1ec4a92934c3a3b2b92299a0bf1aeb8dc22fb1e4381b"
+      "sha256": "ea0ca8956317ec0c67dfe09eef115954cfac944af09adcfc77e347af8e66b2ee"
     },
     {
       "path": "tst/publication/q023_paper_bell_linear_host_harness.cpp",
-      "sha256": "b94be3148393fcef3f3800e47950f5d564438e60a55ef89a989e0539ad21a309"
+      "sha256": "895df9ed44e3ecc8290698424d004b14ade5d7e7997e6c84bf941b0387ca43b4"
     },
     {
       "path": "tst/publication/test_q023_paper_bell_linear_host_harness.py",
-      "sha256": "c1e2f4ce19cf3c885a7bd08b83174873f37a1e6e117cfe6ab64b75a6004c88c2"
+      "sha256": "b53108fe731fcf4e8d205facaa81feae4b78caacf112fe67a8dab05dd73c6999"
     }
   ],
   "source_local_runtime_smoke": {
     "qualification_effect": "bounded_source_local_preparation_smoke_only",
-    "artifact_root": "/lustre/orion/ast207/proj-shared/dfielding/PIC/local-readiness/q023-bell-thin-carrier-smoke-20260530",
+    "artifact_root": "/lustre/orion/ast207/proj-shared/dfielding/PIC/local-readiness/q023-bell-thin-carrier-smoke-header-refactor-20260530",
     "debug_executable": {
-      "path": "/tmp/athenak-pic-local-prereq-debug-20260530/src/athena",
-      "sha256": "8d9ffc78c292c95c9fffd8809b8c7b5532758c171d91f62ca3d217a37863ac8d"
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/local-readiness/q023-bell-thin-carrier-smoke-header-refactor-20260530/debug-executable/athena",
+      "sha256": "f43ec79efb4f2292314914f02f39736c928cedd7ce4e67cbf357677f1f6a55b4"
     },
     "cycle_zero_initializations": [
       {
         "dimension": 1,
         "carrier_shape": [1, 4, 32],
         "selected_raw_mhd_bcc_path": "1d/bin/pic_q023_paper_bell_linear_1d_candidate.mhd_bcc.00000.bin",
-        "selected_raw_mhd_bcc_sha256": "708dc0ab61dbf5f133d53785b0208999a1f9a5ddde7603c7222f5f98f642396c",
+        "selected_raw_mhd_bcc_sha256": "e199a00f01003710b3399029e42b2a8e3d9f8b5e54ae6ebde0a2084e4b9af91d",
         "result": "pass"
       },
       {
         "dimension": 2,
         "carrier_shape": [1, 32, 64],
         "selected_raw_mhd_bcc_path": "2d/bin/pic_q023_paper_bell_linear_2d_candidate.mhd_bcc.00000.bin",
-        "selected_raw_mhd_bcc_sha256": "be020e8558e87c8a09b20e973d0fc672ae23c63847d62a8e654e6975d0386f44",
+        "selected_raw_mhd_bcc_sha256": "87edf1577a54a75fa274fc6fe67050572d97277783140f1efec028442c4b83c2",
         "result": "pass"
       },
       {
         "dimension": 3,
         "carrier_shape": [32, 64, 128],
         "selected_raw_mhd_bcc_path": "3d/bin/pic_q023_paper_bell_linear_3d_candidate.mhd_bcc.00000.bin",
-        "selected_raw_mhd_bcc_sha256": "72f8dfb8ceebfe86ae74970c117ab1d2a655b39593e703d5d933e36ed30db439",
+        "selected_raw_mhd_bcc_sha256": "4415b8775070cfe721dc4c1e5ba51b4dc368998370ae67069543d9b719983ba5",
         "result": "pass"
       }
     ],
     "restart_continuation": {
       "dimension": 2,
       "loaded_restart_path": "restart2d/rst/pic_q023_paper_bell_linear_restart2d.00001.rst",
-      "loaded_restart_sha256": "96540d52cae4239d0cdeefa161a1c42996b02db232492ae281459c712d3db82b",
-      "selected_continuation_raw_mhd_bcc_path": "restart2d/bin/pic_q023_paper_bell_linear_restart2d_cont.mhd_bcc.00001.bin",
-      "selected_continuation_raw_mhd_bcc_sha256": "7d343c2ed771a743a837e8f81666e4145503712bdbd62cce5c6a3c3cf964b11f",
+      "loaded_restart_sha256": "4f4a4dcbd7aeca06a7382d601cf34b2fe02905bb903ea75e314259b99c7819d8",
+      "selected_continuation_raw_mhd_bcc_path": "restart2d/bin/pic_q023_paper_bell_linear_restart2d_cont.mhd_bcc.00003.bin",
+      "selected_continuation_raw_mhd_bcc_sha256": "06102b7d7f9d2590bb87fb6bb79ade7fa6ed3ba3df592c9a578af21b556bc682",
       "final_cycle": 1,
       "final_time": 0.0015625,
       "result": "pass"
@@ -132,6 +173,7 @@
     "Commit and freeze an exact clean candidate containing this source-local tranche.",
     "Review and retain the exact transverse-invariant nx2=4 thin 2D3V carrier for the physical 1D preparation.",
     "Materialize exact epsilon, sensitivity, seed, timestep, and time-limit variants before output inspection.",
+    "Materialize and bind velocity-retaining raw-output variants, then cross-check the paper fluid-velocity growth and phase observable against the magnetic-mode candidate before any Section 5.2 qualification.",
     "Expand the bounded source-local smokes into exact epsilon, resolution, timestep, seed and convergence variants before qualifying execution.",
     "Bind a clean Frontier executable and authorized Orion artifact root only through the reviewed control plane.",
     "Freeze a registered campaign record before a qualifying run.",

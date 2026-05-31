@@ -1,5 +1,11 @@
+//========================================================================================
+// AthenaXXX astrophysical plasma code
+// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
+// Licensed under the 3-clause BSD License (the "LICENSE")
+//========================================================================================
+
 #define Q023_PAPER_BELL_LINEAR_HOST_CONTRACT 1
-#include "../../src/pgen/tests/q023_paper_bell_linear.cpp"
+#include "../../src/pgen/tests/q023_paper_bell_linear.hpp"
 
 #include <iomanip>
 #include <iostream>

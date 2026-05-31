@@ -1,0 +1,131 @@
+# Q-032 bounded source-local mechanics regression only.
+# This is not Plotnikov-comparison evidence and is not Frontier-authorized.
+
+<comment>
+problem   = Q032 reduced static-neutral local mechanics carrier
+
+<job>
+basename  = pic_q032_reduced_static_neutral_runtime_local
+
+<mesh>
+nghost    = 2
+nx1       = 32
+x1min     = 0.0
+x1max     = 1.0
+ix1_bc    = periodic
+ox1_bc    = periodic
+
+nx2       = 4
+x2min     = 0.0
+x2max     = 0.125
+ix2_bc    = periodic
+ox2_bc    = periodic
+
+nx3       = 1
+x3min     = 0.0
+x3max     = 1.0
+ix3_bc    = periodic
+ox3_bc    = periodic
+
+<meshblock>
+nx1       = 32
+nx2       = 4
+nx3       = 1
+
+<mesh_refinement>
+refinement           = none
+num_levels           = 1
+ddens_max            = 0.0
+ncycle_check         = 1
+refinement_interval  = 1
+max_nmb_per_rank     = 128
+
+<time>
+evolution  = dynamic
+integrator = rk1
+cfl_number = 0.1
+nlim       = 1
+tlim       = 1.0
+ndiag      = 1
+
+<mhd>
+eos         = ideal
+reconstruct = plm
+rsolver     = llf
+gamma       = 1.66666666667
+
+<particles>
+particle_type                     = cosmic_ray
+ppc                               = 0.0
+pusher                            = boris_tsc
+nspecies                          = 1
+cr_distribution                   = center
+deposit_moments                   = false
+deposit_order                     = 1
+deposit_qscale                    = 1.0
+couple_moments_to_mhd             = false
+couple_j_to_efield_coeff          = 1.0
+couple_j_to_efield_representation = cell_centered
+couple_j_deposition_mode          = cc_convert
+couple_moments_momentum_to_mhd    = false
+couple_moments_energy_to_mhd      = false
+couple_fluid_feedback_order       = mhd_src_terms
+couple_moments_momentum_coeff     = 1.0
+couple_moments_energy_coeff       = 1.0
+cr_vx0                            = 0.0
+cr_vy0                            = 0.0
+cr_vz0                            = 0.0
+pic_physical_mode                 = extended_mhd_pic
+pic_background_mode               = coupled
+pic_feedback_mode                 = test_particle
+pic_interp_scheme                 = tsc
+pic_enable_2d3v                   = true
+pic_cr_light_speed                = 3.0
+pic_cr_initial_state              = momentum
+pic_cr_hall_mode                  = off
+pic_wave_damping_mode             = ion_neutral_friction
+pic_ion_neutral_collision_rate    = 0.7
+pic_max_cell_cross                = 2
+pic_theta_max                     = 0.3
+pic_deltaf_mode                   = off
+pic_deltaf_f0                     =
+pic_load_balance_cost_per_particle = 0.0
+pic_sort_interval                 = 0
+pic_intermediate_arrays           = auto
+pic_expanding_box_mode            = off
+pic_expansion_law                 = linear
+pic_expansion_rate_x1             = 0.0
+pic_expansion_rate_x2             = 0.0
+pic_expansion_rate_x3             = 0.0
+
+<species0>
+mass   = 1.0
+charge = 0.0
+
+<problem>
+pgen_name = q032_reduced_static_neutral_local
+wave_flag = 1
+amp       = 0.01
+vflow     = 0.2
+along_x1  = true
+along_x2  = false
+along_x3  = false
+
+<q032_reduced_static_neutral_local>
+campaign_id           = Q032-REDUCED-STATIC-NEUTRAL-LOCAL
+deck_role             = bounded_source_local_mechanics_only_not_plotnikov_evidence
+qualification_effect  = none
+frontier_authorization = not_bound
+plotnikov_qualification = not_claimed
+physical_scope        = reduced_static_neutral_high_frequency_transverse_friction_only
+carrier_semantics     = transverse_invariant_thin_2d3v_x1_parallel_alfven
+nu_in_parameter       = particles/pic_ion_neutral_collision_rate
+nu_in                 = 0.7
+attenuation_factor    = exp(-nu_in*dt)
+
+<output1>
+file_type   = bin
+variable    = mhd_u
+id          = mhd_u
+dcycle      = 1
+ghost_zones = false

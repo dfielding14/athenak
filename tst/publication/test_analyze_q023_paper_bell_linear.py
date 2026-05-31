@@ -8,6 +8,7 @@ import hashlib
 import json
 import math
 from pathlib import Path
+import tempfile
 import unittest
 
 import numpy as np
@@ -22,6 +23,10 @@ PROFILES = (
 )
 DRAFTS = (
     REPO_ROOT / "tst/publication/readiness/q023_campaign_drafts_2026-05-30.json"
+)
+SIDECAR = (
+    REPO_ROOT
+    / "tst/publication/readiness/q023_paper_bell_linear_source_local_implementation_2026-05-30.json"
 )
 PAPER_INPUT_IDS = {
     "Q023-INPUT-PAPER-BELL-LINEAR-1D-CANDIDATE",
@@ -44,6 +49,7 @@ def _record(dimension: int, epsilon: float) -> dict[str, object]:
     return {
         "dimension": dimension,
         "epsilon": epsilon,
+        "raw_provenance": bell.synthetic_contract_provenance(dimension, epsilon),
         "normalized_time": time.tolist(),
         "right_mode_real": right.real.tolist(),
         "right_mode_imag": right.imag.tolist(),
@@ -65,6 +71,47 @@ def _bundle() -> dict[str, object]:
             for epsilon in bell.EPSILON_VALUES
         ],
     }
+
+
+def _raw_datasets(dimension: int, epsilon: float) -> list[dict[str, object]]:
+    _, growth = bell.theoretical_dispersion(epsilon)
+    parallel, transverse_a, transverse_b = bell._mode_basis(dimension)
+    geometry = bell._EXPECTED_GEOMETRY[dimension]
+    coordinates = [
+        xmin + (np.arange(count, dtype=float) + 0.5) * extent / count
+        for count, xmin, extent in zip(
+            geometry["nx"], geometry["xmin"], geometry["extent"]
+        )
+    ]
+    x3, x2, x1 = np.meshgrid(
+        coordinates[2], coordinates[1], coordinates[0], indexing="ij"
+    )
+    spatial_phase = bell.K0 * (
+        parallel[0]*x1 + parallel[1]*x2 + parallel[2]*x3
+    )
+    datasets = []
+    for normalized_time in np.linspace(0.0, 7.0, 57):
+        amplitude = 1.0e-6 * math.exp(growth*normalized_time)
+        temporal_phase = spatial_phase + epsilon*normalized_time
+        magnetic = (
+            parallel[:, None, None, None]
+            + amplitude*np.cos(temporal_phase)[None, ...]
+            * transverse_a[:, None, None, None]
+            - amplitude*np.sin(temporal_phase)[None, ...]
+            * transverse_b[:, None, None, None]
+        )
+        datasets.append(
+            {
+                "Time": normalized_time / (bell.K0*bell.U_A),
+                "x1v": coordinates[0],
+                "x2v": coordinates[1],
+                "x3v": coordinates[2],
+                "bcc1": magnetic[0],
+                "bcc2": magnetic[1],
+                "bcc3": magnetic[2],
+            }
+        )
+    return datasets
 
 
 class Q023PaperBellLinearTests(unittest.TestCase):
@@ -93,9 +140,15 @@ class Q023PaperBellLinearTests(unittest.TestCase):
 
     def test_complete_synthetic_analytical_grid_passes(self) -> None:
         report = bell.analyze_trace_bundle(_bundle())
-        self.assertTrue(report["passed"])
+        self.assertFalse(report["passed"])
+        self.assertTrue(report["scientific_contract_pass"])
         self.assertEqual(report["record_count"], 15)
-        self.assertIn("source_local_candidate_analysis_only",
+        self.assertEqual(report["analysis_input_kind"], "synthetic_contract_fixture")
+        self.assertEqual(report["analysis_scope"], "synthetic_contract_fixture_test_only")
+        self.assertTrue(report["synthetic_fixture_analysis"])
+        self.assertFalse(report["materialized_source_local_candidate_pass"])
+        self.assertFalse(report["section52_qualification_eligible"])
+        self.assertIn("synthetic_contract_fixture_test_only",
                       report["qualification_effect"])
 
     def test_growth_fit_ignores_post_window_amplitude_change(self) -> None:
@@ -112,7 +165,8 @@ class Q023PaperBellLinearTests(unittest.TestCase):
         record["right_mode_real"] = right.real.tolist()
         record["right_mode_imag"] = right.imag.tolist()
         report = bell.analyze_trace_bundle(bundle)
-        self.assertTrue(report["passed"])
+        self.assertFalse(report["passed"])
+        self.assertTrue(report["scientific_contract_pass"])
 
     def test_incomplete_or_duplicate_grid_fails_closed(self) -> None:
         bundle = _bundle()
@@ -137,6 +191,31 @@ class Q023PaperBellLinearTests(unittest.TestCase):
         with self.assertRaisesRegex(bell.ContractError, "retained mode trace"):
             bell.analyze_trace_bundle(bundle)
 
+    def test_wrong_phase_propagation_sign_is_reported_as_scientific_failure(self) -> None:
+        bundle = _bundle()
+        record = bundle["records"][0]
+        time = np.asarray(record["normalized_time"])
+        right = np.conjugate(
+            np.asarray(record["right_mode_real"])
+            + 1.0j * np.asarray(record["right_mode_imag"])
+        )
+        left = np.conjugate(
+            np.asarray(record["left_mode_real"])
+            + 1.0j * np.asarray(record["left_mode_imag"])
+        )
+        record["right_mode_real"] = right.real.tolist()
+        record["right_mode_imag"] = right.imag.tolist()
+        record["left_mode_real"] = left.real.tolist()
+        record["left_mode_imag"] = left.imag.tolist()
+        interval, change = bell._fixed_interval_phase_trace(time, right)
+        record["phase_interval"] = interval.tolist()
+        record["phase_change"] = change.tolist()
+        report = bell.analyze_trace_bundle(bundle)
+        self.assertFalse(report["passed"])
+        failed = report["records"][0]
+        self.assertLess(failed["measured_phase_frequency_over_k0_ua"], 0.0)
+        self.assertFalse(failed["phase_pass"])
+
     def test_nonqualifying_seed_fails_closed(self) -> None:
         bundle = _bundle()
         bundle["qualifying_seed"] = 23050091
@@ -158,58 +237,160 @@ class Q023PaperBellLinearTests(unittest.TestCase):
         self.assertFalse(failed["polarization_pass"])
 
     def test_raw_diagonal_mode_trace_extraction(self) -> None:
-        dimension = 3
+        dimension = 2
         epsilon = 0.4
         _, growth = bell.theoretical_dispersion(epsilon)
-        parallel, transverse_a, transverse_b = bell._mode_basis(dimension)
-        extents = bell._EXPECTED_GEOMETRY[dimension]["extent"]
-        coordinates = [
-            (np.arange(count, dtype=float) + 0.5) * extent / count
-            for count, extent in zip((16, 8, 4), extents)
-        ]
-        x3, x2, x1 = np.meshgrid(
-            coordinates[2], coordinates[1], coordinates[0], indexing="ij"
+        datasets = _raw_datasets(dimension, epsilon)
+        record = bell.extract_trace_record_from_datasets(
+            dimension,
+            epsilon,
+            datasets,
+            raw_provenance=bell.synthetic_contract_provenance(dimension, epsilon),
         )
-        spatial_phase = bell.K0 * (
-            parallel[0]*x1 + parallel[1]*x2 + parallel[2]*x3
-        )
-        datasets = []
-        for normalized_time in np.linspace(0.0, 7.0, 57):
-            amplitude = 1.0e-6 * math.exp(growth*normalized_time)
-            temporal_phase = spatial_phase + epsilon*normalized_time
-            magnetic = (
-                parallel[:, None, None, None]
-                + amplitude*np.cos(temporal_phase)[None, ...]
-                * transverse_a[:, None, None, None]
-                - amplitude*np.sin(temporal_phase)[None, ...]
-                * transverse_b[:, None, None, None]
-            )
-            datasets.append(
-                {
-                    "Time": normalized_time / (bell.K0*bell.U_A),
-                    "x1v": coordinates[0],
-                    "x2v": coordinates[1],
-                    "x3v": coordinates[2],
-                    "bcc1": magnetic[0],
-                    "bcc2": magnetic[1],
-                    "bcc3": magnetic[2],
-                }
-            )
-        record = bell.extract_trace_record_from_datasets(dimension, epsilon, datasets)
         report = bell._analyze_record(record)
         self.assertTrue(report["passed"])
+        self.assertFalse(report["section52_qualification_eligible"])
         self.assertAlmostEqual(report["measured_growth_rate_over_k0_ua"], growth)
         self.assertAlmostEqual(report["measured_phase_frequency_over_k0_ua"], epsilon)
 
-        by_name = {f"snapshot-{index}.bin": dataset
-                   for index, dataset in enumerate(reversed(datasets))}
-        reread = bell.extract_trace_record_from_binary_files(
-            dimension,
-            epsilon,
-            [Path(name) for name in by_name],
-            reader=lambda name: by_name[name],
+        with tempfile.TemporaryDirectory() as directory:
+            artifact_root = Path(directory).resolve()
+            paths = []
+            by_name = {}
+            for index, dataset in enumerate(reversed(datasets)):
+                path = artifact_root / f"snapshot-{index}.bin"
+                path.write_bytes(f"snapshot-{index}\n".encode("ascii"))
+                paths.append(path)
+                by_name[str(path)] = dataset
+            reread = bell.extract_trace_record_from_binary_files(
+                dimension,
+                epsilon,
+                paths,
+                "Q023-SOURCE-LOCAL-BASELINE-2D-EPSILON-0P4",
+                reader=lambda name: by_name[name],
+                artifact_root=artifact_root,
+            )
+            self.assertEqual(
+                reread["raw_provenance"]["raw_artifacts"][0]["path"],
+                "snapshot-0.bin",
+            )
+            self.assertTrue(
+                bell._analyze_record(reread, artifact_root=artifact_root)["passed"]
+            )
+            with self.assertRaisesRegex(bell.ContractError, "explicit artifact root"):
+                bell._analyze_record(reread)
+            tampered = copy.deepcopy(reread)
+            tampered["raw_provenance"]["raw_artifacts"][0]["sha256"] = "0" * 64
+            with self.assertRaisesRegex(bell.ContractError, "artifact digest mismatch"):
+                bell._analyze_record(tampered, artifact_root=artifact_root)
+        self.assertEqual(reread["normalized_time"], record["normalized_time"])
+        self.assertEqual(reread["right_mode_real"], record["right_mode_real"])
+        self.assertEqual(reread["right_mode_imag"], record["right_mode_imag"])
+        self.assertEqual(
+            reread["raw_provenance"]["kind"], "source_local_materialized_variant"
         )
-        self.assertEqual(reread, record)
+        self.assertEqual(len(reread["raw_provenance"]["raw_artifacts"]), len(datasets))
+
+    def test_raw_geometry_outside_approved_variant_fails_closed(self) -> None:
+        dimension = 2
+        epsilon = 0.4
+        datasets = _raw_datasets(dimension, epsilon)
+        datasets[0]["x1v"] = 2.0 * np.asarray(datasets[0]["x1v"])
+        with self.assertRaisesRegex(bell.ContractError, "geometry"):
+            bell.extract_trace_record_from_datasets(
+                dimension,
+                epsilon,
+                datasets,
+                raw_provenance=bell.synthetic_contract_provenance(dimension, epsilon),
+            )
+
+    def test_binary_extraction_rejects_unapproved_variant(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            artifact_root = Path(directory).resolve()
+            path = artifact_root / "snapshot.bin"
+            path.write_bytes(b"snapshot\n")
+            with self.assertRaisesRegex(bell.ContractError, "approved materialized"):
+                bell.extract_trace_record_from_binary_files(
+                    2,
+                    0.4,
+                    [path],
+                    "Q023-SOURCE-LOCAL-UNREVIEWED",
+                    reader=lambda name: {},
+                    artifact_root=artifact_root,
+                )
+
+    def test_materialized_artifacts_require_normalized_authorized_root_paths(
+        self,
+    ) -> None:
+        variant_id = "Q023-SOURCE-LOCAL-BASELINE-2D-EPSILON-0P4"
+        with tempfile.TemporaryDirectory() as directory:
+            directory_path = Path(directory).resolve()
+            artifact_root = directory_path / "authorized"
+            artifact_root.mkdir()
+            inside = artifact_root / "snapshot.bin"
+            inside.write_bytes(b"inside\n")
+            outside = directory_path / "outside.bin"
+            outside.write_bytes(b"outside\n")
+
+            provenance = bell._source_local_materialized_provenance(
+                2,
+                0.4,
+                variant_id,
+                [Path("snapshot.bin")],
+                artifact_root=artifact_root,
+            )
+            self.assertEqual(provenance["raw_artifacts"][0]["path"], "snapshot.bin")
+            bell._validate_raw_provenance(
+                provenance, 2, 0.4, artifact_root=artifact_root
+            )
+
+            with self.assertRaisesRegex(bell.ContractError, "explicit artifact root"):
+                bell._validate_raw_provenance(provenance, 2, 0.4)
+            with self.assertRaisesRegex(bell.ContractError, "outside the authorized root"):
+                bell._source_local_materialized_provenance(
+                    2,
+                    0.4,
+                    variant_id,
+                    [outside],
+                    artifact_root=artifact_root,
+                )
+            with self.assertRaisesRegex(bell.ContractError, "root must be absolute"):
+                bell._source_local_materialized_provenance(
+                    2,
+                    0.4,
+                    variant_id,
+                    [Path("snapshot.bin")],
+                    artifact_root=Path("authorized"),
+                )
+
+            absolute = copy.deepcopy(provenance)
+            absolute["raw_artifacts"][0]["path"] = str(inside)
+            with self.assertRaisesRegex(bell.ContractError, "normalized root-relative"):
+                bell._validate_raw_provenance(
+                    absolute, 2, 0.4, artifact_root=artifact_root
+                )
+
+            tampered_deck = copy.deepcopy(provenance)
+            tampered_deck["deck_sha256"] = "0" * 64
+            with self.assertRaisesRegex(bell.ContractError, "deck digest mismatch"):
+                bell._validate_raw_provenance(
+                    tampered_deck, 2, 0.4, artifact_root=artifact_root
+                )
+
+            variant = bell._APPROVED_SOURCE_LOCAL_RAW_VARIANTS[variant_id]
+            expected_deck_sha256 = variant["deck_sha256"]
+            try:
+                variant["deck_sha256"] = "0" * 64
+                with self.assertRaisesRegex(bell.ContractError, "pinned value"):
+                    bell._source_local_materialized_provenance(
+                        2,
+                        0.4,
+                        variant_id,
+                        [inside],
+                        artifact_root=artifact_root,
+                    )
+            finally:
+                variant["deck_sha256"] = expected_deck_sha256
 
     def test_readiness_bindings_distinguish_candidates_from_engineering_proxy(
         self,
@@ -233,7 +414,12 @@ class Q023PaperBellLinearTests(unittest.TestCase):
             ["Q023-ANALYZER-PAPER-BELL-LINEAR-CANDIDATE"],
         )
         analyzer = analyzers["Q023-ANALYZER-PAPER-BELL-LINEAR-CANDIDATE"]
-        self.assertEqual(_sha256(REPO_ROOT / analyzer["path"]), analyzer["sha256"])
+        sidecar = json.loads(SIDECAR.read_text(encoding="utf-8"))
+        sidecar_artifacts = {
+            item["path"]: item["sha256"] for item in sidecar["source_local_artifacts"]
+        }
+        # The shared registration remains frozen until this mixed worktree is clean.
+        self.assertEqual(sidecar_artifacts[analyzer["path"]], analyzer["sha256"])
         for input_id in PAPER_INPUT_IDS:
             candidate = inputs[input_id]
             self.assertEqual(
@@ -250,6 +436,34 @@ class Q023PaperBellLinearTests(unittest.TestCase):
         self.assertIn("source_local", bindings["production_analysis_checksums"])
         self.assertTrue(any("Section 5.2" in item
                             for item in campaign["claim_specific_exclusions"]))
+
+    def test_sidecar_binds_approved_raw_variants_and_velocity_boundary(self) -> None:
+        sidecar = json.loads(SIDECAR.read_text(encoding="utf-8"))
+        contract = sidecar["raw_trace_contract"]
+        self.assertEqual(contract["signed_phase_frequency"],
+                         "required_without_absolute_value")
+        variants = {
+            item["variant_id"]: item
+            for item in contract["approved_source_local_materialized_variants"]
+        }
+        self.assertEqual(set(variants), set(bell._APPROVED_SOURCE_LOCAL_RAW_VARIANTS))
+        for variant_id, expected in bell._APPROVED_SOURCE_LOCAL_RAW_VARIANTS.items():
+            item = variants[variant_id]
+            self.assertEqual(item["dimension"], expected["dimension"])
+            self.assertEqual(item["epsilon"], expected["epsilon"])
+            self.assertEqual(
+                item["deck_path"],
+                str(Path(expected["deck"]).relative_to(REPO_ROOT)),
+            )
+            self.assertEqual(item["deck_sha256"], expected["deck_sha256"])
+            self.assertEqual(_sha256(Path(expected["deck"])), expected["deck_sha256"])
+            self.assertEqual(
+                item["raw_geometry"],
+                bell._raw_geometry(expected["dimension"]),
+            )
+        boundary = contract["paper_velocity_observable_boundary"]
+        self.assertFalse(boundary["section52_qualification_eligible"])
+        self.assertIn("velocity", boundary["required_before_qualification"])
 
 
 if __name__ == "__main__":

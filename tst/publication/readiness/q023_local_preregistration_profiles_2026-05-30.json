@@ -669,8 +669,8 @@
     {
       "analyzer_id": "Q023-ANALYZER-PAPER-BELL-LINEAR-CANDIDATE",
       "path": "tst/publication/analyze_q023_paper_bell_linear.py",
-      "sha256": "ce0b901b44e5d556d8b4a19051021edccab64ec5c5812c0e48dabb3a6bee34f9",
-      "qualification_limit": "source_local_section52_raw_trace_analytical_dispersion_candidate_only_clean_freeze_registered_execution_independent_recompute_and_external_review_open"
+      "sha256": "7e21164b3d2c23b92ccaeeec1e3c80cd750f6c332d1b13723faee61d26fbc9f5",
+      "qualification_limit": "source_local_section52_signed_magnetic_raw_trace_candidate_only_approved_materialized_geometry_and_exact_raw_artifact_provenance_required_velocity_retaining_variants_cross_check_clean_freeze_registered_execution_independent_recompute_and_external_review_open"
     },
     {
       "analyzer_id": "Q023-ANALYZER-SHOCK-LOCAL",
