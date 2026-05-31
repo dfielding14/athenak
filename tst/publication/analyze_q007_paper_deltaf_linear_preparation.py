@@ -358,6 +358,16 @@ class ContractError(ValueError):
     """Raised when a bounded Q-007 source-local contract fails closed."""
 
 
+def _require_schema_version(value: Any, expected: int, label: str) -> None:
+    """Reject Python boolean and float aliases for JSON schema integers."""
+    if (
+        not isinstance(value, dict)
+        or type(value.get("schema_version")) is not int
+        or value["schema_version"] != expected
+    ):
+        raise ContractError(f"{label}: schema drifted")
+
+
 _STAGED_TREES: contextvars.ContextVar[tuple[tuple[Path, Any], ...]] = (
     contextvars.ContextVar("q007_staged_trees", default=())
 )
@@ -1344,6 +1354,7 @@ def _validate_runtime_freeze_receipt(root: Path) -> str:
     """Require the retained Q-007 tree to carry its exact nonqualifying role."""
     path = _contained_regular_file(root, root / FREEZE_RECEIPT_NAME)
     receipt = json.loads(path.read_text(encoding="utf-8"))
+    _require_schema_version(receipt, 1, "Q-007 freeze receipt")
     expected = {
         "schema_version": 1,
         "gate": "Q-007",
@@ -1760,6 +1771,7 @@ def _validate_pinned_executable_binding(root: Path) -> dict[str, Any]:
     )
     receipt_path = _contained_regular_file(pinned_root, pinned_root / FREEZE_RECEIPT_NAME)
     receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    _require_schema_version(receipt, 1, "Q-007 pinned executable receipt")
     expected_receipt = {
         "schema_version": 1,
         "artifact_role": "integrated_serial_host_binary_clean_build_provenance_pin",
@@ -1777,6 +1789,7 @@ def _validate_pinned_executable_binding(root: Path) -> dict[str, Any]:
         pinned_root, pinned_root / PIN_PROVENANCE_RECEIPT_NAME
     )
     provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+    _require_schema_version(provenance, 1, "Q-007 pinned executable provenance receipt")
     source = provenance.get("source_archive")
     if not isinstance(source, dict) or source.get("path") != (
         "source/exact_build_worktree_source.tar.gz"
@@ -1829,6 +1842,9 @@ def _validate_pinned_executable_binding(root: Path) -> dict[str, Any]:
     archive_validation = json.loads(_contained_regular_file(
         pinned_root, pinned_root / "source/archive_validation.json"
     ).read_text(encoding="utf-8"))
+    _require_schema_version(
+        archive_validation, 1, "Q-007 pinned executable archive validation"
+    )
     expected_archive_validation = {
         **archive_report,
         "schema_version": 1,
@@ -1858,6 +1874,7 @@ def _validate_pinned_executable_binding(root: Path) -> dict[str, Any]:
     preflight = json.loads(_contained_regular_file(
         pinned_root, pinned_root / "build/clean_directory_preflight.json"
     ).read_text(encoding="utf-8"))
+    _require_schema_version(preflight, 1, "Q-007 pinned executable clean-directory preflight")
     if not (
         isinstance(preflight, dict)
         and isinstance(preflight.get("build_directory"), str)

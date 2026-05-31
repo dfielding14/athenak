@@ -657,6 +657,19 @@ class ImmutableOrionTreeTests(unittest.TestCase):
             finally:
                 os.close(fd)
 
+    def test_freeze_receipt_rejects_noninteger_schema_version(self) -> None:
+        for value in (True, 1.0, "1"):
+            with self.subTest(value=value):
+                with self.assertRaisesRegex(ValueError, "schema_version drifted"):
+                    immutable_orion_tree._validate_receipt_payload(
+                        {
+                            **_RECEIPT,
+                            "schema_version": value,
+                        },
+                        error_type=ValueError,
+                        label="receipt test",
+                    )
+
 
 if __name__ == "__main__":
     unittest.main()

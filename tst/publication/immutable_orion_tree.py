@@ -430,7 +430,10 @@ def validate_serial_host_build_evidence(
         compile_commands = json.loads(read("build/compile_commands.json"))
     except json.JSONDecodeError as error:
         _raise(error_type, label, f"retained build JSON is invalid: {error}")
-    if profile != {
+    if (
+        not isinstance(profile, dict)
+        or type(profile.get("schema_version")) is not int
+        or profile != {
         "schema_version": 1,
         "profile": "bounded_serial_host_clean_build_provenance_only",
         "qualifying_evidence": False,
@@ -438,7 +441,8 @@ def validate_serial_host_build_evidence(
         "gpu": False,
         "frontier_scheduler": False,
         "kronos": False,
-    }:
+        }
+    ):
         _raise(error_type, label, "retained serial-host build profile drifted")
     if not isinstance(compile_commands, list) or not compile_commands:
         _raise(error_type, label, "retained compile commands must be a nonempty list")
@@ -1009,6 +1013,8 @@ def _validate_receipt_payload(
         "inventory_excludes": INVENTORY_NAME,
         "freeze_policy": "remove all owner, group and other write bits recursively",
     }
+    if type(receipt.get("schema_version")) is not int:
+        _raise(error_type, label, "retained freeze receipt schema_version drifted")
     for name, value in expected.items():
         if receipt.get(name) != value:
             _raise(error_type, label, f"retained freeze receipt {name} drifted")

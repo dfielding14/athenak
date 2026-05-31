@@ -68,7 +68,9 @@ from promote_active_policy import _promotion_lock, promote
 from reconcile_frontier_job import reconcile
 from reconcile_manual_frontier_allocations import reconcile_manual_allocations
 from terminal_recovery_handoff import create_handoff
+from terminal_recovery_handoff import require_closed_received_marker
 from validate_and_reserve_frontier_job import _clear_matching_pending_marker
+from validate_and_reserve_frontier_job import _require_current_reservation_marker
 from validate_and_reserve_frontier_job import _require_scheduler_output_path
 from validate_and_reserve_frontier_job import executable_reservation_bound_manifest
 from validate_and_reserve_frontier_job import mark_dispatch_started, mark_submitted
@@ -6633,6 +6635,39 @@ PY
                 authorized_pic_root=self.pic_root,
             )
 
+    def test_clean_candidate_creator_rejects_noninteger_profile_schema_versions(self) -> None:
+        source_root = self._clean_source("profile-schema-source")
+        executable, profile = self._build_profile(
+            source_root, self.pic_root / "profile-schema-build", "test-profile"
+        )
+        receipt = profile.with_name("profile_receipt.json")
+        originals = {
+            profile: json.loads(profile.read_text(encoding="utf-8")),
+            receipt: json.loads(receipt.read_text(encoding="utf-8")),
+        }
+        for path, original in originals.items():
+            for schema_version in (True, 1.0, "1"):
+                with self.subTest(path=path.name, schema_version=schema_version):
+                    path.chmod(0o644)
+                    path.write_text(
+                        json.dumps({**original, "schema_version": schema_version}),
+                        encoding="utf-8",
+                    )
+                    path.chmod(0o444)
+                    with self.assertRaisesRegex(ValueError, "schema version is invalid"):
+                        create_freeze(
+                            source_root=source_root,
+                            executable=executable,
+                            build_profile=profile,
+                            build_profile_id="test-profile",
+                            prepared_artifact_inventory=self._prepared_artifact_inventory(),
+                            control_plane_dir=self.control_plane_dir,
+                            authorized_pic_root=self.pic_root,
+                        )
+                    path.chmod(0o644)
+                    path.write_text(json.dumps(original), encoding="utf-8")
+                    path.chmod(0o444)
+
     def test_clean_candidate_rename_failure_cleans_read_only_staging(self) -> None:
         source_root = self._clean_source("candidate-rename-failure-source")
         executable, profile = self._build_profile(
@@ -7101,6 +7136,63 @@ PY
         promotion_path.chmod(0o444)
         with self.assertRaises(ValueError):
             self._reserve(manifest_path)
+
+    def test_active_policy_snapshot_rejects_noninteger_promotion_schema_version(self) -> None:
+        promotion_paths = [
+            self.pic_root / "policy" / "active_promotion.json",
+            self.project_home_root / "policy" / "active_promotion.json",
+        ]
+        original = json.loads(promotion_paths[0].read_text(encoding="utf-8"))
+        for schema_version in (True, 1.0, "1"):
+            with self.subTest(schema_version=schema_version):
+                payload = json.dumps({**original, "schema_version": schema_version})
+                for path in promotion_paths:
+                    path.chmod(0o644)
+                    path.write_text(payload, encoding="utf-8")
+                    path.chmod(0o444)
+                with self.assertRaisesRegex(ValueError, "promotion record"):
+                    require_storage_policy_unlock_snapshot(
+                        control_plane_version=self.control_plane_version,
+                        authorized_pic_root=self.pic_root,
+                        authorized_project_home_root=self.project_home_root,
+                    )
+
+    def test_pending_markers_reject_noninteger_schema_versions(self) -> None:
+        reservation = {
+            "reservation_id": "reservation-1",
+            "submission_id": "submission-1",
+            "manifest_path": "/retained/manifest.json",
+            "manifest_sha256": "1" * 64,
+            "control_plane_version": self.control_plane_version,
+        }
+        current = {
+            "schema_version": 2,
+            "state": "scheduler_job_id_received",
+            "reservation_id": reservation["reservation_id"],
+            "submission_id": reservation["submission_id"],
+            "manifest_path": reservation["manifest_path"],
+            "manifest_sha256": reservation["manifest_sha256"],
+            "control_plane_version": reservation["control_plane_version"],
+            "job_id": "12345",
+        }
+        for schema_version in (True, 2.0, "2"):
+            with self.subTest(current_schema_version=schema_version):
+                with self.assertRaisesRegex(ValueError, "Pending marker"):
+                    _require_current_reservation_marker(
+                        {**current, "schema_version": schema_version},
+                        reservation,
+                        control_plane_version=self.control_plane_version,
+                    )
+        received = {**current, "schema_version": 1}
+        received.pop("control_plane_version")
+        for schema_version in (True, 1.0, "1"):
+            with self.subTest(received_schema_version=schema_version):
+                with self.assertRaisesRegex(ValueError, "marker schema"):
+                    require_closed_received_marker(
+                        {**received, "schema_version": schema_version},
+                        reservation,
+                        job_id="12345",
+                    )
 
     def test_reserve_has_no_caller_selected_storage_policy(self) -> None:
         self.assertNotIn("storage_policy_path", inspect.signature(reserve).parameters)

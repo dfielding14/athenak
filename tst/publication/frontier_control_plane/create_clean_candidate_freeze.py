@@ -100,6 +100,11 @@ def _reviewed_utf8(data: bytes, *, label: str) -> str:
     return text
 
 
+def _require_exact_schema_version(value: dict[str, object], *, expected: int, label: str) -> None:
+    if type(value.get("schema_version")) is not int or value["schema_version"] != expected:
+        raise ValueError(f"{label} schema version is invalid")
+
+
 def _documented_build_paths(
     *,
     authorized_pic_root: Path,
@@ -487,6 +492,7 @@ def create_freeze(
         )
         executable_sha256 = sha256_bytes(executable_payload)
         profile = read_json_bytes(build_profile_payload, label=str(build_profile))
+        _require_exact_schema_version(profile, expected=3, label="Build profile")
         provenance_inputs, provenance_payloads = _validate_recorded_provenance_inputs(
             profile.get("provenance_inputs"),
             authorized_pic_root=authorized_pic_root,
@@ -559,7 +565,9 @@ def create_freeze(
             "executable_path": str(executable),
             "executable_sha256": executable_sha256,
         }
-        if read_json_bytes(profile_receipt_payload, label=str(profile_receipt)) != expected_receipt:
+        receipt = read_json_bytes(profile_receipt_payload, label=str(profile_receipt))
+        _require_exact_schema_version(receipt, expected=1, label="Build-profile receipt")
+        if receipt != expected_receipt:
             raise ValueError("Build-profile receipt does not match the trusted build")
 
         staged_profile = temporary / "build_profile.json"
@@ -575,9 +583,15 @@ def create_freeze(
             staged_input.write_bytes(provenance_payloads[label])
             if sha256(staged_input) != provenance_inputs[label]["sha256"]:
                 raise ValueError(f"Frozen build provenance checksum mismatch: {label}")
-        if read_json(staged_profile) != expected_profile:
+        staged_profile_value = read_json(staged_profile)
+        _require_exact_schema_version(staged_profile_value, expected=3, label="Staged build profile")
+        if staged_profile_value != expected_profile:
             raise ValueError("Build profile changed while creating clean-candidate freeze")
-        if read_json(staged_receipt) != expected_receipt:
+        staged_receipt_value = read_json(staged_receipt)
+        _require_exact_schema_version(
+            staged_receipt_value, expected=1, label="Staged build-profile receipt"
+        )
+        if staged_receipt_value != expected_receipt:
             raise ValueError("Build-profile receipt changed while creating clean-candidate freeze")
         if sha256(staged_executable) != executable_sha256:
             raise ValueError("Executable changed while creating clean-candidate freeze")

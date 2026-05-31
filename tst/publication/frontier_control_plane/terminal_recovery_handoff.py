@@ -341,7 +341,7 @@ def verify_terminal_recovery_handoff(
             "reservation_id": reservation["reservation_id"],
             "job_id": job_id,
         }
-    if handoff != expected:
+    if type(handoff.get("schema_version")) is not int or handoff != expected:
         raise ValueError("Terminal-recovery handoff does not match the authorized recovery")
     return handoff, sha256_bytes(primary_bytes)
 

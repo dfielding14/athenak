@@ -907,6 +907,31 @@ class PicQualificationManifestTests(unittest.TestCase):
             receipt_path.chmod(0o444)
             resources["offline_analysis_receipt_sha256"] = _sha256(receipt_path)
 
+            original_receipt_value = json.loads(original_receipt)
+            for schema_version in (True, 1.0, "1"):
+                with self.subTest(offline_receipt_schema_version=schema_version):
+                    receipt_path.chmod(0o644)
+                    receipt_path.write_text(
+                        json.dumps(
+                            {**original_receipt_value, "schema_version": schema_version}
+                        ),
+                        encoding="utf-8",
+                    )
+                    receipt_path.chmod(0o444)
+                    resources["offline_analysis_receipt_sha256"] = _sha256(receipt_path)
+                    with self.assertRaisesRegex(ValueError, "receipt differs"):
+                        _require_frontier_ledger_binding(
+                            {"resources": resources},
+                            candidate_sha256=candidate_sha256,
+                            control_plane_version=control_plane_version,
+                            authorized_pic_root=pic_root,
+                            authorized_project_home_root=project_home_root,
+                        )
+            receipt_path.chmod(0o644)
+            receipt_path.write_bytes(original_receipt)
+            receipt_path.chmod(0o444)
+            resources["offline_analysis_receipt_sha256"] = _sha256(receipt_path)
+
             for source_path in (analyzer_path, helper_path):
                 with self.subTest(replaced_source=source_path.name):
                     detached = source_path.with_name(source_path.name + ".detached")

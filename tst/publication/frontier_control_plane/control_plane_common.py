@@ -1280,7 +1280,9 @@ def validate_clean_candidate_bundle(
         / str(build["profile_id"])
         / "source"
     )
-    if profile != {
+    if (
+        type(profile.get("schema_version")) is not int
+        or profile != {
         "schema_version": 3,
         "profile_id": build.get("profile_id"),
         "authorized_source_root": str(authorized_source_root),
@@ -1295,7 +1297,8 @@ def validate_clean_candidate_bundle(
         "executable_sha256": executable_sha256,
         "provenance_inputs": provenance_records,
         "submodules": profile_records,
-    }:
+        }
+    ):
         raise ValueError("Frozen build profile does not match clean-candidate attestation")
     if (
         build.get("toolchain") != toolchain
@@ -1336,7 +1339,7 @@ def validate_clean_candidate_bundle(
         "executable_path": str(artifact_dir / "athena"),
         "executable_sha256": executable_sha256,
     }
-    if receipt != expected_receipt:
+    if type(receipt.get("schema_version")) is not int or receipt != expected_receipt:
         raise ValueError("Frozen build-profile receipt does not match clean candidate")
     return profile_records
 
@@ -2855,7 +2858,7 @@ def require_storage_policy_unlock_snapshot(
         "project_home_policy_path": str(mirror_policy_path),
         "policy_sha256": policy_sha256,
     }
-    if promotion != expected:
+    if type(promotion.get("schema_version")) is not int or promotion != expected:
         raise ValueError("Active-policy promotion record is not anchored to this control plane")
     if sha256_bytes(mirror_policy_bytes) != promotion["policy_sha256"]:
         raise ValueError("Project Home active-policy mirror checksum differs")

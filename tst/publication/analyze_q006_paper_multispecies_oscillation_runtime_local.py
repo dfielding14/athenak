@@ -459,6 +459,16 @@ def _require(condition: bool, message: str) -> None:
         raise AuditError(message)
 
 
+def _require_schema_version(value: Any, expected: int, label: str) -> None:
+    """Reject Python boolean and float aliases for JSON schema integers."""
+    _require(
+        isinstance(value, dict)
+        and type(value.get("schema_version")) is int
+        and value["schema_version"] == expected,
+        f"{label}: schema drifted",
+    )
+
+
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -776,6 +786,7 @@ def _validate_runtime_freeze_receipt(root: Path) -> str:
     """Require the retained Q-006 tree to carry its exact nonqualifying role."""
     path = _contained_regular_file(root, root / FREEZE_RECEIPT_NAME)
     receipt = json.loads(path.read_text(encoding="utf-8"))
+    _require_schema_version(receipt, 1, "Q-006 freeze receipt")
     expected = {
         "schema_version": 1,
         "artifact_role": ARTIFACT_ROLE,
@@ -889,6 +900,7 @@ def _validate_pinned_executable_binding(root: Path) -> dict[str, Any]:
     binding = json.loads(path.read_text(encoding="utf-8"))
     _require(isinstance(binding, dict) and set(binding) == PINNED_EXECUTABLE_BINDING_KEYS,
              "pinned executable binding schema drifted")
+    _require_schema_version(binding, 1, "pinned executable binding")
     expected_binding = {
         "schema_version": 1,
         "artifact_role": ARTIFACT_ROLE,
@@ -914,6 +926,7 @@ def _validate_pinned_executable_binding(root: Path) -> dict[str, Any]:
     )
     receipt_path = _contained_regular_file(pinned_root, pinned_root / FREEZE_RECEIPT_NAME)
     receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    _require_schema_version(receipt, 1, "pinned executable receipt")
     expected_receipt = {
         "schema_version": 1,
         "artifact_role": "integrated_serial_host_binary_clean_build_provenance_pin",
@@ -930,6 +943,7 @@ def _validate_pinned_executable_binding(root: Path) -> dict[str, Any]:
         pinned_root, pinned_root / PIN_PROVENANCE_RECEIPT_NAME
     )
     provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+    _require_schema_version(provenance, 1, "pinned executable provenance receipt")
     source = provenance.get("source_archive")
     _require(isinstance(source, dict) and source.get("path")
              == "source/exact_build_worktree_source.tar.gz",
@@ -981,6 +995,7 @@ def _validate_pinned_executable_binding(root: Path) -> dict[str, Any]:
     archive_validation = json.loads(_contained_regular_file(
         pinned_root, pinned_root / "source/archive_validation.json"
     ).read_text(encoding="utf-8"))
+    _require_schema_version(archive_validation, 1, "pinned executable archive validation")
     expected_archive_validation = {
         **archive_report,
         "schema_version": 1,
@@ -1010,6 +1025,7 @@ def _validate_pinned_executable_binding(root: Path) -> dict[str, Any]:
     preflight = json.loads(_contained_regular_file(
         pinned_root, pinned_root / "build/clean_directory_preflight.json"
     ).read_text(encoding="utf-8"))
+    _require_schema_version(preflight, 1, "pinned executable clean-directory preflight")
     _require(
         isinstance(preflight, dict)
         and isinstance(preflight.get("build_directory"), str)
@@ -1054,7 +1070,7 @@ def _validate_serial_invocation_identity(
     invocation: dict[str, Any], pinned: dict[str, Any], *, label: str
 ) -> None:
     """Require direct serial-host execution of the exact pinned executable."""
-    _require(invocation.get("schema_version") == 1, f"{label}: invocation schema drifted")
+    _require_schema_version(invocation, 1, f"{label}: invocation")
     _require(invocation.get("launch_style") == "direct_serial_host_execution",
              f"{label}: invocation launch style drifted")
     for name in ("mpi_used", "slurm_used", "frontier_used", "kronos_used"):
@@ -1488,6 +1504,7 @@ def verify_retained_probe(
         measured = build_retained_probe_report(retained)
         summary = _contained_regular_file(retained, retained / PROBE_SUMMARY_NAME)
         expected = json.loads(summary.read_text(encoding="utf-8"))
+        _require_schema_version(expected, 1, "retained Q-006 probe summary")
         _require(measured == expected, "retained Q-006 probe summary drifted from raw recompute")
         return {"tree_freeze": tree, "summary_sha256": _sha256(summary), "summary": measured}
 

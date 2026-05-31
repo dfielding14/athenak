@@ -211,6 +211,35 @@ class Q006PaperMultispeciesOscillationRuntimeLocalTests(unittest.TestCase):
             with self.assertRaisesRegex(q006.AuditError, "deck SHA-256 drifted"):
                 q006.validate_deck("uniform", path)
 
+    def test_invocation_rejects_noninteger_schema_version(self) -> None:
+        pinned = {
+            "pinned_executable_root": "/retained/pin",
+            "pinned_executable_root_inventory_sha256": "1" * 64,
+            "pinned_executable_path": "/retained/pin/bin/athena",
+            "pinned_executable_sha256": "2" * 64,
+        }
+        invocation = {
+            "schema_version": 1,
+            "launch_style": "direct_serial_host_execution",
+            "mpi_used": False,
+            "slurm_used": False,
+            "frontier_used": False,
+            "kronos_used": False,
+            "pinned_executable_root": pinned["pinned_executable_root"],
+            "pinned_executable_root_inventory_sha256":
+                pinned["pinned_executable_root_inventory_sha256"],
+            "executable_realpath": pinned["pinned_executable_path"],
+            "executable_sha256": pinned["pinned_executable_sha256"],
+        }
+        for value in (True, 1.0, "1"):
+            with self.subTest(value=value):
+                with self.assertRaisesRegex(q006.AuditError, "schema drifted"):
+                    q006._validate_serial_invocation_identity(
+                        {**invocation, "schema_version": value},
+                        pinned,
+                        label="invocation test",
+                    )
+
     def test_readiness_sidecar_binds_only_new_q006_runtime_local_files(self) -> None:
         sidecar = json.loads(SIDECAR.read_text(encoding="utf-8"))
         self.assertEqual(sidecar["gate"], "Q-006")

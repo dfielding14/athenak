@@ -800,7 +800,7 @@ def _require_frontier_completed_evidence_binding(
                 "sha256": resources["analysis_result_sha256"],
             },
         }
-        if receipt != expected_receipt:
+        if type(receipt.get("schema_version")) is not int or receipt != expected_receipt:
             raise ValueError("Frontier offline analysis receipt differs from bound evidence")
 
         ledger_jsonl = authorized_pic_root / "ledger" / "node_hours.jsonl"

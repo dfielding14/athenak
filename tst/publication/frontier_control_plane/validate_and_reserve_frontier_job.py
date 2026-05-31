@@ -264,6 +264,7 @@ def _require_current_reservation_marker(
         expected["job_id"] = marker.get("job_id")
     if (
         reservation.get("control_plane_version") != control_plane_version
+        or type(marker.get("schema_version")) is not int
         or marker != expected
     ):
         raise ValueError("Pending marker does not match the current reservation")
