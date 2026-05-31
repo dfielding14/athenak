@@ -21,6 +21,7 @@ sys.path.insert(0, str(REPO_ROOT))
 sys.path.insert(0, str(REPO_ROOT / "tst" / "publication" / "frontier_control_plane"))
 
 from control_plane_common import CONTROL_PLANE_FILES
+from control_plane_common import PREPARED_ARTIFACT_REQUIRED_PUBLICATION_DECK_PATHS
 from control_plane_common import inventory_digest
 from control_plane_common import launch_contract_sha256
 from control_plane_common import validate_launch_contract
@@ -303,7 +304,7 @@ class PicReadinessRegistryTests(unittest.TestCase):
         science_freeze = policy["science_submission_freeze"]
         if science_freeze == {"status": "pending_clean_candidate_freeze"}:
             phase0_successor = _load(
-                "phase0_curated_candidate_successor_v3_2026-05-31.json"
+                "phase0_curated_candidate_successor_v4_2026-05-31.json"
             )
             self.assertEqual(lifecycle, "paired_installed_reviewed_generation")
             self.assertEqual(
@@ -569,7 +570,12 @@ class PicReadinessRegistryTests(unittest.TestCase):
             ]
         )
         phase0_successor = _load(
-            "phase0_curated_candidate_successor_v3_2026-05-31.json"
+            "phase0_curated_candidate_successor_v4_2026-05-31.json"
+        )
+        self.assertEqual(
+            phase0_successor["predecessor_record"],
+            "tst/publication/readiness/"
+            "phase0_curated_candidate_successor_v3_2026-05-31.json",
         )
         self.assertEqual(
             staged_version, phase0_successor["successor_source_control_plane_version"]
@@ -579,7 +585,13 @@ class PicReadinessRegistryTests(unittest.TestCase):
         self.assertEqual(_sha256(prepared_path), prepared["inventory_sha256"])
         prepared_inventory = json.loads(prepared_path.read_text(encoding="utf-8"))
         expected_decks = sorted(
-            (REPO_ROOT / "inputs" / "tests").glob("pic*.athinput")
+            [
+                *(REPO_ROOT / "inputs" / "tests").glob("pic*.athinput"),
+                *(
+                    REPO_ROOT / path
+                    for path in PREPARED_ARTIFACT_REQUIRED_PUBLICATION_DECK_PATHS
+                ),
+            ]
         )
         expected_analyzers = sorted(
             (REPO_ROOT / "tst" / "publication").glob("analyze_*.py")
@@ -608,6 +620,11 @@ class PicReadinessRegistryTests(unittest.TestCase):
         paired_path = REPO_ROOT / paired_binding["path"]
         self.assertEqual(_sha256(paired_path), paired_binding["sha256"])
         paired = json.loads(paired_path.read_text(encoding="utf-8"))
+        self.assertEqual(
+            paired["predecessor_record"],
+            "tst/publication/readiness/"
+            "phase0_paired_control_plane_install_and_policy_promotion_2026-05-31.json",
+        )
         self.assertEqual(paired["control_plane_version"], staged_version)
         installed = paired["paired_install"]
         self.assertEqual(
@@ -615,6 +632,9 @@ class PicReadinessRegistryTests(unittest.TestCase):
             installed["project_home_inventory_sha256"],
         )
         self.assertEqual(installed["inventoried_file_count"], len(CONTROL_PLANE_FILES))
+        self.assertEqual(installed["generation_directory_mode"], "0555")
+        self.assertTrue(installed["byte_identical_inventory"])
+        self.assertEqual(installed["installed_pair_verify"], "pass")
         promotion = paired["active_policy_promotion"]
         self.assertEqual(promotion["maximum_node_hours"], 10000)
         self.assertEqual(promotion["registered_science_slices"], [])
@@ -630,6 +650,8 @@ class PicReadinessRegistryTests(unittest.TestCase):
             promotion["orion_promotion_sha256"],
             promotion["project_home_promotion_sha256"],
         )
+        self.assertTrue(promotion["byte_identical_policy"])
+        self.assertTrue(promotion["byte_identical_promotion"])
         self.assertEqual(
             storage["installed_control_plane_version"],
             storage["staged_control_plane_candidate_version"],

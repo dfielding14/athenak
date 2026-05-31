@@ -1,0 +1,39 @@
+{
+  "record_type": "phase0_curated_candidate_successor",
+  "schema_version": 1,
+  "date": "2026-05-31",
+  "predecessor_record": "tst/publication/readiness/phase0_curated_candidate_successor_v3_2026-05-31.json",
+  "status": "paired_controller_successor_installed_final_clean_boundary_validation_rereview_build_and_freeze_pending",
+  "qualification_effect": "none",
+  "live_paired_control_plane_version": "4f0050968ec5286ade12114bf204fc80357dcfe227392804a50baedb9a85962d",
+  "successor_source_control_plane_version": "4f0050968ec5286ade12114bf204fc80357dcfe227392804a50baedb9a85962d",
+  "curated_source_predecessor_commit": "15d8bf6021f216ab7867669e850ea2b623119f76",
+  "candidate_freeze_source_commit": "pending_final_clean_receipt_commit",
+  "paired_install_and_policy_promotion_receipt": {
+    "path": "tst/publication/readiness/phase0_paired_control_plane_install_and_policy_promotion_successor_2026-05-31.json",
+    "sha256": "8434100ef379eab2c69a942d74a7f9b591d41687b056343c6e5ab0bc452da4fb"
+  },
+  "prepared_artifacts": {
+    "inventory_path": "tst/publication/frontier_control_plane/prepared_pic_artifact_inventory.json",
+    "inventory_sha256": "4314929212c8caf53c1f3f2533c7f29a4001a12ccc0c6d7df724bda26dc9ce6a",
+    "paper_deck_count": 94,
+    "publication_analyzer_count": 12,
+    "closure_policy": "canonical inventory path plus exact archived inputs/tests/pic*.athinput, required inputs/publication/pic_parallel_shock_section54_paper.athinput and tst/publication/analyze_*.py membership"
+  },
+  "completed_phase0_actions": [
+    "recorded the installed and paired reviewed 4f005096 control-plane successor generation on Orion and Project Home with exact inventory hashes",
+    "recorded the promoted fail-closed transition policy with a 10000-node-hour cap and no registered science slices",
+    "recorded the quiescent byte-identical mirrored ledger, exact mirror-receipts hash and absent Orion and Project Home pending-submission markers",
+    "preserved the 93-deck inputs/tests/pic*.athinput closure and added the required inputs/publication/pic_parallel_shock_section54_paper.athinput deck to the canonical prepared-artifact inventory",
+    "regenerated the complete prepared-artifact inventory with 94 PIC decks and 12 publication analyzers",
+    "required complete schema-3 parallel-shock restart ledgers with exact injected and removed tag-window provenance",
+    "rejected reset, rewound and unseeded restart tag progression plus inconsistent, non-finite, negative, non-integral and out-of-range restart-ledger metadata before reconstruction",
+    "kept restart ingestion, rank-interval, particle-chunk and shock numeric-metadata violations fail-stop through MPI-aware fatal paths"
+  ],
+  "remaining_phase0_actions": [
+    "run the final clean-tree validation matrix against the stable committed source boundary",
+    "complete independent rereview on the stable clean source boundary",
+    "write the canonical HIP/MPI Release build profile",
+    "create the canonical clean-candidate freeze and promote its exact manifest binding"
+  ]
+}

@@ -6,8 +6,8 @@ qualify any scientific claim by itself.
 
 ## Files
 
-- `storage_policy.json`: prospective source-side transition policy until it is
-  promoted through the installed paired control plane. It records the
+- `storage_policy.json`: current source-side transition policy promoted through
+  the installed paired control plane. It records the
   authorized Frontier root, budget cap, Project Home ledger mirror,
   user-selected Orion-only bulk-evidence design, and explicit terminal
   durability-risk disposition.
@@ -21,15 +21,26 @@ qualify any scientific claim by itself.
   93-deck, 12-analyzer prepared-artifact inventory refresh. Canonical build and
   clean-candidate freeze remain pending.
 - `phase0_paired_control_plane_install_and_policy_promotion_2026-05-31.json`:
-  receipt-grade source-controlled snapshot of the paired immutable `80b1c664`
-  controller install, byte-identical Orion and Project Home inventories, and
-  promoted transition policy with a 10000-node-hour cap and no registered
-  science slices.
-- `phase0_curated_candidate_successor_v3_2026-05-31.json`: current Phase 0
+  historical receipt-grade source-controlled snapshot of the paired immutable
+  `80b1c664` controller install, byte-identical Orion and Project Home
+  inventories, and promoted transition policy with a 10000-node-hour cap and
+  no registered science slices.
+- `phase0_curated_candidate_successor_v3_2026-05-31.json`: historical Phase 0
   successor after independent restart and Section 5.4 audits found additional
   fail-open paths. It binds the paired-install receipt and refreshed 93-deck,
   12-analyzer closure. Final clean-tree validation, rereview, HIP/MPI Release
   build and canonical clean-candidate freeze remain pending.
+- `phase0_paired_control_plane_install_and_policy_promotion_successor_2026-05-31.json`:
+  current chronology-preserving receipt for the paired immutable `4f005096`
+  controller successor install, byte-identical Orion and Project Home
+  inventories, promoted transition policy, quiescent mirrored ledger and
+  absent pending-submission markers.
+- `phase0_curated_candidate_successor_v4_2026-05-31.json`: current Phase 0
+  successor after schema-3 parallel-shock exact tag-window and restart
+  fail-stop hardening. It binds the paired `4f005096` successor receipt and
+  refreshed 94-deck, 12-analyzer prepared-artifact closure, including the
+  required Section 5.4 publication deck. Final clean-tree validation, rereview,
+  HIP/MPI Release build and canonical clean-candidate freeze remain pending.
 - `phase0_exact_boundary_validation_receipt_2026-05-31.json`: rejected
   nonqualifying exact-clean-tree validation chronology for the first
   schema-hardened Phase 0 code boundary. Its matrix passed, but independent
@@ -413,6 +424,18 @@ qualify any scientific claim by itself.
 - `q011_injection_distribution_runtime_local_successor_v3_2026-05-31.json`:
   retained immutable particle-payload compatibility replay against the
   corrected source contract. It explicitly does not claim a fresh
+  corrected-executable runtime run or any qualifying Frontier evidence.
+- `q011_parallel_shock_section54_paper_preparation_successor_v4_2026-05-31.json`:
+  preparation-only successor rebinding the exact Section 5.4 deck after
+  restart-ledger schema-3 completion, exact tag-window provenance and
+  numeric-metadata fail-stop hardening.
+- `q011_parallel_shock_rk_stage_budget_successor_v4_2026-05-31.json`: bounded
+  current-source successor with schema-3 exact tag-window restart coverage and
+  fail-stop rejection of reset, rewound, unseeded and inconsistent restart
+  ledger metadata. Full Q-011 qualification remains open.
+- `q011_injection_distribution_runtime_local_successor_v4_2026-05-31.json`:
+  retained immutable particle-payload compatibility replay against the
+  schema-3 corrected source contract. It explicitly does not claim a fresh
   corrected-executable runtime run or any qualifying Frontier evidence.
 - `q034_unsupported_capability_successor_2026-05-30.json`: successor
   fail-closed active-MHD expanding-box unsupported-composition addendum.
