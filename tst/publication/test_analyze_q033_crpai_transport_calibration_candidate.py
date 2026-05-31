@@ -18,7 +18,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 SIDECAR = (
     REPO_ROOT
     / "tst/publication/readiness/"
-    "q033_crpai_transport_calibration_parser_hardening_successor_2026-05-30.json"
+    "q033_crpai_transport_calibration_q022_prerequisite_successor_2026-05-30.json"
 )
 APPLICABILITY = (
     REPO_ROOT
@@ -38,6 +38,10 @@ class Q033CRPAITransportCalibrationCandidateTests(unittest.TestCase):
             q033.validate_boundary_artifact_bindings(),
             q033._BOUNDARY_ARTIFACT_BINDINGS,
         )
+        self.assertEqual(
+            q033.validate_q022_prerequisite_bindings(),
+            q033._Q022_PREREQUISITE_BINDINGS,
+        )
         deck = q033.validate_candidate_deck()
         self.assertEqual(deck["launch_status"], q033.LAUNCH_STATUS)
         self.assertEqual(deck["qualification_effect"], "none")
@@ -52,6 +56,10 @@ class Q033CRPAITransportCalibrationCandidateTests(unittest.TestCase):
         self.assertFalse(report["qualifying_evidence"])
         self.assertFalse(report["physical_calibration_claimed"])
         self.assertEqual(report["qualification_effect"], q033.QUALIFICATION_EFFECT)
+        self.assertEqual(
+            report["q022_prerequisite_status"],
+            "blocked_exact_placeholders_bound_nonqualifying",
+        )
         self.assertIn("not_physical_calibration", report["status"])
         self.assertIn("not_qualifying_evidence", report["status"])
         self.assertTrue(
@@ -111,6 +119,15 @@ class Q033CRPAITransportCalibrationCandidateTests(unittest.TestCase):
         with self.assertRaisesRegex(q033.ContractError, "checksums mismatch"):
             q033.analyze_synthetic_contract_bundle(bundle)
 
+        bundle = q033.build_synthetic_contract_bundle()
+        bundle["q022_prerequisite_sha256"] = dict(
+            bundle["q022_prerequisite_sha256"]
+        )
+        first = next(iter(bundle["q022_prerequisite_sha256"]))
+        bundle["q022_prerequisite_sha256"][first] = "0" * 64
+        with self.assertRaisesRegex(q033.ContractError, "Q-022 prerequisite checksums"):
+            q033.analyze_synthetic_contract_bundle(bundle)
+
     def test_source_boundary_artifact_and_deck_drift_fail_closed(self) -> None:
         with mock.patch.dict(
             q033._SOURCE_BINDINGS,
@@ -131,6 +148,18 @@ class Q033CRPAITransportCalibrationCandidateTests(unittest.TestCase):
             ):
                 q033.validate_boundary_artifact_bindings()
 
+        with mock.patch.dict(
+            q033._Q022_PREREQUISITE_BINDINGS,
+            {
+                "tst/publication/readiness/"
+                "q022_dataset_provenance_manifest_2026-05-30.json": "0" * 64
+            },
+        ):
+            with self.assertRaisesRegex(
+                q033.ContractError, "Q-022 prerequisite checksum mismatch"
+            ):
+                q033.validate_q022_prerequisite_bindings()
+
         with tempfile.TemporaryDirectory() as directory:
             mutated = Path(directory) / "candidate.athinput"
             mutated.write_text(
@@ -139,6 +168,45 @@ class Q033CRPAITransportCalibrationCandidateTests(unittest.TestCase):
             )
             with self.assertRaisesRegex(q033.ContractError, "deck checksum mismatch"):
                 q033.validate_candidate_deck(mutated)
+
+    def test_q022_prerequisite_semantic_drift_fails_closed(self) -> None:
+        original_load = q033._load_json
+
+        def mutated_loader(relative: str) -> dict:
+            record = copy.deepcopy(original_load(relative))
+            if relative.endswith("q022_external_reference_private_ingest_2026-05-30.json"):
+                for item in record["artifacts"]:
+                    if item["reference_id"] == q033._Q022_REFERENCE_ID:
+                        item["source_locator"] = "unreviewed:changed"
+            return record
+
+        with mock.patch.object(q033, "_load_json", side_effect=mutated_loader):
+            with self.assertRaisesRegex(q033.ContractError, "source reference"):
+                q033.validate_q022_prerequisite_bindings()
+
+        def populated_map_loader(relative: str) -> dict:
+            record = copy.deepcopy(original_load(relative))
+            if relative.endswith(
+                "q022_xcmp_ext_crpai_transport_equation_map_2026-05-30.json"
+            ):
+                record["matched_equations"] = ["unreviewed"]
+            return record
+
+        with mock.patch.object(q033, "_load_json", side_effect=populated_map_loader):
+            with self.assertRaisesRegex(q033.ContractError, "equation-map"):
+                q033.validate_q022_prerequisite_bindings()
+
+        def dataset_reference_loader(relative: str) -> dict:
+            record = copy.deepcopy(original_load(relative))
+            if relative.endswith("q022_dataset_provenance_manifest_2026-05-30.json"):
+                for item in record["dataset_candidates"]:
+                    if item["dataset_id"] == q033._Q022_DATASET_ID:
+                        item["reference_ids"] = ["unreviewed"]
+            return record
+
+        with mock.patch.object(q033, "_load_json", side_effect=dataset_reference_loader):
+            with self.assertRaisesRegex(q033.ContractError, "dataset-provenance"):
+                q033.validate_q022_prerequisite_bindings()
 
     def test_accidentally_available_generator_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -176,6 +244,8 @@ class Q033CRPAITransportCalibrationCandidateTests(unittest.TestCase):
                          q033._SOURCE_BINDINGS)
         self.assertEqual(sidecar["bounded_boundary_artifact_bindings"],
                          q033._BOUNDARY_ARTIFACT_BINDINGS)
+        self.assertEqual(sidecar["q022_prerequisite_bindings"],
+                         q033._Q022_PREREQUISITE_BINDINGS)
         relative = str(APPLICABILITY.relative_to(REPO_ROOT))
         self.assertEqual(_sha256(APPLICABILITY), bindings[relative])
 

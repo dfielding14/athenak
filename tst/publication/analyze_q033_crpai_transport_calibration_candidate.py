@@ -91,7 +91,7 @@ _BOUNDARY_ARTIFACT_BINDINGS = {
     "tst/scripts/particles/pic_mhd_expanding_box_adaptive_damping_smoke.py":
         "dd049fd2e0828900f9b7152562fd032612647766bda54907c38e5d79e15d46e3",
     "tst/scripts/particles/pic_mhd_expanding_box_adaptive_damping_restart.py":
-        "94a7932d9163a5d5504abc83978de28b0bf3f430f416c2e15685ee72c4a916d4",
+        "933d7965ae116bb4eb7fd171122e322cb63d3878b4d079a0efc12c43e69513c3",
     "tst/publication/readiness/q032_q033_extension_local_scans_2026-05-30.json":
         "8338ee08f311ce353186a514549cec1227d17de300557645655158ee73da3dc4",
     "tst/publication/readiness/"
@@ -100,6 +100,19 @@ _BOUNDARY_ARTIFACT_BINDINGS = {
     "tst/publication/readiness/q008_q033_expanding_coupled_source_successor_2026-05-30.json":
         "c68a5c9ff78b5652f4bb43a90e52a376a8f7a3412bcbe5627e4868cd4bc0968e",
 }
+_Q022_PREREQUISITE_BINDINGS = {
+    "tst/publication/readiness/q022_external_reference_private_ingest_2026-05-30.json":
+        "78287ea54d8350445cfad62e72f6efc2845f720580d070d075897d889ae3a214",
+    "tst/publication/readiness/q022_dataset_provenance_manifest_2026-05-30.json":
+        "dd6dd6e3187b8e5e06bfbce6f0da4cfc0623d79143a55d7ebbcc797b21b38c78",
+    "tst/publication/readiness/q022_xcmp_ext_crpai_transport_equation_map_2026-05-30.json":
+        "584cbee640b15e1e67a18d5652012e3280bfcbd4bf81e9a6a9bca873b114c786",
+    "tst/publication/readiness/q022_xcmp_ext_crpai_transport_tolerance_table_2026-05-30.json":
+        "de47d2b7f6d75f21b92aaf0806596b8e444992ef1ae568d50366d62ee730dd81",
+}
+_Q022_COMPARISON_ID = "XCMP-EXT-CRPAI-TRANSPORT"
+_Q022_DATASET_ID = "Q022-DATASET-XCMP-EXT-CRPAI-TRANSPORT"
+_Q022_REFERENCE_ID = "sun_bai_zhao_2024_arxiv_2409.08592"
 _EXPECTED_DECK_VALUES = {
     ("time", "nlim"): "0",
     ("time", "tlim"): "0.0",
@@ -155,6 +168,7 @@ _BUNDLE_KEYS = {
     "campaign_id",
     "artifact_role",
     "boundary_artifact_sha256",
+    "q022_prerequisite_sha256",
     "series",
 }
 _SERIES_KEYS = {
@@ -235,6 +249,65 @@ def validate_source_bindings() -> dict[str, str]:
 def validate_boundary_artifact_bindings() -> dict[str, str]:
     """Require exact prior bounded-local mechanics records without promoting them."""
     return _require_exact_bindings(_BOUNDARY_ARTIFACT_BINDINGS, "boundary artifact")
+
+
+def _load_json(relative: str) -> dict[str, Any]:
+    return json.loads((REPO_ROOT / relative).read_text(encoding="utf-8"))
+
+
+def validate_q022_prerequisite_bindings() -> dict[str, str]:
+    """Require exact fail-closed Q-022 CRPAI placeholders without promoting them."""
+    bindings = _require_exact_bindings(_Q022_PREREQUISITE_BINDINGS, "Q-022 prerequisite")
+    records = {Path(relative).name: _load_json(relative) for relative in bindings}
+    ingest = records["q022_external_reference_private_ingest_2026-05-30.json"]
+    references = [
+        item for item in ingest.get("artifacts", [])
+        if item.get("reference_id") == _Q022_REFERENCE_ID
+    ]
+    if len(references) != 1 or references[0].get("source_locator") != "arXiv:2409.08592":
+        raise ContractError("Q-022 CRPAI Sun-Bai-Zhao source reference is not frozen")
+    equation_map = records[
+        "q022_xcmp_ext_crpai_transport_equation_map_2026-05-30.json"
+    ]
+    if (
+        equation_map.get("comparison_id") != _Q022_COMPARISON_ID
+        or equation_map.get("dataset_provenance_id") != _Q022_DATASET_ID
+        or equation_map.get("reference_ids") != [_Q022_REFERENCE_ID]
+        or equation_map.get("map_status")
+        != "blocked_pending_reference_specific_mapping_and_external_review"
+        or equation_map.get("matched_equations") != []
+        or equation_map.get("unit_map") != {}
+        or equation_map.get("normalization_map") != {}
+        or equation_map.get("parameter_overlap") != {}
+        or equation_map.get("reviewer_disposition") != "pending external review"
+    ):
+        raise ContractError("Q-022 CRPAI equation-map placeholder is not fail-closed")
+    tolerance_table = records[
+        "q022_xcmp_ext_crpai_transport_tolerance_table_2026-05-30.json"
+    ]
+    if (
+        tolerance_table.get("comparison_id") != _Q022_COMPARISON_ID
+        or tolerance_table.get("dataset_provenance_id") != _Q022_DATASET_ID
+        or tolerance_table.get("freeze_status")
+        != "blocked_pending_reference_dataset_extraction_and_external_review"
+        or tolerance_table.get("rows") != []
+        or tolerance_table.get("reviewer_disposition") != "pending external review"
+    ):
+        raise ContractError("Q-022 CRPAI tolerance-table placeholder is not fail-closed")
+    provenance = records["q022_dataset_provenance_manifest_2026-05-30.json"]
+    candidates = [
+        item for item in provenance.get("dataset_candidates", [])
+        if item.get("dataset_id") == _Q022_DATASET_ID
+    ]
+    if (
+        len(candidates) != 1
+        or candidates[0].get("comparison_id") != _Q022_COMPARISON_ID
+        or candidates[0].get("reference_ids") != [_Q022_REFERENCE_ID]
+        or candidates[0].get("extraction_status") != "blocked_extraction_input_unavailable"
+        or candidates[0].get("reviewer_disposition") != "pending external review"
+    ):
+        raise ContractError("Q-022 CRPAI dataset-provenance placeholder is not fail-closed")
+    return bindings
 
 
 def validate_launch_block() -> str:
@@ -357,6 +430,7 @@ def build_synthetic_contract_bundle() -> dict[str, Any]:
         "campaign_id": CAMPAIGN_ID,
         "artifact_role": ARTIFACT_ROLE,
         "boundary_artifact_sha256": dict(_BOUNDARY_ARTIFACT_BINDINGS),
+        "q022_prerequisite_sha256": dict(_Q022_PREREQUISITE_BINDINGS),
         "series": series,
     }
 
@@ -480,6 +554,7 @@ def analyze_synthetic_contract_bundle(bundle: dict[str, Any]) -> dict[str, Any]:
     """Recompute synthetic observables while always returning nonqualifying status."""
     source_bindings = validate_source_bindings()
     boundary_bindings = validate_boundary_artifact_bindings()
+    q022_prerequisite_bindings = validate_q022_prerequisite_bindings()
     deck = validate_candidate_deck()
     if not isinstance(bundle, dict) or set(bundle) != _BUNDLE_KEYS:
         raise ContractError("Q-033 synthetic bundle keys do not match the contract")
@@ -489,6 +564,8 @@ def analyze_synthetic_contract_bundle(bundle: dict[str, Any]) -> dict[str, Any]:
         raise ContractError("Q-033 bundle is not synthetic transport-contract input")
     if bundle["boundary_artifact_sha256"] != boundary_bindings:
         raise ContractError("Q-033 synthetic bundle boundary artifact checksums mismatch")
+    if bundle["q022_prerequisite_sha256"] != q022_prerequisite_bindings:
+        raise ContractError("Q-033 synthetic bundle Q-022 prerequisite checksums mismatch")
     if not isinstance(bundle["series"], list):
         raise ContractError("Q-033 synthetic series must be a list")
 
@@ -524,6 +601,9 @@ def analyze_synthetic_contract_bundle(bundle: dict[str, Any]) -> dict[str, Any]:
         "launch_status": LAUNCH_STATUS,
         "source_bindings": source_bindings,
         "boundary_artifact_bindings": boundary_bindings,
+        "q022_prerequisite_bindings": q022_prerequisite_bindings,
+        "q022_prerequisite_status":
+            "blocked_exact_placeholders_bound_nonqualifying",
         "deck_contract": deck,
         "series_count": len(reports),
         "series": reports,

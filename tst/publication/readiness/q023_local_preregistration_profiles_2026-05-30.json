@@ -375,7 +375,7 @@
         "extended_mhd_pic_hall"
       ],
       "open_values": [
-        "Derive and review the CR-Hall normalization before freezing the dimensionless Hall coefficient grid.",
+        "Derive and review the CR-Hall normalization before replacing the nonqualifying positive launch-preparation chi_H grid with the dimensionless physical Hall coefficient grid.",
         "Freeze the exact Hall Bell and shock-front decks before qualifying runs."
       ]
     },
@@ -552,6 +552,12 @@
           "acceptance": "expected_right_polarized_unstable_branch",
           "minimum_right_to_left_amplitude_ratio": 10.0,
           "rationale": "Wrong-branch growth is a failure."
+        },
+        {
+          "observable": "source_local_projected_fluid_velocity_to_magnetic_mode_ratio",
+          "absolute_tolerance": 0.05,
+          "qualification_effect": "nonqualifying_source_local_diagnostic_only",
+          "rationale": "Preparation-only cross-check for retained mhd_w_bcc velocity observables. The paper-literal delta_u_y phase and volume-averaged absolute delta_u growth estimator or a reviewed supplemental-estimator decision remains open before qualification."
         }
       ]
     },
@@ -669,8 +675,8 @@
     {
       "analyzer_id": "Q023-ANALYZER-PAPER-BELL-LINEAR-CANDIDATE",
       "path": "tst/publication/analyze_q023_paper_bell_linear.py",
-      "sha256": "7e21164b3d2c23b92ccaeeec1e3c80cd750f6c332d1b13723faee61d26fbc9f5",
-      "qualification_limit": "source_local_section52_signed_magnetic_raw_trace_candidate_only_approved_materialized_geometry_and_exact_raw_artifact_provenance_required_velocity_retaining_variants_cross_check_clean_freeze_registered_execution_independent_recompute_and_external_review_open"
+      "sha256": "84b04b22f6b28ed5313a6598113357f6f2c9cc6611c9407a5e7e4dc72670461f",
+      "qualification_limit": "source_local_section52_signed_combined_magnetic_and_projected_fluid_velocity_raw_trace_candidate_only_approved_materialized_geometry_exact_raw_artifact_provenance_and_nonqualifying_velocity_cross_check_bound_paper_literal_velocity_estimator_or_reviewed_supplemental_estimator_decision_clean_freeze_convergence_registered_execution_independent_recompute_and_external_review_open"
     },
     {
       "analyzer_id": "Q023-ANALYZER-SHOCK-LOCAL",
@@ -749,19 +755,19 @@
     {
       "input_id": "Q023-INPUT-PAPER-BELL-LINEAR-1D-CANDIDATE",
       "path": "inputs/tests/pic_q023_paper_bell_linear_1d_candidate.athinput",
-      "sha256": "8fedfac3098f50380377ea52eee610d60aae36a1b420673032779db86c5592be",
+      "sha256": "b84fb1b046d3174c3ce6bdd5f9067173dccd0636557d57c047331bf0a42eb4d5",
       "qualification_limit": "source_local_section52_runnable_thin_2d3v_carrier_preparation_only_clean_freeze_variant_materialization_and_authorized_run_open"
     },
     {
       "input_id": "Q023-INPUT-PAPER-BELL-LINEAR-2D-CANDIDATE",
       "path": "inputs/tests/pic_q023_paper_bell_linear_2d_candidate.athinput",
-      "sha256": "0b45844f18dfe1966e57d1db153bfd3fc9df603596a6828f998e1e87d28fbe66",
+      "sha256": "b8a11ce7f7227210392de133bf52f71c265d86ab5ade73bf89a45a6449a3a23c",
       "qualification_limit": "source_local_section52_runnable_preparation_only_clean_freeze_variant_materialization_and_authorized_run_open"
     },
     {
       "input_id": "Q023-INPUT-PAPER-BELL-LINEAR-3D-CANDIDATE",
       "path": "inputs/tests/pic_q023_paper_bell_linear_3d_candidate.athinput",
-      "sha256": "8ae2a2e5afa69c1247e495dd335a075e7a130ead5c0d4645f0af19f9d62c7817",
+      "sha256": "a0fda35a71542e3c411c574a4c5069cbbae3776f02aa10dd44176a3102664103",
       "qualification_limit": "source_local_section52_runnable_preparation_only_clean_freeze_variant_materialization_and_authorized_run_open"
     },
     {

@@ -4,12 +4,12 @@
   "date": "2026-05-30",
   "gate": "Q-029",
   "campaign_id": "Q029-HALL-BELL-LINEAR",
-  "status": "source_local_1d2d3d_launch_preparation_only",
+  "status": "source_local_1d2d3d_combined_observable_launch_and_restart_preparation_only",
   "qualification_effect": "none_source_local_launch_preparation_only",
   "claim_closure": false,
   "frontier_authorization": "not_bound",
   "launch_status": "source_local_candidate_only_not_authorized",
-  "scope": "Q-029-only source-local launch preparation for the separately named q029_hall_bell_linear generator and the extended_mhd_pic current_to_ct_experimental path. This tranche freezes three runnable local preparation decks and a positive chi_H variant-materialization analyzer. It does not authorize a launch or qualify linear or nonlinear Hall-Bell physics.",
+  "scope": "Q-029-only source-local launch and restart preparation for the separately named q029_hall_bell_linear generator and the extended_mhd_pic current_to_ct_experimental path. This tranche freezes three runnable local preparation decks, combined fluid-velocity and magnetic output, a positive chi_H variant-materialization analyzer, and exact serial 2D uninterrupted-versus-restart continuation array parity. It does not authorize a launch or qualify linear or nonlinear Hall-Bell physics.",
   "generator": {
     "name": "q029_hall_bell_linear",
     "source": "src/pgen/tests/q029_hall_bell_linear.cpp",
@@ -69,11 +69,13 @@
     "src/pgen/tests/q023_paper_bell_linear.hpp": "afa7b8243b1d402faa9592137050d0e6870a06ce25f61e17d010af3fc5a080e6",
     "src/pgen/tests/q023_paper_bell_linear.cpp": "66a1bb952ca8b9d91d17896c1ebb94b18fa276be24767a99f635466cbe8638eb",
     "src/pgen/tests/q029_hall_bell_linear.cpp": "bbe003dc3621e5dd0ff5bf8905d4898947a9c92277a36bda371a0b24c0da072c",
-    "inputs/tests/pic_q029_hall_bell_linear_1d_candidate.athinput": "7b9f477558adad6daf682b29f5dff306e50ea60c87b1a2d14c81b14bf7e8ea45",
-    "inputs/tests/pic_q029_hall_bell_linear_2d_candidate.athinput": "28c40f19e398a4340d8f32abdacb41c5d4cefbd4e940d2ceb858bc04f8ba5045",
-    "inputs/tests/pic_q029_hall_bell_linear_3d_candidate.athinput": "9adb4d97aceae9fde058ccafacd7a67f1af8e7cdeda4b7fb846e41e463b1a1ce",
-    "tst/publication/analyze_q029_hall_bell_linear.py": "ee76cddb1a3039f700e3a3a455e287883b35c2e1d3ff27c09441005adad2b05a",
-    "tst/publication/test_analyze_q029_hall_bell_linear.py": "985326511c4daee305478fdcd4ee6404c88133aceb0559299514d2737c18a1b0"
+    "inputs/tests/pic_q029_hall_bell_linear_1d_candidate.athinput": "6a72d8f557d540cd4916353df665aa309c6bc0f900fa8fb0ec04549d5ac0acc9",
+    "inputs/tests/pic_q029_hall_bell_linear_2d_candidate.athinput": "72ba6d20676cd0fd24f02c34669f00b54801d05060cb4b0a2395a65fa71f3d1c",
+    "inputs/tests/pic_q029_hall_bell_linear_3d_candidate.athinput": "488c5ed3ee121d98dca9291c1a188bd5cb65c8af256057739b18c4d11a7c0a28",
+    "tst/publication/analyze_q029_hall_bell_linear.py": "ad3411ad07bcc771c6bddc7ebaaca129c60aa5675df2aa151961a7eab07a94c1",
+    "tst/publication/test_analyze_q029_hall_bell_linear.py": "5da8ec52e77a2f471a5f0a0570b57930f4f34330cf9ec9aa68b6a555843e223e",
+    "tst/publication/q029_hall_bell_linear_host_harness.cpp": "670292a0b81e353f93aa8e4212bb4fda7cf29b487bbdfeeec9d0d87156c6e3d3",
+    "tst/publication/test_q029_hall_bell_linear_host_harness.py": "d5c67e07c50a40e6695051862e297ed0f0f9823ba76716daa7933887ed1e0f7b"
   },
   "shared_registration_contract": {
     "src/CMakeLists.txt": "includes pgen/tests/q029_hall_bell_linear.cpp",
@@ -87,6 +89,7 @@
     "requires_exact_global_and_meshblock_geometry": true,
     "requires_pic_enable_2d3v": true,
     "requires_fresh_and_restart_registration": true,
+    "requires_combined_mhd_w_bcc_fluid_velocity_and_magnetic_output": true,
     "requires_guarded_q023_carrier_header_without_cpp_textual_include": true,
     "emits_epsilon_specific_launch_overrides": true,
     "rejects_nonfinite_materialization_values": true,
@@ -96,42 +99,79 @@
     "rejects_incomplete_or_duplicate_variant_grid": true,
     "always_emits_qualifying_evidence": false
   },
+  "compiled_host_contract": {
+    "harness": "tst/publication/q029_hall_bell_linear_host_harness.cpp",
+    "regression": "tst/publication/test_q029_hall_bell_linear_host_harness.py",
+    "compile_flags": "-std=c++17 -Wall -Wextra -Werror",
+    "checks": [
+      "CurrentDensity normalization",
+      "ChiH normalization",
+      "positive prepared chi_H whitelist and tolerance boundary",
+      "Q-023 shared seed-carrier basis, normalized growth, eigenmode sample and vector-potential reuse"
+    ],
+    "qualification_effect": "none_source_local_compiled_contract_only",
+    "result": "pass"
+  },
   "source_local_runtime_smoke": {
     "qualification_effect": "bounded_source_local_launch_preparation_smoke_only",
-    "source_commit": "6c249767d2ada5b8c5698974c6df8eb0646bbff8",
-    "artifact_root": "/lustre/orion/ast207/proj-shared/dfielding/PIC/local-readiness/q029-hall-bell-linear-exact-6c249767d-20260530",
+    "source_commit": "731b550e84f2dfc86b11c897086a397ecb9f0355",
+    "artifact_root": "/lustre/orion/ast207/proj-shared/dfielding/PIC/local-readiness/q029-hall-bell-combined-observable-restart-smoke-20260530",
+    "predecessor_magnetic_only_artifact_root": "/lustre/orion/ast207/proj-shared/dfielding/PIC/local-readiness/q029-hall-bell-linear-exact-6c249767d-20260530",
     "retention": {
-      "file_count": 37,
+      "file_count": 78,
+      "inventory_algorithm": "sha256(sorted lines of '<file_sha256>  <root-relative-path>\\n')",
+      "inventory_sha256": "145d240d859d204b75224ae989544a2b6d975f046f61d643b935c924c5221936",
       "writable_entries": 0,
       "status": "pass_recursively_read_only"
     },
+    "executable_path": "debug-executable/athena",
     "executable_sha256": "f43ec79efb4f2292314914f02f39736c928cedd7ce4e67cbf357677f1f6a55b4",
     "cycle_zero_initializations": [
       {
         "dimension": 1,
-        "stdout_sha256": "4d291f37ad512642731f3340bd1ad337f8a23c4ef8341c46c17b5c3377e1b7e5",
+        "stdout_path": "1d/stdout.log",
+        "stdout_sha256": "2df9f3a8344490c1f0bd7e7194929b73457a1ebadbf232494c38a922cd6b5295",
+        "stderr_path": "1d/stderr.log",
         "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-        "selected_raw_mhd_bcc_path": "src/bin/pic_q029_hall_bell_linear_1d_cycle_zero.mhd_bcc.00000.bin",
-        "selected_raw_mhd_bcc_sha256": "78fe1a071e61ff4f878da6dc7e0387cccf3fbe9d427e1f682c5d0cef827140ac",
+        "selected_raw_mhd_w_bcc_path": "1d/bin/pic_q029_hall_bell_linear_1d_candidate.mhd_w_bcc.00000.bin",
+        "selected_raw_mhd_w_bcc_sha256": "ad1c39450f7ac65f381b6254edaedfa9954cd32a1723c7aceae7c8f24578279d",
         "result": "pass"
       },
       {
         "dimension": 2,
-        "stdout_sha256": "b86ce7de8882e6501e13669bb8ecbc9cfed96c9cdcd60c5c0cf8f5f47aa5bce5",
+        "stdout_path": "2d/stdout.log",
+        "stdout_sha256": "c4665169194891c30117751ae8ee057137fe9a23f34ba4965be6ae308c110cd0",
+        "stderr_path": "2d/stderr.log",
         "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-        "selected_raw_mhd_bcc_path": "src/bin/pic_q029_hall_bell_linear_2d_cycle_zero.mhd_bcc.00000.bin",
-        "selected_raw_mhd_bcc_sha256": "627362e0f26eb93d8dda6d04202bd6591150b1d825ceb7a5b15af6a59b2de96a",
+        "selected_raw_mhd_w_bcc_path": "2d/bin/pic_q029_hall_bell_linear_2d_candidate.mhd_w_bcc.00000.bin",
+        "selected_raw_mhd_w_bcc_sha256": "6e165fdacb2e66910f1a522efc60717926ccde3358d35533a83755314328c227",
         "result": "pass"
       },
       {
         "dimension": 3,
-        "stdout_sha256": "25fde49be6284c675cede302c0202716e40d4e55fa040a84d39601cc492ebdb8",
+        "stdout_path": "3d/stdout.log",
+        "stdout_sha256": "860c9451f593152d47f3515385a79e2e110db118f9303f5dfb1ab8bb689715a1",
+        "stderr_path": "3d/stderr.log",
         "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-        "selected_raw_mhd_bcc_path": "src/bin/pic_q029_hall_bell_linear_3d_cycle_zero.mhd_bcc.00000.bin",
-        "selected_raw_mhd_bcc_sha256": "40aaaa52579af851f1f28b2a14d895e57ef0b03d0d991597b6f9c0a2007ea182",
+        "selected_raw_mhd_w_bcc_path": "3d/bin/pic_q029_hall_bell_linear_3d_candidate.mhd_w_bcc.00000.bin",
+        "selected_raw_mhd_w_bcc_sha256": "9a0d3626135d5c924634853ffbfbfe786d53e2e57762e2b307bffefab2317bfa",
         "result": "pass"
       }
-    ]
+    ],
+    "restart_continuation": {
+      "dimension": 2,
+      "loaded_restart_path": "restart2d/rst/pic_q029_hall_bell_linear_restart2d.00001.rst",
+      "loaded_restart_sha256": "0a5a895ea2d258089ff2fd50d8d4f36611cdc240908d8c6a2983d6821dd0a806",
+      "uninterrupted_raw_mhd_w_bcc_path": "uninterrupted2d/bin/pic_q029_hall_bell_linear_uninterrupted2d.mhd_w_bcc.00002.bin",
+      "uninterrupted_raw_mhd_w_bcc_sha256": "046a41759428bdd587ddc50f4f9215e5bde263b4c73a3ea129b31e9c4709d1df",
+      "continued_raw_mhd_w_bcc_path": "restart2d/bin/pic_q029_hall_bell_linear_restart2d_cont.mhd_w_bcc.00003.bin",
+      "continued_raw_mhd_w_bcc_sha256": "7b3c1a9a88f9edc129d550703623349f72aec86a329090061b93e4a6a8c65975",
+      "exact_parity_fields": ["MaxLevel", "NumCycles", "Time", "bcc1", "bcc2", "bcc3", "dens", "eint", "velx", "vely", "velz", "x1f", "x1v", "x2f", "x2v", "x3f", "x3v"],
+      "max_absolute_field_difference": 0.0,
+      "final_cycle": 1,
+      "final_time": 0.0015625,
+      "result": "pass_exact_array_parity"
+    }
   },
   "nonqualification_boundary": {
     "artifact_role": "source_local_hall_bell_launch_preparation_grid_only",

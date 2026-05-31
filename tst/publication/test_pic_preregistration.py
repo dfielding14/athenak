@@ -335,6 +335,12 @@ class PicPreregistrationTests(unittest.TestCase):
                 self.assertTrue(claim["applicability_envelope"])
                 self.assertTrue(claim["limitations"])
                 self.assertIsInstance(claim["evidence_links"], list)
+                for evidence_link in claim["evidence_links"]:
+                    with self.subTest(evidence_link=evidence_link):
+                        self.assertTrue(
+                            (REPO_ROOT / evidence_link).is_file(),
+                            f"missing claim evidence link: {evidence_link}",
+                        )
 
     def test_q018_registered_f1_bundle_tracks_pending_review_manifests(self) -> None:
         links = _load(Q018_LINKS_PATH)
@@ -352,12 +358,24 @@ class PicPreregistrationTests(unittest.TestCase):
             "frozen_pending_external_review_not_claim_qualified",
         )
         self.assertEqual(
-            bundle["current_active_policy_sha256"],
+            bundle["historical_bounded_f2_projection_policy_sha256"],
             f2["active_policy_sha256"],
         )
         self.assertEqual(
-            bundle["current_active_promotion_sha256"],
+            bundle["historical_bounded_f2_projection_promotion_sha256"],
             f2["active_promotion_sha256"],
+        )
+        strict = _load(
+            READINESS_DIR
+            / "q027_manual_frontier_accounting_activation_2026-05-30.json"
+        )["control_plane_transition"]
+        self.assertEqual(
+            bundle["live_strict_operational_policy_sha256"],
+            strict["active_policy_sha256"],
+        )
+        self.assertEqual(
+            bundle["live_strict_operational_promotion_sha256"],
+            strict["active_promotion_sha256"],
         )
         expected = {
             execution["registered_science_authorization_id"]: (

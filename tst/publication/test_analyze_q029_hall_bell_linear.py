@@ -8,13 +8,19 @@ import hashlib
 import json
 import math
 from pathlib import Path
+import sys
 import tempfile
 import unittest
+
+import numpy as np
 
 from tst.publication import analyze_q029_hall_bell_linear as hall
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT / "vis/python"))
+import bin_convert_new as bin_convert  # noqa: E402
+
 SIDECAR = (
     REPO_ROOT
     / "tst/publication/readiness/"
@@ -24,6 +30,14 @@ SIDECAR = (
 
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _inventory_sha256(root: Path) -> str:
+    rows = [
+        f"{_sha256(path)}  {path.relative_to(root).as_posix()}\n"
+        for path in sorted(path for path in root.rglob("*") if path.is_file())
+    ]
+    return hashlib.sha256("".join(rows).encode("utf-8")).hexdigest()
 
 
 class Q029HallBellLinearTests(unittest.TestCase):
@@ -239,6 +253,8 @@ class Q029HallBellLinearTests(unittest.TestCase):
             "inputs/tests/pic_q029_hall_bell_linear_3d_candidate.athinput",
             "tst/publication/analyze_q029_hall_bell_linear.py",
             "tst/publication/test_analyze_q029_hall_bell_linear.py",
+            "tst/publication/q029_hall_bell_linear_host_harness.cpp",
+            "tst/publication/test_q029_hall_bell_linear_host_harness.py",
         }
         bindings = sidecar["artifact_bindings"]
         self.assertEqual(set(bindings), expected_paths)
@@ -267,6 +283,13 @@ class Q029HallBellLinearTests(unittest.TestCase):
         self.assertTrue(
             any("Hall-Bell" in item for item in sidecar["explicitly_not_claimed"])
         )
+        host_contract = sidecar["compiled_host_contract"]
+        self.assertEqual(host_contract["result"], "pass")
+        self.assertEqual(
+            host_contract["qualification_effect"],
+            "none_source_local_compiled_contract_only",
+        )
+        self.assertIn("-Wall -Wextra -Werror", host_contract["compile_flags"])
 
     def test_sidecar_replays_retained_source_local_runtime_smoke(self) -> None:
         sidecar = json.loads(SIDECAR.read_text(encoding="utf-8"))
@@ -280,24 +303,64 @@ class Q029HallBellLinearTests(unittest.TestCase):
             if path.stat().st_mode & 0o222
         ]
         self.assertEqual(len(files), smoke["retention"]["file_count"])
+        self.assertEqual(
+            _inventory_sha256(root),
+            smoke["retention"]["inventory_sha256"],
+        )
         self.assertEqual(len(writable), smoke["retention"]["writable_entries"])
         self.assertEqual(smoke["retention"]["status"], "pass_recursively_read_only")
-        self.assertEqual(_sha256(root / "src/athena"), smoke["executable_sha256"])
+        self.assertEqual(
+            _sha256(root / smoke["executable_path"]),
+            smoke["executable_sha256"],
+        )
         for initialization in smoke["cycle_zero_initializations"]:
             dimension = initialization["dimension"]
             self.assertEqual(
-                _sha256(root / f"{dimension}d_cycle_zero.stdout.txt"),
+                _sha256(root / initialization["stdout_path"]),
                 initialization["stdout_sha256"],
             )
             self.assertEqual(
-                _sha256(root / f"{dimension}d_cycle_zero.stderr.txt"),
+                _sha256(root / initialization["stderr_path"]),
                 initialization["stderr_sha256"],
             )
             self.assertEqual(
-                _sha256(root / initialization["selected_raw_mhd_bcc_path"]),
-                initialization["selected_raw_mhd_bcc_sha256"],
+                _sha256(root / initialization["selected_raw_mhd_w_bcc_path"]),
+                initialization["selected_raw_mhd_w_bcc_sha256"],
             )
             self.assertEqual(initialization["result"], "pass")
+        restart = smoke["restart_continuation"]
+        self.assertEqual(
+            _sha256(root / restart["loaded_restart_path"]),
+            restart["loaded_restart_sha256"],
+        )
+        self.assertEqual(
+            _sha256(root / restart["uninterrupted_raw_mhd_w_bcc_path"]),
+            restart["uninterrupted_raw_mhd_w_bcc_sha256"],
+        )
+        self.assertEqual(
+            _sha256(root / restart["continued_raw_mhd_w_bcc_path"]),
+            restart["continued_raw_mhd_w_bcc_sha256"],
+        )
+        uninterrupted = bin_convert.read_binary_as_athdf(
+            str(root / restart["uninterrupted_raw_mhd_w_bcc_path"])
+        )
+        continued = bin_convert.read_binary_as_athdf(
+            str(root / restart["continued_raw_mhd_w_bcc_path"])
+        )
+        fields = restart["exact_parity_fields"]
+        self.assertEqual(set(uninterrupted), set(continued))
+        self.assertEqual(set(uninterrupted), set(fields))
+        for field in fields:
+            self.assertEqual(np.asarray(uninterrupted[field]).shape,
+                             np.asarray(continued[field]).shape)
+            self.assertEqual(
+                float(np.max(np.abs(
+                    np.asarray(uninterrupted[field]) - np.asarray(continued[field])
+                ))),
+                0.0,
+            )
+        self.assertEqual(restart["max_absolute_field_difference"], 0.0)
+        self.assertEqual(restart["result"], "pass_exact_array_parity")
 
 
 if __name__ == "__main__":

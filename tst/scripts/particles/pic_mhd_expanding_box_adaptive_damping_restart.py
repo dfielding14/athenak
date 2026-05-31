@@ -6,6 +6,7 @@ import glob
 import json
 import logging
 import os
+import shlex
 import subprocess
 import sys
 
@@ -48,11 +49,38 @@ _RESULTS = {}
 
 
 def _athena_exe_dir():
-    return os.path.join(os.getcwd(), "build", "src")
+    return os.environ.get(
+        "ATHENA_Q033_EXE_DIR", os.path.join(os.getcwd(), "build", "src")
+    )
 
 
 def _athena_input_path():
     return os.path.join(_SOURCE_ROOT, "inputs", _INPUT_DECK)
+
+
+def _rank_count():
+    try:
+        nproc = int(os.environ.get("ATHENA_Q033_NPROC", "1"))
+    except ValueError as error:
+        raise RuntimeError("ATHENA_Q033_NPROC must be 1 or 2") from error
+    if nproc not in (1, 2):
+        raise RuntimeError("ATHENA_Q033_NPROC must be 1 or 2")
+    return nproc
+
+
+def _launcher_prefix():
+    if _rank_count() == 1:
+        return []
+    launcher = shlex.split(os.environ.get("ATHENA_Q033_LAUNCHER", "mpiexec"))
+    if not launcher:
+        raise RuntimeError("ATHENA_Q033_LAUNCHER must not be empty")
+    return launcher + ["-n", str(_rank_count())]
+
+
+def _decomposition_overrides():
+    if _rank_count() == 1:
+        return []
+    return ["mesh/nx1=8"]
 
 
 def _remove_outputs(basename):
@@ -74,12 +102,12 @@ def _latest_file(dirname, pattern, label):
 
 
 def _run_athena(label, arguments, restart_file=None):
-    command = ["./athena"]
+    command = _launcher_prefix() + ["./athena"]
     if restart_file is None:
         command += ["-i", _athena_input_path()]
     else:
         command += ["-r", restart_file]
-    command += list(arguments)
+    command += list(arguments) + _decomposition_overrides()
     logger.info("Executing %s: %s", label, " ".join(command))
     proc = subprocess.run(
         command, cwd=_athena_exe_dir(), capture_output=True, text=True
@@ -172,8 +200,13 @@ def _summary():
         for field in _PARTICLE_FLOAT_FIELDS
     }
     return {
-        "evidence_class": "bounded_local_serial_host_regression",
+        "evidence_class": (
+            "bounded_local_serial_host_regression"
+            if _rank_count() == 1
+            else "bounded_local_two_rank_mpi_host_regression"
+        ),
         "not_frontier_qualification_evidence": True,
+        "configured_ranks": _rank_count(),
         "checkpoint_continuations": 1,
         "full_time": full_mhd["time"],
         "restart_time": restart_mhd["time"],
@@ -234,7 +267,7 @@ def analyze():
         and summary["mhd_time_absolute_error"] <= 1.0e-14
         and max(summary["mhd_field_absolute_errors"].values()) <= 1.0e-12
         and summary["history_endpoint_absolute_error"] <= 1.0e-10
-        and summary["particle_count"] == 64
+        and summary["particle_count"] == 64 * _rank_count()
         and all(summary["particle_int_payload_equal"].values())
         and max(particle_errors.values()) <= 1.0e-6
         and not summary["restart_refit_observed"]

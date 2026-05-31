@@ -1,0 +1,93 @@
+{
+  "record_type": "q032_q033_login_node_parallel_rejected_chronology",
+  "schema_version": 1,
+  "date": "2026-05-30",
+  "gates": ["Q-032", "Q-033"],
+  "qualification_effect": "none_rejected_login_node_parallel_launch_chronology_only",
+  "claim_closure": false,
+  "frontier_authorization": "not_bound",
+  "scope": "Rejected chronology for two direct Cray PALS parallel launches on one Frontier login host without a Slurm allocation. The runs produced mechanically consistent Q-032 and Q-033 outputs, but OLCF site policy forbids parallel launches from login nodes. These outputs are retained only so the policy-invalid attempt remains auditable. They are not readiness evidence and provide no process-decomposition, cross-node, Frontier, HIP/GPU, Plotnikov-comparison, physical CRPAI transport-calibration, or external-review credit.",
+  "policy_rejection": {
+    "status": "rejected_not_readiness_evidence",
+    "source": "https://docs.olcf.ornl.gov/systems/frontier_user_guide.html",
+    "rule": "Frontier login nodes are shared resources; never launch parallel jobs from a login node.",
+    "required_successor_route": "Run only through a registered, budget-tracked Slurm allocation on Frontier compute nodes using the audited control plane and srun."
+  },
+  "source_bindings": {
+    "src/pgen/tests/q032_reduced_static_neutral_local.cpp": "9d3547b6796fe492fb01e1eb4ada60a54c6dcebeeefc99b7214e899a32540951",
+    "tst/scripts/particles/pic_q032_reduced_static_neutral_runtime_local.py": "2181fc926bcad29324193c1a5d6ae66bb8d1629d9ea3900a4bee77a73fde6100",
+    "tst/scripts/particles/pic_mhd_expanding_box_adaptive_damping_restart.py": "933d7965ae116bb4eb7fd171122e322cb63d3878b4d079a0efc12c43e69513c3"
+  },
+  "retained_artifacts": {
+    "artifact_root": "/lustre/orion/ast207/proj-shared/dfielding/PIC/local-readiness/q032-q033-two-rank-mpi-host-20260530",
+    "file_count": 69,
+    "writable_entries": 0,
+    "inventory_algorithm": "sha256(sorted lines of '<file_sha256>  <root-relative-path>\\n')",
+    "inventory_sha256": "d4fd3feca9322429aff15e09fa3ebe8734f0a99057f99d309b0183c99e9bf00f",
+    "retained_manifest_path": "artifact-sha256.txt",
+    "retained_manifest_sha256": "b2b20189b7b94ef486fdd39b4d8886200f798662ce180002b2c2940aafff4ad8",
+    "executable_path": "build/athena",
+    "executable_sha256": "2f06d2fb32ca076570aaa13e7cf2228781f0e722b8ceff8c689d25b663ccb36b",
+    "cmake_cache_path": "build/CMakeCache.txt",
+    "cmake_cache_sha256": "902062e93851c95e7d73adba03b0d81b5667d49b3d0e47bbfbdf2aa294e77fb6",
+    "q032_log_path": "logs/q032_two_rank_mpi_host_replay.log",
+    "q032_log_sha256": "097a0a1e1e2c02669eb4f85f30dbb44f0ed43316368c6efe14469bea53bf4385",
+    "q033_log_path": "logs/q033_two_rank_mpi_host_replay.log",
+    "q033_log_sha256": "05699ff5e2977732ff595c52297c4e7448ad99cc65e4773bcb61dfabda397d8a"
+  },
+  "launcher": {
+    "path": "/opt/cray/pals/1.8/bin/mpiexec",
+    "version": "mpiexec version 1.8.0 revision b211c1ac6a6a built Nov 21 2025",
+    "command_shape": "/opt/cray/pals/1.8/bin/mpiexec -n 2",
+    "hostname_probe": ["login10", "login10"],
+    "slurm_job_id": "",
+    "slurm_step_id": "",
+    "scheduler_launch_used": false
+  },
+  "build_profile": {
+    "cmake_build_type": "Release",
+    "Athena_ENABLE_MPI": "ON",
+    "Kokkos_ENABLE_MPI": "ON",
+    "Kokkos_ENABLE_SERIAL": "ON",
+    "Kokkos_ENABLE_HIP": "OFF"
+  },
+  "q032_two_rank_replay": {
+    "decomposition_override": "meshblock/nx1=16",
+    "configured_ranks": 2,
+    "dt": 0.00142045,
+    "attenuation_factor": 0.99900617916736,
+    "transverse_norm": 0.10209023952484131,
+    "relative_errors": {
+      "density": 0.0,
+      "longitudinal_momentum": 0.0,
+      "transverse_momentum_2": 7.028604169817824e-08,
+      "transverse_momentum_3": 9.939946817308548e-08,
+      "ideal_mhd_energy": 9.368113265735526e-08
+    },
+    "qualification_effect": "none",
+    "plotnikov_qualification": "not_claimed",
+    "result": "pass"
+  },
+  "q033_two_rank_replay": {
+    "decomposition_override": "mesh/nx1=8",
+    "configured_ranks": 2,
+    "checkpoint_continuations": 1,
+    "endpoint_time": 0.0454665,
+    "particle_count": 128,
+    "mhd_time_absolute_error": 0.0,
+    "mhd_field_absolute_error_max": 0.0,
+    "history_endpoint_absolute_error_max": 0.0,
+    "particle_integer_payload_equal": true,
+    "particle_float_payload_absolute_error_max": 0.0,
+    "restart_refit_observed": false,
+    "result": "pass_exact_uninterrupted_restart_endpoint_parity"
+  },
+  "explicitly_not_claimed": [
+    "cross-node MPI or Frontier MPI qualification",
+    "Frontier HIP/GPU qualification or launch authorization",
+    "Plotnikov-matched damped CRSI comparison or scientific qualification",
+    "physical CRPAI transport calibration, effective scattering, anisotropy, spectra, quasi-steady state, saturation or scaling qualification",
+    "external-review closure"
+  ],
+  "q032_q033_disposition": "rejected_login_node_parallel_launch_chronology_only_registered_compute_node_replay_required"
+}

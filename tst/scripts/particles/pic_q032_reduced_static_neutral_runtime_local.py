@@ -1,6 +1,7 @@
 import glob
 import logging
 import os
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -33,6 +34,31 @@ def _athena_input_path():
     return os.path.join(_SOURCE_ROOT, 'inputs', _INPUT_DECK)
 
 
+def _rank_count():
+    try:
+        nproc = int(os.environ.get('ATHENA_Q032_NPROC', '1'))
+    except ValueError as error:
+        raise RuntimeError('ATHENA_Q032_NPROC must be 1 or 2') from error
+    if nproc not in (1, 2):
+        raise RuntimeError('ATHENA_Q032_NPROC must be 1 or 2')
+    return nproc
+
+
+def _launcher_prefix():
+    if _rank_count() == 1:
+        return []
+    launcher = shlex.split(os.environ.get('ATHENA_Q032_LAUNCHER', 'mpiexec'))
+    if not launcher:
+        raise RuntimeError('ATHENA_Q032_LAUNCHER must not be empty')
+    return launcher + ['-n', str(_rank_count())]
+
+
+def _decomposition_overrides():
+    if _rank_count() == 1:
+        return []
+    return ['meshblock/nx1=16']
+
+
 def _remove_outputs(basename):
     pattern = os.path.join(_athena_exe_dir(), 'bin', basename + '.*.bin')
     for fname in glob.glob(pattern):
@@ -50,9 +76,9 @@ def _output_files(basename):
 def _run_case(case_name, arguments, expected_damping_mode):
     basename = 'pic_q032_reduced_static_neutral_runtime_local_' + case_name
     _remove_outputs(basename)
-    command = [
+    command = _launcher_prefix() + [
         './athena', '-i', _athena_input_path(), 'job/basename=' + basename,
-    ] + arguments
+    ] + arguments + _decomposition_overrides()
     logger.info('Executing %s: %s', case_name, ' '.join(command))
     proc = subprocess.run(command, cwd=_athena_exe_dir(),
                           capture_output=True, text=True)
@@ -243,6 +269,7 @@ def analyze():
         'dt': dt,
         'factor': factor,
         'transverse_norm': transverse_norm,
+        'configured_ranks': _rank_count(),
         'errors': errors,
         'qualification_effect': 'none',
         'plotnikov_qualification': 'not_claimed',

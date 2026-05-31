@@ -1,0 +1,82 @@
+{
+  "record_type": "q033_crpai_transport_calibration_q022_prerequisite_successor",
+  "schema_version": 1,
+  "date": "2026-05-30",
+  "gate": "Q-033",
+  "predecessor_record": "tst/publication/readiness/q033_crpai_transport_calibration_parser_hardening_successor_2026-05-30.json",
+  "qualification_effect": "source_local_launch_blocked_preparation_only",
+  "claim_closure": false,
+  "scope": "Q-033-only fail-closed successor for a future adaptive-delta-f physical-damping CRPAI transport-calibration extension. This successor preserves the intentionally unrunnable synthetic-contract-only candidate and binds its Q-022 Sun-Bai-Zhao provenance, equation-map and tolerance-table placeholders exactly. Those placeholders remain blocked and empty; this record does not extract reference data, calibrate physical transport, qualify a campaign or authorize execution.",
+  "artifact_bindings": {
+    "inputs/tests/pic_q033_crpai_transport_calibration_candidate.athinput": "77ffeb7bdfd1f1f2299db7e4ee257d105b580a6bd554cd244e6d9e0c8214ce58",
+    "tst/publication/analyze_q033_crpai_transport_calibration_candidate.py": "f2ff4c6e889a3d2813eabc740818777129097672ab468ddefb297d7fdbc8a78c",
+    "tst/publication/test_analyze_q033_crpai_transport_calibration_candidate.py": "8360a4754d53da110291c499f92a9031978cae2f6e622cb739983a3d47a771f9",
+    "tst/publication/readiness/q033_crpai_transport_calibration_applicability_2026-05-30.md": "0ced16ab8fbe21425bec91df093a936118d0365d45a27760caf6f80e8398713a"
+  },
+  "implementation_source_bindings": {
+    "src/particles/particles.cpp": "06f80ec9a93f027ff5a24a2631754603c7ea3f83cfbcdbd8e5b9a32be711fa79",
+    "src/particles/particles.hpp": "452e6091ad6f1ce50156c770d304ac36020cb53927cc1e40ba6af73e7c3bb462",
+    "src/particles/particles_tasks.cpp": "8310e80ffdb2739ecc60b6d65ef9eae78573aeba8f55fa1981ff98b4801c8946",
+    "src/particles/particles_pushers.cpp": "7cd3ac4b6fc95529d3097a3799b74f064a7e865c8b7be08f830a60dbee103330",
+    "src/particles/particles_moments.cpp": "3b206b1268bc71a0d6745dcda5422da54d255ac6cb73fddd566b89b507da6c58",
+    "src/mhd/mhd.hpp": "655197f1582463020747212294e965e19a078a59d0708ebf7a6a127e5b652d4e",
+    "src/mhd/mhd_tasks.cpp": "339326c2cc8913c321affeafc618a8fea6cbd9133ea6b26a9b58daa2baafa6d2",
+    "docs/source/engineering/pic_mhd_model_contract.md": "ebad2e21725ea15eb301e03f32d8ca8fab9c6503aec90cd7090be4637402ed64"
+  },
+  "bounded_boundary_artifact_bindings": {
+    "inputs/tests/pic_mhd_expanding_box_adaptive_damping_smoke.athinput": "52122a6100eba205191abea2c0f560f26c30f5ca97272b7fd7dd1cfc01832ba5",
+    "tst/scripts/particles/pic_mhd_expanding_box_adaptive_damping_smoke.py": "dd049fd2e0828900f9b7152562fd032612647766bda54907c38e5d79e15d46e3",
+    "tst/scripts/particles/pic_mhd_expanding_box_adaptive_damping_restart.py": "933d7965ae116bb4eb7fd171122e322cb63d3878b4d079a0efc12c43e69513c3",
+    "tst/publication/readiness/q032_q033_extension_local_scans_2026-05-30.json": "8338ee08f311ce353186a514549cec1227d17de300557645655158ee73da3dc4",
+    "tst/publication/readiness/q033_expanding_box_adaptive_damping_restart_resilience_bounded_local_2026-05-30.json": "75e96ceb330d419f4fe7d60331df2bb1fd9e791e2a482778bbe0978f541a342c",
+    "tst/publication/readiness/q008_q033_expanding_coupled_source_successor_2026-05-30.json": "c68a5c9ff78b5652f4bb43a90e52a376a8f7a3412bcbe5627e4868cd4bc0968e"
+  },
+  "q022_prerequisite_bindings": {
+    "tst/publication/readiness/q022_external_reference_private_ingest_2026-05-30.json": "78287ea54d8350445cfad62e72f6efc2845f720580d070d075897d889ae3a214",
+    "tst/publication/readiness/q022_dataset_provenance_manifest_2026-05-30.json": "dd6dd6e3187b8e5e06bfbce6f0da4cfc0623d79143a55d7ebbcc797b21b38c78",
+    "tst/publication/readiness/q022_xcmp_ext_crpai_transport_equation_map_2026-05-30.json": "584cbee640b15e1e67a18d5652012e3280bfcbd4bf81e9a6a9bca873b114c786",
+    "tst/publication/readiness/q022_xcmp_ext_crpai_transport_tolerance_table_2026-05-30.json": "de47d2b7f6d75f21b92aaf0806596b8e444992ef1ae568d50366d62ee730dd81"
+  },
+  "q022_prerequisite_contract": {
+    "comparison_id": "XCMP-EXT-CRPAI-TRANSPORT",
+    "dataset_provenance_id": "Q022-DATASET-XCMP-EXT-CRPAI-TRANSPORT",
+    "reference_id": "sun_bai_zhao_2024_arxiv_2409.08592",
+    "source_locator": "arXiv:2409.08592",
+    "equation_map_status": "blocked_pending_reference_specific_mapping_and_external_review",
+    "matched_equations": [],
+    "unit_map": {},
+    "normalization_map": {},
+    "parameter_overlap": {},
+    "tolerance_table_status": "blocked_pending_reference_dataset_extraction_and_external_review",
+    "tolerance_rows": [],
+    "dataset_extraction_status": "blocked_extraction_input_unavailable",
+    "reviewer_disposition": "pending external review",
+    "qualification_effect": "blocked_exact_placeholders_bound_nonqualifying"
+  },
+  "fail_closed_analyzer_contract": {
+    "requires_exact_implementation_source_checksums": true,
+    "requires_exact_prior_bounded_boundary_artifact_checksums": true,
+    "requires_exact_q022_prerequisite_checksums": true,
+    "requires_q022_placeholders_to_remain_blocked_and_empty": true,
+    "carries_q022_prerequisite_checksums_through_synthetic_bundle": true,
+    "requires_exact_candidate_deck_checksum": true,
+    "requires_candidate_problem_generator_to_remain_unavailable": true,
+    "rejects_q022_prerequisite_checksum_mutation": true,
+    "analyzer_always_emits_qualifying_evidence": false,
+    "analyzer_always_emits_physical_calibration_claimed": false
+  },
+  "verification": {
+    "focused_command": "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. python3 -B -m unittest tst.publication.test_analyze_q033_crpai_transport_calibration_candidate",
+    "focused_result": "pass",
+    "json_parse": "pass",
+    "explicit_trailing_whitespace_check": "pass"
+  },
+  "residual_work": [
+    "Freeze the Sun-Bai-Zhao applicability map and extracted references.",
+    "Review the physical normalization, nu_eff estimator, spectra decomposition, quasi-steady windows, numeric tolerances, seed policy and scaling matrix.",
+    "Implement and review a dedicated Q-033 runtime generator and immutable runtime analyzer before preparing a clean launch candidate.",
+    "Freeze exact runtime decks and register the Frontier HIP and MPI campaign matrix.",
+    "Require immutable artifact inventory, independent recomputation and external reviewer disposition before any physical calibration or qualification claim."
+  ],
+  "q033_disposition": "source_local_transport_contract_q022_placeholders_bound_launch_blocked_candidate_only_physical_calibration_and_qualification_open"
+}

@@ -531,7 +531,14 @@ class Q023PaperBellLinearTests(unittest.TestCase):
             )
         boundary = contract["paper_velocity_observable_boundary"]
         self.assertFalse(boundary["section52_qualification_eligible"])
-        self.assertIn("velocity", boundary["required_before_qualification"])
+        self.assertEqual(
+            boundary["current_retained_output"],
+            "raw_mhd_w_bcc_combined_magnetic_and_fluid_velocity_modes",
+        )
+        self.assertIn(
+            "paper_literal_delta_u_y_phase",
+            boundary["required_before_qualification"],
+        )
 
 
 if __name__ == "__main__":

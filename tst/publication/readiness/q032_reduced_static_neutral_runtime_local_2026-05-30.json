@@ -6,7 +6,7 @@
   "qualification_effect": "none",
   "claim_closure": false,
   "frontier_authorization": "not_bound",
-  "scope": "Q-032-only bounded source-local runtime-generator mechanics tranche. The registered generator accepts one Newtonian single-fluid MHD thin 2D3V x1-parallel periodic Alfven carrier, rejects AMR/SMR, relativistic, radiation, ion-neutral alternate-task-list and broadened carrier state, then delegates MHD initialization and restart behavior to the built-in LinearWave implementation. The shared particle parser fails closed when the reduced map cannot run on the Newtonian single-fluid MHD source task path. The local runtime probe checks only the existing reduced static-neutral high-frequency transverse-friction map against a no-damping linear-wave control.",
+  "scope": "Q-032-only bounded source-local runtime-generator mechanics tranche. The registered generator accepts one Newtonian single-fluid MHD thin 2D3V x1-parallel periodic Alfven carrier with an exact serial or two-way x1 MeshBlock layout, rejects AMR/SMR, relativistic, radiation, ion-neutral alternate-task-list and broadened carrier state, then delegates MHD initialization and restart behavior to the built-in LinearWave implementation. The shared particle parser fails closed when the reduced map cannot run on the Newtonian single-fluid MHD source task path. The local runtime probe checks only the existing reduced static-neutral high-frequency transverse-friction map against a no-damping linear-wave control.",
   "generator": {
     "name": "q032_reduced_static_neutral_local",
     "source": "src/pgen/tests/q032_reduced_static_neutral_local.cpp",
@@ -15,7 +15,7 @@
     "carrier": {
       "semantics": "transverse_invariant_thin_2d3v_x1_parallel_alfven",
       "mesh": {
-        "nx1": 32,
+        "nx1": "32 serial or 16 two-way x1",
         "nx2": 4,
         "nx3": 1
       },
@@ -46,10 +46,10 @@
   },
   "owned_artifact_bindings": {
     "src/particles/particles.cpp": "06f80ec9a93f027ff5a24a2631754603c7ea3f83cfbcdbd8e5b9a32be711fa79",
-    "src/pgen/tests/q032_reduced_static_neutral_local.cpp": "c1171e55bda63f6dc1fe1a3cdfdabba473c59d58601a1a8612c479651d0b57c0",
+    "src/pgen/tests/q032_reduced_static_neutral_local.cpp": "9d3547b6796fe492fb01e1eb4ada60a54c6dcebeeefc99b7214e899a32540951",
     "inputs/tests/pic_q032_reduced_static_neutral_runtime_local.athinput": "2210b7d3f9a49b81163e5ac3484660199374ceed4876b04acf72a24053b4ee62",
-    "tst/scripts/particles/pic_q032_reduced_static_neutral_runtime_local.py": "115f3b042ed532df1861e844aa4bf17c3eb577714ee85733fa9df6ff2820e351",
-    "tst/publication/test_q032_reduced_static_neutral_runtime_local.py": "f135e84c39da34181b0d28fb058b5646837e1905e99b51764850485b1429f46b"
+    "tst/scripts/particles/pic_q032_reduced_static_neutral_runtime_local.py": "2181fc926bcad29324193c1a5d6ae66bb8d1629d9ea3900a4bee77a73fde6100",
+    "tst/publication/test_q032_reduced_static_neutral_runtime_local.py": "b36d97a92c0ead94650f1863cd7bfaec1a59c0ced490806d4ac790cce34534bd"
   },
   "shared_registration_contract": {
     "src/CMakeLists.txt": "includes pgen/tests/q032_reduced_static_neutral_local.cpp",
@@ -113,6 +113,7 @@
     "neutral-fluid evolution or neutral backreaction",
     "special-relativistic, general-relativistic, dynamical-GR, radiation, or ion-neutral alternate-task-path damping support"
   ],
+  "rejected_login_node_parallel_chronology": "tst/publication/readiness/q032_q033_two_rank_mpi_host_successor_2026-05-30.json",
   "residual_work": [
     "Preserve the reviewed bounded source-local runtime mechanics regression as non-qualifying local evidence.",
     "Keep the separately named q032_plotnikov_damped_crsi_open generator unavailable until the Plotnikov applicability map, extracted dataset, reviewed tolerances, clean candidate, and authorization are complete.",

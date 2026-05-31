@@ -47,29 +47,43 @@ qualify any scientific claim by itself.
   extractor and source-local 1D/2D/3D preparations. Raw extraction requires an
   approved materialized variant, exact geometry and artifact provenance, and a
   signed phase-frequency match. The physical 1D case uses an exact
-  transverse-invariant thin 2D3V carrier. Current `mhd_bcc` output is magnetic
-  preparation smoke only; velocity-retaining variants, registered execution,
-  independent recompute and external review remain open.
+  transverse-invariant thin 2D3V carrier. Successor `mhd_w_bcc` smokes retain
+  magnetic and fluid-velocity modes in 1D/2D/3D plus a 2D restart continuation;
+  their projected velocity-to-magnetic ratio is a nonqualifying source-local
+  diagnostic. The paper-literal velocity estimator or a reviewed supplemental
+  estimator decision, convergence, registered execution, independent recompute
+  and external review remain open.
 - `q029_hall_bell_linear_source_local_preparation_2026-05-30.json`: bounded
   source-local 1D/2D/3D launch preparation for the separately named
   experimental Hall-current generator. The guarded shared Q-023 seed-carrier
   header, exact geometry, positive `chi_H` grid and 45 epsilon-specific
-  materializations are frozen as nonqualifying preparation only; Hall-Bell
-  dispersion, nonlinear, Frontier and decomposition qualification remain
-  open.
+  materializations are frozen as nonqualifying preparation only. A
+  warnings-as-errors compiled host contract checks the Hall normalization,
+  positive prepared whitelist and shared Q-023 carrier reuse. Fresh
+  combined `mhd_w_bcc` 1D/2D/3D smokes and exact serial 2D uninterrupted versus
+  restart-continuation array parity pass; Hall-Bell dispersion, nonlinear,
+  Frontier and decomposition qualification remain open.
 - `q029_hall_extension_parser_hardening_successor_2026-05-30.json`,
   `q032_plotnikov_damped_crsi_parser_hardening_successor_2026-05-30.json` and
   `q033_crpai_transport_calibration_parser_hardening_successor_2026-05-30.json`:
-  current nonqualifying synthetic-contract bindings after the shared particle
+  parser-narrowed nonqualifying synthetic-contract bindings after the shared particle
   parser was narrowed to admit reduced static-neutral damping only on the
   Newtonian single-fluid MHD source-task path. Their source-local predecessor
   JSON records remain preserved as chronology.
+- `q033_crpai_transport_calibration_q022_prerequisite_successor_2026-05-30.json`:
+  current Q-033 nonqualifying successor binding the exact blocked Q-022
+  Sun-Bai-Zhao provenance, equation-map and empty tolerance-table placeholders
+  into the synthetic bundle. It remains launch-blocked preparation only.
 - `q032_reduced_static_neutral_runtime_local_2026-05-30.json`: bounded
   source-local thin-2D3V runtime carrier for the exact static-neutral
   transverse-friction map. The retained Orion-local control-versus-damped
-  probe passes with residuals below `1.0e-7`; Plotnikov applicability,
-  matched damped-CRSI qualification, Frontier and decomposition work remain
-  open.
+  probe passes with residuals below `1.0e-7`; Plotnikov applicability and
+  matched damped-CRSI qualification remain open.
+- `q032_q033_two_rank_mpi_host_successor_2026-05-30.json`: rejected chronology
+  for direct-PALS parallel launches on one login host without a Slurm
+  allocation. OLCF policy forbids parallel login-node launches, so the retained
+  outputs provide no readiness credit. Replay only through a registered,
+  budget-tracked compute-node allocation using `srun`.
 - `plotting_environment_lock_candidate_2026-05-30.json`: local Python and
   plotting-dependency lock candidate pending backend, font, environment
   artifact and external-export freeze.
@@ -121,17 +135,17 @@ qualify any scientific claim by itself.
   shares production ledger serialization through the Project Home mirror,
   rejects non-integer inventory schema versions and documents explicit build
   profile activation. A subsequent cross-generation clone audit superseded
-  intermediate digest `0d07f132`: current staged digest `80c0797be` additionally
+  intermediate digest `0d07f132`: historical staged digest `80c0797be` additionally
   serializes ledger mutation and policy promotion through a descriptor lock on
   site-owned `/lustre/orion/ast207`, outside the replaceable PIC tree. Final
   independent clone/hardlink lock retest and quiescent paired immutable install
   plus anchor migration and active-policy promotion pass. Science freeze and
   applicable Frontier prerequisites remain open.
-- `q027_outer_anchor_paired_activation_2026-05-30.json`: current live paired
-  `80c0797b` outer-anchor activation, preserved genesis-anchor migration,
+- `q027_outer_anchor_paired_activation_2026-05-30.json`: retained historical
+  paired `80c0797b` outer-anchor activation, preserved genesis-anchor migration,
   coherent mirrored policy promotion and unchanged 22-record ledger evidence.
-- `q027_control_plane_modulepath_hardening_candidate_2026-05-30.json`: active
-  successor `c8002a1d` after the first clean build-profile preflight through
+- `q027_control_plane_modulepath_hardening_candidate_2026-05-30.json`: retained
+  successor chronology for `c8002a1d` after the first clean build-profile preflight through
   live `80c0797b` rejected caller-dependent Frontier `MODULEPATH` provenance
   before artifact creation. The successor resets a reviewed seed before module
   loading, publishes the reviewed 19-component value after all module work and
@@ -139,7 +153,7 @@ qualify any scientific claim by itself.
   immutable install, idempotent anchor migration and coherent policy promotion
   pass. Science freeze remains pending.
 - `q027_control_plane_source_alias_hardening_candidate_2026-05-30.json`:
-  staged successor `6cbbbbd6` after the exact clean build-profile retry through
+  historical staged successor `6cbbbbd6` after the exact clean build-profile retry through
   live `c8002a1d` rejected initialized clean `kokkos` because the authorized
   `/ccs/home/...` source mount alias was compared directly with its resolved
   `/autofs/...` path. The successor normalizes only after exact lexical
@@ -154,13 +168,13 @@ qualify any scientific claim by itself.
   narrow mirrored policy activation for the structured clean-candidate F0
   parser-contract admission smoke. Policy SHA `1d525be1`, promotion SHA
   `2460cc0c`, exact template, deck, profile, analyzer, executable and trusted
-  launch-contract bindings pass; submission and reconciliation remain pending.
+  launch-contract bindings pass; the later F0 submission and reconciliation passed.
 - `q027_frontier_f0_purged_submission_recovery_activation_2026-05-30.json`:
   successor chronology for held job `4745523`, which was cancelled before
   execution and later purged from live Slurm queries. Immutable mirrored
   handoff `06392534`, zero-consumption reconciliation, paired recovery
-  successor `f2ad817a` and policy promotion `51c9d6a4` pass; a fresh F0 retry
-  remains pending.
+  successor `f2ad817a` and policy promotion `51c9d6a4` pass; the later fresh F0
+  retry passed.
 - `q027_frontier_f0_compute_snapshot_activation_2026-05-30.json`: successor
   chronology for compute-startup failure job `4745755`, whose Project Home
   writer lock returned `OSError 524` before Athena. Reviewed paired successor

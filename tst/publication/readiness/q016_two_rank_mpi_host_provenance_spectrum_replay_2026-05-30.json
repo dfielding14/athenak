@@ -1,14 +1,20 @@
 {
-  "record_type": "q016_two_rank_mpi_host_provenance_spectrum_replay",
+  "record_type": "q016_login_node_parallel_rejected_chronology",
   "date": "2026-05-30",
-  "qualification_effect": "bounded_local_two_rank_mpi_host_replay_only",
+  "qualification_effect": "none_rejected_login_node_parallel_launch_chronology_only",
   "predecessor_record": "tst/publication/readiness/q016_particle_provenance_spectra_local_2026-05-30.json",
   "source_state": {
     "head_at_replay": "7f699a0e38bbc413227bc181e60f68a68732ae72",
     "worktree": "dirty_shared_worktree_with_concurrent_unrelated_changes",
     "freeze_status": "source_local_record_binds_replayed_q016_inputs_and_ephemeral_build_artifacts_by_sha256_not_a_frozen_subject_commit"
   },
-  "scope": "Controlled bounded-local Q-016 replay using two MPI processes on one login host. The replay verifies uninterrupted-versus-restarted persistent particle provenance, restart schema 7, observed MeshBlock migration, and independent full-f plus signed delta-f spectrum reconstruction. This record is local host process-decomposition evidence only. It is not cross-node, Frontier, HIP, repeated-AMR, publication, or shock-campaign qualification evidence.",
+  "scope": "Rejected chronology for a direct Cray PALS Q-016 parallel launch on one Frontier login host without a Slurm allocation. The run produced mechanically consistent persistent particle provenance, restart schema 7, observed MeshBlock migration, and independently reconstructed spectra, but OLCF site policy forbids parallel launches from login nodes. These outputs are not readiness evidence. Use the later Orion-shared srun compute-node replay for bounded Q-016 process-decomposition evidence.",
+  "policy_rejection": {
+    "status": "rejected_not_readiness_evidence",
+    "source": "https://docs.olcf.ornl.gov/systems/frontier_user_guide.html",
+    "rule": "Frontier login nodes are shared resources; never launch parallel jobs from a login node.",
+    "valid_compute_node_successor": "tst/publication/readiness/q016_particle_provenance_spectra_mpi2_orion_local_2026-05-30.json"
+  },
   "source_bindings": [
     {
       "path": "inputs/tests/pic_q016_particle_provenance.athinput",
@@ -150,5 +156,5 @@
     "Repeated-AMR MPI/HIP lifetime coverage remains open.",
     "Preregistered qualifying shock-campaign evidence remains open."
   ],
-  "q016_disposition": "bounded_local_two_rank_mpi_host_replay_passed_with_cross_node_frontier_hip_repeated_amr_and_campaign_gaps_open"
+  "q016_disposition": "rejected_login_node_parallel_launch_chronology_only_use_orion_shared_srun_compute_node_successor"
 }

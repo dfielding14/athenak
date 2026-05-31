@@ -91,7 +91,8 @@ class Q032ReducedStaticNeutralRuntimeLocalTests(unittest.TestCase):
         source = SOURCE.read_text(encoding="utf-8")
         self.assertIn("q032_reduced_static_neutral_local rejects AMR/SMR", source)
         self.assertIn("requires periodic active ", source)
-        self.assertIn("32x4x1 2D3V x1-parallel carrier", source)
+        self.assertIn("32x4x1 2D3V x1-parallel carrier with 32x4x1 serial or ", source)
+        self.assertIn("16x4x1 two-way x1 meshblocks", source)
         self.assertIn('Q032RequireString(pin, "particles", "pic_feedback_mode", '
                       '"test_particle");', source)
         self.assertIn("requires the exact Newtonian ", source)
@@ -190,6 +191,10 @@ class Q032ReducedStaticNeutralRuntimeLocalTests(unittest.TestCase):
         self.assertIn("'final control/damped snapshot times differ'", script)
         self.assertIn("'qualification_effect': 'none'", script)
         self.assertIn("'plotnikov_qualification': 'not_claimed'", script)
+        self.assertIn("ATHENA_Q032_NPROC", script)
+        self.assertIn("ATHENA_Q032_LAUNCHER", script)
+        self.assertIn("['meshblock/nx1=16']", script)
+        self.assertIn("'configured_ranks': _rank_count()", script)
 
 
 if __name__ == "__main__":

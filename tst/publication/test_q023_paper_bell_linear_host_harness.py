@@ -25,6 +25,14 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _inventory_sha256(root: Path) -> str:
+    rows = [
+        f"{_sha256(path)}  {path.relative_to(root).as_posix()}\n"
+        for path in sorted(path for path in root.rglob("*") if path.is_file())
+    ]
+    return hashlib.sha256("".join(rows).encode("utf-8")).hexdigest()
+
+
 def _basis(dimension: int) -> tuple[list[float], list[float], list[float]]:
     raw = [1.0, 2.0 if dimension >= 2 else 0.0, 4.0 if dimension >= 3 else 0.0]
     norm = math.sqrt(sum(value*value for value in raw))
@@ -147,6 +155,7 @@ class Q023PaperBellLinearHostHarnessTests(unittest.TestCase):
             smoke["qualification_effect"],
             "bounded_source_local_preparation_smoke_only",
         )
+        self.assertEqual(smoke["retention"]["writable_entries"], 0)
         self.assertEqual(
             [item["carrier_shape"] for item in smoke["cycle_zero_initializations"]],
             [[1, 4, 32], [1, 32, 64], [32, 64, 128]],
@@ -158,12 +167,20 @@ class Q023PaperBellLinearHostHarnessTests(unittest.TestCase):
         self.assertEqual(smoke["restart_continuation"]["result"], "pass")
         self.assertEqual(smoke["restart_continuation"]["final_cycle"], 1)
         artifact_root = Path(smoke["artifact_root"])
+        self.assertEqual(
+            _inventory_sha256(artifact_root),
+            smoke["retention"]["inventory_sha256"],
+        )
         executable = smoke["debug_executable"]
         self.assertEqual(_sha256(Path(executable["path"])), executable["sha256"])
         for item in smoke["cycle_zero_initializations"]:
             self.assertEqual(
-                _sha256(artifact_root / item["selected_raw_mhd_bcc_path"]),
-                item["selected_raw_mhd_bcc_sha256"],
+                _sha256(artifact_root / item["selected_raw_mhd_w_bcc_path"]),
+                item["selected_raw_mhd_w_bcc_sha256"],
+            )
+            self.assertLess(
+                item["source_local_velocity_magnetic_ratio_absolute_error"],
+                smoke["source_local_velocity_magnetic_ratio_diagnostic_limit"],
             )
         restart = smoke["restart_continuation"]
         self.assertEqual(
@@ -171,8 +188,8 @@ class Q023PaperBellLinearHostHarnessTests(unittest.TestCase):
             restart["loaded_restart_sha256"],
         )
         self.assertEqual(
-            _sha256(artifact_root / restart["selected_continuation_raw_mhd_bcc_path"]),
-            restart["selected_continuation_raw_mhd_bcc_sha256"],
+            _sha256(artifact_root / restart["selected_continuation_raw_mhd_w_bcc_path"]),
+            restart["selected_continuation_raw_mhd_w_bcc_sha256"],
         )
         for artifact in sidecar["source_local_artifacts"]:
             self.assertEqual(_sha256(REPO_ROOT / artifact["path"]), artifact["sha256"])

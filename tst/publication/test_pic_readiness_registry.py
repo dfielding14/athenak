@@ -25,6 +25,7 @@ from control_plane_common import inventory_digest
 from control_plane_common import launch_contract_sha256
 from control_plane_common import validate_launch_contract
 from ledger import record_sha256
+from ledger import incomplete_manual_accounting_marker_paths
 from ledger import validate_mirrored_state
 from tst.publication.pic_qualification_manifest import SCHEMA_PATH
 from tst.publication.pic_qualification_manifest import validate_qualification_manifest
@@ -894,6 +895,10 @@ class PicReadinessRegistryTests(unittest.TestCase):
                 "/lustre/orion/ast207/proj-shared/dfielding/PIC/ledger/pending_submission.json"
             ).exists()
         )
+        for marker in incomplete_manual_accounting_marker_paths(
+            ledger_path, live_surfaces[3]
+        ):
+            self.assertFalse(marker.exists())
         ledger_events = validate_mirrored_state(
             ledger_path,
             live_surfaces[2],

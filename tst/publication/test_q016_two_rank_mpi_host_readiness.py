@@ -1,4 +1,4 @@
-"""Q-016 bounded two-rank MPI host replay readiness record regression."""
+"""Q-016 rejected login-node parallel chronology regression."""
 
 from __future__ import annotations
 
@@ -33,9 +33,16 @@ class TestQ016TwoRankMPIHostReadiness(unittest.TestCase):
         record = self.record
         self.assertEqual(
             record["qualification_effect"],
-            "bounded_local_two_rank_mpi_host_replay_only",
+            "none_rejected_login_node_parallel_launch_chronology_only",
         )
-        self.assertIn("not cross-node", record["scope"].lower())
+        self.assertIn("not readiness evidence", record["scope"].lower())
+        rejection = record["policy_rejection"]
+        self.assertEqual(rejection["status"], "rejected_not_readiness_evidence")
+        self.assertIn("frontier_user_guide.html", rejection["source"])
+        self.assertIn("never launch parallel jobs", rejection["rule"])
+        self.assertTrue(
+            (_REPO_ROOT / rejection["valid_compute_node_successor"]).is_file()
+        )
         gaps = record["remaining_q016_gaps"]
         self.assertTrue(any("Cross-node MPI" in gap for gap in gaps))
         self.assertTrue(any("Frontier MPI and HIP" in gap for gap in gaps))

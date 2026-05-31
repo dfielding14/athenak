@@ -90,10 +90,12 @@ void ProblemGenerator::Q032ReducedStaticNeutralLocal(ParameterInput *pin,
   }
   if (!pmy_mesh_->two_d || pmy_mesh_->one_d || pmy_mesh_->three_d ||
       pmy_mesh_->mesh_indcs.nx1 != 32 || pmy_mesh_->mesh_indcs.nx2 != 4 ||
-      pmy_mesh_->mesh_indcs.nx3 != 1 || pmy_mesh_->mb_indcs.nx1 != 32 ||
+      pmy_mesh_->mesh_indcs.nx3 != 1 ||
+      (pmy_mesh_->mb_indcs.nx1 != 32 && pmy_mesh_->mb_indcs.nx1 != 16) ||
       pmy_mesh_->mb_indcs.nx2 != 4 || pmy_mesh_->mb_indcs.nx3 != 1) {
     Q032Fatal("q032_reduced_static_neutral_local requires the exact thin "
-              "32x4x1 2D3V x1-parallel carrier");
+              "32x4x1 2D3V x1-parallel carrier with 32x4x1 serial or "
+              "16x4x1 two-way x1 meshblocks");
   }
   if (pmy_mesh_->mesh_bcs[BoundaryFace::inner_x1] != BoundaryFlag::periodic ||
       pmy_mesh_->mesh_bcs[BoundaryFace::outer_x1] != BoundaryFlag::periodic ||

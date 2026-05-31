@@ -81,7 +81,7 @@
         "Freeze the source-local registered generator, runnable preparation decks, and raw mode-trace analytical analyzer into an exact clean candidate.",
         "Review the physical-1D transverse-invariant thin 2D3V carrier and retain its exact nx2=4 contract before attempting qualifying variants.",
         "Materialize the epsilon, sensitivity, seed, and timestep variants before output inspection.",
-        "Materialize and bind velocity-retaining raw-output variants, then cross-check the paper fluid-velocity growth and phase observable against the magnetic-mode candidate before Section 5.2 qualification.",
+        "Preserve the bound source-local mhd_w_bcc projected fluid-velocity cross-check as nonqualifying preparation evidence; freeze the paper-literal delta_u_y phase and volume-averaged absolute delta_u growth estimator or a reviewed supplemental-estimator decision before Section 5.2 qualification.",
         "Run bounded source-local preparation smoke checks without promoting them into qualifying evidence.",
         "Bind the clean Frontier executable, authorized Orion artifact root, and registered run."
       ]
@@ -658,13 +658,13 @@
         "status": "open_before_qualifying_run",
         "git_commit": "open_clean_candidate_not_frozen",
         "executable_sha256": "open_clean_frontier_executable_not_frozen",
-        "qualifying_input_checksums": "open_derived_hall_decks_not_created",
-        "production_analysis_checksums": "open_hall_bell_analyzer_not_created"
+        "qualifying_input_checksums": "open_reviewed_physical_hall_deck_freeze_source_local_positive_grid_decks_bound_nonqualifying",
+        "production_analysis_checksums": "open_qualifying_raw_hall_dispersion_analyzer_source_local_positive_grid_materializer_bound_nonqualifying"
       },
       "open_dependencies": [
         "Derive and review the CR-Hall normalization.",
-        "Freeze the Hall coefficient grid, exact decks, windows, and numeric tolerances before qualifying output.",
-        "Create and checksum the Hall Bell analyzer."
+        "Replace the nonqualifying positive launch-preparation grid with the reviewed physical Hall coefficient grid, exact qualifying decks, windows, and numeric tolerances before qualifying output.",
+        "Create and checksum the independent raw-artifact Hall dispersion analyzer; the existing source-local grid materializer and restart-parity regression are preparation only."
       ]
     },
     {
