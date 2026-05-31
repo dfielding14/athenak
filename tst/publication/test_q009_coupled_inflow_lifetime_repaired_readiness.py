@@ -6,6 +6,7 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
+import subprocess
 import unittest
 
 
@@ -21,6 +22,15 @@ def _sha256(relative_path: str) -> str:
     return hashlib.sha256((REPO_ROOT / relative_path).read_bytes()).hexdigest()
 
 
+def _git_blob_sha256(commit: str, relative_path: str) -> str:
+    return hashlib.sha256(
+        subprocess.check_output(
+            ["git", "show", f"{commit}:{relative_path}"],
+            cwd=REPO_ROOT,
+        )
+    ).hexdigest()
+
+
 class Q009CoupledInflowLifetimeRepairedReadinessTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -34,7 +44,13 @@ class Q009CoupledInflowLifetimeRepairedReadinessTests(unittest.TestCase):
     def test_repaired_bytes_are_bound(self) -> None:
         for binding in self.record["production_repairs"]:
             with self.subTest(path=binding["path"]):
-                self.assertEqual(_sha256(binding["path"]), binding["sha256"])
+                self.assertEqual(
+                    _git_blob_sha256(
+                        binding["evidence_git_commit"],
+                        binding["path"],
+                    ),
+                    binding["sha256"],
+                )
         sibling = self.record["inflow_sibling"]
         for key in [
             "input",

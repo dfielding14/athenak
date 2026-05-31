@@ -11,16 +11,19 @@
   "scope": "Successor bounded-local serial-host repair evidence for the Q-009 coupled PIC/MHD x2-inflow sibling. The selected cell-centered coupled path now initializes the linear-wave MHD background inflow reservoir on initial launch and restart, restart scratch buffers no longer leak, and particle MeshBlock offset conversion rejects non-finite or more-distant values before casting. This is not MPI, HIP or scientific-AMR qualification evidence.",
   "production_repairs": [
     {
+      "evidence_git_commit": "4987c0fb6",
       "path": "src/pgen/tests/linear_wave.cpp",
       "sha256": "ba5c9cea00cb05ad3a27ba2c1eab7181102e48777c952b10f43b3ae7fa4169fe",
       "effect": "initialize configured MHD inflow faces from the linear-wave background before the restart early return; fill energy only for ideal EOS"
     },
     {
+      "evidence_git_commit": "41e064da8",
       "path": "src/pgen/pgen.cpp",
       "sha256": "52626e73007c7d16aa6afe30b26650966de19601afac6eabbff232105ae8ebee",
       "effect": "replace restart RNG and variable-size heap scratch buffers with fixed-size stack storage"
     },
     {
+      "evidence_git_commit": "4987c0fb6",
       "path": "src/bvals/bvals_part.cpp",
       "sha256": "7ed83f573cf9ff260249b68cc2b76ab0ccd143a77a7bb2036fbf72d0442764ce",
       "effect": "return a destruction sentinel for non-finite or more-distant particle MeshBlock offsets before converting to int"
