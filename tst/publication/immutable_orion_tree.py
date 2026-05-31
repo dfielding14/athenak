@@ -96,6 +96,37 @@ def _open_self_contained_regular(path: Path, *, error_type: type[ValueError], la
     return fd
 
 
+def _sha256_open_regular(
+    fd: int,
+    path: Path,
+    *,
+    error_type: type[ValueError],
+    label: str,
+) -> str:
+    """Hash one already-open regular file and reject mutation during the read."""
+    os.lseek(fd, 0, os.SEEK_SET)
+    before = os.fstat(fd)
+    if not stat.S_ISREG(before.st_mode) or before.st_nlink not in (0, 1):
+        _raise(error_type, label, f"retained regular file is unsafe: {path}")
+    digest = hashlib.sha256()
+    while chunk := os.read(fd, 1024 * 1024):
+        digest.update(chunk)
+    after = os.fstat(fd)
+    identity = lambda value: (  # noqa: E731
+        value.st_dev,
+        value.st_ino,
+        value.st_mode,
+        value.st_nlink,
+        value.st_size,
+        value.st_mtime_ns,
+        value.st_ctime_ns,
+    )
+    if identity(before) != identity(after):
+        _raise(error_type, label, f"retained regular file changed while reading: {path}")
+    os.lseek(fd, 0, os.SEEK_SET)
+    return digest.hexdigest()
+
+
 def _sha256_regular(
     path: Path,
     *,
@@ -105,15 +136,7 @@ def _sha256_regular(
     """Hash one self-contained regular file without following its final link."""
     fd = _open_self_contained_regular(path, error_type=error_type, label=label)
     try:
-        mode = os.fstat(fd).st_mode
-        if not stat.S_ISREG(mode):
-            _raise(error_type, label, f"retained entry is not a regular file: {path}")
-        if os.fstat(fd).st_nlink not in (0, 1):
-            _raise(error_type, label, f"retained regular file must have one link: {path}")
-        digest = hashlib.sha256()
-        while chunk := os.read(fd, 1024 * 1024):
-            digest.update(chunk)
-        return digest.hexdigest()
+        return _sha256_open_regular(fd, path, error_type=error_type, label=label)
     finally:
         os.close(fd)
 
@@ -193,37 +216,58 @@ def validate_source_archive(
 ) -> dict[str, int | str | bool]:
     """Independently reject unsafe or cache-bearing retained source archives."""
     path = Path(archive_path)
-    measured_sha256 = _sha256_regular(path, error_type=error_type, label=label)
-    if measured_sha256 != expected_sha256:
-        _raise(error_type, label, "source archive SHA-256 drifted")
-    names = set()
-    regular_file_count = 0
+    fd = _open_self_contained_regular(path, error_type=error_type, label=label)
     try:
-        with tarfile.open(path, "r:*") as archive:
-            members = archive.getmembers()
-            for member in members:
-                name = member.name
-                relative = PurePosixPath(name)
-                if (
-                    not name
-                    or name.splitlines() != [name]
-                    or relative.is_absolute()
-                    or any(part in ("", ".", "..") for part in relative.parts)
-                    or name != relative.as_posix()
-                ):
-                    _raise(error_type, label, f"source archive member name is unsafe: {name!r}")
-                if name in names:
-                    _raise(error_type, label, f"source archive member is duplicated: {name!r}")
-                names.add(name)
-                if "__pycache__" in relative.parts or relative.suffix in (".pyc", ".pyo"):
-                    _raise(error_type, label, f"source archive contains bytecode cache: {name!r}")
-                if member.isdir():
-                    continue
-                if not member.isreg():
-                    _raise(error_type, label, f"source archive member is not regular: {name!r}")
-                regular_file_count += 1
-    except (tarfile.TarError, OSError) as error:
-        _raise(error_type, label, f"cannot decode retained source archive: {error}")
+        measured_sha256 = _sha256_open_regular(fd, path, error_type=error_type, label=label)
+        if measured_sha256 != expected_sha256:
+            _raise(error_type, label, "source archive SHA-256 drifted")
+        names = set()
+        regular_file_count = 0
+        try:
+            with os.fdopen(os.dup(fd), "rb") as handle:
+                with tarfile.open(fileobj=handle, mode="r:*") as archive:
+                    members = archive.getmembers()
+                    for member in members:
+                        name = member.name
+                        relative = PurePosixPath(name)
+                        if (
+                            not name
+                            or name.splitlines() != [name]
+                            or relative.is_absolute()
+                            or any(part in ("", ".", "..") for part in relative.parts)
+                            or name != relative.as_posix()
+                        ):
+                            _raise(
+                                error_type,
+                                label,
+                                f"source archive member name is unsafe: {name!r}",
+                            )
+                        if name in names:
+                            _raise(
+                                error_type,
+                                label,
+                                f"source archive member is duplicated: {name!r}",
+                            )
+                        names.add(name)
+                        if "__pycache__" in relative.parts or relative.suffix in (".pyc", ".pyo"):
+                            _raise(
+                                error_type,
+                                label,
+                                f"source archive contains bytecode cache: {name!r}",
+                            )
+                        if member.isdir():
+                            continue
+                        if not member.isreg():
+                            _raise(
+                                error_type,
+                                label,
+                                f"source archive member is not regular: {name!r}",
+                            )
+                        regular_file_count += 1
+        except (tarfile.TarError, OSError) as error:
+            _raise(error_type, label, f"cannot decode retained source archive: {error}")
+    finally:
+        os.close(fd)
     return {
         "archive_sha256": measured_sha256,
         "member_count": len(names),
@@ -241,11 +285,11 @@ def validate_executable_elf(
 ) -> dict[str, str | bool]:
     """Require one retained regular executable with an ELF identity."""
     path = Path(executable_path)
-    measured_sha256 = _sha256_regular(path, error_type=error_type, label=label)
-    if measured_sha256 != expected_sha256:
-        _raise(error_type, label, "executable SHA-256 drifted")
     fd = _open_self_contained_regular(path, error_type=error_type, label=label)
     try:
+        measured_sha256 = _sha256_open_regular(fd, path, error_type=error_type, label=label)
+        if measured_sha256 != expected_sha256:
+            _raise(error_type, label, "executable SHA-256 drifted")
         mode = os.fstat(fd).st_mode
         if stat.S_IMODE(mode) & 0o111 != 0o111:
             _raise(error_type, label, "retained executable must retain all execute bits")
@@ -282,21 +326,35 @@ def validate_source_archive_dependencies(
             or _SHA256_PATTERN.fullmatch(digest) is None
         ):
             _raise(error_type, label, f"retained dependency manifest entry is invalid: {name!r}")
+    path = Path(archive_path)
+    fd = _open_self_contained_regular(path, error_type=error_type, label=label)
     try:
-        with tarfile.open(Path(archive_path), "r:*") as archive:
-            members = {member.name: member for member in archive.getmembers()}
-            for name, expected_sha256 in dependencies.items():
-                member = members.get(name)
-                if member is None or not member.isreg():
-                    _raise(error_type, label, f"required archived dependency is absent: {name}")
-                extracted = archive.extractfile(member)
-                if extracted is None:
-                    _raise(error_type, label, f"cannot read archived dependency: {name}")
-                measured_sha256 = hashlib.sha256(extracted.read()).hexdigest()
-                if measured_sha256 != expected_sha256:
-                    _raise(error_type, label, f"archived dependency SHA-256 drifted: {name}")
-    except (tarfile.TarError, OSError) as error:
-        _raise(error_type, label, f"cannot decode retained source archive: {error}")
+        try:
+            with os.fdopen(os.dup(fd), "rb") as handle:
+                with tarfile.open(fileobj=handle, mode="r:*") as archive:
+                    members = {member.name: member for member in archive.getmembers()}
+                    for name, expected_sha256 in dependencies.items():
+                        member = members.get(name)
+                        if member is None or not member.isreg():
+                            _raise(
+                                error_type,
+                                label,
+                                f"required archived dependency is absent: {name}",
+                            )
+                        extracted = archive.extractfile(member)
+                        if extracted is None:
+                            _raise(error_type, label, f"cannot read archived dependency: {name}")
+                        measured_sha256 = hashlib.sha256(extracted.read()).hexdigest()
+                        if measured_sha256 != expected_sha256:
+                            _raise(
+                                error_type,
+                                label,
+                                f"archived dependency SHA-256 drifted: {name}",
+                            )
+        except (tarfile.TarError, OSError) as error:
+            _raise(error_type, label, f"cannot decode retained source archive: {error}")
+    finally:
+        os.close(fd)
     return {"dependency_count": len(dependencies), "passed": True}
 
 
@@ -1233,6 +1291,7 @@ def staged_verified_frozen_tree(
                 root,
                 root_fd,
                 expected_inventory_sha256,
+                staged_snapshot=snapshot,
                 authorized_root=authorized_root,
                 error_type=error_type,
                 label=label,
@@ -1414,12 +1473,21 @@ def _verify_frozen_tree_anchored(
     baseline = _scan_anchored_tree(root_fd, hash_regular=False, error_type=error_type, label=label)
     _require_read_only(baseline, include_root=True, error_type=error_type, label=label)
     if staged_snapshot is not None:
-        _require_published_tree_matches_staging(
-            staged_snapshot,
-            baseline,
-            error_type=error_type,
-            label=label,
-        )
+        if INVENTORY_NAME in staged_snapshot.by_relative_path():
+            _require_same_snapshot(
+                staged_snapshot,
+                baseline,
+                error_type=error_type,
+                label=label,
+                phase="sealed snapshot topology capture",
+            )
+        else:
+            _require_published_tree_matches_staging(
+                staged_snapshot,
+                baseline,
+                error_type=error_type,
+                label=label,
+            )
     measured = _scan_anchored_tree(
         root_fd,
         hash_regular=True,

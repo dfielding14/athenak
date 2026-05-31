@@ -3,9 +3,12 @@
 
 from __future__ import annotations
 
+import fcntl
+import hashlib
 import os
 from pathlib import Path
 import stat
+import tarfile
 import tempfile
 import unittest
 from unittest import mock
@@ -174,7 +177,10 @@ class ImmutableOrionTreeTests(unittest.TestCase):
                     "_verify_frozen_tree_anchored",
                     side_effect=mutate_after_initial_verify,
                 ):
-                    with self.assertRaisesRegex(ValueError, "(SHA-256|artifact hash) drifted"):
+                    with self.assertRaisesRegex(
+                        ValueError,
+                        "(SHA-256|artifact hash) drifted|sealed snapshot topology capture",
+                    ):
                         with immutable_orion_tree.staged_verified_frozen_tree(
                             tree,
                             report["inventory_sha256"],
@@ -213,6 +219,259 @@ class ImmutableOrionTreeTests(unittest.TestCase):
                         snapshot.member_path("../payload.txt")
             finally:
                 _make_writable_tree(tree)
+
+    def test_staged_snapshot_rejects_directory_hidden_during_topology_capture(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            tree = base / "retained"
+            nested = tree / "nested"
+            nested.mkdir(parents=True)
+            (tree / "payload.txt").write_text("verified\n", encoding="utf-8")
+            try:
+                report = immutable_orion_tree.freeze_tree(
+                    tree,
+                    _RECEIPT,
+                    authorized_root=base,
+                )
+                original_scan = immutable_orion_tree._scan_anchored_tree
+                scan_count = 0
+
+                def hide_on_topology_scan(root_fd: int, **kwargs: object):
+                    nonlocal scan_count
+                    scan_count += 1
+                    if scan_count != 4:
+                        return original_scan(root_fd, **kwargs)
+                    tree.chmod(tree.stat().st_mode | stat.S_IWUSR)
+                    nested.rmdir()
+                    try:
+                        return original_scan(root_fd, **kwargs)
+                    finally:
+                        nested.mkdir()
+                        nested.chmod(nested.stat().st_mode & ~_WRITE_BITS)
+                        tree.chmod(tree.stat().st_mode & ~_WRITE_BITS)
+
+                with mock.patch.object(
+                    immutable_orion_tree,
+                    "_scan_anchored_tree",
+                    side_effect=hide_on_topology_scan,
+                ):
+                    with self.assertRaisesRegex(ValueError, "sealed snapshot topology capture"):
+                        with immutable_orion_tree.staged_verified_frozen_tree(
+                            tree,
+                            report["inventory_sha256"],
+                            authorized_root=base,
+                        ):
+                            self.fail("hidden staged directory was accepted")
+            finally:
+                _make_writable_tree(tree)
+
+    def test_staged_snapshot_rejects_directory_injected_during_topology_capture(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            tree = base / "retained"
+            tree.mkdir()
+            (tree / "payload.txt").write_text("verified\n", encoding="utf-8")
+            injected = tree / "injected"
+            try:
+                report = immutable_orion_tree.freeze_tree(
+                    tree,
+                    _RECEIPT,
+                    authorized_root=base,
+                )
+                original_scan = immutable_orion_tree._scan_anchored_tree
+                scan_count = 0
+
+                def inject_on_topology_scan(root_fd: int, **kwargs: object):
+                    nonlocal scan_count
+                    scan_count += 1
+                    if scan_count != 4:
+                        return original_scan(root_fd, **kwargs)
+                    tree.chmod(tree.stat().st_mode | stat.S_IWUSR)
+                    injected.mkdir()
+                    try:
+                        return original_scan(root_fd, **kwargs)
+                    finally:
+                        injected.rmdir()
+                        tree.chmod(tree.stat().st_mode & ~_WRITE_BITS)
+
+                with mock.patch.object(
+                    immutable_orion_tree,
+                    "_scan_anchored_tree",
+                    side_effect=inject_on_topology_scan,
+                ):
+                    with self.assertRaisesRegex(ValueError, "sealed snapshot topology capture"):
+                        with immutable_orion_tree.staged_verified_frozen_tree(
+                            tree,
+                            report["inventory_sha256"],
+                            authorized_root=base,
+                        ):
+                            self.fail("injected staged directory was accepted")
+            finally:
+                _make_writable_tree(tree)
+
+    def test_staged_snapshot_rejects_file_hidden_during_topology_capture(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            tree = base / "retained"
+            tree.mkdir()
+            payload = tree / "payload.txt"
+            payload.write_text("verified\n", encoding="utf-8")
+            parked = base / "parked.txt"
+            try:
+                report = immutable_orion_tree.freeze_tree(
+                    tree,
+                    _RECEIPT,
+                    authorized_root=base,
+                )
+                original_scan = immutable_orion_tree._scan_anchored_tree
+                scan_count = 0
+
+                def hide_on_topology_scan(root_fd: int, **kwargs: object):
+                    nonlocal scan_count
+                    scan_count += 1
+                    if scan_count != 4:
+                        return original_scan(root_fd, **kwargs)
+                    tree.chmod(tree.stat().st_mode | stat.S_IWUSR)
+                    os.rename(payload, parked)
+                    try:
+                        return original_scan(root_fd, **kwargs)
+                    finally:
+                        os.rename(parked, payload)
+                        tree.chmod(tree.stat().st_mode & ~_WRITE_BITS)
+
+                with mock.patch.object(
+                    immutable_orion_tree,
+                    "_scan_anchored_tree",
+                    side_effect=hide_on_topology_scan,
+                ):
+                    with self.assertRaisesRegex(ValueError, "sealed snapshot topology capture"):
+                        with immutable_orion_tree.staged_verified_frozen_tree(
+                            tree,
+                            report["inventory_sha256"],
+                            authorized_root=base,
+                        ):
+                            self.fail("hidden staged file was accepted")
+            finally:
+                _make_writable_tree(tree)
+
+    def test_q006_and_q007_reject_unrelated_sealed_memfd(self) -> None:
+        from tst.publication import analyze_q006_paper_multispecies_oscillation_runtime_local
+        from tst.publication import analyze_q007_paper_deltaf_linear_preparation
+
+        fd = os.memfd_create("unrelated", flags=os.MFD_ALLOW_SEALING)
+        try:
+            os.write(fd, b"unrelated\n")
+            fcntl.fcntl(fd, fcntl.F_ADD_SEALS, immutable_orion_tree._MEMFD_SEALS)
+            sealed = Path("/proc/self/fd") / str(fd)
+            with tempfile.TemporaryDirectory() as directory:
+                retained_root = Path(directory)
+                with self.assertRaisesRegex(ValueError, "remain below retained root"):
+                    analyze_q006_paper_multispecies_oscillation_runtime_local._contained_regular_file(
+                        retained_root,
+                        sealed,
+                    )
+                with self.assertRaisesRegex(ValueError, "remain below retained root"):
+                    analyze_q007_paper_deltaf_linear_preparation._contained_regular_file(
+                        retained_root,
+                        sealed,
+                    )
+        finally:
+            os.close(fd)
+
+    def test_archive_and_elf_validators_reuse_open_descriptor_after_path_swap(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            source = base / "source.txt"
+            source.write_text("source\n", encoding="utf-8")
+            archive = base / "source.tar"
+            with tarfile.open(archive, "w") as handle:
+                handle.add(source, arcname="source.txt")
+            archive_sha256 = hashlib.sha256(archive.read_bytes()).hexdigest()
+            archive_replacement = base / "source-replacement.tar"
+            archive_replacement.write_bytes(b"not a tar archive\n")
+            archived_original = base / "source-original.tar"
+            original_hash = immutable_orion_tree._sha256_open_regular
+            swapped = False
+
+            def swap_archive_after_hash(*args: object, **kwargs: object):
+                nonlocal swapped
+                digest = original_hash(*args, **kwargs)
+                if not swapped:
+                    os.rename(archive, archived_original)
+                    os.rename(archive_replacement, archive)
+                    swapped = True
+                return digest
+
+            with mock.patch.object(
+                immutable_orion_tree,
+                "_sha256_open_regular",
+                side_effect=swap_archive_after_hash,
+            ):
+                report = immutable_orion_tree.validate_source_archive(
+                    archive,
+                    archive_sha256,
+                )
+            self.assertTrue(report["passed"])
+
+            executable = base / "athena"
+            executable.write_bytes(b"\x7fELFpayload")
+            executable.chmod(0o555)
+            executable_sha256 = hashlib.sha256(executable.read_bytes()).hexdigest()
+            executable_replacement = base / "replacement-athena"
+            executable_replacement.write_bytes(b"not-elf")
+            executable_replacement.chmod(0o555)
+            archived_executable = base / "original-athena"
+            swapped = False
+
+            def swap_executable_after_hash(*args: object, **kwargs: object):
+                nonlocal swapped
+                digest = original_hash(*args, **kwargs)
+                if not swapped:
+                    os.rename(executable, archived_executable)
+                    os.rename(executable_replacement, executable)
+                    swapped = True
+                return digest
+
+            with mock.patch.object(
+                immutable_orion_tree,
+                "_sha256_open_regular",
+                side_effect=swap_executable_after_hash,
+            ):
+                report = immutable_orion_tree.validate_executable_elf(
+                    executable,
+                    executable_sha256,
+                )
+            self.assertTrue(report["elf_identity"])
+
+            dependency_archive = base / "dependency-source.tar"
+            with tarfile.open(dependency_archive, "w") as handle:
+                handle.add(source, arcname="source.txt")
+            dependency_replacement = base / "dependency-replacement.tar"
+            dependency_replacement.write_bytes(b"not a tar archive\n")
+            archived_dependency = base / "dependency-original.tar"
+            original_open = immutable_orion_tree._open_self_contained_regular
+            swapped = False
+
+            def swap_dependency_after_open(*args: object, **kwargs: object):
+                nonlocal swapped
+                fd = original_open(*args, **kwargs)
+                if not swapped:
+                    os.rename(dependency_archive, archived_dependency)
+                    os.rename(dependency_replacement, dependency_archive)
+                    swapped = True
+                return fd
+
+            with mock.patch.object(
+                immutable_orion_tree,
+                "_open_self_contained_regular",
+                side_effect=swap_dependency_after_open,
+            ):
+                report = immutable_orion_tree.validate_source_archive_dependencies(
+                    dependency_archive,
+                    {"source.txt": hashlib.sha256(source.read_bytes()).hexdigest()},
+                    {"source.txt"},
+                )
+            self.assertTrue(report["passed"])
 
 
 if __name__ == "__main__":

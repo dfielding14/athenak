@@ -1285,6 +1285,16 @@ def _contained_regular_file(root: Path, path: Path) -> Path:
     io_root = _tree_io_path(root)
     io_path = _tree_io_path(path)
     if is_sealed_snapshot_member(io_path):
+        try:
+            path.relative_to(root)
+        except ValueError as error:
+            raise ContractError(
+                f"runtime artifact must remain below retained root: {path}"
+            ) from error
+        if io_path == path:
+            raise ContractError(
+                f"sealed runtime artifact must be routed by active snapshot: {path}"
+            )
         return io_path
     status = os.lstat(io_path)
     if not stat.S_ISREG(status.st_mode):

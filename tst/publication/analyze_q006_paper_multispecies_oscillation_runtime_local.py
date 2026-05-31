@@ -735,6 +735,11 @@ def _contained_regular_file(root: Path, path: Path) -> Path:
     io_root = _tree_io_path(root)
     io_path = _tree_io_path(path)
     if is_sealed_snapshot_member(io_path):
+        try:
+            path.relative_to(root)
+        except ValueError as error:
+            raise AuditError(f"runtime artifact must remain below retained root: {path}") from error
+        _require(io_path != path, f"sealed runtime artifact must be routed by active snapshot: {path}")
         return io_path
     status = os.lstat(io_path)
     _require(stat.S_ISREG(status.st_mode), f"runtime artifact must be regular: {path}")

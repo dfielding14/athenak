@@ -112,8 +112,8 @@
     "inputs/tests/pic_q007_paper_crsi_linear_preparation.athinput": "d1e6b774bef0556a298b88d4a4e989572bd88622d57a14dd54700856f9d3770c",
     "inputs/tests/pic_q007_paper_crpai_linear_prolate_preparation.athinput": "f98aa8faad0c50be696e14db0d33fb2c22bc1b4e7a3c7ba8fa51f67fbb71fa69",
     "inputs/tests/pic_q007_paper_crpai_linear_oblate_preparation.athinput": "b092941d81eef7a8f76d2541789035e9ac7e0cfa42b9db4fdef12a2a44ea5b3c",
-    "tst/publication/immutable_orion_tree.py": "c1984f9453f9881c697c1a81b9b2b9a9fe949ab2bedb7fea9205621364bc74e6",
-    "tst/publication/analyze_q007_paper_deltaf_linear_preparation.py": "1ea88445b97b1568164b7aae0db3079060bce35a94ad2c1e787ba2d5d5e296f2",
+    "tst/publication/immutable_orion_tree.py": "d4bd765479c441bba5eefbc874fb110c8fdf98fba27ea1f3c9aecfd170177ac0",
+    "tst/publication/analyze_q007_paper_deltaf_linear_preparation.py": "96edd2bba902e30d5ebd7089992131917f426a9ae39f797d824360aefee82525",
     "tst/publication/test_analyze_q007_paper_deltaf_linear_preparation.py": "2d5071651b91921dd50b6073985d367f69e807ab859b09df241196c0bf71ba7f"
   },
   "shared_registration_contract": {
