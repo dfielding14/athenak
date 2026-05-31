@@ -262,6 +262,23 @@ class Q006PaperMultispeciesOscillationRuntimeLocalTests(unittest.TestCase):
                 with self.assertRaisesRegex(q006.AuditError, "returncode drifted"):
                     q006._require_exact_int(value, 0, "returncode")
 
+    def test_parser_returncode_sidecar_requires_canonical_text(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "returncode.txt"
+            for expected in (0, 1):
+                with self.subTest(expected=expected):
+                    path.write_text(f"{expected}\n", encoding="utf-8")
+                    q006._require_canonical_returncode_sidecar(
+                        path, expected, "parser returncode"
+                    )
+            for alias in ("00\n", "01\n", "+0\n", " 0\n", "0 \n", "0", "0\n\n"):
+                with self.subTest(alias=alias):
+                    path.write_text(alias, encoding="utf-8")
+                    with self.assertRaisesRegex(q006.AuditError, "sidecar drifted"):
+                        q006._require_canonical_returncode_sidecar(
+                            path, int(alias.strip()), "parser returncode"
+                        )
+
     def test_readiness_sidecar_binds_only_new_q006_runtime_local_files(self) -> None:
         sidecar = json.loads(SIDECAR.read_text(encoding="utf-8"))
         self.assertEqual(sidecar["gate"], "Q-006")

@@ -475,6 +475,14 @@ def _require_exact_int(actual: Any, expected: int, label: str) -> None:
     )
 
 
+def _require_canonical_returncode_sidecar(path: Path, expected: int, label: str) -> None:
+    """Require the one canonical textual encoding for a retained return code."""
+    _require(
+        type(expected) is int and path.read_text(encoding="utf-8") == f"{expected}\n",
+        f"{label} sidecar drifted",
+    )
+
+
 def _require_schema_version(value: Any, expected: int, label: str) -> None:
     """Reject Python boolean and float aliases for JSON schema integers."""
     _require(
@@ -1352,11 +1360,10 @@ def _validate_parser_contract_suite(root: Path, pinned: dict[str, Any]) -> dict[
             )) == argv,
             f"{label}: parser command sidecar drifted",
         )
-        _require(
-            int(_contained_regular_file(root, case / "returncode.txt").read_text(
-                encoding="utf-8"
-            ).strip()) == returncode,
-            f"{label}: parser returncode sidecar drifted",
+        _require_canonical_returncode_sidecar(
+            _contained_regular_file(root, case / "returncode.txt"),
+            returncode,
+            f"{label}: parser returncode",
         )
         _require(
             set(_relative_file_hashes(root, case)) - {"invocation.json"}

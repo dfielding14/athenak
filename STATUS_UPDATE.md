@@ -642,7 +642,7 @@ git status --short --branch
 | --- | --- | --- |
 | Live paired control plane | `6f3458ca5c412b866f579d67dde51d73497b65629f6e7a35e10a3af84d7ecd8b` | Installed historical generation; remains live until paired promotion |
 | Successor source control plane | `738d28d97e3ca58c1203651237fd91b1f6c0a418023fe9137fdbd7b344eafc68` | Expanded schema-alias repair source; fresh clean matrix, stable rereview and paired install pending |
-| Prepared-artifact inventory | `c640aa93acba6a1537480fb9a7a53e0dab9f49719a4bcee96f25461b1d4d1398` | Regenerated canonical archived-source closure: 87 PIC decks and 12 publication analyzers |
+| Prepared-artifact inventory | `3640462a1ee07696cf5a4b690884940b91f71f9d6a0378c31ded1dee8fe4327f` | Regenerated canonical archived-source closure: 87 PIC decks and 12 publication analyzers |
 | Canonical schema-v4 freeze | Not yet created | Open Phase 0 gate |
 
 The live installed policy intentionally remains paired at the historical

@@ -8,7 +8,7 @@
   "successor_source_control_plane_version": "738d28d97e3ca58c1203651237fd91b1f6c0a418023fe9137fdbd7b344eafc68",
   "prepared_artifacts": {
     "inventory_path": "tst/publication/frontier_control_plane/prepared_pic_artifact_inventory.json",
-    "inventory_sha256": "c640aa93acba6a1537480fb9a7a53e0dab9f49719a4bcee96f25461b1d4d1398",
+    "inventory_sha256": "3640462a1ee07696cf5a4b690884940b91f71f9d6a0378c31ded1dee8fe4327f",
     "paper_deck_count": 87,
     "publication_analyzer_count": 12,
     "closure_policy": "canonical inventory path plus exact archived inputs/tests/pic*.athinput and tst/publication/analyze_*.py membership"
