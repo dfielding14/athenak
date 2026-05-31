@@ -16,6 +16,10 @@ qualify any scientific claim by itself.
   plane from the next source generation, binds the complete canonical
   prepared-artifact closure, and records the remaining install and freeze
   actions.
+- `phase0_curated_candidate_successor_v2_2026-05-31.json`: chronology-preserving
+  successor after the reviewed paired control-plane install and the final
+  93-deck, 12-analyzer prepared-artifact inventory refresh. Canonical build and
+  clean-candidate freeze remain pending.
 - `phase0_exact_boundary_validation_receipt_2026-05-31.json`: rejected
   nonqualifying exact-clean-tree validation chronology for the first
   schema-hardened Phase 0 code boundary. Its matrix passed, but independent

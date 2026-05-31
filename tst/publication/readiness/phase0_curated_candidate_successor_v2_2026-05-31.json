@@ -1,0 +1,33 @@
+{
+  "record_type": "phase0_curated_candidate_successor",
+  "schema_version": 1,
+  "date": "2026-05-31",
+  "predecessor_record": "tst/publication/readiness/phase0_curated_candidate_successor_2026-05-31.json",
+  "status": "paired_controller_installed_curated_source_ready_for_final_clean_candidate_build_and_freeze",
+  "qualification_effect": "none",
+  "live_paired_control_plane_version": "80b1c664fd42d3771df0fa39549568b22c9e78ad3d6e99196ce535a6eb1e1c80",
+  "successor_source_control_plane_version": "80b1c664fd42d3771df0fa39549568b22c9e78ad3d6e99196ce535a6eb1e1c80",
+  "curated_source_predecessor_commit": "757a473331341e9b8ea0f14adfe4518bba9b080c",
+  "candidate_freeze_source_commit": "pending_final_clean_receipt_commit",
+  "prepared_artifacts": {
+    "inventory_path": "tst/publication/frontier_control_plane/prepared_pic_artifact_inventory.json",
+    "inventory_sha256": "c1977980d4ae893585b815695ab47111e830da102a18f0a9f30a049b3d881030",
+    "paper_deck_count": 93,
+    "publication_analyzer_count": 12,
+    "closure_policy": "canonical inventory path plus exact archived inputs/tests/pic*.athinput and tst/publication/analyze_*.py membership"
+  },
+  "completed_phase0_actions": [
+    "installed and paired the reviewed 80b1c664 control-plane generation on Orion and Project Home",
+    "promoted the fail-closed transition policy with a 10000-node-hour cap and no registered science slices",
+    "hardened MPI fatal restart handling, rank-directory restart discovery and sharded-restart rank-count validation",
+    "persisted complete parallel-shock restart ledger schema 2 state and proved exact continuation through startup-cohort sink removal",
+    "preserved exact particle-VTK timestamps and proved exact emitted float32 Q-011 replay",
+    "refreshed shared Q-006, Q-007 and Q-023 source-binding chronology without promoting retained local probes to qualification evidence",
+    "regenerated the complete prepared-artifact inventory with 93 PIC decks and 12 publication analyzers"
+  ],
+  "remaining_phase0_actions": [
+    "complete the final clean-tree validation matrix and independent rereview",
+    "write the canonical HIP/MPI Release build profile",
+    "create the canonical clean-candidate freeze and promote its exact manifest binding"
+  ]
+}

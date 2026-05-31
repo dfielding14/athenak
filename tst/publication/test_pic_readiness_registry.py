@@ -302,7 +302,9 @@ class PicReadinessRegistryTests(unittest.TestCase):
         lifecycle = storage["installed_control_plane_lifecycle"]
         science_freeze = policy["science_submission_freeze"]
         if science_freeze == {"status": "pending_clean_candidate_freeze"}:
-            phase0_successor = _load("phase0_curated_candidate_successor_2026-05-31.json")
+            phase0_successor = _load(
+                "phase0_curated_candidate_successor_v2_2026-05-31.json"
+            )
             self.assertEqual(lifecycle, "paired_installed_reviewed_generation")
             self.assertEqual(
                 storage["installed_control_plane_version"],
@@ -566,7 +568,9 @@ class PicReadinessRegistryTests(unittest.TestCase):
                 for name in CONTROL_PLANE_FILES
             ]
         )
-        phase0_successor = _load("phase0_curated_candidate_successor_2026-05-31.json")
+        phase0_successor = _load(
+            "phase0_curated_candidate_successor_v2_2026-05-31.json"
+        )
         self.assertEqual(
             staged_version, phase0_successor["successor_source_control_plane_version"]
         )
