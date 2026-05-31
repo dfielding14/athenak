@@ -1,0 +1,112 @@
+{
+  "record_type": "q033_crpai_transport_calibration_source_local_candidate",
+  "schema_version": 1,
+  "date": "2026-05-30",
+  "gate": "Q-033",
+  "qualification_effect": "source_local_launch_blocked_preparation_only",
+  "claim_closure": false,
+  "scope": "Q-033-only source-local preparation for a future adaptive-delta-f physical-damping CRPAI transport-calibration extension. This tranche freezes the exact existing adaptive bi-kappa, expanding-box and reduced static-neutral friction implementation boundary, one intentionally unrunnable candidate deck, one applicability note and one synthetic-contract-only analyzer. It does not calibrate physical transport, qualify a campaign or authorize execution.",
+  "source_constraints": {
+    "production_source_edited": false,
+    "readiness_plan_edited": false,
+    "shared_q023_preregistration_inventories_edited": false,
+    "other_question_files_edited": false,
+    "new_q033_only_files": true
+  },
+  "artifact_bindings": {
+    "inputs/tests/pic_q033_crpai_transport_calibration_candidate.athinput": "77ffeb7bdfd1f1f2299db7e4ee257d105b580a6bd554cd244e6d9e0c8214ce58",
+    "tst/publication/analyze_q033_crpai_transport_calibration_candidate.py": "4b06587a1cbcb5f41eaf580058f17654212e62d378f45dfc58372a429543b0df",
+    "tst/publication/test_analyze_q033_crpai_transport_calibration_candidate.py": "4adf74edd3281b846df1b4d957d5ae1e49d24915702e6f9c2ce17b254ec11df2",
+    "tst/publication/readiness/q033_crpai_transport_calibration_applicability_2026-05-30.md": "0ced16ab8fbe21425bec91df093a936118d0365d45a27760caf6f80e8398713a"
+  },
+  "implementation_source_bindings": {
+    "src/particles/particles.cpp": "045632afb67c4ff301979716d822fddc8ded8c2ce1eae4725a0d34e32533e956",
+    "src/particles/particles.hpp": "452e6091ad6f1ce50156c770d304ac36020cb53927cc1e40ba6af73e7c3bb462",
+    "src/particles/particles_tasks.cpp": "8310e80ffdb2739ecc60b6d65ef9eae78573aeba8f55fa1981ff98b4801c8946",
+    "src/particles/particles_pushers.cpp": "7cd3ac4b6fc95529d3097a3799b74f064a7e865c8b7be08f830a60dbee103330",
+    "src/particles/particles_moments.cpp": "3b206b1268bc71a0d6745dcda5422da54d255ac6cb73fddd566b89b507da6c58",
+    "src/mhd/mhd.hpp": "655197f1582463020747212294e965e19a078a59d0708ebf7a6a127e5b652d4e",
+    "src/mhd/mhd_tasks.cpp": "339326c2cc8913c321affeafc618a8fea6cbd9133ea6b26a9b58daa2baafa6d2",
+    "docs/source/engineering/pic_mhd_model_contract.md": "ebad2e21725ea15eb301e03f32d8ca8fab9c6503aec90cd7090be4637402ed64"
+  },
+  "bounded_boundary_artifact_bindings": {
+    "inputs/tests/pic_mhd_expanding_box_adaptive_damping_smoke.athinput": "52122a6100eba205191abea2c0f560f26c30f5ca97272b7fd7dd1cfc01832ba5",
+    "tst/scripts/particles/pic_mhd_expanding_box_adaptive_damping_smoke.py": "dd049fd2e0828900f9b7152562fd032612647766bda54907c38e5d79e15d46e3",
+    "tst/scripts/particles/pic_mhd_expanding_box_adaptive_damping_restart.py": "94a7932d9163a5d5504abc83978de28b0bf3f430f416c2e15685ee72c4a916d4",
+    "tst/publication/readiness/q032_q033_extension_local_scans_2026-05-30.json": "8338ee08f311ce353186a514549cec1227d17de300557645655158ee73da3dc4",
+    "tst/publication/readiness/q033_expanding_box_adaptive_damping_restart_resilience_bounded_local_2026-05-30.json": "75e96ceb330d419f4fe7d60331df2bb1fd9e791e2a482778bbe0978f541a342c",
+    "tst/publication/readiness/q008_q033_expanding_coupled_source_successor_2026-05-30.json": "c68a5c9ff78b5652f4bb43a90e52a376a8f7a3412bcbe5627e4868cd4bc0968e"
+  },
+  "implemented_boundary": {
+    "physical_mode": "extended_mhd_pic",
+    "deltaf": "physical kappa_aniso with global_bikappa_moments_experimental refit",
+    "expanding_box": "endpoint physical-frame source composition with divergence-preserving comoving magnetic flux",
+    "physical_damping": "reduced high-frequency static-neutral ion-neutral friction map exp(-nu_in dt), not the general two-fluid module",
+    "coupled_feedback": "cell-centered cc_convert conservative momentum and energy source split with Hall mode off",
+    "restart": "schema 7 fingerprints configuration and preserves fitted xi, fitted p0 and cadence bucket"
+  },
+  "launch_block": {
+    "candidate_deck_role": "launch_blocked_source_local_transport_contract_only_not_evidence",
+    "candidate_problem_generator": "q033_crpai_transport_calibration_open",
+    "problem_generator_status": "intentionally_unavailable",
+    "candidate_nlim": 0,
+    "candidate_tlim": 0.0,
+    "launch_status": "blocked_missing_q033_generator_applicability_registered_frontier_matrix_and_external_review",
+    "analyzer_artifact_role": "source_local_synthetic_transport_contract_only",
+    "analyzer_qualification_effect": "none_source_local_launch_blocked_contract_only",
+    "analyzer_always_emits_qualifying_evidence": false,
+    "analyzer_always_emits_physical_calibration_claimed": false
+  },
+  "candidate_observable_contract": {
+    "nu_eff": "candidate convention: v_ref^2 / (3 kappa_parallel), where kappa_parallel is slope(var(delta x_parallel))/2; physical estimator review remains open",
+    "anisotropy": "abs(xi^2 - 1) tail series",
+    "spectra": "polarization-resolved wave-power tail series",
+    "quasi_steady": "tail-window stability for nu_eff, anisotropy and spectra with reviewed runtime windows and tolerances still open",
+    "scaling": "registered matrix for nu_eff versus driving rate and nu_in",
+    "synthetic_limit": "The analyzer's normalized synthetic square-root relation and exact-stability threshold exercise parser and recomputation behavior only. They are not predicted CRPAI scaling laws, extracted references or accepted runtime tolerances."
+  },
+  "fail_closed_analyzer_contract": {
+    "requires_exact_implementation_source_checksums": true,
+    "requires_exact_prior_bounded_boundary_artifact_checksums": true,
+    "requires_exact_candidate_deck_checksum": true,
+    "requires_candidate_problem_generator_to_remain_unavailable": true,
+    "rejects_unexpected_bundle_fields": true,
+    "rejects_runtime_like_extra_fields": true,
+    "rejects_non_synthetic_artifact_role": true,
+    "rejects_boundary_artifact_checksum_mutation": true,
+    "rejects_incomplete_or_duplicate_synthetic_series_grid": true,
+    "rejects_malformed_or_noncanonical_spectra": true,
+    "numeric_mismatch_effect": "reported_as_source_local_synthetic_contract_mismatch_not_physical_calibration_not_qualifying_evidence"
+  },
+  "verification": {
+    "focused_command": "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. python3 -B -m unittest tst.publication.test_analyze_q033_crpai_transport_calibration_candidate",
+    "focused_result": "pass",
+    "synthetic_cli_round_trip": "pass",
+    "python_compile": "pass",
+    "json_parse": "pass",
+    "explicit_trailing_whitespace_check": "pass",
+    "flake8": "not_run_module_unavailable_in_environment"
+  },
+  "explicitly_not_claimed": [
+    "physical CRPAI transport calibration",
+    "physical effective scattering rate nu_eff",
+    "physical anisotropy evolution",
+    "physical polarization-resolved spectra",
+    "physical quasi-steady or saturated state",
+    "physical driving-rate or friction scaling",
+    "variance reduction from adaptive delta-f",
+    "Sun-Bai-Zhao applicability closure or reference extraction",
+    "MPI or decomposition qualification",
+    "Frontier HIP or GPU qualification",
+    "campaign authorization",
+    "external-review closure"
+  ],
+  "residual_work": [
+    "Freeze the Sun-Bai-Zhao applicability map and extracted references.",
+    "Review the physical normalization, nu_eff estimator, spectra decomposition, quasi-steady windows, numeric tolerances, seed policy and scaling matrix.",
+    "Implement and review a dedicated Q-033 runtime generator and immutable runtime analyzer before preparing a clean launch candidate.",
+    "Freeze exact runtime decks and register the Frontier HIP and MPI campaign matrix.",
+    "Require immutable artifact inventory, independent recomputation and external reviewer disposition before any physical calibration or qualification claim."
+  ],
+  "q033_disposition": "source_local_transport_contract_frozen_launch_blocked_candidate_only_physical_calibration_and_qualification_open"
+}

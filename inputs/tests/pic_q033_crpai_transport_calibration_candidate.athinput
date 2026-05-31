@@ -1,0 +1,160 @@
+# Q-033 SOURCE-LOCAL EXTENSION CANDIDATE ONLY: not authorized and not runnable.
+# This deck freezes the implemented adaptive-delta-f, expanding-box, and reduced
+# static-neutral damping boundary. The q033_crpai_transport_calibration_open
+# generator remains intentionally unavailable until the physical applicability
+# map, registered Frontier matrix, immutable analyzer, and external review exist.
+
+<comment>
+problem   = Q033 adaptive-delta-f physical-damping CRPAI transport source-local candidate
+
+<job>
+basename  = pic_q033_crpai_transport_calibration_candidate
+
+<mesh>
+nghost    = 2
+nx1       = 32
+x1min     = 0.0
+x1max     = 1.0
+ix1_bc    = periodic
+ox1_bc    = periodic
+
+nx2       = 1
+x2min     = 0.0
+x2max     = 1.0
+ix2_bc    = periodic
+ox2_bc    = periodic
+
+nx3       = 1
+x3min     = 0.0
+x3max     = 1.0
+ix3_bc    = periodic
+ox3_bc    = periodic
+
+<meshblock>
+nx1       = 32
+nx2       = 1
+nx3       = 1
+
+<time>
+evolution  = dynamic
+integrator = rk2
+cfl_number = 0.1
+nlim       = 0
+tlim       = 0.0
+ndiag      = 1
+
+<mhd>
+eos         = ideal
+reconstruct = plm
+rsolver     = llf
+gamma       = 1.66666666667
+
+<coord>
+special_rel = false
+general_rel = false
+
+<particles>
+particle_type                     = cosmic_ray
+ppc                               = 1.0
+pusher                            = boris_tsc
+nspecies                          = 1
+cr_distribution                   = random
+deposit_moments                   = true
+deposit_order                     = 1
+deposit_qscale                    = 1.0e-4
+couple_moments_to_mhd             = true
+couple_j_to_efield_coeff          = 1.0
+couple_j_to_efield_representation = cell_centered
+couple_j_deposition_mode          = cc_convert
+couple_moments_momentum_to_mhd    = true
+couple_moments_energy_to_mhd      = true
+couple_fluid_feedback_order       = mhd_src_terms
+couple_moments_momentum_coeff     = 1.0
+couple_moments_energy_coeff       = 1.0
+pic_physical_mode                 = extended_mhd_pic
+pic_background_mode               = coupled
+pic_feedback_mode                 = coupled
+pic_interp_scheme                 = tsc
+pic_enable_2d3v                   = false
+pic_cr_light_speed                = 300.0
+pic_cr_initial_state              = momentum
+pic_cr_hall_mode                  = off
+pic_wave_damping_mode             = ion_neutral_friction
+pic_ion_neutral_collision_rate    = 1.0e-4
+pic_max_cell_cross                = 1
+pic_theta_max                     = 0.3
+pic_deltaf_mode                   = physical
+pic_deltaf_f0                     = kappa_aniso
+pic_deltaf_p0                     = 1.0
+pic_deltaf_kappa                  = 1.25
+pic_deltaf_drift_x1               = 0.0
+pic_deltaf_drift_x2               = 0.0
+pic_deltaf_drift_x3               = 0.0
+pic_deltaf_aniso_x1               = 1.0
+pic_deltaf_aniso_x2               = 1.0
+pic_deltaf_aniso_x3               = 1.0
+pic_deltaf_background_rho         = 1.0e-4
+pic_deltaf_background_jx          = 0.0
+pic_deltaf_background_jy          = 0.0
+pic_deltaf_background_jz          = 0.0
+pic_deltaf_adapt_mode             = global_bikappa_moments_experimental
+pic_deltaf_adapt_interval         = 100.0
+pic_load_balance_cost_per_particle = 0.0
+pic_sort_interval                 = 0
+pic_intermediate_arrays           = auto
+pic_expanding_box_mode            = on
+pic_expansion_law                 = exponential
+pic_expansion_rate_x1             = 0.0
+pic_expansion_rate_x2             = 1.0e-5
+pic_expansion_rate_x3             = 1.0e-5
+track_displacement                = true
+pic_random_seed                   = 330033
+
+<species0>
+mass   = 1.0
+charge = 1.0
+
+<problem>
+pgen_name = q033_crpai_transport_calibration_open
+
+<q033_transport_extension>
+campaign_id             = Q033-EXT-CRPAI-TRANSPORT-CALIBRATION-CANDIDATE
+deck_role               = launch_blocked_source_local_transport_contract_only_not_evidence
+qualification_effect    = none
+launch_status           = blocked_missing_q033_generator_applicability_registered_frontier_matrix_and_external_review
+implementation_scope    = existing_adaptive_deltaf_expanding_box_reduced_static_neutral_friction_only
+physical_damping_scope  = reduced_static_neutral_ion_neutral_friction_map_not_calibrated_astrophysical_damping
+nu_eff_observable       = candidate_parallel_displacement_variance_estimator_requires_review
+anisotropy_observable   = candidate_abs_xi_squared_minus_one_tail_series
+spectra_observable      = candidate_polarization_resolved_wave_power_tail_series
+quasi_steady_observable = candidate_tail_window_stability_requires_reviewed_window
+scaling_observable      = candidate_nu_eff_vs_driving_rate_and_nu_in_requires_registered_matrix
+reference_map           = open_sun_bai_zhao_applicability_and_reference_extraction
+physical_calibration    = open_not_claimed
+qualification           = open_not_claimed
+mpi                     = open_not_claimed
+frontier_hip            = open_not_claimed
+
+<output1>
+file_type   = hst
+dcycle      = 1
+data_format = %20.12e
+
+<output2>
+file_type   = bin
+variable    = mhd_bcc
+id          = mhd_bcc
+dcycle      = 1
+ghost_zones = false
+
+<output3>
+file_type   = pvtk
+variable    = prtcl_all
+id          = prtcl_all
+dcycle      = 1
+
+<output4>
+file_type   = rst
+id          = rst
+dcycle      = 1
+single_file_per_rank = false
