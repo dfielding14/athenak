@@ -30,7 +30,7 @@
     },
     {
       "path": "tst/publication/analyze_q029_hall_bell_linear_raw.py",
-      "sha256": "92a36b87ddfb8ee28487edced573549d2996554c90eb61f3adc21d6b8d981808"
+      "sha256": "7fe52f4f6e2d406a31a10eb25d932672b0dbd9e6b27d2d0e920c7a73e8a3a51d"
     },
     {
       "path": "tst/publication/analyze_q029_hall_extension_candidate.py",

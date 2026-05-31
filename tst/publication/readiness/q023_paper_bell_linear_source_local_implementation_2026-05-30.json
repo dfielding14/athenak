@@ -179,7 +179,7 @@
     },
     {
       "path": "tst/publication/analyze_q023_paper_bell_linear.py",
-      "sha256": "bc997159339d708fb8b1e3d2f6062ea5d8e6dc59e038f1cdc98ebe5427881f63"
+      "sha256": "f08fcf115754cb4f2fc50816e4df2bf90418b93161b854cd7c60471f0e42c0dc"
     },
     {
       "path": "tst/publication/test_analyze_q023_paper_bell_linear.py",

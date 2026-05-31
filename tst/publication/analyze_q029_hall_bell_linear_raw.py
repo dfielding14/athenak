@@ -32,7 +32,7 @@ PREPARATION_RECORD = (
     "q029_hall_bell_linear_source_local_preparation_2026-05-30.json"
 )
 PREPARATION_RECORD_SHA256 = (
-    "6d152e0d368b2091b7dd979c5864d17be4ab4de8cc15974310fc81bc3a1052ff"
+    "ff6da49895b60f0977e16231c78881e13261529e386ac795a0dee0503c92de88"
 )
 BINARY_READER = REPO_ROOT / "vis/python/bin_convert_new.py"
 BINARY_READER_SHA256 = (

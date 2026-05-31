@@ -32,7 +32,7 @@
     }
   },
   "source_local_artifacts": {
-    "tst/publication/materialize_q023_paper_bell_linear_variants.py": "365434f245946bd7306bf0a13fcbe24a2ef9e9625124ab26f2ff00ee7c55fadd",
+    "tst/publication/materialize_q023_paper_bell_linear_variants.py": "8705a120ba237b651e16dfcf79fd6dbcbb649a3351c286b3f31ca1698517ca22",
     "tst/publication/test_materialize_q023_paper_bell_linear_variants.py": "3bcd300d92fc569924dfd18eaeb86e2e5121a2061a7f317621b12fea92c47d09"
   },
   "loading_policy": {

@@ -675,13 +675,13 @@
     {
       "analyzer_id": "Q023-ANALYZER-PAPER-BELL-LINEAR-CANDIDATE",
       "path": "tst/publication/analyze_q023_paper_bell_linear.py",
-      "sha256": "bc997159339d708fb8b1e3d2f6062ea5d8e6dc59e038f1cdc98ebe5427881f63",
+      "sha256": "f08fcf115754cb4f2fc50816e4df2bf90418b93161b854cd7c60471f0e42c0dc",
       "qualification_limit": "source_local_section52_signed_combined_magnetic_and_projected_fluid_velocity_raw_trace_candidate_with_paper_literal_delta_u_y_spatial_sine_fit_phase_and_volume_averaged_absolute_delta_u_growth_estimator_only_approved_materialized_geometry_exact_raw_artifact_provenance_nonqualifying_velocity_cross_check_clean_freeze_convergence_registered_execution_independent_recompute_and_external_review_open"
     },
     {
       "analyzer_id": "Q023-MATERIALIZER-PAPER-BELL-LINEAR-VARIANTS",
       "path": "tst/publication/materialize_q023_paper_bell_linear_variants.py",
-      "sha256": "365434f245946bd7306bf0a13fcbe24a2ef9e9625124ab26f2ff00ee7c55fadd",
+      "sha256": "8705a120ba237b651e16dfcf79fd6dbcbb649a3351c286b3f31ca1698517ca22",
       "qualification_limit": "source_local_deterministic_405_deck_preparation_materializer_only_centered_loading_review_boundary_clean_candidate_freeze_registered_execution_and_external_review_open"
     },
     {
@@ -723,13 +723,13 @@
     {
       "analyzer_id": "Q023-ANALYZER-Q029-HALL-BELL-GRID",
       "path": "tst/publication/analyze_q029_hall_bell_linear.py",
-      "sha256": "ad3411ad07bcc771c6bddc7ebaaca129c60aa5675df2aa151961a7eab07a94c1",
+      "sha256": "5a8d713b344873ef0cd74efb529d3ba5d638c2f1f5d8ffb834fe8ac14f9a4aa4",
       "qualification_limit": "source_local_positive_chi_h_launch_preparation_grid_only_reviewed_physical_grid_and_qualifying_hall_dispersion_analyzer_missing"
     },
     {
       "analyzer_id": "Q023-ANALYZER-Q029-HALL-BELL-RAW-PROJECTIONS",
       "path": "tst/publication/analyze_q029_hall_bell_linear_raw.py",
-      "sha256": "18d47ed8630a7187e628f28966ed572eafb2ba735bc66c400755ffdbf626e6e8",
+      "sha256": "7fe52f4f6e2d406a31a10eb25d932672b0dbd9e6b27d2d0e920c7a73e8a3a51d",
       "qualification_limit": "source_local_exact_orion_raw_geometric_seed_carrier_projections_only_not_physical_bai_oracle_not_hall_dispersion_qualification"
     },
     {

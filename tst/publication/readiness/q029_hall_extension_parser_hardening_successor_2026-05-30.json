@@ -45,7 +45,7 @@
   },
   "artifact_bindings": {
     "inputs/tests/pic_q029_extended_hall_normalization_candidate.athinput": "dc159e5f9a80aec8bb94723b69f5de9edaafd624889ac7ea9a88518b46e6bb80",
-    "tst/publication/analyze_q029_hall_extension_candidate.py": "6d5c4c287dcd834ad3e4212677b2d417d5eac0834ae51444c6f1b64cf2636626",
+    "tst/publication/analyze_q029_hall_extension_candidate.py": "ea88929fb6d8cef9d273e1762ec0b3fec90edc16d760df82e8f068f0d4075fd5",
     "tst/publication/test_analyze_q029_hall_extension_candidate.py": "ed07c8e4d6fe64756c23dade93888ecaec4fc1e88765509d7bdd3d3338da55b6",
     "tst/publication/readiness/q029_experimental_hall_normalization_derivation_2026-05-30.md": "3d5c6cfd9e0e4e06cf28d836935e3b5175b931983da377e8b1c2bfb2a80e7b74"
   },
