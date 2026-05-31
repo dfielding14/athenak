@@ -1,0 +1,154 @@
+{
+  "record_type": "q016_two_rank_mpi_host_provenance_spectrum_replay",
+  "date": "2026-05-30",
+  "qualification_effect": "bounded_local_two_rank_mpi_host_replay_only",
+  "predecessor_record": "tst/publication/readiness/q016_particle_provenance_spectra_local_2026-05-30.json",
+  "source_state": {
+    "head_at_replay": "7f699a0e38bbc413227bc181e60f68a68732ae72",
+    "worktree": "dirty_shared_worktree_with_concurrent_unrelated_changes",
+    "freeze_status": "source_local_record_binds_replayed_q016_inputs_and_ephemeral_build_artifacts_by_sha256_not_a_frozen_subject_commit"
+  },
+  "scope": "Controlled bounded-local Q-016 replay using two MPI processes on one login host. The replay verifies uninterrupted-versus-restarted persistent particle provenance, restart schema 7, observed MeshBlock migration, and independent full-f plus signed delta-f spectrum reconstruction. This record is local host process-decomposition evidence only. It is not cross-node, Frontier, HIP, repeated-AMR, publication, or shock-campaign qualification evidence.",
+  "source_bindings": [
+    {
+      "path": "inputs/tests/pic_q016_particle_provenance.athinput",
+      "sha256": "f1a284922beea1fa04eb2f09b49dfea208f91bae247e6a961e78213857cf7235"
+    },
+    {
+      "path": "tst/scripts/particles/pic_q016_particle_provenance.py",
+      "sha256": "2d7997df1dd4ce65c9be1c22ec9b88184781e4b134a823f26466227fa210eb5e"
+    },
+    {
+      "path": "tst/publication/q016_particle_spectra.py",
+      "sha256": "b84dfadd56a55ffcfd8d626f3b793da4ec61cbc844b4930c251ec60147505c0e"
+    },
+    {
+      "path": "tst/publication/readiness/q016_particle_provenance_spectra_local_2026-05-30.json",
+      "sha256": "094f2dea4869ab1abea415a7fda1080f5b4e47a89ba64994b53864dec6241366"
+    }
+  ],
+  "reused_mpi_host_build": {
+    "build_root": "/tmp/athenak-pic-q017-mpi-build",
+    "executable": {
+      "path": "/tmp/athenak-pic-q017-mpi-build/src/athena",
+      "sha256": "3c395ac535cb6dc613a24e7e1d20e33b8d3cb566c89a65b3d6fffd94824b6c24"
+    },
+    "cmake_cache": {
+      "path": "/tmp/athenak-pic-q017-mpi-build/CMakeCache.txt",
+      "sha256": "7c9faa3b58e7f04776ac54909233464fe3da2f82cc24215ba1a05816def227d5"
+    },
+    "configuration_query": "./athena -c",
+    "configuration_query_result": {
+      "problem_generator": "built_in_pgens",
+      "floating_point_precision": "double",
+      "mpi_parallelism": "ON",
+      "openmp_parallelism": "OFF"
+    },
+    "cmake_cache_contract": {
+      "Athena_ENABLE_MPI": "ON",
+      "Kokkos_ENABLE_MPI": "ON",
+      "Kokkos_ENABLE_SERIAL": "ON",
+      "Kokkos_ENABLE_HIP": "OFF",
+      "MPIEXEC_EXECUTABLE": "/usr/bin/srun"
+    }
+  },
+  "launcher_probes": [
+    {
+      "command": "timeout 20s /usr/bin/srun -n 2 /bin/hostname",
+      "launcher_sha256": "b417fe71b836ce95b2cb16a6e60d44233befbd7cec68e005731b583230dcfb08",
+      "status": "blocked_before_launch",
+      "reason": "Local srun allocation request requires an account, node count, and walltime. No Slurm allocation was requested for this bounded-local tranche."
+    },
+    {
+      "command": "timeout 20s /opt/cray/pals/1.8/bin/mpiexec -n 2 /bin/hostname",
+      "launcher_sha256": "fa3196ae08bd8e4ebe53e99c27f658248d3d314784d3cc655c34ce2c2ce4e982",
+      "launcher_version": "mpiexec version 1.8.0 revision b211c1ac6a6a built Nov 21 2025",
+      "status": "pass",
+      "stdout_lines": [
+        "login10",
+        "login10"
+      ]
+    }
+  ],
+  "replay": {
+    "environment": {
+      "PYTHONDONTWRITEBYTECODE": "1",
+      "PYTHONPATH": "tst",
+      "ATHENA_Q016_EXE_DIR": "/tmp/athenak-pic-q017-mpi-build/src",
+      "ATHENA_Q016_NPROC": "2",
+      "ATHENA_Q016_LAUNCHER": "/opt/cray/pals/1.8/bin/mpiexec",
+      "host": "login10",
+      "SLURM_JOB_ID": "",
+      "SLURM_STEP_ID": ""
+    },
+    "command": "env PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=tst ATHENA_Q016_EXE_DIR=/tmp/athenak-pic-q017-mpi-build/src ATHENA_Q016_NPROC=2 ATHENA_Q016_LAUNCHER=/opt/cray/pals/1.8/bin/mpiexec python3 - <<'PY'\nimport json\nimport logging\nfrom scripts.particles import pic_q016_particle_provenance as q016\nlogging.basicConfig(level=logging.INFO, format='%(message)s')\nq016.run()\npassed = bool(q016.analyze())\nprint('Q016_MPI_REPLAY_METRICS ' + json.dumps(q016._RESULTS['metrics'], default=lambda value: value.item(), sort_keys=True))\nprint('Q016_MPI_REPLAY_PASS ' + json.dumps(passed))\nraise SystemExit(0 if passed else 1)\nPY",
+    "observed_athena_commands": [
+      "/opt/cray/pals/1.8/bin/mpiexec -n 2 ./athena -i /autofs/nccs-svm1_home2/dfielding/athenak-pic/inputs/tests/pic_q016_particle_provenance.athinput job/basename=pic_q016_full time/nlim=8 output2/dcycle=0",
+      "/opt/cray/pals/1.8/bin/mpiexec -n 2 ./athena -i /autofs/nccs-svm1_home2/dfielding/athenak-pic/inputs/tests/pic_q016_particle_provenance.athinput job/basename=pic_q016_segment time/nlim=4",
+      "/opt/cray/pals/1.8/bin/mpiexec -n 2 ./athena -r rst/pic_q016_segment.00003.rst job/basename=pic_q016_restart time/nlim=8 output1/file_number=0 output2/dcycle=0"
+    ],
+    "metrics": {
+      "configured_ranks": 2,
+      "restart_schema": 7,
+      "int_metadata_equal_after_restart": {
+        "gid": true,
+        "ptag": true,
+        "species": true,
+        "cr_source": true
+      },
+      "max_float_errors_after_restart": {
+        "points": 0.0,
+        "vel": 0.0,
+        "macro_weight": 0.0,
+        "birth_time": 0.0,
+        "deltaf_f0": 0.0,
+        "deltaf_weight": 0.0
+      },
+      "migration_observed": true,
+      "source_metadata_ok": true,
+      "full_f_spectrum_agreement": 0.0,
+      "delta_f_spectrum_agreement": 0.0,
+      "full_f_group_count": 6,
+      "delta_f_definition": "Histogram weight is macro_weight * deltaf_weight. The result is the signed sampled perturbation spectrum only; the analytic background represented by deltaf_f0 is intentionally not added."
+    },
+    "status": "pass"
+  },
+  "ephemeral_evidence_bindings": {
+    "retention": "Temporary local artifacts are checksum-bound for replay provenance but are not archived qualification artifacts.",
+    "log": {
+      "path": "/tmp/q016_two_rank_mpi_provenance_spectrum_replay.log",
+      "sha256": "ae3af8501614cae1b1d35783087c52855c72d432643f2ebd892ed89f819db5ca"
+    },
+    "output_counts": {
+      "full_particle_vtk": 10,
+      "segment_particle_vtk": 6,
+      "restarted_particle_vtk": 5,
+      "segment_restart_payload_and_companions": 16
+    },
+    "selected_terminal_artifacts": [
+      {
+        "path": "/tmp/athenak-pic-q017-mpi-build/src/pvtk/pic_q016_full.prtcl_all.00009.part.vtk",
+        "sha256": "d4d9bc371755b8b46d014a4da90ebce051c2917626affdaee0fa05fb23430f94"
+      },
+      {
+        "path": "/tmp/athenak-pic-q017-mpi-build/src/pvtk/pic_q016_restart.prtcl_all.00004.part.vtk",
+        "sha256": "d4d9bc371755b8b46d014a4da90ebce051c2917626affdaee0fa05fb23430f94"
+      },
+      {
+        "path": "/tmp/athenak-pic-q017-mpi-build/src/rst/pic_q016_segment.00003.rst",
+        "sha256": "2a80fe76ec85210810f563df221bfc9bf0a715aeab078ed7df88adcc71992db7"
+      },
+      {
+        "path": "/tmp/athenak-pic-q017-mpi-build/src/rst/pic_q016_segment.00003.rst.manifest",
+        "sha256": "6152d12ba1325c9e921bf368057742c4f74c988f4e046c3680837923f5052c40"
+      }
+    ]
+  },
+  "remaining_q016_gaps": [
+    "Cross-node MPI decomposition remains open because this bounded-local replay launched both MPI processes on login10.",
+    "Frontier MPI and HIP parity remain open.",
+    "Repeated-AMR MPI/HIP lifetime coverage remains open.",
+    "Preregistered qualifying shock-campaign evidence remains open."
+  ],
+  "q016_disposition": "bounded_local_two_rank_mpi_host_replay_passed_with_cross_node_frontier_hip_repeated_amr_and_campaign_gaps_open"
+}
