@@ -20,6 +20,16 @@ qualify any scientific claim by itself.
   successor after the reviewed paired control-plane install and the final
   93-deck, 12-analyzer prepared-artifact inventory refresh. Canonical build and
   clean-candidate freeze remain pending.
+- `phase0_paired_control_plane_install_and_policy_promotion_2026-05-31.json`:
+  receipt-grade source-controlled snapshot of the paired immutable `80b1c664`
+  controller install, byte-identical Orion and Project Home inventories, and
+  promoted transition policy with a 10000-node-hour cap and no registered
+  science slices.
+- `phase0_curated_candidate_successor_v3_2026-05-31.json`: current Phase 0
+  successor after independent restart and Section 5.4 audits found additional
+  fail-open paths. It binds the paired-install receipt and refreshed 93-deck,
+  12-analyzer closure. Final clean-tree validation, rereview, HIP/MPI Release
+  build and canonical clean-candidate freeze remain pending.
 - `phase0_exact_boundary_validation_receipt_2026-05-31.json`: rejected
   nonqualifying exact-clean-tree validation chronology for the first
   schema-hardened Phase 0 code boundary. Its matrix passed, but independent
@@ -391,6 +401,19 @@ qualify any scientific claim by itself.
   cohort-ordering, sink-ledger, restart-schema-2 and MPI-aware fatal-path
   hardening. Registered MPI, AMR, HIP, Frontier, physical calibration and the
   full Section 5.4 campaign remain open.
+- `q011_parallel_shock_section54_paper_preparation_successor_v3_2026-05-31.json`:
+  preparation-only successor rebinding the exact Section 5.4 deck after
+  gas-subtraction coupling enforcement, non-finite floor rejection and
+  restart-ledger completion hardening.
+- `q011_parallel_shock_rk_stage_budget_successor_v3_2026-05-31.json`: bounded
+  current-source successor with direct gas-particle momentum and energy closure
+  probes plus negative-floor, non-finite-floor, passive-background subtraction
+  and incomplete-ledger rejection coverage. The fail-stop checks reject before
+  publication; they do not implement transactional rollback.
+- `q011_injection_distribution_runtime_local_successor_v3_2026-05-31.json`:
+  retained immutable particle-payload compatibility replay against the
+  corrected source contract. It explicitly does not claim a fresh
+  corrected-executable runtime run or any qualifying Frontier evidence.
 - `q034_unsupported_capability_successor_2026-05-30.json`: successor
   fail-closed active-MHD expanding-box unsupported-composition addendum.
 - `q042_post_repair_architecture_docs_successor_2026-05-30.json`: successor

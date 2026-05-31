@@ -18,7 +18,7 @@
     },
     {
       "path": "tst/publication/analyze_q011_injection_distribution_runtime_local.py",
-      "sha256": "014b0b5af237ce7913854f981411037e073b787bab1dc8293cf14fda54136cff"
+      "sha256": "7d11c698153147e78fa56ed006d3b4e28bf39e5c26e69c41349d652cdbb2f6e7"
     },
     {
       "path": "tst/publication/analyze_q023_paper_bell_linear.py",

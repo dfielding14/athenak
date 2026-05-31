@@ -1,0 +1,36 @@
+{
+  "record_type": "phase0_paired_control_plane_install_and_policy_promotion",
+  "schema_version": 1,
+  "date": "2026-05-31",
+  "qualification_effect": "none_operational_control_plane_receipt_only",
+  "control_plane_version": "80b1c664fd42d3771df0fa39549568b22c9e78ad3d6e99196ce535a6eb1e1c80",
+  "paired_install": {
+    "orion_root": "/lustre/orion/ast207/proj-shared/dfielding/PIC/control_plane/80b1c664fd42d3771df0fa39549568b22c9e78ad3d6e99196ce535a6eb1e1c80",
+    "project_home_root": "/ccs/proj/ast207/proj-shared/PIC/control_plane/80b1c664fd42d3771df0fa39549568b22c9e78ad3d6e99196ce535a6eb1e1c80",
+    "orion_inventory_sha256": "d9d9fabe9e120f5ab0172afc58e376fc6ac4025780756d81bea720402071f74a",
+    "project_home_inventory_sha256": "d9d9fabe9e120f5ab0172afc58e376fc6ac4025780756d81bea720402071f74a",
+    "inventoried_file_count": 20,
+    "generation_directory_mode": "0555",
+    "byte_identical_inventory": true,
+    "installed_pair_verify": "pass"
+  },
+  "active_policy_promotion": {
+    "orion_policy_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/storage_policy.json",
+    "project_home_policy_path": "/ccs/proj/ast207/proj-shared/PIC/policy/storage_policy.json",
+    "orion_policy_sha256": "4403bb34b99c1cac5a8901df9b79a2cee7dc83777b684018a58dcf97abda3e09",
+    "project_home_policy_sha256": "4403bb34b99c1cac5a8901df9b79a2cee7dc83777b684018a58dcf97abda3e09",
+    "orion_promotion_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/active_promotion.json",
+    "project_home_promotion_path": "/ccs/proj/ast207/proj-shared/PIC/policy/active_promotion.json",
+    "orion_promotion_sha256": "c0e6da528f419f48d2fa80412aa29e8286797461b1018048fe16794e51f8869e",
+    "project_home_promotion_sha256": "c0e6da528f419f48d2fa80412aa29e8286797461b1018048fe16794e51f8869e",
+    "maximum_node_hours": 10000,
+    "registered_science_slices": [],
+    "byte_identical_policy": true,
+    "byte_identical_promotion": true
+  },
+  "scope_limits": [
+    "This receipt records a paired immutable controller installation and active transition-policy promotion only.",
+    "It does not bind a canonical clean candidate, executable, deck, analyzer or registered Frontier science slice.",
+    "It does not qualify a physical claim or close external review."
+  ]
+}

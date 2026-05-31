@@ -303,7 +303,7 @@ class PicReadinessRegistryTests(unittest.TestCase):
         science_freeze = policy["science_submission_freeze"]
         if science_freeze == {"status": "pending_clean_candidate_freeze"}:
             phase0_successor = _load(
-                "phase0_curated_candidate_successor_v2_2026-05-31.json"
+                "phase0_curated_candidate_successor_v3_2026-05-31.json"
             )
             self.assertEqual(lifecycle, "paired_installed_reviewed_generation")
             self.assertEqual(
@@ -569,10 +569,66 @@ class PicReadinessRegistryTests(unittest.TestCase):
             ]
         )
         phase0_successor = _load(
-            "phase0_curated_candidate_successor_v2_2026-05-31.json"
+            "phase0_curated_candidate_successor_v3_2026-05-31.json"
         )
         self.assertEqual(
             staged_version, phase0_successor["successor_source_control_plane_version"]
+        )
+        prepared = phase0_successor["prepared_artifacts"]
+        prepared_path = REPO_ROOT / prepared["inventory_path"]
+        self.assertEqual(_sha256(prepared_path), prepared["inventory_sha256"])
+        prepared_inventory = json.loads(prepared_path.read_text(encoding="utf-8"))
+        expected_decks = sorted(
+            (REPO_ROOT / "inputs" / "tests").glob("pic*.athinput")
+        )
+        expected_analyzers = sorted(
+            (REPO_ROOT / "tst" / "publication").glob("analyze_*.py")
+        )
+        self.assertEqual(len(expected_decks), prepared["paper_deck_count"])
+        self.assertEqual(
+            len(expected_analyzers), prepared["publication_analyzer_count"]
+        )
+        for key, expected_paths in {
+            "paper_decks": expected_decks,
+            "analyzers": expected_analyzers,
+        }.items():
+            records = prepared_inventory[key]
+            self.assertEqual(
+                [record["path"] for record in records],
+                [path.relative_to(REPO_ROOT).as_posix() for path in expected_paths],
+            )
+            for record in records:
+                self.assertEqual(
+                    _sha256(REPO_ROOT / record["path"]),
+                    record["sha256"],
+                )
+        paired_binding = phase0_successor[
+            "paired_install_and_policy_promotion_receipt"
+        ]
+        paired_path = REPO_ROOT / paired_binding["path"]
+        self.assertEqual(_sha256(paired_path), paired_binding["sha256"])
+        paired = json.loads(paired_path.read_text(encoding="utf-8"))
+        self.assertEqual(paired["control_plane_version"], staged_version)
+        installed = paired["paired_install"]
+        self.assertEqual(
+            installed["orion_inventory_sha256"],
+            installed["project_home_inventory_sha256"],
+        )
+        self.assertEqual(installed["inventoried_file_count"], len(CONTROL_PLANE_FILES))
+        promotion = paired["active_policy_promotion"]
+        self.assertEqual(promotion["maximum_node_hours"], 10000)
+        self.assertEqual(promotion["registered_science_slices"], [])
+        self.assertEqual(
+            promotion["orion_policy_sha256"],
+            promotion["project_home_policy_sha256"],
+        )
+        self.assertEqual(
+            promotion["orion_policy_sha256"],
+            _sha256(READINESS_DIR / "storage_policy.json"),
+        )
+        self.assertEqual(
+            promotion["orion_promotion_sha256"],
+            promotion["project_home_promotion_sha256"],
         )
         self.assertEqual(
             storage["installed_control_plane_version"],

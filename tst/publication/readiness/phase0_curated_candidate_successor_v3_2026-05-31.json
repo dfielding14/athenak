@@ -1,0 +1,39 @@
+{
+  "record_type": "phase0_curated_candidate_successor",
+  "schema_version": 1,
+  "date": "2026-05-31",
+  "predecessor_record": "tst/publication/readiness/phase0_curated_candidate_successor_v2_2026-05-31.json",
+  "status": "paired_controller_installed_audit_repairs_pending_final_clean_boundary_receipt_build_and_freeze",
+  "qualification_effect": "none",
+  "live_paired_control_plane_version": "80b1c664fd42d3771df0fa39549568b22c9e78ad3d6e99196ce535a6eb1e1c80",
+  "successor_source_control_plane_version": "80b1c664fd42d3771df0fa39549568b22c9e78ad3d6e99196ce535a6eb1e1c80",
+  "curated_source_predecessor_commit": "110c9985a8d8b166ace1ed3d68930ee57fd14d78",
+  "candidate_freeze_source_commit": "pending_final_clean_receipt_commit",
+  "paired_install_and_policy_promotion_receipt": {
+    "path": "tst/publication/readiness/phase0_paired_control_plane_install_and_policy_promotion_2026-05-31.json",
+    "sha256": "15c6e91c7f9476768038051a73a281c43d1758ea35c3948561e6492f248bc0a7"
+  },
+  "prepared_artifacts": {
+    "inventory_path": "tst/publication/frontier_control_plane/prepared_pic_artifact_inventory.json",
+    "inventory_sha256": "893b392eacb2c2b42a69669aef26f99a5a571e5f5b63597857a6341127c78312",
+    "paper_deck_count": 93,
+    "publication_analyzer_count": 12,
+    "closure_policy": "canonical inventory path plus exact archived inputs/tests/pic*.athinput and tst/publication/analyze_*.py membership"
+  },
+  "completed_phase0_actions": [
+    "recorded the installed and paired reviewed 80b1c664 control-plane generation on Orion and Project Home with exact inventory hashes",
+    "recorded the promoted fail-closed transition policy with a 10000-node-hour cap and no registered science slices",
+    "routed restart-open and cooldown fatal paths through MPI-aware world aborts",
+    "restricted rank-directory restart discovery to the immediate parent and tied sharded manifest cardinality to serialized original_nranks",
+    "validated serialized restart rank intervals and particle chunk bounds before reconstruction",
+    "rejected non-finite Section 5.4 controls, invalid floor fractions and gas subtraction outside coupled background mode",
+    "required complete schema-2 parallel-shock restart ledgers and strengthened bounded momentum, energy and rejection regressions",
+    "regenerated the complete prepared-artifact inventory with 93 PIC decks and 12 publication analyzers"
+  ],
+  "remaining_phase0_actions": [
+    "commit the audit repairs and run the final clean-tree validation matrix",
+    "complete independent rereview on the stable clean source boundary",
+    "write the canonical HIP/MPI Release build profile",
+    "create the canonical clean-candidate freeze and promote its exact manifest binding"
+  ]
+}
