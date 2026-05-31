@@ -1,0 +1,87 @@
+{
+  "record_type": "q011_parallel_shock_section54_paper_preparation",
+  "schema_version": 1,
+  "date": "2026-05-31",
+  "predecessor_record": "tst/publication/readiness/q011_parallel_shock_section54_paper_preparation_successor_v3_2026-05-31.json",
+  "gate": "Q-011",
+  "qualification_effect": "preparation_only",
+  "scope": "Exact-byte Section 5.4 preparation deck and fail-closed analyzer contract after restart-ledger schema-3 completion, exact tag-window provenance and numeric-metadata enforcement, gas-subtraction coupling enforcement, non-finite floor rejection and bounded conservation-regression hardening. This record contains no campaign results and does not qualify the paper-shock claim.",
+  "artifacts": [
+    {
+      "path": "inputs/publication/pic_parallel_shock_section54_paper.athinput",
+      "sha256": "c5110a3ed90c0f28eb315a4b4faeb432f3b980f3a7083cd3527cbcc0497856d6"
+    },
+    {
+      "path": "src/pgen/tests/pic_parallel_shock.cpp",
+      "sha256": "37de471598cdf0b97ca05ec9b60dc4f0bfdf0223bdf505f7442702a3b3e7aa23"
+    },
+    {
+      "path": "tst/scripts/particles/pic_parallel_shock_section54_paper.py",
+      "sha256": "d07ad52847f2c7e59d87556b4b09a32e73008850b4571f45baa5a8c896b3496a"
+    },
+    {
+      "path": "tst/publication/test_pic_q011_parallel_shock_section54_paper.py",
+      "sha256": "2975c9f9feb1c5f67ad27736e853f972adf3bd44345f34f89d79e3580fc0b54d"
+    }
+  ],
+  "analyzer_contract": {
+    "required_candidate_bindings": [
+      "clean_candidate_git_commit",
+      "clean_frontier_executable_sha256",
+      "input_deck_sha256",
+      "analyzer_sha256",
+      "authorized_orion_artifact_root"
+    ],
+    "particle_filters": {
+      "source": "shock_injected",
+      "birth_time_min_omega0_inverse": 45.0,
+      "region": "downstream"
+    },
+    "primary_observables": [
+      "shock_position",
+      "upstream_magnetic_amplification_at_t500",
+      "downstream_weighted_energy_spectra_at_t500_and_t1200",
+      "late_energy_spectrum_power_law_slope_at_t1200",
+      "morphology"
+    ],
+    "required_snapshot_times_omega0_inverse": [500.0, 1200.0],
+    "required_grid_variants": [
+      "coarse_uniform",
+      "three_level_amr_root_12_finest_3",
+      "fine_uniform"
+    ],
+    "required_raw_artifacts_per_snapshot": [
+      "rho_bin",
+      "bmag_bin",
+      "j2_bin",
+      "prtcl_all_pvtk"
+    ],
+    "required_run_artifacts": [
+      "stdout_with_q017_telemetry",
+      "restart_checkpoint",
+      "attempt_status_and_failure_artifacts"
+    ],
+    "required_seeds": [
+      23050101,
+      23050102,
+      23050103,
+      23050104,
+      23050105,
+      23050106,
+      23050107,
+      23050108
+    ],
+    "result_metrics_recorded": false,
+    "campaign_output_inspection": "blocked_pending_open_items"
+  },
+  "execution_policy": {
+    "frontier_campaign_execution": "open_not_run",
+    "allowed_compute_platforms": ["Frontier"],
+    "allowed_bulk_storage_systems": ["Orion"],
+    "authorized_orion_bulk_root": "/lustre/orion/ast207/proj-shared/dfielding/PIC",
+    "forbidden_storage_systems": ["Kronos"],
+    "kronos_use": "prohibited_not_used"
+  },
+  "result_metrics": [],
+  "q011_disposition": "preparation_frozen_frontier_campaign_and_qualification_open"
+}

@@ -652,6 +652,14 @@ class SnapshotTests(unittest.TestCase):
         deck_root.mkdir(parents=True)
         deck = deck_root / "pic_paper.athinput"
         deck.write_text("<job>\nbasename = prepared-paper\n", encoding="utf-8")
+        publication_deck = (
+            source_root
+            / "inputs/publication/pic_parallel_shock_section54_paper.athinput"
+        )
+        publication_deck.parent.mkdir()
+        publication_deck.write_text(
+            "<job>\nbasename = prepared-section54-paper\n", encoding="utf-8"
+        )
         analyzer_root = source_root / "tst/publication"
         analyzer_root.mkdir(parents=True)
         analyzer = analyzer_root / "analyze_paper.py"
@@ -665,6 +673,13 @@ class SnapshotTests(unittest.TestCase):
                 {
                     "schema_version": 1,
                     "paper_decks": [
+                        {
+                            "path": (
+                                "inputs/publication/"
+                                "pic_parallel_shock_section54_paper.athinput"
+                            ),
+                            "sha256": sha256(publication_deck),
+                        },
                         {"path": "inputs/tests/pic_paper.athinput", "sha256": sha256(deck)}
                     ],
                     "analyzers": [
@@ -5796,7 +5811,7 @@ PY
         self.assertEqual(reservation["submission_scope"], "registered_science")
         prepared = json.loads(candidate.read_text(encoding="utf-8"))["prepared_artifacts"]
         self.assertEqual(prepared["inventory_path"], self._prepared_artifact_inventory())
-        self.assertEqual(len(prepared["paper_decks"]), 1)
+        self.assertEqual(len(prepared["paper_decks"]), 2)
         self.assertEqual(len(prepared["analyzers"]), 1)
         self.assertIn("clean_candidate_manifest_sha256", self.csv.read_text())
 
@@ -6246,6 +6261,17 @@ PY
                 ),
                 "paper_decks": [
                     {
+                        "path": (
+                            "inputs/publication/"
+                            "pic_parallel_shock_section54_paper.athinput"
+                        ),
+                        "sha256": sha256(
+                            source_root
+                            / "inputs/publication/"
+                            "pic_parallel_shock_section54_paper.athinput"
+                        ),
+                    },
+                    {
                         "path": "inputs/tests/pic_paper.athinput",
                         "sha256": sha256(source_root / "inputs/tests/pic_paper.athinput"),
                     }
@@ -6273,6 +6299,51 @@ PY
                 candidate["source"]["git_commit"],
             )
         self.assertFalse(list(manifest_path.parent.parent.glob(".tmp-*")))
+
+    def test_clean_candidate_creator_rejects_omitted_required_publication_deck(
+        self,
+    ) -> None:
+        source_root = self._clean_source("omitted-publication-deck-source")
+        inventory = source_root / self._prepared_artifact_inventory()
+        value = json.loads(inventory.read_text(encoding="utf-8"))
+        value["paper_decks"] = [
+            record
+            for record in value["paper_decks"]
+            if record["path"] != (
+                "inputs/publication/pic_parallel_shock_section54_paper.athinput"
+            )
+        ]
+        inventory.write_text(json.dumps(value), encoding="utf-8")
+        subprocess.run(["git", "-C", str(source_root), "add", "."], check=True)
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(source_root),
+                "-c",
+                "user.name=PIC Test",
+                "-c",
+                "user.email=pic-test@example.invalid",
+                "commit",
+                "-m",
+                "omit required publication deck",
+            ],
+            check=True,
+            capture_output=True,
+        )
+        executable, profile = self._build_profile(
+            source_root, self.pic_root / "omitted-publication-deck-build", "test-profile"
+        )
+        with self.assertRaisesRegex(ValueError, "must exactly cover archived"):
+            create_freeze(
+                source_root=source_root,
+                executable=executable,
+                build_profile=profile,
+                build_profile_id="test-profile",
+                prepared_artifact_inventory=self._prepared_artifact_inventory(),
+                control_plane_dir=self.control_plane_dir,
+                authorized_pic_root=self.pic_root,
+            )
 
     def test_clean_candidate_creator_rejects_missing_prepared_archive_member(self) -> None:
         source_root = self._clean_source("missing-prepared-member-source")

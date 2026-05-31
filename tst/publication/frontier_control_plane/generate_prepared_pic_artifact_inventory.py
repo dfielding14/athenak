@@ -8,6 +8,11 @@ import hashlib
 import json
 from pathlib import Path
 
+if __package__:
+    from .control_plane_common import PREPARED_ARTIFACT_REQUIRED_PUBLICATION_DECK_PATHS
+else:
+    from control_plane_common import PREPARED_ARTIFACT_REQUIRED_PUBLICATION_DECK_PATHS
+
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parents[2]
@@ -26,7 +31,15 @@ def _record(path: Path) -> dict[str, str]:
 
 
 def prepared_artifact_inventory() -> dict[str, object]:
-    paper_decks = sorted((REPO_ROOT / "inputs/tests").glob("pic*.athinput"))
+    paper_decks = sorted(
+        [
+            *(REPO_ROOT / "inputs/tests").glob("pic*.athinput"),
+            *(
+                REPO_ROOT / path
+                for path in PREPARED_ARTIFACT_REQUIRED_PUBLICATION_DECK_PATHS
+            ),
+        ]
+    )
     analyzers = sorted((REPO_ROOT / "tst/publication").glob("analyze_*.py"))
     if not paper_decks:
         raise ValueError("No PIC input decks were found")

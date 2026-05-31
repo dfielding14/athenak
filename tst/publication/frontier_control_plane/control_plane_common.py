@@ -78,6 +78,9 @@ AUTHORIZED_STORAGE_PREFLIGHT_METHOD = "local_create_write_sync_remove_probe"
 PREPARED_ARTIFACT_INVENTORY_PATH = (
     "tst/publication/frontier_control_plane/prepared_pic_artifact_inventory.json"
 )
+PREPARED_ARTIFACT_REQUIRED_PUBLICATION_DECK_PATHS = (
+    "inputs/publication/pic_parallel_shock_section54_paper.athinput",
+)
 
 
 def scheduler_account_matches_authorized(value: object) -> bool:
@@ -767,11 +770,16 @@ def prepared_artifact_manifest_from_source_archive(
         source_files=source_files,
     )
     expected_paper_decks = sorted(
-        path
-        for path in source_files
-        if path.startswith("inputs/tests/pic")
-        and path.endswith(".athinput")
-        and "/" not in path[len("inputs/tests/") :]
+        [
+            *(
+                path
+                for path in source_files
+                if path.startswith("inputs/tests/pic")
+                and path.endswith(".athinput")
+                and "/" not in path[len("inputs/tests/") :]
+            ),
+            *PREPARED_ARTIFACT_REQUIRED_PUBLICATION_DECK_PATHS,
+        ]
     )
     expected_analyzers = sorted(
         path
@@ -782,7 +790,8 @@ def prepared_artifact_manifest_from_source_archive(
     )
     if [record["path"] for record in paper_decks] != expected_paper_decks:
         raise ValueError(
-            "Prepared paper-deck inventory must exactly cover archived inputs/tests/pic*.athinput"
+            "Prepared paper-deck inventory must exactly cover archived "
+            "inputs/tests/pic*.athinput and required publication decks"
         )
     if [record["path"] for record in analyzers] != expected_analyzers:
         raise ValueError(

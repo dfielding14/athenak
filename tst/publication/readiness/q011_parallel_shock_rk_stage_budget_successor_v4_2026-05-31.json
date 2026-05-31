@@ -1,0 +1,66 @@
+{
+  "record_type": "q011_parallel_shock_rk_stage_budget_successor",
+  "schema_version": 1,
+  "date": "2026-05-31",
+  "predecessor_record": "tst/publication/readiness/q011_parallel_shock_rk_stage_budget_successor_v3_2026-05-31.json",
+  "gate": "Q-011",
+  "qualification_effect": "none_bounded_serial_host_regression_only",
+  "claim_closure": false,
+  "frontier_authorization": "not_bound",
+  "scope": "Current-source bounded serial-host successor for the Section 5.4 parallel-shock RK-stage budget probe after momentum-shell closure, gas-subtraction coupling enforcement, non-finite floor rejection, startup-cohort sink-ledger completion and numeric-metadata enforcement, restart-schema-3 exact tag-window hardening and MPI-aware fatal-path hardening. The fail-stop checks reject invalid states before publication; they do not implement transactional rollback. The retained predecessor artifacts remain immutable chronology. This current-source rerun demonstrates bounded integrator-invariant mechanics only; it does not qualify MPI, AMR, HIP, Frontier, physical calibration or the full shock campaign.",
+  "source_bindings": {
+    "src/pgen/tests/pic_parallel_shock.cpp": "37de471598cdf0b97ca05ec9b60dc4f0bfdf0223bdf505f7442702a3b3e7aa23",
+    "inputs/tests/pic_parallel_shock_rk_stage_budget.athinput": "30f5551c501367f669298bcab97877b460cf7ace08979029599a68de8df8bdaf",
+    "tst/scripts/particles/pic_parallel_shock_rk_stage_budget.py": "645304db2c4ab714fa4b6332a188cbd3f62dc81570f190a10746b5dd8b44ac1e",
+    "tst/scripts/particles/pic_parallel_shock_startup_cohort_sink_restart.py": "e493f4f2b997010a46b0dc27a390e5a8ad239fb8c2363a17d27d80c40a72e918"
+  },
+  "current_source_verification": {
+    "command": "cd tst && ATHENA_PIC_PARALLEL_SHOCK_RK_EXE_DIR=/tmp/athenak-pic-codex-host/src PYTHONDONTWRITEBYTECODE=1 python3 -B scripts/particles/pic_parallel_shock_rk_stage_budget.py",
+    "status": "pass",
+    "integrators": ["rk1", "rk2", "rk3"],
+    "subtraction_variants": [false, true],
+    "particle_count": 240,
+    "residual_reservoir": 3.00024e-13,
+    "gas_mass_removed": 0.2400054931640625,
+    "integrator_invariant_particle_count": true,
+    "integrator_invariant_reservoir": true,
+    "integrator_invariant_gas_mass_removed": true,
+    "direct_gas_particle_momentum_closure": true,
+    "direct_gas_particle_energy_closure": true,
+    "negative_floor_rejected": true,
+    "non_finite_floor_rejected": true,
+    "passive_background_gas_subtraction_rejected": true
+  },
+  "paired_restart_schema_verification": {
+    "command": "cd tst && ATHENA_PIC_PARALLEL_SHOCK_STARTUP_COHORT_EXE_DIR=/tmp/athenak-pic-codex-host/src PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. python3 -B scripts/particles/pic_parallel_shock_startup_cohort_sink_restart.py",
+    "status": "pass",
+    "restart_schema": 3,
+    "ledger_complete": true,
+    "tag_seeded": true,
+    "full_vs_restart_particle_payload_observed_at_bounded_serial_fixture": "tolerance_bounded_with_observed_zero_float_residuals_in_this_rerun",
+    "explicit_incomplete_restart_ledger_rejected": true,
+    "invalid_restart_ledgers_rejected": [
+      "inconsistent_injected_restart_mass",
+      "inconsistent_removed_restart_mass",
+      "negative_restart_ledger",
+      "non_finite_restart_ledger",
+      "non_integral_restart_count",
+      "out_of_range_restart_reservoir",
+      "reset_restart_tag_floor",
+      "reset_restart_tag_progression",
+      "rewound_restart_tag_window",
+      "unseeded_restart_tag_progression"
+    ]
+  },
+  "retained_predecessor_artifacts": {
+    "role": "immutable_chronology_only",
+    "record": "tst/publication/readiness/q011_parallel_shock_rk_stage_budget_successor_v3_2026-05-31.json"
+  },
+  "remaining_blockers": [
+    "Complete registered MPI, AMR, HIP and Frontier qualification slices.",
+    "Close physical units, macro-mass and downstream-particles-per-cell calibration.",
+    "Run the registered Sun-and-Bai Section 5.4 coarse-uniform, three-level-AMR and fine-uniform campaign.",
+    "Complete independent raw-artifact recomputation and external review."
+  ],
+  "q011_disposition": "bounded_current_source_rk_stage_budget_restart_schema_and_fail_closed_regressions_passed_full_q011_qualification_open"
+}

@@ -25,7 +25,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 SIDECAR = (
     REPO_ROOT
     / "tst/publication/readiness/"
-    "q011_injection_distribution_runtime_local_successor_v3_2026-05-31.json"
+    "q011_injection_distribution_runtime_local_successor_v4_2026-05-31.json"
 )
 
 
