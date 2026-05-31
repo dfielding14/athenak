@@ -119,6 +119,8 @@ Real ps_particle_charge = 1.0;
 Real ps_particle_q_over_m = 1.0;
 Real ps_particle_macro_mass = 1.0;
 Real ps_mass_reservoir_global = 0.0;
+int ps_injection_transaction_cycle = std::numeric_limits<int>::min();
+std::vector<GasDelta> ps_injection_transaction_gas_deltas;
 bool ps_removed_excluded_early_cohort = false;
 bool ps_tag_seeded = false;
 std::int64_t ps_next_tag = 0;
@@ -813,6 +815,94 @@ void SeedNextTag(particles::Particles *ppart) {
   StoreRuntimeStateForRestart();
 }
 
+void ApplyParallelShockGasSubtraction(Mesh *pm, const Real stage_weight) {
+  if (!ps_enable_subtraction || ps_injection_transaction_gas_deltas.empty()) return;
+  if (!(stage_weight > 0.0) || !std::isfinite(stage_weight)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock gas-subtraction stage weight must be finite "
+              << "and positive." << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+
+  MeshBlockPack *pmbp = pm->pmb_pack;
+  if (pmbp == nullptr || pmbp->pmhd == nullptr) return;
+  auto *pmhd = pmbp->pmhd;
+  const int nsub = static_cast<int>(ps_injection_transaction_gas_deltas.size());
+  HostArray1D<int> h_m("ps_m", nsub);
+  HostArray1D<int> h_k("ps_k", nsub);
+  HostArray1D<int> h_j("ps_j", nsub);
+  HostArray1D<int> h_i("ps_i", nsub);
+  HostArray1D<Real> h_dm("ps_dm", nsub);
+  HostArray1D<Real> h_dmx("ps_dmx", nsub);
+  HostArray1D<Real> h_dmy("ps_dmy", nsub);
+  HostArray1D<Real> h_dmz("ps_dmz", nsub);
+  HostArray1D<Real> h_de("ps_de", nsub);
+  for (int n = 0; n < nsub; ++n) {
+    const GasDelta &d = ps_injection_transaction_gas_deltas[n];
+    h_m(n) = d.m;
+    h_k(n) = d.k;
+    h_j(n) = d.j;
+    h_i(n) = d.i;
+    h_dm(n) = stage_weight*d.dm;
+    h_dmx(n) = stage_weight*d.dmx;
+    h_dmy(n) = stage_weight*d.dmy;
+    h_dmz(n) = stage_weight*d.dmz;
+    h_de(n) = stage_weight*d.de;
+  }
+
+  auto d_m = Kokkos::create_mirror_view_and_copy(DevExeSpace(), h_m);
+  auto d_k = Kokkos::create_mirror_view_and_copy(DevExeSpace(), h_k);
+  auto d_j = Kokkos::create_mirror_view_and_copy(DevExeSpace(), h_j);
+  auto d_i = Kokkos::create_mirror_view_and_copy(DevExeSpace(), h_i);
+  auto d_dm = Kokkos::create_mirror_view_and_copy(DevExeSpace(), h_dm);
+  auto d_dmx = Kokkos::create_mirror_view_and_copy(DevExeSpace(), h_dmx);
+  auto d_dmy = Kokkos::create_mirror_view_and_copy(DevExeSpace(), h_dmy);
+  auto d_dmz = Kokkos::create_mirror_view_and_copy(DevExeSpace(), h_dmz);
+  auto d_de = Kokkos::create_mirror_view_and_copy(DevExeSpace(), h_de);
+
+  auto &u0 = pmhd->u0;
+  auto &b0 = pmhd->b0;
+  const Real rho_floor = ps_rho_floor_frac*ps_rho0;
+  const Real p_floor = ps_p_floor_frac*ps_p0;
+  const Real gm1 = pmhd->peos->eos_data.gamma - 1.0;
+  par_for("ps_gas_subtract", DevExeSpace(), 0, nsub - 1,
+  KOKKOS_LAMBDA(const int n) {
+    const int m = d_m(n);
+    const int k = d_k(n);
+    const int j = d_j(n);
+    const int i = d_i(n);
+    const Real dm = d_dm(n);
+    if (dm <= 0.0) return;
+
+    const Real rho_old = u0(m, IDN, k, j, i);
+    Real dm_eff = dm;
+    if (rho_old - dm_eff < rho_floor) {
+      dm_eff = fmax(rho_old - rho_floor, static_cast<Real>(0.0));
+    }
+    if (dm_eff <= 0.0) return;
+
+    const Real frac = dm_eff/dm;
+    u0(m, IDN, k, j, i) = rho_old - dm_eff;
+    u0(m, IM1, k, j, i) -= frac*d_dmx(n);
+    u0(m, IM2, k, j, i) -= frac*d_dmy(n);
+    u0(m, IM3, k, j, i) -= frac*d_dmz(n);
+    u0(m, IEN, k, j, i) -= frac*d_de(n);
+
+    Real bx = 0.5*(b0.x1f(m, k, j, i) + b0.x1f(m, k, j, i + 1));
+    Real by = 0.5*(b0.x2f(m, k, j, i) + b0.x2f(m, k, j + 1, i));
+    Real bz = 0.5*(b0.x3f(m, k, j, i) + b0.x3f(m, k + 1, j, i));
+    Real emag = 0.5*(SQR(bx) + SQR(by) + SQR(bz));
+    Real kin = 0.5*(SQR(u0(m, IM1, k, j, i)) +
+                    SQR(u0(m, IM2, k, j, i)) +
+                    SQR(u0(m, IM3, k, j, i)))/fmax(u0(m, IDN, k, j, i), rho_floor);
+    Real efloor = p_floor/gm1 + kin + emag;
+    if (u0(m, IEN, k, j, i) < efloor) {
+      u0(m, IEN, k, j, i) = efloor;
+    }
+  });
+}
+
 void ParallelShockSource(Mesh *pm, const Real bdt) {
   if (!ps_enable_injection) return;
   if (bdt <= 0.0) return;
@@ -820,8 +910,24 @@ void ParallelShockSource(Mesh *pm, const Real bdt) {
 
   MeshBlockPack *pmbp = pm->pmb_pack;
   if (pmbp == nullptr || pmbp->pmhd == nullptr || pmbp->ppart == nullptr) return;
+  if (!(pm->dt > 0.0) || !std::isfinite(pm->dt)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock injection timestep must be finite and positive."
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  const Real stage_weight = bdt/pm->dt;
+  if (ps_injection_transaction_cycle == pm->ncycle) {
+    ApplyParallelShockGasSubtraction(pm, stage_weight);
+    return;
+  }
+  // Particle creation and reservoir consumption are irreversible.  Commit them
+  // once per physical cycle, then replay only the matching RK-weighted fluid
+  // subtraction on later stages.
+  ps_injection_transaction_cycle = pm->ncycle;
+  ps_injection_transaction_gas_deltas.clear();
 
-  auto *pmhd = pmbp->pmhd;
   auto *ppart = pmbp->ppart;
   SeedNextTag(ppart);
   auto &indcs = pm->mb_indcs;
@@ -890,7 +996,7 @@ void ParallelShockSource(Mesh *pm, const Real bdt) {
   int ninj_global = 0;
   if (area_global > 0.0) {
     const Real sweep_speed = ps_u0 + ps_shock_speed;
-    const Real swept_mass = ps_eta*ps_rho0*sweep_speed*bdt*area_global;
+    const Real swept_mass = ps_eta*ps_rho0*sweep_speed*pm->dt*area_global;
     const Real mass_budget = ps_mass_reservoir_global + swept_mass;
     if (mass_budget > 0.0) {
       ninj_global = static_cast<int>(std::floor(mass_budget/ps_particle_macro_mass));
@@ -1090,82 +1196,10 @@ void ParallelShockSource(Mesh *pm, const Real bdt) {
   pm->CountParticles();
 
   if (!ps_enable_subtraction || gas_deltas.empty()) return;
-
-  const int nsub = static_cast<int>(gas_deltas.size());
-  HostArray1D<int> h_m("ps_m", nsub);
-  HostArray1D<int> h_k("ps_k", nsub);
-  HostArray1D<int> h_j("ps_j", nsub);
-  HostArray1D<int> h_i("ps_i", nsub);
-  HostArray1D<Real> h_dm("ps_dm", nsub);
-  HostArray1D<Real> h_dmx("ps_dmx", nsub);
-  HostArray1D<Real> h_dmy("ps_dmy", nsub);
-  HostArray1D<Real> h_dmz("ps_dmz", nsub);
-  HostArray1D<Real> h_de("ps_de", nsub);
-  int idx_sub = 0;
   for (const auto &kv : gas_deltas) {
-    const GasDelta &d = kv.second;
-    h_m(idx_sub) = d.m;
-    h_k(idx_sub) = d.k;
-    h_j(idx_sub) = d.j;
-    h_i(idx_sub) = d.i;
-    h_dm(idx_sub) = d.dm;
-    h_dmx(idx_sub) = d.dmx;
-    h_dmy(idx_sub) = d.dmy;
-    h_dmz(idx_sub) = d.dmz;
-    h_de(idx_sub) = d.de;
-    ++idx_sub;
+    ps_injection_transaction_gas_deltas.push_back(kv.second);
   }
-
-  auto d_m = Kokkos::create_mirror_view_and_copy(DevExeSpace(), h_m);
-  auto d_k = Kokkos::create_mirror_view_and_copy(DevExeSpace(), h_k);
-  auto d_j = Kokkos::create_mirror_view_and_copy(DevExeSpace(), h_j);
-  auto d_i = Kokkos::create_mirror_view_and_copy(DevExeSpace(), h_i);
-  auto d_dm = Kokkos::create_mirror_view_and_copy(DevExeSpace(), h_dm);
-  auto d_dmx = Kokkos::create_mirror_view_and_copy(DevExeSpace(), h_dmx);
-  auto d_dmy = Kokkos::create_mirror_view_and_copy(DevExeSpace(), h_dmy);
-  auto d_dmz = Kokkos::create_mirror_view_and_copy(DevExeSpace(), h_dmz);
-  auto d_de = Kokkos::create_mirror_view_and_copy(DevExeSpace(), h_de);
-
-  auto &u0 = pmhd->u0;
-  auto &b0 = pmhd->b0;
-  const Real rho_floor = ps_rho_floor_frac*ps_rho0;
-  const Real p_floor = ps_p_floor_frac*ps_p0;
-  const Real gm1 = pmhd->peos->eos_data.gamma - 1.0;
-  par_for("ps_gas_subtract", DevExeSpace(), 0, nsub - 1,
-  KOKKOS_LAMBDA(const int n) {
-    const int m = d_m(n);
-    const int k = d_k(n);
-    const int j = d_j(n);
-    const int i = d_i(n);
-    const Real dm = d_dm(n);
-    if (dm <= 0.0) return;
-
-    const Real rho_old = u0(m, IDN, k, j, i);
-    Real dm_eff = dm;
-    if (rho_old - dm_eff < rho_floor) {
-      dm_eff = fmax(rho_old - rho_floor, static_cast<Real>(0.0));
-    }
-    if (dm_eff <= 0.0) return;
-
-    const Real frac = dm_eff/dm;
-    u0(m, IDN, k, j, i) = rho_old - dm_eff;
-    u0(m, IM1, k, j, i) -= frac*d_dmx(n);
-    u0(m, IM2, k, j, i) -= frac*d_dmy(n);
-    u0(m, IM3, k, j, i) -= frac*d_dmz(n);
-    u0(m, IEN, k, j, i) -= frac*d_de(n);
-
-    Real bx = 0.5*(b0.x1f(m, k, j, i) + b0.x1f(m, k, j, i + 1));
-    Real by = 0.5*(b0.x2f(m, k, j, i) + b0.x2f(m, k, j + 1, i));
-    Real bz = 0.5*(b0.x3f(m, k, j, i) + b0.x3f(m, k + 1, j, i));
-    Real emag = 0.5*(SQR(bx) + SQR(by) + SQR(bz));
-    Real kin = 0.5*(SQR(u0(m, IM1, k, j, i)) +
-                    SQR(u0(m, IM2, k, j, i)) +
-                    SQR(u0(m, IM3, k, j, i)))/fmax(u0(m, IDN, k, j, i), rho_floor);
-    Real efloor = p_floor/gm1 + kin + emag;
-    if (u0(m, IEN, k, j, i) < efloor) {
-      u0(m, IEN, k, j, i) = efloor;
-    }
-  });
+  ApplyParallelShockGasSubtraction(pm, stage_weight);
 }
 
 void ParallelShockRefinement(MeshBlockPack *pmbp) {
@@ -1695,6 +1729,8 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
   ValidateAndStoreParallelShockRestartControls(pin, restart);
   ps_mass_reservoir_global = restart ?
       pin->GetOrAddReal("problem", "ps_mass_reservoir_global", 0.0) : 0.0;
+  ps_injection_transaction_cycle = std::numeric_limits<int>::min();
+  ps_injection_transaction_gas_deltas.clear();
   ps_removed_excluded_early_cohort = restart ?
       pin->GetOrAddBoolean("problem", "ps_removed_excluded_early_cohort", false) :
       false;
