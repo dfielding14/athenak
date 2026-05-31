@@ -216,10 +216,11 @@ hardening is promoted at canonical revision
 `9689c269bf329542815a1b2b137881126964b05c`, helper SHA-256
 `1c633ebb58294938a0a0609742ae8f8d1f88cd15242ffe649578796edeb39375`.
 Focused helper tests, Sphinx warnings-as-errors, syntax, diff, and hardened
-reconciliation pass. Prepare only `R02/s04_rankio_t1p5_t2` from the
-authenticated terminal siblings, then inspect, account, reconcile, and
-recost before any further extension. Finish R02, execute R03--R16
-sequentially, and complete `R17` last.
+reconciliation pass. Archive and catalog the current committed controller
+state, reconcile, then prepare only `R02/s04_rankio_t1p5_t2` from the
+authenticated terminal siblings. Inspect, account, reconcile, and recost
+before any further extension. Finish R02, execute R03--R16 sequentially, and
+complete `R17` last.
 
 The first R02 preflight exposed a nonblocking preview-rendering defect:
 `check-submit` enforced the reviewed shared-root acknowledgement but omitted it
@@ -238,9 +239,11 @@ transition `05cb4c324bfd8feec72ebdeb33b1961c9fde70bf` is archived in
 `1381918e471730d8c9639014475566f93fc87bac66b62738dd8316fc69c03570`.
 Retained F-080 evidence JSON SHA-256 is
 `46fc1c4054e75f4224302be1895c1b9eaae88097544512ac067c53376e542e34`;
-post-archive reconciliation passes. The first post-transition continuation is
-accepted as job `4746154`; use only its authenticated `t = 0.25` checkpoint
-for the next bounded R02 continuation. Commits `9480e62764528a3f40066d22a192f0e99b369891`
+post-archive reconciliation passes. The first post-transition continuation
+was accepted as job `4746154`; later authenticated continuations `4746182`
+and `4746356` now reach exact `t = 1.5`. Use only job `4746356`'s
+authenticated terminal checkpoint for the next bounded R02 continuation.
+Commits `9480e62764528a3f40066d22a192f0e99b369891`
 and `ef1e42fa088203ac9ef6ec8e47e668db4fb95a3c` additionally require the live
 helper to remain committed during historical authentication, reserve the
 case-level `analysis/` evidence namespace, and reject `--segment analysis`.
