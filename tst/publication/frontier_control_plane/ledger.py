@@ -46,6 +46,12 @@ CSV_FIELDS = [
     "terminal_recovery_handoff_path",
     "terminal_recovery_handoff_sha256",
     "terminal_recovery_mode",
+    "manual_accounting_authorization_id",
+    "manual_accounting_authorization_path",
+    "manual_accounting_project_home_authorization_path",
+    "manual_accounting_authorization_sha256",
+    "accounting_scope",
+    "scientific_evidence_eligible",
     "active_policy_sha256",
     "active_promotion_sha256",
     "git_commit",
@@ -319,7 +325,11 @@ def require_explicit_genesis(records: list[dict[str, object]]) -> None:
 
 
 def accounting(records: list[dict[str, object]]) -> dict[str, float]:
-    consumed = 0.0
+    consumed = sum(
+        float(record.get("consumed_node_hours", 0.0))
+        for record in records
+        if record.get("event_type") == "manual_allocation_reconciliation"
+    )
     reserved = 0.0
     for record in latest_reservations(records).values():
         if bool(record.get("reconciled", False)):

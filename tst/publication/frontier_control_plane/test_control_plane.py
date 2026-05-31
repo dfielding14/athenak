@@ -24,6 +24,7 @@ import uuid
 import install_control_plane
 import launch_trampoline
 import reconcile_frontier_job
+import reconcile_manual_frontier_allocations
 import terminal_recovery_handoff
 from control_plane_common import atomic_write_bytes, durable_mkdir_parents
 from control_plane_common import PinnedDirectoryAncestry
@@ -58,9 +59,11 @@ from launch_trampoline import _freeze_artifact_file_at
 from launch_trampoline import _freeze_artifact_tree_at
 from launch_trampoline import _capture_artifact_directory_identities_at
 from launch_trampoline import _publish_frozen_artifact_inventory, _TASK_LOCAL_EXEC, launch
-from ledger import accounting, genesis_anchor_paths, validate_primary_chain
+from ledger import accounting, append_primary_event, genesis_anchor_paths
+from ledger import validate_primary_chain
 from promote_active_policy import _promotion_lock, promote
 from reconcile_frontier_job import reconcile
+from reconcile_manual_frontier_allocations import reconcile_manual_allocations
 from terminal_recovery_handoff import create_handoff
 from validate_and_reserve_frontier_job import _clear_matching_pending_marker
 from validate_and_reserve_frontier_job import _require_scheduler_output_path
@@ -255,6 +258,66 @@ class SnapshotTests(unittest.TestCase):
             ),
         )
 
+    def _write_manual_accounting_authorization(
+        self,
+        *,
+        jobs: list[dict[str, str]] | None = None,
+        authorization_id: str = "q016-login-host-direct-srun",
+        bind_policy: bool = True,
+    ) -> Path:
+        parent = self.pic_root / "policy" / "manual_accounting_authorizations"
+        parent.mkdir(parents=True, exist_ok=True)
+        path = parent / f"{authorization_id}.json"
+        data = json.dumps(
+            {
+                "schema_version": 1,
+                "authorization_id": authorization_id,
+                "accounting_scope": "manual_direct_srun_accounting_only",
+                "scientific_evidence_eligible": False,
+                "jobs": jobs
+                or [
+                    {"job_id": "4746332", "expected_qos": "normal"},
+                    {"job_id": "4746335", "expected_qos": "normal"},
+                ],
+            }
+        )
+        path.write_text(data, encoding="utf-8")
+        path.chmod(0o444)
+        mirror_parent = (
+            self.project_home_root / "policy" / "manual_accounting_authorizations"
+        )
+        mirror_parent.mkdir(parents=True, exist_ok=True)
+        mirror_path = mirror_parent / path.name
+        mirror_path.write_text(data, encoding="utf-8")
+        mirror_path.chmod(0o444)
+        if bind_policy:
+            self._write_policy(
+                manual_accounting_authorizations=[
+                    {
+                        "authorization_id": authorization_id,
+                        "path": str(path),
+                        "project_home_path": str(mirror_path),
+                        "sha256": sha256(path),
+                    }
+                ]
+            )
+            self._promote_policy()
+        return path
+
+    def _manual_accounting_scheduler_output(
+        self, command: list[str], *args: object, **kwargs: object
+    ) -> str:
+        del args, kwargs
+        if command[0] == TRUSTED_SQUEUE:
+            return ""
+        self.assertEqual(command[0], TRUSTED_SACCT)
+        self.assertIn("--allocations", command)
+        self.assertIn("--clusters=frontier", command)
+        return (
+            "4746332|FAILED|5|1||ast207|batch|normal\n"
+            "4746335|COMPLETED|7|1||ast207|batch|normal\n"
+        )
+
     def _write_policy(
         self,
         *,
@@ -285,6 +348,7 @@ class SnapshotTests(unittest.TestCase):
             "orion_retention_role": (
                 "user_selected_sole_bulk_evidence_root_with_documented_durability_risk"
             ),
+            "manual_accounting_authorizations": [],
             "ledger_genesis_allowed": True,
         }
         if hasattr(self, "_closed_genesis"):
@@ -7507,6 +7571,433 @@ PY
             results = list(executor.map(invoke, zip([first, second], identifiers)))
         self.assertEqual(sum(isinstance(result, dict) for result in results), 1)
         self.assertEqual(sum(isinstance(result, ValueError) for result in results), 1)
+
+    def test_manual_direct_srun_accounting_appends_reviewed_events_once(self) -> None:
+        authorization = self._write_manual_accounting_authorization()
+        arguments = {
+            "authorization": authorization,
+            "ledger_jsonl": self.ledger,
+            "ledger_csv": self.csv,
+            "receipts_jsonl": self.receipts,
+            "mirror_jsonl": self.mirror,
+            "control_plane_dir": self.control_plane_dir,
+            "authorized_pic_root": self.pic_root,
+            "authorized_project_home_root": self.project_home_root,
+        }
+        with patch.object(
+            reconcile_manual_frontier_allocations.subprocess,
+            "check_output",
+            side_effect=self._manual_accounting_scheduler_output,
+        ):
+            first = reconcile_manual_allocations(**arguments)
+            second = reconcile_manual_allocations(**arguments)
+        self.assertEqual(first, second)
+        records = validate_primary_chain(self.ledger)
+        self.assertEqual(len(records), 3)
+        self.assertEqual(records[-1]["event_type"], "manual_allocation_reconciliation")
+        self.assertEqual(records[-1]["accounting_scope"], "manual_direct_srun_accounting_only")
+        self.assertIs(records[-1]["scientific_evidence_eligible"], False)
+        self.assertAlmostEqual(
+            accounting(records)["cumulative_consumed_node_hours"], 12.0 / 3600.0
+        )
+        self.assertEqual(
+            json.loads(self.mirror.read_text(encoding="utf-8").splitlines()[-1]),
+            records[-1],
+        )
+        self.assertIn("manual_accounting_authorization_sha256", self.csv.read_text())
+
+    def test_manual_direct_srun_accounting_retry_appends_only_missing_suffix(
+        self,
+    ) -> None:
+        authorization = self._write_manual_accounting_authorization()
+        arguments = {
+            "authorization": authorization,
+            "ledger_jsonl": self.ledger,
+            "ledger_csv": self.csv,
+            "receipts_jsonl": self.receipts,
+            "mirror_jsonl": self.mirror,
+            "control_plane_dir": self.control_plane_dir,
+            "authorized_pic_root": self.pic_root,
+            "authorized_project_home_root": self.project_home_root,
+        }
+        real_append = reconcile_manual_frontier_allocations.append_primary_event_locked
+        append_count = 0
+
+        def fail_second_append(*args: object, **kwargs: object) -> dict[str, object]:
+            nonlocal append_count
+            append_count += 1
+            if append_count == 2:
+                raise RuntimeError("interrupted")
+            return real_append(*args, **kwargs)
+
+        with patch.object(
+            reconcile_manual_frontier_allocations.subprocess,
+            "check_output",
+            side_effect=self._manual_accounting_scheduler_output,
+        ), patch(
+            "reconcile_manual_frontier_allocations.append_primary_event_locked",
+            side_effect=fail_second_append,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "interrupted"):
+                reconcile_manual_allocations(**arguments)
+        prefix = self.ledger.read_bytes()
+        with patch.object(
+            reconcile_manual_frontier_allocations.subprocess,
+            "check_output",
+            side_effect=self._manual_accounting_scheduler_output,
+        ):
+            events = reconcile_manual_allocations(**arguments)
+        self.assertEqual(len(events), 2)
+        self.assertTrue(self.ledger.read_bytes().startswith(prefix))
+        self.assertEqual(
+            [record["job_id"] for record in validate_primary_chain(self.ledger)[1:]],
+            ["4746332", "4746335"],
+        )
+
+    def test_manual_direct_srun_accounting_full_retry_uses_historical_prefix(
+        self,
+    ) -> None:
+        authorization = self._write_manual_accounting_authorization()
+        arguments = {
+            "authorization": authorization,
+            "ledger_jsonl": self.ledger,
+            "ledger_csv": self.csv,
+            "receipts_jsonl": self.receipts,
+            "mirror_jsonl": self.mirror,
+            "control_plane_dir": self.control_plane_dir,
+            "authorized_pic_root": self.pic_root,
+            "authorized_project_home_root": self.project_home_root,
+        }
+        with patch.object(
+            reconcile_manual_frontier_allocations.subprocess,
+            "check_output",
+            side_effect=self._manual_accounting_scheduler_output,
+        ):
+            first = reconcile_manual_allocations(**arguments)
+        append_primary_event(
+            self.ledger,
+            self.csv,
+            self.receipts,
+            self.mirror,
+            {
+                "event_type": "manual_allocation_reconciliation",
+                "job_id": "later-unrelated-job",
+                "manual_accounting_authorization_id": "later-unrelated-authorization",
+                "reconciled": True,
+                "consumed_node_hours": 1.0,
+            },
+            mirror_transport="filesystem_copy",
+        )
+        with patch.object(
+            reconcile_manual_frontier_allocations.subprocess,
+            "check_output",
+            side_effect=self._manual_accounting_scheduler_output,
+        ):
+            second = reconcile_manual_allocations(**arguments)
+        self.assertEqual(first, second)
+        self.assertAlmostEqual(
+            accounting(validate_primary_chain(self.ledger))[
+                "cumulative_consumed_node_hours"
+            ],
+            1.0 + 12.0 / 3600.0,
+        )
+
+    def test_manual_direct_srun_accounting_partial_retry_rejects_interleaving(
+        self,
+    ) -> None:
+        authorization = self._write_manual_accounting_authorization()
+        arguments = {
+            "authorization": authorization,
+            "ledger_jsonl": self.ledger,
+            "ledger_csv": self.csv,
+            "receipts_jsonl": self.receipts,
+            "mirror_jsonl": self.mirror,
+            "control_plane_dir": self.control_plane_dir,
+            "authorized_pic_root": self.pic_root,
+            "authorized_project_home_root": self.project_home_root,
+        }
+        real_append = reconcile_manual_frontier_allocations.append_primary_event_locked
+        append_count = 0
+
+        def fail_second_append(*args: object, **kwargs: object) -> dict[str, object]:
+            nonlocal append_count
+            append_count += 1
+            if append_count == 2:
+                raise RuntimeError("interrupted")
+            return real_append(*args, **kwargs)
+
+        with patch.object(
+            reconcile_manual_frontier_allocations.subprocess,
+            "check_output",
+            side_effect=self._manual_accounting_scheduler_output,
+        ), patch(
+            "reconcile_manual_frontier_allocations.append_primary_event_locked",
+            side_effect=fail_second_append,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "interrupted"):
+                reconcile_manual_allocations(**arguments)
+        append_primary_event(
+            self.ledger,
+            self.csv,
+            self.receipts,
+            self.mirror,
+            {"event_type": "historical_probe"},
+            mirror_transport="filesystem_copy",
+        )
+        with patch.object(
+            reconcile_manual_frontier_allocations.subprocess,
+            "check_output",
+            side_effect=self._manual_accounting_scheduler_output,
+        ):
+            with self.assertRaisesRegex(ValueError, "terminal ledger suffix"):
+                reconcile_manual_allocations(**arguments)
+
+    def test_manual_direct_srun_accounting_requires_frozen_authorization(self) -> None:
+        authorization = self._write_manual_accounting_authorization()
+        authorization.chmod(0o644)
+        with self.assertRaisesRegex(ValueError, "not read-only"):
+            reconcile_manual_allocations(
+                authorization=authorization,
+                ledger_jsonl=self.ledger,
+                ledger_csv=self.csv,
+                receipts_jsonl=self.receipts,
+                mirror_jsonl=self.mirror,
+                control_plane_dir=self.control_plane_dir,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+
+    def test_manual_direct_srun_accounting_rejects_unbound_authorization(self) -> None:
+        authorization = self._write_manual_accounting_authorization(
+            bind_policy=False
+        )
+        with patch.object(
+            reconcile_manual_frontier_allocations.subprocess,
+            "check_output",
+        ) as scheduler:
+            with self.assertRaisesRegex(ValueError, "not bound by the promoted policy"):
+                reconcile_manual_allocations(
+                    authorization=authorization,
+                    ledger_jsonl=self.ledger,
+                    ledger_csv=self.csv,
+                    receipts_jsonl=self.receipts,
+                    mirror_jsonl=self.mirror,
+                    control_plane_dir=self.control_plane_dir,
+                    authorized_pic_root=self.pic_root,
+                    authorized_project_home_root=self.project_home_root,
+                )
+        scheduler.assert_not_called()
+
+    def test_policy_promotion_rejects_manual_accounting_authorization_hash_drift(
+        self,
+    ) -> None:
+        authorization = self._write_manual_accounting_authorization(
+            bind_policy=False
+        )
+        project_home_authorization = (
+            self.project_home_root
+            / "policy"
+            / "manual_accounting_authorizations"
+            / authorization.name
+        )
+        self._write_policy(
+            manual_accounting_authorizations=[
+                {
+                    "authorization_id": authorization.stem,
+                    "path": str(authorization),
+                    "project_home_path": str(project_home_authorization),
+                    "sha256": "0" * 64,
+                }
+            ]
+        )
+        with self.assertRaisesRegex(ValueError, "authorization bytes differ"):
+            self._promote_policy()
+
+    def test_manual_direct_srun_accounting_rejects_authorization_mirror_drift(
+        self,
+    ) -> None:
+        authorization = self._write_manual_accounting_authorization()
+        mirror = (
+            self.project_home_root
+            / "policy"
+            / "manual_accounting_authorizations"
+            / authorization.name
+        )
+        mirror.chmod(0o644)
+        mirror.write_text("{}", encoding="utf-8")
+        mirror.chmod(0o444)
+        with self.assertRaisesRegex(ValueError, "mirror bytes differ"):
+            reconcile_manual_allocations(
+                authorization=authorization,
+                ledger_jsonl=self.ledger,
+                ledger_csv=self.csv,
+                receipts_jsonl=self.receipts,
+                mirror_jsonl=self.mirror,
+                control_plane_dir=self.control_plane_dir,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+
+    def test_manual_direct_srun_accounting_rejects_nonempty_trusted_queue(self) -> None:
+        authorization = self._write_manual_accounting_authorization()
+        with patch.object(
+            reconcile_manual_frontier_allocations.subprocess,
+            "check_output",
+            return_value="4747000\n",
+        ):
+            with self.assertRaisesRegex(ValueError, "empty trusted Frontier queue"):
+                reconcile_manual_allocations(
+                    authorization=authorization,
+                    ledger_jsonl=self.ledger,
+                    ledger_csv=self.csv,
+                    receipts_jsonl=self.receipts,
+                    mirror_jsonl=self.mirror,
+                    control_plane_dir=self.control_plane_dir,
+                    authorized_pic_root=self.pic_root,
+                    authorized_project_home_root=self.project_home_root,
+                )
+
+    def test_manual_direct_srun_accounting_rejects_pending_marker(self) -> None:
+        authorization = self._write_manual_accounting_authorization()
+        (self.pic_root / "ledger" / "pending_submission.json").write_text(
+            "{}\n", encoding="utf-8"
+        )
+        with patch.object(
+            reconcile_manual_frontier_allocations.subprocess,
+            "check_output",
+        ) as scheduler:
+            with self.assertRaisesRegex(ValueError, "pending scheduler submission"):
+                reconcile_manual_allocations(
+                    authorization=authorization,
+                    ledger_jsonl=self.ledger,
+                    ledger_csv=self.csv,
+                    receipts_jsonl=self.receipts,
+                    mirror_jsonl=self.mirror,
+                    control_plane_dir=self.control_plane_dir,
+                    authorized_pic_root=self.pic_root,
+                    authorized_project_home_root=self.project_home_root,
+                )
+        scheduler.assert_not_called()
+
+    def test_manual_direct_srun_accounting_rejects_active_reservation(self) -> None:
+        authorization = self._write_manual_accounting_authorization()
+        append_primary_event(
+            self.ledger,
+            self.csv,
+            self.receipts,
+            self.mirror,
+            {
+                "event_type": "reservation",
+                "reservation_id": str(uuid.uuid4()),
+                "state": "reserved",
+                "reserved_node_hours": 1.0,
+            },
+            mirror_transport="filesystem_copy",
+        )
+        with patch.object(
+            reconcile_manual_frontier_allocations.subprocess,
+            "check_output",
+        ) as scheduler:
+            with self.assertRaisesRegex(ValueError, "active reservation"):
+                reconcile_manual_allocations(
+                    authorization=authorization,
+                    ledger_jsonl=self.ledger,
+                    ledger_csv=self.csv,
+                    receipts_jsonl=self.receipts,
+                    mirror_jsonl=self.mirror,
+                    control_plane_dir=self.control_plane_dir,
+                    authorized_pic_root=self.pic_root,
+                    authorized_project_home_root=self.project_home_root,
+                )
+        scheduler.assert_not_called()
+
+    def test_manual_direct_srun_accounting_rejects_prior_job_event(self) -> None:
+        authorization = self._write_manual_accounting_authorization()
+        append_primary_event(
+            self.ledger,
+            self.csv,
+            self.receipts,
+            self.mirror,
+            {
+                "event_type": "historical_probe",
+                "job_id": "4746332",
+            },
+            mirror_transport="filesystem_copy",
+        )
+        with patch.object(
+            reconcile_manual_frontier_allocations.subprocess,
+            "check_output",
+            side_effect=self._manual_accounting_scheduler_output,
+        ):
+            with self.assertRaisesRegex(ValueError, "prior ledger event"):
+                reconcile_manual_allocations(
+                    authorization=authorization,
+                    ledger_jsonl=self.ledger,
+                    ledger_csv=self.csv,
+                    receipts_jsonl=self.receipts,
+                    mirror_jsonl=self.mirror,
+                    control_plane_dir=self.control_plane_dir,
+                    authorized_pic_root=self.pic_root,
+                    authorized_project_home_root=self.project_home_root,
+                )
+
+    def test_manual_direct_srun_accounting_requires_promoted_successor(self) -> None:
+        authorization = self._write_manual_accounting_authorization()
+        successor = self._publish_test_control_plane_successor(self.pic_root)
+        project_home_successor = self._publish_test_control_plane_successor(
+            self.project_home_root
+        )
+        self.assertEqual(project_home_successor.name, successor.name)
+        with patch.object(
+            reconcile_manual_frontier_allocations.subprocess,
+            "check_output",
+        ) as scheduler:
+            with self.assertRaisesRegex(ValueError, "Active-policy promotion"):
+                reconcile_manual_allocations(
+                    authorization=authorization,
+                    ledger_jsonl=self.ledger,
+                    ledger_csv=self.csv,
+                    receipts_jsonl=self.receipts,
+                    mirror_jsonl=self.mirror,
+                    control_plane_dir=successor,
+                    authorized_pic_root=self.pic_root,
+                    authorized_project_home_root=self.project_home_root,
+                )
+        scheduler.assert_not_called()
+
+    def test_manual_direct_srun_accounting_rejects_scheduler_field_drift(self) -> None:
+        authorization = self._write_manual_accounting_authorization()
+        arguments = {
+            "authorization": authorization,
+            "ledger_jsonl": self.ledger,
+            "ledger_csv": self.csv,
+            "receipts_jsonl": self.receipts,
+            "mirror_jsonl": self.mirror,
+            "control_plane_dir": self.control_plane_dir,
+            "authorized_pic_root": self.pic_root,
+            "authorized_project_home_root": self.project_home_root,
+        }
+        scheduler_outputs = [
+            "4746332|FAILED|5|1|unexpected|ast207|batch|normal\n"
+            "4746335|COMPLETED|7|1||ast207|batch|normal\n",
+            "4746332|FAILED|5|1||other|batch|normal\n"
+            "4746335|COMPLETED|7|1||ast207|batch|normal\n",
+            "4746332|FAILED|5|1||ast207|other|normal\n"
+            "4746335|COMPLETED|7|1||ast207|batch|normal\n",
+            "4746332|FAILED|5|1||ast207|batch|debug\n"
+            "4746335|COMPLETED|7|1||ast207|batch|normal\n",
+            "4746332|FAILED|-1|1||ast207|batch|normal\n"
+            "4746335|COMPLETED|7|1||ast207|batch|normal\n",
+        ]
+        for scheduler_output in scheduler_outputs:
+            with self.subTest(scheduler_output=scheduler_output):
+                with patch.object(
+                    reconcile_manual_frontier_allocations.subprocess,
+                    "check_output",
+                    side_effect=["", scheduler_output],
+                ):
+                    with self.assertRaises(ValueError):
+                        reconcile_manual_allocations(**arguments)
 
 
 if __name__ == "__main__":

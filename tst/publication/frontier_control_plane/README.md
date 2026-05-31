@@ -98,6 +98,34 @@ cannot be collectively atomic across the two filesystems, so readers fail
 closed while any partial generation is visible. A direct edit to the
 repository policy or either active copy is not an authorization.
 
+## Manual Allocation Accounting
+
+Direct `srun` allocations are a deviation from the registered submission path.
+They are never scientific evidence. If a reviewed prerequisite replay used
+direct `srun`, publish one exact read-only authorization JSON file below
+`${PIC_ROOT}/policy/manual_accounting_authorizations/` and its byte-identical
+Project Home mirror, bind both paths and the SHA-256 digest in the reviewed
+storage policy, promote that policy, and reconcile the reviewed allocation IDs
+through the paired installed control plane:
+
+```bash
+export AUTHORIZATION_ID=<reviewed-authorization-id>
+
+"${CONTROL_PLANE[@]}" reconcile_manual_frontier_allocations.py \
+  --authorization "${PIC_ROOT}/policy/manual_accounting_authorizations/${AUTHORIZATION_ID}.json" \
+  --ledger-jsonl "${PIC_ROOT}/ledger/node_hours.jsonl" \
+  --ledger-csv "${PIC_ROOT}/ledger/node_hours.csv" \
+  --receipts-jsonl "${PIC_ROOT}/ledger/mirror_receipts.jsonl" \
+  --mirror-jsonl "${PROJECT_HOME_MIRROR_ROOT}/ledger/node_hours.jsonl"
+```
+
+The helper accepts only terminal Slurm allocation records with the authorized
+account, partition and QoS, requires an empty trusted Frontier queue, no PIC
+pending marker and no active reservation, and appends one explicitly
+nonqualifying event per allocation. Those node-hours count against the tracked
+budget. Interrupted retries may complete only the exact authorized terminal
+suffix.
+
 When promoting a successor over the historical pre-anchor ledger, install the
 successor in both roots and migrate its already-audited genesis before changing
 the active policy:

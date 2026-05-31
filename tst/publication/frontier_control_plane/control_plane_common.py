@@ -330,6 +330,7 @@ CONTROL_PLANE_FILES = [
     "ledger.py",
     "promote_active_policy.py",
     "reconcile_frontier_job.py",
+    "reconcile_manual_frontier_allocations.py",
     "run_installed_control_plane_job.sh",
     "run_control_plane.py",
     "submit_frontier_job.sh",
@@ -2378,6 +2379,64 @@ def validate_storage_policy(
         record = storage.get(key)
         if not isinstance(record, dict) or record.get("status") != "passed":
             raise ValueError(f"Storage policy {key} has not passed")
+    manual_authorizations = storage.get("manual_accounting_authorizations")
+    if not isinstance(manual_authorizations, list) or len(manual_authorizations) > 16:
+        raise ValueError("Storage policy manual-accounting authorizations are malformed")
+    manual_authorization_ids: set[str] = set()
+    manual_authorization_paths: set[Path] = set()
+    manual_authorization_root = (
+        Path(os.path.abspath(authorized_pic_root))
+        / "policy"
+        / "manual_accounting_authorizations"
+    )
+    for authorization in manual_authorizations:
+        if not isinstance(authorization, dict) or set(authorization) != {
+            "authorization_id",
+            "path",
+            "project_home_path",
+            "sha256",
+        }:
+            raise ValueError("Storage policy manual-accounting authorization is malformed")
+        authorization_id = authorization.get("authorization_id")
+        if (
+            not isinstance(authorization_id, str)
+            or re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,127}", authorization_id) is None
+            or authorization_id in manual_authorization_ids
+        ):
+            raise ValueError("Storage policy manual-accounting authorization ID is invalid")
+        path = require_canonical_path_below(
+            Path(str(authorization.get("path", ""))), manual_authorization_root
+        )
+        project_home_authorization_root = (
+            Path(os.path.abspath(authorized_project_home_root))
+            / "policy"
+            / "manual_accounting_authorizations"
+        )
+        project_home_path = require_canonical_path_below(
+            Path(str(authorization.get("project_home_path", ""))),
+            project_home_authorization_root,
+        )
+        if path.name != f"{authorization_id}.json" or path in manual_authorization_paths:
+            raise ValueError("Storage policy manual-accounting authorization path is invalid")
+        if project_home_path.name != path.name:
+            raise ValueError(
+                "Storage policy manual-accounting authorization mirror path is invalid"
+            )
+        digest = authorization.get("sha256")
+        if not isinstance(digest, str) or re.fullmatch(r"[0-9a-f]{64}", digest) is None:
+            raise ValueError("Storage policy manual-accounting authorization SHA-256 is invalid")
+        data = read_stable_regular_file_below(
+            path, manual_authorization_root, require_read_only_mode=True
+        )
+        project_home_data = read_stable_regular_file_below(
+            project_home_path,
+            project_home_authorization_root,
+            require_read_only_mode=True,
+        )
+        if sha256_bytes(data) != digest or project_home_data != data:
+            raise ValueError("Storage policy manual-accounting authorization bytes differ")
+        manual_authorization_ids.add(authorization_id)
+        manual_authorization_paths.add(path)
     genesis_allowed = storage.get("ledger_genesis_allowed")
     genesis = storage.get("ledger_genesis")
     if genesis_allowed is True:

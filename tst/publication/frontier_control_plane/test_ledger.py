@@ -109,6 +109,25 @@ class LedgerTests(unittest.TestCase):
         )
         self.assertEqual(rows[-1]["clean_candidate_manifest_sha256"], "a" * 64)
 
+    def test_manual_direct_srun_reconciliation_counts_toward_consumed_budget(
+        self,
+    ) -> None:
+        self.append(
+            {
+                "event_type": "manual_allocation_reconciliation",
+                "job_id": "4746332",
+                "accounting_scope": "manual_direct_srun_accounting_only",
+                "scientific_evidence_eligible": False,
+                "reconciled": True,
+                "consumed_node_hours": 1.0 / 720.0,
+            }
+        )
+        totals = accounting(validate_primary_chain(self.ledger))
+        self.assertAlmostEqual(
+            totals["cumulative_consumed_node_hours"], 1.0 / 720.0
+        )
+        self.assertEqual(totals["currently_reserved_node_hours"], 0.0)
+
     def test_mirror_head_divergence_fails_closed(self) -> None:
         with self.mirror.open("a", encoding="utf-8") as stream:
             stream.write("{}\n")

@@ -36,6 +36,7 @@ CONTROL_PLANE_FILES = [
     "ledger.py",
     "promote_active_policy.py",
     "reconcile_frontier_job.py",
+    "reconcile_manual_frontier_allocations.py",
     "run_installed_control_plane_job.sh",
     "run_control_plane.py",
     "submit_frontier_job.sh",
