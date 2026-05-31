@@ -34,11 +34,13 @@ MIN_GROWTH_SNAPSHOTS = 8
 MIN_RIGHT_TO_LEFT_RATIO = 10.0
 ABSOLUTE_TOLERANCE = 0.02
 RELATIVE_TOLERANCE = 0.05
+SOURCE_LOCAL_VELOCITY_MAGNETIC_RATIO_ABSOLUTE_TOLERANCE = 0.05
+RAW_GEOMETRY_ABSOLUTE_TOLERANCE = 1.0e-6
 K0 = 2.0 * math.pi
 U_A = 1.0
 RETAINED_OBSERVABLE_CONTRACT = (
-    "magnetic_mode_preparation_only_velocity_observable_not_retained_"
-    "section52_qualification_blocked"
+    "combined_mhd_w_bcc_magnetic_and_fluid_velocity_mode_preparation_"
+    "section52_qualification_still_blocked"
 )
 
 DECKS = {
@@ -77,19 +79,19 @@ _APPROVED_SOURCE_LOCAL_RAW_VARIANTS = {
         "dimension": 1,
         "epsilon": 0.4,
         "deck": DECKS[1],
-        "deck_sha256": "8fedfac3098f50380377ea52eee610d60aae36a1b420673032779db86c5592be",
+        "deck_sha256": "b84fb1b046d3174c3ce6bdd5f9067173dccd0636557d57c047331bf0a42eb4d5",
     },
     "Q023-SOURCE-LOCAL-BASELINE-2D-EPSILON-0P4": {
         "dimension": 2,
         "epsilon": 0.4,
         "deck": DECKS[2],
-        "deck_sha256": "0b45844f18dfe1966e57d1db153bfd3fc9df603596a6828f998e1e87d28fbe66",
+        "deck_sha256": "b8a11ce7f7227210392de133bf52f71c265d86ab5ade73bf89a45a6449a3a23c",
     },
     "Q023-SOURCE-LOCAL-BASELINE-3D-EPSILON-0P4": {
         "dimension": 3,
         "epsilon": 0.4,
         "deck": DECKS[3],
-        "deck_sha256": "8ae2a2e5afa69c1247e495dd335a075e7a130ead5c0d4645f0af19f9d62c7817",
+        "deck_sha256": "a0fda35a71542e3c411c574a4c5069cbbae3776f02aa10dd44176a3102664103",
     },
 }
 
@@ -140,8 +142,8 @@ _EXPECTED_DECK_VALUES = {
     ("q023_paper_bell_linear", "timestep"):
         "open_clean_candidate_timestep_freeze",
     ("output1", "file_type"): "bin",
-    ("output1", "variable"): "mhd_bcc",
-    ("output1", "id"): "mhd_bcc",
+    ("output1", "variable"): "mhd_w_bcc",
+    ("output1", "id"): "mhd_w_bcc",
     ("output1", "dcycle"): "1",
     ("output1", "ghost_zones"): "false",
     ("output2", "file_type"): "rst",
@@ -159,8 +161,14 @@ _TRACE_KEYS = {
     "right_mode_imag",
     "left_mode_real",
     "left_mode_imag",
+    "velocity_right_mode_real",
+    "velocity_right_mode_imag",
+    "velocity_left_mode_real",
+    "velocity_left_mode_imag",
     "phase_interval",
     "phase_change",
+    "velocity_phase_interval",
+    "velocity_phase_change",
 }
 _RAW_PROVENANCE_KEYS = {
     "kind",
@@ -530,8 +538,13 @@ def _fixed_interval_phase_trace(
     return np.diff(boundaries), np.diff(phase)
 
 
-def _spatial_modes_from_dataset(
-    dataset: dict[str, Any], dimension: int, raw_geometry: dict[str, Any]
+def _spatial_modes_from_components(
+    dataset: dict[str, Any],
+    dimension: int,
+    raw_geometry: dict[str, Any],
+    component_names: Sequence[str],
+    *,
+    label: str,
 ) -> tuple[complex, complex]:
     parallel, transverse_a, transverse_b = _mode_basis(dimension)
     coordinates = [
@@ -539,32 +552,52 @@ def _spatial_modes_from_dataset(
     ]
     if any(values.ndim != 1 or not np.all(np.isfinite(values))
            for values in coordinates):
-        raise ContractError("raw mhd_bcc coordinates must be finite one-dimensional arrays")
+        raise ContractError(
+            "raw mhd_w_bcc coordinates must be finite one-dimensional arrays"
+        )
     nx = tuple(raw_geometry["nx"])
     xmin = tuple(raw_geometry["xmin"])
     extent = tuple(raw_geometry["extent"])
     if tuple(values.size for values in coordinates) != nx:
-        raise ContractError("raw mhd_bcc geometry does not match the approved variant")
+        raise ContractError("raw mhd_w_bcc geometry does not match the approved variant")
     for axis, values in enumerate(coordinates):
         expected = xmin[axis] + (np.arange(nx[axis], dtype=float) + 0.5) * (
             extent[axis] / nx[axis]
         )
-        if not np.allclose(values, expected, rtol=0.0, atol=1.0e-13):
-            raise ContractError("raw mhd_bcc geometry does not match the approved variant")
+        if not np.allclose(
+            values, expected, rtol=0.0, atol=RAW_GEOMETRY_ABSOLUTE_TOLERANCE
+        ):
+            raise ContractError(
+                "raw mhd_w_bcc geometry does not match the approved variant"
+            )
     expected_shape = tuple(values.size for values in reversed(coordinates))
-    magnetic = np.stack(
-        [np.asarray(dataset[f"bcc{axis}"], dtype=float) for axis in (1, 2, 3)]
+    if any(name not in dataset for name in component_names):
+        raise ContractError(f"raw mhd_w_bcc {label} components are incomplete")
+    vector = np.stack(
+        [np.asarray(dataset[name], dtype=float) for name in component_names]
     )
-    if magnetic.shape[1:] != expected_shape or not np.all(np.isfinite(magnetic)):
-        raise ContractError("raw mhd_bcc dataset shape or values are invalid")
+    if vector.shape[1:] != expected_shape or not np.all(np.isfinite(vector)):
+        raise ContractError(f"raw mhd_w_bcc {label} shape or values are invalid")
     x3, x2, x1 = np.meshgrid(
         coordinates[2], coordinates[1], coordinates[0], indexing="ij"
     )
     phase = K0 * (parallel[0]*x1 + parallel[1]*x2 + parallel[2]*x3)
     fourier_weight = np.exp(-1.0j * phase)
-    mode_a = np.mean(np.tensordot(transverse_a, magnetic, axes=1) * fourier_weight)
-    mode_b = np.mean(np.tensordot(transverse_b, magnetic, axes=1) * fourier_weight)
+    mode_a = np.mean(np.tensordot(transverse_a, vector, axes=1) * fourier_weight)
+    mode_b = np.mean(np.tensordot(transverse_b, vector, axes=1) * fourier_weight)
     return 0.5*(mode_a - 1.0j*mode_b), 0.5*(mode_a + 1.0j*mode_b)
+
+
+def _spatial_modes_from_dataset(
+    dataset: dict[str, Any], dimension: int, raw_geometry: dict[str, Any]
+) -> tuple[complex, complex, complex, complex]:
+    magnetic = _spatial_modes_from_components(
+        dataset, dimension, raw_geometry, ("bcc1", "bcc2", "bcc3"), label="magnetic"
+    )
+    velocity = _spatial_modes_from_components(
+        dataset, dimension, raw_geometry, ("velx", "vely", "velz"), label="velocity"
+    )
+    return magnetic + velocity
 
 
 def extract_trace_record_from_datasets(
@@ -575,7 +608,7 @@ def extract_trace_record_from_datasets(
     raw_provenance: dict[str, Any],
     artifact_root: Path | None = None,
 ) -> dict[str, Any]:
-    """Extract one paper Bell trace record from raw mhd_bcc snapshot datasets."""
+    """Extract one paper Bell trace record from raw mhd_w_bcc snapshot datasets."""
     theoretical_dispersion(epsilon)
     provenance = _validate_raw_provenance(
         raw_provenance, dimension, epsilon, artifact_root=artifact_root
@@ -583,21 +616,26 @@ def extract_trace_record_from_datasets(
     rows = []
     for dataset in datasets:
         if "Time" not in dataset:
-            raise ContractError("raw mhd_bcc dataset is missing Time")
+            raise ContractError("raw mhd_w_bcc dataset is missing Time")
         time = float(dataset["Time"])
         if not math.isfinite(time):
-            raise ContractError("raw mhd_bcc dataset Time must be finite")
-        right, left = _spatial_modes_from_dataset(
+            raise ContractError("raw mhd_w_bcc dataset Time must be finite")
+        right, left, velocity_right, velocity_left = _spatial_modes_from_dataset(
             dataset, dimension, provenance["raw_geometry"]
         )
-        rows.append((time*K0*U_A, right, left))
+        rows.append((time*K0*U_A, right, left, velocity_right, velocity_left))
     rows.sort(key=lambda item: item[0])
     if not rows:
-        raise ContractError("raw mhd_bcc extraction requires snapshots")
+        raise ContractError("raw mhd_w_bcc extraction requires snapshots")
     time = np.asarray([item[0] for item in rows], dtype=float)
     right = np.asarray([item[1] for item in rows], dtype=complex)
     left = np.asarray([item[2] for item in rows], dtype=complex)
+    velocity_right = np.asarray([item[3] for item in rows], dtype=complex)
+    velocity_left = np.asarray([item[4] for item in rows], dtype=complex)
     interval, change = _fixed_interval_phase_trace(time, right)
+    velocity_interval, velocity_change = _fixed_interval_phase_trace(
+        time, velocity_right
+    )
     return {
         "dimension": dimension,
         "epsilon": epsilon,
@@ -607,8 +645,14 @@ def extract_trace_record_from_datasets(
         "right_mode_imag": right.imag.tolist(),
         "left_mode_real": left.real.tolist(),
         "left_mode_imag": left.imag.tolist(),
+        "velocity_right_mode_real": velocity_right.real.tolist(),
+        "velocity_right_mode_imag": velocity_right.imag.tolist(),
+        "velocity_left_mode_real": velocity_left.real.tolist(),
+        "velocity_left_mode_imag": velocity_left.imag.tolist(),
         "phase_interval": interval.tolist(),
         "phase_change": change.tolist(),
+        "velocity_phase_interval": velocity_interval.tolist(),
+        "velocity_phase_change": velocity_change.tolist(),
     }
 
 
@@ -658,6 +702,25 @@ def _within_both_tolerances(measured: float, expected: float) -> bool:
     return absolute_error <= ABSOLUTE_TOLERANCE and relative_error <= RELATIVE_TOLERANCE
 
 
+def _fit_growth(
+    time: np.ndarray, amplitude: np.ndarray, expected_growth: float, *, label: str
+) -> tuple[float, float, np.ndarray]:
+    fit_mask = (expected_growth * time >= 1.0) & (expected_growth * time <= 5.0)
+    if np.count_nonzero(fit_mask) < MIN_GROWTH_SNAPSHOTS:
+        raise ContractError("the fixed theory growth window requires >= 8 snapshots")
+    if np.any(amplitude[fit_mask] <= 0.0):
+        raise ContractError(f"{label} right-polarized mode amplitude must remain positive")
+    fit_time = time[fit_mask]
+    fit_log_amplitude = np.log(amplitude[fit_mask])
+    coeff = np.polyfit(fit_time, fit_log_amplitude, 1)
+    fitted = np.polyval(coeff, fit_time)
+    residual = fit_log_amplitude - fitted
+    ss_res = float(np.sum(residual * residual))
+    ss_tot = float(np.sum((fit_log_amplitude - np.mean(fit_log_amplitude)) ** 2))
+    growth_r2 = 1.0 if ss_tot == 0.0 else 1.0 - ss_res / ss_tot
+    return float(coeff[0]), growth_r2, fit_mask
+
+
 def _analyze_record(
     record: dict[str, Any], *, artifact_root: Path | None = None
 ) -> dict[str, Any]:
@@ -675,7 +738,7 @@ def _analyze_record(
     time = _finite_array(record, "normalized_time")
     if time.size < MIN_GROWTH_SNAPSHOTS or np.any(np.diff(time) <= 0.0):
         raise ContractError("normalized_time must be strictly increasing with >= 8 rows")
-    mode_arrays = [
+    magnetic_mode_arrays = [
         _finite_array(record, key)
         for key in (
             "right_mode_real",
@@ -684,26 +747,34 @@ def _analyze_record(
             "left_mode_imag",
         )
     ]
-    if any(values.size != time.size for values in mode_arrays):
+    velocity_mode_arrays = [
+        _finite_array(record, key)
+        for key in (
+            "velocity_right_mode_real",
+            "velocity_right_mode_imag",
+            "velocity_left_mode_real",
+            "velocity_left_mode_imag",
+        )
+    ]
+    if any(values.size != time.size
+           for values in magnetic_mode_arrays + velocity_mode_arrays):
         raise ContractError("mode arrays must match normalized_time length")
-    right = mode_arrays[0] + 1.0j * mode_arrays[1]
-    left = mode_arrays[2] + 1.0j * mode_arrays[3]
+    right = magnetic_mode_arrays[0] + 1.0j * magnetic_mode_arrays[1]
+    left = magnetic_mode_arrays[2] + 1.0j * magnetic_mode_arrays[3]
+    velocity_right = velocity_mode_arrays[0] + 1.0j * velocity_mode_arrays[1]
+    velocity_left = velocity_mode_arrays[2] + 1.0j * velocity_mode_arrays[3]
     right_amplitude = np.abs(right)
     left_amplitude = np.abs(left)
-    fit_mask = (expected_growth * time >= 1.0) & (expected_growth * time <= 5.0)
-    if np.count_nonzero(fit_mask) < MIN_GROWTH_SNAPSHOTS:
-        raise ContractError("the fixed theory growth window requires >= 8 snapshots")
-    if np.any(right_amplitude[fit_mask] <= 0.0):
-        raise ContractError("right-polarized mode amplitude must remain positive")
-    fit_time = time[fit_mask]
-    fit_log_amplitude = np.log(right_amplitude[fit_mask])
-    coeff = np.polyfit(fit_time, fit_log_amplitude, 1)
-    measured_growth = float(coeff[0])
-    fitted = np.polyval(coeff, fit_time)
-    residual = fit_log_amplitude - fitted
-    ss_res = float(np.sum(residual * residual))
-    ss_tot = float(np.sum((fit_log_amplitude - np.mean(fit_log_amplitude)) ** 2))
-    growth_r2 = 1.0 if ss_tot == 0.0 else 1.0 - ss_res / ss_tot
+    velocity_right_amplitude = np.abs(velocity_right)
+    velocity_left_amplitude = np.abs(velocity_left)
+    measured_growth, growth_r2, fit_mask = _fit_growth(
+        time, right_amplitude, expected_growth, label="magnetic"
+    )
+    velocity_measured_growth, velocity_growth_r2, velocity_fit_mask = _fit_growth(
+        time, velocity_right_amplitude, expected_growth, label="fluid-velocity"
+    )
+    if not np.array_equal(fit_mask, velocity_fit_mask):
+        raise ContractError("magnetic and fluid-velocity growth windows must match")
 
     phase_interval = _finite_array(record, "phase_interval")
     phase_change = _finite_array(record, "phase_change")
@@ -721,15 +792,77 @@ def _analyze_record(
     ):
         raise ContractError("phase changes do not match the retained mode trace")
     measured_phase = float(np.mean(extracted_change / extracted_interval))
+    velocity_phase_interval = _finite_array(record, "velocity_phase_interval")
+    velocity_phase_change = _finite_array(record, "velocity_phase_change")
+    if velocity_phase_interval.size != velocity_phase_change.size:
+        raise ContractError(
+            "fluid-velocity phase interval and phase change arrays must have equal length"
+        )
+    if not np.allclose(
+        velocity_phase_interval, PHASE_INTERVAL, rtol=0.0, atol=1.0e-14
+    ):
+        raise ContractError("fluid-velocity phase intervals must equal pi/(k0*U_A)")
+    extracted_velocity_interval, extracted_velocity_change = (
+        _fixed_interval_phase_trace(time, velocity_right)
+    )
+    if (
+        velocity_phase_interval.size != extracted_velocity_interval.size
+        or not np.allclose(
+            velocity_phase_interval,
+            extracted_velocity_interval,
+            rtol=0.0,
+            atol=1.0e-12,
+        )
+    ):
+        raise ContractError(
+            "fluid-velocity phase intervals do not match the retained mode trace"
+        )
+    if (
+        velocity_phase_change.size != extracted_velocity_change.size
+        or not np.allclose(
+            velocity_phase_change,
+            extracted_velocity_change,
+            rtol=0.0,
+            atol=1.0e-10,
+        )
+    ):
+        raise ContractError(
+            "fluid-velocity phase changes do not match the retained mode trace"
+        )
+    velocity_measured_phase = float(
+        np.mean(extracted_velocity_change / extracted_velocity_interval)
+    )
     final_fit_index = int(np.flatnonzero(fit_mask)[-1])
     polarization_ratio = float(
         right_amplitude[final_fit_index]
         / max(float(left_amplitude[final_fit_index]), np.finfo(float).tiny)
     )
+    velocity_polarization_ratio = float(
+        velocity_right_amplitude[final_fit_index]
+        / max(float(velocity_left_amplitude[final_fit_index]), np.finfo(float).tiny)
+    )
+    expected_velocity_to_magnetic_ratio = complex(-epsilon, -expected_growth)
+    velocity_to_magnetic_ratio = velocity_right[fit_mask] / right[fit_mask]
+    velocity_magnetic_ratio_max_absolute_error = float(
+        np.max(np.abs(velocity_to_magnetic_ratio - expected_velocity_to_magnetic_ratio))
+    )
 
     growth_pass = _within_both_tolerances(measured_growth, expected_growth)
     phase_pass = _within_both_tolerances(measured_phase, expected_phase)
     polarization_pass = polarization_ratio >= MIN_RIGHT_TO_LEFT_RATIO
+    velocity_growth_pass = _within_both_tolerances(
+        velocity_measured_growth, expected_growth
+    )
+    velocity_phase_pass = _within_both_tolerances(
+        velocity_measured_phase, expected_phase
+    )
+    velocity_polarization_pass = (
+        velocity_polarization_ratio >= MIN_RIGHT_TO_LEFT_RATIO
+    )
+    velocity_magnetic_ratio_pass = (
+        velocity_magnetic_ratio_max_absolute_error
+        <= SOURCE_LOCAL_VELOCITY_MAGNETIC_RATIO_ABSOLUTE_TOLERANCE
+    )
     return {
         "dimension": dimension,
         "epsilon": epsilon,
@@ -741,12 +874,38 @@ def _analyze_record(
         "expected_phase_frequency_over_k0_ua": expected_phase,
         "measured_phase_frequency_over_k0_ua": measured_phase,
         "right_to_left_amplitude_ratio": polarization_ratio,
+        "velocity_measured_growth_rate_over_k0_ua": velocity_measured_growth,
+        "velocity_growth_fit_r2": velocity_growth_r2,
+        "velocity_measured_phase_frequency_over_k0_ua": velocity_measured_phase,
+        "velocity_right_to_left_amplitude_ratio": velocity_polarization_ratio,
+        "expected_velocity_to_magnetic_ratio_real":
+            expected_velocity_to_magnetic_ratio.real,
+        "expected_velocity_to_magnetic_ratio_imag":
+            expected_velocity_to_magnetic_ratio.imag,
+        "velocity_magnetic_ratio_max_absolute_error":
+            velocity_magnetic_ratio_max_absolute_error,
+        "velocity_magnetic_ratio_diagnostic_limit":
+            SOURCE_LOCAL_VELOCITY_MAGNETIC_RATIO_ABSOLUTE_TOLERANCE,
         "growth_pass": growth_pass,
         "phase_pass": phase_pass,
         "polarization_pass": polarization_pass,
-        "retained_velocity_observable_status": RETAINED_OBSERVABLE_CONTRACT,
+        "velocity_growth_pass": velocity_growth_pass,
+        "velocity_phase_pass": velocity_phase_pass,
+        "velocity_polarization_pass": velocity_polarization_pass,
+        "velocity_magnetic_ratio_pass": velocity_magnetic_ratio_pass,
+        "velocity_cross_check_qualification_effect":
+            "nonqualifying_source_local_diagnostic_only",
+        "retained_velocity_observable_status": "retained_and_cross_checked",
         "section52_qualification_eligible": False,
-        "passed": growth_pass and phase_pass and polarization_pass,
+        "passed": (
+            growth_pass
+            and phase_pass
+            and polarization_pass
+            and velocity_growth_pass
+            and velocity_phase_pass
+            and velocity_polarization_pass
+            and velocity_magnetic_ratio_pass
+        ),
     }
 
 
@@ -795,10 +954,10 @@ def analyze_trace_bundle(
         "candidate_pass"
         if synthetic_fixture_analysis
         else (
-            "source_local_magnetic_mode_candidate_analysis_only_velocity_observable_"
-            "not_retained_section52_qualification_blocked_clean_candidate_binding_"
-            "registered_frontier_execution_independent_recompute_and_external_review_"
-            "required"
+            "source_local_combined_magnetic_and_fluid_velocity_mode_candidate_"
+            "cross_check_only_section52_qualification_blocked_clean_candidate_"
+            "binding_convergence_registered_frontier_execution_independent_recompute_"
+            "and_external_review_required"
         )
     )
     return {
@@ -809,7 +968,8 @@ def analyze_trace_bundle(
         "analysis_scope": (
             "synthetic_contract_fixture_test_only"
             if synthetic_fixture_analysis
-            else "source_local_materialized_magnetic_mode_candidate"
+            else "source_local_materialized_combined_magnetic_and_fluid_velocity_"
+                 "mode_candidate"
         ),
         "synthetic_fixture_analysis": synthetic_fixture_analysis,
         "scientific_contract_pass": scientific_contract_pass,

@@ -45,7 +45,12 @@ def _record(dimension: int, epsilon: float) -> dict[str, object]:
     right_amplitude = np.exp(growth * time)
     right = right_amplitude * np.exp(1.0j * epsilon * time)
     left = 1.0e-3 * right
+    velocity_right = (-epsilon - 1.0j * growth) * right
+    velocity_left = 1.0e-3 * velocity_right
     phase_interval, phase_change = bell._fixed_interval_phase_trace(time, right)
+    velocity_phase_interval, velocity_phase_change = bell._fixed_interval_phase_trace(
+        time, velocity_right
+    )
     return {
         "dimension": dimension,
         "epsilon": epsilon,
@@ -55,8 +60,14 @@ def _record(dimension: int, epsilon: float) -> dict[str, object]:
         "right_mode_imag": right.imag.tolist(),
         "left_mode_real": left.real.tolist(),
         "left_mode_imag": left.imag.tolist(),
+        "velocity_right_mode_real": velocity_right.real.tolist(),
+        "velocity_right_mode_imag": velocity_right.imag.tolist(),
+        "velocity_left_mode_real": velocity_left.real.tolist(),
+        "velocity_left_mode_imag": velocity_left.imag.tolist(),
         "phase_interval": phase_interval.tolist(),
         "phase_change": phase_change.tolist(),
+        "velocity_phase_interval": velocity_phase_interval.tolist(),
+        "velocity_phase_change": velocity_phase_change.tolist(),
     }
 
 
@@ -100,6 +111,12 @@ def _raw_datasets(dimension: int, epsilon: float) -> list[dict[str, object]]:
             - amplitude*np.sin(temporal_phase)[None, ...]
             * transverse_b[:, None, None, None]
         )
+        velocity = amplitude * (
+            (-epsilon*np.cos(temporal_phase) + growth*np.sin(temporal_phase))[None, ...]
+            * transverse_a[:, None, None, None]
+            + (growth*np.cos(temporal_phase) + epsilon*np.sin(temporal_phase))[None, ...]
+            * transverse_b[:, None, None, None]
+        )
         datasets.append(
             {
                 "Time": normalized_time / (bell.K0*bell.U_A),
@@ -109,6 +126,9 @@ def _raw_datasets(dimension: int, epsilon: float) -> list[dict[str, object]]:
                 "bcc1": magnetic[0],
                 "bcc2": magnetic[1],
                 "bcc3": magnetic[2],
+                "velx": velocity[0],
+                "vely": velocity[1],
+                "velz": velocity[2],
             }
         )
     return datasets
@@ -252,6 +272,14 @@ class Q023PaperBellLinearTests(unittest.TestCase):
         self.assertFalse(report["section52_qualification_eligible"])
         self.assertAlmostEqual(report["measured_growth_rate_over_k0_ua"], growth)
         self.assertAlmostEqual(report["measured_phase_frequency_over_k0_ua"], epsilon)
+        self.assertAlmostEqual(
+            report["velocity_measured_growth_rate_over_k0_ua"], growth
+        )
+        self.assertAlmostEqual(
+            report["velocity_measured_phase_frequency_over_k0_ua"], epsilon
+        )
+        self.assertTrue(report["velocity_magnetic_ratio_pass"])
+        self.assertLess(report["velocity_magnetic_ratio_max_absolute_error"], 2.0e-12)
 
         with tempfile.TemporaryDirectory() as directory:
             artifact_root = Path(directory).resolve()
@@ -303,6 +331,46 @@ class Q023PaperBellLinearTests(unittest.TestCase):
                 datasets,
                 raw_provenance=bell.synthetic_contract_provenance(dimension, epsilon),
             )
+
+    def test_raw_float32_geometry_serialization_is_accepted(self) -> None:
+        datasets = _raw_datasets(3, 0.4)
+        for dataset in datasets:
+            for axis in (1, 2, 3):
+                dataset[f"x{axis}v"] = np.asarray(dataset[f"x{axis}v"]).astype(
+                    np.float32
+                )
+        record = bell.extract_trace_record_from_datasets(
+            3,
+            0.4,
+            datasets,
+            raw_provenance=bell.synthetic_contract_provenance(3, 0.4),
+        )
+        self.assertTrue(bell._analyze_record(record)["passed"])
+
+    def test_raw_combined_output_requires_velocity_fields(self) -> None:
+        datasets = _raw_datasets(2, 0.4)
+        datasets[0].pop("vely")
+        with self.assertRaisesRegex(bell.ContractError, "velocity components"):
+            bell.extract_trace_record_from_datasets(
+                2,
+                0.4,
+                datasets,
+                raw_provenance=bell.synthetic_contract_provenance(2, 0.4),
+            )
+
+    def test_velocity_magnetic_ratio_drift_is_a_scientific_failure(self) -> None:
+        bundle = _bundle()
+        record = bundle["records"][0]
+        record["velocity_right_mode_real"] = (
+            2.0 * np.asarray(record["velocity_right_mode_real"])
+        ).tolist()
+        record["velocity_right_mode_imag"] = (
+            2.0 * np.asarray(record["velocity_right_mode_imag"])
+        ).tolist()
+        report = bell.analyze_trace_bundle(bundle)
+        self.assertFalse(report["scientific_contract_pass"])
+        failed = report["records"][0]
+        self.assertFalse(failed["velocity_magnetic_ratio_pass"])
 
     def test_binary_extraction_rejects_unapproved_variant(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
