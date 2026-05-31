@@ -29,6 +29,7 @@
 #include "radiation/radiation.hpp"
 #include "srcterms/turb_driver.hpp"
 #include "particles/particles.hpp"
+#include "outputs/restart_utils.hpp"
 #include "pgen.hpp"
 
 namespace {
@@ -78,7 +79,7 @@ void ValidateRestoredParticleIDData(const particles::Particles *ppart,
               << std::endl
               << "Restarted particle gid is not local after restore (gid="
               << gid << ")." << std::endl;
-    std::exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
   if (ppart->particle_type == ParticleType::cosmic_ray) {
     const int sp = h_pi(PSP, p);
@@ -88,7 +89,7 @@ void ValidateRestoredParticleIDData(const particles::Particles *ppart,
                 << "Restarted cosmic-ray particle species is out of range "
                 << "(species=" << sp << ", nspecies=" << ppart->nspecies << ")."
                 << std::endl;
-      std::exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
   }
 }
@@ -109,14 +110,14 @@ void LoadParticleRestartDataSingleFile(Mesh *pm,
               << std::endl
               << "Restart metadata missing file name for single-file restart."
               << std::endl;
-    std::exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
   if (meta.rank_eachmb.size() != static_cast<std::size_t>(pm->nmb_total)) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
               << "Restart metadata inconsistent with MeshBlock count."
               << std::endl;
-    std::exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
   if (meta.original_nranks <= 0 ||
       meta.gids_eachrank.size() != static_cast<std::size_t>(meta.original_nranks) ||
@@ -125,7 +126,7 @@ void LoadParticleRestartDataSingleFile(Mesh *pm,
               << std::endl
               << "Restart metadata missing original rank layout."
               << std::endl;
-    std::exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
 
   MeshBlockPack *pack = pm->pmb_pack;
@@ -145,7 +146,7 @@ void LoadParticleRestartDataSingleFile(Mesh *pm,
                 << std::endl
                 << "Invalid MeshBlock gid encountered during restart."
                 << std::endl;
-      std::exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
     int src_rank = meta.rank_eachmb[gid];
     if (src_rank < 0 || src_rank >= meta.original_nranks) {
@@ -153,7 +154,7 @@ void LoadParticleRestartDataSingleFile(Mesh *pm,
                 << std::endl
                 << "Restart metadata contains invalid rank assignments."
                 << std::endl;
-      std::exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
     requests[src_rank].push_back({m, gid});
   }
@@ -200,7 +201,7 @@ void LoadParticleRestartDataSingleFile(Mesh *pm,
                 << std::endl
               << "Particle restart state is missing from source restart "
                 << "file '" << rank_paths[r] << "'." << std::endl;
-      std::exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
     if (pic_magic != kPicMagic) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -208,7 +209,7 @@ void LoadParticleRestartDataSingleFile(Mesh *pm,
                 << "Source restart file '" << rank_paths[r]
                 << "' has an unknown particle restart marker."
                 << std::endl;
-      std::exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
 
     ParticleRestartSectionMeta sm;
@@ -220,12 +221,20 @@ void LoadParticleRestartDataSingleFile(Mesh *pm,
                   << "Failed to read particle restart metadata field '" << name
                   << "' from source restart file '" << rank_paths[r] << "'."
                   << std::endl;
-        std::exit(EXIT_FAILURE);
+        restart_utils::AbortOnFatalError();
       }
       rd_offset += sizeof(int);
     };
 
     read_int_meta(sm.version, "version");
+    if (sm.version != kPicVersion) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "Unsupported particle restart version " << sm.version
+                << " in source restart file '" << rank_paths[r] << "'."
+                << std::endl;
+      restart_utils::AbortOnFatalError();
+    }
     read_int_meta(sm.nmb_section, "nmb_section");
     read_int_meta(sm.nrdata, "nrdata");
     read_int_meta(sm.nidata, "nidata");
@@ -246,7 +255,7 @@ void LoadParticleRestartDataSingleFile(Mesh *pm,
                 << "Failed to read particle restart metadata field 'cr_light_speed' "
                 << "from source restart file '" << rank_paths[r] << "'."
                 << std::endl;
-      std::exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
     rd_offset += sizeof(Real);
     if (srcfile.Read_bytes_at(sm.model_ints.data(), sizeof(int), sm.model_ints.size(),
@@ -255,7 +264,7 @@ void LoadParticleRestartDataSingleFile(Mesh *pm,
                 << std::endl
                 << "Failed to read particle restart extension-model integer metadata "
                 << "from source restart file '" << rank_paths[r] << "'." << std::endl;
-      std::exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
     rd_offset += sm.model_ints.size()*sizeof(int);
     if (srcfile.Read_Reals_at(sm.model_reals.data(), sm.model_reals.size(), rd_offset,
@@ -264,7 +273,7 @@ void LoadParticleRestartDataSingleFile(Mesh *pm,
                 << std::endl
                 << "Failed to read particle restart extension-model numerical metadata "
                 << "from source restart file '" << rank_paths[r] << "'." << std::endl;
-      std::exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
     rd_offset += sm.model_reals.size()*sizeof(Real);
 
@@ -274,32 +283,24 @@ void LoadParticleRestartDataSingleFile(Mesh *pm,
                 << std::endl
                 << "Failed to read particle-count metadata from source "
                 << "restart file '" << rank_paths[r] << "'." << std::endl;
-      std::exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
     rd_offset += sizeof(IOWrapperSizeT);
 
-    if (sm.version != kPicVersion) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl
-                << "Unsupported particle restart version " << sm.version
-                << " in source restart file '" << rank_paths[r] << "'."
-                << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
     if (sm.nmb_section != meta.nmb_eachrank[r]) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
                 << "Particle restart MeshBlock count mismatch in source restart file '"
                 << rank_paths[r] << "' (file=" << sm.nmb_section << ", metadata="
                 << meta.nmb_eachrank[r] << ")." << std::endl;
-      std::exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
     if (sm.nrdata != nrdata || sm.nidata != nidata) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
                 << "Particle restart data layout mismatch in source restart "
                 << "file '" << rank_paths[r] << "'." << std::endl;
-      std::exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
     const int expected_state_kind = ppart->UsesRelativisticCRState() ? 1 : 0;
     const int expected_physical_mode = static_cast<int>(ppart->pic_physical_mode);
@@ -312,14 +313,14 @@ void LoadParticleRestartDataSingleFile(Mesh *pm,
                 << std::endl
                 << "Particle restart physical-model metadata mismatch in source "
                 << "restart file '" << rank_paths[r] << "'." << std::endl;
-      std::exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
     if (sm.rst_nout1 != nout1 || sm.rst_nout2 != nout2 || sm.rst_nout3 != nout3) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
                 << "Particle restart mesh extents mismatch in source restart file '"
                 << rank_paths[r] << "'." << std::endl;
-      std::exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
     if ((sm.has_moments != 0 && sm.has_moments != 1) ||
         (sm.has_edge != 0 && sm.has_edge != 1)) {
@@ -327,14 +328,14 @@ void LoadParticleRestartDataSingleFile(Mesh *pm,
                 << std::endl
                 << "Particle restart optional-array flags are invalid in source "
                 << "restart file '" << rank_paths[r] << "'." << std::endl;
-      std::exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
     if (sm.moment_cnt != expected_moment_cnt) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
                 << "Particle restart moment size mismatch in source restart file '"
                 << rank_paths[r] << "'." << std::endl;
-      std::exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
     if (sm.has_edge != 0 &&
         (sm.edge1_cnt != expected_edge1_cnt || sm.edge2_cnt != expected_edge2_cnt ||
@@ -343,7 +344,7 @@ void LoadParticleRestartDataSingleFile(Mesh *pm,
                 << std::endl
                 << "Particle restart edge-current size mismatch in source restart file '"
                 << rank_paths[r] << "'." << std::endl;
-      std::exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
 
     if (ref_has_moments < 0) {
@@ -373,7 +374,7 @@ void LoadParticleRestartDataSingleFile(Mesh *pm,
                 << std::endl
                 << "Particle restart metadata is inconsistent across source restart "
                 << "files." << std::endl;
-      std::exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
 
     sm.mb_counts.assign(sm.nmb_section, 0);
@@ -385,7 +386,7 @@ void LoadParticleRestartDataSingleFile(Mesh *pm,
                   << std::endl
                   << "Failed to read particle restart MeshBlock counts from source "
                   << "restart file '" << rank_paths[r] << "'." << std::endl;
-        std::exit(EXIT_FAILURE);
+        restart_utils::AbortOnFatalError();
       }
     }
     rd_offset += static_cast<IOWrapperSizeT>(sm.nmb_section)*sizeof(int);
@@ -398,7 +399,7 @@ void LoadParticleRestartDataSingleFile(Mesh *pm,
                   << "Particle restart MeshBlock count table contains a negative "
                   << "count in source restart file '" << rank_paths[r] << "'."
                   << std::endl;
-        std::exit(EXIT_FAILURE);
+        restart_utils::AbortOnFatalError();
       }
       sm.mb_offsets[m + 1] = sm.mb_offsets[m] +
                              static_cast<IOWrapperSizeT>(sm.mb_counts[m]);
@@ -408,7 +409,7 @@ void LoadParticleRestartDataSingleFile(Mesh *pm,
                 << std::endl
                 << "Particle restart count table is inconsistent in source "
                 << "restart file '" << rank_paths[r] << "'." << std::endl;
-      std::exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
 
     sm.pr_real_offset = rd_offset;
@@ -440,7 +441,7 @@ void LoadParticleRestartDataSingleFile(Mesh *pm,
                   << "Restart metadata is inconsistent with particle section "
                   << "layout in source restart file '" << rank_paths[r] << "'."
                   << std::endl;
-        std::exit(EXIT_FAILURE);
+        restart_utils::AbortOnFatalError();
       }
       local_mb_counts[req.local_index] = sm.mb_counts[src_local];
     }
@@ -473,7 +474,7 @@ void LoadParticleRestartDataSingleFile(Mesh *pm,
                 << std::endl
                 << "Restart expects particle moments, but moments are not allocated."
                 << std::endl;
-      std::exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
     h_mom = Kokkos::create_mirror_view(ppart->moments);
   }
@@ -488,7 +489,7 @@ void LoadParticleRestartDataSingleFile(Mesh *pm,
                 << std::endl
                 << "Restart expects particle edge-current state, but edge arrays are not "
                 << "allocated." << std::endl;
-      std::exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
     h_x1e = Kokkos::create_mirror_view(ppart->j_edge_x1e);
     h_x2e = Kokkos::create_mirror_view(ppart->j_edge_x2e);
@@ -510,7 +511,7 @@ void LoadParticleRestartDataSingleFile(Mesh *pm,
                   << std::endl
                   << "Restart metadata is inconsistent with source restart data in "
                   << "file '" << rank_paths[r] << "'." << std::endl;
-        std::exit(EXIT_FAILURE);
+        restart_utils::AbortOnFatalError();
       }
 
       const int cnt = local_mb_counts[req.local_index];
@@ -527,7 +528,7 @@ void LoadParticleRestartDataSingleFile(Mesh *pm,
                     << "Failed to read particle restart real data from "
                     << "source restart file '" << rank_paths[r] << "'."
                     << std::endl;
-          std::exit(EXIT_FAILURE);
+          restart_utils::AbortOnFatalError();
         }
         if (srcfile.Read_bytes_at(&(packed_pi[lstart*nidata]), sizeof(int), cnt*nidata,
                                   pi_off, true) !=
@@ -537,7 +538,7 @@ void LoadParticleRestartDataSingleFile(Mesh *pm,
                     << "Failed to read particle restart integer data from "
                     << "source restart file '" << rank_paths[r] << "'."
                     << std::endl;
-          std::exit(EXIT_FAILURE);
+          restart_utils::AbortOnFatalError();
         }
       }
 
@@ -553,7 +554,7 @@ void LoadParticleRestartDataSingleFile(Mesh *pm,
                     << std::endl
                     << "Failed to read particle moment restart data from source "
                     << "restart file '" << rank_paths[r] << "'." << std::endl;
-          std::exit(EXIT_FAILURE);
+          restart_utils::AbortOnFatalError();
         }
       }
 
@@ -584,7 +585,7 @@ void LoadParticleRestartDataSingleFile(Mesh *pm,
                     << "Failed to read particle edge-current restart data from "
                     << "source restart file '" << rank_paths[r] << "'."
                     << std::endl;
-          std::exit(EXIT_FAILURE);
+          restart_utils::AbortOnFatalError();
         }
       }
     }
@@ -649,13 +650,13 @@ void LoadSingleFileRestartData(Mesh *pm,
               << std::endl
               << "Restart metadata missing file name for single-file restart."
               << std::endl;
-    std::exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
   if (meta.rank_eachmb.size() != static_cast<std::size_t>(pm->nmb_total)) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl << "Restart metadata inconsistent with MeshBlock count."
               << std::endl;
-    std::exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
   if (meta.original_nranks <= 0 ||
       meta.gids_eachrank.size() != static_cast<std::size_t>(meta.original_nranks) ||
@@ -663,7 +664,7 @@ void LoadSingleFileRestartData(Mesh *pm,
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl << "Restart metadata missing original rank layout."
               << std::endl;
-    std::exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
 
   std::vector<std::vector<RestartBlockRequest>> requests(meta.original_nranks);
@@ -673,14 +674,14 @@ void LoadSingleFileRestartData(Mesh *pm,
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "Invalid MeshBlock gid encountered during restart."
                 << std::endl;
-      std::exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
     int src_rank = meta.rank_eachmb[gid];
     if (src_rank < 0 || src_rank >= meta.original_nranks) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "Restart metadata contains invalid rank assignments."
                 << std::endl;
-      std::exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
     requests[src_rank].push_back({m, gid});
   }
@@ -724,7 +725,7 @@ void LoadSingleFileRestartData(Mesh *pm,
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl << "Restart data chunk size mismatch, restart file is broken."
               << std::endl;
-    std::exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
 
   auto chunk_base = [&](int src_rank, int global_id) -> IOWrapperSizeT {
@@ -735,7 +736,7 @@ void LoadSingleFileRestartData(Mesh *pm,
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "Restart metadata inconsistent with MeshBlock ids."
                 << std::endl;
-      std::exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
     return headeroffset + chunk_stride * static_cast<IOWrapperSizeT>(local_index);
   };
@@ -758,7 +759,7 @@ void LoadSingleFileRestartData(Mesh *pm,
             std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                       << std::endl << "CC hydro data not read correctly from rst file, "
                       << "restart file is broken." << std::endl;
-            std::exit(EXIT_FAILURE);
+            restart_utils::AbortOnFatalError();
           }
         }
       }
@@ -789,7 +790,7 @@ void LoadSingleFileRestartData(Mesh *pm,
             std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                       << std::endl << "CC mhd data not read correctly from rst file, "
                       << "restart file is broken." << std::endl;
-            std::exit(EXIT_FAILURE);
+            restart_utils::AbortOnFatalError();
           }
         }
 
@@ -803,7 +804,7 @@ void LoadSingleFileRestartData(Mesh *pm,
                       << std::endl
                       << "Input b0.x1f field not read correctly from rst file, "
                       << "restart file is broken." << std::endl;
-            std::exit(EXIT_FAILURE);
+            restart_utils::AbortOnFatalError();
           }
         }
 
@@ -817,7 +818,7 @@ void LoadSingleFileRestartData(Mesh *pm,
                       << std::endl
                       << "Input b0.x2f field not read correctly from rst file, "
                       << "restart file is broken." << std::endl;
-            std::exit(EXIT_FAILURE);
+            restart_utils::AbortOnFatalError();
           }
         }
 
@@ -831,7 +832,7 @@ void LoadSingleFileRestartData(Mesh *pm,
                       << std::endl
                       << "Input b0.x3f field not read correctly from rst file, "
                       << "restart file is broken." << std::endl;
-            std::exit(EXIT_FAILURE);
+            restart_utils::AbortOnFatalError();
           }
         }
       }
@@ -865,7 +866,7 @@ void LoadSingleFileRestartData(Mesh *pm,
             std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                       << std::endl << "CC rad data not read correctly from rst file, "
                       << "restart file is broken." << std::endl;
-            std::exit(EXIT_FAILURE);
+            restart_utils::AbortOnFatalError();
           }
         }
       }
@@ -893,7 +894,7 @@ void LoadSingleFileRestartData(Mesh *pm,
             std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                       << std::endl << "CC turb data not read correctly from rst file, "
                       << "restart file is broken." << std::endl;
-            std::exit(EXIT_FAILURE);
+            restart_utils::AbortOnFatalError();
           }
         }
       }
@@ -921,7 +922,7 @@ void LoadSingleFileRestartData(Mesh *pm,
             std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                       << std::endl << "CC z4c data not read correctly from rst file, "
                       << "restart file is broken." << std::endl;
-            std::exit(EXIT_FAILURE);
+            restart_utils::AbortOnFatalError();
           }
         }
       }
@@ -948,7 +949,7 @@ void LoadSingleFileRestartData(Mesh *pm,
             std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                       << std::endl << "CC adm data not read correctly from rst file, "
                       << "restart file is broken." << std::endl;
-            std::exit(EXIT_FAILURE);
+            restart_utils::AbortOnFatalError();
           }
         }
       }
@@ -996,14 +997,14 @@ void LoadParticleRestartData(Mesh *pm,
               << std::endl
               << "Particle restart state is missing from restart file."
               << std::endl;
-    std::exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
   if (pic_magic != kPicMagic) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
               << "Restart file has an unknown particle restart marker."
               << std::endl;
-    std::exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
 
   IOWrapperSizeT rd_offset = section_offset + sizeof(std::uint64_t);
@@ -1034,7 +1035,7 @@ void LoadParticleRestartData(Mesh *pm,
                   << std::endl
                   << "Failed to read particle restart metadata field '" << name << "'."
                   << std::endl;
-        std::exit(EXIT_FAILURE);
+        restart_utils::AbortOnFatalError();
       }
     }
 #if MPI_PARALLEL_ENABLED
@@ -1044,6 +1045,13 @@ void LoadParticleRestartData(Mesh *pm,
 
   read_int_meta(version, rd_offset, "version");
   rd_offset += sizeof(int);
+  if (version != kPicVersion) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Unsupported particle restart version " << version << "."
+              << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
   read_int_meta(nmb_section, rd_offset, "nmb_section");
   rd_offset += sizeof(int);
   read_int_meta(nrdata, rd_offset, "nrdata");
@@ -1078,7 +1086,7 @@ void LoadParticleRestartData(Mesh *pm,
                 << std::endl
                 << "Failed to read particle restart metadata field 'cr_light_speed'."
                 << std::endl;
-      std::exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
   }
 #if MPI_PARALLEL_ENABLED
@@ -1092,7 +1100,7 @@ void LoadParticleRestartData(Mesh *pm,
                 << std::endl
                 << "Failed to read particle restart extension-model integer metadata."
                 << std::endl;
-      std::exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
   }
 #if MPI_PARALLEL_ENABLED
@@ -1106,7 +1114,7 @@ void LoadParticleRestartData(Mesh *pm,
                 << std::endl
                 << "Failed to read particle restart extension-model numerical metadata."
                 << std::endl;
-      std::exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
   }
 #if MPI_PARALLEL_ENABLED
@@ -1121,7 +1129,7 @@ void LoadParticleRestartData(Mesh *pm,
                 << std::endl
                 << "Failed to read particle restart count metadata."
                 << std::endl;
-      std::exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
   }
 #if MPI_PARALLEL_ENABLED
@@ -1129,25 +1137,18 @@ void LoadParticleRestartData(Mesh *pm,
 #endif
   rd_offset += sizeof(IOWrapperSizeT);
 
-  if (version != kPicVersion) {
-    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl
-              << "Unsupported particle restart version " << version << "."
-              << std::endl;
-    std::exit(EXIT_FAILURE);
-  }
   if (nmb_section != pm->nmb_total) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
               << "Particle restart MeshBlock count mismatch (file=" << nmb_section
               << ", runtime=" << pm->nmb_total << ")." << std::endl;
-    std::exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
   if (nrdata != ppart->nrdata || nidata != ppart->nidata) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
               << "Particle restart data layout mismatch." << std::endl;
-    std::exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
   const int expected_state_kind = ppart->UsesRelativisticCRState() ? 1 : 0;
   const int expected_physical_mode = static_cast<int>(ppart->pic_physical_mode);
@@ -1159,21 +1160,21 @@ void LoadParticleRestartData(Mesh *pm,
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
               << "Particle restart physical-model metadata mismatch." << std::endl;
-    std::exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
   if (rst_nout1 != nout1 || rst_nout2 != nout2 || rst_nout3 != nout3) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
               << "Particle restart mesh extents mismatch for moment arrays."
               << std::endl;
-    std::exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
   if ((has_moments != 0 && has_moments != 1) || (has_edge != 0 && has_edge != 1)) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
               << "Particle restart optional-array flags are invalid."
               << std::endl;
-    std::exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
   const int expected_moment_cnt = particles::Particles::NMOM*nout3*nout2*nout1;
   const int expected_edge1_cnt = (nout3 + 1)*(nout2 + 1)*nout1;
@@ -1183,7 +1184,7 @@ void LoadParticleRestartData(Mesh *pm,
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
               << "Particle restart moment size mismatch." << std::endl;
-    std::exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
   if (has_edge != 0 &&
       (edge1_cnt != expected_edge1_cnt || edge2_cnt != expected_edge2_cnt ||
@@ -1191,7 +1192,7 @@ void LoadParticleRestartData(Mesh *pm,
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
               << "Particle restart edge-current size mismatch." << std::endl;
-    std::exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
 
   const IOWrapperSizeT mb_count_offset = rd_offset;
@@ -1203,7 +1204,7 @@ void LoadParticleRestartData(Mesh *pm,
                 << std::endl
                 << "Failed to read particle restart MeshBlock counts."
                 << std::endl;
-      std::exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
   }
 #if MPI_PARALLEL_ENABLED
@@ -1219,7 +1220,7 @@ void LoadParticleRestartData(Mesh *pm,
                 << std::endl
                 << "Particle restart MeshBlock count table contains a negative count."
                 << std::endl;
-      std::exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
     mb_offsets[m + 1] = mb_offsets[m] + static_cast<IOWrapperSizeT>(mb_counts[m]);
   }
@@ -1227,7 +1228,7 @@ void LoadParticleRestartData(Mesh *pm,
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
               << "Particle restart count table is inconsistent." << std::endl;
-    std::exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
 
   IOWrapperSizeT data_offset = mb_count_offset +
@@ -1283,7 +1284,7 @@ void LoadParticleRestartData(Mesh *pm,
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
                 << "Failed to read particle restart real data." << std::endl;
-      std::exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
     if (resfile.Read_bytes_at(&(packed_pi[lstart*nidata]), sizeof(int), cnt*nidata,
                               pi_off, false) !=
@@ -1291,7 +1292,7 @@ void LoadParticleRestartData(Mesh *pm,
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
                 << "Failed to read particle restart integer data." << std::endl;
-      std::exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
   }
 
@@ -1315,7 +1316,7 @@ void LoadParticleRestartData(Mesh *pm,
                 << std::endl
                 << "Restart expects particle moments, but moments are not allocated."
                 << std::endl;
-      std::exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
     auto h_mom = Kokkos::create_mirror_view(ppart->moments);
     for (int m=0; m<nmb_local; ++m) {
@@ -1330,7 +1331,7 @@ void LoadParticleRestartData(Mesh *pm,
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                   << std::endl
                   << "Failed to read particle moment restart data." << std::endl;
-        std::exit(EXIT_FAILURE);
+        restart_utils::AbortOnFatalError();
       }
     }
     Kokkos::deep_copy(ppart->moments, h_mom);
@@ -1345,7 +1346,7 @@ void LoadParticleRestartData(Mesh *pm,
                 << std::endl
                 << "Restart expects particle edge-current state, but edge arrays are not "
                 << "allocated." << std::endl;
-      std::exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
     auto h_x1e = Kokkos::create_mirror_view(ppart->j_edge_x1e);
     auto h_x2e = Kokkos::create_mirror_view(ppart->j_edge_x2e);
@@ -1373,7 +1374,7 @@ void LoadParticleRestartData(Mesh *pm,
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                   << std::endl
                   << "Failed to read particle edge-current restart data." << std::endl;
-        std::exit(EXIT_FAILURE);
+        restart_utils::AbortOnFatalError();
       }
     }
     Kokkos::deep_copy(ppart->j_edge_x1e, h_x1e);
@@ -1476,7 +1477,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm) :
         << std::endl
         << "Rerun cmake with -D PROBLEM=file to specify custom problem generator file"
         << std::endl;;
-    std::exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
 #endif
 
@@ -1486,7 +1487,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm) :
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "User BCs specified in <mesh> block, but not enrolled "
                 << "by SetProblemData()." << std::endl;
-      exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
   }
   // Check that user defined srcterms were enrolled if needed
@@ -1495,7 +1496,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm) :
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "User SRCs specified in <problem> block, but not "
                 << "enrolled by UserProblem()." << std::endl;
-      exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
   }
   // Check that user defined history outputs were enrolled if needed
@@ -1504,7 +1505,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm) :
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "User history output specified in <problem> block, but "
                 << "not enrolled by UserProblem()." << std::endl;
-      exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
   }
   if (user_work_in_loop) {
@@ -1512,7 +1513,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm) :
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "User work-in-loop callback specified in <problem> "
                 << "block, but not enrolled by UserProblem()." << std::endl;
-      exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
   }
 }
@@ -1579,7 +1580,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                   << std::endl << "z4c::last_output_time data size read from restart "
                   << "file is incorrect, restart file is broken." << std::endl;
-        exit(EXIT_FAILURE);
+        restart_utils::AbortOnFatalError();
       }
     }
 #if MPI_PARALLEL_ENABLED
@@ -1596,7 +1597,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                     << std::endl << "compact object tracker data size read from restart "
                     << "file is incorrect, restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          restart_utils::AbortOnFatalError();
         }
       }
 #if MPI_PARALLEL_ENABLED
@@ -1618,7 +1619,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                   << std::endl << "RNG data size read from restart file is incorrect, "
                   << "restart file is broken." << std::endl;
-        exit(EXIT_FAILURE);
+        restart_utils::AbortOnFatalError();
       }
     }
 #if MPI_PARALLEL_ENABLED
@@ -1639,7 +1640,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "Variable data size read from restart file is incorrect, "
                 << "restart file is broken." << std::endl;
-      exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
   }
 #if MPI_PARALLEL_ENABLED
@@ -1691,7 +1692,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
               << std::endl << "CC data size read from restart file not equal to size "
               << "of Hydro, MHD, Rad, and/or Z4c arrays, restart file is broken."
               << std::endl;
-    exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
 
   HostArray5D<Real> ccin("rst-cc-in", 1, 1, 1, 1, 1);
@@ -1732,7 +1733,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                     << std::endl << "CC hydro data not read correctly from rst file, "
                     << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          restart_utils::AbortOnFatalError();
         }
         myoffset += data_size;
 
@@ -1747,7 +1748,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                     << std::endl << "CC hydro data not read correctly from rst file, "
                     << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          restart_utils::AbortOnFatalError();
         }
         myoffset += data_size;
       }
@@ -1772,7 +1773,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                     << std::endl << "CC mhd data not read correctly from rst file, "
                     << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          restart_utils::AbortOnFatalError();
         }
         myoffset += data_size;
       // some ranks are finished writing, so use non-collective write
@@ -1786,7 +1787,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                     << std::endl << "CC mhd data not read correctly from rst file, "
                     << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          restart_utils::AbortOnFatalError();
         }
         myoffset += data_size;
       }
@@ -1812,7 +1813,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "Input b0.x1f field not read correctly from rst file, "
                 << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          restart_utils::AbortOnFatalError();
         }
         myoffset += fldcnt*sizeof(Real);
 
@@ -1825,7 +1826,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "Input b0.x2f field not read correctly from rst file, "
                 << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          restart_utils::AbortOnFatalError();
         }
         myoffset += fldcnt*sizeof(Real);
 
@@ -1838,7 +1839,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "Input b0.x3f field not read correctly from rst file, "
                 << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          restart_utils::AbortOnFatalError();
         }
         myoffset += fldcnt*sizeof(Real);
 
@@ -1853,7 +1854,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "Input b0.x1f field not read correctly from rst file, "
                 << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          restart_utils::AbortOnFatalError();
         }
         myoffset += fldcnt*sizeof(Real);
 
@@ -1866,7 +1867,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "Input b0.x2f field not read correctly from rst file, "
                 << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          restart_utils::AbortOnFatalError();
         }
         myoffset += fldcnt*sizeof(Real);
 
@@ -1879,7 +1880,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "Input b0.x3f field not read correctly from rst file, "
                 << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          restart_utils::AbortOnFatalError();
         }
         myoffset += fldcnt*sizeof(Real);
 
@@ -1912,7 +1913,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                     << std::endl << "CC rad data not read correctly from rst file, "
                     << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          restart_utils::AbortOnFatalError();
         }
         myoffset += data_size;
 
@@ -1927,7 +1928,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                     << std::endl << "CC rad data not read correctly from rst file, "
                     << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          restart_utils::AbortOnFatalError();
         }
         myoffset += data_size;
       }
@@ -1952,7 +1953,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                     << std::endl << "CC turb data not read correctly from rst file, "
                     << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          restart_utils::AbortOnFatalError();
         }
         myoffset += data_size;
 
@@ -1967,7 +1968,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                     << std::endl << "CC turb data not read correctly from rst file, "
                     << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          restart_utils::AbortOnFatalError();
         }
         myoffset += data_size;
       }
@@ -1992,7 +1993,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                     << std::endl << "CC z4c data not read correctly from rst file, "
                     << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          restart_utils::AbortOnFatalError();
         }
         myoffset += data_size;
 
@@ -2007,7 +2008,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                     << std::endl << "CC z4c data not read correctly from rst file, "
                     << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          restart_utils::AbortOnFatalError();
         }
         myoffset += data_size;
       }
@@ -2033,7 +2034,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                     << std::endl << "CC adm data not read correctly from rst file, "
                     << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          restart_utils::AbortOnFatalError();
         }
         myoffset += data_size;
 
@@ -2048,7 +2049,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                     << std::endl << "CC adm data not read correctly from rst file, "
                     << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          restart_utils::AbortOnFatalError();
         }
         myoffset += data_size;
       }
@@ -2125,7 +2126,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
         << std::endl
         << "Rerun cmake with -D PROBLEM=file to specify custom problem generator file"
         << std::endl;;
-    std::exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
 #endif
 
@@ -2135,7 +2136,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "User BCs specified in <mesh> block, but not enrolled "
                 << "during restart by SetProblemData()." << std::endl;
-      exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
   }
   // Check that user defined srcterms were enrolled if needed
@@ -2144,7 +2145,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "User SRCs specified in <problem> block, but not "
                 << "enrolled by UserProblem()." << std::endl;
-      exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
   }
   // Check that user defined history outputs were enrolled if needed
@@ -2153,7 +2154,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "User history output specified in <problem> block, "
                 << "but not enrolled by UserProblem()." << std::endl;
-      exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
   }
   if (user_work_in_loop) {
@@ -2161,7 +2162,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "User work-in-loop callback specified in <problem> "
                 << "block, but not enrolled by UserProblem()." << std::endl;
-      exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
   }
 }

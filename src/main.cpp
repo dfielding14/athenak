@@ -25,6 +25,7 @@
 
 // C/C++ headers
 #include <algorithm>
+#include <cctype>
 #include <cstdlib>
 #include <iostream>
 #include <string>
@@ -66,6 +67,24 @@
 
 namespace {
 
+std::size_t FindRestartRankDirectory(const std::string &path) {
+  std::size_t begin = 0;
+  while (begin < path.size()) {
+    const std::size_t end = path.find('/', begin);
+    if (end == std::string::npos) {
+      return std::string::npos;
+    }
+    const std::string component = path.substr(begin, end - begin);
+    if (component.size() == 13 && component.compare(0, 5, "rank_") == 0 &&
+        std::all_of(component.begin() + 5, component.end(),
+                    [](unsigned char c) { return std::isdigit(c) != 0; })) {
+      return (begin == 0) ? 0 : begin - 1;
+    }
+    begin = end + 1;
+  }
+  return std::string::npos;
+}
+
 void RequireCompletedRestartArtifacts(const std::vector<std::string> &paths) {
   int valid = 1;
   std::string error;
@@ -84,10 +103,7 @@ void RequireCompletedRestartArtifacts(const std::vector<std::string> &paths) {
     if (global_variable::my_rank == 0) {
       std::cerr << "### FATAL ERROR: " << error << std::endl;
     }
-#if MPI_PARALLEL_ENABLED
-    MPI_Abort(MPI_COMM_WORLD, 1);
-#endif
-    std::exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
 }
 
@@ -348,8 +364,8 @@ int main(int argc, char *argv[]) {
   // read parameters from restart file
   bool single_file_per_rank = false; // DBF: flag for single_file_per_rank for rst files
   if (res_flag) {
-    // Check if the path contains "rank_" directory
-    size_t rank_pos = restart_file.find("/rank_");
+    // Check if the path contains one canonical rank_NNNNNNNN directory.
+    size_t rank_pos = FindRestartRankDirectory(restart_file);
     single_file_per_rank = (rank_pos != std::string::npos);
 
     // If single_file_per_rank is true, modify the path for the current rank

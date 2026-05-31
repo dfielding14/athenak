@@ -18,6 +18,10 @@ namespace restart_utils {
 inline constexpr std::uint64_t kMeshMetadataMagic = 0x4154484b4d455348ULL;
 inline constexpr int kMeshMetadataVersion = 1;
 
+// Fatal failures must terminate the whole MPI world. A rank-local exit can
+// strand peers in the next collective.
+[[noreturn]] void AbortOnFatalError();
+
 struct FileDigest {
   std::uint64_t size = 0;
   std::uint64_t fnv1a64 = 0;

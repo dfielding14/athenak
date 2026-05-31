@@ -229,7 +229,7 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
                 << std::endl
                 << "Failed to write restart header to partial artifact '"
                 << partial_fname << "'." << std::endl;
-      std::exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
   };
   if (global_variable::my_rank == 0 || single_file_per_rank) {
@@ -358,7 +358,7 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
           << std::endl << "cell-centered hydro data not written correctly to rst file, "
           << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          restart_utils::AbortOnFatalError();
         }
         myoffset += data_size;
 
@@ -373,7 +373,7 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
           << std::endl << "cell-centered hydro data not written correctly to rst file, "
           << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          restart_utils::AbortOnFatalError();
         }
         myoffset += data_size;
       }
@@ -394,7 +394,7 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
           << std::endl << "cell-centered mhd data not written correctly to rst file, "
           << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          restart_utils::AbortOnFatalError();
         }
         myoffset += data_size;
 
@@ -409,7 +409,7 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
           << std::endl << "cell-centered mhd data not written correctly to rst file, "
           << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          restart_utils::AbortOnFatalError();
         }
         myoffset += data_size;
       }
@@ -428,7 +428,7 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                     << std::endl << "b0.x1f data not written correctly to rst file, "
                     << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          restart_utils::AbortOnFatalError();
         }
         myoffset += fldcnt*sizeof(Real);
 
@@ -440,7 +440,7 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                     << std::endl << "b0.x2f data not written correctly to rst file, "
                     << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          restart_utils::AbortOnFatalError();
         }
         myoffset += fldcnt*sizeof(Real);
 
@@ -452,7 +452,7 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                     << std::endl << "b0.x3f data not written correctly to rst file, "
                     << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          restart_utils::AbortOnFatalError();
         }
         myoffset += fldcnt*sizeof(Real);
 
@@ -468,7 +468,7 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                     << std::endl << "b0.x1f data not written correctly to rst file, "
                     << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          restart_utils::AbortOnFatalError();
         }
         myoffset += fldcnt*sizeof(Real);
 
@@ -480,7 +480,7 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                     << std::endl << "b0.x2f data not written correctly to rst file, "
                     << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          restart_utils::AbortOnFatalError();
         }
         myoffset += fldcnt*sizeof(Real);
 
@@ -492,7 +492,7 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                     << std::endl << "b0.x3f data not written correctly to rst file, "
                     << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          restart_utils::AbortOnFatalError();
         }
         myoffset += fldcnt*sizeof(Real);
 
@@ -518,7 +518,7 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
           << std::endl << "cell-centered rad data not written correctly to rst file, "
           << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          restart_utils::AbortOnFatalError();
         }
         myoffset += data_size;
 
@@ -533,7 +533,7 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                     << std::endl << "cell-centered rad data not written correctly"
                     << " to rst file, restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          restart_utils::AbortOnFatalError();
         }
         myoffset += data_size;
       }
@@ -555,7 +555,7 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
           << std::endl << "cell-centered turb data not written correctly to rst file, "
           << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          restart_utils::AbortOnFatalError();
         }
         myoffset += data_size;
 
@@ -570,7 +570,7 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                     << std::endl << "cell-centered turb data not written correctly"
                     << " to rst file, restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          restart_utils::AbortOnFatalError();
         }
         myoffset += data_size;
       }
@@ -592,7 +592,7 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                     << std::endl << "cell-centered z4c data not written correctly"
                     << " to rst file, restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          restart_utils::AbortOnFatalError();
         }
         myoffset += data_size;
 
@@ -607,7 +607,7 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                     << std::endl << "cell-centered z4c data not written correctly"
                     << " to rst file, restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          restart_utils::AbortOnFatalError();
         }
         myoffset += data_size;
       }
@@ -627,7 +627,7 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                     << std::endl << "cell-centered adm data not written correctly"
                     << " to rst file, restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          restart_utils::AbortOnFatalError();
         }
         myoffset += data_size;
 
@@ -642,7 +642,7 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                     << std::endl << "cell-centered adm data not written correctly"
                     << " to rst file, restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
+          restart_utils::AbortOnFatalError();
         }
         myoffset += data_size;
       }
@@ -684,7 +684,7 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
                 << "Particle restart requested coupled moments, but moments are not "
                 << "allocated."
                 << std::endl;
-      std::exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
 
     auto h_pr = Kokkos::create_mirror_view_and_copy(HostMemSpace(), ppart->prtcl_rdata);
@@ -699,7 +699,7 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
                   << "Particle gid is not local at restart write time (gid="
                   << h_pi(PGID, p) << ", local gid range=[" << gids_local << ","
                   << (gids_local + nmb_local - 1) << "])." << std::endl;
-        std::exit(EXIT_FAILURE);
+        restart_utils::AbortOnFatalError();
       }
       if (ppart->particle_type == ParticleType::cosmic_ray) {
         const int sp = h_pi(PSP, p);
@@ -709,7 +709,7 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
                     << "Particle species is out of range at restart write time "
                     << "(species=" << sp << ", nspecies=" << ppart->nspecies << ")."
                     << std::endl;
-          std::exit(EXIT_FAILURE);
+          restart_utils::AbortOnFatalError();
         }
       }
       local_mb_counts[m] += 1;
@@ -880,7 +880,7 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                   << std::endl
                   << "Failed to write particle restart metadata." << std::endl;
-        std::exit(EXIT_FAILURE);
+        restart_utils::AbortOnFatalError();
       }
       if (nmb_section > 0) {
         if (resfile.Write_any_type_at(mb_counts_section.data(), nmb_section,
@@ -890,7 +890,7 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
                     << std::endl
                     << "Failed to write particle MeshBlock counts."
                     << std::endl;
-          std::exit(EXIT_FAILURE);
+          restart_utils::AbortOnFatalError();
         }
       }
     }
@@ -914,14 +914,14 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                   << std::endl
                   << "Failed to write particle restart real data." << std::endl;
-        std::exit(EXIT_FAILURE);
+        restart_utils::AbortOnFatalError();
       }
       if (resfile.Write_any_type_at(&(packed_pi[lstart*nidata]), cnt*nidata, pi_off,
                                     "int", single_file_per_rank) != cnt*nidata) {
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                   << std::endl
                   << "Failed to write particle restart integer data." << std::endl;
-        std::exit(EXIT_FAILURE);
+        restart_utils::AbortOnFatalError();
       }
     }
 
@@ -939,7 +939,7 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                     << std::endl
                     << "Failed to write particle moment restart data." << std::endl;
-          std::exit(EXIT_FAILURE);
+          restart_utils::AbortOnFatalError();
         }
       }
     }
@@ -972,7 +972,7 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                     << std::endl
                     << "Failed to write particle edge-current restart data." << std::endl;
-          std::exit(EXIT_FAILURE);
+          restart_utils::AbortOnFatalError();
         }
       }
     }
@@ -987,7 +987,7 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
               << std::endl
               << "Failed to sync or close restart partial artifact '" << partial_fname
               << "'." << std::endl;
-    std::exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
 #if MPI_PARALLEL_ENABLED
   MPI_Barrier(MPI_COMM_WORLD);

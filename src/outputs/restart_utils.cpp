@@ -27,7 +27,27 @@
 
 #include "restart_utils.hpp"
 
+#if MPI_PARALLEL_ENABLED
+#include <mpi.h>
+#endif
+
 namespace restart_utils {
+
+[[noreturn]] void AbortOnFatalError() {
+#if MPI_PARALLEL_ENABLED
+  int initialized = 0;
+  int finalized = 0;
+  MPI_Initialized(&initialized);
+  if (initialized != 0) {
+    MPI_Finalized(&finalized);
+  }
+  if (initialized != 0 && finalized == 0) {
+    MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
+  }
+#endif
+  std::exit(EXIT_FAILURE);
+}
+
 namespace {
 
 constexpr std::uint64_t kFnvOffset = 14695981039346656037ULL;
@@ -49,7 +69,7 @@ struct RestartManifest {
 
 [[noreturn]] void Fail(const std::string &message) {
   std::cerr << "### FATAL ERROR in " << __FILE__ << ": " << message << std::endl;
-  std::exit(EXIT_FAILURE);
+  AbortOnFatalError();
 }
 
 std::string DirectoryName(const std::string &path) {

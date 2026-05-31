@@ -56,7 +56,7 @@ void Mesh::BuildTreeFromScratch(ParameterInput *pin) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "Number of refinement levels must be smaller than "
                 << 31 - root_level + 1 << std::endl;
-      std::exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
   } else {
     max_level = 31;
@@ -72,7 +72,7 @@ void Mesh::BuildTreeFromScratch(ParameterInput *pin) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "Number of cells in MeshBlock must be divisible by 2 "
                 << "with SMR or AMR." << std::endl;
-      std::exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
 
     // cycle through ParameterInput list and find "refinement" blocks (SMR), extract data
@@ -105,14 +105,14 @@ void Mesh::BuildTreeFromScratch(ParameterInput *pin) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl << "Refinement level must be larger than 0 (root level = 0)"
               << std::endl;
-          std::exit(EXIT_FAILURE);
+          restart_utils::AbortOnFatalError();
         }
         if (log_ref_lev > max_level) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl << "Refinement level exceeds maximum allowed ("
               << max_level << ")" << std::endl << "Reduce/specify 'num_levels' in "
               << "<mesh_refinement> input block if using AMR" << std::endl;
-          std::exit(EXIT_FAILURE);
+          restart_utils::AbortOnFatalError();
         }
         if (   ref_size.x1min > ref_size.x1max
             || ref_size.x2min > ref_size.x2max
@@ -120,7 +120,7 @@ void Mesh::BuildTreeFromScratch(ParameterInput *pin) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl << "Invalid refinement region (xmax < xmin in one direction)."
               << std::endl;
-          std::exit(EXIT_FAILURE);
+          restart_utils::AbortOnFatalError();
         }
         if (   ref_size.x1min < mesh_size.x1min || ref_size.x1max > mesh_size.x1max
             || ref_size.x2min < mesh_size.x2min || ref_size.x2max > mesh_size.x2max
@@ -128,7 +128,7 @@ void Mesh::BuildTreeFromScratch(ParameterInput *pin) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl << "Refinement region must be fully contained within root mesh"
               << std::endl;
-          std::exit(EXIT_FAILURE);
+          restart_utils::AbortOnFatalError();
         }
 
         // note: if following is too slow, it could be replaced with bi-section search.
@@ -248,7 +248,7 @@ void Mesh::BuildTreeFromScratch(ParameterInput *pin) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
         << "Fewer MeshBlocks (nmb_total=" << nmb_total << ") than MPI ranks (nranks="
         << global_variable::nranks << ")" << std::endl;
-    std::exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
 #endif
 
@@ -277,14 +277,14 @@ void Mesh::BuildTreeFromScratch(ParameterInput *pin) {
           << std::endl << "On rank=" << global_variable::my_rank << " Root grid requires "
           << "more MeshBlocks (nmb_thisrank=" << nmb_thisrank << ") than specified by "
           << "<mesh_refinement>/max_nmb_per_rank=" << nmb_maxperrank << std::endl;
-        std::exit(EXIT_FAILURE);
+        restart_utils::AbortOnFatalError();
       }
     } else {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
         << std::endl << "With AMR maximum number of MeshBlocks per rank must be "
         << "specified in input file using <mesh_refinement>/max_nmb_per_rank"
         << std::endl;
-      std::exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
   }
 #if MPI_PARALLEL_ENABLED
@@ -292,7 +292,7 @@ void Mesh::BuildTreeFromScratch(ParameterInput *pin) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
       << "Maximum number of MeshBlocks per rank cannot exceed 2^(NUM_BITS_LID) due to MPI"
       << " tag limits" << std::endl;
-    std::exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
 #endif
 
@@ -337,7 +337,7 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "Header size read from restart file is incorrect, "
                 << "expected " << headersize << ", got " << read_size << std::endl;
-      exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
   }
 
@@ -350,7 +350,7 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
       int length_of_error_string;
       MPI_Error_string(mpi_err, error_string, &length_of_error_string);
       std::cout << "MPI_Bcast failed with error: " << error_string << std::endl;
-      exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
   }
 #endif
@@ -383,7 +383,7 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
               << std::endl
               << "Number of ranks stored in restart file is invalid."
               << std::endl;
-    std::exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
 
   // calculate the number of MeshBlocks at root level in each dir
@@ -399,7 +399,7 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "Number of refinement levels must be smaller than "
                 << 31 - root_level + 1 << std::endl;
-      std::exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
   } else {
     max_level = 31;
@@ -422,7 +422,7 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "Incorrect number of MeshBlocks in restart file; "
                 << "restart file is broken." << std::endl;
-      std::exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
   }
 #if MPI_PARALLEL_ENABLED
@@ -462,7 +462,7 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "MeshBlock rank list read from restart file is incorrect,"
                 << " restart file is broken." << std::endl;
-      std::exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
   }
 #if MPI_PARALLEL_ENABLED
@@ -480,7 +480,7 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                   << std::endl << "Rank gid table read from restart file is incorrect,"
                   << " restart file is broken." << std::endl;
-        std::exit(EXIT_FAILURE);
+        restart_utils::AbortOnFatalError();
       }
     }
 #if MPI_PARALLEL_ENABLED
@@ -498,7 +498,7 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
                   << std::endl
                   << "Rank MeshBlock count read from restart file is incorrect,"
                   << " restart file is broken." << std::endl;
-        std::exit(EXIT_FAILURE);
+        restart_utils::AbortOnFatalError();
       }
     }
 #if MPI_PARALLEL_ENABLED
@@ -523,7 +523,7 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
                 << std::endl
                 << "Unable to restore restart stream position after mesh-metadata peek."
                 << std::endl;
-      std::exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
   }
 #if MPI_PARALLEL_ENABLED
@@ -546,7 +546,7 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
                   << std::endl
                   << "Mesh restart metadata read is incomplete, restart file is broken."
                   << std::endl;
-        std::exit(EXIT_FAILURE);
+        restart_utils::AbortOnFatalError();
       }
     }
 #if MPI_PARALLEL_ENABLED
@@ -562,7 +562,7 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
                 << "Unsupported mesh restart metadata version="
                 << mesh_metadata_version << " or refinement-cooldown flag="
                 << has_refinement_cooldown << "." << std::endl;
-      std::exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
     if (has_refinement_cooldown == 0) {
       // Keep the empty vector as the backward-compatible constructor signal.
@@ -576,7 +576,7 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
                     << std::endl
                     << "MeshBlock refinement cooldown list read from restart file is "
                     << "incorrect, restart file is broken." << std::endl;
-          std::exit(EXIT_FAILURE);
+          restart_utils::AbortOnFatalError();
         }
       }
 #if MPI_PARALLEL_ENABLED
@@ -602,20 +602,18 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
         << std::endl << "Tree reconstruction failed. Total number of blocks in "
         << "reconstructed tree=" << nnb << ", number in file=" << nmb_total << std::endl;
-      std::exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
   }
 
-#ifdef MPI_PARALLEL_ENABLED
+#if MPI_PARALLEL_ENABLED
   // check there is at least one MeshBlock per MPI rank
-  if (!single_file_per_rank) {
-    if (nmb_total < global_variable::nranks) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line "
-        << __LINE__ << std::endl
-        << "Fewer MeshBlocks (nmb_total=" << nmb_total << ") than MPI ranks (nranks="
-        << global_variable::nranks << ")" << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
+  if (nmb_total < global_variable::nranks) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line "
+      << __LINE__ << std::endl
+      << "Fewer MeshBlocks (nmb_total=" << nmb_total << ") than MPI ranks (nranks="
+      << global_variable::nranks << ")" << std::endl;
+    restart_utils::AbortOnFatalError();
   }
 #endif
 
@@ -640,14 +638,14 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
           << std::endl << "On rank=" << global_variable::my_rank << " Root grid requires "
           << "more MeshBlocks (nmb_thisrank=" << nmb_thisrank << ") than specified by "
           << "<mesh_refinement>/max_nmb_per_rank=" << nmb_maxperrank << std::endl;
-        std::exit(EXIT_FAILURE);
+        restart_utils::AbortOnFatalError();
       }
     } else {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
         << std::endl << "With AMR maximum number of MeshBlocks per rank must be "
         << "specified in input file using <mesh_refinement>/max_nmb_per_rank"
         << std::endl;
-      std::exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
   }
 
