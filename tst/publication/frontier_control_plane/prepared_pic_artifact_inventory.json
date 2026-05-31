@@ -18,7 +18,7 @@
     },
     {
       "path": "tst/publication/analyze_q011_injection_distribution_runtime_local.py",
-      "sha256": "e89e395df5e23bcda3c0e4653bbd7fce325020302c9e7a21b13e89d5e0175f3c"
+      "sha256": "649246aff9b7b2202ead552b19b9f96d651dfdf90742ca54338a722c73676760"
     },
     {
       "path": "tst/publication/analyze_q023_paper_bell_linear.py",
@@ -109,6 +109,10 @@
     {
       "path": "inputs/tests/pic_deposit_conservation.athinput",
       "sha256": "15df280ba2aaf33418ab3c0a30109877210cfb3ed832f7a5cbb825f24378120d"
+    },
+    {
+      "path": "inputs/tests/pic_disjoint_adaptive_restart_compatibility.athinput",
+      "sha256": "dbfa0cd62b76722b53989a16e75ca6e3505be34a9d8f811fb511da1c2607d4fa"
     },
     {
       "path": "inputs/tests/pic_em_vacuum_wave.athinput",
@@ -255,12 +259,24 @@
       "sha256": "4f3aad8083a151d5fac254c77cb122bbd9692c108b4463fc897141a4e3fba2be"
     },
     {
+      "path": "inputs/tests/pic_parallel_shock_injection_mpi_parity.athinput",
+      "sha256": "45ead6ded904c509d69f086b0e384b188b33362d60e29047c9b37b9bd2363bb6"
+    },
+    {
       "path": "inputs/tests/pic_parallel_shock_rk_stage_budget.athinput",
-      "sha256": "fdc0899f0d6ca32682a71db200b4d257f3c213d7f64118b11a43db81fa7c769c"
+      "sha256": "30f5551c501367f669298bcab97877b460cf7ace08979029599a68de8df8bdaf"
     },
     {
       "path": "inputs/tests/pic_parallel_shock_section54_hpc.athinput",
       "sha256": "e755cf96f97e6078343d793015699bf958cf5c22809c7be1fa37aab7a1a83290"
+    },
+    {
+      "path": "inputs/tests/pic_parallel_shock_section54_stage_timing_acceptance.athinput",
+      "sha256": "544cc42435d6d6c09292e2662b81a99b5e0710230d655c577e8b50310ec0f724"
+    },
+    {
+      "path": "inputs/tests/pic_parallel_shock_startup_cohort_sink_restart.athinput",
+      "sha256": "746fd07436a798ef79e3ca566ea0e847e2db50f955cc44b1696bf93159a5ef86"
     },
     {
       "path": "inputs/tests/pic_parser_contract_guards.athinput",
@@ -309,6 +325,10 @@
     {
       "path": "inputs/tests/pic_q009_coupled_inflow_lifetime.athinput",
       "sha256": "6ae0c7418ef47e12ff488824bd602a579fd0aa11256db74c22c0110a8744b2b9"
+    },
+    {
+      "path": "inputs/tests/pic_q009_periodic_amr_restart_ordering_parity.athinput",
+      "sha256": "195dceb5004da2b3a7653223cb2e4bb8ce6d6eeb62d51a57634ae5c3b20af11a"
     },
     {
       "path": "inputs/tests/pic_q009_repeated_amr_lifetime.athinput",
