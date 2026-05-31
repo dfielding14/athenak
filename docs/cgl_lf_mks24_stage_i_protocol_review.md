@@ -63,6 +63,10 @@ Authenticated `R02/s13_rankio_t5p75_t6` job `4747834` is formally and
 independently inspected and recorded `accepted` through exact `t = 6.0` for
 `0.599722` node-hours, bringing corrected E03 Stage I use to `13.510001`
 node-hours.
+Authenticated `R02/s14_rankio_t6_t6p25` job `4748138` is formally and
+independently inspected and recorded `accepted` through exact `t = 6.25` for
+`0.655278` node-hours, bringing corrected E03 Stage I use to `14.165279`
+node-hours.
 
 The `900.000000` node-hour `E02` value is an authorized measurement-based
 projected envelope, not a fully measured matrix cost. It no longer authorizes
@@ -194,6 +198,8 @@ Authenticated job `4747500` now extends that accepted lineage through exact
 `t = 5.75`.
 Authenticated job `4747834` now extends that accepted lineage through exact
 `t = 6.0`.
+Authenticated job `4748138` now extends that accepted lineage through exact
+`t = 6.25`.
 The manuscript also still needs
 compact derivation prose. That prose must:
 
@@ -431,11 +437,32 @@ recost evidence JSON SHA-256 is
 it projects at most `814.945556` matrix node-hours inside the `900.000000`
 envelope, leaving `85.054444` node-hours of margin. Hardened reconciliation
 closes with `14/14/14` ledger rows/manifests/reservations, no active
-reservation, and no transaction. Archive and catalog the current committed
-controller state, reconcile, then prepare only `R02/s14_rankio_t6_t6p25` on
+reservation, and no transaction. At that boundary, the historical next action
+was to archive and catalog the committed controller state, reconcile, then
+prepare only `R02/s14_rankio_t6_t6p25` on
 one node from the authenticated `s13` terminal siblings with Slurm walltime
 `01:05:00`, Athena timeout `00:55:00`, and a `2700`-second threshold retaining
 `600` seconds on both timeout margins. The threshold is scoped only to `s14`
+and cannot ratchet automatically. Any scientific, provenance, scheduler,
+storage, budget, or reconciliation failure blocks successor preparation.
+Inspect, account, reconcile, and recost before any further extension. Finish
+R02, execute R03--R16 sequentially, and complete `R17` last.
+Authenticated `R02/s14_rankio_t6_t6p25` job `4748138` is now accepted
+through exact `t = 6.25` for `0.655278` node-hours. Its sampled-history
+forcing-work relative residual is `8.23749299161874e-12`; strict LF failure
+counters remain zero; terminal `lf_hwproj = 246541685689`; one complete
+eight-rank snapshot group and terminal eight-rank restart siblings are
+retained. Corrected E03 use is `14.165279` node-hours. Retained corrected
+recost evidence JSON SHA-256 is
+`5ba7aec52d3e7824cf4ccf52f95ce1e46368c84ed59f0525e2bbbcfc167fde91`;
+it projects at most `829.101112` matrix node-hours inside the `900.000000`
+envelope, leaving `70.898888` node-hours of margin. Hardened reconciliation
+closes with `15/15/15` ledger rows/manifests/reservations, no active
+reservation, and no transaction. Archive and catalog the current committed
+controller state, reconcile, then prepare only `R02/s15_rankio_t6p25_t6p5` on
+one node from the authenticated `s14` terminal siblings with Slurm walltime
+`01:05:00`, Athena timeout `00:55:00`, and a `2700`-second threshold retaining
+`600` seconds on both timeout margins. The threshold is scoped only to `s15`
 and cannot ratchet automatically. Any scientific, provenance, scheduler,
 storage, budget, or reconciliation failure blocks successor preparation.
 Inspect, account, reconcile, and recost before any further extension. Finish
@@ -470,7 +497,8 @@ Authenticated continuation `4747146` now reaches exact `t = 5.0`.
 Authenticated continuation `4747202` now reaches exact `t = 5.5`.
 Authenticated continuation `4747500` now reaches exact `t = 5.75`.
 Authenticated continuation `4747834` now reaches exact `t = 6.0`.
-Use only job `4747834`'s
+Authenticated continuation `4748138` now reaches exact `t = 6.25`.
+Use only job `4748138`'s
 authenticated terminal checkpoint for the next bounded R02 continuation.
 Commits `9480e62764528a3f40066d22a192f0e99b369891`
 and `ef1e42fa088203ac9ef6ec8e47e668db4fb95a3c` additionally require the live
