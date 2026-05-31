@@ -102,7 +102,7 @@
       "paper_normalization": "rho=B_g=U_A=2*pi/k0=1; Omega=1e-6*k0*U_A; C=1e3*v_CR",
       "open_values": [
         "Freeze the source-local paper candidate decks into an exact clean candidate and materialize the epsilon, sensitivity, seed, and timestep variants before qualifying runs.",
-        "Implement and bind the dedicated Section 5.2 Bell eigenmode problem generator; the source-local paper candidates deliberately retain an unavailable problem-generator name."
+        "Review and freeze the dedicated Section 5.2 Bell eigenmode generator plus the physical-1D transverse-invariant thin 2D3V carrier before qualifying runs."
       ]
     },
     "Q023-GRID-PAPER-SHOCK": {
@@ -669,8 +669,8 @@
     {
       "analyzer_id": "Q023-ANALYZER-PAPER-BELL-LINEAR-CANDIDATE",
       "path": "tst/publication/analyze_q023_paper_bell_linear.py",
-      "sha256": "1a2c5b81edb30a7cca90e63560a8581a1f5aed1b4c63ae7673f9f3d31e0c482a",
-      "qualification_limit": "source_local_section52_analytical_dispersion_candidate_only_clean_freeze_raw_trace_extraction_registered_execution_independent_recompute_and_external_review_open"
+      "sha256": "ce0b901b44e5d556d8b4a19051021edccab64ec5c5812c0e48dabb3a6bee34f9",
+      "qualification_limit": "source_local_section52_raw_trace_analytical_dispersion_candidate_only_clean_freeze_registered_execution_independent_recompute_and_external_review_open"
     },
     {
       "analyzer_id": "Q023-ANALYZER-SHOCK-LOCAL",
@@ -749,20 +749,20 @@
     {
       "input_id": "Q023-INPUT-PAPER-BELL-LINEAR-1D-CANDIDATE",
       "path": "inputs/tests/pic_q023_paper_bell_linear_1d_candidate.athinput",
-      "sha256": "c0ad548f45483550b33c6bccaff4538c52d8ebf99edb4ffe47fcb2385417f815",
-      "qualification_limit": "source_local_section52_paper_value_candidate_only_dedicated_eigenmode_generator_clean_freeze_and_authorized_run_open"
+      "sha256": "8fedfac3098f50380377ea52eee610d60aae36a1b420673032779db86c5592be",
+      "qualification_limit": "source_local_section52_runnable_thin_2d3v_carrier_preparation_only_clean_freeze_variant_materialization_and_authorized_run_open"
     },
     {
       "input_id": "Q023-INPUT-PAPER-BELL-LINEAR-2D-CANDIDATE",
       "path": "inputs/tests/pic_q023_paper_bell_linear_2d_candidate.athinput",
-      "sha256": "8153ded3c389eec7915cc9039e4865008ba29c14c714e9da98b345cbed16a536",
-      "qualification_limit": "source_local_section52_paper_value_candidate_only_dedicated_eigenmode_generator_clean_freeze_and_authorized_run_open"
+      "sha256": "0b45844f18dfe1966e57d1db153bfd3fc9df603596a6828f998e1e87d28fbe66",
+      "qualification_limit": "source_local_section52_runnable_preparation_only_clean_freeze_variant_materialization_and_authorized_run_open"
     },
     {
       "input_id": "Q023-INPUT-PAPER-BELL-LINEAR-3D-CANDIDATE",
       "path": "inputs/tests/pic_q023_paper_bell_linear_3d_candidate.athinput",
-      "sha256": "7ec79f58b022c3d94f79fa089aca58522a2c2941e61837abfec0db78d2b03637",
-      "qualification_limit": "source_local_section52_paper_value_candidate_only_dedicated_eigenmode_generator_clean_freeze_and_authorized_run_open"
+      "sha256": "8ae2a2e5afa69c1247e495dd335a075e7a130ead5c0d4645f0af19f9d62c7817",
+      "qualification_limit": "source_local_section52_runnable_preparation_only_clean_freeze_variant_materialization_and_authorized_run_open"
     },
     {
       "input_id": "Q023-INPUT-CRSI-PROXY",

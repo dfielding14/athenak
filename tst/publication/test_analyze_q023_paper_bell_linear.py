@@ -40,6 +40,7 @@ def _record(dimension: int, epsilon: float) -> dict[str, object]:
     right_amplitude = np.exp(growth * time)
     right = right_amplitude * np.exp(1.0j * epsilon * time)
     left = 1.0e-3 * right
+    phase_interval, phase_change = bell._fixed_interval_phase_trace(time, right)
     return {
         "dimension": dimension,
         "epsilon": epsilon,
@@ -48,8 +49,8 @@ def _record(dimension: int, epsilon: float) -> dict[str, object]:
         "right_mode_imag": right.imag.tolist(),
         "left_mode_real": left.real.tolist(),
         "left_mode_imag": left.imag.tolist(),
-        "phase_interval": [math.pi, math.pi, math.pi],
-        "phase_change": [epsilon * math.pi] * 3,
+        "phase_interval": phase_interval.tolist(),
+        "phase_change": phase_change.tolist(),
     }
 
 
@@ -67,18 +68,24 @@ def _bundle() -> dict[str, object]:
 
 
 class Q023PaperBellLinearTests(unittest.TestCase):
-    def test_source_local_decks_freeze_paper_values_but_remain_launch_blocked(
+    def test_source_local_decks_freeze_paper_values_for_non_authorized_local_run(
         self,
     ) -> None:
         decks = bell.validate_source_local_candidate_decks()
         self.assertEqual([deck["dimension"] for deck in decks], [1, 2, 3])
-        self.assertTrue(
-            all(
-                deck["launch_status"]
-                == "blocked_open_dedicated_section52_problem_generator"
-                for deck in decks
-            )
+        self.assertEqual(
+            [deck["launch_status"] for deck in decks],
+            [
+                "source_local_runnable_thin_2d3v_carrier_preparation_only_not_authorized",
+                "source_local_runnable_preparation_only_not_authorized",
+                "source_local_runnable_preparation_only_not_authorized",
+            ],
         )
+        self.assertEqual(
+            decks[0]["carrier_semantics"],
+            "physical_1d_transverse_invariant_thin_2d3v_nx2_4",
+        )
+        self.assertEqual(bell._EXPECTED_GEOMETRY[1]["nx"], (32, 4, 1))
         self.assertEqual(decks[0]["active_dx"], [1.0 / 32.0])
         self.assertAlmostEqual(decks[1]["active_dx"][0], math.sqrt(5.0) / 64.0)
         self.assertAlmostEqual(decks[2]["active_dx"][2],
@@ -124,6 +131,12 @@ class Q023PaperBellLinearTests(unittest.TestCase):
         with self.assertRaisesRegex(bell.ContractError, "phase intervals"):
             bell.analyze_trace_bundle(bundle)
 
+    def test_phase_change_must_be_reproducible_from_retained_trace(self) -> None:
+        bundle = _bundle()
+        bundle["records"][0]["phase_change"][0] += 0.25
+        with self.assertRaisesRegex(bell.ContractError, "retained mode trace"):
+            bell.analyze_trace_bundle(bundle)
+
     def test_nonqualifying_seed_fails_closed(self) -> None:
         bundle = _bundle()
         bundle["qualifying_seed"] = 23050091
@@ -143,6 +156,60 @@ class Q023PaperBellLinearTests(unittest.TestCase):
         self.assertFalse(report["passed"])
         failed = report["records"][0]
         self.assertFalse(failed["polarization_pass"])
+
+    def test_raw_diagonal_mode_trace_extraction(self) -> None:
+        dimension = 3
+        epsilon = 0.4
+        _, growth = bell.theoretical_dispersion(epsilon)
+        parallel, transverse_a, transverse_b = bell._mode_basis(dimension)
+        extents = bell._EXPECTED_GEOMETRY[dimension]["extent"]
+        coordinates = [
+            (np.arange(count, dtype=float) + 0.5) * extent / count
+            for count, extent in zip((16, 8, 4), extents)
+        ]
+        x3, x2, x1 = np.meshgrid(
+            coordinates[2], coordinates[1], coordinates[0], indexing="ij"
+        )
+        spatial_phase = bell.K0 * (
+            parallel[0]*x1 + parallel[1]*x2 + parallel[2]*x3
+        )
+        datasets = []
+        for normalized_time in np.linspace(0.0, 7.0, 57):
+            amplitude = 1.0e-6 * math.exp(growth*normalized_time)
+            temporal_phase = spatial_phase + epsilon*normalized_time
+            magnetic = (
+                parallel[:, None, None, None]
+                + amplitude*np.cos(temporal_phase)[None, ...]
+                * transverse_a[:, None, None, None]
+                - amplitude*np.sin(temporal_phase)[None, ...]
+                * transverse_b[:, None, None, None]
+            )
+            datasets.append(
+                {
+                    "Time": normalized_time / (bell.K0*bell.U_A),
+                    "x1v": coordinates[0],
+                    "x2v": coordinates[1],
+                    "x3v": coordinates[2],
+                    "bcc1": magnetic[0],
+                    "bcc2": magnetic[1],
+                    "bcc3": magnetic[2],
+                }
+            )
+        record = bell.extract_trace_record_from_datasets(dimension, epsilon, datasets)
+        report = bell._analyze_record(record)
+        self.assertTrue(report["passed"])
+        self.assertAlmostEqual(report["measured_growth_rate_over_k0_ua"], growth)
+        self.assertAlmostEqual(report["measured_phase_frequency_over_k0_ua"], epsilon)
+
+        by_name = {f"snapshot-{index}.bin": dataset
+                   for index, dataset in enumerate(reversed(datasets))}
+        reread = bell.extract_trace_record_from_binary_files(
+            dimension,
+            epsilon,
+            [Path(name) for name in by_name],
+            reader=lambda name: by_name[name],
+        )
+        self.assertEqual(reread, record)
 
     def test_readiness_bindings_distinguish_candidates_from_engineering_proxy(
         self,

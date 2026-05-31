@@ -4,10 +4,11 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import math
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, Sequence
 
 import numpy as np
 
@@ -31,6 +32,8 @@ MIN_GROWTH_SNAPSHOTS = 8
 MIN_RIGHT_TO_LEFT_RATIO = 10.0
 ABSOLUTE_TOLERANCE = 0.02
 RELATIVE_TOLERANCE = 0.05
+K0 = 2.0 * math.pi
+U_A = 1.0
 
 DECKS = {
     1: REPO_ROOT / "inputs/tests/pic_q023_paper_bell_linear_1d_candidate.athinput",
@@ -40,7 +43,7 @@ DECKS = {
 
 _EXPECTED_GEOMETRY = {
     1: {
-        "nx": (32, 1, 1),
+        "nx": (32, 4, 1),
         "extent": (1.0, 1.0, 1.0),
         "active_dx": (1.0 / 32.0,),
     },
@@ -78,9 +81,6 @@ _EXPECTED_DECK_VALUES = {
     ("particles", "couple_moments_momentum_to_mhd"): "true",
     ("particles", "couple_moments_energy_to_mhd"): "true",
     ("particles", "couple_fluid_feedback_order"): "mhd_src_terms",
-    ("particles", "cr_vx0"): "2.5",
-    ("particles", "cr_vy0"): "0.0",
-    ("particles", "cr_vz0"): "0.0",
     ("particles", "pic_physical_mode"): "paper_mhd_pic",
     ("particles", "pic_background_mode"): "coupled",
     ("particles", "pic_feedback_mode"): "coupled",
@@ -91,13 +91,14 @@ _EXPECTED_DECK_VALUES = {
     ("particles", "pic_wave_damping_mode"): "off",
     ("species0", "mass"): "1.0",
     ("species0", "charge"): "6.283185307179586e-6",
-    ("problem", "pgen_name"): "q023_paper_bell_linear_open",
+    ("problem", "pgen_name"): "q023_paper_bell_linear",
     ("q023_paper_bell_linear", "campaign_id"): CAMPAIGN_ID,
-    ("q023_paper_bell_linear", "deck_role"):
-        "source_local_paper_candidate_not_authorized",
     ("q023_paper_bell_linear", "epsilon_default"): "0.4",
+    ("q023_paper_bell_linear", "epsilon"): "0.4",
     ("q023_paper_bell_linear", "epsilon_grid"): "0.1,0.2,0.4,0.6,0.8",
     ("q023_paper_bell_linear", "rho"): "1.0",
+    ("q023_paper_bell_linear", "pressure"): "1.0",
+    ("q023_paper_bell_linear", "amplitude"): "1.0e-6",
     ("q023_paper_bell_linear", "b_g"): "1.0",
     ("q023_paper_bell_linear", "u_a"): "1.0",
     ("q023_paper_bell_linear", "wavelength"): "1.0",
@@ -105,9 +106,18 @@ _EXPECTED_DECK_VALUES = {
     ("q023_paper_bell_linear", "omega"): "6.283185307179586e-6",
     ("q023_paper_bell_linear", "c_over_v_cr"): "1000.0",
     ("q023_paper_bell_linear", "initial_eigenmode"):
-        "open_dedicated_section52_problem_generator",
+        "section52_right_polarized_eigenmode",
     ("q023_paper_bell_linear", "timestep"):
         "open_clean_candidate_timestep_freeze",
+    ("output1", "file_type"): "bin",
+    ("output1", "variable"): "mhd_bcc",
+    ("output1", "id"): "mhd_bcc",
+    ("output1", "dcycle"): "1",
+    ("output1", "ghost_zones"): "false",
+    ("output2", "file_type"): "rst",
+    ("output2", "id"): "rst",
+    ("output2", "dcycle"): "1",
+    ("output2", "single_file_per_rank"): "false",
 }
 
 _TRACE_KEYS = {
@@ -159,8 +169,25 @@ def _require_close(label: str, measured: float, expected: float) -> None:
         raise ContractError(f"{label}: expected {expected!r}, measured {measured!r}")
 
 
+def _mode_basis(dimension: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    if dimension not in DIMENSIONS:
+        raise ContractError("dimension must be one of the preregistered integer values")
+    raw = np.array(
+        [1.0, 2.0 if dimension >= 2 else 0.0, 4.0 if dimension >= 3 else 0.0]
+    )
+    parallel = raw / np.linalg.norm(raw)
+    transverse_a = (
+        np.array([0.0, 1.0, 0.0])
+        if dimension == 1
+        else np.array([-parallel[1], parallel[0], 0.0])
+    )
+    transverse_a /= np.linalg.norm(transverse_a)
+    transverse_b = np.cross(parallel, transverse_a)
+    return parallel, transverse_a, transverse_b
+
+
 def validate_candidate_deck(path: Path, expected_dimension: int) -> dict[str, Any]:
-    """Validate paper values and retain the deliberate launch-blocked boundary."""
+    """Validate paper values and retain the non-authorized local-run boundary."""
     blocks = parse_athinput(path)
     for (block, name), expected in _EXPECTED_DECK_VALUES.items():
         measured = blocks.get(block, {}).get(name)
@@ -172,6 +199,13 @@ def validate_candidate_deck(path: Path, expected_dimension: int) -> dict[str, An
     metadata = blocks["q023_paper_bell_linear"]
     if metadata.get("dimension") != str(expected_dimension):
         raise ContractError(f"{path}: unexpected paper dimension")
+    expected_role = (
+        "source_local_runnable_thin_2d3v_carrier_preparation_not_authorized"
+        if expected_dimension == 1
+        else "source_local_runnable_preparation_not_authorized"
+    )
+    if metadata.get("deck_role") != expected_role:
+        raise ContractError(f"{path}: unexpected source-local preparation role")
     geometry = _EXPECTED_GEOMETRY[expected_dimension]
     nx = tuple(int(blocks["mesh"][f"nx{axis}"]) for axis in (1, 2, 3))
     extent = tuple(
@@ -197,7 +231,15 @@ def validate_candidate_deck(path: Path, expected_dimension: int) -> dict[str, An
     k0 = float(metadata["k0"])
     omega = float(metadata["omega"])
     epsilon = float(metadata["epsilon_default"])
-    vcr = float(blocks["particles"]["cr_vx0"])
+    configured_epsilon = float(metadata["epsilon"])
+    stream = np.array(
+        [
+            float(blocks["particles"]["cr_vx0"]),
+            float(blocks["particles"]["cr_vy0"]),
+            float(blocks["particles"]["cr_vz0"]),
+        ]
+    )
+    vcr = float(np.linalg.norm(stream))
     light_speed = float(blocks["particles"]["pic_cr_light_speed"])
     q_over_m = float(blocks["species0"]["charge"]) / float(blocks["species0"]["mass"])
     ppc = float(blocks["particles"]["ppc"])
@@ -209,15 +251,28 @@ def validate_candidate_deck(path: Path, expected_dimension: int) -> dict[str, An
     _require_close(f"{path}: Omega", omega, 1.0e-6 * k0 * ua)
     _require_close(f"{path}: species q/m", q_over_m, omega / bg)
     _require_close(f"{path}: epsilon", epsilon, ua / vcr)
+    _require_close(f"{path}: configured epsilon", configured_epsilon, epsilon)
     _require_close(f"{path}: C", light_speed, 1.0e3 * vcr)
     _require_close(f"{path}: j_CR", jcr, 2.0 * bg * light_speed * k0)
+    expected_stream = vcr * _mode_basis(expected_dimension)[0]
+    for axis, (measured, expected) in enumerate(zip(stream, expected_stream), 1):
+        _require_close(f"{path}: diagonal CR stream x{axis}", measured, float(expected))
 
     return {
         "path": str(path.relative_to(REPO_ROOT)),
         "dimension": expected_dimension,
         "epsilon_default": epsilon,
         "active_dx": list(active_dx),
-        "launch_status": "blocked_open_dedicated_section52_problem_generator",
+        "launch_status": (
+            "source_local_runnable_thin_2d3v_carrier_preparation_only_not_authorized"
+            if expected_dimension == 1
+            else "source_local_runnable_preparation_only_not_authorized"
+        ),
+        "carrier_semantics": (
+            "physical_1d_transverse_invariant_thin_2d3v_nx2_4"
+            if expected_dimension == 1
+            else "native_mesh_dimension"
+        ),
     }
 
 
@@ -234,6 +289,100 @@ def theoretical_dispersion(epsilon: float) -> tuple[float, float]:
     if epsilon not in EPSILON_VALUES:
         raise ContractError(f"epsilon {epsilon!r} is outside the preregistered grid")
     return epsilon, math.sqrt(1.0 - epsilon * epsilon)
+
+
+def _fixed_interval_phase_trace(
+    normalized_time: np.ndarray, right_mode: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    if normalized_time.size != right_mode.size or normalized_time.size < 2:
+        raise ContractError("phase extraction requires matching trace arrays")
+    if np.any(np.diff(normalized_time) <= 0.0):
+        raise ContractError("phase extraction requires strictly increasing time")
+    first = math.ceil(normalized_time[0] / PHASE_INTERVAL) * PHASE_INTERVAL
+    boundaries = np.arange(
+        first, normalized_time[-1] + 1.0e-12, PHASE_INTERVAL, dtype=float
+    )
+    if boundaries.size < 2:
+        raise ContractError("trace does not cover one fixed paper phase interval")
+    phase = np.interp(boundaries, normalized_time, np.unwrap(np.angle(right_mode)))
+    return np.diff(boundaries), np.diff(phase)
+
+
+def _spatial_modes_from_dataset(
+    dataset: dict[str, Any], dimension: int
+) -> tuple[complex, complex]:
+    parallel, transverse_a, transverse_b = _mode_basis(dimension)
+    coordinates = [
+        np.asarray(dataset[f"x{axis}v"], dtype=float) for axis in (1, 2, 3)
+    ]
+    expected_shape = tuple(values.size for values in reversed(coordinates))
+    magnetic = np.stack(
+        [np.asarray(dataset[f"bcc{axis}"], dtype=float) for axis in (1, 2, 3)]
+    )
+    if magnetic.shape[1:] != expected_shape or not np.all(np.isfinite(magnetic)):
+        raise ContractError("raw mhd_bcc dataset shape or values are invalid")
+    x3, x2, x1 = np.meshgrid(
+        coordinates[2], coordinates[1], coordinates[0], indexing="ij"
+    )
+    phase = K0 * (parallel[0]*x1 + parallel[1]*x2 + parallel[2]*x3)
+    fourier_weight = np.exp(-1.0j * phase)
+    mode_a = np.mean(np.tensordot(transverse_a, magnetic, axes=1) * fourier_weight)
+    mode_b = np.mean(np.tensordot(transverse_b, magnetic, axes=1) * fourier_weight)
+    return 0.5*(mode_a - 1.0j*mode_b), 0.5*(mode_a + 1.0j*mode_b)
+
+
+def extract_trace_record_from_datasets(
+    dimension: int, epsilon: float, datasets: Sequence[dict[str, Any]]
+) -> dict[str, Any]:
+    """Extract one paper Bell trace record from raw mhd_bcc snapshot datasets."""
+    theoretical_dispersion(epsilon)
+    rows = []
+    for dataset in datasets:
+        if "Time" not in dataset:
+            raise ContractError("raw mhd_bcc dataset is missing Time")
+        time = float(dataset["Time"])
+        if not math.isfinite(time):
+            raise ContractError("raw mhd_bcc dataset Time must be finite")
+        right, left = _spatial_modes_from_dataset(dataset, dimension)
+        rows.append((time*K0*U_A, right, left))
+    rows.sort(key=lambda item: item[0])
+    if not rows:
+        raise ContractError("raw mhd_bcc extraction requires snapshots")
+    time = np.asarray([item[0] for item in rows], dtype=float)
+    right = np.asarray([item[1] for item in rows], dtype=complex)
+    left = np.asarray([item[2] for item in rows], dtype=complex)
+    interval, change = _fixed_interval_phase_trace(time, right)
+    return {
+        "dimension": dimension,
+        "epsilon": epsilon,
+        "normalized_time": time.tolist(),
+        "right_mode_real": right.real.tolist(),
+        "right_mode_imag": right.imag.tolist(),
+        "left_mode_real": left.real.tolist(),
+        "left_mode_imag": left.imag.tolist(),
+        "phase_interval": interval.tolist(),
+        "phase_change": change.tolist(),
+    }
+
+
+def extract_trace_record_from_binary_files(
+    dimension: int,
+    epsilon: float,
+    paths: Sequence[Path],
+    reader: Callable[[str], dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Read raw Athena binary snapshots and extract one paper Bell trace record."""
+    if reader is None:
+        module_path = REPO_ROOT / "vis/python/bin_convert_new.py"
+        spec = importlib.util.spec_from_file_location("q023_bin_convert_new", module_path)
+        if spec is None or spec.loader is None:
+            raise ContractError("unable to load the raw Athena binary reader")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        reader = module.read_binary_as_athdf
+    return extract_trace_record_from_datasets(
+        dimension, epsilon, [reader(str(path)) for path in paths]
+    )
 
 
 def _finite_array(record: dict[str, Any], key: str) -> np.ndarray:
@@ -297,7 +446,16 @@ def _analyze_record(record: dict[str, Any]) -> dict[str, Any]:
         raise ContractError("phase interval and phase change arrays must have equal length")
     if not np.allclose(phase_interval, PHASE_INTERVAL, rtol=0.0, atol=1.0e-14):
         raise ContractError("phase intervals must equal pi/(k0*U_A)")
-    measured_phase = float(np.mean(np.abs(phase_change / phase_interval)))
+    extracted_interval, extracted_change = _fixed_interval_phase_trace(time, right)
+    if phase_interval.size != extracted_interval.size or not np.allclose(
+        phase_interval, extracted_interval, rtol=0.0, atol=1.0e-12
+    ):
+        raise ContractError("phase intervals do not match the retained mode trace")
+    if phase_change.size != extracted_change.size or not np.allclose(
+        phase_change, extracted_change, rtol=0.0, atol=1.0e-10
+    ):
+        raise ContractError("phase changes do not match the retained mode trace")
+    measured_phase = float(np.mean(np.abs(extracted_change / extracted_interval)))
     final_fit_index = int(np.flatnonzero(fit_mask)[-1])
     polarization_ratio = float(
         right_amplitude[final_fit_index]
@@ -369,11 +527,23 @@ def analyze_trace_bundle(bundle: dict[str, Any]) -> dict[str, Any]:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("trace_bundle", type=Path)
+    parser.add_argument("--extract-record", action="store_true")
+    parser.add_argument("--dimension", type=int)
+    parser.add_argument("--epsilon", type=float)
+    parser.add_argument("paths", type=Path, nargs="+")
     args = parser.parse_args()
-    bundle = json.loads(args.trace_bundle.read_text(encoding="utf-8"))
-    print(json.dumps(analyze_trace_bundle(bundle), indent=2, sort_keys=True,
-                     allow_nan=False))
+    if args.extract_record:
+        if args.dimension is None or args.epsilon is None:
+            parser.error("--extract-record requires --dimension and --epsilon")
+        result = extract_trace_record_from_binary_files(
+            args.dimension, args.epsilon, args.paths
+        )
+    else:
+        if len(args.paths) != 1 or args.dimension is not None or args.epsilon is not None:
+            parser.error("bundle analysis requires exactly one trace-bundle path")
+        bundle = json.loads(args.paths[0].read_text(encoding="utf-8"))
+        result = analyze_trace_bundle(bundle)
+    print(json.dumps(result, indent=2, sort_keys=True, allow_nan=False))
 
 
 if __name__ == "__main__":

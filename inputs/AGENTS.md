@@ -197,8 +197,14 @@ Format rules are enforced by `src/parameter_input.cpp`:
     and gates out positive exponential growth.
 - `inputs/tests/pic_bell_growth_proxy.athinput`
   - Coupled-MHD Bell-like proxy that compares uncoupled vs coupled runs for
-  transverse magnetic growth and enforces positive growth only in coupled
-  mode with serial/MPI parity.
+    transverse magnetic growth and enforces positive growth only in coupled
+    mode with serial/MPI parity.
+- `inputs/tests/pic_q023_paper_bell_linear_{1d,2d,3d}_candidate.athinput`
+  - Source-local Sun and Bai Section 5.2 Bell preparations using the dedicated
+    right-polarized eigenmode generator. The physical 1D case is represented
+    by an exact transverse-invariant `nx2=4` thin 2D3V carrier because the
+    particle module intentionally supports 2D/3D meshes. These decks are not
+    authorized qualifying campaign inputs until clean freeze and registration.
 - `inputs/tests/pic_multispecies_osc_uniform.athinput`
   - Multi-species (`q=+/-1`) coupled oscillation baseline on a uniform mesh.
 - `inputs/tests/pic_multispecies_osc_smr.athinput`

@@ -1,0 +1,140 @@
+{
+  "record_type": "q023_paper_bell_linear_source_local_implementation",
+  "schema_version": 1,
+  "date": "2026-05-30",
+  "gate": "Q-023",
+  "campaign_id": "Q023-PAPER-BELL-LINEAR",
+  "slice_start_head": "30fa1c7d2a7d50ff2ecaeb7643ccf6eaa9e4ebc0",
+  "required_restart_repair_ancestor": "41e064da87d48da0f9d5412e753e5efe6e22ec66",
+  "transition_source_commit": "open_uncommitted_q023_slice_atop_30fa1c7d2a7d50ff2ecaeb7643ccf6eaa9e4ebc0",
+  "status": "source_local_1d2d3d_runnable_preparation_only",
+  "qualification_effect": "none",
+  "frontier_authorization": "not_bound",
+  "section52_qualification": "not_claimed",
+  "registered_builtin_generator": "q023_paper_bell_linear",
+  "paper_reference": {
+    "source": "Sun and Bai (2023) Section 5.2",
+    "fastest_mode": "k=k0",
+    "dispersion": "omega/(k0*U_A)=epsilon+i*sqrt(1-epsilon^2)",
+    "eigenmode": "delta_u=delta_B/sqrt(rho)*exp(i*(-asin(epsilon)-pi/2))",
+    "direction": "x1_physical_1d_on_transverse_invariant_thin_2d3v_carrier_diagonal_in_native_2d_and_3d",
+    "uniform_particle_count": "two_particles_per_cell"
+  },
+  "source_local_preparation_choices": {
+    "uniform_pressure": 1.0,
+    "eigenmode_amplitude": 1e-06,
+    "output": "raw_mhd_bcc_each_cycle",
+    "qualification_limit": "local_preparation_values_only_not_a_section52_qualification_claim"
+  },
+  "physical_1d_carrier_contract": {
+    "semantics": "transverse_invariant_thin_2d3v_carrier",
+    "mesh": {
+      "nx1": 32,
+      "nx2": 4,
+      "nx3": 1
+    },
+    "reason": "AthenaK particle support intentionally requires a 2D or 3D mesh; the extra transverse cells are invariant carrier cells and do not broaden the physical 1D claim."
+  },
+  "restart_semantics": "revalidate_exact_q023_contract_then_return_without_reinitializing_loaded_state",
+  "raw_mode_trace_extraction": "tst/publication/analyze_q023_paper_bell_linear.py",
+  "source_local_artifacts": [
+    {
+      "path": "src/pgen/tests/q023_paper_bell_linear.cpp",
+      "sha256": "76edb3487dd3d2beebc90437b9af8c6d459e9ee987c3cd153f163b0b4be62dc1"
+    },
+    {
+      "path": "src/pgen/pgen.cpp",
+      "sha256": "8b27bbac7e04e6ec9b0b6a2efe9ec3f308dd397fe1017d6fb2d784127989a22f"
+    },
+    {
+      "path": "src/pgen/pgen.hpp",
+      "sha256": "5bdf2d1534bbd08aa4fa7ff4189d2802d5fc221bf8caf2bfd2bec04a8bfa00ae"
+    },
+    {
+      "path": "src/CMakeLists.txt",
+      "sha256": "ca01e365e89d1b78a47cce1391da62aab110217d4ab3197bffc2b51c4a297fd0"
+    },
+    {
+      "path": "src/pgen/AGENTS.md",
+      "sha256": "fdb839c3bf9b384533c34b70efe3cf75ebed2427e147d0b8ec48fa12fd00eeac"
+    },
+    {
+      "path": "inputs/tests/pic_q023_paper_bell_linear_1d_candidate.athinput",
+      "sha256": "8fedfac3098f50380377ea52eee610d60aae36a1b420673032779db86c5592be"
+    },
+    {
+      "path": "inputs/tests/pic_q023_paper_bell_linear_2d_candidate.athinput",
+      "sha256": "0b45844f18dfe1966e57d1db153bfd3fc9df603596a6828f998e1e87d28fbe66"
+    },
+    {
+      "path": "inputs/tests/pic_q023_paper_bell_linear_3d_candidate.athinput",
+      "sha256": "8ae2a2e5afa69c1247e495dd335a075e7a130ead5c0d4645f0af19f9d62c7817"
+    },
+    {
+      "path": "tst/publication/analyze_q023_paper_bell_linear.py",
+      "sha256": "ce0b901b44e5d556d8b4a19051021edccab64ec5c5812c0e48dabb3a6bee34f9"
+    },
+    {
+      "path": "tst/publication/test_analyze_q023_paper_bell_linear.py",
+      "sha256": "3c0df75559fbffeb0b5f1ec4a92934c3a3b2b92299a0bf1aeb8dc22fb1e4381b"
+    },
+    {
+      "path": "tst/publication/q023_paper_bell_linear_host_harness.cpp",
+      "sha256": "b94be3148393fcef3f3800e47950f5d564438e60a55ef89a989e0539ad21a309"
+    },
+    {
+      "path": "tst/publication/test_q023_paper_bell_linear_host_harness.py",
+      "sha256": "c1e2f4ce19cf3c885a7bd08b83174873f37a1e6e117cfe6ab64b75a6004c88c2"
+    }
+  ],
+  "source_local_runtime_smoke": {
+    "qualification_effect": "bounded_source_local_preparation_smoke_only",
+    "artifact_root": "/lustre/orion/ast207/proj-shared/dfielding/PIC/local-readiness/q023-bell-thin-carrier-smoke-20260530",
+    "debug_executable": {
+      "path": "/tmp/athenak-pic-local-prereq-debug-20260530/src/athena",
+      "sha256": "8d9ffc78c292c95c9fffd8809b8c7b5532758c171d91f62ca3d217a37863ac8d"
+    },
+    "cycle_zero_initializations": [
+      {
+        "dimension": 1,
+        "carrier_shape": [1, 4, 32],
+        "selected_raw_mhd_bcc_path": "1d/bin/pic_q023_paper_bell_linear_1d_candidate.mhd_bcc.00000.bin",
+        "selected_raw_mhd_bcc_sha256": "708dc0ab61dbf5f133d53785b0208999a1f9a5ddde7603c7222f5f98f642396c",
+        "result": "pass"
+      },
+      {
+        "dimension": 2,
+        "carrier_shape": [1, 32, 64],
+        "selected_raw_mhd_bcc_path": "2d/bin/pic_q023_paper_bell_linear_2d_candidate.mhd_bcc.00000.bin",
+        "selected_raw_mhd_bcc_sha256": "be020e8558e87c8a09b20e973d0fc672ae23c63847d62a8e654e6975d0386f44",
+        "result": "pass"
+      },
+      {
+        "dimension": 3,
+        "carrier_shape": [32, 64, 128],
+        "selected_raw_mhd_bcc_path": "3d/bin/pic_q023_paper_bell_linear_3d_candidate.mhd_bcc.00000.bin",
+        "selected_raw_mhd_bcc_sha256": "72f8dfb8ceebfe86ae74970c117ab1d2a655b39593e703d5d933e36ed30db439",
+        "result": "pass"
+      }
+    ],
+    "restart_continuation": {
+      "dimension": 2,
+      "loaded_restart_path": "restart2d/rst/pic_q023_paper_bell_linear_restart2d.00001.rst",
+      "loaded_restart_sha256": "96540d52cae4239d0cdeefa161a1c42996b02db232492ae281459c712d3db82b",
+      "selected_continuation_raw_mhd_bcc_path": "restart2d/bin/pic_q023_paper_bell_linear_restart2d_cont.mhd_bcc.00001.bin",
+      "selected_continuation_raw_mhd_bcc_sha256": "7d343c2ed771a743a837e8f81666e4145503712bdbd62cce5c6a3c3cf964b11f",
+      "final_cycle": 1,
+      "final_time": 0.0015625,
+      "result": "pass"
+    }
+  },
+  "remaining_open_dependencies": [
+    "Commit and freeze an exact clean candidate containing this source-local tranche.",
+    "Review and retain the exact transverse-invariant nx2=4 thin 2D3V carrier for the physical 1D preparation.",
+    "Materialize exact epsilon, sensitivity, seed, timestep, and time-limit variants before output inspection.",
+    "Expand the bounded source-local smokes into exact epsilon, resolution, timestep, seed and convergence variants before qualifying execution.",
+    "Bind a clean Frontier executable and authorized Orion artifact root only through the reviewed control plane.",
+    "Freeze a registered campaign record before a qualifying run.",
+    "Run registered Frontier execution, independent raw-artifact recompute, and external review before any Section 5.2 qualification claim."
+  ]
+}

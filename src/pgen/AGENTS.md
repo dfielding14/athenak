@@ -47,6 +47,8 @@ These are the only problems selectable with `problem/pgen_name` when
 - `orszag_tang` -> `tests/orszag_tang.cpp` (`ProblemGenerator::OrszagTang`)
 - `pic_parallel_shock` -> `tests/pic_parallel_shock.cpp`
   (`ProblemGenerator::PICParallelShock`)
+- `q023_paper_bell_linear` -> `tests/q023_paper_bell_linear.cpp`
+  (`ProblemGenerator::Q023PaperBellLinear`)
 - `rad_linear_wave` -> `tests/rad_linear_wave.cpp`
   (`ProblemGenerator::RadiationLinearWave`)
 - `shock_tube` -> `tests/shock_tube.cpp` (`ProblemGenerator::ShockTube`)

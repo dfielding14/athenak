@@ -1439,6 +1439,8 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm) :
     OrszagTang(pin, false);
   } else if (pgen_fun_name.compare("pic_parallel_shock") == 0) {
     PICParallelShock(pin, false);
+  } else if (pgen_fun_name.compare("q023_paper_bell_linear") == 0) {
+    Q023PaperBellLinear(pin, false);
   } else if (pgen_fun_name.compare("rad_linear_wave") == 0) {
     RadiationLinearWave(pin, false);
   } else if (pgen_fun_name.compare("shock_tube") == 0) {
@@ -2071,6 +2073,8 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
     OrszagTang(pin, true);
   } else if (pgen_fun_name.compare("pic_parallel_shock") == 0) {
     PICParallelShock(pin, true);
+  } else if (pgen_fun_name.compare("q023_paper_bell_linear") == 0) {
+    Q023PaperBellLinear(pin, true);
   } else if (pgen_fun_name.compare("rad_linear_wave") == 0) {
     RadiationLinearWave(pin, true);
   } else if (pgen_fun_name.compare("shock_tube") == 0) {

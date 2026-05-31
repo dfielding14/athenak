@@ -42,6 +42,11 @@ qualify any scientific claim by itself.
   exclusions and independent-recompute plan. Qualifying runs remain blocked
   where exact decks, Frontier bindings, theory, excluded pilots or external
   reference mappings are still prerequisites.
+- `q023_paper_bell_linear_source_local_implementation_2026-05-30.json`:
+  dedicated Section 5.2 right-polarized Bell eigenmode generator, raw-mode
+  extractor and source-local 1D/2D/3D preparations. The physical 1D case uses
+  an exact transverse-invariant thin 2D3V carrier; clean freeze, registered
+  execution, independent recompute and external review remain open.
 - `plotting_environment_lock_candidate_2026-05-30.json`: local Python and
   plotting-dependency lock candidate pending backend, font, environment
   artifact and external-export freeze.
@@ -143,6 +148,16 @@ qualify any scientific claim by itself.
 - `q003_frontier_f1_gpu_gyro_2026-05-30.json`: bounded registered Frontier
   one-rank GPU relativistic-gyro candidate oracle, hardened execution-context
   evidence, reconciled node-hours and explicit clean-freeze boundary.
+- `q027_frontier_f1_registered_science_successor_candidate_2026-05-30.json`
+  and `q027_frontier_f1_accepted_closure_source_local_evidence_2026-05-30.json`:
+  registered clean-candidate gyro-v3 and paper-coupling-v2 Frontier closure
+  chronology plus source-local accepted-evidence index. Both qualification
+  manifests remain pending external review and do not promote broader claims.
+- `q027_frontier_f2_multirank_runtime_metadata_candidate_2026-05-30.json` and
+  `q027_frontier_f2_accepted_closure_source_local_evidence_2026-05-30.json`:
+  rejected-v1 and accepted-v2 bounded multirank runtime-metadata chronology
+  plus exact source-local closure index. The accepted v2 slice is engineering
+  evidence only; broader F2 qualification and external review remain open.
 - `q008_expanding_box_local_oracles_2026-05-30.json`: bounded serial-host
   expanding-box gyro-history and one-step CPAW source-map oracle evidence.
 - `q008_expanding_box_comoving_flux_successor_2026-05-30.json`: successor
@@ -179,6 +194,12 @@ qualify any scientific claim by itself.
 - `q016_particle_provenance_spectra_local_2026-05-30.json`: bounded serial-host
   schema-7 CR provenance, restart-preservation, MeshBlock-migration and
   independently reconstructed weighted-spectrum evidence.
+- `q016_particle_provenance_spectra_mpi2_orion_local_2026-05-30.json`:
+  controlled two-rank, one-node Orion-shared Q-016 provenance, restart,
+  MeshBlock-migration and weighted-spectrum replay. This records direct `srun`
+  prerequisite chronology separately from the immutable control-plane ledger;
+  registered clean-candidate Frontier HIP and shock-campaign evidence remain
+  open.
 - `q017_driver_performance_observability_2026-05-30.json`: bounded driver-level
   timing, throughput and safely derivable rank-load telemetry with
   particle-kernel, memory-detail, Frontier A/B and scaling evidence open.

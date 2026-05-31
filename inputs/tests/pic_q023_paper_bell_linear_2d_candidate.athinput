@@ -1,7 +1,7 @@
-# Q-023 SOURCE-LOCAL PAPER CANDIDATE ONLY: not an authorized or runnable deck.
-# Sun and Bai (2023) Section 5.2 values are frozen below. The dedicated
-# q023_paper_bell_linear problem generator remains intentionally unavailable
-# until an exact clean candidate implements and binds the paper eigenmode.
+# Q-023 SOURCE-LOCAL RUNNABLE PREPARATION ONLY: not an authorized deck.
+# Sun and Bai (2023) Section 5.2 values and the dedicated eigenmode generator
+# are bound below. Clean-candidate freeze, variant materialization, Frontier
+# authorization, registered execution, and qualification remain open.
 
 <comment>
 problem   = Q023-PAPER-BELL-LINEAR 2D source-local paper candidate
@@ -66,8 +66,8 @@ couple_moments_energy_to_mhd      = true
 couple_fluid_feedback_order       = mhd_src_terms
 couple_moments_momentum_coeff     = 1.0
 couple_moments_energy_coeff       = 1.0
-cr_vx0                            = 2.5
-cr_vy0                            = 0.0
+cr_vx0                            = 1.118033988749895
+cr_vy0                            = 2.23606797749979
 cr_vz0                            = 0.0
 pic_physical_mode                 = paper_mhd_pic
 pic_background_mode               = coupled
@@ -91,20 +91,36 @@ mass   = 1.0
 charge = 6.283185307179586e-6
 
 <problem>
-pgen_name = q023_paper_bell_linear_open
+pgen_name = q023_paper_bell_linear
 
 <q023_paper_bell_linear>
 campaign_id       = Q023-PAPER-BELL-LINEAR
-deck_role         = source_local_paper_candidate_not_authorized
+deck_role         = source_local_runnable_preparation_not_authorized
 dimension         = 2
 epsilon_default   = 0.4
+epsilon           = 0.4
 epsilon_grid      = 0.1,0.2,0.4,0.6,0.8
 rho               = 1.0
+pressure          = 1.0
+amplitude         = 1.0e-6
 b_g               = 1.0
 u_a               = 1.0
 wavelength        = 1.0
 k0                = 6.283185307179586
 omega             = 6.283185307179586e-6
 c_over_v_cr       = 1000.0
-initial_eigenmode = open_dedicated_section52_problem_generator
+initial_eigenmode = section52_right_polarized_eigenmode
 timestep          = open_clean_candidate_timestep_freeze
+
+<output1>
+file_type   = bin
+variable    = mhd_bcc
+id          = mhd_bcc
+dcycle      = 1
+ghost_zones = false
+
+<output2>
+file_type   = rst
+id          = rst
+dcycle      = 1
+single_file_per_rank = false
