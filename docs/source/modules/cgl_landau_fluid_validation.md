@@ -191,14 +191,15 @@ retain the reviewed corrected-build qualification approval once, preflight,
 and submit only the single prepared job:
 
 ```bash
-python3 scripts/frontier/cgl_lf_stage_i.py validate-matrix
-python3 scripts/frontier/cgl_lf_stage_i.py approve-qualification \
+stage_i=/autofs/nccs-svm1_home2/dfielding/athenak-df/scripts/frontier/cgl_lf_stage_i.py
+python3 "$stage_i" validate-matrix
+python3 "$stage_i" approve-qualification \
   --executable <immutable-athena-executable> \
   --build-manifest <immutable-build-manifest> \
   --approved-by "$USER" \
   --review-notes "<corrected-build Frontier qualification evidence>" \
   --confirm-corrected-build-frontier-qualified
-python3 scripts/frontier/cgl_lf_stage_i.py prepare \
+python3 "$stage_i" prepare \
   --case-id <Rxx> --segment <segment-name> \
   --acceptance-criterion "<terminal acceptance rule>" \
   --executable <immutable-athena-executable> \
@@ -210,9 +211,9 @@ python3 scripts/frontier/cgl_lf_stage_i.py prepare \
   --nodes <nodes> --walltime <slurm-walltime> \
   --athena-walltime <shorter-application-walltime> \
   --override time/tlim=<segment-target>
-python3 scripts/frontier/cgl_lf_stage_i.py check-submit \
+python3 "$stage_i" check-submit \
   --manifest <prepared_run.json>
-python3 scripts/frontier/cgl_lf_stage_i.py submit \
+python3 "$stage_i" submit \
   --manifest <prepared_run.json>
 ```
 
@@ -231,12 +232,13 @@ After the allocation terminates, accept a scientific continuation only after
 inspection and accounting complete:
 
 ```bash
-python3 scripts/frontier/cgl_lf_stage_i.py inspect-segment \
+stage_i=/autofs/nccs-svm1_home2/dfielding/athenak-df/scripts/frontier/cgl_lf_stage_i.py
+python3 "$stage_i" inspect-segment \
   --manifest <prepared_run.json> --required-time <segment-target>
-python3 scripts/frontier/cgl_lf_stage_i.py record \
+python3 "$stage_i" record \
   --manifest <prepared_run.json> --job-id <jobid> \
   --result accepted --notes "<inspection result>"
-python3 scripts/frontier/cgl_lf_stage_i.py bundle-case \
+python3 "$stage_i" bundle-case \
   --case-id <Rxx> --required-final-time <accepted-final-time> \
   --output-dir <accepted-bundle-path>
 ```

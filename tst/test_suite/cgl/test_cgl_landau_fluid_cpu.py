@@ -1221,6 +1221,33 @@ def test_cgl_lf_stage_i_acceptance_requires_clean_complete_segment(tmp_path):
     report = stage_i.reconcile_report(root)
     assert report["consistent"], report["issues"]
     assert paths["reservations"].read_text() == before_reconcile
+    detached_manifest = json.loads(manifest_path.read_text())
+    detached_manifest["allocation"]["nodes"] = 8
+    detached_manifest["allocation"]["reserved_node_hours"] = stage_i.node_hours(
+        8, stage_i.parse_walltime(
+            detached_manifest["allocation"]["requested_walltime"]
+        )
+    )
+    detached_reservations = json.loads(before_reconcile)
+    detached_reservations[0]["nodes"] = 8
+    detached_reservations[0]["reserved_node_hours"] = (
+        detached_manifest["allocation"]["reserved_node_hours"]
+    )
+    if "execution_intent_sha256" in detached_reservations[0]:
+        detached_reservations[0]["execution_intent_sha256"] = (
+            stage_i.execution_intent_sha256(detached_manifest)
+        )
+    stage_i.write_json(manifest_path, detached_manifest)
+    stage_i.write_json(paths["reservations"], detached_reservations)
+    detached = stage_i.reconcile_report(root)
+    assert not detached["consistent"]
+    assert any(
+        "recorded ledger provenance differs" in issue
+        and "nodes differs from manifest" in issue
+        for issue in detached["issues"]
+    )
+    stage_i.write_json(manifest_path, accounted)
+    stage_i.write_json(paths["reservations"], json.loads(before_reconcile))
     reservations = json.loads(before_reconcile)
     reservations[0]["segment"] = "wrong"
     stage_i.write_json(paths["reservations"], reservations)
@@ -1308,7 +1335,64 @@ def test_cgl_lf_stage_i_hardens_identifiers_overrides_json_and_locking(
     paths["ledger"].write_text("wrong,header\n")
     with pytest.raises(ValueError, match="ledger header is invalid"):
         stage_i.read_ledger(paths)
+    invalid_ledger_row = {column: "" for column in stage_i.LEDGER_COLUMNS}
+    invalid_ledger_row.update({
+        "nodes": "1",
+        "requested_walltime": "01:00:00",
+        "elapsed_seconds": "1",
+        "reserved_node_hours": "1.0",
+        "actual_node_hours": "nan",
+        "cumulative_stage_i_node_hours": "1.0",
+    })
+    paths["ledger"].write_text(
+        ",".join(stage_i.LEDGER_COLUMNS)
+        + "\n"
+        + ",".join(
+            invalid_ledger_row[column] for column in stage_i.LEDGER_COLUMNS
+        )
+        + "\n"
+    )
+    with pytest.raises(ValueError, match="invalid numeric fields"):
+        stage_i.read_ledger(paths)
     paths["ledger"].write_text(original_ledger)
+    with pytest.raises(ValueError, match="invalid numeric fields"):
+        stage_i.append_ledger_row(paths["ledger"], invalid_ledger_row, [])
+    assert paths["ledger"].read_text() == original_ledger
+    ceiling_ledger_row = dict(invalid_ledger_row)
+    ceiling_ledger_row["elapsed_seconds"] = "3600"
+    ceiling_ledger_row["actual_node_hours"] = "1.000000"
+    ceiling_ledger_row["cumulative_stage_i_node_hours"] = str(
+        stage_i.CURRENT_STAGE_I_RESERVED_NODE_HOURS + 1.0
+    )
+    with pytest.raises(ValueError, match="accounting ceiling"):
+        stage_i.validate_ledger_cumulative_fields(
+            ceiling_ledger_row,
+            stage_i.CURRENT_STAGE_I_RESERVED_NODE_HOURS,
+            "prospective ledger row",
+        )
+    scheduler_fixture = tmp_path / "fixture.sacct"
+    scheduler_fixture.write_text(
+        "999|fixture|COMPLETED|0:0|1|1|submit|end\n"
+    )
+    scheduler_fixture_args = SimpleNamespace(
+        sacct_file=str(scheduler_fixture), job_id="999"
+    )
+    scheduler_archive = paths["accounting"] / "999.stage_i.sacct.txt"
+    with monkeypatch.context() as policy:
+        policy.setattr(stage_i, "DEFAULT_ROOT", paths["root"])
+        with pytest.raises(ValueError, match="only for offline local roots"):
+            stage_i.sacct_output(
+                scheduler_fixture_args, paths,
+                allow_fixture=stage_i.is_offline_local_root(
+                    paths["root"], allow_local_root=True
+                ),
+            )
+    assert not scheduler_archive.exists()
+    assert stage_i.sacct_output(
+        scheduler_fixture_args, paths, allow_fixture=True
+    ) == scheduler_fixture.read_text()
+    assert scheduler_archive.read_text() == scheduler_fixture.read_text()
+    scheduler_archive.unlink()
 
     analysis = paths["runs"] / "R02" / "analysis"
     analysis.mkdir(parents=True)
@@ -1331,8 +1415,20 @@ def test_cgl_lf_stage_i_hardens_identifiers_overrides_json_and_locking(
             "cpus_per_task": 7,
         },
         "command": {"athena_walltime": "00:10:00"},
+        "run": {"case_id": "R02"},
     }
     stage_i.validate_prepared_resources(resources, canonical_production=True)
+    resources["allocation"]["nodes"] = 8
+    resources["allocation"]["reserved_node_hours"] = 8.0 / 3.0
+    with pytest.raises(ValueError, match="R02 canonical Stage I preparation"):
+        stage_i.validate_prepared_resources(resources, canonical_production=True)
+    stage_i.validate_prepared_resources(resources, canonical_production=False)
+    resources["allocation"]["nodes"] = 1
+    resources["allocation"]["reserved_node_hours"] = 1.0 / 3.0
+    resources["allocation"]["reserved_node_hours"] = float("nan")
+    with pytest.raises(ValueError, match="resource values must be positive"):
+        stage_i.validate_prepared_resources(resources, canonical_production=True)
+    resources["allocation"]["reserved_node_hours"] = 1.0 / 3.0
     resources["allocation"]["ranks_per_node"] = 0
     with pytest.raises(ValueError, match="resource shape"):
         stage_i.validate_prepared_resources(resources, canonical_production=True)
@@ -1622,7 +1718,7 @@ def test_cgl_lf_stage_i_authenticates_historical_production_utility(
 
 
 def test_cgl_lf_stage_i_isolates_epoch_and_checks_all_shared_root_jobs(
-    tmp_path, capsys
+    tmp_path, capsys, monkeypatch
 ):
     spec = importlib.util.spec_from_file_location(
         "cgl_lf_stage_i_epoch_test", PAPER_STAGE_I_TOOL
@@ -1649,12 +1745,389 @@ def test_cgl_lf_stage_i_isolates_epoch_and_checks_all_shared_root_jobs(
     assert stage_i.MEASURED_STAGE_I_RESERVED_NODE_HOURS == 900.0
     assert stage_i.CURRENT_STAGE_I_RESERVED_NODE_HOURS == 900.0
     assert stage_i.MAX_SEGMENT_SECONDS == 2 * 60 * 60
+    assert stage_i.R17_CASE_ID == "R17"
+    assert stage_i.R17_PREDECESSOR_CASE_IDS == tuple(
+        f"R{number:02d}" for number in range(2, 17)
+    )
+    assert stage_i.REQUIRED_CASE_FINAL_TIME == 10.0
     stage_i.require_authorized_case("R02")
     stage_i.require_authorized_case("R17")
     with pytest.raises(
         ValueError, match="authorized only for mapped matrix cases R02-R17"
     ):
         stage_i.require_authorized_case("R18")
+    stage_i.require_case_node_count("R02", 1)
+    stage_i.require_case_node_count("R16", 1)
+    stage_i.require_case_node_count("R17", 8)
+    with pytest.raises(ValueError, match="R02 canonical Stage I preparation"):
+        stage_i.require_case_node_count("R02", 8)
+    with pytest.raises(ValueError, match="R17 canonical Stage I preparation"):
+        stage_i.require_case_node_count("R17", 1)
+    assert not stage_i.retained_case_has_started(paths, "R17")
+    stage_i.require_r17_last(paths, "R16")
+    stage_i.require_prepare_case_policy(paths, "R17", 1, offline_local_root=True)
+    lineages = {
+        case_id: [{"scientific_inspection": {"final_time": 10.0}}]
+        for case_id in stage_i.R17_PREDECESSOR_CASE_IDS
+    }
+    monkeypatch.setattr(
+        stage_i, "accepted_case_lineage",
+        lambda _paths, case_id: lineages.get(case_id, []),
+    )
+    stage_i.require_r17_last(paths, "R17")
+    stage_i.require_prepare_case_policy(paths, "R17", 8, offline_local_root=False)
+    lineages.pop("R08")
+    with pytest.raises(ValueError, match="R17 must remain last.*R08"):
+        stage_i.require_r17_last(paths, "R17")
+    lineages["R08"] = [{"scientific_inspection": {"final_time": 9.5}}]
+    with pytest.raises(ValueError, match="R17 must remain last.*R08"):
+        stage_i.require_r17_last(paths, "R17")
+    lineages["R08"] = [{"scientific_inspection": {"final_time": float("nan")}}]
+    with pytest.raises(ValueError, match="R17 must remain last.*R08"):
+        stage_i.require_r17_last(paths, "R17")
+    lineages["R08"] = [{"scientific_inspection": {"final_time": 10.0}}]
+    failed_r17_manifest = (
+        paths["runs"] / "R17" / "s_failed"
+        / "manifest" / "prepared_run.json"
+    )
+    failed_r17_manifest.parent.mkdir(parents=True)
+    stage_i.write_json(failed_r17_manifest, {
+        "execution_epoch": stage_i.EXECUTION_EPOCH,
+        "state": "recorded",
+        "accounting": {"result": "failed"},
+    })
+    assert stage_i.retained_case_has_started(paths, "R17")
+    with pytest.raises(ValueError, match="R17 has started.*R16"):
+        stage_i.require_r17_last(paths, "R16")
+    failed_r17_manifest.unlink()
+    failed_r17_manifest.parent.rmdir()
+    failed_r17_manifest.parent.parent.rmdir()
+    assert stage_i.parser().parse_args([
+        "bundle-case", "--case-id", "R02",
+    ]).required_final_time == stage_i.REQUIRED_CASE_FINAL_TIME
+    assert stage_i.parser().parse_args([
+        "bundle-campaign",
+    ]).required_final_time == stage_i.REQUIRED_CASE_FINAL_TIME
+    for value in ("nan", "inf", "0", "-1"):
+        with pytest.raises(ValueError, match="positive and finite"):
+            stage_i.require_positive_finite_float(value, "--required-final-time")
+        with pytest.raises(SystemExit):
+            stage_i.parser().parse_args([
+                "bundle-case", "--case-id", "R02",
+                "--required-final-time", value,
+            ])
+        with pytest.raises(SystemExit):
+            stage_i.parser().parse_args([
+                "bundle-campaign", "--required-final-time", value,
+            ])
+        direct_args = SimpleNamespace(
+            root=str(root), allow_local_root=True, required_final_time=value
+        )
+        with pytest.raises(ValueError, match="positive and finite"):
+            stage_i.bundle_case(direct_args)
+        with pytest.raises(ValueError, match="positive and finite"):
+            stage_i.bundle_campaign(direct_args)
+
+    def reservation(case_id, segment, nodes):
+        return {
+            "execution_epoch": stage_i.EXECUTION_EPOCH,
+            "manifest": str(
+                paths["runs"] / case_id / segment
+                / "manifest" / "prepared_run.json"
+            ),
+            "case_id": case_id,
+            "case_name": "case",
+            "segment": segment,
+            "nodes": nodes,
+            "requested_walltime": "00:10:00",
+            "reserved_node_hours": nodes / 6.0,
+            "state": "prepared",
+            "prepared_utc": stage_i.utc_now(),
+            "execution_intent_sha256": "a" * 64,
+        }
+
+    local_r17 = reservation("R17", "s_local_shape", 1)
+    stage_i.validate_reservation_record(paths, local_r17)
+    with monkeypatch.context() as policy:
+        policy.setattr(stage_i, "DEFAULT_ROOT", root)
+        stage_i.validate_reservation_record(
+            paths, reservation("R02", "s_canonical_shape", 1)
+        )
+        stage_i.validate_reservation_record(
+            paths, reservation("R17", "s_canonical_shape", 8)
+        )
+        with pytest.raises(ValueError, match="R02 canonical Stage I preparation"):
+            stage_i.validate_reservation_record(
+                paths, reservation("R02", "s_wrong_shape", 8)
+            )
+        with pytest.raises(ValueError, match="R17 canonical Stage I preparation"):
+            stage_i.validate_reservation_record(paths, local_r17)
+    replay_manifest_path = (
+        paths["runs"] / "R02" / "s_replay_mismatch"
+        / "manifest" / "prepared_run.json"
+    )
+    replay_manifest = {
+        "schema_version": 3,
+        "execution_epoch": stage_i.EXECUTION_EPOCH,
+        "project_root": str(root),
+        "state": "prepared",
+        "policy": {},
+        "run": {
+            "case_id": "R02",
+            "case_name": "case",
+            "segment": "s_replay_mismatch",
+        },
+        "allocation": {
+            "nodes": 1,
+            "requested_walltime": "00:20:00",
+            "requested_seconds": 1200,
+            "reserved_node_hours": 1.0 / 3.0,
+            "ranks_per_node": 8,
+            "cpus_per_task": 7,
+        },
+        "command": {"athena_walltime": "00:10:00"},
+        "paths": {},
+    }
+    replay_reservation = reservation("R02", "s_replay_mismatch", 1)
+    replay_reservation["execution_intent_sha256"] = (
+        stage_i.execution_intent_sha256(replay_manifest)
+    )
+    replay_transaction = paths["transactions"] / "replay-mismatch.json"
+    stage_i.write_json(replay_transaction, {
+        "schema_version": 1,
+        "execution_epoch": stage_i.EXECUTION_EPOCH,
+        "transaction_id": replay_transaction.stem,
+        "kind": "prepared",
+        "created_utc": stage_i.utc_now(),
+        "manifest_path": str(replay_manifest_path),
+        "prior_reservations": [],
+        "prior_reservations_sha256": stage_i.stable_json_sha256([]),
+        "manifest": replay_manifest,
+        "reservations": [replay_reservation],
+        "ledger_row": None,
+    })
+    with monkeypatch.context() as policy:
+        policy.setattr(stage_i, "DEFAULT_ROOT", root)
+        with pytest.raises(
+            ValueError, match="reservation allocation differs from manifest"
+        ):
+            stage_i.read_transaction(paths, replay_transaction)
+    assert not replay_manifest_path.exists()
+    assert json.loads(paths["reservations"].read_text()) == []
+    replay_transaction.unlink()
+    r17_replay_manifest_path = (
+        paths["runs"] / "R17" / "s_replay_before_predecessors"
+        / "manifest" / "prepared_run.json"
+    )
+    r17_replay_manifest = json.loads(json.dumps(replay_manifest))
+    r17_replay_manifest["run"] = {
+        "case_id": "R17",
+        "case_name": "case",
+        "segment": "s_replay_before_predecessors",
+    }
+    r17_replay_manifest["allocation"]["nodes"] = 8
+    r17_replay_manifest["allocation"]["reserved_node_hours"] = 8.0 / 3.0
+    r17_replay_reservation = reservation(
+        "R17", "s_replay_before_predecessors", 8
+    )
+    r17_replay_reservation["requested_walltime"] = "00:20:00"
+    r17_replay_reservation["reserved_node_hours"] = 8.0 / 3.0
+    r17_replay_reservation["execution_intent_sha256"] = (
+        stage_i.execution_intent_sha256(r17_replay_manifest)
+    )
+    r17_replay_transaction = paths["transactions"] / "r17-replay-policy.json"
+    stage_i.write_json(r17_replay_transaction, {
+        "schema_version": 1,
+        "execution_epoch": stage_i.EXECUTION_EPOCH,
+        "transaction_id": r17_replay_transaction.stem,
+        "kind": "prepared",
+        "created_utc": stage_i.utc_now(),
+        "manifest_path": str(r17_replay_manifest_path),
+        "prior_reservations": [],
+        "prior_reservations_sha256": stage_i.stable_json_sha256([]),
+        "manifest": r17_replay_manifest,
+        "reservations": [r17_replay_reservation],
+        "ledger_row": None,
+    })
+    with monkeypatch.context() as policy:
+        policy.setattr(stage_i, "DEFAULT_ROOT", root)
+        policy.setattr(
+            stage_i, "accepted_case_lineage", lambda _paths, _case_id: []
+        )
+        with pytest.raises(ValueError, match="R17 must remain last"):
+            stage_i.read_transaction(paths, r17_replay_transaction)
+    assert not r17_replay_manifest_path.exists()
+    assert json.loads(paths["reservations"].read_text()) == []
+    r17_replay_transaction.unlink()
+    recorded_replay_manifest_path = (
+        paths["runs"] / "R02" / "s_recorded_nan_replay"
+        / "manifest" / "prepared_run.json"
+    )
+    recorded_replay_manifest = json.loads(json.dumps(replay_manifest))
+    recorded_replay_manifest["state"] = "recorded"
+    recorded_replay_manifest["job_id"] = "123"
+    recorded_replay_manifest["run"]["segment"] = "s_recorded_nan_replay"
+    recorded_ledger_row = {column: "" for column in stage_i.LEDGER_COLUMNS}
+    recorded_ledger_row.update({
+        "execution_epoch": stage_i.EXECUTION_EPOCH,
+        "job_id": "123",
+        "case_id": "R02",
+        "case_name": "case",
+        "segment": "s_recorded_nan_replay",
+        "nodes": "1",
+        "requested_walltime": "00:20:00",
+        "elapsed_seconds": "1",
+        "reserved_node_hours": "0.333333",
+        "actual_node_hours": "nan",
+        "cumulative_stage_i_node_hours": "0.1",
+        "executable_revision": None,
+        "executable_sha256": None,
+        "input_revision": None,
+        "input_file": None,
+        "output_dir": None,
+        "result": "failed",
+    })
+    recorded_replay_manifest["accounting"] = recorded_ledger_row
+    recorded_replay_reservation = reservation(
+        "R02", "s_recorded_nan_replay", 1
+    )
+    recorded_replay_reservation["requested_walltime"] = "00:20:00"
+    recorded_replay_reservation["reserved_node_hours"] = 1.0 / 3.0
+    recorded_replay_reservation["state"] = "recorded"
+    recorded_replay_reservation["job_id"] = "123"
+    recorded_replay_reservation["actual_node_hours"] = 0.1
+    recorded_replay_reservation["result"] = "failed"
+    recorded_replay_reservation["execution_intent_sha256"] = (
+        stage_i.execution_intent_sha256(recorded_replay_manifest)
+    )
+    submitted_replay_reservation = dict(recorded_replay_reservation)
+    submitted_replay_reservation["state"] = "submitted"
+    submitted_replay_reservation.pop("actual_node_hours")
+    submitted_replay_reservation.pop("result")
+    recorded_replay_transaction = (
+        paths["transactions"] / "recorded-nan-replay.json"
+    )
+    stage_i.write_json(recorded_replay_transaction, {
+        "schema_version": 1,
+        "execution_epoch": stage_i.EXECUTION_EPOCH,
+        "transaction_id": recorded_replay_transaction.stem,
+        "kind": "recorded",
+        "created_utc": stage_i.utc_now(),
+        "manifest_path": str(recorded_replay_manifest_path),
+        "prior_reservations": [submitted_replay_reservation],
+        "prior_reservations_sha256": stage_i.stable_json_sha256([
+            submitted_replay_reservation
+        ]),
+        "manifest": recorded_replay_manifest,
+        "reservations": [recorded_replay_reservation],
+        "ledger_row": recorded_ledger_row,
+    })
+    with monkeypatch.context() as policy:
+        policy.setattr(stage_i, "DEFAULT_ROOT", root)
+        with pytest.raises(ValueError, match="invalid numeric fields"):
+            stage_i.read_transaction(paths, recorded_replay_transaction)
+    assert not recorded_replay_manifest_path.exists()
+    assert json.loads(paths["reservations"].read_text()) == []
+    recorded_replay_transaction.unlink()
+    recorded_ledger_row["elapsed_seconds"] = "3600"
+    recorded_ledger_row["actual_node_hours"] = "0.000000"
+    recorded_ledger_row["cumulative_stage_i_node_hours"] = "0.000000"
+    recorded_replay_manifest["accounting"] = recorded_ledger_row
+    recorded_replay_reservation["actual_node_hours"] = 0.0
+    recorded_replay_reservation["execution_intent_sha256"] = (
+        stage_i.execution_intent_sha256(recorded_replay_manifest)
+    )
+    submitted_replay_reservation = dict(recorded_replay_reservation)
+    submitted_replay_reservation["state"] = "submitted"
+    submitted_replay_reservation.pop("actual_node_hours")
+    submitted_replay_reservation.pop("result")
+    stage_i.write_json(recorded_replay_transaction, {
+        "schema_version": 1,
+        "execution_epoch": stage_i.EXECUTION_EPOCH,
+        "transaction_id": recorded_replay_transaction.stem,
+        "kind": "recorded",
+        "created_utc": stage_i.utc_now(),
+        "manifest_path": str(recorded_replay_manifest_path),
+        "prior_reservations": [submitted_replay_reservation],
+        "prior_reservations_sha256": stage_i.stable_json_sha256([
+            submitted_replay_reservation
+        ]),
+        "manifest": recorded_replay_manifest,
+        "reservations": [recorded_replay_reservation],
+        "ledger_row": recorded_ledger_row,
+    })
+    with monkeypatch.context() as policy:
+        policy.setattr(stage_i, "DEFAULT_ROOT", root)
+        with pytest.raises(ValueError, match="invalid numeric fields"):
+            stage_i.read_transaction(paths, recorded_replay_transaction)
+    assert not recorded_replay_manifest_path.exists()
+    assert json.loads(paths["reservations"].read_text()) == []
+    recorded_replay_transaction.unlink()
+    recorded_ledger_row["elapsed_seconds"] = "0"
+    recorded_ledger_row["actual_node_hours"] = "0.000000"
+    recorded_ledger_row["cumulative_stage_i_node_hours"] = "0.000000"
+    recorded_ledger_row["state"] = "COMPLETED"
+    recorded_ledger_row["exit_code"] = "0:0"
+    recorded_ledger_row["submitted_utc"] = "2026-05-30T00:00:00"
+    recorded_ledger_row["completed_utc"] = "2026-05-30T01:00:00"
+    recorded_replay_manifest["accounting"] = recorded_ledger_row
+    recorded_replay_reservation["execution_intent_sha256"] = (
+        stage_i.execution_intent_sha256(recorded_replay_manifest)
+    )
+    submitted_replay_reservation = dict(recorded_replay_reservation)
+    submitted_replay_reservation["state"] = "submitted"
+    submitted_replay_reservation.pop("actual_node_hours")
+    submitted_replay_reservation.pop("result")
+    scheduler_evidence = paths["accounting"] / "123.stage_i.sacct.txt"
+    scheduler_evidence.write_text(
+        "123|"
+        + stage_i.expected_job_name(recorded_replay_manifest)
+        + "|COMPLETED|0:0|1|3600|2026-05-30T00:00:00|2026-05-30T01:00:00\n"
+    )
+    stage_i.write_json(recorded_replay_transaction, {
+        "schema_version": 1,
+        "execution_epoch": stage_i.EXECUTION_EPOCH,
+        "transaction_id": recorded_replay_transaction.stem,
+        "kind": "recorded",
+        "created_utc": stage_i.utc_now(),
+        "manifest_path": str(recorded_replay_manifest_path),
+        "prior_reservations": [submitted_replay_reservation],
+        "prior_reservations_sha256": stage_i.stable_json_sha256([
+            submitted_replay_reservation
+        ]),
+        "manifest": recorded_replay_manifest,
+        "reservations": [recorded_replay_reservation],
+        "ledger_row": recorded_ledger_row,
+    })
+    with monkeypatch.context() as policy:
+        policy.setattr(stage_i, "DEFAULT_ROOT", root)
+        with pytest.raises(ValueError, match="scheduler evidence elapsed_seconds"):
+            stage_i.read_transaction(paths, recorded_replay_transaction)
+    assert not recorded_replay_manifest_path.exists()
+    assert json.loads(paths["reservations"].read_text()) == []
+    recorded_replay_transaction.unlink()
+    scheduler_evidence.unlink()
+    reached_policy = []
+    with monkeypatch.context() as policy:
+        policy.setattr(stage_i, "DEFAULT_ROOT", root)
+        policy.setattr(
+            stage_i, "require_reconciled_store_consistency", lambda *_args: None
+        )
+
+        def stop_at_policy(*args):
+            reached_policy.append(args)
+            raise RuntimeError("prepare policy sentinel")
+
+        policy.setattr(stage_i, "require_prepare_case_policy", stop_at_policy)
+        with pytest.raises(RuntimeError, match="prepare policy sentinel"):
+            stage_i.prepare(SimpleNamespace(
+                root=str(root),
+                allow_local_root=False,
+                case_id="R02",
+                segment="s_prepare_policy_route",
+                nodes=1,
+            ))
+    assert reached_policy == [(paths, "R02", 1, False)]
 
     manifest_path = (
         paths["runs"] / "R16" / "s00" / "manifest" / "prepared_run.json"
@@ -1710,13 +2183,16 @@ def test_cgl_lf_stage_i_isolates_epoch_and_checks_all_shared_root_jobs(
         "exploratory", "beta 25", "-reviewed", "exploratory",
     ]
     assert stage_i.check_submit(args) == 0
+    helper = str(PAPER_STAGE_I_TOOL.resolve())
     submit_line = next(
         line.strip() for line in capsys.readouterr().out.splitlines()
         if line.strip().startswith(
-            "python3 scripts/frontier/cgl_lf_stage_i.py submit "
+            f"python3 {shlex.quote(helper)} submit "
         )
     )
-    parsed = stage_i.parser().parse_args(shlex.split(submit_line)[2:])
+    tokens = shlex.split(submit_line)
+    assert tokens[1] == helper
+    parsed = stage_i.parser().parse_args(tokens[2:])
     assert parsed.allow_shared_root_campaign == [
         "-reviewed", "beta 25", "exploratory",
     ]

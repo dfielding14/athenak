@@ -47,6 +47,11 @@ HISTORICAL_E02_PIPELINE_NODE_HOURS = 15.628610
 EXECUTION_EPOCH = "E03-forcing-policy"
 EXECUTION_EPOCH_SLUG = "E03_forcing_policy"
 AUTHORIZED_CASE_IDS = frozenset(f"R{number:02d}" for number in range(2, 18))
+R17_CASE_ID = "R17"
+R17_PREDECESSOR_CASE_IDS = tuple(
+    f"R{number:02d}" for number in range(2, 17)
+)
+REQUIRED_CASE_FINAL_TIME = 10.0
 COMPLETED_R16_NODE_HOURS = 6.145556
 COMPLETED_R02_STANDARD_LAYOUT_PILOT_NODE_HOURS = 0.473333
 COMPLETED_R17_HIGH_RESOLUTION_PILOT_NODE_HOURS = 4.235556
@@ -67,6 +72,8 @@ BATCH_SCRIPT_DIGEST_PLACEHOLDER = "0" * 64
 BATCH_SCRIPT_DIGEST_PATTERN = re.compile(
     r"(?m)^BATCH_SCRIPT_SHA256=([0-9a-f]{64})$"
 )
+LEDGER_NODE_HOUR_TOLERANCE = 5.0e-7 + 1.0e-12
+LEDGER_CUMULATIVE_NODE_HOUR_TOLERANCE = 5.0e-7 + 1.0e-12
 LEDGER_COLUMNS = (
     "execution_epoch",
     "job_id",
@@ -246,11 +253,14 @@ def unlink_durable(path: Path) -> None:
     fsync_directory(path.parent)
 
 
-def append_ledger_row(path: Path, row: dict[str, object]) -> None:
+def append_ledger_row(path: Path, row: dict[str, object],
+                      prior_rows: list[dict[str, str]]) -> None:
     """Durably append one allocation row."""
 
     if frozenset(row) != frozenset(LEDGER_COLUMNS):
         raise ValueError("ledger append row has invalid columns")
+    prior_actual = sum(float(item["actual_node_hours"]) for item in prior_rows)
+    validate_ledger_cumulative_fields(row, prior_actual, "ledger append row")
     with path.open("a", newline="", encoding="utf-8") as stream:
         csv.DictWriter(stream, fieldnames=LEDGER_COLUMNS).writerow(row)
         stream.flush()
@@ -360,6 +370,69 @@ def node_hours(nodes: int, seconds: int) -> float:
     return nodes * seconds / 3600.0
 
 
+def validate_ledger_numeric_fields(row: dict[str, object],
+                                   label: str) -> tuple[float, float, float]:
+    """Require finite, non-negative retained Stage I accounting values."""
+
+    try:
+        nodes_text = str(row["nodes"])
+        elapsed_text = str(row["elapsed_seconds"])
+        if (
+            re.fullmatch(r"[0-9]+", nodes_text) is None
+            or re.fullmatch(r"[0-9]+", elapsed_text) is None
+        ):
+            raise ValueError
+        nodes = int(nodes_text)
+        elapsed_seconds = int(elapsed_text)
+        requested_seconds = parse_walltime(str(row["requested_walltime"]))
+        reserved_node_hours = float(row["reserved_node_hours"])
+        actual_node_hours = float(row["actual_node_hours"])
+        cumulative_node_hours = float(row["cumulative_stage_i_node_hours"])
+    except (KeyError, TypeError, ValueError) as error:
+        raise ValueError(f"{label} has invalid numeric fields") from error
+    if (
+        nodes < 1
+        or elapsed_seconds < 0
+        or not math.isfinite(reserved_node_hours)
+        or reserved_node_hours <= 0.0
+        or not math.isfinite(actual_node_hours)
+        or actual_node_hours < 0.0
+        or not math.isfinite(cumulative_node_hours)
+        or cumulative_node_hours < 0.0
+        or abs(
+            reserved_node_hours - node_hours(nodes, requested_seconds)
+        ) > LEDGER_NODE_HOUR_TOLERANCE
+        or abs(actual_node_hours - node_hours(nodes, elapsed_seconds))
+        > LEDGER_NODE_HOUR_TOLERANCE
+    ):
+        raise ValueError(f"{label} has invalid numeric fields")
+    return (
+        actual_node_hours,
+        cumulative_node_hours,
+        node_hours(nodes, elapsed_seconds),
+    )
+
+
+def validate_ledger_cumulative_fields(row: dict[str, object],
+                                      prior_actual_node_hours: float,
+                                      label: str) -> float:
+    """Require one retained cumulative total to follow its preceding rows."""
+
+    actual, cumulative, derived_actual = validate_ledger_numeric_fields(row, label)
+    expected = prior_actual_node_hours + derived_actual
+    if (
+        not math.isfinite(expected)
+        or abs(cumulative - expected) > LEDGER_CUMULATIVE_NODE_HOUR_TOLERANCE
+    ):
+        raise ValueError(f"{label} has inconsistent cumulative node-hours")
+    if (
+        expected > CURRENT_STAGE_I_RESERVED_NODE_HOURS
+        or expected > PROJECT_BUDGET_NODE_HOURS
+    ):
+        raise ValueError(f"{label} exceeds an accounting ceiling")
+    return prior_actual_node_hours + actual
+
+
 def require_safe_segment(value: str) -> str:
     """Require a path- and Slurm-safe retained segment identifier."""
 
@@ -433,6 +506,64 @@ def require_authorized_case(case_id: str) -> None:
         )
 
 
+def require_case_node_count(case_id: str, nodes: int) -> None:
+    """Bind each mapped case to its reviewed Frontier allocation shape."""
+
+    require_authorized_case(case_id)
+    expected = 8 if case_id == R17_CASE_ID else 1
+    if nodes != expected:
+        raise ValueError(
+            f"{case_id} canonical Stage I preparation requires --nodes={expected}"
+        )
+
+
+def retained_case_has_started(paths: dict[str, Path], case_id: str) -> bool:
+    """Return whether one mapped case has retained any segment manifest."""
+
+    require_authorized_case(case_id)
+    return any(
+        (paths["runs"] / case_id).glob("*/manifest/prepared_run.json")
+    )
+
+
+def require_r17_last(paths: dict[str, Path], case_id: str) -> None:
+    """Require every lower-cost mapped case to complete before R17 starts."""
+
+    if case_id != R17_CASE_ID:
+        if retained_case_has_started(paths, R17_CASE_ID):
+            raise ValueError(
+                f"{R17_CASE_ID} has started; later {case_id} preparation is forbidden"
+            )
+        return
+    incomplete = []
+    for predecessor in R17_PREDECESSOR_CASE_IDS:
+        lineage = accepted_case_lineage(paths, predecessor)
+        if not lineage:
+            incomplete.append(predecessor)
+            continue
+        final_time = float(lineage[-1]["scientific_inspection"]["final_time"])
+        if (
+            not math.isfinite(final_time)
+            or final_time < REQUIRED_CASE_FINAL_TIME - 1.0e-10
+        ):
+            incomplete.append(predecessor)
+    if incomplete:
+        raise ValueError(
+            "R17 must remain last; accepted t=10 lineages are incomplete for: "
+            + ", ".join(incomplete)
+        )
+
+
+def require_prepare_case_policy(paths: dict[str, Path], case_id: str,
+                                nodes: int, offline_local_root: bool) -> None:
+    """Apply mapped allocation and ordering gates only to canonical production."""
+
+    if offline_local_root:
+        return
+    require_case_node_count(case_id, nodes)
+    require_r17_last(paths, case_id)
+
+
 def parse_utc_timestamp(value: object, label: str) -> datetime:
     """Parse one retained timestamp and normalize it to UTC."""
 
@@ -445,6 +576,27 @@ def parse_utc_timestamp(value: object, label: str) -> datetime:
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=datetime.now().astimezone().tzinfo)
     return parsed.astimezone(timezone.utc)
+
+
+def require_positive_finite_float(value: object, label: str) -> float:
+    """Require one positive finite command or API threshold."""
+
+    try:
+        result = float(value)
+    except (TypeError, ValueError) as error:
+        raise ValueError(f"{label} must be numeric") from error
+    if not math.isfinite(result) or result <= 0.0:
+        raise ValueError(f"{label} must be positive and finite")
+    return result
+
+
+def positive_finite_float_arg(value: str) -> float:
+    """Parse a positive finite command-line floating-point value."""
+
+    try:
+        return require_positive_finite_float(value, "value")
+    except ValueError as error:
+        raise argparse.ArgumentTypeError(str(error)) from error
 
 
 def layout(root: Path) -> dict[str, Path]:
@@ -659,13 +811,18 @@ def read_ledger(paths: dict[str, Path]) -> list[dict[str, str]]:
                 f"Stage I ledger header is invalid: {paths['ledger']}: {header!r}"
             )
         rows = []
+        cumulative = 0.0
         for index, row in enumerate(reader, start=2):
             if len(row) != len(LEDGER_COLUMNS):
                 raise ValueError(
                     f"Stage I ledger row {index} has {len(row)} columns; "
                     f"expected {len(LEDGER_COLUMNS)}"
                 )
-            rows.append(dict(zip(LEDGER_COLUMNS, row)))
+            retained = dict(zip(LEDGER_COLUMNS, row))
+            cumulative = validate_ledger_cumulative_fields(
+                retained, cumulative, f"Stage I ledger row {index}"
+            )
+            rows.append(retained)
         return rows
 
 
@@ -738,6 +895,8 @@ def validate_reservation_record(paths: dict[str, Path],
         or reserved <= 0.0
     ):
         raise ValueError("transaction reservation allocation must be positive")
+    if paths["root"].resolve() == DEFAULT_ROOT.expanduser().resolve():
+        require_case_node_count(case_id, nodes)
     if abs(reserved - node_hours(nodes, requested_seconds)) > 5.0e-12:
         raise ValueError("transaction reservation node-hours differ from allocation")
     parse_utc_timestamp(reservation["prepared_utc"], "reservation prepared_utc")
@@ -780,6 +939,7 @@ def validate_transaction_ledger_row(row: object,
 
     if not isinstance(row, dict) or frozenset(row) != frozenset(LEDGER_COLUMNS):
         raise ValueError("recorded transaction ledger row has invalid columns")
+    validate_ledger_numeric_fields(row, "recorded transaction ledger row")
     require_numeric_job_id(str(row["job_id"]))
     if row["execution_epoch"] != EXECUTION_EPOCH:
         raise ValueError("recorded transaction ledger row has wrong execution epoch")
@@ -1037,18 +1197,29 @@ def read_transaction(paths: dict[str, Path], path: Path) -> dict[str, object]:
     if manifest.get("state") != expected_state:
         raise ValueError(f"transaction manifest state is invalid for {kind}")
     if paths["root"].resolve() == DEFAULT_ROOT.expanduser().resolve():
+        validate_prepared_resources(manifest, canonical_production=True)
+        require_reservation_matches_manifest(matches[0], manifest)
         require_reserved_execution_intent(
             matches[0], manifest, allow_legacy_local=False
         )
+        if kind == "prepared":
+            require_prepare_case_policy(
+                paths, str(run["case_id"]), int(matches[0]["nodes"]),
+                offline_local_root=False,
+            )
     row = value.get("ledger_row")
     if kind == "recorded":
         validate_transaction_ledger_row(row, manifest)
+        if paths["root"].resolve() == DEFAULT_ROOT.expanduser().resolve():
+            require_recorded_scheduler_evidence(paths, row, manifest)
+        difference = abs(
+            float(matches[0].get("actual_node_hours", -1.0))
+            - float(row.get("actual_node_hours", -2.0))
+        )
         if (
             matches[0].get("result") != row.get("result")
-            or abs(
-                float(matches[0].get("actual_node_hours", -1.0))
-                - float(row.get("actual_node_hours", -2.0))
-            ) > 5.0e-7
+            or not math.isfinite(difference)
+            or difference > 5.0e-7
         ):
             raise ValueError("recorded transaction reservation differs from ledger")
     elif row is not None:
@@ -1138,6 +1309,8 @@ def authenticate_canonical_reservation_snapshot(
             )
         manifest = read_manifest(path)
         require_current_epoch(manifest, "canonical replay reservation manifest")
+        validate_prepared_resources(manifest, canonical_production=True)
+        require_reservation_matches_manifest(reservation, manifest)
         require_reserved_execution_intent(
             reservation, manifest, allow_legacy_local=False
         )
@@ -1234,7 +1407,7 @@ def apply_transaction(paths: dict[str, Path], transaction_path: Path) -> None:
         if matches and matches[0] != row:
             raise ValueError(f"transaction ledger row conflicts: {transaction_path}")
         if not matches:
-            append_ledger_row(paths["ledger"], row)
+            append_ledger_row(paths["ledger"], row, ledger)
     write_json(paths["reservations"], reservations)
     write_json(manifest_path, manifest)
     refresh_summary(paths)
@@ -2111,7 +2284,13 @@ def validate_prepared_resources(manifest: dict[str, object],
         reserved_node_hours = float(allocation["reserved_node_hours"])
     except (KeyError, TypeError, ValueError) as error:
         raise ValueError("prepared manifest has invalid resource metadata") from error
-    if nodes < 1 or requested_seconds <= 0 or athena_seconds <= 0:
+    if (
+        nodes < 1
+        or requested_seconds <= 0
+        or athena_seconds <= 0
+        or not math.isfinite(reserved_node_hours)
+        or reserved_node_hours <= 0.0
+    ):
         raise ValueError("prepared manifest resource values must be positive")
     if requested_seconds > MAX_SEGMENT_SECONDS:
         raise ValueError("prepared Slurm walltime exceeds the Stage I limit")
@@ -2129,6 +2308,40 @@ def validate_prepared_resources(manifest: dict[str, object],
         or cpus_per_task != EXPECTED_CPUS_PER_TASK
     ):
         raise ValueError("canonical Frontier resource shape is inconsistent")
+    if canonical_production:
+        run = manifest.get("run")
+        if not isinstance(run, dict):
+            raise ValueError("prepared manifest lacks run metadata")
+        require_case_node_count(str(run.get("case_id")), nodes)
+
+
+def require_reservation_matches_manifest(reservation: dict[str, object],
+                                         manifest: dict[str, object]) -> None:
+    """Bind one canonical reservation snapshot to its manifest allocation."""
+
+    allocation = manifest.get("allocation")
+    run = manifest.get("run")
+    if not isinstance(allocation, dict) or not isinstance(run, dict):
+        raise ValueError("transaction manifest lacks reservation metadata")
+    try:
+        matches = (
+            reservation.get("case_id") == run["case_id"]
+            and reservation.get("case_name") == run["case_name"]
+            and reservation.get("segment") == run["segment"]
+            and int(reservation["nodes"]) == int(allocation["nodes"])
+            and reservation.get("requested_walltime")
+            == allocation["requested_walltime"]
+            and abs(
+                float(reservation["reserved_node_hours"])
+                - float(allocation["reserved_node_hours"])
+            ) <= 5.0e-12
+        )
+    except (KeyError, TypeError, ValueError) as error:
+        raise ValueError(
+            "transaction manifest has invalid reservation metadata"
+        ) from error
+    if not matches:
+        raise ValueError("transaction reservation allocation differs from manifest")
 
 
 def authenticate_prepared_execution(manifest: dict[str, object],
@@ -2512,6 +2725,11 @@ def prepare(args: argparse.Namespace) -> Path:
             "another Stage I segment is prepared or submitted; "
             "record or cancel it before preparing a new segment"
         )
+    if args.nodes < 1:
+        raise ValueError("--nodes must be positive")
+    require_prepare_case_policy(
+        paths, args.case_id, args.nodes, offline_local_root
+    )
     source_dir = Path(args.source_dir).expanduser().resolve()
     matrix_path = Path(args.matrix).expanduser().resolve()
     executable = Path(args.executable).expanduser().resolve()
@@ -2592,8 +2810,6 @@ def prepare(args: argparse.Namespace) -> Path:
                 "continuation time/tlim target must advance beyond its parent "
                 f"inspection time {float(parent_segment['final_time']):.12g}"
             )
-    if args.nodes < 1:
-        raise ValueError("--nodes must be positive")
     requested_seconds = parse_walltime(args.walltime)
     if requested_seconds <= 0:
         raise ValueError("--walltime must be positive")
@@ -3052,7 +3268,7 @@ def check_submit(args: argparse.Namespace) -> int:
         for campaign in sorted(set(getattr(args, "allow_shared_root_campaign", [])))
     )
     print(
-        "  python3 scripts/frontier/cgl_lf_stage_i.py submit "
+        f"  python3 {shlex.quote(str(Path(__file__).resolve()))} submit "
         f"--manifest {shlex.quote(str(manifest_path))}{acknowledgements}"
     )
     print(f"Prepared script: {script}")
@@ -3918,10 +4134,13 @@ def inspect_segment(args: argparse.Namespace) -> int:
     return 0 if accepted else 1
 
 
-def sacct_output(args: argparse.Namespace, paths: dict[str, Path]) -> str:
+def sacct_output(args: argparse.Namespace, paths: dict[str, Path],
+                 allow_fixture: bool) -> str:
     """Read or query a top-level Slurm allocation record."""
 
     if args.sacct_file:
+        if not allow_fixture:
+            raise ValueError("--sacct-file is allowed only for offline local roots")
         output = Path(args.sacct_file).read_text(encoding="utf-8")
     else:
         output = subprocess.run(
@@ -3960,6 +4179,34 @@ def parse_sacct(output: str, job_id: str) -> dict[str, str]:
     return result
 
 
+def require_recorded_scheduler_evidence(paths: dict[str, Path],
+                                        row: dict[str, object],
+                                        manifest: dict[str, object]) -> None:
+    """Bind canonical recorded accounting to its archived Slurm allocation row."""
+
+    job_id = str(row["job_id"])
+    evidence = paths["accounting"] / f"{job_id}.stage_i.sacct.txt"
+    if not evidence.is_file():
+        raise ValueError(f"recorded transaction lacks scheduler evidence: {evidence}")
+    sacct = parse_sacct(evidence.read_text(encoding="utf-8"), job_id)
+    if sacct["job_name"] != expected_job_name(manifest):
+        raise ValueError("recorded scheduler evidence job name differs from manifest")
+    expected = {
+        "job_id": row["job_id"],
+        "state": row["state"],
+        "exit_code": row["exit_code"],
+        "nodes": row["nodes"],
+        "elapsed_seconds": row["elapsed_seconds"],
+        "submitted_utc": row["submitted_utc"],
+        "completed_utc": row["completed_utc"],
+    }
+    for key, value in expected.items():
+        if sacct[key] != str(value):
+            raise ValueError(
+                f"recorded scheduler evidence {key} differs from ledger"
+            )
+
+
 @locked_manifest_action
 def record(args: argparse.Namespace) -> int:
     """Account a completed segment and release its reservation."""
@@ -3991,7 +4238,9 @@ def record(args: argparse.Namespace) -> int:
     ledger = read_ledger(paths)
     if any(row["job_id"] == args.job_id for row in ledger):
         raise ValueError(f"job {args.job_id} is already accounted")
-    sacct = parse_sacct(sacct_output(args, paths), args.job_id)
+    sacct = parse_sacct(
+        sacct_output(args, paths, allow_fixture=offline_local_root), args.job_id
+    )
     if sacct["job_name"] != expected_job_name(manifest):
         raise ValueError(
             "sacct job name does not match the prepared segment: "
@@ -4286,6 +4535,9 @@ def link_distinct_snapshots(sources: list[list[Path]], destination: Path,
 def bundle_case(args: argparse.Namespace) -> int:
     """Assemble accepted restart segments as one analyzer-compatible bundle."""
 
+    required_final_time = require_positive_finite_float(
+        args.required_final_time, "--required-final-time"
+    )
     root = require_root(Path(args.root), args.allow_local_root)
     if is_offline_local_root(root, args.allow_local_root):
         paths = initialize(root)
@@ -4303,10 +4555,10 @@ def bundle_case(args: argparse.Namespace) -> int:
     if not segments:
         raise ValueError(f"no accepted segments are recorded for {args.case_id}")
     final_time = float(segments[-1]["scientific_inspection"]["final_time"])
-    if final_time < args.required_final_time - 1.0e-10:
+    if final_time < required_final_time - 1.0e-10:
         raise ValueError(
             f"{args.case_id} reaches only t={final_time}; "
-            f"required final time is {args.required_final_time}"
+            f"required final time is {required_final_time}"
         )
     first_command = segments[0]["command"]
     expected_digests = (
@@ -4445,7 +4697,7 @@ def bundle_case(args: argparse.Namespace) -> int:
         ),
         "executable": first_command["executable"],
         "production_case_id": args.case_id,
-        "required_final_time": args.required_final_time,
+        "required_final_time": required_final_time,
         "accepted_final_time": final_time,
         "production_segment_manifests": [
             str(segment["_manifest_path"]) for segment in segments
@@ -4477,6 +4729,9 @@ def prefix_bundle_case_paths(case: dict[str, object], prefix: Path
 def bundle_campaign(args: argparse.Namespace) -> int:
     """Assemble all accepted mapped cases into one paper-analysis bundle."""
 
+    required_final_time = require_positive_finite_float(
+        args.required_final_time, "--required-final-time"
+    )
     root = require_root(Path(args.root), args.allow_local_root)
     if is_offline_local_root(root, args.allow_local_root):
         paths = initialize(root)
@@ -4494,10 +4749,10 @@ def bundle_campaign(args: argparse.Namespace) -> int:
         if not segments:
             raise ValueError(f"no accepted segments are recorded for {case['id']}")
         final_time = float(segments[-1]["scientific_inspection"]["final_time"])
-        if final_time < args.required_final_time - 1.0e-10:
+        if final_time < required_final_time - 1.0e-10:
             raise ValueError(
                 f"{case['id']} reaches only t={final_time}; "
-                f"required final time is {args.required_final_time}"
+                f"required final time is {required_final_time}"
             )
     bundle = (
         Path(args.output_dir).expanduser().resolve()
@@ -4539,7 +4794,7 @@ def bundle_campaign(args: argparse.Namespace) -> int:
             "not recorded; submitted inputs and matrices verified committed"
         ),
         "executable": "recorded per accepted production segment",
-        "required_final_time": args.required_final_time,
+        "required_final_time": required_final_time,
         "accepted_case_final_times": case_times,
         "production_segment_manifests": segment_manifests,
         "cases": cases,
@@ -4717,7 +4972,10 @@ def reconcile_report(root: Path) -> dict[str, object]:
         except (KeyError, TypeError, ValueError):
             issues.append(f"reservation node-hours are invalid: {manifest_path}")
         else:
-            if reserved_difference > 5.0e-12:
+            if (
+                not math.isfinite(reserved_difference)
+                or reserved_difference > 5.0e-12
+            ):
                 issues.append(
                     f"reservation node-hours differ from allocation: {manifest_path}"
                 )
@@ -4807,6 +5065,19 @@ def reconcile_report(root: Path) -> dict[str, object]:
         row = rows[0]
         if accounting != row:
             issues.append(f"manifest accounting differs from ledger: {manifest_path}")
+        try:
+            validate_transaction_ledger_row(row, manifest)
+        except (KeyError, TypeError, ValueError) as error:
+            issues.append(
+                f"recorded ledger provenance differs for {manifest_path}: {error}"
+            )
+        if not offline_local_root:
+            try:
+                require_recorded_scheduler_evidence(paths, row, manifest)
+            except (OSError, KeyError, TypeError, ValueError) as error:
+                issues.append(
+                    f"recorded scheduler evidence differs for {manifest_path}: {error}"
+                )
         run = manifest.get("run")
         if not isinstance(run, dict):
             issues.append(f"recorded manifest lacks run metadata: {manifest_path}")
@@ -4828,7 +5099,7 @@ def reconcile_report(root: Path) -> dict[str, object]:
                     f"reservation actual node-hours are invalid: {manifest_path}"
                 )
             else:
-                if difference > 5.0e-7:
+                if not math.isfinite(difference) or difference > 5.0e-7:
                     issues.append(
                         f"reservation actual node-hours differ from ledger: "
                         f"{manifest_path}"
@@ -5022,13 +5293,19 @@ def parser() -> argparse.ArgumentParser:
     recorded.add_argument("--sacct-file")
     bundled = actions.add_parser("bundle-case")
     bundled.add_argument("--case-id", required=True)
-    bundled.add_argument("--required-final-time", type=float, default=10.0)
+    bundled.add_argument(
+        "--required-final-time", type=positive_finite_float_arg,
+        default=REQUIRED_CASE_FINAL_TIME
+    )
     bundled.add_argument("--source-dir", default=str(ROOT_DIR))
     bundled.add_argument("--matrix", default=str(DEFAULT_MATRIX))
     bundled.add_argument("--output-dir")
     bundled.add_argument("--replace", action="store_true")
     campaign = actions.add_parser("bundle-campaign")
-    campaign.add_argument("--required-final-time", type=float, default=10.0)
+    campaign.add_argument(
+        "--required-final-time", type=positive_finite_float_arg,
+        default=REQUIRED_CASE_FINAL_TIME
+    )
     campaign.add_argument("--source-dir", default=str(ROOT_DIR))
     campaign.add_argument("--matrix", default=str(DEFAULT_MATRIX))
     campaign.add_argument("--output-dir")
