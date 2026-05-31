@@ -261,7 +261,7 @@ def overview_workflow() -> None:
     ax.set_ylim(0, 3)
     ax.axis("off")
     box(ax, (0.2, 1.0), 1.8, 1.0, "Source tree\nand tests", BLUE)
-    box(ax, (2.45, 1.0), 1.8, 1.0, "Pinned clean\nhost binary", PURPLE)
+    box(ax, (2.45, 1.0), 1.8, 1.0, "Bounded host pin\n(dirty source)", PURPLE)
     box(ax, (4.7, 1.0), 1.8, 1.0, "Frozen Orion\nartifact trees", GREEN)
     box(ax, (6.95, 1.0), 1.8, 1.0, "Bounded artifact\nverifiers", ORANGE)
     box(ax, (9.2, 1.0), 1.6, 1.0, "Readiness\nclaims", RED)
@@ -290,7 +290,7 @@ def verifier_hardening() -> None:
         "Loose runtime replay checks",
     ]
     after = [
-        "FD-anchored immutable trees + exact hashes",
+        "FD-anchored bytes + verified topology",
         "Exact schemas and closed directories",
         "Bounded diagnostics",
     ]
@@ -309,13 +309,14 @@ def readiness_gate_summary() -> None:
         "Bounded local successor tranche",
         "Verifier hardening",
         "Broad local test suites",
+        "Final clean-tree validation",
         "Canonical clean-candidate freeze",
         "Science qualification",
         "Frontier portability matrix",
         "External review",
     ]
-    status = ["completed", "completed", "completed", "open", "open", "open", "pending"]
-    colors = [GREEN, GREEN, GREEN, ORANGE, ORANGE, ORANGE, GRAY]
+    status = ["completed", "completed", "completed", "open", "open", "open", "open", "pending"]
+    colors = [GREEN, GREEN, GREEN, ORANGE, ORANGE, ORANGE, ORANGE, GRAY]
     fig, ax = plt.subplots(figsize=(9, 4.2))
     y = np.arange(len(labels))
     ax.barh(y, np.ones(len(labels)), color=colors)
@@ -745,7 +746,7 @@ def artifact_sizes(sizes: dict[str, int]) -> dict[str, int]:
 
 def validation_summary() -> dict[str, Any]:
     labels = ["publication\nsuite", "Frontier\ncontrol plane", "hardening\nfocus", "JSON parse", "Python AST"]
-    counts = [711, 359, 91, 170, 88]
+    counts = [716, 359, 96, 168, 88]
     fig, ax = plt.subplots(figsize=(8, 4))
     bars = ax.bar(labels, counts, color=[BLUE, GREEN, ORANGE, PURPLE, CYAN])
     ax.bar_label(bars)

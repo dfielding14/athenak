@@ -6,9 +6,11 @@ qualify any scientific claim by itself.
 
 ## Files
 
-- `storage_policy.json`: authorized Frontier root, budget cap, Project Home
-  ledger mirror, user-selected Orion-only bulk-evidence design, and explicit
-  terminal durability-risk disposition.
+- `storage_policy.json`: prospective source-side transition policy until it is
+  promoted through the installed paired control plane. It records the
+  authorized Frontier root, budget cap, Project Home ledger mirror,
+  user-selected Orion-only bulk-evidence design, and explicit terminal
+  durability-risk disposition.
 - `phase0_curated_candidate_successor_2026-05-31.json`: nonqualifying Phase 0
   successor-source review record. It separates the still-live paired control
   plane from the next source generation, binds the complete canonical
