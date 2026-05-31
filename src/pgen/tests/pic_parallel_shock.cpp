@@ -36,6 +36,7 @@
 #include "mesh/mesh.hpp"
 #include "eos/eos.hpp"
 #include "mhd/mhd.hpp"
+#include "outputs/restart_utils.hpp"
 #include "particles/particles.hpp"
 #include "pgen/pgen.hpp"
 
@@ -255,7 +256,7 @@ void ValidateAndStoreParallelShockRestartControls(ParameterInput *pin,
                 << std::endl
                 << "pic_parallel_shock restart metadata is missing the "
                 << "continuation-control fingerprint." << std::endl;
-      std::exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
     const std::string checkpointed = pin->GetString(block, parameter);
     if (checkpointed != current) {
@@ -264,7 +265,7 @@ void ValidateAndStoreParallelShockRestartControls(ParameterInput *pin,
                 << "pic_parallel_shock restart continuation-control fingerprint "
                 << "mismatch; injection/frame controls must not be overridden."
                 << std::endl;
-      std::exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
   }
   pin->SetString(block, parameter, current);
@@ -413,7 +414,7 @@ void EncodeCRStateFromVelocity(const particles::Particles *ppart,
               << "pic_parallel_shock injected velocity must satisfy |v| < "
               << "<particles>/pic_cr_light_speed in a momentum-state mode."
               << std::endl;
-    std::exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
   const Real gamma = 1.0/std::sqrt(1.0 - v2/(light_speed*light_speed));
   state_x *= gamma;
@@ -446,7 +447,7 @@ void BoostRelativeVelocityFromSurface(const particles::Particles *ppart,
               << "pic_parallel_shock shock-surface speed must satisfy |v| < "
               << "<particles>/pic_cr_light_speed in a momentum-state mode."
               << std::endl;
-    std::exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
   const Real beta2 = SQR(surface_vx/light_speed);
   const Real gamma_surface = 1.0/std::sqrt(1.0 - beta2);
@@ -456,7 +457,7 @@ void BoostRelativeVelocityFromSurface(const particles::Particles *ppart,
               << std::endl
               << "pic_parallel_shock velocity boost has a non-positive "
               << "denominator." << std::endl;
-    std::exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
   vx = (surface_vx + relative_vx)/denominator;
   vy = relative_vy/(gamma_surface*denominator);
@@ -503,7 +504,7 @@ void ApplyFrameShiftToParticles(Mesh *pm, const Real dvx) {
               << "pic_parallel_shock particle frame shifting is not yet defined "
               << "for momentum-state modes; disable "
               << "<problem>/ps_frame_apply_to_particles." << std::endl;
-    std::exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
   auto &prtcl_rdata = ppart->prtcl_rdata;
   par_for("ps_frame_shift_particles", DevExeSpace(), 0, ppart->nprtcl_thispack - 1,
@@ -517,7 +518,7 @@ void FatalParticleMigrationError(const char *message) {
             << std::endl
             << "pic_parallel_shock recenter particle migration failed: "
             << message << std::endl;
-  std::exit(EXIT_FAILURE);
+  restart_utils::AbortOnFatalError();
 }
 
 void StoreRuntimeStateForRestart() {
@@ -549,16 +550,16 @@ void StoreRuntimeStateForRestart() {
                   ps_removed_cr_momentum_x3_global);
   ps_pin->SetReal("problem", "ps_removed_cr_energy_global",
                   ps_removed_cr_energy_global);
-  ps_pin->SetInteger("problem", "ps_cr_ledger_schema", 1);
+  ps_pin->SetInteger("problem", "ps_cr_ledger_schema", 2);
   ps_pin->SetBoolean("problem", "ps_cr_ledger_complete", ps_cr_ledger_complete);
-  if (!ps_tag_seeded) return;
+  ps_pin->SetBoolean("problem", "ps_tag_seeded", ps_tag_seeded);
   if (ps_next_tag < 0 ||
       ps_next_tag > static_cast<std::int64_t>(std::numeric_limits<int>::max())) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
               << "pic_parallel_shock next particle tag cannot be stored in "
               << "restart metadata." << std::endl;
-    std::exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
   ps_pin->SetInteger("problem", "ps_next_tag",
                      static_cast<int>(ps_next_tag));
@@ -812,7 +813,7 @@ void ApplyRecenteringShift(Mesh *pm, const int nshift) {
               << std::endl
               << "pic_parallel_shock recenter shift must be <= nghost."
               << std::endl;
-    std::exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
 
   auto *pmhd = pmbp->pmhd;
@@ -936,7 +937,7 @@ void SeedNextTag(particles::Particles *ppart) {
               << std::endl
               << "Particle tag range exhausted before pic_parallel_shock injection."
               << std::endl;
-    std::exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
   ps_next_tag = start;
   ps_tag_seeded = true;
@@ -950,7 +951,7 @@ void ApplyParallelShockGasSubtraction(Mesh *pm, const Real stage_weight) {
               << std::endl
               << "pic_parallel_shock gas-subtraction stage weight must be finite "
               << "and positive." << std::endl;
-    std::exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
 
   MeshBlockPack *pmbp = pm->pmb_pack;
@@ -1041,7 +1042,7 @@ void ApplyParallelShockGasSubtraction(Mesh *pm, const Real stage_weight) {
               << " pressure_floor_cells=" << global_pressure_floor_clips
               << ". The process is stopping before clipping or checkpoint publication."
               << std::endl;
-    std::exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
   if (nsub <= 0) return;
   par_for("ps_gas_subtract", DevExeSpace(), 0, nsub - 1,
@@ -1075,7 +1076,7 @@ void PrepareParallelShockInjectionTransaction(Mesh *pm) {
               << std::endl
               << "pic_parallel_shock injection timestep must be finite and positive."
               << std::endl;
-    std::exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
   // Particle creation and reservoir consumption are irreversible.  Commit them
   // once per physical cycle, then replay only the matching RK-weighted fluid
@@ -1204,7 +1205,7 @@ void PrepareParallelShockInjectionTransaction(Mesh *pm) {
               << std::endl
               << "pic_parallel_shock gathered shock-surface area does not match "
               << "the global reduction." << std::endl;
-    std::exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
 
   int ninj_global = 0;
@@ -1221,7 +1222,7 @@ void PrepareParallelShockInjectionTransaction(Mesh *pm) {
                   << std::endl
                   << "pic_parallel_shock injected particle count exceeds int range."
                   << std::endl;
-        std::exit(EXIT_FAILURE);
+        restart_utils::AbortOnFatalError();
       }
       ninj_global = static_cast<int>(ninj_real);
       reservoir_after = mass_budget -
@@ -1242,7 +1243,7 @@ void PrepareParallelShockInjectionTransaction(Mesh *pm) {
               << std::endl
               << "Particle tag range exhausted during pic_parallel_shock injection."
               << std::endl;
-    std::exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
   std::map<std::tuple<int, int, int, int>, GasDelta> gas_deltas;
   std::vector<InjectedParticle> injected;
@@ -1367,7 +1368,7 @@ void PrepareParallelShockInjectionTransaction(Mesh *pm) {
               << std::endl
               << "pic_parallel_shock global injected-particle accounting "
               << "does not match the budget." << std::endl;
-    std::exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
   ps_mass_reservoir_global = reservoir_after;
   ps_next_tag = tag_base + static_cast<std::int64_t>(ninj_global);
@@ -1439,7 +1440,7 @@ void ParallelShockSource(Mesh *pm, const Real bdt) {
               << std::endl
               << "pic_parallel_shock injection transaction was not prepared before "
               << "the RK source stage." << std::endl;
-    std::exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
   ApplyParallelShockGasSubtraction(pm, bdt/pm->dt);
 }
@@ -1772,33 +1773,33 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
               << "pic_parallel_shock requires an active <mhd> block." << std::endl;
-    std::exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
   if (pmbp->ppart == nullptr) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
               << "pic_parallel_shock requires an active <particles> block."
               << std::endl;
-    std::exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
   if (pmbp->phydro != nullptr) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
               << "pic_parallel_shock is MHD-only; do not enable <hydro>."
               << std::endl;
-    std::exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
   if (!pmbp->pmhd->peos->eos_data.is_ideal) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
               << "pic_parallel_shock requires ideal MHD EOS." << std::endl;
-    std::exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
   if (pmy_mesh_->mesh_bcs[BoundaryFace::inner_x1] != BoundaryFlag::reflect) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
               << "pic_parallel_shock expects <mesh>/ix1_bc=reflect." << std::endl;
-    std::exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
   const BoundaryFlag ox1_bc = pmy_mesh_->mesh_bcs[BoundaryFace::outer_x1];
   if (!(ox1_bc == BoundaryFlag::inflow || ox1_bc == BoundaryFlag::outflow)) {
@@ -1806,14 +1807,14 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
               << std::endl
               << "pic_parallel_shock expects <mesh>/ox1_bc=inflow or outflow."
               << std::endl;
-    std::exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
   if (pmy_mesh_->mesh_bcs[BoundaryFace::inner_x2] != BoundaryFlag::periodic ||
       pmy_mesh_->mesh_bcs[BoundaryFace::outer_x2] != BoundaryFlag::periodic) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
               << "pic_parallel_shock expects periodic y boundaries." << std::endl;
-    std::exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
 
   // Parse runtime controls.
@@ -1876,7 +1877,7 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
               << std::endl
               << "pic_parallel_shock injection is qualified only with time/integrator="
               << "rk1, rk2, or rk3; received '" << integrator << "'." << std::endl;
-    std::exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
 
   if (ps_rho0 <= 0.0 || ps_p0 <= 0.0 || ps_u0 <= 0.0 || ps_b0 <= 0.0 || ps_eta < 0.0) {
@@ -1884,21 +1885,21 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
               << std::endl
               << "pic_parallel_shock parameters ps_rho0/ps_p0/ps_u0/ps_b0 must be > 0 "
               << "and ps_eta must be >= 0." << std::endl;
-    std::exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
   if (ps_seed_noise_amp < 0.0) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
               << "pic_parallel_shock requires ps_seed_noise_amp >= 0."
               << std::endl;
-    std::exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
   if (std::abs(ps_inject_half_width_cells - 0.5) > 1.0e-15) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
               << "pic_parallel_shock requires ps_inject_half_width_cells = 0.5 "
               << "for a unique shock-surface carrier cell." << std::endl;
-    std::exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
   if (shock_speed_model == "finite_mach") {
     ps_shock_speed_model = PSShockSpeedModel::finite_mach;
@@ -1909,28 +1910,28 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
               << std::endl
               << "ps_shock_speed_model must be 'finite_mach' or "
               << "'ideal_surface'." << std::endl;
-    std::exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
   if (ps_frame_t_ramp < 0.0 || ps_frame_vfrac < 0.0 || ps_frame_dv_max < 0.0) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
               << "pic_parallel_shock frame controls require ps_frame_t_ramp >= 0, "
               << "ps_frame_vfrac >= 0, and ps_frame_dv_max >= 0." << std::endl;
-    std::exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
   if (ps_frame_diag_dcycle < 1) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
               << "pic_parallel_shock requires ps_frame_diag_dcycle >= 1."
               << std::endl;
-    std::exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
   if (ps_feedback_diag_dcycle < 0) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
               << "pic_parallel_shock requires ps_feedback_diag_dcycle >= 0."
               << std::endl;
-    std::exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
   if (frame_mode == "velocity") {
     ps_frame_mode = PSFrameMode::velocity;
@@ -1940,7 +1941,7 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
               << "ps_frame_mode must be 'velocity' or 'recenter'." << std::endl;
-    std::exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
 
   const int nspecies = pmbp->ppart->nspecies;
@@ -1949,7 +1950,7 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
               << std::endl
               << "ps_inject_species is out of range for configured species."
               << std::endl;
-    std::exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
   std::string species_block = "species" + std::to_string(ps_inject_species);
   ps_particle_mass = pin->GetOrAddReal(species_block, "mass", 1.0);
@@ -1957,7 +1958,7 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
   if (ps_particle_mass <= 0.0) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl << "Injected species mass must be > 0." << std::endl;
-    std::exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
   ps_particle_q_over_m = ps_particle_charge/ps_particle_mass;
   Real qscale = pin->GetOrAddReal("particles", "deposit_qscale", 1.0);
@@ -1965,7 +1966,7 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
   if (ps_particle_macro_mass <= 0.0) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl << "Computed injected macro-mass must be > 0." << std::endl;
-    std::exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
 
   // Select the source-local surface model in the reflecting-wall frame.
@@ -1978,7 +1979,7 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
               << std::endl
               << "pic_parallel_shock requires supersonic inflow with positive "
               << "finite-Mach shock-speed estimate." << std::endl;
-    std::exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
   ps_xshock0 = pmy_mesh_->mesh_size.x1min;
   ps_recenter_dx1 = pmy_mesh_->mesh_size.dx1;
@@ -1988,26 +1989,28 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
       restart && pin->DoesParameterExist("problem", "ps_cr_ledger_schema");
   if (has_ledger_schema) {
     const int ledger_schema = pin->GetInteger("problem", "ps_cr_ledger_schema");
-    const std::array<const char *, 13> ledger_fields = {
-      "ps_cr_ledger_complete",
+    const std::array<const char *, 17> ledger_fields = {
+      "ps_cr_ledger_complete", "ps_mass_reservoir_global",
       "ps_injected_cr_count_global", "ps_injected_cr_mass_global",
       "ps_injected_cr_momentum_x1_global", "ps_injected_cr_momentum_x2_global",
       "ps_injected_cr_momentum_x3_global", "ps_injected_cr_energy_global",
+      "ps_removed_excluded_early_cohort",
       "ps_removed_cr_count_global", "ps_removed_cr_mass_global",
       "ps_removed_cr_momentum_x1_global", "ps_removed_cr_momentum_x2_global",
-      "ps_removed_cr_momentum_x3_global", "ps_removed_cr_energy_global"
+      "ps_removed_cr_momentum_x3_global", "ps_removed_cr_energy_global",
+      "ps_tag_seeded", "ps_next_tag"
     };
     bool ledger_fields_complete = true;
     for (const char *field : ledger_fields) {
       ledger_fields_complete =
           ledger_fields_complete && pin->DoesParameterExist("problem", field);
     }
-    if (ledger_schema != 1 || !ledger_fields_complete) {
+    if (ledger_schema != 2 || !ledger_fields_complete) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
                 << "pic_parallel_shock restart has unsupported or incomplete CR "
                 << "ledger metadata." << std::endl;
-      std::exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
     ps_cr_ledger_complete = pin->GetBoolean("problem", "ps_cr_ledger_complete");
   } else {
@@ -2047,19 +2050,23 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
       pin->GetOrAddReal("problem", "ps_removed_cr_momentum_x3_global", 0.0) : 0.0;
   ps_removed_cr_energy_global = restart ?
       pin->GetOrAddReal("problem", "ps_removed_cr_energy_global", 0.0) : 0.0;
-  ps_tag_seeded = false;
+  ps_tag_seeded = has_ledger_schema ?
+      pin->GetBoolean("problem", "ps_tag_seeded") : false;
   ps_next_tag = 0;
-  if (restart && pin->DoesParameterExist("problem", "ps_next_tag")) {
+  if (has_ledger_schema ||
+      (restart && pin->DoesParameterExist("problem", "ps_next_tag"))) {
     const int stored_next_tag = pin->GetInteger("problem", "ps_next_tag");
     if (stored_next_tag < 0) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
                 << "pic_parallel_shock restart metadata has negative ps_next_tag."
                 << std::endl;
-      std::exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
     ps_next_tag = static_cast<std::int64_t>(stored_next_tag);
-    ps_tag_seeded = true;
+    if (!has_ledger_schema) {
+      ps_tag_seeded = true;
+    }
   }
   StoreRuntimeStateForRestart();
   ConfigureSeedNoisePhases();
@@ -2070,7 +2077,7 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
               << std::endl
               << "pic_parallel_shock frame tracking currently supports uniform grids "
               << "only (no AMR/SMR)." << std::endl;
-    std::exit(EXIT_FAILURE);
+    restart_utils::AbortOnFatalError();
   }
   if (ps_enable_frame_tracking && FrameModeRecenter()) {
     if (!(ps_recenter_x_target > pmy_mesh_->mesh_size.x1min &&
@@ -2079,42 +2086,42 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
                 << std::endl
                 << "ps_recenter_x_target must lie strictly inside the x1 domain."
                 << std::endl;
-      std::exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
     if (!(ps_recenter_x_trigger > pmy_mesh_->mesh_size.x1min)) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
                 << "ps_recenter_x_trigger must be greater than x1min."
                 << std::endl;
-      std::exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
     if (!(ps_recenter_x_trigger < pmy_mesh_->mesh_size.x1max)) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
                 << "ps_recenter_x_trigger must be less than x1max."
                 << std::endl;
-      std::exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
     if (ps_recenter_dx1 <= 0.0) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
                 << "pic_parallel_shock recentering requires positive mesh dx1."
                 << std::endl;
-      std::exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
     if (ps_recenter_shift_cells < 1) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
                 << "ps_recenter_shift_cells must be >= 1 in recenter mode."
                 << std::endl;
-      std::exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
     if (ps_recenter_shift_cells > pmy_mesh_->mb_indcs.ng) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
                 << "ps_recenter_shift_cells must be <= nghost in recenter mode."
                 << std::endl;
-      std::exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
     const Real vmodel = ps_recenter_vshock_model;
     const bool use_default = std::abs(vmodel + 1.0) < 1.0e-12;
@@ -2124,7 +2131,7 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
                 << std::endl
                 << "ps_recenter_vshock_model must be > 0 or left at default -1."
                 << std::endl;
-      std::exit(EXIT_FAILURE);
+      restart_utils::AbortOnFatalError();
     }
   }
 

@@ -103,8 +103,11 @@ def _restart_problem_parameters(path):
 def _restart_metadata(path):
     parameters = _restart_problem_parameters(path)
     required = [
+        "ps_cr_ledger_schema",
+        "ps_cr_ledger_complete",
         "ps_removed_excluded_early_cohort",
         *_REMOVED_FLOAT_FIELDS,
+        "ps_tag_seeded",
         "ps_next_tag",
         "ps_mass_reservoir_global",
     ]
@@ -117,10 +120,15 @@ def _restart_metadata(path):
             + path
         )
     return {
+        "ps_cr_ledger_schema": int(parameters["ps_cr_ledger_schema"]),
+        "ps_cr_ledger_complete": _parse_boolean(
+            parameters["ps_cr_ledger_complete"]
+        ),
         "ps_removed_excluded_early_cohort": _parse_boolean(
             parameters["ps_removed_excluded_early_cohort"]
         ),
         **{name: float(parameters[name]) for name in _REMOVED_FLOAT_FIELDS},
+        "ps_tag_seeded": _parse_boolean(parameters["ps_tag_seeded"]),
         "ps_next_tag": int(parameters["ps_next_tag"]),
         "ps_mass_reservoir_global": float(parameters["ps_mass_reservoir_global"]),
     }
@@ -252,6 +260,33 @@ def _summary():
         "shock_injected_particle_counts": shock_counts,
         "expected_sink_from_pre_crossing_particles": expected_sink,
         "crossed_restart_metadata": crossed_metadata,
+        "restart_schema_values": {
+            label: metadata["ps_cr_ledger_schema"]
+            for label, metadata in [
+                ("pre", pre_metadata),
+                ("crossed", crossed_metadata),
+                ("full", full_metadata),
+                ("restart", restart_metadata),
+            ]
+        },
+        "restart_ledger_complete_values": {
+            label: metadata["ps_cr_ledger_complete"]
+            for label, metadata in [
+                ("pre", pre_metadata),
+                ("crossed", crossed_metadata),
+                ("full", full_metadata),
+                ("restart", restart_metadata),
+            ]
+        },
+        "restart_tag_seeded_values": {
+            label: metadata["ps_tag_seeded"]
+            for label, metadata in [
+                ("pre", pre_metadata),
+                ("crossed", crossed_metadata),
+                ("full", full_metadata),
+                ("restart", restart_metadata),
+            ]
+        },
         "sink_vs_pre_crossing_particle_absolute_errors": sink_errors,
         "crossed_vs_full_metadata_absolute_errors": _metadata_errors(
             full_metadata, crossed_metadata
@@ -338,6 +373,9 @@ def analyze():
     crossed_vs_full = summary["crossed_vs_full_metadata_absolute_errors"]
     crossed_vs_restart = summary["crossed_vs_restart_metadata_absolute_errors"]
     next_tags = summary["next_tag_values"]
+    restart_schemas = summary["restart_schema_values"]
+    restart_ledgers_complete = summary["restart_ledger_complete_values"]
+    restart_tags_seeded = summary["restart_tag_seeded_values"]
     expected_sink = summary["expected_sink_from_pre_crossing_particles"]
     particle_errors = summary["full_vs_restart_particle_float_payload_absolute_errors"]
     momentum_scale = max(
@@ -348,6 +386,9 @@ def analyze():
     )
     return (
         summary["cutoff_crossing_exercised"]
+        and all(schema == 2 for schema in restart_schemas.values())
+        and all(restart_ledgers_complete.values())
+        and all(restart_tags_seeded.values())
         and diagnostics == {"pre": 0, "crossed": 1, "full": 1, "restart": 0}
         and all(pre_metadata[name] == 0.0 for name in _REMOVED_FLOAT_FIELDS)
         and crossed_metadata["ps_removed_cr_count_global"] > 0.0
