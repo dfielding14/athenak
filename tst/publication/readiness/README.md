@@ -44,9 +44,32 @@ qualify any scientific claim by itself.
   reference mappings are still prerequisites.
 - `q023_paper_bell_linear_source_local_implementation_2026-05-30.json`:
   dedicated Section 5.2 right-polarized Bell eigenmode generator, raw-mode
-  extractor and source-local 1D/2D/3D preparations. The physical 1D case uses
-  an exact transverse-invariant thin 2D3V carrier; clean freeze, registered
-  execution, independent recompute and external review remain open.
+  extractor and source-local 1D/2D/3D preparations. Raw extraction requires an
+  approved materialized variant, exact geometry and artifact provenance, and a
+  signed phase-frequency match. The physical 1D case uses an exact
+  transverse-invariant thin 2D3V carrier. Current `mhd_bcc` output is magnetic
+  preparation smoke only; velocity-retaining variants, registered execution,
+  independent recompute and external review remain open.
+- `q029_hall_bell_linear_source_local_preparation_2026-05-30.json`: bounded
+  source-local 1D/2D/3D launch preparation for the separately named
+  experimental Hall-current generator. The guarded shared Q-023 seed-carrier
+  header, exact geometry, positive `chi_H` grid and 45 epsilon-specific
+  materializations are frozen as nonqualifying preparation only; Hall-Bell
+  dispersion, nonlinear, Frontier and decomposition qualification remain
+  open.
+- `q029_hall_extension_parser_hardening_successor_2026-05-30.json`,
+  `q032_plotnikov_damped_crsi_parser_hardening_successor_2026-05-30.json` and
+  `q033_crpai_transport_calibration_parser_hardening_successor_2026-05-30.json`:
+  current nonqualifying synthetic-contract bindings after the shared particle
+  parser was narrowed to admit reduced static-neutral damping only on the
+  Newtonian single-fluid MHD source-task path. Their source-local predecessor
+  JSON records remain preserved as chronology.
+- `q032_reduced_static_neutral_runtime_local_2026-05-30.json`: bounded
+  source-local thin-2D3V runtime carrier for the exact static-neutral
+  transverse-friction map. The retained Orion-local control-versus-damped
+  probe passes with residuals below `1.0e-7`; Plotnikov applicability,
+  matched damped-CRSI qualification, Frontier and decomposition work remain
+  open.
 - `plotting_environment_lock_candidate_2026-05-30.json`: local Python and
   plotting-dependency lock candidate pending backend, font, environment
   artifact and external-export freeze.
@@ -158,6 +181,13 @@ qualify any scientific claim by itself.
   rejected-v1 and accepted-v2 bounded multirank runtime-metadata chronology
   plus exact source-local closure index. The accepted v2 slice is engineering
   evidence only; broader F2 qualification and external review remain open.
+- `q027_q016_orion_local_direct_srun_accounting_authorization_2026-05-30.json`:
+  exact reviewed authorization for seven Orion-local direct-`srun` Q-016
+  allocations. This is accounting-only and ineligible for scientific evidence.
+- `q027_manual_frontier_accounting_activation_2026-05-30.json`: empty-queue
+  serialized import of those seven accounting-only rows after paired promotion
+  of the strict registered-lifecycle successor. The terminal mirrored ledger has
+  56 rows, zero active reservations and no pending PIC marker.
 - `q008_expanding_box_local_oracles_2026-05-30.json`: bounded serial-host
   expanding-box gyro-history and one-step CPAW source-map oracle evidence.
 - `q008_expanding_box_comoving_flux_successor_2026-05-30.json`: successor
@@ -234,13 +264,19 @@ qualify any scientific claim by itself.
 - `q042_schema7_architecture_docs_successor_2026-05-30.json`: schema-7
   provenance, repeated-AMR and current 58-page documentation-render successor
   chronology record. Its paired-control-plane statement is historical; the
-  current successor still requires its own independent audit and paired
-  promotion before Frontier use. Frontier and external-review gates remain
-  open.
+  later registered-F1 and bounded-F2 control-plane generations supersede that
+  activation status. The later strict registered-lifecycle successor was
+  independently audited, paired-promoted and used for the accounting-only Q-016
+  import. Frontier scientific-campaign and external-review gates remain open.
 - `storage_artifact_lifecycle_successor_2026-05-30.json`: successor chronology
   correction for Orion-only bulk evidence and Project Home mirror-only use.
 - `q032_q033_extension_local_scans_2026-05-30.json`: bounded serial-host
   ion-neutral Alfven-envelope and adaptive-delta-f cadence-sensitivity scans.
+- `q033_crpai_transport_calibration_source_local_candidate_2026-05-30.json`:
+  fail-closed source-local synthetic transport-calibration contract for the
+  selected adaptive-delta-f physical-damping CRPAI extension. Physical
+  calibration, `nu_eff`, comparison windows, tolerances, Frontier execution
+  and external review remain open.
 - `q034_unsupported_capability_local_closure.md`: local parser, rename, docs,
   and extension-gate classification for unsupported-capability rows.
 - `q039_gizmo_rsol_decision_2026-05-30.json`: fail-closed local GIZMO/RSOL

@@ -6,7 +6,7 @@
   "campaign_id": "Q023-PAPER-BELL-LINEAR",
   "slice_start_head": "30fa1c7d2a7d50ff2ecaeb7643ccf6eaa9e4ebc0",
   "required_restart_repair_ancestor": "41e064da87d48da0f9d5412e753e5efe6e22ec66",
-  "transition_source_commit": "open_uncommitted_q023_slice_atop_30fa1c7d2a7d50ff2ecaeb7643ccf6eaa9e4ebc0",
+  "transition_source_commit": "6c249767d2ada5b8c5698974c6df8eb0646bbff8",
   "status": "source_local_1d2d3d_runnable_preparation_only",
   "qualification_effect": "none",
   "frontier_authorization": "not_bound",

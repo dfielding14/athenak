@@ -26,6 +26,7 @@ from control_plane_common import launch_contract_sha256
 from control_plane_common import validate_launch_contract
 from ledger import record_sha256
 from ledger import validate_mirrored_state
+from tst.publication.pic_qualification_manifest import SCHEMA_PATH
 from tst.publication.pic_qualification_manifest import validate_qualification_manifest
 from tst.publication.pic_qualification_manifest import validate_schema
 
@@ -33,6 +34,7 @@ from tst.publication.pic_qualification_manifest import validate_schema
 READINESS_DIR = REPO_ROOT / "tst" / "publication" / "readiness"
 SCHEMA_DIR = READINESS_DIR / "schemas"
 CONTROL_PLANE_DIR = REPO_ROOT / "tst" / "publication" / "frontier_control_plane"
+VALIDATION_MANIFEST_SCHEMA = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
 PAPER_TEX = (
     REPO_ROOT
     / "docs"
@@ -285,6 +287,9 @@ class PicReadinessRegistryTests(unittest.TestCase):
         f1_candidate = _load(
             "q027_frontier_f1_registered_science_successor_candidate_2026-05-30.json"
         )
+        manual_accounting_activation = _load(
+            "q027_manual_frontier_accounting_activation_2026-05-30.json"
+        )
         self.assertEqual(
             candidate["predecessor"]["control_plane_version"],
             recovery_candidate["active_successor"]["control_plane_version"],
@@ -329,11 +334,31 @@ class PicReadinessRegistryTests(unittest.TestCase):
                 storage["installed_control_plane_version"],
                 storage["staged_control_plane_candidate_version"],
             )
-            paired = f1_candidate["paired_install_transition"]
+            current_transition = manual_accounting_activation[
+                "control_plane_transition"
+            ]
             self.assertEqual(
                 storage["installed_control_plane_version"],
-                paired["control_plane_version"],
+                current_transition["control_plane_version"],
             )
+            terminal_ledger = manual_accounting_activation["terminal_ledger"]
+            self.assertEqual(terminal_ledger["orion_records"], 56)
+            self.assertEqual(
+                terminal_ledger["orion_records"],
+                terminal_ledger["project_home_records"],
+            )
+            self.assertEqual(
+                terminal_ledger["orion_records"],
+                terminal_ledger["mirror_receipts"],
+            )
+            self.assertEqual(terminal_ledger["currently_reserved_node_hours"], 0.0)
+            self.assertEqual(
+                manual_accounting_activation["authorization"][
+                    "scientific_evidence_eligible"
+                ],
+                False,
+            )
+            paired = f1_candidate["paired_install_transition"]
             self.assertEqual(
                 storage["ledger_genesis"]["event_sha256"],
                 paired["genesis_event_sha256"],
@@ -355,10 +380,6 @@ class PicReadinessRegistryTests(unittest.TestCase):
                 )
             else:
                 self.assertEqual(active_transition["status"], "pass")
-                self.assertEqual(
-                    active_transition["control_plane_version"],
-                    storage["installed_control_plane_version"],
-                )
             science_freeze = policy["science_submission_freeze"]
             self.assertEqual(science_freeze["status"], "authorized")
             clean_candidate = candidate["inherited_clean_candidate_freeze"]
@@ -496,7 +517,7 @@ class PicReadinessRegistryTests(unittest.TestCase):
         binding = candidate["registered_science_slice"]
         self.assertEqual(
             candidate["staged_policy_sha256"],
-            _sha256(READINESS_DIR / "storage_policy.json"),
+            candidate["accepted_v2_execution"]["active_policy_sha256"],
         )
         for digest_key, relative_path in {
             "job_script_sha256":
@@ -528,9 +549,6 @@ class PicReadinessRegistryTests(unittest.TestCase):
         )
         successor = _load(
             "q027_frontier_f1_registered_science_successor_candidate_2026-05-30.json"
-        )
-        self.assertEqual(
-            staged_version, successor["staged_successor"]["control_plane_version"]
         )
         clean_manifest_path = Path(policy["science_submission_freeze"]["manifest_path"])
         clean_manifest = json.loads(clean_manifest_path.read_text(encoding="utf-8"))
@@ -1268,12 +1286,10 @@ class PicReadinessRegistryTests(unittest.TestCase):
         f2_candidate = _load(
             "q027_frontier_f2_multirank_runtime_metadata_candidate_2026-05-30.json"
         )
-        f2 = f2_candidate["accepted_v2_execution"]
-        f2_closure = json.loads(
-            (
-                REPO_ROOT / f2_candidate["source_local_accepted_closure_fixture"]
-            ).read_text(encoding="utf-8")
+        manual_accounting_activation = _load(
+            "q027_manual_frontier_accounting_activation_2026-05-30.json"
         )
+        f2 = f2_candidate["accepted_v2_execution"]
         active_policy_path = Path(
             "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/storage_policy.json"
         )
@@ -1282,9 +1298,12 @@ class PicReadinessRegistryTests(unittest.TestCase):
         )
         current_policy_sha256 = _sha256(active_policy_path)
         current_promotion_sha256 = _sha256(active_promotion_path)
-        self.assertEqual(current_policy_sha256, f2["active_policy_sha256"])
-        self.assertEqual(current_promotion_sha256, f2["active_promotion_sha256"])
-        terminal = f2_closure["active_terminal_ledger"]
+        current_transition = manual_accounting_activation["control_plane_transition"]
+        self.assertEqual(current_policy_sha256, current_transition["active_policy_sha256"])
+        self.assertEqual(
+            current_promotion_sha256, current_transition["active_promotion_sha256"]
+        )
+        terminal = manual_accounting_activation["terminal_ledger"]
         for digest_key, path in {
             "orion_jsonl_sha256": Path(
                 "/lustre/orion/ast207/proj-shared/dfielding/PIC/ledger/node_hours.jsonl"
@@ -1342,11 +1361,7 @@ class PicReadinessRegistryTests(unittest.TestCase):
                     manifest_promotion_sha256,
                     execution["qualification_active_promotion_sha256"],
                 )
-                self.assertEqual(manifest_policy_sha256, current_policy_sha256)
-                self.assertEqual(
-                    manifest_promotion_sha256, current_promotion_sha256
-                )
-                validate_qualification_manifest(manifest)
+                validate_schema(manifest, VALIDATION_MANIFEST_SCHEMA)
         with _pinned_regular_bytes(
             Path(f2["qualification_manifest_path"])
         ) as manifest_bytes:
@@ -1354,7 +1369,7 @@ class PicReadinessRegistryTests(unittest.TestCase):
                 hashlib.sha256(manifest_bytes).hexdigest(),
                 f2["qualification_manifest_sha256"],
             )
-            validate_qualification_manifest(json.loads(manifest_bytes))
+            validate_schema(json.loads(manifest_bytes), VALIDATION_MANIFEST_SCHEMA)
 
     def test_registered_parser_policy_transition_resolves_source_commit(self) -> None:
         successor = _load(

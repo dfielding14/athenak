@@ -98,17 +98,18 @@
   },
   "source_local_runtime_smoke": {
     "qualification_effect": "bounded_source_local_launch_preparation_smoke_only",
-    "artifact_root": "/lustre/orion/ast207/proj-shared/dfielding/PIC/local-readiness/q029-hall-bell-linear-source-local-20260530",
+    "source_commit": "6c249767d2ada5b8c5698974c6df8eb0646bbff8",
+    "artifact_root": "/lustre/orion/ast207/proj-shared/dfielding/PIC/local-readiness/q029-hall-bell-linear-exact-6c249767d-20260530",
     "retention": {
       "file_count": 37,
       "writable_entries": 0,
       "status": "pass_recursively_read_only"
     },
-    "executable_sha256": "908e808e2ca71088ab11c8faca6e951e8deff1b1b811dff282b1190d85185184",
+    "executable_sha256": "f43ec79efb4f2292314914f02f39736c928cedd7ce4e67cbf357677f1f6a55b4",
     "cycle_zero_initializations": [
       {
         "dimension": 1,
-        "stdout_sha256": "810091630bb1d8f0289243a61e12ea88a4c7ad283a58fb5ecad7eb5fea2af344",
+        "stdout_sha256": "4d291f37ad512642731f3340bd1ad337f8a23c4ef8341c46c17b5c3377e1b7e5",
         "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
         "selected_raw_mhd_bcc_path": "src/bin/pic_q029_hall_bell_linear_1d_cycle_zero.mhd_bcc.00000.bin",
         "selected_raw_mhd_bcc_sha256": "78fe1a071e61ff4f878da6dc7e0387cccf3fbe9d427e1f682c5d0cef827140ac",
@@ -116,7 +117,7 @@
       },
       {
         "dimension": 2,
-        "stdout_sha256": "9e196a717a2fad39e082edffc72573fa061c9a1f179bddcda7aceeb785bb5749",
+        "stdout_sha256": "b86ce7de8882e6501e13669bb8ecbc9cfed96c9cdcd60c5c0cf8f5f47aa5bce5",
         "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
         "selected_raw_mhd_bcc_path": "src/bin/pic_q029_hall_bell_linear_2d_cycle_zero.mhd_bcc.00000.bin",
         "selected_raw_mhd_bcc_sha256": "627362e0f26eb93d8dda6d04202bd6591150b1d825ceb7a5b15af6a59b2de96a",
@@ -124,7 +125,7 @@
       },
       {
         "dimension": 3,
-        "stdout_sha256": "cc38ebf15ea0ea288a653fecad80e7c8362598676d659d9b0b866466ae708292",
+        "stdout_sha256": "25fde49be6284c675cede302c0202716e40d4e55fa040a84d39601cc492ebdb8",
         "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
         "selected_raw_mhd_bcc_path": "src/bin/pic_q029_hall_bell_linear_3d_cycle_zero.mhd_bcc.00000.bin",
         "selected_raw_mhd_bcc_sha256": "40aaaa52579af851f1f28b2a14d895e57ef0b03d0d991597b6f9c0a2007ea182",

@@ -1,0 +1,101 @@
+{
+  "record_type": "q027_manual_frontier_accounting_activation",
+  "schema_version": 1,
+  "date": "2026-05-30",
+  "gates": [
+    "Q-016",
+    "Q-027"
+  ],
+  "scope": "Record the empty-queue activation of the reviewed Orion-local direct-srun accounting-only tranche after paired promotion of the strict registered-lifecycle Frontier control-plane successor. These seven rows consume the tracked Frontier testing budget and are ineligible for scientific evidence.",
+  "control_plane_transition": {
+    "source_commit": "fe2d7f7ca850308a5093bcf497c521a50375f28f",
+    "policy_activation_commit": "c412cb186fccf8eafd93a05af727292417073591",
+    "control_plane_version": "6f3458ca5c412b866f579d67dde51d73497b65629f6e7a35e10a3af84d7ecd8b",
+    "paired_inventory_sha256": "10bba8e75131d460207d28ec67e553aade688a999504e8a60984493e1765ab24",
+    "retained_source_regression_log": "/lustre/orion/ast207/proj-shared/dfielding/PIC/local-readiness/control-plane-source-regression-20260530-registered-lifecycle-strict-v8/control_plane_and_ledger.log",
+    "retained_source_regression_log_sha256": "d324198995c4630ba5242cc2fd56e02907e1625261161860da3c9a10b82bfd25",
+    "retained_source_regression_tests": 354,
+    "paired_install_read_only": true,
+    "active_policy_sha256": "362280128a988917aa6bd1210cb7509399910794da80919fb225a0f8a581275a",
+    "active_promotion_sha256": "a2e0416152c183bbd201430b5a02ded8a036fe4ea547d4b95034c1073becddfc"
+  },
+  "authorization": {
+    "authorization_id": "q016-orion-local-direct-srun-accounting-2026-05-30",
+    "orion_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/manual_accounting_authorizations/q016-orion-local-direct-srun-accounting-2026-05-30.json",
+    "project_home_path": "/ccs/proj/ast207/proj-shared/PIC/policy/manual_accounting_authorizations/q016-orion-local-direct-srun-accounting-2026-05-30.json",
+    "sha256": "36555c8e2efb9122c69fb312013de5f3c836cbe355e45ffb6c77fa4fb3bbb01d",
+    "accounting_scope": "manual_direct_srun_accounting_only",
+    "scientific_evidence_eligible": false
+  },
+  "activation_preconditions": {
+    "frontier_queue": "empty",
+    "pending_submission_marker": "absent",
+    "pending_manual_accounting_marker": "absent"
+  },
+  "imported_jobs": [
+    {
+      "job_id": "4746332",
+      "state": "FAILED",
+      "elapsed_seconds": 5,
+      "consumed_node_hours": 0.001388888888888889,
+      "event_sha256": "3d20654104ad6cfd30c5737efcb9879088a53d4cd6c9ed622d4dda47eea9a1a2"
+    },
+    {
+      "job_id": "4746335",
+      "state": "COMPLETED",
+      "elapsed_seconds": 5,
+      "consumed_node_hours": 0.001388888888888889,
+      "event_sha256": "b8d23fe34a3ae7196cbf812ce253a4fe1c4ffbe1c96c1fd1f8671d04d5f6c245"
+    },
+    {
+      "job_id": "4746336",
+      "state": "COMPLETED",
+      "elapsed_seconds": 7,
+      "consumed_node_hours": 0.0019444444444444444,
+      "event_sha256": "c5a1567b7ce7262393486d9dfdd170c9564e8f390a141a37b5262b153c0f6d60"
+    },
+    {
+      "job_id": "4746337",
+      "state": "COMPLETED",
+      "elapsed_seconds": 3,
+      "consumed_node_hours": 0.0008333333333333334,
+      "event_sha256": "9f959a3ee3340083fce4031441019d5044ba9ec70cc6bde6d9612bf2ceb65f72"
+    },
+    {
+      "job_id": "4746341",
+      "state": "COMPLETED",
+      "elapsed_seconds": 8,
+      "consumed_node_hours": 0.0022222222222222222,
+      "event_sha256": "e52c4b7d3155a96f40d85971f2e5f9981f7bc6a4a68619c2f572147f7d137d32"
+    },
+    {
+      "job_id": "4746342",
+      "state": "COMPLETED",
+      "elapsed_seconds": 8,
+      "consumed_node_hours": 0.0022222222222222222,
+      "event_sha256": "ffe27643085df72ed6b33d6bed2682799ce95d42f46c7929cb47cacc63319a1f"
+    },
+    {
+      "job_id": "4746343",
+      "state": "COMPLETED",
+      "elapsed_seconds": 4,
+      "consumed_node_hours": 0.0011111111111111111,
+      "event_sha256": "538a5623cd672009bc903d6fc17b20b4dc7b503cae3e560aa362ebe0f3615b95"
+    }
+  ],
+  "terminal_ledger": {
+    "orion_records": 56,
+    "project_home_records": 56,
+    "mirror_receipts": 56,
+    "cumulative_consumed_node_hours": 0.11055555555555553,
+    "currently_reserved_node_hours": 0.0,
+    "head_event_sha256": "538a5623cd672009bc903d6fc17b20b4dc7b503cae3e560aa362ebe0f3615b95",
+    "orion_jsonl_sha256": "cc49675b17c74fccaa84c4f28faab17c131438bc53d6b962b7e7cbda6a989aa6",
+    "orion_csv_sha256": "3b69581e5f2342471c2f2b62a2f5b1b30a0ff140b6dc23ce42bbd78592b0b899",
+    "orion_mirror_receipts_sha256": "a265e98351470a817c9f8e29dbabcbbf5a426fec2eb173c5e6f7884a35bf05d2",
+    "project_home_jsonl_sha256": "cc49675b17c74fccaa84c4f28faab17c131438bc53d6b962b7e7cbda6a989aa6",
+    "pending_submission_marker": "absent",
+    "pending_manual_accounting_marker": "absent"
+  },
+  "overall_disposition": "strict_successor_paired_promoted_q016_accounting_only_import_complete"
+}
