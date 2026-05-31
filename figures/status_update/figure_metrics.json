@@ -1,0 +1,751 @@
+{
+  "artifact_sizes_bytes": {
+    "Q006": 1229462619,
+    "Q007": 117631531,
+    "Q008": 35098365,
+    "Q011": 60033,
+    "Q011 successor": 11252,
+    "clean pin": 27868190
+  },
+  "input_verification": {
+    "active_control_plane_version": "6f3458ca5c412b866f579d67dde51d73497b65629f6e7a35e10a3af84d7ecd8b",
+    "active_policy_sha256": "362280128a988917aa6bd1210cb7509399910794da80919fb225a0f8a581275a",
+    "active_promotion_sha256": "a2e0416152c183bbd201430b5a02ded8a036fe4ea547d4b95034c1073becddfc",
+    "frozen_trees": {
+      "pin": {
+        "freeze_receipt": {
+          "artifact_role": "integrated_serial_host_binary_clean_build_provenance_pin",
+          "freeze_policy": "remove all owner, group and other write bits recursively",
+          "frontier_used": false,
+          "inventory_excludes": "artifact_inventory.sha256",
+          "kronos_used": false,
+          "mpi_used": false,
+          "qualification_effect": "bounded_serial_host_provenance_only",
+          "schema_version": 1,
+          "slurm_used": false
+        },
+        "inventoried_file_count": 34,
+        "inventory_algorithm": "sha256 of '<file_sha256>  <root-relative-path>\\n' entries ordered lexically by root-relative path",
+        "inventory_excludes": "artifact_inventory.sha256",
+        "inventory_path": "artifact_inventory.sha256",
+        "inventory_sha256": "223dcb07d453572ea407f65dc9f7020afa3d6370b9d3c3cf4a06ceb4ca0e852c",
+        "recursively_read_only": true,
+        "root": "/lustre/orion/ast207/proj-shared/dfielding/PIC/local-readiness/integrated-serial-host-binary-clean-20260531T034317Z",
+        "writable_entries": []
+      },
+      "q006": {
+        "freeze_receipt": {
+          "artifact_role": "bounded_serial_host_exact_isothermal_mechanics_only",
+          "freeze_policy": "remove all owner, group and other write bits recursively",
+          "inventory_excludes": "artifact_inventory.sha256",
+          "qualification_effect": "none",
+          "schema_version": 1
+        },
+        "inventoried_file_count": 328,
+        "inventory_algorithm": "sha256 of '<file_sha256>  <root-relative-path>\\n' entries ordered lexically by root-relative path",
+        "inventory_excludes": "artifact_inventory.sha256",
+        "inventory_path": "artifact_inventory.sha256",
+        "inventory_sha256": "2ec81b018a085a1471c479260b17282499f7e8e559a8b8ad45bafa67707f20f7",
+        "recursively_read_only": true,
+        "root": "/lustre/orion/ast207/proj-shared/dfielding/PIC/q006-exact-isothermal-runtime-local-20260531-v4",
+        "writable_entries": []
+      },
+      "q007": {
+        "freeze_receipt": {
+          "artifact_role": "bounded_serial_crsi_runtime_replay_mechanics_only",
+          "freeze_policy": "remove all owner, group and other write bits recursively",
+          "gate": "Q-007",
+          "inventory_excludes": "artifact_inventory.sha256",
+          "qualification_effect": "none_source_local_true_deltaf_preparation_only",
+          "schema_version": 1
+        },
+        "inventoried_file_count": 37,
+        "inventory_algorithm": "sha256 of '<file_sha256>  <root-relative-path>\\n' entries ordered lexically by root-relative path",
+        "inventory_excludes": "artifact_inventory.sha256",
+        "inventory_path": "artifact_inventory.sha256",
+        "inventory_sha256": "772d67effde79fa978283ca7e8425e00734a8c89ccdb124fa215737c80191842",
+        "recursively_read_only": true,
+        "root": "/lustre/orion/ast207/proj-shared/dfielding/PIC/local-readiness/q007-paper-deltaf-runtime-replay-20260531-v4",
+        "writable_entries": []
+      },
+      "q008": {
+        "freeze_receipt": {
+          "artifact_role": "bounded_serial_host_q008_cpaw_history_preparation_only",
+          "freeze_policy": "remove all owner, group and other write bits recursively",
+          "inventory_excludes": "artifact_inventory.sha256",
+          "qualification_effect": "bounded_serial_host_preparation_only",
+          "schema_version": 1
+        },
+        "inventoried_file_count": 785,
+        "inventory_algorithm": "sha256 of '<file_sha256>  <root-relative-path>\\n' entries ordered lexically by root-relative path",
+        "inventory_excludes": "artifact_inventory.sha256",
+        "inventory_path": "artifact_inventory.sha256",
+        "inventory_sha256": "9cd5a4e8f04bdb4c6666f13c5904bd291e04e894d83fb84fb3300d8ee65e23de",
+        "recursively_read_only": true,
+        "root": "/lustre/orion/ast207/proj-shared/dfielding/PIC/q008-cpaw-history-extension-20260531-v5",
+        "writable_entries": []
+      },
+      "q011": {
+        "freeze_receipt": {
+          "artifact_role": "bounded_serial_host_runtime_diagnostic_only",
+          "freeze_policy": "remove all owner, group and other write bits recursively",
+          "inventory_excludes": "artifact_inventory.sha256",
+          "qualification_effect": "none",
+          "schema_version": 1
+        },
+        "inventoried_file_count": 12,
+        "inventory_algorithm": "sha256 of '<file_sha256>  <root-relative-path>\\n' entries ordered lexically by root-relative path",
+        "inventory_excludes": "artifact_inventory.sha256",
+        "inventory_path": "artifact_inventory.sha256",
+        "inventory_sha256": "b50e1c1082e8bfbafce67aed09c1b92cfbae74b696e409aa29c3b6e12987457d",
+        "recursively_read_only": true,
+        "root": "/lustre/orion/ast207/proj-shared/dfielding/PIC/local-readiness/q011-injection-distribution-runtime-local-20260531-v4",
+        "writable_entries": []
+      },
+      "q011 successor": {
+        "freeze_receipt": {
+          "artifact_role": "bounded_serial_host_runtime_diagnostic_only",
+          "freeze_policy": "remove all owner, group and other write bits recursively",
+          "inventory_excludes": "artifact_inventory.sha256",
+          "qualification_effect": "none",
+          "schema_version": 1
+        },
+        "inventoried_file_count": 4,
+        "inventory_algorithm": "sha256 of '<file_sha256>  <root-relative-path>\\n' entries ordered lexically by root-relative path",
+        "inventory_excludes": "artifact_inventory.sha256",
+        "inventory_path": "artifact_inventory.sha256",
+        "inventory_sha256": "a8343749f7cbe49af25a1c07e77645de1d39a8093d0cbf0b9d98cc272129e93c",
+        "recursively_read_only": true,
+        "root": "/lustre/orion/ast207/proj-shared/dfielding/PIC/local-readiness/q011-injection-distribution-runtime-local-successor-audit-20260531-v1",
+        "writable_entries": []
+      }
+    },
+    "ledger_tail_sequence_number": 55,
+    "ledger_tail_sha256": "538a5623cd672009bc903d6fc17b20b4dc7b503cae3e560aa362ebe0f3615b95",
+    "legacy_read_only_trees": {
+      "q023_bell_smoke": {
+        "file_count": 61,
+        "inventory_sha256": "29a0a14bbbd0e879e2cb6fb321758904a8fe8d5783612992f0de2585dca842d5",
+        "recursively_read_only": true,
+        "root": "/lustre/orion/ast207/proj-shared/dfielding/PIC/local-readiness/q023-bell-combined-observable-smoke-20260530"
+      }
+    },
+    "node_hour_cap": 10000.0,
+    "q007_adjacent_analysis_sha256": "bd1eb4dc58773b088ad3e97e8cf50bcd5fbda2aee61907767f52c10c34351113",
+    "q023_bell_continued_mhd_sha256": "0b1b419a1252cd8b82d517b448261ee7aa7b69984f36adfaa66dcd6b08b07943",
+    "q023_bell_initial_mhd_sha256": "e074f28151ec5abf42f2c77c5f4daf33d98ad5e86ab8146db785d2ed67feab30"
+  },
+  "ledger": {
+    "accounting_record_count": 23,
+    "failed_consumed_node_hours": 0.058888888888888886,
+    "failed_consumption_fraction": 0.5326633165829147,
+    "final_cumulative_node_hours": 0.11055555555555553,
+    "ledger_record_count": 56,
+    "ledger_tail_sequence_number": 55,
+    "ledger_tail_sha256": "538a5623cd672009bc903d6fc17b20b4dc7b503cae3e560aa362ebe0f3615b95",
+    "node_hour_cap": 10000.0,
+    "remaining_node_hours": 9999.889444444445,
+    "status_counts": {
+      "CANCELLED": 1,
+      "COMPLETED": 16,
+      "FAILED": 6
+    }
+  },
+  "q006": {
+    "labels": [
+      "uniform",
+      "SMR",
+      "audited AMR",
+      "AMR restart"
+    ],
+    "maximum_absolute_total_momentum_component": [
+      1.1102259272536248e-17,
+      0.011518120765686035,
+      0.011279763308323254,
+      0.030618773403261912
+    ],
+    "meshblocks": [
+      16,
+      72,
+      44,
+      58
+    ],
+    "particles": [
+      131072,
+      589824,
+      131072,
+      131072
+    ],
+    "relative_kinetic_energy_density_error": [
+      2.5204931937879615e-07,
+      5.6472393934516495e-05,
+      5.5610256003563174e-05,
+      0.0001528334531792954
+    ]
+  },
+  "q007_branch_spectrum": {
+    "direction=+1, polarization=+1": {
+      "final_max": 9.999988086567109e-07,
+      "final_min": 1.249706398209713e-07,
+      "initial_max": 1.0000000227346637e-06,
+      "initial_min": 1.250000061588413e-07
+    },
+    "direction=+1, polarization=-1": {
+      "final_max": 9.999975689383222e-07,
+      "final_min": 1.249743449564896e-07,
+      "initial_max": 1.0000000186950655e-06,
+      "initial_min": 1.2499999495436343e-07
+    },
+    "direction=-1, polarization=+1": {
+      "final_max": 9.99997564795264e-07,
+      "final_min": 1.2497349867253508e-07,
+      "initial_max": 1.0000000193685147e-06,
+      "initial_min": 1.2500000374430752e-07
+    },
+    "direction=-1, polarization=-1": {
+      "final_max": 9.999972955493464e-07,
+      "final_min": 1.2497270921645222e-07,
+      "initial_max": 1.0000000039577053e-06,
+      "initial_min": 1.250000000193082e-07
+    }
+  },
+  "q007_startup_residuals": {
+    "fields": [
+      "max MHD residual",
+      "relative macro-weight closure",
+      "max initial $|w|$"
+    ],
+    "labels": [
+      "crpai_oblate",
+      "crpai_prolate",
+      "crsi"
+    ],
+    "values": [
+      [
+        2.1728239606860766e-10,
+        1.5399734820675803e-09,
+        0.0
+      ],
+      [
+        2.1728239606860766e-10,
+        1.5399734820675803e-09,
+        0.0
+      ],
+      [
+        1.8142610070520648e-10,
+        1.868627919066057e-09,
+        0.0
+      ]
+    ]
+  },
+  "q008_convergence": {
+    "linear_compressing": {
+      "magnetic_mode_amplitude_endpoint_relative_error": {
+        "apparent_orders_32_to_64_and_64_to_128": [
+          3.02169006345,
+          2.725913365595356
+        ],
+        "residuals_nx1_32_64_128": [
+          0.08563907987666575,
+          0.010545147184371384,
+          0.001593936284937092
+        ]
+      },
+      "magnetic_phase_endpoint_absolute_error": {
+        "apparent_orders_32_to_64_and_64_to_128": [
+          1.6470015917423908,
+          1.8785644007004727
+        ],
+        "residuals_nx1_32_64_128": [
+          0.050625590488383665,
+          0.016164907349846658,
+          0.004396114408468321
+        ]
+      },
+      "velocity_mode_amplitude_endpoint_relative_error": {
+        "apparent_orders_32_to_64_and_64_to_128": [
+          3.092230263500048,
+          3.7091936783652892
+        ],
+        "residuals_nx1_32_64_128": [
+          0.08068088977812327,
+          0.009460555031252316,
+          0.0007233326342526158
+        ]
+      },
+      "velocity_phase_endpoint_absolute_error": {
+        "apparent_orders_32_to_64_and_64_to_128": [
+          1.632387759268083,
+          1.867669053533588
+        ],
+        "residuals_nx1_32_64_128": [
+          0.04913010328376899,
+          0.015847107245807734,
+          0.004342357645224837
+        ]
+      }
+    },
+    "linear_expanding": {
+      "magnetic_mode_amplitude_endpoint_relative_error": {
+        "apparent_orders_32_to_64_and_64_to_128": [
+          3.0288294288892237,
+          2.7487350057968833
+        ],
+        "residuals_nx1_32_64_128": [
+          0.061919068433698765,
+          0.007586752281706799,
+          0.0011287667737308604
+        ]
+      },
+      "magnetic_phase_endpoint_absolute_error": {
+        "apparent_orders_32_to_64_and_64_to_128": [
+          1.5718476196570057,
+          1.729439153679215
+        ],
+        "residuals_nx1_32_64_128": [
+          0.050459664996232334,
+          0.016973487338823645,
+          0.005118680469507808
+        ]
+      },
+      "velocity_mode_amplitude_endpoint_relative_error": {
+        "apparent_orders_32_to_64_and_64_to_128": [
+          3.0891641457583376,
+          3.6480011597641226
+        ],
+        "residuals_nx1_32_64_128": [
+          0.06803749215557131,
+          0.00799497716838704,
+          0.0006377631976940412
+        ]
+      },
+      "velocity_phase_endpoint_absolute_error": {
+        "apparent_orders_32_to_64_and_64_to_128": [
+          1.5895323994851145,
+          1.7300258718934631
+        ],
+        "residuals_nx1_32_64_128": [
+          0.05236680435662322,
+          0.017400396352176273,
+          0.005245289466817127
+        ]
+      }
+    },
+    "reciprocal_linear_compressing": {
+      "magnetic_mode_amplitude_endpoint_relative_error": {
+        "apparent_orders_32_to_64_and_64_to_128": [
+          3.1562476894028606,
+          4.06275894920934
+        ],
+        "residuals_nx1_32_64_128": [
+          0.06060408971314246,
+          0.0067979302493518245,
+          0.00040678449902831204
+        ]
+      },
+      "magnetic_phase_endpoint_absolute_error": {
+        "apparent_orders_32_to_64_and_64_to_128": [
+          1.5680427494609752,
+          1.7187022780791361
+        ],
+        "residuals_nx1_32_64_128": [
+          0.05058462187815138,
+          0.017060454856377305,
+          0.005183339634374562
+        ]
+      },
+      "velocity_mode_amplitude_endpoint_relative_error": {
+        "apparent_orders_32_to_64_and_64_to_128": [
+          2.9712697032487907,
+          2.6342366008988782
+        ],
+        "residuals_nx1_32_64_128": [
+          0.06859401614585325,
+          0.008746713984816523,
+          0.0014088368183446942
+        ]
+      },
+      "velocity_phase_endpoint_absolute_error": {
+        "apparent_orders_32_to_64_and_64_to_128": [
+          1.5895358899619718,
+          1.7329561817698382
+        ],
+        "residuals_nx1_32_64_128": [
+          0.052383332650268954,
+          0.017405846247257273,
+          0.00523628590143943
+        ]
+      }
+    },
+    "reciprocal_linear_expanding": {
+      "magnetic_mode_amplitude_endpoint_relative_error": {
+        "apparent_orders_32_to_64_and_64_to_128": [
+          3.1350393992201058,
+          3.8095053698564296
+        ],
+        "residuals_nx1_32_64_128": [
+          0.08404751484963047,
+          0.009567180767149353,
+          0.0006823521980126035
+        ]
+      },
+      "magnetic_phase_endpoint_absolute_error": {
+        "apparent_orders_32_to_64_and_64_to_128": [
+          1.644019871377275,
+          1.8669324135319165
+        ],
+        "residuals_nx1_32_64_128": [
+          0.05077959775211838,
+          0.016247627794321318,
+          0.0044543804264201015
+        ]
+      },
+      "velocity_mode_amplitude_endpoint_relative_error": {
+        "apparent_orders_32_to_64_and_64_to_128": [
+          2.9857689781800025,
+          2.723032928589396
+        ],
+        "residuals_nx1_32_64_128": [
+          0.08112260907674285,
+          0.010240847229776362,
+          0.001551033924236389
+        ]
+      },
+      "velocity_phase_endpoint_absolute_error": {
+        "apparent_orders_32_to_64_and_64_to_128": [
+          1.6317853924918186,
+          1.8696385470194734
+        ],
+        "residuals_nx1_32_64_128": [
+          0.04912941500952428,
+          0.01585350315323808,
+          0.0043381839138270095
+        ]
+      }
+    }
+  },
+  "q008_heatmap": {
+    "case_ids": [
+      "exponential_compressing_x1_llf_nx64",
+      "exponential_compressing_x2_llf_nx64",
+      "exponential_compressing_x3_llf_nx64",
+      "exponential_expanding_x1_hlld_nx64",
+      "exponential_expanding_x1_hlle_nx64",
+      "exponential_expanding_x1_llf_nx64",
+      "exponential_expanding_x2_llf_nx64",
+      "exponential_expanding_x3_llf_nx64",
+      "linear_compressing_x1_llf_nx128",
+      "linear_compressing_x1_llf_nx32",
+      "linear_compressing_x1_llf_nx64",
+      "linear_expanding_x1_llf_nx128",
+      "linear_expanding_x1_llf_nx32",
+      "linear_expanding_x1_llf_nx64",
+      "reciprocal_linear_compressing_x1_llf_nx128",
+      "reciprocal_linear_compressing_x1_llf_nx32",
+      "reciprocal_linear_compressing_x1_llf_nx64",
+      "reciprocal_linear_expanding_x1_llf_nx128",
+      "reciprocal_linear_expanding_x1_llf_nx32",
+      "reciprocal_linear_expanding_x1_llf_nx64",
+      "static_off_control_x1_llf_nx128",
+      "static_on_x1_llf_nx128"
+    ],
+    "guardrail_fraction_matrix": [
+      [
+        0.04006613619955779,
+        0.04006613619955779,
+        0.04006613619955779,
+        0.028660110432991104,
+        0.028879935962735637,
+        0.028882870927382065,
+        0.028882870927381177,
+        0.028883530586336637,
+        0.006383469430017108,
+        0.342556319506663,
+        0.042180588737485536,
+        0.004515067094923442,
+        0.24767627373479506,
+        0.030347009126827196,
+        0.0018377147600627808,
+        0.24241635885256985,
+        0.027191720997407298,
+        0.002961401884792103,
+        0.33619005939852187,
+        0.03826872306859741,
+        0.004028342977897559,
+        0.004028342977897559
+      ],
+      [
+        0.03953401922765121,
+        0.03953345369614336,
+        0.039534093563787565,
+        0.03313112295605247,
+        0.03336001697609392,
+        0.03336359794634047,
+        0.033363558510061786,
+        0.03336375709912209,
+        0.0028933305370104634,
+        0.32272355911249306,
+        0.03784222012500926,
+        0.002640037246430804,
+        0.27214996862228524,
+        0.03197990867354816,
+        0.005635347273378777,
+        0.274376064583413,
+        0.03498685593926609,
+        0.006204135696945556,
+        0.3244904363069714,
+        0.04096338891910545,
+        0.0041485145326984885,
+        0.0041485145326984885
+      ],
+      [
+        0.06483620486085329,
+        0.06483621257387995,
+        0.06483620486085329,
+        0.06795080426807942,
+        0.06805104310683419,
+        0.06805336887505575,
+        0.06805337658808241,
+        0.06805347847637222,
+        0.017584457633873285,
+        0.20250236195353466,
+        0.06465962939938663,
+        0.020474721878031232,
+        0.20183865998492934,
+        0.06789394935529458,
+        0.020733358537498248,
+        0.20233848751260552,
+        0.06824181942550922,
+        0.017817521705680406,
+        0.2031183910084735,
+        0.06499051117728527,
+        0.019139396411731013,
+        0.019139396411731013
+      ],
+      [
+        0.06339556040880723,
+        0.06339569749175666,
+        0.06339568568013476,
+        0.06951389070415814,
+        0.06961402166518837,
+        0.06961683555515208,
+        0.06961700746485633,
+        0.06961714290308407,
+        0.017369430580899348,
+        0.19652041313507596,
+        0.06338842898323094,
+        0.020981157867268507,
+        0.20946721742649288,
+        0.06960158540870509,
+        0.02094514360575772,
+        0.20953333060107582,
+        0.06962338498902909,
+        0.017352735655308038,
+        0.19651766003809712,
+        0.06341401261295232,
+        0.01913445624930432,
+        0.01913445624930432
+      ],
+      [
+        0.04155979281381712,
+        0.041555757884723016,
+        0.04156072711677201,
+        0.04146321576259866,
+        0.041469659984838945,
+        0.04147238615888348,
+        0.041467521155593906,
+        0.04147238615888348,
+        0.012825190066672012,
+        0.1894457363663899,
+        0.04362427295957907,
+        0.012791693975709834,
+        0.19071393603917486,
+        0.04342594949530891,
+        0.013548188950968635,
+        0.19276095180850536,
+        0.04501967176265656,
+        0.012404817821047001,
+        0.1885264541869927,
+        0.04383861016239414,
+        0.010115935387800506,
+        0.010115935387800506
+      ],
+      [
+        0.021000041600252622,
+        0.020995578529524675,
+        0.020999162559882007,
+        0.020995623622462035,
+        0.020902690773078502,
+        0.020897301351450338,
+        0.020895330667774097,
+        0.02089559545716544,
+        0.006575483280149406,
+        0.09747999573010956,
+        0.02218155334538587,
+        0.006563186009302595,
+        0.09781798969314569,
+        0.022314150375231802,
+        0.006831731882441889,
+        0.09640219101933513,
+        0.022587911292744237,
+        0.006216626795340631,
+        0.09886311652943494,
+        0.022088256911805396,
+        0.0050644345281027755,
+        0.0050644345281027755
+      ],
+      [
+        1e-14,
+        1e-14,
+        1e-14,
+        1e-14,
+        1e-14,
+        1e-14,
+        1e-14,
+        1e-14,
+        1e-14,
+        1e-14,
+        1e-14,
+        1e-14,
+        1e-14,
+        1e-14,
+        1e-14,
+        1e-14,
+        1e-14,
+        1e-14,
+        1e-14,
+        1e-14,
+        1e-14,
+        1e-14
+      ],
+      [
+        0.07505883657023471,
+        0.07505883657023471,
+        0.07505883657023471,
+        0.058035802172143214,
+        0.058424708341743514,
+        0.05843124808894329,
+        0.05843124808894329,
+        0.05843124808894329,
+        0.011689605922459378,
+        0.6097714705601778,
+        0.07382187266326934,
+        0.008906828566177083,
+        0.4736850674214055,
+        0.0574874897832518,
+        0.010331629923199248,
+        0.4769680644207992,
+        0.061483827852799156,
+        0.012290445070400224,
+        0.6122378595152003,
+        0.07795771903520077,
+        0.0077955851152000655,
+        0.0077955851152000655
+      ]
+    ],
+    "limits": {
+      "B amplitude maximum": 0.25,
+      "B phase maximum": 0.25,
+      "mass drift": 1e-06,
+      "phase lock": 0.01,
+      "scaled transverse energy": 0.25,
+      "u amplitude maximum": 0.25,
+      "u phase maximum": 0.25,
+      "undesired / desired Elsasser": 0.01
+    },
+    "maximum_guardrail_fraction": 0.6122378595152003,
+    "metrics": [
+      "B amplitude maximum",
+      "u amplitude maximum",
+      "B phase maximum",
+      "u phase maximum",
+      "phase lock",
+      "undesired / desired Elsasser",
+      "mass drift",
+      "scaled transverse energy"
+    ]
+  },
+  "q008_solver": {
+    "b_amplitude_relative_error": [
+      0.007165027608247776,
+      0.007219983990683909,
+      0.007220717731845516
+    ],
+    "b_phase_error": [
+      0.016987701067019856,
+      0.017012760776708546,
+      0.017013342218763938
+    ],
+    "solvers": [
+      "hlld",
+      "hlle",
+      "llf"
+    ]
+  },
+  "q011": {
+    "direction_mean": [
+      0.05589328578758783,
+      -5.995015168007582e-05,
+      0.006988822194154101
+    ],
+    "direction_second_moment": [
+      0.32829520688742364,
+      0.3532393578071331,
+      0.3184654353054432
+    ],
+    "maximum_absolute_relative_speed_residual": 4.816556980813402e-06,
+    "octant_counts": [
+      40,
+      34,
+      28,
+      39,
+      38,
+      38,
+      46,
+      46
+    ],
+    "particle_count": 309
+  },
+  "q023_bell_qualitative": {
+    "artifact_root": "/lustre/orion/ast207/proj-shared/dfielding/PIC/local-readiness/q023-bell-combined-observable-smoke-20260530",
+    "continued_cycle": 1,
+    "continued_maximum_absolute_bcc3": 0.00019106479885522276,
+    "continued_maximum_absolute_velz": 0.03636825084686279,
+    "continued_maximum_speed": 0.03666877923053429,
+    "continued_mhd_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/local-readiness/q023-bell-combined-observable-smoke-20260530/restart2d/bin/pic_q023_paper_bell_linear_restart2d_cont.mhd_w_bcc.00003.bin",
+    "continued_time": 0.0015625,
+    "initial_cycle": 0,
+    "initial_maximum_absolute_bcc3": 9.974322665584623e-07,
+    "initial_mhd_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/local-readiness/q023-bell-combined-observable-smoke-20260530/2d/bin/pic_q023_paper_bell_linear_2d_candidate.mhd_w_bcc.00000.bin",
+    "initial_time": 0.0,
+    "qualification_effect": "bounded_source_local_preparation_smoke_only",
+    "serialized_pic_phase_space_available": false
+  },
+  "sources": {
+    "ledger": "/lustre/orion/ast207/proj-shared/dfielding/PIC/ledger/node_hours.jsonl",
+    "pin": "/lustre/orion/ast207/proj-shared/dfielding/PIC/local-readiness/integrated-serial-host-binary-clean-20260531T034317Z",
+    "q006": "/lustre/orion/ast207/proj-shared/dfielding/PIC/q006-exact-isothermal-runtime-local-20260531-v4",
+    "q007": "/lustre/orion/ast207/proj-shared/dfielding/PIC/local-readiness/q007-paper-deltaf-runtime-replay-20260531-v4",
+    "q008": "/lustre/orion/ast207/proj-shared/dfielding/PIC/q008-cpaw-history-extension-20260531-v5",
+    "q011": "/lustre/orion/ast207/proj-shared/dfielding/PIC/local-readiness/q011-injection-distribution-runtime-local-20260531-v4",
+    "q011_successor": "/lustre/orion/ast207/proj-shared/dfielding/PIC/local-readiness/q011-injection-distribution-runtime-local-successor-audit-20260531-v1",
+    "q023_bell": "/lustre/orion/ast207/proj-shared/dfielding/PIC/local-readiness/q023-bell-combined-observable-smoke-20260530"
+  },
+  "validation_summary": {
+    "counts": [
+      710,
+      359,
+      90,
+      170,
+      88
+    ],
+    "labels": [
+      "publication\nsuite",
+      "Frontier\ncontrol plane",
+      "hardening\nfocus",
+      "JSON parse",
+      "Python AST"
+    ],
+    "manually_curated": true
+  }
+}
