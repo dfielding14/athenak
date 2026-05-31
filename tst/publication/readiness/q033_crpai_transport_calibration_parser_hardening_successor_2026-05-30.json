@@ -17,7 +17,7 @@
   },
   "artifact_bindings": {
     "inputs/tests/pic_q033_crpai_transport_calibration_candidate.athinput": "77ffeb7bdfd1f1f2299db7e4ee257d105b580a6bd554cd244e6d9e0c8214ce58",
-    "tst/publication/analyze_q033_crpai_transport_calibration_candidate.py": "7c88a2c5fa3516e43217df34ee601db3b83abf90042f10754812232c40e53383",
+    "tst/publication/analyze_q033_crpai_transport_calibration_candidate.py": "4bc59655126c937a5eaafcff51dc3d1fd1191b733868124c7e79553db4db72ad",
     "tst/publication/test_analyze_q033_crpai_transport_calibration_candidate.py": "8360a4754d53da110291c499f92a9031978cae2f6e622cb739983a3d47a771f9",
     "tst/publication/readiness/q033_crpai_transport_calibration_applicability_2026-05-30.md": "0ced16ab8fbe21425bec91df093a936118d0365d45a27760caf6f80e8398713a"
   },
@@ -28,7 +28,7 @@
     "src/particles/particles_pushers.cpp": "7cd3ac4b6fc95529d3097a3799b74f064a7e865c8b7be08f830a60dbee103330",
     "src/particles/particles_moments.cpp": "3b206b1268bc71a0d6745dcda5422da54d255ac6cb73fddd566b89b507da6c58",
     "src/mhd/mhd.hpp": "655197f1582463020747212294e965e19a078a59d0708ebf7a6a127e5b652d4e",
-    "src/mhd/mhd_tasks.cpp": "339326c2cc8913c321affeafc618a8fea6cbd9133ea6b26a9b58daa2baafa6d2",
+    "src/mhd/mhd_tasks.cpp": "228144855b0925e6405d14e33d22dd90381a01a6f317049bf3d6cd041a99530f",
     "docs/source/engineering/pic_mhd_model_contract.md": "de319a56b34a6be33a41e9da3719d9a06a7646a1ff26748900d746d1b167bf80"
   },
   "bounded_boundary_artifact_bindings": {

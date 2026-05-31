@@ -37,12 +37,12 @@
   },
   "artifact_bindings": {
     "inputs/tests/pic_q032_plotnikov_damped_crsi_candidate.athinput": "ae471a610d8c2c50367c58df372361c1dfeec08644224789f9cba8a55df722a9",
-    "tst/publication/analyze_q032_plotnikov_damped_crsi_candidate.py": "aa17006cdf635885cacde8bc8a75bff3f9d68de8d0bf08c0497fcffcdfa33a33",
+    "tst/publication/analyze_q032_plotnikov_damped_crsi_candidate.py": "9b4b0b00f37ec1c8d63cffaaf1a1680665a3c5559b18dd327899d9780e57fd2c",
     "tst/publication/test_analyze_q032_plotnikov_damped_crsi_candidate.py": "1d2ad55efa9e56c51bf5fec7dee47d315869ef63862e111340ed8b53e951a63d",
     "tst/publication/readiness/q032_reduced_static_neutral_plotnikov_boundary_2026-05-30.md": "a820d63754cfe8446dd892ec16345e95180c7e617ed95bd564b4e53a7845d5a6"
   },
   "implementation_source_bindings": {
-    "src/mhd/mhd_tasks.cpp": "339326c2cc8913c321affeafc618a8fea6cbd9133ea6b26a9b58daa2baafa6d2",
+    "src/mhd/mhd_tasks.cpp": "228144855b0925e6405d14e33d22dd90381a01a6f317049bf3d6cd041a99530f",
     "src/particles/particles.hpp": "452e6091ad6f1ce50156c770d304ac36020cb53927cc1e40ba6af73e7c3bb462",
     "src/particles/particles.cpp": "045632afb67c4ff301979716d822fddc8ded8c2ce1eae4725a0d34e32533e956",
     "docs/source/engineering/pic_mhd_model_contract.md": "ebad2e21725ea15eb301e03f32d8ca8fab9c6503aec90cd7090be4637402ed64"

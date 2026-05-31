@@ -45,12 +45,12 @@
   },
   "artifact_bindings": {
     "inputs/tests/pic_q029_extended_hall_normalization_candidate.athinput": "dc159e5f9a80aec8bb94723b69f5de9edaafd624889ac7ea9a88518b46e6bb80",
-    "tst/publication/analyze_q029_hall_extension_candidate.py": "b745bcb105532311b3abf3db4b02c2b5eca029923cdf6026ea6c61b312e663c3",
+    "tst/publication/analyze_q029_hall_extension_candidate.py": "6d5c4c287dcd834ad3e4212677b2d417d5eac0834ae51444c6f1b64cf2636626",
     "tst/publication/test_analyze_q029_hall_extension_candidate.py": "ed07c8e4d6fe64756c23dade93888ecaec4fc1e88765509d7bdd3d3338da55b6",
     "tst/publication/readiness/q029_experimental_hall_normalization_derivation_2026-05-30.md": "3d5c6cfd9e0e4e06cf28d836935e3b5175b931983da377e8b1c2bfb2a80e7b74"
   },
   "implementation_source_bindings": {
-    "src/mhd/mhd_tasks.cpp": "339326c2cc8913c321affeafc618a8fea6cbd9133ea6b26a9b58daa2baafa6d2",
+    "src/mhd/mhd_tasks.cpp": "228144855b0925e6405d14e33d22dd90381a01a6f317049bf3d6cd041a99530f",
     "src/particles/particles.hpp": "452e6091ad6f1ce50156c770d304ac36020cb53927cc1e40ba6af73e7c3bb462",
     "src/particles/particles.cpp": "4b88b1b0a0d83aed824f2af6f2fb77fc5793cdeb9b0e2d65d408535f22e45c44",
     "docs/source/engineering/pic_mhd_model_contract.md": "de319a56b34a6be33a41e9da3719d9a06a7646a1ff26748900d746d1b167bf80"

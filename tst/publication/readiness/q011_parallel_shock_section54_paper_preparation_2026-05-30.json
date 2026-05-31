@@ -12,7 +12,7 @@
     },
     {
       "path": "src/pgen/tests/pic_parallel_shock.cpp",
-      "sha256": "6e1f7b7d91c7a8b61898b9b29697e76e804319279426684366e227efeb87bf96"
+      "sha256": "509fb2387e3b9933f919b062962158805bacce27e928fa396cd0583e082cbbf9"
     },
     {
       "path": "tst/scripts/particles/pic_parallel_shock_section54_paper.py",

@@ -45,7 +45,7 @@ _SOURCE_BINDINGS = {
     "src/mhd/mhd.hpp":
         "655197f1582463020747212294e965e19a078a59d0708ebf7a6a127e5b652d4e",
     "src/mhd/mhd_tasks.cpp":
-        "339326c2cc8913c321affeafc618a8fea6cbd9133ea6b26a9b58daa2baafa6d2",
+        "228144855b0925e6405d14e33d22dd90381a01a6f317049bf3d6cd041a99530f",
     "docs/source/engineering/pic_mhd_model_contract.md":
         "de319a56b34a6be33a41e9da3719d9a06a7646a1ff26748900d746d1b167bf80",
 }
@@ -75,7 +75,7 @@ _SOURCE_REQUIRED_SNIPPETS = {
         "const Real df_weight = deltaf_local ? pr(IPDFWT,p)",
     ),
     "src/mhd/mhd_tasks.cpp": (
-        "Apply reduced wave damping after the final expanding-box physical-frame sources.",
+        "Apply reduced wave damping after final expanding-box physical-frame sources.",
         "const Real factor = exp(-ppart->pic_ion_neutral_collision_rate*",
         "const Real background_rho =",
     ),
