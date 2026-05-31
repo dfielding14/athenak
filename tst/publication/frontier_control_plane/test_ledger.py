@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import csv
 import fcntl
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -19,7 +20,8 @@ from ledger import accounting, append_primary_event, initialize_ledger
 from ledger import genesis_anchor_paths, migrate_existing_genesis_anchors
 from ledger import ledger_lock
 from ledger import repair_mirrored_state, validate_mirrored_state
-from ledger import validate_primary_chain, validate_receipts, write_csv
+from ledger import slurm_walltime_seconds
+from ledger import transition_payload, validate_primary_chain, validate_receipts, write_csv
 from ledger import validated_read_only_mirrored_state_snapshot
 
 
@@ -27,6 +29,7 @@ class LedgerTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
         root = Path(self.temporary.name)
+        self.root = root
         self.ledger = root / "orion" / "ledger" / "node_hours.jsonl"
         self.csv = root / "orion" / "ledger" / "node_hours.csv"
         self.receipts = root / "orion" / "ledger" / "mirror_receipts.jsonl"
@@ -85,6 +88,114 @@ class LedgerTests(unittest.TestCase):
             ),
         }
 
+    def _reservation_event(
+        self, *, reservation_id: str = "reservation-1"
+    ) -> dict[str, object]:
+        return {
+            "event_type": "reservation",
+            "reservation_id": reservation_id,
+            "state": "reserved",
+            "reconciled": False,
+            "requested_nodes": 1,
+            "requested_walltime": "00:01:00",
+            "reserved_node_hours": 1.0 / 60.0,
+        }
+
+    def _recovery_handoff(
+        self,
+        reservation: dict[str, object],
+        *,
+        mode: str = "fresh_scheduler_binding",
+    ) -> tuple[Path, str]:
+        name = "35181896-6465-4d01-b80f-69841dcf947c.json"
+        handoff: dict[str, object] = {
+            "schema_version": 1,
+            "status": "authorized_terminal_scheduler_job_id_received_recovery",
+            "handoff_id": name.removesuffix(".json"),
+            "reservation_id": reservation["reservation_id"],
+            "submission_id": reservation["submission_id"],
+            "job_id": "1234",
+            "manifest_path": reservation["manifest_path"],
+            "manifest_sha256": reservation["manifest_sha256"],
+            "prior_control_plane_version": reservation["control_plane_version"],
+            "recovery_control_plane_version": "b" * 64,
+            "prior_active_policy_sha256": reservation["active_policy_sha256"],
+            "prior_active_promotion_sha256": reservation["active_promotion_sha256"],
+            "pending_marker_sha256": "e" * 64,
+        }
+        if mode == "purged_scontrol_cancelled_zero_execution":
+            handoff["scheduler_binding_recovery"] = {
+                "mode": mode,
+                "job_id": "1234",
+                "job_name": "run_installed_control_plane_job.sh",
+                "state": "CANCELLED by 123",
+                "elapsed_raw": 0,
+                "allocated_nodes": 0,
+                "comment": "",
+                "account": "ast207",
+                "submit": "2026-05-30T00:00:00",
+                "start": "None",
+                "end": "2026-05-30T00:00:00",
+                "exit_code": "0:0",
+            }
+            handoff["reservation_job_binding_attestation"] = {
+                "mode": (
+                    "reviewed_operator_attestation_for_unprovable_purged_"
+                    "reservation_job_binding"
+                ),
+                "reservation_id": reservation["reservation_id"],
+                "job_id": "1234",
+            }
+        payload = (json.dumps(handoff, sort_keys=True) + "\n").encode("utf-8")
+        paths = [
+            self.root / "orion" / "policy" / "recovery_handoffs" / name,
+            self.root / "project_home" / "policy" / "recovery_handoffs" / name,
+        ]
+        for path in paths:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(payload)
+            path.chmod(0o444)
+        return paths[0], hashlib.sha256(payload).hexdigest()
+
+    def _recovery_reservation_event(
+        self,
+        *,
+        reservation_id: str = "reservation-1",
+        submission_id: str = "submission",
+    ) -> dict[str, object]:
+        event = self._reservation_event(reservation_id=reservation_id)
+        event.update(
+            {
+                "manifest_path": str(
+                    self.root
+                    / "orion"
+                    / "manifests"
+                    / "campaign"
+                    / submission_id
+                    / "manifest.json"
+                ),
+                "submission_id": submission_id,
+                "manifest_sha256": "f" * 64,
+                "control_plane_version": "a" * 64,
+                "active_policy_sha256": "c" * 64,
+                "active_promotion_sha256": "d" * 64,
+            }
+        )
+        return event
+
+    def _rewrite_recovery_handoff(
+        self, handoff_path: Path, mutate: object
+    ) -> str:
+        handoff = json.loads(handoff_path.read_text(encoding="utf-8"))
+        mutate(handoff)
+        payload = (json.dumps(handoff, sort_keys=True) + "\n").encode("utf-8")
+        for root in [self.root / "orion", self.root / "project_home"]:
+            path = root / "policy" / "recovery_handoffs" / handoff_path.name
+            path.chmod(0o600)
+            path.write_bytes(payload)
+            path.chmod(0o444)
+        return hashlib.sha256(payload).hexdigest()
+
     def _drop_last_line(self, path: Path) -> None:
         lines = path.read_text(encoding="utf-8").splitlines()
         path.write_text("".join(line + "\n" for line in lines[:-1]), encoding="utf-8")
@@ -99,6 +210,7 @@ class LedgerTests(unittest.TestCase):
             "requested_nodes": 2,
             "requested_walltime": "00:30:00",
             "reserved_node_hours": 1.0,
+            "reconciled": False,
         }
         self.append({**common, "event_type": "reservation", "state": "reserved"})
         self.append(
@@ -171,6 +283,551 @@ class LedgerTests(unittest.TestCase):
         event = self._manual_accounting_event()
         event["cumulative_consumed_node_hours"] = 999.0
         with self.assertRaisesRegex(ValueError, "cumulative usage differs"):
+            self.append(event)
+
+    def test_registered_reconciliation_rejects_inconsistent_usage(self) -> None:
+        common = {
+            "reservation_id": "reservation-1",
+            "submission_id": "submission-1",
+            "submission_scope": "registered_science",
+            "registered_science_authorization_id": "f1-clean-gyro-v1",
+            "clean_candidate_manifest_sha256": "a" * 64,
+            "requested_nodes": 2,
+            "requested_walltime": "00:30:00",
+            "reserved_node_hours": 1.0,
+            "reconciled": False,
+        }
+        self.append({**common, "event_type": "reservation", "state": "reserved"})
+        self.append(
+            {
+                **common,
+                "event_type": "job_id_attached",
+                "job_id": "1234",
+                "state": "submitted",
+            }
+        )
+        event = {
+            **common,
+            "event_type": "reconciliation",
+            "job_id": "1234",
+            "state": "COMPLETED",
+            "reconciled": True,
+            "scheduler_reported_allocated_nodes": 2,
+            "billed_nodes": 2,
+            "elapsed_seconds": 600,
+            "consumed_node_hours": 1.0 / 3.0,
+            "cumulative_consumed_node_hours": 1.0 / 3.0,
+        }
+        for field, value, message in [
+            ("scheduler_reported_allocated_nodes", "2", "usage is invalid"),
+            ("billed_nodes", 999, "usage is invalid"),
+            ("billed_nodes", 2.0, "usage is invalid"),
+            ("elapsed_seconds", -1, "usage is invalid"),
+            ("consumed_node_hours", 0.001, "usage differs"),
+            ("cumulative_consumed_node_hours", 999.0, "cumulative usage differs"),
+        ]:
+            with self.subTest(field=field):
+                mutated = dict(event)
+                mutated[field] = value
+                with self.assertRaisesRegex(ValueError, message):
+                    self.append(mutated)
+
+    def test_registered_reconciliation_rejects_duplicate_terminal_event(self) -> None:
+        common = {
+            "reservation_id": "reservation-1",
+            "submission_id": "submission-1",
+            "requested_nodes": 2,
+            "requested_walltime": "00:30:00",
+            "reserved_node_hours": 1.0,
+            "reconciled": False,
+        }
+        self.append({**common, "event_type": "reservation", "state": "reserved"})
+        self.append(
+            {
+                **common,
+                "event_type": "job_id_attached",
+                "job_id": "1234",
+                "state": "submitted",
+            }
+        )
+        event = {
+            **common,
+            "event_type": "reconciliation",
+            "job_id": "1234",
+            "state": "COMPLETED",
+            "reconciled": True,
+            "scheduler_reported_allocated_nodes": 2,
+            "billed_nodes": 2,
+            "elapsed_seconds": 600,
+            "consumed_node_hours": 1.0 / 3.0,
+            "cumulative_consumed_node_hours": 1.0 / 3.0,
+        }
+        self.append(event)
+        event["cumulative_consumed_node_hours"] = 2.0 / 3.0
+        with self.assertRaisesRegex(ValueError, "transition is invalid"):
+            self.append(event)
+
+    def test_registered_reconciliation_rejects_nonterminal_state(self) -> None:
+        reservation = self.append(self._reservation_event())
+        attachment = transition_payload(reservation)
+        attachment.update(
+            {"event_type": "job_id_attached", "job_id": "1234", "state": "submitted"}
+        )
+        attachment = self.append(attachment)
+        reconciliation = transition_payload(attachment)
+        reconciliation.update(
+            {
+                "event_type": "reconciliation",
+                "state": "RUNNING",
+                "reconciled": True,
+                "scheduler_reported_allocated_nodes": 1,
+                "billed_nodes": 1,
+                "elapsed_seconds": 60,
+                "consumed_node_hours": 1.0 / 60.0,
+                "cumulative_consumed_node_hours": 1.0 / 60.0,
+            }
+        )
+        with self.assertRaisesRegex(ValueError, "state is not terminal"):
+            self.append(reconciliation)
+
+    def test_registered_attachment_rejects_scheduler_job_id_reuse(self) -> None:
+        for reservation_id in ["reservation-1", "reservation-2"]:
+            reservation = self.append(
+                self._reservation_event(reservation_id=reservation_id)
+            )
+            attachment = transition_payload(reservation)
+            attachment.update(
+                {
+                    "event_type": "job_id_attached",
+                    "job_id": "1234",
+                    "state": "submitted",
+                }
+            )
+            if reservation_id == "reservation-1":
+                self.append(attachment)
+            else:
+                with self.assertRaisesRegex(ValueError, "already has a ledger owner"):
+                    self.append(attachment)
+
+    def test_registered_lifecycle_rejects_payload_rewrites_and_unknown_events(
+        self,
+    ) -> None:
+        reservation = self.append(self._reservation_event())
+        attachment = transition_payload(reservation)
+        attachment.update(
+            {"event_type": "job_id_attached", "job_id": "1234", "state": "submitted"}
+        )
+        rewritten_attachment = dict(attachment)
+        rewritten_attachment["reserved_node_hours"] = 0.0
+        with self.assertRaisesRegex(ValueError, "rewrites immutable fields"):
+            self.append(rewritten_attachment)
+        attachment = self.append(attachment)
+        reconciliation = transition_payload(attachment)
+        reconciliation.update(
+            {
+                "event_type": "reconciliation",
+                "state": "COMPLETED",
+                "reconciled": True,
+                "scheduler_reported_allocated_nodes": 1,
+                "billed_nodes": 1,
+                "elapsed_seconds": 3600,
+                "consumed_node_hours": 1.0,
+                "cumulative_consumed_node_hours": 1.0,
+            }
+        )
+        rewritten_reconciliation = dict(reconciliation)
+        rewritten_reconciliation["requested_nodes"] = 10
+        rewritten_reconciliation["billed_nodes"] = 10
+        rewritten_reconciliation["consumed_node_hours"] = 10.0
+        rewritten_reconciliation["cumulative_consumed_node_hours"] = 10.0
+        with self.assertRaisesRegex(ValueError, "rewrites immutable fields"):
+            self.append(rewritten_reconciliation)
+        self.append(reconciliation)
+        with self.assertRaisesRegex(ValueError, "cancellation transition is invalid"):
+            self.append(
+                {
+                    **transition_payload(reservation),
+                    "event_type": "reservation_cancelled",
+                    "state": "cancelled",
+                }
+            )
+        with self.assertRaisesRegex(ValueError, "Unknown reservation-bearing"):
+            self.append(
+                {
+                    "event_type": "opaque",
+                    "reservation_id": "reservation-1",
+                    "state": "cancelled",
+                }
+            )
+
+    def test_registered_reservation_rejects_false_reserved_usage(self) -> None:
+        for field, value in [
+            ("requested_walltime", "00:00:00"),
+            ("requested_walltime", "invalid"),
+            ("reserved_node_hours", 0.0),
+        ]:
+            with self.subTest(field=field, value=value):
+                event = self._reservation_event()
+                event[field] = value
+                with self.assertRaisesRegex(ValueError, "reservation"):
+                    self.append(event)
+
+    def test_slurm_walltime_parser_rounds_and_supports_day_forms(self) -> None:
+        self.assertEqual(slurm_walltime_seconds("10"), 600)
+        self.assertEqual(slurm_walltime_seconds("60"), 3600)
+        self.assertEqual(slurm_walltime_seconds("120"), 7200)
+        self.assertEqual(slurm_walltime_seconds("10:01"), 660)
+        self.assertEqual(slurm_walltime_seconds("60:00"), 3600)
+        self.assertEqual(slurm_walltime_seconds("00:10:01"), 660)
+        self.assertEqual(slurm_walltime_seconds("1-02"), 93600)
+        self.assertEqual(slurm_walltime_seconds("1-02:03"), 93780)
+        self.assertEqual(slurm_walltime_seconds("0-01:02"), 3720)
+
+    def test_registered_reservation_rejects_unrounded_reserved_usage(self) -> None:
+        event = self._reservation_event()
+        event["requested_walltime"] = "00:10:01"
+        event["reserved_node_hours"] = 601.0 / 3600.0
+        with self.assertRaisesRegex(ValueError, "reservation"):
+            self.append(event)
+
+    def test_scheduler_job_ids_are_canonical_and_globally_unique(self) -> None:
+        reservation = self.append(self._reservation_event())
+        for job_id in ["", " ", "0123", "0"]:
+            with self.subTest(job_id=job_id):
+                attachment = transition_payload(reservation)
+                attachment.update(
+                    {
+                        "event_type": "job_id_attached",
+                        "job_id": job_id,
+                        "state": "submitted",
+                    }
+                )
+                with self.assertRaisesRegex(ValueError, "not canonical"):
+                    self.append(attachment)
+
+        manual = self._manual_accounting_event()
+        manual["job_id"] = "0123"
+        with self.assertRaisesRegex(ValueError, "not canonical"):
+            self.append(manual)
+
+        manual = self.append(self._manual_accounting_event())
+        duplicate = dict(manual)
+        duplicate.pop("sequence_number")
+        duplicate.pop("previous_event_sha256")
+        duplicate.pop("event_sha256")
+        duplicate.pop("timestamp")
+        with self.assertRaisesRegex(ValueError, "already has a ledger owner"):
+            self.append(duplicate)
+
+        reservation = self.append(
+            self._reservation_event(reservation_id="reservation-2")
+        )
+        attachment = transition_payload(reservation)
+        attachment.update(
+            {
+                "event_type": "job_id_attached",
+                "job_id": str(manual["job_id"]),
+                "state": "submitted",
+            }
+        )
+        with self.assertRaisesRegex(ValueError, "already has a ledger owner"):
+            self.append(attachment)
+
+        reservation = self.append(
+            self._reservation_event(reservation_id="reservation-3")
+        )
+        attachment = transition_payload(reservation)
+        attachment.update(
+            {
+                "event_type": "job_id_attached",
+                "job_id": "9999",
+                "state": "submitted",
+            }
+        )
+        self.append(attachment)
+        manual = self._manual_accounting_event()
+        manual["job_id"] = "9999"
+        with self.assertRaisesRegex(ValueError, "already has a ledger owner"):
+            self.append(manual)
+
+    def test_registered_recovery_provenance_is_valid_and_preserved(self) -> None:
+        reservation_event = self._reservation_event()
+        reservation_event["manifest_path"] = str(
+            self.root / "orion" / "manifests" / "campaign" / "submission" / "manifest.json"
+        )
+        reservation_event["submission_id"] = "submission"
+        reservation_event["manifest_sha256"] = "f" * 64
+        reservation_event["control_plane_version"] = "a" * 64
+        reservation_event["active_policy_sha256"] = "c" * 64
+        reservation_event["active_promotion_sha256"] = "d" * 64
+        reservation = self.append(reservation_event)
+        valid_handoff_path, valid_handoff_sha256 = self._recovery_handoff(reservation)
+        for fields in [
+            {"terminal_recovery_handoff_path": "/tmp/handoff"},
+            {
+                "terminal_recovery_handoff_path": "relative",
+                "terminal_recovery_handoff_sha256": "a" * 64,
+                "terminal_recovery_mode": "fresh_scheduler_binding",
+            },
+            {
+                "terminal_recovery_handoff_path": str(valid_handoff_path),
+                "terminal_recovery_handoff_sha256": "not-a-hash",
+                "terminal_recovery_mode": "fresh_scheduler_binding",
+            },
+            {
+                "terminal_recovery_handoff_path": str(valid_handoff_path),
+                "terminal_recovery_handoff_sha256": "a" * 64,
+                "terminal_recovery_mode": "invented",
+            },
+        ]:
+            with self.subTest(fields=fields):
+                attachment = transition_payload(reservation)
+                attachment.update(
+                    {
+                        "event_type": "job_id_attached",
+                        "job_id": "1234",
+                        "state": "submitted",
+                        **fields,
+                    }
+                )
+                with self.assertRaisesRegex(ValueError, "provenance"):
+                    self.append(attachment)
+
+        attachment = transition_payload(reservation)
+        attachment.update(
+            {
+                "event_type": "job_id_attached",
+                "job_id": "1234",
+                "state": "submitted",
+                "attached_by_control_plane_version": "b" * 64,
+                "terminal_recovery_handoff_path": str(valid_handoff_path),
+                "terminal_recovery_handoff_sha256": valid_handoff_sha256,
+                "terminal_recovery_mode": "fresh_scheduler_binding",
+            }
+        )
+        attachment = self.append(attachment)
+        reconciliation = transition_payload(attachment)
+        for field in [
+            "terminal_recovery_handoff_path",
+            "terminal_recovery_handoff_sha256",
+            "terminal_recovery_mode",
+        ]:
+            reconciliation.pop(field)
+        reconciliation.update(
+            {
+                "event_type": "reconciliation",
+                "state": "COMPLETED",
+                "reconciled": True,
+                "scheduler_reported_allocated_nodes": 1,
+                "billed_nodes": 1,
+                "elapsed_seconds": 60,
+                "consumed_node_hours": 1.0 / 60.0,
+                "cumulative_consumed_node_hours": 1.0 / 60.0,
+            }
+        )
+        with self.assertRaisesRegex(ValueError, "rewrites immutable fields"):
+            self.append(reconciliation)
+
+    def test_registered_recovery_provenance_requires_mirrored_handoff(self) -> None:
+        reservation_event = self._reservation_event()
+        reservation_event["manifest_path"] = str(
+            self.root / "orion" / "manifests" / "campaign" / "submission" / "manifest.json"
+        )
+        reservation = self.append(reservation_event)
+        attachment = transition_payload(reservation)
+        attachment.update(
+            {
+                "event_type": "job_id_attached",
+                "job_id": "1234",
+                "state": "submitted",
+                "terminal_recovery_handoff_path": str(
+                    self.root
+                    / "orion"
+                    / "policy"
+                    / "recovery_handoffs"
+                    / "35181896-6465-4d01-b80f-69841dcf947c.json"
+                ),
+                "terminal_recovery_handoff_sha256": "a" * 64,
+                "terminal_recovery_mode": "fresh_scheduler_binding",
+            }
+        )
+        with self.assertRaisesRegex(ValueError, "mirror is missing"):
+            self.append(attachment)
+
+    def test_registered_reconciliation_rejects_late_recovery_provenance(self) -> None:
+        reservation = self.append(self._reservation_event())
+        attachment = transition_payload(reservation)
+        attachment.update(
+            {"event_type": "job_id_attached", "job_id": "1234", "state": "submitted"}
+        )
+        attachment = self.append(attachment)
+        reconciliation = transition_payload(attachment)
+        reconciliation.update(
+            {
+                "event_type": "reconciliation",
+                "state": "COMPLETED",
+                "reconciled": True,
+                "scheduler_reported_allocated_nodes": 1,
+                "billed_nodes": 1,
+                "elapsed_seconds": 60,
+                "consumed_node_hours": 1.0 / 60.0,
+                "cumulative_consumed_node_hours": 1.0 / 60.0,
+                "terminal_recovery_handoff_path": (
+                    "/tmp/policy/recovery_handoffs/"
+                    "35181896-6465-4d01-b80f-69841dcf947c.json"
+                ),
+                "terminal_recovery_handoff_sha256": "a" * 64,
+                "terminal_recovery_mode": "fresh_scheduler_binding",
+            }
+        )
+        with self.assertRaisesRegex(ValueError, "adds unexpected fields"):
+            self.append(reconciliation)
+
+    def test_registered_reconciliation_rejects_false_purged_zero_execution(self) -> None:
+        reservation_event = self._reservation_event()
+        reservation_event["manifest_path"] = str(
+            self.root / "orion" / "manifests" / "campaign" / "submission" / "manifest.json"
+        )
+        reservation_event["submission_id"] = "submission"
+        reservation_event["manifest_sha256"] = "f" * 64
+        reservation_event["control_plane_version"] = "a" * 64
+        reservation_event["active_policy_sha256"] = "c" * 64
+        reservation_event["active_promotion_sha256"] = "d" * 64
+        reservation = self.append(reservation_event)
+        handoff_path, handoff_sha256 = self._recovery_handoff(
+            reservation, mode="purged_scontrol_cancelled_zero_execution"
+        )
+        attachment = transition_payload(reservation)
+        attachment.update(
+            {
+                "event_type": "job_id_attached",
+                "job_id": "1234",
+                "state": "submitted",
+                "attached_by_control_plane_version": "b" * 64,
+                "terminal_recovery_handoff_path": str(handoff_path),
+                "terminal_recovery_handoff_sha256": handoff_sha256,
+                "terminal_recovery_mode": "purged_scontrol_cancelled_zero_execution",
+            }
+        )
+        attachment = self.append(attachment)
+        reconciliation = transition_payload(attachment)
+        reconciliation.update(
+            {
+                "event_type": "reconciliation",
+                "state": "COMPLETED",
+                "reconciled": True,
+                "scheduler_reported_allocated_nodes": 1,
+                "billed_nodes": 1,
+                "elapsed_seconds": 3600,
+                "consumed_node_hours": 1.0,
+                "cumulative_consumed_node_hours": 1.0,
+            }
+        )
+        with self.assertRaisesRegex(ValueError, "zero-execution"):
+            self.append(reconciliation)
+
+    def test_registered_recovery_handoff_is_bound_for_every_record(self) -> None:
+        reservation = self.append(self._recovery_reservation_event())
+        handoff_path, handoff_sha256 = self._recovery_handoff(reservation)
+        attachment = transition_payload(reservation)
+        attachment.update(
+            {
+                "event_type": "job_id_attached",
+                "job_id": "1234",
+                "state": "submitted",
+                "attached_by_control_plane_version": "b" * 64,
+                "terminal_recovery_handoff_path": str(handoff_path),
+                "terminal_recovery_handoff_sha256": handoff_sha256,
+                "terminal_recovery_mode": "fresh_scheduler_binding",
+            }
+        )
+        self.append(attachment)
+
+        second = self.append(
+            self._recovery_reservation_event(
+                reservation_id="reservation-2", submission_id="submission-2"
+            )
+        )
+        attachment = transition_payload(second)
+        attachment.update(
+            {
+                "event_type": "job_id_attached",
+                "job_id": "5678",
+                "state": "submitted",
+                "attached_by_control_plane_version": "b" * 64,
+                "terminal_recovery_handoff_path": str(handoff_path),
+                "terminal_recovery_handoff_sha256": handoff_sha256,
+                "terminal_recovery_mode": "fresh_scheduler_binding",
+            }
+        )
+        with self.assertRaisesRegex(ValueError, "not bound"):
+            self.append(attachment)
+
+    def test_registered_recovery_handoff_rejects_matching_null_security_binding(
+        self,
+    ) -> None:
+        event = self._recovery_reservation_event()
+        event["manifest_sha256"] = None
+        reservation = self.append(event)
+        handoff_path, handoff_sha256 = self._recovery_handoff(reservation)
+        attachment = transition_payload(reservation)
+        attachment.update(
+            {
+                "event_type": "job_id_attached",
+                "job_id": "1234",
+                "state": "submitted",
+                "attached_by_control_plane_version": "b" * 64,
+                "terminal_recovery_handoff_path": str(handoff_path),
+                "terminal_recovery_handoff_sha256": handoff_sha256,
+                "terminal_recovery_mode": "fresh_scheduler_binding",
+            }
+        )
+        with self.assertRaisesRegex(ValueError, "not bound"):
+            self.append(attachment)
+
+    def test_registered_recovery_handoff_rejects_malformed_purged_snapshot(
+        self,
+    ) -> None:
+        reservation = self.append(self._recovery_reservation_event())
+        handoff_path, _ = self._recovery_handoff(
+            reservation, mode="purged_scontrol_cancelled_zero_execution"
+        )
+        for field, value in [
+            ("state", "CANCELLEDEVIL"),
+            ("elapsed_raw", False),
+            ("allocated_nodes", False),
+            ("account", "OTHER"),
+        ]:
+            with self.subTest(field=field):
+                handoff_sha256 = self._rewrite_recovery_handoff(
+                    handoff_path,
+                    lambda handoff, field=field, value=value: handoff[
+                        "scheduler_binding_recovery"
+                    ].__setitem__(field, value),
+                )
+                attachment = transition_payload(reservation)
+                attachment.update(
+                    {
+                        "event_type": "job_id_attached",
+                        "job_id": "1234",
+                        "state": "submitted",
+                        "attached_by_control_plane_version": "b" * 64,
+                        "terminal_recovery_handoff_path": str(handoff_path),
+                        "terminal_recovery_handoff_sha256": handoff_sha256,
+                        "terminal_recovery_mode": (
+                            "purged_scontrol_cancelled_zero_execution"
+                        ),
+                    }
+                )
+                with self.assertRaisesRegex(ValueError, "zero-execution handoff"):
+                    self.append(attachment)
+
+    def test_manual_direct_srun_reconciliation_rejects_boolean_billed_nodes(
+        self,
+    ) -> None:
+        event = self._manual_accounting_event()
+        event["billed_nodes"] = True
+        with self.assertRaisesRegex(ValueError, "usage is invalid"):
             self.append(event)
 
     def test_mirror_head_divergence_fails_closed(self) -> None:
@@ -261,12 +918,9 @@ class LedgerTests(unittest.TestCase):
         paths = [self.ledger, self.csv, self.receipts, self.mirror]
         original = {path: path.read_bytes() for path in paths}
         self.append(
-            {
-                "event_type": "reservation",
-                "reservation_id": "transient-alternate-reservation",
-                "state": "reserved",
-                "reserved_node_hours": 0.0,
-            }
+            self._reservation_event(
+                reservation_id="transient-alternate-reservation"
+            )
         )
         alternate = {path: path.read_bytes() for path in paths}
         for path, data in original.items():
@@ -302,7 +956,45 @@ class LedgerTests(unittest.TestCase):
                 mirror_root=self.mirror.parent.parent,
             ) as records:
                 self.assertEqual(len(records), 1)
-        self.assertEqual(reopened_lengths, [2])
+        self.assertEqual(reopened_lengths, [2, 2])
+
+    def test_read_only_snapshot_rejects_recovery_handoff_replacement(self) -> None:
+        reservation = self.append(self._recovery_reservation_event())
+        handoff_path, handoff_sha256 = self._recovery_handoff(reservation)
+        attachment = transition_payload(reservation)
+        attachment.update(
+            {
+                "event_type": "job_id_attached",
+                "job_id": "1234",
+                "state": "submitted",
+                "attached_by_control_plane_version": "b" * 64,
+                "terminal_recovery_handoff_path": str(handoff_path),
+                "terminal_recovery_handoff_sha256": handoff_sha256,
+                "terminal_recovery_mode": "fresh_scheduler_binding",
+            }
+        )
+        self.append(attachment)
+        mirror_path = (
+            self.root
+            / "project_home"
+            / "policy"
+            / "recovery_handoffs"
+            / handoff_path.name
+        )
+        with self.assertRaisesRegex(ValueError, "snapshot path changed"):
+            with validated_read_only_mirrored_state_snapshot(
+                self.ledger,
+                self.receipts,
+                self.mirror,
+                ledger_root=self.ledger.parent.parent,
+                receipts_root=self.receipts.parent.parent,
+                mirror_root=self.mirror.parent.parent,
+            ):
+                for path in [handoff_path, mirror_path]:
+                    replacement = path.with_name(f"replacement-{path.name}")
+                    replacement.write_bytes(path.read_bytes())
+                    replacement.chmod(0o444)
+                    replacement.replace(path)
 
     def test_read_only_snapshot_missing_parent_fails_without_creation(self) -> None:
         missing = self.mirror.parent.parent / "missing" / "node_hours.jsonl"
@@ -387,7 +1079,7 @@ class LedgerTests(unittest.TestCase):
             validate_primary_chain(self.ledger)
 
     def test_repair_copies_missing_mirror_suffix_and_receipt(self) -> None:
-        self.append({"event_type": "reservation", "state": "reserved"})
+        self.append(self._reservation_event())
         self._drop_last_line(self.mirror)
         self._drop_last_line(self.receipts)
         result = repair_mirrored_state(
@@ -407,7 +1099,7 @@ class LedgerTests(unittest.TestCase):
         )
 
     def test_repair_appends_missing_receipt_only(self) -> None:
-        self.append({"event_type": "reservation", "state": "reserved"})
+        self.append(self._reservation_event())
         self._drop_last_line(self.receipts)
         result = repair_mirrored_state(
             self.ledger,

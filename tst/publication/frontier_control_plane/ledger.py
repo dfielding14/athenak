@@ -29,6 +29,7 @@ from control_plane_common import atomic_write_json, atomic_write_json_at
 from control_plane_common import durable_mkdir_parents, fsync_directory
 from control_plane_common import open_directory_below, read_json_bytes
 from control_plane_common import read_stable_regular_file_below
+from control_plane_common import scheduler_account_matches_authorized
 from control_plane_common import stable_serialization_anchor
 
 
@@ -132,6 +133,48 @@ MANUAL_ACCOUNTING_EVENT_FIELDS = {
     "state",
     "reconciled",
     "notes",
+}
+REGISTERED_RESERVATION_EVENT_TYPES = {
+    "reservation",
+    "job_id_attached",
+    "reservation_cancelled",
+    "reconciliation",
+}
+SCHEDULER_JOB_OWNERSHIP_EVENT_TYPES = {
+    "job_id_attached",
+    "manual_allocation_reconciliation",
+}
+TERMINAL_RECOVERY_FIELDS = {
+    "terminal_recovery_handoff_path",
+    "terminal_recovery_handoff_sha256",
+    "terminal_recovery_mode",
+}
+TERMINAL_RECOVERY_MODES = {
+    "fresh_scheduler_binding",
+    "purged_scontrol_cancelled_zero_execution",
+}
+REGISTERED_ATTACHMENT_CHANGES = {
+    "state",
+    "job_id",
+    "attached_by_control_plane_version",
+    "terminal_recovery_handoff_path",
+    "terminal_recovery_handoff_sha256",
+    "terminal_recovery_mode",
+    "notes",
+}
+REGISTERED_CANCELLATION_CHANGES = {
+    "state",
+    "notes",
+}
+REGISTERED_RECONCILIATION_CHANGES = {
+    "state",
+    "reconciled",
+    "reconciled_by_control_plane_version",
+    "scheduler_reported_allocated_nodes",
+    "billed_nodes",
+    "elapsed_seconds",
+    "consumed_node_hours",
+    "cumulative_consumed_node_hours",
 }
 _PINNED_PARENT_DESCRIPTORS: ContextVar[dict[Path, int]] = ContextVar(
     "_PINNED_PARENT_DESCRIPTORS", default={}
@@ -394,6 +437,49 @@ def _is_lowercase_sha256(value: object) -> bool:
     )
 
 
+def slurm_walltime_seconds(value: object) -> int:
+    if not isinstance(value, str) or not value:
+        raise ValueError("Registered reservation walltime is invalid")
+    days = 0
+    time_value = value
+    has_days = "-" in value
+    try:
+        if has_days:
+            day_text, time_value = value.split("-", 1)
+            days = int(day_text)
+        fields = [int(field) for field in time_value.split(":")]
+    except ValueError as error:
+        raise ValueError("Registered reservation walltime is invalid") from error
+    if has_days and len(fields) == 1:
+        hours = fields[0]
+        minutes = 0
+        seconds = 0
+    elif has_days and len(fields) == 2:
+        hours, minutes = fields
+        seconds = 0
+    elif len(fields) == 1:
+        hours = 0
+        minutes = fields[0]
+        seconds = 0
+    elif len(fields) == 2:
+        hours = 0
+        minutes, seconds = fields
+    elif len(fields) == 3:
+        hours, minutes, seconds = fields
+    else:
+        raise ValueError("Registered reservation walltime is invalid")
+    if (
+        days < 0
+        or hours < 0
+        or minutes < 0
+        or seconds not in range(60)
+        or ((has_days or len(fields) == 3) and minutes not in range(60))
+    ):
+        raise ValueError("Registered reservation walltime is invalid")
+    seconds = (((days * 24) + hours) * 60 + minutes) * 60 + seconds
+    return ((seconds + 59) // 60) * 60
+
+
 def _accounting_without_validation(
     records: list[dict[str, object]],
 ) -> dict[str, float]:
@@ -420,6 +506,244 @@ def _accounting_without_validation(
     }
 
 
+def _require_registered_transition_payload(
+    prior: dict[str, object],
+    record: dict[str, object],
+    *,
+    allowed_changes: set[str],
+) -> None:
+    prior_payload = transition_payload(prior)
+    payload = transition_payload(record)
+    if set(payload) - set(prior_payload) - allowed_changes:
+        raise ValueError("Registered reservation transition adds unexpected fields")
+    for key, value in prior_payload.items():
+        if key not in allowed_changes and payload.get(key) != value:
+            raise ValueError("Registered reservation transition rewrites immutable fields")
+
+
+def _require_canonical_scheduler_job_id(value: object) -> str:
+    if (
+        not isinstance(value, str)
+        or not value.isascii()
+        or not value.isdigit()
+        or value.startswith("0")
+    ):
+        raise ValueError("Scheduler job ID is not canonical")
+    return value
+
+
+def _require_new_scheduler_job_id(
+    records: list[dict[str, object]], job_id: str
+) -> None:
+    if any(
+        earlier.get("event_type") in SCHEDULER_JOB_OWNERSHIP_EVENT_TYPES
+        and earlier.get("job_id") == job_id
+        for earlier in records
+    ):
+        raise ValueError("Scheduler job ID already has a ledger owner")
+
+
+def _require_terminal_recovery_provenance(
+    record: dict[str, object], *, prior: dict[str, object] | None = None
+) -> None:
+    present = TERMINAL_RECOVERY_FIELDS & set(record)
+    if present and present != TERMINAL_RECOVERY_FIELDS:
+        raise ValueError("Terminal-recovery provenance is incomplete")
+    if present:
+        path = record["terminal_recovery_handoff_path"]
+        handoff_path = Path(str(path))
+        manifest_path = Path(str(record.get("manifest_path", "")))
+        try:
+            canonical_handoff_id = str(uuid.UUID(handoff_path.stem))
+        except ValueError:
+            canonical_handoff_id = ""
+        try:
+            pic_root = manifest_path.parents[3]
+        except IndexError:
+            pic_root = Path("")
+        if (
+            not isinstance(path, str)
+            or not os.path.isabs(path)
+            or path != os.path.abspath(path)
+            or not manifest_path.is_absolute()
+            or manifest_path.parents[2] != pic_root / "manifests"
+            or handoff_path.parent != pic_root / "policy" / "recovery_handoffs"
+            or handoff_path.suffix != ".json"
+            or handoff_path.stem != canonical_handoff_id
+            or not _is_lowercase_sha256(record["terminal_recovery_handoff_sha256"])
+            or record["terminal_recovery_mode"] not in TERMINAL_RECOVERY_MODES
+        ):
+            raise ValueError("Terminal-recovery provenance is invalid")
+    if prior is not None and TERMINAL_RECOVERY_FIELDS & set(prior):
+        if any(record.get(field) != prior[field] for field in TERMINAL_RECOVERY_FIELDS):
+            raise ValueError("Terminal-recovery provenance is not preserved")
+
+
+def _require_purged_zero_execution_semantics(record: dict[str, object]) -> None:
+    if record.get("terminal_recovery_mode") == "purged_scontrol_cancelled_zero_execution":
+        if (
+            record.get("state") != "CANCELLED"
+            or record.get("scheduler_reported_allocated_nodes") != 0
+            or record.get("elapsed_seconds") != 0
+            or record.get("consumed_node_hours") != 0.0
+        ):
+            raise ValueError("Purged zero-execution reconciliation semantics differ")
+
+
+def _validate_terminal_recovery_handoff_mirrors(
+    records: list[dict[str, object]],
+    *,
+    ledger_jsonl: Path,
+    mirror_jsonl: Path,
+    state: dict[Path, bytes] | None = None,
+) -> None:
+    pic_root = Path(os.path.abspath(ledger_jsonl.parent.parent))
+    project_home_root = Path(os.path.abspath(mirror_jsonl.parent.parent))
+    cached_bytes: dict[Path, tuple[bytes, bytes]] = {}
+    for record in records:
+        if not TERMINAL_RECOVERY_FIELDS & set(record):
+            continue
+        handoff_path = Path(str(record["terminal_recovery_handoff_path"]))
+        if handoff_path.parent != pic_root / "policy" / "recovery_handoffs":
+            raise ValueError("Terminal-recovery handoff is outside the PIC root")
+        mirror_path = project_home_root / "policy" / "recovery_handoffs" / handoff_path.name
+        if handoff_path not in cached_bytes:
+            try:
+                if state is None:
+                    handoff_bytes = read_stable_regular_file_below(
+                        handoff_path, pic_root, require_read_only_mode=True
+                    )
+                    mirror_bytes = read_stable_regular_file_below(
+                        mirror_path, project_home_root, require_read_only_mode=True
+                    )
+                else:
+                    handoff_bytes = state[handoff_path]
+                    mirror_bytes = state[mirror_path]
+            except (FileNotFoundError, KeyError) as error:
+                raise ValueError("Terminal-recovery handoff mirror is missing") from error
+            cached_bytes[handoff_path] = (handoff_bytes, mirror_bytes)
+        handoff_bytes, mirror_bytes = cached_bytes[handoff_path]
+        if handoff_bytes != mirror_bytes:
+            raise ValueError("Terminal-recovery handoff mirror bytes differ")
+        if hashlib.sha256(handoff_bytes).hexdigest() != record[
+            "terminal_recovery_handoff_sha256"
+        ]:
+            raise ValueError("Terminal-recovery handoff SHA-256 differs")
+        _validate_terminal_recovery_handoff_bytes(record, handoff_path, handoff_bytes)
+
+
+def _validate_terminal_recovery_handoff_bytes(
+    record: dict[str, object], handoff_path: Path, handoff_bytes: bytes
+) -> None:
+    handoff = read_json_bytes(handoff_bytes, label=str(handoff_path))
+    base_fields = {
+        "schema_version",
+        "status",
+        "handoff_id",
+        "reservation_id",
+        "submission_id",
+        "job_id",
+        "manifest_path",
+        "manifest_sha256",
+        "prior_control_plane_version",
+        "recovery_control_plane_version",
+        "prior_active_policy_sha256",
+        "prior_active_promotion_sha256",
+        "pending_marker_sha256",
+    }
+    mode = record["terminal_recovery_mode"]
+    extra_fields = (
+        {"scheduler_binding_recovery", "reservation_job_binding_attestation"}
+        if mode == "purged_scontrol_cancelled_zero_execution"
+        else set()
+    )
+    if (
+        set(handoff) != base_fields | extra_fields
+        or type(handoff.get("schema_version")) is not int
+        or handoff.get("schema_version") != 1
+        or handoff.get("status")
+        != "authorized_terminal_scheduler_job_id_received_recovery"
+        or handoff.get("handoff_id") != handoff_path.stem
+        or not isinstance(handoff.get("reservation_id"), str)
+        or not handoff["reservation_id"]
+        or handoff.get("reservation_id") != record.get("reservation_id")
+        or not isinstance(handoff.get("submission_id"), str)
+        or not handoff["submission_id"]
+        or handoff.get("submission_id") != record.get("submission_id")
+        or not isinstance(handoff.get("job_id"), str)
+        or not handoff["job_id"]
+        or handoff.get("job_id") != record.get("job_id")
+        or not isinstance(handoff.get("manifest_path"), str)
+        or not os.path.isabs(handoff["manifest_path"])
+        or handoff.get("manifest_path") != record.get("manifest_path")
+        or not _is_lowercase_sha256(handoff.get("manifest_sha256"))
+        or handoff.get("manifest_sha256") != record.get("manifest_sha256")
+        or not _is_lowercase_sha256(handoff.get("prior_control_plane_version"))
+        or handoff.get("prior_control_plane_version")
+        != record.get("control_plane_version")
+        or not _is_lowercase_sha256(handoff.get("recovery_control_plane_version"))
+        or handoff.get("recovery_control_plane_version")
+        != record.get("attached_by_control_plane_version")
+        or not _is_lowercase_sha256(handoff.get("prior_active_policy_sha256"))
+        or handoff.get("prior_active_policy_sha256")
+        != record.get("active_policy_sha256")
+        or not _is_lowercase_sha256(handoff.get("prior_active_promotion_sha256"))
+        or handoff.get("prior_active_promotion_sha256")
+        != record.get("active_promotion_sha256")
+        or not _is_lowercase_sha256(handoff.get("pending_marker_sha256"))
+    ):
+        raise ValueError("Terminal-recovery handoff bytes are not bound to the ledger")
+    if mode == "fresh_scheduler_binding":
+        return
+    snapshot = handoff["scheduler_binding_recovery"]
+    attestation = handoff["reservation_job_binding_attestation"]
+    if (
+        not isinstance(snapshot, dict)
+        or set(snapshot)
+        != {
+            "mode",
+            "job_id",
+            "job_name",
+            "state",
+            "elapsed_raw",
+            "allocated_nodes",
+            "comment",
+            "account",
+            "submit",
+            "start",
+            "end",
+            "exit_code",
+        }
+        or snapshot.get("mode") != mode
+        or snapshot.get("job_id") != record.get("job_id")
+        or snapshot.get("job_name") != "run_installed_control_plane_job.sh"
+        or not isinstance(snapshot.get("state"), str)
+        or not snapshot["state"].split()
+        or snapshot["state"].split()[0] != "CANCELLED"
+        or type(snapshot.get("elapsed_raw")) is not int
+        or snapshot.get("elapsed_raw") != 0
+        or type(snapshot.get("allocated_nodes")) is not int
+        or snapshot.get("allocated_nodes") != 0
+        or snapshot.get("comment") != ""
+        or not scheduler_account_matches_authorized(snapshot.get("account"))
+        or not isinstance(snapshot.get("submit"), str)
+        or not snapshot["submit"]
+        or snapshot.get("start") != "None"
+        or snapshot.get("end") != snapshot["submit"]
+        or snapshot.get("exit_code") != "0:0"
+        or attestation
+        != {
+            "mode": (
+                "reviewed_operator_attestation_for_unprovable_purged_"
+                "reservation_job_binding"
+            ),
+            "reservation_id": record.get("reservation_id"),
+            "job_id": record.get("job_id"),
+        }
+    ):
+        raise ValueError("Purged zero-execution handoff bytes are invalid")
+
+
 def _validate_accounting_records(records: list[dict[str, object]]) -> None:
     for index, record in enumerate(records):
         event_type = record.get("event_type")
@@ -429,7 +753,67 @@ def _validate_accounting_records(records: list[dict[str, object]]) -> None:
             _nonnegative_finite_number(
                 record, "reserved_node_hours", label="Ledger reservation"
             )
+        if (
+            "reservation_id" in record
+            or event_type in REGISTERED_RESERVATION_EVENT_TYPES
+        ):
+            reservation_id = record.get("reservation_id")
+            if not isinstance(reservation_id, str) or not reservation_id:
+                raise ValueError("Registered reservation identifier is invalid")
+            prior = latest_reservations(records[:index]).get(reservation_id)
+            if event_type == "reservation":
+                requested_nodes = record.get("requested_nodes")
+                walltime_seconds = slurm_walltime_seconds(
+                    record.get("requested_walltime")
+                )
+                reserved = _nonnegative_finite_number(
+                    record, "reserved_node_hours", label="Registered reservation"
+                )
+                if (
+                    prior is not None
+                    or record.get("state") != "reserved"
+                    or record.get("reconciled") is not False
+                    or type(requested_nodes) is not int
+                    or requested_nodes <= 0
+                    or walltime_seconds <= 0
+                    or reserved != requested_nodes * walltime_seconds / 3600.0
+                    or TERMINAL_RECOVERY_FIELDS & set(record)
+                ):
+                    raise ValueError("Registered reservation event is invalid")
+            elif event_type == "job_id_attached":
+                job_id = _require_canonical_scheduler_job_id(record.get("job_id"))
+                _require_new_scheduler_job_id(records[:index], job_id)
+                if (
+                    prior is None
+                    or prior.get("event_type") != "reservation"
+                    or prior.get("state") != "reserved"
+                    or prior.get("reconciled") is not False
+                    or record.get("state") != "submitted"
+                    or record.get("reconciled") is not False
+                ):
+                    raise ValueError("Registered attachment transition is invalid")
+                _require_registered_transition_payload(
+                    prior, record, allowed_changes=REGISTERED_ATTACHMENT_CHANGES
+                )
+                _require_terminal_recovery_provenance(record, prior=prior)
+            elif event_type == "reservation_cancelled":
+                if (
+                    prior is None
+                    or prior.get("event_type") != "reservation"
+                    or prior.get("state") != "reserved"
+                    or prior.get("reconciled") is not False
+                    or record.get("state") != "cancelled"
+                    or record.get("reconciled") is not False
+                ):
+                    raise ValueError("Registered cancellation transition is invalid")
+                _require_registered_transition_payload(
+                    prior, record, allowed_changes=REGISTERED_CANCELLATION_CHANGES
+                )
+            elif event_type != "reconciliation":
+                raise ValueError("Unknown reservation-bearing ledger event")
         if event_type == "manual_allocation_reconciliation":
+            job_id = _require_canonical_scheduler_job_id(record.get("job_id"))
+            _require_new_scheduler_job_id(records[:index], job_id)
             if (
                 set(record) != MANUAL_ACCOUNTING_EVENT_FIELDS
                 or record.get("reconciled") is not True
@@ -469,6 +853,7 @@ def _validate_accounting_records(records: list[dict[str, object]]) -> None:
             if (
                 type(allocated_nodes) is not int
                 or allocated_nodes < 0
+                or type(billed_nodes) is not int
                 or billed_nodes != allocated_nodes
                 or type(elapsed_seconds) is not int
                 or elapsed_seconds < 0
@@ -499,9 +884,58 @@ def _validate_accounting_records(records: list[dict[str, object]]) -> None:
         elif event_type == "reconciliation":
             if record.get("reconciled") is not True:
                 raise ValueError("Registered reconciliation must be reconciled")
-            _nonnegative_finite_number(
+            if record.get("state") not in MANUAL_ACCOUNTING_TERMINAL_STATES:
+                raise ValueError("Registered reconciliation state is not terminal")
+            reservation_id = record.get("reservation_id")
+            prior = latest_reservations(records[:index]).get(str(reservation_id))
+            _require_canonical_scheduler_job_id(record.get("job_id"))
+            if (
+                prior is None
+                or prior.get("event_type") != "job_id_attached"
+                or prior.get("reconciled", False) is not False
+                or prior.get("job_id") != record.get("job_id")
+            ):
+                raise ValueError("Registered reconciliation transition is invalid")
+            _require_registered_transition_payload(
+                prior, record, allowed_changes=REGISTERED_RECONCILIATION_CHANGES
+            )
+            _require_terminal_recovery_provenance(record, prior=prior)
+            _require_purged_zero_execution_semantics(record)
+            requested_nodes = record.get("requested_nodes")
+            allocated_nodes = record.get("scheduler_reported_allocated_nodes")
+            billed_nodes = record.get("billed_nodes")
+            elapsed_seconds = record.get("elapsed_seconds")
+            if (
+                type(requested_nodes) is not int
+                or requested_nodes <= 0
+                or type(allocated_nodes) is not int
+                or allocated_nodes < 0
+                or type(billed_nodes) is not int
+                or billed_nodes != max(requested_nodes, allocated_nodes)
+                or type(elapsed_seconds) is not int
+                or elapsed_seconds < 0
+            ):
+                raise ValueError("Registered reconciliation usage is invalid")
+            consumed = _nonnegative_finite_number(
                 record, "consumed_node_hours", label="Registered reconciliation"
             )
+            if consumed != billed_nodes * elapsed_seconds / 3600.0:
+                raise ValueError("Registered reconciliation usage differs")
+            cumulative = _nonnegative_finite_number(
+                record,
+                "cumulative_consumed_node_hours",
+                label="Registered reconciliation",
+            )
+            expected_cumulative = (
+                _accounting_without_validation(records[:index])[
+                    "cumulative_consumed_node_hours"
+                ]
+                + consumed
+            )
+            if not math.isclose(
+                cumulative, expected_cumulative, rel_tol=0.0, abs_tol=1.0e-12
+            ):
+                raise ValueError("Registered reconciliation cumulative usage differs")
 
 
 def accounting(records: list[dict[str, object]]) -> dict[str, float]:
@@ -1012,6 +1446,10 @@ def _validate_recoverable_manual_accounting_suffix(
     ]
     for record, job_id in zip(suffix, suffix_job_ids):
         scheduler = reviewed_scheduler_results[job_id]
+        _require_canonical_scheduler_job_id(job_id)
+        _require_new_scheduler_job_id(
+            records[:pre_tranche_sequence_number], job_id
+        )
         if set(record) != MANUAL_ACCOUNTING_EVENT_FIELDS:
             raise ValueError("Incomplete manual-accounting Orion suffix event is malformed")
         if (
@@ -1050,6 +1488,7 @@ def _validate_recoverable_manual_accounting_suffix(
         if (
             type(allocated_nodes) is not int
             or allocated_nodes < 0
+            or type(billed_nodes) is not int
             or billed_nodes != allocated_nodes
             or type(elapsed_seconds) is not int
             or elapsed_seconds < 0
@@ -1391,6 +1830,9 @@ def validate_mirrored_state(
         root=receipts_root,
     )
     _validate_genesis_anchors(ledger_jsonl, mirror_jsonl, local_records, receipts)
+    _validate_terminal_recovery_handoff_mirrors(
+        local_records, ledger_jsonl=ledger_jsonl, mirror_jsonl=mirror_jsonl
+    )
     return local_records
 
 
@@ -1400,6 +1842,7 @@ def _validate_mirrored_state_bytes(
     ledger_jsonl: Path,
     receipts_jsonl: Path,
     mirror_jsonl: Path,
+    validate_handoffs: bool = True,
 ) -> list[dict[str, object]]:
     local_records = _validate_primary_records(
         _read_jsonl_bytes(state[ledger_jsonl], path=ledger_jsonl),
@@ -1427,7 +1870,36 @@ def _validate_mirrored_state_bytes(
         records=local_records,
         receipts=receipts,
     )
+    if validate_handoffs:
+        _validate_terminal_recovery_handoff_mirrors(
+            local_records,
+            ledger_jsonl=ledger_jsonl,
+            mirror_jsonl=mirror_jsonl,
+            state=state,
+        )
     return local_records
+
+
+def _terminal_recovery_handoff_paths(
+    records: list[dict[str, object]],
+    *,
+    ledger_jsonl: Path,
+    mirror_jsonl: Path,
+) -> list[Path]:
+    pic_root = Path(os.path.abspath(ledger_jsonl.parent.parent))
+    project_home_root = Path(os.path.abspath(mirror_jsonl.parent.parent))
+    paths: list[Path] = []
+    for record in records:
+        if not TERMINAL_RECOVERY_FIELDS & set(record):
+            continue
+        handoff_path = Path(str(record["terminal_recovery_handoff_path"]))
+        if handoff_path.parent != pic_root / "policy" / "recovery_handoffs":
+            raise ValueError("Terminal-recovery handoff is outside the PIC root")
+        mirror_path = project_home_root / "policy" / "recovery_handoffs" / handoff_path.name
+        for path in [handoff_path, mirror_path]:
+            if path not in paths:
+                paths.append(path)
+    return paths
 
 
 def _ledger_state_paths(
@@ -1523,22 +1995,62 @@ def validated_read_only_mirrored_state_snapshot(
                 ledger_jsonl=ledger_jsonl,
                 receipts_jsonl=receipts_jsonl,
                 mirror_jsonl=mirror_jsonl,
+                validate_handoffs=False,
             )
-            _require_same_pinned_regular_files(descriptors)
-            validated = {
-                path: _read_descriptor_bytes(descriptor)
-                for path, descriptor in descriptors.items()
+            handoff_paths = _terminal_recovery_handoff_paths(
+                records, ledger_jsonl=ledger_jsonl, mirror_jsonl=mirror_jsonl
+            )
+            handoff_roots = {
+                Path(os.path.abspath(path.parent)): (
+                    Path(os.path.abspath(ledger_root))
+                    if path.parent == ledger_jsonl.parent.parent / "policy" / "recovery_handoffs"
+                    else Path(os.path.abspath(mirror_root))
+                )
+                for path in handoff_paths
             }
-            if initial != validated:
-                raise ValueError("Authoritative PIC ledger bytes changed during validation")
-            yield records
-            _require_same_pinned_regular_files(descriptors)
-            final = {
-                path: _read_descriptor_bytes(descriptor)
-                for path, descriptor in descriptors.items()
-            }
-            if validated != final:
-                raise ValueError("Authoritative PIC ledger bytes changed during snapshot use")
+            with _pinned_parent_directories(
+                handoff_paths, create_missing=False, roots=handoff_roots
+            ):
+                for path in handoff_paths:
+                    parent_descriptor = _parent_descriptor(path)
+                    if parent_descriptor is None:
+                        raise ValueError(
+                            f"Missing pinned parent descriptor for snapshot file: {path}"
+                        )
+                    descriptor = os.open(
+                        path.name,
+                        os.O_RDONLY | os.O_NOFOLLOW,
+                        dir_fd=parent_descriptor,
+                    )
+                    metadata = os.fstat(descriptor)
+                    if not stat.S_ISREG(metadata.st_mode):
+                        os.close(descriptor)
+                        raise ValueError(f"Expected a regular snapshot file: {path}")
+                    if metadata.st_mode & 0o222:
+                        os.close(descriptor)
+                        raise ValueError(f"Expected a read-only snapshot file: {path}")
+                    descriptors[path] = descriptor
+                _require_same_pinned_regular_files(descriptors)
+                validated = {
+                    path: _read_descriptor_bytes(descriptor)
+                    for path, descriptor in descriptors.items()
+                }
+                records = _validate_mirrored_state_bytes(
+                    validated,
+                    ledger_jsonl=ledger_jsonl,
+                    receipts_jsonl=receipts_jsonl,
+                    mirror_jsonl=mirror_jsonl,
+                )
+                if initial != {path: validated[path] for path in initial}:
+                    raise ValueError("Authoritative PIC ledger bytes changed during validation")
+                yield records
+                _require_same_pinned_regular_files(descriptors)
+                final = {
+                    path: _read_descriptor_bytes(descriptor)
+                    for path, descriptor in descriptors.items()
+                }
+                if validated != final:
+                    raise ValueError("Authoritative PIC ledger bytes changed during snapshot use")
         finally:
             for descriptor in descriptors.values():
                 os.close(descriptor)
@@ -1762,6 +2274,9 @@ def _append_primary_event_pinned(
     record.setdefault("timestamp", utc_now())
     record["event_sha256"] = record_sha256(record, "event_sha256")
     _validate_accounting_records([*local_records, record])
+    _validate_terminal_recovery_handoff_mirrors(
+        [*local_records, record], ledger_jsonl=ledger_jsonl, mirror_jsonl=mirror_jsonl
+    )
     if not allow_incomplete_manual_accounting:
         require_no_incomplete_manual_accounting_marker(ledger_jsonl, mirror_jsonl)
     _append_jsonl(ledger_jsonl, record)

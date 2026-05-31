@@ -47,6 +47,7 @@ from control_plane_common import verify_snapshot_files
 from ledger import accounting, append_primary_event_locked, ledger_lock
 from ledger import latest_reservations, require_explicit_genesis, transition_payload
 from ledger import repair_mirrored_state_locked, validate_mirrored_state
+from ledger import slurm_walltime_seconds
 from ledger import validated_read_only_mirrored_state_snapshot
 
 
@@ -96,22 +97,10 @@ def _require_run_artifact_dir(manifest: dict[str, object]) -> Path:
 
 
 def _walltime_seconds(value: str) -> int:
-    days = 0
-    time_value = value
-    if "-" in value:
-        day_text, time_value = value.split("-", 1)
-        days = int(day_text)
-    fields = [int(field) for field in time_value.split(":")]
-    if len(fields) == 2:
-        hours = 0
-        minutes, seconds = fields
-    elif len(fields) == 3:
-        hours, minutes, seconds = fields
-    else:
-        raise ValueError(f"Unsupported Slurm walltime: {value}")
-    if minutes >= 60 or seconds >= 60:
-        raise ValueError(f"Unsupported Slurm walltime: {value}")
-    return (((days * 24) + hours) * 60 + minutes) * 60 + seconds
+    try:
+        return slurm_walltime_seconds(value)
+    except ValueError as error:
+        raise ValueError(f"Unsupported Slurm walltime: {value}") from error
 
 
 def _directives(job_script: Path) -> dict[str, str]:
