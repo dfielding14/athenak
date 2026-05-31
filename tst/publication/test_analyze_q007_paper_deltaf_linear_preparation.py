@@ -609,6 +609,8 @@ class Q007PaperDeltaFLinearPreparationTests(unittest.TestCase):
             ("crsi", "executable_sha256", "3" * 64, "executable_sha256"),
             ("crsi", "overrides", ["time/nlim=1"], "overrides"),
             ("crsi", "returncode", 1, "returncode"),
+            ("crsi", "returncode", False, "returncode"),
+            ("crsi", "returncode", 0.0, "returncode"),
             ("crsi", "produced_file_sha256", {}, "produced payload"),
         )
         for label, key, value, expected in mutations:
@@ -626,6 +628,24 @@ class Q007PaperDeltaFLinearPreparationTests(unittest.TestCase):
                     )
                     with self.assertRaisesRegex(q007.ContractError, expected):
                         q007._validate_runtime_invocations(root, pinned)
+
+    def test_retained_json_guard_rejects_boolean_aliases(self) -> None:
+        expected = {
+            "clean_empty_directory_configure": True,
+            "configure_returncode": 0,
+            "mpi_used": False,
+        }
+        for replacement in (
+            {"clean_empty_directory_configure": 1},
+            {"clean_empty_directory_configure": 1.0},
+            {"configure_returncode": False},
+            {"configure_returncode": 0.0},
+            {"mpi_used": 0},
+            {"mpi_used": 0.0},
+        ):
+            with self.subTest(replacement=replacement):
+                with self.assertRaisesRegex(q007.ContractError, "primitive type drifted"):
+                    q007._require_exact_match({**expected, **replacement}, expected, "metadata")
 
     def test_runtime_invocation_closure_rejects_unexpected_claim_key(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

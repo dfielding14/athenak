@@ -126,6 +126,43 @@ class Q029HallBellLinearRawTests(unittest.TestCase):
         with self.assertRaisesRegex(raw.ContractError, "trace value drift"):
             raw.validate_raw_trace_bundle(projected, self.artifact_root)
 
+    def test_dimension_geometry_and_provenance_numeric_aliases_fail_closed(
+        self,
+    ) -> None:
+        for alias in (True, 1.0):
+            with self.subTest(dimension_alias=alias):
+                with self.assertRaisesRegex(raw.ContractError, "dimension"):
+                    raw._raw_geometry(alias)
+                with self.assertRaisesRegex(raw.ContractError, "dimension"):
+                    raw._mode_basis(alias)
+                bundle = copy.deepcopy(self.bundle)
+                bundle["traces"][0]["dimension"] = alias
+                with self.assertRaisesRegex(raw.ContractError, "dimension"):
+                    raw.validate_raw_trace_bundle(bundle, self.artifact_root)
+
+        for key, index, alias in (
+            ("nx", 0, 32.0),
+            ("xmin", 0, False),
+            ("extent", 0, 1),
+        ):
+            with self.subTest(geometry_key=key, geometry_alias=alias):
+                bundle = copy.deepcopy(self.bundle)
+                bundle["traces"][0]["raw_geometry"][key][index] = alias
+                with self.assertRaisesRegex(raw.ContractError, "geometry schema drift"):
+                    raw.validate_raw_trace_bundle(bundle, self.artifact_root)
+
+        for key, alias in (
+            ("artifact_file_count", float(
+                self.bundle["provenance"]["artifact_file_count"]
+            )),
+            ("artifact_writable_entries", False),
+        ):
+            with self.subTest(provenance_key=key, provenance_alias=alias):
+                bundle = copy.deepcopy(self.bundle)
+                bundle["provenance"][key] = alias
+                with self.assertRaisesRegex(raw.ContractError, "identity schema drift"):
+                    raw.validate_raw_trace_bundle(bundle, self.artifact_root)
+
     def test_preparation_record_digest_pin_rejects_schema_drift(self) -> None:
         preparation = json.loads(raw.PREPARATION_RECORD.read_text(encoding="utf-8"))
         preparation["not_admitted"] = True
@@ -135,6 +172,44 @@ class Q029HallBellLinearRawTests(unittest.TestCase):
             with self.assertRaisesRegex(raw.ContractError, "digest mismatch"):
                 raw._load_preparation_record(path)
 
+    def test_preparation_dimensions_and_retention_aliases_fail_closed(self) -> None:
+        smoke = copy.deepcopy(
+            raw._load_preparation_record()["source_local_runtime_smoke"]
+        )
+        smoke["cycle_zero_initializations"][0]["dimension"] = True
+        with self.assertRaisesRegex(raw.ContractError, "dimension"):
+            raw._validate_preparation_artifact_bindings(smoke)
+
+        smoke = copy.deepcopy(
+            raw._load_preparation_record()["source_local_runtime_smoke"]
+        )
+        smoke["restart_continuation"]["dimension"] = 2.0
+        with self.assertRaisesRegex(raw.ContractError, "dimension"):
+            raw._validate_preparation_artifact_bindings(smoke)
+
+        for alias in (False, 0):
+            with self.subTest(restart_parity_alias=alias):
+                smoke = copy.deepcopy(
+                    raw._load_preparation_record()["source_local_runtime_smoke"]
+                )
+                smoke["restart_continuation"]["max_absolute_field_difference"] = (
+                    alias
+                )
+                with self.assertRaisesRegex(raw.ContractError, "restart-parity"):
+                    raw._validate_preparation_artifact_bindings(smoke)
+
+        preparation = json.loads(raw.PREPARATION_RECORD.read_text(encoding="utf-8"))
+        preparation["source_local_runtime_smoke"]["retention"][
+            "writable_entries"
+        ] = False
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "preparation.json"
+            path.write_text(json.dumps(preparation), encoding="utf-8")
+            digest = hashlib.sha256(path.read_bytes()).hexdigest()
+            with patch.object(raw, "PREPARATION_RECORD_SHA256", digest):
+                with self.assertRaisesRegex(raw.ContractError, "retention provenance"):
+                    raw._load_preparation_record(path)
+
     def test_artifact_root_must_be_the_exact_approved_absolute_root(self) -> None:
         smoke = raw._load_preparation_record()["source_local_runtime_smoke"]
         with self.assertRaisesRegex(raw.ContractError, "must be absolute"):
@@ -142,6 +217,15 @@ class Q029HallBellLinearRawTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             with self.assertRaisesRegex(raw.ContractError, "not the approved"):
                 raw._authorized_artifact_root(Path(directory), smoke)
+        for key, alias in (
+            ("file_count", float(smoke["retention"]["file_count"])),
+            ("writable_entries", False),
+        ):
+            with self.subTest(retention_key=key, retention_alias=alias):
+                aliased = copy.deepcopy(smoke)
+                aliased["retention"][key] = alias
+                with self.assertRaisesRegex(raw.ContractError, "provenance drift"):
+                    raw._authorized_artifact_root(self.artifact_root, aliased)
 
     def test_production_api_rejects_reader_injection_and_inventory_special_files(
         self,

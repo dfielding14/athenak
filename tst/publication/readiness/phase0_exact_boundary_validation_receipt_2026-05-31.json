@@ -1,0 +1,77 @@
+{
+  "record_type": "phase0_rejected_exact_boundary_validation_receipt",
+  "schema_version": 1,
+  "date": "2026-05-31",
+  "status": "rejected_after_independent_schema_alias_rereview",
+  "qualification_effect": "none",
+  "tested_code_boundary": {
+    "git_commit": "d0ad350562799e609b4d22f45ce9ca314b38da82",
+    "recursive_source_archive_sha256": "5cae920ccdd2991d9586c202640c26db1bdd585d6e996c56b6f90b24d539dd80",
+    "successor_source_control_plane_version": "06d579f35c3a5681fb8f940d23c47016701b3b7d505137b037ab6fa368932f4a",
+    "prepared_artifact_inventory_sha256": "51f88d4a2362befb31d81a530ca0297b9fd7b5a76acf76c406372d1da5526ffb",
+    "prospective_storage_policy_sha256": "152d8d6dae15ba5308a7aaf67209b1e407c2b4dafcd0b85de5991f77148703b2",
+    "phase0_successor_record_sha256": "a0457af19a0766b108563cec4819091f6abcced142fce177c9c774a05257241b"
+  },
+  "validation_matrix": [
+    {
+      "name": "publication_discovery",
+      "command": "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=.:tst/publication/frontier_control_plane python3 -B -m unittest discover -s tst/publication -p 'test*.py' -q",
+      "result": "passed",
+      "passed_tests": 727,
+      "skipped_tests": 2,
+      "elapsed_seconds": 181.796
+    },
+    {
+      "name": "frontier_control_plane_discovery",
+      "command": "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=tst/publication/frontier_control_plane python3 -B -m unittest discover -s tst/publication/frontier_control_plane -p 'test*.py' -q",
+      "result": "passed",
+      "passed_tests": 364,
+      "elapsed_seconds": 106.071
+    },
+    {
+      "name": "focused_hardening_regressions",
+      "result": "passed",
+      "passed_tests": 102,
+      "elapsed_seconds": 9.25
+    },
+    {
+      "name": "documentation_warning_as_error_render",
+      "command": "/tmp/athenak-pic-docs-venv/bin/sphinx-build -b html -W --keep-going -E docs/source docs/build/html",
+      "result": "passed"
+    },
+    {
+      "name": "python_ast_sweep",
+      "result": "passed",
+      "parsed_files": 88
+    },
+    {
+      "name": "tracked_report_scope_json_parse_sweep",
+      "result": "passed",
+      "parsed_files_after_receipt_addition": 168
+    },
+    {
+      "name": "git_diff_check",
+      "result": "passed"
+    }
+  ],
+  "review_state": {
+    "independent_stable_boundary_rereview": "failed_closed",
+    "paired_successor_install": "pending",
+    "canonical_hip_mpi_release_build_and_freeze": "pending"
+  },
+  "rereview_blockers": [
+    "qualification-manifest JSON-schema const and enum validation admitted Python numeric aliases",
+    "claims-registry consumption lacked a closed exact schema",
+    "prospective storage-policy promotion lacked a closed exact root schema and admitted authorization aliases",
+    "pre-submit short-job and timeout-margin values admitted coercive aliases",
+    "retained ledger sequence, immutable-transition and genesis-anchor controls admitted numeric aliases",
+    "retained Q-006 and Q-007 profile, provenance and return-code checks admitted primitive aliases",
+    "Q-023 and Q-029 Bell retained geometry and dimension checks admitted numeric aliases"
+  ],
+  "notes": [
+    "The receipt binds a tested but rejected code-and-control boundary. The matrix passed, but independent rereview found additional fail-open schema-alias defects.",
+    "The receipt does not authorize Frontier science execution, qualify a physical claim, install a control-plane generation, or create the canonical schema-v4 clean-candidate freeze.",
+    "An initial broad-discovery invocation without the nested Frontier control-plane PYTHONPATH was discarded as a harness invocation error; the exact corrected discovery command above passed.",
+    "A later expanded repair supersedes this rejected boundary and requires a fresh exact clean-tree receipt before installation."
+  ]
+}

@@ -348,6 +348,30 @@ class Q023PaperBellLinearTests(unittest.TestCase):
                 raw_provenance=bell.synthetic_contract_provenance(dimension, epsilon),
             )
 
+    def test_dimension_and_retained_raw_geometry_numeric_aliases_fail_closed(
+        self,
+    ) -> None:
+        for alias in (True, 1.0):
+            with self.subTest(dimension_alias=alias):
+                with self.assertRaisesRegex(bell.ContractError, "dimension"):
+                    bell.synthetic_contract_provenance(alias, 0.4)
+                with self.assertRaisesRegex(bell.ContractError, "dimension"):
+                    bell._mode_basis(alias)
+                provenance = bell.synthetic_contract_provenance(1, 0.4)
+                with self.assertRaisesRegex(bell.ContractError, "dimension"):
+                    bell._validate_raw_provenance(provenance, alias, 0.4)
+
+        for key, index, alias in (
+            ("nx", 0, 32.0),
+            ("xmin", 0, False),
+            ("extent", 0, 1),
+        ):
+            with self.subTest(geometry_key=key, geometry_alias=alias):
+                provenance = bell.synthetic_contract_provenance(1, 0.4)
+                provenance["raw_geometry"][key][index] = alias
+                with self.assertRaisesRegex(bell.ContractError, "geometry"):
+                    bell._validate_raw_provenance(provenance, 1, 0.4)
+
     def test_raw_float32_geometry_serialization_is_accepted(self) -> None:
         datasets = _raw_datasets(3, 0.4)
         for dataset in datasets:

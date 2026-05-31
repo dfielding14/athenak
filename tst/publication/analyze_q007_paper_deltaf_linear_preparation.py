@@ -24,6 +24,7 @@ if __package__:
     from .immutable_orion_tree import authorized_tree_root
     from .immutable_orion_tree import freeze_tree as freeze_immutable_tree
     from .immutable_orion_tree import is_sealed_snapshot_member
+    from .immutable_orion_tree import require_exact_primitive_types
     from .immutable_orion_tree import staged_verified_frozen_tree
     from .immutable_orion_tree import validate_executable_elf
     from .immutable_orion_tree import validate_serial_host_build_evidence
@@ -34,6 +35,7 @@ else:
     from immutable_orion_tree import authorized_tree_root
     from immutable_orion_tree import freeze_tree as freeze_immutable_tree
     from immutable_orion_tree import is_sealed_snapshot_member
+    from immutable_orion_tree import require_exact_primitive_types
     from immutable_orion_tree import staged_verified_frozen_tree
     from immutable_orion_tree import validate_executable_elf
     from immutable_orion_tree import validate_serial_host_build_evidence
@@ -356,6 +358,19 @@ _CASES = {
 
 class ContractError(ValueError):
     """Raised when a bounded Q-007 source-local contract fails closed."""
+
+
+def _require_exact_match(actual: Any, expected: Any, label: str) -> None:
+    """Reject primitive aliases before requiring an exact retained JSON value."""
+    require_exact_primitive_types(actual, expected, error_type=ContractError, label=label)
+    if actual != expected:
+        raise ContractError(f"{label} drifted")
+
+
+def _require_exact_int(actual: Any, expected: int, label: str) -> None:
+    """Require one JSON integer without accepting boolean or float aliases."""
+    if type(actual) is not int or type(expected) is not int or actual != expected:
+        raise ContractError(f"{label} drifted")
 
 
 def _require_schema_version(value: Any, expected: int, label: str) -> None:
@@ -1783,8 +1798,7 @@ def _validate_pinned_executable_binding(root: Path) -> dict[str, Any]:
         "frontier_used": False,
         "kronos_used": False,
     }
-    if receipt != expected_receipt:
-        raise ContractError("Q-007 pinned executable receipt drifted")
+    _require_exact_match(receipt, expected_receipt, "Q-007 pinned executable receipt")
     provenance_path = _contained_regular_file(
         pinned_root, pinned_root / PIN_PROVENANCE_RECEIPT_NAME
     )
@@ -1817,8 +1831,11 @@ def _validate_pinned_executable_binding(root: Path) -> dict[str, Any]:
         },
         "retained_evidence": sorted(PIN_RETAINED_EVIDENCE),
     }
-    if provenance != expected_provenance:
-        raise ContractError("Q-007 pinned executable provenance receipt drifted")
+    _require_exact_match(
+        provenance,
+        expected_provenance,
+        "Q-007 pinned executable provenance receipt",
+    )
     for relative in evidence:
         if not isinstance(relative, str) or not relative:
             raise ContractError("Q-007 pinned executable provenance evidence path is invalid")
@@ -1853,8 +1870,11 @@ def _validate_pinned_executable_binding(root: Path) -> dict[str, Any]:
             "no_specials_no_bytecode_cache_no_line_separator_names"
         ),
     }
-    if archive_validation != expected_archive_validation:
-        raise ContractError("Q-007 pinned executable source archive validation receipt drifted")
+    _require_exact_match(
+        archive_validation,
+        expected_archive_validation,
+        "Q-007 pinned executable source archive validation receipt",
+    )
     dependency_manifest = json.loads(_contained_regular_file(
         pinned_root, pinned_root / "source/shared_dependency_sha256.json"
     ).read_text(encoding="utf-8"))
@@ -1879,15 +1899,18 @@ def _validate_pinned_executable_binding(root: Path) -> dict[str, Any]:
         isinstance(preflight, dict)
         and isinstance(preflight.get("build_directory"), str)
         and Path(preflight["build_directory"]).is_absolute()
-        and {name: value for name, value in preflight.items() if name != "build_directory"}
-        == {
+    ):
+        raise ContractError("Q-007 pinned executable clean-directory preflight receipt drifted")
+    _require_exact_match(
+        {name: value for name, value in preflight.items() if name != "build_directory"},
+        {
             "schema_version": 1,
             "existed_before_creation": False,
             "entries_immediately_after_creation": [],
             "clean_empty_directory_configure": True,
-        }
-    ):
-        raise ContractError("Q-007 pinned executable clean-directory preflight receipt drifted")
+        },
+        "Q-007 pinned executable clean-directory preflight receipt",
+    )
     return {
         **binding,
         "binding_sha256": _sha256(path),
@@ -1975,8 +1998,11 @@ def _validate_runtime_invocations(root: Path, pinned: dict[str, Any]) -> dict[st
             raise ContractError(f"{label}: Q-007 invocation deck binding drifted")
         if invocation.get("overrides") != overrides:
             raise ContractError(f"{label}: Q-007 invocation overrides drifted")
-        if invocation.get("returncode") != expected["returncode"]:
-            raise ContractError(f"{label}: Q-007 invocation returncode drifted")
+        _require_exact_int(
+            invocation.get("returncode"),
+            expected["returncode"],
+            f"{label}: Q-007 invocation returncode",
+        )
         returncode_path = _contained_regular_file(root, run / "returncode.txt")
         if returncode_path.read_text(encoding="utf-8") != f"{expected['returncode']}\n":
             raise ContractError(f"{label}: Q-007 retained returncode text drifted")

@@ -642,6 +642,91 @@ class PicQualificationManifestTests(unittest.TestCase):
         host_with_frontier_claim["resources"]["submission_id"] = "submission-1"
         self._assert_rejected(host_with_frontier_claim)
 
+    def test_root_schema_rejects_schema_version_numeric_and_bool_aliases(self) -> None:
+        schema = json.loads(
+            qualification_manifest.SCHEMA_PATH.read_text(encoding="utf-8")
+        )
+        for schema_version in (True, 1.0):
+            with self.subTest(schema_version=schema_version):
+                manifest = copy.deepcopy(self.manifest)
+                manifest["schema_version"] = schema_version
+                with self.assertRaisesRegex(
+                    ValueError, r"^\$\.schema_version does not match const$"
+                ):
+                    qualification_manifest.validate_schema(manifest, schema)
+
+    def test_schema_const_and_enum_reject_numeric_and_bool_aliases(self) -> None:
+        for keyword, value, allowed in (
+            ("const", True, 1),
+            ("const", 1, True),
+            ("const", 1.0, 1),
+            ("const", 1, 1.0),
+            ("enum", True, 1),
+            ("enum", 1, True),
+            ("enum", 1.0, 1),
+            ("enum", 1, 1.0),
+        ):
+            with self.subTest(keyword=keyword, value=value, allowed=allowed):
+                schema = {keyword: [allowed] if keyword == "enum" else allowed}
+                with self.assertRaises(ValueError):
+                    qualification_manifest.validate_schema(value, schema)
+
+    def test_schema_type_enforces_strict_integer_and_boolean_semantics(self) -> None:
+        for value, expected_type in (
+            (1, "integer"),
+            (True, "boolean"),
+            (1, "number"),
+            (1.0, "number"),
+        ):
+            with self.subTest(value=value, expected_type=expected_type):
+                qualification_manifest.validate_schema(
+                    value, {"type": expected_type}
+                )
+
+        for value, expected_type in (
+            (True, "integer"),
+            (1.0, "integer"),
+            (1, "boolean"),
+            (0, "boolean"),
+            (False, "number"),
+        ):
+            with self.subTest(value=value, expected_type=expected_type):
+                with self.assertRaises(ValueError):
+                    qualification_manifest.validate_schema(
+                        value, {"type": expected_type}
+                    )
+
+    def test_claim_registry_root_schema_is_validated_before_claim_consumption(
+        self,
+    ) -> None:
+        registry = qualification_manifest._load_object(
+            qualification_manifest.CLAIMS_PATH
+        )
+        original_load_object = qualification_manifest._load_object
+        cases = []
+        for schema_version in (True, 1.0, "1"):
+            malformed = copy.deepcopy(registry)
+            malformed["schema_version"] = schema_version
+            cases.append((f"schema_version={schema_version!r}", malformed))
+        missing_version = copy.deepcopy(registry)
+        del missing_version["schema_version"]
+        cases.append(("missing schema_version", missing_version))
+        unknown_key = copy.deepcopy(registry)
+        unknown_key["unexpected"] = "not allowed"
+        cases.append(("unknown root key", unknown_key))
+
+        for label, malformed in cases:
+            with self.subTest(label=label):
+                def load_object(path: Path) -> dict[str, object]:
+                    if path == qualification_manifest.CLAIMS_PATH:
+                        return malformed
+                    return original_load_object(path)
+
+                with patch.object(
+                    qualification_manifest, "_load_object", side_effect=load_object
+                ):
+                    self._assert_rejected(self.manifest)
+
     def test_duplicate_json_keys_are_rejected(self) -> None:
         with self.assertRaises(ValueError):
             _load_object_bytes(b'{"schema_version": 1, "schema_version": 2}',

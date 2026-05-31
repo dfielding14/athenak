@@ -16,6 +16,11 @@ qualify any scientific claim by itself.
   plane from the next source generation, binds the complete canonical
   prepared-artifact closure, and records the remaining install and freeze
   actions.
+- `phase0_exact_boundary_validation_receipt_2026-05-31.json`: rejected
+  nonqualifying exact-clean-tree validation chronology for the first
+  schema-hardened Phase 0 code boundary. Its matrix passed, but independent
+  rereview found additional fail-open numeric aliases. It does not promote the
+  still-pending paired install or canonical clean-candidate freeze.
 - `claims_registry.json`: stable claim IDs and their initial gate dependencies.
 - `findings_registry.json`: initial implementation and operational findings.
 - `external_artifacts.json`: provenance and redistribution inventory for paper,

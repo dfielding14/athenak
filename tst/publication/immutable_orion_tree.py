@@ -39,6 +39,38 @@ def _raise(error_type: type[ValueError], label: str, message: str) -> None:
     raise error_type(f"{label}: {message}")
 
 
+def require_exact_primitive_types(
+    actual: Any,
+    expected: Any,
+    *,
+    error_type: type[ValueError] = ValueError,
+    label: str = "immutable-tree retained metadata",
+) -> None:
+    """Reject JSON primitive aliases before a separate whole-object comparison."""
+    if type(actual) is not type(expected):
+        _raise(error_type, label, "retained primitive type drifted")
+    if isinstance(expected, dict):
+        if set(actual) != set(expected):
+            _raise(error_type, label, "retained object keys drifted")
+        for name in sorted(expected):
+            require_exact_primitive_types(
+                actual[name],
+                expected[name],
+                error_type=error_type,
+                label=f"{label} {name}",
+            )
+    elif isinstance(expected, list):
+        if len(actual) != len(expected):
+            _raise(error_type, label, "retained list length drifted")
+        for index, (actual_item, expected_item) in enumerate(zip(actual, expected)):
+            require_exact_primitive_types(
+                actual_item,
+                expected_item,
+                error_type=error_type,
+                label=f"{label} item {index}",
+            )
+
+
 def _is_sealed_memfd_reference(path: Path) -> bool:
     """Return whether one procfs fd path names a fully sealed regular memfd."""
     if path.parent != Path("/proc/self/fd") or not path.name.isdigit():
@@ -430,10 +462,7 @@ def validate_serial_host_build_evidence(
         compile_commands = json.loads(read("build/compile_commands.json"))
     except json.JSONDecodeError as error:
         _raise(error_type, label, f"retained build JSON is invalid: {error}")
-    if (
-        not isinstance(profile, dict)
-        or type(profile.get("schema_version")) is not int
-        or profile != {
+    expected_profile = {
         "schema_version": 1,
         "profile": "bounded_serial_host_clean_build_provenance_only",
         "qualifying_evidence": False,
@@ -441,8 +470,14 @@ def validate_serial_host_build_evidence(
         "gpu": False,
         "frontier_scheduler": False,
         "kronos": False,
-        }
-    ):
+    }
+    require_exact_primitive_types(
+        profile,
+        expected_profile,
+        error_type=error_type,
+        label=f"{label} profile",
+    )
+    if profile != expected_profile:
         _raise(error_type, label, "retained serial-host build profile drifted")
     if not isinstance(compile_commands, list) or not compile_commands:
         _raise(error_type, label, "retained compile commands must be a nonempty list")

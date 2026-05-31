@@ -2475,6 +2475,30 @@ def validate_storage_policy(
     ledger_mirror_transport: str = AUTHORIZED_LEDGER_MIRROR_TRANSPORT,
     allow_pending_genesis: bool = False,
 ) -> dict[str, object]:
+    allowed_policy_keys = {
+        "schema_version",
+        "frontier",
+        "science_submission_freeze",
+        "registered_science_slices",
+        "frontier_admission_smoke",
+        "olcf_side_storage",
+        "long_term_storage",
+        "authorization_date",
+        "authorized_by",
+        "reviewer",
+    }
+    required_policy_keys = allowed_policy_keys - {
+        "authorization_date",
+        "authorized_by",
+        "reviewer",
+    }
+    if (
+        type(policy.get("schema_version")) is not int
+        or policy.get("schema_version") != 1
+        or not required_policy_keys <= set(policy)
+        or not set(policy) <= allowed_policy_keys
+    ):
+        raise ValueError("Storage policy root schema is malformed")
     frontier = policy.get("frontier")
     storage = policy.get("olcf_side_storage")
     long_term = policy.get("long_term_storage")
@@ -2497,12 +2521,34 @@ def validate_storage_policy(
         "account": authorized_account,
         "partition": AUTHORIZED_PARTITION,
         "simulation_root": str(authorized_pic_root.resolve()),
-        "maximum_node_hours": AUTHORIZED_NODE_HOUR_CAP,
-        "serial_pic_submissions": True,
     }
     for key, expected in expected_frontier.items():
         if frontier.get(key) != expected:
             raise ValueError(f"Storage policy frontier.{key} must be {expected!r}")
+    maximum_node_hours = frontier.get("maximum_node_hours")
+    if (
+        not isinstance(maximum_node_hours, (int, float))
+        or isinstance(maximum_node_hours, bool)
+        or float(maximum_node_hours) != AUTHORIZED_NODE_HOUR_CAP
+    ):
+        raise ValueError(
+            f"Storage policy frontier.maximum_node_hours must be {AUTHORIZED_NODE_HOUR_CAP!r}"
+        )
+    if frontier.get("serial_pic_submissions") is not True:
+        raise ValueError("Storage policy frontier.serial_pic_submissions must be True")
+    allowed_frontier_keys = {
+        *expected_frontier,
+        "maximum_node_hours",
+        "serial_pic_submissions",
+        "qos_policy",
+    }
+    if not set(frontier) <= allowed_frontier_keys:
+        raise ValueError("Storage policy frontier schema is malformed")
+    if (
+        "qos_policy" in frontier
+        and frontier["qos_policy"] != "debug_preferred_normal_fallback"
+    ):
+        raise ValueError("Storage policy Frontier QoS policy is not authorized")
     if Path(str(storage.get("project_home_mirror_root", ""))).resolve() != (
         authorized_project_home_root.resolve()
     ):
@@ -2787,7 +2833,8 @@ def validate_storage_policy(
         "maximum_walltime_seconds": 15 * 60,
     }
     for key, expected in expected_admission_smoke.items():
-        if admission_smoke.get(key) != expected:
+        value = admission_smoke.get(key)
+        if type(value) is not type(expected) or value != expected:
             raise ValueError(f"Storage policy frontier_admission_smoke.{key} is invalid")
     for key in [
         "job_script_sha256",

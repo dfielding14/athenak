@@ -61,6 +61,28 @@ ADMISSION_SMOKE_FIELDS = {
     "selected_qos": "debug",
     "registered_short_nonproduction": True,
 }
+TIMEOUT_MARGIN_KEYS = {
+    "athena_walltime_seconds",
+    "scheduler_walltime_seconds",
+    "environment_profile_sha256",
+    "measured_utc",
+    "expires_utc",
+}
+
+
+def _strict_json_equal(left: object, right: object) -> bool:
+    if type(left) is not type(right):
+        return False
+    if isinstance(left, dict):
+        return set(left) == set(right) and all(
+            _strict_json_equal(left[key], right[key]) for key in left
+        )
+    if isinstance(left, list):
+        return len(left) == len(right) and all(
+            _strict_json_equal(left_value, right_value)
+            for left_value, right_value in zip(left, right)
+        )
+    return left == right
 
 
 def _verify_installed_control_plane_pair(
@@ -744,7 +766,8 @@ def _check_submission_scope(
         )
         return candidate_sha256, identifier, maximum_attempts
     for key, expected in ADMISSION_SMOKE_FIELDS.items():
-        if manifest.get(key) != expected:
+        value = manifest.get(key)
+        if type(value) is not type(expected) or value != expected:
             raise ValueError(f"Admission-smoke exemption requires {key}={expected!r}")
     if manifest.get("submission_scope") != FRONTIER_ADMISSION_SMOKE_SCOPE:
         raise ValueError("Submission scope is not authorized")
@@ -752,7 +775,8 @@ def _check_submission_scope(
     if authorization.get("status") != AUTHORIZED_ADMISSION_SMOKE_STATUS:
         raise ValueError("Admission-smoke exemption is not authorized")
     for key, expected in ADMISSION_SMOKE_FIELDS.items():
-        if authorization.get(key) != expected:
+        value = authorization.get(key)
+        if type(value) is not type(expected) or value != expected:
             raise ValueError(f"Admission-smoke policy requires {key}={expected!r}")
     if int(directives["nodes"]) > int(authorization["maximum_nodes"]):
         raise ValueError("Admission smoke exceeds its authorized node ceiling")
@@ -799,10 +823,16 @@ def _check_timeout_margin(
 ) -> None:
     record = record_for_role(manifest, "timeout-margin")
     margin = read_json(Path(str(record["path"])))
-    if margin != manifest.get("timeout_margin"):
+    if (
+        not isinstance(margin, dict)
+        or set(margin) != TIMEOUT_MARGIN_KEYS
+        or not _strict_json_equal(margin, manifest.get("timeout_margin"))
+    ):
         raise ValueError("Timeout-margin snapshot differs from manifest record")
-    scheduler = int(margin.get("scheduler_walltime_seconds", 0))
-    athena = int(margin.get("athena_walltime_seconds", 0))
+    scheduler = margin.get("scheduler_walltime_seconds")
+    athena = margin.get("athena_walltime_seconds")
+    if type(scheduler) is not int or type(athena) is not int:
+        raise ValueError("Timeout-margin walltimes must be exact integers")
     if scheduler != walltime_seconds:
         raise ValueError("Timeout-margin artifact does not match Slurm walltime")
     if not 0 < athena < scheduler:
@@ -843,7 +873,9 @@ def _check_qos(
         line for line in queue_output.splitlines()
         if len(line.split("|")) >= 3 and line.split("|")[2] == "debug"
     ]
-    short = bool(manifest.get("registered_short_nonproduction", False))
+    short = manifest.get("registered_short_nonproduction", False)
+    if not isinstance(short, bool):
+        raise ValueError("Manifest short-job registration must be a boolean")
     if qos == "debug":
         if not short or walltime_seconds > DEBUG_MAX_SECONDS:
             raise ValueError("Debug QoS is restricted to registered short jobs")

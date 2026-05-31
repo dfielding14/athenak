@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import fcntl
 import hashlib
+import json
 import os
 from pathlib import Path
 import stat
@@ -39,6 +40,35 @@ def _swap_sibling_directories(first: Path, second: Path) -> None:
     os.rename(first, temporary)
     os.rename(second, first)
     os.rename(temporary, second)
+
+
+def _serial_host_build_evidence_texts(profile: dict[str, object]) -> dict[str, str]:
+    configure = "cmake -S /tmp/source -B /tmp/build -DCMAKE_BUILD_TYPE=Release"
+    build = "cmake --build /tmp/build --target athena"
+    return {
+        "build/build_profile.json": json.dumps(profile),
+        "build/compile_commands.json": '[{"command": "c++"}]',
+        "build/CMakeCache.txt": (
+            "Athena_ENABLE_MPI:BOOL=OFF\n"
+            "CMAKE_BUILD_TYPE:STRING=Release\n"
+            "Kokkos_ENABLE_HIP:BOOL=OFF\n"
+            "Kokkos_ENABLE_SERIAL:BOOL=ON\n"
+        ),
+        "build/config.hpp": (
+            "#define MPI_PARALLEL_ENABLED 0\n"
+            "#define OPENMP_PARALLEL_ENABLED 0\n"
+        ),
+        "build/configure_command.txt": configure,
+        "build/configure_compile_commands_refresh_command.txt": (
+            f"{configure} -DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
+        ),
+        "build/build_command.txt": f"{build} -- -j4",
+        "build/verbose_clean_rebuild_command.txt": f"{build} --verbose --clean-first -- -j4",
+        "build/configure.log": "configured\n",
+        "build/build.log": "built\n",
+        "build/configure_compile_commands_refresh.log": "refreshed\n",
+        "build/verbose_clean_rebuild.log": "rebuilt\n",
+    }
 
 
 class ImmutableOrionTreeTests(unittest.TestCase):
@@ -669,6 +699,54 @@ class ImmutableOrionTreeTests(unittest.TestCase):
                         error_type=ValueError,
                         label="receipt test",
                     )
+
+    def test_serial_host_profile_rejects_numeric_boolean_aliases(self) -> None:
+        root = Path("/tmp/retained-profile-test")
+        profile = {
+            "schema_version": 1,
+            "profile": "bounded_serial_host_clean_build_provenance_only",
+            "qualifying_evidence": False,
+            "mpi": False,
+            "gpu": False,
+            "frontier_scheduler": False,
+            "kronos": False,
+        }
+
+        def validate(candidate: dict[str, object]) -> None:
+            texts = _serial_host_build_evidence_texts(candidate)
+
+            def read(path: Path, **_: object) -> str:
+                return texts[path.relative_to(root).as_posix()]
+
+            with mock.patch.object(immutable_orion_tree, "_read_regular_text", side_effect=read):
+                immutable_orion_tree.validate_serial_host_build_evidence(root)
+
+        validate(profile)
+        for name in ("qualifying_evidence", "mpi", "gpu", "frontier_scheduler", "kronos"):
+            for value in (0, 0.0):
+                with self.subTest(name=name, value=value):
+                    with self.assertRaisesRegex(ValueError, "primitive type drifted"):
+                        validate({**profile, name: value})
+
+    def test_exact_primitive_type_guard_rejects_nested_provenance_aliases(self) -> None:
+        expected = {
+            "clean_empty_directory_configure": True,
+            "configure_returncode": 0,
+            "nested": {"mpi_used": False},
+        }
+        aliases = (
+            {"clean_empty_directory_configure": 1},
+            {"clean_empty_directory_configure": 1.0},
+            {"configure_returncode": False},
+            {"configure_returncode": 0.0},
+            {"nested": {"mpi_used": 0}},
+            {"nested": {"mpi_used": 0.0}},
+        )
+        for replacement in aliases:
+            with self.subTest(replacement=replacement):
+                actual = {**expected, **replacement}
+                with self.assertRaisesRegex(ValueError, "primitive type drifted"):
+                    immutable_orion_tree.require_exact_primitive_types(actual, expected)
 
 
 if __name__ == "__main__":

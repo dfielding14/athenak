@@ -349,6 +349,12 @@ def _require_exact_keys(value: Any, expected: set[str], label: str) -> dict[str,
     return value
 
 
+def _require_dimension(dimension: Any) -> int:
+    if type(dimension) is not int or dimension not in _EXPECTED_GEOMETRY:
+        raise ContractError("Q-029 raw trace dimension is not approved")
+    return dimension
+
+
 def _load_preparation_record(path: Path = PREPARATION_RECORD) -> dict[str, Any]:
     """Load the exact approved Q-029 source-local preparation predecessor."""
     try:
@@ -381,6 +387,7 @@ def _load_preparation_record(path: Path = PREPARATION_RECORD) -> dict[str, Any]:
         or retention["inventory_algorithm"]
         != "sha256(sorted lines of '<file_sha256>  <root-relative-path>\\n')"
         or not _is_sha256(retention["inventory_sha256"])
+        or type(retention["writable_entries"]) is not int
         or retention["writable_entries"] != 0
         or retention["status"] != "pass_recursively_read_only"
     ):
@@ -400,6 +407,8 @@ def _load_preparation_record(path: Path = PREPARATION_RECORD) -> dict[str, Any]:
 
 
 def _validate_preparation_artifact_bindings(smoke: dict[str, Any]) -> None:
+    for item in smoke["cycle_zero_initializations"]:
+        _require_dimension(item["dimension"])
     initializations = {
         item["dimension"]: item for item in smoke["cycle_zero_initializations"]
     }
@@ -417,12 +426,14 @@ def _validate_preparation_artifact_bindings(smoke: dict[str, Any]) -> None:
     restart_source = _APPROVED_TRACE_SOURCES[3]
     uninterrupted, continued = restart_source["raw_artifacts"]
     restart = smoke["restart_continuation"]
+    _require_dimension(restart["dimension"])
     if (
         restart["dimension"] != restart_source["dimension"]
         or restart["uninterrupted_raw_mhd_w_bcc_path"] != uninterrupted["path"]
         or restart["uninterrupted_raw_mhd_w_bcc_sha256"] != uninterrupted["sha256"]
         or restart["continued_raw_mhd_w_bcc_path"] != continued["path"]
         or restart["continued_raw_mhd_w_bcc_sha256"] != continued["sha256"]
+        or type(restart["max_absolute_field_difference"]) is not float
         or restart["max_absolute_field_difference"] != 0.0
         or restart["result"] != "pass_exact_array_parity"
     ):
@@ -565,7 +576,9 @@ def _authorized_artifact_root(
         )
         retention = smoke["retention"]
         if (
-            file_count != retention["file_count"]
+            type(retention["file_count"]) is not int
+            or type(retention["writable_entries"]) is not int
+            or file_count != retention["file_count"]
             or writable_entries != retention["writable_entries"]
             or inventory_sha256 != retention["inventory_sha256"]
         ):
@@ -602,10 +615,8 @@ def _normalized_artifact_bytes(
 
 
 def _raw_geometry(dimension: int) -> dict[str, list[int] | list[float]]:
-    try:
-        geometry = _EXPECTED_GEOMETRY[dimension]
-    except KeyError as error:
-        raise ContractError("Q-029 raw trace dimension is not approved") from error
+    dimension = _require_dimension(dimension)
+    geometry = _EXPECTED_GEOMETRY[dimension]
     return {
         "nx": list(geometry["nx"]),
         "xmin": list(geometry["xmin"]),
@@ -613,9 +624,28 @@ def _raw_geometry(dimension: int) -> dict[str, list[int] | list[float]]:
     }
 
 
+def _validate_retained_raw_geometry(geometry: Any, dimension: int) -> None:
+    dimension = _require_dimension(dimension)
+    if (
+        not isinstance(geometry, dict)
+        or set(geometry) != _RAW_GEOMETRY_KEYS
+        or not isinstance(geometry["nx"], list)
+        or len(geometry["nx"]) != 3
+        or any(type(value) is not int for value in geometry["nx"])
+        or not isinstance(geometry["xmin"], list)
+        or len(geometry["xmin"]) != 3
+        or any(type(value) is not float for value in geometry["xmin"])
+        or not isinstance(geometry["extent"], list)
+        or len(geometry["extent"]) != 3
+        or any(type(value) is not float for value in geometry["extent"])
+    ):
+        raise ContractError("Q-029 projected trace geometry schema drift")
+    if geometry != _raw_geometry(dimension):
+        raise ContractError("Q-029 projected trace provenance drift")
+
+
 def _mode_basis(dimension: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    if dimension not in _EXPECTED_GEOMETRY:
-        raise ContractError("Q-029 raw trace dimension is not approved")
+    dimension = _require_dimension(dimension)
     raw = np.array(
         [1.0, 2.0 if dimension >= 2 else 0.0, 4.0 if dimension >= 3 else 0.0]
     )
@@ -643,6 +673,7 @@ def _validate_raw_dataset(
     dataset: dict[str, Any], dimension: int
 ) -> tuple[list[np.ndarray], tuple[int, int, int]]:
     _require_exact_keys(dataset, _RAW_DATASET_KEYS, "Q-029 raw mhd_w_bcc dataset")
+    dimension = _require_dimension(dimension)
     geometry = _EXPECTED_GEOMETRY[dimension]
     nx = geometry["nx"]
     xmin = geometry["xmin"]
@@ -895,6 +926,17 @@ def _finite_trace_array(trace: dict[str, Any], key: str, size: int) -> None:
         _finite_scalar(value, key)
 
 
+def _validate_provenance_identity_types(provenance: dict[str, Any]) -> None:
+    for key in (
+        "artifact_root_device",
+        "artifact_root_inode",
+        "artifact_file_count",
+        "artifact_writable_entries",
+    ):
+        if type(provenance[key]) is not int:
+            raise ContractError("Q-029 raw provenance identity schema drift")
+
+
 def validate_raw_trace_bundle(
     bundle: dict[str, Any],
     artifact_root: Path,
@@ -914,7 +956,10 @@ def validate_raw_trace_bundle(
         or bundle["projection_contract"] != PROJECTION_CONTRACT
     ):
         raise ContractError("Q-029 projected raw-trace bundle identity drift")
-    _require_exact_keys(bundle["provenance"], _PROVENANCE_KEYS, "Q-029 raw provenance")
+    provenance = _require_exact_keys(
+        bundle["provenance"], _PROVENANCE_KEYS, "Q-029 raw provenance"
+    )
+    _validate_provenance_identity_types(provenance)
     traces = bundle["traces"]
     if not isinstance(traces, list) or len(traces) != len(_APPROVED_TRACE_SOURCES):
         raise ContractError("Q-029 projected raw-trace inventory drift")
@@ -923,19 +968,16 @@ def validate_raw_trace_bundle(
         raise ContractError("Q-029 raw provenance drift")
     for trace, expected_trace in zip(traces, expected["traces"]):
         _require_exact_keys(trace, _TRACE_KEYS, "Q-029 projected trace")
+        dimension = _require_dimension(trace["dimension"])
+        _validate_retained_raw_geometry(trace["raw_geometry"], dimension)
         if (
             trace["trace_id"] != expected_trace["trace_id"]
             or trace["trace_role"] != expected_trace["trace_role"]
-            or trace["dimension"] != expected_trace["dimension"]
+            or dimension != expected_trace["dimension"]
             or trace["raw_geometry"] != expected_trace["raw_geometry"]
             or trace["raw_artifacts"] != expected_trace["raw_artifacts"]
         ):
             raise ContractError("Q-029 projected trace provenance drift")
-        if (
-            not isinstance(trace["raw_geometry"], dict)
-            or set(trace["raw_geometry"]) != _RAW_GEOMETRY_KEYS
-        ):
-            raise ContractError("Q-029 projected trace geometry schema drift")
         if any(
             not isinstance(artifact, dict) or set(artifact) != _RAW_ARTIFACT_KEYS
             for artifact in trace["raw_artifacts"]

@@ -746,7 +746,7 @@ def artifact_sizes(sizes: dict[str, int]) -> dict[str, int]:
 
 def validation_summary() -> dict[str, Any]:
     labels = ["publication\nsuite", "Frontier\ncontrol plane", "hardening\nfocus", "JSON parse", "Python AST"]
-    counts = [719, 359, 99, 168, 88]
+    counts = [727, 364, 102, 168, 88]
     fig, ax = plt.subplots(figsize=(8, 4))
     bars = ax.bar(labels, counts, color=[BLUE, GREEN, ORANGE, PURPLE, CYAN])
     ax.bar_label(bars)

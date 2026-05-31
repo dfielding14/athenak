@@ -460,6 +460,19 @@ class LedgerTests(unittest.TestCase):
                 }
             )
 
+    def test_registered_attachment_rejects_immutable_numeric_aliases(self) -> None:
+        reservation = self.append(self._reservation_event())
+        attachment = transition_payload(reservation)
+        attachment.update(
+            {"event_type": "job_id_attached", "job_id": "1234", "state": "submitted"}
+        )
+        for value in [1.0, True]:
+            with self.subTest(value=value):
+                aliased = dict(attachment)
+                aliased["requested_nodes"] = value
+                with self.assertRaisesRegex(ValueError, "rewrites immutable fields"):
+                    self.append(aliased)
+
     def test_registered_reservation_rejects_false_reserved_usage(self) -> None:
         for field, value in [
             ("requested_walltime", "00:00:00"),
@@ -726,6 +739,52 @@ class LedgerTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "zero-execution"):
             self.append(reconciliation)
 
+    def test_registered_reconciliation_rejects_purged_zero_numeric_aliases(
+        self,
+    ) -> None:
+        reservation = self.append(self._recovery_reservation_event())
+        handoff_path, handoff_sha256 = self._recovery_handoff(
+            reservation, mode="purged_scontrol_cancelled_zero_execution"
+        )
+        attachment = transition_payload(reservation)
+        attachment.update(
+            {
+                "event_type": "job_id_attached",
+                "job_id": "1234",
+                "state": "submitted",
+                "attached_by_control_plane_version": "b" * 64,
+                "terminal_recovery_handoff_path": str(handoff_path),
+                "terminal_recovery_handoff_sha256": handoff_sha256,
+                "terminal_recovery_mode": "purged_scontrol_cancelled_zero_execution",
+            }
+        )
+        attachment = self.append(attachment)
+        reconciliation = transition_payload(attachment)
+        reconciliation.update(
+            {
+                "event_type": "reconciliation",
+                "state": "CANCELLED",
+                "reconciled": True,
+                "scheduler_reported_allocated_nodes": 0,
+                "billed_nodes": 1,
+                "elapsed_seconds": 0,
+                "consumed_node_hours": 0.0,
+                "cumulative_consumed_node_hours": 0.0,
+            }
+        )
+        for field, value in [
+            ("scheduler_reported_allocated_nodes", False),
+            ("scheduler_reported_allocated_nodes", 0.0),
+            ("elapsed_seconds", False),
+            ("elapsed_seconds", 0.0),
+            ("consumed_node_hours", False),
+        ]:
+            with self.subTest(field=field, value=value):
+                aliased = dict(reconciliation)
+                aliased[field] = value
+                with self.assertRaisesRegex(ValueError, "zero-execution"):
+                    self.append(aliased)
+
     def test_registered_recovery_handoff_is_bound_for_every_record(self) -> None:
         reservation = self.append(self._recovery_reservation_event())
         handoff_path, handoff_sha256 = self._recovery_handoff(reservation)
@@ -914,6 +973,33 @@ class LedgerTests(unittest.TestCase):
             ):
                 replacement.replace(anchor)
 
+    def test_genesis_anchor_rejects_schema_numeric_aliases_before_equality(
+        self,
+    ) -> None:
+        anchors = genesis_anchor_paths(self.ledger, self.mirror)
+        original = {path: path.read_bytes() for path in anchors}
+        try:
+            for value in [1.0, True]:
+                with self.subTest(value=value):
+                    anchor = json.loads(original[anchors[0]])
+                    anchor["schema_version"] = value
+                    payload = (
+                        json.dumps(anchor, indent=2, sort_keys=True) + "\n"
+                    ).encode("utf-8")
+                    for path in anchors:
+                        path.chmod(0o600)
+                        path.write_bytes(payload)
+                        path.chmod(0o444)
+                    with self.assertRaisesRegex(ValueError, "genesis-anchor schema"):
+                        validate_mirrored_state(
+                            self.ledger, self.receipts, self.mirror
+                        )
+        finally:
+            for path, payload in original.items():
+                path.chmod(0o600)
+                path.write_bytes(payload)
+                path.chmod(0o444)
+
     def test_read_only_snapshot_validates_pinned_bytes_not_transient_paths(self) -> None:
         paths = [self.ledger, self.csv, self.receipts, self.mirror]
         original = {path: path.read_bytes() for path in paths}
@@ -1077,6 +1163,31 @@ class LedgerTests(unittest.TestCase):
                                encoding="utf-8")
         with self.assertRaises(ValueError):
             validate_primary_chain(self.ledger)
+
+    def test_primary_chain_rejects_rehashed_sequence_numeric_aliases(self) -> None:
+        from ledger import canonical_json, record_sha256
+
+        self.append(self._reservation_event())
+        canonical_records = [
+            json.loads(line)
+            for line in self.ledger.read_text(encoding="utf-8").splitlines()
+        ]
+        for index, value in [(0, 0.0), (1, True)]:
+            with self.subTest(index=index, value=value):
+                records = [dict(record) for record in canonical_records]
+                records[index]["sequence_number"] = value
+                previous = ""
+                for record in records:
+                    record["previous_event_sha256"] = previous
+                    record["event_sha256"] = record_sha256(record, "event_sha256")
+                    previous = str(record["event_sha256"])
+                forged = self.root / f"forged-sequence-{index}.jsonl"
+                forged.write_text(
+                    "".join(canonical_json(record) + "\n" for record in records),
+                    encoding="utf-8",
+                )
+                with self.assertRaisesRegex(ValueError, "Invalid sequence number"):
+                    validate_primary_chain(forged)
 
     def test_repair_copies_missing_mirror_suffix_and_receipt(self) -> None:
         self.append(self._reservation_event())
@@ -1412,6 +1523,47 @@ class LedgerTests(unittest.TestCase):
         )
         self.assertEqual(len(validate_mirrored_state(ledger, receipts, mirror)), 1)
 
+    def test_interrupted_fresh_genesis_rejects_rehashed_boolean_sequence(self) -> None:
+        from ledger import canonical_json, record_sha256
+
+        root = Path(self.temporary.name) / "interrupted-genesis-boolean-sequence"
+        ledger = root / "orion" / "ledger" / "node_hours.jsonl"
+        csv_path = root / "orion" / "ledger" / "node_hours.csv"
+        receipts = root / "orion" / "ledger" / "mirror_receipts.jsonl"
+        mirror = root / "project_home" / "ledger" / "node_hours.jsonl"
+        real_append = __import__("ledger")._append_jsonl
+
+        def interrupt_mirror(path: Path, record: dict[str, object]) -> None:
+            if path == mirror:
+                raise RuntimeError("simulated mirror append interruption")
+            real_append(path, record)
+
+        with patch("ledger._append_jsonl", side_effect=interrupt_mirror):
+            with self.assertRaises(RuntimeError):
+                initialize_ledger(
+                    ledger,
+                    csv_path,
+                    receipts,
+                    mirror,
+                    mirror_transport="filesystem_copy",
+                    notes="recover exact interrupted genesis",
+                    control_plane_version="recoverable-control-plane",
+                )
+        genesis = json.loads(ledger.read_text(encoding="utf-8"))
+        genesis["sequence_number"] = False
+        genesis["event_sha256"] = record_sha256(genesis, "event_sha256")
+        ledger.write_text(canonical_json(genesis) + "\n", encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "Invalid sequence number"):
+            initialize_ledger(
+                ledger,
+                csv_path,
+                receipts,
+                mirror,
+                mirror_transport="filesystem_copy",
+                notes="recover exact interrupted genesis",
+                control_plane_version="recoverable-control-plane",
+            )
+
     def test_interrupted_fresh_genesis_receipt_only_is_repairable(self) -> None:
         root = Path(self.temporary.name) / "interrupted-genesis-receipt"
         ledger = root / "orion" / "ledger" / "node_hours.jsonl"
@@ -1656,6 +1808,30 @@ class LedgerTests(unittest.TestCase):
         self.assertTrue(local_anchor.is_file())
         self.assertTrue(mirror_anchor.is_file())
         self.assertEqual(anchor["event_sha256"], event["event_sha256"])
+
+    def test_audited_pre_anchor_migration_rejects_existing_anchor_schema_alias(
+        self,
+    ) -> None:
+        local_anchor, mirror_anchor = genesis_anchor_paths(self.ledger, self.mirror)
+        event = json.loads(self.ledger.read_text(encoding="utf-8"))
+        receipt = json.loads(self.receipts.read_text(encoding="utf-8"))
+        anchor = json.loads(local_anchor.read_text(encoding="utf-8"))
+        anchor["schema_version"] = True
+        local_anchor.chmod(0o600)
+        local_anchor.write_text(
+            json.dumps(anchor, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        local_anchor.chmod(0o444)
+        mirror_anchor.chmod(0o600)
+        mirror_anchor.unlink()
+        with self.assertRaisesRegex(ValueError, "genesis-anchor schema"):
+            migrate_existing_genesis_anchors(
+                self.ledger,
+                self.receipts,
+                self.mirror,
+                expected_event_sha256=event["event_sha256"],
+                expected_mirror_ack_sha256=receipt["mirror_ack_sha256"],
+            )
 
 
 if __name__ == "__main__":

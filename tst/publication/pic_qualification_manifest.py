@@ -84,6 +84,41 @@ RUNTIME_ENVIRONMENT_ALLOWLIST_KEYS = [
     "_LMFILES_",
     "MODULEPATH",
 ]
+CLAIMS_REGISTRY_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["schema_version", "registry_date", "default_reviewer", "claims"],
+    "properties": {
+        "schema_version": {"const": 1},
+        "registry_date": {"type": "string", "minLength": 1},
+        "default_reviewer": {"type": "string", "minLength": 1},
+        "claims": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": [
+                    "claim_id",
+                    "claim_class",
+                    "required_gates",
+                    "disposition",
+                ],
+                "properties": {
+                    "claim_id": {"type": "string", "minLength": 1},
+                    "claim_class": {"type": "string", "minLength": 1},
+                    "required_gates": {
+                        "type": "array",
+                        "minItems": 1,
+                        "items": {"type": "string", "minLength": 1},
+                    },
+                    "disposition": {"type": "string", "minLength": 1},
+                    "authorized_extension_required": {"type": "boolean"},
+                },
+            },
+        },
+    },
+}
 
 
 def _schema_matches(value: object, schema: dict[str, Any]) -> bool:
@@ -92,6 +127,22 @@ def _schema_matches(value: object, schema: dict[str, Any]) -> bool:
     except ValueError:
         return False
     return True
+
+
+def _json_values_equal(left: object, right: object) -> bool:
+    """Compare JSON values without Python's bool and numeric aliases."""
+    if type(left) is not type(right):
+        return False
+    if isinstance(left, dict):
+        return left.keys() == right.keys() and all(
+            _json_values_equal(left[key], right[key]) for key in left
+        )
+    if isinstance(left, list):
+        return len(left) == len(right) and all(
+            _json_values_equal(left_item, right_item)
+            for left_item, right_item in zip(left, right)
+        )
+    return left == right
 
 
 def validate_schema(
@@ -108,17 +159,22 @@ def validate_schema(
     ):
         validate_schema(value, schema["then"], path)
 
-    if "const" in schema and value != schema["const"]:
+    if "const" in schema and not _json_values_equal(value, schema["const"]):
         raise ValueError(f"{path} does not match const")
-    if "enum" in schema and value not in schema["enum"]:
+    if "enum" in schema and not any(
+        _json_values_equal(value, candidate) for candidate in schema["enum"]
+    ):
         raise ValueError(f"{path} is not in enum")
 
     expected_type = schema.get("type")
     type_matches = {
-        "object": isinstance(value, dict),
-        "array": isinstance(value, list),
-        "string": isinstance(value, str),
-        "number": isinstance(value, (int, float)) and not isinstance(value, bool),
+        "object": type(value) is dict,
+        "array": type(value) is list,
+        "string": type(value) is str,
+        "number": type(value) in (int, float),
+        "integer": type(value) is int,
+        "boolean": type(value) is bool,
+        "null": value is None,
     }
     if expected_type is not None and not type_matches[str(expected_type)]:
         raise ValueError(f"{path} is not a {expected_type}")
@@ -1017,6 +1073,7 @@ def validate_qualification_manifest(
         )
 
     claim_registry = _load_object(CLAIMS_PATH)
+    validate_schema(claim_registry, CLAIMS_REGISTRY_SCHEMA)
     known_claim_ids = {
         claim["claim_id"] for claim in claim_registry["claims"]
     }

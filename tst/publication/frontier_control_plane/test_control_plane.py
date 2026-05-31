@@ -7018,6 +7018,24 @@ PY
         with self.assertRaises(ValueError):
             self._promote_policy()
 
+    def test_initializer_rejects_storage_policy_schema_and_boolean_aliases(self) -> None:
+        for mutate in [
+            lambda policy: policy.update(schema_version=True),
+            lambda policy: policy["frontier"].update(maximum_node_hours=True),
+            lambda policy: policy["frontier"].update(serial_pic_submissions=1),
+            lambda policy: policy["frontier_admission_smoke"].update(maximum_nodes=True),
+            lambda policy: policy["frontier_admission_smoke"].update(
+                registered_short_nonproduction=1
+            ),
+        ]:
+            with self.subTest(mutate=mutate):
+                self._write_policy()
+                policy = json.loads(self.policy.read_text(encoding="utf-8"))
+                mutate(policy)
+                self.policy.write_text(json.dumps(policy), encoding="utf-8")
+                with self.assertRaises(ValueError):
+                    self._promote_policy()
+
     def test_initializer_rejects_non_filesystem_copy_argument(self) -> None:
         with self.assertRaises(ValueError):
             initialize_from_policy(
@@ -7961,6 +7979,39 @@ PY
         manifest_path = self._create_manifest()
         with self.assertRaises(ValueError):
             self._reserve(manifest_path)
+
+    def test_manifest_rejects_nonboolean_short_job_registration(self) -> None:
+        self._write_config(registered_short_nonproduction="false")
+        with self.assertRaises(ValueError):
+            self._create_manifest()
+
+    def test_manifest_rejects_nonstring_required_config_value(self) -> None:
+        self._write_config(git_commit=True)
+        with self.assertRaises(ValueError):
+            self._create_manifest()
+
+    def test_reservation_rejects_timeout_margin_numeric_aliases(self) -> None:
+        for field, value in [
+            ("athena_walltime_seconds", True),
+            ("athena_walltime_seconds", "300"),
+            ("athena_walltime_seconds", 300.9),
+            ("scheduler_walltime_seconds", 600.0),
+        ]:
+            with self.subTest(field=field, value=value):
+                self._write_timeout()
+                margin_path = self.sources / "timeout.json"
+                margin = json.loads(margin_path.read_text(encoding="utf-8"))
+                margin[field] = value
+                margin_path.write_text(json.dumps(margin), encoding="utf-8")
+                submission_id = str(uuid.uuid4())
+                self._write_config(
+                    submission_id=submission_id,
+                    artifact_dir=str(
+                        self.pic_root / "runs" / "f0_hipmpi_smoke" / submission_id
+                    ),
+                )
+                with self.assertRaises(ValueError):
+                    self._reserve(self._create_manifest())
 
     def test_reservation_rejects_stale_site_policy_timestamp(self) -> None:
         stale = datetime.now(timezone.utc) - timedelta(days=2)

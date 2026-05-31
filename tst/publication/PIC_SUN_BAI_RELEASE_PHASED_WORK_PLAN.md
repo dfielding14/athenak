@@ -208,14 +208,29 @@ sealed descriptor-backed snapshot members. It compares the handed-off
 topology map back to the verified tree, rejects unknown active-snapshot
 members, copies mutation-checked ordinary validator inputs into sealed
 descriptors before multi-pass semantic inspection, and rejects sealed
-descriptors that were not routed by the active retained-tree snapshot. The
-transition policy also clears
+descriptors that were not routed by the active retained-tree snapshot. A fifth
+schema-alias audit then found Python numeric-equality gaps at release
+boundaries: boolean, floating-point, or string schema aliases could survive
+selected profile, receipt, provenance, invocation, recovery, reservation, and
+promotion checks. The committed repair requires exact integer schema versions
+at those boundaries and adds adversarial regressions. The transition policy
+also clears
 historical registered-science slices and marks the schema-v4 clean-candidate
 freeze pending. The nonqualifying transition record is
 [`phase0_curated_candidate_successor_2026-05-31.json`](readiness/phase0_curated_candidate_successor_2026-05-31.json).
 
-The clean-tree Phase 0 validation matrix now passes. Phase 0 remains open until
-the stable final diff is independently rereviewed, installed as a paired Orion
+The first exact clean-tree Phase 0 code-boundary validation matrix passed at
+`d0ad350562799e609b4d22f45ce9ca314b38da82`: 727 publication tests with two
+intentional skips, 364 Frontier control-plane tests, 102 focused hardening
+tests, warning-as-error documentation rendering, syntax sweeps and
+`git diff --check`. The nonqualifying receipt is
+[`phase0_exact_boundary_validation_receipt_2026-05-31.json`](readiness/phase0_exact_boundary_validation_receipt_2026-05-31.json).
+Independent rereview rejected that boundary after finding additional
+schema-alias paths in policy promotion, qualification registries, pre-submit
+coercions, ledger records and Bell retained geometry. The expanded repair is
+now pending a fresh exact clean-tree matrix and independent rereview. Phase 0
+remains open until the stable final diff is independently rereviewed,
+installed as a paired Orion
 and Project Home control-plane generation, and frozen with its final source,
 executable, deck, and analyzer checksums. No later phase is authorized yet.
 The historically installed `6f3458ca5c412b866f579d67dde51d73497b65629f6e7a35e10a3af84d7ecd8b`

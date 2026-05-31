@@ -240,6 +240,28 @@ class Q006PaperMultispeciesOscillationRuntimeLocalTests(unittest.TestCase):
                         label="invocation test",
                     )
 
+    def test_retained_json_guards_reject_boolean_and_returncode_aliases(self) -> None:
+        expected = {
+            "clean_empty_directory_configure": True,
+            "configure_returncode": 0,
+            "mpi_used": False,
+        }
+        for replacement in (
+            {"clean_empty_directory_configure": 1},
+            {"clean_empty_directory_configure": 1.0},
+            {"configure_returncode": False},
+            {"configure_returncode": 0.0},
+            {"mpi_used": 0},
+            {"mpi_used": 0.0},
+        ):
+            with self.subTest(replacement=replacement):
+                with self.assertRaisesRegex(q006.AuditError, "primitive type drifted"):
+                    q006._require_exact_match({**expected, **replacement}, expected, "metadata")
+        for value in (False, 0.0):
+            with self.subTest(returncode=value):
+                with self.assertRaisesRegex(q006.AuditError, "returncode drifted"):
+                    q006._require_exact_int(value, 0, "returncode")
+
     def test_readiness_sidecar_binds_only_new_q006_runtime_local_files(self) -> None:
         sidecar = json.loads(SIDECAR.read_text(encoding="utf-8"))
         self.assertEqual(sidecar["gate"], "Q-006")

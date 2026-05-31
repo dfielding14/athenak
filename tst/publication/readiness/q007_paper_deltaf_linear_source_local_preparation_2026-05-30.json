@@ -112,9 +112,9 @@
     "inputs/tests/pic_q007_paper_crsi_linear_preparation.athinput": "d1e6b774bef0556a298b88d4a4e989572bd88622d57a14dd54700856f9d3770c",
     "inputs/tests/pic_q007_paper_crpai_linear_prolate_preparation.athinput": "f98aa8faad0c50be696e14db0d33fb2c22bc1b4e7a3c7ba8fa51f67fbb71fa69",
     "inputs/tests/pic_q007_paper_crpai_linear_oblate_preparation.athinput": "b092941d81eef7a8f76d2541789035e9ac7e0cfa42b9db4fdef12a2a44ea5b3c",
-    "tst/publication/immutable_orion_tree.py": "7ce5af9f07e22d96296f6943370011d1350321f5426543ea7c2ed9ef04e27479",
-    "tst/publication/analyze_q007_paper_deltaf_linear_preparation.py": "b120001162bdc3a828cd1f9e892e3470f1419f003a4738d7e3d9c5264234f80f",
-    "tst/publication/test_analyze_q007_paper_deltaf_linear_preparation.py": "2d5071651b91921dd50b6073985d367f69e807ab859b09df241196c0bf71ba7f"
+    "tst/publication/immutable_orion_tree.py": "287b779d672227e31458496873d646eb892f9ed7fff171627ed11f5f892f208c",
+    "tst/publication/analyze_q007_paper_deltaf_linear_preparation.py": "f3053d5db1e89cf404f7c1ae71498cf41c4ab9a820f1695969aa5b34169ba890",
+    "tst/publication/test_analyze_q007_paper_deltaf_linear_preparation.py": "4506311f984ed21df9752924484c7d56fe2700e5afee394bf891ae14f6a3b1b2"
   },
   "shared_registration_contract": {
     "src/CMakeLists.txt": "includes pgen/tests/q007_paper_deltaf_linear.cpp",

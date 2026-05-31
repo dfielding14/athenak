@@ -675,7 +675,7 @@
     {
       "analyzer_id": "Q023-ANALYZER-PAPER-BELL-LINEAR-CANDIDATE",
       "path": "tst/publication/analyze_q023_paper_bell_linear.py",
-      "sha256": "f08fcf115754cb4f2fc50816e4df2bf90418b93161b854cd7c60471f0e42c0dc",
+      "sha256": "0f60b3e16ce8550bdf133cba4a490a0773d1fa995881cc89651fab4f55e9bdb1",
       "qualification_limit": "source_local_section52_signed_combined_magnetic_and_projected_fluid_velocity_raw_trace_candidate_with_paper_literal_delta_u_y_spatial_sine_fit_phase_and_volume_averaged_absolute_delta_u_growth_estimator_only_approved_materialized_geometry_exact_raw_artifact_provenance_nonqualifying_velocity_cross_check_clean_freeze_convergence_registered_execution_independent_recompute_and_external_review_open"
     },
     {
@@ -729,7 +729,7 @@
     {
       "analyzer_id": "Q023-ANALYZER-Q029-HALL-BELL-RAW-PROJECTIONS",
       "path": "tst/publication/analyze_q029_hall_bell_linear_raw.py",
-      "sha256": "7fe52f4f6e2d406a31a10eb25d932672b0dbd9e6b27d2d0e920c7a73e8a3a51d",
+      "sha256": "b997abf10d11a336e8167ea7c4a400ff9f19fa69aa0ca10fa4e87c7c522548e6",
       "qualification_limit": "source_local_exact_orion_raw_geometric_seed_carrier_projections_only_not_physical_bai_oracle_not_hall_dispersion_qualification"
     },
     {

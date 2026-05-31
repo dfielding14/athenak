@@ -29,10 +29,10 @@ SCRIPT_DIR = Path(__file__).absolute().parent
 
 
 def _required(config: dict[str, object], key: str) -> str:
-    value = str(config.get(key, "")).strip()
-    if not value:
+    value = config.get(key)
+    if not isinstance(value, str) or not value.strip():
         raise ValueError(f"Missing required pre-submit config key: {key}")
-    return value
+    return value.strip()
 
 
 def _safe_filename_segment(config: dict[str, object], key: str) -> str:
@@ -210,6 +210,13 @@ def create_manifest(
         )
         snapshot_files.append(queue_snapshot_record)
         timeout_margin = read_json(Path(_required(config, "timeout_margin_artifact")))
+        registered_short_nonproduction = config.get(
+            "registered_short_nonproduction", False
+        )
+        if not isinstance(registered_short_nonproduction, bool):
+            raise ValueError(
+                "Pre-submit registered_short_nonproduction must be a boolean"
+            )
         for record in snapshot_files:
             staged_path = Path(record["path"])
             record["path"] = str(submission_dir / staged_path.relative_to(temporary))
@@ -231,9 +238,7 @@ def create_manifest(
             "selected_qos": _required(config, "selected_qos"),
             "qos_selection_reason": _required(config, "qos_selection_reason"),
             "site_policy_checked_utc": _required(config, "site_policy_checked_utc"),
-            "registered_short_nonproduction": bool(
-                config.get("registered_short_nonproduction", False)
-            ),
+            "registered_short_nonproduction": registered_short_nonproduction,
             "artifact_dir": _required(config, "artifact_dir"),
             "queue_snapshot_sha256": queue_snapshot_record["sha256"],
             "timeout_margin": timeout_margin,

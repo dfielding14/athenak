@@ -22,6 +22,7 @@ if __package__:
     from .immutable_orion_tree import authorized_tree_root
     from .immutable_orion_tree import freeze_tree as freeze_immutable_tree
     from .immutable_orion_tree import is_sealed_snapshot_member
+    from .immutable_orion_tree import require_exact_primitive_types
     from .immutable_orion_tree import staged_verified_frozen_tree
     from .immutable_orion_tree import validate_executable_elf
     from .immutable_orion_tree import validate_serial_host_build_evidence
@@ -33,6 +34,7 @@ else:
     from immutable_orion_tree import authorized_tree_root
     from immutable_orion_tree import freeze_tree as freeze_immutable_tree
     from immutable_orion_tree import is_sealed_snapshot_member
+    from immutable_orion_tree import require_exact_primitive_types
     from immutable_orion_tree import staged_verified_frozen_tree
     from immutable_orion_tree import validate_executable_elf
     from immutable_orion_tree import validate_serial_host_build_evidence
@@ -457,6 +459,20 @@ def _restore_logical_paths(value: Any) -> Any:
 def _require(condition: bool, message: str) -> None:
     if not condition:
         raise AuditError(message)
+
+
+def _require_exact_match(actual: Any, expected: Any, label: str) -> None:
+    """Reject primitive aliases before requiring an exact retained JSON value."""
+    require_exact_primitive_types(actual, expected, error_type=AuditError, label=label)
+    _require(actual == expected, f"{label} drifted")
+
+
+def _require_exact_int(actual: Any, expected: int, label: str) -> None:
+    """Require one JSON integer without accepting boolean or float aliases."""
+    _require(
+        type(actual) is int and type(expected) is int and actual == expected,
+        f"{label} drifted",
+    )
 
 
 def _require_schema_version(value: Any, expected: int, label: str) -> None:
@@ -938,7 +954,7 @@ def _validate_pinned_executable_binding(root: Path) -> dict[str, Any]:
         "frontier_used": False,
         "kronos_used": False,
     }
-    _require(receipt == expected_receipt, "pinned executable receipt drifted")
+    _require_exact_match(receipt, expected_receipt, "pinned executable receipt")
     provenance_path = _contained_regular_file(
         pinned_root, pinned_root / PIN_PROVENANCE_RECEIPT_NAME
     )
@@ -970,8 +986,7 @@ def _validate_pinned_executable_binding(root: Path) -> dict[str, Any]:
         },
         "retained_evidence": sorted(PIN_RETAINED_EVIDENCE),
     }
-    _require(provenance == expected_provenance,
-             "pinned executable provenance receipt drifted")
+    _require_exact_match(provenance, expected_provenance, "pinned executable provenance receipt")
     for relative in evidence:
         _require(isinstance(relative, str) and relative,
                  "pinned executable provenance evidence path is invalid")
@@ -1004,8 +1019,11 @@ def _validate_pinned_executable_binding(root: Path) -> dict[str, Any]:
             "no_specials_no_bytecode_cache_no_line_separator_names"
         ),
     }
-    _require(archive_validation == expected_archive_validation,
-             "pinned executable source archive validation receipt drifted")
+    _require_exact_match(
+        archive_validation,
+        expected_archive_validation,
+        "pinned executable source archive validation receipt",
+    )
     dependency_manifest = json.loads(_contained_regular_file(
         pinned_root, pinned_root / "source/shared_dependency_sha256.json"
     ).read_text(encoding="utf-8"))
@@ -1029,15 +1047,18 @@ def _validate_pinned_executable_binding(root: Path) -> dict[str, Any]:
     _require(
         isinstance(preflight, dict)
         and isinstance(preflight.get("build_directory"), str)
-        and Path(preflight["build_directory"]).is_absolute()
-        and {name: value for name, value in preflight.items() if name != "build_directory"}
-        == {
+        and Path(preflight["build_directory"]).is_absolute(),
+        "pinned executable clean-directory preflight receipt drifted",
+    )
+    _require_exact_match(
+        {name: value for name, value in preflight.items() if name != "build_directory"},
+        {
             "schema_version": 1,
             "existed_before_creation": False,
             "entries_immediately_after_creation": [],
             "clean_empty_directory_configure": True,
         },
-        "pinned executable clean-directory preflight receipt drifted",
+        "pinned executable clean-directory preflight receipt",
     )
     return {
         **binding,
@@ -1140,7 +1161,7 @@ def _validate_runtime_invocations(root: Path, pinned: dict[str, Any]) -> dict[st
         _validate_serial_invocation_identity(invocation, pinned, label=label)
         _require(invocation.get("cwd") == str(run), f"{label}: invocation cwd drifted")
         _require(invocation.get("argv") == expected["argv"], f"{label}: invocation argv drifted")
-        _require(invocation.get("returncode") == 0, f"{label}: invocation did not succeed")
+        _require_exact_int(invocation.get("returncode"), 0, f"{label}: invocation returncode")
         _require(invocation.get("selected_environment") == {"PYTHONDONTWRITEBYTECODE": "1"},
                  f"{label}: selected environment drifted")
         produced = _relative_file_hashes(root, run, excluded=("invocation.json",))
@@ -1249,10 +1270,10 @@ def _validate_parser_contract_suite(root: Path, pinned: dict[str, Any]) -> dict[
              "parser-contract positive case count drifted")
     _require(isinstance(negative, list) and len(negative) == 31,
              "parser-contract negative case count drifted")
-    _require(summary.get("accepted_case_count") == 6,
-             "parser-contract accepted case count drifted")
-    _require(summary.get("rejected_case_count") == 31,
-             "parser-contract rejected case count drifted")
+    _require_exact_int(summary.get("accepted_case_count"), 6,
+                       "parser-contract accepted case count")
+    _require_exact_int(summary.get("rejected_case_count"), 31,
+                       "parser-contract rejected case count")
     _require(summary.get("all_passed") is True, "parser-contract suite did not pass")
     _require(
         summary.get("pinned_executable_root_inventory_sha256")
@@ -1305,9 +1326,12 @@ def _validate_parser_contract_suite(root: Path, pinned: dict[str, Any]) -> dict[
         _require(set(generated) == _expected_parser_generated_paths(label, expected_positive),
                  f"{label}: parser generated payload topology drifted")
         returncode = invocation.get("returncode")
-        _require(returncode == item.get("returncode"), f"{label}: parser returncode drifted")
-        _require(returncode == (0 if expected_positive else 1),
-                 f"{label}: parser positive/negative disposition drifted")
+        _require_exact_int(returncode, item.get("returncode"), f"{label}: parser returncode")
+        _require_exact_int(
+            returncode,
+            0 if expected_positive else 1,
+            f"{label}: parser positive/negative disposition",
+        )
         _require(item.get("positive") is expected_positive and item.get("passed") is True,
                  f"{label}: parser summary disposition drifted")
         stdout = _contained_regular_file(root, case / "stdout.txt").read_text(
@@ -1371,7 +1395,7 @@ def _validate_retained_topology(root: Path, pinned: dict[str, Any]) -> None:
     _require(_sha256(convenience) == pinned["pinned_executable_sha256"],
              "Q-006 convenience executable drifted")
     static_path, static = _load_rooted_json(root, root / "reports/static_descriptor.json")
-    _require(static == static_descriptor(), "Q-006 retained static descriptor drifted")
+    _require_exact_match(static, static_descriptor(), "Q-006 retained static descriptor")
     _require(_sha256(static_path), "Q-006 static descriptor hash is empty")
     allowed = {
         "bin", "decks", "reports", "runs", "parser_contract_suite",
@@ -1505,7 +1529,7 @@ def verify_retained_probe(
         summary = _contained_regular_file(retained, retained / PROBE_SUMMARY_NAME)
         expected = json.loads(summary.read_text(encoding="utf-8"))
         _require_schema_version(expected, 1, "retained Q-006 probe summary")
-        _require(measured == expected, "retained Q-006 probe summary drifted from raw recompute")
+        _require_exact_match(expected, measured, "retained Q-006 probe summary")
         return {"tree_freeze": tree, "summary_sha256": _sha256(summary), "summary": measured}
 
 

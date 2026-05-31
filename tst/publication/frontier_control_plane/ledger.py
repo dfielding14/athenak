@@ -329,7 +329,10 @@ def _validate_primary_records(
 ) -> list[dict[str, object]]:
     previous = ""
     for expected_sequence, record in enumerate(records):
-        if record.get("sequence_number") != expected_sequence:
+        if (
+            type(record.get("sequence_number")) is not int
+            or record.get("sequence_number") != expected_sequence
+        ):
             raise ValueError(f"Invalid sequence number in {path}")
         if record.get("previous_event_sha256") != previous:
             raise ValueError(f"Broken previous-event link in {path}")
@@ -517,7 +520,14 @@ def _require_registered_transition_payload(
     if set(payload) - set(prior_payload) - allowed_changes:
         raise ValueError("Registered reservation transition adds unexpected fields")
     for key, value in prior_payload.items():
-        if key not in allowed_changes and payload.get(key) != value:
+        if (
+            key not in allowed_changes
+            and (
+                key not in payload
+                or canonical_json({"value": payload[key]})
+                != canonical_json({"value": value})
+            )
+        ):
             raise ValueError("Registered reservation transition rewrites immutable fields")
 
 
@@ -583,8 +593,11 @@ def _require_purged_zero_execution_semantics(record: dict[str, object]) -> None:
     if record.get("terminal_recovery_mode") == "purged_scontrol_cancelled_zero_execution":
         if (
             record.get("state") != "CANCELLED"
+            or type(record.get("scheduler_reported_allocated_nodes")) is not int
             or record.get("scheduler_reported_allocated_nodes") != 0
+            or type(record.get("elapsed_seconds")) is not int
             or record.get("elapsed_seconds") != 0
+            or type(record.get("consumed_node_hours")) not in {int, float}
             or record.get("consumed_node_hours") != 0.0
         ):
             raise ValueError("Purged zero-execution reconciliation semantics differ")
@@ -1756,8 +1769,18 @@ def _read_one_genesis_anchor_bytes(path: Path, root: Path) -> bytes:
     )
 
 
+def _validate_genesis_anchor_schema(anchor: dict[str, object]) -> None:
+    if (
+        type(anchor.get("schema_version")) is not int
+        or anchor.get("schema_version") != 1
+    ):
+        raise ValueError("Unsupported Frontier PIC genesis-anchor schema")
+
+
 def _read_one_genesis_anchor(path: Path, root: Path) -> dict[str, object]:
-    return read_json_bytes(_read_one_genesis_anchor_bytes(path, root), label=str(path))
+    anchor = read_json_bytes(_read_one_genesis_anchor_bytes(path, root), label=str(path))
+    _validate_genesis_anchor_schema(anchor)
+    return anchor
 
 
 def _validate_genesis_anchors(
@@ -1805,6 +1828,7 @@ def _validate_genesis_anchor_bytes(
         raise ValueError("Orion and Project Home genesis-anchor bytes differ")
     local_anchor, _ = genesis_anchor_paths(ledger_jsonl, mirror_jsonl)
     anchor = read_json_bytes(local_bytes, label=str(local_anchor))
+    _validate_genesis_anchor_schema(anchor)
     if anchor != _genesis_anchor(records[0], receipts[0], mirror_jsonl=mirror_jsonl):
         raise ValueError("Frontier PIC genesis anchor differs from ledger genesis")
 
@@ -2462,6 +2486,7 @@ def _repair_interrupted_genesis_locked(
         or genesis.get("state") != "initialized"
         or genesis.get("notes") != notes
         or genesis.get("control_plane_version") != control_plane_version
+        or type(genesis.get("sequence_number")) is not int
         or genesis.get("sequence_number") != 0
         or genesis.get("previous_event_sha256") != ""
         or record_sha256(genesis, "event_sha256") != genesis.get("event_sha256")

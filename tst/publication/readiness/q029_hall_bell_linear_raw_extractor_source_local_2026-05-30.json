@@ -11,16 +11,16 @@
     "scope_interpretation": "extractor_subpatch_constraints_only_not_an_integrated_worktree_diff_claim",
     "production_source_edited": false,
     "pinned_existing_decoder_edited": false,
-    "existing_q029_files_edited": false,
-    "new_q029_only_files": true
+    "existing_q029_files_edited": true,
+    "new_q029_only_files": false
   },
   "predecessor_binding": {
     "path": "tst/publication/readiness/q029_hall_bell_linear_source_local_preparation_2026-05-30.json",
     "sha256": "ff6da49895b60f0977e16231c78881e13261529e386ac795a0dee0503c92de88"
   },
   "artifact_bindings": {
-    "tst/publication/analyze_q029_hall_bell_linear_raw.py": "7fe52f4f6e2d406a31a10eb25d932672b0dbd9e6b27d2d0e920c7a73e8a3a51d",
-    "tst/publication/test_analyze_q029_hall_bell_linear_raw.py": "b2abae5d51e2ff12edb3b6c6140b8292995679f8b5dbb35a745612acc5b5ea9b",
+    "tst/publication/analyze_q029_hall_bell_linear_raw.py": "b997abf10d11a336e8167ea7c4a400ff9f19fa69aa0ca10fa4e87c7c522548e6",
+    "tst/publication/test_analyze_q029_hall_bell_linear_raw.py": "2c7de332e5cd02681824c0fd199bab7dd7d877eb95729787a10d099ca049b085",
     "vis/python/bin_convert_new.py": "5835cad3233c351689c9a961d57e352613a9a731608b80a733f8f00977daac65"
   },
   "approved_source_local_raw_artifacts": {

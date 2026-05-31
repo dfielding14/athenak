@@ -230,7 +230,14 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _require_dimension(dimension: Any) -> int:
+    if type(dimension) is not int or dimension not in DIMENSIONS:
+        raise ContractError("dimension must be one of the preregistered integer values")
+    return dimension
+
+
 def _raw_geometry(dimension: int) -> dict[str, list[float] | list[int]]:
+    dimension = _require_dimension(dimension)
     geometry = _EXPECTED_GEOMETRY[dimension]
     return {
         "nx": list(geometry["nx"]),
@@ -239,11 +246,34 @@ def _raw_geometry(dimension: int) -> dict[str, list[float] | list[int]]:
     }
 
 
+def _validate_raw_geometry(
+    geometry: Any, dimension: int
+) -> dict[str, list[float] | list[int]]:
+    dimension = _require_dimension(dimension)
+    if (
+        not isinstance(geometry, dict)
+        or set(geometry) != _RAW_GEOMETRY_KEYS
+        or not isinstance(geometry["nx"], list)
+        or len(geometry["nx"]) != 3
+        or any(type(value) is not int for value in geometry["nx"])
+        or not isinstance(geometry["xmin"], list)
+        or len(geometry["xmin"]) != 3
+        or any(type(value) is not float for value in geometry["xmin"])
+        or not isinstance(geometry["extent"], list)
+        or len(geometry["extent"]) != 3
+        or any(type(value) is not float for value in geometry["extent"])
+        or geometry != _raw_geometry(dimension)
+    ):
+        raise ContractError(
+            "raw Bell provenance geometry is not an approved materialized variant"
+        )
+    return geometry
+
+
 def synthetic_contract_provenance(dimension: int, epsilon: float) -> dict[str, Any]:
     """Return explicitly non-qualifying provenance for analytical unit fixtures."""
     theoretical_dispersion(epsilon)
-    if dimension not in DIMENSIONS:
-        raise ContractError("dimension must be one of the preregistered integer values")
+    dimension = _require_dimension(dimension)
     return {
         "kind": "synthetic_contract_fixture",
         "variant_id": f"Q023-SYNTHETIC-CONTRACT-{dimension}D-EPSILON-{epsilon:g}",
@@ -314,6 +344,7 @@ def _source_local_materialized_provenance(
     *,
     artifact_root: Path,
 ) -> dict[str, Any]:
+    dimension = _require_dimension(dimension)
     variant = _APPROVED_SOURCE_LOCAL_RAW_VARIANTS.get(variant_id)
     if variant is None:
         raise ContractError("raw Bell variant is not an approved materialized source-local ID")
@@ -351,14 +382,12 @@ def _validate_raw_provenance(
     *,
     artifact_root: Path | None = None,
 ) -> dict[str, Any]:
+    dimension = _require_dimension(dimension)
     if not isinstance(provenance, dict) or set(provenance) != _RAW_PROVENANCE_KEYS:
         raise ContractError("raw Bell provenance keys do not match the contract")
     if provenance["retained_observable_contract"] != RETAINED_OBSERVABLE_CONTRACT:
         raise ContractError("raw Bell retained-observable contract mismatch")
-    geometry = provenance["raw_geometry"]
-    if (not isinstance(geometry, dict) or set(geometry) != _RAW_GEOMETRY_KEYS or
-            geometry != _raw_geometry(dimension)):
-        raise ContractError("raw Bell provenance geometry is not an approved materialized variant")
+    _validate_raw_geometry(provenance["raw_geometry"], dimension)
     artifacts = provenance["raw_artifacts"]
     if not isinstance(artifacts, list):
         raise ContractError("raw Bell provenance artifacts must be a list")
@@ -406,8 +435,7 @@ def _validate_raw_provenance(
 
 
 def _mode_basis(dimension: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    if dimension not in DIMENSIONS:
-        raise ContractError("dimension must be one of the preregistered integer values")
+    dimension = _require_dimension(dimension)
     raw = np.array(
         [1.0, 2.0 if dimension >= 2 else 0.0, 4.0 if dimension >= 3 else 0.0]
     )
@@ -424,6 +452,7 @@ def _mode_basis(dimension: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
 
 def validate_candidate_deck(path: Path, expected_dimension: int) -> dict[str, Any]:
     """Validate paper values and retain the non-authorized local-run boundary."""
+    expected_dimension = _require_dimension(expected_dimension)
     blocks = parse_athinput(path)
     for (block, name), expected in _EXPECTED_DECK_VALUES.items():
         measured = blocks.get(block, {}).get(name)

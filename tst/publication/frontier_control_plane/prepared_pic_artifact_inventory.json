@@ -10,11 +10,11 @@
     },
     {
       "path": "tst/publication/analyze_q006_paper_multispecies_oscillation_runtime_local.py",
-      "sha256": "d669815c23f217b92fa5fe2e1b9b930bca7f1c7ec529df815e33a274bf5002a1"
+      "sha256": "3235cbd383159538b9d9aa3b4959e2f5469dd5729b65e56b64885843ad4a6327"
     },
     {
       "path": "tst/publication/analyze_q007_paper_deltaf_linear_preparation.py",
-      "sha256": "b120001162bdc3a828cd1f9e892e3470f1419f003a4738d7e3d9c5264234f80f"
+      "sha256": "f3053d5db1e89cf404f7c1ae71498cf41c4ab9a820f1695969aa5b34169ba890"
     },
     {
       "path": "tst/publication/analyze_q011_injection_distribution_runtime_local.py",
@@ -22,7 +22,7 @@
     },
     {
       "path": "tst/publication/analyze_q023_paper_bell_linear.py",
-      "sha256": "f08fcf115754cb4f2fc50816e4df2bf90418b93161b854cd7c60471f0e42c0dc"
+      "sha256": "0f60b3e16ce8550bdf133cba4a490a0773d1fa995881cc89651fab4f55e9bdb1"
     },
     {
       "path": "tst/publication/analyze_q029_hall_bell_linear.py",
@@ -30,7 +30,7 @@
     },
     {
       "path": "tst/publication/analyze_q029_hall_bell_linear_raw.py",
-      "sha256": "7fe52f4f6e2d406a31a10eb25d932672b0dbd9e6b27d2d0e920c7a73e8a3a51d"
+      "sha256": "b997abf10d11a336e8167ea7c4a400ff9f19fa69aa0ca10fa4e87c7c522548e6"
     },
     {
       "path": "tst/publication/analyze_q029_hall_extension_candidate.py",
