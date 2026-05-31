@@ -8,7 +8,7 @@
   "claim_closure": false,
   "scope": "Q-029-only fail-closed successor for the experimental Hall-Bell extension. This record binds the separately named source-local q029_hall_bell_linear launch-preparation carrier to a dedicated Q-022 Bai provenance, equation-map and tolerance-table route. Those placeholders remain blocked and empty; the broader Athena-Bai shock comparison remains separate. This record does not derive the physical CR-Hall mapping, extract reference data, qualify Hall-Bell physics, close shock-front applicability or authorize execution.",
   "artifact_bindings": {
-    "tst/publication/readiness/q029_hall_bell_linear_source_local_preparation_2026-05-30.json": "6d152e0d368b2091b7dd979c5864d17be4ab4de8cc15974310fc81bc3a1052ff",
+    "tst/publication/readiness/q029_hall_bell_linear_source_local_preparation_2026-05-30.json": "ff6da49895b60f0977e16231c78881e13261529e386ac795a0dee0503c92de88",
     "tst/publication/readiness/q029_experimental_hall_normalization_derivation_2026-05-30.md": "3d5c6cfd9e0e4e06cf28d836935e3b5175b931983da377e8b1c2bfb2a80e7b74"
   },
   "q022_prerequisite_bindings": {
