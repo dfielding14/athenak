@@ -300,6 +300,20 @@ class PicReadinessRegistryTests(unittest.TestCase):
             candidate["active_successor"]["control_plane_version"],
         )
         lifecycle = storage["installed_control_plane_lifecycle"]
+        science_freeze = policy["science_submission_freeze"]
+        if science_freeze == {"status": "pending_clean_candidate_freeze"}:
+            phase0_successor = _load("phase0_curated_candidate_successor_2026-05-31.json")
+            self.assertEqual(lifecycle, "paired_installed_reviewed_generation")
+            self.assertEqual(
+                storage["installed_control_plane_version"],
+                phase0_successor["successor_source_control_plane_version"],
+            )
+            self.assertEqual(
+                storage["staged_control_plane_candidate_version"],
+                phase0_successor["successor_source_control_plane_version"],
+            )
+            self.assertEqual(policy["registered_science_slices"], [])
+            return
         if lifecycle == "live_active_generation_successor_staged_not_installed":
             prior_active = f1_candidate.get(
                 "active_policy_transition",
@@ -381,7 +395,6 @@ class PicReadinessRegistryTests(unittest.TestCase):
                 )
             else:
                 self.assertEqual(active_transition["status"], "pass")
-            science_freeze = policy["science_submission_freeze"]
             self.assertEqual(science_freeze["status"], "authorized")
             clean_candidate = candidate["inherited_clean_candidate_freeze"]
             clean_candidate_transition = source_alias_candidate[
@@ -492,6 +505,14 @@ class PicReadinessRegistryTests(unittest.TestCase):
                 "frontier_f2_multirank_runtime_metadata_launch_contract.json"
             ),
         }
+        if policy["science_submission_freeze"]["status"] == (
+            "pending_clean_candidate_freeze"
+        ):
+            self.assertEqual(authorizations, {})
+            for authorization_id, filename in sidecars.items():
+                with self.subTest(authorization_id=authorization_id):
+                    validate_launch_contract(_load(filename))
+            return
         self.assertEqual(set(authorizations), set(sidecars))
         for authorization_id, filename in sidecars.items():
             with self.subTest(authorization_id=authorization_id):
@@ -553,10 +574,15 @@ class PicReadinessRegistryTests(unittest.TestCase):
             storage["installed_control_plane_version"],
             storage["staged_control_plane_candidate_version"],
         )
-        self.assertNotEqual(
+        self.assertEqual(
             staged_version,
             storage["installed_control_plane_version"],
         )
+        if policy["science_submission_freeze"] == {
+            "status": "pending_clean_candidate_freeze"
+        }:
+            self.assertEqual(policy["registered_science_slices"], [])
+            return
         successor = _load(
             "q027_frontier_f1_registered_science_successor_candidate_2026-05-30.json"
         )

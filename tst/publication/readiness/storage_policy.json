@@ -12,93 +12,17 @@
     "maximum_node_hours": 10000
   },
   "science_submission_freeze": {
-    "status": "authorized",
-    "manifest_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/clean_candidates/31be2cd6-19db-4246-9857-06fc2f523c19/clean_candidate_manifest.json",
-    "manifest_sha256": "3174515d1578f0310e8ce4b0bf214050f8b4d95ff4af3c694b44eb466b7dff41",
-    "build_profile_control_plane_version": "6cbbbbd6f5da8fb2dcd0a1ab9b91fca51570f5a54502dcb1da59aea0eda0f3ab"
+    "status": "pending_clean_candidate_freeze"
   },
-  "registered_science_slices": [
-    {
-      "authorization_id": "f1-clean-gyro-mpich-stderr-v3",
-      "status": "authorized",
-      "campaign": "f1_gpu_relativistic_gyro",
-      "test_id": "pic_relativistic_gyro_paper",
-      "evidence_class": "frontier_f1_clean_candidate_gpu_pusher_oracle",
-      "physical_mode": "paper_test_particle",
-      "runtime_profile": "frontier_minimum_supported",
-      "selected_qos": "debug",
-      "registered_short_nonproduction": true,
-      "maximum_nodes": 1,
-      "maximum_walltime_seconds": 900,
-      "maximum_attempts": 1,
-      "job_script_sha256": "961f1253dc4d9428c53b89c158a457946eb8171e11fa6be4aa13be8ddd4b7c7e",
-      "input_deck_sha256": "994acc009bf7455d3666db44da2c8825b6124ce025a2e3547bef6e7c75992c8e",
-      "environment_profile_sha256": "7ff6cff3e263e8b4552bcbac1d5b55a85264a2a7af5565bbc9856584e35402c1",
-      "analysis_script_sha256": [
-        "411337175b5d3a2506939833656142a766dfac00b54ae8c1f7b34ca28e0ed905",
-        "cf090115bcdfd143f67b12339115102b57e74cf3205b1ebb1521c144c3415a5a"
-      ],
-      "executable_sha256": "bea2a418faf582e0b7e8a2830494fa156ddddb18763dde21d344a4cba14a60d8",
-      "launch_contract_sha256": "f63d539df5118ff0f9cec769fa656f4f34784dce54847a285aea48517e299a1f",
-      "clean_candidate_manifest_sha256": "3174515d1578f0310e8ce4b0bf214050f8b4d95ff4af3c694b44eb466b7dff41"
-    },
-    {
-      "authorization_id": "f1-clean-paper-coupling-mpich-stderr-v2",
-      "status": "authorized",
-      "campaign": "f1_gpu_paper_coupling",
-      "test_id": "pic_paper_coupling_conservation",
-      "evidence_class": "frontier_f1_clean_candidate_gpu_paper_coupling_oracle",
-      "physical_mode": "paper_mhd_pic",
-      "runtime_profile": "frontier_minimum_supported",
-      "selected_qos": "debug",
-      "registered_short_nonproduction": true,
-      "maximum_nodes": 1,
-      "maximum_walltime_seconds": 900,
-      "maximum_attempts": 1,
-      "job_script_sha256": "c55eef619396c00d50d893d908720d34381cbe34557f4c8fcbb9e45e6393adb3",
-      "input_deck_sha256": "d0dc2e23a2085c9ad54479240f3f65c4b28f6d565d8bf4279c9865b40d095fc5",
-      "environment_profile_sha256": "7ff6cff3e263e8b4552bcbac1d5b55a85264a2a7af5565bbc9856584e35402c1",
-      "analysis_script_sha256": [
-        "9b27bace0b8fc1e6ae4ebeac914b25c80c2d8b12beeb763628b4049c5085c67a",
-        "cf090115bcdfd143f67b12339115102b57e74cf3205b1ebb1521c144c3415a5a"
-      ],
-      "executable_sha256": "bea2a418faf582e0b7e8a2830494fa156ddddb18763dde21d344a4cba14a60d8",
-      "launch_contract_sha256": "0daebd7708c642af2aae000a9a35c773599956e5e3273c4eb4124125fdd5a1e6",
-      "clean_candidate_manifest_sha256": "3174515d1578f0310e8ce4b0bf214050f8b4d95ff4af3c694b44eb466b7dff41"
-    },
-    {
-      "authorization_id": "f2-parser-multirank-runtime-metadata-v2",
-      "status": "authorized",
-      "campaign": "f2_multirank_runtime_metadata",
-      "test_id": "pic_parser_contract_guards",
-      "evidence_class": "frontier_f2_clean_candidate_multirank_runtime_metadata",
-      "physical_mode": "extended_mhd_pic_parser_contract",
-      "runtime_profile": "frontier_minimum_supported",
-      "selected_qos": "debug",
-      "registered_short_nonproduction": true,
-      "maximum_nodes": 1,
-      "maximum_walltime_seconds": 900,
-      "maximum_attempts": 1,
-      "job_script_sha256": "e825d2c153b789706d2c293d04a34e1db08b0dc2a8e0043d1e88183f0b029b87",
-      "input_deck_sha256": "e14ac149dc3f8c6fb3d5400f6e330063e6f72f2ed2f54691ade8c65ce5173a45",
-      "environment_profile_sha256": "7ff6cff3e263e8b4552bcbac1d5b55a85264a2a7af5565bbc9856584e35402c1",
-      "analysis_script_sha256": [
-        "8c240ef0a2d9431f5cbb37b1f6d8639ab77a83d2dd8c61870568c30ef1cc115a",
-        "cf090115bcdfd143f67b12339115102b57e74cf3205b1ebb1521c144c3415a5a"
-      ],
-      "executable_sha256": "bea2a418faf582e0b7e8a2830494fa156ddddb18763dde21d344a4cba14a60d8",
-      "launch_contract_sha256": "ff3dd988bf8148c8d89b1586fdd254e14501007972f1ca25efc1992a06415429",
-      "clean_candidate_manifest_sha256": "3174515d1578f0310e8ce4b0bf214050f8b4d95ff4af3c694b44eb466b7dff41"
-    }
-  ],
+  "registered_science_slices": [],
   "frontier_admission_smoke": {
     "status": "closed_after_pass"
   },
   "olcf_side_storage": {
     "status": "passed_user_authorized_orion_only_storage",
     "last_preflight_utc": "2026-05-30T22:52:40Z",
-    "installed_control_plane_version": "6f3458ca5c412b866f579d67dde51d73497b65629f6e7a35e10a3af84d7ecd8b",
-    "staged_control_plane_candidate_version": "6f3458ca5c412b866f579d67dde51d73497b65629f6e7a35e10a3af84d7ecd8b",
+    "installed_control_plane_version": "273da436765b471f2bf21aa5d109d47b4af905f611c01d604b08015a48ef5acd",
+    "staged_control_plane_candidate_version": "273da436765b471f2bf21aa5d109d47b4af905f611c01d604b08015a48ef5acd",
     "installed_control_plane_lifecycle": "paired_installed_reviewed_generation",
     "orion_simulation_root_preflight": {
       "status": "passed",

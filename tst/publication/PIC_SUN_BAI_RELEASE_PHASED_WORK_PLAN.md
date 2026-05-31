@@ -193,11 +193,15 @@ using additional Frontier allocation.
 The first curation pass exposed two freeze-blocking provenance gaps during
 independent review: clean-candidate creation accepted an operator-selected
 prepared-artifact subset, and Q-006, Q-007, and Q-011 analyzers reopened
-retained evidence by pathname after verification. The successor now requires
+retained evidence by pathname after verification. A second independent review
+then found that the copied private snapshot remained owner-mutable under the
+same Unix account. The successor now requires
 the canonical prepared-artifact inventory path, independently derives the
-complete archived PIC-deck and publication-analyzer closure, and stages
-descriptor-anchored verified bytes into private read-only snapshots for
-analysis. The nonqualifying transition record is
+complete archived PIC-deck and publication-analyzer closure, keeps verified
+tree topology in memory, and exposes consumed regular payloads lazily through
+sealed descriptor-backed snapshot members. The transition policy also clears
+historical registered-science slices and marks the schema-v4 clean-candidate
+freeze pending. The nonqualifying transition record is
 [`phase0_curated_candidate_successor_2026-05-31.json`](readiness/phase0_curated_candidate_successor_2026-05-31.json).
 
 Phase 0 remains open until the stable final diff is independently rereviewed,
