@@ -4,7 +4,7 @@
 | --- | --- |
 | Date | 2026-05-31 |
 | Repository | AthenaK MHD-PIC worktree at `/ccs/home/dfielding/athenak-pic` |
-| Branch and commit | `PIC` code-and-control snapshot `ec69dd5b6a16f7945d7531f33b3d6a13393243e2`; tracking `origin/PIC`; local branch is 111 commits ahead at that snapshot; this documentation reconciliation follows it |
+| Branch and commits | `PIC` code-and-control snapshot `ec69dd5b6a16f7945d7531f33b3d6a13393243e2` at 111 commits ahead of `origin/PIC`; audited documentation snapshot `717046d1f330a2ee88471669bfc6fc2edfd06f89` at 112 commits ahead; this scoped reproducibility refresh follows it |
 | Agent | Codex |
 | Governing plan | `tst/publication/PIC_PRODUCTION_READINESS_PLAN.md` |
 | Data analyzed | Frozen Q006, Q007, Q008 and Q011 local-readiness artifacts; retained read-only Q023 Bell source-local smoke; authoritative Frontier node-hour ledger |
@@ -53,13 +53,13 @@ The main change relative to the prior state is therefore not “the entire plan 
 
 ![Readiness gate summary](figures/status_update/readiness_gate_summary.png)
 
-*Figure 5. Status classification for the current tranche. The bounded local successor tranche, verifier hardening and broad local test suites are complete. The final clean-tree validation matrix, canonical schema-v4 clean-candidate freeze, science qualification and the broader Frontier portability matrix remain open; external review remains pending. The bars are categorical labels, not completion percentages.*
+*Figure 5. Status classification for the current tranche. The bounded local successor tranche, verifier hardening, broad local test suites and final clean-tree validation matrix are complete. The canonical schema-v4 clean-candidate freeze, science qualification and the broader Frontier portability matrix remain open; external review remains pending. The bars are categorical labels, not completion percentages.*
 
 The strongest statements we can make are local ones: the bounded successors ran, their retained outputs were inventoried, and Q008 shows monotonic three-resolution residual reduction within the tested matrix. The final local test tranches also passed during this work session, although their broad counts are manually curated observations rather than a retained signed test receipt. The report generator itself re-validates the retained trees and mirrored accounting state, re-reads the frozen JSON products, and regenerates the figures.
 
 The largest remaining uncertainty is not a single bug. It is the unclosed transition from bounded local engineering evidence to physical and operational qualification: long-horizon paper campaigns, calibrated extension comparisons, MPI/GPU and multi-node checks, restart and filesystem failure drills on Frontier, scaling and memory measurements, Orion-retention disposition, and named external review.
 
-Source curation was committed through code-and-control snapshot `ec69dd5b6a16f7945d7531f33b3d6a13393243e2`. Independent audits first found a same-account substitution risk in the copied-snapshot handoff and then a topology-map race at the stable handoff boundary. The committed repair keeps verified topology in memory, compares the handed-off topology map back to the verified tree, exposes consumed regular files lazily through sealed Linux `memfd` descriptors, retains one open descriptor across multi-pass archive and ELF validation, and rejects unrelated sealed descriptors outside an active routed snapshot. Q006, Q007 and Q011 retained-artifact replays reproduce their archived results through those sealed members. The report generator applies the same anchored sealed-member rule to frozen JSON inputs and the legacy Q023 Bell payloads. The source-side transition policy now clears inherited schema-v3 science registrations and marks the schema-v4 clean-candidate freeze pending. The canonical schema-v4 source bundle and HIP/MPI executable freeze have not yet been created. The sensible next step is to complete the stable-boundary rereview and final clean validation matrix, install the paired successor control-plane generation, build the canonical HIP/MPI Release executable, and freeze the clean candidate before registering another Frontier slice. The Q006 residual pattern makes AMR/restart parity a priority after that freeze: bind its acceptance threshold before submission and use the slice to test whether decomposition or device execution changes the bounded carrier result. Large paper or extension campaigns should not begin until their campaign-specific registrations, tolerances and independent comparison inputs are frozen.
+Source curation was committed through code-and-control snapshot `ec69dd5b6a16f7945d7531f33b3d6a13393243e2`. Independent audits first found a same-account substitution risk in the copied-snapshot handoff and then a topology-map race at the stable handoff boundary. The committed repair keeps verified topology in memory, compares the handed-off topology map back to the verified tree, exposes consumed regular files lazily through sealed Linux `memfd` descriptors, retains one open descriptor across multi-pass archive and ELF validation, and rejects unrelated sealed descriptors outside an active routed snapshot. Q006, Q007 and Q011 retained-artifact replays reproduce their archived results through those sealed members. The report generator applies the same anchored sealed-member rule to frozen JSON inputs and the legacy Q023 Bell payloads. The source-side transition policy now clears inherited schema-v3 science registrations and marks the schema-v4 clean-candidate freeze pending. The clean-tree validation matrix passed, but the canonical schema-v4 source bundle and HIP/MPI executable freeze have not yet been created. The sensible next step is to complete the stable-boundary rereview, install the paired successor control-plane generation, build the canonical HIP/MPI Release executable, and freeze the clean candidate before registering another Frontier slice. The Q006 residual pattern makes AMR/restart parity a priority after that freeze: bind its acceptance threshold before submission and use the slice to test whether decomposition or device execution changes the bounded carrier result. Large paper or extension campaigns should not begin until their campaign-specific registrations, tolerances and independent comparison inputs are frozen.
 
 # Tier 1: How the analysis works
 
@@ -206,7 +206,7 @@ The current pre-freeze local validation tranche combined broad test suites, focu
 | Frontier control-plane suite | 359 tests passed | Registered-lifecycle and accounting controls passed locally |
 | Focused hardening suite | 96 tests passed | Qualification fixtures, immutable snapshots, analyzer substitution rejection and successor-policy registry checks passed |
 | Sphinx warning-as-error build | Passed | Documentation renders without warning regressions |
-| Readiness JSON parse sweep | 168 filesystem JSON files parsed | Readiness, policy and generated figure-metric sidecars are syntactically valid |
+| Readiness JSON parse sweep | 168 tracked report-scope JSON files parsed | Readiness, policy and generated figure-metric sidecars are syntactically valid |
 | Python AST sweep | 88 publication Python files parsed | Publication Python sources are syntactically valid |
 | `git diff --check` | Passed | No whitespace-error regression in the worktree diff |
 | Touched C++ lint | Passed | Changed-file wrapper passed; the new Q006 C++ source also passed direct lint |
@@ -214,13 +214,13 @@ The current pre-freeze local validation tranche combined broad test suites, focu
 
 ![Validation summary](figures/status_update/validation_summary.png)
 
-*Figure 12. Manually curated summary of passed local check classes in the current pre-freeze hardening tranche. Counts represent different classes and are not additive; parsed-file counts are not test counts. The final clean-tree rerun remains required from the reconciled stable boundary before the canonical freeze. The inherited repository-wide style baseline remains separately open.*
+*Figure 12. Manually curated summary of passed local check classes in the current pre-freeze hardening tranche. Counts represent different classes and are not additive; parsed-file counts are not test counts. The final clean-tree rerun passed before the canonical freeze. The inherited repository-wide style baseline remains separately open.*
 
 ## 1.6 Caveats and next-stage plan
 
 The current evidence is strongest for bounded serial-host mechanics and verifier behavior. It is not yet strong enough for physical paper claims or operational production claims. The immediate next-stage sequence is:
 
-1. Complete the stable-boundary rereview and final clean validation matrix, install the paired reviewed successor control-plane generation and freeze the canonical clean candidate.
+1. Complete the stable-boundary rereview, install the paired reviewed successor control-plane generation and freeze the canonical clean candidate.
 2. Close prerequisite-complete registered Frontier MPI/HIP slices one at a time under the existing ledger policy after the freeze.
 3. Add runtime, memory, sorting, deposition, coupling, communication and load-balance telemetry before scaling studies.
 4. Freeze external-reference mappings and tolerances before physical comparison campaigns.
@@ -479,7 +479,7 @@ The Q006, Q007, Q008 and Q011 evidence and the Q023 Bell smoke reported here are
 | Frontier control-plane suite | Exercise registered lifecycle, immutable promotion and ledger controls | Python unit discovery under `tst/publication/frontier_control_plane` | 359 passed | No failures | Pass |
 | Hardening focus | Stress candidate closure, descriptor snapshots and registry lifecycle | Focused publication tests | 96 passed | No failures | Pass |
 | Documentation | Detect warning regressions | Sphinx HTML build with `-W --keep-going -E` | Passed | No Sphinx warnings | Pass |
-| Readiness JSON syntax | Detect malformed readiness records | Parse readiness, policy and generated figure-metric JSON files | 168 parsed | No parse errors | Pass |
+| Readiness JSON syntax | Detect malformed readiness records | Parse tracked readiness, policy and generated figure-metric JSON files | 168 parsed | No parse errors | Pass |
 | Python syntax | Detect malformed publication Python sources | AST parse sweep | 88 parsed | No syntax errors | Pass |
 | Diff whitespace | Detect whitespace regressions | `git diff --check` | Clean | No findings | Pass |
 | Targeted C++ lint | Check touched C++ files | Changed-file wrapper plus direct lint of the new Q006 source | Passed | No touched-file findings | Pass |
@@ -595,7 +595,7 @@ The repository-wide C++ style baseline remains open. A fresh wrapper-equivalent 
 
 ## 2.9 Recommended next steps
 
-1. **Immediate:** complete the stable-boundary rereview and final clean validation matrix, install the paired reviewed successor control-plane generation, build the canonical HIP/MPI Release executable and freeze the clean candidate.
+1. **Immediate:** complete the stable-boundary rereview, install the paired reviewed successor control-plane generation, build the canonical HIP/MPI Release executable and freeze the clean candidate.
 2. **Validation:** run the next prerequisite-complete registered Frontier MPI/HIP slice under the serialized scheduler policy and reconcile the ledger immediately.
 3. **Production preparation:** add runtime and memory telemetry for pusher, deposition, coupling, communication, sorting, AMR, load balance, output and restart paths.
 4. **Scientific qualification:** freeze comparison mappings, extracted reference data, tolerances, fit windows, seeds and uncertainty methods before launching physical Hall Bell, damped-CRSI or adaptive-delta-f CRPAI campaigns. Require same-run particle distribution, current and field snapshots for Bell visualization.
@@ -610,21 +610,23 @@ The repository-wide C++ style baseline remains open. A fresh wrapper-equivalent 
 | Repository path | `/ccs/home/dfielding/athenak-pic` |
 | Resolved path in this environment | `/autofs/nccs-svm1_home2/dfielding/athenak-pic` |
 | Branch | `PIC` |
-| HEAD | Code-and-control snapshot `ec69dd5b6a16f7945d7531f33b3d6a13393243e2`; this documentation reconciliation follows it |
+| Code-and-control snapshot | `ec69dd5b6a16f7945d7531f33b3d6a13393243e2` |
+| Audited documentation snapshot | `717046d1f330a2ee88471669bfc6fc2edfd06f89`; this scoped reproducibility refresh follows it |
+| Current HEAD | Resolve with `git rev-parse HEAD` before installation |
 | Upstream | `origin/PIC` |
-| Ahead/behind | 111 ahead, 0 behind at the code-and-control snapshot |
-| Worktree | Expected clean after this documentation reconciliation commit; verify with `git status --short --branch` before installation |
+| Ahead/behind | Code-and-control snapshot: 111 ahead, 0 behind; audited documentation snapshot: 112 ahead, 0 behind |
+| Worktree | Expected clean after this scoped reproducibility refresh; verify with `git status --short --branch` before installation |
 | Deleted files | None observed |
 | New report | `STATUS_UPDATE.md` |
 | New figure generator | `tst/publication/generate_pic_status_update_figures.py` |
 | New figure directory | `figures/status_update/` |
 
-The code-and-control repair is committed. This documentation reconciliation,
-the stable-boundary rereview and the final clean validation matrix remain
-required before installation. Do not treat the curated commit series as a
-frozen release baseline until the canonical clean-candidate operation archives
-the source bundle and HIP/MPI executable together. Inspect the current list
-with:
+The code-and-control repair and documentation reconciliation are committed.
+The scoped reproducibility refresh records a deterministic tracked-JSON sweep.
+Stable-boundary rereview remains required before installation. Do not treat the
+curated commit series as a frozen release baseline until the canonical
+clean-candidate operation archives the source bundle and HIP/MPI executable
+together. Inspect the current list with:
 
 ```bash
 git status --short --branch
@@ -635,7 +637,7 @@ git status --short --branch
 | Boundary | Current value | Status |
 | --- | --- | --- |
 | Live paired control plane | `6f3458ca5c412b866f579d67dde51d73497b65629f6e7a35e10a3af84d7ecd8b` | Installed historical generation; remains live until paired promotion |
-| Successor source control plane | `273da436765b471f2bf21aa5d109d47b4af905f611c01d604b08015a48ef5acd` | Committed controller source; stable rereview, final clean validation and paired install pending |
+| Successor source control plane | `273da436765b471f2bf21aa5d109d47b4af905f611c01d604b08015a48ef5acd` | Committed controller source; stable rereview and paired install pending |
 | Prepared-artifact inventory | `75f06573b2b313a7c258bd5ab4234e03b18c238c90882daf03f47f78c85a6ba1` | Regenerated canonical archived-source closure: 87 PIC decks and 12 publication analyzers |
 | Canonical schema-v4 freeze | Not yet created | Open Phase 0 gate |
 
@@ -753,13 +755,20 @@ python3 -m venv /tmp/athenak-pic-docs-venv
 git diff --check
 ```
 
-Parse the exact filesystem JSON scope, including the two `tst/.codex` Bell-materialization files and generated report metrics:
+Parse the exact tracked report JSON scope. This intentionally excludes ignored
+runtime residue under `tst/.codex` and `tst/build`:
 
 ```bash
 python3 - <<'PY'
 import json
+import subprocess
 from pathlib import Path
-paths = sorted({*Path("tst").rglob("*.json"), *Path("figures").rglob("*.json")})
+paths = [
+    Path(path)
+    for path in subprocess.check_output(["git", "ls-files"], text=True).splitlines()
+    if path.endswith(".json")
+    and path.startswith(("tst/publication/", "figures/status_update/"))
+]
 for path in paths:
     json.loads(path.read_text(encoding="utf-8"))
 print(len(paths))

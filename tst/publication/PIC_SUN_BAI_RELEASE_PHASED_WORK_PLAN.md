@@ -209,9 +209,9 @@ historical registered-science slices and marks the schema-v4 clean-candidate
 freeze pending. The nonqualifying transition record is
 [`phase0_curated_candidate_successor_2026-05-31.json`](readiness/phase0_curated_candidate_successor_2026-05-31.json).
 
-Phase 0 remains open until the stable final diff is independently rereviewed,
-committed, validated from a clean worktree, installed as a paired Orion and
-Project Home control-plane generation, and frozen with its final source,
+The clean-tree Phase 0 validation matrix now passes. Phase 0 remains open until
+the stable final diff is independently rereviewed, installed as a paired Orion
+and Project Home control-plane generation, and frozen with its final source,
 executable, deck, and analyzer checksums. No later phase is authorized yet.
 The historically installed `6f3458ca5c412b866f579d67dde51d73497b65629f6e7a35e10a3af84d7ecd8b`
 control-plane generation is chronology-only: do not launch any new Frontier
@@ -634,9 +634,9 @@ unless all required bindings and products are present.
 
 Execute these actions in order:
 
-1. Complete the stable-boundary rereview and final clean Phase 0 matrix,
-   install the paired successor control plane, build the canonical HIP/MPI
-   Release executable, and freeze the clean release candidate.
+1. Complete the stable-boundary rereview, install the paired successor control
+   plane, build the canonical HIP/MPI Release executable, and freeze the clean
+   release candidate.
 2. Close the Section 5.4 normalization, macro-particle-mass, gas-subtraction,
    spectrum-window, snapshot-tolerance, and AMR-residual reviews.
 3. Create and freeze the qualifying Section 5.4 analyzer.

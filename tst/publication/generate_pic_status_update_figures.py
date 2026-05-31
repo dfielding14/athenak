@@ -315,8 +315,8 @@ def readiness_gate_summary() -> None:
         "Frontier portability matrix",
         "External review",
     ]
-    status = ["completed", "completed", "completed", "open", "open", "open", "open", "pending"]
-    colors = [GREEN, GREEN, GREEN, ORANGE, ORANGE, ORANGE, ORANGE, GRAY]
+    status = ["completed", "completed", "completed", "completed", "open", "open", "open", "pending"]
+    colors = [GREEN, GREEN, GREEN, GREEN, ORANGE, ORANGE, ORANGE, GRAY]
     fig, ax = plt.subplots(figsize=(9, 4.2))
     y = np.arange(len(labels))
     ax.barh(y, np.ones(len(labels)), color=colors)

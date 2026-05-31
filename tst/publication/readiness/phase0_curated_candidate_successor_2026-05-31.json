@@ -26,7 +26,6 @@
   ],
   "remaining_phase0_actions": [
     "complete independent review of the stable repair boundary and documentation reconciliation",
-    "rerun the final clean-tree validation matrix",
     "install the paired successor control plane on Orion and Project Home",
     "write the final build profile and create the canonical clean-candidate freeze"
   ]
