@@ -1,0 +1,48 @@
+{
+  "record_type": "q011_parallel_shock_storage_estimator_readiness",
+  "schema_version": 1,
+  "date": "2026-05-31",
+  "gate": "Q-011",
+  "qualification_effect": "none_analytical_storage_planning_only",
+  "claim_closure": false,
+  "frontier_authorization": "not_bound",
+  "scope": "Deterministic Section 5.4 storage-planning sidecar. This is an analytical no-escape raw-PVTK payload estimate only. It is not runtime evidence, a storage reservation, campaign authorization, or qualification evidence.",
+  "source_sidecar": "tst/publication/q011_parallel_shock_storage_estimator.py",
+  "paper_deck": "inputs/publication/pic_parallel_shock_section54_paper.athinput",
+  "assumptions": {
+    "particle_retention": "No particle escape. All shock-injected particles with birth_time >= 45 remain retained.",
+    "cadence": "Retain PVTK at t=0 and every output4/dt=100 through time/tlim=1200.",
+    "quantization": "Continuous swept-mass analytical rate. Runtime timestep-edge and carried mass-reservoir sub-particle quantization are excluded.",
+    "payload_scope": "Raw PVTK binary particle arrays only. ASCII headers, MHD bin outputs, restart files, logs, filesystem allocation, replication, and safety margin are excluded."
+  },
+  "pvtk_layout": {
+    "position_float_components": 3,
+    "integer_scalar_fields": [
+      "gid",
+      "ptag",
+      "species",
+      "cr_source"
+    ],
+    "float_scalar_fields": [
+      "macro_weight",
+      "birth_time",
+      "deltaf_f0",
+      "deltaf_weight"
+    ],
+    "velocity_float_components": 3,
+    "bytes_per_scalar": 4,
+    "bytes_per_particle": 56
+  },
+  "current_projection": {
+    "grid_count": 3,
+    "seed_count": 8,
+    "run_count": 24,
+    "pvtk_snapshot_count_per_run": 13,
+    "retained_particle_count_at_t1200_analytical_approx": 160160000.0002002,
+    "raw_pvtk_payload_bytes_per_run_before_overhead_analytical_approx": 56376320000.07047,
+    "raw_pvtk_payload_gb_decimal_per_run_before_overhead_analytical_approx": 56.37632000007047,
+    "raw_pvtk_payload_bytes_campaign_before_overhead_analytical_approx": 1353031680001.6914,
+    "raw_pvtk_payload_tb_decimal_campaign_before_overhead_analytical_approx": 1.3530316800016915
+  },
+  "q011_disposition": "storage_estimator_sidecar_ready_full_q011_qualification_open"
+}

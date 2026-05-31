@@ -29,13 +29,15 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 DECK = REPO_ROOT / "inputs/tests/pic_q011_injection_distribution_runtime_local.athinput"
 SOURCE = REPO_ROOT / "src/pgen/tests/pic_parallel_shock.cpp"
 EXPECTED_DECK_SHA256 = "6e84e34a91e48b4933f26ee1c3354e95139ff89ddf75ec1b358a7a7d3c1d1c17"
-EXPECTED_SOURCE_SHA256 = "aaea18b8949c882230402a8b117a2783e9a0a5cc6c049bd87c2109ce59684b95"
+EXPECTED_SOURCE_SHA256 = "0ec2e1eec3786bce12be2e40fb53b34d553955e9ad7b58fb64b0a912e8d15c7b"
 ORION_BULK_ROOT = Path("/lustre/orion/ast207/proj-shared/dfielding/PIC")
 ARTIFACT_ROLE = "bounded_serial_host_runtime_diagnostic_only"
 QUALIFICATION_EFFECT = "none"
-AUDIT_METHOD = "deterministic_bounded_statistics_not_exact_rng_replay"
+DECK_AUDIT_METHOD = "deterministic_bounded_statistics_not_exact_rng_replay"
+AUDIT_METHOD = "exact_tagged_sampler_cycle_one_replay_with_bounded_isotropy_statistics"
 INVENTORY_NAME = "artifact_inventory.sha256"
 FREEZE_RECEIPT_NAME = "freeze_receipt.json"
+_UINT64_MASK = (1 << 64) - 1
 _PVTK_EXECUTION_PATTERN = re.compile(
     rb"^# vtk DataFile Version 2\.0\n"
     rb"# AthenaK particle data at time= ([^ \n]+)  "
@@ -67,6 +69,7 @@ _EXPECTED_DECK_VALUES = {
     ("particles", "cr_distribution"): "random",
     ("particles", "deposit_qscale"): "2.0e-2",
     ("particles", "pic_physical_mode"): "paper_mhd_pic",
+    ("particles", "pic_cr_light_speed"): "10000.0",
     ("particles", "pic_cr_initial_state"): "momentum",
     ("problem", "pgen_name"): "pic_parallel_shock",
     ("problem", "ps_rho0"): "1.0",
@@ -94,7 +97,7 @@ _EXPECTED_DECK_VALUES = {
         "not_claimed",
     ("q011_injection_distribution_runtime_local", "external_review"):
         "not_claimed",
-    ("q011_injection_distribution_runtime_local", "audit_method"): AUDIT_METHOD,
+    ("q011_injection_distribution_runtime_local", "audit_method"): DECK_AUDIT_METHOD,
     ("output1", "file_type"): "pvtk",
     ("output1", "variable"): "prtcl_all",
     ("output1", "dcycle"): "1",
@@ -159,7 +162,11 @@ def validate_deck(path: Path = DECK) -> dict[str, Any]:
     x1min = float(blocks["mesh"]["x1min"])
     x1max = float(blocks["mesh"]["x1max"])
     shock_speed = 0.5 * (gamma - 1.0) * u0
-    injection_speed = float(blocks["problem"]["ps_vinj_over_u0"]) * u0
+    injection_momentum = float(blocks["problem"]["ps_vinj_over_u0"]) * u0
+    light_speed = float(blocks["particles"]["pic_cr_light_speed"])
+    injection_speed = injection_momentum / math.sqrt(
+        1.0 + (injection_momentum / light_speed) ** 2
+    )
     return {
         "path": str(path.relative_to(REPO_ROOT)),
         "sha256": _sha256(path),
@@ -168,9 +175,12 @@ def validate_deck(path: Path = DECK) -> dict[str, Any]:
         "qualifying_evidence": False,
         "audit_method": AUDIT_METHOD,
         "shock_speed": shock_speed,
+        "numerical_light_speed": light_speed,
+        "injection_momentum_over_mass_relative_to_surface": injection_momentum,
         "injection_speed_relative_to_surface": injection_speed,
         "shock_surface_at_injection_time": x1min,
         "clamped_surface_output_x1": x1min + max(1.0e-12 * (x1max - x1min), 1.0e-14),
+        "inject_seed": int(blocks["problem"]["ps_inject_seed"]),
         "explicit_gaps": list(_EXPLICIT_GAPS),
     }
 
@@ -182,17 +192,16 @@ def validate_source_contract() -> dict[str, Any]:
         raise AuditError("pic_parallel_shock source SHA-256 drifted")
     source = SOURCE.read_text(encoding="utf-8")
     snippets = [
-        "std::mt19937_64 rng(seed);",
-        "const Real mu = 2.0*Uniform01(rng) - 1.0;",
-        "const Real phi = 2.0*M_PI*Uniform01(rng);",
+        "const Real pinj = ps_vinj_over_u0*ps_u0;",
+        "const Real vinj = VelocityMagnitudeFromMomentumMagnitude(ppart, pinj);",
+        "const Real mu = 2.0*TaggedUniform01(tag, 1) - 1.0;",
+        "const Real phi = 2.0*M_PI*TaggedUniform01(tag, 2);",
         "dirx = mu;",
         "diry = st*std::cos(phi);",
         "dirz = st*std::sin(phi);",
         "part.x1 = xshock;",
         "xshock >= x1c - half_width && xshock < x1c + half_width",
-        "part.vx = ps_shock_speed + frame_vx + vinj*dirx;",
-        "part.vy = vinj*diry;",
-        "part.vz = vinj*dirz;",
+        "BoostRelativeVelocityFromSurface(ppart, surface_vx, vinj*dirx, vinj*diry,",
     ]
     missing = [snippet for snippet in snippets if snippet not in source]
     if missing:
@@ -200,7 +209,7 @@ def validate_source_contract() -> dict[str, Any]:
     return {
         "path": str(SOURCE.relative_to(REPO_ROOT)),
         "sha256": source_sha256,
-        "sampler": "full_sphere_isotropic_monoenergetic_relative_to_ideal_surface",
+        "sampler": "full_sphere_isotropic_monomomentum_relative_to_ideal_surface",
         "placement": "single_half_open_carrier_cell_with_x1_at_clamped_surface",
     }
 
@@ -233,8 +242,90 @@ def _require(condition: bool, message: str) -> None:
         raise AuditError(message)
 
 
-def analyze_particle_payload(data: ParticleVTKData) -> dict[str, Any]:
-    """Audit one untransported runtime injection payload using deterministic bounds."""
+def _splitmix64(value: int) -> int:
+    """Match the source-local unsigned SplitMix64 sampler exactly."""
+    value = (value + 0x9E3779B97F4A7C15) & _UINT64_MASK
+    value = ((value ^ (value >> 30)) * 0xBF58476D1CE4E5B9) & _UINT64_MASK
+    value = ((value ^ (value >> 27)) * 0x94D049BB133111EB) & _UINT64_MASK
+    return value ^ (value >> 31)
+
+
+def _tagged_uniform01(tag: int, stream: int, seed: int) -> float:
+    """Match TaggedUniform01 for one source particle tag and stream."""
+    mixed = (
+        seed
+        ^ (((tag + 1) * 0x9E3779B97F4A7C15) & _UINT64_MASK)
+        ^ (((stream + 1) * 0xBF58476D1CE4E5B9) & _UINT64_MASK)
+    )
+    return _splitmix64(mixed) / _UINT64_MASK
+
+
+def _expected_cycle_one_payload(tags: np.ndarray, timestep: float) -> dict[str, Any]:
+    """Replay injection, one parallel-field Boris push, and wall handling."""
+    deck = validate_deck()
+    count = tags.shape[0]
+    light_speed = float(deck["numerical_light_speed"])
+    surface_speed = float(deck["shock_speed"])
+    relative_speed = float(deck["injection_speed_relative_to_surface"])
+    gamma_surface = 1.0 / math.sqrt(1.0 - (surface_speed / light_speed) ** 2)
+    seed = int(deck["inject_seed"])
+
+    direction = np.empty((count, 3), dtype=np.float64)
+    initial_x2 = np.empty(count, dtype=np.float64)
+    for index, tag_value in enumerate(tags):
+        tag = int(tag_value)
+        mu = 2.0 * _tagged_uniform01(tag, 1, seed) - 1.0
+        phi = 2.0 * math.pi * _tagged_uniform01(tag, 2, seed)
+        st = math.sqrt(max(0.0, 1.0 - mu * mu))
+        direction[index] = (mu, st * math.cos(phi), st * math.sin(phi))
+        initial_x2[index] = (
+            math.floor(16.0 * _tagged_uniform01(tag, 0, seed))
+            + _tagged_uniform01(tag, 3, seed)
+        )
+
+    relative_velocity = relative_speed * direction
+    denominator = 1.0 + surface_speed * relative_velocity[:, 0] / light_speed**2
+    initial_velocity = relative_velocity.copy()
+    initial_velocity[:, 0] = (surface_speed + relative_velocity[:, 0]) / denominator
+    initial_velocity[:, 1] = relative_velocity[:, 1] / (gamma_surface * denominator)
+    initial_velocity[:, 2] = relative_velocity[:, 2] / (gamma_surface * denominator)
+
+    initial_gamma = 1.0 / np.sqrt(
+        1.0 - np.sum(initial_velocity * initial_velocity, axis=1) / light_speed**2
+    )
+    state = initial_gamma[:, None] * initial_velocity
+    tx = 0.5 * timestep / initial_gamma
+    rotation = 2.0 * tx / (1.0 + tx * tx)
+    state_y = state[:, 1] + (state[:, 2] - state[:, 1] * tx) * rotation
+    state_z = state[:, 2] - (state[:, 1] + state[:, 2] * tx) * rotation
+    state[:, 1] = state_y
+    state[:, 2] = state_z
+    final_gamma = np.sqrt(1.0 + np.sum(state * state, axis=1) / light_speed**2)
+    velocity = state / final_gamma[:, None]
+
+    points = np.zeros((count, 3), dtype=np.float64)
+    points[:, 0] = float(deck["clamped_surface_output_x1"]) + timestep * velocity[:, 0]
+    points[:, 1] = np.mod(
+        initial_x2 + 0.5 * timestep * (initial_velocity[:, 1] + velocity[:, 1]),
+        16.0,
+    )
+    reflected = points[:, 0] < 0.0
+    points[reflected, 0] *= -1.0
+    velocity[reflected, 0] *= -1.0
+    return {
+        "direction": direction,
+        "points": points,
+        "velocity": velocity,
+        "reflected": reflected,
+    }
+
+
+def analyze_particle_payload(
+    data: ParticleVTKData,
+    *,
+    cycle_one_timestep: float | None = None,
+) -> dict[str, Any]:
+    """Audit one source-surface or emitted cycle-one injection payload."""
     deck = validate_deck()
     validate_source_contract()
     points = np.asarray(data.points, dtype=np.float64)
@@ -257,24 +348,65 @@ def analyze_particle_payload(data: ParticleVTKData) -> dict[str, Any]:
     _require(np.all(birth_time == 0.0), "runtime particles must be born at source time zero")
 
     x1_expected = float(deck["clamped_surface_output_x1"])
-    surface_residual = np.abs(points[:, 0] - x1_expected)
-    _require(
-        float(np.max(surface_residual)) <= 1.0e-17,
-        "runtime particle x1 placement drifted from the clamped shock surface",
-    )
+    shock_speed = float(deck["shock_speed"])
+    injection_speed = float(deck["injection_speed_relative_to_surface"])
+    light_speed = float(deck["numerical_light_speed"])
+    replay_report: dict[str, Any] | None = None
+    if cycle_one_timestep is None:
+        surface_residual = np.abs(points[:, 0] - x1_expected)
+        _require(
+            float(np.max(surface_residual)) <= 1.0e-17,
+            "runtime particle x1 placement drifted from the clamped shock surface",
+        )
+        gamma_surface = 1.0 / math.sqrt(1.0 - (shock_speed / light_speed) ** 2)
+        inverse_denominator = 1.0 - shock_speed * velocity[:, 0] / light_speed**2
+        relative_velocity = velocity.copy()
+        relative_velocity[:, 0] = (velocity[:, 0] - shock_speed) / inverse_denominator
+        relative_velocity[:, 1] = velocity[:, 1] / (gamma_surface * inverse_denominator)
+        relative_velocity[:, 2] = velocity[:, 2] / (gamma_surface * inverse_denominator)
+    else:
+        _require(
+            math.isfinite(cycle_one_timestep) and cycle_one_timestep > 0.0,
+            "cycle-one replay timestep must be finite and positive",
+        )
+        replay = _expected_cycle_one_payload(tags, cycle_one_timestep)
+        point_residual = np.abs(points - replay["points"])
+        velocity_residual = np.abs(velocity - replay["velocity"])
+        _require(
+            float(np.max(point_residual)) <= 2.0e-6,
+            "runtime emitted points drifted from exact cycle-one replay",
+        )
+        _require(
+            float(np.max(velocity_residual)) <= 1.0e-5,
+            "runtime emitted velocity drifted from exact cycle-one replay",
+        )
+        relative_velocity = injection_speed * replay["direction"]
+        replay_report = {
+            "timestep": cycle_one_timestep,
+            "reflected_particle_count": int(np.count_nonzero(replay["reflected"])),
+            "maximum_absolute_point_residual": float(np.max(point_residual)),
+            "maximum_absolute_velocity_residual": float(np.max(velocity_residual)),
+        }
     _require(np.all((points[:, 1] >= 0.0) & (points[:, 1] < 16.0)),
              "runtime particle x2 placement left the carrier domain")
     _require(np.all(points[:, 2] == 0.0), "thin 2D PVTK output must report x3=0")
 
-    shock_speed = float(deck["shock_speed"])
-    injection_speed = float(deck["injection_speed_relative_to_surface"])
-    relative_velocity = velocity.copy()
-    relative_velocity[:, 0] -= shock_speed
     relative_speed = np.linalg.norm(relative_velocity, axis=1)
     speed_residual = np.abs(relative_speed - injection_speed)
     _require(
         float(np.max(speed_residual)) <= 1.0e-5,
         "runtime relative speed drifted from the monoenergetic shell",
+    )
+    relative_momentum = relative_speed / np.sqrt(
+        1.0 - (relative_speed / light_speed) ** 2
+    )
+    expected_relative_momentum = float(
+        deck["injection_momentum_over_mass_relative_to_surface"]
+    )
+    momentum_residual = np.abs(relative_momentum - expected_relative_momentum)
+    _require(
+        float(np.max(momentum_residual)) <= 1.0e-5,
+        "runtime relative momentum drifted from the monoenergetic shell",
     )
     direction = relative_velocity / relative_speed[:, None]
     direction_mean = np.mean(direction, axis=0)
@@ -296,7 +428,7 @@ def analyze_particle_payload(data: ParticleVTKData) -> dict[str, Any]:
     octant_counts = np.bincount(octant_index, minlength=8)
     _require(bool(np.all(octant_counts > 0)), "runtime sampler did not populate all octants")
 
-    return {
+    report = {
         "schema_version": 1,
         "artifact_role": ARTIFACT_ROLE,
         "qualification_effect": QUALIFICATION_EFFECT,
@@ -313,12 +445,19 @@ def analyze_particle_payload(data: ParticleVTKData) -> dict[str, Any]:
         "shock_surface_placement": {
             "model_surface_x1": float(deck["shock_surface_at_injection_time"]),
             "clamped_output_x1": x1_expected,
-            "maximum_absolute_x1_residual": float(np.max(surface_residual)),
-            "single_surface_coordinate": bool(np.unique(points[:, 0]).size == 1),
+            "payload_state": (
+                "source_surface" if cycle_one_timestep is None
+                else "emitted_after_one_push_with_boundary_handling"
+            ),
+            "single_surface_coordinate": cycle_one_timestep is None,
         },
         "monoenergetic_full_sphere_sampler": {
             "shock_speed": shock_speed,
+            "expected_relative_momentum_over_mass":
+                float(deck["injection_momentum_over_mass_relative_to_surface"]),
             "expected_relative_speed": injection_speed,
+            "maximum_absolute_relative_momentum_residual":
+                float(np.max(momentum_residual)),
             "maximum_absolute_relative_speed_residual": float(np.max(speed_residual)),
             "direction_mean": direction_mean.tolist(),
             "direction_second_moment": direction_second_moment.tolist(),
@@ -326,6 +465,13 @@ def analyze_particle_payload(data: ParticleVTKData) -> dict[str, Any]:
         },
         "explicit_gaps": list(_EXPLICIT_GAPS),
     }
+    if replay_report is not None:
+        report["exact_cycle_one_emission_replay"] = replay_report
+    else:
+        report["shock_surface_placement"]["maximum_absolute_x1_residual"] = float(
+            np.max(surface_residual)
+        )
+    return report
 
 
 def extract_runtime_artifact(
@@ -374,7 +520,10 @@ def extract_runtime_artifact(
             "Q-011 pinned executable SHA-256 drifted",
         )
         execution_metadata = _read_pvtk_execution_metadata(staged_path)
-        report = analyze_particle_payload(read_particle_vtk(staged_path))
+        report = analyze_particle_payload(
+            read_particle_vtk(staged_path),
+            cycle_one_timestep=float(execution_metadata["time"]),
+        )
         report["immutable_runtime_artifact"] = {
             "path": str(path),
             "sha256": _sha256(staged_path),

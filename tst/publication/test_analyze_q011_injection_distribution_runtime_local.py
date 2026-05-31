@@ -25,7 +25,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 SIDECAR = (
     REPO_ROOT
     / "tst/publication/readiness/"
-    "q011_injection_distribution_runtime_local_2026-05-30.json"
+    "q011_injection_distribution_runtime_local_successor_2026-05-31.json"
 )
 
 
@@ -46,8 +46,15 @@ def _payload(count: int = 512) -> ParticleVTKData:
     st = np.sqrt(1.0 - mu * mu)
     direction = np.column_stack((mu, st * np.cos(phi), st * np.sin(phi)))
     deck = q011.validate_deck()
-    velocity = float(deck["injection_speed_relative_to_surface"]) * direction
-    velocity[:, 0] += float(deck["shock_speed"])
+    relative_velocity = float(deck["injection_speed_relative_to_surface"]) * direction
+    surface_speed = float(deck["shock_speed"])
+    light_speed = float(deck["numerical_light_speed"])
+    gamma_surface = 1.0 / np.sqrt(1.0 - (surface_speed / light_speed) ** 2)
+    denominator = 1.0 + surface_speed * relative_velocity[:, 0] / light_speed**2
+    velocity = relative_velocity.copy()
+    velocity[:, 0] = (relative_velocity[:, 0] + surface_speed) / denominator
+    velocity[:, 1] = relative_velocity[:, 1] / (gamma_surface * denominator)
+    velocity[:, 2] = relative_velocity[:, 2] / (gamma_surface * denominator)
     points = np.column_stack((
         np.full(count, float(deck["clamped_surface_output_x1"])),
         np.mod(indices * 0.73, 16.0),
@@ -69,6 +76,25 @@ def _payload(count: int = 512) -> ParticleVTKData:
     )
 
 
+def _emitted_payload(count: int = 512, timestep: float = 0.5) -> ParticleVTKData:
+    tags = np.arange(count, dtype=np.int64)
+    replay = q011._expected_cycle_one_payload(tags, timestep)
+    return ParticleVTKData(
+        points=replay["points"],
+        scalars={
+            "gid": np.zeros(count, dtype=np.int64),
+            "species": np.zeros(count, dtype=np.int64),
+            "ptag": tags,
+            "cr_source": np.ones(count, dtype=np.int64),
+            "macro_weight": np.ones(count),
+            "birth_time": np.zeros(count),
+            "deltaf_f0": np.ones(count),
+            "deltaf_weight": np.zeros(count),
+        },
+        vectors={"vel": replay["velocity"]},
+    )
+
+
 class Q011InjectionDistributionRuntimeLocalTests(unittest.TestCase):
     def test_deck_and_committed_source_bind_reduced_nonqualifying_sampler(self) -> None:
         deck = q011.validate_deck()
@@ -80,7 +106,7 @@ class Q011InjectionDistributionRuntimeLocalTests(unittest.TestCase):
         self.assertAlmostEqual(deck["shock_speed"], 10.00000000005)
         self.assertEqual(
             source["sampler"],
-            "full_sphere_isotropic_monoenergetic_relative_to_ideal_surface",
+            "full_sphere_isotropic_monomomentum_relative_to_ideal_surface",
         )
 
     def test_payload_audits_surface_monoenergetic_shell_and_full_sphere_bounds(self) -> None:
@@ -97,7 +123,24 @@ class Q011InjectionDistributionRuntimeLocalTests(unittest.TestCase):
         )
         sampler = report["monoenergetic_full_sphere_sampler"]
         self.assertLess(sampler["maximum_absolute_relative_speed_residual"], 1.0e-12)
+        self.assertLess(
+            sampler["maximum_absolute_relative_momentum_residual"], 1.0e-12
+        )
         self.assertTrue(all(count > 0 for count in sampler["octant_counts"]))
+
+    def test_cycle_one_payload_replays_transport_and_reflecting_wall(self) -> None:
+        report = q011.analyze_particle_payload(
+            _emitted_payload(),
+            cycle_one_timestep=0.5,
+        )
+        replay = report["exact_cycle_one_emission_replay"]
+        self.assertGreater(replay["reflected_particle_count"], 0)
+        self.assertEqual(replay["maximum_absolute_point_residual"], 0.0)
+        self.assertEqual(replay["maximum_absolute_velocity_residual"], 0.0)
+        self.assertEqual(
+            report["shock_surface_placement"]["payload_state"],
+            "emitted_after_one_push_with_boundary_handling",
+        )
 
     def test_payload_rejects_planar_drift_surface_drift_and_wrong_provenance(self) -> None:
         payload = _payload()
@@ -148,7 +191,11 @@ class Q011InjectionDistributionRuntimeLocalTests(unittest.TestCase):
             try:
                 runtime_freeze = q011.freeze_tree(runtime_tree)
                 executable_freeze = q011.freeze_tree(executable_tree)
-                with mock.patch.object(q011, "read_particle_vtk", return_value=_payload()):
+                with mock.patch.object(
+                    q011,
+                    "read_particle_vtk",
+                    return_value=_emitted_payload(),
+                ):
                     report = q011.extract_runtime_artifact(
                         pvtk,
                         artifact_root=runtime_tree,
