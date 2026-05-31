@@ -15,11 +15,13 @@
       "openmp_parallelism": "OFF"
     }
   },
-  "source_local_bindings": {
-    "inputs/tests/pic_q016_particle_provenance.athinput": "f1a284922beea1fa04eb2f09b49dfea208f91bae247e6a961e78213857cf7235",
-    "tst/scripts/particles/pic_q016_particle_provenance.py": "2d7997df1dd4ce65c9be1c22ec9b88184781e4b134a823f26466227fa210eb5e",
-    "tst/publication/readiness/q016_particle_provenance_spectra_local_2026-05-30.json": "094f2dea4869ab1abea415a7fda1080f5b4e47a89ba64994b53864dec6241366"
-  },
+    "source_local_bindings": {
+        "inputs/tests/pic_q016_particle_provenance.athinput": "f1a284922beea1fa04eb2f09b49dfea208f91bae247e6a961e78213857cf7235",
+        "tst/scripts/particles/pic_q016_particle_provenance.py": "2d7997df1dd4ce65c9be1c22ec9b88184781e4b134a823f26466227fa210eb5e",
+        "tst/publication/pvtk_particles.py": "adaa48ceafc7806a921b78001cf73ace6a4f6014a051826a2b3a8123d57b4413",
+        "tst/publication/q016_particle_spectra.py": "b84dfadd56a55ffcfd8d626f3b793da4ec61cbc844b4930c251ec60147505c0e",
+        "tst/publication/readiness/q016_particle_provenance_spectra_local_2026-05-30.json": "094f2dea4869ab1abea415a7fda1080f5b4e47a89ba64994b53864dec6241366"
+    },
   "validated_replay": {
     "command": "cd tst && PYTHONDONTWRITEBYTECODE=1 ATHENA_Q016_EXE_DIR=/lustre/orion/ast207/proj-shared/dfielding/PIC/local-readiness/q016-mpi-shared-20260530/src ATHENA_Q016_NPROC=2 ATHENA_Q016_LAUNCHER='srun -A ast207 -N 1 -t 00:05:00 --cpu-bind=cores' python3 -B -c 'from scripts.particles import pic_q016_particle_provenance as q; q.run(); ok=q.analyze(); print(\"Q016_ANALYZE_OK\", ok); raise SystemExit(0 if ok else 1)'",
     "configured_ranks": 2,
