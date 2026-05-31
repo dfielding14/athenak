@@ -1,0 +1,163 @@
+{
+  "record_type": "q011_injection_distribution_runtime_local",
+  "schema_version": 1,
+  "date": "2026-05-30",
+  "gate": "Q-011",
+  "qualification_effect": "none",
+  "claim_closure": false,
+  "frontier_authorization": "not_bound",
+  "scope": "Q-011-only bounded local runtime audit of the committed pic_parallel_shock generator. One direct serial host execution on a reduced 8x16x1 uniform 2D3V domain emits an untransported shock-injected particle payload. The analyzer checks actual PVTK provenance, clamped shock-surface x1 placement, monoenergetic relative speed and deterministic bounded full-sphere statistics. This is not exact libstdc++ RNG replay, a paper-shock campaign, physical calibration, AMR qualification, GPU evidence, Frontier evidence, or external-review closure.",
+  "artifact_bindings": {
+    "inputs/tests/pic_q011_injection_distribution_runtime_local.athinput": "6e84e34a91e48b4933f26ee1c3354e95139ff89ddf75ec1b358a7a7d3c1d1c17",
+    "tst/publication/immutable_orion_tree.py": "b5526ee2b7c4d651469b6bd3cea58ffdbe70feaba30c461aa5fb052fe83e10b0",
+    "tst/publication/analyze_q011_injection_distribution_runtime_local.py": "592ad2fa69ecbf1d8316ab9f5e9be6354d7995150a65ef0cbd3ac6d797a2f007",
+    "tst/publication/test_analyze_q011_injection_distribution_runtime_local.py": "a2496b82997d8431289bcfec6356cf1ec874ff68a034d2c6060fafcf612858d5"
+  },
+  "committed_generator_binding": {
+    "path": "src/pgen/tests/pic_parallel_shock.cpp",
+    "sha256": "6e1f7b7d91c7a8b61898b9b29697e76e804319279426684366e227efeb87bf96",
+    "reuse_only": true,
+    "source_edit": false,
+    "sampler": "full_sphere_isotropic_monoenergetic_relative_to_ideal_surface",
+    "placement": "single_half_open_carrier_cell_with_x1_at_clamped_surface"
+  },
+  "host_execution": {
+    "launch_style": "direct_serial_host_execution",
+    "executable": "/lustre/orion/ast207/proj-shared/dfielding/PIC/local-readiness/integrated-serial-host-binary-clean-20260531T034317Z/bin/athena",
+    "executable_sha256": "dadfbb19bd4453ea00c0caee93f85b7664f875621b1582f50cdd26d372422d18",
+    "pinned_executable_root": "/lustre/orion/ast207/proj-shared/dfielding/PIC/local-readiness/integrated-serial-host-binary-clean-20260531T034317Z",
+    "pinned_executable_root_inventory_sha256": "223dcb07d453572ea407f65dc9f7020afa3d6370b9d3c3cf4a06ceb4ca0e852c",
+    "configuration": {
+      "problem_generator": "built_in_pgens",
+      "floating_point_precision": "double",
+      "mpi_parallelism": "OFF",
+      "openmp_parallelism": "OFF"
+    },
+    "mpi_used": false,
+    "slurm_used": false,
+    "frontier_used": false,
+    "kronos_used": false,
+    "bulk_artifacts_strictly_below": "/lustre/orion/ast207/proj-shared/dfielding/PIC"
+  },
+  "bounded_runtime_probe": {
+    "status": "pass",
+    "qualification_effect": "none",
+    "audit_method": "deterministic_bounded_statistics_not_exact_rng_replay",
+    "artifact_root": "/lustre/orion/ast207/proj-shared/dfielding/PIC/local-readiness/q011-injection-distribution-runtime-local-20260531-v4",
+    "runtime_audit_report": {
+      "path": "runtime_audit_report.json",
+      "sha256": "da94223d7c3eebe455d345a2a6af2d051635efb91a2cfad007b3af567eeb7c02"
+    },
+    "audited_pvtk": {
+      "path": "runtime/pvtk/pic_q011_injection_distribution_runtime_local.prtcl_all.00001.part.vtk",
+      "sha256": "6497883ecf24bd1d85dd3b3fe8d9aec9530976d7325bc1bf3dc1b27d7989ba71",
+      "particle_count": 309,
+      "source": "shock_injected",
+      "birth_time": 0.0,
+      "serial_tag_range": [
+        0,
+        308
+      ]
+    },
+    "shock_surface_placement": {
+      "model_surface_x1": 0.0,
+      "clamped_output_x1": 8e-12,
+      "single_surface_coordinate": true,
+      "maximum_absolute_x1_residual": 3.196642223709303e-20
+    },
+    "pvtk_execution_metadata": {
+      "nranks": 1,
+      "cycle": 1,
+      "variables": "prtcl_all",
+      "time": 0.00967742
+    },
+    "monoenergetic_full_sphere_sampler": {
+      "shock_speed": 10.000000000050001,
+      "expected_relative_speed": 94.8683298051,
+      "maximum_absolute_relative_speed_residual": 4.816556980813402e-06,
+      "direction_mean": [
+        0.05589328578758783,
+        -5.995015168007582e-05,
+        0.006988822194154101
+      ],
+      "direction_second_moment": [
+        0.32829520688742364,
+        0.3532393578071331,
+        0.3184654353054432
+      ],
+      "octant_counts": [
+        40,
+        34,
+        28,
+        39,
+        38,
+        38,
+        46,
+        46
+      ]
+    },
+    "tree_freeze": {
+      "inventory_path": "artifact_inventory.sha256",
+      "inventory_excludes": "artifact_inventory.sha256",
+      "inventory_algorithm": "sha256 of '<file_sha256>  <root-relative-path>\\n' entries ordered lexically by root-relative path",
+      "inventory_sha256": "b50e1c1082e8bfbafce67aed09c1b92cfbae74b696e409aa29c3b6e12987457d",
+      "inventoried_file_count": 12,
+      "total_file_count_including_inventory": 13,
+      "recursively_read_only": true,
+      "writable_entries": 0
+    },
+    "pinned_executable_binding": {
+      "path": "pinned_executable_binding.json",
+      "sha256": "cea86f038c0cff6abc667ffbba532a08f9c1078c1670f273a3c0268660ddd20a"
+    },
+    "hardened_successor_replay": {
+      "status": "pass",
+      "artifact_root": "/lustre/orion/ast207/proj-shared/dfielding/PIC/local-readiness/q011-injection-distribution-runtime-local-successor-audit-20260531-v1",
+      "runtime_audit_report": {
+        "path": "runtime_audit_report.json",
+        "sha256": "927f43c372623396bbc20dd64b0c750c9fa80e393858e9090be6719f749cd825"
+      },
+      "tree_freeze": {
+        "inventory_path": "artifact_inventory.sha256",
+        "inventory_sha256": "a8343749f7cbe49af25a1c07e77645de1d39a8093d0cbf0b9d98cc272129e93c",
+        "inventoried_file_count": 4,
+        "recursively_read_only": true
+      },
+      "replay_scope": "separate frozen successor audit tree produced by the hardened analyzer after independently verifying the retained runtime and executable trees"
+    }
+  },
+  "analyzer_contract": {
+    "runtime_payload": "actual PVTK snapshot strictly below a verified immutable Orion runtime tree",
+    "executable_payload": "actual ELF executable strictly below a separately verified immutable Orion executable tree with an exact caller-supplied SHA-256",
+    "execution_header_check": "actual PVTK header must report nranks=1, cycle=1 and variables=prtcl_all",
+    "surface_check": "all injected x1 coordinates equal the clamped ideal-surface coordinate within 1.0e-17",
+    "monoenergetic_check": "all relative speeds lie on the injected shell within 1.0e-5 after float PVTK serialization",
+    "full_sphere_check": "component means bounded by 0.12, component second moments in [0.25, 0.42], and every octant populated",
+    "applies_paper_campaign_tolerances": false,
+    "emits_qualifying_evidence": false
+  },
+  "verification": {
+    "focused_command": "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. python3 -B -m unittest tst.publication.test_analyze_q011_injection_distribution_runtime_local",
+    "focused_result": "pass_25_tests",
+    "python_ast_parse": "pass",
+    "git_diff_check_q011_only": "pass",
+    "direct_serial_host_runtime": "pass_one_cycle",
+    "independent_frozen_tree_verify": "pass",
+    "pinned_executable_tree_verify": "pass",
+    "hardened_successor_runtime_audit_report_regeneration": "pass_archived_as_separate_frozen_successor_tree",
+    "shared_archive_and_executable_negative_regressions": "pass"
+  },
+  "explicit_gaps": [
+    "physical gas-pressure, unit-normalization, macro-mass and downstream-ppc calibration",
+    "AMR versus fine-uniform residual qualification",
+    "GPU, HIP, MPI, decomposition and Frontier qualification",
+    "independent raw-artifact recompute and external review"
+  ],
+  "residual_work": [
+    "Keep this bounded local runtime audit nonqualifying.",
+    "Resolve physical calibration and downstream ppc mapping in a separately reviewed tranche.",
+    "Run AMR and fine-uniform residual qualification separately.",
+    "Prepare any GPU, MPI, Frontier or external-review transition as a separate authorization step."
+  ],
+  "q011_disposition": "bounded_local_injection_distribution_runtime_audit_only_full_q011_qualification_open"
+}

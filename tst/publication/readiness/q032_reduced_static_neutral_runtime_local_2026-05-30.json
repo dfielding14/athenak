@@ -45,7 +45,7 @@
     }
   },
   "owned_artifact_bindings": {
-    "src/particles/particles.cpp": "83bc366df553a70fc1470f9ed461dc98e8d7506fb9327d4b5d5abb97484f1637",
+    "src/particles/particles.cpp": "4b88b1b0a0d83aed824f2af6f2fb77fc5793cdeb9b0e2d65d408535f22e45c44",
     "src/pgen/tests/q032_reduced_static_neutral_local.cpp": "9d3547b6796fe492fb01e1eb4ada60a54c6dcebeeefc99b7214e899a32540951",
     "inputs/tests/pic_q032_reduced_static_neutral_runtime_local.athinput": "2210b7d3f9a49b81163e5ac3484660199374ceed4876b04acf72a24053b4ee62",
     "tst/scripts/particles/pic_q032_reduced_static_neutral_runtime_local.py": "2181fc926bcad29324193c1a5d6ae66bb8d1629d9ea3900a4bee77a73fde6100",

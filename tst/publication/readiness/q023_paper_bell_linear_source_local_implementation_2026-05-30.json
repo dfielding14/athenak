@@ -48,7 +48,23 @@
         "epsilon": 0.4,
         "deck_path": "inputs/tests/pic_q023_paper_bell_linear_1d_candidate.athinput",
         "deck_sha256": "b84fb1b046d3174c3ce6bdd5f9067173dccd0636557d57c047331bf0a42eb4d5",
-        "raw_geometry": {"nx": [32, 4, 1], "xmin": [0.0, 0.0, 0.0], "extent": [1.0, 1.0, 1.0]}
+        "raw_geometry": {
+          "nx": [
+            32,
+            4,
+            1
+          ],
+          "xmin": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "extent": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
       },
       {
         "variant_id": "Q023-SOURCE-LOCAL-BASELINE-2D-EPSILON-0P4",
@@ -56,7 +72,23 @@
         "epsilon": 0.4,
         "deck_path": "inputs/tests/pic_q023_paper_bell_linear_2d_candidate.athinput",
         "deck_sha256": "b8a11ce7f7227210392de133bf52f71c265d86ab5ade73bf89a45a6449a3a23c",
-        "raw_geometry": {"nx": [64, 32, 1], "xmin": [0.0, 0.0, 0.0], "extent": [2.23606797749979, 1.118033988749895, 1.0]}
+        "raw_geometry": {
+          "nx": [
+            64,
+            32,
+            1
+          ],
+          "xmin": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "extent": [
+            2.23606797749979,
+            1.118033988749895,
+            1.0
+          ]
+        }
       },
       {
         "variant_id": "Q023-SOURCE-LOCAL-BASELINE-3D-EPSILON-0P4",
@@ -64,7 +96,23 @@
         "epsilon": 0.4,
         "deck_path": "inputs/tests/pic_q023_paper_bell_linear_3d_candidate.athinput",
         "deck_sha256": "a0fda35a71542e3c411c574a4c5069cbbae3776f02aa10dd44176a3102664103",
-        "raw_geometry": {"nx": [128, 64, 32], "xmin": [0.0, 0.0, 0.0], "extent": [4.58257569495584, 2.29128784747792, 1.14564392373896]}
+        "raw_geometry": {
+          "nx": [
+            128,
+            64,
+            32
+          ],
+          "xmin": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "extent": [
+            4.58257569495584,
+            2.29128784747792,
+            1.14564392373896
+          ]
+        }
       }
     ],
     "paper_velocity_observable_boundary": {
@@ -103,15 +151,15 @@
     },
     {
       "path": "src/pgen/pgen.cpp",
-      "sha256": "fe6232890bbe76053a80f59188f30940d7cc7d4fa3f40f32e790c5f6b82c8279"
+      "sha256": "c5719bed9ae5ba823794829d17e0df6dd4f020a6f29d894a7ff70f65432c4532"
     },
     {
       "path": "src/pgen/pgen.hpp",
-      "sha256": "c462661118786fdcee5d7dca410027bdde9a5df97f5e150bfe33a593e25ab40c"
+      "sha256": "835ece58c7291533c3c3dd8299331cadfab458aab8a510af442aabac0476e0e9"
     },
     {
       "path": "src/CMakeLists.txt",
-      "sha256": "2608f171cf7461699ffab513b21e1fbacb0649f3290d0b171e84bc934b89176d"
+      "sha256": "e9cd518abc209ad0f7e84d8694fad199a98406de2033b8b9cad8af4adb5567b9"
     },
     {
       "path": "src/pgen/AGENTS.md",
@@ -166,7 +214,11 @@
     "cycle_zero_initializations": [
       {
         "dimension": 1,
-        "carrier_shape": [1, 4, 32],
+        "carrier_shape": [
+          1,
+          4,
+          32
+        ],
         "selected_raw_mhd_w_bcc_path": "1d/bin/pic_q023_paper_bell_linear_1d_candidate.mhd_w_bcc.00000.bin",
         "selected_raw_mhd_w_bcc_sha256": "376b9197fe804d99ce44c8a3c64f6bce39b15fb057fc932b5c3fdc44963e177d",
         "source_local_velocity_magnetic_ratio_absolute_error": 0.0016082023878473274,
@@ -174,7 +226,11 @@
       },
       {
         "dimension": 2,
-        "carrier_shape": [1, 32, 64],
+        "carrier_shape": [
+          1,
+          32,
+          64
+        ],
         "selected_raw_mhd_w_bcc_path": "2d/bin/pic_q023_paper_bell_linear_2d_candidate.mhd_w_bcc.00000.bin",
         "selected_raw_mhd_w_bcc_sha256": "e074f28151ec5abf42f2c77c5f4daf33d98ad5e86ab8146db785d2ed67feab30",
         "source_local_velocity_magnetic_ratio_absolute_error": 0.0026451134816128517,
@@ -182,7 +238,11 @@
       },
       {
         "dimension": 3,
-        "carrier_shape": [32, 64, 128],
+        "carrier_shape": [
+          32,
+          64,
+          128
+        ],
         "selected_raw_mhd_w_bcc_path": "3d/bin/pic_q023_paper_bell_linear_3d_candidate.mhd_w_bcc.00000.bin",
         "selected_raw_mhd_w_bcc_sha256": "ec12b1e12a3e224eed6ca524c8487fe021fb7e22937e6ccfa8f38fe8f807e2f8",
         "source_local_velocity_magnetic_ratio_absolute_error": 0.002984367264437341,

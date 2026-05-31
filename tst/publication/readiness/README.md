@@ -22,8 +22,13 @@ qualify any scientific claim by itself.
 - `q006_paper_multispecies_oscillation_source_local_preparation_2026-05-30.json`:
   separately named registered Section 5.3 uniform, SMR and deterministic
   audited-AMR source-local preparation. The integrated host build passes, but
-  the ideal-EOS compatibility boundary, retained runtime matrix and
-  long-horizon paper-frequency qualification remain open.
+  the retained long-horizon paper-frequency qualification remains open.
+- `q006_paper_multispecies_oscillation_runtime_local_2026-05-30.json`: bounded
+  direct serial-host exact-isothermal full-f momentum-only mechanics successor.
+  Uniform, SMR, deterministic audited-AMR and audited-AMR restart snapshots are
+  retained recursively read-only below Orion. Long-horizon residual tolerances,
+  true-AMR policy qualification, MPI, GPU, Frontier and external review remain
+  open.
 - `q015_entity_differential_2026-05-30.json`: frozen-source Entity
   exact-overlap differential evidence and explicit non-overlap boundaries.
 - `q022_independent_comparison_preregistration_2026-05-30.json` and
@@ -243,10 +248,12 @@ qualify any scientific claim by itself.
 - `q008_expanding_box_local_oracles_2026-05-30.json`: bounded serial-host
   expanding-box gyro-history and one-step CPAW source-map oracle evidence.
 - `q008_expanding_box_cpaw_history_convergence_preparation_2026-05-30.json`:
-  bounded serial-host exponential-profile Appendix-A CPAW four-crossing-time
-  history and resolution-convergence preparation matrix retained below Orion.
-  Literal linear and reciprocal-linear profiles, portability and qualification
-  remain open.
+  bounded serial-host Appendix-A CPAW four-crossing-time history preparation
+  matrices retained below Orion. The successor extension adds literal linear
+  and reciprocal-linear profiles, supported LLF/HLLE/HLLD sensitivity,
+  axis-aligned x1/x2/x3 carriers and a fail-closed unsupported Roe probe.
+  Publication thresholds, expanded dimensional convergence, portability and
+  qualification remain open.
 - `q008_expanding_box_comoving_flux_successor_2026-05-30.json`: successor
   bounded serial-host comoving-flux repair, oblique-divB oracle and active-MHD
   fail-closed guard evidence.
@@ -260,10 +267,14 @@ qualify any scientific claim by itself.
   parity for the selected active-MHD expanding adaptive-delta-f plus damping
   carrier. Frontier, MPI and physical-transport qualification remain open.
 - `q007_paper_deltaf_linear_source_local_preparation_2026-05-30.json`:
-  bounded source-local exact-isothermal true-delta-f CRSI/CRPAI cycle-zero
-  preparation carriers and paper-literal static mappings. The paper log-bin
-  weighted loader, random-phase four-branch wave spectrum, runtime dispersion,
-  CRPAI handedness review and qualification remain open.
+  bounded source-local exact-isothermal true-delta-f CRSI/CRPAI preparation
+  carriers, eight-bin IPWT-weighted loading, deterministic four-branch wave
+  carrier, raw startup loading validation for CRSI and both CRPAI carriers,
+  static full-`Q1 + Q2` oracle and recursively read-only two-cycle CRSI mechanics
+  replay. The finite quadrature, angular sampler, seed and mode set remain
+  explicit source-local conventions; paper-run provenance, growth-fit
+  qualification, CRPAI handedness review and runtime replay, MPI, GPU, Frontier
+  and external review remain open.
 - `q009_amr_lifetime_policy_successor_2026-05-30.json`: bounded local AMR
   retained-state inventory and `paper_smooth` interface-policy decision with
   the coupled-boundary, MPI and HIP lifetime matrix intentionally open.
@@ -324,6 +335,12 @@ qualify any scientific claim by itself.
   finite-Mach surface as an explicitly separate engineering option. Open
   executed-distribution, calibration and campaign
   fields prevent accidental promotion to scientific evidence.
+- `q011_injection_distribution_runtime_local_2026-05-30.json`: bounded direct
+  serial-host runtime audit of the committed Section 5.4 injection path. The
+  recursively read-only Orion payload checks actual PVTK provenance, clamped
+  shock-surface placement, monoenergetic surface-relative speed and bounded
+  full-sphere statistics. Physical calibration, AMR, MPI, GPU, Frontier,
+  independent recompute and external review remain open.
 - `q034_unsupported_capability_successor_2026-05-30.json`: successor
   fail-closed active-MHD expanding-box unsupported-composition addendum.
 - `q042_post_repair_architecture_docs_successor_2026-05-30.json`: successor

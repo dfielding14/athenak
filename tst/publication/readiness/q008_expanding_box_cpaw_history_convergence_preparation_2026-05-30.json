@@ -2,23 +2,29 @@
   "record_type": "q008_expanding_box_cpaw_history_convergence_preparation",
   "date": "2026-05-30",
   "qualification_effect": "bounded_serial_host_preparation_only",
-  "scope": "Add-only Q008 Appendix-A CPAW exponential-history preparation tranche. A bounded local serial-host pilot exercises the existing cpaw problem generator, existing binary reader, and built-in physical-volume MHD history output for four crossing times. This is preparation evidence only. It does not freeze publication-qualification thresholds or close the Appendix-A gate.",
+  "scope": "Add-only Q008 Appendix-A CPAW history preparation tranche. Bounded local direct-serial-host pilots exercise the existing cpaw problem generator, retained binary reader, and built-in physical-volume MHD history output for four crossing times. The retained extension adds literal linear and reciprocal-linear profiles, supported llf/hlle/hlld sensitivity, axis-aligned x1/x2/x3 carriers, and an explicit fail-closed unsupported Roe probe. The final successor executes a repo-shaped retained snapshot of the script, deck and reader and records the analysis environment. This is preparation evidence only. It does not freeze publication-qualification thresholds or close the Appendix-A gate.",
   "artifacts": [
     "inputs/tests/pic_mhd_expanding_box_cpaw_history_preparation.athinput",
     "tst/scripts/particles/pic_mhd_expanding_box_cpaw_history_preparation.py",
+    "tst/publication/test_pic_mhd_expanding_box_cpaw_history_preparation.py",
+    "vis/python/bin_convert_new.py",
     "tst/publication/readiness/q008_expanding_box_cpaw_history_convergence_preparation_2026-05-30.json"
   ],
   "artifact_bindings": {
-    "inputs/tests/pic_mhd_expanding_box_cpaw_history_preparation.athinput": "953071b3e07ffa4a211a9bab9287bfd805c2f9adc1d3c4af18c86047061b2b4a",
-    "tst/scripts/particles/pic_mhd_expanding_box_cpaw_history_preparation.py": "26ea8ef6e02c997766d282005ccec67fd88cc0a8bed1ec3f453816f29d373cc3"
+    "inputs/tests/pic_mhd_expanding_box_cpaw_history_preparation.athinput": "08885c1001d94085567b324162b4721e1c82f0ab135a68056d6953f58d4c3c80",
+    "tst/scripts/particles/pic_mhd_expanding_box_cpaw_history_preparation.py": "81fe85989bd74438717c9e6d44d8a154102368dc2b17ea0dfdb00a2fbc3bbcca",
+    "tst/publication/test_pic_mhd_expanding_box_cpaw_history_preparation.py": "9383e8658275c04e85522301150021fbafaf46702b5969a67ca517a6f2130a6b",
+    "vis/python/bin_convert_new.py": "5835cad3233c351689c9a961d57e352613a9a731608b80a733f8f00977daac65"
   },
   "serial_host_profile": {
     "execution_mode": "bounded_local_direct_serial_host_only",
     "mpi_launcher": "not_used",
     "slurm_launcher": "not_used",
     "frontier_execution": "not_used",
-    "accepted_existing_executable": "/tmp/dfielding-athenak-q033-local-build/src/athena",
-    "accepted_existing_executable_mtime": "2026-05-30 22:36:24.511462567 -0400",
+    "accepted_existing_executable": "/lustre/orion/ast207/proj-shared/dfielding/PIC/local-readiness/integrated-serial-host-binary-clean-20260531T034317Z/bin/athena",
+    "accepted_existing_executable_sha256": "dadfbb19bd4453ea00c0caee93f85b7664f875621b1582f50cdd26d372422d18",
+    "pinned_executable_root": "/lustre/orion/ast207/proj-shared/dfielding/PIC/local-readiness/integrated-serial-host-binary-clean-20260531T034317Z",
+    "pinned_executable_root_inventory_sha256": "223dcb07d453572ea407f65dc9f7020afa3d6370b9d3c3cf4a06ceb4ca0e852c",
     "cmake_home_directory": "/autofs/nccs-svm1_home2/dfielding/athenak-pic",
     "build_type": "Release",
     "athena_mpi": "OFF",
@@ -35,6 +41,47 @@
     "results_json_sha256": "44768c928ee5a2c514b2caca95238f0e3e802263a44d06a02bce0a5bed2f64ad",
     "writable_entries": 0,
     "status": "pass_recursively_read_only"
+  },
+  "retained_orion_extension_artifacts": {
+    "artifact_root": "/lustre/orion/ast207/proj-shared/dfielding/PIC/q008-cpaw-history-extension-20260531-v5",
+    "total_file_count_including_manifest": 786,
+    "payload_manifest": "artifact_inventory.sha256",
+    "payload_manifest_entry_count": 785,
+    "payload_manifest_algorithm": "sha256 of '<file_sha256>  <root-relative-path>\\n' entries ordered lexically by root-relative path; artifact_inventory.sha256 excludes itself",
+    "payload_manifest_sha256": "9cd5a4e8f04bdb4c6666f13c5904bd291e04e894d83fb84fb3300d8ee65e23de",
+    "all_files_inventory_algorithm": "sha256 of '<file_sha256>  <root-relative-path>\\n' entries ordered lexically by root-relative path, including artifact_inventory.sha256",
+    "all_files_inventory_sha256": "2a621618cea5318b53a23f3775db7f8515d30649d44f5dbb617c155ddc6ef34a",
+    "results_json_sha256": "74dfe1c671e0b462a8c82b76031bac91e7586032b1ddc35f87428a33155319b0",
+    "run_log_sha256": "61f514b7110d12de3e4596047c4836282b95193cf2fc94fc8dbe9561d6aac73d",
+    "mhd_w_bcc_bin_file_count": 726,
+    "mhd_history_file_count": 22,
+    "errs_dat_file_count_retained_but_not_used_as_oracle": 22,
+    "writable_entries": 0,
+    "status": "pass_manifest_verified_recursively_read_only",
+    "pinned_executable_binding_sha256": "68564e61898aa31e056f57c76b30d30d9ef583387ebf0dd4ed12775e9445d10d",
+    "invocation_sha256": "344e09a11fe6366ea49e33df7d50f11d939289dac004e12fa762c77bd1e843cf"
+  },
+  "retained_analysis_provenance": {
+    "status": "pass_self_contained_retained_snapshot_execution",
+    "stable_read_before_and_after_analysis": "pass",
+    "invocation": {
+      "path": "invocation.json",
+      "sha256": "344e09a11fe6366ea49e33df7d50f11d939289dac004e12fa762c77bd1e843cf"
+    },
+    "analysis_environment": {
+      "path": "analysis_environment.json",
+      "sha256": "4d4058c398206ff895220f2751549e48a6cb9ec872ef73a4f0c904837cf9745e",
+      "python_executable": "/opt/cray/pe/python/3.11.7/bin/python3",
+      "python_version": "3.11.7",
+      "numpy_version": "1.26.4"
+    },
+    "source_binding_manifest": {
+      "path": "source_snapshot/source_binding_sha256.json",
+      "sha256": "d021aa6c7164e05fe0416acac341523e41d74b69af6ab3e66216d3ebaed8a866"
+    },
+    "executed_script": "source_snapshot/tst/scripts/particles/pic_mhd_expanding_box_cpaw_history_preparation.py",
+    "retained_deck": "source_snapshot/inputs/tests/pic_mhd_expanding_box_cpaw_history_preparation.athinput",
+    "retained_binary_reader": "source_snapshot/vis/python/bin_convert_new.py"
   },
   "excluded_stale_executable_probe": {
     "executable": "/tmp/athenak-pic-build-release-serial/src/athena",
@@ -205,7 +252,7 @@
       "b_amp": 0.0010070857444743897,
       "u_phase": 0.00478361406232608,
       "b_phase": 0.004784849102932753,
-      "elsasser": 0.00005064434528102776,
+      "elsasser": 5.064434528102776e-05,
       "vb_lock": 0.00010115935387800506,
       "mass_hst": 0.0,
       "bx_me_hst": 0.0,
@@ -253,7 +300,7 @@
       "b_amp": 0.0007949564099383188,
       "u_phase": 0.005242392665191886,
       "b_phase": 0.00514829705567621,
-      "elsasser": 0.00005065727219994719,
+      "elsasser": 5.065727219994719e-05,
       "vb_lock": 0.00010071245267305003,
       "mass_hst": 0.0,
       "bx_me_hst": 0.0,
@@ -301,7 +348,7 @@
       "b_amp": 0.0011337906344262016,
       "u_phase": 0.004339036050936329,
       "b_phase": 0.0044276533091967,
-      "elsasser": 0.00005067135733377113,
+      "elsasser": 5.067135733377113e-05,
       "vb_lock": 0.0001011457988525983,
       "mass_hst": 0.0,
       "bx_me_hst": 0.0,
@@ -317,7 +364,7 @@
       "b_amp": 0.0010070857444743897,
       "u_phase": 0.00478361406232608,
       "b_phase": 0.004784849102932753,
-      "elsasser": 0.00005064434528102776,
+      "elsasser": 5.064434528102776e-05,
       "vb_lock": 0.00010115935387800506,
       "mass_hst": 0.0,
       "bx_me_hst": 0.0,
@@ -445,17 +492,314 @@
       ]
     }
   },
+  "frozen_extension_preparation_matrix": {
+    "execution_mode": "bounded_local_direct_serial_host_only",
+    "successful_case_count": 22,
+    "crossing_times": 4.0,
+    "output_cadence": 0.125,
+    "literal_profile_x1_llf_convergence": [
+      {
+        "name": "linear_expanding",
+        "expansion_law": "linear",
+        "rates_x1_x2_x3": [
+          0.02,
+          0.01,
+          0.01
+        ],
+        "nx1_values": [
+          32,
+          64,
+          128
+        ]
+      },
+      {
+        "name": "linear_compressing",
+        "expansion_law": "linear",
+        "rates_x1_x2_x3": [
+          -0.02,
+          -0.01,
+          -0.01
+        ],
+        "nx1_values": [
+          32,
+          64,
+          128
+        ]
+      },
+      {
+        "name": "reciprocal_linear_expanding",
+        "expansion_law": "reciprocal_linear",
+        "rates_x1_x2_x3": [
+          0.02,
+          0.01,
+          0.01
+        ],
+        "nx1_values": [
+          32,
+          64,
+          128
+        ]
+      },
+      {
+        "name": "reciprocal_linear_compressing",
+        "expansion_law": "reciprocal_linear",
+        "rates_x1_x2_x3": [
+          -0.02,
+          -0.01,
+          -0.01
+        ],
+        "nx1_values": [
+          32,
+          64,
+          128
+        ]
+      }
+    ],
+    "static_x1_llf_controls": [
+      "static_on_x1_llf_nx128",
+      "static_off_control_x1_llf_nx128"
+    ],
+    "exponential_llf_dimensional_carriers": {
+      "profiles": [
+        "exponential_expanding",
+        "exponential_compressing"
+      ],
+      "axes": [
+        "x1",
+        "x2",
+        "x3"
+      ],
+      "primary_axis_resolution": 64,
+      "transverse_axis_resolution": 4
+    },
+    "exponential_expanding_x1_nx64_solver_sensitivity": [
+      "llf",
+      "hlle",
+      "hlld"
+    ],
+    "roe_probe_disposition": "fail_closed_unsupported_mhd_roe_not_wired"
+  },
+  "extension_analytical_preparation_oracles": {
+    "geometry": "For carrier-axis factor A(t)=scale(law,2*r,t) and transverse factor a(t)=scale(law,r,t), scale(linear,q,t)=1+q*t, scale(reciprocal_linear,q,t)=1/(1+q*t), and scale(exponential,q,t)=exp(q*t).",
+    "density": "rho(t)/rho(0)=1/(A(t)*a(t)^2)",
+    "parallel_magnetic_field": "B_parallel(t)/B_parallel(0)=a(t)^-2",
+    "transverse_velocity_amplitude": "|u_perp(t)|/|u_perp(0)|=a(t)^-1",
+    "transverse_magnetic_amplitude": "|B_perp(t)|/|B_perp(0)|=1/(A(t)*a(t))",
+    "phase_integrand": "phi(t)=k*U_A*integral_0^t ds/(a(s)*sqrt(A(s)))",
+    "linear_phase": "phi(t)=k*U_A*2*(atan(sqrt(1+2*r*t))-pi/4)/r",
+    "reciprocal_linear_phase": "phi(t)=k*U_A*(((sqrt(1+2*r*t)^5-1)/5+(sqrt(1+2*r*t)^3-1)/3)/(2*r))",
+    "exponential_phase": "phi(t)=k*U_A*(1-exp(-2*r*t))/(2*r)",
+    "static_phase_limit": "phi(t)=k*U_A*t when r=0",
+    "physical_mass_history": "constant",
+    "physical_parallel_magnetic_energy_history": "proportional to A(t)/a(t)^2; constant for the exponential specialization A(t)=a(t)^2",
+    "physical_transverse_kinetic_energy_history": "proportional to a(t)^-2",
+    "physical_transverse_magnetic_energy_history": "proportional to A(t)^-1; proportional to a(t)^-2 for the exponential specialization A(t)=a(t)^2",
+    "elsasser_branch": "undesired-to-desired mode-amplitude ratio remains bounded",
+    "velocity_magnetic_phase_lock": "relative velocity-to-magnetic mode phase remains bounded",
+    "errs_dat_oracle": "not_used"
+  },
+  "observed_extension_pilot": {
+    "status": "pass_bounded_serial_host_preparation_only",
+    "direct_serial_wall_seconds": 99.54,
+    "successful_case_count": 22,
+    "mhd_w_bcc_snapshot_count_per_successful_case": 33,
+    "built_in_mhd_history_row_count_per_successful_case": 33,
+    "guardrail_metric_envelope": {
+      "rho_relative_error_max": 0.0014314651489257812,
+      "parallel_magnetic_field_relative_error_max": 1.1920928955078125e-07,
+      "velocity_mode_amplitude_relative_error_max": 0.08112260907674285,
+      "magnetic_mode_amplitude_relative_error_max": 0.08563907987666575,
+      "velocity_phase_absolute_error_max": 0.052383332650268954,
+      "magnetic_phase_absolute_error_max": 0.05077959775211838,
+      "undesired_to_desired_elsasser_ratio_max": 0.0009886311652943494,
+      "velocity_magnetic_phase_lock_absolute_error_max": 0.0019276095180850536,
+      "mass_relative_drift_max": 0.0,
+      "parallel_magnetic_energy_scaled_relative_error_max": 1.4499512701604544e-13,
+      "transverse_kinetic_energy_scaled_relative_error_max": 0.15305946487880007,
+      "transverse_magnetic_energy_scaled_relative_error_max": 0.14910094184991296
+    },
+    "static_mode_on_off_parity": {
+      "mhd_w_bcc_relative_difference_max": 3.168348954349794e-08,
+      "mhd_history_relative_difference_max": 2.4990860075790877e-16
+    },
+    "roe_disposition": {
+      "solver": "roe",
+      "returncode": 1,
+      "expected_rejection_text_observed": true,
+      "outputs_after_rejection": [],
+      "raw_sidecars": {
+        "command": {
+          "path": "roe_unsupported_probe/command.json",
+          "sha256": "e3505e7470e9df709bd48de47668eb23c6044cf88063ccda0dc6e978ec28aa8f"
+        },
+        "stdout": {
+          "path": "roe_unsupported_probe/stdout.txt",
+          "sha256": "98d70b504e328be98efd491a1841de74deff1dd6ad8f0042d1843a1906875b05"
+        },
+        "stderr": {
+          "path": "roe_unsupported_probe/stderr.txt",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "returncode": {
+          "path": "roe_unsupported_probe/returncode.txt",
+          "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
+        }
+      },
+      "status": "pass_fail_closed_unsupported"
+    },
+    "solver_sensitivity_exponential_expanding_x1_nx64": {
+      "llf": {
+        "rho": 0.0005935430526733398,
+        "u_amp": 0.008340899486585118,
+        "b_amp": 0.007220717731845516,
+        "u_phase": 0.01740420888878802,
+        "b_phase": 0.017013342218763938,
+        "uperp_ke_hst": 0.014607812022235822,
+        "bperp_me_hst": 0.013632167668158779
+      },
+      "hlle": {
+        "rho": 0.0005934834480285645,
+        "u_amp": 0.00834000424402348,
+        "b_amp": 0.007219983990683909,
+        "u_phase": 0.017403505416297094,
+        "b_phase": 0.017012760776708546,
+        "uperp_ke_hst": 0.014606177085435879,
+        "bperp_me_hst": 0.01363052667655329
+      },
+      "hlld": {
+        "rho": 0.00057220458984375,
+        "u_amp": 0.008282780739013118,
+        "b_amp": 0.007165027608247776,
+        "u_phase": 0.017378472676039536,
+        "b_phase": 0.016987701067019856,
+        "uperp_ke_hst": 0.014508950543035803,
+        "bperp_me_hst": 0.013528454246485744
+      }
+    },
+    "dimensional_carrier_max_residual_spread_across_x1_x2_x3": {
+      "exponential_expanding": {
+        "rho": 0.0,
+        "u_amp": 4.964726507683537e-08,
+        "b_amp": 1.649147388649297e-07,
+        "u_phase": 7.683698299842945e-08,
+        "b_phase": 2.7400329116744615e-08
+      },
+      "exponential_compressing": {
+        "rho": 0.0,
+        "u_amp": 1.5996691105080174e-07,
+        "b_amp": 0.0,
+        "u_phase": 3.4270737359065606e-08,
+        "b_phase": 1.9282566654510447e-09
+      }
+    },
+    "literal_profile_endpoint_residuals_nx1_32_64_128": {
+      "linear_expanding": {
+        "u_amp": [
+          0.06803749215557131,
+          0.00799497716838704,
+          0.0006377631976940412
+        ],
+        "b_amp": [
+          0.061919068433698765,
+          0.007586752281706799,
+          0.0011287667737308604
+        ],
+        "u_phase": [
+          0.05236680435662322,
+          0.017400396352176273,
+          0.005245289466817127
+        ],
+        "b_phase": [
+          0.050459664996232334,
+          0.016973487338823645,
+          0.005118680469507808
+        ]
+      },
+      "linear_compressing": {
+        "u_amp": [
+          0.08068088977812327,
+          0.009460555031252316,
+          0.0007233326342526158
+        ],
+        "b_amp": [
+          0.08563907987666575,
+          0.010545147184371384,
+          0.001593936284937092
+        ],
+        "u_phase": [
+          0.04913010328376899,
+          0.015847107245807734,
+          0.004342357645224837
+        ],
+        "b_phase": [
+          0.050625590488383665,
+          0.016164907349846658,
+          0.004396114408468321
+        ]
+      },
+      "reciprocal_linear_expanding": {
+        "u_amp": [
+          0.08112260907674285,
+          0.010240847229776362,
+          0.001551033924236389
+        ],
+        "b_amp": [
+          0.08404751484963047,
+          0.009567180767149353,
+          0.0006823521980126035
+        ],
+        "u_phase": [
+          0.04912941500952428,
+          0.01585350315323808,
+          0.0043381839138270095
+        ],
+        "b_phase": [
+          0.05077959775211838,
+          0.016247627794321318,
+          0.0044543804264201015
+        ]
+      },
+      "reciprocal_linear_compressing": {
+        "u_amp": [
+          0.06859401614585325,
+          0.008746713984816523,
+          0.0014088368183446942
+        ],
+        "b_amp": [
+          0.06060408971314246,
+          0.0067979302493518245,
+          0.00040678449902831204
+        ],
+        "u_phase": [
+          0.052383332650268954,
+          0.017405846247257273,
+          0.00523628590143943
+        ],
+        "b_phase": [
+          0.05058462187815138,
+          0.017060454856377305,
+          0.005183339634374562
+        ]
+      }
+    },
+    "exact_full_case_metrics": "retained in results.json bound by retained_orion_extension_artifacts.results_json_sha256"
+  },
   "open_qualification_work": [
-    "literal_linear_profile",
-    "literal_reciprocal_linear_profile",
-    "roe_parity",
-    "solver_sensitivity",
-    "dimensional_matrix",
+    "literal_linear_profile_publication_thresholds",
+    "literal_reciprocal_linear_profile_publication_thresholds",
+    "unsupported_roe_disposition_review_or_implementation_if_required",
+    "supported_solver_sensitivity_publication_thresholds",
+    "expanded_dimensional_convergence_matrix",
     "mpi",
     "gpu",
     "frontier",
     "external_review",
     "driven_crpai"
   ],
-  "q008_disposition": "bounded_serial_host_preparation_only_exponential_cpaw_history_pilot_passed_qualification_thresholds_and_open_profiles_remain_open"
+  "local_formula_harness": {
+    "command": "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. python3 -B -m unittest -v tst.publication.test_pic_mhd_expanding_box_cpaw_history_preparation",
+    "result": "pass_7_tests",
+    "coverage": "axis remapping, dimensions, rates, command flags, synthetic mode projection, geometry laws, independent phase quadrature, history-energy scaling, unsupported Roe fail-closed behavior, and successful-solver matrix exclusion"
+  },
+  "q008_disposition": "bounded_serial_host_preparation_only_exponential_and_literal_profile_cpaw_history_pilots_supported_solver_sensitivity_dimensional_carriers_and_fail_closed_unsupported_roe_disposition_passed_coarse_preparation_guardrails_publication_qualification_thresholds_not_frozen_and_open_work_remains_open"
 }

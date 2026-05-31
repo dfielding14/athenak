@@ -9,19 +9,19 @@
   "scope": "Q-033-only fail-closed successor for a future adaptive-delta-f physical-damping CRPAI transport-calibration extension. This successor preserves the intentionally unrunnable synthetic-contract-only candidate and binds its Q-022 Sun-Bai-Zhao provenance, equation-map and tolerance-table placeholders exactly. Those placeholders remain blocked and empty; this record does not extract reference data, calibrate physical transport, qualify a campaign or authorize execution.",
   "artifact_bindings": {
     "inputs/tests/pic_q033_crpai_transport_calibration_candidate.athinput": "77ffeb7bdfd1f1f2299db7e4ee257d105b580a6bd554cd244e6d9e0c8214ce58",
-    "tst/publication/analyze_q033_crpai_transport_calibration_candidate.py": "c33f6695cd7bb1185cd3fcc993bc4d371ab5fad9d30487938d93f548b9869888",
+    "tst/publication/analyze_q033_crpai_transport_calibration_candidate.py": "7c88a2c5fa3516e43217df34ee601db3b83abf90042f10754812232c40e53383",
     "tst/publication/test_analyze_q033_crpai_transport_calibration_candidate.py": "8360a4754d53da110291c499f92a9031978cae2f6e622cb739983a3d47a771f9",
     "tst/publication/readiness/q033_crpai_transport_calibration_applicability_2026-05-30.md": "0ced16ab8fbe21425bec91df093a936118d0365d45a27760caf6f80e8398713a"
   },
   "implementation_source_bindings": {
-    "src/particles/particles.cpp": "83bc366df553a70fc1470f9ed461dc98e8d7506fb9327d4b5d5abb97484f1637",
+    "src/particles/particles.cpp": "4b88b1b0a0d83aed824f2af6f2fb77fc5793cdeb9b0e2d65d408535f22e45c44",
     "src/particles/particles.hpp": "452e6091ad6f1ce50156c770d304ac36020cb53927cc1e40ba6af73e7c3bb462",
     "src/particles/particles_tasks.cpp": "8310e80ffdb2739ecc60b6d65ef9eae78573aeba8f55fa1981ff98b4801c8946",
     "src/particles/particles_pushers.cpp": "7cd3ac4b6fc95529d3097a3799b74f064a7e865c8b7be08f830a60dbee103330",
     "src/particles/particles_moments.cpp": "3b206b1268bc71a0d6745dcda5422da54d255ac6cb73fddd566b89b507da6c58",
     "src/mhd/mhd.hpp": "655197f1582463020747212294e965e19a078a59d0708ebf7a6a127e5b652d4e",
     "src/mhd/mhd_tasks.cpp": "339326c2cc8913c321affeafc618a8fea6cbd9133ea6b26a9b58daa2baafa6d2",
-    "docs/source/engineering/pic_mhd_model_contract.md": "ebad2e21725ea15eb301e03f32d8ca8fab9c6503aec90cd7090be4637402ed64"
+    "docs/source/engineering/pic_mhd_model_contract.md": "de319a56b34a6be33a41e9da3719d9a06a7646a1ff26748900d746d1b167bf80"
   },
   "bounded_boundary_artifact_bindings": {
     "inputs/tests/pic_mhd_expanding_box_adaptive_damping_smoke.athinput": "52122a6100eba205191abea2c0f560f26c30f5ca97272b7fd7dd1cfc01832ba5",
