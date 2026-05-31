@@ -26,9 +26,12 @@ from control_plane_common import require_storage_policy_unlock_snapshot
 from control_plane_common import scheduler_account_matches_authorized, sha256_bytes
 from control_plane_common import trusted_slurm_environment
 from control_plane_common import verify_installed_control_plane
-from ledger import accounting, append_primary_event_locked, ledger_lock
+from ledger import accounting, append_primary_event_locked, chain_head
+from ledger import clear_matching_incomplete_manual_accounting_marker_locked
+from ledger import ledger_lock, publish_incomplete_manual_accounting_marker_locked
+from ledger import recover_incomplete_manual_accounting_locked
 from ledger import latest_reservations, require_explicit_genesis
-from ledger import validate_mirrored_state
+from ledger import validate_mirrored_state, validate_primary_chain, write_csv
 
 
 TERMINAL_STATES = {
@@ -294,7 +297,11 @@ def reconcile_manual_allocations(
         authorized_pic_root=authorized_pic_root,
         authorized_project_home_root=authorized_project_home_root,
     )
-    with ledger_lock(ledger_jsonl, mirror_jsonl):
+    with ledger_lock(
+        ledger_jsonl,
+        mirror_jsonl,
+        allow_incomplete_manual_accounting=True,
+    ):
         inventory = _verify_installed_control_plane_pair(
             control_plane_dir,
             authorized_pic_root=authorized_pic_root,
@@ -318,32 +325,48 @@ def reconcile_manual_allocations(
             raise ValueError(
                 "Manual-accounting authorization is not bound by the promoted policy"
             )
-        records = validate_mirrored_state(ledger_jsonl, receipts_jsonl, mirror_jsonl)
-        require_explicit_genesis(records)
+        jobs = reviewed["jobs"]
+        assert isinstance(jobs, list)
+        job_ids = [str(job["job_id"]) for job in jobs]
+        authorization_id = str(reviewed["authorization_id"])
+        local_records = validate_primary_chain(ledger_jsonl)
+        require_explicit_genesis(local_records)
         pending_marker = (
             Path(os.path.abspath(authorized_pic_root)) / "ledger" / "pending_submission.json"
         )
         require_canonical_path_below(pending_marker, authorized_pic_root)
         if pending_marker.exists():
             raise ValueError("Manual accounting is blocked by a pending scheduler submission")
-        totals = accounting(records)
+        totals = accounting(local_records)
         outstanding = [
-            record for record in latest_reservations(records).values()
+            record for record in latest_reservations(local_records).values()
             if record.get("state") in {"reserved", "submitted"}
         ]
         if outstanding or totals["currently_reserved_node_hours"]:
             raise ValueError("Manual accounting is blocked by an active reservation")
         _require_empty_queue()
-        jobs = reviewed["jobs"]
-        assert isinstance(jobs, list)
         scheduler = _scheduler_results(jobs)
-        authorization_id = str(reviewed["authorization_id"])
+        incomplete_marker = recover_incomplete_manual_accounting_locked(
+            ledger_jsonl,
+            receipts_jsonl,
+            mirror_jsonl,
+            authorization_id=authorization_id,
+            authorization_sha256=authorization_sha256,
+            authorization_path=authorization,
+            project_home_authorization_path=project_home_authorization,
+            reviewed_job_ids=job_ids,
+            reviewed_scheduler_results=scheduler,
+            control_plane_version=version,
+            active_policy_sha256=policy_snapshot["active_policy_sha256"],
+            active_promotion_sha256=policy_snapshot["active_promotion_sha256"],
+        )
+        records = validate_mirrored_state(ledger_jsonl, receipts_jsonl, mirror_jsonl)
+        require_explicit_genesis(records)
         existing = [
             record for record in records
             if record.get("event_type") == "manual_allocation_reconciliation"
             and record.get("manual_accounting_authorization_id") == authorization_id
         ]
-        job_ids = [str(job["job_id"]) for job in jobs]
         if [record.get("job_id") for record in existing] != job_ids[:len(existing)]:
             raise ValueError("Existing manual-accounting events are not an authorized prefix")
         if len(existing) > len(job_ids):
@@ -379,26 +402,60 @@ def reconcile_manual_allocations(
             records[:existing_positions[0]] if existing_positions else records
         )
         cumulative = accounting(preceding_records)["cumulative_consumed_node_hours"]
+        if incomplete_marker is None:
+            incomplete_marker = {
+                "schema_version": 3,
+                "state": "manual_accounting_incomplete",
+                "manual_accounting_authorization_id": authorization_id,
+                "manual_accounting_authorization_sha256": authorization_sha256,
+                "pre_tranche_sequence_number": len(records),
+                "pre_tranche_chain_head": chain_head(records),
+                "pre_tranche_authorized_job_count": len(existing),
+                "control_plane_version": version,
+                "active_policy_sha256": policy_snapshot["active_policy_sha256"],
+                "active_promotion_sha256": policy_snapshot["active_promotion_sha256"],
+            }
+            marker_published = False
+        else:
+            marker_published = True
         results: list[dict[str, object]] = []
         for index, job_id in enumerate(job_ids):
+            historical = existing[index] if index < len(existing) else None
             payload = _event_payload(
                 scheduler[job_id],
                 authorization_id=authorization_id,
                 authorization_path=authorization,
                 project_home_authorization_path=project_home_authorization,
                 authorization_sha256=authorization_sha256,
-                control_plane_version=version,
-                active_policy_sha256=policy_snapshot["active_policy_sha256"],
-                active_promotion_sha256=policy_snapshot["active_promotion_sha256"],
+                control_plane_version=(
+                    str(historical["control_plane_version"])
+                    if historical is not None
+                    else version
+                ),
+                active_policy_sha256=(
+                    str(historical["active_policy_sha256"])
+                    if historical is not None
+                    else policy_snapshot["active_policy_sha256"]
+                ),
+                active_promotion_sha256=(
+                    str(historical["active_promotion_sha256"])
+                    if historical is not None
+                    else policy_snapshot["active_promotion_sha256"]
+                ),
                 cumulative=cumulative,
             )
-            if index < len(existing):
-                result = existing[index]
+            if historical is not None:
+                result = historical
                 if _stable_event_payload(result) != payload:
                     raise ValueError(
                         f"Existing manual-accounting event differs from reviewed scheduler data: {job_id}"
                     )
             else:
+                if not marker_published:
+                    publish_incomplete_manual_accounting_marker_locked(
+                        ledger_jsonl, mirror_jsonl, incomplete_marker
+                    )
+                    marker_published = True
                 result = append_primary_event_locked(
                     ledger_jsonl,
                     ledger_csv,
@@ -406,9 +463,25 @@ def reconcile_manual_allocations(
                     mirror_jsonl,
                     payload,
                     mirror_transport="filesystem_copy",
+                    allow_incomplete_manual_accounting=True,
                 )
             cumulative = float(payload["cumulative_consumed_node_hours"])
             results.append(result)
+        if not marker_published:
+            publish_incomplete_manual_accounting_marker_locked(
+                ledger_jsonl, mirror_jsonl, incomplete_marker
+            )
+        write_csv(
+            ledger_jsonl,
+            receipts_jsonl,
+            ledger_csv,
+            mirror_jsonl=mirror_jsonl,
+            mirror_transport="filesystem_copy",
+            allow_incomplete_manual_accounting=True,
+        )
+        clear_matching_incomplete_manual_accounting_marker_locked(
+            ledger_jsonl, mirror_jsonl, incomplete_marker
+        )
         return results
 
 

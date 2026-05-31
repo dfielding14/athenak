@@ -123,8 +123,20 @@ The helper accepts only terminal Slurm allocation records with the authorized
 account, partition and QoS, requires an empty trusted Frontier queue, no PIC
 pending marker and no active reservation, and appends one explicitly
 nonqualifying event per allocation. Those node-hours count against the tracked
-budget. Interrupted retries may complete only the exact authorized terminal
-suffix.
+budget. Before the first append, it publishes matching read-only
+`ledger/pending_manual_accounting.json` markers in Orion and Project Home. An
+incomplete marker blocks unrelated ledger writers and policy promotion.
+Interrupted retries may repair and complete only the exact authorized terminal
+suffix after the marker-bound pre-tranche sequence number, authorized-prefix
+length and chain head. The marker also binds the installed control-plane
+version and promoted policy hashes. Recovery validates fresh reviewed Slurm
+accounting against every scheduler-bound suffix field before publishing missing
+mirror bytes. Retries reject older mirror or receipt truncation, always
+regenerate the derived CSV index after mirrored publication is coherent, and
+clear only the matching marker pair after the full authorized tranche is
+durable. A predecessor markerless partial prefix retains its historical
+control-plane and policy bindings; only its newly appended suffix is bound to
+the active successor.
 
 When promoting a successor over the historical pre-anchor ledger, install the
 successor in both roots and migrate its already-audited genesis before changing

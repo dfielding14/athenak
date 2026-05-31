@@ -23,6 +23,7 @@ import uuid
 
 import install_control_plane
 import launch_trampoline
+import ledger
 import reconcile_frontier_job
 import reconcile_manual_frontier_allocations
 import terminal_recovery_handoff
@@ -60,6 +61,7 @@ from launch_trampoline import _freeze_artifact_tree_at
 from launch_trampoline import _capture_artifact_directory_identities_at
 from launch_trampoline import _publish_frozen_artifact_inventory, _TASK_LOCAL_EXEC, launch
 from ledger import accounting, append_primary_event, genesis_anchor_paths
+from ledger import incomplete_manual_accounting_marker_paths
 from ledger import validate_primary_chain
 from promote_active_policy import _promotion_lock, promote
 from reconcile_frontier_job import reconcile
@@ -293,16 +295,24 @@ class SnapshotTests(unittest.TestCase):
         if bind_policy:
             self._write_policy(
                 manual_accounting_authorizations=[
-                    {
-                        "authorization_id": authorization_id,
-                        "path": str(path),
-                        "project_home_path": str(mirror_path),
-                        "sha256": sha256(path),
-                    }
+                    self._manual_accounting_policy_binding(path)
                 ]
             )
             self._promote_policy()
         return path
+
+    def _manual_accounting_policy_binding(self, path: Path) -> dict[str, str]:
+        return {
+            "authorization_id": path.stem,
+            "path": str(path),
+            "project_home_path": str(
+                self.project_home_root
+                / "policy"
+                / "manual_accounting_authorizations"
+                / path.name
+            ),
+            "sha256": sha256(path),
+        }
 
     def _manual_accounting_scheduler_output(
         self, command: list[str], *args: object, **kwargs: object
@@ -317,6 +327,66 @@ class SnapshotTests(unittest.TestCase):
             "4746332|FAILED|5|1||ast207|batch|normal\n"
             "4746335|COMPLETED|7|1||ast207|batch|normal\n"
         )
+
+    def _manual_accounting_arguments(self, authorization: Path) -> dict[str, Path]:
+        return {
+            "authorization": authorization,
+            "ledger_jsonl": self.ledger,
+            "ledger_csv": self.csv,
+            "receipts_jsonl": self.receipts,
+            "mirror_jsonl": self.mirror,
+            "control_plane_dir": self.control_plane_dir,
+            "authorized_pic_root": self.pic_root,
+            "authorized_project_home_root": self.project_home_root,
+        }
+
+    def _retry_manual_accounting_and_require_clean_markers(
+        self, arguments: dict[str, Path]
+    ) -> list[dict[str, object]]:
+        with patch.object(
+            reconcile_manual_frontier_allocations.subprocess,
+            "check_output",
+            side_effect=self._manual_accounting_scheduler_output,
+        ):
+            events = reconcile_manual_allocations(**arguments)
+        local_marker, mirror_marker = incomplete_manual_accounting_marker_paths(
+            self.ledger, self.mirror
+        )
+        self.assertFalse(local_marker.exists())
+        assert mirror_marker is not None
+        self.assertFalse(mirror_marker.exists())
+        self.assertEqual(
+            validate_primary_chain(self.ledger),
+            ledger.validate_mirrored_state(self.ledger, self.receipts, self.mirror),
+        )
+        return events
+
+    def _strand_manual_accounting_after_orion_append(
+        self, arguments: dict[str, Path]
+    ) -> None:
+        real_append = ledger._append_jsonl
+        interrupted = False
+
+        def interrupt_before_mirror(
+            path: Path, record: dict[str, object]
+        ) -> None:
+            nonlocal interrupted
+            if (
+                not interrupted
+                and path == self.mirror
+                and record.get("event_type") == "manual_allocation_reconciliation"
+            ):
+                interrupted = True
+                raise RuntimeError("interrupted after Orion append")
+            real_append(path, record)
+
+        with patch.object(
+            reconcile_manual_frontier_allocations.subprocess,
+            "check_output",
+            side_effect=self._manual_accounting_scheduler_output,
+        ), patch("ledger._append_jsonl", side_effect=interrupt_before_mirror):
+            with self.assertRaisesRegex(RuntimeError, "after Orion append"):
+                reconcile_manual_allocations(**arguments)
 
     def _write_policy(
         self,
@@ -7676,18 +7746,24 @@ PY
             side_effect=self._manual_accounting_scheduler_output,
         ):
             first = reconcile_manual_allocations(**arguments)
+        second_authorization = self._write_manual_accounting_authorization(
+            authorization_id="later-reviewed-authorization",
+            jobs=[{"job_id": "4746999", "expected_qos": "debug"}],
+            bind_policy=False,
+        )
+        self._write_policy(
+            manual_accounting_authorizations=[
+                self._manual_accounting_policy_binding(authorization),
+                self._manual_accounting_policy_binding(second_authorization),
+            ]
+        )
+        self._promote_policy()
         append_primary_event(
             self.ledger,
             self.csv,
             self.receipts,
             self.mirror,
-            {
-                "event_type": "manual_allocation_reconciliation",
-                "job_id": "later-unrelated-job",
-                "manual_accounting_authorization_id": "later-unrelated-authorization",
-                "reconciled": True,
-                "consumed_node_hours": 1.0,
-            },
+            {"event_type": "historical_probe"},
             mirror_transport="filesystem_copy",
         )
         with patch.object(
@@ -7701,10 +7777,10 @@ PY
             accounting(validate_primary_chain(self.ledger))[
                 "cumulative_consumed_node_hours"
             ],
-            1.0 + 12.0 / 3600.0,
+            12.0 / 3600.0,
         )
 
-    def test_manual_direct_srun_accounting_partial_retry_rejects_interleaving(
+    def test_manual_direct_srun_accounting_partial_retry_after_retained_successor_rotation(
         self,
     ) -> None:
         authorization = self._write_manual_accounting_authorization()
@@ -7738,6 +7814,502 @@ PY
         ):
             with self.assertRaisesRegex(RuntimeError, "interrupted"):
                 reconcile_manual_allocations(**arguments)
+        # Model one predecessor partial prefix created before paired markers existed.
+        local_marker, mirror_marker = incomplete_manual_accounting_marker_paths(
+            self.ledger, self.mirror
+        )
+        local_marker.unlink()
+        assert mirror_marker is not None
+        mirror_marker.unlink()
+        second_authorization = self._write_manual_accounting_authorization(
+            authorization_id="later-reviewed-authorization",
+            jobs=[{"job_id": "4746999", "expected_qos": "debug"}],
+            bind_policy=False,
+        )
+        successor = self._publish_test_control_plane_successor(self.pic_root)
+        project_home_successor = self._publish_test_control_plane_successor(
+            self.project_home_root
+        )
+        self.assertEqual(project_home_successor.name, successor.name)
+        self._write_policy(
+            manual_accounting_authorizations=[
+                self._manual_accounting_policy_binding(authorization),
+                self._manual_accounting_policy_binding(second_authorization),
+            ],
+            installed_control_plane_version=successor.name,
+            staged_control_plane_candidate_version=successor.name,
+        )
+        promote(
+            self.policy,
+            control_plane_dir=successor,
+            authorized_pic_root=self.pic_root,
+            authorized_project_home_root=self.project_home_root,
+        )
+        arguments["control_plane_dir"] = successor
+        with patch.object(
+            reconcile_manual_frontier_allocations.subprocess,
+            "check_output",
+            side_effect=self._manual_accounting_scheduler_output,
+        ):
+            events = reconcile_manual_allocations(**arguments)
+        self.assertEqual([event["job_id"] for event in events], ["4746332", "4746335"])
+        self.assertFalse(local_marker.exists())
+        self.assertFalse(mirror_marker.exists())
+
+    def test_manual_direct_srun_accounting_partial_retry_blocks_other_writers(
+        self,
+    ) -> None:
+        authorization = self._write_manual_accounting_authorization()
+        arguments = {
+            "authorization": authorization,
+            "ledger_jsonl": self.ledger,
+            "ledger_csv": self.csv,
+            "receipts_jsonl": self.receipts,
+            "mirror_jsonl": self.mirror,
+            "control_plane_dir": self.control_plane_dir,
+            "authorized_pic_root": self.pic_root,
+            "authorized_project_home_root": self.project_home_root,
+        }
+        real_append = reconcile_manual_frontier_allocations.append_primary_event_locked
+        append_count = 0
+
+        def fail_second_append(*args: object, **kwargs: object) -> dict[str, object]:
+            nonlocal append_count
+            append_count += 1
+            if append_count == 2:
+                raise RuntimeError("interrupted")
+            return real_append(*args, **kwargs)
+
+        with patch.object(
+            reconcile_manual_frontier_allocations.subprocess,
+            "check_output",
+            side_effect=self._manual_accounting_scheduler_output,
+        ), patch(
+            "reconcile_manual_frontier_allocations.append_primary_event_locked",
+            side_effect=fail_second_append,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "interrupted"):
+                reconcile_manual_allocations(**arguments)
+        local_marker, mirror_marker = incomplete_manual_accounting_marker_paths(
+            self.ledger, self.mirror
+        )
+        self.assertTrue(local_marker.is_file())
+        assert mirror_marker is not None
+        self.assertEqual(local_marker.read_bytes(), mirror_marker.read_bytes())
+        marker = json.loads(local_marker.read_text(encoding="utf-8"))
+        self.assertEqual(marker["schema_version"], 3)
+        self.assertEqual(marker["pre_tranche_sequence_number"], 1)
+        self.assertEqual(marker["pre_tranche_authorized_job_count"], 0)
+        self.assertEqual(
+            marker["pre_tranche_chain_head"],
+            validate_primary_chain(self.ledger)[0]["event_sha256"],
+        )
+        with self.assertRaisesRegex(ValueError, "incomplete manual accounting"):
+            append_primary_event(
+                self.ledger,
+                self.csv,
+                self.receipts,
+                self.mirror,
+                {"event_type": "historical_probe"},
+                mirror_transport="filesystem_copy",
+            )
+        with self.assertRaisesRegex(ValueError, "incomplete manual accounting"):
+            self._reserve(self._create_manifest())
+        with self.assertRaisesRegex(ValueError, "incomplete manual accounting"):
+            self._promote_policy()
+        with self.assertRaisesRegex(ValueError, "incomplete manual accounting"):
+            repair_ledger_mirror(
+                ledger_jsonl=self.ledger,
+                ledger_csv=self.csv,
+                receipts_jsonl=self.receipts,
+                mirror_jsonl=self.mirror,
+                control_plane_dir=self.control_plane_dir,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+        with patch.object(
+            reconcile_manual_frontier_allocations.subprocess,
+            "check_output",
+            side_effect=self._manual_accounting_scheduler_output,
+        ):
+            reconcile_manual_allocations(**arguments)
+        self.assertFalse(local_marker.exists())
+        self.assertFalse(mirror_marker.exists())
+
+    def test_manual_direct_srun_accounting_recovers_after_orion_append(self) -> None:
+        authorization = self._write_manual_accounting_authorization()
+        arguments = self._manual_accounting_arguments(authorization)
+        self._strand_manual_accounting_after_orion_append(arguments)
+        self.assertEqual(len(validate_primary_chain(self.ledger)), 2)
+        self.assertEqual(len(validate_primary_chain(self.mirror)), 1)
+        events = self._retry_manual_accounting_and_require_clean_markers(arguments)
+        self.assertEqual([event["job_id"] for event in events], ["4746332", "4746335"])
+
+    def test_manual_direct_srun_accounting_recovery_rejects_pre_tranche_mirror_truncation(
+        self,
+    ) -> None:
+        authorization = self._write_manual_accounting_authorization()
+        arguments = self._manual_accounting_arguments(authorization)
+        append_primary_event(
+            self.ledger,
+            self.csv,
+            self.receipts,
+            self.mirror,
+            {"event_type": "historical_probe"},
+            mirror_transport="filesystem_copy",
+        )
+        self._strand_manual_accounting_after_orion_append(arguments)
+        local_marker, _ = incomplete_manual_accounting_marker_paths(
+            self.ledger, self.mirror
+        )
+        self.assertEqual(
+            json.loads(local_marker.read_text(encoding="utf-8"))[
+                "pre_tranche_sequence_number"
+            ],
+            2,
+        )
+        lines = self.mirror.read_text(encoding="utf-8").splitlines()
+        self.mirror.write_text(lines[0] + "\n", encoding="utf-8")
+        with patch.object(
+            reconcile_manual_frontier_allocations.subprocess,
+            "check_output",
+            side_effect=self._manual_accounting_scheduler_output,
+        ):
+            with self.assertRaisesRegex(ValueError, "pre-tranche publication loss"):
+                reconcile_manual_allocations(**arguments)
+        self.assertEqual(len(validate_primary_chain(self.mirror)), 1)
+        self.assertTrue(local_marker.is_file())
+
+    def test_manual_direct_srun_accounting_recovery_rejects_pre_tranche_receipt_truncation(
+        self,
+    ) -> None:
+        authorization = self._write_manual_accounting_authorization()
+        arguments = self._manual_accounting_arguments(authorization)
+        append_primary_event(
+            self.ledger,
+            self.csv,
+            self.receipts,
+            self.mirror,
+            {"event_type": "historical_probe"},
+            mirror_transport="filesystem_copy",
+        )
+        self._strand_manual_accounting_after_orion_append(arguments)
+        local_marker, _ = incomplete_manual_accounting_marker_paths(
+            self.ledger, self.mirror
+        )
+        self.assertEqual(
+            json.loads(local_marker.read_text(encoding="utf-8"))[
+                "pre_tranche_sequence_number"
+            ],
+            2,
+        )
+        lines = self.receipts.read_text(encoding="utf-8").splitlines()
+        self.receipts.write_text(lines[0] + "\n", encoding="utf-8")
+        with patch.object(
+            reconcile_manual_frontier_allocations.subprocess,
+            "check_output",
+            side_effect=self._manual_accounting_scheduler_output,
+        ):
+            with self.assertRaisesRegex(ValueError, "pre-tranche publication loss"):
+                reconcile_manual_allocations(**arguments)
+        self.assertEqual(
+            len(self.receipts.read_text(encoding="utf-8").splitlines()), 1
+        )
+        self.assertTrue(local_marker.is_file())
+
+    def test_manual_direct_srun_accounting_recovery_rejects_torn_orion_suffix(
+        self,
+    ) -> None:
+        authorization = self._write_manual_accounting_authorization()
+        arguments = self._manual_accounting_arguments(authorization)
+        self._strand_manual_accounting_after_orion_append(arguments)
+        with self.ledger.open("ab") as stream:
+            stream.write(b'{"sequence_number":')
+        with patch.object(
+            reconcile_manual_frontier_allocations.subprocess,
+            "check_output",
+        ) as scheduler:
+            with self.assertRaises(ValueError):
+                reconcile_manual_allocations(**arguments)
+        scheduler.assert_not_called()
+        self.assertEqual(len(validate_primary_chain(self.mirror)), 1)
+
+    def test_manual_direct_srun_accounting_recovery_rejects_corrupt_orion_suffix(
+        self,
+    ) -> None:
+        authorization = self._write_manual_accounting_authorization()
+        arguments = self._manual_accounting_arguments(authorization)
+        self._strand_manual_accounting_after_orion_append(arguments)
+        lines = self.ledger.read_text(encoding="utf-8").splitlines()
+        record = json.loads(lines[-1])
+        record["consumed_node_hours"] = 10.0
+        record["event_sha256"] = ledger.record_sha256(record, "event_sha256")
+        self.ledger.write_text(
+            "".join(line + "\n" for line in lines[:-1])
+            + ledger.canonical_json(record)
+            + "\n",
+            encoding="utf-8",
+        )
+        with patch.object(
+            reconcile_manual_frontier_allocations.subprocess,
+            "check_output",
+        ) as scheduler:
+            with self.assertRaisesRegex(ValueError, "ledger event usage differs"):
+                reconcile_manual_allocations(**arguments)
+        scheduler.assert_not_called()
+        self.assertEqual(len(validate_primary_chain(self.mirror)), 1)
+
+    def test_manual_direct_srun_accounting_recovery_rejects_unrelated_orion_suffix(
+        self,
+    ) -> None:
+        authorization = self._write_manual_accounting_authorization()
+        arguments = self._manual_accounting_arguments(authorization)
+        self._strand_manual_accounting_after_orion_append(arguments)
+        lines = self.ledger.read_text(encoding="utf-8").splitlines()
+        record = json.loads(lines[-1])
+        record["event_type"] = "historical_probe"
+        record["event_sha256"] = ledger.record_sha256(record, "event_sha256")
+        self.ledger.write_text(
+            "".join(line + "\n" for line in lines[:-1])
+            + ledger.canonical_json(record)
+            + "\n",
+            encoding="utf-8",
+        )
+        with patch.object(
+            reconcile_manual_frontier_allocations.subprocess,
+            "check_output",
+            side_effect=self._manual_accounting_scheduler_output,
+        ):
+            with self.assertRaisesRegex(ValueError, "suffix event is invalid"):
+                reconcile_manual_allocations(**arguments)
+        self.assertEqual(len(validate_primary_chain(self.mirror)), 1)
+
+    def test_manual_direct_srun_accounting_recovery_rejects_policy_binding_drift_before_mirror(
+        self,
+    ) -> None:
+        authorization = self._write_manual_accounting_authorization()
+        arguments = self._manual_accounting_arguments(authorization)
+        self._strand_manual_accounting_after_orion_append(arguments)
+        lines = self.ledger.read_text(encoding="utf-8").splitlines()
+        record = json.loads(lines[-1])
+        record["active_policy_sha256"] = "0" * 64
+        record["event_sha256"] = ledger.record_sha256(record, "event_sha256")
+        self.ledger.write_text(
+            "".join(line + "\n" for line in lines[:-1])
+            + ledger.canonical_json(record)
+            + "\n",
+            encoding="utf-8",
+        )
+        with patch.object(
+            reconcile_manual_frontier_allocations.subprocess,
+            "check_output",
+            side_effect=self._manual_accounting_scheduler_output,
+        ):
+            with self.assertRaisesRegex(ValueError, "suffix event is invalid"):
+                reconcile_manual_allocations(**arguments)
+        self.assertEqual(len(validate_primary_chain(self.mirror)), 1)
+
+    def test_manual_direct_srun_accounting_recovery_rejects_reviewed_qos_drift_before_mirror(
+        self,
+    ) -> None:
+        authorization = self._write_manual_accounting_authorization()
+        arguments = self._manual_accounting_arguments(authorization)
+        self._strand_manual_accounting_after_orion_append(arguments)
+        lines = self.ledger.read_text(encoding="utf-8").splitlines()
+        record = json.loads(lines[-1])
+        record["qos"] = "debug"
+        record["event_sha256"] = ledger.record_sha256(record, "event_sha256")
+        self.ledger.write_text(
+            "".join(line + "\n" for line in lines[:-1])
+            + ledger.canonical_json(record)
+            + "\n",
+            encoding="utf-8",
+        )
+        with patch.object(
+            reconcile_manual_frontier_allocations.subprocess,
+            "check_output",
+            side_effect=self._manual_accounting_scheduler_output,
+        ):
+            with self.assertRaisesRegex(ValueError, "suffix event is invalid"):
+                reconcile_manual_allocations(**arguments)
+        self.assertEqual(len(validate_primary_chain(self.mirror)), 1)
+
+    def test_manual_direct_srun_accounting_recovers_after_mirror_append(self) -> None:
+        authorization = self._write_manual_accounting_authorization()
+        arguments = self._manual_accounting_arguments(authorization)
+        real_append_receipt = ledger._append_mirror_receipt
+        interrupted = False
+
+        def interrupt_before_receipt(
+            receipts_jsonl: Path,
+            event: dict[str, object],
+            mirror_jsonl: Path,
+            mirror_transport: str,
+        ) -> dict[str, object]:
+            nonlocal interrupted
+            if (
+                not interrupted
+                and event.get("event_type") == "manual_allocation_reconciliation"
+            ):
+                interrupted = True
+                raise RuntimeError("interrupted after mirror append")
+            return real_append_receipt(
+                receipts_jsonl, event, mirror_jsonl, mirror_transport
+            )
+
+        with patch.object(
+            reconcile_manual_frontier_allocations.subprocess,
+            "check_output",
+            side_effect=self._manual_accounting_scheduler_output,
+        ), patch("ledger._append_mirror_receipt", side_effect=interrupt_before_receipt):
+            with self.assertRaisesRegex(RuntimeError, "after mirror append"):
+                reconcile_manual_allocations(**arguments)
+        self.assertEqual(len(validate_primary_chain(self.ledger)), 2)
+        self.assertEqual(len(validate_primary_chain(self.mirror)), 2)
+        self.assertEqual(len(self.receipts.read_text(encoding="utf-8").splitlines()), 1)
+        self._retry_manual_accounting_and_require_clean_markers(arguments)
+
+    def test_manual_direct_srun_accounting_recovers_after_receipt_before_csv(
+        self,
+    ) -> None:
+        authorization = self._write_manual_accounting_authorization()
+        arguments = self._manual_accounting_arguments(authorization)
+        with patch.object(
+            reconcile_manual_frontier_allocations.subprocess,
+            "check_output",
+            side_effect=self._manual_accounting_scheduler_output,
+        ), patch("ledger.write_csv", side_effect=RuntimeError("interrupted before CSV")):
+            with self.assertRaisesRegex(RuntimeError, "before CSV"):
+                reconcile_manual_allocations(**arguments)
+        self.assertEqual(len(validate_primary_chain(self.ledger)), 2)
+        self.assertEqual(len(validate_primary_chain(self.mirror)), 2)
+        self.assertEqual(len(self.receipts.read_text(encoding="utf-8").splitlines()), 2)
+        self._retry_manual_accounting_and_require_clean_markers(arguments)
+
+    def test_manual_direct_srun_accounting_historical_retry_repairs_csv_before_clear(
+        self,
+    ) -> None:
+        authorization = self._write_manual_accounting_authorization()
+        arguments = self._manual_accounting_arguments(authorization)
+        self._retry_manual_accounting_and_require_clean_markers(arguments)
+        with patch.object(
+            reconcile_manual_frontier_allocations.subprocess,
+            "check_output",
+            side_effect=self._manual_accounting_scheduler_output,
+        ), patch(
+            "reconcile_manual_frontier_allocations.write_csv",
+            side_effect=RuntimeError("CSV publication failed"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "CSV publication failed"):
+                reconcile_manual_allocations(**arguments)
+        local_marker, mirror_marker = incomplete_manual_accounting_marker_paths(
+            self.ledger, self.mirror
+        )
+        self.assertTrue(local_marker.is_file())
+        assert mirror_marker is not None
+        self.assertTrue(mirror_marker.is_file())
+        self._retry_manual_accounting_and_require_clean_markers(arguments)
+
+    def test_manual_direct_srun_accounting_recovers_one_sided_marker_publication(
+        self,
+    ) -> None:
+        authorization = self._write_manual_accounting_authorization()
+        arguments = self._manual_accounting_arguments(authorization)
+        real_atomic_write = ledger.atomic_write_bytes_at
+        marker_writes = 0
+
+        def interrupt_second_marker(
+            parent_descriptor: int,
+            name: str,
+            data: bytes,
+            **kwargs: object,
+        ) -> None:
+            nonlocal marker_writes
+            if name == ledger.INCOMPLETE_MANUAL_ACCOUNTING_MARKER_FILENAME:
+                marker_writes += 1
+                if marker_writes == 2:
+                    raise RuntimeError("interrupted one-sided marker publication")
+            real_atomic_write(parent_descriptor, name, data, **kwargs)
+
+        with patch.object(
+            reconcile_manual_frontier_allocations.subprocess,
+            "check_output",
+            side_effect=self._manual_accounting_scheduler_output,
+        ), patch("ledger.atomic_write_bytes_at", side_effect=interrupt_second_marker):
+            with self.assertRaisesRegex(RuntimeError, "one-sided marker"):
+                reconcile_manual_allocations(**arguments)
+        local_marker, mirror_marker = incomplete_manual_accounting_marker_paths(
+            self.ledger, self.mirror
+        )
+        self.assertTrue(local_marker.is_file())
+        assert mirror_marker is not None
+        self.assertFalse(mirror_marker.exists())
+        self._retry_manual_accounting_and_require_clean_markers(arguments)
+
+    def test_manual_direct_srun_accounting_recovers_clear_one_marker_interruption(
+        self,
+    ) -> None:
+        authorization = self._write_manual_accounting_authorization()
+        arguments = self._manual_accounting_arguments(authorization)
+        real_unlink = ledger.os.unlink
+        marker_unlinks = 0
+
+        def interrupt_second_marker_unlink(
+            path: str, *args: object, **kwargs: object
+        ) -> None:
+            nonlocal marker_unlinks
+            if path == ledger.INCOMPLETE_MANUAL_ACCOUNTING_MARKER_FILENAME:
+                marker_unlinks += 1
+                if marker_unlinks == 2:
+                    raise RuntimeError("interrupted clearing marker pair")
+            real_unlink(path, *args, **kwargs)
+
+        with patch.object(
+            reconcile_manual_frontier_allocations.subprocess,
+            "check_output",
+            side_effect=self._manual_accounting_scheduler_output,
+        ), patch("ledger.os.unlink", side_effect=interrupt_second_marker_unlink):
+            with self.assertRaisesRegex(RuntimeError, "clearing marker pair"):
+                reconcile_manual_allocations(**arguments)
+        local_marker, mirror_marker = incomplete_manual_accounting_marker_paths(
+            self.ledger, self.mirror
+        )
+        self.assertFalse(local_marker.exists())
+        assert mirror_marker is not None
+        self.assertTrue(mirror_marker.is_file())
+        self._retry_manual_accounting_and_require_clean_markers(arguments)
+
+    def test_manual_direct_srun_accounting_legacy_partial_prefix_rejects_unrelated_suffix(
+        self,
+    ) -> None:
+        authorization = self._write_manual_accounting_authorization()
+        arguments = self._manual_accounting_arguments(authorization)
+        real_append = reconcile_manual_frontier_allocations.append_primary_event_locked
+        append_count = 0
+
+        def fail_second_append(*args: object, **kwargs: object) -> dict[str, object]:
+            nonlocal append_count
+            append_count += 1
+            if append_count == 2:
+                raise RuntimeError("interrupted")
+            return real_append(*args, **kwargs)
+
+        with patch.object(
+            reconcile_manual_frontier_allocations.subprocess,
+            "check_output",
+            side_effect=self._manual_accounting_scheduler_output,
+        ), patch(
+            "reconcile_manual_frontier_allocations.append_primary_event_locked",
+            side_effect=fail_second_append,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "interrupted"):
+                reconcile_manual_allocations(**arguments)
+        local_marker, mirror_marker = incomplete_manual_accounting_marker_paths(
+            self.ledger, self.mirror
+        )
+        local_marker.unlink()
+        assert mirror_marker is not None
+        mirror_marker.unlink()
         append_primary_event(
             self.ledger,
             self.csv,
@@ -7990,6 +8562,13 @@ PY
             "4746335|COMPLETED|7|1||ast207|batch|normal\n",
             "4746332|FAILED|-1|1||ast207|batch|normal\n"
             "4746335|COMPLETED|7|1||ast207|batch|normal\n",
+            "4746332|FAILED|5|1||ast207|batch|normal\n",
+            "4746332|FAILED|5|1||ast207|batch|normal\n"
+            "4746332|FAILED|5|1||ast207|batch|normal\n"
+            "4746335|COMPLETED|7|1||ast207|batch|normal\n",
+            "4746332|FAILED|5|1||ast207|batch|normal\n"
+            "4746335|COMPLETED|7|1||ast207|batch|normal\n"
+            "4746999|COMPLETED|1|1||ast207|batch|normal\n",
         ]
         for scheduler_output in scheduler_outputs:
             with self.subTest(scheduler_output=scheduler_output):

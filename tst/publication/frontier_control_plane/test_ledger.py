@@ -54,6 +54,37 @@ class LedgerTests(unittest.TestCase):
             mirror_transport="filesystem_copy",
         )
 
+    def _manual_accounting_event(self) -> dict[str, object]:
+        return {
+            "event_type": "manual_allocation_reconciliation",
+            "job_id": "4746332",
+            "control_plane_version": "a" * 64,
+            "reconciled_by_control_plane_version": "a" * 64,
+            "manual_accounting_authorization_id": "reviewed-allocation",
+            "manual_accounting_authorization_path": "/tmp/reviewed-allocation.json",
+            "manual_accounting_project_home_authorization_path": (
+                "/tmp/project-home/reviewed-allocation.json"
+            ),
+            "manual_accounting_authorization_sha256": "b" * 64,
+            "accounting_scope": "manual_direct_srun_accounting_only",
+            "scientific_evidence_eligible": False,
+            "active_policy_sha256": "c" * 64,
+            "active_promotion_sha256": "d" * 64,
+            "partition": "batch",
+            "qos": "normal",
+            "scheduler_reported_allocated_nodes": 1,
+            "billed_nodes": 1,
+            "elapsed_seconds": 5,
+            "reconciled": True,
+            "consumed_node_hours": 1.0 / 720.0,
+            "cumulative_consumed_node_hours": 1.0 / 720.0,
+            "state": "FAILED",
+            "notes": (
+                "Reviewed direct-srun accounting only; "
+                "ineligible for scientific evidence."
+            ),
+        }
+
     def _drop_last_line(self, path: Path) -> None:
         lines = path.read_text(encoding="utf-8").splitlines()
         path.write_text("".join(line + "\n" for line in lines[:-1]), encoding="utf-8")
@@ -112,21 +143,35 @@ class LedgerTests(unittest.TestCase):
     def test_manual_direct_srun_reconciliation_counts_toward_consumed_budget(
         self,
     ) -> None:
-        self.append(
-            {
-                "event_type": "manual_allocation_reconciliation",
-                "job_id": "4746332",
-                "accounting_scope": "manual_direct_srun_accounting_only",
-                "scientific_evidence_eligible": False,
-                "reconciled": True,
-                "consumed_node_hours": 1.0 / 720.0,
-            }
-        )
+        self.append(self._manual_accounting_event())
         totals = accounting(validate_primary_chain(self.ledger))
         self.assertAlmostEqual(
             totals["cumulative_consumed_node_hours"], 1.0 / 720.0
         )
         self.assertEqual(totals["currently_reserved_node_hours"], 0.0)
+
+    def test_manual_direct_srun_reconciliation_rejects_under_bound_event(
+        self,
+    ) -> None:
+        with self.assertRaisesRegex(ValueError, "semantics are invalid"):
+            self.append(
+                {
+                    "event_type": "manual_allocation_reconciliation",
+                    "job_id": "4746332",
+                    "accounting_scope": "manual_direct_srun_accounting_only",
+                    "scientific_evidence_eligible": False,
+                    "reconciled": True,
+                    "consumed_node_hours": 1.0 / 720.0,
+                }
+            )
+
+    def test_manual_direct_srun_reconciliation_rejects_false_cumulative_usage(
+        self,
+    ) -> None:
+        event = self._manual_accounting_event()
+        event["cumulative_consumed_node_hours"] = 999.0
+        with self.assertRaisesRegex(ValueError, "cumulative usage differs"):
+            self.append(event)
 
     def test_mirror_head_divergence_fails_closed(self) -> None:
         with self.mirror.open("a", encoding="utf-8") as stream:

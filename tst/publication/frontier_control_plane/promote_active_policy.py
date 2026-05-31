@@ -31,6 +31,7 @@ from control_plane_common import stable_serialization_anchor
 from control_plane_common import validate_storage_policy, verify_installed_control_plane
 from ledger import _path_exists, _pinned_parent_directories
 from ledger import latest_reservations, validate_mirrored_state
+from ledger import require_no_incomplete_manual_accounting_marker
 
 
 SCRIPT_DIR = Path(__file__).absolute().parent
@@ -254,6 +255,12 @@ def promote(
     mirror_policy_parent = Path(os.path.abspath(authorized_project_home_root)) / "policy"
     durable_mkdir_parents(mirror_policy_parent, root=authorized_project_home_root)
     with _promotion_lock(authorized_pic_root) as policy_descriptor:
+        require_no_incomplete_manual_accounting_marker(
+            Path(os.path.abspath(authorized_pic_root)) / "ledger" / "node_hours.jsonl",
+            Path(os.path.abspath(authorized_project_home_root))
+            / "ledger"
+            / "node_hours.jsonl",
+        )
         _require_no_outstanding_submissions(
             authorized_pic_root, authorized_project_home_root
         )

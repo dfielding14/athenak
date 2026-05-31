@@ -17,6 +17,7 @@ import fcntl
 import hashlib
 import io
 import json
+import math
 import os
 from pathlib import Path
 import stat
@@ -87,6 +88,51 @@ CSV_FIELDS = [
     "notes",
 ]
 GENESIS_ANCHOR_FILENAME = "genesis_anchor.json"
+INCOMPLETE_MANUAL_ACCOUNTING_MARKER_FILENAME = "pending_manual_accounting.json"
+MANUAL_ACCOUNTING_SCOPE = "manual_direct_srun_accounting_only"
+MANUAL_ACCOUNTING_NOTES = (
+    "Reviewed direct-srun accounting only; ineligible for scientific evidence."
+)
+MANUAL_ACCOUNTING_TERMINAL_STATES = {
+    "BOOT_FAIL",
+    "CANCELLED",
+    "COMPLETED",
+    "DEADLINE",
+    "FAILED",
+    "NODE_FAIL",
+    "OUT_OF_MEMORY",
+    "PREEMPTED",
+    "REVOKED",
+    "TIMEOUT",
+}
+MANUAL_ACCOUNTING_EVENT_FIELDS = {
+    "sequence_number",
+    "previous_event_sha256",
+    "event_sha256",
+    "timestamp",
+    "event_type",
+    "job_id",
+    "control_plane_version",
+    "reconciled_by_control_plane_version",
+    "manual_accounting_authorization_id",
+    "manual_accounting_authorization_path",
+    "manual_accounting_project_home_authorization_path",
+    "manual_accounting_authorization_sha256",
+    "accounting_scope",
+    "scientific_evidence_eligible",
+    "active_policy_sha256",
+    "active_promotion_sha256",
+    "partition",
+    "qos",
+    "scheduler_reported_allocated_nodes",
+    "billed_nodes",
+    "elapsed_seconds",
+    "consumed_node_hours",
+    "cumulative_consumed_node_hours",
+    "state",
+    "reconciled",
+    "notes",
+}
 _PINNED_PARENT_DESCRIPTORS: ContextVar[dict[Path, int]] = ContextVar(
     "_PINNED_PARENT_DESCRIPTORS", default={}
 )
@@ -248,6 +294,7 @@ def _validate_primary_records(
         if record.get("event_sha256") != expected_hash:
             raise ValueError(f"Invalid event hash in {path}")
         previous = expected_hash
+    _validate_accounting_records(records)
     return records
 
 
@@ -324,22 +371,142 @@ def require_explicit_genesis(records: list[dict[str, object]]) -> None:
         raise ValueError("Frontier PIC ledger contains more than one genesis event")
 
 
-def accounting(records: list[dict[str, object]]) -> dict[str, float]:
+def _nonnegative_finite_number(
+    record: dict[str, object], field: str, *, label: str
+) -> float:
+    value = record.get(field)
+    if type(value) not in {int, float}:
+        raise ValueError(f"{label} {field} must be a real number")
+    try:
+        result = float(value)
+    except OverflowError as error:
+        raise ValueError(f"{label} {field} must be finite") from error
+    if not math.isfinite(result) or result < 0.0:
+        raise ValueError(f"{label} {field} must be finite and non-negative")
+    return result
+
+
+def _is_lowercase_sha256(value: object) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and all(character in "0123456789abcdef" for character in value)
+    )
+
+
+def _accounting_without_validation(
+    records: list[dict[str, object]],
+) -> dict[str, float]:
     consumed = sum(
-        float(record.get("consumed_node_hours", 0.0))
+        _nonnegative_finite_number(
+            record, "consumed_node_hours", label="Manual-accounting ledger event"
+        )
         for record in records
         if record.get("event_type") == "manual_allocation_reconciliation"
     )
     reserved = 0.0
     for record in latest_reservations(records).values():
-        if bool(record.get("reconciled", False)):
-            consumed += float(record.get("consumed_node_hours", 0.0))
+        if record.get("reconciled", False) is True:
+            consumed += _nonnegative_finite_number(
+                record, "consumed_node_hours", label="Registered reconciliation"
+            )
         elif record.get("state") not in {"cancelled", "submission_attach_failed"}:
-            reserved += float(record.get("reserved_node_hours", 0.0))
+            reserved += _nonnegative_finite_number(
+                record, "reserved_node_hours", label="Ledger reservation"
+            )
     return {
         "cumulative_consumed_node_hours": consumed,
         "currently_reserved_node_hours": reserved,
     }
+
+
+def _validate_accounting_records(records: list[dict[str, object]]) -> None:
+    for index, record in enumerate(records):
+        event_type = record.get("event_type")
+        if "reconciled" in record and type(record["reconciled"]) is not bool:
+            raise ValueError("Ledger reconciled status must be boolean")
+        if "reserved_node_hours" in record:
+            _nonnegative_finite_number(
+                record, "reserved_node_hours", label="Ledger reservation"
+            )
+        if event_type == "manual_allocation_reconciliation":
+            if (
+                set(record) != MANUAL_ACCOUNTING_EVENT_FIELDS
+                or record.get("reconciled") is not True
+                or record.get("accounting_scope") != MANUAL_ACCOUNTING_SCOPE
+                or record.get("scientific_evidence_eligible") is not False
+                or not isinstance(record.get("job_id"), str)
+                or not record["job_id"]
+                or not _is_lowercase_sha256(record.get("control_plane_version"))
+                or record.get("reconciled_by_control_plane_version")
+                != record["control_plane_version"]
+                or not isinstance(record.get("manual_accounting_authorization_id"), str)
+                or not record["manual_accounting_authorization_id"]
+                or not isinstance(record.get("manual_accounting_authorization_path"), str)
+                or not os.path.isabs(str(record["manual_accounting_authorization_path"]))
+                or not isinstance(
+                    record.get("manual_accounting_project_home_authorization_path"), str
+                )
+                or not os.path.isabs(
+                    str(record["manual_accounting_project_home_authorization_path"])
+                )
+                or not _is_lowercase_sha256(
+                    record.get("manual_accounting_authorization_sha256")
+                )
+                or not _is_lowercase_sha256(record.get("active_policy_sha256"))
+                or not _is_lowercase_sha256(record.get("active_promotion_sha256"))
+                or record.get("partition") != "batch"
+                or record.get("qos") not in {"debug", "normal"}
+                or record.get("state") not in MANUAL_ACCOUNTING_TERMINAL_STATES
+                or not isinstance(record.get("timestamp"), str)
+                or not record["timestamp"]
+                or record.get("notes") != MANUAL_ACCOUNTING_NOTES
+            ):
+                raise ValueError("Manual-accounting ledger event semantics are invalid")
+            allocated_nodes = record.get("scheduler_reported_allocated_nodes")
+            billed_nodes = record.get("billed_nodes")
+            elapsed_seconds = record.get("elapsed_seconds")
+            if (
+                type(allocated_nodes) is not int
+                or allocated_nodes < 0
+                or billed_nodes != allocated_nodes
+                or type(elapsed_seconds) is not int
+                or elapsed_seconds < 0
+            ):
+                raise ValueError("Manual-accounting ledger event usage is invalid")
+            consumed = _nonnegative_finite_number(
+                record, "consumed_node_hours", label="Manual-accounting ledger event"
+            )
+            if consumed != billed_nodes * elapsed_seconds / 3600.0:
+                raise ValueError("Manual-accounting ledger event usage differs")
+            cumulative = _nonnegative_finite_number(
+                record,
+                "cumulative_consumed_node_hours",
+                label="Manual-accounting ledger event",
+            )
+            expected_cumulative = (
+                _accounting_without_validation(records[:index])[
+                    "cumulative_consumed_node_hours"
+                ]
+                + consumed
+            )
+            if not math.isclose(
+                cumulative, expected_cumulative, rel_tol=0.0, abs_tol=1.0e-12
+            ):
+                raise ValueError(
+                    "Manual-accounting ledger event cumulative usage differs"
+                )
+        elif event_type == "reconciliation":
+            if record.get("reconciled") is not True:
+                raise ValueError("Registered reconciliation must be reconciled")
+            _nonnegative_finite_number(
+                record, "consumed_node_hours", label="Registered reconciliation"
+            )
+
+
+def accounting(records: list[dict[str, object]]) -> dict[str, float]:
+    _validate_accounting_records(records)
+    return _accounting_without_validation(records)
 
 
 def latest_reservations(
@@ -644,8 +811,387 @@ def _ledger_lock_within_serialization_anchor(
         os.close(mirror_parent_descriptor)
 
 
+def incomplete_manual_accounting_marker_paths(
+    ledger_jsonl: Path, mirror_jsonl: Path | None
+) -> tuple[Path, Path | None]:
+    return (
+        ledger_jsonl.parent / INCOMPLETE_MANUAL_ACCOUNTING_MARKER_FILENAME,
+        (
+            None
+            if mirror_jsonl is None
+            else mirror_jsonl.parent / INCOMPLETE_MANUAL_ACCOUNTING_MARKER_FILENAME
+        ),
+    )
+
+
+def _incomplete_manual_accounting_marker_bytes(
+    marker: dict[str, object],
+) -> bytes:
+    return (json.dumps(marker, indent=2, sort_keys=True, allow_nan=False) + "\n").encode(
+        "utf-8"
+    )
+
+
+def _validate_incomplete_manual_accounting_marker(
+    marker: dict[str, object],
+) -> None:
+    if (
+        set(marker)
+        != {
+            "schema_version",
+            "state",
+            "manual_accounting_authorization_id",
+            "manual_accounting_authorization_sha256",
+            "pre_tranche_sequence_number",
+            "pre_tranche_chain_head",
+            "pre_tranche_authorized_job_count",
+            "control_plane_version",
+            "active_policy_sha256",
+            "active_promotion_sha256",
+        }
+        or type(marker.get("schema_version")) is not int
+        or marker.get("schema_version") != 3
+        or marker.get("state") != "manual_accounting_incomplete"
+        or not isinstance(marker.get("manual_accounting_authorization_id"), str)
+        or not isinstance(marker.get("manual_accounting_authorization_sha256"), str)
+        or type(marker.get("pre_tranche_sequence_number")) is not int
+        or not isinstance(marker.get("pre_tranche_chain_head"), str)
+        or type(marker.get("pre_tranche_authorized_job_count")) is not int
+    ):
+        raise ValueError("Incomplete manual-accounting marker is malformed")
+    authorization_id = str(marker["manual_accounting_authorization_id"])
+    authorization_sha256 = str(marker["manual_accounting_authorization_sha256"])
+    pre_tranche_sequence_number = int(marker["pre_tranche_sequence_number"])
+    pre_tranche_chain_head = str(marker["pre_tranche_chain_head"])
+    pre_tranche_authorized_job_count = int(marker["pre_tranche_authorized_job_count"])
+    if (
+        not authorization_id
+        or len(authorization_id) > 128
+        or not authorization_sha256
+        or len(authorization_sha256) != 64
+        or any(character not in "0123456789abcdef" for character in authorization_sha256)
+        or pre_tranche_sequence_number < 0
+        or pre_tranche_authorized_job_count < 0
+        or not _is_lowercase_sha256(marker.get("control_plane_version"))
+        or not _is_lowercase_sha256(marker.get("active_policy_sha256"))
+        or not _is_lowercase_sha256(marker.get("active_promotion_sha256"))
+        or (
+            pre_tranche_chain_head != ""
+            and (
+                len(pre_tranche_chain_head) != 64
+                or any(
+                    character not in "0123456789abcdef"
+                    for character in pre_tranche_chain_head
+                )
+            )
+        )
+        or (pre_tranche_sequence_number == 0) != (pre_tranche_chain_head == "")
+    ):
+        raise ValueError("Incomplete manual-accounting marker binding is malformed")
+
+
+def _read_incomplete_manual_accounting_marker(path: Path) -> dict[str, object]:
+    marker = read_json_bytes(
+        _read_regular_bytes(path, require_read_only_mode=True),
+        label=str(path),
+    )
+    _validate_incomplete_manual_accounting_marker(marker)
+    return marker
+
+
+def require_no_incomplete_manual_accounting_marker(
+    ledger_jsonl: Path, mirror_jsonl: Path | None
+) -> None:
+    local_marker, mirror_marker = incomplete_manual_accounting_marker_paths(
+        ledger_jsonl, mirror_jsonl
+    )
+    paths = [local_marker] + ([] if mirror_marker is None else [mirror_marker])
+    with _pinned_parent_directories(paths):
+        if any(_path_exists(path) for path in paths):
+            raise ValueError("Ledger mutation is blocked by incomplete manual accounting")
+
+
+def publish_incomplete_manual_accounting_marker_locked(
+    ledger_jsonl: Path,
+    mirror_jsonl: Path,
+    marker: dict[str, object],
+) -> None:
+    _validate_incomplete_manual_accounting_marker(marker)
+    expected = _incomplete_manual_accounting_marker_bytes(marker)
+    local_marker, mirror_marker = incomplete_manual_accounting_marker_paths(
+        ledger_jsonl, mirror_jsonl
+    )
+    assert mirror_marker is not None
+    with _pinned_parent_directories([local_marker, mirror_marker]):
+        for path in [local_marker, mirror_marker]:
+            if _path_exists(path) and _read_regular_bytes(
+                path, require_read_only_mode=True
+            ) != expected:
+                raise ValueError("Incomplete manual-accounting marker differs")
+        for path in [local_marker, mirror_marker]:
+            if not _path_exists(path):
+                parent_descriptor = _parent_descriptor(path)
+                assert parent_descriptor is not None
+                atomic_write_bytes_at(
+                    parent_descriptor,
+                    path.name,
+                    expected,
+                    mode=0o444,
+                    replace=False,
+                )
+        if any(
+            _read_regular_bytes(path, require_read_only_mode=True) != expected
+            for path in [local_marker, mirror_marker]
+        ):
+            raise ValueError("Incomplete manual-accounting marker publication differs")
+
+
+def clear_matching_incomplete_manual_accounting_marker_locked(
+    ledger_jsonl: Path,
+    mirror_jsonl: Path,
+    marker: dict[str, object],
+) -> None:
+    _validate_incomplete_manual_accounting_marker(marker)
+    expected = _incomplete_manual_accounting_marker_bytes(marker)
+    local_marker, mirror_marker = incomplete_manual_accounting_marker_paths(
+        ledger_jsonl, mirror_jsonl
+    )
+    assert mirror_marker is not None
+    with _pinned_parent_directories([local_marker, mirror_marker]):
+        paths = [local_marker, mirror_marker]
+        existing = [path for path in paths if _path_exists(path)]
+        if not existing:
+            return
+        if any(
+            _read_regular_bytes(path, require_read_only_mode=True) != expected
+            for path in existing
+        ):
+            raise ValueError("Incomplete manual-accounting marker pair differs")
+        for path in existing:
+            parent_descriptor = _parent_descriptor(path)
+            assert parent_descriptor is not None
+            os.unlink(path.name, dir_fd=parent_descriptor)
+            os.fsync(parent_descriptor)
+
+
+def _validate_recoverable_manual_accounting_suffix(
+    records: list[dict[str, object]],
+    *,
+    pre_tranche_sequence_number: int,
+    authorization_id: str,
+    authorization_sha256: str,
+    authorization_path: Path,
+    project_home_authorization_path: Path,
+    reviewed_job_ids: list[str],
+    reviewed_scheduler_results: dict[str, dict[str, object]],
+    pre_tranche_authorized_job_count: int,
+    control_plane_version: str,
+    active_policy_sha256: str,
+    active_promotion_sha256: str,
+) -> None:
+    suffix = records[pre_tranche_sequence_number:]
+    authorized_prefix = [
+        record
+        for record in records[:pre_tranche_sequence_number]
+        if (
+            record.get("event_type") == "manual_allocation_reconciliation"
+            and record.get("manual_accounting_authorization_id") == authorization_id
+        )
+    ]
+    if (
+        pre_tranche_authorized_job_count > len(reviewed_job_ids)
+        or [record.get("job_id") for record in authorized_prefix]
+        != reviewed_job_ids[:pre_tranche_authorized_job_count]
+    ):
+        raise ValueError("Incomplete manual-accounting marker authorized prefix differs")
+    suffix_job_ids = reviewed_job_ids[pre_tranche_authorized_job_count:]
+    if len(suffix) > len(suffix_job_ids):
+        raise ValueError("Incomplete manual-accounting Orion suffix exceeds authorization")
+    cumulative = accounting(records[:pre_tranche_sequence_number])[
+        "cumulative_consumed_node_hours"
+    ]
+    for record, job_id in zip(suffix, suffix_job_ids):
+        scheduler = reviewed_scheduler_results[job_id]
+        if set(record) != MANUAL_ACCOUNTING_EVENT_FIELDS:
+            raise ValueError("Incomplete manual-accounting Orion suffix event is malformed")
+        if (
+            record.get("event_type") != "manual_allocation_reconciliation"
+            or record.get("job_id") != job_id
+            or record.get("manual_accounting_authorization_id") != authorization_id
+            or record.get("manual_accounting_authorization_sha256")
+            != authorization_sha256
+            or record.get("manual_accounting_authorization_path")
+            != str(authorization_path)
+            or record.get("manual_accounting_project_home_authorization_path")
+            != str(project_home_authorization_path)
+            or record.get("accounting_scope") != MANUAL_ACCOUNTING_SCOPE
+            or record.get("scientific_evidence_eligible") is not False
+            or record.get("reconciled") is not True
+            or record.get("control_plane_version") != control_plane_version
+            or record.get("reconciled_by_control_plane_version")
+            != control_plane_version
+            or record.get("active_policy_sha256") != active_policy_sha256
+            or record.get("active_promotion_sha256") != active_promotion_sha256
+            or record.get("partition") != scheduler["partition"]
+            or record.get("qos") != scheduler["qos"]
+            or record.get("state") != scheduler["state"]
+            or record.get("scheduler_reported_allocated_nodes")
+            != scheduler["allocated_nodes"]
+            or record.get("elapsed_seconds") != scheduler["elapsed_seconds"]
+            or not isinstance(record.get("timestamp"), str)
+            or not record["timestamp"]
+            or record.get("notes")
+            != MANUAL_ACCOUNTING_NOTES
+        ):
+            raise ValueError("Incomplete manual-accounting Orion suffix event is invalid")
+        allocated_nodes = record.get("scheduler_reported_allocated_nodes")
+        billed_nodes = record.get("billed_nodes")
+        elapsed_seconds = record.get("elapsed_seconds")
+        if (
+            type(allocated_nodes) is not int
+            or allocated_nodes < 0
+            or billed_nodes != allocated_nodes
+            or type(elapsed_seconds) is not int
+            or elapsed_seconds < 0
+        ):
+            raise ValueError("Incomplete manual-accounting Orion suffix usage is invalid")
+        consumed = _nonnegative_finite_number(
+            record, "consumed_node_hours", label="Manual-accounting Orion suffix"
+        )
+        if consumed != billed_nodes * elapsed_seconds / 3600.0:
+            raise ValueError("Incomplete manual-accounting Orion suffix usage differs")
+        cumulative += consumed
+        if (
+            _nonnegative_finite_number(
+                record,
+                "cumulative_consumed_node_hours",
+                label="Manual-accounting Orion suffix",
+            )
+            != cumulative
+        ):
+            raise ValueError("Incomplete manual-accounting Orion suffix cumulative usage differs")
+
+
+def recover_incomplete_manual_accounting_locked(
+    ledger_jsonl: Path,
+    receipts_jsonl: Path,
+    mirror_jsonl: Path,
+    *,
+    authorization_id: str,
+    authorization_sha256: str,
+    authorization_path: Path,
+    project_home_authorization_path: Path,
+    reviewed_job_ids: list[str],
+    reviewed_scheduler_results: dict[str, dict[str, object]],
+    control_plane_version: str,
+    active_policy_sha256: str,
+    active_promotion_sha256: str,
+) -> dict[str, object] | None:
+    """Repair only a marker-bound manual-accounting publication from Orion."""
+    local_marker, mirror_marker = incomplete_manual_accounting_marker_paths(
+        ledger_jsonl, mirror_jsonl
+    )
+    assert mirror_marker is not None
+    paths = [
+        *_ledger_state_paths(ledger_jsonl, None, receipts_jsonl, mirror_jsonl),
+        local_marker,
+        mirror_marker,
+    ]
+    with _pinned_parent_directories(paths):
+        markers = [
+            _read_incomplete_manual_accounting_marker(path)
+            for path in [local_marker, mirror_marker]
+            if _path_exists(path)
+        ]
+        if not markers:
+            return None
+        marker = markers[0]
+        if any(candidate != marker for candidate in markers[1:]):
+            raise ValueError("Incomplete manual-accounting marker pair differs")
+        if (
+            marker["manual_accounting_authorization_id"] != authorization_id
+            or marker["manual_accounting_authorization_sha256"]
+            != authorization_sha256
+            or marker["control_plane_version"] != control_plane_version
+            or marker["active_policy_sha256"] != active_policy_sha256
+            or marker["active_promotion_sha256"] != active_promotion_sha256
+        ):
+            raise ValueError("Incomplete manual-accounting marker binding differs")
+        local_records = validate_primary_chain(ledger_jsonl)
+        pre_tranche_sequence_number = int(marker["pre_tranche_sequence_number"])
+        if (
+            pre_tranche_sequence_number > len(local_records)
+            or chain_head(local_records[:pre_tranche_sequence_number])
+            != marker["pre_tranche_chain_head"]
+        ):
+            raise ValueError("Incomplete manual-accounting marker Orion boundary differs")
+        require_explicit_genesis(local_records)
+        _validate_recoverable_manual_accounting_suffix(
+            local_records,
+            pre_tranche_sequence_number=pre_tranche_sequence_number,
+            authorization_id=authorization_id,
+            authorization_sha256=authorization_sha256,
+            authorization_path=authorization_path,
+            project_home_authorization_path=project_home_authorization_path,
+            reviewed_job_ids=reviewed_job_ids,
+            reviewed_scheduler_results=reviewed_scheduler_results,
+            pre_tranche_authorized_job_count=int(
+                marker["pre_tranche_authorized_job_count"]
+            ),
+            control_plane_version=control_plane_version,
+            active_policy_sha256=active_policy_sha256,
+            active_promotion_sha256=active_promotion_sha256,
+        )
+        mirror_records = validate_primary_chain(mirror_jsonl)
+        if mirror_records != local_records[:len(mirror_records)]:
+            raise ValueError("Project Home ledger is not an exact prefix of canonical Orion")
+        receipts = _read_jsonl(receipts_jsonl)
+        for receipt in receipts:
+            _validate_receipt_provenance(
+                receipt,
+                mirror_jsonl=mirror_jsonl,
+                mirror_transport="filesystem_copy",
+            )
+            if receipt.get("mirror_ack_sha256") != record_sha256(
+                receipt, "mirror_ack_sha256"
+            ):
+                raise ValueError("Cannot recover a corrupt mirror receipt")
+        if (
+            len(mirror_records) < pre_tranche_sequence_number
+            or len(receipts) < pre_tranche_sequence_number
+        ):
+            raise ValueError(
+                "Incomplete manual-accounting recovery cannot repair pre-tranche publication loss"
+            )
+        if [receipt.get("mirrored_event_sha256") for receipt in receipts] != [
+            record["event_sha256"] for record in mirror_records[:len(receipts)]
+        ]:
+            raise ValueError("Mirror receipts are not an exact prefix of mirrored events")
+        if not receipts:
+            raise ValueError("Cannot recover manual accounting without its genesis receipt")
+        _validate_genesis_anchors(ledger_jsonl, mirror_jsonl, local_records, receipts)
+        publish_incomplete_manual_accounting_marker_locked(
+            ledger_jsonl, mirror_jsonl, marker
+        )
+        mirror_preflight(mirror_jsonl)
+        for record in local_records[len(mirror_records):]:
+            _append_jsonl(mirror_jsonl, record)
+            mirror_records.append(record)
+        for record in mirror_records[len(receipts):]:
+            _append_mirror_receipt(
+                receipts_jsonl, record, mirror_jsonl, "filesystem_copy"
+            )
+        validate_mirrored_state(ledger_jsonl, receipts_jsonl, mirror_jsonl)
+        return marker
+
+
 @contextmanager
-def ledger_lock(ledger_jsonl: Path, mirror_jsonl: Path | None = None) -> Iterator[None]:
+def ledger_lock(
+    ledger_jsonl: Path,
+    mirror_jsonl: Path | None = None,
+    *,
+    allow_incomplete_manual_accounting: bool = False,
+) -> Iterator[None]:
     pic_root = Path(os.path.abspath(ledger_jsonl.parent.parent))
     anchor = stable_serialization_anchor(pic_root)
     durable_mkdir_parents(anchor)
@@ -659,6 +1205,10 @@ def ledger_lock(ledger_jsonl: Path, mirror_jsonl: Path | None = None) -> Iterato
             _require_same_directory(anchor, anchor_descriptor)
             with _ledger_lock_within_serialization_anchor(ledger_jsonl, mirror_jsonl):
                 _require_same_directory(anchor, anchor_descriptor)
+                if not allow_incomplete_manual_accounting:
+                    require_no_incomplete_manual_accounting_marker(
+                        ledger_jsonl, mirror_jsonl
+                    )
                 yield
                 _require_same_directory(anchor, anchor_descriptor)
         finally:
@@ -1150,6 +1700,7 @@ def repair_mirrored_state_locked(
     *,
     mirror_transport: str,
 ) -> dict[str, int]:
+    require_no_incomplete_manual_accounting_marker(ledger_jsonl, mirror_jsonl)
     with _pinned_parent_directories(
         _ledger_state_paths(ledger_jsonl, ledger_csv, receipts_jsonl, mirror_jsonl)
     ):
@@ -1188,6 +1739,7 @@ def _append_primary_event_pinned(
     event: dict[str, object],
     *,
     mirror_transport: str,
+    allow_incomplete_manual_accounting: bool,
 ) -> dict[str, object]:
     if mirror_transport != "filesystem_copy":
         raise ValueError("Only preflighted filesystem_copy transport is implemented")
@@ -1209,6 +1761,9 @@ def _append_primary_event_pinned(
     record["previous_event_sha256"] = chain_head(local_records)
     record.setdefault("timestamp", utc_now())
     record["event_sha256"] = record_sha256(record, "event_sha256")
+    _validate_accounting_records([*local_records, record])
+    if not allow_incomplete_manual_accounting:
+        require_no_incomplete_manual_accounting_marker(ledger_jsonl, mirror_jsonl)
     _append_jsonl(ledger_jsonl, record)
     _append_jsonl(mirror_jsonl, record)
     receipt = _append_mirror_receipt(
@@ -1226,6 +1781,7 @@ def _append_primary_event_pinned(
         ledger_csv,
         mirror_jsonl=mirror_jsonl,
         mirror_transport=mirror_transport,
+        allow_incomplete_manual_accounting=allow_incomplete_manual_accounting,
     )
     return record
 
@@ -1238,6 +1794,7 @@ def append_primary_event_locked(
     event: dict[str, object],
     *,
     mirror_transport: str,
+    allow_incomplete_manual_accounting: bool = False,
 ) -> dict[str, object]:
     with _pinned_parent_directories(
         _ledger_state_paths(ledger_jsonl, ledger_csv, receipts_jsonl, mirror_jsonl)
@@ -1249,6 +1806,7 @@ def append_primary_event_locked(
             mirror_jsonl,
             event,
             mirror_transport=mirror_transport,
+            allow_incomplete_manual_accounting=allow_incomplete_manual_accounting,
         )
 
 
@@ -1279,7 +1837,10 @@ def write_csv(
     *,
     mirror_jsonl: Path,
     mirror_transport: str,
+    allow_incomplete_manual_accounting: bool = False,
 ) -> None:
+    if not allow_incomplete_manual_accounting:
+        require_no_incomplete_manual_accounting_marker(ledger_jsonl, mirror_jsonl)
     primary = validate_mirrored_state(ledger_jsonl, receipts_jsonl, mirror_jsonl)
     receipts = validate_receipts(
         receipts_jsonl,
