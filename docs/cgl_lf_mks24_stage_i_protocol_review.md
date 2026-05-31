@@ -43,6 +43,10 @@ Authenticated `R02/s08_rankio_t3p5_t4` job `4747015` is formally and
 independently inspected and recorded `accepted` through exact `t = 4.0` for
 `1.200000` node-hours, bringing corrected E03 Stage I use to `8.546945`
 node-hours.
+Authenticated `R02/s09_rankio_t4_t4p5` job `4747087` is formally and
+independently inspected and recorded `accepted` through exact `t = 4.5` for
+`1.208056` node-hours, bringing corrected E03 Stage I use to `9.755001`
+node-hours.
 
 The `900.000000` node-hour `E02` value is an authorized measurement-based
 projected envelope, not a fully measured matrix cost. It no longer authorizes
@@ -164,6 +168,8 @@ Authenticated job `4746953` now extends that accepted lineage through exact
 `t = 3.5`.
 Authenticated job `4747015` now extends that accepted lineage through exact
 `t = 4.0`.
+Authenticated job `4747087` now extends that accepted lineage through exact
+`t = 4.5`.
 The manuscript also still needs
 compact derivation prose. That prose must:
 
@@ -315,7 +321,24 @@ transaction. Reconcile, then prepare only
 `R02/s09_rankio_t4_t4p5` from the authenticated terminal siblings with Slurm
 walltime `01:40:00`, Athena timeout `01:30:00`, and a `4800`-second threshold
 retaining `600` seconds on both timeout margins. The threshold is scoped only
-to `s09` and cannot ratchet automatically. Inspect, account, reconcile, and
+to `s09` and cannot ratchet automatically. Those were the historical next
+actions. Authenticated `R02/s09_rankio_t4_t4p5` job `4747087` is now accepted
+through exact `t = 4.5` for `1.208056` node-hours. Its sampled-history
+forcing-work relative residual is `1.9837412357887464e-12`; strict LF failure
+counters remain zero; terminal `lf_hwproj = 207989256307`; complete two-group
+eight-rank snapshots and terminal eight-rank restart siblings are retained.
+Corrected E03 use is `9.755001` node-hours. Retained corrected recost evidence
+JSON SHA-256 is
+`8b10b1786db520740b687d989207f3cda6e0123f9bf2b62e75a5df3849511561`;
+it projects at most `769.290001` matrix node-hours inside the `900.000000`
+envelope, leaving `130.710000` node-hours of margin. Hardened reconciliation
+closes with `10/10/10` ledger rows/manifests/reservations, no active
+reservation, and no transaction. Archive and catalog the current committed
+controller state, reconcile, then prepare only `R02/s10_rankio_t4p5_t5` from
+the authenticated `s09` terminal siblings with Slurm walltime `01:40:00`,
+Athena timeout `01:30:00`, and a `4800`-second threshold retaining `600`
+seconds on both timeout margins. The threshold is scoped only to `s10` and
+cannot ratchet automatically. Inspect, account, reconcile, and
 recost before any further extension. Finish R02, execute R03--R16
 sequentially, and complete `R17` last.
 
@@ -343,7 +366,8 @@ reaches exact `t = 2.0`; authenticated continuation `4746663` now reaches
 exact `t = 2.5`; authenticated continuation `4746773` now reaches exact
 `t = 3.0`; authenticated continuation `4746953` now reaches exact `t = 3.5`.
 Authenticated continuation `4747015` now reaches exact `t = 4.0`.
-Use only job `4747015`'s
+Authenticated continuation `4747087` now reaches exact `t = 4.5`.
+Use only job `4747087`'s
 authenticated terminal checkpoint for the next bounded R02 continuation.
 Commits `9480e62764528a3f40066d22a192f0e99b369891`
 and `ef1e42fa088203ac9ef6ec8e47e668db4fb95a3c` additionally require the live
