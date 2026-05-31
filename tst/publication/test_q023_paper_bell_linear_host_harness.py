@@ -17,7 +17,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 HARNESS = REPO_ROOT / "tst/publication/q023_paper_bell_linear_host_harness.cpp"
 SIDECAR = (
     REPO_ROOT
-    / "tst/publication/readiness/q023_paper_bell_linear_source_local_implementation_successor_2026-05-31.json"
+    / "tst/publication/readiness/q023_paper_bell_linear_source_local_implementation_successor_v2_2026-05-31.json"
 )
 
 

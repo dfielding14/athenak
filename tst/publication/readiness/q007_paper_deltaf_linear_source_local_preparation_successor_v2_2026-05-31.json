@@ -1,0 +1,264 @@
+{
+  "record_type": "q007_paper_deltaf_linear_source_local_preparation",
+  "schema_version": 1,
+  "date": "2026-05-31",
+  "predecessor_record": "tst/publication/readiness/q007_paper_deltaf_linear_source_local_preparation_successor_2026-05-31.json",
+  "binding_refresh_reason": "Shared problem-generator fatal-path and particle-VTK timestamp precision hardening changed exact source bytes without changing the retained bounded Q-007 preparation interpretation. The immutable predecessor runtime artifacts remain chronology-only local evidence.",
+  "gate": "Q-007",
+  "status": "source_local_true_deltaf_weighted_loading_wave_and_bounded_serial_oracle_replay_preparation_only",
+  "qualification_effect": "none_source_local_true_deltaf_preparation_only",
+  "claim_closure": false,
+  "frontier_authorization": "not_bound",
+  "scope": "Bounded nonqualifying Q-007 source-local preparation for the Sun and Bai true-delta-f linear CRSI and CRPAI mappings. This tranche retains the narrowly guarded exact-isothermal paper_mhd_pic physical-delta-f parser allowance and separately named CRSI and CRPAI generators. It implements eight logarithmic momentum bins, 256 particles per cell per bin, source-local IPWT macro-multiplicity weighting with equal species q over mc, deterministic random-phase forward and backward left and right Alfven-wave carrier initialization, static full-Q1-plus-Q2 dispersion-oracle preparation, and a retained two-cycle serial CRSI mechanics replay below Orion PIC. The finite shell quadrature, angular sampler, wave seed, and discrete carrier-mode set are explicit source-local conventions because the manuscript does not freeze those choices. CRPAI runtime evolution remains fail-closed pending handedness review. This record does not claim runtime growth fitting, scientific qualification, Frontier authorization, or claim closure.",
+  "manuscript_anchor": {
+    "reference_id": "sun_bai_2023_arxiv_2304.10568v1",
+    "source": "docs/reference_paper/arXiv-2304.10568v1/mnras_template.tex",
+    "sections": [
+      "5.5.1 The CR streaming instability",
+      "5.5.2 The CR pressure anisotropy instability"
+    ],
+    "paper_literal_mappings": {
+      "crsi": {
+        "distribution": "normalized isotropic kappa",
+        "vd_over_ua": 2.0,
+        "mncr_over_rho0": 0.0001,
+        "light_speed_over_ua": 300.0,
+        "p0_over_m": 300.0,
+        "kappa": 1.25,
+        "isothermal_cs_over_ua": 1.0,
+        "domain_ua_over_omega0": 96000.0,
+        "dx_ua_over_omega0": 10.0,
+        "momentum_bin_count": 8,
+        "particles_per_cell_per_bin": 256,
+        "seed_amplitude": 0.001
+      },
+      "crpai": {
+        "distribution": "normalized anisotropic kappa",
+        "mncr_over_rho0": 0.0001,
+        "light_speed_over_ua": 30000.0,
+        "p0_over_m": 300.0,
+        "kappa": 1.75,
+        "xi": [
+          0.99,
+          1.01
+        ],
+        "dx_ua_over_omega0": 20.0,
+        "seed_intensity_kIk": 1e-06
+      }
+    }
+  },
+  "narrow_parser_allowance": {
+    "path": "src/particles/particles.cpp",
+    "scope": "paper_mhd_pic plus physical delta-f plus isothermal MHD only",
+    "requires_coupled_mhd_background": true,
+    "requires_coupled_feedback": true,
+    "requires_moment_deposition": true,
+    "requires_momentum_feedback": true,
+    "requires_energy_feedback": false,
+    "rejects_energy_feedback_for_isothermal_mhd": true,
+    "preserves_existing_ideal_mhd_paper_energy_feedback_requirement": true
+  },
+  "generators": [
+    {
+      "name": "q007_paper_crsi_linear_preparation",
+      "method": "ProblemGenerator::Q007PaperCRSILinearPreparation",
+      "source": "src/pgen/tests/q007_paper_deltaf_linear.cpp",
+      "role": "bounded_two_cycle_serial_mechanics_replay_and_static_oracle_preparation_only"
+    },
+    {
+      "name": "q007_paper_crpai_linear_preparation",
+      "method": "ProblemGenerator::Q007PaperCRPAILinearPreparation",
+      "source": "src/pgen/tests/q007_paper_deltaf_linear.cpp",
+      "role": "cycle_zero_weighted_loading_wave_and_signed_branch_static_oracle_preparation_only"
+    }
+  ],
+  "deck_freezes": [
+    {
+      "path": "inputs/tests/pic_q007_paper_crsi_linear_preparation.athinput",
+      "case": "crsi",
+      "cycle_zero_only": false,
+      "bounded_serial_runtime_cycles": 2,
+      "source_local_particles_total": 262144,
+      "particles_per_cell_per_bin": 256,
+      "momentum_bin_count": 8
+    },
+    {
+      "path": "inputs/tests/pic_q007_paper_crpai_linear_prolate_preparation.athinput",
+      "case": "crpai_prolate_xi_0p99",
+      "cycle_zero_only": true,
+      "source_local_particles_total": 262144,
+      "particles_per_cell_per_bin": 256,
+      "momentum_bin_count": 8
+    },
+    {
+      "path": "inputs/tests/pic_q007_paper_crpai_linear_oblate_preparation.athinput",
+      "case": "crpai_oblate_xi_1p01",
+      "cycle_zero_only": true,
+      "source_local_particles_total": 262144,
+      "particles_per_cell_per_bin": 256,
+      "momentum_bin_count": 8
+    }
+  ],
+  "source_local_conventions": {
+    "momentum_shell_quadrature": "eight_logarithmic_shells_from_p0_over_500_to_500_p0_with_geometric_centers_and_normalized_shell_midpoint_weights",
+    "angular_sampler": "deterministic_hashed_antipodal_pairs_128_pairs_per_bin_per_cell",
+    "weight_encoding": "IPWT_macro_multiplicity_equivalent_equal_species_q_over_mc",
+    "wave_seed": "deterministic_splitmix64_seed_per_mode_direction_and_signed_polarization",
+    "wave_discrete_mode_set": "modes_1_through_8_with_branch_amplitude_A_over_sqrt_mode",
+    "paper_literal_sampling_algorithm_claimed": false,
+    "paper_literal_wave_seed_and_discrete_mode_set_claimed": false
+  },
+  "artifact_bindings": {
+    "src/pgen/tests/q007_paper_deltaf_linear.hpp": "a92c76c9c8f202ccb80e2d24667b1e929de810ec05c53a94b6e79cc64c947329",
+    "src/pgen/tests/q007_paper_deltaf_linear.cpp": "59697372a9be32fb5c24ff4980f7816d25504419515afd60ab17655b3735396b",
+    "inputs/tests/pic_q007_paper_crsi_linear_preparation.athinput": "d1e6b774bef0556a298b88d4a4e989572bd88622d57a14dd54700856f9d3770c",
+    "inputs/tests/pic_q007_paper_crpai_linear_prolate_preparation.athinput": "f98aa8faad0c50be696e14db0d33fb2c22bc1b4e7a3c7ba8fa51f67fbb71fa69",
+    "inputs/tests/pic_q007_paper_crpai_linear_oblate_preparation.athinput": "b092941d81eef7a8f76d2541789035e9ac7e0cfa42b9db4fdef12a2a44ea5b3c",
+    "tst/publication/immutable_orion_tree.py": "2782efa7a362bca4d660fe7dc9e4e8e5a853d016881c78ab3a8114664dd5acf4",
+    "tst/publication/analyze_q007_paper_deltaf_linear_preparation.py": "e6ed7f7dd75d646f9627d574c41cda9f8ed50f0903ea1ec708d4082ac825116c",
+    "tst/publication/test_analyze_q007_paper_deltaf_linear_preparation.py": "cd33d54f687a7e44fe4b14f4c17b23ae4821ad2eb42c59c7b87fbe4d6ccb23e1"
+  },
+  "shared_registration_contract": {
+    "src/CMakeLists.txt": "includes pgen/tests/q007_paper_deltaf_linear.cpp",
+    "src/pgen/pgen.hpp": "declares both Q-007 preparation methods",
+    "src/pgen/pgen.cpp": "dispatches both Q-007 preparation names for fresh and restart construction"
+  },
+  "analyzer_contract": {
+    "path": "tst/publication/analyze_q007_paper_deltaf_linear_preparation.py",
+    "artifact_role": "section55_section56_true_deltaf_preparation_not_qualifying_evidence",
+    "validates_guarded_deck_contracts": true,
+    "validates_narrow_parser_allowance": true,
+    "validates_normalized_isotropic_kappa_mapping": true,
+    "validates_normalized_anisotropic_kappa_mapping": true,
+    "validates_resonant_scale_and_q2": true,
+    "validates_source_local_log_bin_weighted_loading": true,
+    "validates_source_local_deterministic_four_branch_wave_spectrum": true,
+    "prepares_full_q1_q2_dispersion_oracle": true,
+    "validates_low_density_crsi_approximation": true,
+    "validates_low_density_crpai_signed_branch_approximation": true,
+    "assigns_crpai_handedness_labels": false,
+    "accepts_orion_only_bounded_serial_crsi_runtime_replay_artifacts": true,
+    "always_emits_qualifying_evidence": false,
+    "accepts_orion_only_bounded_serial_crpai_startup_artifacts": true,
+    "validates_exact_carrier_specific_deck_contracts": true,
+    "validates_raw_startup_loading_for_crsi_crpai_prolate_and_crpai_oblate": true,
+    "uses_separate_crsi_and_crpai_carrier_length_oracles": true,
+    "validates_raw_startup_mhd_cells_for_crsi_crpai_prolate_and_crpai_oblate": true
+  },
+  "nonqualification_boundary": {
+    "deck_source_freeze": true,
+    "true_deltaf_parser_path": true,
+    "exact_isothermal_mhd_startup": true,
+    "source_local_log_bin_weighted_loading": true,
+    "source_local_deterministic_four_branch_wave_spectrum": true,
+    "bounded_serial_crsi_runtime_replay": true,
+    "full_q1_q2_dispersion_oracle_prepared": true,
+    "paper_literal_sampling_algorithm_reviewed": false,
+    "paper_literal_wave_seed_and_discrete_mode_set_reviewed": false,
+    "runtime_growth_fit": false,
+    "crpai_handedness_mapping_reviewed": false,
+    "mpi_qualification": false,
+    "gpu_qualification": false,
+    "frontier_authorization": false,
+    "external_review": false,
+    "qualifying_evidence": false
+  },
+  "crpai_handedness_review_boundary": {
+    "status": "blocked_pending_independent_review",
+    "reason": "The manuscript prose and the nearby figure caption assign the prolate and oblate handedness labels inconsistently. This tranche freezes signed analytical branches only and does not resolve or claim the label mapping."
+  },
+  "retained_orion_runtime_replay": {
+    "artifact_role": "bounded_serial_crsi_runtime_replay_plus_crpai_startup_mechanics_only",
+    "root": "/lustre/orion/ast207/proj-shared/dfielding/PIC/local-readiness/q007-paper-deltaf-runtime-replay-20260531-v4",
+    "qualifying_evidence": false,
+    "runtime_growth_fit_claimed": false,
+    "crsi_runtime_replay": "pass_two_cycles",
+    "raw_startup_cases": [
+      "crsi",
+      "crpai_prolate",
+      "crpai_oblate"
+    ],
+    "analysis": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/local-readiness/q007-paper-deltaf-runtime-replay-20260531-v4-analysis.json",
+      "sha256": "bd1eb4dc58773b088ad3e97e8cf50bcd5fbda2aee61907767f52c10c34351113"
+    },
+    "pinned_executable_binding": {
+      "path": "pinned_executable_binding.json",
+      "sha256": "8137fca60cb205893c817c46092eaed26fdef81489cf2f87ac375d37f9dd5456"
+    },
+    "pinned_executable_root": "/lustre/orion/ast207/proj-shared/dfielding/PIC/local-readiness/integrated-serial-host-binary-clean-20260531T034317Z",
+    "pinned_executable_root_inventory_sha256": "223dcb07d453572ea407f65dc9f7020afa3d6370b9d3c3cf4a06ceb4ca0e852c",
+    "pinned_executable_sha256": "dadfbb19bd4453ea00c0caee93f85b7664f875621b1582f50cdd26d372422d18",
+    "negative_crpai_nlim1": {
+      "status": "fail_closed_time_nlim_contract_error_pending_handedness_review",
+      "raw_stdout_sha256": "52802a5342ba9b58b36083065b71789a5a57cd28ca86a07931743f0ef9261b53",
+      "raw_invocation_retained": true
+    },
+    "tree_freeze": {
+      "inventory_algorithm": "sha256 of '<file_sha256>  <root-relative-path>\\n' entries ordered lexically by root-relative path",
+      "inventory_sha256": "772d67effde79fa978283ca7e8425e00734a8c89ccdb124fa215737c80191842",
+      "inventoried_file_count": 37,
+      "total_file_count_including_inventory": 38,
+      "recursively_read_only": true,
+      "writable_entries": 0
+    },
+    "analysis_environment": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/local-readiness/integrated-serial-host-binary-clean-20260531T034317Z/runtime/analysis_environment.json",
+      "sha256": "9299515495cc8ec3f5f361dcd85ecbe2b37a49c8ca44c31a80dbdf203d2f7e2a",
+      "numpy": "1.26.4",
+      "python": "3.11.7",
+      "scipy": "1.10.1"
+    }
+  },
+  "verification": {
+    "focused_command": "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. python3 -B -m unittest tst.publication.test_analyze_q007_paper_deltaf_linear_preparation",
+    "focused_result": "pass_26_tests",
+    "analyzer_command": "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. python3 -B tst/publication/analyze_q007_paper_deltaf_linear_preparation.py",
+    "analyzer_result": "pass",
+    "python_compile": "pass",
+    "json_parse": "pass",
+    "integrated_serial_non_mpi_compile": "pass_debug_builtin_pgens",
+    "cycle_zero_startup": "pass_raw_crsi_crpai_prolate_and_crpai_oblate_decks",
+    "cycle_zero_raw_grid_metadata_and_shape": "pass_exact_1x4x32_faces_centers_and_level_zero",
+    "bounded_serial_runtime_replay": "pass_crsi_two_cycles_orion_only",
+    "runtime_replay_extractor": "pass_raw_crsi_runtime_and_all_three_startup_mhd_cells_particle_counts_weights_initial_deltaf_and_four_branch_spectra",
+    "crpai_runtime_evolution_rejection": "pass_mutated_nlim_1_fails_closed_with_time_nlim_contract_error_pending_handedness_review",
+    "independent_frozen_tree_verify": "pass",
+    "pinned_executable_tree_verify": "pass",
+    "pinned_executable_elf_identity": "pass",
+    "pinned_source_archive_dependency_manifest": "pass_13_direct_archive_member_hashes",
+    "pinned_serial_host_build_evidence": "pass",
+    "runtime_wrapper_schema_and_directory_topology": "pass_exact",
+    "direct_cli_without_pythonpath": "pass",
+    "runtime_replay_exact_regeneration": "pass"
+  },
+  "explicitly_not_claimed": [
+    "paper-literal finite-bin quadrature or angular-sampling algorithm provenance",
+    "paper-literal random-phase seed or finite discrete-mode-set provenance",
+    "runtime growth-rate fit evidence",
+    "reviewed CRPAI handedness label mapping",
+    "clean-candidate freeze",
+    "MPI or decomposition qualification",
+    "Frontier HIP or GPU qualification",
+    "Frontier launch authorization",
+    "external-review closure",
+    "Q-007 closure or scientific runtime qualification"
+  ],
+  "residual_work": [
+    "Independently review the source-local eight-log-bin shell-midpoint quadrature and deterministic antipodal angular sampler against any original paper-run provenance before treating them as paper-literal.",
+    "Recover or independently review any original paper-run random seed and finite discrete carrier-mode set before treating the deterministic source-local four-branch wave initialization as paper-literal.",
+    "Run and independently assess a long-horizon CRSI growth-rate fit against the prepared full Q1 plus Q2 oracle before claiming scientific runtime qualification.",
+    "Resolve the manuscript CRPAI handedness-label discrepancy before admitting CRPAI runtime replay or growth fitting.",
+    "Prepare clean-candidate MPI, HIP/GPU, Frontier and external-review transitions separately."
+  ],
+  "q007_disposition": "source_local_true_deltaf_weighted_loading_wave_and_bounded_serial_oracle_replay_preparation_only_no_runtime_qualification_claim",
+  "shared_artifact_bindings": {
+    "docs/source/engineering/pic_mhd_model_contract.md": "de319a56b34a6be33a41e9da3719d9a06a7646a1ff26748900d746d1b167bf80",
+    "src/CMakeLists.txt": "e9cd518abc209ad0f7e84d8694fad199a98406de2033b8b9cad8af4adb5567b9",
+    "src/particles/particles.cpp": "4b88b1b0a0d83aed824f2af6f2fb77fc5793cdeb9b0e2d65d408535f22e45c44",
+    "src/pgen/pgen.cpp": "391adff40239bcb8746c3f76910fe642d0376d9060069248d82cecc42a7dc6a1",
+    "src/pgen/pgen.hpp": "be5578291d7ec1c38c518e00f5fed85dc79838af8da958d6badab94d6655b61b",
+    "src/outputs/vtk_prtcl.cpp": "bc82e21125526ef56d231638a3154c37501ad002261daf84f968e7dec964eaca",
+    "tst/publication/pvtk_particles.py": "187254c4ed10ce20ec383e710dadfa2e03e9f45317cce53e5d644c1db2be7339"
+  }
+}

@@ -1,0 +1,212 @@
+{
+  "record_type": "q006_paper_multispecies_oscillation_runtime_local",
+  "schema_version": 1,
+  "date": "2026-05-31",
+  "predecessor_record": "tst/publication/readiness/q006_paper_multispecies_oscillation_runtime_local_successor_2026-05-31.json",
+  "binding_refresh_reason": "Shared problem-generator fatal-path hardening changed exact src/pgen/pgen.cpp bytes without changing the retained bounded Q-006 mechanics interpretation. The immutable predecessor runtime artifacts remain chronology-only local evidence.",
+  "gate": "Q-006",
+  "qualification_effect": "none",
+  "claim_closure": false,
+  "frontier_authorization": "not_bound",
+  "scope": "Q-006-only bounded serial-host runtime-local successor. The separately named q006_paper_multispecies_oscillation_runtime_local generator admits exact-isothermal full-f coupled PIC with momentum-only fluid feedback, initializes the Section 5.3 two-species center-of-mass frame on uniform, SMR and deterministic audited-AMR carriers, and reenrolls the deterministic AMR callback on restart. The retained Orion artifacts demonstrate bounded local mechanics only. They do not establish long-horizon oscillation accuracy, an accepted carrier-to-carrier residual tolerance, MPI, GPU, Frontier or external-review qualification.",
+  "artifact_bindings": {
+    "src/pgen/tests/q006_paper_multispecies_oscillation_runtime_local.cpp": "1b990b80395cb47018dd8885c88926ef4460345d3609ef0acb660fd87f9bf175",
+    "inputs/tests/pic_q006_paper_multispecies_oscillation_uniform_runtime_local.athinput": "5b8d81aa4914247ba82f065c791d736e7f041ebcb56bc409fd312e17b39f8f01",
+    "inputs/tests/pic_q006_paper_multispecies_oscillation_smr_runtime_local.athinput": "ec94c9ac5dddcdfc600e0831b2d6a2a39238b34e42da09203948d1eb3c3fb5eb",
+    "inputs/tests/pic_q006_paper_multispecies_oscillation_audited_amr_runtime_local.athinput": "9baa6cad1995c359f86401be2ce69580d9b5292a5959925b9abadb1d4f4b3847",
+    "tst/publication/immutable_orion_tree.py": "2782efa7a362bca4d660fe7dc9e4e8e5a853d016881c78ab3a8114664dd5acf4",
+    "tst/publication/analyze_q006_paper_multispecies_oscillation_runtime_local.py": "4068ec44c92dfc1bfa8e201cf06838020dd4b90580c2f59fc16f90d6ba92b44e",
+    "tst/publication/test_analyze_q006_paper_multispecies_oscillation_runtime_local.py": "98e1d7a0b47becdac79d4a00011abdab1c21644499a5e599f5ab3e0a6318c22d"
+  },
+  "shared_parser_contract": {
+    "src/particles/particles.cpp": "adds a narrow paper_mhd_pic exact-isothermal full-f momentum-only allowance while preserving the historical exact-isothermal delta-f allowance",
+    "tst/scripts/particles/pic_parser_contract_guards.py": "routes the accepted exact-isothermal Q-006 case plus energy-feedback and generator-scope rejections through the complete Q-006 uniform runtime-local deck, retains the ordinary paper deck for the ideal-EOS momentum-only rejection, and retains the historical guard deck for existing cases"
+  },
+  "shared_registration_contract": {
+    "src/CMakeLists.txt": "includes pgen/tests/q006_paper_multispecies_oscillation_runtime_local.cpp",
+    "src/pgen/pgen.hpp": "declares ProblemGenerator::Q006PaperMultispeciesOscillationRuntimeLocal",
+    "src/pgen/pgen.cpp": "dispatches q006_paper_multispecies_oscillation_runtime_local for fresh and restart construction"
+  },
+  "historical_preparation_preservation": {
+    "status": "pass",
+    "binding_count": 6,
+    "verification": "the runtime-local analyzer recomputes and verifies every historical preparation binding from q006_paper_multispecies_oscillation_source_local_preparation_2026-05-30.json"
+  },
+  "host_execution": {
+    "launch_style": "direct_serial_host_execution",
+    "executable": "/lustre/orion/ast207/proj-shared/dfielding/PIC/local-readiness/integrated-serial-host-binary-clean-20260531T034317Z/bin/athena",
+    "retained_executable_sha256": "dadfbb19bd4453ea00c0caee93f85b7664f875621b1582f50cdd26d372422d18",
+    "configuration": {
+      "mpi_parallelism": "OFF",
+      "kokkos_serial": "ON",
+      "build_type": "Release"
+    },
+    "mpi_used": false,
+    "slurm_used": false,
+    "frontier_used": false,
+    "kronos_used": false,
+    "bulk_artifacts_strictly_below": "/lustre/orion/ast207/proj-shared/dfielding/PIC",
+    "pinned_executable_root": "/lustre/orion/ast207/proj-shared/dfielding/PIC/local-readiness/integrated-serial-host-binary-clean-20260531T034317Z",
+    "pinned_executable_root_inventory_sha256": "223dcb07d453572ea407f65dc9f7020afa3d6370b9d3c3cf4a06ceb4ca0e852c"
+  },
+  "bounded_runtime_probe": {
+    "status": "pass_bounded_local_mechanics_only",
+    "qualification_effect": "none",
+    "artifact_root": "/lustre/orion/ast207/proj-shared/dfielding/PIC/q006-exact-isothermal-runtime-local-20260531-v4",
+    "summary_report": {
+      "path": "reports/probe_summary.json",
+      "sha256": "88aa3741c30f1a63672a12caaca59c4e28f9f0d100261f5320fb399bcfb90a9f"
+    },
+    "parser_contract_suite": {
+      "accepted_cases": 6,
+      "rejected_cases": 31,
+      "exact_isothermal_fullf_momentum_only": "accepted",
+      "exact_isothermal_energy_feedback": "rejected",
+      "exact_isothermal_fullf_non_q006_generator": "rejected",
+      "ideal_fullf_momentum_only": "rejected",
+      "raw_case_sidecars": "retained",
+      "summary": {
+        "path": "parser_contract_suite/summary.json",
+        "sha256": "d38d154bfded2142afff90eab8f1869ff9064c4ab5517758ab580f815d0a843c"
+      }
+    },
+    "analytical_anchor": {
+      "physical_volume": 1024.0,
+      "aggregate_ppc": 128.0,
+      "species_mass_density_each": 1.5,
+      "gas_vy": -0.3,
+      "species_vy": 0.1,
+      "initial_total_kinetic_energy_density": 0.06,
+      "oscillation_omega": 2.0,
+      "oscillation_period": 3.141592653589793
+    },
+    "carriers": {
+      "uniform_startup_cycle0": {
+        "cycle": 0,
+        "meshblocks": 16,
+        "particle_count": 131072,
+        "species_mass_density": [
+          1.5,
+          1.5
+        ],
+        "maximum_absolute_total_momentum": 7.62939453125e-06,
+        "total_kinetic_energy_density": 0.0600000040233136
+      },
+      "uniform_evolution_cycle2": {
+        "cycle": 2,
+        "meshblocks": 16,
+        "particle_count": 131072,
+        "species_mass_density": [
+          1.5,
+          1.5
+        ],
+        "maximum_absolute_total_momentum": 1.1102259272536248e-17,
+        "total_kinetic_energy_density": 0.06000001512295916
+      },
+      "smr_evolution_cycle2": {
+        "cycle": 2,
+        "meshblocks": 72,
+        "particle_count": 589824,
+        "species_mass_density": [
+          1.5,
+          1.5
+        ],
+        "maximum_absolute_total_momentum": 0.011518120765686035,
+        "total_kinetic_energy_density": 0.06000338834363607
+      },
+      "audited_amr_evolution_cycle2": {
+        "cycle": 2,
+        "meshblocks": 44,
+        "particle_count": 131072,
+        "species_mass_density": [
+          1.5,
+          1.5
+        ],
+        "maximum_absolute_total_momentum": 0.011279763308323254,
+        "total_kinetic_energy_density": 0.06000333661536021
+      },
+      "audited_amr_restart_cycle3": {
+        "cycle": 3,
+        "meshblocks": 58,
+        "particle_count": 131072,
+        "species_mass_density": [
+          1.5,
+          1.5
+        ],
+        "maximum_absolute_total_momentum": 0.030618773403261912,
+        "total_kinetic_energy_density": 0.060009170007190756
+      }
+    },
+    "tree_freeze": {
+      "inventory_path": "artifact_inventory.sha256",
+      "inventory_excludes": "artifact_inventory.sha256",
+      "inventory_algorithm": "sha256 of '<file_sha256>  <root-relative-path>\\n' entries ordered lexically by root-relative path",
+      "inventory_sha256": "2ec81b018a085a1471c479260b17282499f7e8e559a8b8ad45bafa67707f20f7",
+      "inventoried_file_count": 328,
+      "total_file_count_including_inventory": 329,
+      "recursively_read_only": true,
+      "writable_entries": 0
+    },
+    "pinned_executable_binding": {
+      "path": "pinned_executable_binding.json",
+      "sha256": "ab113467196b49936cf62a9807a5413f969ebd7be296d0c8b0e58bcea8546795"
+    },
+    "static_descriptor": {
+      "path": "reports/static_descriptor.json",
+      "sha256": "7409fbbca9375bc93d6c7b7b6577d3d7960458712418a5e11b816b0c8ae6efb2"
+    }
+  },
+  "analyzer_contract": {
+    "runtime_payload": "immutable raw mhd_w_bcc binary plus prtcl_all PVTK snapshot pairs",
+    "checks": [
+      "finite positive MHD density and finite fluid velocity",
+      "finite positive macro weights, finite particle velocity, valid species identifiers and unique particle tags",
+      "PVTK execution header reports serial prtcl_all runtime metadata",
+      "exact physical-volume integration across uniform, SMR and audited-AMR MeshBlock levels",
+      "macro-weight-aware species mass density, fluid momentum, particle momentum and kinetic-energy recomputation",
+      "sha256 of every decoded raw input artifact",
+      "strict Orion-scoped frozen-tree membership, hash and read-only verification"
+    ],
+    "applies_long_horizon_tolerance": false,
+    "applies_mesh_transition_residual_tolerance": false,
+    "emits_qualifying_evidence": false
+  },
+  "verification": {
+    "serial_non_mpi_compile": "pass",
+    "serial_non_mpi_startup": "pass_uniform_cycle_zero",
+    "serial_non_mpi_evolution": "pass_uniform_smr_and_audited_amr_cycle_two",
+    "serial_non_mpi_restart": "pass_audited_amr_restart_cycle_two_to_cycle_three",
+    "raw_runtime_extraction": "pass_five_snapshot_pairs_with_exact_regeneration",
+    "parser_contract_suite": "pass_6_positive_31_rejection_cases_with_raw_sidecars",
+    "focused_python_tests_before_sidecar": "pass_11_tests",
+    "independent_frozen_tree_verify": "pass",
+    "pinned_executable_tree_verify": "pass",
+    "pinned_executable_elf_identity": "pass",
+    "pinned_source_archive_dependency_manifest": "pass_13_direct_archive_member_hashes",
+    "pinned_serial_host_build_evidence": "pass",
+    "parser_rejection_returncodes": "pass_exact_exit_1"
+  },
+  "explicitly_not_claimed": [
+    "long-horizon Section 5.3 oscillation accuracy or accepted residual tolerance",
+    "MPI or decomposition qualification",
+    "GPU qualification",
+    "Frontier qualification or launch authorization",
+    "external review closure",
+    "true-AMR policy qualification beyond the bounded deterministic audited-AMR mechanics probe"
+  ],
+  "residual_work": [
+    "Keep the retained bounded serial-host mechanics artifacts nonqualifying.",
+    "Review and freeze accepted uniform, SMR and AMR long-horizon Section 5.3 observables and tolerances in a separate tranche.",
+    "Run any MPI, GPU, Frontier or external-review transition as a separately reviewed authorization step."
+  ],
+  "q006_disposition": "bounded_exact_isothermal_fullf_momentum_only_runtime_local_successor_mechanics_only_all_qualification_open",
+  "shared_artifact_bindings": {
+    "docs/source/engineering/pic_mhd_model_contract.md": "de319a56b34a6be33a41e9da3719d9a06a7646a1ff26748900d746d1b167bf80",
+    "src/CMakeLists.txt": "e9cd518abc209ad0f7e84d8694fad199a98406de2033b8b9cad8af4adb5567b9",
+    "src/particles/particles.cpp": "4b88b1b0a0d83aed824f2af6f2fb77fc5793cdeb9b0e2d65d408535f22e45c44",
+    "src/pgen/pgen.cpp": "391adff40239bcb8746c3f76910fe642d0376d9060069248d82cecc42a7dc6a1",
+    "src/pgen/pgen.hpp": "be5578291d7ec1c38c518e00f5fed85dc79838af8da958d6badab94d6655b61b",
+    "tst/publication/pvtk_particles.py": "187254c4ed10ce20ec383e710dadfa2e03e9f45317cce53e5d644c1db2be7339",
+    "tst/scripts/particles/pic_parser_contract_guards.py": "0fee2d5342fbd35b2ed73e32c401119a55aaad25d8fa6ec542f037ac892616d4"
+  }
+}

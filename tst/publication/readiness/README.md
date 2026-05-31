@@ -44,6 +44,9 @@ qualify any scientific claim by itself.
 - `q006_paper_multispecies_oscillation_runtime_local_successor_2026-05-31.json`:
   chronology-preserving successor receipt rebinding the retained Q-006 evidence
   after the shared restart callback registration changed `src/pgen/pgen.hpp`.
+- `q006_paper_multispecies_oscillation_runtime_local_successor_v2_2026-05-31.json`:
+  chronology-preserving byte refresh after shared problem-generator fatal-path
+  hardening.
 - `q015_entity_differential_2026-05-30.json`: frozen-source Entity
   exact-overlap differential evidence and explicit non-overlap boundaries.
 - `q022_independent_comparison_preregistration_2026-05-30.json` and
@@ -83,6 +86,9 @@ qualify any scientific claim by itself.
   chronology-preserving successor receipt rebinding the retained Q-023
   source-local evidence after the shared restart callback registration changed
   `src/pgen/pgen.hpp`.
+- `q023_paper_bell_linear_source_local_implementation_successor_v2_2026-05-31.json`:
+  chronology-preserving byte refresh after shared problem-generator fatal-path
+  hardening.
 - `materialize_q023_paper_bell_linear_variants.py`: deterministic source-local
   Q-023 Section 5.2 preparation materializer. It emits the fixed 405-deck
   epsilon, dimensionality, resolution, local-CFL and PPC matrix only as a
@@ -298,6 +304,9 @@ qualify any scientific claim by itself.
   chronology-preserving successor receipt rebinding the retained Q-007
   source-local evidence after the shared restart callback registration changed
   `src/pgen/pgen.hpp`.
+- `q007_paper_deltaf_linear_source_local_preparation_successor_v2_2026-05-31.json`:
+  chronology-preserving byte refresh after shared problem-generator fatal-path
+  and particle-VTK timestamp precision hardening.
 - `q009_amr_lifetime_policy_successor_2026-05-30.json`: bounded local AMR
   retained-state inventory and `paper_smooth` interface-policy decision with
   the coupled-boundary, MPI and HIP lifetime matrix intentionally open.
