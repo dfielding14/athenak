@@ -1,12 +1,11 @@
 import glob
 import logging
 import os
+import re
 import subprocess
 import sys
 
 import numpy as np
-import scripts.utils.athena as athena
-
 sys.path.insert(0, '../vis/python')
 import bin_convert_new as bin_convert  # noqa
 
@@ -17,14 +16,27 @@ _INTEGRATORS = ('rk1', 'rk2', 'rk3')
 _MACRO_MASS = 1.0e-3
 _MASS_FLUX = 0.10 * 1.0 * (3.0 + 1.0) * 8.0
 _RESULTS = {}
+_FLOOR_REJECTION = {}
+_INTEGRATOR_REJECTION = {}
+_FEEDBACK_DIAG_RE = re.compile(
+    r'pic_parallel_shock feedback_diag: .*?'
+    r'j_rms=\(([^,]+),([^,]+),([^)]+)\).*?'
+    r'dpdt_rms=\(([^,]+),([^,]+),([^)]+)\).*?'
+    r'dedt_rms=([^ ]+)'
+)
 
 
 def _athena_exe_dir():
-    return os.path.join(os.getcwd(), 'build', 'src')
+    return os.environ.get(
+        'ATHENA_PIC_PARALLEL_SHOCK_RK_EXE_DIR',
+        os.path.join(os.getcwd(), 'build', 'src'),
+    )
 
 
 def _athena_input_path():
-    return '../../' + athena.athena_rel_path + 'inputs/' + _INPUT_DECK
+    return os.path.abspath(os.path.join(
+        os.path.dirname(__file__), '..', '..', '..', 'inputs', _INPUT_DECK,
+    ))
 
 
 def _remove_outputs(basename):
@@ -84,20 +96,87 @@ def _run_case(integrator, subtraction):
 
     restart = _latest_file('rst', basename + '.*.rst')
     snapshot = _latest_file('bin', basename + '.mhd_u.*.bin')
-    density = np.asarray(bin_convert.read_binary_as_athdf(snapshot)['dens'])
+    fields = bin_convert.read_binary_as_athdf(snapshot)
+    density = np.asarray(fields['dens'])
+    momentum = np.array([
+        np.sum(np.asarray(fields[name])) for name in ('mom1', 'mom2', 'mom3')
+    ])
+    energy = float(np.sum(np.asarray(fields['ener'])))
     history = np.loadtxt(os.path.join(_athena_exe_dir(), basename + '.mhd.hst'))
     if history.ndim == 1:
         history = history.reshape(1, -1)
     consumed_dt = float(history[-1, 0] - history[0, 0])
     if consumed_dt <= 0.0:
         raise RuntimeError('History did not record a positive consumed timestep')
+    match = _FEEDBACK_DIAG_RE.search(output)
+    if match is None:
+        raise RuntimeError('Missing birth-cycle feedback diagnostic for ' + basename)
     return {
         'next_tag': _restart_parameter(restart, 'problem', 'ps_next_tag', int),
         'reservoir': _restart_parameter(
             restart, 'problem', 'ps_mass_reservoir_global', float),
+        'injected_ledger': np.array([
+            _restart_parameter(restart, 'problem', name, float)
+            for name in (
+                'ps_injected_cr_count_global',
+                'ps_injected_cr_mass_global',
+                'ps_injected_cr_momentum_x1_global',
+                'ps_injected_cr_momentum_x2_global',
+                'ps_injected_cr_momentum_x3_global',
+                'ps_injected_cr_energy_global',
+            )
+        ]),
         'gas_mass': float(np.sum(density)),
+        'gas_momentum': momentum,
+        'gas_energy': energy,
         'dt': consumed_dt,
+        'feedback_diag': np.array([float(value) for value in match.groups()]),
     }
+
+
+def _run_expected_floor_rejection():
+    basename = 'pic_parallel_shock_rk_stage_budget_floor_reject'
+    _remove_outputs(basename)
+    command = [
+        './athena', '-i', _athena_input_path(),
+        'job/basename=' + basename,
+        'time/integrator=rk1',
+        'problem/ps_p0=0.10',
+        'problem/ps_eta=0.30',
+        'problem/ps_enable_gas_subtraction=true',
+    ]
+    logger.info('Executing expected rejection: %s', ' '.join(command))
+    proc = subprocess.run(command, cwd=_athena_exe_dir(),
+                          capture_output=True, text=True)
+    output = (proc.stdout or '') + (proc.stderr or '')
+    _FLOOR_REJECTION.update({
+        'returncode': proc.returncode,
+        'saw_floor_rejection': (
+            'gas subtraction would violate a fluid floor' in output
+            and 'process is stopping before clipping or checkpoint publication' in output
+        ),
+    })
+
+
+def _run_expected_integrator_rejection():
+    basename = 'pic_parallel_shock_rk_stage_budget_rk4_reject'
+    _remove_outputs(basename)
+    command = [
+        './athena', '-i', _athena_input_path(),
+        'job/basename=' + basename,
+        'time/integrator=rk4',
+    ]
+    logger.info('Executing expected rejection: %s', ' '.join(command))
+    proc = subprocess.run(command, cwd=_athena_exe_dir(),
+                          capture_output=True, text=True)
+    output = (proc.stdout or '') + (proc.stderr or '')
+    _INTEGRATOR_REJECTION.update({
+        'returncode': proc.returncode,
+        'saw_integrator_rejection': (
+            'injection is qualified only with time/integrator=rk1, rk2, or rk3'
+            in output
+        ),
+    })
 
 
 def run(**kwargs):
@@ -109,7 +188,11 @@ def run(**kwargs):
             'off': off,
             'on': on,
             'gas_mass_removed': off['gas_mass'] - on['gas_mass'],
+            'gas_momentum_removed': off['gas_momentum'] - on['gas_momentum'],
+            'gas_energy_removed': off['gas_energy'] - on['gas_energy'],
         }
+    _run_expected_floor_rejection()
+    _run_expected_integrator_rejection()
 
 
 def analyze():
@@ -124,19 +207,39 @@ def analyze():
         budget = created_mass + off['reservoir']
         expected_budget = _MASS_FLUX * off['dt']
         gas_mass_removed = result['gas_mass_removed']
+        gas_momentum_removed = result['gas_momentum_removed']
+        gas_energy_removed = result['gas_energy_removed']
         logger.info(
             '%s dt=% .12e next_tag=%d reservoir=% .12e budget=% .12e '
-            'expected_budget=% .12e gas_mass_removed=% .12e',
+            'expected_budget=% .12e gas_mass_removed=% .12e '
+            'gas_momentum_removed=%s gas_energy_removed=% .12e '
+            'injected_ledger=%s',
             integrator, off['dt'], off['next_tag'], off['reservoir'], budget,
-            expected_budget, gas_mass_removed)
-        ok = abs(budget - expected_budget) <= 2.0e-12 and ok
+            expected_budget, gas_mass_removed, gas_momentum_removed,
+            gas_energy_removed, off['injected_ledger'])
+        # The history endpoint prints dt with fewer digits than restart metadata.
+        ok = abs(budget - expected_budget) <= 2.0e-7 and ok
         ok = abs(gas_mass_removed - created_mass) <= 1.0e-5 and ok
         ok = on['next_tag'] == off['next_tag'] and ok
         ok = abs(on['reservoir'] - off['reservoir']) <= 2.0e-12 and ok
+        ok = np.array_equal(on['injected_ledger'], off['injected_ledger']) and ok
+        ok = off['injected_ledger'][0] == off['next_tag'] and ok
+        ok = abs(off['injected_ledger'][1] - created_mass) <= 2.0e-12 and ok
+        ok = np.all(np.isfinite(off['injected_ledger'])) and ok
+        ok = off['injected_ledger'][5] > 0.0 and ok
+        ok = np.linalg.norm(off['feedback_diag'][:3]) > 0.0 and ok
+        ok = np.all(np.isfinite(gas_momentum_removed)) and ok
+        ok = np.isfinite(gas_energy_removed) and gas_energy_removed > 0.0 and ok
         if reference is None:
-            reference = (off['next_tag'], off['reservoir'], gas_mass_removed)
+            reference = (
+                off['next_tag'], off['reservoir'], off['injected_ledger'],
+            )
         else:
             ok = off['next_tag'] == reference[0] and ok
             ok = abs(off['reservoir'] - reference[1]) <= 2.0e-12 and ok
-            ok = abs(gas_mass_removed - reference[2]) <= 2.0e-12 and ok
+            ok = np.array_equal(off['injected_ledger'], reference[2]) and ok
+    ok = _FLOOR_REJECTION.get('returncode', 0) != 0 and ok
+    ok = _FLOOR_REJECTION.get('saw_floor_rejection', False) and ok
+    ok = _INTEGRATOR_REJECTION.get('returncode', 0) != 0 and ok
+    ok = _INTEGRATOR_REJECTION.get('saw_integrator_rejection', False) and ok
     return ok

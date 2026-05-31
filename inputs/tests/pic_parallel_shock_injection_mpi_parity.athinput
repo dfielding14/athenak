@@ -1,11 +1,12 @@
-# Bounded local regression for Section 5.4 irreversible shock-source accounting.
-# This is not a production shock deck or qualification artifact.
+# Bounded local regression for deterministic pic_parallel_shock injection parity.
+# This injection-only one-cycle carrier is not a production shock deck or
+# qualification artifact.
 
 <comment>
-problem   = pic_parallel_shock RK-stage injection budget regression
+problem   = pic_parallel_shock serial versus MPI2 deterministic injection parity
 
 <job>
-basename  = pic_parallel_shock_rk_stage_budget
+basename  = pic_parallel_shock_injection_mpi_parity
 
 <mesh>
 nghost    = 2
@@ -29,7 +30,7 @@ ox3_bc    = periodic
 
 <meshblock>
 nx1       = 8
-nx2       = 8
+nx2       = 4
 nx3       = 1
 
 <mesh_refinement>
@@ -60,30 +61,24 @@ general_rel = false
 <particles>
 particle_type                      = cosmic_ray
 ppc                                = 0.0
-pusher                             = boris_tsc
+pusher                             = drift
 pic_enable_2d3v                    = true
 nspecies                           = 1
 cr_distribution                    = random
-deposit_moments                    = true
+deposit_moments                    = false
 deposit_order                      = 1
 deposit_qscale                     = 1.0e-3
-couple_moments_to_mhd              = true
-couple_j_to_efield_representation  = cell_centered
-couple_moments_momentum_to_mhd     = true
-couple_moments_energy_to_mhd       = true
+couple_moments_to_mhd              = false
+couple_moments_momentum_to_mhd     = false
+couple_moments_energy_to_mhd       = false
 cr_vx0                             = 0.0
 cr_vy0                             = 0.0
 cr_vz0                             = 0.0
-pic_physical_mode                  = paper_mhd_pic
 pic_background_mode                = coupled
-pic_feedback_mode                  = coupled
-pic_cr_light_speed                 = 10000.0
-pic_cr_initial_state               = momentum
+pic_feedback_mode                  = test_particle
 pic_max_cell_cross                 = 2
-pic_theta_max                      = 0.3
 pic_sort_interval                  = 0
-pic_intermediate_arrays            = auto
-pic_random_seed                    = 54011
+pic_random_seed                    = 54013
 
 <species0>
 mass   = 1.0
@@ -100,32 +95,27 @@ ps_vinj_over_u0               = 3.16227766017
 ps_inject_half_width_cells    = 0.5
 ps_shock_speed_model          = ideal_surface
 ps_inject_t_start             = 0.0
-ps_inject_t_stop              = 1.0
+ps_inject_t_stop              = 0.0
 ps_remove_birth_time_before   = -1.0
 ps_enable_injection           = true
-ps_enable_gas_subtraction     = true
+ps_enable_gas_subtraction     = false
 ps_enable_curvature_amr       = false
-ps_rho_floor_frac             = 1.0e-6
-ps_p_floor_frac               = 1.0e-8
 ps_inject_species             = 0
-ps_inject_seed                = 54011
+ps_inject_seed                = 54013
 ps_seed_noise_amp             = 0.0
-ps_seed_noise_seed            = 54011
+ps_seed_noise_seed            = 54013
 ps_enable_frame_tracking      = false
 ps_frame_diag_dcycle          = 1
-ps_feedback_diag_dcycle       = 1
+ps_feedback_diag_dcycle       = 0
 
 <output1>
-file_type   = bin
-variable    = mhd_u
-id          = mhd_u
+file_type   = pvtk
+variable    = prtcl_all
+id          = prtcl_all
 dcycle      = 1
-ghost_zones = false
 
 <output2>
-file_type   = hst
-dcycle      = 1
-
-<output3>
-file_type   = rst
-dcycle      = 1
+file_type             = rst
+id                    = rst
+dcycle                = 1
+single_file_per_rank  = false

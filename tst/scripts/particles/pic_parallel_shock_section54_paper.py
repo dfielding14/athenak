@@ -6,6 +6,7 @@ import argparse
 import hashlib
 import json
 import logging
+import math
 from pathlib import Path
 
 logger = logging.getLogger("athena" + __name__[7:])
@@ -18,6 +19,7 @@ _INPUT_DECK = (
     / "pic_parallel_shock_section54_paper.athinput"
 )
 _PGEN_SOURCE = _REPO_ROOT / "src" / "pgen" / "tests" / "pic_parallel_shock.cpp"
+_PUSHER_SOURCE = _REPO_ROOT / "src" / "particles" / "particles_pushers.cpp"
 _RESULTS = {}
 
 _EXPECTED_VALUES = {
@@ -32,16 +34,21 @@ _EXPECTED_VALUES = {
     ("mesh", "ix2_bc"): "periodic",
     ("mesh", "ox2_bc"): "periodic",
     ("mesh", "nx3"): "1",
+    ("mesh", "x3min"): "0.0",
+    ("mesh", "x3max"): "1.0",
     ("meshblock", "nx1"): "20",
     ("meshblock", "nx2"): "20",
+    ("meshblock", "nx3"): "1",
     ("mesh_refinement", "refinement"): "adaptive",
     ("mesh_refinement", "num_levels"): "3",
     ("time", "tlim"): "1200.0",
     ("mhd", "eos"): "ideal",
     ("mhd", "gamma"): "1.66666666667",
     ("particles", "particle_type"): "cosmic_ray",
+    ("particles", "ppc"): "0.0",
     ("particles", "pusher"): "boris_tsc",
     ("particles", "pic_enable_2d3v"): "true",
+    ("particles", "nspecies"): "1",
     ("particles", "deposit_moments"): "true",
     ("particles", "deposit_qscale"): "9.0e-4",
     ("particles", "couple_moments_to_mhd"): "true",
@@ -74,6 +81,7 @@ _EXPECTED_VALUES = {
     ("problem", "ps_enable_curvature_amr"): "true",
     ("problem", "ps_refine_curv"): "1.0",
     ("problem", "ps_derefine_curv"): "0.1",
+    ("problem", "ps_inject_species"): "0",
     ("problem", "ps_inject_seed"): "23050101",
     ("problem", "ps_enable_frame_tracking"): "false",
     ("output1", "file_type"): "bin",
@@ -94,12 +102,13 @@ _EXPECTED_VALUES = {
     ("output4", "dt"): "100.0",
     ("output5", "file_type"): "rst",
     ("output5", "dt"): "100.0",
+    ("species0", "mass"): "1.0",
+    ("species0", "charge"): "1.0",
 }
 
 _OPEN_ITEMS = [
     "executed_shock_surface_injection_distribution_audit",
-    "gas_pressure_and_unit_normalization_audit",
-    "downstream_40_640_ppc_macro_mass_calibration",
+    "gas_pressure_thermodynamic_normalization_audit",
     "frontier_load_balance_cost_tuning",
     "snapshot_time_selection_tolerance",
     "downstream_spectrum_fit_energy_interval",
@@ -111,6 +120,40 @@ _OPEN_ITEMS = [
 
 class ContractError(ValueError):
     """Raised when the frozen Q-011 preparation contract is not satisfied."""
+
+
+def _require_close(label: str, measured: float, expected: float) -> None:
+    if not math.isfinite(measured) or not math.isfinite(expected):
+        raise ContractError(f"{label}: values must be finite")
+    if not math.isclose(measured, expected, rel_tol=1.0e-11, abs_tol=1.0e-12):
+        raise ContractError(f"{label}: expected {expected!r}, measured {measured!r}")
+
+
+def _parse_positive_float(label: str, value: str) -> float:
+    measured = _parse_finite_float(label, value)
+    if measured <= 0.0:
+        raise ContractError(f"{label}: expected a positive finite number")
+    return measured
+
+
+def _parse_finite_float(label: str, value: str) -> float:
+    try:
+        measured = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ContractError(f"{label}: expected a finite number") from exc
+    if not math.isfinite(measured):
+        raise ContractError(f"{label}: expected a finite number")
+    return measured
+
+
+def _parse_positive_int(label: str, value: str) -> int:
+    try:
+        measured = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ContractError(f"{label}: expected a positive integer") from exc
+    if measured <= 0:
+        raise ContractError(f"{label}: expected a positive integer")
+    return measured
 
 
 def _sha256(path: Path) -> str:
@@ -157,28 +200,272 @@ def _require_exact_values(blocks: dict[str, dict[str, str]]) -> None:
 
 
 def _require_source_contract() -> None:
-    source = _PGEN_SOURCE.read_text(encoding="utf-8")
-    required_fragments = [
-        "enum class PSShockSpeedModel { finite_mach, ideal_surface };",
-        'pin->GetOrAddString(\n      "problem", "ps_shock_speed_model", "finite_mach")',
-        "IdealSurfaceShockSpeed(gamma, ps_u0)",
-        'pin->GetOrAddReal(\n      "problem", "ps_remove_birth_time_before", -1.0)',
-        "const Real sweep_speed = ps_u0 + ps_shock_speed;",
-        "xshock >= x1c - half_width && xshock < x1c + half_width",
-        "part.x1 = xshock;",
-        "RemoveExcludedEarlyInjectedParticles(pm);",
-        "const Real mu = 2.0*Uniform01(rng) - 1.0;",
-        "const Real phi = 2.0*M_PI*Uniform01(rng);",
-    ]
-    missing = [fragment for fragment in required_fragments if fragment not in source]
+    required_fragments = {
+        _PGEN_SOURCE: [
+            "enum class PSShockSpeedModel { finite_mach, ideal_surface };",
+            'pin->GetOrAddString(\n      "problem", "ps_shock_speed_model", "finite_mach")',
+            "IdealSurfaceShockSpeed(gamma, ps_u0)",
+            'pin->GetOrAddReal(\n      "problem", "ps_remove_birth_time_before", -1.0)',
+            "const Real sweep_speed = ps_u0 + ps_shock_speed;",
+            "const Real swept_mass = ps_eta*ps_rho0*sweep_speed*pm->dt*global_running_area;",
+            "ps_particle_q_over_m = ps_particle_charge/ps_particle_mass;",
+            "ps_particle_macro_mass = qscale*ps_particle_mass;",
+            "h_pr_new(IPM, n) = ps_particle_q_over_m;",
+            "h_pr_new(IPWT, n) = 1.0;",
+            "xshock >= x1c - half_width && xshock < x1c + half_width",
+            "part.x1 = xshock;",
+            "RemoveExcludedEarlyInjectedParticles(pm);",
+            "const Real pinj = ps_vinj_over_u0*ps_u0;",
+            "const Real vinj = VelocityMagnitudeFromMomentumMagnitude(ppart, pinj);",
+            "const Real mu = 2.0*TaggedUniform01(tag, 1) - 1.0;",
+            "const Real phi = 2.0*M_PI*TaggedUniform01(tag, 2);",
+            "BoostRelativeVelocityFromSurface(ppart, surface_vx, vinj*dirx, vinj*diry,",
+        ],
+        _PUSHER_SOURCE: [
+            "Real q_over_m = pr(IPM, p);",
+            "Real qdt_2m = q_over_m*dt_half;",
+            "Real tx = qdt_2m*Bx*inv_gamma_minus;",
+        ],
+    }
+    missing = []
+    for path, fragments in required_fragments.items():
+        source = path.read_text(encoding="utf-8")
+        missing.extend(
+            f"{path.relative_to(_REPO_ROOT)}: {fragment}"
+            for fragment in fragments
+            if fragment not in source
+        )
     if missing:
         raise ContractError(
-            "Q-011 source-local shock-surface contract mismatch:\n"
+            "Q-011 source-local shock normalization contract mismatch:\n"
             + "\n".join(missing)
         )
 
 
-def _shock_surface_derivation(blocks: dict[str, dict[str, str]]) -> dict[str, object]:
+def derive_normalization_and_macro_particle_calibration(
+    blocks: dict[str, dict[str, str]],
+) -> dict[str, object]:
+    """Derive the paper-unit mapping and ideal downstream ppc calibration."""
+    rho0 = _parse_positive_float("problem/ps_rho0", blocks["problem"]["ps_rho0"])
+    b0 = _parse_positive_float("problem/ps_b0", blocks["problem"]["ps_b0"])
+    u0 = _parse_positive_float("problem/ps_u0", blocks["problem"]["ps_u0"])
+    eta = _parse_positive_float("problem/ps_eta", blocks["problem"]["ps_eta"])
+    gamma = _parse_positive_float("mhd/gamma", blocks["mhd"]["gamma"])
+    if gamma <= 1.0:
+        raise ContractError("mhd/gamma: expected a value greater than one")
+    numerical_light_speed = _parse_positive_float(
+        "particles/pic_cr_light_speed",
+        blocks["particles"]["pic_cr_light_speed"],
+    )
+    qscale = _parse_positive_float(
+        "particles/deposit_qscale",
+        blocks["particles"]["deposit_qscale"],
+    )
+    species_mass = _parse_positive_float(
+        "species0/mass",
+        blocks["species0"]["mass"],
+    )
+    species_charge = _parse_positive_float(
+        "species0/charge",
+        blocks["species0"]["charge"],
+    )
+
+    # Sun & Bai write Omega0 = B0*q/(m*c). AthenaK stores species charge/mass
+    # directly in IPM and the Boris rotation uses IPM*B without another C
+    # division. Under this deck convention, species charge/mass is therefore
+    # the normalized paper q/(m*c), while pic_cr_light_speed is the separate
+    # artificial numerical C used for relativistic kinematics. Dividing IPM by
+    # pic_cr_light_speed again would double-apply the c normalization.
+    normalized_q_over_mc = species_charge / species_mass
+    alfven_speed_u_a0 = b0 / math.sqrt(rho0)
+    cyclotron_frequency_omega0 = b0 * normalized_q_over_mc
+    ion_inertial_length = 1.0 / (normalized_q_over_mc * math.sqrt(rho0))
+    ion_inertial_length_via_u_a0_over_omega0 = (
+        alfven_speed_u_a0 / cyclotron_frequency_omega0
+    )
+    rejected_raw_q_over_m_divided_by_artificial_c_omega0 = (
+        species_charge * b0 / (species_mass * numerical_light_speed)
+    )
+    numerical_light_speed_over_u_a0 = numerical_light_speed / alfven_speed_u_a0
+
+    nx1 = _parse_positive_int("mesh/nx1", blocks["mesh"]["nx1"])
+    nx2 = _parse_positive_int("mesh/nx2", blocks["mesh"]["nx2"])
+    nx3 = _parse_positive_int("mesh/nx3", blocks["mesh"]["nx3"])
+    levels = _parse_positive_int(
+        "mesh_refinement/num_levels",
+        blocks["mesh_refinement"]["num_levels"],
+    )
+    root_dx = (
+        _parse_finite_float("mesh/x1max", blocks["mesh"]["x1max"])
+        - _parse_finite_float("mesh/x1min", blocks["mesh"]["x1min"])
+    ) / nx1
+    root_dy = (
+        _parse_finite_float("mesh/x2max", blocks["mesh"]["x2max"])
+        - _parse_finite_float("mesh/x2min", blocks["mesh"]["x2min"])
+    ) / nx2
+    collapsed_dz = (
+        _parse_finite_float("mesh/x3max", blocks["mesh"]["x3max"])
+        - _parse_finite_float("mesh/x3min", blocks["mesh"]["x3min"])
+    ) / nx3
+    for label, measured in (
+        ("root dx", root_dx),
+        ("root dy", root_dy),
+        ("collapsed dz", collapsed_dz),
+    ):
+        if not math.isfinite(measured) or measured <= 0.0:
+            raise ContractError(f"{label}: expected a positive finite cell size")
+
+    cell_sizes = []
+    for level in range(levels):
+        refinement = 2**level
+        dx = root_dx / refinement
+        dy = root_dy / refinement
+        cell_sizes.append(
+            {
+                "level": level,
+                "dx_c_over_omega_pi": dx / ion_inertial_length,
+                "dy_c_over_omega_pi": dy / ion_inertial_length,
+                "collapsed_dz_c_over_omega_pi": collapsed_dz / ion_inertial_length,
+                "effective_2d_cell_volume": dx * dy * collapsed_dz,
+            }
+        )
+
+    ideal_shock_speed = 0.5 * (gamma - 1.0) * u0
+    swept_speed = u0 + ideal_shock_speed
+    macro_particle_mass = qscale * species_mass
+    downstream_compression = swept_speed / ideal_shock_speed
+    downstream_macro_particle_density = (
+        eta * rho0 * downstream_compression / macro_particle_mass
+    )
+    expected_downstream_ppc = [
+        downstream_macro_particle_density * item["effective_2d_cell_volume"]
+        for item in cell_sizes
+    ]
+    macro_mass_from_coarse_ppc = (
+        eta
+        * rho0
+        * downstream_compression
+        * cell_sizes[0]["effective_2d_cell_volume"]
+        / 640.0
+    )
+    macro_mass_from_fine_ppc = (
+        eta
+        * rho0
+        * downstream_compression
+        * cell_sizes[-1]["effective_2d_cell_volume"]
+        / 40.0
+    )
+
+    _require_close("U_A0", alfven_speed_u_a0, 1.0)
+    _require_close("normalized q/(m*c)", normalized_q_over_mc, 1.0)
+    _require_close("Omega0", cyclotron_frequency_omega0, 1.0)
+    _require_close(
+        "c/omega_pi identity",
+        ion_inertial_length,
+        ion_inertial_length_via_u_a0_over_omega0,
+    )
+    _require_close("c/omega_pi", ion_inertial_length, 1.0)
+    _require_close("C/U_A0", numerical_light_speed_over_u_a0, 10000.0)
+    if len(cell_sizes) != 3:
+        raise ContractError("AMR ladder: expected exactly three levels")
+    for level, (item, expected_size) in enumerate(
+        zip(cell_sizes, (12.0, 6.0, 3.0))
+    ):
+        _require_close(f"level {level} dx", item["dx_c_over_omega_pi"], expected_size)
+        _require_close(f"level {level} dy", item["dy_c_over_omega_pi"], expected_size)
+    _require_close("collapsed dz", collapsed_dz, 1.0)
+    _require_close("ideal shock speed/U_A0", ideal_shock_speed / alfven_speed_u_a0, 10.0)
+    _require_close("swept speed/U_A0", swept_speed / alfven_speed_u_a0, 40.0)
+    _require_close("qscale to macro mass", macro_particle_mass, 9.0e-4)
+    _require_close("ideal downstream compression", downstream_compression, 4.0)
+    for level, (measured, expected) in enumerate(
+        zip(expected_downstream_ppc, (640.0, 160.0, 40.0))
+    ):
+        _require_close(f"level {level} downstream ppc", measured, expected)
+    _require_close(
+        "coarse reverse-calibrated macro mass",
+        macro_mass_from_coarse_ppc,
+        macro_particle_mass,
+    )
+    _require_close(
+        "fine reverse-calibrated macro mass",
+        macro_mass_from_fine_ppc,
+        macro_particle_mass,
+    )
+
+    return {
+        "convention_ambiguity": {
+            "status": "resolved_for_the_frozen_athenak_deck",
+            "paper_formula": "Omega0 = B0 * q / (m * c)",
+            "athenak_deck_mapping": (
+                "species charge/mass is the normalized q/(m*c) coefficient "
+                "stored in IPM; pic_cr_light_speed is the separate artificial C"
+            ),
+            "applicable_formula": "Omega0 = B0 * (species_charge / species_mass)",
+            "rejected_double_division_formula": (
+                "Omega0 = B0 * species_charge / "
+                "(species_mass * pic_cr_light_speed)"
+            ),
+            "rejected_double_division_omega0": (
+                rejected_raw_q_over_m_divided_by_artificial_c_omega0
+            ),
+        },
+        "formulas": {
+            "alfven_speed_u_a0": "B0 / sqrt(rho0)",
+            "cyclotron_frequency_omega0": "B0 * normalized_q_over_mc",
+            "ion_inertial_length_c_over_omega_pi": (
+                "1 / (normalized_q_over_mc * sqrt(rho0)) = U_A0 / Omega0"
+            ),
+            "numerical_light_speed_over_u_a0": "pic_cr_light_speed / U_A0",
+            "ideal_shock_speed": "(gamma - 1) * u0 / 2",
+            "upstream_relative_swept_speed": "u0 + ideal_shock_speed",
+            "macro_particle_mass": "deposit_qscale * species_mass * IPWT",
+            "ideal_downstream_ppc": (
+                "eta * rho0 * swept_speed / ideal_shock_speed "
+                "* effective_2d_cell_volume / macro_particle_mass"
+            ),
+        },
+        "alfven_speed_u_a0": alfven_speed_u_a0,
+        "normalized_q_over_mc": normalized_q_over_mc,
+        "cyclotron_frequency_omega0": cyclotron_frequency_omega0,
+        "ion_inertial_length_c_over_omega_pi": ion_inertial_length,
+        "ion_inertial_length_via_u_a0_over_omega0": (
+            ion_inertial_length_via_u_a0_over_omega0
+        ),
+        "numerical_light_speed_c": numerical_light_speed,
+        "numerical_light_speed_over_u_a0": numerical_light_speed_over_u_a0,
+        "cell_sizes": cell_sizes,
+        "ideal_shock_speed_over_u_a0": ideal_shock_speed / alfven_speed_u_a0,
+        "upstream_relative_swept_speed_over_u_a0": swept_speed / alfven_speed_u_a0,
+        "macro_particle": {
+            "formula": "deposit_qscale * species_mass * IPWT",
+            "injected_ipwt": 1.0,
+            "deposit_qscale": qscale,
+            "species_mass": species_mass,
+            "mass": macro_particle_mass,
+        },
+        "ideal_downstream_calibration": {
+            "scope": (
+                "ideal mean immediately-downstream injection calibration; "
+                "not a campaign measurement"
+            ),
+            "effective_dimension": "2d_with_collapsed_x3_thickness",
+            "compression_ratio": downstream_compression,
+            "macro_particle_density": downstream_macro_particle_density,
+            "target_ppc_by_level": [640.0, 160.0, 40.0],
+            "expected_ppc_by_level": expected_downstream_ppc,
+            "expected_coarse_ppc": expected_downstream_ppc[0],
+            "expected_fine_ppc": expected_downstream_ppc[-1],
+            "macro_mass_from_coarse_ppc": macro_mass_from_coarse_ppc,
+            "macro_mass_from_fine_ppc": macro_mass_from_fine_ppc,
+        },
+    }
+
+
+def _shock_surface_derivation(
+    blocks: dict[str, dict[str, str]],
+    calibration: dict[str, object],
+) -> dict[str, object]:
     gamma = float(blocks["mhd"]["gamma"])
     u0 = float(blocks["problem"]["ps_u0"])
     rho0 = float(blocks["problem"]["ps_rho0"])
@@ -192,15 +479,21 @@ def _shock_surface_derivation(blocks: dict[str, dict[str, str]]) -> dict[str, ob
     )
     finite_mach_speed = u0 / (compression_ratio - 1.0)
     upstream_relative_sweep_speed = u0 + ideal_surface_speed
+    alfven_speed = calibration["alfven_speed_u_a0"]
+    ion_inertial_length = calibration["ion_inertial_length_c_over_omega_pi"]
     return {
         "selected_model": "ideal_surface",
         "paper_equation": "u_sh_prime = (Gamma - 1) * u0 / 2",
-        "ideal_surface_speed_over_ua0": ideal_surface_speed,
-        "finite_mach_engineering_option_speed_over_ua0": finite_mach_speed,
-        "upstream_relative_sweep_speed_over_ua0": upstream_relative_sweep_speed,
+        "ideal_surface_speed_over_ua0": ideal_surface_speed / alfven_speed,
+        "finite_mach_engineering_option_speed_over_ua0": (
+            finite_mach_speed / alfven_speed
+        ),
+        "upstream_relative_sweep_speed_over_ua0": (
+            upstream_relative_sweep_speed / alfven_speed
+        ),
         "ideal_surface_positions_c_over_omega_pi": {
-            "t500": ideal_surface_speed * 500.0,
-            "t1200": ideal_surface_speed * 1200.0,
+            "t500": ideal_surface_speed * 500.0 / ion_inertial_length,
+            "t1200": ideal_surface_speed * 1200.0 / ion_inertial_length,
         },
         "injection_distribution": "monoenergetic_full_sphere_isotropic_relative_to_ideal_surface",
         "shock_surface_carrier_selection": "single_half_open_cell_with_surface_x1",
@@ -213,41 +506,33 @@ def validate_deck(path: Path = _INPUT_DECK) -> dict[str, object]:
     blocks = parse_athinput(path)
     _require_exact_values(blocks)
     _require_source_contract()
-    dx_root = (
-        (float(blocks["mesh"]["x1max"]) - float(blocks["mesh"]["x1min"]))
-        / float(blocks["mesh"]["nx1"])
-    )
-    dy_root = (
-        (float(blocks["mesh"]["x2max"]) - float(blocks["mesh"]["x2min"]))
-        / float(blocks["mesh"]["nx2"])
-    )
-    levels = int(blocks["mesh_refinement"]["num_levels"])
-    cell_sizes = [dx_root / (2**level) for level in range(levels)]
-    ua0 = float(blocks["problem"]["ps_b0"]) / float(
-        blocks["problem"]["ps_rho0"]
-    ) ** 0.5
+    calibration = derive_normalization_and_macro_particle_calibration(blocks)
+    cell_sizes = [
+        item["dx_c_over_omega_pi"] for item in calibration["cell_sizes"]
+    ]
+    ua0 = calibration["alfven_speed_u_a0"]
     mach_alfven = float(blocks["problem"]["ps_u0"]) / ua0
-    light_speed_over_ua0 = float(blocks["particles"]["pic_cr_light_speed"]) / ua0
-    if dx_root != 12.0 or dy_root != 12.0 or cell_sizes != [12.0, 6.0, 3.0]:
-        raise ContractError("Q-011 root/fine cell-size contract mismatch")
+    light_speed_over_ua0 = calibration["numerical_light_speed_over_u_a0"]
     if mach_alfven != 30.0 or light_speed_over_ua0 != 10000.0:
         raise ContractError("Q-011 dimensionless normalization contract mismatch")
     return {
         "deck": str(path.relative_to(_REPO_ROOT)),
         "deck_sha256": _sha256(path),
-        "root_cell_size_c_over_omega_pi": dx_root,
+        "root_cell_size_c_over_omega_pi": cell_sizes[0],
         "amr_cell_sizes_c_over_omega_pi": cell_sizes,
         "mach_alfven": mach_alfven,
         "light_speed_over_ua0": light_speed_over_ua0,
-        "shock_surface_derivation": _shock_surface_derivation(blocks),
+        "normalization_and_macro_particle_calibration": calibration,
+        "shock_surface_derivation": _shock_surface_derivation(blocks, calibration),
         "pgen_source_sha256": _sha256(_PGEN_SOURCE),
+        "particles_pusher_source_sha256": _sha256(_PUSHER_SOURCE),
     }
 
 
 def build_preparation_contract() -> dict[str, object]:
     """Return the frozen contract without inspecting campaign output."""
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "gate": "Q-011",
         "claim_id": "CLAIM-PAPER-SHOCK-001",
         "qualification_effect": "source_controlled_preparation_only",
@@ -263,6 +548,7 @@ def build_preparation_contract() -> dict[str, object]:
             "light_speed_over_ua0": 10000.0,
             "exclude_birth_time_before_omega0_inverse": 45.0,
             "amr_cell_sizes_c_over_omega_pi": [12.0, 6.0, 3.0],
+            "expected_downstream_ppc": {"coarse": 640.0, "fine": 40.0},
             "amr_refine_curvature_threshold": 1.0,
             "amr_derefine_curvature_threshold": 0.1,
             "snapshot_times_omega0_inverse": [500.0, 1200.0],
