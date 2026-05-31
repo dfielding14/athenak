@@ -364,9 +364,9 @@ def extract_runtime_artifact(
         error_type=AuditError,
         label="Q-011 pinned executable tree",
     ) as (executable_tree, executable_snapshot):
-        staged_path = runtime_snapshot / path.relative_to(runtime_root)
-        staged_executable = executable_snapshot / executable_path.relative_to(
-            executable_tree_root
+        staged_path = runtime_snapshot.member_path(path.relative_to(runtime_root))
+        staged_executable = executable_snapshot.member_path(
+            executable_path.relative_to(executable_tree_root)
         )
         executable_sha256 = _sha256(staged_executable)
         _require(

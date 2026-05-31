@@ -25,6 +25,7 @@ from matplotlib.colors import LogNorm
 from matplotlib.patches import FancyArrowPatch, FancyBboxPatch
 
 from immutable_orion_tree import staged_verified_frozen_tree
+from immutable_orion_tree import staged_verified_legacy_read_only_tree
 
 
 REPO = Path(__file__).resolve().parents[2]
@@ -121,37 +122,6 @@ def regular_file_bytes(path: Path, expected_sha256: str | None = None) -> bytes:
         os.close(fd)
 
 
-def verify_legacy_read_only_tree(root: Path, expected_count: int, expected_sha256: str) -> dict[str, Any]:
-    root = root.resolve(strict=True)
-    authorized = ORION.resolve(strict=True)
-    if not root.is_relative_to(authorized):
-        raise ValueError(f"legacy report input escaped the Orion root: {root}")
-    writable_entries = []
-    lines = []
-    for path in [root, *sorted(root.rglob("*"))]:
-        status = path.lstat()
-        relative = path.relative_to(root)
-        if stat.S_ISLNK(status.st_mode):
-            raise ValueError(f"legacy report input contains a symbolic link: {path}")
-        if status.st_mode & 0o222:
-            writable_entries.append(str(relative))
-        if stat.S_ISREG(status.st_mode):
-            lines.append(f"{regular_file_sha256(path)}  {relative.as_posix()}\n")
-    if writable_entries:
-        raise ValueError(f"legacy report input contains writable entries: {writable_entries}")
-    if len(lines) != expected_count:
-        raise ValueError(f"legacy report input file count drifted: {len(lines)} != {expected_count}")
-    inventory_sha256 = hashlib.sha256("".join(lines).encode("utf-8")).hexdigest()
-    if inventory_sha256 != expected_sha256:
-        raise ValueError("legacy report input aggregate SHA-256 drifted")
-    return {
-        "root": str(root),
-        "file_count": len(lines),
-        "inventory_sha256": inventory_sha256,
-        "recursively_read_only": True,
-    }
-
-
 def verify_report_inputs() -> tuple[list[dict[str, Any]], float, dict[str, Any], dict[str, Any]]:
     payload_members = {
         "q006": "reports/probe_summary.json",
@@ -159,6 +129,7 @@ def verify_report_inputs() -> tuple[list[dict[str, Any]], float, dict[str, Any],
         "q011": "runtime_audit_report.json",
     }
     tree_receipts = {}
+    verified_tree_sizes = {}
     frozen_payloads = {}
     for name, (root, expected) in EXPECTED_INVENTORIES.items():
         with staged_verified_frozen_tree(
@@ -166,29 +137,37 @@ def verify_report_inputs() -> tuple[list[dict[str, Any]], float, dict[str, Any],
             expected,
             authorized_root=ORION,
             label=f"status-update {name}",
-        ) as (receipt, staged_root):
+        ) as (receipt, staged_tree):
             tree_receipts[name] = receipt
+            verified_tree_sizes[name] = staged_tree.total_regular_size()
             if name in payload_members:
-                frozen_payloads[name] = load_json(staged_root / payload_members[name])
+                frozen_payloads[name] = load_json(
+                    staged_tree.member_path(payload_members[name])
+                )
     q007_analysis_payload = regular_file_bytes(
         Q007_ANALYSIS,
         EXPECTED_Q007_ANALYSIS_SHA256,
     )
     measured_q007_analysis = hashlib.sha256(q007_analysis_payload).hexdigest()
-    q023_bell_receipt = verify_legacy_read_only_tree(
+    with staged_verified_legacy_read_only_tree(
         Q023_BELL,
         EXPECTED_Q023_BELL_FILE_COUNT,
         EXPECTED_Q023_BELL_INVENTORY_SHA256,
-    )
-    q023_initial_payload = regular_file_bytes(
-        Q023_BELL_INITIAL,
-        EXPECTED_Q023_BELL_INITIAL_SHA256,
-    )
+        authorized_root=ORION,
+        label="status-update legacy q023 Bell smoke",
+    ) as (q023_bell_receipt, q023_bell_snapshot):
+        verified_tree_sizes["q023_bell"] = q023_bell_snapshot.total_regular_size()
+        q023_initial_payload = q023_bell_snapshot.member_path(
+            Q023_BELL_INITIAL.relative_to(Q023_BELL)
+        ).read_bytes()
+        q023_continued_payload = q023_bell_snapshot.member_path(
+            Q023_BELL_CONTINUED.relative_to(Q023_BELL)
+        ).read_bytes()
+    if hashlib.sha256(q023_initial_payload).hexdigest() != EXPECTED_Q023_BELL_INITIAL_SHA256:
+        raise ValueError("status-update initial Q023 Bell payload SHA-256 drifted")
     measured_q023_initial = hashlib.sha256(q023_initial_payload).hexdigest()
-    q023_continued_payload = regular_file_bytes(
-        Q023_BELL_CONTINUED,
-        EXPECTED_Q023_BELL_CONTINUED_SHA256,
-    )
+    if hashlib.sha256(q023_continued_payload).hexdigest() != EXPECTED_Q023_BELL_CONTINUED_SHA256:
+        raise ValueError("status-update continued Q023 Bell payload SHA-256 drifted")
     measured_q023_continued = hashlib.sha256(q023_continued_payload).hexdigest()
 
     promotion = load_json(ACTIVE_PROMOTION)
@@ -236,6 +215,7 @@ def verify_report_inputs() -> tuple[list[dict[str, Any]], float, dict[str, Any],
         "ledger_tail_sequence_number": ledger_tail["sequence_number"],
         "ledger_tail_sha256": ledger_tail["event_sha256"],
         "node_hour_cap": node_hour_cap,
+        "verified_tree_sizes_bytes": verified_tree_sizes,
     }, {
         **frozen_payloads,
         "q007_analysis": json.loads(q007_analysis_payload),
@@ -248,10 +228,6 @@ def save(fig: plt.Figure, name: str) -> None:
     fig.tight_layout()
     fig.savefig(OUT / name, dpi=180, bbox_inches="tight")
     plt.close(fig)
-
-
-def tree_size(path: Path) -> int:
-    return sum(item.stat().st_size for item in path.rglob("*") if item.is_file())
 
 
 def box(
@@ -754,8 +730,7 @@ def ledger_plot(rows: list[dict[str, Any]], node_hour_cap: float) -> dict[str, A
     }
 
 
-def artifact_sizes(paths: dict[str, Path]) -> dict[str, int]:
-    sizes = {label: tree_size(path) for label, path in paths.items()}
+def artifact_sizes(sizes: dict[str, int]) -> dict[str, int]:
     labels = list(sizes)
     mib = [sizes[label] / (1024**2) for label in labels]
     fig, ax = plt.subplots(figsize=(8.2, 4.2))
@@ -770,12 +745,12 @@ def artifact_sizes(paths: dict[str, Path]) -> dict[str, int]:
 
 def validation_summary() -> dict[str, Any]:
     labels = ["publication\nsuite", "Frontier\ncontrol plane", "hardening\nfocus", "JSON parse", "Python AST"]
-    counts = [710, 359, 90, 170, 88]
+    counts = [711, 359, 91, 170, 88]
     fig, ax = plt.subplots(figsize=(8, 4))
     bars = ax.bar(labels, counts, color=[BLUE, GREEN, ORANGE, PURPLE, CYAN])
     ax.bar_label(bars)
     ax.set_ylabel("checks or test cases passed")
-    ax.set_title("Verified local checks in the final tranche")
+    ax.set_title("Current pre-freeze hardening tranche")
     ax.text(
         0.99,
         0.02,
@@ -827,12 +802,12 @@ def main() -> None:
         "ledger": ledger_plot(rows, node_hour_cap),
         "artifact_sizes_bytes": artifact_sizes(
             {
-                "clean pin": PIN,
-                "Q006": Q006,
-                "Q007": Q007,
-                "Q008": Q008,
-                "Q011": Q011,
-                "Q011 successor": Q011_SUCCESSOR,
+                "clean pin": verification["verified_tree_sizes_bytes"]["pin"],
+                "Q006": verification["verified_tree_sizes_bytes"]["q006"],
+                "Q007": verification["verified_tree_sizes_bytes"]["q007"],
+                "Q008": verification["verified_tree_sizes_bytes"]["q008"],
+                "Q011": verification["verified_tree_sizes_bytes"]["q011"],
+                "Q011 successor": verification["verified_tree_sizes_bytes"]["q011 successor"],
             }
         ),
     }

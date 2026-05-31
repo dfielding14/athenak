@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import fcntl
 import hashlib
 import json
 import os
@@ -26,10 +27,73 @@ INVENTORY_ALGORITHM = (
 _SHA256_PATTERN = re.compile(r"[0-9a-f]{64}")
 _WRITE_BITS = stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH
 _RESERVED_METADATA = {INVENTORY_NAME, FREEZE_RECEIPT_NAME}
+_MEMFD_SEALS = (
+    fcntl.F_SEAL_WRITE
+    | fcntl.F_SEAL_GROW
+    | fcntl.F_SEAL_SHRINK
+    | fcntl.F_SEAL_SEAL
+)
 
 
 def _raise(error_type: type[ValueError], label: str, message: str) -> None:
     raise error_type(f"{label}: {message}")
+
+
+def _is_sealed_memfd_reference(path: Path) -> bool:
+    """Return whether one procfs fd path names a fully sealed regular memfd."""
+    if path.parent != Path("/proc/self/fd") or not path.name.isdigit():
+        return False
+    try:
+        fd = os.open(path, os.O_RDONLY)
+    except OSError:
+        return False
+    try:
+        status = os.fstat(fd)
+        return (
+            stat.S_ISREG(status.st_mode)
+            and status.st_nlink == 0
+            and fcntl.fcntl(fd, fcntl.F_GET_SEALS) & _MEMFD_SEALS == _MEMFD_SEALS
+        )
+    except OSError:
+        return False
+    finally:
+        os.close(fd)
+
+
+def is_sealed_snapshot_member(path: str | Path) -> bool:
+    """Expose the sealed-member check to retained-artifact analyzers."""
+    return _is_sealed_memfd_reference(Path(path))
+
+
+def _open_self_contained_regular(path: Path, *, error_type: type[ValueError], label: str) -> int:
+    """Open a canonical retained file or one fully sealed snapshot memfd."""
+    if path.parent == Path("/proc/self/fd") and path.name.isdigit():
+        try:
+            fd = os.open(path, os.O_RDONLY)
+        except OSError as error:
+            _raise(error_type, label, f"cannot open sealed snapshot member {path}: {error}")
+        try:
+            status = os.fstat(fd)
+            if (
+                stat.S_ISREG(status.st_mode)
+                and status.st_nlink == 0
+                and fcntl.fcntl(fd, fcntl.F_GET_SEALS) & _MEMFD_SEALS == _MEMFD_SEALS
+            ):
+                return fd
+        except OSError as error:
+            os.close(fd)
+            _raise(error_type, label, f"cannot inspect sealed snapshot member {path}: {error}")
+        os.close(fd)
+        _raise(error_type, label, f"snapshot member is not a fully sealed regular memfd: {path}")
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    except OSError as error:
+        _raise(error_type, label, f"cannot open retained regular file {path}: {error}")
+    status = os.fstat(fd)
+    if not stat.S_ISREG(status.st_mode) or status.st_nlink != 1:
+        os.close(fd)
+        _raise(error_type, label, f"retained regular file is unsafe: {path}")
+    return fd
 
 
 def _sha256_regular(
@@ -39,15 +103,12 @@ def _sha256_regular(
     label: str,
 ) -> str:
     """Hash one self-contained regular file without following its final link."""
-    try:
-        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
-    except OSError as error:
-        _raise(error_type, label, f"cannot open retained regular file {path}: {error}")
+    fd = _open_self_contained_regular(path, error_type=error_type, label=label)
     try:
         mode = os.fstat(fd).st_mode
         if not stat.S_ISREG(mode):
             _raise(error_type, label, f"retained entry is not a regular file: {path}")
-        if os.fstat(fd).st_nlink != 1:
+        if os.fstat(fd).st_nlink not in (0, 1):
             _raise(error_type, label, f"retained regular file must have one link: {path}")
         digest = hashlib.sha256()
         while chunk := os.read(fd, 1024 * 1024):
@@ -64,13 +125,10 @@ def _read_regular_text(
     label: str,
 ) -> str:
     """Read one self-contained regular UTF-8 file without following its final link."""
-    try:
-        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
-    except OSError as error:
-        _raise(error_type, label, f"cannot open retained metadata file {path}: {error}")
+    fd = _open_self_contained_regular(path, error_type=error_type, label=label)
     try:
         status = os.fstat(fd)
-        if not stat.S_ISREG(status.st_mode) or status.st_nlink != 1:
+        if not stat.S_ISREG(status.st_mode) or status.st_nlink not in (0, 1):
             _raise(error_type, label, f"retained metadata file is unsafe: {path}")
         payload = bytearray()
         while chunk := os.read(fd, 1024 * 1024):
@@ -186,10 +244,7 @@ def validate_executable_elf(
     measured_sha256 = _sha256_regular(path, error_type=error_type, label=label)
     if measured_sha256 != expected_sha256:
         _raise(error_type, label, "executable SHA-256 drifted")
-    try:
-        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
-    except OSError as error:
-        _raise(error_type, label, f"cannot open retained executable {path}: {error}")
+    fd = _open_self_contained_regular(path, error_type=error_type, label=label)
     try:
         mode = os.fstat(fd).st_mode
         if stat.S_IMODE(mode) & 0o111 != 0o111:
@@ -248,6 +303,7 @@ def validate_source_archive_dependencies(
 def validate_serial_host_build_evidence(
     pinned_root: str | Path,
     *,
+    file_resolver: Any | None = None,
     error_type: type[ValueError] = ValueError,
     label: str = "immutable-tree serial-host build evidence",
 ) -> dict[str, str | bool]:
@@ -255,7 +311,8 @@ def validate_serial_host_build_evidence(
     root = Path(pinned_root)
 
     def read(relative: str) -> str:
-        return _read_regular_text(root / relative, error_type=error_type, label=label)
+        path = root / relative if file_resolver is None else Path(file_resolver(relative))
+        return _read_regular_text(path, error_type=error_type, label=label)
 
     try:
         profile = json.loads(read("build/build_profile.json"))
@@ -380,6 +437,163 @@ class _AnchoredTreeSnapshot:
 
     def by_relative_path(self) -> dict[str, _AnchoredEntry]:
         return {entry.relative: entry for entry in self.entries}
+
+
+class VerifiedFrozenTree:
+    """Expose verified regular payloads only through lazily materialized sealed memfds."""
+
+    def __init__(
+        self,
+        staged_root: Path,
+        *,
+        regular_sha256: dict[str, str],
+        regular_sizes: dict[str, int],
+        directories: frozenset[str],
+        loader: Any,
+    ) -> None:
+        self.staged_root = staged_root
+        self._regular_sha256 = regular_sha256
+        self._regular_sizes = regular_sizes
+        self._directories = directories
+        self._loader = loader
+        self._fds: dict[str, int] = {}
+
+    @staticmethod
+    def _relative_text(relative: str | Path) -> str:
+        candidate = PurePosixPath(relative)
+        text = candidate.as_posix()
+        if (
+            not text
+            or text == "."
+            or candidate.is_absolute()
+            or any(part in ("", ".", "..") for part in candidate.parts)
+        ):
+            raise ValueError(f"unsafe sealed snapshot member path: {relative!r}")
+        return text
+
+    def has_file(self, relative: str | Path) -> bool:
+        try:
+            text = self._relative_text(relative)
+        except ValueError:
+            return False
+        return text in self._regular_sha256
+
+    def has_directory(self, relative: str | Path = ".") -> bool:
+        """Return whether one topology-only snapshot directory exists."""
+        candidate = PurePosixPath(relative)
+        if candidate.as_posix() == ".":
+            return True
+        try:
+            text = self._relative_text(relative)
+        except ValueError:
+            return False
+        return text in self._directories
+
+    def member_path(self, relative: str | Path) -> Path:
+        """Return an immutable procfs handle for one verified regular member."""
+        text = self._relative_text(relative)
+        expected_sha256 = self._regular_sha256.get(text)
+        if expected_sha256 is None:
+            raise ValueError(f"sealed snapshot regular member is absent: {text}")
+        if text not in self._fds:
+            payload, mode = self._loader(text, expected_sha256)
+            fd = os.memfd_create(
+                f"athenak-pic-{Path(text).name}",
+                flags=os.MFD_CLOEXEC | os.MFD_ALLOW_SEALING,
+            )
+            try:
+                view = memoryview(payload)
+                while view:
+                    written = os.write(fd, view)
+                    if written <= 0:
+                        raise OSError("short write while materializing sealed snapshot member")
+                    view = view[written:]
+                os.fchmod(fd, stat.S_IMODE(mode) & ~_WRITE_BITS)
+                os.lseek(fd, 0, os.SEEK_SET)
+                fcntl.fcntl(fd, fcntl.F_ADD_SEALS, _MEMFD_SEALS)
+            except Exception:
+                os.close(fd)
+                raise
+            self._fds[text] = fd
+        return Path("/proc/self/fd") / str(self._fds[text])
+
+    def io_path(self, logical_root: Path, path: Path) -> Path:
+        """Route one logical or staged member to a sealed file or topology-only directory."""
+        try:
+            relative = path.relative_to(logical_root)
+        except ValueError:
+            try:
+                relative = path.relative_to(self.staged_root)
+            except ValueError:
+                return path
+        if relative == Path("."):
+            return self.staged_root
+        self._relative_text(relative)
+        if self.has_file(relative):
+            return self.member_path(relative)
+        return self.staged_root / relative
+
+    def logical_path_for_io(self, logical_root: Path, path: str | Path) -> Path | None:
+        """Map a staged-directory or sealed-fd label back to its retained logical label."""
+        candidate = Path(path)
+        try:
+            relative = candidate.relative_to(self.staged_root)
+        except ValueError:
+            pass
+        else:
+            if relative == Path("."):
+                return logical_root
+            try:
+                self._relative_text(relative)
+            except ValueError:
+                return None
+            return logical_root / relative
+        for relative, fd in self._fds.items():
+            if candidate == Path("/proc/self/fd") / str(fd):
+                return logical_root / relative
+        return None
+
+    def relative_files(self, subtree: str | Path = ".") -> set[str]:
+        """Return regular-file labels below one logical subtree, relative to that subtree."""
+        prefix = PurePosixPath(subtree)
+        if prefix.as_posix() != ".":
+            self._relative_text(subtree)
+        return {
+            PurePosixPath(relative).relative_to(prefix).as_posix()
+            for relative in self._regular_sha256
+            if PurePosixPath(relative).is_relative_to(prefix)
+            and PurePosixPath(relative) != prefix
+        }
+
+    def relative_directories(self, subtree: str | Path = ".") -> set[str]:
+        """Return directory labels below one logical subtree, relative to that subtree."""
+        prefix = PurePosixPath(subtree)
+        if prefix.as_posix() != ".":
+            self._relative_text(subtree)
+        return {
+            PurePosixPath(relative).relative_to(prefix).as_posix()
+            for relative in self._directories
+            if PurePosixPath(relative).is_relative_to(prefix)
+            and PurePosixPath(relative) != prefix
+        }
+
+    def immediate_directories(self, subtree: str | Path = ".") -> set[str]:
+        """Return direct-child directory names below one logical subtree."""
+        return {
+            PurePosixPath(relative).parts[0]
+            for relative in self.relative_directories(subtree)
+            if PurePosixPath(relative).parts
+        }
+
+    def total_regular_size(self) -> int:
+        """Return the verified aggregate size of regular snapshot members."""
+        return sum(self._regular_sizes.values())
+
+    def close(self) -> None:
+        """Close every sealed member handle."""
+        for fd in self._fds.values():
+            os.close(fd)
+        self._fds.clear()
 
 
 def _entry_from_status(
@@ -955,14 +1169,6 @@ def _read_anchored_regular_bytes(
         os.close(fd)
 
 
-def _set_staged_tree_owner_write(root: Path, *, enabled: bool) -> None:
-    """Toggle owner write bits so a private staged tree can be consumed and removed."""
-    paths = [root, *root.rglob("*")]
-    for path in reversed(paths) if enabled else paths:
-        mode = path.stat().st_mode
-        path.chmod(mode | stat.S_IWUSR if enabled else mode & ~_WRITE_BITS)
-
-
 @contextmanager
 def staged_verified_frozen_tree(
     runtime_root: str | Path,
@@ -971,8 +1177,8 @@ def staged_verified_frozen_tree(
     authorized_root: Path,
     error_type: type[ValueError] = ValueError,
     label: str = "immutable-tree",
-) -> Iterator[tuple[dict[str, Any], Path]]:
-    """Stage descriptor-anchored verified bytes into one private read-only snapshot."""
+) -> Iterator[tuple[dict[str, Any], VerifiedFrozenTree]]:
+    """Expose descriptor-anchored verified bytes through sealed lazy snapshot members."""
     if not _SHA256_PATTERN.fullmatch(expected_inventory_sha256):
         _raise(error_type, label, "expected inventory SHA-256 must be 64 lowercase hex digits")
     root = _canonical_authorized_root(
@@ -1023,18 +1229,6 @@ def staged_verified_frozen_tree(
                         exist_ok=True,
                     )
             records = {INVENTORY_NAME: expected_inventory_sha256, **expected}
-            for relative, digest in records.items():
-                payload, mode = _read_anchored_regular_bytes(
-                    root_fd,
-                    relative,
-                    expected_sha256=digest,
-                    error_type=error_type,
-                    label=label,
-                )
-                destination = staged_root.joinpath(*PurePosixPath(relative).parts)
-                destination.parent.mkdir(parents=True, exist_ok=True)
-                destination.write_bytes(payload)
-                destination.chmod(stat.S_IMODE(mode) & ~_WRITE_BITS)
             _verify_frozen_tree_anchored(
                 root,
                 root_fd,
@@ -1043,11 +1237,167 @@ def staged_verified_frozen_tree(
                 error_type=error_type,
                 label=label,
             )
-            _set_staged_tree_owner_write(staged_root, enabled=False)
+
+            def load_member(relative: str, digest: str) -> tuple[bytes, int]:
+                return _read_anchored_regular_bytes(
+                    root_fd,
+                    relative,
+                    expected_sha256=digest,
+                    error_type=error_type,
+                    label=label,
+                )
+
+            sealed_snapshot = VerifiedFrozenTree(
+                staged_root,
+                regular_sha256=records,
+                regular_sizes={
+                    entry.relative: entry.size
+                    for entry in snapshot.entries
+                    if entry.entry_type == "file"
+                },
+                directories=frozenset(
+                    entry.relative
+                    for entry in snapshot.entries
+                    if entry.entry_type == "directory" and entry.relative
+                ),
+                loader=load_member,
+            )
             try:
-                yield report, staged_root
+                yield report, sealed_snapshot
             finally:
-                _set_staged_tree_owner_write(staged_root, enabled=True)
+                sealed_snapshot.close()
+
+
+@contextmanager
+def staged_verified_legacy_read_only_tree(
+    runtime_root: str | Path,
+    expected_file_count: int,
+    expected_inventory_sha256: str,
+    *,
+    authorized_root: Path,
+    error_type: type[ValueError] = ValueError,
+    label: str = "immutable-tree legacy read-only",
+) -> Iterator[tuple[dict[str, Any], VerifiedFrozenTree]]:
+    """Expose a legacy read-only tree through sealed members after anchored aggregate verification."""
+    if expected_file_count < 1:
+        _raise(error_type, label, "expected legacy file count must be positive")
+    if not _SHA256_PATTERN.fullmatch(expected_inventory_sha256):
+        _raise(error_type, label, "expected inventory SHA-256 must be 64 lowercase hex digits")
+    root = _canonical_authorized_root(
+        runtime_root,
+        authorized_root=authorized_root,
+        error_type=error_type,
+        label=label,
+    )
+    with _open_anchored_root(
+        root,
+        authorized_root=authorized_root,
+        error_type=error_type,
+        label=label,
+    ) as root_fd:
+        baseline = _scan_anchored_tree(
+            root_fd,
+            hash_regular=False,
+            error_type=error_type,
+            label=label,
+        )
+        _require_read_only(baseline, include_root=True, error_type=error_type, label=label)
+        measured = _scan_anchored_tree(
+            root_fd,
+            hash_regular=True,
+            error_type=error_type,
+            label=label,
+        )
+        _require_read_only(measured, include_root=True, error_type=error_type, label=label)
+        _require_same_snapshot(
+            baseline,
+            measured,
+            error_type=error_type,
+            label=label,
+            phase="legacy anchored verification hash pass",
+        )
+        records = {
+            entry.relative: entry.sha256
+            for entry in measured.entries
+            if entry.entry_type == "file" and entry.sha256 is not None
+        }
+        if len(records) != expected_file_count:
+            _raise(
+                error_type,
+                label,
+                f"legacy retained file count drifted: {len(records)} != {expected_file_count}",
+            )
+        inventory_payload = "".join(
+            f"{digest}  {relative}\n" for relative, digest in sorted(records.items())
+        )
+        inventory_sha256 = hashlib.sha256(inventory_payload.encode("utf-8")).hexdigest()
+        if inventory_sha256 != expected_inventory_sha256:
+            _raise(error_type, label, "legacy retained aggregate SHA-256 drifted")
+        final = _scan_anchored_tree(
+            root_fd,
+            hash_regular=False,
+            error_type=error_type,
+            label=label,
+        )
+        _require_read_only(final, include_root=True, error_type=error_type, label=label)
+        _require_same_snapshot(
+            measured,
+            final,
+            error_type=error_type,
+            label=label,
+            phase="legacy anchored verification stability pass",
+        )
+        _require_root_binding(
+            root,
+            root_fd,
+            authorized_root=authorized_root,
+            error_type=error_type,
+            label=label,
+        )
+        with tempfile.TemporaryDirectory(prefix="athenak-pic-legacy-tree-") as directory:
+            staged_root = Path(directory) / "snapshot"
+            staged_root.mkdir()
+            for entry in measured.entries:
+                if entry.entry_type == "directory" and entry.relative:
+                    staged_root.joinpath(*PurePosixPath(entry.relative).parts).mkdir(
+                        parents=True,
+                        exist_ok=True,
+                    )
+
+            def load_member(relative: str, digest: str) -> tuple[bytes, int]:
+                return _read_anchored_regular_bytes(
+                    root_fd,
+                    relative,
+                    expected_sha256=digest,
+                    error_type=error_type,
+                    label=label,
+                )
+
+            sealed_snapshot = VerifiedFrozenTree(
+                staged_root,
+                regular_sha256=records,
+                regular_sizes={
+                    entry.relative: entry.size
+                    for entry in measured.entries
+                    if entry.entry_type == "file"
+                },
+                directories=frozenset(
+                    entry.relative
+                    for entry in measured.entries
+                    if entry.entry_type == "directory" and entry.relative
+                ),
+                loader=load_member,
+            )
+            try:
+                yield {
+                    "root": str(root),
+                    "file_count": len(records),
+                    "inventory_sha256": inventory_sha256,
+                    "recursively_read_only": True,
+                    "anchored_sealed_snapshot": True,
+                }, sealed_snapshot
+            finally:
+                sealed_snapshot.close()
 
 
 def _verify_frozen_tree_anchored(

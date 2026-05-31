@@ -269,7 +269,9 @@ class Q011InjectionDistributionRuntimeLocalTests(unittest.TestCase):
                     "_verify_frozen_tree_anchored",
                     side_effect=mutate_runtime_payload,
                 ):
-                    with self.assertRaisesRegex(q011.AuditError, "SHA-256 drifted"):
+                    with self.assertRaisesRegex(
+                        q011.AuditError, "(SHA-256|artifact hash) drifted"
+                    ):
                         q011.extract_runtime_artifact(
                             pvtk,
                             artifact_root=runtime_tree,

@@ -174,13 +174,43 @@ class ImmutableOrionTreeTests(unittest.TestCase):
                     "_verify_frozen_tree_anchored",
                     side_effect=mutate_after_initial_verify,
                 ):
-                    with self.assertRaisesRegex(ValueError, "SHA-256 drifted"):
+                    with self.assertRaisesRegex(ValueError, "(SHA-256|artifact hash) drifted"):
                         with immutable_orion_tree.staged_verified_frozen_tree(
                             tree,
                             report["inventory_sha256"],
                             authorized_root=base,
                         ):
                             self.fail("unsafe post-verification mutation was accepted")
+            finally:
+                _make_writable_tree(tree)
+
+    def test_staged_snapshot_yields_sealed_payload_member(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            tree = base / "retained"
+            tree.mkdir()
+            (tree / "payload.txt").write_text("verified\n", encoding="utf-8")
+            try:
+                report = immutable_orion_tree.freeze_tree(
+                    tree,
+                    _RECEIPT,
+                    authorized_root=base,
+                )
+                with immutable_orion_tree.staged_verified_frozen_tree(
+                    tree,
+                    report["inventory_sha256"],
+                    authorized_root=base,
+                ) as (_, snapshot):
+                    sealed = snapshot.member_path("payload.txt")
+                    self.assertTrue(immutable_orion_tree.is_sealed_snapshot_member(sealed))
+                    self.assertEqual(sealed.read_text(encoding="utf-8"), "verified\n")
+                    with self.assertRaises(OSError):
+                        os.open(sealed, os.O_WRONLY)
+                    self.assertEqual(sealed.read_text(encoding="utf-8"), "verified\n")
+                    self.assertFalse(snapshot.has_file("../payload.txt"))
+                    self.assertFalse(snapshot.has_directory("../retained"))
+                    with self.assertRaisesRegex(ValueError, "unsafe sealed snapshot"):
+                        snapshot.member_path("../payload.txt")
             finally:
                 _make_writable_tree(tree)
 

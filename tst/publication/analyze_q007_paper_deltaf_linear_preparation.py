@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import cmath
 from contextlib import contextmanager
+import contextvars
 from functools import lru_cache
 import hashlib
 import json
@@ -22,6 +23,7 @@ from scipy.integrate import quad
 if __package__:
     from .immutable_orion_tree import authorized_tree_root
     from .immutable_orion_tree import freeze_tree as freeze_immutable_tree
+    from .immutable_orion_tree import is_sealed_snapshot_member
     from .immutable_orion_tree import staged_verified_frozen_tree
     from .immutable_orion_tree import validate_executable_elf
     from .immutable_orion_tree import validate_serial_host_build_evidence
@@ -31,6 +33,7 @@ if __package__:
 else:
     from immutable_orion_tree import authorized_tree_root
     from immutable_orion_tree import freeze_tree as freeze_immutable_tree
+    from immutable_orion_tree import is_sealed_snapshot_member
     from immutable_orion_tree import staged_verified_frozen_tree
     from immutable_orion_tree import validate_executable_elf
     from immutable_orion_tree import validate_serial_host_build_evidence
@@ -355,41 +358,89 @@ class ContractError(ValueError):
     """Raised when a bounded Q-007 source-local contract fails closed."""
 
 
-_STAGED_TREES: list[tuple[Path, Path]] = []
+_STAGED_TREES: contextvars.ContextVar[tuple[tuple[Path, Any], ...]] = (
+    contextvars.ContextVar("q007_staged_trees", default=())
+)
 
 
 @contextmanager
-def _use_staged_tree(logical_root: Path, staged_root: Path):
-    """Route retained-tree reads through one descriptor-anchored private snapshot."""
-    record = (logical_root, staged_root)
-    _STAGED_TREES.append(record)
+def _use_staged_tree(logical_root: Path, staged_tree: Any):
+    """Route retained-tree reads through one descriptor-anchored sealed snapshot."""
+    token = _STAGED_TREES.set((*_STAGED_TREES.get(), (logical_root, staged_tree)))
     try:
         yield
     finally:
-        _STAGED_TREES.remove(record)
+        _STAGED_TREES.reset(token)
 
 
 def _tree_io_path(path: Path) -> Path:
-    for logical_root, staged_root in reversed(_STAGED_TREES):
-        try:
-            return staged_root / path.relative_to(logical_root)
-        except ValueError:
-            pass
-        try:
-            path.relative_to(staged_root)
-            return path
-        except ValueError:
-            pass
+    for logical_root, staged_tree in reversed(_STAGED_TREES.get()):
+        routed = staged_tree.io_path(logical_root, path)
+        if routed != path:
+            return routed
     return path
 
 
 def _has_staged_tree(root: Path) -> bool:
-    return any(logical_root == root for logical_root, _ in _STAGED_TREES)
+    return any(logical_root == root for logical_root, _ in _STAGED_TREES.get())
+
+
+def _staged_tree_for(path: Path) -> tuple[Path, Any, Path] | None:
+    for logical_root, staged_tree in reversed(_STAGED_TREES.get()):
+        try:
+            return logical_root, staged_tree, path.relative_to(logical_root)
+        except ValueError:
+            pass
+        try:
+            return logical_root, staged_tree, path.relative_to(staged_tree.staged_root)
+        except ValueError:
+            pass
+    return None
+
+
+def _tree_relative_files(subtree: Path) -> set[str]:
+    staged = _staged_tree_for(subtree)
+    if staged is None:
+        return {
+            path.relative_to(subtree).as_posix()
+            for path in subtree.rglob("*")
+            if path.is_file()
+        }
+    _, staged_tree, relative = staged
+    return staged_tree.relative_files(relative)
+
+
+def _tree_relative_directories(subtree: Path) -> set[str]:
+    staged = _staged_tree_for(subtree)
+    if staged is None:
+        return {
+            path.relative_to(subtree).as_posix()
+            for path in subtree.rglob("*")
+            if path.is_dir()
+        }
+    _, staged_tree, relative = staged
+    return staged_tree.relative_directories(relative)
+
+
+def _tree_has_directory(subtree: Path) -> bool:
+    staged = _staged_tree_for(subtree)
+    if staged is None:
+        return subtree.is_dir()
+    _, staged_tree, relative = staged
+    return staged_tree.has_directory(relative)
 
 
 def _logical_relative(root: Path, path: Path) -> Path:
     """Return a retained-tree relative label for a staged or retained path."""
-    return _tree_io_path(path).relative_to(_tree_io_path(root))
+    for logical_root, staged_tree in reversed(_STAGED_TREES.get()):
+        restored = staged_tree.logical_path_for_io(logical_root, path)
+        if restored is not None:
+            return restored.relative_to(root)
+    staged = _staged_tree_for(path)
+    if staged is not None:
+        logical_root, _, relative = staged
+        return (logical_root / relative).relative_to(root)
+    return path.relative_to(root)
 
 
 def parse_athinput(path: Path) -> dict[str, dict[str, str]]:
@@ -1233,6 +1284,8 @@ def _contained_regular_file(root: Path, path: Path) -> Path:
     """Require one self-contained regular artifact below its retained root."""
     io_root = _tree_io_path(root)
     io_path = _tree_io_path(path)
+    if is_sealed_snapshot_member(io_path):
+        return io_path
     status = os.lstat(io_path)
     if not stat.S_ISREG(status.st_mode):
         raise ContractError(f"runtime artifact must be regular: {path}")
@@ -1624,15 +1677,13 @@ def _relative_file_hashes(
     root: Path, subtree: Path, *, excluded: tuple[str, ...] = ()
 ) -> dict[str, str]:
     """Hash every regular payload below one retained subtree."""
-    io_subtree = _tree_io_path(subtree)
-    if not io_subtree.is_dir():
+    relative_files = _tree_relative_files(subtree)
+    if not _tree_has_directory(subtree):
         raise ContractError(f"retained payload subtree is missing: {subtree}")
     payload = {}
-    for path in sorted(io_subtree.rglob("*")):
-        if path.is_file():
-            relative = path.relative_to(io_subtree).as_posix()
-            if relative not in excluded:
-                payload[relative] = _sha256(_contained_regular_file(root, path))
+    for relative in sorted(relative_files):
+        if relative not in excluded:
+            payload[relative] = _sha256(_contained_regular_file(root, subtree / relative))
     return payload
 
 
@@ -1742,16 +1793,10 @@ def _validate_pinned_executable_binding(root: Path) -> dict[str, Any]:
         INVENTORY_NAME, FREEZE_RECEIPT_NAME, PIN_PROVENANCE_RECEIPT_NAME, "bin/athena",
     }
     io_pinned_root = _tree_io_path(pinned_root)
-    measured_pin_files = {
-        item.relative_to(io_pinned_root).as_posix()
-        for item in io_pinned_root.rglob("*") if item.is_file()
-    }
+    measured_pin_files = _tree_relative_files(pinned_root)
     if measured_pin_files != expected_pin_files:
         raise ContractError("Q-007 pinned executable tree file topology drifted")
-    measured_pin_directories = {
-        item.relative_to(io_pinned_root).as_posix()
-        for item in io_pinned_root.rglob("*") if item.is_dir()
-    }
+    measured_pin_directories = _tree_relative_directories(pinned_root)
     if measured_pin_directories != {"bin", "build", "runtime", "source"}:
         raise ContractError("Q-007 pinned executable tree directory topology drifted")
     archive_report = validate_source_archive(
@@ -1785,6 +1830,7 @@ def _validate_pinned_executable_binding(root: Path) -> dict[str, Any]:
     )
     validate_serial_host_build_evidence(
         io_pinned_root,
+        file_resolver=lambda relative: _tree_io_path(pinned_root / relative),
         error_type=ContractError,
         label="Q-007 pinned executable serial-host build evidence",
     )
@@ -1944,11 +1990,7 @@ def _validate_runtime_tree_topology(root: Path) -> None:
         for cycle in cycles:
             expected.add(f"{label}/bin/{basename}.mhd_w_bcc.{cycle:05d}.bin")
             expected.add(f"{label}/pvtk/{basename}.prtcl_all.{cycle:05d}.part.vtk")
-    io_root = _tree_io_path(root)
-    measured = {
-        item.relative_to(io_root).as_posix()
-        for item in io_root.rglob("*") if item.is_file()
-    }
+    measured = _tree_relative_files(root)
     if measured != expected:
         raise ContractError("Q-007 retained runtime tree file topology drifted")
     expected_directories = {
@@ -1957,10 +1999,7 @@ def _validate_runtime_tree_topology(root: Path) -> None:
         "crpai-oblate", "crpai-oblate/bin", "crpai-oblate/pvtk",
         "negative-crpai-nlim1", "decks",
     }
-    measured_directories = {
-        item.relative_to(io_root).as_posix()
-        for item in io_root.rglob("*") if item.is_dir()
-    }
+    measured_directories = _tree_relative_directories(root)
     if measured_directories != expected_directories:
         raise ContractError("Q-007 retained runtime tree directory topology drifted")
 
