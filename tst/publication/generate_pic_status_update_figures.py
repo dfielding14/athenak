@@ -290,7 +290,7 @@ def verifier_hardening() -> None:
         "Loose runtime replay checks",
     ]
     after = [
-        "FD-anchored bytes + verified topology",
+        "FD anchors + sealed semantic copies",
         "Exact schemas and closed directories",
         "Bounded diagnostics",
     ]
@@ -746,7 +746,7 @@ def artifact_sizes(sizes: dict[str, int]) -> dict[str, int]:
 
 def validation_summary() -> dict[str, Any]:
     labels = ["publication\nsuite", "Frontier\ncontrol plane", "hardening\nfocus", "JSON parse", "Python AST"]
-    counts = [716, 359, 96, 168, 88]
+    counts = [719, 359, 99, 168, 88]
     fig, ax = plt.subplots(figsize=(8, 4))
     bars = ax.bar(labels, counts, color=[BLUE, GREEN, ORANGE, PURPLE, CYAN])
     ax.bar_label(bars)

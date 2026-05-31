@@ -4,7 +4,7 @@
 | --- | --- |
 | Date | 2026-05-31 |
 | Repository | AthenaK MHD-PIC worktree at `/ccs/home/dfielding/athenak-pic` |
-| Branch and commits | `PIC` code-and-control snapshot `ec69dd5b6a16f7945d7531f33b3d6a13393243e2` at 111 commits ahead of `origin/PIC`; audited documentation snapshot `717046d1f330a2ee88471669bfc6fc2edfd06f89` at 112 commits ahead; this scoped reproducibility refresh follows it |
+| Branch and commits | `PIC` code-and-control snapshot `00a79b223fdb22b70cde19fc97cd353c4bb75141` at 114 commits ahead of `origin/PIC`; audited documentation snapshot `abe9a8fa1eb706bd20a515bb7afe7100198ee6fb` at 113 commits ahead; this reconciliation follows the second validator repair |
 | Agent | Codex |
 | Governing plan | `tst/publication/PIC_PRODUCTION_READINESS_PLAN.md` |
 | Data analyzed | Frozen Q006, Q007, Q008 and Q011 local-readiness artifacts; retained read-only Q023 Bell source-local smoke; authoritative Frontier node-hour ledger |
@@ -59,7 +59,7 @@ The strongest statements we can make are local ones: the bounded successors ran,
 
 The largest remaining uncertainty is not a single bug. It is the unclosed transition from bounded local engineering evidence to physical and operational qualification: long-horizon paper campaigns, calibrated extension comparisons, MPI/GPU and multi-node checks, restart and filesystem failure drills on Frontier, scaling and memory measurements, Orion-retention disposition, and named external review.
 
-Source curation was committed through code-and-control snapshot `ec69dd5b6a16f7945d7531f33b3d6a13393243e2`. Independent audits first found a same-account substitution risk in the copied-snapshot handoff and then a topology-map race at the stable handoff boundary. The committed repair keeps verified topology in memory, compares the handed-off topology map back to the verified tree, exposes consumed regular files lazily through sealed Linux `memfd` descriptors, retains one open descriptor across multi-pass archive and ELF validation, and rejects unrelated sealed descriptors outside an active routed snapshot. Q006, Q007 and Q011 retained-artifact replays reproduce their archived results through those sealed members. The report generator applies the same anchored sealed-member rule to frozen JSON inputs and the legacy Q023 Bell payloads. The source-side transition policy now clears inherited schema-v3 science registrations and marks the schema-v4 clean-candidate freeze pending. The clean-tree validation matrix passed, but the canonical schema-v4 source bundle and HIP/MPI executable freeze have not yet been created. The sensible next step is to complete the stable-boundary rereview, install the paired successor control-plane generation, build the canonical HIP/MPI Release executable, and freeze the clean candidate before registering another Frontier slice. The Q006 residual pattern makes AMR/restart parity a priority after that freeze: bind its acceptance threshold before submission and use the slice to test whether decomposition or device execution changes the bounded carrier result. Large paper or extension campaigns should not begin until their campaign-specific registrations, tolerances and independent comparison inputs are frozen.
+Source curation was committed through code-and-control snapshot `00a79b223fdb22b70cde19fc97cd353c4bb75141`. Independent audits first found a same-account substitution risk in the copied-snapshot handoff, then a topology-map race at the stable handoff boundary, and finally two deeper fail-open paths: unknown post-handoff files could fall back into the writable topology-only staging tree, and ordinary inodes could be rewritten in place between hashing and semantic inspection. The committed repair keeps verified topology in memory, compares the handed-off topology map back to the verified tree, rejects unknown active-snapshot members, exposes consumed regular files lazily through sealed Linux `memfd` descriptors, and copies mutation-checked ordinary validator bytes into sealed descriptors before multi-pass archive, dependency-archive or ELF inspection. Q006, Q007 and Q011 retained-artifact replays reproduce their archived results through those sealed members. The report generator applies the same anchored sealed-member rule to frozen JSON inputs and the legacy Q023 Bell payloads. The source-side transition policy now clears inherited schema-v3 science registrations and marks the schema-v4 clean-candidate freeze pending. The expanded clean-tree validation matrix passed, but the canonical schema-v4 source bundle and HIP/MPI executable freeze have not yet been created. The sensible next step is to complete the stable-boundary rereview, install the paired successor control-plane generation, build the canonical HIP/MPI Release executable, and freeze the clean candidate before registering another Frontier slice. The Q006 residual pattern makes AMR/restart parity a priority after that freeze: bind its acceptance threshold before submission and use the slice to test whether decomposition or device execution changes the bounded carrier result. Large paper or extension campaigns should not begin until their campaign-specific registrations, tolerances and independent comparison inputs are frozen.
 
 # Tier 1: How the analysis works
 
@@ -79,7 +79,7 @@ The current evidence flow is:
 
 ![Verifier hardening schematic](figures/status_update/verifier_hardening_schematic.png)
 
-*Figure 6. Schematic summary of verifier hardening. Mutable payload paths, partial-schema acceptance and loose replay checks were replaced by anchored verification, sealed descriptor-backed regular members, immutable topology maps, pinned archive or executable hashes, exact schemas, directory closure and bounded diagnostics. This matters because a verifier should reject ambiguous evidence rather than silently reinterpret it.*
+*Figure 6. Schematic summary of verifier hardening. Mutable payload paths, partial-schema acceptance and loose replay checks were replaced by anchored verification, sealed descriptor-backed regular members, immutable topology maps, unknown-member rejection, sealed semantic copies for multi-pass ordinary-file validators, pinned hashes, exact schemas, directory closure and bounded diagnostics. This matters because a verifier should reject ambiguous evidence rather than silently reinterpret it.*
 
 ## 1.2 Frozen inputs
 
@@ -202,9 +202,9 @@ The current pre-freeze local validation tranche combined broad test suites, focu
 
 | Validation class | Actual result | Interpretation |
 | --- | --- | --- |
-| Publication Python suite | 716 tests passed; 2 skipped | Combined broad local publication and nested control-plane discovery passed |
+| Publication Python suite | 719 tests passed; 2 skipped | Combined broad local publication and nested control-plane discovery passed |
 | Frontier control-plane suite | 359 tests passed | Registered-lifecycle and accounting controls passed locally |
-| Focused hardening suite | 96 tests passed | Qualification fixtures, immutable snapshots, analyzer substitution rejection and successor-policy registry checks passed |
+| Focused hardening suite | 99 tests passed | Qualification fixtures, immutable snapshots, analyzer substitution rejection and successor-policy registry checks passed |
 | Sphinx warning-as-error build | Passed | Documentation renders without warning regressions |
 | Readiness JSON parse sweep | 168 tracked report-scope JSON files parsed | Readiness, policy and generated figure-metric sidecars are syntactically valid |
 | Python AST sweep | 88 publication Python files parsed | Publication Python sources are syntactically valid |
@@ -414,6 +414,9 @@ The pass contract requires every direction-mean component to remain within $0.12
 - rejection of source-archive caches;
 - ELF and executable-mode validation for retained binaries;
 - source-archive dependency hashing;
+- rejection of unknown active-snapshot members outside verified directories;
+- sealed semantic copies for multi-pass ordinary-file validators;
+- mutation-checked text metadata reads;
 - serial-host build-evidence validation;
 - robust frozen-tree inventory checks.
 
@@ -475,9 +478,9 @@ The Q006, Q007, Q008 and Q011 evidence and the Q023 Bell smoke reported here are
 
 | Test | Purpose | Method | Actual result | Tolerance or pass rule | Status |
 | --- | --- | --- | --- | --- | --- |
-| Publication suite | Exercise publication analyzers and verifier contracts | Python unit discovery under `tst/publication` with the control-plane import path | 716 passed, 2 skipped | No failures | Pass |
+| Publication suite | Exercise publication analyzers and verifier contracts | Python unit discovery under `tst/publication` with the control-plane import path | 719 passed, 2 skipped | No failures | Pass |
 | Frontier control-plane suite | Exercise registered lifecycle, immutable promotion and ledger controls | Python unit discovery under `tst/publication/frontier_control_plane` | 359 passed | No failures | Pass |
-| Hardening focus | Stress candidate closure, descriptor snapshots and registry lifecycle | Focused publication tests | 96 passed | No failures | Pass |
+| Hardening focus | Stress candidate closure, descriptor snapshots and registry lifecycle | Focused publication tests | 99 passed | No failures | Pass |
 | Documentation | Detect warning regressions | Sphinx HTML build with `-W --keep-going -E` | Passed | No Sphinx warnings | Pass |
 | Readiness JSON syntax | Detect malformed readiness records | Parse tracked readiness, policy and generated figure-metric JSON files | 168 parsed | No parse errors | Pass |
 | Python syntax | Detect malformed publication Python sources | AST parse sweep | 88 parsed | No syntax errors | Pass |
@@ -610,23 +613,23 @@ The repository-wide C++ style baseline remains open. A fresh wrapper-equivalent 
 | Repository path | `/ccs/home/dfielding/athenak-pic` |
 | Resolved path in this environment | `/autofs/nccs-svm1_home2/dfielding/athenak-pic` |
 | Branch | `PIC` |
-| Code-and-control snapshot | `ec69dd5b6a16f7945d7531f33b3d6a13393243e2` |
-| Audited documentation snapshot | `717046d1f330a2ee88471669bfc6fc2edfd06f89`; this scoped reproducibility refresh follows it |
+| Code-and-control snapshot | `00a79b223fdb22b70cde19fc97cd353c4bb75141` |
+| Audited documentation snapshot | `abe9a8fa1eb706bd20a515bb7afe7100198ee6fb`; this reconciliation follows the second validator repair |
 | Current HEAD | Resolve with `git rev-parse HEAD` before installation |
 | Upstream | `origin/PIC` |
-| Ahead/behind | Code-and-control snapshot: 111 ahead, 0 behind; audited documentation snapshot: 112 ahead, 0 behind |
-| Worktree | Expected clean after this scoped reproducibility refresh; verify with `git status --short --branch` before installation |
+| Ahead/behind | Code-and-control snapshot: 114 ahead, 0 behind; audited documentation snapshot: 113 ahead, 0 behind |
+| Worktree | Expected clean after this reconciliation; verify with `git status --short --branch` before installation |
 | Deleted files | None observed |
 | New report | `STATUS_UPDATE.md` |
 | New figure generator | `tst/publication/generate_pic_status_update_figures.py` |
 | New figure directory | `figures/status_update/` |
 
-The code-and-control repair and documentation reconciliation are committed.
-The scoped reproducibility refresh records a deterministic tracked-JSON sweep.
-Stable-boundary rereview remains required before installation. Do not treat the
-curated commit series as a frozen release baseline until the canonical
-clean-candidate operation archives the source bundle and HIP/MPI executable
-together. Inspect the current list with:
+The second code-and-control validator repair is committed. This reconciliation
+records the stronger fail-closed boundary and the deterministic tracked-JSON
+sweep. Stable-boundary rereview remains required before installation. Do not
+treat the curated commit series as a frozen release baseline until the
+canonical clean-candidate operation archives the source bundle and HIP/MPI
+executable together. Inspect the current list with:
 
 ```bash
 git status --short --branch
@@ -942,7 +945,7 @@ Human input is required before:
 
 # Appendix B: Review disposition
 
-Five independent post-draft reviews were completed and reconciled before report snapshot commit `897ca86ab61d6393f23122dcb842b1c84360aa18`. Later independent code audits found the same-account copied-snapshot substitution blocker and then the topology-map race at the stable handoff boundary described above. Both repairs and the style-cleaned exact-source-contract rebind are committed in code-and-control snapshot `ec69dd5b6a16f7945d7531f33b3d6a13393243e2`; a fresh stable-boundary rereview remains required before paired installation or freeze.
+Five independent post-draft reviews were completed and reconciled before report snapshot commit `897ca86ab61d6393f23122dcb842b1c84360aa18`. Later independent code audits found the same-account copied-snapshot substitution blocker, the topology-map race at the stable handoff boundary, mutable unknown-member fallback and in-place ordinary-inode rewrite windows. The repairs and style-cleaned exact-source-contract rebind are committed through code-and-control snapshot `00a79b223fdb22b70cde19fc97cd353c4bb75141`; a fresh stable-boundary rereview remains required before paired installation or freeze.
 
 | Review | Audit focus | Material disposition |
 | --- | --- | --- |
@@ -952,6 +955,7 @@ Five independent post-draft reviews were completed and reconciled before report 
 | Tier 3 reproducibility audit | Paths, commands, accounting and handoff | Hardened the generator around verified inventories, active policy, mirrored ledgers, adjacent Q007 digest and the explicitly pinned ledger tail |
 | Adversarial whole-report challenge | Overstatement, hidden assumptions, negative results and cross-tier consistency | Narrowed implemented-path claims, preserved rejected operational chronology and the stale Q008 probe, reported failed-node-hour consumption and replaced the draft marker in this appendix |
 | Post-snapshot code audit | Same-account substitution and stable-boundary freeze safety | Rejected the copied-path snapshot handoff; committed repair uses anchored topology maps, sealed lazy regular members and context-local Q006/Q007 routing |
-| Stable-boundary code audit | Handoff topology races, pathname reopen windows and unrelated sealed descriptors | Rejected an unverified topology capture and multi-pass pathname inspection; committed repair compares handoff topology to the verified tree, retains one descriptor across archive and ELF inspection and rejects sealed descriptors outside an active routed snapshot |
+| Stable-boundary code audit | Handoff topology races, pathname reopen windows and unrelated sealed descriptors | Rejected an unverified topology capture and multi-pass pathname inspection; committed repair compares handoff topology to the verified tree and rejects unrelated sealed descriptors |
+| Adversarial validator audit | Unknown post-handoff members and in-place ordinary-inode rewrite windows | Rejected writable topology-staging fallback and descriptor-only semantic inspection; committed repair rejects unknown active-snapshot members and inspects sealed byte copies |
 
 The reconciliation deliberately rejected any suggestion that would promote bounded local preparation into physical qualification or Frontier production readiness. A fresh independent review of the committed stable boundary remains mandatory. The remaining open gates are listed in Sections 2.8 and 3.5.

@@ -196,15 +196,20 @@ prepared-artifact subset, and Q-006, Q-007, and Q-011 analyzers reopened
 retained evidence by pathname after verification. A second independent review
 then found that the copied private snapshot remained owner-mutable under the
 same Unix account. A third stable-boundary review then found that the handoff
-captured its topology map from an unverified scan. The successor now requires
+captured its topology map from an unverified scan. A fourth adversarial review
+found that unknown post-handoff members could fall back into the writable
+topology-only staging tree and that open ordinary inodes could still be
+rewritten in place between hashing and semantic inspection. The successor now
+requires
 the canonical prepared-artifact inventory path, independently derives the
 complete archived PIC-deck and publication-analyzer closure, keeps verified
 tree topology in memory, and exposes consumed regular payloads lazily through
 sealed descriptor-backed snapshot members. It compares the handed-off
-topology map back to the verified tree, retains one open descriptor across
-multi-pass source-archive and ELF validation, and rejects sealed descriptors
-that were not routed by the active retained-tree snapshot. The transition
-policy also clears
+topology map back to the verified tree, rejects unknown active-snapshot
+members, copies mutation-checked ordinary validator inputs into sealed
+descriptors before multi-pass semantic inspection, and rejects sealed
+descriptors that were not routed by the active retained-tree snapshot. The
+transition policy also clears
 historical registered-science slices and marks the schema-v4 clean-candidate
 freeze pending. The nonqualifying transition record is
 [`phase0_curated_candidate_successor_2026-05-31.json`](readiness/phase0_curated_candidate_successor_2026-05-31.json).
