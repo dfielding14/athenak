@@ -108,10 +108,12 @@ build-directory, log, command-file, or provenance-input paths. For
 bin, and log paths, materializes a detached local checkout plus recursive local
 submodule checkouts from the authorized clean source closure, and invokes the
 closed direct `/usr/bin/cmake` configure and build argv with
-`/opt/cray/pe/craype/2.7.33/bin/CC`, `ROCM_PATH=/opt/rocm-6.2.4`, and a minimal
-subprocess environment that excludes caller Git, Python, CMake, and loader
-overrides. The installed profile explicitly unloads the inactive default
-`darshan-runtime` module so its site-Spack pkg-config path cannot drift into
+`/opt/cray/pe/craype/2.7.33/bin/CC`, `ROCM_PATH=/opt/rocm-6.2.4`, explicit
+double precision through `Athena_SINGLE_PRECISION=OFF`, and a minimal subprocess
+environment that excludes caller Git, Python, CMake, and loader overrides.
+Single-precision shock runs are outside this release profile and require
+separate qualification. The installed profile explicitly unloads the inactive
+default `darshan-runtime` module so its site-Spack pkg-config path cannot drift into
 the closed PIC compiler-wrapper environment. It captures the exact
 argv as `build-invocations.json`, binds empty `git_status.preconfigure.txt` and
 post-build `git_status.txt` captures from the fresh checkout, and records the

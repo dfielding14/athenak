@@ -8085,6 +8085,18 @@ PY
             {"const": "hip-mpi-release-paper-pic"},
         )
 
+    def test_production_profile_explicitly_pins_double_precision(self) -> None:
+        from control_plane_common import AUTHORIZED_PIC_ROOT
+        from control_plane_common import PRODUCTION_BUILD_PROFILE
+        from control_plane_common import production_build_invocations
+
+        configure = production_build_invocations(
+            authorized_pic_root=AUTHORIZED_PIC_ROOT,
+            git_commit="0" * 40,
+            profile_id=PRODUCTION_BUILD_PROFILE,
+        )["configure"]
+        self.assertEqual(configure.count("-DAthena_SINGLE_PRECISION=OFF"), 1)
+
     def test_clean_candidate_schema_requires_prepared_artifact_inventories(self) -> None:
         schema = json.loads(
             (self.control_plane_dir / "clean_candidate.schema.json").read_text(

@@ -161,11 +161,14 @@ using additional Frontier allocation.
 4. Review the final diff against nearby AthenaK patterns.
 5. Build the final host candidate and run the broad local suite.
 6. Create the canonical clean source bundle and executable pin.
-7. Regenerate and review
+7. Bind the canonical paper release profile explicitly to double precision
+   with `Athena_SINGLE_PRECISION=OFF`. Single-precision shock runs require a
+   separate qualification campaign.
+8. Regenerate and review
    `tst/publication/frontier_control_plane/prepared_pic_artifact_inventory.json`,
    then freeze its exact checksums for all prepared PIC decks and publication
    analyzers from archived source bytes.
-8. Preserve predecessor evidence as chronology without promoting it to release
+9. Preserve predecessor evidence as chronology without promoting it to release
    evidence.
 
 ### Required Verification
@@ -216,8 +219,11 @@ promotion checks. The committed repair requires exact integer schema versions
 at those boundaries and adds adversarial regressions. The transition policy
 also clears
 historical registered-science slices and marks the schema-v4 clean-candidate
-freeze pending. The nonqualifying transition record is
+freeze pending. The historical nonqualifying transition record is
 [`phase0_curated_candidate_successor_2026-05-31.json`](readiness/phase0_curated_candidate_successor_2026-05-31.json).
+The current local successor chronology is
+[`phase0_curated_candidate_successor_v6_2026-06-01.json`](readiness/phase0_curated_candidate_successor_v6_2026-06-01.json);
+it remains nonqualifying until the final clean freeze.
 
 The first exact clean-tree Phase 0 code-boundary validation matrix passed at
 `d0ad350562799e609b4d22f45ce9ca314b38da82`: 727 publication tests with two

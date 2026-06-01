@@ -239,8 +239,9 @@ reconstructs every recursive submodule from the corresponding validated local
 source submodule with its pinned detached commit. No network fetch or mutable
 source-tree build is part of this path.
 
-The production profile fixes `ROCM_PATH=/opt/rocm-6.2.4`, the Cray `CC` wrapper
-and a minimal build subprocess environment. It unloads the inactive default
+The production profile fixes `ROCM_PATH=/opt/rocm-6.2.4`, the Cray `CC` wrapper,
+double precision through `Athena_SINGLE_PRECISION=OFF`, and a minimal build
+subprocess environment. It unloads the inactive default
 `darshan-runtime` module so its site-Spack pkg-config path cannot drift into
 the closed compiler-wrapper environment. The writer rejects caller
 overrides, records the exact retained `build-environment.json`, generates the
@@ -264,6 +265,7 @@ pipeline:
     "-B",
     "${PIC_ROOT}/build/<commit12>/<profile>/cmake",
     "-DCMAKE_BUILD_TYPE=Release",
+    "-DAthena_SINGLE_PRECISION=OFF",
     "-DAthena_ENABLE_MPI=ON",
     "-DKokkos_ENABLE_HIP=ON",
     "-DKokkos_ARCH_ZEN3=ON",

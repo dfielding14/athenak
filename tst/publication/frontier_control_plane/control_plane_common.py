@@ -472,6 +472,7 @@ def production_build_invocations(
             "-B",
             str(cmake_dir),
             "-DCMAKE_BUILD_TYPE=Release",
+            "-DAthena_SINGLE_PRECISION=OFF",
             "-DAthena_ENABLE_MPI=ON",
             "-DKokkos_ENABLE_HIP=ON",
             "-DKokkos_ARCH_ZEN3=ON",
