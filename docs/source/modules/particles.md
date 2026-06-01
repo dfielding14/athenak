@@ -184,11 +184,13 @@ MeshBlock geometrically before rank reassignment completes. The retained
 particle module then validates its MeshBlock-sized arrays against the rebuilt
 pack. `pic_load_balance_cost_per_particle > 0` adds a particle-count term to
 the base fluid cost of each post-AMR MeshBlock before load balancing.
-The retained-state inventory and the selected `paper_smooth`
-refinement-interface deposition policy are documented in
-{doc}`../engineering/pic_amr_lifetime_and_interface_policy`. The existing
-direct-staggered trajectory-current path is an experimental candidate, not a
-qualified conservative AMR gas-feedback policy.
+The retained-state inventory and the target `paper_smooth`
+receiver-resolution TSC refinement-interface deposition policy are documented
+in {doc}`../engineering/pic_amr_lifetime_and_interface_policy`. The generic
+restriction/exchange/prolongation path remains supporting infrastructure until
+the fine/coarse oracle passes. The existing direct-staggered trajectory-current
+path is an experimental candidate, not a qualified conservative AMR
+gas-feedback policy.
 
 In expanding-box mode with active MHD, raw face-centered arrays are
 divergence-preserving comoving magnetic fluxes. MHD consumers derive physical

@@ -29,8 +29,13 @@ against `max_nmb_per_rank`, reconstructed, or refreshed explicitly after AMR.
 
 ## Refinement-Interface Deposition Policy
 
-The production paper-mode policy is named `paper_smooth`. In the current
-implementation it maps to the existing cell-centered moment path:
+The production paper-mode target policy is named `paper_smooth`. Sun and Bai
+require each TSC contribution near a refinement interface to be evaluated at
+the resolution of the receiving cell. This deliberately permits a single
+particle's cross-interface weight sum to differ from one while preserving a
+smooth deposited profile.
+
+The existing cell-centered moment path currently:
 
 1. Deposit cell-centered particle moments.
 2. Restrict deposited moments into coarse storage on multilevel meshes.
@@ -39,8 +44,11 @@ implementation it maps to the existing cell-centered moment path:
 5. Use the synchronized cell-centered moments for the paper-mode gas feedback
    path.
 
-This is the locally smooth paper policy. It is not advertised as individually
-conservative particle feedback at every refinement-interface crossing.
+This generic path is useful infrastructure, but it is not yet a paper-faithful
+`paper_smooth` implementation: it deposits with the owning MeshBlock resolution
+before generic restriction, exchange, and prolongation. Paper-mode AMR
+qualification remains blocked until receiver-resolution TSC deposition and its
+fine/coarse interface oracle pass.
 
 The optional `conservative` AMR-interface policy is **not retained as a
 qualified production mode**. The existing

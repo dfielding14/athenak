@@ -105,10 +105,11 @@ particle-owned communication helpers must remain valid across:
 
 The retained-state inventory and the refinement-interface policy decision are
 recorded in
-{doc}`pic_amr_lifetime_and_interface_policy`. Paper-mode AMR uses the
-`paper_smooth` cell-centered restriction/exchange/prolongation path. The
-optional `conservative` interface policy is not retained as a qualified
-production mode.
+{doc}`pic_amr_lifetime_and_interface_policy`. Paper-mode AMR targets the
+`paper_smooth` receiver-resolution TSC policy. The existing cell-centered
+restriction/exchange/prolongation path is supporting infrastructure, not a
+qualified substitute at fine/coarse interfaces. The optional `conservative`
+interface policy is not retained as a qualified production mode.
 
 Paper-mode deposition uses TSC interpolation/deposition unless a separately
 named extension explicitly documents a different policy. A particle timestep
