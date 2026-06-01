@@ -105,6 +105,15 @@ particle_x = -1.45
 particle_y = -0.75
 particle_z = 0.0
 particle_df_weight = 0.0
+particle_vx = 0.0
+particle_vy = 0.0
+particle_vz = 0.0
+particle_dpxdt = 0.0
+particle_dpydt = 0.0
+particle_dpzdt = 0.0
+particle_dedt = 0.0
+particle_ebdot = 0.0
+deposit_manual_records_at_startup = false
 require_interface_mpi_split = false
 required_remote_receiver_mpi_split = none
 wave_flag = 0
@@ -118,5 +127,61 @@ along_x3  = false
 file_type   = bin
 variable    = prtcl_rho
 id          = prtcl_rho
+dcycle      = 1
+ghost_zones = false
+
+<output2>
+file_type   = bin
+variable    = prtcl_jx
+id          = prtcl_jx
+dcycle      = 1
+ghost_zones = false
+
+<output3>
+file_type   = bin
+variable    = prtcl_jy
+id          = prtcl_jy
+dcycle      = 1
+ghost_zones = false
+
+<output4>
+file_type   = bin
+variable    = prtcl_jz
+id          = prtcl_jz
+dcycle      = 1
+ghost_zones = false
+
+<output5>
+file_type   = bin
+variable    = prtcl_dpxdt
+id          = prtcl_dpxdt
+dcycle      = 1
+ghost_zones = false
+
+<output6>
+file_type   = bin
+variable    = prtcl_dpydt
+id          = prtcl_dpydt
+dcycle      = 1
+ghost_zones = false
+
+<output7>
+file_type   = bin
+variable    = prtcl_dpzdt
+id          = prtcl_dpzdt
+dcycle      = 1
+ghost_zones = false
+
+<output8>
+file_type   = bin
+variable    = prtcl_dedt
+id          = prtcl_dedt
+dcycle      = 1
+ghost_zones = false
+
+<output9>
+file_type   = bin
+variable    = prtcl_ebdot
+id          = prtcl_ebdot
 dcycle      = 1
 ghost_zones = false

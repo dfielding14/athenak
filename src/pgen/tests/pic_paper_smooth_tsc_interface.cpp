@@ -159,6 +159,14 @@ void ProblemGenerator::PICPaperSmoothTSCInterface(ParameterInput *pin,
   const Real particle_z = pin->GetOrAddReal("problem", "particle_z", 0.0);
   const Real particle_df_weight =
       pin->GetOrAddReal("problem", "particle_df_weight", 0.0);
+  const Real particle_vx = pin->GetOrAddReal("problem", "particle_vx", 0.0);
+  const Real particle_vy = pin->GetOrAddReal("problem", "particle_vy", 0.0);
+  const Real particle_vz = pin->GetOrAddReal("problem", "particle_vz", 0.0);
+  const Real particle_dpxdt = pin->GetOrAddReal("problem", "particle_dpxdt", 0.0);
+  const Real particle_dpydt = pin->GetOrAddReal("problem", "particle_dpydt", 0.0);
+  const Real particle_dpzdt = pin->GetOrAddReal("problem", "particle_dpzdt", 0.0);
+  const Real particle_dedt = pin->GetOrAddReal("problem", "particle_dedt", 0.0);
+  const Real particle_ebdot = pin->GetOrAddReal("problem", "particle_ebdot", 0.0);
   const int m = FindLocalParticleMeshBlock(pmbp, particle_x, particle_y, particle_z);
   if (m >= 0) {
     HostArray2D<int> h_pi("paper_smooth_tsc_interface_pi", ppart->nidata, 1);
@@ -174,9 +182,9 @@ void ProblemGenerator::PICPaperSmoothTSCInterface(ParameterInput *pin,
     h_pr(IPX, 0) = particle_x;
     h_pr(IPY, 0) = particle_y;
     h_pr(IPZ, 0) = particle_z;
-    h_pr(IPVX, 0) = 0.0;
-    h_pr(IPVY, 0) = 0.0;
-    h_pr(IPVZ, 0) = 0.0;
+    h_pr(IPVX, 0) = particle_vx;
+    h_pr(IPVY, 0) = particle_vy;
+    h_pr(IPVZ, 0) = particle_vz;
     h_pr(IPM, 0) = 1.0;
     h_pr(IPWT, 0) = 1.0;
     h_pr(IPF0, 0) = 1.0;
@@ -190,10 +198,16 @@ void ProblemGenerator::PICPaperSmoothTSCInterface(ParameterInput *pin,
           ppart->pic_deltaf_kappa, ppart->pic_deltaf_drift_x1,
           ppart->pic_deltaf_drift_x2, ppart->pic_deltaf_drift_x3,
           ppart->pic_deltaf_aniso_x1, ppart->pic_deltaf_aniso_x2,
-          ppart->pic_deltaf_aniso_x3, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0);
+          ppart->pic_deltaf_aniso_x3, 1.0, 1.0, 1.0,
+          particle_vx, particle_vy, particle_vz);
       h_pr(IPF0, 0) = f0/(1.0 - particle_df_weight);
       h_pr(IPDFWT, 0) = particle_df_weight;
     }
+    h_pr(IPDPX, 0) = particle_dpxdt;
+    h_pr(IPDPY, 0) = particle_dpydt;
+    h_pr(IPDPZ, 0) = particle_dpzdt;
+    h_pr(IPDE, 0) = particle_dedt;
+    h_pr(IPEBDOT, 0) = particle_ebdot;
     h_pr(IPT_BIRTH, 0) = pm->time;
 
     Kokkos::resize(ppart->prtcl_idata, ppart->nidata, 1);
@@ -206,5 +220,9 @@ void ProblemGenerator::PICPaperSmoothTSCInterface(ParameterInput *pin,
   pm->CountParticles();
   if (pm->nprtcl_total != 1) {
     AbortInterfaceRegression("requires exactly one global manually allocated particle.");
+  }
+  if (pin->GetOrAddBoolean("problem", "deposit_manual_records_at_startup", false)) {
+    ppart->ZeroMoments(nullptr, 2);
+    ppart->DepositMoments(nullptr, 2);
   }
 }

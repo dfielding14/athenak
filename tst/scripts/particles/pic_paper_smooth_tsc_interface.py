@@ -27,6 +27,7 @@ _DOMAIN_LENGTH_Y = 4.0
 _DOMAIN_LENGTH_Z = 4.0
 _ATOL = 1.0e-6
 _RESULTS = {}
+_RECORD_RESULTS = {}
 _RUNTIME_PARTICLES = {
     label: (particle_x, _PARTICLE_Y, 0.0)
     for label, particle_x in oracle.PARTICLES.items()
@@ -75,6 +76,26 @@ _EXPECTED_TOTALS['o'] = 0.5
 _EXPECTED_TOTALS['p'] = -0.25 * 0.86
 _NON_UNIT_TOTAL_PARTICLES = tuple(oracle.NON_UNIT_TOTAL_PARTICLES) + (
     'g', 'm', 'n', 'o', 'p')
+_RECORD_LABELS = ('a', 'g', 'k', 'j', 'm', 'n', 'o', 'p')
+_RECORD_IDS = (
+    'prtcl_rho', 'prtcl_jx', 'prtcl_jy', 'prtcl_jz',
+    'prtcl_dpxdt', 'prtcl_dpydt', 'prtcl_dpzdt', 'prtcl_dedt',
+    'prtcl_ebdot',
+)
+_DELTAF_SCALED_RECORD_IDS = _RECORD_IDS[:-1]
+_MANUAL_RECORD_OVERRIDES = [
+    'time/evolution=static',
+    'mhd/rsolver=advect',
+    'problem/deposit_manual_records_at_startup=true',
+    'problem/particle_vx=0.125',
+    'problem/particle_vy=-0.25',
+    'problem/particle_vz=0.375',
+    'problem/particle_dpxdt=2.0',
+    'problem/particle_dpydt=-3.0',
+    'problem/particle_dpzdt=4.0',
+    'problem/particle_dedt=5.0',
+    'problem/particle_ebdot=7.0',
+]
 
 
 def _athena_exe_dir():
@@ -101,9 +122,9 @@ def _remove_outputs(basename):
         os.remove(fname)
 
 
-def _latest_output_file(basename):
+def _latest_output_file(basename, output_id='prtcl_rho'):
     pattern = os.path.join(_athena_exe_dir(), 'bin',
-                           basename + '.prtcl_rho.*.bin')
+                           basename + '.' + output_id + '.*.bin')
     matches = sorted(glob.glob(pattern))
     if not matches:
         raise RuntimeError('No output files found for pattern: ' + pattern)
@@ -111,7 +132,7 @@ def _latest_output_file(basename):
 
 
 def _run_case(mode, label, nproc, require_split=False,
-              required_remote_receiver='none'):
+              required_remote_receiver='none', manual_records=False):
     basename = 'pic_paper_smooth_tsc_interface_' + mode + '_' + label
     args = [
         'job/basename=' + basename,
@@ -126,6 +147,8 @@ def _run_case(mode, label, nproc, require_split=False,
     args.append('problem/required_remote_receiver_mpi_split='
                 + required_remote_receiver)
     args.extend(_RUNTIME_OVERRIDES.get(label, []))
+    if manual_records:
+        args.extend(_MANUAL_RECORD_OVERRIDES)
     command = ['./athena', '-i', _athena_input_path(label)] + args
     if nproc > 1:
         command = [_MPIEXEC, '-n', str(nproc)] + command
@@ -137,6 +160,8 @@ def _run_case(mode, label, nproc, require_split=False,
     if proc.returncode != 0:
         output = (proc.stdout or '') + (proc.stderr or '')
         raise RuntimeError('Command failed for ' + mode + '_' + label + '\n' + output)
+    if manual_records:
+        return _measure_record_case(basename)
     return _measure_case(basename, label)
 
 
@@ -206,6 +231,17 @@ def _measure_case(basename, label):
     }
 
 
+def _measure_record_case(basename):
+    quantities = {}
+    for output_id in _RECORD_IDS:
+        data = bin_convert.read_binary(_latest_output_file(basename, output_id))
+        quantities[output_id] = np.concatenate([
+            np.asarray(values, dtype=float).ravel()
+            for values in data['mb_data'][output_id]
+        ])
+    return quantities
+
+
 def _check_close(label, actual, expected):
     actual = np.asarray(actual)
     expected = np.asarray(expected)
@@ -218,6 +254,7 @@ def run(**kwargs):
     logger.debug('Running test ' + __name__)
     oracle.validate_oracle()
     _RESULTS.clear()
+    _RECORD_RESULTS.clear()
     for label in _RUNTIME_PARTICLES:
         _RESULTS['serial_' + label] = _run_case('serial', label, 1)
 
@@ -234,6 +271,21 @@ def run(**kwargs):
                 required_remote_receiver='j_periodic_x1_x3_edge')
     else:
         logger.info('Skipping mpi2 cases: Athena build has MPI parallelism OFF')
+    for label in _RECORD_LABELS:
+        _RECORD_RESULTS['serial_' + label] = _run_case(
+            'record_serial', label, 1, manual_records=True)
+    if _athena_mpi_enabled():
+        for label in ('a', 'g', 'k', 'm', 'n', 'o'):
+            _RECORD_RESULTS['mpi2_' + label] = _run_case(
+                'record_mpi2', label, 2,
+                required_remote_receiver=(
+                    'g_periodic_x1' if label in ('g', 'n') else 'none'),
+                manual_records=True)
+        for label in ('j', 'p'):
+            _RECORD_RESULTS['mpi3_' + label] = _run_case(
+                'record_mpi3', label, 3,
+                required_remote_receiver='j_periodic_x1_x3_edge',
+                manual_records=True)
 
 
 def analyze():
@@ -264,6 +316,27 @@ def analyze():
                     weighted_key + ':deltaf_scale',
                     _RESULTS[weighted_key]['actual_cells'],
                     scale * _RESULTS[reference_key]['actual_cells']) and ok
+    for mode in ('serial', 'mpi2', 'mpi3'):
+        for weighted, reference, scale in (
+                ('m', 'a', 0.5), ('n', 'g', -0.25),
+                ('o', 'k', 0.5), ('p', 'j', -0.25)):
+            weighted_key = mode + '_' + weighted
+            reference_key = mode + '_' + reference
+            if weighted_key not in _RECORD_RESULTS:
+                continue
+            for output_id in _DELTAF_SCALED_RECORD_IDS:
+                reference_values = _RECORD_RESULTS[reference_key][output_id]
+                ok = bool(np.max(np.abs(reference_values)) > _ATOL) and ok
+                ok = _check_close(
+                    weighted_key + ':' + output_id + ':deltaf_scale',
+                    _RECORD_RESULTS[weighted_key][output_id],
+                    scale * reference_values) and ok
+            reference_ebdot = _RECORD_RESULTS[reference_key]['prtcl_ebdot']
+            ok = bool(np.max(np.abs(reference_ebdot)) > _ATOL) and ok
+            ok = _check_close(
+                weighted_key + ':prtcl_ebdot:deltaf_invariant',
+                _RECORD_RESULTS[weighted_key]['prtcl_ebdot'],
+                reference_ebdot) and ok
     remote_checks = {
         'mpi2_g': ((2.0, 4.0, -2.0, 2.0, -0.5, 0.5),
                    (3.5, -0.5, 0.0), 0.32, 0.22),
