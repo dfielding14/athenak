@@ -13,7 +13,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 RECORD = (
     REPO_ROOT
     / "tst/publication/readiness/"
-    "pic_vl2_tsc_additive_successor_registration_v2_2026-06-01.json"
+    "pic_vl2_tsc_additive_successor_registration_v3_2026-06-01.json"
 )
 
 
@@ -83,6 +83,18 @@ class PicVL2TSCAdditiveSuccessorRegistrationV2Tests(unittest.TestCase):
                 "o": ["k", 0.5],
                 "p": ["j", -0.25],
             },
+        )
+        self.assertEqual(
+            oracle["dynamic_multilevel_record_ids"],
+            [
+                "prtcl_rho", "prtcl_jx", "prtcl_jy", "prtcl_jz",
+                "prtcl_dpxdt", "prtcl_dpydt", "prtcl_dpzdt", "prtcl_dedt",
+                "prtcl_ebdot",
+            ],
+        )
+        self.assertEqual(
+            oracle["dynamic_multilevel_record_cases"],
+            ["a", "g", "k", "j", "m", "n", "o", "p"],
         )
 
 

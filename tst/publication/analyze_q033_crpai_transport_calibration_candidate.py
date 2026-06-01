@@ -33,21 +33,21 @@ SPECTRUM_K_GRID = (1.0, 2.0, 3.0)
 
 _SOURCE_BINDINGS = {
     "src/particles/particles.cpp":
-        "4b88b1b0a0d83aed824f2af6f2fb77fc5793cdeb9b0e2d65d408535f22e45c44",
+        "8b3d2b7d9a5f1b8691bfd55eeaf8640a4443e169f98c5135f03a065141b8c469",
     "src/particles/particles.hpp":
-        "452e6091ad6f1ce50156c770d304ac36020cb53927cc1e40ba6af73e7c3bb462",
+        "cc75479df25c5731f46f31334ce110c2ab652549bb832772b7a9c2c4b6841fe0",
     "src/particles/particles_tasks.cpp":
-        "8310e80ffdb2739ecc60b6d65ef9eae78573aeba8f55fa1981ff98b4801c8946",
+        "2c8206b552998901ff1f94157d5850bfeb83b446ca82dfd8890d79fe538d7e80",
     "src/particles/particles_pushers.cpp":
-        "7cd3ac4b6fc95529d3097a3799b74f064a7e865c8b7be08f830a60dbee103330",
+        "d4f25d55ffbdb24451cb0c14d6c3f251aea52c8b42bbd43e4ec0eba7e6b4141a",
     "src/particles/particles_moments.cpp":
-        "3b206b1268bc71a0d6745dcda5422da54d255ac6cb73fddd566b89b507da6c58",
+        "a5e0f268ea20d797d7672444a5db795cb66f764d53fb36e1041d4d618961464c",
     "src/mhd/mhd.hpp":
         "655197f1582463020747212294e965e19a078a59d0708ebf7a6a127e5b652d4e",
     "src/mhd/mhd_tasks.cpp":
-        "228144855b0925e6405d14e33d22dd90381a01a6f317049bf3d6cd041a99530f",
+        "f8b907095ca9efc7c0bac13975f29f5f5e156c74493d6927049638815da67f1b",
     "docs/source/engineering/pic_mhd_model_contract.md":
-        "de319a56b34a6be33a41e9da3719d9a06a7646a1ff26748900d746d1b167bf80",
+        "38e5fb9c3a980501337366a26ca7560c5665398c8ec805188063198073b5041e",
 }
 _SOURCE_REQUIRED_SNIPPETS = {
     "src/particles/particles.cpp": (

@@ -1,0 +1,102 @@
+{
+  "record_type": "q029_hall_extension_parser_hardening_successor",
+  "schema_version": 1,
+  "date": "2026-06-01",
+  "gate": "Q-029",
+  "predecessor_record": "tst/publication/readiness/q029_hall_extension_parser_hardening_successor_2026-05-30.json",
+  "qualification_effect": "source_local_launch_blocked_preparation_only",
+  "claim_closure": false,
+  "scope": "Q-029-only additive source-binding successor for the separately named extended_mhd_pic current_to_ct_experimental path. This successor preserves the frozen additive CT-current source normalization, rebinds the intentionally unrunnable candidate deck and synthetic-contract-only analyzer after the paper VL2 TSC successor registration, and does not qualify Hall-Bell physics or any runtime campaign.",
+  "source_constraints": {
+    "production_source_edited": false,
+    "shared_q023_inventories_edited": false,
+    "plan_edited": false,
+    "new_q029_only_files": true,
+    "shared_particle_parser_hardening_rebound": true
+  },
+  "implemented_source_normalization": {
+    "code_equation": "cE_CT = cE_ideal + alpha_H P_edge[J_CR]",
+    "alpha_h_parameter": "particles/couple_j_to_efield_coeff",
+    "dimensionless_equation": "hat(cE_CT) = hat(cE_ideal) + chi_H P_edge[hat(J_CR)]",
+    "chi_h_definition": "chi_H = alpha_H J_CR0 / (U_A0 B_g0)",
+    "reference_scales": {
+      "rho0": 1.0,
+      "b_g0": 1.0,
+      "u_a0": 1.0,
+      "c_e0": 1.0,
+      "j_cr0": 1.0
+    },
+    "fiducial": {
+      "alpha_h": 0.5,
+      "chi_h": 0.5
+    },
+    "candidate_positive_chi_h_grid": [
+      0.0,
+      0.25,
+      0.5,
+      1.0
+    ],
+    "synthetic_signed_alpha_h_source_oracle_grid": [
+      -1.0,
+      0.0,
+      1.0
+    ],
+    "signed_grid_limit": "The signed grid verifies only the additive source contract and odd-in-coefficient increment. Negative alpha_H is not a registered physical extension campaign point."
+  },
+  "artifact_bindings": {
+    "inputs/tests/pic_q029_extended_hall_normalization_candidate.athinput": "dc159e5f9a80aec8bb94723b69f5de9edaafd624889ac7ea9a88518b46e6bb80",
+    "tst/publication/analyze_q029_hall_extension_candidate.py": "9be54c659e2d914ec4924f9c45cc0f35936d7ad5786714dc28af3a3837357e27",
+    "tst/publication/test_analyze_q029_hall_extension_candidate.py": "ea58a8b160b908327843f8b83c6948dd8e980ad4a5f8d7b086d1e1dd1bb96202",
+    "tst/publication/readiness/q029_experimental_hall_normalization_derivation_2026-05-30.md": "3d5c6cfd9e0e4e06cf28d836935e3b5175b931983da377e8b1c2bfb2a80e7b74"
+  },
+  "implementation_source_bindings": {
+    "src/mhd/mhd_tasks.cpp": "f8b907095ca9efc7c0bac13975f29f5f5e156c74493d6927049638815da67f1b",
+    "src/particles/particles.hpp": "cc75479df25c5731f46f31334ce110c2ab652549bb832772b7a9c2c4b6841fe0",
+    "src/particles/particles.cpp": "8b3d2b7d9a5f1b8691bfd55eeaf8640a4443e169f98c5135f03a065141b8c469",
+    "docs/source/engineering/pic_mhd_model_contract.md": "38e5fb9c3a980501337366a26ca7560c5665398c8ec805188063198073b5041e"
+  },
+  "launch_block": {
+    "candidate_deck_role": "launch_blocked_source_local_normalization_only_not_evidence",
+    "candidate_problem_generator": "q029_extended_hall_normalization_open",
+    "problem_generator_status": "intentionally_unavailable",
+    "candidate_nlim": 0,
+    "candidate_tlim": 0.0,
+    "launch_status": "blocked_missing_q029_generator_and_authorization",
+    "analyzer_artifact_role": "source_local_synthetic_normalization_contract_only",
+    "analyzer_qualification_effect": "none_source_local_launch_blocked_contract_only",
+    "analyzer_always_emits_qualifying_evidence": false
+  },
+  "fail_closed_analyzer_contract": {
+    "requires_exact_implementation_source_checksums": true,
+    "requires_exact_candidate_deck_checksum": true,
+    "requires_candidate_problem_generator_to_remain_unavailable": true,
+    "rejects_unexpected_bundle_fields": true,
+    "rejects_runtime_like_extra_fields": true,
+    "rejects_non_synthetic_artifact_role": true,
+    "rejects_incomplete_or_duplicate_synthetic_grid": true,
+    "numeric_mismatch_effect": "reported_as_source_local_contract_mismatch_not_qualifying_evidence"
+  },
+  "verification": {
+    "focused_command": "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. python3 -m unittest tst.publication.test_analyze_q029_hall_extension_candidate",
+    "focused_result": "pass",
+    "python_compile": "pass",
+    "json_parse": "pass",
+    "explicit_line_length_and_trailing_whitespace_check": "pass",
+    "flake8": "not_run_module_unavailable_in_environment"
+  },
+  "explicitly_not_claimed": [
+    "reviewed physical CR-Hall mapping to Bai et al. (2015)",
+    "linear Bell qualification",
+    "nonlinear Bell qualification",
+    "shock-front applicability",
+    "MPI or decomposition qualification",
+    "Frontier HIP or GPU qualification",
+    "external-review closure"
+  ],
+  "residual_work": [
+    "Obtain external review of the physical CR-Hall mapping and applicability envelope before registering a runtime campaign.",
+    "Implement and review a dedicated Q-029 runtime generator before preparing any clean launch candidate.",
+    "Freeze runtime decks, observables, tolerances, decomposition matrix, and Frontier registration before any qualifying execution."
+  ],
+  "q029_disposition": "source_local_normalization_frozen_launch_blocked_candidate_only_full_q029_open"
+}

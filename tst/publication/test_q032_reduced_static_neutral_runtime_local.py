@@ -18,7 +18,7 @@ SCRIPT = (
 )
 SIDECAR = (
     REPO_ROOT / "tst/publication/readiness/"
-    "q032_reduced_static_neutral_runtime_local_2026-05-30.json"
+    "q032_reduced_static_neutral_runtime_local_successor_2026-06-01.json"
 )
 
 

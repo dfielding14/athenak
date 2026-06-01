@@ -18,7 +18,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 SIDECAR = (
     REPO_ROOT
     / "tst/publication/readiness/"
-    "q032_plotnikov_damped_crsi_parser_hardening_successor_2026-05-30.json"
+    "q032_plotnikov_damped_crsi_parser_hardening_successor_v2_2026-06-01.json"
 )
 BOUNDARY_NOTE = (
     REPO_ROOT
