@@ -100,7 +100,9 @@ Format rules are enforced by `src/parameter_input.cpp`:
     `particles/cr_v*0` when omitted).
 - Staged PIC runtime-control overrides (parse/guard stage):
   - `particles/pic_physical_mode = engineering|paper_test_particle|paper_mhd_pic|
-    extended_mhd_pic`; explicit paper/extension modes store CR `p/m`
+    paper_mhd_pic_vl2_tsc|extended_mhd_pic`; explicit paper/extension modes
+    store CR `p/m`; `paper_mhd_pic_vl2_tsc` selects the additive Sun-Bai VL2
+    TSC candidate while `paper_mhd_pic` retains its historical behavior
   - `particles/pic_background_mode = coupled|passive_mhd|no_mhd`
   - `particles/pic_feedback_mode = coupled|test_particle`
   - `particles/pic_interp_scheme = tsc`

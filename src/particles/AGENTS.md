@@ -199,8 +199,10 @@ but these are not wired in the constructor.
 - `pic_enable_2d3v`: required for Boris pushers on 2D meshes; the reduced
   2D/2V Lorentz-force path is not implemented.
 - `pic_physical_mode`: `engineering`, `paper_test_particle`, `paper_mhd_pic`,
-  or `extended_mhd_pic`. Only explicit paper/extension modes reinterpret CR
-  state slots as mass-normalized momentum `p/m`.
+  `paper_mhd_pic_vl2_tsc`, or `extended_mhd_pic`. Only explicit
+  paper/extension modes reinterpret CR state slots as mass-normalized momentum
+  `p/m`. The additive `paper_mhd_pic_vl2_tsc` mode selects the Sun-Bai VL2 TSC
+  candidate while `paper_mhd_pic` retains its historical behavior.
 - `pic_cr_light_speed`: positive artificial CR light speed used by
   momentum-state modes. `pic_cr_initial_state` selects whether initializer
   components are interpreted as `velocity` or `momentum`.
