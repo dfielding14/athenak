@@ -1,0 +1,138 @@
+{
+  "record_type": "phase0_registered_prerequisite_replay_closure",
+  "schema_version": 1,
+  "date": "2026-06-01",
+  "predecessor_record": "tst/publication/readiness/phase0_registered_prerequisite_replay_policy_promotion_2026-06-01.json",
+  "qualification_effect": "none_registered_short_nonproduction_prerequisite_replay_closure_only",
+  "status": "pass_all_three_registered_prerequisite_replays_reconciled_and_offline_analysis_published",
+  "control_plane_version": "3d3d0d20ab3cedb1b650d8a19e99a0123b550ead25ebd312882d03d3be3b41d9",
+  "clean_candidate": {
+    "manifest_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/clean_candidates/0092f069-cbb4-4654-a00f-086bbcdfb985/clean_candidate_manifest.json",
+    "manifest_sha256": "533eea21e72a61f01e4c4ed84ff80dafe48ad31f74669e37be7d66beb03d4410",
+    "source_git_commit": "1171668b32017e9d46f7f5ecf65f05ebc85aaa62",
+    "executable_sha256": "bb2abaecad0dbecdb83fece1417efb35d661220554e804a3bb3566393e1973ab"
+  },
+  "pre_execution_source_boundary": {
+    "source_git_commit": "edf22cd053bdec3f6acabba472675d9ec482b8f9",
+    "publication_regression": {
+      "command": "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=.:tst/publication/frontier_control_plane python3 -B -m unittest discover -s tst/publication -p 'test_*.py'",
+      "tests_run": 799,
+      "intentional_skips": 2,
+      "status": "pass"
+    },
+    "independent_read_only_audit": "pass_no_blockers"
+  },
+  "registered_replays": [
+    {
+      "campaign": "f1_gpu_relativistic_gyro",
+      "authorization_id": "f1-clean-gyro-1171668b-v4",
+      "submission_id": "39e853c3-6731-484a-a7a7-32eb511553e8",
+      "reservation_id": "8fc36ef0-3321-4fc1-9461-225f0b9d8e8b",
+      "job_id": "4752676",
+      "scheduler_state": "COMPLETED",
+      "elapsed_seconds": 80,
+      "consumed_node_hours": 0.022222222222222223,
+      "terminal_ledger_event_sha256": "890254c634b0b4488c47ea8e3428889e536d5988ec4724d56f83e5370bb16fd9",
+      "manifest_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/manifests/f1_gpu_relativistic_gyro/39e853c3-6731-484a-a7a7-32eb511553e8/pre_submit_manifest.json",
+      "manifest_sha256": "a67c1f6485427c56714891fe7a30041855da8e3fb62bc48f3a7c81a7393f1cce",
+      "artifact_dir": "/lustre/orion/ast207/proj-shared/dfielding/PIC/runs/f1_gpu_relativistic_gyro/39e853c3-6731-484a-a7a7-32eb511553e8",
+      "artifact_inventory_sha256": "1f7975279d39683d36a8c2d3c31676338246c32b01b1595a29c691d71f87f21f",
+      "analysis_result_sha256": "cc8f4956c4aa9d747a1ed8aabd8e22c43214b9c9e02e9999e2dffa9c2835354e",
+      "offline_analysis_receipt_sha256": "16d3f85cf33b59d58f8b2378c2819668cc8b8ef9c2e41d4410b9ded6299da43b",
+      "pre_manifest_attestation": {
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/operator_attestations/20260601T211525Z-f1-clean-gyro-1171668b-v4-pre_manifest/attestation.json",
+        "sha256": "29bcd312d09b8c4d7ee5398b297c3e0bbc59368f9cae71c4ed051bfb4c71d926"
+      },
+      "pre_submit_wrapper_attestation": {
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/operator_attestations/20260601T211915Z-f1-clean-gyro-1171668b-v4-pre_submit_wrapper/attestation.json",
+        "sha256": "079fab07185d02cfc3a979bdcdf4774312155954f2a69dbd4f9dfca594930589"
+      },
+      "analysis_summary": {
+        "status": "pass",
+        "particle_count": 64,
+        "max_abs_velocity_error": 5.808176634092277e-09,
+        "velocity_tolerance": 2e-06
+      }
+    },
+    {
+      "campaign": "f1_gpu_paper_coupling",
+      "authorization_id": "f1-clean-paper-coupling-1171668b-v3",
+      "submission_id": "9a9f85fb-3db5-4673-a9e1-fb7091d15cad",
+      "reservation_id": "3110cda2-113f-4bd7-8a7d-05a34c6d7839",
+      "job_id": "4752687",
+      "scheduler_state": "COMPLETED",
+      "elapsed_seconds": 104,
+      "consumed_node_hours": 0.028888888888888888,
+      "terminal_ledger_event_sha256": "c8b86a90f512529dbc926201ecbfac65efc6f03f22dfea06715288f1ef9cd50d",
+      "manifest_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/manifests/f1_gpu_paper_coupling/9a9f85fb-3db5-4673-a9e1-fb7091d15cad/pre_submit_manifest.json",
+      "manifest_sha256": "46bb3f94fdf4f345b73f9f860837080db23a67957df632d4866872e2cf829ce2",
+      "artifact_dir": "/lustre/orion/ast207/proj-shared/dfielding/PIC/runs/f1_gpu_paper_coupling/9a9f85fb-3db5-4673-a9e1-fb7091d15cad",
+      "artifact_inventory_sha256": "36feb51c399881ccb15294bc12fb6ddcdd86c32f6831ff3e164897193e5c6611",
+      "analysis_result_sha256": "ad92e17dc77c6b33edd88b734e08912892979d225133747373b31f9acf5d1326",
+      "offline_analysis_receipt_sha256": "b14458a6b2ab6f47aed1ab3166c564b51c7d498b354d19980f164cfa9fd46459",
+      "pre_manifest_attestation": {
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/operator_attestations/20260601T212238Z-f1-clean-paper-coupling-1171668b-v3-pre_manifest/attestation.json",
+        "sha256": "8d75b9e057d3062858937e456e009091e9714e5685ad80d2a55e9d2568d163ba"
+      },
+      "pre_submit_wrapper_attestation": {
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/operator_attestations/20260601T212339Z-f1-clean-paper-coupling-1171668b-v3-pre_submit_wrapper/attestation.json",
+        "sha256": "75f8f829d8af7b3c8576fb09b610a043c5dec6fc1c41e22fcd650835960af223"
+      },
+      "analysis_summary": {
+        "status": "pass",
+        "max_abs_momentum_conservation_error": 6.731680066707213e-07,
+        "abs_energy_conservation_error": 6.459872196273864e-06,
+        "max_abs_particle_momentum_invariance_error": 0.0,
+        "max_abs_bcc_invariance_error": 0.0
+      }
+    },
+    {
+      "campaign": "f2_multirank_runtime_metadata",
+      "authorization_id": "f2-parser-multirank-metadata-1171668b-v3",
+      "submission_id": "ae1924f0-46bd-4aa1-9718-a08940c9106f",
+      "reservation_id": "29fe2068-d6da-4817-a787-b0bbd780b5a9",
+      "job_id": "4752697",
+      "scheduler_state": "COMPLETED",
+      "elapsed_seconds": 22,
+      "consumed_node_hours": 0.006111111111111111,
+      "terminal_ledger_event_sha256": "e69c299fe0012816b72a475702b786544719e773ce1748bee8c2f6b9c17b5376",
+      "manifest_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/manifests/f2_multirank_runtime_metadata/ae1924f0-46bd-4aa1-9718-a08940c9106f/pre_submit_manifest.json",
+      "manifest_sha256": "0d0f0a307ffcc20d56712629be390f5398505f0996ebfae3f12e471aa8975742",
+      "artifact_dir": "/lustre/orion/ast207/proj-shared/dfielding/PIC/runs/f2_multirank_runtime_metadata/ae1924f0-46bd-4aa1-9718-a08940c9106f",
+      "artifact_inventory_sha256": "0a43e6e8590a9d7d13b751cdb50d02b08864ef7fe75b736d740d93071df01112",
+      "analysis_result_sha256": "ec2cc708c7733fe267fe31a7ed871c612823902018a209bf99a25046cf4709a5",
+      "offline_analysis_receipt_sha256": "718fc6605ec83926cab9301488d4e7311520d75ef958ebe02201408b820ca325",
+      "pre_manifest_attestation": {
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/operator_attestations/20260601T212721Z-f2-parser-multirank-metadata-1171668b-v3-pre_manifest/attestation.json",
+        "sha256": "aef6be82e76d91a71d296f8b3eeb24ffa89cdac80fff1035a75f6db1ef9c35be"
+      },
+      "pre_submit_wrapper_attestation": {
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/operator_attestations/20260601T212817Z-f2-parser-multirank-metadata-1171668b-v3-pre_submit_wrapper/attestation.json",
+        "sha256": "9eb84cd68fa09172cee94861622dba4297a2e47ba93107e755d607c92b1c2f48"
+      },
+      "analysis_summary": {
+        "status": "pass",
+        "parallel_ranks": 8,
+        "distinct_gpu_bindings": 8,
+        "parser_runtime_smoke": "pass"
+      }
+    }
+  ],
+  "terminal_mirrored_ledger": {
+    "orion_node_hours_jsonl_sha256": "53cf79eb013a6ecb025754c5c48ed4cdbebc8832496d4c7d8da83a85916a7b55",
+    "project_home_node_hours_jsonl_sha256": "53cf79eb013a6ecb025754c5c48ed4cdbebc8832496d4c7d8da83a85916a7b55",
+    "orion_node_hours_csv_sha256": "b9a356a30cdf01eb65ff526214870ef22ba9f027a52bb7e3935dc3e041927dca",
+    "orion_mirror_receipts_jsonl_sha256": "bc3cc2d1757fc30b0298e7a6d24104274529669c74ae7cddd3a9ecb9a3e44641",
+    "orion_ledger_records": 75,
+    "project_home_ledger_records": 75,
+    "orion_receipt_records": 75,
+    "active_reservations": 0,
+    "pending_submission_marker": "absent",
+    "pending_manual_accounting_marker": "absent",
+    "cumulative_consumed_node_hours": 1.038888888888889
+  },
+  "scope_limits": [
+    "These registered short nonproduction prerequisite replays verify the frozen candidate's Frontier gyro, one-rank paper-coupling and eight-rank parser/runtime-metadata paths.",
+    "They do not qualify Section 5.4, close external review or replace the remaining AMR, restart, resilience and paper-reproduction campaigns."
+  ]
+}

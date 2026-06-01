@@ -645,6 +645,9 @@ class PicReadinessRegistryTests(unittest.TestCase):
         accounting = _load(
             "phase0_scheduler_accounting_controller_successor_2026-06-01.json"
         )
+        closure = _load(
+            "phase0_registered_prerequisite_replay_closure_2026-06-01.json"
+        )
         storage = policy["olcf_side_storage"]
         self.assertEqual(staged_version, replay["control_plane_version"])
         self.assertEqual(
@@ -808,7 +811,85 @@ class PicReadinessRegistryTests(unittest.TestCase):
                 self.assertEqual(
                     authorization["executable_sha256"], _sha256(executable_path)
                 )
-        ledger = replay["terminal_mirrored_ledger"]
+        executions = {
+            record["campaign"]: record for record in closure["registered_replays"]
+        }
+        self.assertEqual(set(executions), set(binding_paths))
+        ledger_records = [
+            json.loads(line)
+            for line in Path(
+                "/lustre/orion/ast207/proj-shared/dfielding/PIC/ledger/"
+                "node_hours.jsonl"
+            )
+            .read_text(encoding="utf-8")
+            .splitlines()
+        ]
+        terminal_events = {
+            record["job_id"]: record
+            for record in ledger_records
+            if record.get("event_type") == "reconciliation"
+            and record.get("job_id") in {
+                execution["job_id"] for execution in executions.values()
+            }
+        }
+        self.assertEqual(len(terminal_events), len(executions))
+        for campaign, execution in executions.items():
+            with self.subTest(campaign=campaign):
+                self.assertEqual(
+                    execution["authorization_id"],
+                    authorizations[campaign]["authorization_id"],
+                )
+                manifest_path = Path(execution["manifest_path"])
+                artifact_dir = Path(execution["artifact_dir"])
+                self.assertEqual(_sha256(manifest_path), execution["manifest_sha256"])
+                self.assertEqual(
+                    _sha256(artifact_dir / "artifact_inventory.json"),
+                    execution["artifact_inventory_sha256"],
+                )
+                result_path = artifact_dir / "analysis" / "analysis.json"
+                self.assertEqual(
+                    _sha256(result_path), execution["analysis_result_sha256"]
+                )
+                result = json.loads(result_path.read_text(encoding="utf-8"))
+                self.assertEqual(result["status"], "pass")
+                receipt_path = (
+                    artifact_dir / "analysis" / "offline_analysis_receipt.json"
+                )
+                self.assertEqual(
+                    _sha256(receipt_path),
+                    execution["offline_analysis_receipt_sha256"],
+                )
+                receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+                self.assertEqual(
+                    receipt["artifact_inventory"]["sha256"],
+                    execution["artifact_inventory_sha256"],
+                )
+                self.assertEqual(
+                    receipt["analysis_result"]["sha256"],
+                    execution["analysis_result_sha256"],
+                )
+                for attestation_key in (
+                    "pre_manifest_attestation",
+                    "pre_submit_wrapper_attestation",
+                ):
+                    attestation = execution[attestation_key]
+                    self.assertEqual(
+                        _sha256(Path(attestation["path"])),
+                        attestation["sha256"],
+                    )
+                terminal = terminal_events[execution["job_id"]]
+                self.assertEqual(terminal["state"], "COMPLETED")
+                self.assertEqual(
+                    terminal["event_sha256"],
+                    execution["terminal_ledger_event_sha256"],
+                )
+                self.assertEqual(
+                    terminal["reservation_id"], execution["reservation_id"]
+                )
+                self.assertEqual(
+                    terminal["submission_id"], execution["submission_id"]
+                )
+        ledger = closure["terminal_mirrored_ledger"]
         self.assertEqual(
             _sha256(Path("/lustre/orion/ast207/proj-shared/dfielding/PIC/ledger/node_hours.jsonl")),
             ledger["orion_node_hours_jsonl_sha256"],
@@ -817,6 +898,7 @@ class PicReadinessRegistryTests(unittest.TestCase):
             _sha256(Path("/ccs/proj/ast207/proj-shared/PIC/ledger/node_hours.jsonl")),
             ledger["project_home_node_hours_jsonl_sha256"],
         )
+        self.assertEqual(len(ledger_records), ledger["orion_ledger_records"])
         self.assertEqual(
             accounting["manual_accounting_activation"]["reviewed_job_count"], 10
         )
@@ -844,6 +926,20 @@ class PicReadinessRegistryTests(unittest.TestCase):
                 receipt["sha256"],
                 _sha256(REPO_ROOT / receipt["path"]),
             )
+
+    def test_phase0_successor_v8_binds_terminal_replay_closure(self) -> None:
+        successor = _load("phase0_curated_candidate_successor_v8_2026-06-01.json")
+        self.assertEqual(
+            successor["status"],
+            "canonical_clean_candidate_frozen_registered_prerequisite_replays_pass",
+        )
+        self.assertEqual(
+            successor["predecessor_record"],
+            "tst/publication/readiness/"
+            "phase0_curated_candidate_successor_v7_2026-06-01.json",
+        )
+        receipt = successor["registered_prerequisite_replay_closure_receipt"]
+        self.assertEqual(receipt["sha256"], _sha256(REPO_ROOT / receipt["path"]))
 
     def test_registered_science_staged_bindings_recompute_from_exact_files(self) -> None:
         policy = _load("storage_policy.json")

@@ -58,11 +58,20 @@ qualify any scientific claim by itself.
   clean candidate and the fresh single-attempt gyro, paper-coupling and
   multirank parser/runtime-metadata short nonproduction replays after scheduler
   accounting closure.
-- `phase0_curated_candidate_successor_v7_2026-06-01.json`: current Phase 0
+- `phase0_registered_prerequisite_replay_closure_2026-06-01.json`: terminal
+  three-slice replay closure. It binds the reconciled one-rank gyro, one-rank
+  paper-coupling and eight-rank parser/runtime-metadata scheduler allocations,
+  immutable artifact inventories, passing offline-analysis receipts and the
+  quiescent 75-row mirrored ledger.
+- `phase0_curated_candidate_successor_v7_2026-06-01.json`: historical Phase 0
   successor. It binds the canonical clean-candidate freeze, terminal scheduler
   accounting closure and fresh three-slice registered prerequisite replay
   authorization. Phase 0 is complete; the serial prerequisite replays are the
   next execution boundary.
+- `phase0_curated_candidate_successor_v8_2026-06-01.json`: current curated
+  Phase 0 successor. It binds the terminal passing closure for the gyro,
+  paper-coupling and multirank parser/runtime-metadata registered prerequisite
+  replays and advances the work program to local Section 5.4 contract closure.
 - `phase0_curated_candidate_successor_v4_2026-05-31.json`: historical Phase 0
   successor after schema-3 parallel-shock exact tag-window and restart
   fail-stop hardening. It binds the paired `4f005096` successor receipt and

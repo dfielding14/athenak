@@ -1,0 +1,25 @@
+{
+  "record_type": "phase0_curated_candidate_successor",
+  "schema_version": 1,
+  "date": "2026-06-01",
+  "predecessor_record": "tst/publication/readiness/phase0_curated_candidate_successor_v7_2026-06-01.json",
+  "status": "canonical_clean_candidate_frozen_registered_prerequisite_replays_pass",
+  "qualification_effect": "none_section54_and_broader_release_campaigns_still_pending",
+  "live_paired_control_plane_version": "3d3d0d20ab3cedb1b650d8a19e99a0123b550ead25ebd312882d03d3be3b41d9",
+  "candidate_freeze_source_commit": "1171668b32017e9d46f7f5ecf65f05ebc85aaa62",
+  "registered_prerequisite_replay_closure_receipt": {
+    "path": "tst/publication/readiness/phase0_registered_prerequisite_replay_closure_2026-06-01.json",
+    "sha256": "e3555417133022d9eedcb94e85c61727aece7c1c0fc95a21943f612386a5429e"
+  },
+  "completed_actions": [
+    "preserved the canonical frozen candidate and paired immutable scheduler-accounting control plane",
+    "executed the one-rank relativistic-gyro replay through the registered wrapper, reconciled Slurm job 4752676 and published passing offline analysis",
+    "executed the one-rank paper-coupling replay through the registered wrapper, reconciled Slurm job 4752687 and published passing offline analysis",
+    "executed the eight-rank parser/runtime-metadata replay through the registered wrapper, reconciled Slurm job 4752697 and published passing offline analysis",
+    "returned the mirrored ledger to a terminal quiescent state with 75 rows and 1.038888888888889 cumulative consumed node-hours"
+  ],
+  "next_actions": [
+    "close the locally decidable Section 5.4 thermodynamic, charge-normalization, estimator and analyzer contracts before shock pilots",
+    "authorize and execute the remaining registered AMR, restart, resilience and paper-reproduction campaigns serially after their exact contracts are frozen"
+  ]
+}
