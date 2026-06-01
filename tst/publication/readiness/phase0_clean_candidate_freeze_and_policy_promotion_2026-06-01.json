@@ -1,0 +1,57 @@
+{
+  "record_type": "phase0_clean_candidate_freeze_and_policy_promotion",
+  "schema_version": 1,
+  "date": "2026-06-01",
+  "predecessor_record": "tst/publication/readiness/phase0_paired_control_plane_install_and_policy_promotion_successor_v2_2026-06-01.json",
+  "qualification_effect": "none_operational_clean_candidate_freeze_receipt_only",
+  "control_plane_version": "66b63acd1b4743854e503b2345b628d81d8a3bdec4d8d4b753acc358801041a9",
+  "clean_candidate": {
+    "freeze_id": "0092f069-cbb4-4654-a00f-086bbcdfb985",
+    "manifest_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/clean_candidates/0092f069-cbb4-4654-a00f-086bbcdfb985/clean_candidate_manifest.json",
+    "manifest_sha256": "533eea21e72a61f01e4c4ed84ff80dafe48ad31f74669e37be7d66beb03d4410",
+    "source_git_commit": "1171668b32017e9d46f7f5ecf65f05ebc85aaa62",
+    "source_git_tree": "b62ee538f96ab6575959e5cf0b3365b09123cb4b",
+    "source_archive_sha256": "4e725a800ad4dc6b2591d3ccb2b8521caf139f8f971e65aabcaf2e5264309ed5",
+    "source_commit_sha256": "6c18ac3393ad810622332daaf37d35acc84f5529d0cef05ec193b2a695748a9c",
+    "source_bundle_sha256": "2fd34ce2c80ec0f745b8cf8f65e3bab7fef0f2441c6d869906e15ae2be2d325e",
+    "prepared_artifact_inventory_sha256": "7ce7b80365d3798b73ddfeac6bff4306e2e01686f5d1e6bdee8697b672f43515",
+    "build_profile_id": "hip-mpi-release-paper-pic",
+    "build_profile_sha256": "b402255b18932a416838459dfbf6719e1ed2b32e81224c7316224a06b6eead3b",
+    "profile_receipt_sha256": "d07b96fb813e44a9f993cc5dab3184f005c74fbb875479cc36539745776affa9",
+    "executable_sha256": "bb2abaecad0dbecdb83fece1417efb35d661220554e804a3bb3566393e1973ab"
+  },
+  "active_policy_promotion": {
+    "source_policy_commit": "8f93ce50b062c5347de33c498eab9932691679a0",
+    "orion_policy_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/storage_policy.json",
+    "project_home_policy_path": "/ccs/proj/ast207/proj-shared/PIC/policy/storage_policy.json",
+    "orion_policy_sha256": "65cc4536498a8c1bd4f321314368a9de57e141762d3db9b0e093ad4d359a28b6",
+    "project_home_policy_sha256": "65cc4536498a8c1bd4f321314368a9de57e141762d3db9b0e093ad4d359a28b6",
+    "orion_promotion_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/active_promotion.json",
+    "project_home_promotion_path": "/ccs/proj/ast207/proj-shared/PIC/policy/active_promotion.json",
+    "orion_promotion_sha256": "147dd77b9b7eccb346fa4ff152c7a72c825dd67255810ac0adb5e09792f1fda0",
+    "project_home_promotion_sha256": "147dd77b9b7eccb346fa4ff152c7a72c825dd67255810ac0adb5e09792f1fda0",
+    "maximum_node_hours": 10000,
+    "registered_science_slices": [],
+    "byte_identical_policy": true,
+    "byte_identical_promotion": true
+  },
+  "pre_promotion_operator_attestation": {
+    "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/operator_attestations/20260601T204916Z-phase0-clean-candidate-freeze-1171668b-pre_policy_promotion/attestation.json",
+    "sha256": "1e90310977264c4585bc87826fec20670c3d87e0ed6de857ac10199c41324132"
+  },
+  "mirrored_ledger_invariant": {
+    "orion_node_hours_jsonl_sha256": "cc49675b17c74fccaa84c4f28faab17c131438bc53d6b962b7e7cbda6a989aa6",
+    "project_home_node_hours_jsonl_sha256": "cc49675b17c74fccaa84c4f28faab17c131438bc53d6b962b7e7cbda6a989aa6",
+    "orion_mirror_receipts_jsonl_sha256": "a265e98351470a817c9f8e29dbabcbbf5a426fec2eb173c5e6f7884a35bf05d2",
+    "orion_ledger_records": 56,
+    "project_home_ledger_records": 56,
+    "orion_receipt_records": 56,
+    "active_reservations": 0,
+    "pending_submission_marker": "absent"
+  },
+  "scope_limits": [
+    "This receipt binds the canonical double-precision HIP/MPI Release clean candidate and its exact promoted manifest only.",
+    "The promoted boundary contains no registered-science slice authorization.",
+    "It does not qualify a physical claim or close external review."
+  ]
+}

@@ -36,11 +36,17 @@ qualify any scientific claim by itself.
   inventories, promoted transition policy, quiescent mirrored ledger and
   absent pending-submission markers.
 - `phase0_paired_control_plane_install_and_policy_promotion_successor_v2_2026-06-01.json`:
-  current chronology-preserving receipt for the paired immutable `66b63acd`
+  chronology-preserving receipt for the paired immutable `66b63acd`
   controller successor install, explicit double-precision paper release
   profile, byte-identical Orion and Project Home inventories, promoted
   transition policy, quiescent mirrored ledger and absent pending-submission
   markers.
+- `phase0_clean_candidate_freeze_and_policy_promotion_2026-06-01.json`:
+  current canonical clean-candidate freeze receipt. It binds the exact
+  `1171668b` source commit, double-precision HIP/MPI Release executable,
+  immutable clean-candidate manifest, paired-controller policy promotion,
+  pre-promotion operator attestation and quiescent mirrored ledger without
+  authorizing a registered-science attempt.
 - `phase0_curated_candidate_successor_v4_2026-05-31.json`: historical Phase 0
   successor after schema-3 parallel-shock exact tag-window and restart
   fail-stop hardening. It binds the paired `4f005096` successor receipt and
