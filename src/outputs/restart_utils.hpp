@@ -17,7 +17,8 @@
 namespace restart_utils {
 
 inline constexpr std::uint64_t kMeshMetadataMagic = 0x4154484b4d455348ULL;
-inline constexpr int kMeshMetadataVersion = 1;
+inline constexpr int kMeshMetadataVersionWithoutCheckpointNonce = 1;
+inline constexpr int kMeshMetadataVersion = 2;
 
 // Fatal failures must terminate the whole MPI world. A rank-local exit can
 // strand peers in the next collective.

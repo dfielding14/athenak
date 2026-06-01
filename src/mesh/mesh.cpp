@@ -256,6 +256,11 @@ Mesh::Mesh(ParameterInput *pin) :
   }
 
   // error check consistency of the block and mesh
+  if (mb_indcs.nx1 <= 0 || mb_indcs.nx2 <= 0 || mb_indcs.nx3 <= 0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
+              << "MeshBlock dimensions must be positive" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
   if (mesh_indcs.nx1 % mb_indcs.nx1 != 0 ||
       mesh_indcs.nx2 % mb_indcs.nx2 != 0 ||
       mesh_indcs.nx3 % mb_indcs.nx3 != 0) {
@@ -373,9 +378,10 @@ void Mesh::PrintMeshDiagnostics() {
 
   // if more than one physical level: compute/output # of blocks and cost per level
   if ((max_level - root_level) > 1) {
-    int *nb_per_plevel = new int[max_level];
-    float *cost_per_plevel = new float[max_level];
-    for (int i=0; i<max_level; ++i) {
+    const int nplevels = max_level - root_level + 1;
+    int *nb_per_plevel = new int[nplevels];
+    float *cost_per_plevel = new float[nplevels];
+    for (int i=0; i<nplevels; ++i) {
       nb_per_plevel[i] = 0;
       cost_per_plevel[i] = 0.0;
     }

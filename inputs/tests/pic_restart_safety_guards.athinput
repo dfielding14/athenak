@@ -31,6 +31,11 @@ nx1       = 4
 nx2       = 4
 nx3       = 4
 
+<mesh_refinement>
+refinement      = none
+num_levels      = 1
+max_nmb_per_rank = 64
+
 <time>
 evolution  = dynamic
 integrator = rk2
@@ -56,6 +61,7 @@ particle_type            = cosmic_ray
 star_particle_file       = pic_guard_star_particles.txt
 ppc                      = 1.0
 pusher                   = boris_tsc
+pic_enable_2d3v          = false
 nspecies                 = 1
 cr_distribution          = center
 deposit_moments          = true

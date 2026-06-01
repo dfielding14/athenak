@@ -39,12 +39,15 @@ class MeshBlockTree {
 
   // functions
   void CreateRootGrid();
+  void ResetMeshBlockCount(int count);
+  void ResetRestartNodeBudget(int physical_leaf_count);
   void AddNode(LogicalLocation rloc, int &nnew);
   void AddNodeWithoutRefinement(LogicalLocation rloc);
   void Refine(int &nnew);
   void Derefine(int &ndel);
   MeshBlockTree* FindMeshBlock(LogicalLocation tloc);
   void CountMeshBlocks(int& count);
+  bool IsRestartTreeComplete();
   void CreateZOrderedLLList(LogicalLocation *list, int *pglist, int& count);
   MeshBlockTree* FindNeighbor(LogicalLocation myloc, int ox1, int ox2, int ox3,
                               bool amrflag=false);
@@ -58,6 +61,8 @@ class MeshBlockTree {
   static Mesh *pmesh_;           // pointer to Mesh containing Tree
   static MeshBlockTree *proot_;  // pointer to leaf at root level
   static int nleaf_;             // number of leafs (2/4/8 for 1D/2D/3D)
+  static int nmeshblocks_;        // current number of physical leaf MeshBlocks
+  static int restart_node_budget_; // remaining restart-only sparse-tree node allowance
 };
 
 #endif // MESH_MESHBLOCK_TREE_HPP_

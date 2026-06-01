@@ -34,6 +34,10 @@ _MODEL_INT_COUNT = 31
 _MODEL_REAL_COUNT = 37
 _EXPECTED_RESTART_SCHEMA = 7
 _MESH_METADATA_MAGIC = 0x4154484B4D455348
+_MESH_METADATA_VERSION_WITH_CHECKPOINT_NONCE = 2
+_MAX_SUPPORTED_RESTART_MESHBLOCKS = 1 << 20
+_FORGED_IN_CAP_RESTART_MESHBLOCKS = 100000
+_FORGED_OVERSIZED_RESTART_PARTICLE_COUNT = 1 << 27
 
 _CASES = {
     'no_mhd': [
@@ -168,22 +172,96 @@ def _execute(label, nproc, arguments, restart_file=None, input_deck=_INPUT_DECK,
     return proc.returncode, output
 
 
-def _run_success(label, nproc, arguments, restart_file=None, timeout=None):
+def _run_success(label, nproc, arguments, restart_file=None, timeout=None,
+                 input_deck=_INPUT_DECK):
     code, output = _execute(label, nproc, arguments, restart_file=restart_file,
-                            timeout=timeout)
+                            timeout=timeout, input_deck=input_deck)
     if code != 0:
         raise RuntimeError('Command failed for ' + label + '\n' + output)
     return output
 
 
-def _run_expect_fail(label, nproc, arguments, reason):
-    code, output = _execute(label, nproc, arguments)
+def _run_expect_fail(label, nproc, arguments, reason, input_deck=_INPUT_DECK,
+                     timeout=None):
+    code, output = _execute(label, nproc, arguments, input_deck=input_deck,
+                            timeout=timeout)
     if code == 0:
         raise RuntimeError('Expected failure for ' + label + ', but command passed')
     if reason not in output:
         raise RuntimeError('Unexpected failure reason for ' + label + '\n'
                            'Expected substring: ' + reason + '\n'
                            'Output:\n' + output)
+
+
+def _run_scratch_tree_bounds_guards():
+    base = 'pic_rst_safe_guard_oversized_static_refinement_level'
+    _remove_outputs(base)
+    _run_expect_fail(
+        'guard_oversized_static_refinement_level', 1,
+        ['job/basename=' + base,
+         'refinement1/level=' + str((1 << 31) - 1)],
+        'Refinement level exceeds supported logical bounds.',
+        input_deck='tests/pic_refinement_boundary_amr_proxy.athinput',
+        timeout=30)
+    _RESTART_GUARDS['oversized_static_refinement_level'] = True
+    base = 'pic_rst_safe_guard_oversized_root_grid'
+    _remove_outputs(base)
+    _run_expect_fail(
+        'guard_oversized_root_grid', 1,
+        ['job/basename=' + base,
+         'mesh/nx1=' + str(4 * (_MAX_SUPPORTED_RESTART_MESHBLOCKS + 1)),
+         'meshblock/nx1=4'],
+        'Root MeshBlock grid exceeds supported topology bounds.',
+        timeout=30)
+    _RESTART_GUARDS['oversized_root_grid'] = True
+    base = 'pic_rst_safe_guard_zero_meshblock_extent'
+    _remove_outputs(base)
+    _run_expect_fail(
+        'guard_zero_meshblock_extent', 1,
+        ['job/basename=' + base, 'meshblock/nx1=0'],
+        'MeshBlock dimensions must be positive',
+        timeout=30)
+    _RESTART_GUARDS['zero_meshblock_extent'] = True
+    base = 'pic_rst_safe_guard_root_level_zero_multilevel_diagnostics'
+    _remove_outputs(base)
+    _run_success(
+        'guard_root_level_zero_multilevel_diagnostics', 1,
+        ['job/basename=' + base,
+         'mesh/nx1=4', 'mesh/nx2=4', 'mesh/nx3=4',
+         'meshblock/nx1=4', 'meshblock/nx2=4', 'meshblock/nx3=4',
+         'time/nlim=0'],
+        input_deck='tests/pic_refinement_boundary_amr_proxy.athinput',
+        timeout=30)
+    _RESTART_GUARDS['root_level_zero_multilevel_diagnostics'] = True
+
+
+def _run_hydro_only_sharded_restart_guard():
+    base = 'pic_rst_safe_guard_hydro_only_sharded'
+    base_seg = base + '_seg'
+    base_rst = base + '_rst'
+    for name in [base_seg, base_rst]:
+        _remove_outputs(name)
+    checkpoint_args = [
+        'job/basename=' + base_seg,
+        'time/nlim=1',
+        'output1/dcycle=0',
+        'output2/file_number=100000',
+        'output2/single_file_per_rank=true',
+    ]
+    _run_success(
+        base + '_checkpoint', 1, checkpoint_args,
+        input_deck='tests/pic_relativistic_gyro_paper.athinput')
+    full_restart, restart_path = _latest_restart_path(base_seg, per_rank=True)
+    first_six_digit_restart = os.path.join(
+        _athena_exe_dir(), 'rst', 'rank_00000000', base_seg + '.100000.rst')
+    if not os.path.exists(first_six_digit_restart):
+        raise RuntimeError('Six-digit restart sequence was not preserved: ' +
+                           first_six_digit_restart)
+    _run_success(
+        base + '_continuation', 1,
+        ['job/basename=' + base_rst, 'time/nlim=2', 'output2/dcycle=0'],
+        restart_file=restart_path)
+    _RESTART_GUARDS['hydro_only_sharded_restart_six_digit_sequence'] = True
 
 
 def _latest_restart_path(basename, per_rank=False):
@@ -299,6 +377,27 @@ def _write_shared_restart_publication(path):
     _write_completion_marker(manifest_path)
 
 
+def _restart_mesh_header_offset(data, restart_path):
+    marker = b'<par_end>\n'
+    header_offset = data.find(marker)
+    if header_offset < 0:
+        raise RuntimeError('Restart parameter header marker not found in ' + restart_path)
+    return header_offset + len(marker)
+
+
+def _mesh_metadata_cooldown_offset(data, restart_path):
+    marker = struct.pack('<Q', _MESH_METADATA_MAGIC)
+    metadata_offset = data.find(marker)
+    if metadata_offset < 0:
+        raise RuntimeError('Mesh metadata marker not found in ' + restart_path)
+    payload_offset = metadata_offset + struct.calcsize('<Qii')
+    metadata_version = struct.unpack_from('<i', data,
+                                          metadata_offset + struct.calcsize('<Q'))[0]
+    if metadata_version >= _MESH_METADATA_VERSION_WITH_CHECKPOINT_NONCE:
+        payload_offset += struct.calcsize('<Q')
+    return payload_offset
+
+
 def _run_extra_shard_manifest_guard():
     base = 'pic_rst_safe_guard_extra_shard'
     base_seg = base + '_seg'
@@ -387,6 +486,135 @@ def _run_inconsistent_rank_layout_guard():
     _RESTART_GUARDS['inconsistent_rank_layout'] = True
 
 
+def _run_inconsistent_shard_common_prefix_guard():
+    base = 'pic_rst_safe_guard_shard_common_prefix'
+    base_seg = base + '_seg'
+    base_rst = base + '_rst'
+    for name in [base_seg, base_rst]:
+        _remove_outputs(name)
+
+    checkpoint_args = [
+        'job/basename=' + base_seg,
+        'time/nlim=1',
+        'output7/single_file_per_rank=true',
+    ] + _CASES['no_mhd']
+
+    def _checkpoint_nonce(path):
+        with open(path, 'rb') as fp:
+            data = bytearray(fp.read())
+        marker = struct.pack('<Q', _MESH_METADATA_MAGIC)
+        metadata_offset = data.find(marker)
+        if metadata_offset < 0:
+            raise RuntimeError('Mesh metadata marker not found in ' + path)
+        version_offset = metadata_offset + struct.calcsize('<Q')
+        metadata_version = struct.unpack_from('<i', data, version_offset)[0]
+        if metadata_version != _MESH_METADATA_VERSION_WITH_CHECKPOINT_NONCE:
+            raise RuntimeError('Unexpected mesh metadata version in ' + path)
+        return struct.unpack_from('<Q', data,
+                                  metadata_offset + struct.calcsize('<Qii'))[0]
+
+    with tempfile.TemporaryDirectory(prefix=base + '_',
+                                     dir=_athena_exe_dir()) as tmpdir:
+        _run_success(base + '_checkpoint_a', 2, checkpoint_args)
+        checkpoint_a_rank0, _ = _latest_restart_path(base_seg, per_rank=True)
+        checkpoint_a_rank1 = checkpoint_a_rank0.replace(
+            'rank_00000000', 'rank_00000001')
+        saved_checkpoint_a_rank1 = os.path.join(tmpdir, 'rank_00000001.rst')
+        shutil.copyfile(checkpoint_a_rank1, saved_checkpoint_a_rank1)
+        checkpoint_a_nonce = _checkpoint_nonce(saved_checkpoint_a_rank1)
+
+        _remove_outputs(base_seg)
+        _run_success(base + '_checkpoint_b', 2, checkpoint_args)
+        checkpoint_b_rank0, rst_path = _latest_restart_path(base_seg, per_rank=True)
+        checkpoint_b_rank1 = checkpoint_b_rank0.replace(
+            'rank_00000000', 'rank_00000001')
+        checkpoint_b_nonce = _checkpoint_nonce(checkpoint_b_rank1)
+        if checkpoint_a_nonce == checkpoint_b_nonce:
+            raise RuntimeError('Distinct checkpoints reused the same checkpoint nonce')
+
+        # Both member files were published successfully by complete checkpoint writes.
+        # Assemble an otherwise plausible cross-checkpoint pair and refresh the digest
+        # manifest so restart ingestion must reject the duplicated-prefix mismatch.
+        shutil.copyfile(saved_checkpoint_a_rank1, checkpoint_b_rank1)
+        _refresh_sharded_member_publication(checkpoint_b_rank1)
+        code, output = _execute(
+            base + '_restart_run', 2,
+            ['job/basename=' + base_rst, 'time/nlim=2'] + _CASES['no_mhd'],
+            restart_file=rst_path,
+            timeout=30)
+    expected = 'Restart shard common mesh metadata is inconsistent across files'
+    if code == 0:
+        raise RuntimeError('Expected inconsistent shard-prefix failure, '
+                           'but command passed')
+    if expected not in output:
+        raise RuntimeError('Unexpected inconsistent shard-prefix failure reason\n'
+                           'Expected substring: ' + expected + '\n'
+                           'Output:\n' + output)
+    _RESTART_GUARDS['inconsistent_shard_common_prefix'] = True
+
+
+def _run_checkpoint_nonce_guards():
+    base = 'pic_rst_safe_guard_checkpoint_nonce'
+    base_seg = base + '_seg'
+    base_v1 = base + '_schema_v1'
+    base_zero = base + '_zero'
+    base_rst = base + '_rst'
+    for name in [base_seg, base_v1, base_zero, base_rst]:
+        _remove_outputs(name)
+
+    _run_success(base + '_seg_run', 1,
+                 ['job/basename=' + base_seg, 'time/nlim=1'] + _CASES['no_mhd'])
+    src_rst_path = os.path.join('rst', base_seg + '.00000.rst')
+    full_src = os.path.join(_athena_exe_dir(), src_rst_path)
+    with open(full_src, 'rb') as fp:
+        source_data = bytearray(fp.read())
+    marker = struct.pack('<Q', _MESH_METADATA_MAGIC)
+    metadata_offset = source_data.find(marker)
+    if metadata_offset < 0:
+        raise RuntimeError('Mesh metadata marker not found in ' + full_src)
+    version_offset = metadata_offset + struct.calcsize('<Q')
+    metadata_version = struct.unpack_from('<i', source_data, version_offset)[0]
+    if metadata_version != _MESH_METADATA_VERSION_WITH_CHECKPOINT_NONCE:
+        raise RuntimeError('Unexpected mesh metadata version in ' + full_src)
+    nonce_offset = metadata_offset + struct.calcsize('<Qii')
+
+    v1_rst_path = os.path.join('rst', base_v1 + '.00000.rst')
+    full_v1 = os.path.join(_athena_exe_dir(), v1_rst_path)
+    v1_data = bytearray(source_data)
+    struct.pack_into('<i', v1_data, version_offset, 1)
+    del v1_data[nonce_offset:nonce_offset + struct.calcsize('<Q')]
+    with open(full_v1, 'wb') as fp:
+        fp.write(v1_data)
+    _write_shared_restart_publication(full_v1)
+    _run_success(
+        base + '_schema_v1_restart_run', 1,
+        ['job/basename=' + base_rst, 'time/nlim=2'] + _CASES['no_mhd'],
+        restart_file=v1_rst_path,
+        timeout=30)
+    _RESTART_GUARDS['mesh_metadata_v1_restart_compatibility'] = True
+
+    zero_rst_path = os.path.join('rst', base_zero + '.00000.rst')
+    full_zero = os.path.join(_athena_exe_dir(), zero_rst_path)
+    zero_data = bytearray(source_data)
+    struct.pack_into('<Q', zero_data, nonce_offset, 0)
+    with open(full_zero, 'wb') as fp:
+        fp.write(zero_data)
+    _write_shared_restart_publication(full_zero)
+    code, output = _execute(
+        base + '_zero_restart_run', 1,
+        ['job/basename=' + base_rst, 'time/nlim=2'] + _CASES['no_mhd'],
+        restart_file=zero_rst_path,
+        timeout=30)
+    expected = 'Restart checkpoint nonce is invalid'
+    if code == 0:
+        raise RuntimeError('Expected zero checkpoint-nonce failure, but command passed')
+    if expected not in output:
+        raise RuntimeError('Unexpected zero checkpoint-nonce failure reason\n'
+                           'Expected substring: ' + expected + '\n'
+                           'Output:\n' + output)
+    _RESTART_GUARDS['zero_checkpoint_nonce'] = True
+
+
 def _run_oversized_meshblock_count_guard():
     base = 'pic_rst_safe_guard_oversized_meshblock_count'
     base_seg = base + '_seg'
@@ -404,11 +632,7 @@ def _run_oversized_meshblock_count_guard():
     shutil.copyfile(full_src, full_dst)
     with open(full_dst, 'rb') as fp:
         data = bytearray(fp.read())
-    marker = b'<par_end>\n'
-    header_offset = data.find(marker)
-    if header_offset < 0:
-        raise RuntimeError('Restart parameter header marker not found in ' + full_dst)
-    header_offset += len(marker)
+    header_offset = _restart_mesh_header_offset(data, full_dst)
     struct.pack_into('<i', data, header_offset, (1 << 31) - 1)
     with open(full_dst, 'wb') as fp:
         fp.write(data)
@@ -419,7 +643,7 @@ def _run_oversized_meshblock_count_guard():
         ['job/basename=' + base_rst, 'time/nlim=2'] + _CASES['no_mhd'],
         restart_file=dst_rst_path,
         timeout=30)
-    expected = 'Restart artifact is too small for serialized MeshBlock layout'
+    expected = 'MeshBlock or rank count stored in restart file is invalid or exceeds'
     if code == 0:
         raise RuntimeError('Expected oversized MeshBlock-count failure, but command passed')
     if expected not in output:
@@ -444,11 +668,7 @@ def _run_sharded_oversized_meshblock_count_guard():
     full_src, rst_path = _latest_restart_path(base_seg, per_rank=True)
     with open(full_src, 'rb') as fp:
         data = bytearray(fp.read())
-    marker = b'<par_end>\n'
-    header_offset = data.find(marker)
-    if header_offset < 0:
-        raise RuntimeError('Restart parameter header marker not found in ' + full_src)
-    header_offset += len(marker)
+    header_offset = _restart_mesh_header_offset(data, full_src)
     struct.pack_into('<i', data, header_offset, (1 << 31) - 1)
     with open(full_src, 'wb') as fp:
         fp.write(data)
@@ -459,7 +679,7 @@ def _run_sharded_oversized_meshblock_count_guard():
         ['job/basename=' + base_rst, 'time/nlim=2'] + _CASES['no_mhd'],
         restart_file=rst_path,
         timeout=30)
-    expected = 'Restart artifact is too small for serialized MeshBlock layout'
+    expected = 'MeshBlock or rank count stored in restart file is invalid or exceeds'
     if code == 0:
         raise RuntimeError('Expected sharded oversized MeshBlock-count failure, but '
                            'command passed')
@@ -468,6 +688,418 @@ def _run_sharded_oversized_meshblock_count_guard():
                            'Expected substring: ' + expected + '\n'
                            'Output:\n' + output)
     _RESTART_GUARDS['sharded_oversized_meshblock_count'] = True
+
+
+def _run_sparse_oversized_meshblock_count_guard():
+    base = 'pic_rst_safe_guard_sparse_oversized_meshblock_count'
+    base_seg = base + '_seg'
+    base_rst = base + '_rst'
+    base_bad = base + '_corrupt'
+    for name in [base_seg, base_rst, base_bad]:
+        _remove_outputs(name)
+
+    _run_success(base + '_seg_run', 1,
+                 ['job/basename=' + base_seg, 'time/nlim=1'] + _CASES['no_mhd'])
+    src_rst_path = os.path.join('rst', base_seg + '.00000.rst')
+    dst_rst_path = os.path.join('rst', base_bad + '.00000.rst')
+    full_src = os.path.join(_athena_exe_dir(), src_rst_path)
+    full_dst = os.path.join(_athena_exe_dir(), dst_rst_path)
+    shutil.copyfile(full_src, full_dst)
+    with open(full_dst, 'r+b') as fp:
+        data = bytearray(fp.read())
+        header_offset = _restart_mesh_header_offset(data, full_dst)
+        struct.pack_into('<i', data, header_offset,
+                         _MAX_SUPPORTED_RESTART_MESHBLOCKS + 1)
+        fp.seek(0)
+        fp.write(data)
+        fp.truncate(32 * 1024 * 1024)
+    _write_shared_restart_publication(full_dst)
+
+    code, output = _execute(
+        base + '_restart_run', 1,
+        ['job/basename=' + base_rst, 'time/nlim=2'] + _CASES['no_mhd'],
+        restart_file=dst_rst_path,
+        timeout=30)
+    expected = 'MeshBlock or rank count stored in restart file is invalid or exceeds'
+    if code == 0:
+        raise RuntimeError('Expected sparse oversized MeshBlock-count failure, but '
+                           'command passed')
+    if expected not in output:
+        raise RuntimeError('Unexpected sparse oversized MeshBlock-count failure reason\n'
+                           'Expected substring: ' + expected + '\n'
+                           'Output:\n' + output)
+    _RESTART_GUARDS['sparse_oversized_meshblock_count'] = True
+
+
+def _run_sparse_in_cap_undersized_meshblock_layout_guard():
+    base = 'pic_rst_safe_guard_sparse_in_cap_undersized_meshblock_layout'
+    base_seg = base + '_seg'
+    base_rst = base + '_rst'
+    base_bad = base + '_corrupt'
+    for name in [base_seg, base_rst, base_bad]:
+        _remove_outputs(name)
+
+    _run_success(base + '_seg_run', 1,
+                 ['job/basename=' + base_seg, 'time/nlim=1'] + _CASES['no_mhd'])
+    src_rst_path = os.path.join('rst', base_seg + '.00000.rst')
+    dst_rst_path = os.path.join('rst', base_bad + '.00000.rst')
+    full_src = os.path.join(_athena_exe_dir(), src_rst_path)
+    full_dst = os.path.join(_athena_exe_dir(), dst_rst_path)
+    shutil.copyfile(full_src, full_dst)
+    with open(full_dst, 'r+b') as fp:
+        data = bytearray(fp.read())
+        header_offset = _restart_mesh_header_offset(data, full_dst)
+        struct.pack_into('<i', data, header_offset, _FORGED_IN_CAP_RESTART_MESHBLOCKS)
+        fp.seek(0)
+        fp.write(data)
+        fp.truncate(1024 * 1024)
+    _write_shared_restart_publication(full_dst)
+
+    code, output = _execute(
+        base + '_restart_run', 1,
+        ['job/basename=' + base_rst, 'time/nlim=2'] + _CASES['no_mhd'],
+        restart_file=dst_rst_path,
+        timeout=30)
+    expected = 'Restart artifact is too small for serialized MeshBlock layout'
+    if code == 0:
+        raise RuntimeError(
+            'Expected sparse in-cap undersized layout failure, but command passed')
+    if expected not in output:
+        raise RuntimeError('Unexpected sparse in-cap undersized layout failure reason\n'
+                           'Expected substring: ' + expected + '\n'
+                           'Output:\n' + output)
+    _RESTART_GUARDS['sparse_in_cap_undersized_meshblock_layout'] = True
+
+
+def _run_adaptive_refinement_level_overflow_guard():
+    base = 'pic_rst_safe_guard_adaptive_refinement_level_overflow'
+    base_seg = base + '_seg'
+    base_rst = base + '_rst'
+    for name in [base_seg, base_rst]:
+        _remove_outputs(name)
+
+    _run_success(base + '_seg_run', 1,
+                 ['job/basename=' + base_seg, 'time/nlim=1'] + _CASES['no_mhd'])
+    _, rst_path = _latest_restart_path(base_seg)
+    code, output = _execute(
+        base + '_restart_run', 1,
+        ['job/basename=' + base_rst, 'time/nlim=2',
+         'mesh_refinement/refinement=adaptive',
+         'mesh_refinement/num_levels=2147483647'] + _CASES['no_mhd'],
+        restart_file=rst_path,
+        timeout=30)
+    expected = 'Number of refinement levels must be between 1 and'
+    if code == 0:
+        raise RuntimeError('Expected adaptive refinement-level overflow failure, but '
+                           'command passed')
+    if expected not in output:
+        raise RuntimeError(
+            'Unexpected adaptive refinement-level overflow failure reason\n'
+            'Expected substring: ' + expected + '\n'
+            'Output:\n' + output)
+    _RESTART_GUARDS['adaptive_refinement_level_overflow'] = True
+
+
+def _run_invalid_meshblock_geometry_guard():
+    base = 'pic_rst_safe_guard_invalid_meshblock_geometry'
+    base_seg = base + '_seg'
+    base_rst = base + '_rst'
+    base_bad = base + '_corrupt'
+    for name in [base_seg, base_rst, base_bad]:
+        _remove_outputs(name)
+
+    _run_success(base + '_seg_run', 1,
+                 ['job/basename=' + base_seg, 'time/nlim=1'] + _CASES['no_mhd'])
+    src_rst_path = os.path.join('rst', base_seg + '.00000.rst')
+    dst_rst_path = os.path.join('rst', base_bad + '.00000.rst')
+    full_src = os.path.join(_athena_exe_dir(), src_rst_path)
+    full_dst = os.path.join(_athena_exe_dir(), dst_rst_path)
+    shutil.copyfile(full_src, full_dst)
+    with open(full_dst, 'rb') as fp:
+        data = bytearray(fp.read())
+    header_offset = _restart_mesh_header_offset(data, full_dst)
+    region_size_bytes = 9 * _REAL_BYTES
+    region_indices_bytes = 19 * struct.calcsize('<i')
+    mb_nx1_offset = (header_offset + 2 * struct.calcsize('<i') +
+                     region_size_bytes + region_indices_bytes +
+                     struct.calcsize('<i'))
+    struct.pack_into('<i', data, mb_nx1_offset, 0)
+    with open(full_dst, 'wb') as fp:
+        fp.write(data)
+    _write_shared_restart_publication(full_dst)
+
+    code, output = _execute(
+        base + '_restart_run', 1,
+        ['job/basename=' + base_rst, 'time/nlim=2'] + _CASES['no_mhd'],
+        restart_file=dst_rst_path,
+        timeout=30)
+    expected = 'Restart mesh geometry does not match configured mesh geometry'
+    if code == 0:
+        raise RuntimeError(
+            'Expected invalid MeshBlock geometry failure, but command passed')
+    if expected not in output:
+        raise RuntimeError('Unexpected invalid MeshBlock geometry failure reason\n'
+                           'Expected substring: ' + expected + '\n'
+                           'Output:\n' + output)
+    _RESTART_GUARDS['invalid_meshblock_geometry'] = True
+
+
+def _run_adaptive_refinement_cooldown_guards():
+    base = 'pic_rst_safe_guard_adaptive_refinement_cooldown'
+    base_seg = base + '_seg'
+    base_rst = base + '_rst'
+    base_negative = base + '_negative'
+    base_saturated = base + '_saturated'
+    for name in [base_seg, base_rst, base_negative, base_saturated]:
+        _remove_outputs(name)
+
+    adaptive_args = [
+        'mesh_refinement/refinement=adaptive',
+        'mesh_refinement/num_levels=2',
+    ] + _CASES['no_mhd']
+    _run_success(base + '_seg_run', 1,
+                 ['job/basename=' + base_seg, 'time/nlim=1'] + adaptive_args)
+    src_rst_path = os.path.join('rst', base_seg + '.00000.rst')
+    full_src = os.path.join(_athena_exe_dir(), src_rst_path)
+
+    negative_rst_path = os.path.join('rst', base_negative + '.00000.rst')
+    full_negative = os.path.join(_athena_exe_dir(), negative_rst_path)
+    shutil.copyfile(full_src, full_negative)
+    with open(full_negative, 'rb') as fp:
+        data = bytearray(fp.read())
+    cooldown_offset = _mesh_metadata_cooldown_offset(data, full_negative)
+    struct.pack_into('<i', data, cooldown_offset, -1)
+    with open(full_negative, 'wb') as fp:
+        fp.write(data)
+    _write_shared_restart_publication(full_negative)
+    code, output = _execute(
+        base + '_negative_restart_run', 1,
+        ['job/basename=' + base_rst, 'time/nlim=2'] + _CASES['no_mhd'],
+        restart_file=negative_rst_path,
+        timeout=30)
+    expected = 'MeshBlock refinement cooldown list contains a negative value'
+    if code == 0:
+        raise RuntimeError(
+            'Expected negative refinement-cooldown failure, but command passed')
+    if expected not in output:
+        raise RuntimeError('Unexpected negative refinement-cooldown failure reason\n'
+                           'Expected substring: ' + expected + '\n'
+                           'Output:\n' + output)
+    _RESTART_GUARDS['negative_refinement_cooldown'] = True
+
+    saturated_rst_path = os.path.join('rst', base_saturated + '.00000.rst')
+    full_saturated = os.path.join(_athena_exe_dir(), saturated_rst_path)
+    shutil.copyfile(full_src, full_saturated)
+    with open(full_saturated, 'rb') as fp:
+        data = bytearray(fp.read())
+    cooldown_offset = _mesh_metadata_cooldown_offset(data, full_saturated)
+    struct.pack_into('<i', data, cooldown_offset, (1 << 31) - 1)
+    with open(full_saturated, 'wb') as fp:
+        fp.write(data)
+    _write_shared_restart_publication(full_saturated)
+    _run_success(
+        base + '_saturated_restart_run', 1,
+        ['job/basename=' + base_rst, 'time/nlim=2'] + _CASES['no_mhd'],
+        restart_file=saturated_rst_path,
+        timeout=30)
+    _RESTART_GUARDS['saturated_refinement_cooldown'] = True
+
+
+def _run_corrupt_mesh_idlist_guard(label, mutate, expected, extra_args=None,
+                                   nproc=1):
+    base = 'pic_rst_safe_guard_' + label
+    base_seg = base + '_seg'
+    base_rst = base + '_rst'
+    base_bad = base + '_corrupt'
+    for name in [base_seg, base_rst, base_bad]:
+        _remove_outputs(name)
+    args = list(extra_args or []) + _CASES['no_mhd']
+    _run_success(base + '_seg_run', nproc,
+                 ['job/basename=' + base_seg, 'time/nlim=1'] + args)
+    src_rst_path = os.path.join('rst', base_seg + '.00000.rst')
+    dst_rst_path = os.path.join('rst', base_bad + '.00000.rst')
+    full_src = os.path.join(_athena_exe_dir(), src_rst_path)
+    full_dst = os.path.join(_athena_exe_dir(), dst_rst_path)
+    shutil.copyfile(full_src, full_dst)
+    with open(full_dst, 'rb') as fp:
+        data = bytearray(fp.read())
+    header_offset = _restart_mesh_header_offset(data, full_dst)
+    nmb_total = struct.unpack_from('<i', data, header_offset)[0]
+    idlist_offset = header_offset + 4 * struct.calcsize('<i')
+    idlist_offset += 2 * _REAL_BYTES + 9 * _REAL_BYTES
+    idlist_offset += 2 * 19 * struct.calcsize('<i')
+    mutate(data, idlist_offset, nmb_total)
+    with open(full_dst, 'wb') as fp:
+        fp.write(data)
+    _write_shared_restart_publication(full_dst)
+    code, output = _execute(
+        base + '_restart_run', nproc,
+        ['job/basename=' + base_rst, 'time/nlim=2'] + args,
+        restart_file=dst_rst_path,
+        timeout=30)
+    if code == 0:
+        raise RuntimeError('Expected ' + label + ' failure, but command passed')
+    if expected not in output:
+        raise RuntimeError('Unexpected ' + label + ' failure reason\n'
+                           'Expected substring: ' + expected + '\n'
+                           'Output:\n' + output)
+    _RESTART_GUARDS[label] = True
+
+
+def _run_corrupt_mesh_idlist_guards():
+    location_error = 'Restart MeshBlock logical location is outside supported bounds'
+    _run_corrupt_mesh_idlist_guard(
+        'negative_logical_level',
+        lambda data, offset, _nmb: struct.pack_into('<i', data, offset + 3 * 4, -1),
+        location_error)
+    _run_corrupt_mesh_idlist_guard(
+        'minimum_logical_level',
+        lambda data, offset, _nmb: struct.pack_into(
+            '<i', data, offset + 3 * 4, -(1 << 31)),
+        location_error)
+    _run_corrupt_mesh_idlist_guard(
+        'extreme_logical_level',
+        lambda data, offset, _nmb: struct.pack_into('<i', data, offset + 3 * 4, 31),
+        location_error)
+    _run_corrupt_mesh_idlist_guard(
+        'inactive_logical_coordinate',
+        lambda data, offset, _nmb: struct.pack_into('<i', data, offset + 2 * 4, 1),
+        location_error,
+        extra_args=['mesh/nx3=1', 'meshblock/nx3=1',
+                    'particles/pic_enable_2d3v=true'])
+    _run_corrupt_mesh_idlist_guard(
+        'nan_meshblock_cost',
+        lambda data, offset, nmb: struct.pack_into('<f', data, offset + nmb * 16,
+                                                   float('nan')),
+        'Restart MeshBlock load-balance cost is invalid')
+
+    def zero_costs(data, offset, nmb):
+        for index in range(nmb):
+            struct.pack_into('<f', data, offset + nmb * 16 + index * 4, 0.0)
+
+    _run_corrupt_mesh_idlist_guard(
+        'zero_meshblock_cost_total', zero_costs,
+        'Restart MeshBlock load-balance total cost is invalid')
+
+    def refine_first_leaf_only(data, offset, _nmb):
+        level_offset = offset + 3 * struct.calcsize('<i')
+        level = struct.unpack_from('<i', data, level_offset)[0]
+        struct.pack_into('<i', data, level_offset, level + 1)
+
+    _run_corrupt_mesh_idlist_guard(
+        'incomplete_leaf_partition', refine_first_leaf_only,
+        'Tree reconstruction failed',
+        nproc=2 if _athena_mpi_enabled() else 1)
+
+    def forge_sparse_deep_locations(data, offset, nmb):
+        logical_location_bytes = 4 * struct.calcsize('<i')
+        for index in range(nmb):
+            struct.pack_into('<iiii', data, offset + index * logical_location_bytes,
+                             index << 26, 0, 0, 30)
+
+    _run_corrupt_mesh_idlist_guard(
+        'sparse_deep_tree_node_budget', forge_sparse_deep_locations,
+        'Restart MeshBlock tree exceeds supported reconstruction node budget')
+
+    def swap_first_two_locations(data, offset, nmb):
+        if nmb < 2:
+            raise RuntimeError('Canonical-order fixture requires at least two MeshBlocks')
+        logical_location_bytes = 4 * struct.calcsize('<i')
+        first = data[offset:offset + logical_location_bytes]
+        second_offset = offset + logical_location_bytes
+        second = data[second_offset:second_offset + logical_location_bytes]
+        data[offset:offset + logical_location_bytes] = second
+        data[second_offset:second_offset + logical_location_bytes] = first
+
+    _run_corrupt_mesh_idlist_guard(
+        'noncanonical_meshblock_order', swap_first_two_locations,
+        'Restart MeshBlock logical locations are not in canonical gid order')
+
+
+def _forge_oversized_particle_count(data, restart_path):
+    section = _find_particle_restart_section(data, restart_path)
+    offset = section + struct.calcsize('<Q') + 15 * struct.calcsize('<i')
+    offset += _REAL_BYTES
+    offset += _MODEL_INT_COUNT * struct.calcsize('<i')
+    offset += _MODEL_REAL_COUNT * _REAL_BYTES
+    forged_count = _FORGED_OVERSIZED_RESTART_PARTICLE_COUNT
+    struct.pack_into('<Q', data, offset, forged_count)
+    offset += struct.calcsize('<Q')
+    nmb_section = struct.unpack_from(
+        '<i', data, section + struct.calcsize('<Q') + struct.calcsize('<i'))[0]
+    original_counts = struct.unpack_from('<' + str(nmb_section) + 'i', data, offset)
+    struct.pack_into('<i', data, offset, forged_count - sum(original_counts[1:]))
+
+
+def _run_oversized_particle_count_guard():
+    base = 'pic_rst_safe_guard_oversized_particle_count'
+    base_seg = base + '_seg'
+    base_rst = base + '_rst'
+    base_bad = base + '_corrupt'
+    for name in [base_seg, base_rst, base_bad]:
+        _remove_outputs(name)
+
+    _run_success(base + '_seg_run', 1,
+                 ['job/basename=' + base_seg, 'time/nlim=1'] + _CASES['no_mhd'])
+    src_rst_path = os.path.join('rst', base_seg + '.00000.rst')
+    dst_rst_path = os.path.join('rst', base_bad + '.00000.rst')
+    full_src = os.path.join(_athena_exe_dir(), src_rst_path)
+    full_dst = os.path.join(_athena_exe_dir(), dst_rst_path)
+    shutil.copyfile(full_src, full_dst)
+    with open(full_dst, 'rb') as fp:
+        data = bytearray(fp.read())
+    _forge_oversized_particle_count(data, full_dst)
+    with open(full_dst, 'wb') as fp:
+        fp.write(data)
+    _write_shared_restart_publication(full_dst)
+
+    code, output = _execute(
+        base + '_restart_run', 1,
+        ['job/basename=' + base_rst, 'time/nlim=2'] + _CASES['no_mhd'],
+        restart_file=dst_rst_path,
+        timeout=30)
+    expected = 'Particle restart section exceeds source artifact bounds'
+    if code == 0:
+        raise RuntimeError(
+            'Expected oversized particle-count failure, but command passed')
+    if expected not in output:
+        raise RuntimeError('Unexpected oversized particle-count failure reason\n'
+                           'Expected substring: ' + expected + '\n'
+                           'Output:\n' + output)
+    _RESTART_GUARDS['oversized_particle_count'] = True
+
+
+def _run_sharded_oversized_particle_count_guard():
+    base = 'pic_rst_safe_guard_sharded_oversized_particle_count'
+    base_seg = base + '_seg'
+    base_rst = base + '_rst'
+    for name in [base_seg, base_rst]:
+        _remove_outputs(name)
+    _run_success(
+        base + '_seg_run', 1,
+        ['job/basename=' + base_seg, 'time/nlim=1',
+         'output7/single_file_per_rank=true'] + _CASES['no_mhd'])
+    full_src, rst_path = _latest_restart_path(base_seg, per_rank=True)
+    with open(full_src, 'rb') as fp:
+        data = bytearray(fp.read())
+    _forge_oversized_particle_count(data, full_src)
+    with open(full_src, 'wb') as fp:
+        fp.write(data)
+    _refresh_sharded_member_publication(full_src)
+    code, output = _execute(
+        base + '_restart_run', 1,
+        ['job/basename=' + base_rst, 'time/nlim=2'] + _CASES['no_mhd'],
+        restart_file=rst_path,
+        timeout=30)
+    expected = 'Particle restart layout exceeds supported offset or allocation limits'
+    if code == 0:
+        raise RuntimeError('Expected sharded oversized particle-count failure, but '
+                           'command passed')
+    if expected not in output:
+        raise RuntimeError('Unexpected sharded oversized particle-count failure reason\n'
+                           'Expected substring: ' + expected + '\n'
+                           'Output:\n' + output)
+    _RESTART_GUARDS['sharded_oversized_particle_count'] = True
 
 
 def _run_zero_block_source_rank_guard():
@@ -961,7 +1593,8 @@ def _run_preload_restart_guards():
             for guard in [
                     'short_header_write',
                     'stdio_fseek_failure',
-                    'killed_writer_preserves_prior']:
+                    'killed_writer_preserves_prior',
+                    'mpi_rank_local_open_failure']:
                 _skip_drill(guard, reason)
             return
         _run_preload_failure_guard(
@@ -1496,6 +2129,8 @@ def run(**kwargs):
         _run_expect_fail(guard['tag'], 1,
                          ['job/basename=' + base] + guard['args'],
                          guard['reason'])
+    _run_scratch_tree_bounds_guards()
+    _run_hydro_only_sharded_restart_guard()
     _run_corrupt_species_restart_guard()
     _run_corrupt_moment_count_restart_guard()
     _run_schema_version_restart_guard()
@@ -1504,8 +2139,17 @@ def run(**kwargs):
     _run_publication_failure_path_guards()
     _run_extra_shard_manifest_guard()
     _run_inconsistent_rank_layout_guard()
+    _run_checkpoint_nonce_guards()
     _run_oversized_meshblock_count_guard()
     _run_sharded_oversized_meshblock_count_guard()
+    _run_sparse_oversized_meshblock_count_guard()
+    _run_sparse_in_cap_undersized_meshblock_layout_guard()
+    _run_adaptive_refinement_level_overflow_guard()
+    _run_invalid_meshblock_geometry_guard()
+    _run_adaptive_refinement_cooldown_guards()
+    _run_corrupt_mesh_idlist_guards()
+    _run_oversized_particle_count_guard()
+    _run_sharded_oversized_particle_count_guard()
     _run_rank_shaped_ancestor_guard()
     _run_preload_restart_guards()
     _run_full_device_restart_target_guard()
@@ -1518,6 +2162,7 @@ def run(**kwargs):
     _run_direct_inflow_edge_current_bc_guard()
 
     if mpi_enabled:
+        _run_inconsistent_shard_common_prefix_guard()
         _run_zero_block_source_rank_guard()
         _run_per_rank_watch(2, _CASES['coupled_edge_direct'])
 
@@ -1576,8 +2221,32 @@ def analyze():
         'interrupted_publication_preserves_prior',
         'extra_shard_manifest_member',
         'inconsistent_rank_layout',
+        'mesh_metadata_v1_restart_compatibility',
+        'zero_checkpoint_nonce',
+        'oversized_static_refinement_level',
+        'oversized_root_grid',
+        'zero_meshblock_extent',
+        'root_level_zero_multilevel_diagnostics',
+        'hydro_only_sharded_restart_six_digit_sequence',
         'oversized_meshblock_count',
         'sharded_oversized_meshblock_count',
+        'sparse_oversized_meshblock_count',
+        'sparse_in_cap_undersized_meshblock_layout',
+        'adaptive_refinement_level_overflow',
+        'invalid_meshblock_geometry',
+        'negative_refinement_cooldown',
+        'saturated_refinement_cooldown',
+        'negative_logical_level',
+        'minimum_logical_level',
+        'extreme_logical_level',
+        'inactive_logical_coordinate',
+        'nan_meshblock_cost',
+        'zero_meshblock_cost_total',
+        'incomplete_leaf_partition',
+        'sparse_deep_tree_node_budget',
+        'noncanonical_meshblock_order',
+        'oversized_particle_count',
+        'sharded_oversized_particle_count',
         'rank_shaped_ancestor_ignored',
         'short_header_write',
         'stdio_fseek_failure',
@@ -1589,6 +2258,7 @@ def analyze():
     if _athena_mpi_enabled():
         publication_guards += [
             'mpi_rank_local_open_failure',
+            'inconsistent_shard_common_prefix',
             'zero_block_source_rank',
         ]
     for guard in publication_guards:

@@ -20,6 +20,81 @@
 #include "io_wrapper.hpp"
 #include "restart_utils.hpp"
 
+namespace {
+long CheckedStdioIoOffset(IOWrapperSizeT offset,  // NOLINT(runtime/int)
+                          const char* operation) {
+  constexpr IOWrapperSizeT stdio_offset_max =
+      static_cast<IOWrapperSizeT>(
+          std::numeric_limits<long>::max());  // NOLINT(runtime/int)
+  if (offset > stdio_offset_max) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << operation << " offset exceeds the stdio long limit: " << offset
+              << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+  return static_cast<long>(offset);  // NOLINT(runtime/int)
+}
+
+std::size_t CheckedStdioIoCount(IOWrapperSizeT count, IOWrapperSizeT elements_per_item,
+                                const char* operation) {
+  constexpr IOWrapperSizeT stdio_count_max =
+      static_cast<IOWrapperSizeT>(std::numeric_limits<std::size_t>::max());
+  if (elements_per_item == 0 || elements_per_item > stdio_count_max ||
+      count > stdio_count_max/elements_per_item) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << operation << " count exceeds the stdio size_t limit or has zero width: "
+              << count << " * " << elements_per_item << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+  return static_cast<std::size_t>(count);
+}
+
+#if MPI_PARALLEL_ENABLED
+int CheckedMpiIoCount(IOWrapperSizeT count, IOWrapperSizeT elements_per_item,
+                      const char* operation) {
+  constexpr IOWrapperSizeT mpi_count_max =
+      static_cast<IOWrapperSizeT>(std::numeric_limits<int>::max());
+  if (elements_per_item == 0 || elements_per_item > mpi_count_max ||
+      count > mpi_count_max/elements_per_item) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << operation << " count exceeds the MPI int limit or has zero width: "
+              << count << " * " << elements_per_item << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+  return static_cast<int>(count * elements_per_item);
+}
+
+MPI_Offset CheckedMpiIoOffset(IOWrapperSizeT offset, const char* operation) {
+  constexpr IOWrapperSizeT mpi_offset_max =
+      static_cast<IOWrapperSizeT>(std::numeric_limits<MPI_Offset>::max());
+  if (offset > mpi_offset_max) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << operation << " offset exceeds the MPI_Offset limit: " << offset
+              << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+  return static_cast<MPI_Offset>(offset);
+}
+
+int CheckedMpiStatusCount(MPI_Status *status, MPI_Datatype datatype,
+                          const char* operation) {
+  int count = 0;
+  const int errcode = MPI_Get_count(status, datatype, &count);
+  if (errcode != MPI_SUCCESS || count == MPI_UNDEFINED || count < 0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << operation << " returned an invalid MPI status count." << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+  return count;
+}
+#endif
+}  // namespace
+
 //----------------------------------------------------------------------------------------
 //! \fn int IOWrapper::Open(const char* fname, FileMode rw)
 //! \brief wrapper for {MPI_File_open} versus {std::fopen} including error check
@@ -50,7 +125,6 @@ int IOWrapper::Open(const char* fname, FileMode rw, bool single_file_per_rank) {
         break;
       case FileMode::write:
         mpi_mode = MPI_MODE_WRONLY | MPI_MODE_CREATE;
-        MPI_File_delete(fname, MPI_INFO_NULL); // truncation
         break;
       case FileMode::append:
         mpi_mode = MPI_MODE_WRONLY | MPI_MODE_APPEND;
@@ -69,6 +143,19 @@ int IOWrapper::Open(const char* fname, FileMode rw, bool single_file_per_rank) {
                 << std::endl << "File '" << fname << "' could not be opened"
                 << std::endl;
       restart_utils::AbortOnFatalError();
+    }
+    if (rw == FileMode::write) {
+      errcode = MPI_File_set_size(fh_, 0);
+      if (errcode != MPI_SUCCESS) {
+        char msg[MPI_MAX_ERROR_STRING];
+        int resultlen;
+        MPI_Error_string(errcode, msg, &resultlen);
+        Kokkos::printf("%.*s\n", resultlen, msg);
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "File '" << fname << "' could not be truncated"
+                  << std::endl;
+        restart_utils::AbortOnFatalError();
+      }
     }
   } else {
     FILE* local_fh;
@@ -107,7 +194,9 @@ std::size_t IOWrapper::Read_bytes(void *buf, IOWrapperSizeT size, IOWrapperSizeT
 #if MPI_PARALLEL_ENABLED
   if (!single_file_per_rank) {
     MPI_Status status;
-    int errcode = MPI_File_read(fh_, buf, cnt*size, MPI_BYTE, &status);
+    int errcode =
+        MPI_File_read(fh_, buf, CheckedMpiIoCount(cnt, size, "MPI_File_read"), MPI_BYTE,
+                      &status);
     if (errcode != MPI_SUCCESS) {
       char msg[MPI_MAX_ERROR_STRING];
       int resultlen;
@@ -115,14 +204,14 @@ std::size_t IOWrapper::Read_bytes(void *buf, IOWrapperSizeT size, IOWrapperSizeT
       Kokkos::printf("%.*s\n", resultlen, msg);
       return 0;
     }
-    int nread;
-    if (MPI_Get_count(&status,MPI_BYTE,&nread) == MPI_UNDEFINED) {return 0;}
+    int nread = CheckedMpiStatusCount(&status, MPI_BYTE, "MPI_File_read");
     return nread/size;
   } else {
-    return std::fread(buf, size, cnt, reinterpret_cast<FILE*>(fh_));
+    return std::fread(buf, size, CheckedStdioIoCount(cnt, size, "fread"),
+                      reinterpret_cast<FILE*>(fh_));
   }
 #else
-  return std::fread(buf, size, cnt, fh_);
+  return std::fread(buf, size, CheckedStdioIoCount(cnt, size, "fread"), fh_);
 #endif
 }
 
@@ -139,7 +228,10 @@ std::size_t IOWrapper::Read_bytes_at(void *buf, IOWrapperSizeT size,
 #if MPI_PARALLEL_ENABLED
   if (!single_file_per_rank) {
     MPI_Status status;
-    int errcode = MPI_File_read_at(fh_, offset, buf, cnt*size, MPI_BYTE, &status);
+    int errcode =
+        MPI_File_read_at(fh_, CheckedMpiIoOffset(offset, "MPI_File_read_at"), buf,
+                         CheckedMpiIoCount(cnt, size, "MPI_File_read_at"),
+                         MPI_BYTE, &status);
     if (errcode != MPI_SUCCESS) {
       char msg[MPI_MAX_ERROR_STRING];
       int resultlen;
@@ -147,16 +239,17 @@ std::size_t IOWrapper::Read_bytes_at(void *buf, IOWrapperSizeT size,
       Kokkos::printf("%.*s\n", resultlen, msg);
       return 0;
     }
-    int nread;
-    if (MPI_Get_count(&status,MPI_BYTE,&nread) == MPI_UNDEFINED) {return 0;}
+    int nread = CheckedMpiStatusCount(&status, MPI_BYTE, "MPI_File_read_at");
     return nread/size;
   } else {
-    if (std::fseek(reinterpret_cast<FILE*>(fh_), offset, SEEK_SET) != 0) return 0;
-    return std::fread(buf, size, cnt, reinterpret_cast<FILE*>(fh_));
+    if (std::fseek(reinterpret_cast<FILE*>(fh_),
+                   CheckedStdioIoOffset(offset, "fseek"), SEEK_SET) != 0) return 0;
+    return std::fread(buf, size, CheckedStdioIoCount(cnt, size, "fread"),
+                      reinterpret_cast<FILE*>(fh_));
   }
 #else
-  if (std::fseek(fh_, offset, SEEK_SET) != 0) return 0;
-  return std::fread(buf, size, cnt, fh_);
+  if (std::fseek(fh_, CheckedStdioIoOffset(offset, "fseek"), SEEK_SET) != 0) return 0;
+  return std::fread(buf, size, CheckedStdioIoCount(cnt, size, "fread"), fh_);
 #endif
 }
 
@@ -173,7 +266,10 @@ std::size_t IOWrapper::Read_bytes_at_all(void *buf, IOWrapperSizeT size,
 #if MPI_PARALLEL_ENABLED
   if (!single_file_per_rank) {
     MPI_Status status;
-    int errcode = MPI_File_read_at_all(fh_, offset, buf, cnt*size, MPI_BYTE, &status);
+    int errcode = MPI_File_read_at_all(
+        fh_, CheckedMpiIoOffset(offset, "MPI_File_read_at_all"), buf,
+        CheckedMpiIoCount(cnt, size, "MPI_File_read_at_all"), MPI_BYTE,
+        &status);
     if (errcode != MPI_SUCCESS) {
       char msg[MPI_MAX_ERROR_STRING];
       int resultlen;
@@ -181,16 +277,17 @@ std::size_t IOWrapper::Read_bytes_at_all(void *buf, IOWrapperSizeT size,
       Kokkos::printf("%.*s\n", resultlen, msg);
       return 0;
     }
-    int nread;
-    if (MPI_Get_count(&status,MPI_BYTE,&nread) == MPI_UNDEFINED) {return 0;}
+    int nread = CheckedMpiStatusCount(&status, MPI_BYTE, "MPI_File_read_at_all");
     return nread/size;
   } else {
-    if (std::fseek(reinterpret_cast<FILE*>(fh_), offset, SEEK_SET) != 0) return 0;
-    return std::fread(buf, size, cnt, reinterpret_cast<FILE*>(fh_));
+    if (std::fseek(reinterpret_cast<FILE*>(fh_),
+                   CheckedStdioIoOffset(offset, "fseek"), SEEK_SET) != 0) return 0;
+    return std::fread(buf, size, CheckedStdioIoCount(cnt, size, "fread"),
+                      reinterpret_cast<FILE*>(fh_));
   }
 #else
-  if (std::fseek(fh_, offset, SEEK_SET) != 0) return 0;
-  return std::fread(buf, size, cnt, fh_);
+  if (std::fseek(fh_, CheckedStdioIoOffset(offset, "fseek"), SEEK_SET) != 0) return 0;
+  return std::fread(buf, size, CheckedStdioIoCount(cnt, size, "fread"), fh_);
 #endif
 }
 
@@ -205,7 +302,8 @@ std::size_t IOWrapper::Read_Reals(void *buf, IOWrapperSizeT cnt,
 #if MPI_PARALLEL_ENABLED
   if (!single_file_per_rank) {
     MPI_Status status;
-    int errcode = MPI_File_read(fh_, buf, cnt, MPI_ATHENA_REAL, &status);
+    int errcode = MPI_File_read(fh_, buf, CheckedMpiIoCount(cnt, 1, "MPI_File_read"),
+                                MPI_ATHENA_REAL, &status);
     if (errcode != MPI_SUCCESS) {
       char msg[MPI_MAX_ERROR_STRING];
       int resultlen;
@@ -213,14 +311,15 @@ std::size_t IOWrapper::Read_Reals(void *buf, IOWrapperSizeT cnt,
       Kokkos::printf("%.*s\n", resultlen, msg);
       return 0;
     }
-    int nread;
-    if (MPI_Get_count(&status,MPI_ATHENA_REAL,&nread) == MPI_UNDEFINED) {return 0;}
+    int nread = CheckedMpiStatusCount(&status, MPI_ATHENA_REAL, "MPI_File_read");
     return nread;
   } else {
-    return std::fread(buf, sizeof(Real), cnt, reinterpret_cast<FILE*>(fh_));
+    return std::fread(buf, sizeof(Real), CheckedStdioIoCount(cnt, sizeof(Real), "fread"),
+                      reinterpret_cast<FILE*>(fh_));
   }
 #else
-  return std::fread(buf, sizeof(Real), cnt, fh_);
+  return std::fread(buf, sizeof(Real), CheckedStdioIoCount(cnt, sizeof(Real), "fread"),
+                    fh_);
 #endif
 }
 
@@ -235,7 +334,10 @@ std::size_t IOWrapper::Read_Reals_at(void *buf, IOWrapperSizeT cnt,
 #if MPI_PARALLEL_ENABLED
   if (!single_file_per_rank) {
     MPI_Status status;
-    int errcode = MPI_File_read_at(fh_, offset, buf, cnt, MPI_ATHENA_REAL, &status);
+    int errcode =
+        MPI_File_read_at(fh_, CheckedMpiIoOffset(offset, "MPI_File_read_at"), buf,
+                         CheckedMpiIoCount(cnt, 1, "MPI_File_read_at"),
+                         MPI_ATHENA_REAL, &status);
     if (errcode != MPI_SUCCESS) {
       char msg[MPI_MAX_ERROR_STRING];
       int resultlen;
@@ -243,16 +345,18 @@ std::size_t IOWrapper::Read_Reals_at(void *buf, IOWrapperSizeT cnt,
       Kokkos::printf("%.*s\n", resultlen, msg);
       return 0;
     }
-    int nread;
-    if (MPI_Get_count(&status,MPI_ATHENA_REAL,&nread) == MPI_UNDEFINED) {return 0;}
+    int nread = CheckedMpiStatusCount(&status, MPI_ATHENA_REAL, "MPI_File_read_at");
     return nread;
   } else {
-    if (std::fseek(reinterpret_cast<FILE*>(fh_), offset, SEEK_SET) != 0) return 0;
-    return std::fread(buf, sizeof(Real), cnt, reinterpret_cast<FILE*>(fh_));
+    if (std::fseek(reinterpret_cast<FILE*>(fh_),
+                   CheckedStdioIoOffset(offset, "fseek"), SEEK_SET) != 0) return 0;
+    return std::fread(buf, sizeof(Real), CheckedStdioIoCount(cnt, sizeof(Real), "fread"),
+                      reinterpret_cast<FILE*>(fh_));
   }
 #else
-  if (std::fseek(fh_, offset, SEEK_SET) != 0) return 0;
-  return std::fread(buf, sizeof(Real), cnt, fh_);
+  if (std::fseek(fh_, CheckedStdioIoOffset(offset, "fseek"), SEEK_SET) != 0) return 0;
+  return std::fread(buf, sizeof(Real), CheckedStdioIoCount(cnt, sizeof(Real), "fread"),
+                    fh_);
 #endif
 }
 
@@ -268,7 +372,10 @@ std::size_t IOWrapper::Read_Reals_at_all(void *buf, IOWrapperSizeT cnt,
 #if MPI_PARALLEL_ENABLED
   if (!single_file_per_rank) {
     MPI_Status status;
-    int errcode = MPI_File_read_at_all(fh_, offset, buf, cnt, MPI_ATHENA_REAL, &status);
+    int errcode = MPI_File_read_at_all(
+        fh_, CheckedMpiIoOffset(offset, "MPI_File_read_at_all"), buf,
+        CheckedMpiIoCount(cnt, 1, "MPI_File_read_at_all"),
+        MPI_ATHENA_REAL, &status);
     if (errcode != MPI_SUCCESS) {
       char msg[MPI_MAX_ERROR_STRING];
       int resultlen;
@@ -276,16 +383,18 @@ std::size_t IOWrapper::Read_Reals_at_all(void *buf, IOWrapperSizeT cnt,
       Kokkos::printf("%.*s\n", resultlen, msg);
       return 0;
     }
-    int nread;
-    if (MPI_Get_count(&status,MPI_ATHENA_REAL,&nread) == MPI_UNDEFINED) {return 0;}
+    int nread = CheckedMpiStatusCount(&status, MPI_ATHENA_REAL, "MPI_File_read_at_all");
     return nread;
   } else {
-    if (std::fseek(reinterpret_cast<FILE*>(fh_), offset, SEEK_SET) != 0) return 0;
-    return std::fread(buf, sizeof(Real), cnt, reinterpret_cast<FILE*>(fh_));
+    if (std::fseek(reinterpret_cast<FILE*>(fh_),
+                   CheckedStdioIoOffset(offset, "fseek"), SEEK_SET) != 0) return 0;
+    return std::fread(buf, sizeof(Real), CheckedStdioIoCount(cnt, sizeof(Real), "fread"),
+                      reinterpret_cast<FILE*>(fh_));
   }
 #else
-  if (std::fseek(fh_, offset, SEEK_SET) != 0) return 0;
-  return std::fread(buf, sizeof(Real), cnt, fh_);
+  if (std::fseek(fh_, CheckedStdioIoOffset(offset, "fseek"), SEEK_SET) != 0) return 0;
+  return std::fread(buf, sizeof(Real), CheckedStdioIoCount(cnt, sizeof(Real), "fread"),
+                    fh_);
 #endif
 }
 
@@ -316,7 +425,9 @@ std::size_t IOWrapper::Write_any_type(const void *buf, IOWrapperSizeT cnt,
                 << std::endl << "Unrecognized datatype '" << datatype << "'" << std::endl;
       std::exit(EXIT_FAILURE);
     }
-    std::size_t written = std::fwrite(buf, datasize, cnt, reinterpret_cast<FILE*>(fh_));
+    std::size_t written = std::fwrite(
+        buf, datasize, CheckedStdioIoCount(cnt, datasize, "fwrite"),
+        reinterpret_cast<FILE*>(fh_));
     if (written != cnt) {
       std::cerr << "Error writing data. Expected to write " << cnt
                 << " elements, but wrote " << written << std::endl;
@@ -343,7 +454,8 @@ std::size_t IOWrapper::Write_any_type(const void *buf, IOWrapperSizeT cnt,
     }
     // Now write data using MPI-IO
     MPI_Status status;
-    int errcode = MPI_File_write(fh_, buf, cnt, mpitype, &status);
+    int errcode = MPI_File_write(fh_, buf, CheckedMpiIoCount(cnt, 1, "MPI_File_write"),
+                                 mpitype, &status);
     if (errcode != MPI_SUCCESS) {
       char msg[MPI_MAX_ERROR_STRING];
       int resultlen;
@@ -351,8 +463,7 @@ std::size_t IOWrapper::Write_any_type(const void *buf, IOWrapperSizeT cnt,
       Kokkos::printf("%.*s\n", resultlen, msg);
       return 0;
     }
-    int nwrite;
-    if (MPI_Get_count(&status, mpitype, &nwrite) == MPI_UNDEFINED) {return 0;}
+    int nwrite = CheckedMpiStatusCount(&status, mpitype, "MPI_File_write");
     return nwrite;
   }
 #else
@@ -374,7 +485,8 @@ std::size_t IOWrapper::Write_any_type(const void *buf, IOWrapperSizeT cnt,
     std::exit(EXIT_FAILURE);
   }
   // Write data using standard C functions
-  std::size_t written = std::fwrite(buf, datasize, cnt, fh_);
+  std::size_t written =
+      std::fwrite(buf, datasize, CheckedStdioIoCount(cnt, datasize, "fwrite"), fh_);
   if (written != cnt) {
     std::cerr << "Error writing data. Expected to write " << cnt
               << " elements, but wrote " << written << std::endl;
@@ -412,11 +524,14 @@ std::size_t IOWrapper::Write_any_type_at(const void *buf, IOWrapperSizeT cnt,
       std::exit(EXIT_FAILURE);
     }
     // Write data using standard C functions
-    if (std::fseek(reinterpret_cast<FILE*>(fh_), offset, SEEK_SET) != 0) {
+    if (std::fseek(reinterpret_cast<FILE*>(fh_),
+                   CheckedStdioIoOffset(offset, "fseek"), SEEK_SET) != 0) {
       perror("Error seeking before writing data");
       return 0;
     }
-    std::size_t written = std::fwrite(buf, datasize, cnt, reinterpret_cast<FILE*>(fh_));
+    std::size_t written = std::fwrite(
+        buf, datasize, CheckedStdioIoCount(cnt, datasize, "fwrite"),
+        reinterpret_cast<FILE*>(fh_));
     if (written != cnt) {
       std::cerr << "Error writing data. Expected to write " << cnt
                 << " elements, but wrote " << written << std::endl;
@@ -443,7 +558,10 @@ std::size_t IOWrapper::Write_any_type_at(const void *buf, IOWrapperSizeT cnt,
     }
     // Now write data using MPI-IO
     MPI_Status status;
-    int errcode = MPI_File_write_at(fh_, offset, buf, cnt, mpitype, &status);
+    int errcode = MPI_File_write_at(fh_, CheckedMpiIoOffset(offset, "MPI_File_write_at"),
+                                    buf,
+                                    CheckedMpiIoCount(cnt, 1, "MPI_File_write_at"),
+                                    mpitype, &status);
     if (errcode != MPI_SUCCESS) {
       char msg[MPI_MAX_ERROR_STRING];
       int resultlen;
@@ -451,8 +569,7 @@ std::size_t IOWrapper::Write_any_type_at(const void *buf, IOWrapperSizeT cnt,
       Kokkos::printf("%.*s\n", resultlen, msg);
       return 0;
     }
-    int nwrite;
-    if (MPI_Get_count(&status, mpitype, &nwrite) == MPI_UNDEFINED) {return 0;}
+    int nwrite = CheckedMpiStatusCount(&status, mpitype, "MPI_File_write_at");
     return nwrite;
   }
 #else
@@ -474,11 +591,12 @@ std::size_t IOWrapper::Write_any_type_at(const void *buf, IOWrapperSizeT cnt,
     std::exit(EXIT_FAILURE);
   }
   // Write data using standard C functions
-  if (std::fseek(fh_, offset, SEEK_SET) != 0) {
+  if (std::fseek(fh_, CheckedStdioIoOffset(offset, "fseek"), SEEK_SET) != 0) {
     perror("Error seeking before writing data");
     return 0;
   }
-  std::size_t written = std::fwrite(buf, datasize, cnt, fh_);
+  std::size_t written =
+      std::fwrite(buf, datasize, CheckedStdioIoCount(cnt, datasize, "fwrite"), fh_);
   if (written != cnt) {
     std::cerr << "Error writing data. Expected to write " << cnt
               << " elements, but wrote " << written << std::endl;
@@ -516,11 +634,14 @@ std::size_t IOWrapper::Write_any_type_at_all(const void *buf, IOWrapperSizeT cnt
       std::exit(EXIT_FAILURE);
     }
     // Write data using standard C functions
-    if (std::fseek(reinterpret_cast<FILE*>(fh_), offset, SEEK_SET) != 0) {
+    if (std::fseek(reinterpret_cast<FILE*>(fh_),
+                   CheckedStdioIoOffset(offset, "fseek"), SEEK_SET) != 0) {
       perror("Error seeking before writing data");
       return 0;
     }
-    std::size_t written = std::fwrite(buf, datasize, cnt, reinterpret_cast<FILE*>(fh_));
+    std::size_t written = std::fwrite(
+        buf, datasize, CheckedStdioIoCount(cnt, datasize, "fwrite"),
+        reinterpret_cast<FILE*>(fh_));
     if (written != cnt) {
       std::cerr << "Error writing data. Expected to write " << cnt
                 << " elements, but wrote " << written << std::endl;
@@ -547,7 +668,10 @@ std::size_t IOWrapper::Write_any_type_at_all(const void *buf, IOWrapperSizeT cnt
     }
     // Now write data using MPI-IO
     MPI_Status status;
-    int errcode = MPI_File_write_at_all(fh_, offset, buf, cnt, mpitype, &status);
+    int errcode = MPI_File_write_at_all(
+        fh_, CheckedMpiIoOffset(offset, "MPI_File_write_at_all"), buf,
+        CheckedMpiIoCount(cnt, 1, "MPI_File_write_at_all"), mpitype,
+        &status);
     if (errcode != MPI_SUCCESS) {
       char msg[MPI_MAX_ERROR_STRING];
       int resultlen;
@@ -555,8 +679,7 @@ std::size_t IOWrapper::Write_any_type_at_all(const void *buf, IOWrapperSizeT cnt
       Kokkos::printf("%.*s\n", resultlen, msg);
       return 0;
     }
-    int nwrite;
-    if (MPI_Get_count(&status,mpitype,&nwrite) == MPI_UNDEFINED) {return 0;}
+    int nwrite = CheckedMpiStatusCount(&status, mpitype, "MPI_File_write_at_all");
     return nwrite;
   }
 #else
@@ -578,11 +701,12 @@ std::size_t IOWrapper::Write_any_type_at_all(const void *buf, IOWrapperSizeT cnt
     std::exit(EXIT_FAILURE);
   }
   // Write data using standard C functions
-  if (std::fseek(fh_, offset, SEEK_SET) != 0) {
+  if (std::fseek(fh_, CheckedStdioIoOffset(offset, "fseek"), SEEK_SET) != 0) {
     perror("Error seeking before writing data");
     return 0;
   }
-  std::size_t written = std::fwrite(buf, datasize, cnt, fh_);
+  std::size_t written =
+      std::fwrite(buf, datasize, CheckedStdioIoCount(cnt, datasize, "fwrite"), fh_);
   if (written != cnt) {
     std::cerr << "Error writing data. Expected to write " << cnt
               << " elements, but wrote " << written << std::endl;
@@ -631,12 +755,13 @@ int IOWrapper::Sync(bool single_file_per_rank) {
 int IOWrapper::Seek(IOWrapperSizeT offset, bool single_file_per_rank) {
 #if MPI_PARALLEL_ENABLED
   if (!single_file_per_rank) {
-    return MPI_File_seek(fh_, offset, MPI_SEEK_SET);
+    return MPI_File_seek(fh_, CheckedMpiIoOffset(offset, "MPI_File_seek"), MPI_SEEK_SET);
   } else {
-    return std::fseek(reinterpret_cast<FILE*>(fh_), offset, SEEK_SET);
+    return std::fseek(reinterpret_cast<FILE*>(fh_), CheckedStdioIoOffset(offset, "fseek"),
+                      SEEK_SET);
   }
 #else
-  return std::fseek(fh_, offset, SEEK_SET);
+  return std::fseek(fh_, CheckedStdioIoOffset(offset, "fseek"), SEEK_SET);
 #endif
 }
 
@@ -653,12 +778,13 @@ IOWrapperSizeT IOWrapper::GetPosition(bool single_file_per_rank) {
     }
     return static_cast<IOWrapperSizeT>(position);
   } else {
-    const long position = std::ftell(reinterpret_cast<FILE*>(fh_));
+    const long position =  // NOLINT(runtime/int)
+        std::ftell(reinterpret_cast<FILE*>(fh_));
     return (position < 0) ? std::numeric_limits<IOWrapperSizeT>::max() :
                            static_cast<IOWrapperSizeT>(position);
   }
 #else
-  const long position = std::ftell(fh_);
+  const long position = std::ftell(fh_);  // NOLINT(runtime/int)
   return (position < 0) ? std::numeric_limits<IOWrapperSizeT>::max() :
                          static_cast<IOWrapperSizeT>(position);
 #endif
@@ -679,9 +805,9 @@ IOWrapperSizeT IOWrapper::GetSize(bool single_file_per_rank) {
 #else
   FILE *file = fh_;
 #endif
-  const long position = std::ftell(file);
+  const long position = std::ftell(file);  // NOLINT(runtime/int)
   if (position < 0 || std::fseek(file, 0, SEEK_END) != 0) return 0;
-  const long size = std::ftell(file);
+  const long size = std::ftell(file);  // NOLINT(runtime/int)
   if (std::fseek(file, position, SEEK_SET) != 0 || size < 0) return 0;
   return static_cast<IOWrapperSizeT>(size);
 }

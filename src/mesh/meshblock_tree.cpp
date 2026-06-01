@@ -15,11 +15,14 @@
 #include "parameter_input.hpp"
 #include "mesh.hpp"
 #include "meshblock_tree.hpp"
+#include "outputs/restart_utils.hpp"
 
 // Define static member variables
 Mesh* MeshBlockTree::pmesh_;
 MeshBlockTree* MeshBlockTree::proot_;
 int MeshBlockTree::nleaf_;
+int MeshBlockTree::nmeshblocks_;
+int MeshBlockTree::restart_node_budget_;
 
 //----------------------------------------------------------------------------------------
 //! \fn MeshBlockTree::MeshBlockTree()
@@ -67,6 +70,20 @@ void MeshBlockTree::CreateRootGrid() {
     if (pmesh_->one_d)   nleaf_ = 2;
     if (pmesh_->two_d)   nleaf_ = 4;
     if (pmesh_->three_d) nleaf_ = 8;
+    const std::int64_t nx1 = pmesh_->nmb_rootx1;
+    const std::int64_t nx2 = pmesh_->nmb_rootx2;
+    const std::int64_t nx3 = pmesh_->nmb_rootx3;
+    if (nx1 <= 0 || nx2 <= 0 || nx3 <= 0 ||
+        nx1 > kMaxSupportedMeshBlocks ||
+        nx2 > kMaxSupportedMeshBlocks/nx1 ||
+        nx3 > kMaxSupportedMeshBlocks/(nx1*nx2)) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "Root MeshBlock grid exceeds supported topology bounds." << std::endl;
+      restart_utils::AbortOnFatalError();
+    }
+    const std::int64_t root_blocks = nx1*nx2*nx3;
+    nmeshblocks_ = static_cast<int>(root_blocks);
   }
   // do not create any nodes beyond the logical level of root grid (which corresponds to
   // logical level = 0 only in the case of a grid containing a single MeshBlock)
@@ -89,6 +106,38 @@ void MeshBlockTree::CreateRootGrid() {
     }
   }
   return;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void MeshBlockTree::ResetMeshBlockCount(int count)
+//! \brief synchronize the physical leaf count after restart-tree reconstruction
+
+void MeshBlockTree::ResetMeshBlockCount(int count) {
+  if (count <= 0 || count > kMaxSupportedMeshBlocks) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "MeshBlock count exceeds supported topology bounds." << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+  nmeshblocks_ = count;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void MeshBlockTree::ResetRestartNodeBudget(int physical_leaf_count)
+//! \brief bound sparse internal-node allocation while reconstructing an untrusted restart
+
+void MeshBlockTree::ResetRestartNodeBudget(int physical_leaf_count) {
+  if (physical_leaf_count <= 0 || physical_leaf_count > kMaxSupportedMeshBlocks) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Restart MeshBlock count exceeds supported topology bounds."
+              << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+  // Beyond the configured root grid, every valid complete split adds nleaf children
+  // and nleaf-1 physical leaves.  The worst case is binary, so two constructed nodes
+  // per serialized physical leaf is a conservative bound.
+  restart_node_budget_ = 2*physical_leaf_count;
 }
 
 //----------------------------------------------------------------------------------------
@@ -138,6 +187,14 @@ void MeshBlockTree::AddNodeWithoutRefinement(LogicalLocation rloc) {
   mz = ((rloc.lx3>>sh) & 1) == 1;
   int n = mx + (my<<1) + (mz<<2);
   if (pleaf_[n] == nullptr) {
+    if (restart_node_budget_ <= 0) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "Restart MeshBlock tree exceeds supported reconstruction node budget."
+                << std::endl;
+      restart_utils::AbortOnFatalError();
+    }
+    --restart_node_budget_;
     pleaf_[n] = new MeshBlockTree(this, mx, my, mz);
   }
   pleaf_[n]->AddNodeWithoutRefinement(rloc);
@@ -151,6 +208,15 @@ void MeshBlockTree::AddNodeWithoutRefinement(LogicalLocation rloc) {
 
 void MeshBlockTree::Refine(int &nnew) {
   if (pleaf_ != nullptr) return;
+  if (nmeshblocks_ > kMaxSupportedMeshBlocks - (nleaf_ - 1)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "MeshBlock count exceeds supported topology bounds during refinement."
+              << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+  // Reserve this split before balancing recursively refines neighbors.
+  nmeshblocks_ += nleaf_-1;
 
   pleaf_ = new MeshBlockTree*[nleaf_];
   for (int n=0; n<nleaf_; n++) {pleaf_[n] = nullptr;}
@@ -301,6 +367,7 @@ void MeshBlockTree::Derefine(int &ndel) {
   }
   delete [] pleaf_;
   pleaf_ = nullptr;
+  nmeshblocks_ -= nleaf_-1;
   ndel+=nleaf_-1;
   return;
 }
@@ -320,6 +387,24 @@ void MeshBlockTree::CountMeshBlocks(int& count) {
     }
   }
   return;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn bool MeshBlockTree::IsRestartTreeComplete()
+//! \brief Checks that every refined physical MeshBlock has a complete child set.
+//! The logical root grid may be incomplete when its shape is not a power-of-two cube.
+
+bool MeshBlockTree::IsRestartTreeComplete() {
+  if (pleaf_ == nullptr) return true;
+
+  for (int n=0; n<nleaf_; n++) {
+    if (pleaf_[n] == nullptr) {
+      if (lloc_.level >= pmesh_->root_level) return false;
+    } else if (!pleaf_[n]->IsRestartTreeComplete()) {
+      return false;
+    }
+  }
+  return true;
 }
 
 //----------------------------------------------------------------------------------------

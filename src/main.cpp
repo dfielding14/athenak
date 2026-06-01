@@ -475,6 +475,7 @@ int main(int argc, char *argv[]) {
                                   restart_file_name);
       }
       RequireCompletedRestartArtifacts(member_files);
+      pmesh->ValidateRestartShardCommonPrefix();
     }
   }
 

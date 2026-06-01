@@ -10,7 +10,9 @@
 
 #include <array>
 #include <cstdio>
+#include <initializer_list>
 #include <iostream>
+#include <limits>
 #include <string>
 #include <utility>
 #include <algorithm>
@@ -33,6 +35,9 @@
 #include "pgen.hpp"
 
 namespace {
+
+constexpr IOWrapperSizeT kMaxSupportedRestartParticlePayloadBytesPerRank =
+    static_cast<IOWrapperSizeT>(8) << 30;
 
 struct RestartBlockRequest {
   int local_index;
@@ -68,6 +73,131 @@ struct ParticleRestartSectionMeta {
   std::vector<int> mb_counts;
   std::vector<IOWrapperSizeT> mb_offsets;
 };
+
+void AbortParticleRestartLayoutOverflow() {
+  std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+            << std::endl
+            << "Particle restart layout exceeds supported offset or allocation limits."
+            << std::endl;
+  restart_utils::AbortOnFatalError();
+}
+
+IOWrapperSizeT CheckedParticleRestartProduct(const IOWrapperSizeT count,
+                                             const IOWrapperSizeT width) {
+  constexpr IOWrapperSizeT max = std::numeric_limits<IOWrapperSizeT>::max();
+  if (count != 0 && width > max/count) AbortParticleRestartLayoutOverflow();
+  return count*width;
+}
+
+IOWrapperSizeT CheckedParticleRestartProduct(
+    std::initializer_list<IOWrapperSizeT> factors) {
+  IOWrapperSizeT product = 1;
+  for (const IOWrapperSizeT factor : factors) {
+    product = CheckedParticleRestartProduct(product, factor);
+  }
+  return product;
+}
+
+void ValidateParticleRestartAllocation(std::initializer_list<int> extents) {
+  std::size_t count = 1;
+  constexpr std::size_t max = std::numeric_limits<std::size_t>::max();
+  constexpr std::size_t element_bytes =
+      sizeof(Real) > sizeof(int) ? sizeof(Real) : sizeof(int);
+  for (const int extent : extents) {
+    if (extent < 0 || (extent != 0 &&
+                       count > max/static_cast<std::size_t>(extent))) {
+      AbortParticleRestartLayoutOverflow();
+    }
+    count *= static_cast<std::size_t>(extent);
+  }
+  if (count > max/element_bytes) AbortParticleRestartLayoutOverflow();
+}
+
+void AdvanceParticleRestartOffset(IOWrapperSizeT &offset, const IOWrapperSizeT count,
+                                  const IOWrapperSizeT width) {
+  constexpr IOWrapperSizeT max = std::numeric_limits<IOWrapperSizeT>::max();
+  const IOWrapperSizeT increment = CheckedParticleRestartProduct(count, width);
+  if (offset > max - increment) AbortParticleRestartLayoutOverflow();
+  offset += increment;
+}
+
+void AdvanceParticleRestartRealArrayOffset(
+    IOWrapperSizeT &offset, std::initializer_list<int> extents) {
+  IOWrapperSizeT count = 1;
+  for (const int extent : extents) {
+    if (extent < 0) AbortParticleRestartLayoutOverflow();
+    count = CheckedParticleRestartProduct(count, static_cast<IOWrapperSizeT>(extent));
+  }
+  AdvanceParticleRestartOffset(offset, count, sizeof(Real));
+}
+
+void AdvanceParticleRestartPastFaceArrayRemainder(
+    IOWrapperSizeT &offset, const IOWrapperSizeT data_size,
+    std::initializer_list<IOWrapperSizeT> face_counts) {
+  IOWrapperSizeT face_bytes = 0;
+  for (const IOWrapperSizeT count : face_counts) {
+    AdvanceParticleRestartOffset(face_bytes, count, sizeof(Real));
+  }
+  if (face_bytes > data_size) AbortParticleRestartLayoutOverflow();
+  AdvanceParticleRestartOffset(offset, data_size - face_bytes, 1);
+}
+
+IOWrapperSizeT CheckedParticleRestartDataOffset(const IOWrapperSizeT base,
+                                                const IOWrapperSizeT relative) {
+  IOWrapperSizeT offset = base;
+  AdvanceParticleRestartOffset(offset, relative, 1);
+  return offset;
+}
+
+int CheckedParticleRestartExtentPlusOne(const int extent) {
+  if (extent < 0 || extent == std::numeric_limits<int>::max()) {
+    AbortParticleRestartLayoutOverflow();
+  }
+  return extent + 1;
+}
+
+int CheckedParticleRestartOutputExtent(const int active_cells, const int ghost_cells) {
+  if (active_cells <= 0 || ghost_cells < 0) AbortParticleRestartLayoutOverflow();
+  IOWrapperSizeT extent = static_cast<IOWrapperSizeT>(active_cells);
+  if (active_cells > 1) {
+    AdvanceParticleRestartOffset(extent, static_cast<IOWrapperSizeT>(ghost_cells), 2);
+  }
+  if (extent > static_cast<IOWrapperSizeT>(std::numeric_limits<int>::max())) {
+    AbortParticleRestartLayoutOverflow();
+  }
+  return static_cast<int>(extent);
+}
+
+int CheckedParticleRestartIntProduct(std::initializer_list<int> factors) {
+  IOWrapperSizeT product = 1;
+  for (const int factor : factors) {
+    if (factor < 0) AbortParticleRestartLayoutOverflow();
+    product = CheckedParticleRestartProduct(product, static_cast<IOWrapperSizeT>(factor));
+  }
+  if (product > static_cast<IOWrapperSizeT>(std::numeric_limits<int>::max())) {
+    AbortParticleRestartLayoutOverflow();
+  }
+  return static_cast<int>(product);
+}
+
+int CheckedLocalParticleCount(const IOWrapperSizeT count, const int nrdata,
+                              const int nidata) {
+  if (nrdata <= 0 || nidata <= 0) AbortParticleRestartLayoutOverflow();
+  const IOWrapperSizeT real_values =
+      CheckedParticleRestartProduct(count, static_cast<IOWrapperSizeT>(nrdata));
+  const IOWrapperSizeT int_values =
+      CheckedParticleRestartProduct(count, static_cast<IOWrapperSizeT>(nidata));
+  const IOWrapperSizeT int_bytes = CheckedParticleRestartProduct(int_values, sizeof(int));
+  const IOWrapperSizeT real_bytes =
+      CheckedParticleRestartProduct(real_values, sizeof(Real));
+  if (count > static_cast<IOWrapperSizeT>(std::numeric_limits<int>::max()) ||
+      real_values > static_cast<IOWrapperSizeT>(std::numeric_limits<int>::max()) ||
+      int_bytes > static_cast<IOWrapperSizeT>(std::numeric_limits<int>::max()) ||
+      real_bytes > kMaxSupportedRestartParticlePayloadBytesPerRank - int_bytes) {
+    AbortParticleRestartLayoutOverflow();
+  }
+  return static_cast<int>(count);
+}
 
 template <typename IntArray>
 void ValidateRestoredParticleIDData(const particles::Particles *ppart,
@@ -133,10 +263,17 @@ void LoadParticleRestartDataSingleFile(Mesh *pm,
   const int nmb_local = pack->nmb_thispack;
   const int nrdata = ppart->nrdata;
   const int nidata = ppart->nidata;
-  const int expected_moment_cnt = particles::Particles::NMOM*nout3*nout2*nout1;
-  const int expected_edge1_cnt = (nout3 + 1)*(nout2 + 1)*nout1;
-  const int expected_edge2_cnt = (nout3 + 1)*nout2*(nout1 + 1);
-  const int expected_edge3_cnt = nout3*(nout2 + 1)*(nout1 + 1);
+  const int expected_moment_cnt = CheckedParticleRestartIntProduct(
+      {particles::Particles::NMOM, nout3, nout2, nout1});
+  const int nout1p1 = CheckedParticleRestartExtentPlusOne(nout1);
+  const int nout2p1 = CheckedParticleRestartExtentPlusOne(nout2);
+  const int nout3p1 = CheckedParticleRestartExtentPlusOne(nout3);
+  const int expected_edge1_cnt =
+      CheckedParticleRestartIntProduct({nout3p1, nout2p1, nout1});
+  const int expected_edge2_cnt =
+      CheckedParticleRestartIntProduct({nout3p1, nout2, nout1p1});
+  const int expected_edge3_cnt =
+      CheckedParticleRestartIntProduct({nout3, nout2p1, nout1p1});
 
   std::vector<std::vector<RestartBlockRequest>> requests(meta.original_nranks);
   for (int m=0; m<nmb_local; ++m) {
@@ -189,8 +326,10 @@ void LoadParticleRestartDataSingleFile(Mesh *pm,
     IOWrapper srcfile;
     srcfile.Open(rank_paths[r].c_str(), IOWrapper::FileMode::read, true);
 
-    IOWrapperSizeT section_offset = headeroffset +
-      data_stride*static_cast<IOWrapperSizeT>(meta.nmb_eachrank[r]);
+    IOWrapperSizeT section_offset = headeroffset;
+    AdvanceParticleRestartOffset(section_offset,
+                                 static_cast<IOWrapperSizeT>(meta.nmb_eachrank[r]),
+                                 data_stride);
 
     std::uint64_t pic_magic = 0;
     if (srcfile.Read_bytes_at(&pic_magic, 1, sizeof(std::uint64_t), section_offset,
@@ -211,7 +350,8 @@ void LoadParticleRestartDataSingleFile(Mesh *pm,
     }
 
     ParticleRestartSectionMeta sm;
-    IOWrapperSizeT rd_offset = section_offset + sizeof(std::uint64_t);
+    IOWrapperSizeT rd_offset = section_offset;
+    AdvanceParticleRestartOffset(rd_offset, 1, sizeof(std::uint64_t));
     auto read_int_meta = [&](int &val, const char *name) {
       if (srcfile.Read_bytes_at(&val, sizeof(int), 1, rd_offset, true) != 1) {
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -221,7 +361,7 @@ void LoadParticleRestartDataSingleFile(Mesh *pm,
                   << std::endl;
         restart_utils::AbortOnFatalError();
       }
-      rd_offset += sizeof(int);
+      AdvanceParticleRestartOffset(rd_offset, 1, sizeof(int));
     };
 
     read_int_meta(sm.version, "version");
@@ -236,6 +376,7 @@ void LoadParticleRestartDataSingleFile(Mesh *pm,
     read_int_meta(sm.nmb_section, "nmb_section");
     read_int_meta(sm.nrdata, "nrdata");
     read_int_meta(sm.nidata, "nidata");
+    if (sm.nrdata <= 0 || sm.nidata <= 0) AbortParticleRestartLayoutOverflow();
     read_int_meta(sm.rst_nout1, "nout1");
     read_int_meta(sm.rst_nout2, "nout2");
     read_int_meta(sm.rst_nout3, "nout3");
@@ -255,7 +396,7 @@ void LoadParticleRestartDataSingleFile(Mesh *pm,
                 << std::endl;
       restart_utils::AbortOnFatalError();
     }
-    rd_offset += sizeof(Real);
+    AdvanceParticleRestartOffset(rd_offset, 1, sizeof(Real));
     if (srcfile.Read_bytes_at(sm.model_ints.data(), sizeof(int), sm.model_ints.size(),
                               rd_offset, true) != sm.model_ints.size()) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -264,7 +405,7 @@ void LoadParticleRestartDataSingleFile(Mesh *pm,
                 << "from source restart file '" << rank_paths[r] << "'." << std::endl;
       restart_utils::AbortOnFatalError();
     }
-    rd_offset += sm.model_ints.size()*sizeof(int);
+    AdvanceParticleRestartOffset(rd_offset, sm.model_ints.size(), sizeof(int));
     if (srcfile.Read_Reals_at(sm.model_reals.data(), sm.model_reals.size(), rd_offset,
                               true) != sm.model_reals.size()) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -273,7 +414,7 @@ void LoadParticleRestartDataSingleFile(Mesh *pm,
                 << "from source restart file '" << rank_paths[r] << "'." << std::endl;
       restart_utils::AbortOnFatalError();
     }
-    rd_offset += sm.model_reals.size()*sizeof(Real);
+    AdvanceParticleRestartOffset(rd_offset, sm.model_reals.size(), sizeof(Real));
 
     if (srcfile.Read_bytes_at(&sm.npart_section, sizeof(IOWrapperSizeT), 1, rd_offset,
                               true) != 1) {
@@ -283,7 +424,7 @@ void LoadParticleRestartDataSingleFile(Mesh *pm,
                 << "restart file '" << rank_paths[r] << "'." << std::endl;
       restart_utils::AbortOnFatalError();
     }
-    rd_offset += sizeof(IOWrapperSizeT);
+    AdvanceParticleRestartOffset(rd_offset, 1, sizeof(IOWrapperSizeT));
 
     if (sm.nmb_section != meta.nmb_eachrank[r]) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -387,7 +528,8 @@ void LoadParticleRestartDataSingleFile(Mesh *pm,
         restart_utils::AbortOnFatalError();
       }
     }
-    rd_offset += static_cast<IOWrapperSizeT>(sm.nmb_section)*sizeof(int);
+    AdvanceParticleRestartOffset(rd_offset, static_cast<IOWrapperSizeT>(sm.nmb_section),
+                                 sizeof(int));
 
     sm.mb_offsets.assign(sm.nmb_section + 1, 0);
     for (int m=0; m<sm.nmb_section; ++m) {
@@ -399,8 +541,9 @@ void LoadParticleRestartDataSingleFile(Mesh *pm,
                   << std::endl;
         restart_utils::AbortOnFatalError();
       }
-      sm.mb_offsets[m + 1] = sm.mb_offsets[m] +
-                             static_cast<IOWrapperSizeT>(sm.mb_counts[m]);
+      sm.mb_offsets[m + 1] = sm.mb_offsets[m];
+      AdvanceParticleRestartOffset(sm.mb_offsets[m + 1],
+                                   static_cast<IOWrapperSizeT>(sm.mb_counts[m]), 1);
     }
     if (sm.mb_offsets[sm.nmb_section] != sm.npart_section) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -409,27 +552,53 @@ void LoadParticleRestartDataSingleFile(Mesh *pm,
                 << "restart file '" << rank_paths[r] << "'." << std::endl;
       restart_utils::AbortOnFatalError();
     }
+    (void)CheckedLocalParticleCount(sm.npart_section, sm.nrdata, sm.nidata);
 
     sm.pr_real_offset = rd_offset;
-    rd_offset += sm.npart_section*sm.nrdata*sizeof(Real);
+    AdvanceParticleRestartOffset(rd_offset, sm.npart_section,
+                                 CheckedParticleRestartProduct(
+                                     static_cast<IOWrapperSizeT>(sm.nrdata),
+                                     sizeof(Real)));
     sm.pr_int_offset = rd_offset;
-    rd_offset += sm.npart_section*sm.nidata*sizeof(int);
+    AdvanceParticleRestartOffset(rd_offset, sm.npart_section,
+                                 CheckedParticleRestartProduct(
+                                     static_cast<IOWrapperSizeT>(sm.nidata),
+                                     sizeof(int)));
     sm.moments_offset = rd_offset;
     if (sm.has_moments != 0) {
-      rd_offset += static_cast<IOWrapperSizeT>(sm.nmb_section)*sm.moment_cnt*
-                   sizeof(Real);
+      AdvanceParticleRestartOffset(
+          rd_offset, static_cast<IOWrapperSizeT>(sm.nmb_section),
+          CheckedParticleRestartProduct(
+              static_cast<IOWrapperSizeT>(sm.moment_cnt), sizeof(Real)));
     }
     sm.edge1_offset = rd_offset;
     if (sm.has_edge != 0) {
-      rd_offset += static_cast<IOWrapperSizeT>(sm.nmb_section)*sm.edge1_cnt*
-                   sizeof(Real);
+      AdvanceParticleRestartOffset(
+          rd_offset, static_cast<IOWrapperSizeT>(sm.nmb_section),
+          CheckedParticleRestartProduct(
+              static_cast<IOWrapperSizeT>(sm.edge1_cnt), sizeof(Real)));
     }
     sm.edge2_offset = rd_offset;
     if (sm.has_edge != 0) {
-      rd_offset += static_cast<IOWrapperSizeT>(sm.nmb_section)*sm.edge2_cnt*
-                   sizeof(Real);
+      AdvanceParticleRestartOffset(
+          rd_offset, static_cast<IOWrapperSizeT>(sm.nmb_section),
+          CheckedParticleRestartProduct(
+              static_cast<IOWrapperSizeT>(sm.edge2_cnt), sizeof(Real)));
     }
     sm.edge3_offset = rd_offset;
+    if (sm.has_edge != 0) {
+      AdvanceParticleRestartOffset(
+          rd_offset, static_cast<IOWrapperSizeT>(sm.nmb_section),
+          CheckedParticleRestartProduct(
+              static_cast<IOWrapperSizeT>(sm.edge3_cnt), sizeof(Real)));
+    }
+    if (rd_offset > srcfile.GetSize(true)) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "Particle restart section exceeds source artifact bounds."
+                << std::endl;
+      restart_utils::AbortOnFatalError();
+    }
 
     for (const auto &req : reqs) {
       const int src_local = req.global_id - meta.gids_eachrank[r];
@@ -451,12 +620,16 @@ void LoadParticleRestartDataSingleFile(Mesh *pm,
 
   std::vector<IOWrapperSizeT> local_mb_offsets(nmb_local + 1, 0);
   for (int m=0; m<nmb_local; ++m) {
-    local_mb_offsets[m + 1] = local_mb_offsets[m] +
-                              static_cast<IOWrapperSizeT>(local_mb_counts[m]);
+    local_mb_offsets[m + 1] = local_mb_offsets[m];
+    AdvanceParticleRestartOffset(local_mb_offsets[m + 1],
+                                 static_cast<IOWrapperSizeT>(local_mb_counts[m]), 1);
   }
-  const int local_npart = static_cast<int>(local_mb_offsets[nmb_local]);
+  const int local_npart =
+      CheckedLocalParticleCount(local_mb_offsets[nmb_local], nrdata, nidata);
   ppart->nprtcl_thispack = local_npart;
+  ValidateParticleRestartAllocation({nrdata, local_npart});
   Kokkos::realloc(ppart->prtcl_rdata, nrdata, local_npart);
+  ValidateParticleRestartAllocation({nidata, local_npart});
   Kokkos::realloc(ppart->prtcl_idata, nidata, local_npart);
 
   std::vector<Real> packed_pr(static_cast<std::size_t>(local_npart)*nrdata, 0.0);
@@ -515,12 +688,25 @@ void LoadParticleRestartDataSingleFile(Mesh *pm,
       const int cnt = local_mb_counts[req.local_index];
       const IOWrapperSizeT gstart = sm.mb_offsets[src_local];
       const IOWrapperSizeT lstart = local_mb_offsets[req.local_index];
-      const IOWrapperSizeT pr_off = sm.pr_real_offset + gstart*nrdata*sizeof(Real);
-      const IOWrapperSizeT pi_off = sm.pr_int_offset + gstart*nidata*sizeof(int);
+      IOWrapperSizeT pr_off = sm.pr_real_offset;
+      AdvanceParticleRestartOffset(pr_off, gstart,
+                                   CheckedParticleRestartProduct(
+                                       static_cast<IOWrapperSizeT>(nrdata),
+                                       sizeof(Real)));
+      IOWrapperSizeT pi_off = sm.pr_int_offset;
+      AdvanceParticleRestartOffset(pi_off, gstart,
+                                   CheckedParticleRestartProduct(
+                                       static_cast<IOWrapperSizeT>(nidata), sizeof(int)));
+      const IOWrapperSizeT pr_count =
+          CheckedParticleRestartProduct(static_cast<IOWrapperSizeT>(cnt), nrdata);
+      const IOWrapperSizeT pi_count =
+          CheckedParticleRestartProduct(static_cast<IOWrapperSizeT>(cnt), nidata);
+      const IOWrapperSizeT pr_start = CheckedParticleRestartProduct(lstart, nrdata);
+      const IOWrapperSizeT pi_start = CheckedParticleRestartProduct(lstart, nidata);
 
       if (cnt > 0) {
-        if (srcfile.Read_Reals_at(&(packed_pr[lstart*nrdata]), cnt*nrdata, pr_off,
-                                  true) != static_cast<std::size_t>(cnt*nrdata)) {
+        if (srcfile.Read_Reals_at(&(packed_pr[pr_start]), pr_count, pr_off,
+                                  true) != static_cast<std::size_t>(pr_count)) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                     << std::endl
                     << "Failed to read particle restart real data from "
@@ -528,9 +714,9 @@ void LoadParticleRestartDataSingleFile(Mesh *pm,
                     << std::endl;
           restart_utils::AbortOnFatalError();
         }
-        if (srcfile.Read_bytes_at(&(packed_pi[lstart*nidata]), sizeof(int), cnt*nidata,
+        if (srcfile.Read_bytes_at(&(packed_pi[pi_start]), sizeof(int), pi_count,
                                   pi_off, true) !=
-            static_cast<std::size_t>(cnt*nidata)) {
+            static_cast<std::size_t>(pi_count)) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                     << std::endl
                     << "Failed to read particle restart integer data from "
@@ -543,9 +729,10 @@ void LoadParticleRestartDataSingleFile(Mesh *pm,
       if (has_moments) {
         auto mom_mb = Kokkos::subview(h_mom, req.local_index, Kokkos::ALL, Kokkos::ALL,
                                       Kokkos::ALL, Kokkos::ALL);
-        const IOWrapperSizeT moff = sm.moments_offset +
-                                    static_cast<IOWrapperSizeT>(src_local)*
-                                    sm.moment_cnt*sizeof(Real);
+        IOWrapperSizeT moff = sm.moments_offset;
+        AdvanceParticleRestartOffset(moff, static_cast<IOWrapperSizeT>(src_local),
+                                     static_cast<IOWrapperSizeT>(sm.moment_cnt)*
+                                     sizeof(Real));
         if (srcfile.Read_Reals_at(mom_mb.data(), sm.moment_cnt, moff, true) !=
             static_cast<std::size_t>(sm.moment_cnt)) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -563,15 +750,18 @@ void LoadParticleRestartDataSingleFile(Mesh *pm,
                                      Kokkos::ALL);
         auto x3_mb = Kokkos::subview(h_x3e, req.local_index, Kokkos::ALL, Kokkos::ALL,
                                      Kokkos::ALL);
-        const IOWrapperSizeT x1off = sm.edge1_offset +
-                                     static_cast<IOWrapperSizeT>(src_local)*
-                                     sm.edge1_cnt*sizeof(Real);
-        const IOWrapperSizeT x2off = sm.edge2_offset +
-                                     static_cast<IOWrapperSizeT>(src_local)*
-                                     sm.edge2_cnt*sizeof(Real);
-        const IOWrapperSizeT x3off = sm.edge3_offset +
-                                     static_cast<IOWrapperSizeT>(src_local)*
-                                     sm.edge3_cnt*sizeof(Real);
+        IOWrapperSizeT x1off = sm.edge1_offset;
+        AdvanceParticleRestartOffset(x1off, static_cast<IOWrapperSizeT>(src_local),
+                                     static_cast<IOWrapperSizeT>(sm.edge1_cnt)*
+                                     sizeof(Real));
+        IOWrapperSizeT x2off = sm.edge2_offset;
+        AdvanceParticleRestartOffset(x2off, static_cast<IOWrapperSizeT>(src_local),
+                                     static_cast<IOWrapperSizeT>(sm.edge2_cnt)*
+                                     sizeof(Real));
+        IOWrapperSizeT x3off = sm.edge3_offset;
+        AdvanceParticleRestartOffset(x3off, static_cast<IOWrapperSizeT>(src_local),
+                                     static_cast<IOWrapperSizeT>(sm.edge3_cnt)*
+                                     sizeof(Real));
         if (srcfile.Read_Reals_at(x1_mb.data(), sm.edge1_cnt, x1off, true) !=
               static_cast<std::size_t>(sm.edge1_cnt) ||
             srcfile.Read_Reals_at(x2_mb.data(), sm.edge2_cnt, x2off, true) !=
@@ -694,28 +884,36 @@ void LoadSingleFileRestartData(Mesh *pm,
   }
 
   const IOWrapperSizeT chunk_stride = data_stride;
+  const int nout1p1 = CheckedParticleRestartExtentPlusOne(nout1);
+  const int nout2p1 = CheckedParticleRestartExtentPlusOne(nout2);
+  const int nout3p1 = CheckedParticleRestartExtentPlusOne(nout3);
   IOWrapperSizeT chunk_offset = 0;
   const IOWrapperSizeT hydro_offset = chunk_offset;
-  chunk_offset += nout1*nout2*nout3*nhydro*sizeof(Real);
+  AdvanceParticleRestartRealArrayOffset(chunk_offset, {nout1, nout2, nout3, nhydro});
   const IOWrapperSizeT mhd_cc_offset = chunk_offset;
-  chunk_offset += nout1*nout2*nout3*nmhd*sizeof(Real);
-  const IOWrapperSizeT mhd_x1f_offset = chunk_offset;
-  chunk_offset += (nout1+1)*nout2*nout3*sizeof(Real);
-  const IOWrapperSizeT mhd_x2f_offset = chunk_offset;
-  chunk_offset += nout1*(nout2+1)*nout3*sizeof(Real);
-  const IOWrapperSizeT mhd_x3f_offset = chunk_offset;
-  chunk_offset += nout1*nout2*(nout3+1)*sizeof(Real);
+  IOWrapperSizeT mhd_x1f_offset = chunk_offset;
+  IOWrapperSizeT mhd_x2f_offset = chunk_offset;
+  IOWrapperSizeT mhd_x3f_offset = chunk_offset;
+  if (pmhd != nullptr) {
+    AdvanceParticleRestartRealArrayOffset(chunk_offset, {nout1, nout2, nout3, nmhd});
+    mhd_x1f_offset = chunk_offset;
+    AdvanceParticleRestartRealArrayOffset(chunk_offset, {nout1p1, nout2, nout3});
+    mhd_x2f_offset = chunk_offset;
+    AdvanceParticleRestartRealArrayOffset(chunk_offset, {nout1, nout2p1, nout3});
+    mhd_x3f_offset = chunk_offset;
+    AdvanceParticleRestartRealArrayOffset(chunk_offset, {nout1, nout2, nout3p1});
+  }
   const IOWrapperSizeT rad_offset = chunk_offset;
-  chunk_offset += nout1*nout2*nout3*nrad*sizeof(Real);
+  AdvanceParticleRestartRealArrayOffset(chunk_offset, {nout1, nout2, nout3, nrad});
   const IOWrapperSizeT turb_offset = chunk_offset;
   if (pturb != nullptr && nforce > 0) {
-    chunk_offset += nout1*nout2*nout3*nforce*sizeof(Real);
+    AdvanceParticleRestartRealArrayOffset(chunk_offset, {nout1, nout2, nout3, nforce});
   }
   const IOWrapperSizeT z4c_adm_offset = chunk_offset;
   if (pz4c != nullptr) {
-    chunk_offset += nout1*nout2*nout3*nz4c*sizeof(Real);
+    AdvanceParticleRestartRealArrayOffset(chunk_offset, {nout1, nout2, nout3, nz4c});
   } else if (padm != nullptr) {
-    chunk_offset += nout1*nout2*nout3*nadm*sizeof(Real);
+    AdvanceParticleRestartRealArrayOffset(chunk_offset, {nout1, nout2, nout3, nadm});
   }
   if (chunk_offset != chunk_stride) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -733,10 +931,14 @@ void LoadSingleFileRestartData(Mesh *pm,
                 << std::endl;
       restart_utils::AbortOnFatalError();
     }
-    return headeroffset + chunk_stride * static_cast<IOWrapperSizeT>(local_index);
+    IOWrapperSizeT offset = headeroffset;
+    AdvanceParticleRestartOffset(offset, static_cast<IOWrapperSizeT>(local_index),
+                                 chunk_stride);
+    return offset;
   };
 
   if (phydro != nullptr && nhydro > 0) {
+    ValidateParticleRestartAllocation({nmb, nhydro, nout3, nout2, nout1});
     Kokkos::realloc(ccin, nmb, nhydro, nout3, nout2, nout1);
     for (int r=0; r<meta.original_nranks; ++r) {
       auto &reqs = requests[r];
@@ -746,10 +948,12 @@ void LoadSingleFileRestartData(Mesh *pm,
       for (const auto &req : reqs) {
         auto mbptr = Kokkos::subview(ccin, req.local_index, Kokkos::ALL, Kokkos::ALL,
                                      Kokkos::ALL, Kokkos::ALL);
-        int mbcnt = mbptr.size();
+        auto mbcnt = mbptr.size();
         if (mbcnt > 0) {
           IOWrapperSizeT base = chunk_base(r, req.global_id);
-          if (srcfile.Read_Reals_at(mbptr.data(), mbcnt, base + hydro_offset, true)
+          if (srcfile.Read_Reals_at(
+                  mbptr.data(), mbcnt,
+                  CheckedParticleRestartDataOffset(base, hydro_offset), true)
               != mbcnt) {
             std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                       << std::endl << "CC hydro data not read correctly from rst file, "
@@ -765,10 +969,14 @@ void LoadSingleFileRestartData(Mesh *pm,
   }
 
   if (pmhd != nullptr && nmhd > 0) {
+    ValidateParticleRestartAllocation({nmb, nmhd, nout3, nout2, nout1});
     Kokkos::realloc(ccin, nmb, nmhd, nout3, nout2, nout1);
-    Kokkos::realloc(fcin.x1f, nmb, nout3, nout2, nout1+1);
-    Kokkos::realloc(fcin.x2f, nmb, nout3, nout2+1, nout1);
-    Kokkos::realloc(fcin.x3f, nmb, nout3+1, nout2, nout1);
+    ValidateParticleRestartAllocation({nmb, nout3, nout2, nout1p1});
+    Kokkos::realloc(fcin.x1f, nmb, nout3, nout2, nout1p1);
+    ValidateParticleRestartAllocation({nmb, nout3, nout2p1, nout1});
+    Kokkos::realloc(fcin.x2f, nmb, nout3, nout2p1, nout1);
+    ValidateParticleRestartAllocation({nmb, nout3p1, nout2, nout1});
+    Kokkos::realloc(fcin.x3f, nmb, nout3p1, nout2, nout1);
     for (int r=0; r<meta.original_nranks; ++r) {
       auto &reqs = requests[r];
       if (reqs.empty()) continue;
@@ -778,9 +986,11 @@ void LoadSingleFileRestartData(Mesh *pm,
         IOWrapperSizeT base = chunk_base(r, req.global_id);
         auto mbptr = Kokkos::subview(ccin, req.local_index, Kokkos::ALL, Kokkos::ALL,
                                      Kokkos::ALL, Kokkos::ALL);
-        int mbcnt = mbptr.size();
+        auto mbcnt = mbptr.size();
         if (mbcnt > 0) {
-          if (srcfile.Read_Reals_at(mbptr.data(), mbcnt, base + mhd_cc_offset, true)
+          if (srcfile.Read_Reals_at(
+                  mbptr.data(), mbcnt,
+                  CheckedParticleRestartDataOffset(base, mhd_cc_offset), true)
               != mbcnt) {
             std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                       << std::endl << "CC mhd data not read correctly from rst file, "
@@ -791,9 +1001,11 @@ void LoadSingleFileRestartData(Mesh *pm,
 
         auto x1fptr = Kokkos::subview(fcin.x1f, req.local_index, Kokkos::ALL, Kokkos::ALL,
                                        Kokkos::ALL);
-        int fldcnt = x1fptr.size();
+        auto fldcnt = x1fptr.size();
         if (fldcnt > 0) {
-          if (srcfile.Read_Reals_at(x1fptr.data(), fldcnt, base + mhd_x1f_offset, true)
+          if (srcfile.Read_Reals_at(
+                  x1fptr.data(), fldcnt,
+                  CheckedParticleRestartDataOffset(base, mhd_x1f_offset), true)
               != fldcnt) {
             std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                       << std::endl
@@ -807,7 +1019,9 @@ void LoadSingleFileRestartData(Mesh *pm,
                                        Kokkos::ALL);
         fldcnt = x2fptr.size();
         if (fldcnt > 0) {
-          if (srcfile.Read_Reals_at(x2fptr.data(), fldcnt, base + mhd_x2f_offset, true)
+          if (srcfile.Read_Reals_at(
+                  x2fptr.data(), fldcnt,
+                  CheckedParticleRestartDataOffset(base, mhd_x2f_offset), true)
               != fldcnt) {
             std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                       << std::endl
@@ -821,7 +1035,9 @@ void LoadSingleFileRestartData(Mesh *pm,
                                        Kokkos::ALL);
         fldcnt = x3fptr.size();
         if (fldcnt > 0) {
-          if (srcfile.Read_Reals_at(x3fptr.data(), fldcnt, base + mhd_x3f_offset, true)
+          if (srcfile.Read_Reals_at(
+                  x3fptr.data(), fldcnt,
+                  CheckedParticleRestartDataOffset(base, mhd_x3f_offset), true)
               != fldcnt) {
             std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                       << std::endl
@@ -844,6 +1060,7 @@ void LoadSingleFileRestartData(Mesh *pm,
   }
 
   if (prad != nullptr && nrad > 0) {
+    ValidateParticleRestartAllocation({nmb, nrad, nout3, nout2, nout1});
     Kokkos::realloc(ccin, nmb, nrad, nout3, nout2, nout1);
     for (int r=0; r<meta.original_nranks; ++r) {
       auto &reqs = requests[r];
@@ -853,10 +1070,12 @@ void LoadSingleFileRestartData(Mesh *pm,
       for (const auto &req : reqs) {
         auto mbptr = Kokkos::subview(ccin, req.local_index, Kokkos::ALL, Kokkos::ALL,
                                      Kokkos::ALL, Kokkos::ALL);
-        int mbcnt = mbptr.size();
+        auto mbcnt = mbptr.size();
         if (mbcnt > 0) {
           IOWrapperSizeT base = chunk_base(r, req.global_id);
-          if (srcfile.Read_Reals_at(mbptr.data(), mbcnt, base + rad_offset, true)
+          if (srcfile.Read_Reals_at(
+                  mbptr.data(), mbcnt,
+                  CheckedParticleRestartDataOffset(base, rad_offset), true)
               != mbcnt) {
             std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                       << std::endl << "CC rad data not read correctly from rst file, "
@@ -872,6 +1091,7 @@ void LoadSingleFileRestartData(Mesh *pm,
   }
 
   if (pturb != nullptr && nforce > 0) {
+    ValidateParticleRestartAllocation({nmb, nforce, nout3, nout2, nout1});
     Kokkos::realloc(ccin, nmb, nforce, nout3, nout2, nout1);
     for (int r=0; r<meta.original_nranks; ++r) {
       auto &reqs = requests[r];
@@ -881,10 +1101,12 @@ void LoadSingleFileRestartData(Mesh *pm,
       for (const auto &req : reqs) {
         auto mbptr = Kokkos::subview(ccin, req.local_index, Kokkos::ALL, Kokkos::ALL,
                                      Kokkos::ALL, Kokkos::ALL);
-        int mbcnt = mbptr.size();
+        auto mbcnt = mbptr.size();
         if (mbcnt > 0) {
           IOWrapperSizeT base = chunk_base(r, req.global_id);
-          if (srcfile.Read_Reals_at(mbptr.data(), mbcnt, base + turb_offset, true)
+          if (srcfile.Read_Reals_at(
+                  mbptr.data(), mbcnt,
+                  CheckedParticleRestartDataOffset(base, turb_offset), true)
               != mbcnt) {
             std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                       << std::endl << "CC turb data not read correctly from rst file, "
@@ -900,6 +1122,7 @@ void LoadSingleFileRestartData(Mesh *pm,
   }
 
   if (pz4c != nullptr && nz4c > 0) {
+    ValidateParticleRestartAllocation({nmb, nz4c, nout3, nout2, nout1});
     Kokkos::realloc(ccin, nmb, nz4c, nout3, nout2, nout1);
     for (int r=0; r<meta.original_nranks; ++r) {
       auto &reqs = requests[r];
@@ -909,10 +1132,12 @@ void LoadSingleFileRestartData(Mesh *pm,
       for (const auto &req : reqs) {
         auto mbptr = Kokkos::subview(ccin, req.local_index, Kokkos::ALL, Kokkos::ALL,
                                      Kokkos::ALL, Kokkos::ALL);
-        int mbcnt = mbptr.size();
+        auto mbcnt = mbptr.size();
         if (mbcnt > 0) {
           IOWrapperSizeT base = chunk_base(r, req.global_id);
-          if (srcfile.Read_Reals_at(mbptr.data(), mbcnt, base + z4c_adm_offset, true)
+          if (srcfile.Read_Reals_at(
+                  mbptr.data(), mbcnt,
+                  CheckedParticleRestartDataOffset(base, z4c_adm_offset), true)
               != mbcnt) {
             std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                       << std::endl << "CC z4c data not read correctly from rst file, "
@@ -927,6 +1152,7 @@ void LoadSingleFileRestartData(Mesh *pm,
                       Kokkos::ALL, Kokkos::ALL, Kokkos::ALL), ccin);
     pz4c->Z4cToADM(pm->pmb_pack);
   } else if (padm != nullptr && nadm > 0) {
+    ValidateParticleRestartAllocation({nmb, nadm, nout3, nout2, nout1});
     Kokkos::realloc(ccin, nmb, nadm, nout3, nout2, nout1);
     for (int r=0; r<meta.original_nranks; ++r) {
       auto &reqs = requests[r];
@@ -936,10 +1162,12 @@ void LoadSingleFileRestartData(Mesh *pm,
       for (const auto &req : reqs) {
         auto mbptr = Kokkos::subview(ccin, req.local_index, Kokkos::ALL, Kokkos::ALL,
                                      Kokkos::ALL, Kokkos::ALL);
-        int mbcnt = mbptr.size();
+        auto mbcnt = mbptr.size();
         if (mbcnt > 0) {
           IOWrapperSizeT base = chunk_base(r, req.global_id);
-          if (srcfile.Read_Reals_at(mbptr.data(), mbcnt, base + z4c_adm_offset, true)
+          if (srcfile.Read_Reals_at(
+                  mbptr.data(), mbcnt,
+                  CheckedParticleRestartDataOffset(base, z4c_adm_offset), true)
               != mbcnt) {
             std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                       << std::endl << "CC adm data not read correctly from rst file, "
@@ -973,7 +1201,9 @@ void LoadParticleRestartData(Mesh *pm,
   constexpr std::uint64_t kPicMagic = 0x5049435253543031ULL;
   constexpr int kPicVersion = particles::Particles::PIC_RESTART_SCHEMA_VERSION;
 
-  IOWrapperSizeT section_offset = headeroffset + data_stride*pm->nmb_total;
+  IOWrapperSizeT section_offset = headeroffset;
+  AdvanceParticleRestartOffset(section_offset, static_cast<IOWrapperSizeT>(pm->nmb_total),
+                               data_stride);
 
   std::uint64_t pic_magic = 0;
   int has_pic_section = 0;
@@ -1002,7 +1232,8 @@ void LoadParticleRestartData(Mesh *pm,
     restart_utils::AbortOnFatalError();
   }
 
-  IOWrapperSizeT rd_offset = section_offset + sizeof(std::uint64_t);
+  IOWrapperSizeT rd_offset = section_offset;
+  AdvanceParticleRestartOffset(rd_offset, 1, sizeof(std::uint64_t));
   int version = -1;
   int nmb_section = 0;
   int nrdata = 0;
@@ -1039,7 +1270,7 @@ void LoadParticleRestartData(Mesh *pm,
   };
 
   read_int_meta(version, rd_offset, "version");
-  rd_offset += sizeof(int);
+  AdvanceParticleRestartOffset(rd_offset, 1, sizeof(int));
   if (version != kPicVersion) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
@@ -1048,33 +1279,33 @@ void LoadParticleRestartData(Mesh *pm,
     restart_utils::AbortOnFatalError();
   }
   read_int_meta(nmb_section, rd_offset, "nmb_section");
-  rd_offset += sizeof(int);
+  AdvanceParticleRestartOffset(rd_offset, 1, sizeof(int));
   read_int_meta(nrdata, rd_offset, "nrdata");
-  rd_offset += sizeof(int);
+  AdvanceParticleRestartOffset(rd_offset, 1, sizeof(int));
   read_int_meta(nidata, rd_offset, "nidata");
-  rd_offset += sizeof(int);
+  AdvanceParticleRestartOffset(rd_offset, 1, sizeof(int));
   read_int_meta(rst_nout1, rd_offset, "nout1");
-  rd_offset += sizeof(int);
+  AdvanceParticleRestartOffset(rd_offset, 1, sizeof(int));
   read_int_meta(rst_nout2, rd_offset, "nout2");
-  rd_offset += sizeof(int);
+  AdvanceParticleRestartOffset(rd_offset, 1, sizeof(int));
   read_int_meta(rst_nout3, rd_offset, "nout3");
-  rd_offset += sizeof(int);
+  AdvanceParticleRestartOffset(rd_offset, 1, sizeof(int));
   read_int_meta(has_moments, rd_offset, "has_moments");
-  rd_offset += sizeof(int);
+  AdvanceParticleRestartOffset(rd_offset, 1, sizeof(int));
   read_int_meta(has_edge, rd_offset, "has_edge");
-  rd_offset += sizeof(int);
+  AdvanceParticleRestartOffset(rd_offset, 1, sizeof(int));
   read_int_meta(moment_cnt, rd_offset, "moment_cnt");
-  rd_offset += sizeof(int);
+  AdvanceParticleRestartOffset(rd_offset, 1, sizeof(int));
   read_int_meta(edge1_cnt, rd_offset, "edge1_cnt");
-  rd_offset += sizeof(int);
+  AdvanceParticleRestartOffset(rd_offset, 1, sizeof(int));
   read_int_meta(edge2_cnt, rd_offset, "edge2_cnt");
-  rd_offset += sizeof(int);
+  AdvanceParticleRestartOffset(rd_offset, 1, sizeof(int));
   read_int_meta(edge3_cnt, rd_offset, "edge3_cnt");
-  rd_offset += sizeof(int);
+  AdvanceParticleRestartOffset(rd_offset, 1, sizeof(int));
   read_int_meta(state_kind, rd_offset, "state_kind");
-  rd_offset += sizeof(int);
+  AdvanceParticleRestartOffset(rd_offset, 1, sizeof(int));
   read_int_meta(physical_mode, rd_offset, "physical_mode");
-  rd_offset += sizeof(int);
+  AdvanceParticleRestartOffset(rd_offset, 1, sizeof(int));
   if (global_variable::my_rank == 0) {
     if (resfile.Read_Reals_at(&cr_light_speed, 1, rd_offset, false) != 1) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -1087,7 +1318,7 @@ void LoadParticleRestartData(Mesh *pm,
 #if MPI_PARALLEL_ENABLED
   MPI_Bcast(&cr_light_speed, 1, MPI_ATHENA_REAL, 0, MPI_COMM_WORLD);
 #endif
-  rd_offset += sizeof(Real);
+  AdvanceParticleRestartOffset(rd_offset, 1, sizeof(Real));
   if (global_variable::my_rank == 0) {
     if (resfile.Read_bytes_at(model_ints.data(), sizeof(int), model_ints.size(),
                               rd_offset, false) != model_ints.size()) {
@@ -1101,7 +1332,7 @@ void LoadParticleRestartData(Mesh *pm,
 #if MPI_PARALLEL_ENABLED
   MPI_Bcast(model_ints.data(), model_ints.size(), MPI_INT, 0, MPI_COMM_WORLD);
 #endif
-  rd_offset += model_ints.size()*sizeof(int);
+  AdvanceParticleRestartOffset(rd_offset, model_ints.size(), sizeof(int));
   if (global_variable::my_rank == 0) {
     if (resfile.Read_Reals_at(model_reals.data(), model_reals.size(), rd_offset, false)
           != model_reals.size()) {
@@ -1115,7 +1346,7 @@ void LoadParticleRestartData(Mesh *pm,
 #if MPI_PARALLEL_ENABLED
   MPI_Bcast(model_reals.data(), model_reals.size(), MPI_ATHENA_REAL, 0, MPI_COMM_WORLD);
 #endif
-  rd_offset += model_reals.size()*sizeof(Real);
+  AdvanceParticleRestartOffset(rd_offset, model_reals.size(), sizeof(Real));
 
   if (global_variable::my_rank == 0) {
     if (resfile.Read_bytes_at(&npart_section, sizeof(IOWrapperSizeT), 1, rd_offset,
@@ -1130,7 +1361,7 @@ void LoadParticleRestartData(Mesh *pm,
 #if MPI_PARALLEL_ENABLED
   MPI_Bcast(&npart_section, sizeof(IOWrapperSizeT), MPI_BYTE, 0, MPI_COMM_WORLD);
 #endif
-  rd_offset += sizeof(IOWrapperSizeT);
+  AdvanceParticleRestartOffset(rd_offset, 1, sizeof(IOWrapperSizeT));
 
   if (nmb_section != pm->nmb_total) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -1139,7 +1370,8 @@ void LoadParticleRestartData(Mesh *pm,
               << ", runtime=" << pm->nmb_total << ")." << std::endl;
     restart_utils::AbortOnFatalError();
   }
-  if (nrdata != ppart->nrdata || nidata != ppart->nidata) {
+  if (nrdata <= 0 || nidata <= 0 ||
+      nrdata != ppart->nrdata || nidata != ppart->nidata) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
               << "Particle restart data layout mismatch." << std::endl;
@@ -1171,10 +1403,17 @@ void LoadParticleRestartData(Mesh *pm,
               << std::endl;
     restart_utils::AbortOnFatalError();
   }
-  const int expected_moment_cnt = particles::Particles::NMOM*nout3*nout2*nout1;
-  const int expected_edge1_cnt = (nout3 + 1)*(nout2 + 1)*nout1;
-  const int expected_edge2_cnt = (nout3 + 1)*nout2*(nout1 + 1);
-  const int expected_edge3_cnt = nout3*(nout2 + 1)*(nout1 + 1);
+  const int expected_moment_cnt = CheckedParticleRestartIntProduct(
+      {particles::Particles::NMOM, nout3, nout2, nout1});
+  const int nout1p1 = CheckedParticleRestartExtentPlusOne(nout1);
+  const int nout2p1 = CheckedParticleRestartExtentPlusOne(nout2);
+  const int nout3p1 = CheckedParticleRestartExtentPlusOne(nout3);
+  const int expected_edge1_cnt =
+      CheckedParticleRestartIntProduct({nout3p1, nout2p1, nout1});
+  const int expected_edge2_cnt =
+      CheckedParticleRestartIntProduct({nout3p1, nout2, nout1p1});
+  const int expected_edge3_cnt =
+      CheckedParticleRestartIntProduct({nout3, nout2p1, nout1p1});
   if (moment_cnt != expected_moment_cnt) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
@@ -1217,7 +1456,9 @@ void LoadParticleRestartData(Mesh *pm,
                 << std::endl;
       restart_utils::AbortOnFatalError();
     }
-    mb_offsets[m + 1] = mb_offsets[m] + static_cast<IOWrapperSizeT>(mb_counts[m]);
+    mb_offsets[m + 1] = mb_offsets[m];
+    AdvanceParticleRestartOffset(mb_offsets[m + 1],
+                                 static_cast<IOWrapperSizeT>(mb_counts[m]), 1);
   }
   if (mb_offsets[nmb_section] != npart_section) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -1226,25 +1467,52 @@ void LoadParticleRestartData(Mesh *pm,
     restart_utils::AbortOnFatalError();
   }
 
-  IOWrapperSizeT data_offset = mb_count_offset +
-                               static_cast<IOWrapperSizeT>(nmb_section)*sizeof(int);
+  IOWrapperSizeT data_offset = mb_count_offset;
+  AdvanceParticleRestartOffset(data_offset, static_cast<IOWrapperSizeT>(nmb_section),
+                               sizeof(int));
   const IOWrapperSizeT pr_real_offset = data_offset;
-  data_offset += npart_section*nrdata*sizeof(Real);
+  AdvanceParticleRestartOffset(data_offset, npart_section,
+                               CheckedParticleRestartProduct(
+                                   static_cast<IOWrapperSizeT>(nrdata), sizeof(Real)));
   const IOWrapperSizeT pr_int_offset = data_offset;
-  data_offset += npart_section*nidata*sizeof(int);
+  AdvanceParticleRestartOffset(data_offset, npart_section,
+                               CheckedParticleRestartProduct(
+                                   static_cast<IOWrapperSizeT>(nidata), sizeof(int)));
   const IOWrapperSizeT moments_offset = data_offset;
   if (has_moments) {
-    data_offset += static_cast<IOWrapperSizeT>(nmb_section)*moment_cnt*sizeof(Real);
+    AdvanceParticleRestartOffset(data_offset, static_cast<IOWrapperSizeT>(nmb_section),
+                                 CheckedParticleRestartProduct(
+                                     static_cast<IOWrapperSizeT>(moment_cnt),
+                                     sizeof(Real)));
   }
   const IOWrapperSizeT edge1_offset = data_offset;
   if (has_edge) {
-    data_offset += static_cast<IOWrapperSizeT>(nmb_section)*edge1_cnt*sizeof(Real);
+    AdvanceParticleRestartOffset(data_offset, static_cast<IOWrapperSizeT>(nmb_section),
+                                 CheckedParticleRestartProduct(
+                                     static_cast<IOWrapperSizeT>(edge1_cnt),
+                                     sizeof(Real)));
   }
   const IOWrapperSizeT edge2_offset = data_offset;
   if (has_edge) {
-    data_offset += static_cast<IOWrapperSizeT>(nmb_section)*edge2_cnt*sizeof(Real);
+    AdvanceParticleRestartOffset(data_offset, static_cast<IOWrapperSizeT>(nmb_section),
+                                 CheckedParticleRestartProduct(
+                                     static_cast<IOWrapperSizeT>(edge2_cnt),
+                                     sizeof(Real)));
   }
   const IOWrapperSizeT edge3_offset = data_offset;
+  if (has_edge) {
+    AdvanceParticleRestartOffset(data_offset, static_cast<IOWrapperSizeT>(nmb_section),
+                                 CheckedParticleRestartProduct(
+                                     static_cast<IOWrapperSizeT>(edge3_cnt),
+                                     sizeof(Real)));
+  }
+  if (data_offset > resfile.GetSize(false)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Particle restart section exceeds source artifact bounds."
+              << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
 
   const int nmb_local = pm->nmb_thisrank;
   const int gids_local = pm->gids_eachrank[global_variable::my_rank];
@@ -1254,13 +1522,17 @@ void LoadParticleRestartData(Mesh *pm,
   }
   std::vector<IOWrapperSizeT> local_mb_offsets(nmb_local + 1, 0);
   for (int m=0; m<nmb_local; ++m) {
-    local_mb_offsets[m + 1] = local_mb_offsets[m] +
-                              static_cast<IOWrapperSizeT>(local_mb_counts[m]);
+    local_mb_offsets[m + 1] = local_mb_offsets[m];
+    AdvanceParticleRestartOffset(local_mb_offsets[m + 1],
+                                 static_cast<IOWrapperSizeT>(local_mb_counts[m]), 1);
   }
 
-  const int local_npart = static_cast<int>(local_mb_offsets[nmb_local]);
+  const int local_npart =
+      CheckedLocalParticleCount(local_mb_offsets[nmb_local], nrdata, nidata);
   ppart->nprtcl_thispack = local_npart;
+  ValidateParticleRestartAllocation({nrdata, local_npart});
   Kokkos::realloc(ppart->prtcl_rdata, nrdata, local_npart);
+  ValidateParticleRestartAllocation({nidata, local_npart});
   Kokkos::realloc(ppart->prtcl_idata, nidata, local_npart);
 
   std::vector<Real> packed_pr(static_cast<std::size_t>(local_npart)*nrdata, 0.0);
@@ -1272,18 +1544,30 @@ void LoadParticleRestartData(Mesh *pm,
     const int gid = gids_local + m;
     const IOWrapperSizeT gstart = mb_offsets[gid];
     const IOWrapperSizeT lstart = local_mb_offsets[m];
-    const IOWrapperSizeT pr_off = pr_real_offset + gstart*nrdata*sizeof(Real);
-    const IOWrapperSizeT pi_off = pr_int_offset + gstart*nidata*sizeof(int);
-    if (resfile.Read_Reals_at(&(packed_pr[lstart*nrdata]), cnt*nrdata, pr_off, false) !=
-        static_cast<std::size_t>(cnt*nrdata)) {
+    IOWrapperSizeT pr_off = pr_real_offset;
+    AdvanceParticleRestartOffset(pr_off, gstart,
+                                 CheckedParticleRestartProduct(
+                                     static_cast<IOWrapperSizeT>(nrdata), sizeof(Real)));
+    IOWrapperSizeT pi_off = pr_int_offset;
+    AdvanceParticleRestartOffset(pi_off, gstart,
+                                 CheckedParticleRestartProduct(
+                                     static_cast<IOWrapperSizeT>(nidata), sizeof(int)));
+    const IOWrapperSizeT pr_count =
+        CheckedParticleRestartProduct(static_cast<IOWrapperSizeT>(cnt), nrdata);
+    const IOWrapperSizeT pi_count =
+        CheckedParticleRestartProduct(static_cast<IOWrapperSizeT>(cnt), nidata);
+    const IOWrapperSizeT pr_start = CheckedParticleRestartProduct(lstart, nrdata);
+    const IOWrapperSizeT pi_start = CheckedParticleRestartProduct(lstart, nidata);
+    if (resfile.Read_Reals_at(&(packed_pr[pr_start]), pr_count, pr_off, false) !=
+        static_cast<std::size_t>(pr_count)) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
                 << "Failed to read particle restart real data." << std::endl;
       restart_utils::AbortOnFatalError();
     }
-    if (resfile.Read_bytes_at(&(packed_pi[lstart*nidata]), sizeof(int), cnt*nidata,
+    if (resfile.Read_bytes_at(&(packed_pi[pi_start]), sizeof(int), pi_count,
                               pi_off, false) !=
-        static_cast<std::size_t>(cnt*nidata)) {
+        static_cast<std::size_t>(pi_count)) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
                 << "Failed to read particle restart integer data." << std::endl;
@@ -1318,9 +1602,11 @@ void LoadParticleRestartData(Mesh *pm,
       const int gid = gids_local + m;
       auto mom_mb = Kokkos::subview(h_mom, m, Kokkos::ALL, Kokkos::ALL, Kokkos::ALL,
                                     Kokkos::ALL);
-      const IOWrapperSizeT moff = moments_offset +
-                                  static_cast<IOWrapperSizeT>(gid)*moment_cnt*
-                                  sizeof(Real);
+      IOWrapperSizeT moff = moments_offset;
+      AdvanceParticleRestartOffset(moff, static_cast<IOWrapperSizeT>(gid),
+                                   CheckedParticleRestartProduct(
+                                       static_cast<IOWrapperSizeT>(moment_cnt),
+                                       sizeof(Real)));
       if (resfile.Read_Reals_at(mom_mb.data(), moment_cnt, moff, false) !=
           static_cast<std::size_t>(moment_cnt)) {
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -1351,15 +1637,21 @@ void LoadParticleRestartData(Mesh *pm,
       auto x1_mb = Kokkos::subview(h_x1e, m, Kokkos::ALL, Kokkos::ALL, Kokkos::ALL);
       auto x2_mb = Kokkos::subview(h_x2e, m, Kokkos::ALL, Kokkos::ALL, Kokkos::ALL);
       auto x3_mb = Kokkos::subview(h_x3e, m, Kokkos::ALL, Kokkos::ALL, Kokkos::ALL);
-      const IOWrapperSizeT x1off = edge1_offset +
-                                   static_cast<IOWrapperSizeT>(gid)*edge1_cnt*
-                                   sizeof(Real);
-      const IOWrapperSizeT x2off = edge2_offset +
-                                   static_cast<IOWrapperSizeT>(gid)*edge2_cnt*
-                                   sizeof(Real);
-      const IOWrapperSizeT x3off = edge3_offset +
-                                   static_cast<IOWrapperSizeT>(gid)*edge3_cnt*
-                                   sizeof(Real);
+      IOWrapperSizeT x1off = edge1_offset;
+      AdvanceParticleRestartOffset(x1off, static_cast<IOWrapperSizeT>(gid),
+                                   CheckedParticleRestartProduct(
+                                       static_cast<IOWrapperSizeT>(edge1_cnt),
+                                       sizeof(Real)));
+      IOWrapperSizeT x2off = edge2_offset;
+      AdvanceParticleRestartOffset(x2off, static_cast<IOWrapperSizeT>(gid),
+                                   CheckedParticleRestartProduct(
+                                       static_cast<IOWrapperSizeT>(edge2_cnt),
+                                       sizeof(Real)));
+      IOWrapperSizeT x3off = edge3_offset;
+      AdvanceParticleRestartOffset(x3off, static_cast<IOWrapperSizeT>(gid),
+                                   CheckedParticleRestartProduct(
+                                       static_cast<IOWrapperSizeT>(edge3_cnt),
+                                       sizeof(Real)));
       if (resfile.Read_Reals_at(x1_mb.data(), edge1_cnt, x1off, false) !=
             static_cast<std::size_t>(edge1_cnt) ||
           resfile.Read_Reals_at(x2_mb.data(), edge2_cnt, x2off, false) !=
@@ -1540,9 +1832,12 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
 
   // get spatial dimensions of arrays, including ghost zones
   auto &indcs = pm->pmb_pack->pmesh->mb_indcs;
-  int nout1 = indcs.nx1 + 2*(indcs.ng);
-  int nout2 = (indcs.nx2 > 1)? (indcs.nx2 + 2*(indcs.ng)) : 1;
-  int nout3 = (indcs.nx3 > 1)? (indcs.nx3 + 2*(indcs.ng)) : 1;
+  int nout1 = CheckedParticleRestartOutputExtent(indcs.nx1, indcs.ng);
+  int nout2 = CheckedParticleRestartOutputExtent(indcs.nx2, indcs.ng);
+  int nout3 = CheckedParticleRestartOutputExtent(indcs.nx3, indcs.ng);
+  const int nout1p1 = CheckedParticleRestartExtentPlusOne(nout1);
+  const int nout2p1 = CheckedParticleRestartExtentPlusOne(nout2);
+  const int nout3p1 = CheckedParticleRestartExtentPlusOne(nout3);
   int nmb = pm->pmb_pack->nmb_thispack;
   // calculate total number of CC variables
   hydro::Hydro* phydro = pm->pmb_pack->phydro;
@@ -1662,24 +1957,24 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
 
   IOWrapperSizeT data_size_ = 0;
   if (phydro != nullptr) {
-    data_size_ += nout1*nout2*nout3*nhydro*sizeof(Real); // hydro u0
+    AdvanceParticleRestartRealArrayOffset(data_size_, {nout1, nout2, nout3, nhydro});
   }
   if (pmhd != nullptr) {
-    data_size_ += nout1*nout2*nout3*nmhd*sizeof(Real);   // mhd u0
-    data_size_ += (nout1+1)*nout2*nout3*sizeof(Real);    // mhd b0.x1f
-    data_size_ += nout1*(nout2+1)*nout3*sizeof(Real);    // mhd b0.x2f
-    data_size_ += nout1*nout2*(nout3+1)*sizeof(Real);    // mhd b0.x3f
+    AdvanceParticleRestartRealArrayOffset(data_size_, {nout1, nout2, nout3, nmhd});
+    AdvanceParticleRestartRealArrayOffset(data_size_, {nout1p1, nout2, nout3});
+    AdvanceParticleRestartRealArrayOffset(data_size_, {nout1, nout2p1, nout3});
+    AdvanceParticleRestartRealArrayOffset(data_size_, {nout1, nout2, nout3p1});
   }
   if (prad != nullptr) {
-    data_size_ += nout1*nout2*nout3*nrad*sizeof(Real);   // rad i0
+    AdvanceParticleRestartRealArrayOffset(data_size_, {nout1, nout2, nout3, nrad});
   }
   if (pturb != nullptr) {
-    data_size_ += nout1*nout2*nout3*nforce*sizeof(Real); // forcing
+    AdvanceParticleRestartRealArrayOffset(data_size_, {nout1, nout2, nout3, nforce});
   }
   if (pz4c != nullptr) {
-    data_size_ += nout1*nout2*nout3*nz4c*sizeof(Real);   // z4c u0
+    AdvanceParticleRestartRealArrayOffset(data_size_, {nout1, nout2, nout3, nz4c});
   } else if (padm != nullptr) {
-    data_size_ += nout1*nout2*nout3*nadm*sizeof(Real);   // adm u_adm
+    AdvanceParticleRestartRealArrayOffset(data_size_, {nout1, nout2, nout3, nadm});
   }
 
   if (data_size_ != data_size) {
@@ -1688,6 +1983,10 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
               << "of Hydro, MHD, Rad, and/or Z4c arrays, restart file is broken."
               << std::endl;
     restart_utils::AbortOnFatalError();
+  }
+  if (single_file_per_rank) {
+    pm->restart_meta.common_prefix_bytes = static_cast<std::uint64_t>(headeroffset);
+    pm->ValidateRestartShardCommonPrefix();
   }
 
   HostArray5D<Real> ccin("rst-cc-in", 1, 1, 1, 1, 1);
@@ -1700,9 +1999,11 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
   } else {
     // read CC data into host array
     int mygids = pm->gids_eachrank[global_variable::my_rank];
+    if (mygids < 0) AbortParticleRestartLayoutOverflow();
     IOWrapperSizeT offset_myrank = headeroffset;
     if (!single_file_per_rank) {
-      offset_myrank += data_size_ * pm->gids_eachrank[global_variable::my_rank];
+      AdvanceParticleRestartOffset(offset_myrank, static_cast<IOWrapperSizeT>(mygids),
+                                   data_size_);
     }
     IOWrapperSizeT myoffset = offset_myrank;
 
@@ -1715,6 +2016,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
     }
 
   if (phydro != nullptr) {
+    ValidateParticleRestartAllocation({nmb, nhydro, nout3, nout2, nout1});
     Kokkos::realloc(ccin, nmb, nhydro, nout3, nout2, nout1);
     for (int m=0;  m<noutmbs_max; ++m) {
       // every rank has a MB to read, so read collectively
@@ -1722,7 +2024,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
         // get ptr to cell-centered MeshBlock data
         auto mbptr = Kokkos::subview(ccin, m, Kokkos::ALL, Kokkos::ALL, Kokkos::ALL,
                                      Kokkos::ALL);
-        int mbcnt = mbptr.size();
+        auto mbcnt = mbptr.size();
         if (resfile.Read_Reals_at_all(mbptr.data(), mbcnt, myoffset, single_file_per_rank)
             != mbcnt) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -1730,14 +2032,14 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
                     << "restart file is broken." << std::endl;
           restart_utils::AbortOnFatalError();
         }
-        myoffset += data_size;
+        AdvanceParticleRestartOffset(myoffset, 1, data_size);
 
       // some ranks are finished writing, so use non-collective write
       } else if (m < pm->nmb_thisrank) {
         // get ptr to MeshBlock data
         auto mbptr = Kokkos::subview(ccin, m, Kokkos::ALL, Kokkos::ALL, Kokkos::ALL,
                                      Kokkos::ALL);
-        int mbcnt = mbptr.size();
+        auto mbcnt = mbptr.size();
         if (resfile.Read_Reals_at(mbptr.data(), mbcnt, myoffset, single_file_per_rank)
             != mbcnt) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -1745,16 +2047,17 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
                     << "restart file is broken." << std::endl;
           restart_utils::AbortOnFatalError();
         }
-        myoffset += data_size;
+        AdvanceParticleRestartOffset(myoffset, 1, data_size);
       }
     }
     Kokkos::deep_copy(Kokkos::subview(phydro->u0, std::make_pair(0,nmb), Kokkos::ALL,
                       Kokkos::ALL, Kokkos::ALL, Kokkos::ALL), ccin);
-    offset_myrank += nout1*nout2*nout3*nhydro*sizeof(Real); // hydro u0
+    AdvanceParticleRestartRealArrayOffset(offset_myrank, {nout1, nout2, nout3, nhydro});
     myoffset = offset_myrank;
   }
 
   if (pmhd != nullptr) {
+    ValidateParticleRestartAllocation({nmb, nmhd, nout3, nout2, nout1});
     Kokkos::realloc(ccin, nmb, nmhd, nout3, nout2, nout1);
     for (int m=0;  m<noutmbs_max; ++m) {
       // every rank has a MB to read, so read collectively
@@ -1762,7 +2065,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
         // get ptr to cell-centered MeshBlock data
         auto mbptr = Kokkos::subview(ccin, m, Kokkos::ALL, Kokkos::ALL, Kokkos::ALL,
                                    Kokkos::ALL);
-        int mbcnt = mbptr.size();
+        auto mbcnt = mbptr.size();
         if (resfile.Read_Reals_at_all(mbptr.data(), mbcnt, myoffset, single_file_per_rank)
             != mbcnt) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -1770,13 +2073,13 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
                     << "restart file is broken." << std::endl;
           restart_utils::AbortOnFatalError();
         }
-        myoffset += data_size;
+        AdvanceParticleRestartOffset(myoffset, 1, data_size);
       // some ranks are finished writing, so use non-collective write
       } else if (m < pm->nmb_thisrank) {
         // get ptr to MeshBlock data
         auto mbptr = Kokkos::subview(ccin, m, Kokkos::ALL, Kokkos::ALL, Kokkos::ALL,
                                      Kokkos::ALL);
-        int mbcnt = mbptr.size();
+        auto mbcnt = mbptr.size();
         if (resfile.Read_Reals_at(mbptr.data(), mbcnt, myoffset, single_file_per_rank)
             != mbcnt) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -1784,24 +2087,27 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
                     << "restart file is broken." << std::endl;
           restart_utils::AbortOnFatalError();
         }
-        myoffset += data_size;
+        AdvanceParticleRestartOffset(myoffset, 1, data_size);
       }
     }
     Kokkos::deep_copy(Kokkos::subview(pmhd->u0, std::make_pair(0,nmb), Kokkos::ALL,
                       Kokkos::ALL, Kokkos::ALL, Kokkos::ALL), ccin);
-    offset_myrank += nout1*nout2*nout3*nmhd*sizeof(Real);   // mhd u0
+    AdvanceParticleRestartRealArrayOffset(offset_myrank, {nout1, nout2, nout3, nmhd});
     myoffset = offset_myrank;
 
-    Kokkos::realloc(fcin.x1f, nmb, nout3, nout2, nout1+1);
-    Kokkos::realloc(fcin.x2f, nmb, nout3, nout2+1, nout1);
-    Kokkos::realloc(fcin.x3f, nmb, nout3+1, nout2, nout1);
+    ValidateParticleRestartAllocation({nmb, nout3, nout2, nout1p1});
+    Kokkos::realloc(fcin.x1f, nmb, nout3, nout2, nout1p1);
+    ValidateParticleRestartAllocation({nmb, nout3, nout2p1, nout1});
+    Kokkos::realloc(fcin.x2f, nmb, nout3, nout2p1, nout1);
+    ValidateParticleRestartAllocation({nmb, nout3p1, nout2, nout1});
+    Kokkos::realloc(fcin.x3f, nmb, nout3p1, nout2, nout1);
     // read FC data into host array, again one MeshBlock at a time
     for (int m=0;  m<noutmbs_max; ++m) {
       // every rank has a MB to write, so write collectively
       if (m < noutmbs_min) {
         // get ptr to x1-face field
         auto x1fptr = Kokkos::subview(fcin.x1f, m, Kokkos::ALL, Kokkos::ALL, Kokkos::ALL);
-        int fldcnt = x1fptr.size();
+        auto fldcnt = x1fptr.size();
 
         if (resfile.Read_Reals_at_all(x1fptr.data(), fldcnt, myoffset,
                                       single_file_per_rank) != fldcnt) {
@@ -1810,7 +2116,8 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
                 << "restart file is broken." << std::endl;
           restart_utils::AbortOnFatalError();
         }
-        myoffset += fldcnt*sizeof(Real);
+        AdvanceParticleRestartOffset(myoffset, static_cast<IOWrapperSizeT>(fldcnt),
+                                     sizeof(Real));
 
         // get ptr to x2-face field
         auto x2fptr = Kokkos::subview(fcin.x2f, m, Kokkos::ALL, Kokkos::ALL, Kokkos::ALL);
@@ -1823,7 +2130,8 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
                 << "restart file is broken." << std::endl;
           restart_utils::AbortOnFatalError();
         }
-        myoffset += fldcnt*sizeof(Real);
+        AdvanceParticleRestartOffset(myoffset, static_cast<IOWrapperSizeT>(fldcnt),
+                                     sizeof(Real));
 
         // get ptr to x3-face field
         auto x3fptr = Kokkos::subview(fcin.x3f, m, Kokkos::ALL, Kokkos::ALL, Kokkos::ALL);
@@ -1836,13 +2144,15 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
                 << "restart file is broken." << std::endl;
           restart_utils::AbortOnFatalError();
         }
-        myoffset += fldcnt*sizeof(Real);
+        AdvanceParticleRestartOffset(myoffset, static_cast<IOWrapperSizeT>(fldcnt),
+                                     sizeof(Real));
 
-        myoffset += data_size-(x1fptr.size()+x2fptr.size()+x3fptr.size())*sizeof(Real);
+        AdvanceParticleRestartPastFaceArrayRemainder(
+            myoffset, data_size, {x1fptr.size(), x2fptr.size(), x3fptr.size()});
       } else if (m < pm->nmb_thisrank) {
         // get ptr to x1-face field
         auto x1fptr = Kokkos::subview(fcin.x1f, m, Kokkos::ALL, Kokkos::ALL, Kokkos::ALL);
-        int fldcnt = x1fptr.size();
+        auto fldcnt = x1fptr.size();
 
         if (resfile.Read_Reals_at(x1fptr.data(), fldcnt, myoffset,
                                       single_file_per_rank) != fldcnt) {
@@ -1851,7 +2161,8 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
                 << "restart file is broken." << std::endl;
           restart_utils::AbortOnFatalError();
         }
-        myoffset += fldcnt*sizeof(Real);
+        AdvanceParticleRestartOffset(myoffset, static_cast<IOWrapperSizeT>(fldcnt),
+                                     sizeof(Real));
 
         // get ptr to x2-face field
         auto x2fptr = Kokkos::subview(fcin.x2f, m, Kokkos::ALL, Kokkos::ALL, Kokkos::ALL);
@@ -1864,7 +2175,8 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
                 << "restart file is broken." << std::endl;
           restart_utils::AbortOnFatalError();
         }
-        myoffset += fldcnt*sizeof(Real);
+        AdvanceParticleRestartOffset(myoffset, static_cast<IOWrapperSizeT>(fldcnt),
+                                     sizeof(Real));
 
         // get ptr to x3-face field
         auto x3fptr = Kokkos::subview(fcin.x3f, m, Kokkos::ALL, Kokkos::ALL, Kokkos::ALL);
@@ -1877,9 +2189,11 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
                 << "restart file is broken." << std::endl;
           restart_utils::AbortOnFatalError();
         }
-        myoffset += fldcnt*sizeof(Real);
+        AdvanceParticleRestartOffset(myoffset, static_cast<IOWrapperSizeT>(fldcnt),
+                                     sizeof(Real));
 
-        myoffset += data_size-(x1fptr.size()+x2fptr.size()+x3fptr.size())*sizeof(Real);
+        AdvanceParticleRestartPastFaceArrayRemainder(
+            myoffset, data_size, {x1fptr.size(), x2fptr.size(), x3fptr.size()});
       }
     }
     Kokkos::deep_copy(Kokkos::subview(pmhd->b0.x1f, std::make_pair(0,nmb), Kokkos::ALL,
@@ -1888,13 +2202,14 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
                       Kokkos::ALL, Kokkos::ALL), fcin.x2f);
     Kokkos::deep_copy(Kokkos::subview(pmhd->b0.x3f, std::make_pair(0,nmb), Kokkos::ALL,
                       Kokkos::ALL, Kokkos::ALL), fcin.x3f);
-    offset_myrank += (nout1+1)*nout2*nout3*sizeof(Real);    // mhd b0.x1f
-    offset_myrank += nout1*(nout2+1)*nout3*sizeof(Real);    // mhd b0.x2f
-    offset_myrank += nout1*nout2*(nout3+1)*sizeof(Real);    // mhd b0.x3f
+    AdvanceParticleRestartRealArrayOffset(offset_myrank, {nout1p1, nout2, nout3});
+    AdvanceParticleRestartRealArrayOffset(offset_myrank, {nout1, nout2p1, nout3});
+    AdvanceParticleRestartRealArrayOffset(offset_myrank, {nout1, nout2, nout3p1});
     myoffset = offset_myrank;
   }
 
   if (prad != nullptr) {
+    ValidateParticleRestartAllocation({nmb, nrad, nout3, nout2, nout1});
     Kokkos::realloc(ccin, nmb, nrad, nout3, nout2, nout1);
     for (int m=0;  m<noutmbs_max; ++m) {
       // every rank has a MB to read, so read collectively
@@ -1902,7 +2217,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
         // get ptr to cell-centered MeshBlock data
         auto mbptr = Kokkos::subview(ccin, m, Kokkos::ALL, Kokkos::ALL, Kokkos::ALL,
                                      Kokkos::ALL);
-        int mbcnt = mbptr.size();
+        auto mbcnt = mbptr.size();
         if (resfile.Read_Reals_at_all(mbptr.data(), mbcnt, myoffset,
                                       single_file_per_rank) != mbcnt) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -1910,14 +2225,14 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
                     << "restart file is broken." << std::endl;
           restart_utils::AbortOnFatalError();
         }
-        myoffset += data_size;
+        AdvanceParticleRestartOffset(myoffset, 1, data_size);
 
       // some ranks are finished writing, so use non-collective write
       } else if (m < pm->nmb_thisrank) {
         // get ptr to MeshBlock data
         auto mbptr = Kokkos::subview(ccin, m, Kokkos::ALL, Kokkos::ALL, Kokkos::ALL,
                                      Kokkos::ALL);
-        int mbcnt = mbptr.size();
+        auto mbcnt = mbptr.size();
         if (resfile.Read_Reals_at(mbptr.data(), mbcnt, myoffset,
                                       single_file_per_rank) != mbcnt) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -1925,16 +2240,17 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
                     << "restart file is broken." << std::endl;
           restart_utils::AbortOnFatalError();
         }
-        myoffset += data_size;
+        AdvanceParticleRestartOffset(myoffset, 1, data_size);
       }
     }
     Kokkos::deep_copy(Kokkos::subview(prad->i0, std::make_pair(0,nmb), Kokkos::ALL,
                       Kokkos::ALL, Kokkos::ALL, Kokkos::ALL), ccin);
-    offset_myrank += nout1*nout2*nout3*nrad*sizeof(Real);   // radiation i0
+    AdvanceParticleRestartRealArrayOffset(offset_myrank, {nout1, nout2, nout3, nrad});
     myoffset = offset_myrank;
   }
 
   if (pturb != nullptr) {
+    ValidateParticleRestartAllocation({nmb, nforce, nout3, nout2, nout1});
     Kokkos::realloc(ccin, nmb, nforce, nout3, nout2, nout1);
     for (int m=0;  m<noutmbs_max; ++m) {
       // every rank has a MB to read, so read collectively
@@ -1942,7 +2258,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
         // get ptr to cell-centered MeshBlock data
         auto mbptr = Kokkos::subview(ccin, m, Kokkos::ALL, Kokkos::ALL, Kokkos::ALL,
                                      Kokkos::ALL);
-        int mbcnt = mbptr.size();
+        auto mbcnt = mbptr.size();
         if (resfile.Read_Reals_at_all(mbptr.data(), mbcnt, myoffset,
                                       single_file_per_rank) != mbcnt) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -1950,14 +2266,14 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
                     << "restart file is broken." << std::endl;
           restart_utils::AbortOnFatalError();
         }
-        myoffset += data_size;
+        AdvanceParticleRestartOffset(myoffset, 1, data_size);
 
       // some ranks are finished writing, so use non-collective write
       } else if (m < pm->nmb_thisrank) {
         // get ptr to MeshBlock data
         auto mbptr = Kokkos::subview(ccin, m, Kokkos::ALL, Kokkos::ALL, Kokkos::ALL,
                                      Kokkos::ALL);
-        int mbcnt = mbptr.size();
+        auto mbcnt = mbptr.size();
         if (resfile.Read_Reals_at(mbptr.data(), mbcnt, myoffset,
                                       single_file_per_rank) != mbcnt) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -1965,16 +2281,17 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
                     << "restart file is broken." << std::endl;
           restart_utils::AbortOnFatalError();
         }
-        myoffset += data_size;
+        AdvanceParticleRestartOffset(myoffset, 1, data_size);
       }
     }
     Kokkos::deep_copy(Kokkos::subview(pturb->force, std::make_pair(0,nmb), Kokkos::ALL,
                       Kokkos::ALL, Kokkos::ALL, Kokkos::ALL), ccin);
-    offset_myrank += nout1*nout2*nout3*nforce*sizeof(Real); // forcing
+    AdvanceParticleRestartRealArrayOffset(offset_myrank, {nout1, nout2, nout3, nforce});
     myoffset = offset_myrank;
   }
 
   if (pz4c != nullptr) {
+    ValidateParticleRestartAllocation({nmb, nz4c, nout3, nout2, nout1});
     Kokkos::realloc(ccin, nmb, nz4c, nout3, nout2, nout1);
     for (int m=0;  m<noutmbs_max; ++m) {
       // every rank has a MB to read, so read collectively
@@ -1982,7 +2299,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
         // get ptr to cell-centered MeshBlock data
         auto mbptr = Kokkos::subview(ccin, m, Kokkos::ALL, Kokkos::ALL, Kokkos::ALL,
                                      Kokkos::ALL);
-        int mbcnt = mbptr.size();
+        auto mbcnt = mbptr.size();
         if (resfile.Read_Reals_at_all(mbptr.data(), mbcnt, myoffset,
                                       single_file_per_rank) != mbcnt) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -1990,14 +2307,14 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
                     << "restart file is broken." << std::endl;
           restart_utils::AbortOnFatalError();
         }
-        myoffset += data_size;
+        AdvanceParticleRestartOffset(myoffset, 1, data_size);
 
       // some ranks are finished writing, so use non-collective write
       } else if (m < pm->nmb_thisrank) {
         // get ptr to MeshBlock data
         auto mbptr = Kokkos::subview(ccin, m, Kokkos::ALL, Kokkos::ALL, Kokkos::ALL,
                                      Kokkos::ALL);
-        int mbcnt = mbptr.size();
+        auto mbcnt = mbptr.size();
         if (resfile.Read_Reals_at(mbptr.data(), mbcnt, myoffset,
                                       single_file_per_rank) != mbcnt) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -2005,17 +2322,18 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
                     << "restart file is broken." << std::endl;
           restart_utils::AbortOnFatalError();
         }
-        myoffset += data_size;
+        AdvanceParticleRestartOffset(myoffset, 1, data_size);
       }
     }
     Kokkos::deep_copy(Kokkos::subview(pz4c->u0, std::make_pair(0,nmb), Kokkos::ALL,
                       Kokkos::ALL, Kokkos::ALL, Kokkos::ALL), ccin);
-    offset_myrank += nout1*nout2*nout3*nz4c*sizeof(Real);   // z4c u0
+    AdvanceParticleRestartRealArrayOffset(offset_myrank, {nout1, nout2, nout3, nz4c});
     myoffset = offset_myrank;
 
     // We also need to reinitialize the ADM data.
     pz4c->Z4cToADM(pmy_mesh_->pmb_pack);
   } else if (padm != nullptr) {
+    ValidateParticleRestartAllocation({nmb, nadm, nout3, nout2, nout1});
     Kokkos::realloc(ccin, nmb, nadm, nout3, nout2, nout1);
     for (int m=0;  m<noutmbs_max; ++m) {
       // every rank has a MB to read, so read collectively
@@ -2023,7 +2341,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
         // get ptr to cell-centered MeshBlock data
         auto mbptr = Kokkos::subview(ccin, m, Kokkos::ALL, Kokkos::ALL, Kokkos::ALL,
                                      Kokkos::ALL);
-        int mbcnt = mbptr.size();
+        auto mbcnt = mbptr.size();
         if (resfile.Read_Reals_at_all(mbptr.data(), mbcnt, myoffset,
                                       single_file_per_rank) != mbcnt) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -2031,14 +2349,14 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
                     << "restart file is broken." << std::endl;
           restart_utils::AbortOnFatalError();
         }
-        myoffset += data_size;
+        AdvanceParticleRestartOffset(myoffset, 1, data_size);
 
       // some ranks are finished writing, so use non-collective write
       } else if (m < pm->nmb_thisrank) {
         // get ptr to MeshBlock data
         auto mbptr = Kokkos::subview(ccin, m, Kokkos::ALL, Kokkos::ALL, Kokkos::ALL,
                                      Kokkos::ALL);
-        int mbcnt = mbptr.size();
+        auto mbcnt = mbptr.size();
         if (resfile.Read_Reals_at(mbptr.data(), mbcnt, myoffset,
                                       single_file_per_rank) != mbcnt) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -2046,12 +2364,12 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
                     << "restart file is broken." << std::endl;
           restart_utils::AbortOnFatalError();
         }
-        myoffset += data_size;
+        AdvanceParticleRestartOffset(myoffset, 1, data_size);
       }
     }
     Kokkos::deep_copy(Kokkos::subview(padm->u_adm, std::make_pair(0,nmb), Kokkos::ALL,
                       Kokkos::ALL, Kokkos::ALL, Kokkos::ALL), ccin);
-    offset_myrank += nout1*nout2*nout3*nadm*sizeof(Real);   // adm u_adm
+    AdvanceParticleRestartRealArrayOffset(offset_myrank, {nout1, nout2, nout3, nadm});
     myoffset = offset_myrank;
   }
   }

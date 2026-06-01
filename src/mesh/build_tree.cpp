@@ -6,10 +6,17 @@
 //! \file build_tree.cpp
 //! \brief Functions to build MeshBlockTreee, both for new runs and restarts
 
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <cstdio>
+#include <cstring>
+#include <fstream>
 #include <iostream>
 #include <cinttypes>
 #include <limits> // numeric_limits<>
 #include <memory> // make_unique<>
+#include <string>
 
 #include "athena.hpp"
 #include "globals.hpp"
@@ -23,6 +30,139 @@
 #if MPI_PARALLEL_ENABLED
 #include <mpi.h>
 #endif
+
+namespace {
+
+bool SameRegionSize(const RegionSize &lhs, const RegionSize &rhs) {
+  return lhs.x1min == rhs.x1min && lhs.x2min == rhs.x2min && lhs.x3min == rhs.x3min &&
+         lhs.x1max == rhs.x1max && lhs.x2max == rhs.x2max && lhs.x3max == rhs.x3max &&
+         lhs.dx1 == rhs.dx1 && lhs.dx2 == rhs.dx2 && lhs.dx3 == rhs.dx3;
+}
+
+bool SameRegionIndcs(const RegionIndcs &lhs, const RegionIndcs &rhs) {
+  return lhs.ng == rhs.ng && lhs.nx1 == rhs.nx1 && lhs.nx2 == rhs.nx2 &&
+         lhs.nx3 == rhs.nx3 && lhs.is == rhs.is && lhs.ie == rhs.ie &&
+         lhs.js == rhs.js && lhs.je == rhs.je && lhs.ks == rhs.ks &&
+         lhs.ke == rhs.ke && lhs.cnx1 == rhs.cnx1 && lhs.cnx2 == rhs.cnx2 &&
+         lhs.cnx3 == rhs.cnx3 && lhs.cis == rhs.cis && lhs.cie == rhs.cie &&
+         lhs.cjs == rhs.cjs && lhs.cje == rhs.cje && lhs.cks == rhs.cks &&
+         lhs.cke == rhs.cke;
+}
+
+bool SameMeshRegionIndcs(const RegionIndcs &lhs, const RegionIndcs &rhs) {
+  return lhs.ng == rhs.ng && lhs.nx1 == rhs.nx1 && lhs.nx2 == rhs.nx2 &&
+         lhs.nx3 == rhs.nx3 && lhs.is == rhs.is && lhs.ie == rhs.ie &&
+         lhs.js == rhs.js && lhs.je == rhs.je && lhs.ks == rhs.ks &&
+         lhs.ke == rhs.ke;
+}
+
+bool SameLogicalLocation(const LogicalLocation &lhs, const LogicalLocation &rhs) {
+  return lhs.lx1 == rhs.lx1 && lhs.lx2 == rhs.lx2 && lhs.lx3 == rhs.lx3 &&
+         lhs.level == rhs.level;
+}
+
+bool CheckedMpiByteCount(const IOWrapperSizeT count, const IOWrapperSizeT width,
+                         int &bytes) {
+  constexpr IOWrapperSizeT max = static_cast<IOWrapperSizeT>(
+      std::numeric_limits<int>::max());
+  if (count != 0 && width > max/count) return false;
+  bytes = static_cast<int>(count*width);
+  return true;
+}
+
+int CheckedMaxRefinementLevel(ParameterInput *pin, const int root_level) {
+  const int num_levels = pin->GetOrAddInteger("mesh_refinement", "num_levels", 1);
+  if (root_level < 0 || root_level > 30 || num_levels < 1 ||
+      num_levels > 31 - root_level) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Number of refinement levels must be between 1 and "
+              << 31 - root_level << " for the configured root grid." << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+  return root_level + num_levels - 1;
+}
+
+int CheckedRootLevel(const int nmbmax) {
+  if (nmbmax <= 0 || nmbmax > (1 << 30)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Root-grid MeshBlock count exceeds supported logical bounds."
+              << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+  int level = 0;
+  while ((1 << level) < nmbmax) ++level;
+  return level;
+}
+
+int CheckedStaticRefinementLevel(const int phy_ref_lev, const int root_level,
+                                 const int max_level) {
+  if (phy_ref_lev < 1 || phy_ref_lev > 30 - root_level) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Refinement level exceeds supported logical bounds." << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+  const int log_ref_lev = root_level + phy_ref_lev;
+  if (log_ref_lev > max_level) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "Refinement level exceeds maximum allowed ("
+              << max_level << ")" << std::endl << "Reduce/specify 'num_levels' in "
+              << "<mesh_refinement> input block if using AMR" << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+  return log_ref_lev;
+}
+
+std::int32_t CheckedRefinedLogicalExtent(const int nmb_root, const int phy_ref_lev) {
+  const std::int64_t factor = std::int64_t{1} << phy_ref_lev;
+  if (nmb_root <= 0 ||
+      static_cast<std::int64_t>(nmb_root) >
+          std::numeric_limits<std::int32_t>::max()/factor) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Refined logical MeshBlock extent exceeds supported bounds."
+              << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+  return static_cast<std::int32_t>(static_cast<std::int64_t>(nmb_root)*factor);
+}
+
+std::int32_t FirstRefinedLogicalIndex(const std::int32_t logical_extent,
+                                     const Real mesh_min, const Real mesh_max,
+                                     const Real region_min) {
+  std::int32_t lower = 0;
+  std::int32_t upper = logical_extent;
+  while (lower < upper) {
+    const std::int32_t middle = lower + (upper - lower)/2;
+    if (LeftEdgeX(middle + 1, logical_extent, mesh_min, mesh_max) > region_min) {
+      upper = middle;
+    } else {
+      lower = middle + 1;
+    }
+  }
+  return lower;
+}
+
+std::int32_t LastRefinedLogicalIndex(const std::int32_t logical_extent,
+                                    const std::int32_t first,
+                                    const Real mesh_min, const Real mesh_max,
+                                    const Real region_max) {
+  std::int32_t lower = first;
+  std::int32_t upper = logical_extent;
+  while (lower < upper) {
+    const std::int32_t middle = lower + (upper - lower)/2;
+    if (LeftEdgeX(middle + 1, logical_extent, mesh_min, mesh_max) >= region_max) {
+      upper = middle;
+    } else {
+      lower = middle + 1;
+    }
+  }
+  return lower;
+}
+
+} // namespace
 
 //----------------------------------------------------------------------------------------
 //! \fn void Mesh::BuildTreeFromScratch():
@@ -40,9 +180,8 @@ void Mesh::BuildTreeFromScratch(ParameterInput *pin) {
   int nmbmax = (nmb_rootx1 > nmb_rootx2) ? nmb_rootx1 : nmb_rootx2;
   nmbmax = (nmbmax > nmb_rootx3) ? nmbmax : nmb_rootx3;
 
-  // Find smallest N such that 2^N > max number of MeshBlocks in any dimension (nmbmax)
-  // Then N is logical level of root grid.  2^N implemented as left-shift (1<<root_level)
-  for (root_level=0; ((1<<root_level) < nmbmax); root_level++) {}
+  // Find smallest N such that 2^N >= max number of MeshBlocks in any dimension.
+  root_level = CheckedRootLevel(nmbmax);
   int current_level = root_level;
 
   // Construct tree and create root grid
@@ -51,15 +190,9 @@ void Mesh::BuildTreeFromScratch(ParameterInput *pin) {
 
   // Error check properties of input paraemters for SMR/AMR meshes.
   if (adaptive) {
-    max_level = pin->GetOrAddInteger("mesh_refinement", "num_levels", 1) + root_level - 1;
-    if (max_level > 31) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "Number of refinement levels must be smaller than "
-                << 31 - root_level + 1 << std::endl;
-      restart_utils::AbortOnFatalError();
-    }
+    max_level = CheckedMaxRefinementLevel(pin, root_level);
   } else {
-    max_level = 31;
+    max_level = 30;
   }
 
   // For meshes with refinement, construct new nodes for <refinement> blocks in input file
@@ -97,23 +230,11 @@ void Mesh::BuildTreeFromScratch(ParameterInput *pin) {
           ref_size.x3max = mesh_size.x3max;
         }
         int phy_ref_lev = pin->GetInteger(it->block_name, "level");
-        int log_ref_lev = phy_ref_lev + root_level;
+        int log_ref_lev =
+            CheckedStaticRefinementLevel(phy_ref_lev, root_level, max_level);
         if (log_ref_lev > current_level) current_level = log_ref_lev;
 
         // error check parameters in "refinement" blocks
-        if (phy_ref_lev < 1) {
-          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl << "Refinement level must be larger than 0 (root level = 0)"
-              << std::endl;
-          restart_utils::AbortOnFatalError();
-        }
-        if (log_ref_lev > max_level) {
-          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl << "Refinement level exceeds maximum allowed ("
-              << max_level << ")" << std::endl << "Reduce/specify 'num_levels' in "
-              << "<mesh_refinement> input block if using AMR" << std::endl;
-          restart_utils::AbortOnFatalError();
-        }
         if (   ref_size.x1min > ref_size.x1max
             || ref_size.x2min > ref_size.x2max
             || ref_size.x3min > ref_size.x3max)  {
@@ -138,48 +259,32 @@ void Mesh::BuildTreeFromScratch(ParameterInput *pin) {
         std::int32_t lx1min = 0, lx1max = 0;
         std::int32_t lx2min = 0, lx2max = 0;
         std::int32_t lx3min = 0, lx3max = 0;
-        std::int32_t lxmax = nmb_rootx1*(1<<phy_ref_lev);
-        for (lx1min=0; lx1min<lxmax; lx1min++) {
-          if (LeftEdgeX(lx1min+1,lxmax,mesh_size.x1min,mesh_size.x1max) > ref_size.x1min)
-            break;
-        }
-        for (lx1max=lx1min; lx1max<lxmax; lx1max++) {
-          if (LeftEdgeX(lx1max+1,lxmax,mesh_size.x1min,mesh_size.x1max) >= ref_size.x1max)
-            break;
-        }
+        std::int32_t lxmax = CheckedRefinedLogicalExtent(nmb_rootx1, phy_ref_lev);
+        lx1min = FirstRefinedLogicalIndex(lxmax, mesh_size.x1min, mesh_size.x1max,
+                                          ref_size.x1min);
+        lx1max = LastRefinedLogicalIndex(lxmax, lx1min, mesh_size.x1min,
+                                        mesh_size.x1max, ref_size.x1max);
         if (lx1min % 2 == 1) lx1min--;
         if (lx1max % 2 == 0) lx1max++;
 
         // Find range of x2-indices of such MeshBlocks that cover the refinement region
         if (multi_d) { // 2D or 3D
-          lxmax = nmb_rootx2*(1<<phy_ref_lev);
-          for (lx2min=0; lx2min<lxmax; lx2min++) {
-            if (LeftEdgeX(lx2min+1, lxmax, mesh_size.x2min, mesh_size.x2max) >
-                ref_size.x2min)
-            break;
-          }
-          for (lx2max=lx2min; lx2max<lxmax; lx2max++) {
-            if (LeftEdgeX(lx2max+1, lxmax, mesh_size.x2min, mesh_size.x2max) >=
-                ref_size.x2max)
-            break;
-          }
+          lxmax = CheckedRefinedLogicalExtent(nmb_rootx2, phy_ref_lev);
+          lx2min = FirstRefinedLogicalIndex(lxmax, mesh_size.x2min, mesh_size.x2max,
+                                            ref_size.x2min);
+          lx2max = LastRefinedLogicalIndex(lxmax, lx2min, mesh_size.x2min,
+                                          mesh_size.x2max, ref_size.x2max);
           if (lx2min % 2 == 1) lx2min--;
           if (lx2max % 2 == 0) lx2max++;
         }
 
         // Find range of x3-indices of such MeshBlocks that cover the refinement region
         if (three_d) { // 3D
-          lxmax = nmb_rootx3*(1<<phy_ref_lev);
-          for (lx3min=0; lx3min<lxmax; lx3min++) {
-            if (LeftEdgeX(lx3min+1, lxmax, mesh_size.x3min, mesh_size.x3max) >
-                ref_size.x3min)
-            break;
-          }
-          for (lx3max=lx3min; lx3max<lxmax; lx3max++) {
-            if (LeftEdgeX(lx3max+1, lxmax, mesh_size.x3min, mesh_size.x3max) >=
-                ref_size.x3max)
-            break;
-          }
+          lxmax = CheckedRefinedLogicalExtent(nmb_rootx3, phy_ref_lev);
+          lx3min = FirstRefinedLogicalIndex(lxmax, mesh_size.x3min, mesh_size.x3max,
+                                            ref_size.x3min);
+          lx3max = LastRefinedLogicalIndex(lxmax, lx3min, mesh_size.x3min,
+                                          mesh_size.x3max, ref_size.x3max);
           if (lx3min % 2 == 1) lx3min--;
           if (lx3max % 2 == 0) lx3max++;
         }
@@ -192,7 +297,7 @@ void Mesh::BuildTreeFromScratch(ParameterInput *pin) {
             nlloc.lx1 = i;
             nlloc.lx2 = 0;
             nlloc.lx3 = 0;
-            int nnew;
+            int nnew = 0;
             ptree->AddNode(nlloc, nnew);
           }
         }
@@ -204,7 +309,7 @@ void Mesh::BuildTreeFromScratch(ParameterInput *pin) {
               nlloc.lx1 = i;
               nlloc.lx2 = j;
               nlloc.lx3 = 0;
-              int nnew;
+              int nnew = 0;
               ptree->AddNode(nlloc, nnew);
             }
           }
@@ -218,7 +323,7 @@ void Mesh::BuildTreeFromScratch(ParameterInput *pin) {
                 nlloc.lx1 = i;
                 nlloc.lx2 = j;
                 nlloc.lx3 = k;
-                int nnew;
+                int nnew = 0;
                 ptree->AddNode(nlloc, nnew);
               }
             }
@@ -232,6 +337,13 @@ void Mesh::BuildTreeFromScratch(ParameterInput *pin) {
 
   // initial mesh hierarchy construction is completed here
   ptree->CountMeshBlocks(nmb_total);
+  if (nmb_total <= 0 || nmb_total > kMaxSupportedMeshBlocks) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "MeshBlock count exceeds supported topology bounds." << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+  ptree->ResetMeshBlockCount(nmb_total);
 
   cost_eachmb = new float[nmb_total];
   rank_eachmb = new int[nmb_total];
@@ -319,6 +431,10 @@ void Mesh::BuildTreeFromScratch(ParameterInput *pin) {
 
 void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
                                                      bool single_file_per_rank) {
+  const RegionSize configured_mesh_size = mesh_size;
+  const RegionIndcs configured_mesh_indcs = mesh_indcs;
+  const RegionIndcs configured_mb_indcs = mb_indcs;
+
   // At this point, the restartfile is already open and the ParameterInput (input file)
   // data has already been read in main(). Thus the file pointer is set to after <par_end>
   IOWrapperSizeT headeroffset = resfile.GetPosition(single_file_per_rank);
@@ -378,11 +494,32 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
   std::memcpy(&(restart_meta.original_nranks), &(headerdata[hdos]), sizeof(int));
   delete [] headerdata;
 
-  if (nmb_total <= 0 || restart_meta.original_nranks <= 0 ||
+  if (nmb_total <= 0 || nmb_total > kMaxSupportedMeshBlocks ||
+      restart_meta.original_nranks <= 0 ||
       restart_meta.original_nranks > nmb_total) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
-              << "MeshBlock or rank count stored in restart file is invalid."
+              << "MeshBlock or rank count stored in restart file is invalid or exceeds "
+              << "the supported restart limit."
+              << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+  if (!SameRegionSize(mesh_size, configured_mesh_size) ||
+      !SameMeshRegionIndcs(mesh_indcs, configured_mesh_indcs) ||
+      !SameRegionIndcs(mb_indcs, configured_mb_indcs)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Restart mesh geometry does not match configured mesh geometry."
+              << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+  if (root_level < 0 || root_level > 30 ||
+      mesh_indcs.nx1 % mb_indcs.nx1 != 0 ||
+      mesh_indcs.nx2 % mb_indcs.nx2 != 0 ||
+      mesh_indcs.nx3 % mb_indcs.nx3 != 0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Restart mesh geometry or root level is invalid."
               << std::endl;
     restart_utils::AbortOnFatalError();
   }
@@ -400,11 +537,13 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
   bool valid_minimum_size = checked_add_product(minimum_size, 1, headersize);
   valid_minimum_size =
       valid_minimum_size &&
-      checked_add_product(minimum_size, meshblocks, sizeof(LogicalLocation) + sizeof(float));
+      checked_add_product(minimum_size, meshblocks,
+                          sizeof(LogicalLocation) + sizeof(float));
   valid_minimum_size =
       valid_minimum_size && checked_add_product(minimum_size, meshblocks, sizeof(int));
   valid_minimum_size =
-      valid_minimum_size && checked_add_product(minimum_size, original_nranks, 2*sizeof(int));
+      valid_minimum_size &&
+      checked_add_product(minimum_size, original_nranks, 2*sizeof(int));
   if (!valid_minimum_size || minimum_size > resfile.GetSize(single_file_per_rank)) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
@@ -417,17 +556,44 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
   nmb_rootx1 = mesh_indcs.nx1/mb_indcs.nx1;
   nmb_rootx2 = mesh_indcs.nx2/mb_indcs.nx2;
   nmb_rootx3 = mesh_indcs.nx3/mb_indcs.nx3;
+  if (nmb_rootx1 <= 0 || nmb_rootx2 <= 0 || nmb_rootx3 <= 0 ||
+      nmb_rootx1 > nmb_total || nmb_rootx2 > nmb_total/nmb_rootx1 ||
+      nmb_rootx3 > nmb_total/(nmb_rootx1*nmb_rootx2)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Restart root MeshBlock grid exceeds serialized MeshBlock count."
+              << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+  const int nmbmax = std::max(nmb_rootx1, std::max(nmb_rootx2, nmb_rootx3));
+  int expected_root_level = 0;
+  while ((1 << expected_root_level) < nmbmax) ++expected_root_level;
+  if (root_level != expected_root_level) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Restart root level is inconsistent with configured mesh geometry."
+              << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
   int current_level = root_level;
+
+  int idlist_mpi_bytes = 0;
+  int meshblock_int_mpi_bytes = 0;
+  int rank_int_mpi_bytes = 0;
+  if (!CheckedMpiByteCount(meshblocks, sizeof(LogicalLocation) + sizeof(float),
+                           idlist_mpi_bytes) ||
+      !CheckedMpiByteCount(meshblocks, sizeof(int), meshblock_int_mpi_bytes) ||
+      !CheckedMpiByteCount(original_nranks, sizeof(int), rank_int_mpi_bytes)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Restart MeshBlock layout exceeds supported MPI broadcast counts."
+              << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
 
   // Error check properties of input paraemters for SMR/AMR meshes.
   if (adaptive) {
-    max_level = pin->GetOrAddInteger("mesh_refinement", "num_levels", 1) + root_level - 1;
-    if (max_level > 31) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "Number of refinement levels must be smaller than "
-                << 31 - root_level + 1 << std::endl;
-      restart_utils::AbortOnFatalError();
-    }
+    max_level = CheckedMaxRefinementLevel(pin, root_level);
   } else {
     max_level = 31;
   }
@@ -455,7 +621,7 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
 #if MPI_PARALLEL_ENABLED
   // then broadcast the ID list
   if (!single_file_per_rank) {
-    MPI_Bcast(idlist, listsize*nmb_total, MPI_CHAR, 0, MPI_COMM_WORLD);
+    MPI_Bcast(idlist, idlist_mpi_bytes, MPI_CHAR, 0, MPI_COMM_WORLD);
   }
 #endif
 
@@ -471,7 +637,53 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
     if (lloc_eachmb[i].level > current_level) current_level = lloc_eachmb[i].level;
   }
   delete [] idlist;
+  double total_cost = 0.0;
+  for (int i=0; i<nmb_total; ++i) {
+    const LogicalLocation &loc = lloc_eachmb[i];
+    const bool valid_level = loc.level >= root_level && loc.level <= 30;
+    const int level_offset = valid_level ? loc.level - root_level : 0;
+    std::int64_t nx1 = 0;
+    std::int64_t nx2 = 0;
+    std::int64_t nx3 = 0;
+    if (valid_level) {
+      const std::int64_t scale = static_cast<std::int64_t>(1) << level_offset;
+      nx1 = static_cast<std::int64_t>(nmb_rootx1)*scale;
+      nx2 = static_cast<std::int64_t>(nmb_rootx2)*scale;
+      nx3 = static_cast<std::int64_t>(nmb_rootx3)*scale;
+    }
+    const std::int64_t max_logical_extent = std::numeric_limits<std::int32_t>::max();
+    if (!valid_level || nx1 > max_logical_extent || nx2 > max_logical_extent ||
+        nx3 > max_logical_extent || loc.lx1 < 0 || loc.lx1 >= nx1 ||
+        loc.lx2 < 0 || loc.lx2 >= nx2 || loc.lx3 < 0 || loc.lx3 >= nx3 ||
+        (!multi_d && loc.lx2 != 0) || (!three_d && loc.lx3 != 0)) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "Restart MeshBlock logical location is outside supported bounds."
+                << std::endl;
+      restart_utils::AbortOnFatalError();
+    }
+    if (!std::isfinite(cost_eachmb[i]) || cost_eachmb[i] < 0.0) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "Restart MeshBlock load-balance cost is invalid." << std::endl;
+      restart_utils::AbortOnFatalError();
+    }
+    total_cost += static_cast<double>(cost_eachmb[i]);
+  }
+  if (!std::isfinite(total_cost) || !(total_cost > 0.0)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Restart MeshBlock load-balance total cost is invalid." << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
   if (!adaptive) max_level = current_level;
+  if (adaptive && current_level > max_level) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Restart MeshBlock logical level exceeds configured AMR levels."
+              << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
 
   restart_meta.rank_eachmb.assign(nmb_total, 0);
   if (restart_meta.original_nranks > 0) {
@@ -494,7 +706,7 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
   }
 #if MPI_PARALLEL_ENABLED
   if (!single_file_per_rank) {
-    MPI_Bcast(restart_meta.rank_eachmb.data(), nmb_total*sizeof(int), MPI_CHAR, 0,
+    MPI_Bcast(restart_meta.rank_eachmb.data(), meshblock_int_mpi_bytes, MPI_CHAR, 0,
               MPI_COMM_WORLD);
   }
 #endif
@@ -513,7 +725,7 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
 #if MPI_PARALLEL_ENABLED
     if (!single_file_per_rank) {
       MPI_Bcast(restart_meta.gids_eachrank.data(),
-                restart_meta.original_nranks*sizeof(int), MPI_CHAR, 0, MPI_COMM_WORLD);
+                rank_int_mpi_bytes, MPI_CHAR, 0, MPI_COMM_WORLD);
     }
 #endif
 
@@ -531,7 +743,7 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
 #if MPI_PARALLEL_ENABLED
     if (!single_file_per_rank) {
       MPI_Bcast(restart_meta.nmb_eachrank.data(),
-                restart_meta.original_nranks*sizeof(int), MPI_CHAR, 0, MPI_COMM_WORLD);
+                rank_int_mpi_bytes, MPI_CHAR, 0, MPI_COMM_WORLD);
     }
 #endif
   }
@@ -569,6 +781,7 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
   }
 
   restart_meta.ncyc_since_ref.clear();
+  restart_meta.checkpoint_nonce = 0;
   std::uint64_t mesh_metadata_magic = 0;
   if (global_variable::my_rank == 0 || single_file_per_rank) {
     const IOWrapperSizeT extension_offset = resfile.GetPosition(single_file_per_rank);
@@ -614,7 +827,9 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
       MPI_Bcast(&has_refinement_cooldown, 1, MPI_INT, 0, MPI_COMM_WORLD);
     }
 #endif
-    if (mesh_metadata_version != restart_utils::kMeshMetadataVersion
+    if ((mesh_metadata_version !=
+         restart_utils::kMeshMetadataVersionWithoutCheckpointNonce &&
+         mesh_metadata_version != restart_utils::kMeshMetadataVersion)
         || (has_refinement_cooldown != 0 && has_refinement_cooldown != 1)) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
@@ -622,6 +837,30 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
                 << mesh_metadata_version << " or refinement-cooldown flag="
                 << has_refinement_cooldown << "." << std::endl;
       restart_utils::AbortOnFatalError();
+    }
+    if (mesh_metadata_version >= restart_utils::kMeshMetadataVersion) {
+      if (global_variable::my_rank == 0 || single_file_per_rank) {
+        if (resfile.Read_bytes(&restart_meta.checkpoint_nonce,
+                               sizeof(restart_meta.checkpoint_nonce), 1,
+                               single_file_per_rank) != 1) {
+          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                    << std::endl
+                    << "Restart checkpoint nonce read is incomplete." << std::endl;
+          restart_utils::AbortOnFatalError();
+        }
+      }
+#if MPI_PARALLEL_ENABLED
+      if (!single_file_per_rank) {
+        MPI_Bcast(&restart_meta.checkpoint_nonce, sizeof(restart_meta.checkpoint_nonce),
+                  MPI_CHAR, 0, MPI_COMM_WORLD);
+      }
+#endif
+      if (restart_meta.checkpoint_nonce == 0) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl
+                  << "Restart checkpoint nonce is invalid." << std::endl;
+        restart_utils::AbortOnFatalError();
+      }
     }
     if (has_refinement_cooldown == 0) {
       // Keep the empty vector as the backward-compatible constructor signal.
@@ -640,28 +879,51 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
       }
 #if MPI_PARALLEL_ENABLED
       if (!single_file_per_rank) {
-        MPI_Bcast(restart_meta.ncyc_since_ref.data(), nmb_total*sizeof(int),
+        MPI_Bcast(restart_meta.ncyc_since_ref.data(), meshblock_int_mpi_bytes,
                   MPI_CHAR, 0, MPI_COMM_WORLD);
       }
 #endif
+      for (const int cooldown : restart_meta.ncyc_since_ref) {
+        if (cooldown < 0) {
+          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                    << std::endl
+                    << "MeshBlock refinement cooldown list contains a negative value."
+                    << std::endl;
+          restart_utils::AbortOnFatalError();
+        }
+      }
     }
   }
+  restart_meta.common_prefix_bytes =
+      static_cast<std::uint64_t>(resfile.GetPosition(single_file_per_rank));
 
   // rebuild the MeshBlockTree
   ptree = std::make_unique<MeshBlockTree>(this);
   ptree->CreateRootGrid();
+  ptree->ResetRestartNodeBudget(nmb_total);
   for (int i=0; i<nmb_total; i++) {ptree->AddNodeWithoutRefinement(lloc_eachmb[i]);}
 
-  // check the tree structure by making sure total # of MBs counted in tree same as the
-  // number read from the restart file.
+  // Check that the serialized leaves rebuild a complete physical tree in canonical order.
   {
-    int nnb;
-    ptree->CreateZOrderedLLList(lloc_eachmb, nullptr, nnb);
-    if (nnb != nmb_total) {
+    int nnb = 0;
+    ptree->CountMeshBlocks(nnb);
+    if (nnb != nmb_total || !ptree->IsRestartTreeComplete()) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
         << std::endl << "Tree reconstruction failed. Total number of blocks in "
         << "reconstructed tree=" << nnb << ", number in file=" << nmb_total << std::endl;
       restart_utils::AbortOnFatalError();
+    }
+    ptree->ResetMeshBlockCount(nnb);
+    auto canonical_lloc_eachmb = std::make_unique<LogicalLocation[]>(nmb_total);
+    ptree->CreateZOrderedLLList(canonical_lloc_eachmb.get(), nullptr, nnb);
+    for (int gid=0; gid<nmb_total; ++gid) {
+      if (!SameLogicalLocation(lloc_eachmb[gid], canonical_lloc_eachmb[gid])) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl
+                  << "Restart MeshBlock logical locations are not in canonical gid order."
+                  << std::endl;
+        restart_utils::AbortOnFatalError();
+      }
     }
   }
 
@@ -716,4 +978,51 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
   // set remaining parameters, output diagnostics
   cfl_no = pin->GetReal("time", "cfl_number");
   if (global_variable::my_rank == 0) {PrintMeshDiagnostics();}
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void Mesh::ValidateRestartShardCommonPrefix() const
+//! \brief reject per-rank restart sets whose duplicated mesh metadata is inconsistent
+
+void Mesh::ValidateRestartShardCommonPrefix() const {
+  if (!restart_meta.single_file_per_rank || restart_meta.original_nranks <= 1) return;
+  if (restart_meta.common_prefix_bytes == 0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Restart shard common-prefix size is invalid." << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+
+  constexpr std::size_t chunk_bytes = 64*1024;
+  std::array<char, chunk_bytes> reference = {};
+  std::array<char, chunk_bytes> candidate = {};
+  const std::string base_prefix = restart_meta.base_dir.empty() ? "" :
+      (restart_meta.base_dir == "/" ? "/" : restart_meta.base_dir + "/");
+  const auto shard_path = [&](const int rank) {
+    char rank_dir[20];
+    std::snprintf(rank_dir, sizeof(rank_dir), "rank_%08d", rank);
+    return base_prefix + rank_dir + "/" + restart_meta.file_name;
+  };
+
+  for (int rank=1; rank<restart_meta.original_nranks; ++rank) {
+    std::ifstream rank_zero(shard_path(0), std::ios::binary);
+    std::ifstream other(shard_path(rank), std::ios::binary);
+    std::uint64_t remaining = restart_meta.common_prefix_bytes;
+    while (remaining > 0) {
+      const auto count = static_cast<std::streamsize>(
+          std::min<std::uint64_t>(remaining, chunk_bytes));
+      rank_zero.read(reference.data(), count);
+      other.read(candidate.data(), count);
+      if (rank_zero.gcount() != count || other.gcount() != count ||
+          std::memcmp(reference.data(), candidate.data(),
+                      static_cast<std::size_t>(count)) != 0) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl
+                  << "Restart shard common mesh metadata is inconsistent across files."
+                  << std::endl;
+        restart_utils::AbortOnFatalError();
+      }
+      remaining -= static_cast<std::uint64_t>(count);
+    }
+  }
 }

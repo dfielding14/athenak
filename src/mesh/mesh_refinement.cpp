@@ -12,6 +12,7 @@
 #include <cstdlib>   // std::exit
 #include <cstdint>   // int32_t
 #include <iostream>
+#include <limits>
 #include <cstdio>    // printf
 #include <cmath>     // abs
 #include <algorithm> // sort
@@ -163,8 +164,16 @@ MeshRefinement::MeshRefinement(Mesh *pm, ParameterInput *pin) :
   // Initialize Views, restoring the AMR cooldown state on new-schema restarts.
   for (int m=0; m<(pm->nmb_total); ++m) {
     refine_flag.h_view(m) = 0;
-    ncyc_since_ref(m) = (pm->restart_meta.ncyc_since_ref.empty()) ?
+    const int cooldown = (pm->restart_meta.ncyc_since_ref.empty()) ?
         0 : pm->restart_meta.ncyc_since_ref[m];
+    if (cooldown < 0) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "Adaptive restart cooldown metadata contains a negative value."
+                << std::endl;
+      restart_utils::AbortOnFatalError();
+    }
+    ncyc_since_ref(m) = cooldown;
   }
   refine_flag.template modify<HostMemSpace>();
   refine_flag.template sync<DevExeSpace>();
@@ -265,7 +274,9 @@ void MeshRefinement::CheckForRefinement(MeshBlockPack* pmbp) {
 
   // increment cycle counter for each MB
   for (int m=0; m<(pmy_mesh->nmb_total); ++m) {
-    ncyc_since_ref(m) += 1;
+    if (ncyc_since_ref(m) < std::numeric_limits<int>::max()) {
+      ncyc_since_ref(m) += 1;
+    }
   }
   if ((pmbp->pmesh->ncycle)%(ncyc_check_amr) != 0) {return;}  // not cycle to check
 
@@ -548,6 +559,18 @@ void MeshRefinement::UpdateMeshBlockTree(int &nnew, int &ndel) {
     delete [] llderef;
   }
 
+  const std::int64_t requested_nmb =
+      static_cast<std::int64_t>(pmy_mesh->nmb_total) +
+      static_cast<std::int64_t>(tnref)*(nleaf - 1) -
+      static_cast<std::int64_t>(ctnd)*(nleaf - 1);
+  if (requested_nmb <= 0 || requested_nmb > kMaxSupportedMeshBlocks) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Adaptive MeshBlock count exceeds supported topology bounds."
+              << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+
   // Now the lists of the blocks to be refined and derefined are completed
   // Start tree manipulation.  Note all ranks manipulate entire tree, so each rank has
   // a complete and updated copy of the entire tree.
@@ -555,6 +578,14 @@ void MeshRefinement::UpdateMeshBlockTree(int &nnew, int &ndel) {
   for (int n=0; n<tnref; n++) {
     MeshBlockTree *bt = pmy_mesh->ptree->FindMeshBlock(llref[n]);
     bt->Refine(nnew);
+    if (static_cast<std::int64_t>(pmy_mesh->nmb_total) + nnew >
+        kMaxSupportedMeshBlocks) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "Adaptive MeshBlock count exceeds supported topology bounds."
+                << std::endl;
+      restart_utils::AbortOnFatalError();
+    }
   }
   if (tnref != 0) {
     delete [] llref;
@@ -584,8 +615,17 @@ void MeshRefinement::UpdateMeshBlockTree(int &nnew, int &ndel) {
 
 void MeshRefinement::RedistAndRefineMeshBlocks(ParameterInput *pin, int nnew, int ndel) {
   Mesh* pm = pmy_mesh;
-  int old_nmb = pm->nmb_total;
-  int new_nmb = old_nmb + nnew - ndel;
+  const int old_nmb = pm->nmb_total;
+  const std::int64_t new_nmb_wide = static_cast<std::int64_t>(old_nmb) +
+      static_cast<std::int64_t>(nnew) - static_cast<std::int64_t>(ndel);
+  if (new_nmb_wide <= 0 || new_nmb_wide > kMaxSupportedMeshBlocks) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Adaptive MeshBlock count exceeds supported topology bounds."
+              << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+  const int new_nmb = static_cast<int>(new_nmb_wide);
   // compute nleaf = number of leaf MeshBlocks per refined block
   int nleaf = 2;
   if (pm->two_d) nleaf = 4;
