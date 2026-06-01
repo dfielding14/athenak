@@ -31,7 +31,7 @@
     "required restart-time shock provenance audit even for zero-cycle republish attempts, saturated adaptive cooldown counters at INT_MAX, rejected negative adaptive cooldown metadata and enforced one shared MeshBlock topology ceiling across scratch construction, adaptive growth, restart publication and restart ingestion",
     "rejected oversized scratch root grids before multiplication, reserved adaptive MeshBlock capacity before recursive refinement and replaced linear static-region extent walks with logarithmic index searches",
     "required rank-sharded restarts to agree byte-for-byte through the complete duplicated payload prefix before reading rank-local fluid or particle sections, including object state and serialized payload size",
-    "persisted a shared nonzero best-effort schema-2 checkpoint nonce to detect accidental mixed-shard assembly and rejected zero or cross-checkpoint rank-shard nonces before restart payload ingestion; schema-1 and schema-absent legacy reads intentionally retain the weaker pre-nonce guarantee",
+    "persisted a shared nonzero best-effort schema-2 checkpoint nonce to detect accidental mixed-shard assembly and rejected zero or mismatched schema-2 rank-shard nonces before restart payload ingestion; schema-1 and schema-absent legacy reads intentionally retain the weaker pre-nonce guarantee",
     "bounded sparse restart MeshBlock-tree reconstruction by the physical-leaf budget before allocating adversarial deep paths",
     "rejected nonpositive MeshBlock extents before scratch divisibility checks and sized multilevel diagnostics by the inclusive physical-level count"
   ],
