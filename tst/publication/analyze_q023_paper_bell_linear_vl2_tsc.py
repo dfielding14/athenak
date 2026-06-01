@@ -80,19 +80,19 @@ _APPROVED_SOURCE_LOCAL_RAW_VARIANTS = {
         "dimension": 1,
         "epsilon": 0.4,
         "deck": DECKS[1],
-        "deck_sha256": "b84fb1b046d3174c3ce6bdd5f9067173dccd0636557d57c047331bf0a42eb4d5",
+        "deck_sha256": "b77689de8e683d918cbfda2d13adac77ca7aa85b7f5cb7f998fb1dfc02ce1cba",
     },
     "Q023-SOURCE-LOCAL-BASELINE-2D-EPSILON-0P4": {
         "dimension": 2,
         "epsilon": 0.4,
         "deck": DECKS[2],
-        "deck_sha256": "b8a11ce7f7227210392de133bf52f71c265d86ab5ade73bf89a45a6449a3a23c",
+        "deck_sha256": "1877445adcecd24dbc91aeda80e5f11a4529fd4ab68049ef000e7cdda79b3524",
     },
     "Q023-SOURCE-LOCAL-BASELINE-3D-EPSILON-0P4": {
         "dimension": 3,
         "epsilon": 0.4,
         "deck": DECKS[3],
-        "deck_sha256": "a0fda35a71542e3c411c574a4c5069cbbae3776f02aa10dd44176a3102664103",
+        "deck_sha256": "e30e44d1566e4acaf1201c46db8cf37537101c79c2d325a48dbe4ae9288556ad",
     },
 }
 
@@ -114,7 +114,7 @@ _EXPECTED_DECK_VALUES = {
     ("particles", "couple_moments_momentum_to_mhd"): "true",
     ("particles", "couple_moments_energy_to_mhd"): "true",
     ("particles", "couple_fluid_feedback_order"): "mhd_src_terms",
-    ("particles", "pic_physical_mode"): "paper_mhd_pic",
+    ("particles", "pic_physical_mode"): "paper_mhd_pic_vl2_tsc",
     ("particles", "pic_background_mode"): "coupled",
     ("particles", "pic_feedback_mode"): "coupled",
     ("particles", "pic_enable_2d3v"): "true",

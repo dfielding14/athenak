@@ -5,10 +5,10 @@ import subprocess
 logger = logging.getLogger('athena' + __name__[7:])
 
 _INPUT_DECK = (
-    'tests/pic_parallel_shock_section54_stage_timing_acceptance.athinput'
+    'tests/pic_parallel_shock_section54_stage_timing_acceptance_vl2_tsc.athinput'
 )
 _EXPECTED_MARKERS = (
-    'physical_mode=paper_mhd_pic',
+    'physical_mode=paper_mhd_pic_vl2_tsc',
     'C=10000',
     'cycle=1 time=9.677419e-03',
     'q017.telemetry.particles.total=3.00000000000000000e+00',

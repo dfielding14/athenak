@@ -82,7 +82,7 @@ couple_moments_energy_coeff    = 1.0
 cr_vx0                 = 0.0
 cr_vy0                 = 0.0
 cr_vz0                 = 0.0
-pic_physical_mode      = paper_mhd_pic
+pic_physical_mode      = paper_mhd_pic_vl2_tsc
 pic_background_mode    = coupled
 pic_feedback_mode      = coupled
 pic_interp_scheme      = tsc
@@ -94,6 +94,7 @@ pic_wave_damping_mode  = off
 pic_max_cell_cross     = 2
 pic_theta_max          = 0.3
 pic_deltaf_mode        = off
+pic_deltaf_f0          =
 pic_expanding_box_mode = off
 
 <species0>
@@ -105,7 +106,9 @@ pgen_name = pic_paper_smooth_tsc_interface
 particle_x = -1.45
 particle_y = -0.75
 particle_z = 0.0
+particle_df_weight = 0.0
 require_interface_mpi_split = false
+required_remote_receiver_mpi_split = none
 wave_flag = 0
 amp       = 0.0
 vflow     = 0.0

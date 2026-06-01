@@ -60,7 +60,7 @@ PINNED_EXECUTABLE_BINDING_NAME = "pinned_executable_binding.json"
 PIN_PROVENANCE_RECEIPT_NAME = "build/provenance_receipt.json"
 PARSER_CONTRACT_SUMMARY_NAME = "parser_contract_suite/summary.json"
 PROBE_SUMMARY_NAME = "reports/probe_summary.json"
-PARSER_GUARDS_SOURCE = REPO_ROOT / "tst/scripts/particles/pic_parser_contract_guards.py"
+PARSER_GUARDS_SOURCE = REPO_ROOT / "tst/scripts/particles/pic_parser_contract_guards_vl2_tsc.py"
 PIN_RETAINED_EVIDENCE = {
     "build/CMakeCache.txt",
     "build/CMakeConfigureLog.yaml",
@@ -107,7 +107,7 @@ PIN_BUILD_DEPENDENCY_PATHS = {
     "tst/publication/analyze_q011_injection_distribution_runtime_local.py",
     "tst/publication/immutable_orion_tree.py",
     "tst/scripts/particles/pic_mhd_expanding_box_cpaw_history_preparation.py",
-    "tst/scripts/particles/pic_parser_contract_guards.py",
+    "tst/scripts/particles/pic_parser_contract_guards_vl2_tsc.py",
 }
 PINNED_EXECUTABLE_BINDING_KEYS = {
     "artifact_role",
@@ -189,10 +189,10 @@ DECKS = {
     ),
 }
 EXPECTED_DECK_SHA256 = {
-    "uniform": "65315c97c8a6036cd60eb6478b0d7907b458be85d9bd1ec829a65d639261c65a",
-    "smr": "53e63a0deb4d9c3287c1c4542f4694d0fcf19764d614a3694c46147520399bf2",
+    "uniform": "f2ac0efc5d773dc59d4a03ea6c556e3fa6d5260afb83dbf0787a6e3b01186591",
+    "smr": "6976e4839b6b7b2e4e777f1e82baeb2b405ea639659aaf50fb69dc54deb682e3",
     "audited_amr_runtime_local":
-        "9e53c4014c542d4cd33f4fa68bd74a3e565cf270b1ba5a611999ce5dc7ecc81d",
+        "7347d707af8474cf5a88bd2115de16e53d765bc514819ea3627b1ce660c22dde",
 }
 
 _EXPECTED_COMMON = {
@@ -221,7 +221,7 @@ _EXPECTED_COMMON = {
     ("particles", "couple_fluid_feedback_order"): "mhd_src_terms",
     ("particles", "couple_moments_momentum_coeff"): "1.0",
     ("particles", "couple_moments_energy_coeff"): "0.0",
-    ("particles", "pic_physical_mode"): "paper_mhd_pic",
+    ("particles", "pic_physical_mode"): "paper_mhd_pic_vl2_tsc",
     ("particles", "pic_background_mode"): "coupled",
     ("particles", "pic_feedback_mode"): "coupled",
     ("particles", "pic_interp_scheme"): "tsc",
@@ -1279,7 +1279,7 @@ def _expected_runtime_payload_paths(label: str) -> set[str]:
 def _parser_contract_oracle(root: Path, pinned: dict[str, Any]) -> list[dict[str, Any]]:
     """Build the exact parser matrix from the source-owned regression oracle."""
     sys.path.insert(0, str(REPO_ROOT / "tst"))
-    from scripts.particles import pic_parser_contract_guards as guards  # noqa: PLC0415
+    from scripts.particles import pic_parser_contract_guards_vl2_tsc as guards  # noqa: PLC0415
 
     generic = root / "decks/pic_parser_contract_guards.athinput"
     q006 = root / "decks/pic_q006_paper_multispecies_oscillation_uniform_runtime_local_vl2_tsc.athinput"
@@ -1303,7 +1303,7 @@ def _parser_contract_oracle(root: Path, pinned: dict[str, Any]) -> list[dict[str
 def _expected_parser_generated_paths(label: str, positive: bool) -> set[str]:
     if not positive:
         return set()
-    if label != "paper_mhd_pic_isothermal_fullf_momentum_only":
+    if label != "paper_mhd_pic_vl2_tsc_isothermal_fullf_momentum_only":
         return {"pic_parser_contract_guards-errs.dat"}
     basename = "pic_q006_paper_multispecies_oscillation_uniform_runtime_local"
     payload = set()

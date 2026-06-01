@@ -202,13 +202,6 @@ def run(**kwargs):
                      'particles/cr_vz0=0.125'],
         },
         {
-            'name': 'serial_tsc',
-            'basename': 'pic_dep_cons_tsc',
-            'nproc': 1,
-            'args': ['job/basename=pic_dep_cons_tsc',
-                     'particles/deposit_order=2'],
-        },
-        {
             'name': 'serial_reflect_x1_crossing',
             'basename': 'pic_dep_cons_reflect_x1_crossing',
             'nproc': 1,
@@ -252,9 +245,9 @@ def run(**kwargs):
     _run_command(
         'guard_unsupported_deposit_order',
         1,
-        ['particles/deposit_order=3', 'time/nlim=0'],
+        ['particles/deposit_order=2', 'time/nlim=0'],
         expect_fail=True,
-        expected_message='only deposit_order={1,2}',
+        expected_message='only deposit_order=1',
     )
     _run_command(
         'guard_unsupported_boundary_class',

@@ -106,7 +106,7 @@ PIN_BUILD_DEPENDENCY_PATHS = {
     "tst/publication/analyze_q011_injection_distribution_runtime_local.py",
     "tst/publication/immutable_orion_tree.py",
     "tst/scripts/particles/pic_mhd_expanding_box_cpaw_history_preparation.py",
-    "tst/scripts/particles/pic_parser_contract_guards.py",
+    "tst/scripts/particles/pic_parser_contract_guards_vl2_tsc.py",
 }
 PINNED_EXECUTABLE_BINDING_KEYS = {
     "artifact_role",
@@ -214,7 +214,7 @@ _COMMON = {
     ("particles", "cr_vx0"): "0.0",
     ("particles", "cr_vy0"): "0.0",
     ("particles", "cr_vz0"): "0.0",
-    ("particles", "pic_physical_mode"): "paper_mhd_pic",
+    ("particles", "pic_physical_mode"): "paper_mhd_pic_vl2_tsc",
     ("particles", "pic_background_mode"): "coupled",
     ("particles", "pic_feedback_mode"): "coupled",
     ("particles", "pic_interp_scheme"): "tsc",

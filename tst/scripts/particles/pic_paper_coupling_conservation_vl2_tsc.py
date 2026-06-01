@@ -13,7 +13,7 @@ import bin_convert_new as bin_convert  # noqa
 
 logger = logging.getLogger('athena' + __name__[7:])
 
-_INPUT_DECK = 'tests/pic_paper_coupling_conservation.athinput'
+_INPUT_DECK = 'tests/pic_paper_coupling_conservation_vl2_tsc.athinput'
 _RESULTS = {}
 _C = 3.0
 
@@ -45,7 +45,7 @@ def _run_case(basename, coeff):
     output = (proc.stdout or '') + (proc.stderr or '')
     if proc.returncode != 0:
         raise RuntimeError('Command failed for ' + basename + '\n' + output)
-    if 'physical_mode=paper_mhd_pic' not in output:
+    if 'physical_mode=paper_mhd_pic_vl2_tsc' not in output:
         raise RuntimeError('Missing paper-mode runtime identity for ' + basename)
     if 'induction=ideal_mhd_only' not in output:
         raise RuntimeError('Paper mode enabled a non-ideal induction path')

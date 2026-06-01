@@ -11,30 +11,39 @@ import subprocess
 
 import numpy as np
 
-from scripts.particles import pic_q009_coupled_boundary_lifetime as archived
+from scripts.particles import pic_q009_coupled_boundary_lifetime_vl2_tsc as archived
 
 logger = logging.getLogger("athena" + __name__[7:])
 
-_INPUT_DECK = "tests/pic_q009_coupled_inflow_lifetime.athinput"
+_INPUT_DECK = "tests/pic_q009_coupled_inflow_lifetime_vl2_tsc.athinput"
 _EXE_ENV = "ATHENA_Q009_COUPLED_INFLOW_EXE_DIR"
 _ARCHIVED_EXE_ENV = "ATHENA_Q009_COUPLED_BOUNDARY_EXE_DIR"
 _BASENAME_PREFIX = "pic_q009_coupled_inflow_"
 _INFLOW_CONTRACT = "zero_valued_moment_ghosts"
+_STAGE_NLIMS = (40, 80, 160, 240, 320, 400)
+_STAGES = [
+    (label, transition, threshold, nlim)
+    for (label, transition, threshold, _), nlim
+    in zip(archived._STAGES, _STAGE_NLIMS)
+]
 _ARCHIVED_SUMMARY = archived._summary
-_RESULTS = archived._RESULTS
+_RESULTS = {}
 
 
 @contextmanager
 def _adapt_archived_harness():
     original_deck = archived._INPUT_DECK
     original_exe_dir = os.environ.get(_ARCHIVED_EXE_ENV)
+    original_results = archived._RESULTS
     archived._INPUT_DECK = _INPUT_DECK
+    archived._RESULTS = _RESULTS
     if _EXE_ENV in os.environ:
         os.environ[_ARCHIVED_EXE_ENV] = os.environ[_EXE_ENV]
     try:
         yield
     finally:
         archived._INPUT_DECK = original_deck
+        archived._RESULTS = original_results
         if original_exe_dir is None:
             os.environ.pop(_ARCHIVED_EXE_ENV, None)
         else:
@@ -85,7 +94,8 @@ def _run_stage(stage, restart_path):
 
 
 def _summary():
-    summary = _ARCHIVED_SUMMARY()
+    with _adapt_archived_harness():
+        summary = _ARCHIVED_SUMMARY()
     summary["evidence_class"] = "bounded_local_serial_host_inflow_sibling_regression"
     summary["supported_physical_boundaries"]["x2"] = "inflow"
     summary["inflow_contract"] = _INFLOW_CONTRACT
@@ -171,7 +181,7 @@ def run(**kwargs):
     stages = []
     restart_path = None
     with _adapt_archived_harness():
-        for stage in archived._STAGES:
+        for stage in _STAGES:
             result = _run_stage(stage, restart_path)
             stages.append(result)
             restart_path = result["restart"]
