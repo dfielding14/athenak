@@ -1,6 +1,6 @@
 # Q-011 PREPARATION DECK ONLY: not launch authorization or reproduction evidence.
 # Freeze Sun & Bai (2023) Section 5.4 sourced values separately from the open
-# AthenaK injection, normalization, macro-mass, load-balance, and campaign audits.
+# AthenaK load-balance tuning and campaign audits.
 
 <comment>
 problem   = Q-011 Section 5.4 parallel-shock paper preparation deck
@@ -71,8 +71,10 @@ pic_enable_2d3v                   = true
 nspecies                          = 1
 cr_distribution                   = random
 deposit_moments                   = true
-deposit_order                     = 1
-# Preparation calibration only: downstream 40/640 ppc audit remains open.
+deposit_order                     = 2
+# AthenaK normalized macro-mass choice. With eta=1e-3, rho0=1,
+# u_sh'=10, swept speed=40, IPWT=1, and collapsed x3 thickness=1, this gives
+# downstream 640/160/40 ppc on the 12/6/3 c/omega_pi AMR ladder.
 deposit_qscale                    = 9.0e-4
 couple_moments_to_mhd             = true
 couple_j_to_efield_coeff          = 1.0
@@ -108,14 +110,20 @@ pic_random_seed                   = 23050101
 pic_expanding_box_mode            = off
 
 <species0>
+# AthenaK stores normalized q/(m*c) in IPM. pic_cr_light_speed is the
+# separate artificial C used for relativistic kinematics; do not divide IPM
+# by pic_cr_light_speed again.
 mass   = 1.0
 charge = 1.0
 
 <problem>
 pgen_name                     = pic_parallel_shock
 ps_rho0                       = 1.0
-# Preparation choice pending the exact thermodynamic normalization audit.
-ps_p0                         = 0.10
+# Section 5.4 does not state p0. Bai et al. (2015), the cited predecessor
+# setup, uses p0=1.0. This inferred baseline gives beta0=2, cs=sqrt(5/3),
+# and upstream sonic Mach number Ms=23.237900. The preregistered
+# pressure-sensitivity pilots also test p0=0.05, 0.10, and 0.20.
+ps_p0                         = 1.0
 ps_u0                         = 30.0
 ps_b0                         = 1.0
 ps_eta                        = 1.0e-3
@@ -170,17 +178,24 @@ ghost_zones = false
 
 <output3>
 file_type   = bin
+variable    = prtcl_jx
+id          = prtcl_jx
+dt          = 100.0
+ghost_zones = false
+
+<output4>
+file_type   = bin
 variable    = mhd_j2
 id          = j2
 dt          = 100.0
 ghost_zones = false
 
-<output4>
+<output5>
 file_type   = pvtk
 variable    = prtcl_all
 id          = prtcl_all
 dt          = 100.0
 
-<output5>
+<output6>
 file_type   = rst
 dt          = 100.0

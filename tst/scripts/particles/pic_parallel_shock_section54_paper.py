@@ -50,6 +50,7 @@ _EXPECTED_VALUES = {
     ("particles", "pic_enable_2d3v"): "true",
     ("particles", "nspecies"): "1",
     ("particles", "deposit_moments"): "true",
+    ("particles", "deposit_order"): "2",
     ("particles", "deposit_qscale"): "9.0e-4",
     ("particles", "couple_moments_to_mhd"): "true",
     ("particles", "couple_j_to_efield_representation"): "cell_centered",
@@ -68,7 +69,7 @@ _EXPECTED_VALUES = {
     ("particles", "pic_load_balance_cost_per_particle"): "0.0",
     ("problem", "pgen_name"): "pic_parallel_shock",
     ("problem", "ps_rho0"): "1.0",
-    ("problem", "ps_p0"): "0.10",
+    ("problem", "ps_p0"): "1.0",
     ("problem", "ps_u0"): "30.0",
     ("problem", "ps_b0"): "1.0",
     ("problem", "ps_eta"): "1.0e-3",
@@ -93,24 +94,27 @@ _EXPECTED_VALUES = {
     ("output2", "id"): "bmag",
     ("output2", "dt"): "100.0",
     ("output3", "file_type"): "bin",
-    ("output3", "variable"): "mhd_j2",
-    ("output3", "id"): "j2",
+    ("output3", "variable"): "prtcl_jx",
+    ("output3", "id"): "prtcl_jx",
     ("output3", "dt"): "100.0",
-    ("output4", "file_type"): "pvtk",
-    ("output4", "variable"): "prtcl_all",
-    ("output4", "id"): "prtcl_all",
+    ("output4", "file_type"): "bin",
+    ("output4", "variable"): "mhd_j2",
+    ("output4", "id"): "j2",
     ("output4", "dt"): "100.0",
-    ("output5", "file_type"): "rst",
+    ("output5", "file_type"): "pvtk",
+    ("output5", "variable"): "prtcl_all",
+    ("output5", "id"): "prtcl_all",
     ("output5", "dt"): "100.0",
+    ("output6", "file_type"): "rst",
+    ("output6", "dt"): "100.0",
     ("species0", "mass"): "1.0",
     ("species0", "charge"): "1.0",
 }
 
 _OPEN_ITEMS = [
-    "executed_shock_surface_injection_distribution_audit",
-    "gas_pressure_thermodynamic_normalization_audit",
+    "qualifying_campaign_bound_shock_surface_injection_distribution_audit",
+    "frontier_gas_pressure_sensitivity_pilots",
     "frontier_load_balance_cost_tuning",
-    "snapshot_time_selection_tolerance",
     "downstream_spectrum_fit_energy_interval",
     "amr_vs_fine_uniform_residual_tolerances",
     "clean_candidate_frontier_executable_orion_root_and_campaign_execution",
@@ -247,6 +251,7 @@ def derive_normalization_and_macro_particle_calibration(
 ) -> dict[str, object]:
     """Derive the paper-unit mapping and ideal downstream ppc calibration."""
     rho0 = _parse_positive_float("problem/ps_rho0", blocks["problem"]["ps_rho0"])
+    p0 = _parse_positive_float("problem/ps_p0", blocks["problem"]["ps_p0"])
     b0 = _parse_positive_float("problem/ps_b0", blocks["problem"]["ps_b0"])
     u0 = _parse_positive_float("problem/ps_u0", blocks["problem"]["ps_u0"])
     eta = _parse_positive_float("problem/ps_eta", blocks["problem"]["ps_eta"])
@@ -287,6 +292,9 @@ def derive_normalization_and_macro_particle_calibration(
         species_charge * b0 / (species_mass * numerical_light_speed)
     )
     numerical_light_speed_over_u_a0 = numerical_light_speed / alfven_speed_u_a0
+    beta0 = 2.0 * p0 / (b0 * b0)
+    sound_speed = math.sqrt(gamma * p0 / rho0)
+    sonic_mach = u0 / sound_speed
 
     nx1 = _parse_positive_int("mesh/nx1", blocks["mesh"]["nx1"])
     nx2 = _parse_positive_int("mesh/nx2", blocks["mesh"]["nx2"])
@@ -366,6 +374,9 @@ def derive_normalization_and_macro_particle_calibration(
     )
     _require_close("c/omega_pi", ion_inertial_length, 1.0)
     _require_close("C/U_A0", numerical_light_speed_over_u_a0, 10000.0)
+    _require_close("beta0", beta0, 2.0)
+    _require_close("sound speed", sound_speed, math.sqrt(5.0 / 3.0))
+    _require_close("sonic Mach number", sonic_mach, 23.2379000772445)
     if len(cell_sizes) != 3:
         raise ContractError("AMR ladder: expected exactly three levels")
     for level, (item, expected_size) in enumerate(
@@ -394,6 +405,24 @@ def derive_normalization_and_macro_particle_calibration(
     )
 
     return {
+        "thermodynamic_deck_choice": {
+            "status": "resolved_as_inferred_predecessor_baseline",
+            "paper_source_boundary": (
+                "Sun & Bai (2023) Section 5.4 specifies M_A, Gamma, eta, C/U_A0, "
+                "geometry, AMR ladder, and injection controls but does not state p0"
+            ),
+            "ps_p0": p0,
+            "beta0": beta0,
+            "sound_speed": sound_speed,
+            "sonic_mach_number": sonic_mach,
+            "predecessor_source_boundary": (
+                "Bai et al. (2015), the cited predecessor setup, states P0=1"
+            ),
+            "interpretation": (
+                "inferred predecessor baseline; not a Sun & Bai manuscript-literal value"
+            ),
+            "preregistered_frontier_pressure_cases_ps_p0": [1.0, 0.05, 0.1, 0.2],
+        },
         "convention_ambiguity": {
             "status": "resolved_for_the_frozen_athenak_deck",
             "paper_formula": "Omega0 = B0 * q / (m * c)",
@@ -581,9 +610,12 @@ def build_preparation_contract() -> dict[str, object]:
                 "fine_uniform",
             ],
             "required_snapshot_times_omega0_inverse": [500.0, 1200.0],
+            "required_snapshot_absolute_tolerance_omega0_inverse": 1.0e-6,
+            "preregistered_pressure_cases_ps_p0": [1.0, 0.05, 0.1, 0.2],
             "required_raw_artifacts_per_snapshot": [
                 "rho_bin",
                 "bmag_bin",
+                "prtcl_jx_bin",
                 "j2_bin",
                 "prtcl_all_pvtk",
             ],

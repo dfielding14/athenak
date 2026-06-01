@@ -38,6 +38,22 @@ class PicQ011Section54NormalizationOracleTests(unittest.TestCase):
             calibration["numerical_light_speed_over_u_a0"],
             10000.0,
         )
+        thermodynamics = calibration["thermodynamic_deck_choice"]
+        self.assertEqual(
+            thermodynamics["status"],
+            "resolved_as_inferred_predecessor_baseline",
+        )
+        self.assertAlmostEqual(thermodynamics["ps_p0"], 1.0)
+        self.assertAlmostEqual(thermodynamics["beta0"], 2.0)
+        self.assertAlmostEqual(thermodynamics["sound_speed"], (5.0 / 3.0) ** 0.5)
+        self.assertAlmostEqual(
+            thermodynamics["sonic_mach_number"],
+            23.2379000772445,
+        )
+        self.assertEqual(
+            thermodynamics["preregistered_frontier_pressure_cases_ps_p0"],
+            [1.0, 0.05, 0.1, 0.2],
+        )
 
         ambiguity = calibration["convention_ambiguity"]
         self.assertEqual(
@@ -94,10 +110,11 @@ class PicQ011Section54NormalizationOracleTests(unittest.TestCase):
             "downstream_40_640_ppc_macro_mass_calibration",
             contract["open_items"],
         )
-        self.assertIn(
+        self.assertNotIn(
             "gas_pressure_thermodynamic_normalization_audit",
             contract["open_items"],
         )
+        self.assertIn("frontier_gas_pressure_sensitivity_pilots", contract["open_items"])
 
     def test_qscale_drift_fails_closed(self) -> None:
         blocks = copy.deepcopy(q011.parse_athinput())

@@ -17,7 +17,7 @@ else:
 READINESS = (
     storage.REPO_ROOT
     / "tst/publication/readiness"
-    / "q011_parallel_shock_storage_estimator_readiness_2026-05-31.json"
+    / "q011_parallel_shock_storage_estimator_successor_2026-06-01.json"
 )
 
 
@@ -123,9 +123,9 @@ class Q011ParallelShockStorageEstimatorTests(unittest.TestCase):
     def test_nondivisible_pvtk_cadence_fails_closed(self) -> None:
         deck = self._temporary_deck(
             lambda text: text.replace(
-                "<output4>\nfile_type   = pvtk\nvariable    = prtcl_all\n"
+                "<output5>\nfile_type   = pvtk\nvariable    = prtcl_all\n"
                 "id          = prtcl_all\ndt          = 100.0",
-                "<output4>\nfile_type   = pvtk\nvariable    = prtcl_all\n"
+                "<output5>\nfile_type   = pvtk\nvariable    = prtcl_all\n"
                 "id          = prtcl_all\ndt          = 128.0",
             )
         )

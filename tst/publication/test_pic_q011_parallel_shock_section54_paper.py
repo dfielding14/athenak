@@ -19,7 +19,7 @@ SIDECAR = (
     / "tst"
     / "publication"
     / "readiness"
-    / "q011_parallel_shock_section54_paper_preparation_successor_v6_2026-06-01.json"
+    / "q011_parallel_shock_section54_paper_preparation_successor_v7_2026-06-01.json"
 )
 
 
@@ -50,7 +50,7 @@ class PicQ011ParallelShockSection54PaperTests(unittest.TestCase):
         self.assertAlmostEqual(derivation["ideal_surface_speed_over_ua0"], 10.0)
         self.assertAlmostEqual(
             derivation["finite_mach_engineering_option_speed_over_ua0"],
-            10.007408779453616,
+            10.07421150283317,
         )
         self.assertAlmostEqual(
             derivation["upstream_relative_sweep_speed_over_ua0"],
@@ -77,7 +77,7 @@ class PicQ011ParallelShockSection54PaperTests(unittest.TestCase):
             contract["open_items"],
         )
         self.assertIn(
-            "executed_shock_surface_injection_distribution_audit",
+            "qualifying_campaign_bound_shock_surface_injection_distribution_audit",
             contract["open_items"],
         )
         self.assertTrue(contract["open_items"])
@@ -101,6 +101,8 @@ class PicQ011ParallelShockSection54PaperTests(unittest.TestCase):
             "particle_filters",
             "primary_observables",
             "required_snapshot_times_omega0_inverse",
+            "required_snapshot_absolute_tolerance_omega0_inverse",
+            "preregistered_pressure_cases_ps_p0",
             "required_grid_variants",
             "required_raw_artifacts_per_snapshot",
             "required_run_artifacts",

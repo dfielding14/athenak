@@ -490,6 +490,15 @@ qualify any scientific claim by itself.
 - `q011_parallel_shock_section54_paper_preparation_successor_v6_2026-06-01.json`:
   preparation-only successor after full-precision restart-real serialization
   and live particle-provenance fail-stop hardening.
+- `q011_parallel_shock_section54_paper_preparation_successor_v7_2026-06-01.json`:
+  preparation-only successor closing the locally decidable thermodynamic,
+  normalized-charge and ideal downstream `640/160/40` occupancy mappings.
+  The upstream pressure is an explicitly labeled inferred Bai et al. (2015)
+  predecessor baseline with preregistered Frontier pressure cases.
+- `q011_parallel_shock_storage_estimator_successor_2026-06-01.json`:
+  analytical storage-planning successor after the publication deck gained a
+  signed particle-current binary output and the PVTK block moved. The estimator
+  binds the declared `prtcl_all` PVTK output semantically.
 - `q011_parallel_shock_rk_stage_budget_successor_v6_2026-06-01.json`: bounded
   successor adding malformed live-payload rejection, immutable shock-origin
   checks, a non-decimal ledger restart round trip and a two-rank nonempty
