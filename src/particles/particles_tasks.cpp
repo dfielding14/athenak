@@ -152,14 +152,6 @@ TaskStatus Particles::AdaptDeltaF(Driver *pdriver, int stage) {
 void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> tl) {
   TaskID none(0);
   const bool paper_vl2 = UsesPaperVL2Coupling();
-  if (paper_vl2 && UsesDeltaF()) {
-    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl
-              << "<particles>/pic_physical_mode=paper_mhd_pic staged VL2 coupling "
-              << "currently supports full-f only; delta-f staged source semantics "
-              << "are not implemented" << std::endl;
-    std::exit(EXIT_FAILURE);
-  }
   id.rest_mom = none;
   id.bcs_mom = none;
   id.prol_mom = none;
@@ -200,9 +192,9 @@ void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> t
 
   // Paper VL2 applies particle boundary handling at the midpoint and endpoint.
   // Legacy coupled modes migrate once after the full time integrator.
-  auto comm_tl = (paper_vl2 ? tl["after_stagen"] :
-                  (couple_moments_to_mhd ? tl["after_timeintegrator"] :
-                                           tl["before_timeintegrator"]));
+  auto comm_tl = (couple_moments_to_mhd ? tl["after_timeintegrator"] :
+                                          tl["before_timeintegrator"]);
+  if (paper_vl2) comm_tl = tl["after_stagen"];
   TaskID comm_dep = (couple_moments_to_mhd ? none : id.prol_mom);
   id.newgid = comm_tl->AddTask(&Particles::NewGID, this, comm_dep);
   id.count  = comm_tl->AddTask(&Particles::SendCnt, this, id.newgid);
@@ -250,9 +242,12 @@ void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> t
                   << insert_name << std::endl;
         std::exit(EXIT_FAILURE);
       }
+      sid = stagen_tl->InsertTask(&Particles::SaveOldPositions, this, sid, insert_loc);
+    } else {
+      sid = stagen_tl->InsertTask(&Particles::SaveOldPositions, this, insert_dep,
+                                  insert_loc);
     }
 
-    sid = stagen_tl->InsertTask(&Particles::SaveOldPositions, this, sid, insert_loc);
     if (sid == TaskID(0)) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "Failed to insert Particles::SaveOldPositions before "

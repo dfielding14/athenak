@@ -139,7 +139,15 @@ void Q007ValidateCommon(ParameterInput *pin, const Q007ModeContract &mode) {
   Q007RequireInteger(pin, "particles", "nspecies", 8);
   Q007RequireString(pin, "particles", "cr_distribution", "center");
   Q007RequireBoolean(pin, "particles", "deposit_moments", true);
-  Q007RequireInteger(pin, "particles", "deposit_order", 2);
+  const std::string pic_physical_mode =
+      pin->GetString("particles", "pic_physical_mode");
+  const bool paper_vl2_tsc =
+      (pic_physical_mode.compare("paper_mhd_pic_vl2_tsc") == 0);
+  if (!paper_vl2_tsc && pic_physical_mode.compare("paper_mhd_pic") != 0) {
+    Q007Fatal("<particles>/pic_physical_mode does not match the "
+              "Q-007 preparation contract");
+  }
+  Q007RequireInteger(pin, "particles", "deposit_order", paper_vl2_tsc ? 2 : 1);
   Q007RequireReal(pin, "particles", "deposit_qscale", 1.0e-4);
   Q007RequireBoolean(pin, "particles", "couple_moments_to_mhd", true);
   Q007RequireReal(pin, "particles", "couple_j_to_efield_coeff", 1.0);
@@ -152,7 +160,6 @@ void Q007ValidateCommon(ParameterInput *pin, const Q007ModeContract &mode) {
   Q007RequireReal(pin, "particles", "couple_moments_energy_coeff", 1.0);
   Q007RequireString(pin, "particles", "couple_fluid_feedback_order",
                     "mhd_src_terms");
-  Q007RequireString(pin, "particles", "pic_physical_mode", "paper_mhd_pic");
   Q007RequireString(pin, "particles", "pic_background_mode", "coupled");
   Q007RequireString(pin, "particles", "pic_feedback_mode", "coupled");
   Q007RequireString(pin, "particles", "pic_interp_scheme", "tsc");

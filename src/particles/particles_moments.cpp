@@ -562,7 +562,7 @@ TaskStatus Particles::DepositPaperSmoothMoments(Driver *pdriver, int stage) {
   if (paper_smooth_mom_transport == nullptr) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
-              << "paper_mhd_pic multilevel deposition requires the paper_smooth "
+              << "paper_mhd_pic_vl2_tsc multilevel deposition requires the paper_smooth "
               << "receiver-record transport" << std::endl;
     std::exit(EXIT_FAILURE);
   }
@@ -612,6 +612,8 @@ TaskStatus Particles::DepositPaperSmoothMoments(Driver *pdriver, int stage) {
 
       Real weight = h_pr(IPWT, p);
       if (weight <= static_cast<Real>(0.0)) weight = static_cast<Real>(1.0);
+      const Real df_weight = UsesDeltaF() ? h_pr(IPDFWT, p) :
+                                           static_cast<Real>(1.0);
       const Real physical_boundary_norm = PaperSmoothPhysicalBoundaryNorm(
           pm, pmb, owner_m, h_pr(IPX, p), h_pr(IPY, p), h_pr(IPZ, p));
       if (!(physical_boundary_norm > static_cast<Real>(0.0)) ||
@@ -631,15 +633,15 @@ TaskStatus Particles::DepositPaperSmoothMoments(Driver *pdriver, int stage) {
       PaperSmoothMomentRecord record{
           owner_gid, ptag, deposit_flags, 0U,
           h_pr(IPX, p), h_pr(IPY, p), h_pr(IPZ, p),
-          physical_boundary_scale*deposit_qscale*weight*h_qspecies(sp),
-          vx, vy, vz, h_pr(IPEBDOT, p),
-          use_momentum_feedback ? physical_boundary_scale*h_pr(IPDPX, p) :
+          physical_boundary_scale*deposit_qscale*weight*df_weight*h_qspecies(sp),
+          vx, vy, vz, physical_boundary_scale*h_pr(IPEBDOT, p),
+          use_momentum_feedback ? physical_boundary_scale*df_weight*h_pr(IPDPX, p) :
                                   static_cast<Real>(0.0),
-          use_momentum_feedback ? physical_boundary_scale*h_pr(IPDPY, p) :
+          use_momentum_feedback ? physical_boundary_scale*df_weight*h_pr(IPDPY, p) :
                                   static_cast<Real>(0.0),
-          use_momentum_feedback ? physical_boundary_scale*h_pr(IPDPZ, p) :
+          use_momentum_feedback ? physical_boundary_scale*df_weight*h_pr(IPDPZ, p) :
                                   static_cast<Real>(0.0),
-          use_energy_feedback ? physical_boundary_scale*h_pr(IPDE, p) :
+          use_energy_feedback ? physical_boundary_scale*df_weight*h_pr(IPDE, p) :
                                 static_cast<Real>(0.0)};
 
       auto queue_receiver = [&record, &transport, pm](const int gid, const int rank,

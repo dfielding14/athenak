@@ -382,6 +382,8 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
     pic_physical_mode = PICPhysicalMode::paper_test_particle;
   } else if (pic_physical_mode_str.compare("paper_mhd_pic") == 0) {
     pic_physical_mode = PICPhysicalMode::paper_mhd_pic;
+  } else if (pic_physical_mode_str.compare("paper_mhd_pic_vl2_tsc") == 0) {
+    pic_physical_mode = PICPhysicalMode::paper_mhd_pic_vl2_tsc;
   } else if (pic_physical_mode_str.compare("extended_mhd_pic") == 0) {
     pic_physical_mode = PICPhysicalMode::extended_mhd_pic;
   } else {
@@ -392,13 +394,16 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
     std::exit(EXIT_FAILURE);
   }
   const bool paper_coupled_mode =
-      (pic_physical_mode == PICPhysicalMode::paper_mhd_pic);
+      (pic_physical_mode == PICPhysicalMode::paper_mhd_pic) ||
+      (pic_physical_mode == PICPhysicalMode::paper_mhd_pic_vl2_tsc);
+  const bool paper_vl2_tsc_mode =
+      (pic_physical_mode == PICPhysicalMode::paper_mhd_pic_vl2_tsc);
 
   // PR1 deposition controls
   deposit_moments = pin->GetOrAddBoolean("particles", "deposit_moments",
                                          paper_coupled_mode);
   deposit_order = pin->GetOrAddInteger("particles", "deposit_order",
-                                        paper_coupled_mode ? 2 : 1);
+                                        paper_vl2_tsc_mode ? 2 : 1);
   deposit_qscale = pin->GetOrAddReal("particles", "deposit_qscale", 1.0);
   couple_moments_to_mhd = pin->GetOrAddBoolean("particles",
                                                "couple_moments_to_mhd",
@@ -1010,18 +1015,25 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
                 << "<particles>/particle_type=cosmic_ray" << std::endl;
       std::exit(EXIT_FAILURE);
     }
-    const bool valid_deposit_order = (deposit_order == 1 || deposit_order == 2);
-    if (!valid_deposit_order) {
+    const bool direct_edge_mode =
+        (couple_moments_to_mhd &&
+         couple_j_deposition_mode ==
+         CoupledCurrentDepositionMode::direct_staggered);
+    const bool valid_order2_mode = direct_edge_mode || paper_vl2_tsc_mode;
+    const bool valid_order = (deposit_order == 1 || deposit_order == 2);
+    if ((!valid_order2_mode && deposit_order != 1) ||
+        (valid_order2_mode && !valid_order)) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "<particles>/deposit_order=" << deposit_order
-                << " is not supported (only deposit_order={1,2})"
+                << " is not supported (only deposit_order=1, or "
+                << "deposit_order={1,2} with coupled "
+                << "couple_j_deposition_mode=direct_staggered or "
+                << "pic_physical_mode=paper_mhd_pic_vl2_tsc)"
                 << std::endl;
       std::exit(EXIT_FAILURE);
     }
     ValidateMomentBoundaryPolicy(pmy_pack->pmesh);
-    if (couple_moments_to_mhd &&
-        couple_j_deposition_mode ==
-        CoupledCurrentDepositionMode::direct_staggered) {
+    if (direct_edge_mode) {
       ValidateDirectEdgeCurrentBoundaryPolicy(pmy_pack->pmesh);
     }
     if (pin->DoesBlockExist("shearing_box")) {
@@ -1245,7 +1257,9 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
       std::exit(EXIT_FAILURE);
     }
   }
-  if (pic_physical_mode == PICPhysicalMode::paper_mhd_pic) {
+  if (paper_coupled_mode) {
+    const char *paper_mode_name =
+        paper_vl2_tsc_mode ? "paper_mhd_pic_vl2_tsc" : "paper_mhd_pic";
     const bool exact_isothermal_deltaf_paper_feedback =
         (pin->GetString("mhd", "eos").compare("isothermal") == 0) &&
         UsesDeltaF() && !couple_moments_energy_to_mhd;
@@ -1263,7 +1277,8 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
          !exact_isothermal_fullf_paper_feedback)) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
-                << "<particles>/pic_physical_mode=paper_mhd_pic requires coupled "
+                << "<particles>/pic_physical_mode=" << paper_mode_name
+                << " requires coupled "
                 << "MHD background, coupled feedback, moment deposition, and "
                 << "conservative momentum feedback. Energy feedback is required "
                 << "for ideal MHD; exact isothermal paper delta-f uses momentum-only "
@@ -1278,57 +1293,61 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
          CoupledCurrentDepositionMode::direct_staggered)) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
-                << "<particles>/pic_physical_mode=paper_mhd_pic rejects "
+                << "<particles>/pic_physical_mode=" << paper_mode_name
+                << " rejects "
                 << "direct-current CT induction options; use the ideal-MHD "
                 << "paper induction path" << std::endl;
       std::exit(EXIT_FAILURE);
     }
-    if (deposit_order != 2) {
+    if (paper_vl2_tsc_mode && deposit_order != 2) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
-                << "<particles>/pic_physical_mode=paper_mhd_pic requires "
+                << "<particles>/pic_physical_mode=paper_mhd_pic_vl2_tsc requires "
                 << "<particles>/deposit_order=2 for TSC moment deposition."
                 << std::endl;
       std::exit(EXIT_FAILURE);
     }
-    if (pmy_pack->pmesh->mb_indcs.ng < 2) {
+    if (paper_vl2_tsc_mode && pmy_pack->pmesh->mb_indcs.ng < 2) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
-                << "<particles>/pic_physical_mode=paper_mhd_pic requires "
+                << "<particles>/pic_physical_mode=paper_mhd_pic_vl2_tsc requires "
                 << "mesh/nghost>=2 for receiver-resolution TSC support."
                 << std::endl;
       std::exit(EXIT_FAILURE);
     }
-    if (pin->GetOrAddString("time", "integrator", "rk2").compare("rk2") != 0) {
+    if (paper_vl2_tsc_mode &&
+        pin->GetOrAddString("time", "integrator", "rk2").compare("rk2") != 0) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
-                << "<particles>/pic_physical_mode=paper_mhd_pic requires "
+                << "<particles>/pic_physical_mode=paper_mhd_pic_vl2_tsc requires "
                 << "<time>/integrator=rk2 for the staged VL2 coupling path."
                 << std::endl;
       std::exit(EXIT_FAILURE);
     }
-    if (couple_fluid_feedback_order != CoupledFluidFeedbackOrder::mhd_src_terms) {
+    if (paper_vl2_tsc_mode &&
+        couple_fluid_feedback_order != CoupledFluidFeedbackOrder::mhd_src_terms) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
-                << "<particles>/pic_physical_mode=paper_mhd_pic requires "
+                << "<particles>/pic_physical_mode=paper_mhd_pic_vl2_tsc requires "
                 << "<particles>/couple_fluid_feedback_order=mhd_src_terms."
                 << std::endl;
       std::exit(EXIT_FAILURE);
     }
-    if ((couple_moments_momentum_coeff != static_cast<Real>(1.0)) ||
+    if (paper_vl2_tsc_mode &&
+        ((couple_moments_momentum_coeff != static_cast<Real>(1.0)) ||
         (couple_moments_energy_to_mhd &&
-         couple_moments_energy_coeff != static_cast<Real>(1.0))) {
+         couple_moments_energy_coeff != static_cast<Real>(1.0)))) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
-                << "<particles>/pic_physical_mode=paper_mhd_pic requires unit "
+                << "<particles>/pic_physical_mode=paper_mhd_pic_vl2_tsc requires unit "
                 << "conservative momentum and enabled energy feedback coefficients."
                 << std::endl;
       std::exit(EXIT_FAILURE);
     }
-    if (UsesExpandingBox()) {
+    if (paper_vl2_tsc_mode && UsesExpandingBox()) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
-                << "<particles>/pic_physical_mode=paper_mhd_pic with "
+                << "<particles>/pic_physical_mode=paper_mhd_pic_vl2_tsc with "
                 << "<particles>/pic_expanding_box_mode=on is not yet supported by "
                 << "the staged VL2 coupling path."
                 << std::endl;

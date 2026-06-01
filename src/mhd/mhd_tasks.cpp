@@ -387,7 +387,7 @@ TaskStatus MHD::MHDSrcTerms(Driver *pdrive, int stage) {
 
       par_for("prtcl_fluid_feedback_src", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie,
       KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
-        if (paper_vl2_predictor) {
+        if (paper_vl2_predictor && !use_deltaf) {
           const Real rho = mom(m, particles::Particles::IMOM_RHO, k, j, i);
           const Real jx = mom(m, particles::Particles::IMOM_JX, k, j, i);
           const Real jy = mom(m, particles::Particles::IMOM_JY, k, j, i);

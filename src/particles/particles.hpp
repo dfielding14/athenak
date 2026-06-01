@@ -46,8 +46,9 @@ enum class CoupledFluidFeedbackOrder { mhd_src_terms, efield_src };
 // constants for staged PIC runtime controls used by PR5+ test-suite expansion
 enum class PICBackgroundMode { coupled, passive_mhd, no_mhd };
 enum class PICFeedbackMode { coupled, test_particle };
-enum class PICPhysicalMode { engineering, paper_test_particle, paper_mhd_pic,
-                             extended_mhd_pic };
+enum class PICPhysicalMode { engineering = 0, paper_test_particle = 1,
+                             paper_mhd_pic = 2, extended_mhd_pic = 3,
+                             paper_mhd_pic_vl2_tsc = 4 };
 enum class PICCRHallMode { off, current_to_ct_experimental };
 enum class PICWaveDampingMode { off, ion_neutral_friction };
 enum class PICCRInitialState { velocity, momentum };
@@ -384,7 +385,7 @@ class Particles {
     return pic_expanding_box_mode == PICExpandingBoxMode::on;
   }
   bool UsesPaperVL2Coupling() const {
-    return pic_physical_mode == PICPhysicalMode::paper_mhd_pic;
+    return pic_physical_mode == PICPhysicalMode::paper_mhd_pic_vl2_tsc;
   }
   bool UsesPICWaveDamping() const {
     return pic_wave_damping_mode == PICWaveDampingMode::ion_neutral_friction;

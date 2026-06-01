@@ -7,11 +7,13 @@
 //! \brief Deterministic static-SMR paper_smooth TSC interface regression carrier.
 
 #include <iostream>
+#include <string>
 
 #include "athena.hpp"
 #include "globals.hpp"
 #include "parameter_input.hpp"
 #include "mesh/mesh.hpp"
+#include "mesh/nghbr_index.hpp"
 #include "outputs/restart_utils.hpp"
 #include "particles/particles.hpp"
 #include "pgen/pgen.hpp"
@@ -45,7 +47,59 @@ void RequireInterfaceMPISplit(const Mesh *pm) {
   }
   if (lower_fine_rank == coarse_rank) {
     AbortInterfaceRegression(
-        "requires the lower fine interface block and coarse neighbor on different ranks.");
+        "requires the lower fine interface block and coarse neighbor on "
+        "different ranks.");
+  }
+}
+
+int FindLogicalMeshBlockGID(const Mesh *pm, const int level,
+                            const int lx1, const int lx2, const int lx3) {
+  for (int gid = 0; gid < pm->nmb_total; ++gid) {
+    const auto &loc = pm->lloc_eachmb[gid];
+    if (loc.level == level && loc.lx1 == lx1 &&
+        loc.lx2 == lx2 && loc.lx3 == lx3) {
+      return gid;
+    }
+  }
+  return -1;
+}
+
+void RequireRemoteReceiverMPISplit(const Mesh *pm, const MeshBlockPack *pmbp,
+                                   const std::string &requirement) {
+  if (requirement == "none") return;
+
+  int owner_gid = -1;
+  int receiver_gid = -1;
+  int slot = -1;
+  if (requirement == "g_periodic_x1") {
+    owner_gid = FindLogicalMeshBlockGID(pm, pm->root_level + 1, 0, 0, 0);
+    receiver_gid = FindLogicalMeshBlockGID(pm, pm->root_level, 1, 0, 0);
+    slot = NeighborIndex(-1, 0, 0, 0, 0);
+  } else if (requirement == "j_periodic_x1_x3_edge") {
+    owner_gid = FindLogicalMeshBlockGID(pm, pm->root_level, 1, 0, 0);
+    receiver_gid = FindLogicalMeshBlockGID(pm, pm->root_level + 1, 0, 0, 1);
+    slot = NeighborIndex(1, 0, -1, 0, 0);
+  } else {
+    AbortInterfaceRegression("has an unsupported required remote receiver split.");
+  }
+
+  if (owner_gid < 0 || receiver_gid < 0 || slot < 0) {
+    AbortInterfaceRegression("could not resolve the required remote receiver split.");
+  }
+  const int owner_rank = pm->rank_eachmb[owner_gid];
+  const int receiver_rank = pm->rank_eachmb[receiver_gid];
+  if (owner_rank == receiver_rank) {
+    AbortInterfaceRegression("requires the selected receiver on a remote MPI rank.");
+  }
+  if (owner_rank == global_variable::my_rank) {
+    const int owner_m = owner_gid - pmbp->gids;
+    if (owner_m < 0 || owner_m >= pmbp->nmb_thispack) {
+      AbortInterfaceRegression("could not resolve the local owner MeshBlock.");
+    }
+    const auto &neighbor = pmbp->pmb->nghbr.h_view(owner_m, slot);
+    if (neighbor.gid != receiver_gid || neighbor.rank != receiver_rank) {
+      AbortInterfaceRegression("required neighbor slot does not name the receiver.");
+    }
   }
 }
 
@@ -81,10 +135,17 @@ void ProblemGenerator::PICPaperSmoothTSCInterface(ParameterInput *pin,
   if (pmbp->ppart->particle_type != ParticleType::cosmic_ray) {
     AbortInterfaceRegression("requires <particles>/particle_type=cosmic_ray.");
   }
+  if (!pmbp->ppart->UsesPaperVL2Coupling()) {
+    AbortInterfaceRegression(
+        "requires <particles>/pic_physical_mode=paper_mhd_pic_vl2_tsc.");
+  }
 
   if (pin->GetOrAddBoolean("problem", "require_interface_mpi_split", false)) {
     RequireInterfaceMPISplit(pm);
   }
+  RequireRemoteReceiverMPISplit(
+      pm, pmbp, pin->GetOrAddString(
+          "problem", "required_remote_receiver_mpi_split", "none"));
   if (restart) return;
 
   auto *ppart = pmbp->ppart;
@@ -96,6 +157,8 @@ void ProblemGenerator::PICPaperSmoothTSCInterface(ParameterInput *pin,
   const Real particle_x = pin->GetReal("problem", "particle_x");
   const Real particle_y = pin->GetOrAddReal("problem", "particle_y", -0.75);
   const Real particle_z = pin->GetOrAddReal("problem", "particle_z", 0.0);
+  const Real particle_df_weight =
+      pin->GetOrAddReal("problem", "particle_df_weight", 0.0);
   const int m = FindLocalParticleMeshBlock(pmbp, particle_x, particle_y, particle_z);
   if (m >= 0) {
     HostArray2D<int> h_pi("paper_smooth_tsc_interface_pi", ppart->nidata, 1);
@@ -117,6 +180,20 @@ void ProblemGenerator::PICPaperSmoothTSCInterface(ParameterInput *pin,
     h_pr(IPM, 0) = 1.0;
     h_pr(IPWT, 0) = 1.0;
     h_pr(IPF0, 0) = 1.0;
+    h_pr(IPDFWT, 0) = 0.0;
+    if (ppart->UsesDeltaF()) {
+      if (particle_df_weight == 1.0) {
+        AbortInterfaceRegression("requires problem/particle_df_weight != 1.");
+      }
+      const Real f0 = particles::PICDeltaFBackgroundValue(
+          ppart->pic_deltaf_background, ppart->pic_deltaf_p0,
+          ppart->pic_deltaf_kappa, ppart->pic_deltaf_drift_x1,
+          ppart->pic_deltaf_drift_x2, ppart->pic_deltaf_drift_x3,
+          ppart->pic_deltaf_aniso_x1, ppart->pic_deltaf_aniso_x2,
+          ppart->pic_deltaf_aniso_x3, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0);
+      h_pr(IPF0, 0) = f0/(1.0 - particle_df_weight);
+      h_pr(IPDFWT, 0) = particle_df_weight;
+    }
     h_pr(IPT_BIRTH, 0) = pm->time;
 
     Kokkos::resize(ppart->prtcl_idata, ppart->nidata, 1);

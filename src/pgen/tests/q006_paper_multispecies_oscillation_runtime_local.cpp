@@ -166,7 +166,16 @@ void ProblemGenerator::Q006PaperMultispeciesOscillationRuntimeLocal(
   Q006RuntimeLocalRequireInteger(pin, "particles", "nspecies", 2);
   Q006RuntimeLocalRequireString(pin, "particles", "cr_distribution", "center");
   Q006RuntimeLocalRequireBoolean(pin, "particles", "deposit_moments", true);
-  Q006RuntimeLocalRequireInteger(pin, "particles", "deposit_order", 2);
+  const std::string pic_physical_mode =
+      pin->GetString("particles", "pic_physical_mode");
+  const bool paper_vl2_tsc =
+      (pic_physical_mode.compare("paper_mhd_pic_vl2_tsc") == 0);
+  if (!paper_vl2_tsc && pic_physical_mode.compare("paper_mhd_pic") != 0) {
+    Q006RuntimeLocalFatal("<particles>/pic_physical_mode does not match the "
+                          "bounded Q-006 runtime-local contract");
+  }
+  Q006RuntimeLocalRequireInteger(pin, "particles", "deposit_order",
+                                 paper_vl2_tsc ? 2 : 1);
   Q006RuntimeLocalRequireReal(pin, "particles", "deposit_qscale", 0.0234375);
   Q006RuntimeLocalRequireBoolean(pin, "particles", "couple_moments_to_mhd", true);
   Q006RuntimeLocalRequireReal(pin, "particles", "couple_j_to_efield_coeff", 1.0);
@@ -181,7 +190,6 @@ void ProblemGenerator::Q006PaperMultispeciesOscillationRuntimeLocal(
                                 "mhd_src_terms");
   Q006RuntimeLocalRequireReal(pin, "particles", "couple_moments_momentum_coeff", 1.0);
   Q006RuntimeLocalRequireReal(pin, "particles", "couple_moments_energy_coeff", 0.0);
-  Q006RuntimeLocalRequireString(pin, "particles", "pic_physical_mode", "paper_mhd_pic");
   Q006RuntimeLocalRequireString(pin, "particles", "pic_background_mode", "coupled");
   Q006RuntimeLocalRequireString(pin, "particles", "pic_feedback_mode", "coupled");
   Q006RuntimeLocalRequireString(pin, "particles", "pic_interp_scheme", "tsc");

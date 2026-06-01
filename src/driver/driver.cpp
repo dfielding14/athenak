@@ -137,9 +137,10 @@ Driver::Driver(ParameterInput *pin, Mesh *pmesh, Real wtlim, Kokkos::Timer* ptim
     tlim = pin->GetReal("time", "tlim");
     nlim = pin->GetOrAddInteger("time", "nlim", -1);
     ndiag = pin->GetOrAddInteger("time", "ndiag", 1);
-    const bool paper_mhd_pic =
+    const bool paper_mhd_pic_vl2_tsc =
         pin->DoesBlockExist("particles") &&
-        (pin->GetString("particles", "pic_physical_mode") == "paper_mhd_pic");
+        (pin->GetOrAddString("particles", "pic_physical_mode", "engineering") ==
+         "paper_mhd_pic_vl2_tsc");
 
     if (integrator == "rk1") {
       // RK1: first-order Runge-Kutta / the forward Euler (FE) method
@@ -153,8 +154,8 @@ Driver::Driver(ParameterInput *pin, Mesh *pmesh, Real wtlim, Kokkos::Timer* ptim
       nimp_stages = 0;
       nexp_stages = 2;
       cfl_limit = 1.0;  // c_eff = c/nstages = 1/2 (Gottlieb (2009), pg 271)
-      if (paper_mhd_pic) {
-        // Sun & Bai VL2 predictor-corrector for staged full-f MHD-PIC coupling.
+      if (paper_mhd_pic_vl2_tsc) {
+        // Sun & Bai VL2 predictor-corrector for staged MHD-PIC coupling.
         gam0[0] = 0.0;
         gam1[0] = 1.0;
         beta[0] = 0.5;

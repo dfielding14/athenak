@@ -485,7 +485,7 @@ void InterpolateTSCFields(const RegionIndcs indcs, const SizeView size,
 
 //----------------------------------------------------------------------------------------
 //! \fn void Particles::PushPaperCosmicRaysVL2
-//! \brief Sun & Bai VL2 split pusher for full-f paper MHD-PIC coupling.
+//! \brief Sun & Bai VL2 split pusher for paper MHD-PIC coupling.
 
 TaskStatus Particles::PushPaperCosmicRaysVL2(Driver *pdriver, int stage) {
   (void)pdriver;
@@ -521,6 +521,19 @@ TaskStatus Particles::PushPaperCosmicRaysVL2(Driver *pdriver, int stage) {
   const Real qscale = deposit_qscale;
   const int nspecies_local = nspecies;
   const Real light_speed = pic_cr_light_speed;
+  const bool deltaf_local = UsesDeltaF();
+  const bool adaptive_deltaf_local = UsesAdaptiveDeltaF();
+  const PICDeltaFBackground deltaf_background_local = pic_deltaf_background;
+  const Real deltaf_p0_local = pic_deltaf_p0;
+  const Real deltaf_kappa_local = pic_deltaf_kappa;
+  const Real deltaf_adaptive_xi_local = pic_deltaf_adaptive_xi;
+  const Real deltaf_adaptive_p0_local = pic_deltaf_adaptive_p0;
+  const Real deltaf_drift_x1_local = pic_deltaf_drift_x1;
+  const Real deltaf_drift_x2_local = pic_deltaf_drift_x2;
+  const Real deltaf_drift_x3_local = pic_deltaf_drift_x3;
+  const Real deltaf_aniso_x1_local = pic_deltaf_aniso_x1;
+  const Real deltaf_aniso_x2_local = pic_deltaf_aniso_x2;
+  const Real deltaf_aniso_x3_local = pic_deltaf_aniso_x3;
   auto &pi = prtcl_idata;
   auto &pr = prtcl_rdata;
   auto &size = pmy_pack->pmb->mb_size;
@@ -611,6 +624,22 @@ TaskStatus Particles::PushPaperCosmicRaysVL2(Driver *pdriver, int stage) {
         pr(IPVX, p) = state_x;
         pr(IPVY, p) = state_y;
         pr(IPVZ, p) = use_vz_component ? state_z : static_cast<Real>(0.0);
+        if (deltaf_local) {
+          const Real f0_current = adaptive_deltaf_local ?
+              PICAdaptiveDeltaFBackgroundValue(
+                  deltaf_kappa_local, deltaf_p0_local, deltaf_adaptive_p0_local,
+                  deltaf_adaptive_xi_local, static_cast<Real>(1.0),
+                  static_cast<Real>(1.0), static_cast<Real>(1.0),
+                  state_x, state_y, state_z) :
+              PICDeltaFBackgroundValue(
+                  deltaf_background_local, deltaf_p0_local, deltaf_kappa_local,
+                  deltaf_drift_x1_local, deltaf_drift_x2_local,
+                  deltaf_drift_x3_local, deltaf_aniso_x1_local,
+                  deltaf_aniso_x2_local, deltaf_aniso_x3_local,
+                  static_cast<Real>(1.0), static_cast<Real>(1.0),
+                  static_cast<Real>(1.0), state_x, state_y, state_z);
+          pr(IPDFWT, p) = static_cast<Real>(1.0) - f0_current/pr(IPF0, p);
+        }
       });
   return TaskStatus::complete;
 }
