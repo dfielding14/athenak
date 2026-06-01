@@ -1,5 +1,14 @@
-#ifndef PARTICLES_DATA_STRUCTS_HPP_
-#define PARTICLES_DATA_STRUCTS_HPP_
+#ifndef PARTICLES_PARTICLES_DATA_STRUCTS_HPP_
+#define PARTICLES_PARTICLES_DATA_STRUCTS_HPP_
+//========================================================================================
+// AthenaXXX astrophysical plasma code
+// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
+// Licensed under the 3-clause BSD License (the "LICENSE")
+//========================================================================================
+
+#include <cstdint>
+
+#include "athena.hpp"
 
 //----------------------------------------------------------------------------------------
 //! \struct ParticleLocationData
@@ -33,5 +42,27 @@ struct ParticleMessageData {
     sendrank(a), recvrank(b), nprtcls(c) {}
 };
 
-#endif // PARTICLES_DATA_STRUCTS_HPP_
+namespace particles {
+//----------------------------------------------------------------------------------------
+//! \struct PaperSmoothMomentRecord
+//! \brief Host-transport record for receiver-resolution paper_smooth AMR deposition
 
+constexpr std::uint32_t kPaperSmoothDepositRhoJ = 1U << 0;
+constexpr std::uint32_t kPaperSmoothDepositEBDot = 1U << 1;
+constexpr std::uint32_t kPaperSmoothDepositMomentumFeedback = 1U << 2;
+constexpr std::uint32_t kPaperSmoothDepositEnergyFeedback = 1U << 3;
+
+struct PaperSmoothMomentRecord {
+  std::int32_t dest_gid;
+  std::int32_t ptag;
+  std::uint32_t deposit_flags;
+  std::uint32_t reserved; // initialize to zero
+  Real x, y, z;
+  Real q_macro; // extensive macro-charge
+  Real vx, vy, vz;
+  Real ebdot;
+  Real dpxdt, dpydt, dpzdt, dedt; // extensive feedback rates
+};
+} // namespace particles
+
+#endif // PARTICLES_PARTICLES_DATA_STRUCTS_HPP_

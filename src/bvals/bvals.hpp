@@ -26,10 +26,14 @@ enum class CCCommMode {ghost_fill, synchronize};
 enum class CCRecvOp {assign, accumulate};
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <vector>
 
 #include "athena.hpp"
+#if MPI_PARALLEL_ENABLED
+#include <mpi.h>
+#endif
 #include "mesh/mesh.hpp"
 #include "coordinates/coordinates.hpp"
 #include "tasklist/task_list.hpp"
@@ -228,6 +232,58 @@ class MeshBoundaryValuesFC : public MeshBoundaryValues {
 //  \brief Defines boundary values class for particles
 
 namespace particles {
+//----------------------------------------------------------------------------------------
+//! \class PaperSmoothMomentRecordTransport
+//! \brief Synchronous host transport for duplicated cross-level paper_smooth records
+
+class PaperSmoothMomentRecordTransport {
+ public:
+  PaperSmoothMomentRecordTransport();
+  ~PaperSmoothMomentRecordTransport();
+
+  PaperSmoothMomentRecordTransport(const PaperSmoothMomentRecordTransport &) = delete;
+  PaperSmoothMomentRecordTransport &operator=(
+      const PaperSmoothMomentRecordTransport &) = delete;
+
+  void Reset();
+  bool Queue(const PaperSmoothMomentRecord &record, int dest_rank,
+             int source_level, int dest_level);
+  bool Exchange();
+
+  const std::vector<PaperSmoothMomentRecord> &records() const {return records_;}
+  std::uint64_t RecordAllocationBytes() const;
+  std::uint64_t MetadataAllocationBytes() const;
+  std::uint64_t AllocationBytes() const;
+
+ private:
+  struct DestinationRecord {
+    int dest_rank;
+    PaperSmoothMomentRecord record;
+  };
+
+  static constexpr std::uint64_t empty_key_ = ~static_cast<std::uint64_t>(0);
+
+  static std::uint64_t MakeKey(const PaperSmoothMomentRecord &record);
+  static std::uint64_t HashKey(std::uint64_t key);
+  static void RehashKeys(std::vector<std::uint64_t> &table, std::size_t new_size);
+  static bool InsertKey(std::vector<std::uint64_t> &table, std::size_t &count,
+                        std::uint64_t key);
+  static void ResetKeys(std::vector<std::uint64_t> &table, std::size_t &count);
+  bool AddRecord(const PaperSmoothMomentRecord &record);
+
+  std::vector<PaperSmoothMomentRecord> records_;
+  std::vector<DestinationRecord> outgoing_;
+  std::vector<PaperSmoothMomentRecord> send_records_, recv_records_;
+  std::vector<std::uint64_t> queued_keys_, delivered_keys_;
+  std::size_t queued_key_count_, delivered_key_count_;
+#if MPI_PARALLEL_ENABLED
+  MPI_Comm mpi_comm_mom_;
+  bool mpi_ready_;
+  std::vector<int> send_counts_, recv_counts_, send_displs_, recv_displs_;
+#endif
+  int my_rank_, nranks_;
+};
+
 class ParticlesBoundaryValues {
  public:
   ParticlesBoundaryValues(particles::Particles *ppart, ParameterInput *pin);
