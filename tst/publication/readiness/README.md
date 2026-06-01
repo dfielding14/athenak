@@ -42,11 +42,17 @@ qualify any scientific claim by itself.
   transition policy, quiescent mirrored ledger and absent pending-submission
   markers.
 - `phase0_clean_candidate_freeze_and_policy_promotion_2026-06-01.json`:
-  current canonical clean-candidate freeze receipt. It binds the exact
+  canonical clean-candidate freeze receipt. It binds the exact
   `1171668b` source commit, double-precision HIP/MPI Release executable,
   immutable clean-candidate manifest, paired-controller policy promotion,
   pre-promotion operator attestation and quiescent mirrored ledger without
   authorizing a registered-science attempt.
+- `phase0_scheduler_accounting_controller_successor_2026-06-01.json`:
+  current accounting-only paired-controller successor. It widens the
+  nonqualifying manual allocation importer without invalidating historical
+  direct-`srun` rows, records the reviewed ten-job direct-`sbatch` Phase 0
+  diagnostic import, and binds the terminal 66-row mirrored ledger before any
+  registered replay is submitted.
 - `phase0_curated_candidate_successor_v4_2026-05-31.json`: historical Phase 0
   successor after schema-3 parallel-shock exact tag-window and restart
   fail-stop hardening. It binds the paired `4f005096` successor receipt and

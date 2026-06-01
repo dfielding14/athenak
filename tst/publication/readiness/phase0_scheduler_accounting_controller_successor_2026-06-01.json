@@ -1,0 +1,99 @@
+{
+  "record_type": "phase0_scheduler_accounting_controller_successor",
+  "schema_version": 1,
+  "date": "2026-06-01",
+  "predecessor_record": "tst/publication/readiness/phase0_clean_candidate_freeze_and_policy_promotion_2026-06-01.json",
+  "qualification_effect": "none_nonqualifying_scheduler_accounting_closure_only",
+  "control_plane_successor": {
+    "source_commit": "dccc7905f162652f90ac009a067521c554803c15",
+    "control_plane_version": "3d3d0d20ab3cedb1b650d8a19e99a0123b550ead25ebd312882d03d3be3b41d9",
+    "orion_root": "/lustre/orion/ast207/proj-shared/dfielding/PIC/control_plane/3d3d0d20ab3cedb1b650d8a19e99a0123b550ead25ebd312882d03d3be3b41d9",
+    "project_home_root": "/ccs/proj/ast207/proj-shared/PIC/control_plane/3d3d0d20ab3cedb1b650d8a19e99a0123b550ead25ebd312882d03d3be3b41d9",
+    "orion_inventory_sha256": "2b6a8dcae26494dcce36d5b932c8242a4480064d7afd403a3877a3bc84f04c10",
+    "project_home_inventory_sha256": "2b6a8dcae26494dcce36d5b932c8242a4480064d7afd403a3877a3bc84f04c10",
+    "byte_identical_inventory": true,
+    "installed_pair_verify": "pass",
+    "focused_manual_accounting_tests": "pass",
+    "full_control_plane_tests": {
+      "status": "pass",
+      "tests_run": 397
+    },
+    "qualification_manifest_tests": {
+      "status": "pass",
+      "tests_run": 26
+    }
+  },
+  "active_policy_promotion": {
+    "source_policy_commit": "95cc11929fd0a59a68f0a7a9b06392c063854778",
+    "orion_policy_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/storage_policy.json",
+    "project_home_policy_path": "/ccs/proj/ast207/proj-shared/PIC/policy/storage_policy.json",
+    "orion_policy_sha256": "7cb207100126f971bfae0bd8076150de8617d980674065b09661b43968301f79",
+    "project_home_policy_sha256": "7cb207100126f971bfae0bd8076150de8617d980674065b09661b43968301f79",
+    "orion_promotion_sha256": "a1581c845c9d1e5ed1d18228f2e07acd8b327bbb05352ea92044e3ef161e95df",
+    "project_home_promotion_sha256": "a1581c845c9d1e5ed1d18228f2e07acd8b327bbb05352ea92044e3ef161e95df",
+    "maximum_node_hours": 10000,
+    "registered_science_slices": [],
+    "byte_identical_policy": true,
+    "byte_identical_promotion": true
+  },
+  "pre_promotion_operator_attestation": {
+    "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/operator_attestations/20260601T210537Z-phase0-direct-sbatch-accounting-promotion-2026-06-01-pre_policy_promotion/attestation.json",
+    "sha256": "8b1ba2967b166627bf4c755dfc586186a81df9a241dd8c29eb5baa1caf69dcd2"
+  },
+  "manual_accounting_authorization": {
+    "authorization_id": "phase0-mpi-rereview-direct-sbatch-accounting-2026-06-01",
+    "source_path": "tst/publication/readiness/q027_phase0_mpi_rereview_direct_scheduler_accounting_authorization_2026-06-01.json",
+    "orion_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/manual_accounting_authorizations/phase0-mpi-rereview-direct-sbatch-accounting-2026-06-01.json",
+    "project_home_path": "/ccs/proj/ast207/proj-shared/PIC/policy/manual_accounting_authorizations/phase0-mpi-rereview-direct-sbatch-accounting-2026-06-01.json",
+    "sha256": "15d4f9e81570105fce843e3bd49c51ca265370eff389815e688e4d0c90e0a091",
+    "accounting_scope": "manual_direct_scheduler_accounting_only",
+    "scientific_evidence_eligible": false
+  },
+  "manual_accounting_activation": {
+    "reviewed_job_ids": [
+      "4752263",
+      "4752280",
+      "4752316",
+      "4752320",
+      "4752323",
+      "4752342",
+      "4752352",
+      "4752359",
+      "4752392",
+      "4752410"
+    ],
+    "reviewed_job_count": 10,
+    "imported_event_sha256": [
+      "97cdb153471b9b874518ed51992e5f8d515c7d9d6f46fb0f4c44bafaf5d0eaf4",
+      "d81df2854c13792718fafb74d61a4f0af6bb6407a532e2530bde93355f2e3c93",
+      "261157e69bd32f0b93644aa07eda07f2f0159c6bdde196039b92abf28c06b73b",
+      "a656f7cb2c6a021356429035009bbd82aa10066a8827eb414e663ca8b22e9ea3",
+      "1c0be1d0dd1df9aebf7c305e60555cfe877c693c37570eb2cceb3e4f83769c0c",
+      "ad9491bcc6356a8e56c018f0adbca349803431ef6b9e0445bef3a1908aa91149",
+      "4d52939d1b2ed1482bd4672a4e3b91c7e7c0399107cca9e482c6192f43e27801",
+      "71bccf96deef7280c7373f3f29078499cfb8b3ef4089c4c6260ced2813aa3a32",
+      "43bea30dcee50c365b2143c6bf242148f9d1223341599123b39e26c4c42e9020",
+      "b8b2852252b8b5e2be021b1d1f97a846140c7d10082bbdd1fa7482d5fbc50557"
+    ],
+    "imported_node_hours": 0.8711111111111111,
+    "cumulative_consumed_node_hours": 0.9816666666666666,
+    "scientific_evidence_eligible": false
+  },
+  "terminal_mirrored_ledger": {
+    "orion_node_hours_jsonl_sha256": "f46a48f3ceecf74fdb67463d91fa8f77b68125f2af1a3bb60111a9c90812bf59",
+    "project_home_node_hours_jsonl_sha256": "f46a48f3ceecf74fdb67463d91fa8f77b68125f2af1a3bb60111a9c90812bf59",
+    "orion_mirror_receipts_jsonl_sha256": "f33de9d7f43272855ba02674709420f5d3cac855fb9756a14bf2135b59eacfeb",
+    "orion_node_hours_csv_sha256": "9829b6bd8409824b050d4ff3ea79fa1db9af42413cd415304e39711ad9b084b3",
+    "orion_ledger_records": 66,
+    "project_home_ledger_records": 66,
+    "orion_receipt_records": 66,
+    "active_reservations": 0,
+    "pending_submission_marker": "absent",
+    "pending_manual_accounting_marker": "absent"
+  },
+  "scope_limits": [
+    "The imported direct-sbatch Phase 0 diagnostics count against the Frontier node-hour budget but are ineligible for scientific evidence.",
+    "This receipt does not authorize a registered-science slice.",
+    "It does not qualify a physical claim or close external review."
+  ]
+}
