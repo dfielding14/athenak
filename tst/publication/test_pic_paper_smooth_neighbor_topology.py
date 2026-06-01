@@ -91,6 +91,21 @@ class PicPaperSmoothNeighborTopologyTests(unittest.TestCase):
         self.assertIn("record.reserved", source)
         self.assertIn("lhs.image_code == rhs.image_code", source)
 
+    def test_record_scaling_matches_standard_deltaf_deposition(self) -> None:
+        source = (
+            REPO_ROOT / "src/particles/particles_moments.cpp"
+        ).read_text(encoding="ascii")
+        for snippet in (
+            "physical_boundary_scale*deposit_qscale*weight*df_weight*h_qspecies(sp)",
+            "vx, vy, vz, physical_boundary_scale*h_pr(IPEBDOT, p)",
+            "physical_boundary_scale*df_weight*h_pr(IPDPX, p)",
+            "physical_boundary_scale*df_weight*h_pr(IPDPY, p)",
+            "physical_boundary_scale*df_weight*h_pr(IPDPZ, p)",
+            "physical_boundary_scale*df_weight*h_pr(IPDE, p)",
+        ):
+            with self.subTest(snippet=snippet):
+                self.assertIn(snippet, source)
+
 
 if __name__ == "__main__":
     unittest.main()
