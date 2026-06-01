@@ -1,0 +1,54 @@
+{
+  "record_type": "phase0_curated_candidate_successor",
+  "schema_version": 1,
+  "date": "2026-06-01",
+  "predecessor_record": "tst/publication/readiness/phase0_curated_candidate_successor_v8_2026-06-01.json",
+  "status": "local_vl2_tsc_successor_staged_validation_rereview_install_build_and_freeze_pending",
+  "qualification_effect": "none",
+  "live_paired_control_plane_version": "3d3d0d20ab3cedb1b650d8a19e99a0123b550ead25ebd312882d03d3be3b41d9",
+  "successor_source_control_plane_version": "aa069bc7df47f26d7d0677da69b5a1c4da6a3777151255e830d6989fced210f0",
+  "curated_source_predecessor_commit": "b847715635bd93074bd99b47fcf3055bce6d7b1a",
+  "candidate_freeze_source_commit": "pending_final_clean_receipt_commit",
+  "frontier_launch_authorization": "none_pending_validation_rereview_paired_install_clean_build_and_freeze",
+  "prepared_artifacts": {
+    "inventory_path": "tst/publication/frontier_control_plane/prepared_pic_artifact_inventory.json",
+    "inventory_sha256": "bcd518a595a90a7174e02ed6d46e9bfa066d9cf0a75118950005ae2b0bda8d23",
+    "paper_deck_count": 110,
+    "publication_analyzer_count": 16,
+    "closure_policy": "canonical inventory path plus exact archived inputs/tests/pic*.athinput, required inputs/publication/pic_parallel_shock_section54_paper_vl2_tsc.athinput and tst/publication/analyze_*.py membership"
+  },
+  "operational_baseline": {
+    "orion_policy_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/storage_policy.json",
+    "project_home_policy_path": "/ccs/proj/ast207/proj-shared/PIC/policy/storage_policy.json",
+    "repo_policy_sha256": "dc6bfc7212c445793b61ca93dc9d7e7406dc83b952c2cbb06d4524323a4369a4",
+    "orion_policy_sha256": "dc6bfc7212c445793b61ca93dc9d7e7406dc83b952c2cbb06d4524323a4369a4",
+    "project_home_policy_sha256": "dc6bfc7212c445793b61ca93dc9d7e7406dc83b952c2cbb06d4524323a4369a4",
+    "orion_promotion_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/active_promotion.json",
+    "project_home_promotion_path": "/ccs/proj/ast207/proj-shared/PIC/policy/active_promotion.json",
+    "orion_promotion_sha256": "3d071e5c7af570338d3160cc966cd2d55b01a1a6f6199ff9187654164f198b3d",
+    "project_home_promotion_sha256": "3d071e5c7af570338d3160cc966cd2d55b01a1a6f6199ff9187654164f198b3d"
+  },
+  "terminal_mirrored_ledger": {
+    "orion_node_hours_jsonl_sha256": "9ea685309a478887910a25f7976ad74741fc5fc10c6f43115827e6013048f88a",
+    "project_home_node_hours_jsonl_sha256": "9ea685309a478887910a25f7976ad74741fc5fc10c6f43115827e6013048f88a",
+    "ledger_records": 108,
+    "latest_sequence_number": 107,
+    "latest_event_type": "manual_allocation_reconciliation",
+    "cumulative_consumed_node_hours": 1.0880555555555558,
+    "pending_reservations": false
+  },
+  "completed_actions": [
+    "preserved paper_mhd_pic as historical chronology and registered paper_mhd_pic_vl2_tsc additively",
+    "routed the prepared Section 5.4 publication deck through the additive VL2 TSC identity",
+    "validated deterministic smooth multilevel rho, current, momentum-source, energy-source and EBDOT deposition records locally",
+    "regenerated the complete prepared-artifact inventory with 110 PIC decks and 16 publication analyzers",
+    "preserved the active mirrored policy and terminal ledger without authorizing a new Frontier launch"
+  ],
+  "remaining_phase0_actions": [
+    "run the final clean-tree local validation matrix against the staged candidate",
+    "complete independent rereview on the stable clean source boundary",
+    "install the staged paired control-plane generation and promote a launch-prohibited transition policy",
+    "write the canonical HIP/MPI Release build profile",
+    "create the canonical clean-candidate freeze and promote its exact manifest binding"
+  ]
+}

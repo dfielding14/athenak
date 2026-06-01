@@ -953,8 +953,84 @@ class PicReadinessRegistryTests(unittest.TestCase):
         replay = _load(
             "phase0_registered_prerequisite_replay_policy_promotion_2026-06-01.json"
         )
-        if storage["installed_control_plane_version"] == replay["control_plane_version"]:
+        if (
+            storage["installed_control_plane_version"] == replay["control_plane_version"]
+            and staged_version == replay["control_plane_version"]
+        ):
             self._assert_current_registered_replay_bindings(policy, staged_version)
+            return
+        if storage["installed_control_plane_version"] == replay["control_plane_version"]:
+            successor = _load("phase0_curated_candidate_successor_v9_2026-06-01.json")
+            self.assertEqual(
+                successor["predecessor_record"],
+                "tst/publication/readiness/"
+                "phase0_curated_candidate_successor_v8_2026-06-01.json",
+            )
+            self.assertEqual(
+                successor["live_paired_control_plane_version"],
+                storage["installed_control_plane_version"],
+            )
+            self.assertEqual(
+                successor["successor_source_control_plane_version"], staged_version
+            )
+            predecessor_commit = successor["curated_source_predecessor_commit"]
+            self.assertRegex(predecessor_commit, r"^[0-9a-f]{40}$")
+            subprocess.check_call(
+                ["git", "cat-file", "-e", f"{predecessor_commit}^{{commit}}"],
+                cwd=REPO_ROOT,
+            )
+            prepared = successor["prepared_artifacts"]
+            prepared_path = REPO_ROOT / prepared["inventory_path"]
+            self.assertEqual(_sha256(prepared_path), prepared["inventory_sha256"])
+            prepared_inventory = json.loads(
+                prepared_path.read_text(encoding="utf-8")
+            )
+            expected_decks = sorted(
+                [
+                    *(REPO_ROOT / "inputs" / "tests").glob("pic*.athinput"),
+                    *(
+                        REPO_ROOT / path
+                        for path in PREPARED_ARTIFACT_REQUIRED_PUBLICATION_DECK_PATHS
+                    ),
+                ]
+            )
+            expected_analyzers = sorted(
+                (REPO_ROOT / "tst" / "publication").glob("analyze_*.py")
+            )
+            self.assertEqual(len(expected_decks), prepared["paper_deck_count"])
+            self.assertEqual(
+                len(expected_analyzers), prepared["publication_analyzer_count"]
+            )
+            for key, expected_paths in {
+                "paper_decks": expected_decks,
+                "analyzers": expected_analyzers,
+            }.items():
+                records = prepared_inventory[key]
+                self.assertEqual(
+                    [record["path"] for record in records],
+                    [
+                        path.relative_to(REPO_ROOT).as_posix()
+                        for path in expected_paths
+                    ],
+                )
+                for record in records:
+                    self.assertEqual(
+                        _sha256(REPO_ROOT / record["path"]), record["sha256"]
+                    )
+            baseline = successor["operational_baseline"]
+            self.assertEqual(
+                baseline["repo_policy_sha256"],
+                _sha256(READINESS_DIR / "storage_policy.json"),
+            )
+            for key in (
+                "orion_policy",
+                "project_home_policy",
+                "orion_promotion",
+                "project_home_promotion",
+            ):
+                self.assertEqual(
+                    baseline[f"{key}_sha256"], _sha256(Path(baseline[f"{key}_path"]))
+                )
             return
         phase0_successor = _load(
             "phase0_curated_candidate_successor_v6_2026-06-01.json"
