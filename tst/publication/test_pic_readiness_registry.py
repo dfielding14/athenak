@@ -304,7 +304,7 @@ class PicReadinessRegistryTests(unittest.TestCase):
         science_freeze = policy["science_submission_freeze"]
         if science_freeze == {"status": "pending_clean_candidate_freeze"}:
             phase0_successor = _load(
-                "phase0_curated_candidate_successor_v4_2026-05-31.json"
+                "phase0_curated_candidate_successor_v6_2026-06-01.json"
             )
             self.assertEqual(lifecycle, "paired_installed_reviewed_generation")
             self.assertEqual(
@@ -570,12 +570,18 @@ class PicReadinessRegistryTests(unittest.TestCase):
             ]
         )
         phase0_successor = _load(
-            "phase0_curated_candidate_successor_v4_2026-05-31.json"
+            "phase0_curated_candidate_successor_v6_2026-06-01.json"
         )
         self.assertEqual(
             phase0_successor["predecessor_record"],
             "tst/publication/readiness/"
-            "phase0_curated_candidate_successor_v3_2026-05-31.json",
+            "phase0_curated_candidate_successor_v4_2026-05-31.json",
+        )
+        predecessor_commit = phase0_successor["curated_source_predecessor_commit"]
+        self.assertRegex(predecessor_commit, r"^[0-9a-f]{40}$")
+        subprocess.check_call(
+            ["git", "cat-file", "-e", f"{predecessor_commit}^{{commit}}"],
+            cwd=REPO_ROOT,
         )
         self.assertEqual(
             staged_version, phase0_successor["successor_source_control_plane_version"]
@@ -623,7 +629,7 @@ class PicReadinessRegistryTests(unittest.TestCase):
         self.assertEqual(
             paired["predecessor_record"],
             "tst/publication/readiness/"
-            "phase0_paired_control_plane_install_and_policy_promotion_2026-05-31.json",
+            "phase0_paired_control_plane_install_and_policy_promotion_successor_2026-05-31.json",
         )
         self.assertEqual(paired["control_plane_version"], staged_version)
         installed = paired["paired_install"]

@@ -1,0 +1,95 @@
+{
+  "record_type": "q011_parallel_shock_rk_stage_budget_successor",
+  "schema_version": 1,
+  "date": "2026-06-01",
+  "predecessor_record": "tst/publication/readiness/q011_parallel_shock_rk_stage_budget_successor_v4_2026-05-31.json",
+  "gate": "Q-011",
+  "qualification_effect": "none_bounded_serial_host_regression_only",
+  "claim_closure": false,
+  "frontier_authorization": "not_bound",
+  "scope": "Current-source bounded serial-host successor for the Section 5.4 parallel-shock RK-stage budget probe after momentum-shell closure, gas-subtraction coupling enforcement, non-finite floor rejection, startup-cohort sink-ledger completion and numeric-metadata enforcement, restart-schema-3 exact tag-window hardening and MPI-aware fatal-path hardening. The fail-stop checks reject invalid states before publication; they do not implement transactional rollback. The retained predecessor artifacts remain immutable chronology. This current-source rerun demonstrates bounded integrator-invariant mechanics only; it does not qualify MPI, AMR, HIP, Frontier, physical calibration or the full shock campaign.",
+  "source_bindings": {
+    "src/pgen/tests/pic_parallel_shock.cpp": "8396917b20c96421090caabcd608f810d85733bab9dad20ffac3c14f23ea7f16",
+    "inputs/tests/pic_parallel_shock_rk_stage_budget.athinput": "30f5551c501367f669298bcab97877b460cf7ace08979029599a68de8df8bdaf",
+    "inputs/tests/pic_parallel_shock_startup_cohort_sink_restart.athinput": "887e053ee42bae0d838c52547925f5fe10a2c33a44df9b338386ad31190845fd",
+    "tst/scripts/particles/pic_parallel_shock_rk_stage_budget.py": "1228bf7bde0bd933ef640f7c8d27581a471286df3adc52a872b034d63cf7c745",
+    "tst/scripts/particles/pic_parallel_shock_startup_cohort_sink_restart.py": "0d60d9cad6470fb176bd790ddaae4b26be614b43cf3ebb02a9d45d49433005f6"
+  },
+  "current_source_verification": {
+    "command": "cd tst && ATHENA_PIC_PARALLEL_SHOCK_RK_EXE_DIR=/tmp/athenak-pic-codex-host/src PYTHONDONTWRITEBYTECODE=1 python3 -B scripts/particles/pic_parallel_shock_rk_stage_budget.py",
+    "status": "pass",
+    "integrators": ["rk1", "rk2", "rk3"],
+    "subtraction_variants": [false, true],
+    "particle_count": 240,
+    "residual_reservoir": 3.00024e-13,
+    "gas_mass_removed": 0.2400054931640625,
+    "integrator_invariant_particle_count": true,
+    "integrator_invariant_reservoir": true,
+    "integrator_invariant_gas_mass_removed": true,
+    "source_transaction_momentum_closure": true,
+    "source_transaction_energy_closure": true,
+    "final_evolved_wall_response_interpreted_as_source_transaction": false,
+    "negative_floor_rejected": true,
+    "non_finite_floor_rejected": true,
+    "passive_background_gas_subtraction_rejected": true,
+    "source_transaction_excessive_relative_bound_rejected": true,
+    "source_transaction_nonfinite_terms_rejected": true
+  },
+  "paired_restart_schema_verification": {
+    "command": "cd tst && ATHENA_PIC_PARALLEL_SHOCK_STARTUP_COHORT_EXE_DIR=/tmp/athenak-pic-codex-host/src PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. python3 -B scripts/particles/pic_parallel_shock_startup_cohort_sink_restart.py",
+    "status": "pass",
+    "restart_schema": 3,
+    "ledger_complete": true,
+    "tag_seeded": true,
+    "full_vs_restart_particle_payload_observed_at_bounded_serial_fixture": "tolerance_bounded_with_observed_zero_float_residuals_in_this_rerun",
+    "explicit_incomplete_restart_ledger_rejected": true,
+    "invalid_restart_ledgers_rejected": [
+      "inconsistent_injected_restart_mass",
+      "inconsistent_removed_restart_mass",
+      "negative_restart_ledger",
+      "non_finite_restart_ledger",
+      "non_integral_restart_count",
+      "out_of_range_restart_reservoir",
+      "premature_sink_completion",
+      "reset_restart_tag_floor",
+      "reset_restart_tag_progression",
+      "rewound_restart_tag_window",
+      "unseeded_restart_tag_progression"
+    ],
+    "invalid_restart_particle_payloads_rejected": [
+      "baseline_tag_at_floor",
+      "duplicate_tag",
+      "non_finite_real_payload",
+      "post_sink_early_birth_time",
+      "shock_birth_time",
+      "shock_macro_weight",
+      "shock_q_over_m",
+      "shock_species",
+      "unknown_source",
+      "zero_cycle_shock_macro_weight"
+    ],
+    "nondecimal_ledger_roundtrip": true,
+    "large_count_ledger_checkpoint": {
+      "injected_particle_count": 135545,
+      "injected_mass": 135.54500000000002,
+      "inconsistent_mass_rejected": true,
+      "restart_continuation_passed": true
+    },
+    "nonempty_two_rank_mpi_shared_restart_roundtrip_spanning_meshblocks": {
+      "particle_count": 167,
+      "shock_particle_count": 135,
+      "distinct_meshblock_gids": 2
+    }
+  },
+  "retained_predecessor_artifacts": {
+    "role": "immutable_chronology_only",
+    "record": "tst/publication/readiness/q011_parallel_shock_rk_stage_budget_successor_v4_2026-05-31.json"
+  },
+  "remaining_blockers": [
+    "Complete registered MPI, AMR, HIP and Frontier qualification slices.",
+    "Close physical units, macro-mass and downstream-particles-per-cell calibration.",
+    "Run the registered Sun-and-Bai Section 5.4 coarse-uniform, three-level-AMR and fine-uniform campaign.",
+    "Complete independent raw-artifact recomputation and external review."
+  ],
+  "q011_disposition": "bounded_current_source_rk_stage_budget_restart_schema_and_fail_closed_regressions_passed_full_q011_qualification_open"
+}

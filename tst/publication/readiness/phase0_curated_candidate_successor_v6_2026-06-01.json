@@ -1,0 +1,44 @@
+{
+  "record_type": "phase0_curated_candidate_successor",
+  "schema_version": 1,
+  "date": "2026-06-01",
+  "predecessor_record": "tst/publication/readiness/phase0_curated_candidate_successor_v4_2026-05-31.json",
+  "status": "paired_controller_successor_installed_final_clean_boundary_validation_rereview_build_and_freeze_pending",
+  "qualification_effect": "none",
+  "live_paired_control_plane_version": "66b63acd1b4743854e503b2345b628d81d8a3bdec4d8d4b753acc358801041a9",
+  "successor_source_control_plane_version": "66b63acd1b4743854e503b2345b628d81d8a3bdec4d8d4b753acc358801041a9",
+  "curated_source_predecessor_commit": "318bf37b914847b0b06ec0492a0e9b2c7447a6c7",
+  "candidate_freeze_source_commit": "pending_final_clean_receipt_commit",
+  "paired_install_and_policy_promotion_receipt": {
+    "path": "tst/publication/readiness/phase0_paired_control_plane_install_and_policy_promotion_successor_v2_2026-06-01.json",
+    "sha256": "ece9ad46fee6add0e031e9f9811e7bc50d8a8ea22b4dcf9e75e761382f267fd1"
+  },
+  "prepared_artifacts": {
+    "inventory_path": "tst/publication/frontier_control_plane/prepared_pic_artifact_inventory.json",
+    "inventory_sha256": "7ce7b80365d3798b73ddfeac6bff4306e2e01686f5d1e6bdee8697b672f43515",
+    "paper_deck_count": 94,
+    "publication_analyzer_count": 12,
+    "closure_policy": "canonical inventory path plus exact archived inputs/tests/pic*.athinput, required inputs/publication/pic_parallel_shock_section54_paper.athinput and tst/publication/analyze_*.py membership"
+  },
+  "completed_phase0_actions": [
+    "installed the paired 66b63acd explicit-double-precision control-plane generation and promoted its 10000-node-hour transition policy without rewriting operational chronology",
+    "regenerated the complete prepared-artifact inventory with 94 PIC decks and 12 publication analyzers after the restart-safety deck and Q-011 analyzer hardening",
+    "rejected unsupported restart MeshBlock counts, undersized in-cap layouts, mesh geometry, logical locations, incomplete leaf partitions, noncanonical gid ordering, adaptive-level overflow, non-finite load-balance costs and zero total load-balance cost before materializing restart state",
+    "rejected oversized shared and rank-sharded particle payload extents before allocation and guarded particle and fluid restart stride, offset and byte-allocation arithmetic",
+    "guarded scratch-build static-refinement logical bounds, MPI-IO count narrowing and status-count validation, stdio offset conversion, MPI offset conversion, explicit MPI shared-file truncation, rank-digest indexing and six-digit restart sequence formatting",
+    "required full-precision persisted runtime reals and immutable shock-injected species, charge-to-mass ratio, macro weight, birth-time, post-sink lifecycle and tag-window provenance",
+    "bounded the MPI tag-audit owner allocation, passed an explicit two-rank nonempty shared shock restart reload spanning multiple MeshBlock gids and passed a hydro-only rank-sharded six-digit checkpoint reload",
+    "required restart-time shock provenance audit even for zero-cycle republish attempts, saturated adaptive cooldown counters at INT_MAX, rejected negative adaptive cooldown metadata and enforced one shared MeshBlock topology ceiling across scratch construction, adaptive growth, restart publication and restart ingestion",
+    "rejected oversized scratch root grids before multiplication, reserved adaptive MeshBlock capacity before recursive refinement and replaced linear static-region extent walks with logarithmic index searches",
+    "required rank-sharded restarts to agree byte-for-byte through the complete duplicated payload prefix before reading rank-local fluid or particle sections, including object state and serialized payload size",
+    "persisted a shared nonzero best-effort schema-2 checkpoint nonce to detect accidental mixed-shard assembly and rejected zero or cross-checkpoint rank-shard nonces before restart payload ingestion; schema-1 and schema-absent legacy reads intentionally retain the weaker pre-nonce guarantee",
+    "bounded sparse restart MeshBlock-tree reconstruction by the physical-leaf budget before allocating adversarial deep paths",
+    "rejected nonpositive MeshBlock extents before scratch divisibility checks and sized multilevel diagnostics by the inclusive physical-level count"
+  ],
+  "remaining_phase0_actions": [
+    "run the final clean-tree validation matrix against the stable committed source boundary",
+    "complete independent rereview on the stable clean source boundary",
+    "write the canonical HIP/MPI Release build profile",
+    "create the canonical clean-candidate freeze and promote its exact manifest binding"
+  ]
+}

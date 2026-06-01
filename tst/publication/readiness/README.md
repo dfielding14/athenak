@@ -31,16 +31,30 @@ qualify any scientific claim by itself.
   12-analyzer closure. Final clean-tree validation, rereview, HIP/MPI Release
   build and canonical clean-candidate freeze remain pending.
 - `phase0_paired_control_plane_install_and_policy_promotion_successor_2026-05-31.json`:
-  current chronology-preserving receipt for the paired immutable `4f005096`
+  historical chronology-preserving receipt for the paired immutable `4f005096`
   controller successor install, byte-identical Orion and Project Home
   inventories, promoted transition policy, quiescent mirrored ledger and
   absent pending-submission markers.
-- `phase0_curated_candidate_successor_v4_2026-05-31.json`: current Phase 0
+- `phase0_paired_control_plane_install_and_policy_promotion_successor_v2_2026-06-01.json`:
+  current chronology-preserving receipt for the paired immutable `66b63acd`
+  controller successor install, explicit double-precision paper release
+  profile, byte-identical Orion and Project Home inventories, promoted
+  transition policy, quiescent mirrored ledger and absent pending-submission
+  markers.
+- `phase0_curated_candidate_successor_v4_2026-05-31.json`: historical Phase 0
   successor after schema-3 parallel-shock exact tag-window and restart
   fail-stop hardening. It binds the paired `4f005096` successor receipt and
   refreshed 94-deck, 12-analyzer prepared-artifact closure, including the
   required Section 5.4 publication deck. Final clean-tree validation, rereview,
   HIP/MPI Release build and canonical clean-candidate freeze remain pending.
+- `phase0_curated_candidate_successor_v6_2026-06-01.json`: current Phase 0
+  successor after restart-layout bounds checks, centralized MPI-IO count
+  and status guards, explicit MPI truncation, immutable shock-origin validation,
+  hydro-only six-digit sharded restart reload and the explicit two-rank nonempty
+  shared shock reload spanning multiple meshblocks. It refreshes the canonical
+  94-deck, 12-analyzer inventory.
+  Final clean-tree validation, rereview, HIP/MPI Release build and canonical
+  clean-candidate freeze remain pending.
 - `phase0_exact_boundary_validation_receipt_2026-05-31.json`: rejected
   nonqualifying exact-clean-tree validation chronology for the first
   schema-hardened Phase 0 code boundary. Its matrix passed, but independent
@@ -437,6 +451,16 @@ qualify any scientific claim by itself.
   retained immutable particle-payload compatibility replay against the
   schema-3 corrected source contract. It explicitly does not claim a fresh
   corrected-executable runtime run or any qualifying Frontier evidence.
+- `q011_parallel_shock_section54_paper_preparation_successor_v6_2026-06-01.json`:
+  preparation-only successor after full-precision restart-real serialization
+  and live particle-provenance fail-stop hardening.
+- `q011_parallel_shock_rk_stage_budget_successor_v6_2026-06-01.json`: bounded
+  successor adding malformed live-payload rejection, immutable shock-origin
+  checks, a non-decimal ledger restart round trip and a two-rank nonempty
+  restart reload. Full Q-011 qualification remains open.
+- `q011_injection_distribution_runtime_local_successor_v6_2026-06-01.json`:
+  retained immutable particle-payload compatibility replay rebound to the
+  hardened source contract. It does not claim fresh qualifying evidence.
 - `q034_unsupported_capability_successor_2026-05-30.json`: successor
   fail-closed active-MHD expanding-box unsupported-composition addendum.
 - `q042_post_repair_architecture_docs_successor_2026-05-30.json`: successor

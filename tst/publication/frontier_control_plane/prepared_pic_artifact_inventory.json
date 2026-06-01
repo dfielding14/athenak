@@ -18,7 +18,7 @@
     },
     {
       "path": "tst/publication/analyze_q011_injection_distribution_runtime_local.py",
-      "sha256": "cf05509b4d3816037f26531abac8444746b3a0360876a16e35a234e36bbc173b"
+      "sha256": "27826f6282258388adec732f4f6ec8078f56500645cda1fc0d430ac7e9d57402"
     },
     {
       "path": "tst/publication/analyze_q023_paper_bell_linear.py",
@@ -280,7 +280,7 @@
     },
     {
       "path": "inputs/tests/pic_parallel_shock_startup_cohort_sink_restart.athinput",
-      "sha256": "746fd07436a798ef79e3ca566ea0e847e2db50f955cc44b1696bf93159a5ef86"
+      "sha256": "887e053ee42bae0d838c52547925f5fe10a2c33a44df9b338386ad31190845fd"
     },
     {
       "path": "inputs/tests/pic_parser_contract_guards.athinput",
@@ -404,11 +404,11 @@
     },
     {
       "path": "inputs/tests/pic_relativistic_gyro_paper.athinput",
-      "sha256": "994acc009bf7455d3666db44da2c8825b6124ce025a2e3547bef6e7c75992c8e"
+      "sha256": "d4ae5a0b231ca53a62f2cc3d178093f488a6a703644bff7c99a53b589cc602cd"
     },
     {
       "path": "inputs/tests/pic_restart_safety_guards.athinput",
-      "sha256": "4b6f6dd59d6dd7a50de20f7f72b780868b1eb5a7ecbde45fce89584410a9d324"
+      "sha256": "618e551ddc36d0466363135b6a2f2f5c0f2c5be2468783816e7bc577eee28745"
     },
     {
       "path": "inputs/tests/pic_two_stream_growth_proxy.athinput",

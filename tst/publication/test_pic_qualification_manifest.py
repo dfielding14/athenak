@@ -103,6 +103,13 @@ class PicQualificationManifestTests(unittest.TestCase):
         deck_root.mkdir(parents=True)
         deck = deck_root / "pic_paper.athinput"
         deck.write_text("<job>\nbasename = prepared-paper\n", encoding="utf-8")
+        publication_deck = (
+            source / "inputs/publication/pic_parallel_shock_section54_paper.athinput"
+        )
+        publication_deck.parent.mkdir()
+        publication_deck.write_text(
+            "<job>\nbasename = prepared-section54-paper\n", encoding="utf-8"
+        )
         analyzer_root = source / "tst/publication"
         analyzer_root.mkdir(parents=True)
         analyzer = analyzer_root / "analyze_paper.py"
@@ -116,7 +123,17 @@ class PicQualificationManifestTests(unittest.TestCase):
                 {
                     "schema_version": 1,
                     "paper_decks": [
-                        {"path": "inputs/tests/pic_paper.athinput", "sha256": _sha256(deck)}
+                        {
+                            "path": (
+                                "inputs/publication/"
+                                "pic_parallel_shock_section54_paper.athinput"
+                            ),
+                            "sha256": _sha256(publication_deck),
+                        },
+                        {
+                            "path": "inputs/tests/pic_paper.athinput",
+                            "sha256": _sha256(deck),
+                        },
                     ],
                     "analyzers": [
                         {
@@ -276,6 +293,13 @@ class PicQualificationManifestTests(unittest.TestCase):
                 ),
                 "inventory_sha256": _sha256(inventory),
                 "paper_decks": [
+                    {
+                        "path": (
+                            "inputs/publication/"
+                            "pic_parallel_shock_section54_paper.athinput"
+                        ),
+                        "sha256": _sha256(publication_deck),
+                    },
                     {"path": "inputs/tests/pic_paper.athinput", "sha256": _sha256(deck)}
                 ],
                 "analyzers": [
