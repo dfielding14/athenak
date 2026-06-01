@@ -71,6 +71,7 @@ struct InjectedParticle {
 
 struct GasDelta {
   int m, k, j, i;
+  Real vol;
   Real dm;
   Real dmx;
   Real dmy;
@@ -131,6 +132,12 @@ Real ps_particle_macro_mass = 1.0;
 Real ps_mass_reservoir_global = 0.0;
 int ps_injection_transaction_cycle = std::numeric_limits<int>::min();
 std::vector<GasDelta> ps_injection_transaction_gas_deltas;
+std::array<Real, 5> ps_injection_transaction_expected_global = {};
+std::array<Real, 5> ps_injection_transaction_applied_local = {};
+std::array<Real, 5> ps_injection_transaction_abs_global = {};
+Real ps_injection_transaction_terms_global = 1.0;
+bool ps_test_source_transaction_terms_override = false;
+Real ps_test_source_transaction_terms = 1.0;
 Real ps_injected_cr_count_global = 0.0;
 Real ps_injected_cr_mass_global = 0.0;
 Real ps_injected_cr_momentum_x1_global = 0.0;
@@ -204,6 +211,11 @@ std::string ParallelShockRestartControlFingerprint() {
                                   static_cast<int>(ps_enable_subtraction));
   HashParallelShockRestartControl(hash, "ps_enable_curvature_amr",
                                   static_cast<int>(ps_enable_curvature_amr));
+  HashParallelShockRestartControl(hash, "ps_test_source_transaction_terms_override",
+                                  static_cast<int>(
+                                      ps_test_source_transaction_terms_override));
+  HashParallelShockRestartControl(hash, "ps_test_source_transaction_terms",
+                                  ps_test_source_transaction_terms);
   HashParallelShockRestartControl(hash, "ps_inject_species", ps_inject_species);
   HashParallelShockRestartControl(hash, "ps_inject_seed", ps_inject_seed);
   HashParallelShockRestartControl(hash, "ps_particle_mass", ps_particle_mass);
@@ -523,21 +535,54 @@ void FatalParticleMigrationError(const char *message) {
   restart_utils::AbortOnFatalError();
 }
 
-Real ParallelShockLedgerTolerance(const Real lhs, const Real rhs) {
+Real ParallelShockLedgerTolerance(const Real lhs, const Real rhs,
+                                  const Real accumulated_terms = 1.0) {
   const Real scale = std::max({std::abs(lhs), std::abs(rhs),
-                               std::abs(ps_particle_macro_mass)});
-  return 1.0e-6*scale + 64.0*std::numeric_limits<Real>::epsilon();
+                               std::abs(ps_particle_macro_mass),
+                               static_cast<Real>(1.0)});
+  const Real eps = std::numeric_limits<Real>::epsilon();
+  const Real relative_bound = std::max(accumulated_terms, static_cast<Real>(1.0))*eps;
+  const Real summation_bound =
+      (relative_bound < 0.5) ? relative_bound/(1.0 - relative_bound) : 1.0;
+  return (8.0*summation_bound + 64.0*eps)*scale;
 }
 
-bool ParallelShockLedgerValuesAgree(const Real lhs, const Real rhs) {
-  return std::abs(lhs - rhs) <= ParallelShockLedgerTolerance(lhs, rhs);
+bool ParallelShockLedgerValuesAgree(const Real lhs, const Real rhs,
+                                    const Real accumulated_terms = 1.0) {
+  return std::abs(lhs - rhs) <=
+      ParallelShockLedgerTolerance(lhs, rhs, accumulated_terms);
+}
+
+bool ParallelShockSourceTransactionValuesAgree(const Real lhs, const Real rhs,
+                                               const Real absolute_contributions,
+                                               const Real accumulated_terms) {
+  if (!std::isfinite(lhs) || !std::isfinite(rhs) ||
+      !std::isfinite(absolute_contributions) || absolute_contributions < 0.0 ||
+      !std::isfinite(accumulated_terms) || accumulated_terms < 0.0 ||
+      !std::isfinite(ps_particle_macro_mass)) {
+    return false;
+  }
+  const Real scale = std::max({std::abs(lhs), std::abs(rhs),
+                               std::abs(absolute_contributions),
+                               std::abs(ps_particle_macro_mass),
+                               static_cast<Real>(1.0)});
+  const Real eps = std::numeric_limits<Real>::epsilon();
+  const Real relative_bound =
+      std::max(accumulated_terms, static_cast<Real>(1.0))*eps;
+  if (!std::isfinite(scale) || !std::isfinite(relative_bound) ||
+      relative_bound >= 0.5) {
+    return false;
+  }
+  const Real summation_bound = relative_bound/(1.0 - relative_bound);
+  const Real tolerance = (8.0*summation_bound + 64.0*eps)*scale;
+  return std::isfinite(tolerance) && std::abs(lhs - rhs) <= tolerance;
 }
 
 bool ParallelShockLedgerValueExceeds(const Real lhs, const Real rhs) {
   return lhs > rhs + ParallelShockLedgerTolerance(lhs, rhs);
 }
 
-void ValidateParallelShockRuntimeLedger(const char *context) {
+void ValidateParallelShockRuntimeLedger(const char *context, const Real current_time) {
   const auto invalid_nonnegative_ledger = [](const Real value) {
     return !std::isfinite(value) || value < 0.0;
   };
@@ -551,6 +596,10 @@ void ValidateParallelShockRuntimeLedger(const char *context) {
        ps_removed_cr_momentum_x2_global != 0.0 ||
        ps_removed_cr_momentum_x3_global != 0.0 ||
        ps_removed_cr_energy_global != 0.0);
+  const bool invalid_sink_completion =
+      ps_removed_excluded_early_cohort &&
+      (ps_remove_birth_time_before < 0.0 ||
+       current_time < ps_remove_birth_time_before);
   const Real expected_injected_mass =
       ps_injected_cr_count_global*ps_particle_macro_mass;
   const Real expected_removed_mass =
@@ -600,7 +649,7 @@ void ValidateParallelShockRuntimeLedger(const char *context) {
       ps_removed_cr_count_global > ps_injected_cr_count_global ||
       ParallelShockLedgerValueExceeds(ps_removed_cr_mass_global,
                                       ps_injected_cr_mass_global) ||
-      invalid_removed_before_sink) {
+      invalid_removed_before_sink || invalid_sink_completion) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
               << "pic_parallel_shock " << context
@@ -609,9 +658,9 @@ void ValidateParallelShockRuntimeLedger(const char *context) {
   }
 }
 
-void StoreRuntimeStateForRestart() {
+void StoreRuntimeStateForRestart(const Real current_time) {
   if (ps_pin == nullptr) return;
-  ValidateParallelShockRuntimeLedger("runtime");
+  ValidateParallelShockRuntimeLedger("runtime", current_time);
   ps_pin->SetReal("problem", "ps_mass_reservoir_global", ps_mass_reservoir_global);
   ps_pin->SetReal("problem", "ps_injected_cr_count_global",
                   ps_injected_cr_count_global);
@@ -865,14 +914,24 @@ void RemoveExcludedEarlyInjectedParticles(Mesh *pm) {
 #else
   Real *removed_global = removed_local;
 #endif
+  const Real expected_removed_mass = removed_global[0]*ps_particle_macro_mass;
+  if (!ParallelShockLedgerValuesAgree(removed_global[1], expected_removed_mass,
+                                      removed_global[0])) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock removed-particle mass accounting is inconsistent."
+              << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
   ps_removed_cr_count_global += removed_global[0];
-  ps_removed_cr_mass_global += removed_global[1];
+  ps_removed_cr_mass_global =
+      ps_removed_cr_count_global*ps_particle_macro_mass;
   ps_removed_cr_momentum_x1_global += removed_global[2];
   ps_removed_cr_momentum_x2_global += removed_global[3];
   ps_removed_cr_momentum_x3_global += removed_global[4];
   ps_removed_cr_energy_global += removed_global[5];
   ps_removed_excluded_early_cohort = true;
-  StoreRuntimeStateForRestart();
+  StoreRuntimeStateForRestart(pm->time);
   pm->CountParticles();
   if (global_variable::my_rank == 0) {
     std::cout << std::setprecision(17)
@@ -1003,30 +1062,144 @@ inline Real ClampInsideDomain(const Real x, const Real xmin, const Real xmax) {
   return std::min(std::max(x, xmin + eps), xmax - eps);
 }
 
-void SeedNextTag(particles::Particles *ppart) {
+void SeedNextTag(particles::Particles *ppart, const Real current_time) {
   if (ps_tag_seeded && ps_tag_progression_validated) return;
 
   int local_max = -1;
   int local_baseline_max = -1;
+  bool local_payload_invalid = false;
+  std::vector<int> local_tags;
   int npart = ppart->nprtcl_thispack;
+  local_tags.reserve(npart);
   if (npart > 0) {
+    auto h_pr = Kokkos::create_mirror_view_and_copy(HostMemSpace(), ppart->prtcl_rdata);
     auto h_pi = Kokkos::create_mirror_view_and_copy(HostMemSpace(), ppart->prtcl_idata);
     for (int p = 0; p < npart; ++p) {
-      local_max = std::max(local_max, h_pi(PTAG, p));
-      if (h_pi(PCRSOURCE, p) !=
-          static_cast<int>(CRParticleSource::shock_injected)) {
-        local_baseline_max = std::max(local_baseline_max, h_pi(PTAG, p));
+      const int tag = h_pi(PTAG, p);
+      const int source = h_pi(PCRSOURCE, p);
+      local_payload_invalid = local_payload_invalid || tag < 0;
+      local_tags.push_back(tag);
+      local_max = std::max(local_max, tag);
+      for (int q = 0; q < ppart->nrdata; ++q) {
+        local_payload_invalid = local_payload_invalid || !std::isfinite(h_pr(q, p));
+      }
+      if (source == static_cast<int>(CRParticleSource::initial)) {
+        local_baseline_max = std::max(local_baseline_max, tag);
+        local_payload_invalid =
+            local_payload_invalid || (ps_tag_seeded && tag >= ps_injection_tag_floor);
+      } else if (source == static_cast<int>(CRParticleSource::shock_injected)) {
+        local_payload_invalid =
+            local_payload_invalid || !ps_tag_seeded ||
+            tag < ps_injection_tag_floor || tag >= ps_next_tag ||
+            h_pi(PSP, p) != ps_inject_species ||
+            h_pr(IPM, p) != ps_particle_q_over_m || h_pr(IPWT, p) != 1.0 ||
+            h_pr(IPT_BIRTH, p) < ps_inject_t_start ||
+            h_pr(IPT_BIRTH, p) > ps_inject_t_stop ||
+            h_pr(IPT_BIRTH, p) > current_time ||
+            (ps_removed_excluded_early_cohort &&
+             h_pr(IPT_BIRTH, p) < ps_remove_birth_time_before);
+      } else {
+        local_payload_invalid = true;
       }
     }
   }
 
 #if MPI_PARALLEL_ENABLED
+  int payload_invalid = local_payload_invalid ? 1 : 0;
+  int global_payload_invalid = 0;
+  MPI_Allreduce(&payload_invalid, &global_payload_invalid, 1, MPI_INT, MPI_MAX,
+                MPI_COMM_WORLD);
+  if (global_payload_invalid != 0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock particle provenance payload is invalid."
+              << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+
+  const int nranks = global_variable::nranks;
   int global_max = -1;
   int global_baseline_max = -1;
   MPI_Allreduce(&local_max, &global_max, 1, MPI_INT, MPI_MAX, MPI_COMM_WORLD);
   MPI_Allreduce(&local_baseline_max, &global_baseline_max, 1, MPI_INT, MPI_MAX,
                 MPI_COMM_WORLD);
+  std::vector<int> send_counts(nranks, 0);
+  std::vector<int> recv_counts(nranks, 0);
+  for (const int tag : local_tags) ++send_counts[tag % nranks];
+  MPI_Alltoall(send_counts.data(), 1, MPI_INT, recv_counts.data(), 1, MPI_INT,
+               MPI_COMM_WORLD);
+  std::vector<int> send_displs(nranks, 0);
+  std::vector<int> recv_displs(nranks, 0);
+  int send_total = 0;
+  int recv_total = 0;
+  for (int rank = 0; rank < nranks; ++rank) {
+    if (send_counts[rank] > std::numeric_limits<int>::max() - send_total ||
+        recv_counts[rank] > std::numeric_limits<int>::max() - recv_total) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "pic_parallel_shock particle tag audit exceeds MPI count limits."
+                << std::endl;
+      restart_utils::AbortOnFatalError();
+    }
+    send_displs[rank] = send_total;
+    recv_displs[rank] = recv_total;
+    send_total += send_counts[rank];
+    recv_total += recv_counts[rank];
+  }
+  const std::int64_t audited_tag_count = ps_tag_seeded ? ps_next_tag :
+      static_cast<std::int64_t>(global_max) + 1;
+  const std::int64_t max_owner_tags =
+      (audited_tag_count + static_cast<std::int64_t>(nranks) - 1) / nranks;
+  int local_owner_overflow = recv_total > max_owner_tags ? 1 : 0;
+  int global_owner_overflow = 0;
+  MPI_Allreduce(&local_owner_overflow, &global_owner_overflow, 1, MPI_INT, MPI_MAX,
+                MPI_COMM_WORLD);
+  if (global_owner_overflow != 0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock particle tag audit exceeds owner allocation bounds."
+              << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+  std::vector<int> send_tags(send_total, 0);
+  std::vector<int> recv_tags(recv_total, 0);
+  std::vector<int> send_cursor = send_displs;
+  for (const int tag : local_tags) {
+    const int owner = tag % nranks;
+    send_tags[send_cursor[owner]++] = tag;
+  }
+  MPI_Alltoallv(send_tags.data(), send_counts.data(), send_displs.data(), MPI_INT,
+                recv_tags.data(), recv_counts.data(), recv_displs.data(), MPI_INT,
+                MPI_COMM_WORLD);
+  std::sort(recv_tags.begin(), recv_tags.end());
+  int local_duplicate =
+      std::adjacent_find(recv_tags.begin(), recv_tags.end()) != recv_tags.end() ? 1 : 0;
+  int global_duplicate = 0;
+  MPI_Allreduce(&local_duplicate, &global_duplicate, 1, MPI_INT, MPI_MAX,
+                MPI_COMM_WORLD);
+  if (global_duplicate != 0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock particle tags are not globally unique."
+              << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
 #else
+  if (local_payload_invalid) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock particle provenance payload is invalid."
+              << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+  std::sort(local_tags.begin(), local_tags.end());
+  if (std::adjacent_find(local_tags.begin(), local_tags.end()) != local_tags.end()) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock particle tags are not globally unique."
+              << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
   int global_max = local_max;
   int global_baseline_max = local_baseline_max;
 #endif
@@ -1056,7 +1229,7 @@ void SeedNextTag(particles::Particles *ppart) {
   ps_next_tag = start;
   ps_tag_seeded = true;
   ps_tag_progression_validated = true;
-  StoreRuntimeStateForRestart();
+  StoreRuntimeStateForRestart(current_time);
 }
 
 void ApplyParallelShockGasSubtraction(Mesh *pm, const Real stage_weight) {
@@ -1198,12 +1371,30 @@ void ApplyParallelShockGasSubtraction(Mesh *pm, const Real stage_weight) {
     u0(m, IM3, k, j, i) -= d_dmz(n);
     u0(m, IEN, k, j, i) -= d_de(n);
   });
+  std::array<Real, 5> stage_delta = {};
+  for (const GasDelta &d : ps_injection_transaction_gas_deltas) {
+    stage_delta[0] += d.dm*d.vol;
+    stage_delta[1] += d.dmx*d.vol;
+    stage_delta[2] += d.dmy*d.vol;
+    stage_delta[3] += d.dmz*d.vol;
+    stage_delta[4] += d.de*d.vol;
+  }
+  // Qualified shock injection uses SSPRK1/2/3, whose source-only low-storage
+  // recurrence is S <- beta*(S + Delta).
+  for (int n=0; n<5; ++n) {
+    ps_injection_transaction_applied_local[n] =
+        stage_weight*(ps_injection_transaction_applied_local[n] + stage_delta[n]);
+  }
 }
 
 void PrepareParallelShockInjectionTransaction(Mesh *pm) {
   if (ps_injection_transaction_cycle == pm->ncycle) return;
   ps_injection_transaction_cycle = pm->ncycle;
   ps_injection_transaction_gas_deltas.clear();
+  ps_injection_transaction_expected_global.fill(0.0);
+  ps_injection_transaction_applied_local.fill(0.0);
+  ps_injection_transaction_abs_global.fill(0.0);
+  ps_injection_transaction_terms_global = 1.0;
   if (!ps_enable_injection) return;
   if (pm->time < ps_inject_t_start || pm->time > ps_inject_t_stop) return;
 
@@ -1220,7 +1411,7 @@ void PrepareParallelShockInjectionTransaction(Mesh *pm) {
   // once per physical cycle, then replay only the matching RK-weighted fluid
   // subtraction on later stages.
   auto *ppart = pmbp->ppart;
-  SeedNextTag(ppart);
+  SeedNextTag(ppart, pm->time);
   auto &indcs = pm->mb_indcs;
   const int is = indcs.is;
   const int ie = indcs.ie;
@@ -1369,7 +1560,7 @@ void PrepareParallelShockInjectionTransaction(Mesh *pm) {
   }
   if (ninj_global <= 0) {
     ps_mass_reservoir_global = reservoir_after;
-    StoreRuntimeStateForRestart();
+    StoreRuntimeStateForRestart(pm->time);
     return;
   }
 
@@ -1388,6 +1579,7 @@ void PrepareParallelShockInjectionTransaction(Mesh *pm) {
   injected.reserve(static_cast<std::size_t>(
       std::ceil(static_cast<Real>(ninj_global)*area_total/global_running_area)));
   Real injected_local[6] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+  Real injected_abs_local[5] = {0.0, 0.0, 0.0, 0.0, 0.0};
 
   const Real frame_vx = FrameVelocityOffset(pm->time);
   const Real surface_vx = ps_shock_speed + frame_vx;
@@ -1461,6 +1653,11 @@ void PrepareParallelShockInjectionTransaction(Mesh *pm) {
     injected_local[3] += ps_particle_macro_mass*state_y;
     injected_local[4] += ps_particle_macro_mass*state_z;
     injected_local[5] += ps_particle_macro_mass*particle_energy;
+    injected_abs_local[0] += ps_particle_macro_mass;
+    injected_abs_local[1] += std::abs(ps_particle_macro_mass*state_x);
+    injected_abs_local[2] += std::abs(ps_particle_macro_mass*state_y);
+    injected_abs_local[3] += std::abs(ps_particle_macro_mass*state_z);
+    injected_abs_local[4] += std::abs(ps_particle_macro_mass*particle_energy);
     if (!ps_enable_subtraction) continue;
     const auto key = std::make_tuple(cell.m, cell.k, cell.j, cell.i);
     auto dit = gas_deltas.find(key);
@@ -1470,6 +1667,7 @@ void PrepareParallelShockInjectionTransaction(Mesh *pm) {
       delta.k = cell.k;
       delta.j = cell.j;
       delta.i = cell.i;
+      delta.vol = cell.vol;
       delta.dm = 0.0;
       delta.dmx = 0.0;
       delta.dmy = 0.0;
@@ -1496,10 +1694,14 @@ void PrepareParallelShockInjectionTransaction(Mesh *pm) {
   }
 #if MPI_PARALLEL_ENABLED
   Real injected_global[6] = {};
+  Real injected_abs_global[5] = {};
   MPI_Allreduce(injected_local, injected_global, 6, MPI_ATHENA_REAL, MPI_SUM,
+                MPI_COMM_WORLD);
+  MPI_Allreduce(injected_abs_local, injected_abs_global, 5, MPI_ATHENA_REAL, MPI_SUM,
                 MPI_COMM_WORLD);
 #else
   Real *injected_global = injected_local;
+  Real *injected_abs_global = injected_abs_local;
 #endif
   if (std::abs(injected_global[0] - static_cast<Real>(ninj_global)) > 0.5) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -1508,15 +1710,33 @@ void PrepareParallelShockInjectionTransaction(Mesh *pm) {
               << "does not match the budget." << std::endl;
     restart_utils::AbortOnFatalError();
   }
+  const Real expected_injected_mass = injected_global[0]*ps_particle_macro_mass;
+  if (!ParallelShockLedgerValuesAgree(injected_global[1], expected_injected_mass,
+                                      injected_global[0])) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock injected-particle mass accounting is inconsistent."
+              << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+  if (ps_enable_subtraction) {
+    ps_injection_transaction_terms_global =
+        std::max(static_cast<Real>(1.0), injected_global[0]);
+    for (int n=0; n<5; ++n) {
+      ps_injection_transaction_expected_global[n] = injected_global[n + 1];
+      ps_injection_transaction_abs_global[n] = injected_abs_global[n];
+    }
+  }
   ps_mass_reservoir_global = reservoir_after;
   ps_next_tag = tag_base + static_cast<std::int64_t>(ninj_global);
   ps_injected_cr_count_global += injected_global[0];
-  ps_injected_cr_mass_global += injected_global[1];
+  ps_injected_cr_mass_global =
+      ps_injected_cr_count_global*ps_particle_macro_mass;
   ps_injected_cr_momentum_x1_global += injected_global[2];
   ps_injected_cr_momentum_x2_global += injected_global[3];
   ps_injected_cr_momentum_x3_global += injected_global[4];
   ps_injected_cr_energy_global += injected_global[5];
-  StoreRuntimeStateForRestart();
+  StoreRuntimeStateForRestart(pm->time);
   if (ninject <= 0) {
     pm->CountParticles();
     return;
@@ -1581,6 +1801,54 @@ void ParallelShockSource(Mesh *pm, const Real bdt) {
     restart_utils::AbortOnFatalError();
   }
   ApplyParallelShockGasSubtraction(pm, bdt/pm->dt);
+}
+
+void ValidateParallelShockInjectionTransaction(Mesh *pm) {
+  if (!ps_enable_injection || !ps_enable_subtraction) return;
+#if MPI_PARALLEL_ENABLED
+  std::array<Real, 5> applied_global = {};
+  Real delta_terms_global = 0.0;
+  const Real delta_terms_local =
+      static_cast<Real>(ps_injection_transaction_gas_deltas.size());
+  MPI_Allreduce(ps_injection_transaction_applied_local.data(), applied_global.data(),
+                5, MPI_ATHENA_REAL, MPI_SUM, MPI_COMM_WORLD);
+  MPI_Allreduce(&delta_terms_local, &delta_terms_global, 1, MPI_ATHENA_REAL, MPI_SUM,
+                MPI_COMM_WORLD);
+#else
+  const std::array<Real, 5> &applied_global = ps_injection_transaction_applied_local;
+  const Real delta_terms_global =
+      static_cast<Real>(ps_injection_transaction_gas_deltas.size());
+#endif
+  // Count particle aggregation, cell aggregation and worst-case qualified
+  // three-stage SSPRK shadow arithmetic, plus a conservative rank reduction depth.
+  Real terms = ps_injection_transaction_terms_global +
+      8.0*delta_terms_global + 4.0*global_variable::nranks;
+  if (ps_test_source_transaction_terms_override) {
+    terms = ps_test_source_transaction_terms;
+  }
+  for (int n=0; n<5; ++n) {
+    if (!ParallelShockSourceTransactionValuesAgree(
+            applied_global[n], ps_injection_transaction_expected_global[n],
+            ps_injection_transaction_abs_global[n], terms)) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "pic_parallel_shock applied gas-subtraction transaction does not "
+                << "match the injected-particle ledger." << std::endl;
+      restart_utils::AbortOnFatalError();
+    }
+  }
+  if (global_variable::my_rank == 0 && ps_feedback_diag_dcycle > 0 &&
+      (pm->ncycle % ps_feedback_diag_dcycle) == 0) {
+    std::cout << "pic_parallel_shock source_transaction_diag: cycle=" << pm->ncycle
+              << " applied=(" << applied_global[0] << "," << applied_global[1]
+              << "," << applied_global[2] << "," << applied_global[3] << ","
+              << applied_global[4] << ") expected=("
+              << ps_injection_transaction_expected_global[0] << ","
+              << ps_injection_transaction_expected_global[1] << ","
+              << ps_injection_transaction_expected_global[2] << ","
+              << ps_injection_transaction_expected_global[3] << ","
+              << ps_injection_transaction_expected_global[4] << ")" << std::endl;
+  }
 }
 
 void ParallelShockRefinement(MeshBlockPack *pmbp) {
@@ -1821,6 +2089,7 @@ void MaybePrintFeedbackDiagnostics(Mesh *pm) {
 void ParallelShockWorkInLoop(Mesh *pm) {
   if (pm == nullptr || pm->dt <= 0.0) return;
   if (ps_frame_diag_dcycle < 1) ps_frame_diag_dcycle = 1;
+  ValidateParallelShockInjectionTransaction(pm);
 
   if (!ps_enable_frame_tracking) {
     MaybePrintFeedbackDiagnostics(pm);
@@ -1896,7 +2165,7 @@ void ParallelShockWorkBeforeLoop(Mesh *pm) {
   if (pm == nullptr || pm->dt <= 0.0) return;
   MeshBlockPack *pmbp = pm->pmb_pack;
   if (pmbp != nullptr && pmbp->ppart != nullptr) {
-    SeedNextTag(pmbp->ppart);
+    SeedNextTag(pmbp->ppart, pm->time);
   }
   RemoveExcludedEarlyInjectedParticles(pm);
   PrepareParallelShockInjectionTransaction(pm);
@@ -1985,6 +2254,10 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
       "problem", "ps_enable_gas_subtraction", true);
   ps_enable_curvature_amr = pin->GetOrAddBoolean(
       "problem", "ps_enable_curvature_amr", true);
+  ps_test_source_transaction_terms_override = pin->GetOrAddBoolean(
+      "problem", "ps_test_source_transaction_terms_override", false);
+  ps_test_source_transaction_terms = pin->GetOrAddReal(
+      "problem", "ps_test_source_transaction_terms", 1.0);
   ps_enable_frame_tracking = pin->GetOrAddBoolean(
       "problem", "ps_enable_frame_tracking", false);
   std::string frame_mode = pin->GetOrAddString("problem", "ps_frame_mode",
@@ -2272,8 +2545,12 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
       ps_tag_seeded = true;
     }
   }
-  ValidateParallelShockRuntimeLedger(restart ? "restart" : "runtime");
-  StoreRuntimeStateForRestart();
+  ValidateParallelShockRuntimeLedger(restart ? "restart" : "runtime",
+                                     pmy_mesh_->time);
+  if (restart && pmbp->ppart != nullptr) {
+    SeedNextTag(pmbp->ppart, pmy_mesh_->time);
+  }
+  StoreRuntimeStateForRestart(pmy_mesh_->time);
   ConfigureSeedNoisePhases();
 
   if (ps_enable_frame_tracking && ps_frame_require_uniform &&

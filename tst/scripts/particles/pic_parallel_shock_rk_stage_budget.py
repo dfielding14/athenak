@@ -25,6 +25,11 @@ _FEEDBACK_DIAG_RE = re.compile(
     r'dpdt_rms=\(([^,]+),([^,]+),([^)]+)\).*?'
     r'dedt_rms=([^ ]+)'
 )
+_SOURCE_TRANSACTION_DIAG_RE = re.compile(
+    r'pic_parallel_shock source_transaction_diag: .*?'
+    r'applied=\(([^,]+),([^,]+),([^,]+),([^,]+),([^)]+)\) .*?'
+    r'expected=\(([^,]+),([^,]+),([^,]+),([^,]+),([^)]+)\)'
+)
 
 
 def _athena_exe_dir():
@@ -112,6 +117,16 @@ def _run_case(integrator, subtraction):
     match = _FEEDBACK_DIAG_RE.search(output)
     if match is None:
         raise RuntimeError('Missing birth-cycle feedback diagnostic for ' + basename)
+    source_match = _SOURCE_TRANSACTION_DIAG_RE.search(output)
+    if subtraction and source_match is None:
+        raise RuntimeError('Missing source-transaction diagnostic for ' + basename)
+    source_transaction = None
+    if source_match is not None:
+        values = np.array([float(value) for value in source_match.groups()])
+        source_transaction = {
+            'applied': values[:5],
+            'expected': values[5:],
+        }
     return {
         'next_tag': _restart_parameter(restart, 'problem', 'ps_next_tag', int),
         'reservoir': _restart_parameter(
@@ -132,6 +147,7 @@ def _run_case(integrator, subtraction):
         'gas_energy': energy,
         'dt': consumed_dt,
         'feedback_diag': np.array([float(value) for value in match.groups()]),
+        'source_transaction': source_transaction,
     }
 
 
@@ -233,6 +249,22 @@ def run(**kwargs):
         ],
         'gas subtraction requires <particles>/pic_background_mode=coupled',
     )
+    _run_expected_parameter_rejection(
+        'source_transaction_relative_bound_reject',
+        [
+            'problem/ps_test_source_transaction_terms_override=true',
+            'problem/ps_test_source_transaction_terms=3.0e15',
+        ],
+        'applied gas-subtraction transaction does not match the injected-particle ledger',
+    )
+    _run_expected_parameter_rejection(
+        'source_transaction_nonfinite_terms_reject',
+        [
+            'problem/ps_test_source_transaction_terms_override=true',
+            'problem/ps_test_source_transaction_terms=nan',
+        ],
+        'applied gas-subtraction transaction does not match the injected-particle ledger',
+    )
 
 
 def analyze():
@@ -270,9 +302,13 @@ def analyze():
         ok = np.linalg.norm(off['feedback_diag'][:3]) > 0.0 and ok
         ok = np.all(np.isfinite(gas_momentum_removed)) and ok
         ok = np.isfinite(gas_energy_removed) and gas_energy_removed > 0.0 and ok
+        source_transaction = on['source_transaction']
+        ok = source_transaction is not None and ok
         ok = np.max(np.abs(
-            gas_momentum_removed - off['injected_ledger'][2:5])) <= 1.0e-5 and ok
-        ok = abs(gas_energy_removed - off['injected_ledger'][5]) <= 1.0e-5 and ok
+            source_transaction['applied'] -
+            source_transaction['expected'])) <= 1.0e-5 and ok
+        ok = np.max(np.abs(
+            source_transaction['expected'] - off['injected_ledger'][1:])) <= 1.0e-5 and ok
         if reference is None:
             reference = (
                 off['next_tag'], off['reservoir'], off['injected_ledger'],

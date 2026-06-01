@@ -7,6 +7,8 @@ import json
 import logging
 import math
 import os
+import shutil
+import struct
 import subprocess
 import sys
 
@@ -36,6 +38,13 @@ _REMOVED_FLOAT_FIELDS = [
     "ps_removed_cr_energy_global",
 ]
 _MACRO_MASS = 1.0e-3
+_PIC_RESTART_MAGIC = 0x5049435253543031
+_EXPECTED_RESTART_SCHEMA = 7
+_MODEL_INT_COUNT = 31
+_MODEL_REAL_COUNT = 37
+_REAL_BYTES = 8
+_MPIEXEC = os.environ.get("MPIEXEC", "mpiexec")
+_MPI_RELOAD_NPROC_ENV = "ATHENA_PIC_PARALLEL_SHOCK_MPI_RELOAD_NPROC"
 _RESULTS = {}
 
 
@@ -140,13 +149,15 @@ def _restart_metadata(path):
     }
 
 
-def _run_athena(label, arguments, restart_path=None):
+def _run_athena(label, arguments, restart_path=None, nproc=1):
     command = ["./athena"]
     if restart_path is None:
         command += ["-i", _athena_input_path()]
     else:
         command += ["-r", os.path.relpath(restart_path, _athena_exe_dir())]
     command += list(arguments)
+    if nproc > 1:
+        command = [_MPIEXEC, "-n", str(nproc)] + command
     logger.info("Executing %s: %s", label, " ".join(command))
     proc = subprocess.run(
         command, cwd=_athena_exe_dir(), capture_output=True, text=True
@@ -176,6 +187,208 @@ def _run_athena_expect_fail(label, arguments, expected, restart_path=None):
             "Unexpected rejection reason for " + label + "\nExpected substring: "
             + expected + "\nOutput:\n" + output
         )
+
+
+def _fnv1a64(path):
+    value = 14695981039346656037
+    with open(path, "rb") as handle:
+        while True:
+            payload = handle.read(1024 * 1024)
+            if not payload:
+                break
+            for byte in payload:
+                value ^= byte
+                value = (value * 1099511628211) & 0xFFFFFFFFFFFFFFFF
+    return value
+
+
+def _write_completion_marker(path):
+    with open(path + ".complete", "w", encoding="ascii") as handle:
+        handle.write("ATHENAK_RESTART_COMPLETE_V1\n")
+        handle.write("size=" + str(os.path.getsize(path)) + "\n")
+        handle.write("fnv1a64=" + format(_fnv1a64(path), "016x") + "\n")
+
+
+def _write_shared_restart_publication(path):
+    _write_completion_marker(path)
+    manifest_path = path + ".manifest"
+    manifest = {
+        "schema": "ATHENAK_RESTART_MANIFEST_V1",
+        "members": [{
+            "path": os.path.relpath(path, _athena_exe_dir()),
+            "size": os.path.getsize(path),
+            "fnv1a64": format(_fnv1a64(path), "016x"),
+        }],
+    }
+    with open(manifest_path, "w", encoding="ascii") as handle:
+        json.dump(manifest, handle, indent=2, sort_keys=True)
+        handle.write("\n")
+    _write_completion_marker(manifest_path)
+
+
+def _particle_restart_payload_offsets(data, restart_path):
+    marker = struct.pack("<Q", _PIC_RESTART_MAGIC)
+    section = data.find(marker)
+    if section < 0:
+        raise RuntimeError("Particle restart marker not found in " + restart_path)
+    offset = section + struct.calcsize("<Q")
+    meta_fmt = "<15i"
+    (version, nmb_section, nrdata, nidata, *_unused) = struct.unpack_from(
+        meta_fmt, data, offset
+    )
+    offset += struct.calcsize(meta_fmt)
+    offset += _REAL_BYTES
+    offset += _MODEL_INT_COUNT * struct.calcsize("<i")
+    offset += _MODEL_REAL_COUNT * _REAL_BYTES
+    npart_section = struct.unpack_from("<Q", data, offset)[0]
+    offset += struct.calcsize("<Q")
+    if (
+        version != _EXPECTED_RESTART_SCHEMA
+        or nmb_section <= 0
+        or nrdata <= 0
+        or nidata <= 3
+        or npart_section <= 1
+    ):
+        raise RuntimeError("Unexpected particle restart metadata in " + restart_path)
+    pr_real_offset = offset + nmb_section * struct.calcsize("<i")
+    pr_int_offset = pr_real_offset + npart_section * nrdata * _REAL_BYTES
+    return pr_real_offset, pr_int_offset, npart_section, nrdata, nidata
+
+
+def _first_shock_particle_index(data, pr_int_offset, npart_section, nidata):
+    for particle in range(npart_section):
+        source = struct.unpack_from(
+            "<i", data, pr_int_offset + (particle * nidata + 3) * 4
+        )[0]
+        if source == 1:
+            return particle
+    raise RuntimeError("No shock-injected particle found in restart payload")
+
+
+def _crossed_particle_payload_mutations(tag_floor):
+    return {
+        "unknown_source": (
+            lambda data, _pr, pi, _np, _nr, _ni: struct.pack_into(
+                "<i", data, pi + 3 * 4, 99
+            ),
+            "pic_parallel_shock particle provenance payload is invalid",
+        ),
+        "baseline_tag_at_floor": (
+            lambda data, _pr, pi, _np, _nr, _ni: struct.pack_into(
+                "<i", data, pi + 1 * 4, tag_floor
+            ),
+            "pic_parallel_shock particle provenance payload is invalid",
+        ),
+        "non_finite_real_payload": (
+            lambda data, pr, _pi, _np, _nr, _ni: struct.pack_into(
+                "<d", data, pr, math.nan
+            ),
+            "pic_parallel_shock particle provenance payload is invalid",
+        ),
+        "duplicate_tag": (
+            lambda data, _pr, pi, _np, _nr, nidata: struct.pack_into(
+                "<i", data, pi + (nidata + 1) * 4,
+                struct.unpack_from("<i", data, pi + 1 * 4)[0],
+            ),
+            "pic_parallel_shock particle tags are not globally unique",
+        ),
+    }
+
+
+def _mutate_first_shock_real(field, value):
+    def mutate(data, pr_real_offset, pr_int_offset, npart_section, nrdata, nidata):
+        particle = _first_shock_particle_index(
+            data, pr_int_offset, npart_section, nidata
+        )
+        struct.pack_into(
+            "<d", data, pr_real_offset + (particle * nrdata + field) * _REAL_BYTES,
+            value,
+        )
+    return mutate
+
+
+def _mutate_first_shock_int(field, value):
+    def mutate(data, _pr_real_offset, pr_int_offset, npart_section, _nrdata, nidata):
+        particle = _first_shock_particle_index(
+            data, pr_int_offset, npart_section, nidata
+        )
+        struct.pack_into(
+            "<i", data, pr_int_offset + (particle * nidata + field) * 4, value
+        )
+    return mutate
+
+
+def _shock_particle_payload_mutations():
+    return {
+        "shock_species": (
+            _mutate_first_shock_int(2, 1),
+            "pic_parallel_shock particle provenance payload is invalid",
+        ),
+        "shock_q_over_m": (
+            _mutate_first_shock_real(6, 2.0),
+            "pic_parallel_shock particle provenance payload is invalid",
+        ),
+        "shock_macro_weight": (
+            _mutate_first_shock_real(22, 2.0),
+            "pic_parallel_shock particle provenance payload is invalid",
+        ),
+        "shock_birth_time": (
+            _mutate_first_shock_real(25, 1.0),
+            "pic_parallel_shock particle provenance payload is invalid",
+        ),
+    }
+
+
+def _run_corrupted_particle_restart_rejections(
+    source_restart, restart_basename, mutations, continuation_nlim=3
+):
+    rejected = []
+    for label, (mutate, expected) in mutations.items():
+        corrupt_path = os.path.join(
+            _athena_exe_dir(), "rst", restart_basename + "_" + label + ".00000.rst"
+        )
+        shutil.copyfile(source_restart, corrupt_path)
+        with open(corrupt_path, "rb") as handle:
+            data = bytearray(handle.read())
+        pr_real_offset, pr_int_offset, npart_section, nrdata, nidata = (
+            _particle_restart_payload_offsets(data, corrupt_path)
+        )
+        mutate(data, pr_real_offset, pr_int_offset, npart_section, nrdata, nidata)
+        with open(corrupt_path, "wb") as handle:
+            handle.write(data)
+        _write_shared_restart_publication(corrupt_path)
+        _run_athena_expect_fail(
+            "corrupt_particle_" + label,
+            [
+                "job/basename=" + restart_basename + "_" + label + "_run",
+                "time/nlim=" + str(continuation_nlim),
+            ],
+            expected,
+            restart_path=corrupt_path,
+        )
+        rejected.append(label)
+    return sorted(rejected)
+
+
+def _particle_restart_payload_census(path):
+    with open(path, "rb") as handle:
+        data = bytearray(handle.read())
+    _, pr_int_offset, npart_section, _, nidata = _particle_restart_payload_offsets(
+        data, path
+    )
+    sources = [
+        struct.unpack_from("<i", data, pr_int_offset + (particle * nidata + 3) * 4)[0]
+        for particle in range(npart_section)
+    ]
+    gids = [
+        struct.unpack_from("<i", data, pr_int_offset + particle * nidata * 4)[0]
+        for particle in range(npart_section)
+    ]
+    return {
+        "particle_count": int(npart_section),
+        "shock_particle_count": sources.count(1),
+        "distinct_meshblock_gids": len(set(gids)),
+    }
 
 
 def _particle_snapshot(basename):
@@ -230,6 +443,39 @@ def _metadata_errors(actual, expected):
         name: abs(actual[name] - expected[name])
         for name in _REMOVED_FLOAT_FIELDS + ["ps_mass_reservoir_global"]
     }
+
+
+def _run_optional_nonempty_mpi_restart_roundtrip():
+    nproc = int(os.environ.get(_MPI_RELOAD_NPROC_ENV, "0"))
+    if nproc <= 1:
+        return "not_requested"
+    segment = "pic_parallel_shock_startup_sink_mpi_seg"
+    restart = "pic_parallel_shock_startup_sink_mpi_restart"
+    _remove_outputs(segment)
+    _remove_outputs(restart)
+    mpi_layout = ["meshblock/nx1=4"]
+    _run_athena(
+        "nonempty_mpi_checkpoint",
+        ["job/basename=" + segment, "time/nlim=1", *mpi_layout],
+        nproc=nproc,
+    )
+    checkpoint = _latest_restart(segment)
+    census = _particle_restart_payload_census(checkpoint)
+    if (
+        census["particle_count"] <= 0
+        or census["shock_particle_count"] <= 0
+        or census["distinct_meshblock_gids"] <= 1
+    ):
+        raise RuntimeError(
+            "MPI restart checkpoint did not exercise distributed particles"
+        )
+    _run_athena(
+        "nonempty_mpi_restart_continuation",
+        ["job/basename=" + restart, "time/nlim=2"],
+        restart_path=checkpoint,
+        nproc=nproc,
+    )
+    return census
 
 
 def _summary():
@@ -318,6 +564,12 @@ def _summary():
             _RESULTS["explicit_incomplete_restart_rejected"],
         "invalid_restart_ledgers_rejected":
             _RESULTS["invalid_restart_ledgers_rejected"],
+        "invalid_restart_particle_payloads_rejected":
+            _RESULTS["invalid_restart_particle_payloads_rejected"],
+        "nondecimal_ledger_roundtrip": _RESULTS["nondecimal_ledger_roundtrip"],
+        "large_count_ledger_checkpoint": _RESULTS["large_count_ledger_checkpoint"],
+        "optional_nonempty_mpi_restart_roundtrip":
+            _RESULTS["optional_nonempty_mpi_restart_roundtrip"],
         "sink_vs_pre_crossing_particle_absolute_errors": sink_errors,
         "crossed_vs_full_metadata_absolute_errors": _metadata_errors(
             full_metadata, crossed_metadata
@@ -351,7 +603,8 @@ def run(**kwargs):
         "pre_crossing",
         ["job/basename=" + basenames["pre"], "time/nlim=1"],
     )
-    _RESULTS["pre_metadata"] = _restart_metadata(_latest_restart(basenames["pre"]))
+    pre_restart = _latest_restart(basenames["pre"])
+    _RESULTS["pre_metadata"] = _restart_metadata(pre_restart)
     _RESULTS["pre_particles"] = _particle_snapshot(basenames["pre"])
 
     crossed_output = _run_athena(
@@ -374,6 +627,21 @@ def run(**kwargs):
     numeric_metadata_error = (
         "pic_parallel_shock restart CR ledger numeric metadata is invalid"
     )
+    premature_sink_segment = basenames["restart"] + "_premature_sink_seg"
+    _remove_outputs(premature_sink_segment)
+    _run_athena(
+        "premature_sink_checkpoint",
+        [
+            "job/basename=" + premature_sink_segment,
+            "time/nlim=1",
+            "problem/ps_inject_t_start=0.08",
+            "problem/ps_inject_t_stop=0.16",
+            "problem/ps_remove_birth_time_before=0.2",
+        ],
+    )
+    premature_sink_restart = _latest_restart(premature_sink_segment)
+    if _restart_metadata(premature_sink_restart)["ps_removed_excluded_early_cohort"]:
+        raise RuntimeError("Premature-sink fixture crossed the sink threshold")
     invalid_ledger_overrides = {
         "inconsistent_injected_restart_mass": (
             ["problem/ps_injected_cr_mass_global=0.134"], numeric_metadata_error
@@ -407,10 +675,13 @@ def run(**kwargs):
                 "problem/ps_next_tag="
                 + str(int(_RESULTS["crossed_metadata"]["ps_injected_cr_count_global"])),
             ],
-            "pic_parallel_shock persisted CR tag progression is invalid",
+            "pic_parallel_shock particle provenance payload is invalid",
         ),
         "unseeded_restart_tag_progression": (
             ["problem/ps_tag_seeded=false"], numeric_metadata_error
+        ),
+        "premature_sink_completion": (
+            ["problem/ps_removed_excluded_early_cohort=true"], numeric_metadata_error
         ),
     }
     for label, (overrides, expected) in invalid_ledger_overrides.items():
@@ -421,10 +692,130 @@ def run(**kwargs):
                 *overrides,
             ],
             expected,
-            restart_path=crossed_restart,
+            restart_path=(
+                premature_sink_restart if label == "premature_sink_completion"
+                else crossed_restart
+            ),
         )
     _RESULTS["invalid_restart_ledgers_rejected"] = sorted(
         invalid_ledger_overrides
+    )
+    _RESULTS["invalid_restart_particle_payloads_rejected"] = sorted(
+        _run_corrupted_particle_restart_rejections(
+            crossed_restart,
+            basenames["restart"] + "_corrupt",
+            _crossed_particle_payload_mutations(
+                _RESULTS["crossed_metadata"]["ps_injection_tag_floor"]
+            ),
+        )
+        + _run_corrupted_particle_restart_rejections(
+            pre_restart,
+            basenames["restart"] + "_corrupt_pre",
+            _shock_particle_payload_mutations(),
+        )
+        + _run_corrupted_particle_restart_rejections(
+            pre_restart,
+            basenames["restart"] + "_corrupt_zero_cycle",
+            {
+                "zero_cycle_shock_macro_weight": (
+                    _mutate_first_shock_real(22, 2.0),
+                    "pic_parallel_shock particle provenance payload is invalid",
+                )
+            },
+            continuation_nlim=1,
+        )
+    )
+
+    post_sink_segment = basenames["restart"] + "_post_sink_late_seg"
+    _remove_outputs(post_sink_segment)
+    _run_athena(
+        "post_sink_late_particle_checkpoint",
+        [
+            "job/basename=" + post_sink_segment,
+            "time/nlim=3",
+            "problem/ps_inject_t_stop=1.0",
+        ],
+    )
+    post_sink_restart = _latest_restart(post_sink_segment)
+    if not _restart_metadata(post_sink_restart)["ps_removed_excluded_early_cohort"]:
+        raise RuntimeError("Post-sink lifecycle fixture did not cross the sink threshold")
+    _RESULTS["invalid_restart_particle_payloads_rejected"] += (
+        _run_corrupted_particle_restart_rejections(
+            post_sink_restart,
+            basenames["restart"] + "_corrupt_post_sink",
+            {
+                "post_sink_early_birth_time": (
+                    _mutate_first_shock_real(25, 0.0),
+                    "pic_parallel_shock particle provenance payload is invalid",
+                )
+            },
+            continuation_nlim=4,
+        )
+    )
+    _RESULTS["invalid_restart_particle_payloads_rejected"].sort()
+
+    precision_seg = basenames["restart"] + "_precision_seg"
+    precision_rst = basenames["restart"] + "_precision_rst"
+    _remove_outputs(precision_seg)
+    _remove_outputs(precision_rst)
+    _run_athena(
+        "nondecimal_ledger_checkpoint",
+        [
+            "job/basename=" + precision_seg,
+            "time/nlim=1",
+            "particles/deposit_qscale=0.001234567890123",
+        ],
+    )
+    _run_athena(
+        "nondecimal_ledger_continuation",
+        ["job/basename=" + precision_rst, "time/nlim=2"],
+        restart_path=_latest_restart(precision_seg),
+    )
+    _RESULTS["nondecimal_ledger_roundtrip"] = True
+    large_count_segment = basenames["restart"] + "_large_count_seg"
+    _remove_outputs(large_count_segment)
+    _run_athena(
+        "large_count_ledger_checkpoint",
+        [
+            "job/basename=" + large_count_segment,
+            "time/nlim=1",
+            "problem/ps_eta=100.0",
+        ],
+    )
+    large_count_restart = _latest_restart(large_count_segment)
+    large_count_metadata = _restart_metadata(large_count_restart)
+    if large_count_metadata["ps_injected_cr_count_global"] < 100000:
+        raise RuntimeError("Large-count ledger fixture did not inject enough particles")
+    _run_athena_expect_fail(
+        "large_count_inconsistent_mass",
+        [
+            "job/basename=" + large_count_segment + "_bad_mass",
+            "problem/ps_injected_cr_mass_global="
+            + str(
+                large_count_metadata["ps_injected_cr_count_global"] * _MACRO_MASS
+                - _MACRO_MASS
+            ),
+        ],
+        numeric_metadata_error,
+        restart_path=large_count_restart,
+    )
+    large_count_restart_basename = large_count_segment + "_rst"
+    _remove_outputs(large_count_restart_basename)
+    _run_athena(
+        "large_count_ledger_continuation",
+        ["job/basename=" + large_count_restart_basename, "time/nlim=2"],
+        restart_path=large_count_restart,
+    )
+    _RESULTS["large_count_ledger_checkpoint"] = {
+        "injected_particle_count": large_count_metadata["ps_injected_cr_count_global"],
+        "injected_mass": (
+            large_count_metadata["ps_injected_cr_count_global"] * _MACRO_MASS
+        ),
+        "inconsistent_mass_rejected": True,
+        "restart_continuation_passed": True,
+    }
+    _RESULTS["optional_nonempty_mpi_restart_roundtrip"] = (
+        _run_optional_nonempty_mpi_restart_roundtrip()
     )
 
     full_output = _run_athena(
@@ -490,11 +881,40 @@ def analyze():
             "non_finite_restart_ledger",
             "non_integral_restart_count",
             "out_of_range_restart_reservoir",
+            "premature_sink_completion",
             "reset_restart_tag_floor",
             "reset_restart_tag_progression",
             "rewound_restart_tag_window",
             "unseeded_restart_tag_progression",
         ]
+        and summary["invalid_restart_particle_payloads_rejected"] == [
+            "baseline_tag_at_floor",
+            "duplicate_tag",
+            "non_finite_real_payload",
+            "post_sink_early_birth_time",
+            "shock_birth_time",
+            "shock_macro_weight",
+            "shock_q_over_m",
+            "shock_species",
+            "unknown_source",
+            "zero_cycle_shock_macro_weight",
+        ]
+        and summary["nondecimal_ledger_roundtrip"]
+        and summary["large_count_ledger_checkpoint"]["injected_particle_count"] >= 100000
+        and summary["large_count_ledger_checkpoint"]["inconsistent_mass_rejected"]
+        and summary["large_count_ledger_checkpoint"]["restart_continuation_passed"]
+        and (
+            summary["optional_nonempty_mpi_restart_roundtrip"] == "not_requested"
+            or (
+                summary["optional_nonempty_mpi_restart_roundtrip"]["particle_count"] > 0
+                and summary["optional_nonempty_mpi_restart_roundtrip"][
+                    "shock_particle_count"
+                ] > 0
+                and summary["optional_nonempty_mpi_restart_roundtrip"][
+                    "distinct_meshblock_gids"
+                ] > 1
+            )
+        )
         and all(schema == 3 for schema in restart_schemas.values())
         and all(restart_ledgers_complete.values())
         and all(restart_tags_seeded.values())

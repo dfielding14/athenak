@@ -62,7 +62,7 @@ particle_type                      = cosmic_ray
 ppc                                = 0.5
 pusher                             = drift
 pic_enable_2d3v                    = true
-nspecies                           = 1
+nspecies                           = 2
 cr_distribution                    = center
 deposit_moments                    = false
 deposit_order                      = 1
@@ -80,6 +80,10 @@ pic_sort_interval                  = 0
 pic_random_seed                    = 54012
 
 <species0>
+mass   = 1.0
+charge = 1.0
+
+<species1>
 mass   = 1.0
 charge = 1.0
 
