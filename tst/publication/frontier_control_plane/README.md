@@ -100,9 +100,10 @@ repository policy or either active copy is not an authorization.
 
 ## Manual Allocation Accounting
 
-Direct `srun` allocations are a deviation from the registered submission path.
-They are never scientific evidence. If a reviewed prerequisite replay used
-direct `srun`, publish one exact read-only authorization JSON file below
+Direct scheduler allocations outside the registered submission path are
+deviations. They are never scientific evidence. If a reviewed prerequisite
+replay used direct `srun` or direct `sbatch`, publish one exact read-only
+authorization JSON file below
 `${PIC_ROOT}/policy/manual_accounting_authorizations/` and its byte-identical
 Project Home mirror, bind both paths and the SHA-256 digest in the reviewed
 storage policy, promote that policy, and reconcile the reviewed allocation IDs

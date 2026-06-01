@@ -290,6 +290,22 @@ class LedgerTests(unittest.TestCase):
         )
         self.assertEqual(totals["currently_reserved_node_hours"], 0.0)
 
+    def test_manual_direct_scheduler_reconciliation_counts_toward_consumed_budget(
+        self,
+    ) -> None:
+        event = self._manual_accounting_event()
+        event["accounting_scope"] = "manual_direct_scheduler_accounting_only"
+        event["notes"] = (
+            "Reviewed direct-scheduler accounting only; "
+            "ineligible for scientific evidence."
+        )
+        self.append(event)
+        totals = accounting(validate_primary_chain(self.ledger))
+        self.assertAlmostEqual(
+            totals["cumulative_consumed_node_hours"], 1.0 / 720.0
+        )
+        self.assertEqual(totals["currently_reserved_node_hours"], 0.0)
+
     def test_manual_direct_srun_reconciliation_rejects_under_bound_event(
         self,
     ) -> None:
@@ -311,6 +327,22 @@ class LedgerTests(unittest.TestCase):
         event = self._manual_accounting_event()
         event["cumulative_consumed_node_hours"] = 999.0
         with self.assertRaisesRegex(ValueError, "cumulative usage differs"):
+            self.append(event)
+
+    def test_manual_reconciliation_rejects_nonstring_accounting_scope(self) -> None:
+        event = self._manual_accounting_event()
+        event["accounting_scope"] = []
+        with self.assertRaisesRegex(
+            ValueError, "Manual-accounting ledger event semantics are invalid"
+        ):
+            self.append(event)
+
+    def test_manual_reconciliation_rejects_unknown_accounting_scope(self) -> None:
+        event = self._manual_accounting_event()
+        event["accounting_scope"] = "unknown_manual_scope"
+        with self.assertRaisesRegex(
+            ValueError, "Manual-accounting ledger event semantics are invalid"
+        ):
             self.append(event)
 
     def test_registered_reconciliation_rejects_inconsistent_usage(self) -> None:

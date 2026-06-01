@@ -90,10 +90,18 @@ CSV_FIELDS = [
 ]
 GENESIS_ANCHOR_FILENAME = "genesis_anchor.json"
 INCOMPLETE_MANUAL_ACCOUNTING_MARKER_FILENAME = "pending_manual_accounting.json"
-MANUAL_ACCOUNTING_SCOPE = "manual_direct_srun_accounting_only"
-MANUAL_ACCOUNTING_NOTES = (
-    "Reviewed direct-srun accounting only; ineligible for scientific evidence."
+MANUAL_DIRECT_SRUN_ACCOUNTING_SCOPE = "manual_direct_srun_accounting_only"
+MANUAL_DIRECT_SCHEDULER_ACCOUNTING_SCOPE = (
+    "manual_direct_scheduler_accounting_only"
 )
+MANUAL_ACCOUNTING_SCOPE_NOTES = {
+    MANUAL_DIRECT_SRUN_ACCOUNTING_SCOPE: (
+        "Reviewed direct-srun accounting only; ineligible for scientific evidence."
+    ),
+    MANUAL_DIRECT_SCHEDULER_ACCOUNTING_SCOPE: (
+        "Reviewed direct-scheduler accounting only; ineligible for scientific evidence."
+    ),
+}
 MANUAL_ACCOUNTING_TERMINAL_STATES = {
     "BOOT_FAIL",
     "CANCELLED",
@@ -959,7 +967,8 @@ def _validate_accounting_records(records: list[dict[str, object]]) -> None:
             if (
                 set(record) != MANUAL_ACCOUNTING_EVENT_FIELDS
                 or record.get("reconciled") is not True
-                or record.get("accounting_scope") != MANUAL_ACCOUNTING_SCOPE
+                or not isinstance(record.get("accounting_scope"), str)
+                or record["accounting_scope"] not in MANUAL_ACCOUNTING_SCOPE_NOTES
                 or record.get("scientific_evidence_eligible") is not False
                 or not isinstance(record.get("job_id"), str)
                 or not record["job_id"]
@@ -986,7 +995,8 @@ def _validate_accounting_records(records: list[dict[str, object]]) -> None:
                 or record.get("state") not in MANUAL_ACCOUNTING_TERMINAL_STATES
                 or not isinstance(record.get("timestamp"), str)
                 or not record["timestamp"]
-                or record.get("notes") != MANUAL_ACCOUNTING_NOTES
+                or record.get("notes")
+                != MANUAL_ACCOUNTING_SCOPE_NOTES[record["accounting_scope"]]
             ):
                 raise ValueError("Manual-accounting ledger event semantics are invalid")
             allocated_nodes = record.get("scheduler_reported_allocated_nodes")
@@ -1564,6 +1574,7 @@ def _validate_recoverable_manual_accounting_suffix(
     control_plane_version: str,
     active_policy_sha256: str,
     active_promotion_sha256: str,
+    accounting_scope: str,
 ) -> None:
     suffix = records[pre_tranche_sequence_number:]
     authorized_prefix = [
@@ -1604,7 +1615,7 @@ def _validate_recoverable_manual_accounting_suffix(
             != str(authorization_path)
             or record.get("manual_accounting_project_home_authorization_path")
             != str(project_home_authorization_path)
-            or record.get("accounting_scope") != MANUAL_ACCOUNTING_SCOPE
+            or record.get("accounting_scope") != accounting_scope
             or record.get("scientific_evidence_eligible") is not False
             or record.get("reconciled") is not True
             or record.get("control_plane_version") != control_plane_version
@@ -1621,7 +1632,7 @@ def _validate_recoverable_manual_accounting_suffix(
             or not isinstance(record.get("timestamp"), str)
             or not record["timestamp"]
             or record.get("notes")
-            != MANUAL_ACCOUNTING_NOTES
+            != MANUAL_ACCOUNTING_SCOPE_NOTES[accounting_scope]
         ):
             raise ValueError("Incomplete manual-accounting Orion suffix event is invalid")
         allocated_nodes = record.get("scheduler_reported_allocated_nodes")
@@ -1667,6 +1678,7 @@ def recover_incomplete_manual_accounting_locked(
     control_plane_version: str,
     active_policy_sha256: str,
     active_promotion_sha256: str,
+    accounting_scope: str,
 ) -> dict[str, object] | None:
     """Repair only a marker-bound manual-accounting publication from Orion."""
     local_marker, mirror_marker = incomplete_manual_accounting_marker_paths(
@@ -1722,6 +1734,7 @@ def recover_incomplete_manual_accounting_locked(
             control_plane_version=control_plane_version,
             active_policy_sha256=active_policy_sha256,
             active_promotion_sha256=active_promotion_sha256,
+            accounting_scope=accounting_scope,
         )
         mirror_records = validate_primary_chain(mirror_jsonl)
         if mirror_records != local_records[:len(mirror_records)]:

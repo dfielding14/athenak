@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "authorization_id": "phase0-mpi-rereview-direct-sbatch-accounting-2026-06-01",
+  "accounting_scope": "manual_direct_scheduler_accounting_only",
+  "scientific_evidence_eligible": false,
+  "jobs": [
+    {
+      "job_id": "4752263",
+      "expected_qos": "normal"
+    },
+    {
+      "job_id": "4752280",
+      "expected_qos": "normal"
+    },
+    {
+      "job_id": "4752316",
+      "expected_qos": "normal"
+    },
+    {
+      "job_id": "4752320",
+      "expected_qos": "normal"
+    },
+    {
+      "job_id": "4752323",
+      "expected_qos": "normal"
+    },
+    {
+      "job_id": "4752342",
+      "expected_qos": "normal"
+    },
+    {
+      "job_id": "4752352",
+      "expected_qos": "normal"
+    },
+    {
+      "job_id": "4752359",
+      "expected_qos": "normal"
+    },
+    {
+      "job_id": "4752392",
+      "expected_qos": "normal"
+    },
+    {
+      "job_id": "4752410",
+      "expected_qos": "normal"
+    }
+  ]
+}

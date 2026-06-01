@@ -315,6 +315,11 @@ qualify any scientific claim by itself.
   serialized import of those seven accounting-only rows after paired promotion
   of the strict registered-lifecycle successor. The terminal mirrored ledger has
   56 rows, zero active reservations and no pending PIC marker.
+- `q027_phase0_mpi_rereview_direct_scheduler_accounting_authorization_2026-06-01.json`:
+  exact reviewed authorization for ten nonqualifying direct-`sbatch` Phase 0
+  MPI rereview diagnostics. Their terminal scheduler usage must be imported
+  under the direct-scheduler accounting-only scope before a registered replay
+  is submitted.
 - `q008_expanding_box_local_oracles_2026-05-30.json`: bounded serial-host
   expanding-box gyro-history and one-step CPAW source-map oracle evidence.
 - `q008_expanding_box_cpaw_history_convergence_preparation_2026-05-30.json`:

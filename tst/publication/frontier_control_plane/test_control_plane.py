@@ -268,6 +268,7 @@ class SnapshotTests(unittest.TestCase):
         *,
         jobs: list[dict[str, str]] | None = None,
         authorization_id: str = "q016-login-host-direct-srun",
+        accounting_scope: object = "manual_direct_srun_accounting_only",
         bind_policy: bool = True,
     ) -> Path:
         parent = self.pic_root / "policy" / "manual_accounting_authorizations"
@@ -277,7 +278,7 @@ class SnapshotTests(unittest.TestCase):
             {
                 "schema_version": 1,
                 "authorization_id": authorization_id,
-                "accounting_scope": "manual_direct_srun_accounting_only",
+                "accounting_scope": accounting_scope,
                 "scientific_evidence_eligible": False,
                 "jobs": jobs
                 or [
@@ -8427,6 +8428,42 @@ PY
         )
         self.assertIn("manual_accounting_authorization_sha256", self.csv.read_text())
 
+    def test_manual_direct_scheduler_accounting_appends_nonqualifying_event(
+        self,
+    ) -> None:
+        authorization = self._write_manual_accounting_authorization(
+            accounting_scope="manual_direct_scheduler_accounting_only",
+        )
+        with patch.object(
+            reconcile_manual_frontier_allocations.subprocess,
+            "check_output",
+            side_effect=self._manual_accounting_scheduler_output,
+        ):
+            reconcile_manual_allocations(
+                **self._manual_accounting_arguments(authorization)
+            )
+        records = validate_primary_chain(self.ledger)
+        self.assertEqual(
+            records[-1]["accounting_scope"],
+            "manual_direct_scheduler_accounting_only",
+        )
+        self.assertEqual(
+            records[-1]["notes"],
+            "Reviewed direct-scheduler accounting only; "
+            "ineligible for scientific evidence.",
+        )
+        self.assertIs(records[-1]["scientific_evidence_eligible"], False)
+        self.assertRegex(str(records[-1]["active_policy_sha256"]), r"^[0-9a-f]{64}$")
+        self.assertRegex(str(records[-1]["active_promotion_sha256"]), r"^[0-9a-f]{64}$")
+        self.assertAlmostEqual(
+            accounting(records)["cumulative_consumed_node_hours"], 12.0 / 3600.0
+        )
+        self.assertEqual(
+            json.loads(self.mirror.read_text(encoding="utf-8").splitlines()[-1]),
+            records[-1],
+        )
+        self.assertIn("manual_accounting_authorization_sha256", self.csv.read_text())
+
     def test_manual_direct_srun_accounting_retry_appends_only_missing_suffix(
         self,
     ) -> None:
@@ -8686,6 +8723,51 @@ PY
         self.assertEqual(len(validate_primary_chain(self.mirror)), 1)
         events = self._retry_manual_accounting_and_require_clean_markers(arguments)
         self.assertEqual([event["job_id"] for event in events], ["4746332", "4746335"])
+
+    def test_manual_direct_scheduler_accounting_recovers_after_orion_append(
+        self,
+    ) -> None:
+        authorization = self._write_manual_accounting_authorization(
+            accounting_scope="manual_direct_scheduler_accounting_only",
+        )
+        arguments = self._manual_accounting_arguments(authorization)
+        self._strand_manual_accounting_after_orion_append(arguments)
+        events = self._retry_manual_accounting_and_require_clean_markers(arguments)
+        self.assertEqual([event["job_id"] for event in events], ["4746332", "4746335"])
+        self.assertEqual(
+            events[-1]["accounting_scope"],
+            "manual_direct_scheduler_accounting_only",
+        )
+
+    def test_manual_direct_scheduler_recovery_rejects_cross_scope_suffix(
+        self,
+    ) -> None:
+        authorization = self._write_manual_accounting_authorization(
+            accounting_scope="manual_direct_scheduler_accounting_only",
+        )
+        arguments = self._manual_accounting_arguments(authorization)
+        self._strand_manual_accounting_after_orion_append(arguments)
+        lines = self.ledger.read_text(encoding="utf-8").splitlines()
+        record = json.loads(lines[-1])
+        record["accounting_scope"] = "manual_direct_srun_accounting_only"
+        record["notes"] = (
+            "Reviewed direct-srun accounting only; "
+            "ineligible for scientific evidence."
+        )
+        record["event_sha256"] = ledger.record_sha256(record, "event_sha256")
+        self.ledger.write_text(
+            "".join(line + "\n" for line in lines[:-1])
+            + ledger.canonical_json(record)
+            + "\n",
+            encoding="utf-8",
+        )
+        with patch.object(
+            reconcile_manual_frontier_allocations.subprocess,
+            "check_output",
+            side_effect=self._manual_accounting_scheduler_output,
+        ):
+            with self.assertRaisesRegex(ValueError, "suffix event is invalid"):
+                reconcile_manual_allocations(**arguments)
 
     def test_manual_direct_srun_accounting_recovery_rejects_pre_tranche_mirror_truncation(
         self,
@@ -9060,6 +9142,28 @@ PY
                 control_plane_dir=self.control_plane_dir,
                 authorized_pic_root=self.pic_root,
                 authorized_project_home_root=self.project_home_root,
+            )
+
+    def test_manual_accounting_rejects_nonstring_scope(self) -> None:
+        authorization = self._write_manual_accounting_authorization(
+            accounting_scope=[],
+        )
+        with self.assertRaisesRegex(
+            ValueError, "Manual-accounting authorization scope is invalid"
+        ):
+            reconcile_manual_allocations(
+                **self._manual_accounting_arguments(authorization)
+            )
+
+    def test_manual_accounting_rejects_unknown_scope(self) -> None:
+        authorization = self._write_manual_accounting_authorization(
+            accounting_scope="unknown_manual_scope",
+        )
+        with self.assertRaisesRegex(
+            ValueError, "Manual-accounting authorization scope is invalid"
+        ):
+            reconcile_manual_allocations(
+                **self._manual_accounting_arguments(authorization)
             )
 
     def test_manual_direct_srun_accounting_rejects_unbound_authorization(self) -> None:

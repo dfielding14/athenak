@@ -1,5 +1,5 @@
 #!/opt/cray/pe/python/3.11.7/bin/python3 -I
-"""Reconcile reviewed direct-srun Frontier allocations into the node-hour ledger."""
+"""Reconcile reviewed direct Frontier allocations into the node-hour ledger."""
 
 from __future__ import annotations
 
@@ -29,6 +29,7 @@ from control_plane_common import verify_installed_control_plane
 from ledger import accounting, append_primary_event_locked, chain_head
 from ledger import clear_matching_incomplete_manual_accounting_marker_locked
 from ledger import ledger_lock, publish_incomplete_manual_accounting_marker_locked
+from ledger import MANUAL_ACCOUNTING_SCOPE_NOTES
 from ledger import recover_incomplete_manual_accounting_locked
 from ledger import latest_reservations, require_explicit_genesis
 from ledger import validate_mirrored_state, validate_primary_chain, write_csv
@@ -46,7 +47,6 @@ TERMINAL_STATES = {
     "REVOKED",
     "TIMEOUT",
 }
-MANUAL_ACCOUNTING_SCOPE = "manual_direct_srun_accounting_only"
 SCRIPT_DIR = Path(__file__).absolute().parent
 
 
@@ -115,7 +115,10 @@ def _authorization(
         or path.name != f"{authorization_id}.json"
     ):
         raise ValueError("Manual-accounting authorization ID is invalid")
-    if authorization.get("accounting_scope") != MANUAL_ACCOUNTING_SCOPE:
+    if (
+        not isinstance(authorization.get("accounting_scope"), str)
+        or authorization["accounting_scope"] not in MANUAL_ACCOUNTING_SCOPE_NOTES
+    ):
         raise ValueError("Manual-accounting authorization scope is invalid")
     if authorization.get("scientific_evidence_eligible") is not False:
         raise ValueError("Manual-accounting authorization must reject scientific evidence use")
@@ -196,7 +199,7 @@ def _scheduler_results(
         if elapsed_seconds < 0 or allocated_nodes < 0:
             raise ValueError("Scheduler accounting values must not be negative")
         if comment:
-            raise ValueError("Manual direct-srun allocation must have an empty Slurm comment")
+            raise ValueError("Manual direct allocation must have an empty Slurm comment")
         if not scheduler_account_matches_authorized(account):
             raise ValueError("Slurm accounting account does not match the PIC account")
         if partition != AUTHORIZED_PARTITION:
@@ -227,6 +230,7 @@ def _event_payload(
     active_policy_sha256: str,
     active_promotion_sha256: str,
     cumulative: float,
+    accounting_scope: str,
 ) -> dict[str, object]:
     allocated_nodes = int(scheduler["allocated_nodes"])
     elapsed_seconds = int(scheduler["elapsed_seconds"])
@@ -242,7 +246,7 @@ def _event_payload(
             project_home_authorization_path
         ),
         "manual_accounting_authorization_sha256": authorization_sha256,
-        "accounting_scope": MANUAL_ACCOUNTING_SCOPE,
+        "accounting_scope": accounting_scope,
         "scientific_evidence_eligible": False,
         "active_policy_sha256": active_policy_sha256,
         "active_promotion_sha256": active_promotion_sha256,
@@ -255,7 +259,7 @@ def _event_payload(
         "cumulative_consumed_node_hours": cumulative + consumed,
         "state": scheduler["state"],
         "reconciled": True,
-        "notes": "Reviewed direct-srun accounting only; ineligible for scientific evidence.",
+        "notes": MANUAL_ACCOUNTING_SCOPE_NOTES[accounting_scope],
     }
 
 
@@ -332,6 +336,7 @@ def reconcile_manual_allocations(
         assert isinstance(jobs, list)
         job_ids = [str(job["job_id"]) for job in jobs]
         authorization_id = str(reviewed["authorization_id"])
+        accounting_scope = str(reviewed["accounting_scope"])
         local_records = validate_primary_chain(ledger_jsonl)
         require_explicit_genesis(local_records)
         pending_marker = (
@@ -362,6 +367,7 @@ def reconcile_manual_allocations(
             control_plane_version=version,
             active_policy_sha256=policy_snapshot["active_policy_sha256"],
             active_promotion_sha256=policy_snapshot["active_promotion_sha256"],
+            accounting_scope=accounting_scope,
         )
         records = validate_mirrored_state(ledger_jsonl, receipts_jsonl, mirror_jsonl)
         require_explicit_genesis(records)
@@ -446,6 +452,7 @@ def reconcile_manual_allocations(
                     else policy_snapshot["active_promotion_sha256"]
                 ),
                 cumulative=cumulative,
+                accounting_scope=accounting_scope,
             )
             if historical is not None:
                 result = historical
