@@ -96,6 +96,9 @@ Real GravPot(Real x1, Real x2, Real x3, Real G, Real r_s, Real rho_s,
 //  \brief
 
 TaskStatus Particles::Push(Driver *pdriver, int stage) {
+  if (UsesPaperVL2Coupling() && stage == 0) {
+    return TaskStatus::complete;
+  }
   Q017Fence();
   Kokkos::Timer q017_timer;
   TaskStatus status = TaskStatus::fail;
@@ -436,11 +439,21 @@ void InterpolateTSCFields(const RegionIndcs indcs, const SizeView size,
 
   int ix[3] = {ic - 1, ic, ic + 1};
   int iy[3] = {jc - 1, jc, jc + 1};
+  // Active MHD fields carry synchronized same-level and refinement-interface
+  // ghost zones. TSC must consume those values near MeshBlock boundaries.
+  // The no-MHD manufactured-field carrier has no boundary exchange, so retain
+  // its active-cell clamp.
+  const int i_min = use_mhd_fluid_velocity ? indcs.is - indcs.ng : indcs.is;
+  const int i_max = use_mhd_fluid_velocity ? indcs.ie + indcs.ng : indcs.ie;
+  const int j_min = use_mhd_fluid_velocity ? indcs.js - indcs.ng : indcs.js;
+  const int j_max = use_mhd_fluid_velocity ? indcs.je + indcs.ng : indcs.je;
+  const int k_min = use_mhd_fluid_velocity ? indcs.ks - indcs.ng : indcs.ks;
+  const int k_max = use_mhd_fluid_velocity ? indcs.ke + indcs.ng : indcs.ke;
   for (int n = 0; n < 3; ++n) {
-    ix[n] = (ix[n] < indcs.is) ? indcs.is : ((ix[n] > indcs.ie) ? indcs.ie : ix[n]);
-    iy[n] = (iy[n] < indcs.js) ? indcs.js : ((iy[n] > indcs.je) ? indcs.je : iy[n]);
+    ix[n] = (ix[n] < i_min) ? i_min : ((ix[n] > i_max) ? i_max : ix[n]);
+    iy[n] = (iy[n] < j_min) ? j_min : ((iy[n] > j_max) ? j_max : iy[n]);
     if (three_d) {
-      kz[n] = (kz[n] < indcs.ks) ? indcs.ks : ((kz[n] > indcs.ke) ? indcs.ke : kz[n]);
+      kz[n] = (kz[n] < k_min) ? k_min : ((kz[n] > k_max) ? k_max : kz[n]);
     }
   }
 
@@ -471,10 +484,230 @@ void InterpolateTSCFields(const RegionIndcs indcs, const SizeView size,
 }
 
 //----------------------------------------------------------------------------------------
+//! \fn void Particles::PushPaperCosmicRaysVL2
+//! \brief Sun & Bai VL2 split pusher for full-f paper MHD-PIC coupling.
+
+TaskStatus Particles::PushPaperCosmicRaysVL2(Driver *pdriver, int stage) {
+  (void)pdriver;
+  if (stage != 1 && stage != 2) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Paper MHD-PIC VL2 particle push requires stage 1 or 2"
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  // Stage 1 deposits predictor rho/J at x_ini without changing particle
+  // momenta. Stage 2 applies the full-step Boris kick at x_mid before the
+  // impulse deposit. Position updates are a separate post-deposit task.
+  if (stage == 1) return TaskStatus::complete;
+  if (pmy_pack->pmhd == nullptr) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Paper MHD-PIC VL2 particle push requires active MHD fields"
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+
+  const RegionIndcs indcs = pmy_pack->pmesh->mb_indcs;
+  const Real dt = pmy_pack->pmesh->dt;
+  const Real dt_half = static_cast<Real>(0.5)*dt;
+  const Real inv_dt = (dt > 0.0) ? (static_cast<Real>(1.0)/dt) :
+                                   static_cast<Real>(0.0);
+  const int gids = pmy_pack->gids;
+  const int nmb = pmy_pack->nmb_thispack;
+  const int nx3 = indcs.nx3;
+  const bool allow_2d3v = (pic_enable_2d3v && (nx3 == 1));
+  const bool use_vz_component = (nx3 > 1) || allow_2d3v;
+  const Real qscale = deposit_qscale;
+  const int nspecies_local = nspecies;
+  const Real light_speed = pic_cr_light_speed;
+  auto &pi = prtcl_idata;
+  auto &pr = prtcl_rdata;
+  auto &size = pmy_pack->pmb->mb_size;
+  auto bcc = pmy_pack->pmhd->bcc0;
+  auto w0 = pmy_pack->pmhd->w0;
+  auto mspecies = species_mass;
+  size.template sync<DevExeSpace>();
+  auto size_view = size;
+
+  par_for(
+      "push_cr_paper_vl2_midpoint_kick",
+      DevExeSpace(), 0, nprtcl_thispack - 1,
+      KOKKOS_LAMBDA(const int p) {
+        const int m = pi(PGID, p) - gids;
+        if (m < 0 || m >= nmb) return;
+        Real x = pr(IPX, p);
+        Real y = pr(IPY, p);
+        Real z = (nx3 > 1) ? pr(IPZ, p) : static_cast<Real>(0.0);
+        Real state_x = pr(IPVX, p);
+        Real state_y = pr(IPVY, p);
+        Real state_z = use_vz_component ? pr(IPVZ, p) : static_cast<Real>(0.0);
+        Real vx, vy, vz;
+        CRVelocityFromState(true, light_speed, state_x, state_y, state_z,
+                            vx, vy, vz);
+
+        Real Bx = 0.0, By = 0.0, Bz = 0.0;
+        Real Ux = 0.0, Uy = 0.0, Uz = 0.0;
+        InterpolateTSCFields(indcs, size_view, bcc, w0, true, m, x, y, z,
+                             Bx, By, Bz, Ux, Uy, Uz, allow_2d3v);
+        if (!use_vz_component) {
+          Bz = 0.0;
+          Uz = 0.0;
+        }
+        const Real cEx = -(Uy*Bz - Uz*By);
+        const Real cEy = -(Uz*Bx - Ux*Bz);
+        const Real cEz = use_vz_component ? -(Ux*By - Uy*Bx) :
+                                           static_cast<Real>(0.0);
+        const Real state_x_before = state_x;
+        const Real state_y_before = state_y;
+        const Real state_z_before = state_z;
+        const Real qdt_2m = pr(IPM, p)*dt_half;
+
+        state_x += qdt_2m*cEx;
+        state_y += qdt_2m*cEy;
+        state_z += qdt_2m*cEz;
+        const Real inv_gamma_minus =
+            static_cast<Real>(1.0)/
+            CRLorentzFactor(state_x, state_y, state_z, light_speed);
+        const Real tx = qdt_2m*Bx*inv_gamma_minus;
+        const Real ty = qdt_2m*By*inv_gamma_minus;
+        const Real tz = qdt_2m*Bz*inv_gamma_minus;
+        const Real t2 = tx*tx + ty*ty + tz*tz;
+        const Real rot_x = static_cast<Real>(2.0)*tx/(static_cast<Real>(1.0) + t2);
+        const Real rot_y = static_cast<Real>(2.0)*ty/(static_cast<Real>(1.0) + t2);
+        const Real rot_z = static_cast<Real>(2.0)*tz/(static_cast<Real>(1.0) + t2);
+        const Real state_px = state_x + (state_y*tz - state_z*ty);
+        const Real state_py = state_y + (state_z*tx - state_x*tz);
+        const Real state_pz = state_z + (state_x*ty - state_y*tx);
+        state_x += state_py*rot_z - state_pz*rot_y;
+        state_y += state_pz*rot_x - state_px*rot_z;
+        state_z += state_px*rot_y - state_py*rot_x;
+        state_x += qdt_2m*cEx;
+        state_y += qdt_2m*cEy;
+        state_z += qdt_2m*cEz;
+
+        const Real energy_before =
+            CRKineticEnergy(true, light_speed, state_x_before, state_y_before,
+                            state_z_before);
+        const Real energy_after =
+            CRKineticEnergy(true, light_speed, state_x, state_y, state_z);
+        const int sp = pi(PSP, p);
+        if (sp < 0 || sp >= nspecies_local) return;
+        Real weight = pr(IPWT, p);
+        if (weight <= static_cast<Real>(0.0)) weight = static_cast<Real>(1.0);
+        const Real macro_mass = qscale*weight*mspecies(sp);
+        pr(IPDPX, p) = macro_mass*(state_x - state_x_before)*inv_dt;
+        pr(IPDPY, p) = macro_mass*(state_y - state_y_before)*inv_dt;
+        pr(IPDPZ, p) = macro_mass*(state_z - state_z_before)*inv_dt;
+        pr(IPDE, p) = macro_mass*(energy_after - energy_before)*inv_dt;
+        pr(IPEBDOT, p) = cEx*Bx + cEy*By + cEz*Bz;
+        pr(IPBX, p) = Bx;
+        pr(IPBY, p) = By;
+        pr(IPBZ, p) = use_vz_component ? Bz : static_cast<Real>(0.0);
+        pr(IPEX, p) = cEx;
+        pr(IPEY, p) = cEy;
+        pr(IPEZ, p) = use_vz_component ? cEz : static_cast<Real>(0.0);
+
+        pr(IPVX, p) = state_x;
+        pr(IPVY, p) = state_y;
+        pr(IPVZ, p) = use_vz_component ? state_z : static_cast<Real>(0.0);
+      });
+  return TaskStatus::complete;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void Particles::DriftPaperCosmicRaysHalfStep
+//! \brief Drift paper-mode CRs after depositing predictor or impulse moments.
+
+TaskStatus Particles::DriftPaperCosmicRaysHalfStep(Driver *pdriver, int stage) {
+  (void)pdriver;
+  if (stage != 1 && stage != 2) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Paper MHD-PIC VL2 half drift requires stage 1 or 2"
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+
+  const RegionIndcs indcs = pmy_pack->pmesh->mb_indcs;
+  const Real dt_half = static_cast<Real>(0.5)*pmy_pack->pmesh->dt;
+  const int gids = pmy_pack->gids;
+  const int nmb = pmy_pack->nmb_thispack;
+  const int nx3 = indcs.nx3;
+  const bool multi_d = pmy_pack->pmesh->multi_d;
+  const bool three_d = pmy_pack->pmesh->three_d;
+  const bool allow_2d3v = (pic_enable_2d3v && (nx3 == 1));
+  const bool use_vz_component = (nx3 > 1) || allow_2d3v;
+  const bool track_displacement_local = track_displacement;
+  const Real light_speed = pic_cr_light_speed;
+  auto &pi = prtcl_idata;
+  auto &pr = prtcl_rdata;
+  auto &size = pmy_pack->pmb->mb_size;
+  auto &mb_bcs = pmy_pack->pmb->mb_bcs;
+  auto bcc = pmy_pack->pmhd->bcc0;
+  auto w0 = pmy_pack->pmhd->w0;
+  size.template sync<DevExeSpace>();
+  mb_bcs.template sync<DevExeSpace>();
+  auto size_view = size;
+  auto mb_bcs_view = mb_bcs;
+
+  par_for("drift_cr_paper_vl2_half_step", DevExeSpace(), 0, nprtcl_thispack - 1,
+      KOKKOS_LAMBDA(const int p) {
+        const int m = pi(PGID, p) - gids;
+        if (m < 0 || m >= nmb) return;
+        Real x = pr(IPX, p);
+        Real y = pr(IPY, p);
+        Real z = (nx3 > 1) ? pr(IPZ, p) : static_cast<Real>(0.0);
+        Real state_x = pr(IPVX, p);
+        Real state_y = pr(IPVY, p);
+        Real state_z = use_vz_component ? pr(IPVZ, p) : static_cast<Real>(0.0);
+        Real vx, vy, vz;
+        CRVelocityFromState(true, light_speed, state_x, state_y, state_z,
+                            vx, vy, vz);
+        if (track_displacement_local) {
+          Real Bx = pr(IPBX, p);
+          Real By = pr(IPBY, p);
+          Real Bz = use_vz_component ? pr(IPBZ, p) : static_cast<Real>(0.0);
+          if (stage == 1) {
+            Real Ux = 0.0;
+            Real Uy = 0.0;
+            Real Uz = 0.0;
+            InterpolateTSCFields(indcs, size_view, bcc, w0, true, m, x, y, z,
+                                 Bx, By, Bz, Ux, Uy, Uz, allow_2d3v);
+          }
+          const Real bmag = sqrt(Bx*Bx + By*By + Bz*Bz);
+          if (bmag > static_cast<Real>(0.0)) {
+            pr(IPDB, p) += dt_half*(vx*Bx + vy*By + vz*Bz)/bmag;
+          }
+        }
+        x += dt_half*vx;
+        y += dt_half*vy;
+        if (nx3 > 1) z += dt_half*vz;
+        ApplyReflectiveParticleBCs(m, size_view, mb_bcs_view, multi_d, three_d,
+                                   x, y, z, state_x, state_y, state_z);
+        pr(IPX, p) = x;
+        pr(IPY, p) = y;
+        pr(IPZ, p) = z;
+        pr(IPVX, p) = state_x;
+        pr(IPVY, p) = state_y;
+        pr(IPVZ, p) = use_vz_component ? state_z : static_cast<Real>(0.0);
+        if (track_displacement_local) {
+          pr(IPDX, p) += dt_half*vx;
+          pr(IPDY, p) += dt_half*vy;
+          if (use_vz_component) pr(IPDZ, p) += dt_half*vz;
+        }
+      });
+  return TaskStatus::complete;
+}
+
+//----------------------------------------------------------------------------------------
 //! \fn void Particles::PushCosmicRays
 //  \brief Boris pusher for cosmic ray particles in electromagnetic fields
 
 TaskStatus Particles::PushCosmicRays(Driver *pdriver, int stage) {
+  if (UsesPaperVL2Coupling()) {
+    return PushPaperCosmicRaysVL2(pdriver, stage);
+  }
   const RegionIndcs indcs = pmy_pack->pmesh->mb_indcs;
   auto &pi = prtcl_idata;
   auto &pr = prtcl_rdata;

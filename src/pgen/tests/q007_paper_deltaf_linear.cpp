@@ -139,7 +139,7 @@ void Q007ValidateCommon(ParameterInput *pin, const Q007ModeContract &mode) {
   Q007RequireInteger(pin, "particles", "nspecies", 8);
   Q007RequireString(pin, "particles", "cr_distribution", "center");
   Q007RequireBoolean(pin, "particles", "deposit_moments", true);
-  Q007RequireInteger(pin, "particles", "deposit_order", 1);
+  Q007RequireInteger(pin, "particles", "deposit_order", 2);
   Q007RequireReal(pin, "particles", "deposit_qscale", 1.0e-4);
   Q007RequireBoolean(pin, "particles", "couple_moments_to_mhd", true);
   Q007RequireReal(pin, "particles", "couple_j_to_efield_coeff", 1.0);

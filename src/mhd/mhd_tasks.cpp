@@ -336,9 +336,9 @@ TaskStatus MHD::MHDSrcTerms(Driver *pdrive, int stage) {
   }
 
   // WS-H: optional particle-feedback source split for fluid momentum/energy.
-  // Particle feedback rates are deposited once per cycle, then reused as a
-  // cycle-fixed source across all explicit RK stages, just like the current
-  // source added in EFieldSrc below.
+  // Legacy coupled modes reuse cycle-fixed deposited rates across RK stages.
+  // Paper VL2 uses predictor rho/J in stage 1 and the final particle impulse
+  // deposited after the stage-2 midpoint kick.
   if ((ppart != nullptr) && ppart->couple_moments_to_mhd) {
     const bool add_mom = ppart->couple_moments_momentum_to_mhd;
     const bool add_eng = ppart->couple_moments_energy_to_mhd;
@@ -365,6 +365,8 @@ TaskStatus MHD::MHDSrcTerms(Driver *pdrive, int stage) {
       const Real mom_coef = ppart->couple_moments_momentum_coeff;
       const Real eng_coef = ppart->couple_moments_energy_coeff;
       const bool use_deltaf = ppart->UsesDeltaF();
+      const bool paper_vl2_predictor =
+          ppart->UsesPaperVL2Coupling() && (stage == 1);
       Real background_density_scale = 1.0;
       if (ppart->UsesExpandingBox()) {
         const auto geom = particles::PICExpandingBoxGeometryAt(
@@ -385,7 +387,26 @@ TaskStatus MHD::MHDSrcTerms(Driver *pdrive, int stage) {
 
       par_for("prtcl_fluid_feedback_src", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie,
       KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
-        if (use_deltaf) {
+        if (paper_vl2_predictor) {
+          const Real rho = mom(m, particles::Particles::IMOM_RHO, k, j, i);
+          const Real jx = mom(m, particles::Particles::IMOM_JX, k, j, i);
+          const Real jy = mom(m, particles::Particles::IMOM_JY, k, j, i);
+          const Real jz = mom(m, particles::Particles::IMOM_JZ, k, j, i);
+          const Real bx = bcc(m, IBX, k, j, i);
+          const Real by = bcc(m, IBY, k, j, i);
+          const Real bz = bcc(m, IBZ, k, j, i);
+          const Real cex = -(w(m, IVY, k, j, i)*bz - w(m, IVZ, k, j, i)*by);
+          const Real cey = -(w(m, IVZ, k, j, i)*bx - w(m, IVX, k, j, i)*bz);
+          const Real cez = -(w(m, IVX, k, j, i)*by - w(m, IVY, k, j, i)*bx);
+          if (add_mom) {
+            u(m, IM1, k, j, i) -= beta_dt*mom_coef*(rho*cex + jy*bz - jz*by);
+            u(m, IM2, k, j, i) -= beta_dt*mom_coef*(rho*cey + jz*bx - jx*bz);
+            u(m, IM3, k, j, i) -= beta_dt*mom_coef*(rho*cez + jx*by - jy*bx);
+          }
+          if (add_eng) {
+            u(m, IEN, k, j, i) -= beta_dt*eng_coef*(jx*cex + jy*cey + jz*cez);
+          }
+        } else if (use_deltaf) {
           const Real rho = background_rho +
               mom(m, particles::Particles::IMOM_RHO, k, j, i);
           const Real jx = background_jx +

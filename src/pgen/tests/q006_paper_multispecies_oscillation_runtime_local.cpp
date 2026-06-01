@@ -166,7 +166,7 @@ void ProblemGenerator::Q006PaperMultispeciesOscillationRuntimeLocal(
   Q006RuntimeLocalRequireInteger(pin, "particles", "nspecies", 2);
   Q006RuntimeLocalRequireString(pin, "particles", "cr_distribution", "center");
   Q006RuntimeLocalRequireBoolean(pin, "particles", "deposit_moments", true);
-  Q006RuntimeLocalRequireInteger(pin, "particles", "deposit_order", 1);
+  Q006RuntimeLocalRequireInteger(pin, "particles", "deposit_order", 2);
   Q006RuntimeLocalRequireReal(pin, "particles", "deposit_qscale", 0.0234375);
   Q006RuntimeLocalRequireBoolean(pin, "particles", "couple_moments_to_mhd", true);
   Q006RuntimeLocalRequireReal(pin, "particles", "couple_j_to_efield_coeff", 1.0);

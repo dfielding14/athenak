@@ -236,6 +236,8 @@ namespace particles {
 //! \class PaperSmoothMomentRecordTransport
 //! \brief Synchronous host transport for duplicated cross-level paper_smooth records
 
+enum class PaperSmoothRecordStatus {accepted, duplicate, invalid};
+
 class PaperSmoothMomentRecordTransport {
  public:
   PaperSmoothMomentRecordTransport();
@@ -246,8 +248,10 @@ class PaperSmoothMomentRecordTransport {
       const PaperSmoothMomentRecordTransport &) = delete;
 
   void Reset();
-  bool Queue(const PaperSmoothMomentRecord &record, int dest_rank,
-             int source_level, int dest_level);
+  PaperSmoothRecordStatus Queue(const PaperSmoothMomentRecord &record, int dest_rank,
+                                int source_level, int dest_level);
+  PaperSmoothRecordStatus QueueReceiver(const PaperSmoothMomentRecord &record,
+                                        int dest_rank);
   bool Exchange();
 
   const std::vector<PaperSmoothMomentRecord> &records() const {return records_;}
@@ -261,20 +265,28 @@ class PaperSmoothMomentRecordTransport {
     PaperSmoothMomentRecord record;
   };
 
-  static constexpr std::uint64_t empty_key_ = ~static_cast<std::uint64_t>(0);
+  struct RecordKey {
+    std::uint32_t ptag;
+    std::uint32_t dest_gid;
+    std::uint32_t image_code;
+  };
 
-  static std::uint64_t MakeKey(const PaperSmoothMomentRecord &record);
-  static std::uint64_t HashKey(std::uint64_t key);
-  static void RehashKeys(std::vector<std::uint64_t> &table, std::size_t new_size);
-  static bool InsertKey(std::vector<std::uint64_t> &table, std::size_t &count,
-                        std::uint64_t key);
-  static void ResetKeys(std::vector<std::uint64_t> &table, std::size_t &count);
-  bool AddRecord(const PaperSmoothMomentRecord &record);
+  static constexpr std::uint32_t empty_key_component_ = ~static_cast<std::uint32_t>(0);
+
+  static RecordKey MakeKey(const PaperSmoothMomentRecord &record);
+  static std::uint64_t HashKey(const RecordKey &key);
+  static bool KeysEqual(const RecordKey &lhs, const RecordKey &rhs);
+  static bool IsEmptyKey(const RecordKey &key);
+  static void RehashKeys(std::vector<RecordKey> &table, std::size_t new_size);
+  static bool InsertKey(std::vector<RecordKey> &table, std::size_t &count,
+                        const RecordKey &key);
+  static void ResetKeys(std::vector<RecordKey> &table, std::size_t &count);
+  PaperSmoothRecordStatus AddRecord(const PaperSmoothMomentRecord &record);
 
   std::vector<PaperSmoothMomentRecord> records_;
   std::vector<DestinationRecord> outgoing_;
   std::vector<PaperSmoothMomentRecord> send_records_, recv_records_;
-  std::vector<std::uint64_t> queued_keys_, delivered_keys_;
+  std::vector<RecordKey> queued_keys_, delivered_keys_;
   std::size_t queued_key_count_, delivered_key_count_;
 #if MPI_PARALLEL_ENABLED
   MPI_Comm mpi_comm_mom_;

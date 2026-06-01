@@ -291,6 +291,7 @@ class Particles {
   static constexpr int IMOM_EBDOT = 8;
   DvceArray5D<Real> moments;
   DvceArray5D<Real> coarse_moments;
+  DvceArray1D<PaperSmoothMomentRecord> paper_smooth_mom_records;
   DvceArray4D<Real> j_edge_x1e, j_edge_x2e, j_edge_x3e;
   DvceArray1D<Real> x1_old, x2_old, x3_old;
 
@@ -308,6 +309,7 @@ class Particles {
   ParticlesBoundaryValues *pbval_part;
   MeshBoundaryValuesCC *pbval_mom = nullptr;
   MeshBoundaryValuesFC *pbval_jedge = nullptr;
+  PaperSmoothMomentRecordTransport *paper_smooth_mom_transport = nullptr;
 
   // container to hold names of TaskIDs
   ParticlesTaskIDs id;
@@ -329,6 +331,7 @@ class Particles {
   TaskStatus ZeroMoments(Driver *pdriver, int stage);
   TaskStatus InitRecvMoments(Driver *pdriver, int stage);
   TaskStatus DepositMoments(Driver *pdriver, int stage);
+  TaskStatus DepositPaperSmoothMoments(Driver *pdriver, int stage);
   TaskStatus RestrictMoments(Driver *pdriver, int stage);
   TaskStatus SendMoments(Driver *pdriver, int stage);
   TaskStatus RecvMoments(Driver *pdriver, int stage);
@@ -349,6 +352,8 @@ class Particles {
   void InitializeStars(std::vector<std::array<Real, 9>> &particle_list);
   TaskStatus PushDrift(Driver *pdriver, int stage);
   TaskStatus PushCosmicRays(Driver *pdriver, int stage);
+  TaskStatus PushPaperCosmicRaysVL2(Driver *pdriver, int stage);
+  TaskStatus DriftPaperCosmicRaysHalfStep(Driver *pdriver, int stage);
   TaskStatus PushStars(Driver *pdriver, int stage);
   void NewTimeStep();
   void Q017Fence() const {
@@ -362,6 +367,8 @@ class Particles {
   std::uint64_t Q017DirectViewAllocationBytes() const;
   std::uint64_t Q017OwnedKokkosViewAllocationBytes() const;
   void ObserveQ017OwnedKokkosViewAllocationBytes(std::uint64_t transient_bytes=0);
+  std::uint64_t Q017PaperSmoothHostAllocationBytes() const;
+  void ObserveQ017PaperSmoothHostAllocationBytes(std::uint64_t transient_bytes=0);
   void OutputQ017Telemetry() const;
   bool UsesRelativisticCRState() const {
     return pic_physical_mode != PICPhysicalMode::engineering;
@@ -375,6 +382,9 @@ class Particles {
   }
   bool UsesExpandingBox() const {
     return pic_expanding_box_mode == PICExpandingBoxMode::on;
+  }
+  bool UsesPaperVL2Coupling() const {
+    return pic_physical_mode == PICPhysicalMode::paper_mhd_pic;
   }
   bool UsesPICWaveDamping() const {
     return pic_wave_damping_mode == PICWaveDampingMode::ion_neutral_friction;
@@ -509,6 +519,7 @@ class Particles {
   std::array<double, nq017_particle_timers> q017_particle_time_{};
   std::array<std::uint64_t, nq017_particle_timers> q017_particle_calls_{};
   std::uint64_t q017_owned_kokkos_view_high_water_bytes_ = 0;
+  std::uint64_t q017_paper_smooth_host_high_water_bytes_ = 0;
 };
 
 } // namespace particles

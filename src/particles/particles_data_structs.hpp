@@ -51,12 +51,43 @@ constexpr std::uint32_t kPaperSmoothDepositRhoJ = 1U << 0;
 constexpr std::uint32_t kPaperSmoothDepositEBDot = 1U << 1;
 constexpr std::uint32_t kPaperSmoothDepositMomentumFeedback = 1U << 2;
 constexpr std::uint32_t kPaperSmoothDepositEnergyFeedback = 1U << 3;
+constexpr std::uint32_t kPaperSmoothImageAxisMask = 3U;
+constexpr std::uint32_t kPaperSmoothImageCodeMask = 0x3fU;
+
+KOKKOS_INLINE_FUNCTION
+constexpr std::uint32_t PaperSmoothEncodeImageShift(const int shift) {
+  return (shift == -1) ? 2U : ((shift == 1) ? 1U : ((shift == 0) ? 0U : 3U));
+}
+
+KOKKOS_INLINE_FUNCTION
+constexpr std::uint32_t PaperSmoothEncodeImageCode(const int shift_x1,
+                                                   const int shift_x2,
+                                                   const int shift_x3) {
+  return PaperSmoothEncodeImageShift(shift_x1) |
+         (PaperSmoothEncodeImageShift(shift_x2) << 2) |
+         (PaperSmoothEncodeImageShift(shift_x3) << 4);
+}
+
+KOKKOS_INLINE_FUNCTION
+constexpr int PaperSmoothDecodeImageShift(const std::uint32_t code,
+                                          const int axis) {
+  const std::uint32_t encoded = (code >> (2*axis)) & kPaperSmoothImageAxisMask;
+  return (encoded == 2U) ? -1 : ((encoded == 1U) ? 1 : 0);
+}
+
+KOKKOS_INLINE_FUNCTION
+constexpr bool PaperSmoothImageCodeValid(const std::uint32_t code) {
+  return ((code & ~kPaperSmoothImageCodeMask) == 0U) &&
+         ((code & kPaperSmoothImageAxisMask) != 3U) &&
+         (((code >> 2) & kPaperSmoothImageAxisMask) != 3U) &&
+         (((code >> 4) & kPaperSmoothImageAxisMask) != 3U);
+}
 
 struct PaperSmoothMomentRecord {
   std::int32_t dest_gid;
   std::int32_t ptag;
   std::uint32_t deposit_flags;
-  std::uint32_t reserved; // initialize to zero
+  std::uint32_t reserved; // periodic receiver-image code; zero is the native image
   Real x, y, z;
   Real q_macro; // extensive macro-charge
   Real vx, vy, vz;

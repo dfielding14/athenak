@@ -151,6 +151,15 @@ TaskStatus Particles::AdaptDeltaF(Driver *pdriver, int stage) {
 
 void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> tl) {
   TaskID none(0);
+  const bool paper_vl2 = UsesPaperVL2Coupling();
+  if (paper_vl2 && UsesDeltaF()) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "<particles>/pic_physical_mode=paper_mhd_pic staged VL2 coupling "
+              << "currently supports full-f only; delta-f staged source semantics "
+              << "are not implemented" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
   id.rest_mom = none;
   id.bcs_mom = none;
   id.prol_mom = none;
@@ -189,9 +198,11 @@ void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> t
   id.prol_mom = tl["before_timeintegrator"]->AddTask(&Particles::ProlongateMoments, this,
                                                       id.bcs_mom);
 
-  // WS-H: in coupled mode, move particle migration/communication after field updates.
-  auto comm_tl = (couple_moments_to_mhd ? tl["after_timeintegrator"] :
-                                          tl["before_timeintegrator"]);
+  // Paper VL2 applies particle boundary handling at the midpoint and endpoint.
+  // Legacy coupled modes migrate once after the full time integrator.
+  auto comm_tl = (paper_vl2 ? tl["after_stagen"] :
+                  (couple_moments_to_mhd ? tl["after_timeintegrator"] :
+                                           tl["before_timeintegrator"]));
   TaskID comm_dep = (couple_moments_to_mhd ? none : id.prol_mom);
   id.newgid = comm_tl->AddTask(&Particles::NewGID, this, comm_dep);
   id.count  = comm_tl->AddTask(&Particles::SendCnt, this, id.newgid);
@@ -230,8 +241,18 @@ void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> t
       std::exit(EXIT_FAILURE);
     }
 
-    TaskID sid = stagen_tl->InsertTask(&Particles::SaveOldPositions, this,
-                                       insert_dep, insert_loc);
+    TaskID sid = insert_dep;
+    if (paper_vl2) {
+      sid = stagen_tl->InsertTask(&Particles::Push, this, sid, insert_loc);
+      if (sid == TaskID(0)) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "Failed to insert staged Particles::Push before "
+                  << insert_name << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+    }
+
+    sid = stagen_tl->InsertTask(&Particles::SaveOldPositions, this, sid, insert_loc);
     if (sid == TaskID(0)) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "Failed to insert Particles::SaveOldPositions before "
@@ -319,6 +340,18 @@ void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> t
                 << std::endl << "Failed to insert Particles::ProlongateMoments before "
                 << insert_name << std::endl;
       std::exit(EXIT_FAILURE);
+    }
+
+    if (paper_vl2) {
+      sid = stagen_tl->InsertTask(&Particles::DriftPaperCosmicRaysHalfStep,
+                                  this, sid, insert_loc);
+      if (sid == TaskID(0)) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl
+                  << "Failed to insert staged particle half drift before "
+                  << insert_name << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
     }
 
     // PR4 direct mode: synchronize deposited edge-currents before EFieldSrc.
@@ -549,6 +582,8 @@ std::uint64_t Particles::Q017DirectViewAllocationBytes() const {
          static_cast<std::uint64_t>(species_vz0.span())*sizeof(Real) +
          static_cast<std::uint64_t>(moments.span())*sizeof(Real) +
          static_cast<std::uint64_t>(coarse_moments.span())*sizeof(Real) +
+         static_cast<std::uint64_t>(paper_smooth_mom_records.span())*
+             sizeof(PaperSmoothMomentRecord) +
          static_cast<std::uint64_t>(j_edge_x1e.span())*sizeof(Real) +
          static_cast<std::uint64_t>(j_edge_x2e.span())*sizeof(Real) +
          static_cast<std::uint64_t>(j_edge_x3e.span())*sizeof(Real) +
@@ -575,6 +610,17 @@ void Particles::ObserveQ017OwnedKokkosViewAllocationBytes(std::uint64_t transien
                Q017OwnedKokkosViewAllocationBytes() + transient_bytes);
 }
 
+std::uint64_t Particles::Q017PaperSmoothHostAllocationBytes() const {
+  return (paper_smooth_mom_transport == nullptr) ? 0 :
+         paper_smooth_mom_transport->AllocationBytes();
+}
+
+void Particles::ObserveQ017PaperSmoothHostAllocationBytes(std::uint64_t transient_bytes) {
+  q017_paper_smooth_host_high_water_bytes_ =
+      std::max(q017_paper_smooth_host_high_water_bytes_,
+               Q017PaperSmoothHostAllocationBytes() + transient_bytes);
+}
+
 //----------------------------------------------------------------------------------------
 //! \fn void Particles::OutputQ017Telemetry()
 //! \brief Emit final-only particle timers and AthenaK-owned allocation telemetry.
@@ -597,6 +643,11 @@ void Particles::OutputQ017Telemetry() const {
   const std::uint64_t owned_allocated_bytes = Q017OwnedKokkosViewAllocationBytes();
   const std::uint64_t owned_high_water_bytes =
       std::max(owned_allocated_bytes, q017_owned_kokkos_view_high_water_bytes_);
+  const std::uint64_t paper_smooth_host_allocated_bytes =
+      Q017PaperSmoothHostAllocationBytes();
+  const std::uint64_t paper_smooth_host_high_water_bytes =
+      std::max(paper_smooth_host_allocated_bytes,
+               q017_paper_smooth_host_high_water_bytes_);
 
   std::vector<std::uint64_t> species_counts(nsp, 0);
   std::vector<std::uint64_t> level_counts(nlevels, 0);
@@ -637,6 +688,14 @@ void Particles::OutputQ017Telemetry() const {
   std::uint64_t max_owned_allocated_bytes = owned_allocated_bytes;
   std::uint64_t sum_owned_high_water_bytes = owned_high_water_bytes;
   std::uint64_t max_owned_high_water_bytes = owned_high_water_bytes;
+  std::uint64_t total_paper_smooth_host_allocated_bytes =
+      paper_smooth_host_allocated_bytes;
+  std::uint64_t max_paper_smooth_host_allocated_bytes =
+      paper_smooth_host_allocated_bytes;
+  std::uint64_t sum_paper_smooth_host_high_water_bytes =
+      paper_smooth_host_high_water_bytes;
+  std::uint64_t max_paper_smooth_host_high_water_bytes =
+      paper_smooth_host_high_water_bytes;
   std::uint64_t total_invalid_records = invalid_records;
   std::vector<std::uint64_t> global_species_counts = species_counts;
   std::vector<std::uint64_t> global_level_counts = level_counts;
@@ -662,6 +721,18 @@ void Particles::OutputQ017Telemetry() const {
              MPI_SUM, 0, MPI_COMM_WORLD);
   MPI_Reduce(&owned_high_water_bytes, &max_owned_high_water_bytes, 1, MPI_UINT64_T,
              MPI_MAX, 0, MPI_COMM_WORLD);
+  MPI_Reduce(&paper_smooth_host_allocated_bytes,
+             &total_paper_smooth_host_allocated_bytes, 1, MPI_UINT64_T, MPI_SUM, 0,
+             MPI_COMM_WORLD);
+  MPI_Reduce(&paper_smooth_host_allocated_bytes,
+             &max_paper_smooth_host_allocated_bytes, 1, MPI_UINT64_T, MPI_MAX, 0,
+             MPI_COMM_WORLD);
+  MPI_Reduce(&paper_smooth_host_high_water_bytes,
+             &sum_paper_smooth_host_high_water_bytes, 1, MPI_UINT64_T, MPI_SUM, 0,
+             MPI_COMM_WORLD);
+  MPI_Reduce(&paper_smooth_host_high_water_bytes,
+             &max_paper_smooth_host_high_water_bytes, 1, MPI_UINT64_T, MPI_MAX, 0,
+             MPI_COMM_WORLD);
   MPI_Reduce(&invalid_records, &total_invalid_records, 1, MPI_UINT64_T, MPI_SUM, 0,
              MPI_COMM_WORLD);
   if (nsp > 0) {
@@ -706,6 +777,18 @@ void Particles::OutputQ017Telemetry() const {
   print_scalar("particle_memory.athenak_owned_tracked_kokkos_views."
                "allocated_high_water_bytes_rank_max",
                max_owned_high_water_bytes);
+  print_scalar("particle_memory.paper_smooth_host_transport."
+               "allocated_snapshot_bytes_total",
+               total_paper_smooth_host_allocated_bytes);
+  print_scalar("particle_memory.paper_smooth_host_transport."
+               "allocated_snapshot_bytes_rank_max",
+               max_paper_smooth_host_allocated_bytes);
+  print_scalar("particle_memory.paper_smooth_host_transport."
+               "allocated_high_water_bytes_rank_sum",
+               sum_paper_smooth_host_high_water_bytes);
+  print_scalar("particle_memory.paper_smooth_host_transport."
+               "allocated_high_water_bytes_rank_max",
+               max_paper_smooth_host_high_water_bytes);
   print_scalar("particle_memory.invalid_records", total_invalid_records);
   for (int sp=0; sp<nsp; ++sp) {
     const std::string prefix = "particle_memory.species." + std::to_string(sp);

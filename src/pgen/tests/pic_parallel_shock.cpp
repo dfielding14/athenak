@@ -1379,11 +1379,20 @@ void ApplyParallelShockGasSubtraction(Mesh *pm, const Real stage_weight) {
     stage_delta[3] += d.dmz*d.vol;
     stage_delta[4] += d.de*d.vol;
   }
-  // Qualified shock injection uses SSPRK1/2/3, whose source-only low-storage
-  // recurrence is S <- beta*(S + Delta).
+  const bool paper_vl2 =
+      (pm->pmb_pack != nullptr) && (pm->pmb_pack->ppart != nullptr) &&
+      pm->pmb_pack->ppart->UsesPaperVL2Coupling();
   for (int n=0; n<5; ++n) {
-    ps_injection_transaction_applied_local[n] =
-        stage_weight*(ps_injection_transaction_applied_local[n] + stage_delta[n]);
+    if (paper_vl2) {
+      // VL2 stage 2 resets to the saved cycle-start state before replaying the
+      // full source transaction. The stage-1 half-step is predictor-only.
+      ps_injection_transaction_applied_local[n] = stage_weight*stage_delta[n];
+    } else {
+      // Qualified legacy shock injection uses SSPRK1/2/3, whose source-only
+      // low-storage recurrence is S <- beta*(S + Delta).
+      ps_injection_transaction_applied_local[n] =
+          stage_weight*(ps_injection_transaction_applied_local[n] + stage_delta[n]);
+    }
   }
 }
 

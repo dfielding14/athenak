@@ -9,9 +9,15 @@
 #include <cstdlib>
 #include <cmath>
 #include <iostream>
+#include <vector>
 
 #include "athena.hpp"
+#if MPI_PARALLEL_ENABLED
+#include <mpi.h>
+#endif
+#include "globals.hpp"
 #include "mesh/mesh.hpp"
+#include "mesh/nghbr_index.hpp"
 #include "bvals/bvals.hpp"
 #include "particles.hpp"
 
@@ -20,8 +26,10 @@ namespace particles {
 namespace {
 // PR2 coupling inserts wrappers into stagen; keep PR1 default in before_timeintegrator.
 KOKKOS_INLINE_FUNCTION
-bool RunMomentWrappersAtStage(const bool couple_to_mhd, const int stage) {
+bool RunMomentWrappersAtStage(const bool couple_to_mhd, const bool paper_vl2,
+                              const int stage) {
   if (couple_to_mhd) {
+    if (paper_vl2) return (stage == 1) || (stage == 2);
     return (stage == 1);
   }
   return (stage == 0);
@@ -58,6 +66,17 @@ void PosToCellAndFrac(const Real x, const Real xmin, const Real dx, const int is
 }
 
 KOKKOS_INLINE_FUNCTION
+void PosToCellAndFracUnclamped(const Real x, const Real xmin, const Real dx,
+                               const int is, int &icell, Real &frac) {
+  const Real xrel = (x - xmin)/dx;
+  const Real ifloor = floor(xrel);
+  icell = static_cast<int>(ifloor) + is;
+  frac = xrel - ifloor;
+  if (frac < static_cast<Real>(0.0)) frac = static_cast<Real>(0.0);
+  if (frac > static_cast<Real>(1.0)) frac = static_cast<Real>(1.0);
+}
+
+KOKKOS_INLINE_FUNCTION
 bool InBoundsInclusive(const int i, const int imin, const int imax) {
   return (i >= imin && i <= imax);
 }
@@ -67,6 +86,124 @@ bool MomentDepositUsesGhostFace(const BoundaryFlag flag) {
   return ((flag == BoundaryFlag::block) ||
           (flag == BoundaryFlag::periodic) ||
           (flag == BoundaryFlag::shear_periodic));
+}
+
+int PeriodicReceiverImageShift(const std::int32_t owner_index, const int direction,
+                               const int nblocks, const BoundaryFlag inner_flag,
+                               const BoundaryFlag outer_flag) {
+  if (inner_flag != BoundaryFlag::periodic ||
+      outer_flag != BoundaryFlag::periodic) {
+    return 0;
+  }
+  if (direction < 0 && owner_index == 0) return 1;
+  if (direction > 0 && owner_index == nblocks - 1) return -1;
+  return 0;
+}
+
+bool NeighborDirectionsFromIndex(const int index, int &ox1, int &ox2, int &ox3) {
+  for (int z = -1; z <= 1; ++z) {
+    for (int y = -1; y <= 1; ++y) {
+      for (int x = -1; x <= 1; ++x) {
+        if (x == 0 && y == 0 && z == 0) continue;
+        const int ndirections = (x == 0) + (y == 0) + (z == 0);
+        const int n1_max = (ndirections >= 1) ? 1 : 0;
+        const int n2_max = (ndirections == 2) ? 1 : 0;
+        for (int n1 = 0; n1 <= n1_max; ++n1) {
+          for (int n2 = 0; n2 <= n2_max; ++n2) {
+            if (NeighborIndex(x, y, z, n1, n2) != index) continue;
+            ox1 = x;
+            ox2 = y;
+            ox3 = z;
+            return true;
+          }
+        }
+      }
+    }
+  }
+  return false;
+}
+
+std::uint32_t PaperSmoothReceiverImageCode(const Mesh *pm, const int owner_gid,
+                                           const int ox1, const int ox2,
+                                           const int ox3) {
+  const auto &loc = pm->lloc_eachmb[owner_gid];
+  const int level_offset = loc.level - pm->root_level;
+  const int nmbx1 = pm->nmb_rootx1 << level_offset;
+  const int nmbx2 = pm->nmb_rootx2 << level_offset;
+  const int nmbx3 = pm->nmb_rootx3 << level_offset;
+  const int shift_x1 = PeriodicReceiverImageShift(
+      loc.lx1, ox1, nmbx1, pm->mesh_bcs[BoundaryFace::inner_x1],
+      pm->mesh_bcs[BoundaryFace::outer_x1]);
+  const int shift_x2 = PeriodicReceiverImageShift(
+      loc.lx2, ox2, nmbx2, pm->mesh_bcs[BoundaryFace::inner_x2],
+      pm->mesh_bcs[BoundaryFace::outer_x2]);
+  const int shift_x3 = PeriodicReceiverImageShift(
+      loc.lx3, ox3, nmbx3, pm->mesh_bcs[BoundaryFace::inner_x3],
+      pm->mesh_bcs[BoundaryFace::outer_x3]);
+  return PaperSmoothEncodeImageCode(shift_x1, shift_x2, shift_x3);
+}
+
+void ShiftPaperSmoothRecordIntoReceiverImage(PaperSmoothMomentRecord &record,
+                                             const Mesh *pm) {
+  const auto &mesh = pm->mesh_size;
+  record.x += PaperSmoothDecodeImageShift(record.reserved, 0) *
+              (mesh.x1max - mesh.x1min);
+  record.y += PaperSmoothDecodeImageShift(record.reserved, 1) *
+              (mesh.x2max - mesh.x2min);
+  record.z += PaperSmoothDecodeImageShift(record.reserved, 2) *
+              (mesh.x3max - mesh.x3min);
+}
+
+Real PaperSmoothRawTSCWeight(const Real coordinate, const Real center, const Real dx) {
+  const Real distance = std::abs(coordinate - center)/dx;
+  if (distance <= static_cast<Real>(0.5)) {
+    return static_cast<Real>(0.75) - distance*distance;
+  }
+  if (distance <= static_cast<Real>(1.5)) {
+    const Real remainder = static_cast<Real>(1.5) - distance;
+    return static_cast<Real>(0.5)*remainder*remainder;
+  }
+  return static_cast<Real>(0.0);
+}
+
+Real PaperSmoothPhysicalAxisNorm(const Real coordinate, const Real dx,
+                                 const Real domain_min, const Real domain_max,
+                                 const BoundaryFlag inner_flag,
+                                 const BoundaryFlag outer_flag) {
+  if (inner_flag == BoundaryFlag::periodic &&
+      outer_flag == BoundaryFlag::periodic) {
+    return static_cast<Real>(1.0);
+  }
+  const int center_index = static_cast<int>(std::floor((coordinate - domain_min)/dx));
+  Real norm = static_cast<Real>(0.0);
+  for (int offset = -2; offset <= 2; ++offset) {
+    const Real center = domain_min +
+        (static_cast<Real>(center_index + offset) + static_cast<Real>(0.5))*dx;
+    if (center < domain_min || center >= domain_max) continue;
+    norm += PaperSmoothRawTSCWeight(coordinate, center, dx);
+  }
+  return norm;
+}
+
+Real PaperSmoothPhysicalBoundaryNorm(const Mesh *pm, const MeshBlock *pmb,
+                                     const int owner_m, const Real x,
+                                     const Real y, const Real z) {
+  const auto &mesh = pm->mesh_size;
+  const auto &size = pmb->mb_size.h_view(owner_m);
+  Real norm = PaperSmoothPhysicalAxisNorm(
+      x, size.dx1, mesh.x1min, mesh.x1max,
+      pm->mesh_bcs[BoundaryFace::inner_x1], pm->mesh_bcs[BoundaryFace::outer_x1]);
+  if (pm->multi_d) {
+    norm *= PaperSmoothPhysicalAxisNorm(
+        y, size.dx2, mesh.x2min, mesh.x2max,
+        pm->mesh_bcs[BoundaryFace::inner_x2], pm->mesh_bcs[BoundaryFace::outer_x2]);
+  }
+  if (pm->three_d) {
+    norm *= PaperSmoothPhysicalAxisNorm(
+        z, size.dx3, mesh.x3min, mesh.x3max,
+        pm->mesh_bcs[BoundaryFace::inner_x3], pm->mesh_bcs[BoundaryFace::outer_x3]);
+  }
+  return norm;
 }
 
 KOKKOS_INLINE_FUNCTION
@@ -112,22 +249,13 @@ void ShapeOrder(const int i, const Real di, int &i_min, Real S[O + 1]) {
     }
   } else {
     if constexpr (!STAGGERED) {
-      if (di < static_cast<Real>(0.5)) {
-        i_min = i - 1;
-        S[0] = static_cast<Real>(0.5) *
-               (static_cast<Real>(0.5) - di) *
-               (static_cast<Real>(0.5) - di);
-        S[1] = static_cast<Real>(0.75) - di*di;
-        S[2] = static_cast<Real>(1.0) - S[0] - S[1];
-      } else {
-        i_min = i;
-        S[0] = static_cast<Real>(0.5) *
-               (static_cast<Real>(1.5) - di) *
-               (static_cast<Real>(1.5) - di);
-        Real d1 = static_cast<Real>(1.0) - di;
-        S[1] = static_cast<Real>(0.75) - d1*d1;
-        S[2] = static_cast<Real>(1.0) - S[0] - S[1];
-      }
+      i_min = i - 1;
+      const Real d = di - static_cast<Real>(0.5);
+      S[0] = static_cast<Real>(0.5) *
+             (static_cast<Real>(0.5) - d) *
+             (static_cast<Real>(0.5) - d);
+      S[1] = static_cast<Real>(0.75) - d*d;
+      S[2] = static_cast<Real>(1.0) - S[0] - S[1];
     } else {
       i_min = i - 1;
       S[0] = static_cast<Real>(0.5) *
@@ -194,19 +322,32 @@ void DepositCellCenteredMomentsShape(
     const bool use_delta_feedback, const Real q_macro,
     const Real vx, const Real vy, const Real vz,
     const Real ebdot, const Real dpxdt,
-    const Real dpydt, const Real dpzdt, const Real dedt) {
+    const Real dpydt, const Real dpzdt, const Real dedt,
+    const bool normalize_clipped_shape) {
   int ip = is;
   int jp = js;
   int kp = ks;
   Real dxp = static_cast<Real>(0.0);
   Real dyp = static_cast<Real>(0.0);
   Real dzp = static_cast<Real>(0.0);
-  PosToCellAndFrac(x, x1min, dx1, is, i_min, i_max, ip, dxp);
+  if (normalize_clipped_shape) {
+    PosToCellAndFrac(x, x1min, dx1, is, i_min, i_max, ip, dxp);
+  } else {
+    PosToCellAndFracUnclamped(x, x1min, dx1, is, ip, dxp);
+  }
   if (multi_d) {
-    PosToCellAndFrac(y, x2min, dx2, js, j_min, j_max, jp, dyp);
+    if (normalize_clipped_shape) {
+      PosToCellAndFrac(y, x2min, dx2, js, j_min, j_max, jp, dyp);
+    } else {
+      PosToCellAndFracUnclamped(y, x2min, dx2, js, jp, dyp);
+    }
   }
   if (three_d) {
-    PosToCellAndFrac(z, x3min, dx3, ks, k_min, k_max, kp, dzp);
+    if (normalize_clipped_shape) {
+      PosToCellAndFrac(z, x3min, dx3, ks, k_min, k_max, kp, dzp);
+    } else {
+      PosToCellAndFracUnclamped(z, x3min, dx3, ks, kp, dzp);
+    }
   }
 
   Real sx[O + 1];
@@ -237,22 +378,25 @@ void DepositCellCenteredMomentsShape(
   const int nk = three_d ? (O + 1) : 1;
   const int nj = multi_d ? (O + 1) : 1;
 
-  Real norm = static_cast<Real>(0.0);
-  for (int dk = 0; dk < nk; ++dk) {
-    const int kk = k0 + dk;
-    if (!InBoundsInclusive(kk, k_min, k_max)) continue;
-    for (int dj = 0; dj < nj; ++dj) {
-      const int jj = j0 + dj;
-      if (!InBoundsInclusive(jj, j_min, j_max)) continue;
-      for (int di = 0; di < O + 1; ++di) {
-        const int ii = i0 + di;
-        if (!InBoundsInclusive(ii, i_min, i_max)) continue;
-        norm += sx[di]*sy[dj]*sz[dk];
+  Real inv_norm = static_cast<Real>(1.0);
+  if (normalize_clipped_shape) {
+    Real norm = static_cast<Real>(0.0);
+    for (int dk = 0; dk < nk; ++dk) {
+      const int kk = k0 + dk;
+      if (!InBoundsInclusive(kk, k_min, k_max)) continue;
+      for (int dj = 0; dj < nj; ++dj) {
+        const int jj = j0 + dj;
+        if (!InBoundsInclusive(jj, j_min, j_max)) continue;
+        for (int di = 0; di < O + 1; ++di) {
+          const int ii = i0 + di;
+          if (!InBoundsInclusive(ii, i_min, i_max)) continue;
+          norm += sx[di]*sy[dj]*sz[dk];
+        }
       }
     }
+    if (norm <= static_cast<Real>(0.0)) return;
+    inv_norm = static_cast<Real>(1.0)/norm;
   }
-  if (norm <= static_cast<Real>(0.0)) return;
-  const Real inv_norm = static_cast<Real>(1.0)/norm;
 
   for (int dk = 0; dk < nk; ++dk) {
     const int kk = k0 + dk;
@@ -304,13 +448,14 @@ inline DvceEdgeFld4D<Real> MakeEdgeCurrentAlias(const DvceArray4D<Real> &x1e,
 
 inline bool RunEdgeCurrentWrappersAtStage(const bool deposit_moments,
                                           const bool couple_to_mhd,
+                                          const bool paper_vl2,
                                           const CoupledCurrentRepresentation repr,
                                           const CoupledCurrentDepositionMode mode,
                                           const int stage) {
   if (!UseDirectEdgeCurrentDeposit(deposit_moments, couple_to_mhd, repr, mode)) {
     return false;
   }
-  return RunMomentWrappersAtStage(couple_to_mhd, stage);
+  return RunMomentWrappersAtStage(couple_to_mhd, paper_vl2, stage);
 }
 
 // PR4b scaffolding: trajectory-based direct deposition requires pre-push old
@@ -372,7 +517,8 @@ TaskStatus Particles::SaveOldPositions(Driver *pdriver, int stage) {
 TaskStatus Particles::ZeroMoments(Driver *pdriver, int stage) {
   (void)pdriver;
   if (!deposit_moments) return TaskStatus::complete;
-  if (!RunMomentWrappersAtStage(couple_moments_to_mhd, stage)) {
+  if (!RunMomentWrappersAtStage(couple_moments_to_mhd, UsesPaperVL2Coupling(),
+                                stage)) {
     return TaskStatus::complete;
   }
 
@@ -397,10 +543,237 @@ TaskStatus Particles::ZeroMoments(Driver *pdriver, int stage) {
 TaskStatus Particles::InitRecvMoments(Driver *pdriver, int stage) {
   (void)pdriver;
   if (!(deposit_moments) || pbval_mom == nullptr) return TaskStatus::complete;
-  if (!RunMomentWrappersAtStage(couple_moments_to_mhd, stage)) {
+  if (!RunMomentWrappersAtStage(couple_moments_to_mhd, UsesPaperVL2Coupling(),
+                                stage)) {
+    return TaskStatus::complete;
+  }
+  if (UsesPaperVL2Coupling() && pmy_pack->pmesh->multilevel) {
     return TaskStatus::complete;
   }
   return pbval_mom->InitRecv(NMOM);
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn TaskStatus Particles::DepositPaperSmoothMoments()
+//! \brief Deposit raw receiver-resolution TSC records onto AMR/SMR leaf blocks.
+
+TaskStatus Particles::DepositPaperSmoothMoments(Driver *pdriver, int stage) {
+  (void)pdriver;
+  if (paper_smooth_mom_transport == nullptr) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "paper_mhd_pic multilevel deposition requires the paper_smooth "
+              << "receiver-record transport" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+
+  Q017Fence();
+  Kokkos::Timer q017_timer;
+  auto *pm = pmy_pack->pmesh;
+  auto *pmb = pmy_pack->pmb;
+  auto &transport = *paper_smooth_mom_transport;
+  transport.Reset();
+
+  if (nprtcl_thispack > 0) {
+    auto h_pr = Kokkos::create_mirror_view_and_copy(HostMemSpace(), prtcl_rdata);
+    auto h_pi = Kokkos::create_mirror_view_and_copy(HostMemSpace(), prtcl_idata);
+    auto h_qspecies =
+        Kokkos::create_mirror_view_and_copy(HostMemSpace(), species_charge);
+    const bool stage_has_feedback = (stage == 2);
+    const bool use_momentum_feedback =
+        stage_has_feedback && couple_moments_momentum_to_mhd;
+    const bool use_energy_feedback =
+        stage_has_feedback && couple_moments_energy_to_mhd;
+    std::uint32_t deposit_flags =
+        kPaperSmoothDepositRhoJ | kPaperSmoothDepositEBDot;
+    if (use_momentum_feedback) {
+      deposit_flags |= kPaperSmoothDepositMomentumFeedback;
+    }
+    if (use_energy_feedback) {
+      deposit_flags |= kPaperSmoothDepositEnergyFeedback;
+    }
+
+    for (int p = 0; p < nprtcl_thispack; ++p) {
+      const int owner_gid = h_pi(PGID, p);
+      const int owner_m = owner_gid - pmy_pack->gids;
+      const int sp = h_pi(PSP, p);
+      const int ptag = h_pi(PTAG, p);
+      if (owner_gid < 0 || owner_gid >= pm->nmb_total ||
+          owner_m < 0 || owner_m >= pmy_pack->nmb_thispack ||
+          pm->rank_eachmb[owner_gid] != global_variable::my_rank ||
+          pmb->mb_gid.h_view(owner_m) != owner_gid ||
+          sp < 0 || sp >= nspecies || ptag < 0) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl
+                  << "paper_smooth receiver routing found an invalid particle record"
+                  << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+
+      Real weight = h_pr(IPWT, p);
+      if (weight <= static_cast<Real>(0.0)) weight = static_cast<Real>(1.0);
+      const Real physical_boundary_norm = PaperSmoothPhysicalBoundaryNorm(
+          pm, pmb, owner_m, h_pr(IPX, p), h_pr(IPY, p), h_pr(IPZ, p));
+      if (!(physical_boundary_norm > static_cast<Real>(0.0)) ||
+          !std::isfinite(physical_boundary_norm)) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl
+                  << "paper_smooth receiver routing found invalid physical-boundary "
+                  << "shape support" << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      const Real physical_boundary_scale =
+          static_cast<Real>(1.0)/physical_boundary_norm;
+      Real vx, vy, vz;
+      CRVelocityFromState(UsesRelativisticCRState(), pic_cr_light_speed,
+                          h_pr(IPVX, p), h_pr(IPVY, p), h_pr(IPVZ, p),
+                          vx, vy, vz);
+      PaperSmoothMomentRecord record{
+          owner_gid, ptag, deposit_flags, 0U,
+          h_pr(IPX, p), h_pr(IPY, p), h_pr(IPZ, p),
+          physical_boundary_scale*deposit_qscale*weight*h_qspecies(sp),
+          vx, vy, vz, h_pr(IPEBDOT, p),
+          use_momentum_feedback ? physical_boundary_scale*h_pr(IPDPX, p) :
+                                  static_cast<Real>(0.0),
+          use_momentum_feedback ? physical_boundary_scale*h_pr(IPDPY, p) :
+                                  static_cast<Real>(0.0),
+          use_momentum_feedback ? physical_boundary_scale*h_pr(IPDPZ, p) :
+                                  static_cast<Real>(0.0),
+          use_energy_feedback ? physical_boundary_scale*h_pr(IPDE, p) :
+                                static_cast<Real>(0.0)};
+
+      auto queue_receiver = [&record, &transport, pm](const int gid, const int rank,
+                                                       const std::uint32_t image_code) {
+        if (gid < 0 || gid >= pm->nmb_total ||
+            rank < 0 || rank >= global_variable::nranks ||
+            pm->rank_eachmb[gid] != rank ||
+            !PaperSmoothImageCodeValid(image_code)) {
+          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                    << std::endl
+                    << "paper_smooth receiver routing found an invalid destination"
+                    << std::endl;
+          std::exit(EXIT_FAILURE);
+        }
+        auto receiver_record = record;
+        receiver_record.dest_gid = gid;
+        receiver_record.reserved = image_code;
+        ShiftPaperSmoothRecordIntoReceiverImage(receiver_record, pm);
+        if (transport.QueueReceiver(receiver_record, rank) ==
+            PaperSmoothRecordStatus::invalid) {
+          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                    << std::endl
+                    << "paper_smooth receiver transport rejected a destination"
+                    << std::endl;
+          std::exit(EXIT_FAILURE);
+        }
+      };
+      queue_receiver(owner_gid, pm->rank_eachmb[owner_gid], 0U);
+      for (int n = 0; n < pmb->nnghbr; ++n) {
+        const auto &neighbor = pmb->nghbr.h_view(owner_m, n);
+        if (neighbor.gid >= 0) {
+          int ox1 = 0;
+          int ox2 = 0;
+          int ox3 = 0;
+          if (!NeighborDirectionsFromIndex(n, ox1, ox2, ox3)) {
+            std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                      << std::endl
+                      << "paper_smooth receiver routing found an invalid neighbor index"
+                      << std::endl;
+            std::exit(EXIT_FAILURE);
+          }
+          queue_receiver(neighbor.gid, neighbor.rank,
+                         PaperSmoothReceiverImageCode(pm, owner_gid, ox1, ox2, ox3));
+        }
+      }
+    }
+    ObserveQ017PaperSmoothHostAllocationBytes(
+        static_cast<std::uint64_t>(h_pr.span())*sizeof(Real) +
+        static_cast<std::uint64_t>(h_pi.span())*sizeof(int) +
+        static_cast<std::uint64_t>(h_qspecies.span())*sizeof(Real));
+  }
+
+  if (!transport.Exchange()) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "paper_smooth receiver-record exchange failed" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+
+  const auto &records = transport.records();
+  bool local_delivery_valid = true;
+  for (const auto &record : records) {
+    if (record.dest_gid < pmy_pack->gids ||
+        record.dest_gid >= pmy_pack->gids + pmy_pack->nmb_thispack ||
+        pm->rank_eachmb[record.dest_gid] != global_variable::my_rank ||
+        !PaperSmoothImageCodeValid(record.reserved)) {
+      local_delivery_valid = false;
+      break;
+    }
+  }
+#if MPI_PARALLEL_ENABLED
+  int local_delivery_valid_int = local_delivery_valid ? 1 : 0;
+  int global_delivery_valid_int = 0;
+  if (MPI_Allreduce(&local_delivery_valid_int, &global_delivery_valid_int, 1,
+                    MPI_INT, MPI_MIN, MPI_COMM_WORLD) != MPI_SUCCESS) {
+    global_delivery_valid_int = 0;
+  }
+  local_delivery_valid = (global_delivery_valid_int != 0);
+#endif
+  if (!local_delivery_valid) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "paper_smooth receiver transport delivered a record outside its "
+              << "owning rank pack" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  Kokkos::realloc(paper_smooth_mom_records, records.size());
+  if (!records.empty()) {
+    auto h_records = Kokkos::create_mirror_view(paper_smooth_mom_records);
+    for (std::size_t n = 0; n < records.size(); ++n) h_records(n) = records[n];
+    Kokkos::deep_copy(paper_smooth_mom_records, h_records);
+    ObserveQ017PaperSmoothHostAllocationBytes(
+        static_cast<std::uint64_t>(h_records.span())*sizeof(PaperSmoothMomentRecord));
+  }
+
+  auto &indcs = pm->mb_indcs;
+  const int is = indcs.is;
+  const int ie = indcs.ie;
+  const int js = indcs.js;
+  const int je = indcs.je;
+  const int ks = indcs.ks;
+  const int ke = indcs.ke;
+  const bool multi_d = pm->multi_d;
+  const bool three_d = pm->three_d;
+  const int gids = pmy_pack->gids;
+  const int nmb = pmy_pack->nmb_thispack;
+  const int nrecords = static_cast<int>(records.size());
+  auto &size = pmb->mb_size;
+  auto &mom = moments;
+  auto &device_records = paper_smooth_mom_records;
+  if (nrecords > 0) {
+    par_for("deposit_paper_smooth_receiver_records", DevExeSpace(), 0, nrecords - 1,
+    KOKKOS_LAMBDA(const int n) {
+      const auto record = device_records(n);
+      const int m = record.dest_gid - gids;
+      if (m < 0 || m >= nmb) return;
+      const bool use_delta_feedback =
+          (record.deposit_flags &
+           (kPaperSmoothDepositMomentumFeedback |
+            kPaperSmoothDepositEnergyFeedback)) != 0U;
+      DepositCellCenteredMomentsShape<2>(
+          mom, m, record.x, record.y, record.z,
+          size.d_view(m).x1min, size.d_view(m).x2min, size.d_view(m).x3min,
+          size.d_view(m).dx1, size.d_view(m).dx2, size.d_view(m).dx3,
+          is, js, ks, is, ie, js, je, ks, ke, multi_d, three_d, true,
+          use_delta_feedback, record.q_macro,
+          record.vx, record.vy, record.vz, record.ebdot,
+          record.dpxdt, record.dpydt, record.dpzdt, record.dedt, false);
+    });
+  }
+
+  Q017Fence();
+  AccumulateQ017Timer(Q017ParticleTimer::deposition, q017_timer.seconds());
+  return TaskStatus::complete;
 }
 
 //----------------------------------------------------------------------------------------
@@ -410,8 +783,12 @@ TaskStatus Particles::InitRecvMoments(Driver *pdriver, int stage) {
 TaskStatus Particles::DepositMoments(Driver *pdriver, int stage) {
   (void)pdriver;
   if (!deposit_moments) return TaskStatus::complete;
-  if (!RunMomentWrappersAtStage(couple_moments_to_mhd, stage)) {
+  if (!RunMomentWrappersAtStage(couple_moments_to_mhd, UsesPaperVL2Coupling(),
+                                stage)) {
     return TaskStatus::complete;
+  }
+  if (UsesPaperVL2Coupling() && pmy_pack->pmesh->multilevel) {
+    return DepositPaperSmoothMoments(pdriver, stage);
   }
 
   int npart = nprtcl_thispack;
@@ -519,7 +896,7 @@ TaskStatus Particles::DepositMoments(Driver *pdriver, int stage) {
           physical_density_scale*df_weight*pr(IPDPX,p),
           physical_density_scale*df_weight*pr(IPDPY,p),
           physical_density_scale*df_weight*pr(IPDPZ,p),
-          physical_density_scale*df_weight*pr(IPDE,p));
+          physical_density_scale*df_weight*pr(IPDE,p), true);
     });
   } else if (deposit_order == 2) {
     par_for("deposit_moments_o2", DevExeSpace(), 0, npart-1,
@@ -573,7 +950,7 @@ TaskStatus Particles::DepositMoments(Driver *pdriver, int stage) {
           physical_density_scale*df_weight*pr(IPDPX,p),
           physical_density_scale*df_weight*pr(IPDPY,p),
           physical_density_scale*df_weight*pr(IPDPZ,p),
-          physical_density_scale*df_weight*pr(IPDE,p));
+          physical_density_scale*df_weight*pr(IPDE,p), true);
     });
   }
 
@@ -1362,7 +1739,11 @@ TaskStatus Particles::DepositMoments(Driver *pdriver, int stage) {
 TaskStatus Particles::RestrictMoments(Driver *pdriver, int stage) {
   (void)pdriver;
   if (!deposit_moments) return TaskStatus::complete;
-  if (!RunMomentWrappersAtStage(couple_moments_to_mhd, stage)) {
+  if (!RunMomentWrappersAtStage(couple_moments_to_mhd, UsesPaperVL2Coupling(),
+                                stage)) {
+    return TaskStatus::complete;
+  }
+  if (UsesPaperVL2Coupling() && pmy_pack->pmesh->multilevel) {
     return TaskStatus::complete;
   }
   if (!(pmy_pack->pmesh->multilevel)) return TaskStatus::complete;
@@ -1379,7 +1760,11 @@ TaskStatus Particles::RestrictMoments(Driver *pdriver, int stage) {
 TaskStatus Particles::SendMoments(Driver *pdriver, int stage) {
   (void)pdriver;
   if (!(deposit_moments) || pbval_mom == nullptr) return TaskStatus::complete;
-  if (!RunMomentWrappersAtStage(couple_moments_to_mhd, stage)) {
+  if (!RunMomentWrappersAtStage(couple_moments_to_mhd, UsesPaperVL2Coupling(),
+                                stage)) {
+    return TaskStatus::complete;
+  }
+  if (UsesPaperVL2Coupling() && pmy_pack->pmesh->multilevel) {
     return TaskStatus::complete;
   }
   return pbval_mom->PackAndSendCC(moments, coarse_moments);
@@ -1392,7 +1777,11 @@ TaskStatus Particles::SendMoments(Driver *pdriver, int stage) {
 TaskStatus Particles::RecvMoments(Driver *pdriver, int stage) {
   (void)pdriver;
   if (!(deposit_moments) || pbval_mom == nullptr) return TaskStatus::complete;
-  if (!RunMomentWrappersAtStage(couple_moments_to_mhd, stage)) {
+  if (!RunMomentWrappersAtStage(couple_moments_to_mhd, UsesPaperVL2Coupling(),
+                                stage)) {
+    return TaskStatus::complete;
+  }
+  if (UsesPaperVL2Coupling() && pmy_pack->pmesh->multilevel) {
     return TaskStatus::complete;
   }
   return pbval_mom->RecvAndUnpackCC(moments, coarse_moments, CCRecvOp::accumulate);
@@ -1405,7 +1794,11 @@ TaskStatus Particles::RecvMoments(Driver *pdriver, int stage) {
 TaskStatus Particles::ClearRecvMoments(Driver *pdriver, int stage) {
   (void)pdriver;
   if (!(deposit_moments) || pbval_mom == nullptr) return TaskStatus::complete;
-  if (!RunMomentWrappersAtStage(couple_moments_to_mhd, stage)) {
+  if (!RunMomentWrappersAtStage(couple_moments_to_mhd, UsesPaperVL2Coupling(),
+                                stage)) {
+    return TaskStatus::complete;
+  }
+  if (UsesPaperVL2Coupling() && pmy_pack->pmesh->multilevel) {
     return TaskStatus::complete;
   }
   return pbval_mom->ClearRecv();
@@ -1418,7 +1811,11 @@ TaskStatus Particles::ClearRecvMoments(Driver *pdriver, int stage) {
 TaskStatus Particles::ClearSendMoments(Driver *pdriver, int stage) {
   (void)pdriver;
   if (!(deposit_moments) || pbval_mom == nullptr) return TaskStatus::complete;
-  if (!RunMomentWrappersAtStage(couple_moments_to_mhd, stage)) {
+  if (!RunMomentWrappersAtStage(couple_moments_to_mhd, UsesPaperVL2Coupling(),
+                                stage)) {
+    return TaskStatus::complete;
+  }
+  if (UsesPaperVL2Coupling() && pmy_pack->pmesh->multilevel) {
     return TaskStatus::complete;
   }
   return pbval_mom->ClearSend();
@@ -1431,7 +1828,11 @@ TaskStatus Particles::ClearSendMoments(Driver *pdriver, int stage) {
 TaskStatus Particles::ApplyMomentPhysicalBCs(Driver *pdriver, int stage) {
   (void)pdriver;
   if (!(deposit_moments) || pbval_mom == nullptr) return TaskStatus::complete;
-  if (!RunMomentWrappersAtStage(couple_moments_to_mhd, stage)) {
+  if (!RunMomentWrappersAtStage(couple_moments_to_mhd, UsesPaperVL2Coupling(),
+                                stage)) {
+    return TaskStatus::complete;
+  }
+  if (UsesPaperVL2Coupling() && pmy_pack->pmesh->multilevel) {
     return TaskStatus::complete;
   }
 
@@ -1446,7 +1847,11 @@ TaskStatus Particles::ApplyMomentPhysicalBCs(Driver *pdriver, int stage) {
 TaskStatus Particles::ProlongateMoments(Driver *pdriver, int stage) {
   (void)pdriver;
   if (!(deposit_moments) || pbval_mom == nullptr) return TaskStatus::complete;
-  if (!RunMomentWrappersAtStage(couple_moments_to_mhd, stage)) {
+  if (!RunMomentWrappersAtStage(couple_moments_to_mhd, UsesPaperVL2Coupling(),
+                                stage)) {
+    return TaskStatus::complete;
+  }
+  if (UsesPaperVL2Coupling() && pmy_pack->pmesh->multilevel) {
     return TaskStatus::complete;
   }
   if (!(pmy_pack->pmesh->multilevel)) return TaskStatus::complete;
@@ -1465,6 +1870,7 @@ TaskStatus Particles::InitRecvEdgeCurrents(Driver *pdriver, int stage) {
   (void)pdriver;
   if (pbval_jedge == nullptr) return TaskStatus::complete;
   if (!RunEdgeCurrentWrappersAtStage(deposit_moments, couple_moments_to_mhd,
+                                     UsesPaperVL2Coupling(),
                                      couple_j_to_efield_representation,
                                      couple_j_deposition_mode, stage)) {
     return TaskStatus::complete;
@@ -1480,6 +1886,7 @@ TaskStatus Particles::SendEdgeCurrents(Driver *pdriver, int stage) {
   (void)pdriver;
   if (pbval_jedge == nullptr) return TaskStatus::complete;
   if (!RunEdgeCurrentWrappersAtStage(deposit_moments, couple_moments_to_mhd,
+                                     UsesPaperVL2Coupling(),
                                      couple_j_to_efield_representation,
                                      couple_j_deposition_mode, stage)) {
     return TaskStatus::complete;
@@ -1496,6 +1903,7 @@ TaskStatus Particles::RecvEdgeCurrents(Driver *pdriver, int stage) {
   (void)pdriver;
   if (pbval_jedge == nullptr) return TaskStatus::complete;
   if (!RunEdgeCurrentWrappersAtStage(deposit_moments, couple_moments_to_mhd,
+                                     UsesPaperVL2Coupling(),
                                      couple_j_to_efield_representation,
                                      couple_j_deposition_mode, stage)) {
     return TaskStatus::complete;
@@ -1525,6 +1933,7 @@ TaskStatus Particles::ClearRecvEdgeCurrents(Driver *pdriver, int stage) {
   (void)pdriver;
   if (pbval_jedge == nullptr) return TaskStatus::complete;
   if (!RunEdgeCurrentWrappersAtStage(deposit_moments, couple_moments_to_mhd,
+                                     UsesPaperVL2Coupling(),
                                      couple_j_to_efield_representation,
                                      couple_j_deposition_mode, stage)) {
     return TaskStatus::complete;
@@ -1540,6 +1949,7 @@ TaskStatus Particles::ClearSendEdgeCurrents(Driver *pdriver, int stage) {
   (void)pdriver;
   if (pbval_jedge == nullptr) return TaskStatus::complete;
   if (!RunEdgeCurrentWrappersAtStage(deposit_moments, couple_moments_to_mhd,
+                                     UsesPaperVL2Coupling(),
                                      couple_j_to_efield_representation,
                                      couple_j_deposition_mode, stage)) {
     return TaskStatus::complete;
@@ -1555,6 +1965,7 @@ TaskStatus Particles::ApplyEdgeCurrentPhysicalBCs(Driver *pdriver, int stage) {
   (void)pdriver;
   if (pbval_jedge == nullptr) return TaskStatus::complete;
   if (!RunEdgeCurrentWrappersAtStage(deposit_moments, couple_moments_to_mhd,
+                                     UsesPaperVL2Coupling(),
                                      couple_j_to_efield_representation,
                                      couple_j_deposition_mode, stage)) {
     return TaskStatus::complete;
@@ -1920,7 +2331,8 @@ TaskStatus Particles::ConvertCoupledCurrentRepresentation(Driver *pdriver, int s
   (void)pdriver;
   if (!deposit_moments) return TaskStatus::complete;
   if (!couple_moments_to_mhd) return TaskStatus::complete;
-  if (!RunMomentWrappersAtStage(couple_moments_to_mhd, stage)) {
+  if (!RunMomentWrappersAtStage(couple_moments_to_mhd, UsesPaperVL2Coupling(),
+                                stage)) {
     return TaskStatus::complete;
   }
   if (couple_j_to_efield_representation != CoupledCurrentRepresentation::edge_staggered) {

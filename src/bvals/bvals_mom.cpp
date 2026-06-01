@@ -109,18 +109,30 @@ void PaperSmoothMomentRecordTransport::Reset() {
 //----------------------------------------------------------------------------------------
 //! \brief Queue one unique cross-level duplicate without touching migration data.
 
-bool PaperSmoothMomentRecordTransport::Queue(const PaperSmoothMomentRecord &record,
-                                             const int dest_rank,
-                                             const int source_level,
-                                             const int dest_level) {
-  if (source_level == dest_level) return false;
-  if (record.dest_gid < 0 || record.ptag < 0) return false;
-  if (dest_rank < 0 || dest_rank >= nranks_) return false;
-  if (!InsertKey(queued_keys_, queued_key_count_, MakeKey(record))) return false;
+PaperSmoothRecordStatus PaperSmoothMomentRecordTransport::Queue(
+    const PaperSmoothMomentRecord &record, const int dest_rank,
+    const int source_level, const int dest_level) {
+  if (source_level == dest_level) return PaperSmoothRecordStatus::duplicate;
+  return QueueReceiver(record, dest_rank);
+}
+
+//----------------------------------------------------------------------------------------
+//! \brief Queue one unique receiver-leaf record without touching migration data.
+
+PaperSmoothRecordStatus PaperSmoothMomentRecordTransport::QueueReceiver(
+    const PaperSmoothMomentRecord &record, const int dest_rank) {
+  if (record.dest_gid < 0 || record.ptag < 0 ||
+      !PaperSmoothImageCodeValid(record.reserved)) {
+    return PaperSmoothRecordStatus::invalid;
+  }
+  if (dest_rank < 0 || dest_rank >= nranks_) return PaperSmoothRecordStatus::invalid;
+  if (!InsertKey(queued_keys_, queued_key_count_, MakeKey(record))) {
+    return PaperSmoothRecordStatus::duplicate;
+  }
 
   if (dest_rank == my_rank_) return AddRecord(record);
   outgoing_.push_back({dest_rank, record});
-  return true;
+  return PaperSmoothRecordStatus::accepted;
 }
 
 //----------------------------------------------------------------------------------------
@@ -176,7 +188,11 @@ bool PaperSmoothMomentRecordTransport::Exchange() {
   }
 
   outgoing_.clear();
-  for (const auto &record : recv_records_) AddRecord(record);
+  local_valid = true;
+  for (const auto &record : recv_records_) {
+    if (AddRecord(record) == PaperSmoothRecordStatus::invalid) local_valid = false;
+  }
+  if (!AllRanksValid(local_valid, mpi_comm_mom_)) return false;
 #else
   outgoing_.clear();
 #endif
@@ -200,7 +216,7 @@ std::uint64_t PaperSmoothMomentRecordTransport::RecordAllocationBytes() const {
 std::uint64_t PaperSmoothMomentRecordTransport::MetadataAllocationBytes() const {
   std::uint64_t bytes =
       static_cast<std::uint64_t>(queued_keys_.capacity() + delivered_keys_.capacity()) *
-      sizeof(std::uint64_t);
+      sizeof(RecordKey);
 #if MPI_PARALLEL_ENABLED
   bytes += static_cast<std::uint64_t>(send_counts_.capacity() + recv_counts_.capacity() +
                                      send_displs_.capacity() + recv_displs_.capacity()) *
@@ -219,31 +235,54 @@ std::uint64_t PaperSmoothMomentRecordTransport::AllocationBytes() const {
 //----------------------------------------------------------------------------------------
 //! \brief Pack the stable particle provenance key and destination GID for deduplication.
 
-std::uint64_t
+PaperSmoothMomentRecordTransport::RecordKey
 PaperSmoothMomentRecordTransport::MakeKey(const PaperSmoothMomentRecord &record) {
-  return (static_cast<std::uint64_t>(static_cast<std::uint32_t>(record.ptag)) << 32) |
-         static_cast<std::uint32_t>(record.dest_gid);
+  return {static_cast<std::uint32_t>(record.ptag),
+          static_cast<std::uint32_t>(record.dest_gid), record.reserved};
 }
 
 //----------------------------------------------------------------------------------------
 //! \brief Hash a packed record key using the SplitMix64 finalizer.
 
-std::uint64_t PaperSmoothMomentRecordTransport::HashKey(std::uint64_t key) {
+std::uint64_t PaperSmoothMomentRecordTransport::HashKey(const RecordKey &record_key) {
+  std::uint64_t key = record_key.ptag;
+  key ^= static_cast<std::uint64_t>(record_key.dest_gid) +
+         UINT64_C(0x9e3779b97f4a7c15) + (key << 6) + (key >> 2);
+  key ^= static_cast<std::uint64_t>(record_key.image_code) +
+         UINT64_C(0x9e3779b97f4a7c15) + (key << 6) + (key >> 2);
   key = (key ^ (key >> 30))*UINT64_C(0xbf58476d1ce4e5b9);
   key = (key ^ (key >> 27))*UINT64_C(0x94d049bb133111eb);
   return key ^ (key >> 31);
 }
 
 //----------------------------------------------------------------------------------------
+//! \brief Compare stable particle, receiver, and periodic-image record identities.
+
+bool PaperSmoothMomentRecordTransport::KeysEqual(const RecordKey &lhs,
+                                                 const RecordKey &rhs) {
+  return lhs.ptag == rhs.ptag && lhs.dest_gid == rhs.dest_gid &&
+         lhs.image_code == rhs.image_code;
+}
+
+//----------------------------------------------------------------------------------------
+//! \brief Return true for an unused open-addressing table slot.
+
+bool PaperSmoothMomentRecordTransport::IsEmptyKey(const RecordKey &key) {
+  return key.ptag == empty_key_component_;
+}
+
+//----------------------------------------------------------------------------------------
 //! \brief Resize an open-addressed key table while preserving existing keys.
 
-void PaperSmoothMomentRecordTransport::RehashKeys(std::vector<std::uint64_t> &table,
+void PaperSmoothMomentRecordTransport::RehashKeys(std::vector<RecordKey> &table,
                                                   const std::size_t new_size) {
-  std::vector<std::uint64_t> new_table(new_size, empty_key_);
-  for (const std::uint64_t key : table) {
-    if (key == empty_key_) continue;
+  const RecordKey empty_key{empty_key_component_, empty_key_component_,
+                            empty_key_component_};
+  std::vector<RecordKey> new_table(new_size, empty_key);
+  for (const RecordKey &key : table) {
+    if (IsEmptyKey(key)) continue;
     std::size_t slot = static_cast<std::size_t>(HashKey(key)) & (new_size - 1);
-    while (new_table[slot] != empty_key_) slot = (slot + 1) & (new_size - 1);
+    while (!IsEmptyKey(new_table[slot])) slot = (slot + 1) & (new_size - 1);
     new_table[slot] = key;
   }
   table.swap(new_table);
@@ -252,9 +291,9 @@ void PaperSmoothMomentRecordTransport::RehashKeys(std::vector<std::uint64_t> &ta
 //----------------------------------------------------------------------------------------
 //! \brief Insert a key into an allocation-accountable open-addressed deduplication table.
 
-bool PaperSmoothMomentRecordTransport::InsertKey(std::vector<std::uint64_t> &table,
+bool PaperSmoothMomentRecordTransport::InsertKey(std::vector<RecordKey> &table,
                                                  std::size_t &count,
-                                                 const std::uint64_t key) {
+                                                 const RecordKey &key) {
   if (table.empty()) {
     RehashKeys(table, 16);
   } else if ((count + 1)*10 > table.size()*7) {
@@ -262,8 +301,8 @@ bool PaperSmoothMomentRecordTransport::InsertKey(std::vector<std::uint64_t> &tab
   }
 
   std::size_t slot = static_cast<std::size_t>(HashKey(key)) & (table.size() - 1);
-  while (table[slot] != empty_key_) {
-    if (table[slot] == key) return false;
+  while (!IsEmptyKey(table[slot])) {
+    if (KeysEqual(table[slot], key)) return false;
     slot = (slot + 1) & (table.size() - 1);
   }
   table[slot] = key;
@@ -274,19 +313,27 @@ bool PaperSmoothMomentRecordTransport::InsertKey(std::vector<std::uint64_t> &tab
 //----------------------------------------------------------------------------------------
 //! \brief Reset a key table while retaining its allocation for the next stage.
 
-void PaperSmoothMomentRecordTransport::ResetKeys(std::vector<std::uint64_t> &table,
+void PaperSmoothMomentRecordTransport::ResetKeys(std::vector<RecordKey> &table,
                                                  std::size_t &count) {
-  std::fill(table.begin(), table.end(), empty_key_);
+  const RecordKey empty_key{empty_key_component_, empty_key_component_,
+                            empty_key_component_};
+  std::fill(table.begin(), table.end(), empty_key);
   count = 0;
 }
 
 //----------------------------------------------------------------------------------------
 //! \brief Retain a local or received record once per provenance key and destination GID.
 
-bool PaperSmoothMomentRecordTransport::AddRecord(const PaperSmoothMomentRecord &record) {
-  if (record.dest_gid < 0 || record.ptag < 0) return false;
-  if (!InsertKey(delivered_keys_, delivered_key_count_, MakeKey(record))) return false;
+PaperSmoothRecordStatus PaperSmoothMomentRecordTransport::AddRecord(
+    const PaperSmoothMomentRecord &record) {
+  if (record.dest_gid < 0 || record.ptag < 0 ||
+      !PaperSmoothImageCodeValid(record.reserved)) {
+    return PaperSmoothRecordStatus::invalid;
+  }
+  if (!InsertKey(delivered_keys_, delivered_key_count_, MakeKey(record))) {
+    return PaperSmoothRecordStatus::duplicate;
+  }
   records_.push_back(record);
-  return true;
+  return PaperSmoothRecordStatus::accepted;
 }
 } // namespace particles

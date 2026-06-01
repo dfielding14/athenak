@@ -397,7 +397,8 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
   // PR1 deposition controls
   deposit_moments = pin->GetOrAddBoolean("particles", "deposit_moments",
                                          paper_coupled_mode);
-  deposit_order = pin->GetOrAddInteger("particles", "deposit_order", 1);
+  deposit_order = pin->GetOrAddInteger("particles", "deposit_order",
+                                        paper_coupled_mode ? 2 : 1);
   deposit_qscale = pin->GetOrAddReal("particles", "deposit_qscale", 1.0);
   couple_moments_to_mhd = pin->GetOrAddBoolean("particles",
                                                "couple_moments_to_mhd",
@@ -1009,23 +1010,18 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
                 << "<particles>/particle_type=cosmic_ray" << std::endl;
       std::exit(EXIT_FAILURE);
     }
-    const bool direct_edge_mode =
-        (couple_moments_to_mhd &&
-         couple_j_deposition_mode ==
-         CoupledCurrentDepositionMode::direct_staggered);
-    const bool valid_direct_order = (deposit_order == 1 || deposit_order == 2);
-    if ((!direct_edge_mode && deposit_order != 1) ||
-        (direct_edge_mode && !valid_direct_order)) {
+    const bool valid_deposit_order = (deposit_order == 1 || deposit_order == 2);
+    if (!valid_deposit_order) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "<particles>/deposit_order=" << deposit_order
-                << " is not supported (only deposit_order=1, or "
-                << "deposit_order={1,2} with coupled "
-                << "couple_j_deposition_mode=direct_staggered)"
+                << " is not supported (only deposit_order={1,2})"
                 << std::endl;
       std::exit(EXIT_FAILURE);
     }
     ValidateMomentBoundaryPolicy(pmy_pack->pmesh);
-    if (direct_edge_mode) {
+    if (couple_moments_to_mhd &&
+        couple_j_deposition_mode ==
+        CoupledCurrentDepositionMode::direct_staggered) {
       ValidateDirectEdgeCurrentBoundaryPolicy(pmy_pack->pmesh);
     }
     if (pin->DoesBlockExist("shearing_box")) {
@@ -1287,6 +1283,57 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
                 << "paper induction path" << std::endl;
       std::exit(EXIT_FAILURE);
     }
+    if (deposit_order != 2) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "<particles>/pic_physical_mode=paper_mhd_pic requires "
+                << "<particles>/deposit_order=2 for TSC moment deposition."
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    if (pmy_pack->pmesh->mb_indcs.ng < 2) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "<particles>/pic_physical_mode=paper_mhd_pic requires "
+                << "mesh/nghost>=2 for receiver-resolution TSC support."
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    if (pin->GetOrAddString("time", "integrator", "rk2").compare("rk2") != 0) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "<particles>/pic_physical_mode=paper_mhd_pic requires "
+                << "<time>/integrator=rk2 for the staged VL2 coupling path."
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    if (couple_fluid_feedback_order != CoupledFluidFeedbackOrder::mhd_src_terms) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "<particles>/pic_physical_mode=paper_mhd_pic requires "
+                << "<particles>/couple_fluid_feedback_order=mhd_src_terms."
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    if ((couple_moments_momentum_coeff != static_cast<Real>(1.0)) ||
+        (couple_moments_energy_to_mhd &&
+         couple_moments_energy_coeff != static_cast<Real>(1.0))) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "<particles>/pic_physical_mode=paper_mhd_pic requires unit "
+                << "conservative momentum and enabled energy feedback coefficients."
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    if (UsesExpandingBox()) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "<particles>/pic_physical_mode=paper_mhd_pic with "
+                << "<particles>/pic_expanding_box_mode=on is not yet supported by "
+                << "the staged VL2 coupling path."
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
   }
   if ((pic_cr_hall_mode == PICCRHallMode::current_to_ct_experimental) &&
       !couple_moments_to_mhd) {
@@ -1303,13 +1350,15 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
                                                         "velocity";
     const char *induction_name = AddsCRCurrentToCT() ? "cr_current_to_ct" :
                                                        "ideal_mhd_only";
+    const char *deposition_name = !deposit_moments ? "disabled" :
+                                  ((deposit_order == 2) ? "tsc" : "cic");
     std::cout << "PIC runtime model: physical_mode=" << pic_physical_mode_str
               << " state=" << state_name
               << " C=" << pic_cr_light_speed
               << " background=" << pic_background_mode_str
               << " feedback=" << pic_feedback_mode_str
               << " induction=" << induction_name
-              << " deposition=tsc"
+              << " deposition=" << deposition_name
               << " deltaf=" << pic_deltaf_mode_str
               << " deltaf_adapt=" << pic_deltaf_adapt_mode_str
               << " deltaf_adapt_interval=" << pic_deltaf_adapt_interval
@@ -1350,6 +1399,9 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
 
     pbval_mom = new MeshBoundaryValuesCC(ppack, pin, false, CCCommMode::synchronize);
     pbval_mom->InitializeBuffers(NMOM);
+    if (UsesPaperVL2Coupling() && ppack->pmesh->multilevel) {
+      paper_smooth_mom_transport = new PaperSmoothMomentRecordTransport();
+    }
     if (!(pmy_pack->pmesh->strictly_periodic) &&
         (std::getenv("ATHENA_SKIP_MOM_INFLOW_ZERO") == nullptr)) {
       // Use zero-valued inflow moments unless a problem callback overwrites them.
@@ -1413,6 +1465,9 @@ Particles::~Particles() {
   }
   if (pbval_jedge != nullptr) {
     delete pbval_jedge;
+  }
+  if (paper_smooth_mom_transport != nullptr) {
+    delete paper_smooth_mom_transport;
   }
 }
 
