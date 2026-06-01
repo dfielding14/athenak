@@ -16,7 +16,7 @@ _INPUT_DECK = (
     _REPO_ROOT
     / "inputs"
     / "publication"
-    / "pic_parallel_shock_section54_paper.athinput"
+    / "pic_parallel_shock_section54_paper_vl2_tsc.athinput"
 )
 _PGEN_SOURCE = _REPO_ROOT / "src" / "pgen" / "tests" / "pic_parallel_shock.cpp"
 _PUSHER_SOURCE = _REPO_ROOT / "src" / "particles" / "particles_pushers.cpp"
@@ -58,7 +58,7 @@ _EXPECTED_VALUES = {
     ("particles", "couple_fluid_feedback_order"): "mhd_src_terms",
     ("particles", "couple_moments_momentum_to_mhd"): "true",
     ("particles", "couple_moments_energy_to_mhd"): "true",
-    ("particles", "pic_physical_mode"): "paper_mhd_pic",
+    ("particles", "pic_physical_mode"): "paper_mhd_pic_vl2_tsc",
     ("particles", "pic_background_mode"): "coupled",
     ("particles", "pic_feedback_mode"): "coupled",
     ("particles", "pic_cr_light_speed"): "10000.0",

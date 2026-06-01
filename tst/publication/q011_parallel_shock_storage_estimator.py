@@ -28,7 +28,7 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_DECK = (
-    REPO_ROOT / "inputs/publication/pic_parallel_shock_section54_paper.athinput"
+    REPO_ROOT / "inputs/publication/pic_parallel_shock_section54_paper_vl2_tsc.athinput"
 )
 DEFAULT_GRID_COUNT = 3
 DEFAULT_SEED_COUNT = 8

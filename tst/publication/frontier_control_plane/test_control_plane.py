@@ -655,7 +655,7 @@ class SnapshotTests(unittest.TestCase):
         deck.write_text("<job>\nbasename = prepared-paper\n", encoding="utf-8")
         publication_deck = (
             source_root
-            / "inputs/publication/pic_parallel_shock_section54_paper.athinput"
+            / "inputs/publication/pic_parallel_shock_section54_paper_vl2_tsc.athinput"
         )
         publication_deck.parent.mkdir()
         publication_deck.write_text(
@@ -677,7 +677,7 @@ class SnapshotTests(unittest.TestCase):
                         {
                             "path": (
                                 "inputs/publication/"
-                                "pic_parallel_shock_section54_paper.athinput"
+                                "pic_parallel_shock_section54_paper_vl2_tsc.athinput"
                             ),
                             "sha256": sha256(publication_deck),
                         },
@@ -6264,12 +6264,12 @@ PY
                     {
                         "path": (
                             "inputs/publication/"
-                            "pic_parallel_shock_section54_paper.athinput"
+                            "pic_parallel_shock_section54_paper_vl2_tsc.athinput"
                         ),
                         "sha256": sha256(
                             source_root
                             / "inputs/publication/"
-                            "pic_parallel_shock_section54_paper.athinput"
+                            "pic_parallel_shock_section54_paper_vl2_tsc.athinput"
                         ),
                     },
                     {
@@ -6311,7 +6311,7 @@ PY
             record
             for record in value["paper_decks"]
             if record["path"] != (
-                "inputs/publication/pic_parallel_shock_section54_paper.athinput"
+                "inputs/publication/pic_parallel_shock_section54_paper_vl2_tsc.athinput"
             )
         ]
         inventory.write_text(json.dumps(value), encoding="utf-8")

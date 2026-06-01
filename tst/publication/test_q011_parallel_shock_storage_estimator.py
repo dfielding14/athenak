@@ -17,7 +17,7 @@ else:
 READINESS = (
     storage.REPO_ROOT
     / "tst/publication/readiness"
-    / "q011_parallel_shock_storage_estimator_successor_2026-06-01.json"
+    / "q011_parallel_shock_storage_estimator_successor_v2_2026-06-01.json"
 )
 
 

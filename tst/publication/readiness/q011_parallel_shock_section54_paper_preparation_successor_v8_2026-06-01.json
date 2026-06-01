@@ -1,0 +1,130 @@
+{
+  "record_type": "q011_parallel_shock_section54_paper_preparation",
+  "schema_version": 1,
+  "date": "2026-06-01",
+  "predecessor_record": "tst/publication/readiness/q011_parallel_shock_section54_paper_preparation_successor_v7_2026-06-01.json",
+  "gate": "Q-011",
+  "qualification_effect": "preparation_only",
+  "scope": "Exact-byte additive VL2 TSC Section 5.4 preparation successor after closing the locally decidable thermodynamic, charge-normalization and ideal downstream occupancy mappings. The archival pre-successor publication deck remains unchanged. Sun & Bai (2023) Section 5.4 does not state p0, so ps_p0=1.0 is explicitly an inferred Bai et al. (2015) predecessor baseline with preregistered Frontier pressure cases. This record contains no campaign results and does not qualify the paper-shock claim.",
+  "artifacts": [
+    {
+      "path": "inputs/publication/pic_parallel_shock_section54_paper_vl2_tsc.athinput",
+      "sha256": "0b1cbd62d54027ec81a5f4f5c88d5ee56b86b8cc0cb018c3fbebfb37a11be7b1"
+    },
+    {
+      "path": "src/pgen/tests/pic_parallel_shock.cpp",
+      "sha256": "1104c4d01647e6094f1322db0fd172f61d05c76f76edccb1f58d1cbb04cd0481"
+    },
+    {
+      "path": "tst/scripts/particles/pic_parallel_shock_section54_paper.py",
+      "sha256": "e1fb616f0316c2dbe25eae54d0b3b033fbbb96287dcff4bc2928b057cbbb3354"
+    },
+    {
+      "path": "tst/publication/test_pic_q011_parallel_shock_section54_paper.py",
+      "sha256": "0b058d437ad9eb015c38f873535b3d246b1ef5c3bcea763ce8c31153b97cfd18"
+    },
+    {
+      "path": "tst/publication/test_pic_q011_section54_normalization_oracle.py",
+      "sha256": "8645f260cee9550e9a1d59833fa6b47d818b353212ce01632babd3337b648c64"
+    }
+  ],
+  "local_mapping_closure": {
+    "thermodynamic_choice": {
+      "paper_source_boundary": "Sun & Bai (2023) Section 5.4 does not state upstream p0.",
+      "bai_2015_predecessor_p0": 1.0,
+      "athenak_inferred_baseline_ps_p0": 1.0,
+      "derived_beta0": 2.0,
+      "derived_sound_speed": 1.2909944487358056,
+      "derived_sonic_mach_number": 23.2379000772445,
+      "interpretation": "inferred Bai et al. (2015) predecessor baseline, not Sun & Bai manuscript-literal value",
+      "preregistered_frontier_pressure_cases_ps_p0": [1.0, 0.05, 0.1, 0.2]
+    },
+    "charge_normalization": {
+      "paper_formula": "Omega0 = B0 * q / (m * c)",
+      "athenak_mapping": "species charge/mass is the normalized q/(m*c) coefficient stored in IPM; pic_cr_light_speed is the separate artificial C",
+      "double_division_rejected": true,
+      "derived_u_a0": 1.0,
+      "derived_omega0": 1.0,
+      "derived_c_over_omega_pi": 1.0,
+      "derived_c_over_u_a0": 10000.0
+    },
+    "macro_particle_calibration": {
+      "deposit_qscale": 0.0009,
+      "macro_particle_mass": 0.0009,
+      "collapsed_x3_thickness": 1.0,
+      "amr_cell_sizes_c_over_omega_pi": [12.0, 6.0, 3.0],
+      "ideal_downstream_ppc": [640.0, 160.0, 40.0],
+      "scope": "analytical ideal mean immediately-downstream calibration, not campaign measurement"
+    }
+  },
+  "analyzer_contract": {
+    "required_candidate_bindings": [
+      "clean_candidate_git_commit",
+      "clean_frontier_executable_sha256",
+      "input_deck_sha256",
+      "analyzer_sha256",
+      "authorized_orion_artifact_root"
+    ],
+    "particle_filters": {
+      "source": "shock_injected",
+      "birth_time_min_omega0_inverse": 45.0,
+      "region": "downstream"
+    },
+    "primary_observables": [
+      "shock_position",
+      "upstream_magnetic_amplification_at_t500",
+      "downstream_weighted_energy_spectra_at_t500_and_t1200",
+      "late_energy_spectrum_power_law_slope_at_t1200",
+      "morphology"
+    ],
+    "required_snapshot_times_omega0_inverse": [500.0, 1200.0],
+    "required_snapshot_absolute_tolerance_omega0_inverse": 1.0e-6,
+    "preregistered_pressure_cases_ps_p0": [1.0, 0.05, 0.1, 0.2],
+    "required_grid_variants": [
+      "coarse_uniform",
+      "three_level_amr_root_12_finest_3",
+      "fine_uniform"
+    ],
+    "required_raw_artifacts_per_snapshot": [
+      "rho_bin",
+      "bmag_bin",
+      "prtcl_jx_bin",
+      "j2_bin",
+      "prtcl_all_pvtk"
+    ],
+    "required_run_artifacts": [
+      "stdout_with_q017_telemetry",
+      "restart_checkpoint",
+      "attempt_status_and_failure_artifacts"
+    ],
+    "required_seeds": [
+      23050101,
+      23050102,
+      23050103,
+      23050104,
+      23050105,
+      23050106,
+      23050107,
+      23050108
+    ],
+    "result_metrics_recorded": false,
+    "campaign_output_inspection": "blocked_pending_analyzer_and_remaining_preregistration"
+  },
+  "execution_policy": {
+    "frontier_campaign_execution": "open_not_run",
+    "allowed_compute_platforms": ["Frontier"],
+    "allowed_bulk_storage_systems": ["Orion"],
+    "authorized_orion_bulk_root": "/lustre/orion/ast207/proj-shared/dfielding/PIC",
+    "forbidden_storage_systems": ["Kronos"],
+    "kronos_use": "prohibited_not_used"
+  },
+  "open_items": [
+    "Qualifying campaign-bound injection-distribution audit remains open.",
+    "Preregistered Frontier gas-pressure matrix remains open.",
+    "Frontier load-balance cost tuning remains open.",
+    "Downstream spectrum fit interval and AMR-versus-fine residual tolerances remain open.",
+    "Qualifying analyzer, clean successor candidate, Frontier campaigns, independent raw-artifact recompute and external review remain open."
+  ],
+  "result_metrics": [],
+  "q011_disposition": "local_normalization_and_macro_mass_mapping_closed_frontier_pilots_and_qualification_open"
+}

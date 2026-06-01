@@ -1,0 +1,357 @@
+{
+  "record_type": "q011_section54_qualifying_campaign_preregistration",
+  "schema_version": 1,
+  "date": "2026-06-01",
+  "predecessor_record": "tst/publication/readiness/q011_section54_qualifying_campaign_preregistration_2026-06-01.json",
+  "gate": "Q-011",
+  "claim_id": "CLAIM-PAPER-SHOCK-001",
+  "qualification_effect": "policy_freeze_only_no_execution_authorization_no_claim_closure",
+  "scope": "Narrow additive preregistration policy for a future AthenaK Sun and Bai Section 5.4 qualifying campaign. This record freezes locally selected analysis choices before qualifying output inspection. It contains no campaign result, does not authorize execution, and does not promote AthenaK-selected release criteria into manuscript tolerances.",
+  "schema_contract": {
+    "schema_style": "self_contained_exact_key_policy",
+    "unknown_keys": "reject",
+    "missing_keys": "reject",
+    "numeric_aliases": "reject_boolean_nonfinite_and_numeric_string_aliases",
+    "policy_drift": "requires_versioned_successor_before_qualifying_output_inspection"
+  },
+  "analysis_primitive_bindings": {
+    "module": "tst/publication/analyze_q011_section54_outputs.py",
+    "role": "policy_free_arithmetic_foundation_only",
+    "fixed_histogram": "fixed_histogram",
+    "slope_fit": "fit_fixed_bin_loglog_slope",
+    "shock_front": "detect_shock_front",
+    "upstream_magnetic_amplification": "estimate_upstream_amplification",
+    "amr_vs_fine_uniform_residuals": "matched_grid_residual_metrics"
+  },
+  "paper_literal_observables": {
+    "source_anchor": "docs/reference_paper/arXiv-2304.10568v1/mnras_template.tex Section 5.4 Non-relativistic shock acceleration",
+    "tolerance_boundary": "The manuscript states observables and approximate physical behavior but does not publish AthenaK acceptance tolerances. Every numeric gate under athenak_selected_release_criteria is an AthenaK release criterion selected before qualifying output inspection, not a claimed manuscript tolerance.",
+    "observables": [
+      {
+        "id": "ideal_injection_surface",
+        "classification": "paper_literal_observable",
+        "statement": "Inject supra-thermal protons evenly and continuously at the ideal surface x = u_sh_prime * t with u_sh_prime = ((Gamma - 1) * u0) / 2."
+      },
+      {
+        "id": "startup_cohort_removal",
+        "classification": "paper_literal_observable",
+        "statement": "Remove particles injected before 45 Omega0^-1 to reduce influence from the initial state."
+      },
+      {
+        "id": "snapshot_morphology_at_t500",
+        "classification": "paper_literal_observable",
+        "statement": "At t = 500 Omega0^-1 inspect gas density, magnetic-field strength and the CR distribution near the shock, including corrugation, upstream filaments and cavities."
+      },
+      {
+        "id": "upstream_magnetic_amplification_at_t500",
+        "classification": "paper_literal_observable",
+        "statement": "Compared with the initial background field, upstream field strength reaches approximately 2-4 times B0 in certain regions."
+      },
+      {
+        "id": "downstream_spectra_at_t500_and_t1200",
+        "classification": "paper_literal_observable",
+        "statement": "Compare downstream CR spectra at t = 500 and 1200 Omega0^-1; the AMR result largely overlaps the high-resolution result."
+      },
+      {
+        "id": "late_energy_tail_slope_at_t1200",
+        "classification": "paper_literal_observable",
+        "statement": "The downstream non-thermal energy tail approaches f(epsilon) proportional to epsilon^(-3/2) at late time, exemplified by t = 1200 Omega0^-1."
+      }
+    ]
+  },
+  "athenak_selected_release_criteria": {
+    "criteria_provenance": "All thresholds in this object are conservative AthenaK release criteria selected before qualifying output inspection. They are not tolerances quoted or implied by the manuscript.",
+    "campaign_matrix": {
+      "physical_mode": "paper_mhd_pic_vl2_tsc",
+      "grid_variants": [
+        "coarse_uniform_dx12",
+        "three_level_amr_root_dx12_finest_dx3",
+        "fine_uniform_dx3"
+      ],
+      "qualifying_seeds": [
+        23050101,
+        23050102,
+        23050103,
+        23050104,
+        23050105,
+        23050106,
+        23050107,
+        23050108
+      ],
+      "expected_baseline_attempts": 24,
+      "paired_seed_rule": "Use the same qualifying seed for coarse-uniform, AMR and fine-uniform variants."
+    },
+    "snapshot_selection": {
+      "time_unit": "omega0_inverse",
+      "required_times": [
+        500.0,
+        1200.0
+      ],
+      "absolute_match_tolerance": 1.0e-06,
+      "missing_or_ambiguous_snapshot": "fail_endpoint"
+    },
+    "ideal_injection_surface_classifier": {
+      "formula": "x_ideal(t) = ((gamma - 1) * u0 / 2) * t",
+      "gamma": 1.6666666666666667,
+      "u0_over_u_a0": 30.0,
+      "ideal_surface_speed_over_u_a0": 10.0,
+      "downstream_rule": "x1 < x_ideal(t)",
+      "upstream_rule": "x1 > x_ideal(t)",
+      "on_surface_rule": "x1 == x_ideal(t) belongs to neither open analysis region; injection remains assigned to the ideal surface",
+      "detected_front_substitution": "forbidden"
+    },
+    "particle_filter": {
+      "source_scalar": "cr_source",
+      "required_source": "shock_injected",
+      "birth_time_scalar": "birth_time",
+      "birth_time_operator": ">=",
+      "birth_time_min_omega0_inverse": 45.0,
+      "spatial_region": "downstream_by_ideal_injection_surface_classifier",
+      "rejected_particle_policy": "exclude_from_spectrum_and_archive_filter_counts"
+    },
+    "spectrum": {
+      "energy_variable": "chi",
+      "energy_formula": "chi = 2 * epsilon / (m * u0^2)",
+      "epsilon_formula": "epsilon = p_cr^2 / (2 * m)",
+      "histogram_weight": "macro_weight",
+      "distribution_for_fit": "f_chi = admitted_macro_weight / delta_chi",
+      "plotted_quantity": "chi * f_chi normalized by total admitted downstream macro weight",
+      "bin_spacing": "logarithmic_fixed_quarter_octave",
+      "bin_edges": [
+        1.0,
+        1.189207115002721,
+        1.4142135623730951,
+        1.681792830507429,
+        2.0,
+        2.378414230005442,
+        2.8284271247461903,
+        3.363585661014858,
+        4.0,
+        4.756828460010884,
+        5.656854249492381,
+        6.727171322029716,
+        8.0,
+        9.513656920021768,
+        11.313708498984761,
+        13.454342644059432,
+        16.0,
+        19.027313840043536,
+        22.627416997969522,
+        26.908685288118864,
+        32.0,
+        38.05462768008707,
+        45.254833995939045,
+        53.81737057623773,
+        64.0,
+        76.10925536017415,
+        90.50966799187809,
+        107.63474115247546,
+        128.0,
+        152.2185107203483,
+        181.01933598375618,
+        215.2694823049509,
+        256.0,
+        304.4370214406966,
+        362.03867196751236,
+        430.5389646099018,
+        512.0,
+        608.8740428813932,
+        724.0773439350247,
+        861.0779292198037,
+        1024.0
+      ],
+      "underflow_policy": "archive_count_and_macro_weight",
+      "overflow_policy": "archive_count_and_macro_weight_and_fail_if_macro_weight_fraction_exceeds_limit",
+      "max_overflow_macro_weight_fraction": 0.001,
+      "slope_snapshot_omega0_inverse": 1200.0,
+      "slope_fit_window_chi": [
+        20.0,
+        160.0
+      ],
+      "slope_fit_rationale": "The fixed window starts above the mono-energetic injection feature at chi = 10 and ends below the visible high-energy rollover in the manuscript figure. It is selected before qualifying output inspection.",
+      "minimum_positive_fit_bins": 8,
+      "slope_target": -1.5,
+      "slope_absolute_tolerance": 0.2,
+      "slope_scope": [
+        "three_level_amr_root_dx12_finest_dx3",
+        "fine_uniform_dx3"
+      ],
+      "fit_failure_policy": "fail_endpoint_and_archive_fit_inputs; do_not_tune_bins_or_window_after_output_inspection"
+    },
+    "shock_front": {
+      "source_field": "rho",
+      "profile": "y_area_weighted_mean",
+      "detector": "unique_strongest_positive_density_gradient",
+      "search_window_relative_to_x_ideal_c_over_omega_pi": [
+        -1200.0,
+        1200.0
+      ],
+      "max_absolute_offset_from_x_ideal_c_over_omega_pi": 600.0,
+      "search_window_rationale": "The fixed search window spans 100 root cells on either side of the ideal injection surface. It admits corrugation while excluding distant structures and may not be tuned after inspection."
+    },
+    "upstream_magnetic_amplification": {
+      "source_field": "bmag",
+      "observable": "area_weighted_mean_abs_b_over_b0",
+      "snapshot_omega0_inverse": 500.0,
+      "window_relative_to_x_ideal_c_over_omega_pi": [
+        120.0,
+        1200.0
+      ],
+      "reference_b0": 1.0,
+      "acceptance_range": [
+        1.2,
+        3.5
+      ],
+      "rationale": "The manuscript's approximate 2-4 factor refers to certain regions, not an area-weighted mean. The fixed mean-field interval is a separate AthenaK release criterion requiring resolved upstream amplification without claiming a manuscript tolerance."
+    },
+    "amr_vs_fine_uniform_residuals": {
+      "comparison_rule": "Compare each AMR qualifying seed only with the fine-uniform run carrying the same seed.",
+      "grid_matching_rule": "For spatial profiles, conservatively area-restrict both variants to dx = 12 c/omega_pi and y-average before matched-grid residual metrics. For spectra, compare the same fixed chi bins after the particle filter.",
+      "normalization_rule": "Normalize spectrum shapes by total admitted downstream macro weight before residual metrics.",
+      "rows": [
+        {
+          "observable": "shock_front_position_at_t500",
+          "comparison_domain": "detected_front",
+          "max_absolute_difference": 240.0,
+          "max_relative_mean_absolute": null,
+          "max_relative_root_mean_square": null
+        },
+        {
+          "observable": "upstream_magnetic_amplification_at_t500",
+          "comparison_domain": "fixed_upstream_window",
+          "max_absolute_difference": 0.35,
+          "max_relative_mean_absolute": null,
+          "max_relative_root_mean_square": null
+        },
+        {
+          "observable": "rho_y_average_at_t500",
+          "comparison_domain": "x_ideal_plus_or_minus_1200_c_over_omega_pi",
+          "max_absolute_difference": null,
+          "max_relative_mean_absolute": 0.2,
+          "max_relative_root_mean_square": 0.3
+        },
+        {
+          "observable": "bmag_y_average_at_t500",
+          "comparison_domain": "x_ideal_plus_or_minus_1200_c_over_omega_pi",
+          "max_absolute_difference": null,
+          "max_relative_mean_absolute": 0.25,
+          "max_relative_root_mean_square": 0.35
+        },
+        {
+          "observable": "normalized_downstream_chi_f_chi_at_t500",
+          "comparison_domain": "fixed_chi_bins_10_to_256",
+          "max_absolute_difference": null,
+          "max_relative_mean_absolute": 0.2,
+          "max_relative_root_mean_square": 0.3
+        },
+        {
+          "observable": "normalized_downstream_chi_f_chi_at_t1200",
+          "comparison_domain": "fixed_chi_bins_10_to_512",
+          "max_absolute_difference": null,
+          "max_relative_mean_absolute": 0.2,
+          "max_relative_root_mean_square": 0.3
+        }
+      ],
+      "maximum_norm_policy": "Archive maximum-absolute residuals but do not gate on a per-cell maximum norm because turbulent feature phase is not a stable cellwise oracle.",
+      "tolerance_rationale": "The paired mean and RMS bounds are conservative AthenaK release screens: integrated spectra must remain close, while turbulent spatial profiles receive a modestly wider RMS allowance. They are frozen before qualifying output inspection.",
+      "threshold_boundary": "These paired residual bounds are AthenaK release criteria, not manuscript tolerances."
+    },
+    "qualitative_figure_requirements": [
+      {
+        "id": "morphology_t500",
+        "snapshot_omega0_inverse": 500.0,
+        "required_panels": [
+          "rho",
+          "bmag",
+          "filtered_cr_distribution"
+        ],
+        "categorical_requirements": [
+          "show_shock_corrugation",
+          "show_upstream_density_filaments_and_cavities",
+          "show_regions_of_upstream_magnetic_amplification",
+          "show_meshblock_or_refinement_boundaries"
+        ]
+      },
+      {
+        "id": "profile_t500",
+        "snapshot_omega0_inverse": 500.0,
+        "required_panels": [
+          "prtcl_jx_y_average",
+          "bmag_y_average"
+        ],
+        "categorical_requirements": [
+          "mark_ideal_injection_surface",
+          "mark_detected_shock_front_separately",
+          "overlay_coarse_uniform_amr_and_fine_uniform"
+        ]
+      },
+      {
+        "id": "spectra_t500_t1200",
+        "snapshot_omega0_inverse": 1200.0,
+        "required_panels": [
+          "downstream_chi_f_chi"
+        ],
+        "categorical_requirements": [
+          "use_fixed_chi_axis",
+          "overlay_coarse_uniform_amr_and_fine_uniform",
+          "distinguish_t500_and_t1200",
+          "show_late_slope_reference",
+          "record_external_reviewer_disposition"
+        ]
+      }
+    ]
+  },
+  "artifact_retention_policy": {
+    "retention_scope": "retain every emitted raw artifact for every attempted baseline run, including failed attempts",
+    "required_output_times_omega0_inverse": [
+      0.0,
+      100.0,
+      200.0,
+      300.0,
+      400.0,
+      500.0,
+      600.0,
+      700.0,
+      800.0,
+      900.0,
+      1000.0,
+      1100.0,
+      1200.0
+    ],
+    "raw_bin_ids": [
+      "rho",
+      "bmag",
+      "prtcl_jx",
+      "j2"
+    ],
+    "raw_pvtk_ids": [
+      "prtcl_all"
+    ],
+    "raw_rst_policy": "retain_each_emitted_restart_checkpoint_and_completion_metadata",
+    "inventory_policy": "write_root_relative_sha256_inventory_and_preserve_raw_bin_pvtk_rst_bytes",
+    "derived_artifact_policy": "retain_filter_counts_histograms_fit_inputs_residual_tables_figures_and_reviewer_disposition_without_replacing_raw_artifacts"
+  },
+  "failure_policy": {
+    "archive_every_attempt": true,
+    "archive_failed_attempts": true,
+    "archive_finite_outliers": true,
+    "delete_or_overwrite_attempt_artifacts": "forbidden",
+    "failed_fit_or_missing_snapshot": "archive_available_artifacts_and_fail_endpoint",
+    "post_inspection_threshold_or_window_tuning": "forbidden_requires_versioned_successor_and_new_qualifying_dataset",
+    "replacement_attempt_rule": "archive_original_attempt_and_register_replacement_as_a_distinct_attempt"
+  },
+  "qualifying_execution_bindings": {
+    "status": "open_run_blocked_until_immutable_campaign_record_binds_all_fields",
+    "required_before_run": [
+      "clean_candidate_git_commit",
+      "clean_frontier_executable_sha256",
+      "qualifying_input_deck_sha256_per_variant",
+      "qualifying_analyzer_sha256",
+      "authorized_orion_campaign_root",
+      "registered_frontier_submission_policy",
+      "independent_raw_artifact_recompute_plan"
+    ],
+    "campaign_results_inspected": false,
+    "frontier_execution_authorized_by_this_record": false
+  }
+}

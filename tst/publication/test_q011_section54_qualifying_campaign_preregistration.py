@@ -18,7 +18,7 @@ except ModuleNotFoundError:
 POLICY = (
     Path(__file__).resolve().parent
     / "readiness"
-    / "q011_section54_qualifying_campaign_preregistration_2026-06-01.json"
+    / "q011_section54_qualifying_campaign_preregistration_successor_v2_2026-06-01.json"
 )
 
 
@@ -88,6 +88,7 @@ def _validate_policy(policy: object) -> None:
             "gate",
             "claim_id",
             "qualification_effect",
+            "predecessor_record",
             "scope",
             "schema_contract",
             "analysis_primitive_bindings",
@@ -214,7 +215,7 @@ def _validate_policy(policy: object) -> None:
     _strict_equal(
         criteria["campaign_matrix"],
         {
-            "physical_mode": "paper_mhd_pic",
+            "physical_mode": "paper_mhd_pic_vl2_tsc",
             "grid_variants": [
                 "coarse_uniform_dx12",
                 "three_level_amr_root_dx12_finest_dx3",

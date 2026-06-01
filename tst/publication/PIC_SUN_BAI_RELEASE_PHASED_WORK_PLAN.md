@@ -76,8 +76,10 @@ release milestones is complete.
 
 ### Section 5.4 Preparation Already Present
 
-The prepared paper deck is
-[`inputs/publication/pic_parallel_shock_section54_paper.athinput`](../../inputs/publication/pic_parallel_shock_section54_paper.athinput).
+The active prepared paper deck is
+[`inputs/publication/pic_parallel_shock_section54_paper_vl2_tsc.athinput`](../../inputs/publication/pic_parallel_shock_section54_paper_vl2_tsc.athinput).
+The sibling deck without the `_vl2_tsc` suffix is retained as archival
+pre-successor chronology only.
 The source-local preparation record is
 [`q011_parallel_shock_section54_paper_preparation_2026-05-30.json`](readiness/q011_parallel_shock_section54_paper_preparation_2026-05-30.json).
 The bounded injection audit is

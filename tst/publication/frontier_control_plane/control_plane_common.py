@@ -79,7 +79,7 @@ PREPARED_ARTIFACT_INVENTORY_PATH = (
     "tst/publication/frontier_control_plane/prepared_pic_artifact_inventory.json"
 )
 PREPARED_ARTIFACT_REQUIRED_PUBLICATION_DECK_PATHS = (
-    "inputs/publication/pic_parallel_shock_section54_paper.athinput",
+    "inputs/publication/pic_parallel_shock_section54_paper_vl2_tsc.athinput",
 )
 
 

@@ -104,7 +104,7 @@ class PicQualificationManifestTests(unittest.TestCase):
         deck = deck_root / "pic_paper.athinput"
         deck.write_text("<job>\nbasename = prepared-paper\n", encoding="utf-8")
         publication_deck = (
-            source / "inputs/publication/pic_parallel_shock_section54_paper.athinput"
+            source / "inputs/publication/pic_parallel_shock_section54_paper_vl2_tsc.athinput"
         )
         publication_deck.parent.mkdir()
         publication_deck.write_text(
@@ -126,7 +126,7 @@ class PicQualificationManifestTests(unittest.TestCase):
                         {
                             "path": (
                                 "inputs/publication/"
-                                "pic_parallel_shock_section54_paper.athinput"
+                                "pic_parallel_shock_section54_paper_vl2_tsc.athinput"
                             ),
                             "sha256": _sha256(publication_deck),
                         },
@@ -296,7 +296,7 @@ class PicQualificationManifestTests(unittest.TestCase):
                     {
                         "path": (
                             "inputs/publication/"
-                            "pic_parallel_shock_section54_paper.athinput"
+                            "pic_parallel_shock_section54_paper_vl2_tsc.athinput"
                         ),
                         "sha256": _sha256(publication_deck),
                     },
