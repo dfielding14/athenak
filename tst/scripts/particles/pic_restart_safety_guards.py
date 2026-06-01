@@ -35,6 +35,14 @@ _MODEL_REAL_COUNT = 37
 _EXPECTED_RESTART_SCHEMA = 7
 _MESH_METADATA_MAGIC = 0x4154484B4D455348
 _MESH_METADATA_VERSION_WITH_CHECKPOINT_NONCE = 2
+_COMMAND_TIMEOUT_SECONDS = float(
+    os.environ.get('ATHENA_PIC_RESTART_SAFETY_COMMAND_TIMEOUT_SECONDS', '30')
+)
+if (
+    not np.isfinite(_COMMAND_TIMEOUT_SECONDS)
+    or _COMMAND_TIMEOUT_SECONDS <= 0.0
+):
+    raise RuntimeError('Restart-safety command timeout must be finite and positive')
 _MAX_SUPPORTED_RESTART_MESHBLOCKS = 1 << 20
 _FORGED_IN_CAP_RESTART_MESHBLOCKS = 100000
 _FORGED_OVERSIZED_RESTART_PARTICLE_COUNT = 1 << 27
@@ -202,7 +210,7 @@ def _run_scratch_tree_bounds_guards():
          'refinement1/level=' + str((1 << 31) - 1)],
         'Refinement level exceeds supported logical bounds.',
         input_deck='tests/pic_refinement_boundary_amr_proxy.athinput',
-        timeout=30)
+        timeout=_COMMAND_TIMEOUT_SECONDS)
     _RESTART_GUARDS['oversized_static_refinement_level'] = True
     base = 'pic_rst_safe_guard_oversized_root_grid'
     _remove_outputs(base)
@@ -212,7 +220,7 @@ def _run_scratch_tree_bounds_guards():
          'mesh/nx1=' + str(4 * (_MAX_SUPPORTED_RESTART_MESHBLOCKS + 1)),
          'meshblock/nx1=4'],
         'Root MeshBlock grid exceeds supported topology bounds.',
-        timeout=30)
+        timeout=_COMMAND_TIMEOUT_SECONDS)
     _RESTART_GUARDS['oversized_root_grid'] = True
     base = 'pic_rst_safe_guard_zero_meshblock_extent'
     _remove_outputs(base)
@@ -220,7 +228,7 @@ def _run_scratch_tree_bounds_guards():
         'guard_zero_meshblock_extent', 1,
         ['job/basename=' + base, 'meshblock/nx1=0'],
         'MeshBlock dimensions must be positive',
-        timeout=30)
+        timeout=_COMMAND_TIMEOUT_SECONDS)
     _RESTART_GUARDS['zero_meshblock_extent'] = True
     base = 'pic_rst_safe_guard_root_level_zero_multilevel_diagnostics'
     _remove_outputs(base)
@@ -231,7 +239,7 @@ def _run_scratch_tree_bounds_guards():
          'meshblock/nx1=4', 'meshblock/nx2=4', 'meshblock/nx3=4',
          'time/nlim=0'],
         input_deck='tests/pic_refinement_boundary_amr_proxy.athinput',
-        timeout=30)
+        timeout=_COMMAND_TIMEOUT_SECONDS)
     _RESTART_GUARDS['root_level_zero_multilevel_diagnostics'] = True
 
 
@@ -541,7 +549,7 @@ def _run_inconsistent_shard_common_prefix_guard():
             base + '_restart_run', 2,
             ['job/basename=' + base_rst, 'time/nlim=2'] + _CASES['no_mhd'],
             restart_file=rst_path,
-            timeout=30)
+            timeout=_COMMAND_TIMEOUT_SECONDS)
     expected = 'Restart shard common mesh metadata is inconsistent across files'
     if code == 0:
         raise RuntimeError('Expected inconsistent shard-prefix failure, '
@@ -590,7 +598,7 @@ def _run_checkpoint_nonce_guards():
         base + '_schema_v1_restart_run', 1,
         ['job/basename=' + base_rst, 'time/nlim=2'] + _CASES['no_mhd'],
         restart_file=v1_rst_path,
-        timeout=30)
+        timeout=_COMMAND_TIMEOUT_SECONDS)
     _RESTART_GUARDS['mesh_metadata_v1_restart_compatibility'] = True
 
     zero_rst_path = os.path.join('rst', base_zero + '.00000.rst')
@@ -604,7 +612,7 @@ def _run_checkpoint_nonce_guards():
         base + '_zero_restart_run', 1,
         ['job/basename=' + base_rst, 'time/nlim=2'] + _CASES['no_mhd'],
         restart_file=zero_rst_path,
-        timeout=30)
+        timeout=_COMMAND_TIMEOUT_SECONDS)
     expected = 'Restart checkpoint nonce is invalid'
     if code == 0:
         raise RuntimeError('Expected zero checkpoint-nonce failure, but command passed')
@@ -642,7 +650,7 @@ def _run_oversized_meshblock_count_guard():
         base + '_restart_run', 1,
         ['job/basename=' + base_rst, 'time/nlim=2'] + _CASES['no_mhd'],
         restart_file=dst_rst_path,
-        timeout=30)
+        timeout=_COMMAND_TIMEOUT_SECONDS)
     expected = 'MeshBlock or rank count stored in restart file is invalid or exceeds'
     if code == 0:
         raise RuntimeError('Expected oversized MeshBlock-count failure, but command passed')
@@ -678,7 +686,7 @@ def _run_sharded_oversized_meshblock_count_guard():
         base + '_restart_run', 1,
         ['job/basename=' + base_rst, 'time/nlim=2'] + _CASES['no_mhd'],
         restart_file=rst_path,
-        timeout=30)
+        timeout=_COMMAND_TIMEOUT_SECONDS)
     expected = 'MeshBlock or rank count stored in restart file is invalid or exceeds'
     if code == 0:
         raise RuntimeError('Expected sharded oversized MeshBlock-count failure, but '
@@ -719,7 +727,7 @@ def _run_sparse_oversized_meshblock_count_guard():
         base + '_restart_run', 1,
         ['job/basename=' + base_rst, 'time/nlim=2'] + _CASES['no_mhd'],
         restart_file=dst_rst_path,
-        timeout=30)
+        timeout=_COMMAND_TIMEOUT_SECONDS)
     expected = 'MeshBlock or rank count stored in restart file is invalid or exceeds'
     if code == 0:
         raise RuntimeError('Expected sparse oversized MeshBlock-count failure, but '
@@ -759,7 +767,7 @@ def _run_sparse_in_cap_undersized_meshblock_layout_guard():
         base + '_restart_run', 1,
         ['job/basename=' + base_rst, 'time/nlim=2'] + _CASES['no_mhd'],
         restart_file=dst_rst_path,
-        timeout=30)
+        timeout=_COMMAND_TIMEOUT_SECONDS)
     expected = 'Restart artifact is too small for serialized MeshBlock layout'
     if code == 0:
         raise RuntimeError(
@@ -787,7 +795,7 @@ def _run_adaptive_refinement_level_overflow_guard():
          'mesh_refinement/refinement=adaptive',
          'mesh_refinement/num_levels=2147483647'] + _CASES['no_mhd'],
         restart_file=rst_path,
-        timeout=30)
+        timeout=_COMMAND_TIMEOUT_SECONDS)
     expected = 'Number of refinement levels must be between 1 and'
     if code == 0:
         raise RuntimeError('Expected adaptive refinement-level overflow failure, but '
@@ -832,7 +840,7 @@ def _run_invalid_meshblock_geometry_guard():
         base + '_restart_run', 1,
         ['job/basename=' + base_rst, 'time/nlim=2'] + _CASES['no_mhd'],
         restart_file=dst_rst_path,
-        timeout=30)
+        timeout=_COMMAND_TIMEOUT_SECONDS)
     expected = 'Restart mesh geometry does not match configured mesh geometry'
     if code == 0:
         raise RuntimeError(
@@ -876,7 +884,7 @@ def _run_adaptive_refinement_cooldown_guards():
         base + '_negative_restart_run', 1,
         ['job/basename=' + base_rst, 'time/nlim=2'] + _CASES['no_mhd'],
         restart_file=negative_rst_path,
-        timeout=30)
+        timeout=_COMMAND_TIMEOUT_SECONDS)
     expected = 'MeshBlock refinement cooldown list contains a negative value'
     if code == 0:
         raise RuntimeError(
@@ -901,7 +909,7 @@ def _run_adaptive_refinement_cooldown_guards():
         base + '_saturated_restart_run', 1,
         ['job/basename=' + base_rst, 'time/nlim=2'] + _CASES['no_mhd'],
         restart_file=saturated_rst_path,
-        timeout=30)
+        timeout=_COMMAND_TIMEOUT_SECONDS)
     _RESTART_GUARDS['saturated_refinement_cooldown'] = True
 
 
@@ -936,7 +944,7 @@ def _run_corrupt_mesh_idlist_guard(label, mutate, expected, extra_args=None,
         base + '_restart_run', nproc,
         ['job/basename=' + base_rst, 'time/nlim=2'] + args,
         restart_file=dst_rst_path,
-        timeout=30)
+        timeout=_COMMAND_TIMEOUT_SECONDS)
     if code == 0:
         raise RuntimeError('Expected ' + label + ' failure, but command passed')
     if expected not in output:
@@ -1057,7 +1065,7 @@ def _run_oversized_particle_count_guard():
         base + '_restart_run', 1,
         ['job/basename=' + base_rst, 'time/nlim=2'] + _CASES['no_mhd'],
         restart_file=dst_rst_path,
-        timeout=30)
+        timeout=_COMMAND_TIMEOUT_SECONDS)
     expected = 'Particle restart section exceeds source artifact bounds'
     if code == 0:
         raise RuntimeError(
@@ -1090,7 +1098,7 @@ def _run_sharded_oversized_particle_count_guard():
         base + '_restart_run', 1,
         ['job/basename=' + base_rst, 'time/nlim=2'] + _CASES['no_mhd'],
         restart_file=rst_path,
-        timeout=30)
+        timeout=_COMMAND_TIMEOUT_SECONDS)
     expected = 'Particle restart layout exceeds supported offset or allocation limits'
     if code == 0:
         raise RuntimeError('Expected sharded oversized particle-count failure, but '
@@ -1114,7 +1122,7 @@ def _run_zero_block_source_rank_guard():
         ['job/basename=' + base_seg,
          'time/nlim=1',
          'output7/single_file_per_rank=true'] + _CASES['no_mhd'],
-        timeout=30)
+        timeout=_COMMAND_TIMEOUT_SECONDS)
     full_src, rst_path = _latest_restart_path(base_seg, per_rank=True)
     with open(full_src, 'rb') as fp:
         data = bytearray(fp.read())
@@ -1131,7 +1139,7 @@ def _run_zero_block_source_rank_guard():
         base + '_restart_run', 2,
         ['job/basename=' + base_rst, 'time/nlim=2'] + _CASES['no_mhd'],
         restart_file=rst_path,
-        timeout=30)
+        timeout=_COMMAND_TIMEOUT_SECONDS)
     expected = 'Restart rank layout is not a contiguous MeshBlock partition'
     if code == 0:
         raise RuntimeError('Expected zero-block source-rank failure, but command passed')
@@ -1529,7 +1537,7 @@ def _run_preload_failure_guard(injector, fault, guard, expected):
          'time/nlim=1',
          'output7/single_file_per_rank=true'] + _CASES['no_mhd'],
         env=_fault_injector_env(injector, fault),
-        timeout=30)
+        timeout=_COMMAND_TIMEOUT_SECONDS)
     if code == 0:
         raise RuntimeError('Expected injected restart failure for ' + guard)
     if expected not in output:
@@ -1559,7 +1567,7 @@ def _run_killed_writer_restart_guard(injector):
         ['job/basename=' + base_seed, 'time/nlim=2'] + common,
         restart_file=prior_rst,
         env=_fault_injector_env(injector, 'kill_writer'),
-        timeout=30)
+        timeout=_COMMAND_TIMEOUT_SECONDS)
     if code == 0:
         raise RuntimeError('Expected killed restart writer, but command passed')
 
@@ -1619,7 +1627,7 @@ def _run_mpi_rank_local_open_failure_guard(injector):
          'time/nlim=1',
          'output7/single_file_per_rank=true'] + _CASES['no_mhd'],
         env=_fault_injector_env(injector, 'rank_one_fopen_failure'),
-        timeout=30)
+        timeout=_COMMAND_TIMEOUT_SECONDS)
     if code == 0:
         raise RuntimeError('Expected rank-local MPI restart open failure, but command passed')
     if '.rst.partial' not in output or 'could not be opened' not in output:
@@ -1647,7 +1655,7 @@ def _run_full_device_restart_target_guard():
              'job/basename=' + base,
              'time/nlim=1',
              'output7/single_file_per_rank=true'] + _CASES['no_mhd'],
-            timeout=30)
+            timeout=_COMMAND_TIMEOUT_SECONDS)
         if code == 0:
             raise RuntimeError('Expected /dev/full restart publication failure')
         expected = [
@@ -1949,7 +1957,7 @@ def _run_soft_wallclock_continuation_parity():
         ['-t', '00:00:01',
          'job/basename=' + base_seg,
          'time/nlim=100000'] + common,
-        timeout=30)
+        timeout=_COMMAND_TIMEOUT_SECONDS)
     if code != 0:
         raise RuntimeError('Soft wallclock segment failed\n' + output)
     if 'Terminating on wall clock limit' not in output:
@@ -1972,7 +1980,7 @@ def _run_soft_wallclock_continuation_parity():
               'time/nlim=' + str(target_cycle)] + common,
              restart_path)]:
         code, output = _execute(label, 1, arguments, restart_file=restart_file,
-                                timeout=30)
+                                timeout=_COMMAND_TIMEOUT_SECONDS)
         if code != 0:
             raise RuntimeError('Command failed for ' + label + '\n' + output)
 
@@ -2033,18 +2041,21 @@ def _run_per_rank_watch(nproc, case_args):
     rst_args = ['job/basename=' + base_rst,
                 'time/nlim=3'] + case_args
 
-    _run_success(base + '_full_run', nproc, full_args, timeout=30)
+    _run_success(
+        base + '_full_run', nproc, full_args, timeout=_COMMAND_TIMEOUT_SECONDS)
     full_measured = _measure_case(base_full)
 
-    _run_success(base + '_seg_run', nproc, seg_args, timeout=30)
+    _run_success(
+        base + '_seg_run', nproc, seg_args, timeout=_COMMAND_TIMEOUT_SECONDS)
 
     rst_path = os.path.join('rst', 'rank_00000000', base_seg + '.00000.rst')
     full_rst_path = os.path.join(_athena_exe_dir(), rst_path)
     if not os.path.exists(full_rst_path):
         raise RuntimeError('Expected restart file not found: ' + full_rst_path)
 
-    code, output = _execute(base + '_restart_run', nproc,
-                            rst_args, restart_file=rst_path, timeout=30)
+    code, output = _execute(
+        base + '_restart_run', nproc, rst_args, restart_file=rst_path,
+        timeout=_COMMAND_TIMEOUT_SECONDS)
     if code == 0:
         rst_measured = _measure_case(base_rst)
         _PER_RANK_WATCH['status'] = 'supported'
