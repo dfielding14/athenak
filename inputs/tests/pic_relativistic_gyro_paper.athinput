@@ -118,4 +118,5 @@ dcycle      = 1
 file_type   = rst
 id          = rst
 dcycle      = 1
+file_number = 0
 single_file_per_rank = false
