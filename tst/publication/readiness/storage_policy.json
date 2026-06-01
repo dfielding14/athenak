@@ -136,6 +136,18 @@
         "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/manual_accounting_authorizations/phase0-mpi-rereview-direct-sbatch-accounting-2026-06-01.json",
         "project_home_path": "/ccs/proj/ast207/proj-shared/PIC/policy/manual_accounting_authorizations/phase0-mpi-rereview-direct-sbatch-accounting-2026-06-01.json",
         "sha256": "15d4f9e81570105fce843e3bd49c51ca265370eff389815e688e4d0c90e0a091"
+      },
+      {
+        "authorization_id": "pic-paper-smooth-tsc-interface-direct-srun-accounting-2026-06-01",
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/manual_accounting_authorizations/pic-paper-smooth-tsc-interface-direct-srun-accounting-2026-06-01.json",
+        "project_home_path": "/ccs/proj/ast207/proj-shared/PIC/policy/manual_accounting_authorizations/pic-paper-smooth-tsc-interface-direct-srun-accounting-2026-06-01.json",
+        "sha256": "d7d43700eb36911dfadd1975a11d964ee8f050010c452928f516e489a124343f"
+      },
+      {
+        "authorization_id": "pic-paper-smooth-tsc-interface-auditor-deviation-accounting-2026-06-01",
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/manual_accounting_authorizations/pic-paper-smooth-tsc-interface-auditor-deviation-accounting-2026-06-01.json",
+        "project_home_path": "/ccs/proj/ast207/proj-shared/PIC/policy/manual_accounting_authorizations/pic-paper-smooth-tsc-interface-auditor-deviation-accounting-2026-06-01.json",
+        "sha256": "0ef3abbf09ace206ec5b5998eb979477d0784874176ec9213fec1695ad9a24f5"
       }
     ],
     "ledger_genesis_allowed": false,

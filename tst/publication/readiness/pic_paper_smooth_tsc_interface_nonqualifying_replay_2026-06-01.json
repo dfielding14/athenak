@@ -1,0 +1,78 @@
+{
+  "record_type": "pic_paper_smooth_tsc_interface_nonqualifying_replay",
+  "schema_version": 1,
+  "date": "2026-06-01",
+  "status": "pass_nonqualifying_mechanics_evidence",
+  "scientific_evidence_eligible": false,
+  "scope": "Bounded serial-host and Frontier MPI2 replay of the additive paper_smooth receiver-resolution TSC interface oracle. This validates mechanics only. It is not a clean-candidate freeze, Sun-Bai reproduction result, production qualification result, or authorization for a later science campaign.",
+  "artifact_root": "/lustre/orion/ast207/proj-shared/dfielding/PIC/runtime_oracles/paper_smooth_tsc_interface",
+  "source_state": {
+    "classification": "dirty_successor_tranche_before_reviewable_commit",
+    "repository": "/autofs/nccs-svm1_home2/dfielding/athenak-pic",
+    "branch": "PIC"
+  },
+  "bindings": {
+    "frontier_mpi_executable": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/runtime_oracles/paper_smooth_tsc_interface/athena",
+      "sha256": "a7e142cdbefde16b3d7e7813b7e5696c33bcaad27ac33946adcf32eafd489e76"
+    },
+    "base_deck": {
+      "path": "inputs/tests/pic_paper_smooth_tsc_interface.athinput",
+      "sha256": "65233226276a81f22f95d9376b9a09276404d332abfeb7c0737e8c84af6b2319"
+    },
+    "three_dimensional_deck": {
+      "path": "inputs/tests/pic_paper_smooth_tsc_interface_3d.athinput",
+      "sha256": "f0fa32ccdfc8611f87a364c830b2a2ff0835c9cab558995bed11ba4ae77651e0"
+    },
+    "analyzer": {
+      "path": "tst/scripts/particles/pic_paper_smooth_tsc_interface.py",
+      "sha256": "f6d8d997684cac9220e229a05e5357a665e476bcdaf61faf3e0c078cd71de0fb"
+    }
+  },
+  "runtime_oracle": {
+    "serial_cases": ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l"],
+    "serial_status": "pass",
+    "frontier_mpi2_cases": ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l"],
+    "frontier_mpi2_status": "pass",
+    "cross_rank_interface_split_cases": ["b", "c", "d", "g"],
+    "periodic_cross_edge_case": "g",
+    "same_gid_periodic_image_case": "h",
+    "physical_boundary_modes": {"i": "reflect", "k": "outflow", "l": "inflow"},
+    "three_dimensional_periodic_edge_case": "j"
+  },
+  "frontier_mpi2_allocation_ids": [
+    "4753014",
+    "4753017",
+    "4753019",
+    "4753022",
+    "4753025",
+    "4753027",
+    "4753029",
+    "4753030",
+    "4753031",
+    "4753033",
+    "4753035",
+    "4753038"
+  ],
+  "accounting": {
+    "classification": "manual_direct_scheduler_accounting_only",
+    "scientific_evidence_eligible": false,
+    "tracked_cap_node_hours": 10000,
+    "cumulative_consumed_node_hours_after_reconciliation": 1.0880555555555558,
+    "ledger_lines_after_reconciliation": 108,
+    "ledger_head_event_sha256": "8be906d4b94b61629093d0a28da906558f134eaa571effa9170c527a63ecc40b",
+    "active_policy_sha256": "dc6bfc7212c445793b61ca93dc9d7e7406dc83b952c2cbb06d4524323a4369a4",
+    "active_promotion_sha256": "3d071e5c7af570338d3160cc966cd2d55b01a1a6f6199ff9187654164f198b3d",
+    "manual_accounting_authorizations": [
+      "pic-paper-smooth-tsc-interface-direct-srun-accounting-2026-06-01",
+      "pic-paper-smooth-tsc-interface-auditor-deviation-accounting-2026-06-01"
+    ],
+    "auditor_deviation_allocation_ids": ["4753042", "4753045", "4753048", "4753050", "4753052"],
+    "auditor_deviation_disposition": "Subagent was stopped immediately after it exceeded its source-only read-only scope. Its out-of-policy scratch directory was removed and every resulting scheduler allocation was reconciled as nonqualifying manual accounting."
+  },
+  "limitations": [
+    "The replay was executed from a dirty successor tranche and is not qualifying evidence.",
+    "The replay validates bounded interface mechanics and record routing, not long-horizon conservation, Sun-Bai growth rates, shock morphology, or particle spectra.",
+    "A future clean-candidate registered replay must bind a source commit, source bundle, executable, decks, analyzer, scheduler script, environment allowlist, artifact root, and ledger mutation through the registered control plane."
+  ]
+}
