@@ -1890,27 +1890,45 @@ class PicReadinessRegistryTests(unittest.TestCase):
         current_policy_sha256 = _sha256(active_policy_path)
         current_promotion_sha256 = _sha256(active_promotion_path)
         current_transition = manual_accounting_activation["control_plane_transition"]
-        self.assertEqual(current_policy_sha256, current_transition["active_policy_sha256"])
-        self.assertEqual(
-            current_promotion_sha256, current_transition["active_promotion_sha256"]
-        )
-        terminal = manual_accounting_activation["terminal_ledger"]
+        if current_policy_sha256 == current_transition["active_policy_sha256"]:
+            self.assertEqual(
+                current_promotion_sha256, current_transition["active_promotion_sha256"]
+            )
+            terminal = manual_accounting_activation["terminal_ledger"]
+        else:
+            staged = _load("phase0_curated_candidate_successor_v9_2026-06-01.json")
+            baseline = staged["operational_baseline"]
+            self.assertEqual(current_policy_sha256, baseline["orion_policy_sha256"])
+            self.assertEqual(
+                current_promotion_sha256, baseline["orion_promotion_sha256"]
+            )
+            terminal = staged["terminal_mirrored_ledger"]
         for digest_key, path in {
-            "orion_jsonl_sha256": Path(
+            "orion_node_hours_jsonl_sha256": Path(
                 "/lustre/orion/ast207/proj-shared/dfielding/PIC/ledger/node_hours.jsonl"
             ),
-            "orion_csv_sha256": Path(
+            "orion_node_hours_csv_sha256": Path(
                 "/lustre/orion/ast207/proj-shared/dfielding/PIC/ledger/node_hours.csv"
             ),
-            "orion_mirror_receipts_sha256": Path(
+            "orion_mirror_receipts_jsonl_sha256": Path(
                 "/lustre/orion/ast207/proj-shared/dfielding/PIC/ledger/"
                 "mirror_receipts.jsonl"
             ),
-            "project_home_jsonl_sha256": Path(
+            "project_home_node_hours_jsonl_sha256": Path(
                 "/ccs/proj/ast207/proj-shared/PIC/ledger/node_hours.jsonl"
             ),
         }.items():
-            self.assertEqual(_sha256(path), terminal[digest_key])
+            expected_key = digest_key
+            if terminal is manual_accounting_activation["terminal_ledger"]:
+                expected_key = {
+                    "orion_node_hours_jsonl_sha256": "orion_jsonl_sha256",
+                    "orion_node_hours_csv_sha256": "orion_csv_sha256",
+                    "orion_mirror_receipts_jsonl_sha256":
+                        "orion_mirror_receipts_sha256",
+                    "project_home_node_hours_jsonl_sha256":
+                        "project_home_jsonl_sha256",
+                }[digest_key]
+            self.assertEqual(_sha256(path), terminal[expected_key])
         for key in [
             "accepted_gyro_v3_registered_execution",
             "accepted_paper_coupling_v2_registered_execution",

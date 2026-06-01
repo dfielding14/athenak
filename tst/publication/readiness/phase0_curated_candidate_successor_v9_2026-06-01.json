@@ -30,6 +30,8 @@
   },
   "terminal_mirrored_ledger": {
     "orion_node_hours_jsonl_sha256": "9ea685309a478887910a25f7976ad74741fc5fc10c6f43115827e6013048f88a",
+    "orion_node_hours_csv_sha256": "9a0f1fd31763b620ce6c89aac5e997b14e6ed6ff9098405ff08fdc3213ff4493",
+    "orion_mirror_receipts_jsonl_sha256": "2d2f408f29dde6ed404dbb35864fda51584cd48b10518435b576e4e45d0a1c35",
     "project_home_node_hours_jsonl_sha256": "9ea685309a478887910a25f7976ad74741fc5fc10c6f43115827e6013048f88a",
     "ledger_records": 108,
     "latest_sequence_number": 107,
