@@ -11,13 +11,14 @@ import bin_convert_new as bin_convert  # noqa
 
 logger = logging.getLogger('athena' + __name__[7:])
 
-_INPUT_DECK = 'tests/pic_parallel_shock_rk_stage_budget.athinput'
+_INPUT_DECK = 'tests/pic_parallel_shock_rk_stage_budget_vl2_tsc.athinput'
 _INTEGRATORS = ('rk1', 'rk2', 'rk3')
 _MACRO_MASS = 1.0e-3
 _MASS_FLUX = 0.10 * 1.0 * (3.0 + 1.0) * 8.0
 _RESULTS = {}
 _FLOOR_REJECTION = {}
 _INTEGRATOR_REJECTION = {}
+_PAPER_INTEGRATOR_REJECTIONS = {}
 _PARAMETER_REJECTIONS = {}
 _FEEDBACK_DIAG_RE = re.compile(
     r'pic_parallel_shock feedback_diag: .*?'
@@ -83,14 +84,17 @@ def _restart_parameter(path, block, name, converter):
     raise RuntimeError(f'Missing restart parameter <{block}>/{name} in ' + path)
 
 
-def _run_case(integrator, subtraction):
+def _run_case(integrator, subtraction, physical_mode='extended_mhd_pic',
+              label=None):
     suffix = 'on' if subtraction else 'off'
-    basename = f'pic_parallel_shock_rk_stage_budget_{integrator}_{suffix}'
+    case = label or integrator
+    basename = f'pic_parallel_shock_rk_stage_budget_{case}_{suffix}'
     _remove_outputs(basename)
     command = [
         './athena', '-i', _athena_input_path(),
         'job/basename=' + basename,
         'time/integrator=' + integrator,
+        'particles/pic_physical_mode=' + physical_mode,
         'problem/ps_enable_gas_subtraction=' + str(subtraction).lower(),
     ]
     logger.info('Executing %s: %s', basename, ' '.join(command))
@@ -158,6 +162,7 @@ def _run_expected_floor_rejection():
         './athena', '-i', _athena_input_path(),
         'job/basename=' + basename,
         'time/integrator=rk1',
+        'particles/pic_physical_mode=extended_mhd_pic',
         'problem/ps_p0=0.10',
         'problem/ps_eta=0.30',
         'problem/ps_enable_gas_subtraction=true',
@@ -182,6 +187,7 @@ def _run_expected_integrator_rejection():
         './athena', '-i', _athena_input_path(),
         'job/basename=' + basename,
         'time/integrator=rk4',
+        'particles/pic_physical_mode=extended_mhd_pic',
     ]
     logger.info('Executing expected rejection: %s', ' '.join(command))
     proc = subprocess.run(command, cwd=_athena_exe_dir(),
@@ -196,6 +202,28 @@ def _run_expected_integrator_rejection():
     })
 
 
+def _run_expected_paper_integrator_rejection(integrator):
+    basename = 'pic_parallel_shock_rk_stage_budget_paper_' + integrator + '_reject'
+    _remove_outputs(basename)
+    command = [
+        './athena', '-i', _athena_input_path(),
+        'job/basename=' + basename,
+        'time/integrator=' + integrator,
+        'particles/pic_physical_mode=paper_mhd_pic',
+    ]
+    logger.info('Executing expected rejection: %s', ' '.join(command))
+    proc = subprocess.run(command, cwd=_athena_exe_dir(),
+                          capture_output=True, text=True)
+    output = (proc.stdout or '') + (proc.stderr or '')
+    _PAPER_INTEGRATOR_REJECTIONS[integrator] = {
+        'returncode': proc.returncode,
+        'saw_rejection': (
+            '<particles>/pic_physical_mode=paper_mhd_pic requires '
+            '<time>/integrator=rk2 for the staged VL2 coupling path.' in output
+        ),
+    }
+
+
 def _run_expected_parameter_rejection(label, overrides, reason):
     basename = 'pic_parallel_shock_rk_stage_budget_' + label
     _remove_outputs(basename)
@@ -203,6 +231,7 @@ def _run_expected_parameter_rejection(label, overrides, reason):
         './athena', '-i', _athena_input_path(),
         'job/basename=' + basename,
         'time/integrator=rk1',
+        'particles/pic_physical_mode=extended_mhd_pic',
     ] + overrides
     logger.info('Executing expected rejection: %s', ' '.join(command))
     proc = subprocess.run(command, cwd=_athena_exe_dir(),
@@ -226,8 +255,22 @@ def run(**kwargs):
             'gas_momentum_removed': off['gas_momentum'] - on['gas_momentum'],
             'gas_energy_removed': off['gas_energy'] - on['gas_energy'],
         }
+    paper_off = _run_case('rk2', False, physical_mode='paper_mhd_pic',
+                          label='paper_vl2_rk2')
+    paper_on = _run_case('rk2', True, physical_mode='paper_mhd_pic',
+                         label='paper_vl2_rk2')
+    _RESULTS['paper_vl2_rk2'] = {
+        'off': paper_off,
+        'on': paper_on,
+        'gas_mass_removed': paper_off['gas_mass'] - paper_on['gas_mass'],
+        'gas_momentum_removed': (
+            paper_off['gas_momentum'] - paper_on['gas_momentum']),
+        'gas_energy_removed': paper_off['gas_energy'] - paper_on['gas_energy'],
+    }
     _run_expected_floor_rejection()
     _run_expected_integrator_rejection()
+    _run_expected_paper_integrator_rejection('rk1')
+    _run_expected_paper_integrator_rejection('rk3')
     _run_expected_parameter_rejection(
         'negative_floor_reject',
         ['problem/ps_rho_floor_frac=-1.0'],
@@ -271,8 +314,8 @@ def analyze():
     logger.debug('Analyzing test ' + __name__)
     ok = True
     reference = None
-    for integrator in _INTEGRATORS:
-        result = _RESULTS[integrator]
+    for case in _INTEGRATORS + ('paper_vl2_rk2',):
+        result = _RESULTS[case]
         off = result['off']
         on = result['on']
         created_mass = off['next_tag'] * _MACRO_MASS
@@ -286,7 +329,7 @@ def analyze():
             'expected_budget=% .12e gas_mass_removed=% .12e '
             'gas_momentum_removed=%s gas_energy_removed=% .12e '
             'injected_ledger=%s',
-            integrator, off['dt'], off['next_tag'], off['reservoir'], budget,
+            case, off['dt'], off['next_tag'], off['reservoir'], budget,
             expected_budget, gas_mass_removed, gas_momentum_removed,
             gas_energy_removed, off['injected_ledger'])
         # The history endpoint prints dt with fewer digits than restart metadata.
@@ -321,6 +364,9 @@ def analyze():
     ok = _FLOOR_REJECTION.get('saw_floor_rejection', False) and ok
     ok = _INTEGRATOR_REJECTION.get('returncode', 0) != 0 and ok
     ok = _INTEGRATOR_REJECTION.get('saw_integrator_rejection', False) and ok
+    for rejection in _PAPER_INTEGRATOR_REJECTIONS.values():
+        ok = rejection.get('returncode', 0) != 0 and ok
+        ok = rejection.get('saw_rejection', False) and ok
     for rejection in _PARAMETER_REJECTIONS.values():
         ok = rejection.get('returncode', 0) != 0 and ok
         ok = rejection.get('saw_rejection', False) and ok

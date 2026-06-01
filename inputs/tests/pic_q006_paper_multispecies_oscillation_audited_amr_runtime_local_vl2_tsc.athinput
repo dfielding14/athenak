@@ -1,0 +1,158 @@
+# Q-006 bounded serial-host exact-isothermal audited-AMR runtime mechanics only.
+# This is not long-horizon evidence, AMR qualification, MPI/GPU/Frontier qualification,
+# or review closure.
+
+<comment>
+problem   = Q006 Section 5.3 exact-isothermal audited-AMR runtime-local mechanics
+
+<job>
+basename  = pic_q006_paper_multispecies_oscillation_audited_amr_runtime_local
+
+<mesh>
+nghost    = 2
+nx1       = 16
+x1min     = 0.0
+x1max     = 16.0
+ix1_bc    = periodic
+ox1_bc    = periodic
+
+nx2       = 8
+x2min     = 0.0
+x2max     = 8.0
+ix2_bc    = periodic
+ox2_bc    = periodic
+
+nx3       = 8
+x3min     = 0.0
+x3max     = 8.0
+ix3_bc    = periodic
+ox3_bc    = periodic
+
+<meshblock>
+nx1       = 4
+nx2       = 4
+nx3       = 4
+
+<mesh_refinement>
+refinement           = adaptive
+num_levels           = 2
+ncycle_check         = 1
+refinement_interval  = 1
+max_nmb_per_rank     = 512
+
+<time>
+evolution  = dynamic
+integrator = rk2
+cfl_number = 0.1
+nlim       = 2
+tlim       = 1.0
+ndiag      = 1
+
+<mhd>
+eos             = isothermal
+iso_sound_speed = 1.0
+reconstruct     = plm
+rsolver         = llf
+
+<coord>
+special_rel = false
+general_rel = false
+
+<particles>
+particle_type                      = cosmic_ray
+ppc                                = 128.0
+pusher                             = boris_tsc
+nspecies                           = 2
+cr_distribution                    = center
+deposit_moments                    = true
+deposit_order                      = 2
+deposit_qscale                     = 0.0234375
+couple_moments_to_mhd              = true
+couple_j_to_efield_coeff           = 1.0
+couple_j_to_efield_representation  = cell_centered
+couple_j_deposition_mode           = cc_convert
+couple_moments_momentum_to_mhd     = true
+couple_moments_energy_to_mhd       = false
+couple_fluid_feedback_order        = mhd_src_terms
+couple_moments_momentum_coeff      = 1.0
+couple_moments_energy_coeff        = 0.0
+cr_vx0                             = 0.0
+cr_vy0                             = 0.0
+cr_vz0                             = 0.0
+pic_physical_mode                  = paper_mhd_pic
+pic_background_mode                = coupled
+pic_feedback_mode                  = coupled
+pic_interp_scheme                  = tsc
+pic_cr_light_speed                 = 1000.0
+pic_cr_initial_state               = velocity
+pic_cr_hall_mode                   = off
+pic_wave_damping_mode              = off
+pic_max_cell_cross                 = 1
+pic_theta_max                      = 0.1
+pic_deltaf_mode                    = off
+pic_load_balance_cost_per_particle = 0.0
+pic_sort_interval                  = 0
+pic_intermediate_arrays            = auto
+pic_expanding_box_mode             = off
+
+<species0>
+mass   = 1.0
+charge = -1.0
+vx0    = 0.0
+vy0    = 0.1
+vz0    = 0.0
+
+<species1>
+mass   = 1.0
+charge = 1.0
+vx0    = 0.0
+vy0    = 0.1
+vz0    = 0.0
+
+<problem>
+pgen_name = q006_paper_multispecies_oscillation_runtime_local
+
+<q006_paper_multispecies_oscillation_runtime_local>
+campaign_id                    = Q006-PAPER-MULTISPECIES-OSCILLATION-RUNTIME-LOCAL
+deck_role                      = bounded_serial_host_audited_amr_mechanics_only
+qualification_effect           = none
+frontier_authorization         = not_bound
+runtime_scope                  = bounded_serial_host_mechanics_only
+long_horizon_qualification     = not_claimed
+true_amr_policy_qualification  = not_claimed
+mpi_qualification              = not_claimed
+gpu_qualification              = not_claimed
+external_review                = not_claimed
+runtime_eos_contract           = exact_isothermal_cs_1_fullf_momentum_only
+ppc_semantics                  = aggregate_128_round_robin_yields_64_per_species_per_cell
+grid_setup                     = audited_amr_runtime_local
+amr_policy                     = deterministic_audited_randomized_runtime_local_10_refine_60_derefine_not_qualified
+amr_seed                       = 60053
+rho                            = 1.0
+paper_cs                       = 1.0
+b_g                            = 1.0
+omega                          = 1.0
+species_mass_density_ratio     = 1.5
+gas_uy                         = -0.3
+species_vy                     = 0.1
+artificial_c                   = 1000.0
+dt_omega_target                = 0.1
+
+<output1>
+file_type   = bin
+variable    = mhd_w_bcc
+id          = mhd_w_bcc
+dcycle      = 1
+ghost_zones = false
+
+<output2>
+file_type   = pvtk
+variable    = prtcl_all
+id          = prtcl_all
+dcycle      = 1
+
+<output3>
+file_type   = rst
+id          = rst
+dcycle      = 1
+single_file_per_rank = false

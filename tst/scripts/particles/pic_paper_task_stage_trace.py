@@ -10,7 +10,7 @@ logger = logging.getLogger('athena' + __name__[7:])
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _EXE_DIR = _REPO_ROOT / 'tst' / 'build' / 'src'
 _INPUT_DECK = _REPO_ROOT / 'inputs' / 'tests' / (
-    'pic_paper_coupling_conservation.athinput')
+    'pic_paper_coupling_conservation_vl2_tsc.athinput')
 _RESULTS = {}
 
 _PARTICLE_CYCLE_CHAIN = [
@@ -47,8 +47,10 @@ _PAPER_STAGE_INSERT_CHAIN = [
     'pmhd->id.efld);',
     'TaskID insert_loc = (feedback_in_mhd_src ? pmhd->id.srctrms : '
     'pmhd->id.efldsrc);',
+    'TaskID sid = insert_dep;',
+    'stagen_tl->InsertTask(&Particles::Push, this, sid, insert_loc);',
     'stagen_tl->InsertTask(&Particles::SaveOldPositions, this, '
-    'insert_dep, insert_loc);',
+    'sid, insert_loc);',
     'stagen_tl->InsertTask(&Particles::ZeroMoments, this, sid, insert_loc);',
     'stagen_tl->InsertTask(&Particles::InitRecvMoments, this, sid, insert_loc);',
     'stagen_tl->InsertTask(&Particles::DepositMoments, this, sid, insert_loc);',
@@ -61,6 +63,18 @@ _PAPER_STAGE_INSERT_CHAIN = [
     'insert_loc);',
     'stagen_tl->InsertTask(&Particles::ProlongateMoments, this, sid, '
     'insert_loc);',
+    'stagen_tl->InsertTask(&Particles::DriftPaperCosmicRaysHalfStep, '
+    'this, sid, insert_loc);',
+]
+
+_PAPER_VL2_COEFF_CHAIN = [
+    'if (paper_mhd_pic) {',
+    'gam0[0] = 0.0;',
+    'gam1[0] = 1.0;',
+    'beta[0] = 0.5;',
+    'gam0[1] = 0.0;',
+    'gam1[1] = 1.0;',
+    'beta[1] = 1.0;',
 ]
 
 _MHD_STAGE_CHAIN = [
@@ -127,13 +141,22 @@ def _check_static_task_graph():
         _REPO_ROOT / 'src' / 'particles' / 'particles_tasks.cpp')
     particles_hpp = _normalized(
         _REPO_ROOT / 'src' / 'particles' / 'particles.hpp')
+    particles_pushers = _normalized(
+        _REPO_ROOT / 'src' / 'particles' / 'particles_pushers.cpp')
+    particles_moments = _normalized(
+        _REPO_ROOT / 'src' / 'particles' / 'particles_moments.cpp')
     mhd_tasks = _normalized(_REPO_ROOT / 'src' / 'mhd' / 'mhd_tasks.cpp')
+    driver = _normalized(_REPO_ROOT / 'src' / 'driver' / 'driver.cpp')
+    parallel_shock = _normalized(
+        _REPO_ROOT / 'src' / 'pgen' / 'tests' / 'pic_parallel_shock.cpp')
     deck = _normalized(_INPUT_DECK)
 
     _require_ordered(particles_tasks, _PARTICLE_CYCLE_CHAIN,
                      'particle cycle task chain')
     _require_ordered(particles_tasks, _PAPER_STAGE_INSERT_CHAIN,
                      'paper stage insertion chain')
+    _require_ordered(driver, _PAPER_VL2_COEFF_CHAIN,
+                     'paper VL2 coefficient chain')
     _require_ordered(mhd_tasks, _MHD_STAGE_CHAIN, 'MHD stage task chain')
 
     required_fragments = [
@@ -143,8 +166,44 @@ def _check_static_task_graph():
          'CoupledFluidFeedbackOrder::mhd_src_terms'),
         ('particle task graph',
          particles_tasks,
-         'auto comm_tl = (couple_moments_to_mhd ? '
-         'tl["after_timeintegrator"] : tl["before_timeintegrator"]);'),
+         'auto comm_tl = (paper_vl2 ? tl["after_stagen"] : '
+         '(couple_moments_to_mhd ? tl["after_timeintegrator"] : '
+         'tl["before_timeintegrator"]));'),
+        ('paper delta-f fail-closed guard',
+         particles_tasks,
+         'if (paper_vl2 && UsesDeltaF()) {'),
+        ('paper preintegrator push gate',
+         particles_pushers,
+         'if (UsesPaperVL2Coupling() && stage == 0) { '
+         'return TaskStatus::complete; }'),
+        ('paper stage pusher',
+         particles_pushers,
+         'return PushPaperCosmicRaysVL2(pdriver, stage);'),
+        ('paper stage-1 kick no-op',
+         particles_pushers,
+         'if (stage == 1) return TaskStatus::complete;'),
+        ('paper stage-2 midpoint kick',
+         particles_pushers,
+         'InterpolateTSCFields(indcs, size_view, bcc, w0, true, m, x, y, z, '
+         'Bx, By, Bz, Ux, Uy, Uz, allow_2d3v);'),
+        ('paper post-deposit half drift',
+         particles_pushers,
+         'TaskStatus Particles::DriftPaperCosmicRaysHalfStep('),
+        ('paper both-stage moments',
+         particles_moments,
+         'if (paper_vl2) return (stage == 1) || (stage == 2);'),
+        ('paper stage-1 predictor feedback',
+         mhd_tasks,
+         'const bool paper_vl2_predictor = '
+         'ppart->UsesPaperVL2Coupling() && (stage == 1);'),
+        ('paper stage-1 rho/J feedback',
+         mhd_tasks,
+         'if (paper_vl2_predictor) { const Real rho = '
+         'mom(m, particles::Particles::IMOM_RHO, k, j, i);'),
+        ('paper VL2 source transaction',
+         parallel_shock,
+         'ps_injection_transaction_applied_local[n] = '
+         'stage_weight*stage_delta[n];'),
         ('CT source gate',
          mhd_tasks,
          'if ((ppart != nullptr) && ppart->AddsCRCurrentToCT()) {'),
@@ -175,7 +234,8 @@ def _check_static_task_graph():
             raise RuntimeError(label + ' missing source fragment:\n' + fragment)
 
     _RESULTS['particle_cycle_tasks'] = len(_PARTICLE_CYCLE_CHAIN)
-    _RESULTS['paper_stage_insert_tasks'] = len(_PAPER_STAGE_INSERT_CHAIN) - 2
+    _RESULTS['paper_stage_insert_tasks'] = len(_PAPER_STAGE_INSERT_CHAIN) - 3
+    _RESULTS['paper_vl2_coefficients'] = len(_PAPER_VL2_COEFF_CHAIN) - 1
     _RESULTS['mhd_stage_tasks_through_expanding_box_u'] = len(_MHD_STAGE_CHAIN)
     _RESULTS['static_graph'] = 'pass'
 
@@ -204,6 +264,37 @@ def _run_runtime_identity():
     _RESULTS['runtime_identity'] = trace
 
 
+def _run_expected_rejection(label, overrides, reason):
+    command = [
+        './athena', '-i', os.path.relpath(_INPUT_DECK, _EXE_DIR),
+        'time/nlim=0',
+    ] + overrides
+    logger.info('Executing expected %s rejection: %s', label, ' '.join(command))
+    proc = subprocess.run(command, cwd=_EXE_DIR, capture_output=True, text=True)
+    output = (proc.stdout or '') + (proc.stderr or '')
+    if proc.returncode == 0 or reason not in output:
+        raise RuntimeError('Missing expected ' + label + ' rejection\n' + output)
+    _RESULTS[label] = 'pass'
+
+
+def _run_fail_closed_guards():
+    _run_expected_rejection(
+        'paper_deltaf_fail_closed',
+        [
+            'particles/pic_deltaf_mode=physical',
+            'particles/pic_deltaf_f0=kappa_iso',
+        ],
+        'currently supports full-f only; delta-f staged source semantics '
+        'are not implemented',
+    )
+    _run_expected_rejection(
+        'paper_expanding_box_fail_closed',
+        ['particles/pic_expanding_box_mode=on'],
+        'pic_expanding_box_mode=on is not yet supported by the staged VL2 '
+        'coupling path',
+    )
+
+
 def _run_dynamic_induction_isolation():
     original_cwd = os.getcwd()
     try:
@@ -220,6 +311,7 @@ def run(**kwargs):
     logger.debug('Running test ' + __name__)
     _check_static_task_graph()
     _run_runtime_identity()
+    _run_fail_closed_guards()
     _run_dynamic_induction_isolation()
 
 
@@ -227,4 +319,6 @@ def analyze():
     logger.info('PIC paper task-stage trace: %s', _RESULTS)
     return (_RESULTS.get('static_graph') == 'pass'
             and _RESULTS.get('dynamic_induction_isolation') == 'pass'
+            and _RESULTS.get('paper_deltaf_fail_closed') == 'pass'
+            and _RESULTS.get('paper_expanding_box_fail_closed') == 'pass'
             and 'induction=ideal_mhd_only' in _RESULTS.get('runtime_identity', ''))

@@ -1725,6 +1725,8 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm) :
     Monopole(pin, false);
   } else if (pgen_fun_name.compare("orszag_tang") == 0) {
     OrszagTang(pin, false);
+  } else if (pgen_fun_name.compare("pic_paper_smooth_tsc_interface") == 0) {
+    PICPaperSmoothTSCInterface(pin, false);
   } else if (pgen_fun_name.compare("pic_parallel_shock") == 0) {
     PICParallelShock(pin, false);
   } else if (pgen_fun_name.compare("q006_paper_multispecies_oscillation") == 0) {
@@ -2401,6 +2403,8 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
     Monopole(pin, true);
   } else if (pgen_fun_name.compare("orszag_tang") == 0) {
     OrszagTang(pin, true);
+  } else if (pgen_fun_name.compare("pic_paper_smooth_tsc_interface") == 0) {
+    PICPaperSmoothTSCInterface(pin, true);
   } else if (pgen_fun_name.compare("pic_parallel_shock") == 0) {
     PICParallelShock(pin, true);
   } else if (pgen_fun_name.compare("q006_paper_multispecies_oscillation") == 0) {

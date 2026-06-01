@@ -13,7 +13,7 @@ import bin_convert_new as bin_convert  # noqa
 
 logger = logging.getLogger('athena' + __name__[7:])
 
-_INPUT_DECK = 'tests/pic_paper_coupling_conservation.athinput'
+_INPUT_DECK = 'tests/pic_paper_coupling_conservation_vl2_tsc.athinput'
 _RESULTS = {}
 _C = 3.0
 

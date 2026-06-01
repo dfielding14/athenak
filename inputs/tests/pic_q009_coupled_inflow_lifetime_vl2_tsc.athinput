@@ -1,0 +1,130 @@
+# BOUNDED Q-009 LOCAL SERIAL-HOST REGRESSION: not qualification evidence.
+# Alternating dens_max restart overrides force repeated coupled refine/derefine transitions.
+# Reflect/inflow boundaries exercise supported non-periodic PIC/MHD boundary helpers.
+
+<comment>
+problem   = Q-009 bounded coupled PIC/MHD inflow lifetime stress
+
+<job>
+basename  = pic_q009_coupled_inflow_lifetime
+
+<mesh>
+nghost    = 2
+nx1       = 8
+x1min     = 0.0
+x1max     = 1.0
+ix1_bc    = reflect
+ox1_bc    = reflect
+
+nx2       = 4
+x2min     = 0.0
+x2max     = 4.0
+ix2_bc    = inflow
+ox2_bc    = inflow
+
+nx3       = 1
+x3min     = 0.0
+x3max     = 1.0
+ix3_bc    = periodic
+ox3_bc    = periodic
+
+<meshblock>
+nx1       = 4
+nx2       = 4
+nx3       = 1
+
+<mesh_refinement>
+refinement           = adaptive
+num_levels           = 2
+dens_max             = 0.5
+ncycle_check         = 1
+refinement_interval  = 1
+max_nmb_per_rank     = 16
+
+<time>
+evolution  = dynamic
+integrator = rk2
+cfl_number = 0.3
+nlim       = 2
+tlim       = 10.0
+ndiag      = 1
+
+<mhd>
+eos         = ideal
+reconstruct = plm
+rsolver     = llf
+gamma       = 1.66666666667
+
+<particles>
+particle_type                     = cosmic_ray
+ppc                               = 2.0
+pusher                            = boris_tsc
+nspecies                          = 1
+cr_distribution                   = random
+deposit_moments                   = true
+deposit_order                     = 2
+deposit_qscale                    = 1.0e-4
+couple_moments_to_mhd             = true
+couple_j_to_efield_coeff          = 0.0
+couple_j_to_efield_representation = cell_centered
+couple_j_deposition_mode          = cc_convert
+couple_moments_momentum_to_mhd    = true
+couple_moments_energy_to_mhd      = true
+couple_fluid_feedback_order       = mhd_src_terms
+couple_moments_momentum_coeff     = 1.0
+couple_moments_energy_coeff       = 1.0
+cr_vx0                            = 0.8
+cr_vy0                            = 0.0
+cr_vz0                            = 0.0
+pic_physical_mode                 = paper_mhd_pic
+pic_background_mode               = coupled
+pic_feedback_mode                 = coupled
+pic_interp_scheme                 = tsc
+pic_enable_2d3v                   = true
+pic_cr_light_speed                = 3.0
+pic_cr_initial_state              = momentum
+pic_cr_hall_mode                  = off
+pic_wave_damping_mode             = off
+pic_max_cell_cross                = 1
+pic_theta_max                     = 0.3
+pic_deltaf_mode                   = off
+pic_load_balance_cost_per_particle = 0.0
+pic_sort_interval                 = 0
+pic_intermediate_arrays           = auto
+pic_expanding_box_mode            = off
+pic_random_seed                   = 9009
+
+<species0>
+mass   = 1.0
+charge = 1.0
+
+<problem>
+pgen_name = linear_wave
+wave_flag = 0
+amp       = 1.0e-6
+vflow     = 0.0
+along_x1  = true
+along_x2  = false
+along_x3  = false
+
+<output1>
+file_type   = pvtk
+variable    = prtcl_all
+id          = prtcl_all
+dcycle      = 1
+file_number = 0
+
+<output2>
+file_type   = bin
+variable    = mhd_w_d
+id          = mesh
+dcycle      = 1
+file_number = 0
+ghost_zones = false
+
+<output3>
+file_type   = rst
+id          = rst
+dcycle      = 1
+file_number = 0
+single_file_per_rank = false

@@ -74,6 +74,10 @@ _REQUIRED_NAMES = {
     'particle_memory.athenak_owned_tracked_kokkos_views.allocated_snapshot_bytes_rank_max',
     'particle_memory.athenak_owned_tracked_kokkos_views.allocated_high_water_bytes_rank_sum',
     'particle_memory.athenak_owned_tracked_kokkos_views.allocated_high_water_bytes_rank_max',
+    'particle_memory.paper_smooth_host_transport.allocated_snapshot_bytes_total',
+    'particle_memory.paper_smooth_host_transport.allocated_snapshot_bytes_rank_max',
+    'particle_memory.paper_smooth_host_transport.allocated_high_water_bytes_rank_sum',
+    'particle_memory.paper_smooth_host_transport.allocated_high_water_bytes_rank_max',
     'particle_memory.invalid_records',
     'particle_memory.species.0.count',
     'particle_memory.species.0.resident_bytes',
@@ -201,6 +205,30 @@ def analyze():
                          owned_high_water_sum == owned_high_water_max) and ok
     ok = _check_relation('owned high-water exceeds final snapshot',
                          owned_high_water_max > owned_rank_max) and ok
+    host_transport_total = _RESULTS[
+        'particle_memory.paper_smooth_host_transport.allocated_snapshot_bytes_total']
+    host_transport_rank_max = _RESULTS[
+        'particle_memory.paper_smooth_host_transport.allocated_snapshot_bytes_rank_max']
+    host_transport_high_water_sum = _RESULTS[
+        'particle_memory.paper_smooth_host_transport.allocated_high_water_bytes_rank_sum']
+    host_transport_high_water_max = _RESULTS[
+        'particle_memory.paper_smooth_host_transport.allocated_high_water_bytes_rank_max']
+    ok = _check_equal(
+        'particle_memory.paper_smooth_host_transport.allocated_snapshot_bytes_total',
+        0.0) and ok
+    ok = _check_equal(
+        'particle_memory.paper_smooth_host_transport.allocated_snapshot_bytes_rank_max',
+        0.0) and ok
+    ok = _check_equal(
+        'particle_memory.paper_smooth_host_transport.allocated_high_water_bytes_rank_sum',
+        0.0) and ok
+    ok = _check_equal(
+        'particle_memory.paper_smooth_host_transport.allocated_high_water_bytes_rank_max',
+        0.0) and ok
+    ok = _check_relation('one-rank host-transport snapshot reduction is exact',
+                         host_transport_total == host_transport_rank_max) and ok
+    ok = _check_relation('one-rank host-transport high-water reduction is exact',
+                         host_transport_high_water_sum == host_transport_high_water_max) and ok
     ok = _check_equal('particle_memory.invalid_records', 0.0) and ok
     ok = _check_equal('particle_memory.species.0.count', 120.0) and ok
     ok = _check_equal('particle_memory.species.1.count', 120.0) and ok

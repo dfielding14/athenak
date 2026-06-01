@@ -26,6 +26,12 @@ _PAPER_TEST_PARTICLE = [
     'particles/couple_moments_energy_to_mhd=false',
 ]
 
+_PAPER_MHD_PIC = [
+    'particles/pic_physical_mode=paper_mhd_pic',
+    'particles/deposit_order=2',
+    'time/integrator=rk2',
+]
+
 _ADAPTIVE_DELTAF = [
     'particles/pic_background_mode=passive_mhd',
     'particles/pic_feedback_mode=test_particle',
@@ -58,10 +64,10 @@ _EXPANDING_COUPLED_PHYSICAL_DAMPING = [
 _POSITIVE_CASES = [
     ('extended_mhd_pic', [], ['physical_mode=extended_mhd_pic']),
     ('paper_mhd_pic',
-     ['particles/pic_physical_mode=paper_mhd_pic'],
+     _PAPER_MHD_PIC,
      ['physical_mode=paper_mhd_pic']),
     ('paper_mhd_pic_isothermal_fullf_momentum_only',
-     ['particles/pic_physical_mode=paper_mhd_pic',
+     _PAPER_MHD_PIC + [
       'mhd/eos=isothermal',
       'particles/couple_moments_energy_to_mhd=false'],
      ['physical_mode=paper_mhd_pic']),
@@ -128,19 +134,19 @@ _REJECTION_CASES = [
      '<particles>/pic_physical_mode=paper_test_particle requires '
      'test-particle feedback with all particle-to-MHD coupling toggles disabled'),
     ('paper_mhd_pic_requires_conservative_feedback',
-     ['particles/pic_physical_mode=paper_mhd_pic',
+     _PAPER_MHD_PIC + [
       'particles/couple_moments_momentum_to_mhd=false'],
      '<particles>/pic_physical_mode=paper_mhd_pic requires coupled MHD '
      'background, coupled feedback, moment deposition, and conservative '
      'momentum feedback'),
     ('paper_mhd_pic_isothermal_rejects_energy_feedback',
-     ['particles/pic_physical_mode=paper_mhd_pic',
+     _PAPER_MHD_PIC + [
       'mhd/eos=isothermal',
       'particles/couple_moments_energy_to_mhd=true',
       'particles/couple_moments_energy_coeff=1.0'],
      '<particles>/couple_moments_energy_to_mhd=true requires <mhd>/eos=ideal'),
     ('paper_mhd_pic_isothermal_fullf_rejects_non_q006_generator',
-     ['particles/pic_physical_mode=paper_mhd_pic',
+     _PAPER_MHD_PIC + [
       'mhd/eos=isothermal',
       'particles/couple_moments_energy_to_mhd=false',
       'problem/pgen_name=linear_wave'],
@@ -148,38 +154,59 @@ _REJECTION_CASES = [
      'background, coupled feedback, moment deposition, and conservative '
      'momentum feedback'),
     ('paper_mhd_pic_ideal_fullf_rejects_momentum_only',
-     ['particles/pic_physical_mode=paper_mhd_pic',
+     _PAPER_MHD_PIC + [
       'particles/couple_moments_energy_to_mhd=false',
       'particles/couple_moments_energy_coeff=0.0'],
      '<particles>/pic_physical_mode=paper_mhd_pic requires coupled MHD '
      'background, coupled feedback, moment deposition, and conservative '
      'momentum feedback'),
     ('paper_mhd_pic_rejects_direct_ct',
-     ['particles/pic_physical_mode=paper_mhd_pic',
+     _PAPER_MHD_PIC + [
       'particles/couple_j_to_efield_representation=edge_staggered',
       'particles/couple_j_deposition_mode=direct_staggered'],
      '<particles>/pic_physical_mode=paper_mhd_pic rejects direct-current CT '
      'induction options'),
     ('paper_mhd_pic_rejects_relativistic_mhd_background',
-     ['particles/pic_physical_mode=paper_mhd_pic',
+     _PAPER_MHD_PIC + [
       'coord/special_rel=true'],
      'Fluid momentum/energy feedback is limited to non-relativistic MHD in PR2'),
     ('paper_mode_rejects_hall_extension',
-     ['particles/pic_physical_mode=paper_mhd_pic',
+     _PAPER_MHD_PIC + [
       'particles/pic_cr_hall_mode=current_to_ct_experimental'],
      '<particles>/pic_cr_hall_mode=current_to_ct_experimental requires '
      '<particles>/pic_physical_mode=extended_mhd_pic'),
     ('paper_mode_rejects_wave_damping_extension',
-     ['particles/pic_physical_mode=paper_mhd_pic',
+     _PAPER_MHD_PIC + [
       'particles/pic_wave_damping_mode=ion_neutral_friction',
       'particles/pic_ion_neutral_collision_rate=0.5'],
      '<particles>/pic_wave_damping_mode=ion_neutral_friction requires '
      '<particles>/pic_physical_mode=extended_mhd_pic'),
     ('paper_mode_rejects_adaptive_deltaf_extension',
-     ['particles/pic_physical_mode=paper_mhd_pic'] + _ADAPTIVE_DELTAF,
+     _PAPER_MHD_PIC + _ADAPTIVE_DELTAF,
      '<particles>/pic_deltaf_adapt_mode='
      'global_bikappa_moments_experimental requires '
      '<particles>/pic_physical_mode=extended_mhd_pic'),
+    ('paper_mhd_pic_requires_tsc_deposition',
+     ['particles/pic_physical_mode=paper_mhd_pic'],
+     '<particles>/pic_physical_mode=paper_mhd_pic requires '
+     '<particles>/deposit_order=2 for TSC moment deposition'),
+    ('paper_mhd_pic_requires_rk2_vl2_path',
+     _PAPER_MHD_PIC + ['time/integrator=rk1'],
+     '<particles>/pic_physical_mode=paper_mhd_pic requires '
+     '<time>/integrator=rk2 for the staged VL2 coupling path'),
+    ('paper_mhd_pic_requires_mhd_source_feedback_order',
+     _PAPER_MHD_PIC + ['particles/couple_fluid_feedback_order=efield_src'],
+     '<particles>/pic_physical_mode=paper_mhd_pic requires '
+     '<particles>/couple_fluid_feedback_order=mhd_src_terms'),
+    ('paper_mhd_pic_requires_unit_feedback_coefficients',
+     _PAPER_MHD_PIC + ['particles/couple_moments_momentum_coeff=0.5'],
+     '<particles>/pic_physical_mode=paper_mhd_pic requires unit conservative '
+     'momentum and enabled energy feedback coefficients'),
+    ('paper_mhd_pic_rejects_unstaged_expanding_box',
+     _PAPER_MHD_PIC + ['particles/pic_expanding_box_mode=on'],
+     '<particles>/pic_physical_mode=paper_mhd_pic with '
+     '<particles>/pic_expanding_box_mode=on is not yet supported by the staged '
+     'VL2 coupling path'),
     ('hall_extension_requires_coupled_moments',
      ['particles/pic_cr_hall_mode=current_to_ct_experimental',
       'particles/couple_moments_to_mhd=false',

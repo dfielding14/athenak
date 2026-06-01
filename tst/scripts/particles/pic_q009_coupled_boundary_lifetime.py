@@ -27,7 +27,7 @@ from pvtk_particles import read_particle_vtk  # noqa: E402
 
 logger = logging.getLogger("athena" + __name__[7:])
 
-_INPUT_DECK = "tests/pic_q009_coupled_boundary_lifetime.athinput"
+_INPUT_DECK = "tests/pic_q009_coupled_boundary_lifetime_vl2_tsc.athinput"
 _SOURCE_ROOT = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..", "..")
 )

@@ -1,0 +1,127 @@
+# Q-023 SOURCE-LOCAL RUNNABLE PREPARATION ONLY: not an authorized deck.
+# Sun and Bai (2023) Section 5.2 values and the dedicated eigenmode generator
+# are bound below. The physical 1D case uses a transverse-invariant nx2=4
+# carrier because AthenaK's particle module intentionally supports 2D/3D.
+# Clean freeze, authorization, execution, and qualification remain open.
+
+<comment>
+problem   = Q023-PAPER-BELL-LINEAR 1D source-local paper candidate
+
+<job>
+basename  = pic_q023_paper_bell_linear_1d_candidate
+
+<mesh>
+nghost    = 2
+nx1       = 32
+x1min     = 0.0
+x1max     = 1.0
+ix1_bc    = periodic
+ox1_bc    = periodic
+
+nx2       = 4
+x2min     = 0.0
+x2max     = 1.0
+ix2_bc    = periodic
+ox2_bc    = periodic
+
+nx3       = 1
+x3min     = 0.0
+x3max     = 1.0
+ix3_bc    = periodic
+ox3_bc    = periodic
+
+<meshblock>
+nx1       = 32
+nx2       = 4
+nx3       = 1
+
+<time>
+evolution  = dynamic
+integrator = rk2
+cfl_number = 0.1
+nlim       = 0
+tlim       = 0.0
+ndiag      = 1
+
+<mhd>
+eos         = ideal
+reconstruct = plm
+rsolver     = llf
+gamma       = 1.66666666667
+
+<particles>
+particle_type                     = cosmic_ray
+ppc                               = 2.0
+pusher                            = boris_tsc
+nspecies                          = 1
+cr_distribution                   = center
+deposit_moments                   = true
+deposit_order                     = 2
+deposit_qscale                    = 1.0e9
+couple_moments_to_mhd             = true
+couple_j_to_efield_coeff          = 1.0
+couple_j_to_efield_representation = cell_centered
+couple_j_deposition_mode          = cc_convert
+couple_moments_momentum_to_mhd    = true
+couple_moments_energy_to_mhd      = true
+couple_fluid_feedback_order       = mhd_src_terms
+couple_moments_momentum_coeff     = 1.0
+couple_moments_energy_coeff       = 1.0
+cr_vx0                            = 2.5
+cr_vy0                            = 0.0
+cr_vz0                            = 0.0
+pic_physical_mode                 = paper_mhd_pic
+pic_background_mode               = coupled
+pic_feedback_mode                 = coupled
+pic_interp_scheme                 = tsc
+pic_enable_2d3v                   = true
+pic_cr_light_speed                = 2500.0
+pic_cr_initial_state              = velocity
+pic_cr_hall_mode                  = off
+pic_wave_damping_mode             = off
+pic_max_cell_cross                = 1
+pic_theta_max                     = 0.3
+pic_deltaf_mode                   = off
+pic_load_balance_cost_per_particle = 0.0
+pic_sort_interval                 = 0
+pic_intermediate_arrays           = auto
+pic_expanding_box_mode            = off
+
+<species0>
+mass   = 1.0
+charge = 6.283185307179586e-6
+
+<problem>
+pgen_name = q023_paper_bell_linear
+
+<q023_paper_bell_linear>
+campaign_id       = Q023-PAPER-BELL-LINEAR
+deck_role         = source_local_runnable_thin_2d3v_carrier_preparation_not_authorized
+dimension         = 1
+epsilon_default   = 0.4
+epsilon           = 0.4
+epsilon_grid      = 0.1,0.2,0.4,0.6,0.8
+rho               = 1.0
+pressure          = 1.0
+amplitude         = 1.0e-6
+b_g               = 1.0
+u_a               = 1.0
+wavelength        = 1.0
+k0                = 6.283185307179586
+omega             = 6.283185307179586e-6
+c_over_v_cr       = 1000.0
+initial_eigenmode = section52_right_polarized_eigenmode
+timestep          = open_clean_candidate_timestep_freeze
+
+<output1>
+file_type   = bin
+variable    = mhd_w_bcc
+id          = mhd_w_bcc
+dcycle      = 1
+ghost_zones = false
+
+<output2>
+file_type   = rst
+id          = rst
+dcycle      = 1
+single_file_per_rank = false

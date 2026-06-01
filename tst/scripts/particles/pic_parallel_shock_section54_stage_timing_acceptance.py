@@ -5,7 +5,7 @@ import subprocess
 logger = logging.getLogger('athena' + __name__[7:])
 
 _INPUT_DECK = (
-    'tests/pic_parallel_shock_section54_stage_timing_acceptance.athinput'
+    'tests/pic_parallel_shock_section54_stage_timing_acceptance_vl2_tsc.athinput'
 )
 _EXPECTED_MARKERS = (
     'physical_mode=paper_mhd_pic',
