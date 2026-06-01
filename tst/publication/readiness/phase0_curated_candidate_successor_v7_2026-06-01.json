@@ -1,0 +1,42 @@
+{
+  "record_type": "phase0_curated_candidate_successor",
+  "schema_version": 1,
+  "date": "2026-06-01",
+  "predecessor_record": "tst/publication/readiness/phase0_curated_candidate_successor_v6_2026-06-01.json",
+  "status": "canonical_clean_candidate_frozen_accounting_closed_registered_prerequisite_replays_authorized",
+  "qualification_effect": "none_registered_short_nonproduction_replays_still_pending",
+  "live_paired_control_plane_version": "3d3d0d20ab3cedb1b650d8a19e99a0123b550ead25ebd312882d03d3be3b41d9",
+  "successor_source_control_plane_version": "3d3d0d20ab3cedb1b650d8a19e99a0123b550ead25ebd312882d03d3be3b41d9",
+  "candidate_freeze_source_commit": "1171668b32017e9d46f7f5ecf65f05ebc85aaa62",
+  "clean_candidate_freeze_receipt": {
+    "path": "tst/publication/readiness/phase0_clean_candidate_freeze_and_policy_promotion_2026-06-01.json",
+    "sha256": "c6c4ba48485364d0daf67b63dc3f67a332464c2d4b8b7e65a781d0e1d84c9c03"
+  },
+  "scheduler_accounting_successor_receipt": {
+    "path": "tst/publication/readiness/phase0_scheduler_accounting_controller_successor_2026-06-01.json",
+    "sha256": "13606bd97b8cf74cdedcdb29fb67af863f2da40447675250702b5765f1329f22"
+  },
+  "registered_prerequisite_replay_policy_promotion_receipt": {
+    "path": "tst/publication/readiness/phase0_registered_prerequisite_replay_policy_promotion_2026-06-01.json",
+    "sha256": "e406be45d5bba1b0bb1cc2d10680a34357a0356e083fdca6eb3fb440caec86ee"
+  },
+  "prepared_artifacts": {
+    "inventory_path": "tst/publication/frontier_control_plane/prepared_pic_artifact_inventory.json",
+    "inventory_sha256": "7ce7b80365d3798b73ddfeac6bff4306e2e01686f5d1e6bdee8697b672f43515",
+    "paper_deck_count": 94,
+    "publication_analyzer_count": 12
+  },
+  "completed_phase0_actions": [
+    "passed the final clean-tree publication regression, build matrix and independent restart-safety rereview on the stable source boundary",
+    "built the canonical explicit-double-precision HIP/MPI Release executable and froze its source commit, build profile, executable checksum and immutable manifest",
+    "promoted the clean-candidate freeze before authorizing any registered-science attempt",
+    "installed the paired scheduler-accounting controller successor and imported ten terminal direct-sbatch diagnostics as nonqualifying ledger rows",
+    "promoted fresh single-attempt registered prerequisite replay slices only after the mirrored ledger returned to a quiescent terminal state"
+  ],
+  "remaining_phase0_actions": [],
+  "next_actions": [
+    "execute the gyro, paper-coupling and multirank parser/runtime-metadata registered short nonproduction prerequisite replays serially through the installed paired control plane",
+    "reconcile every reservation to terminal scheduler accounting and preserve immutable artifact inventories",
+    "advance to the local Section 5.4 normalization and analyzer closure only after all three prerequisite replays pass"
+  ]
+}

@@ -48,18 +48,28 @@ qualify any scientific claim by itself.
   pre-promotion operator attestation and quiescent mirrored ledger without
   authorizing a registered-science attempt.
 - `phase0_scheduler_accounting_controller_successor_2026-06-01.json`:
-  current accounting-only paired-controller successor. It widens the
+  accounting-only paired-controller successor. It widens the
   nonqualifying manual allocation importer without invalidating historical
   direct-`srun` rows, records the reviewed ten-job direct-`sbatch` Phase 0
   diagnostic import, and binds the terminal 66-row mirrored ledger before any
   registered replay is submitted.
+- `phase0_registered_prerequisite_replay_policy_promotion_2026-06-01.json`:
+  current three-slice replay authorization receipt. It binds the canonical
+  clean candidate and the fresh single-attempt gyro, paper-coupling and
+  multirank parser/runtime-metadata short nonproduction replays after scheduler
+  accounting closure.
+- `phase0_curated_candidate_successor_v7_2026-06-01.json`: current Phase 0
+  successor. It binds the canonical clean-candidate freeze, terminal scheduler
+  accounting closure and fresh three-slice registered prerequisite replay
+  authorization. Phase 0 is complete; the serial prerequisite replays are the
+  next execution boundary.
 - `phase0_curated_candidate_successor_v4_2026-05-31.json`: historical Phase 0
   successor after schema-3 parallel-shock exact tag-window and restart
   fail-stop hardening. It binds the paired `4f005096` successor receipt and
   refreshed 94-deck, 12-analyzer prepared-artifact closure, including the
   required Section 5.4 publication deck. Final clean-tree validation, rereview,
   HIP/MPI Release build and canonical clean-candidate freeze remain pending.
-- `phase0_curated_candidate_successor_v6_2026-06-01.json`: current Phase 0
+- `phase0_curated_candidate_successor_v6_2026-06-01.json`: historical Phase 0
   successor after restart-layout bounds checks, centralized MPI-IO count
   and status guards, explicit MPI truncation, immutable shock-origin validation,
   hydro-only six-digit sharded restart reload and the explicit two-rank nonempty

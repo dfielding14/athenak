@@ -1,0 +1,64 @@
+{
+  "record_type": "phase0_registered_prerequisite_replay_policy_promotion",
+  "schema_version": 1,
+  "date": "2026-06-01",
+  "predecessor_record": "tst/publication/readiness/phase0_scheduler_accounting_controller_successor_2026-06-01.json",
+  "qualification_effect": "none_registered_short_nonproduction_replay_authorization_only",
+  "control_plane_version": "3d3d0d20ab3cedb1b650d8a19e99a0123b550ead25ebd312882d03d3be3b41d9",
+  "clean_candidate": {
+    "manifest_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/clean_candidates/0092f069-cbb4-4654-a00f-086bbcdfb985/clean_candidate_manifest.json",
+    "manifest_sha256": "533eea21e72a61f01e4c4ed84ff80dafe48ad31f74669e37be7d66beb03d4410",
+    "source_git_commit": "1171668b32017e9d46f7f5ecf65f05ebc85aaa62",
+    "executable_sha256": "bb2abaecad0dbecdb83fece1417efb35d661220554e804a3bb3566393e1973ab"
+  },
+  "active_policy_promotion": {
+    "source_policy_commit": "9e8c48371a8b6de393760e1881134de0430e6d38",
+    "orion_policy_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/storage_policy.json",
+    "project_home_policy_path": "/ccs/proj/ast207/proj-shared/PIC/policy/storage_policy.json",
+    "orion_policy_sha256": "a119b39d904f75d026fe9122c270301068510edd8e8fcb4ba2770b3385024506",
+    "project_home_policy_sha256": "a119b39d904f75d026fe9122c270301068510edd8e8fcb4ba2770b3385024506",
+    "orion_promotion_sha256": "ce5a22027e964afffb3a6c667e225f79a2c72d7370a1cb18a375ccbf84c8abe2",
+    "project_home_promotion_sha256": "ce5a22027e964afffb3a6c667e225f79a2c72d7370a1cb18a375ccbf84c8abe2",
+    "maximum_node_hours": 10000,
+    "byte_identical_policy": true,
+    "byte_identical_promotion": true
+  },
+  "pre_promotion_operator_attestation": {
+    "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/operator_attestations/20260601T210902Z-phase0-registered-slice-promotion-1171668b-v2-pre_policy_promotion/attestation.json",
+    "sha256": "48fce6ec07a9ecbe140219dee6c6b92bbfc189b660f496b43492d9cad961c629"
+  },
+  "registered_science_slices": [
+    {
+      "authorization_id": "f1-clean-gyro-1171668b-v4",
+      "campaign": "f1_gpu_relativistic_gyro",
+      "launch_contract_sha256": "f63d539df5118ff0f9cec769fa656f4f34784dce54847a285aea48517e299a1f"
+    },
+    {
+      "authorization_id": "f1-clean-paper-coupling-1171668b-v3",
+      "campaign": "f1_gpu_paper_coupling",
+      "launch_contract_sha256": "0daebd7708c642af2aae000a9a35c773599956e5e3273c4eb4124125fdd5a1e6"
+    },
+    {
+      "authorization_id": "f2-parser-multirank-metadata-1171668b-v3",
+      "campaign": "f2_multirank_runtime_metadata",
+      "launch_contract_sha256": "ff3dd988bf8148c8d89b1586fdd254e14501007972f1ca25efc1992a06415429"
+    }
+  ],
+  "terminal_mirrored_ledger": {
+    "orion_node_hours_jsonl_sha256": "f46a48f3ceecf74fdb67463d91fa8f77b68125f2af1a3bb60111a9c90812bf59",
+    "project_home_node_hours_jsonl_sha256": "f46a48f3ceecf74fdb67463d91fa8f77b68125f2af1a3bb60111a9c90812bf59",
+    "orion_mirror_receipts_jsonl_sha256": "f33de9d7f43272855ba02674709420f5d3cac855fb9756a14bf2135b59eacfeb",
+    "orion_ledger_records": 66,
+    "project_home_ledger_records": 66,
+    "orion_receipt_records": 66,
+    "active_reservations": 0,
+    "pending_submission_marker": "absent",
+    "pending_manual_accounting_marker": "absent",
+    "cumulative_consumed_node_hours": 0.9816666666666666
+  },
+  "scope_limits": [
+    "Each registered replay authorization is short, nonproduction and single-attempt.",
+    "A reservation consumes its exact authorization attempt even if the job later fails or is cancelled.",
+    "This promotion does not qualify a physical claim or close external review."
+  ]
+}

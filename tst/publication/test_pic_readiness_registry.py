@@ -317,6 +317,76 @@ class PicReadinessRegistryTests(unittest.TestCase):
             )
             self.assertEqual(policy["registered_science_slices"], [])
             return
+        replay = _load(
+            "phase0_registered_prerequisite_replay_policy_promotion_2026-06-01.json"
+        )
+        if (
+            storage["installed_control_plane_version"]
+            == replay["control_plane_version"]
+        ):
+            accounting = _load(
+                "phase0_scheduler_accounting_controller_successor_2026-06-01.json"
+            )
+            freeze = _load(
+                "phase0_clean_candidate_freeze_and_policy_promotion_2026-06-01.json"
+            )
+            self.assertEqual(lifecycle, "paired_installed_reviewed_generation")
+            self.assertEqual(
+                storage["installed_control_plane_version"],
+                storage["staged_control_plane_candidate_version"],
+            )
+            self.assertEqual(
+                replay["predecessor_record"],
+                "tst/publication/readiness/"
+                "phase0_scheduler_accounting_controller_successor_2026-06-01.json",
+            )
+            self.assertEqual(
+                accounting["predecessor_record"],
+                "tst/publication/readiness/"
+                "phase0_clean_candidate_freeze_and_policy_promotion_2026-06-01.json",
+            )
+            self.assertEqual(
+                science_freeze["manifest_path"],
+                freeze["clean_candidate"]["manifest_path"],
+            )
+            self.assertEqual(
+                science_freeze["manifest_sha256"],
+                freeze["clean_candidate"]["manifest_sha256"],
+            )
+            self.assertEqual(
+                {
+                    record["authorization_id"]: {
+                        "campaign": record["campaign"],
+                        "launch_contract_sha256": record["launch_contract_sha256"],
+                    }
+                    for record in policy["registered_science_slices"]
+                },
+                {
+                    record["authorization_id"]: {
+                        "campaign": record["campaign"],
+                        "launch_contract_sha256": record["launch_contract_sha256"],
+                    }
+                    for record in replay["registered_science_slices"]
+                },
+            )
+            terminal = replay["terminal_mirrored_ledger"]
+            self.assertEqual(terminal["orion_ledger_records"], 66)
+            self.assertEqual(
+                terminal["orion_ledger_records"],
+                terminal["project_home_ledger_records"],
+            )
+            self.assertEqual(
+                terminal["orion_ledger_records"],
+                terminal["orion_receipt_records"],
+            )
+            self.assertEqual(terminal["active_reservations"], 0)
+            self.assertEqual(terminal["pending_submission_marker"], "absent")
+            self.assertEqual(terminal["pending_manual_accounting_marker"], "absent")
+            self.assertEqual(
+                long_term["status"],
+                "user_selected_orion_only_with_documented_durability_risk",
+            )
+            return
         if lifecycle == "live_active_generation_successor_staged_not_installed":
             prior_active = f1_candidate.get(
                 "active_policy_transition",
@@ -500,11 +570,11 @@ class PicReadinessRegistryTests(unittest.TestCase):
             for record in policy["registered_science_slices"]
         }
         sidecars = {
-            "f1-clean-gyro-mpich-stderr-v3": "frontier_f1_clean_gyro_launch_contract.json",
-            "f1-clean-paper-coupling-mpich-stderr-v2": (
+            "f1_gpu_relativistic_gyro": "frontier_f1_clean_gyro_launch_contract.json",
+            "f1_gpu_paper_coupling": (
                 "frontier_f1_clean_paper_coupling_launch_contract.json"
             ),
-            "f2-parser-multirank-runtime-metadata-v2": (
+            "f2_multirank_runtime_metadata": (
                 "frontier_f2_multirank_runtime_metadata_launch_contract.json"
             ),
         }
@@ -512,18 +582,24 @@ class PicReadinessRegistryTests(unittest.TestCase):
             "pending_clean_candidate_freeze"
         ):
             self.assertEqual(authorizations, {})
-            for authorization_id, filename in sidecars.items():
-                with self.subTest(authorization_id=authorization_id):
+            for campaign, filename in sidecars.items():
+                with self.subTest(campaign=campaign):
                     validate_launch_contract(_load(filename))
             return
-        self.assertEqual(set(authorizations), set(sidecars))
-        for authorization_id, filename in sidecars.items():
+        authorizations_by_campaign = {
+            record["campaign"]: record
+            for record in policy["registered_science_slices"]
+        }
+        self.assertEqual(set(authorizations_by_campaign), set(sidecars))
+        for campaign, filename in sidecars.items():
+            authorization = authorizations_by_campaign[campaign]
+            authorization_id = authorization["authorization_id"]
             with self.subTest(authorization_id=authorization_id):
                 contract = _load(filename)
                 validate_launch_contract(contract)
                 self.assertEqual(
                     launch_contract_sha256(contract),
-                    authorizations[authorization_id]["launch_contract_sha256"],
+                    authorization["launch_contract_sha256"],
                 )
 
     def test_f2_multirank_runtime_metadata_candidate_resolves_source_commit(self) -> None:
@@ -560,6 +636,215 @@ class PicReadinessRegistryTests(unittest.TestCase):
             launch_contract_sha256(contract),
         )
 
+    def _assert_current_registered_replay_bindings(
+        self, policy: dict[str, object], staged_version: str
+    ) -> None:
+        replay = _load(
+            "phase0_registered_prerequisite_replay_policy_promotion_2026-06-01.json"
+        )
+        accounting = _load(
+            "phase0_scheduler_accounting_controller_successor_2026-06-01.json"
+        )
+        storage = policy["olcf_side_storage"]
+        self.assertEqual(staged_version, replay["control_plane_version"])
+        self.assertEqual(
+            storage["installed_control_plane_version"], staged_version
+        )
+        self.assertEqual(
+            storage["staged_control_plane_candidate_version"], staged_version
+        )
+        promotion = replay["active_policy_promotion"]
+        self.assertEqual(
+            promotion["orion_policy_sha256"],
+            _sha256(READINESS_DIR / "storage_policy.json"),
+        )
+        self.assertEqual(
+            promotion["orion_policy_sha256"],
+            _sha256(Path(promotion["orion_policy_path"])),
+        )
+        self.assertEqual(
+            promotion["project_home_policy_sha256"],
+            _sha256(Path(promotion["project_home_policy_path"])),
+        )
+        self.assertEqual(
+            promotion["orion_promotion_sha256"],
+            _sha256(
+                Path(promotion["orion_policy_path"]).with_name(
+                    "active_promotion.json"
+                )
+            ),
+        )
+        self.assertEqual(
+            promotion["project_home_promotion_sha256"],
+            _sha256(
+                Path(promotion["project_home_policy_path"]).with_name(
+                    "active_promotion.json"
+                )
+            ),
+        )
+        clean_manifest_path = Path(
+            policy["science_submission_freeze"]["manifest_path"]
+        )
+        self.assertEqual(
+            _sha256(clean_manifest_path),
+            replay["clean_candidate"]["manifest_sha256"],
+        )
+        clean_manifest = json.loads(clean_manifest_path.read_text(encoding="utf-8"))
+        executable_path = Path(clean_manifest["build"]["executable_path"])
+        self.assertEqual(
+            _sha256(executable_path),
+            replay["clean_candidate"]["executable_sha256"],
+        )
+        binding_paths = {
+            "f1_gpu_relativistic_gyro": {
+                "job_script_sha256": (
+                    REPO_ROOT
+                    / "tst/publication/frontier_f1_structured_gpu_relativistic_gyro_job.sh"
+                ),
+                "input_deck_sha256": (
+                    REPO_ROOT / "inputs/tests/pic_relativistic_gyro_paper.athinput"
+                ),
+                "analysis_script_sha256": [
+                    REPO_ROOT
+                    / "tst/publication/frontier_f1_gpu_relativistic_gyro_analysis.py",
+                    REPO_ROOT / "tst/publication/frontier_f1_structured_artifacts.py",
+                ],
+            },
+            "f1_gpu_paper_coupling": {
+                "job_script_sha256": (
+                    REPO_ROOT
+                    / "tst/publication/frontier_f1_structured_gpu_paper_coupling_job.sh"
+                ),
+                "input_deck_sha256": (
+                    REPO_ROOT / "inputs/tests/pic_paper_coupling_conservation.athinput"
+                ),
+                "analysis_script_sha256": [
+                    REPO_ROOT
+                    / "tst/publication/frontier_f1_gpu_paper_coupling_analysis.py",
+                    REPO_ROOT / "tst/publication/frontier_f1_structured_artifacts.py",
+                ],
+            },
+            "f2_multirank_runtime_metadata": {
+                "job_script_sha256": (
+                    REPO_ROOT
+                    / "tst/publication/frontier_f2_structured_multirank_runtime_metadata_job.sh"
+                ),
+                "input_deck_sha256": (
+                    REPO_ROOT / "inputs/tests/pic_parser_contract_guards.athinput"
+                ),
+                "analysis_script_sha256": [
+                    REPO_ROOT
+                    / "tst/publication/frontier_f2_multirank_runtime_metadata_analysis.py",
+                    REPO_ROOT / "tst/publication/frontier_f1_structured_artifacts.py",
+                ],
+            },
+        }
+        expected_metadata = {
+            "f1_gpu_relativistic_gyro": {
+                "test_id": "pic_relativistic_gyro_paper",
+                "evidence_class": "frontier_f1_clean_candidate_gpu_pusher_oracle",
+                "physical_mode": "paper_test_particle",
+            },
+            "f1_gpu_paper_coupling": {
+                "test_id": "pic_paper_coupling_conservation",
+                "evidence_class": "frontier_f1_clean_candidate_gpu_paper_coupling_oracle",
+                "physical_mode": "paper_mhd_pic",
+            },
+            "f2_multirank_runtime_metadata": {
+                "test_id": "pic_parser_contract_guards",
+                "evidence_class": "frontier_f2_clean_candidate_multirank_runtime_metadata",
+                "physical_mode": "extended_mhd_pic_parser_contract",
+            },
+        }
+        authorizations = {
+            record["campaign"]: record
+            for record in policy["registered_science_slices"]
+        }
+        replay_slices = {
+            record["campaign"]: record for record in replay["registered_science_slices"]
+        }
+        self.assertEqual(set(authorizations), set(binding_paths))
+        self.assertEqual(set(replay_slices), set(binding_paths))
+        environment_path = CONTROL_PLANE_DIR / "frontier_pic_environment.sh"
+        for campaign, authorization in authorizations.items():
+            with self.subTest(campaign=campaign):
+                paths = binding_paths[campaign]
+                for key, expected in expected_metadata[campaign].items():
+                    self.assertEqual(authorization[key], expected)
+                self.assertEqual(authorization["runtime_profile"], "frontier_minimum_supported")
+                self.assertEqual(authorization["selected_qos"], "debug")
+                self.assertIs(authorization["registered_short_nonproduction"], True)
+                self.assertEqual(authorization["maximum_nodes"], 1)
+                self.assertEqual(authorization["maximum_walltime_seconds"], 900)
+                self.assertEqual(authorization["maximum_attempts"], 1)
+                self.assertEqual(
+                    authorization["authorization_id"],
+                    replay_slices[campaign]["authorization_id"],
+                )
+                self.assertEqual(
+                    authorization["launch_contract_sha256"],
+                    replay_slices[campaign]["launch_contract_sha256"],
+                )
+                self.assertEqual(
+                    authorization["job_script_sha256"],
+                    _sha256(paths["job_script_sha256"]),
+                )
+                self.assertEqual(
+                    authorization["input_deck_sha256"],
+                    _sha256(paths["input_deck_sha256"]),
+                )
+                self.assertEqual(
+                    authorization["environment_profile_sha256"],
+                    _sha256(environment_path),
+                )
+                self.assertEqual(
+                    authorization["analysis_script_sha256"],
+                    [_sha256(path) for path in paths["analysis_script_sha256"]],
+                )
+                self.assertEqual(
+                    authorization["clean_candidate_manifest_sha256"],
+                    _sha256(clean_manifest_path),
+                )
+                self.assertEqual(
+                    authorization["executable_sha256"], _sha256(executable_path)
+                )
+        ledger = replay["terminal_mirrored_ledger"]
+        self.assertEqual(
+            _sha256(Path("/lustre/orion/ast207/proj-shared/dfielding/PIC/ledger/node_hours.jsonl")),
+            ledger["orion_node_hours_jsonl_sha256"],
+        )
+        self.assertEqual(
+            _sha256(Path("/ccs/proj/ast207/proj-shared/PIC/ledger/node_hours.jsonl")),
+            ledger["project_home_node_hours_jsonl_sha256"],
+        )
+        self.assertEqual(
+            accounting["manual_accounting_activation"]["reviewed_job_count"], 10
+        )
+
+    def test_phase0_successor_v7_binds_completed_replay_boundary(self) -> None:
+        successor = _load("phase0_curated_candidate_successor_v7_2026-06-01.json")
+        self.assertEqual(
+            successor["status"],
+            "canonical_clean_candidate_frozen_accounting_closed_"
+            "registered_prerequisite_replays_authorized",
+        )
+        self.assertEqual(successor["remaining_phase0_actions"], [])
+        self.assertEqual(
+            successor["predecessor_record"],
+            "tst/publication/readiness/"
+            "phase0_curated_candidate_successor_v6_2026-06-01.json",
+        )
+        for key in (
+            "clean_candidate_freeze_receipt",
+            "scheduler_accounting_successor_receipt",
+            "registered_prerequisite_replay_policy_promotion_receipt",
+        ):
+            receipt = successor[key]
+            self.assertEqual(
+                receipt["sha256"],
+                _sha256(REPO_ROOT / receipt["path"]),
+            )
+
     def test_registered_science_staged_bindings_recompute_from_exact_files(self) -> None:
         policy = _load("storage_policy.json")
         storage = policy["olcf_side_storage"]
@@ -569,6 +854,12 @@ class PicReadinessRegistryTests(unittest.TestCase):
                 for name in CONTROL_PLANE_FILES
             ]
         )
+        replay = _load(
+            "phase0_registered_prerequisite_replay_policy_promotion_2026-06-01.json"
+        )
+        if storage["installed_control_plane_version"] == replay["control_plane_version"]:
+            self._assert_current_registered_replay_bindings(policy, staged_version)
+            return
         phase0_successor = _load(
             "phase0_curated_candidate_successor_v6_2026-06-01.json"
         )
