@@ -149,15 +149,21 @@ def _fsync_directory(path: Path) -> None:
         os.close(descriptor)
 
 
-def _canonical_existing_directory(path: Path, *, label: str) -> Path:
+def _canonical_existing_directory(
+    path: Path, *, label: str, trusted_lexical_alias: Path | None = None
+) -> Path:
     lexical = Path(os.path.abspath(path))
     try:
         resolved = lexical.resolve(strict=True)
     except FileNotFoundError as error:
         raise ValueError(f"{label} does not exist: {lexical}") from error
-    if lexical != resolved:
+    allowed_alias = (
+        trusted_lexical_alias is not None
+        and lexical == Path(os.path.abspath(trusted_lexical_alias))
+    )
+    if lexical != resolved and not allowed_alias:
         raise ValueError(f"{label} must not use a symlink alias: {lexical}")
-    metadata = os.lstat(lexical)
+    metadata = os.stat(lexical) if allowed_alias else os.lstat(lexical)
     if not stat.S_ISDIR(metadata.st_mode):
         raise ValueError(f"{label} is not a directory: {lexical}")
     return lexical
@@ -182,11 +188,15 @@ def _ensure_archive_root(path: Path) -> Path:
 def _ledger_paths(pic_root: Path, project_home_root: Path) -> LedgerPaths:
     pic_root = _canonical_existing_directory(pic_root, label="PIC root")
     project_home_root = _canonical_existing_directory(
-        project_home_root, label="Project Home root"
+        project_home_root,
+        label="Project Home root",
+        trusted_lexical_alias=AUTHORIZED_PROJECT_HOME_ROOT,
     )
     ledger_root = _canonical_existing_directory(pic_root / "ledger", label="PIC ledger root")
     mirror_ledger_root = _canonical_existing_directory(
-        project_home_root / "ledger", label="Project Home ledger root"
+        project_home_root / "ledger",
+        label="Project Home ledger root",
+        trusted_lexical_alias=AUTHORIZED_PROJECT_HOME_ROOT / "ledger",
     )
     return LedgerPaths(
         ledger=ledger_root / "node_hours.jsonl",
@@ -494,7 +504,9 @@ def capture(
     user = _validate_user(_current_user() if user is None else user)
     pic_root = _canonical_existing_directory(pic_root, label="PIC root")
     project_home_root = _canonical_existing_directory(
-        project_home_root, label="Project Home root"
+        project_home_root,
+        label="Project Home root",
+        trusted_lexical_alias=AUTHORIZED_PROJECT_HOME_ROOT,
     )
     archive_root = _ensure_archive_root(archive_root)
     paths = _ledger_paths(pic_root, project_home_root)
@@ -576,10 +588,17 @@ def _validate_metadata(metadata: dict[str, object], staging: Path) -> None:
 def _require_matching_optional_root(
     captured: Path, override: Path | None, *, label: str
 ) -> Path:
-    captured = _canonical_existing_directory(captured, label=label)
+    trusted_alias = (
+        AUTHORIZED_PROJECT_HOME_ROOT if label == "Project Home root" else None
+    )
+    captured = _canonical_existing_directory(
+        captured, label=label, trusted_lexical_alias=trusted_alias
+    )
     if override is None:
         return captured
-    override = _canonical_existing_directory(override, label=label)
+    override = _canonical_existing_directory(
+        override, label=label, trusted_lexical_alias=trusted_alias
+    )
     if override != captured:
         raise ValueError(f"{label} override differs from staged capture")
     return captured
@@ -704,11 +723,19 @@ def _make_tree_read_only(path: Path) -> None:
             os.chmod(member, 0o500, follow_symlinks=False)
 
 
-def _rename_no_replace(source: Path, destination: Path) -> None:
+def _require_tree_read_only(path: Path) -> None:
+    for member in _walk_tree(path):
+        metadata = os.lstat(member)
+        expected_mode = 0o500 if stat.S_ISDIR(metadata.st_mode) else 0o400
+        if stat.S_IMODE(metadata.st_mode) != expected_mode:
+            raise ValueError(f"Sealed attestation tree member is not read-only: {member}")
+
+
+def _renameat2_no_replace(source: Path, destination: Path) -> None:
     libc = ctypes.CDLL(None, use_errno=True)
     renameat2 = getattr(libc, "renameat2", None)
     if renameat2 is None:
-        raise ValueError("Atomic no-replace directory rename is unavailable")
+        raise OSError(errno.ENOSYS, os.strerror(errno.ENOSYS), str(destination))
     renameat2.argtypes = [
         ctypes.c_int,
         ctypes.c_char_p,
@@ -727,9 +754,84 @@ def _rename_no_replace(source: Path, destination: Path) -> None:
     if result == 0:
         return
     error_number = ctypes.get_errno()
+    raise OSError(error_number, os.strerror(error_number), str(destination))
+
+
+def _rename_no_replace(source: Path, destination: Path) -> None:
+    try:
+        _renameat2_no_replace(source, destination)
+        return
+    except OSError as error:
+        error_number = error.errno
     if error_number == errno.EEXIST:
         raise ValueError(f"Final attestation directory collided during rename: {destination}")
-    raise OSError(error_number, os.strerror(error_number), str(destination))
+    unsupported = {
+        errno.EINVAL,
+        errno.ENOSYS,
+        getattr(errno, "ENOTSUP", errno.EINVAL),
+        getattr(errno, "EOPNOTSUPP", errno.EINVAL),
+    }
+    if error_number not in unsupported:
+        raise
+
+    # Lustre rejects renameat2(RENAME_NOREPLACE). The operator attestation
+    # establishes the same-account isolation boundary for this short fallback.
+    before = os.lstat(source)
+    _require_absent_entry(destination, label="Final attestation directory")
+    os.rename(source, destination)
+    after = os.lstat(destination)
+    if (before.st_dev, before.st_ino) != (after.st_dev, after.st_ino):
+        raise RuntimeError("Final attestation directory identity changed during rename")
+    if os.path.lexists(source):
+        raise RuntimeError("Staged attestation directory still exists after rename")
+
+
+def _sealed_final_path(staging: Path) -> Path:
+    attestation = _read_json_regular(staging / "attestation.json")
+    required = {
+        "schema_version",
+        "record_type",
+        "recorded_utc",
+        "sealed_utc",
+        "registered_science_authorization_id",
+        "control_plane_version",
+        "phase",
+    }
+    if (
+        not required.issubset(attestation)
+        or attestation.get("schema_version") != 1
+        or attestation.get("record_type") != RECORD_TYPE
+        or attestation.get("phase") != PHASE
+        or any(type(attestation.get(field)) is not str for field in required - {"schema_version"})
+    ):
+        raise ValueError("Sealed attestation schema is invalid")
+    authorization_id = _validate_authorization_id(
+        str(attestation["registered_science_authorization_id"])
+    )
+    _validate_control_plane_version(str(attestation["control_plane_version"]))
+    try:
+        recorded = datetime.strptime(str(attestation["recorded_utc"]), "%Y-%m-%dT%H:%M:%SZ")
+        datetime.strptime(str(attestation["sealed_utc"]), "%Y-%m-%dT%H:%M:%SZ")
+    except ValueError as error:
+        raise ValueError("Sealed attestation UTC timestamp is malformed") from error
+    final_name = f"{recorded.strftime('%Y%m%dT%H%M%SZ')}-{authorization_id}-{PHASE}"
+    if re.fullmatch(rf"\.{re.escape(final_name)}\.staging-[0-9a-f]{{16}}", staging.name) is None:
+        raise ValueError("Sealed staging directory name is malformed")
+    return staging.parent / final_name
+
+
+def publish_sealed_staging(staging_dir: Path) -> Path:
+    """Publish a previously revalidated immutable staging tree after rename failure."""
+    staging = _canonical_existing_directory(staging_dir, label="Sealed staging directory")
+    archive_root = _canonical_existing_directory(staging.parent, label="Archive root")
+    _require_exact_regular_files(staging, SEALED_FILENAMES)
+    _require_tree_read_only(staging)
+    final = _sealed_final_path(staging)
+    _require_absent_entry(final, label="Final attestation directory")
+    _fsync_tree(staging)
+    _rename_no_replace(staging, final)
+    _fsync_directory(archive_root)
+    return final
 
 
 def seal(
@@ -786,10 +888,7 @@ def seal(
     _fsync_tree(staging)
     _make_tree_read_only(staging)
     _fsync_tree(staging)
-    _require_absent_entry(final, label="Final attestation directory")
-    _rename_no_replace(staging, final)
-    _fsync_directory(archive_root)
-    return final
+    return publish_sealed_staging(staging)
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -812,6 +911,10 @@ def _parser() -> argparse.ArgumentParser:
     seal_parser.add_argument("--attest-reviewed", action="store_true")
     seal_parser.add_argument("--pic-root", type=Path)
     seal_parser.add_argument("--project-home-root", type=Path)
+    recover_parser = commands.add_parser(
+        "recover-sealed", help="publish an immutable staging tree after rename failure"
+    )
+    recover_parser.add_argument("--staging-dir", type=Path, required=True)
     return parser
 
 
@@ -827,7 +930,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 pic_root=arguments.pic_root,
                 project_home_root=arguments.project_home_root,
             )
-        else:
+        elif arguments.command == "seal":
             path = seal(
                 arguments.staging_dir,
                 attest_reviewed=arguments.attest_reviewed,
@@ -835,6 +938,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 project_home_root=arguments.project_home_root,
                 user=_current_user(),
             )
+        else:
+            path = publish_sealed_staging(arguments.staging_dir)
     except (OSError, ValueError) as error:
         parser.exit(1, f"error: {error}\n")
     print(path)

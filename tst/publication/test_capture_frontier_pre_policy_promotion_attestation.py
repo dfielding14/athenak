@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import errno
 import json
 import os
 from pathlib import Path
@@ -255,6 +256,52 @@ class CaptureFrontierPrePolicyPromotionAttestationTest(unittest.TestCase):
         self.assertTrue(final.is_dir())
         self.assertEqual(stat.S_IMODE(os.lstat(final).st_mode), 0o500)
 
+    def test_lustre_rename_fallback_preserves_identity_and_rejects_collision(self) -> None:
+        source = self.archive_root / "source"
+        destination = self.archive_root / "destination"
+        source.mkdir()
+        with mock.patch.object(
+            capture_attestation,
+            "_renameat2_no_replace",
+            side_effect=OSError(errno.EINVAL, os.strerror(errno.EINVAL)),
+        ):
+            capture_attestation._rename_no_replace(source, destination)
+        self.assertFalse(source.exists())
+        self.assertTrue(destination.is_dir())
+
+        collision_source = self.archive_root / "collision-source"
+        collision_destination = self.archive_root / "collision-destination"
+        collision_source.mkdir()
+        collision_destination.mkdir()
+        with mock.patch.object(
+            capture_attestation,
+            "_renameat2_no_replace",
+            side_effect=OSError(errno.EINVAL, os.strerror(errno.EINVAL)),
+        ):
+            with self.assertRaisesRegex(ValueError, "collides"):
+                capture_attestation._rename_no_replace(
+                    collision_source, collision_destination
+                )
+        self.assertTrue(collision_source.is_dir())
+        self.assertTrue(collision_destination.is_dir())
+
+    def test_failed_final_rename_can_publish_sealed_staging(self) -> None:
+        runner = ReadOnlyRunner(["", ""])
+        staging = self._capture(runner=runner)
+        with mock.patch.object(
+            capture_attestation,
+            "_rename_no_replace",
+            side_effect=OSError(errno.EIO, os.strerror(errno.EIO)),
+        ):
+            with self.assertRaises(OSError):
+                self._seal(staging, runner=runner)
+        self.assertEqual(stat.S_IMODE(os.lstat(staging).st_mode), 0o500)
+        self.assertFalse((staging / capture_attestation.METADATA_FILENAME).exists())
+
+        final = capture_attestation.publish_sealed_staging(staging)
+        self.assertFalse(staging.exists())
+        self.assertTrue((final / "attestation.json").is_file())
+
     def test_capture_rejects_archive_root_symlink_alias(self) -> None:
         alias = self.base / "archive-alias"
         alias.symlink_to(self.archive_root, target_is_directory=True)
@@ -272,6 +319,28 @@ class CaptureFrontierPrePolicyPromotionAttestationTest(unittest.TestCase):
                 ledger_validator=self._validator,
             )
         self.assertEqual(runner.calls, [])
+
+    def test_exact_trusted_project_home_mount_alias_is_accepted(self) -> None:
+        target = self.base / "trusted-project-home-target"
+        target.mkdir()
+        alias = self.base / "trusted-project-home-alias"
+        alias.symlink_to(target, target_is_directory=True)
+        self.assertEqual(
+            capture_attestation._canonical_existing_directory(
+                alias,
+                label="Project Home root",
+                trusted_lexical_alias=alias,
+            ),
+            alias,
+        )
+        second_alias = self.base / "untrusted-project-home-alias"
+        second_alias.symlink_to(target, target_is_directory=True)
+        with self.assertRaisesRegex(ValueError, "symlink alias"):
+            capture_attestation._canonical_existing_directory(
+                second_alias,
+                label="Project Home root",
+                trusted_lexical_alias=alias,
+            )
 
     def test_seal_rejects_final_directory_collision(self) -> None:
         runner = ReadOnlyRunner([""])
