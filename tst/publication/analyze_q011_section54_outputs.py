@@ -278,9 +278,11 @@ def _parse_input_parameters(payload: bytes, source: str) -> dict[str, dict[str, 
             f"{source}: parameter header line {lineno}: malformed parameter",
         )
         key, value = (item.strip() for item in line.split("=", 1))
+        # AthenaK can emit runtime-added optional parameters with an empty value,
+        # for example particles/pic_deltaf_f0 when delta-f mode is disabled.
         _require(
-            bool(key) and bool(value),
-            f"{source}: parameter header line {lineno}: empty parameter",
+            bool(key),
+            f"{source}: parameter header line {lineno}: empty parameter key",
         )
         _require(
             key not in current,

@@ -12,7 +12,27 @@ set -euo pipefail
 export PIC_ROOT=/lustre/orion/ast207/proj-shared/dfielding/PIC
 export PYTHONDONTWRITEBYTECODE=1
 
-cd /ccs/home/dfielding/athenak-pic/tst/publication
+REPO_ROOT=/ccs/home/dfielding/athenak-pic
+SOURCE_CLOSURE=(
+  tst/publication/frontier_q011_section54_pressure_pilot_publish_job.sh
+  tst/publication/publish_q011_section54_pressure_pilot_bundle.py
+  tst/publication/analyze_q011_section54_pressure_pilot.py
+  tst/publication/analyze_q011_section54_pressure_pilot_case.py
+  tst/publication/analyze_q011_section54_outputs.py
+  tst/publication/q011_section54_pressure_pilot_execution.py
+  tst/publication/frontier_f1_structured_artifacts.py
+  tst/publication/pvtk_particles.py
+  tst/publication/readiness/q011_section54_pressure_pilot_preregistration_2026-06-01.json
+  tst/publication/readiness/q011_section54_pressure_pilot_registered_execution_preregistration_2026-06-02.json
+)
+
+cd "$REPO_ROOT"
+git diff --quiet HEAD -- "${SOURCE_CLOSURE[@]}"
+test -z "$(git ls-files --others --exclude-standard -- "${SOURCE_CLOSURE[@]}")"
+echo "source_commit=$(git rev-parse HEAD)"
+sha256sum "${SOURCE_CLOSURE[@]}"
+
+cd "$REPO_ROOT/tst/publication"
 
 python3 -B publish_q011_section54_pressure_pilot_bundle.py \
   "$PIC_ROOT/publication/q011_section54_pressure_pilot_bundle" \

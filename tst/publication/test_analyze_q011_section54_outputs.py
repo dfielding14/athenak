@@ -89,6 +89,7 @@ def _payload(
     root_shape: tuple[int, int, int] = _ROOT_SHAPE,
     block_shape: tuple[int, int, int] = _BLOCK_SHAPE,
     domain_bounds: tuple[float, float, float, float, float, float] = _DOMAIN_BOUNDS,
+    additional_parameter_header: str = "",
 ) -> bytes:
     x1min, x1max, x2min, x2max, x3min, x3max = domain_bounds
     parameter_header = (
@@ -107,6 +108,7 @@ def _payload(
         f"nx1={block_shape[0]}\n"
         f"nx2={block_shape[1]}\n"
         f"nx3={block_shape[2]}\n"
+        f"{additional_parameter_header}"
     ).encode()
     header = (
         b"Athena binary output version=1.1\n"
@@ -160,6 +162,25 @@ class Q011Section54BinaryTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(q011.AnalysisError, "variable count does not match"):
             q011.parse_athenak_binary_bytes(malformed)
+
+    def test_parser_preserves_runtime_added_empty_optional_parameter(self) -> None:
+        payload = _payload(
+            [_block((0, 0, 0), 0, 1.0), _block((1, 0, 0), 0, 3.0)],
+            additional_parameter_header=(
+                "<particles>\n"
+                "pic_deltaf_f0 = # Default value added at run time\n"
+            ),
+        )
+        dataset = q011.parse_athenak_binary_bytes(payload)
+        self.assertEqual(dataset.input_parameters["particles"]["pic_deltaf_f0"], "")
+
+    def test_parser_rejects_empty_parameter_key(self) -> None:
+        payload = _payload(
+            [_block((0, 0, 0), 0, 1.0), _block((1, 0, 0), 0, 3.0)],
+            additional_parameter_header="<particles>\n = value\n",
+        )
+        with self.assertRaisesRegex(q011.AnalysisError, "empty parameter key"):
+            q011.parse_athenak_binary_bytes(payload)
 
     def test_parser_rejects_nonfinite_field_geometry_and_invalid_logical_level(self) -> None:
         nonfinite_field = _payload([_block((0, 0, 0), 0, math.nan)])
