@@ -10,21 +10,21 @@
 set -euo pipefail
 
 export PYTHONDONTWRITEBYTECODE=1
+
+REPO_ROOT=/ccs/home/dfielding/athenak-pic
+cd "$REPO_ROOT"
+test -z "$(git status --porcelain --untracked-files=all)"
+echo "source_commit=$(git rev-parse HEAD)"
+
+SNAPSHOT_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/pic-q011-repair-validate.XXXXXXXX")
+trap 'rm -rf "$SNAPSHOT_ROOT"' EXIT
+git archive HEAD | tar -xf - -C "$SNAPSHOT_ROOT"
+cd "$SNAPSHOT_ROOT"
 export PYTHONPATH="$PWD:$PWD/tst/publication/frontier_control_plane"
 
-cd /ccs/home/dfielding/athenak-pic
-export PYTHONPATH="$PWD:$PWD/tst/publication/frontier_control_plane"
+mapfile -t publication_python < <(find tst/publication -type f -name '*.py' | sort)
 
-git diff --check
-
-mapfile -t changed_python < <(
-  {
-    git diff --name-only -- '*.py'
-    git ls-files --others --exclude-standard -- '*.py'
-  } | sort -u
-)
-
-python3 -B - "${changed_python[@]}" <<'PY'
+python3 -B - "${publication_python[@]}" <<'PY'
 import sys
 from pathlib import Path
 
