@@ -86,6 +86,11 @@ qualify any scientific claim by itself.
   records the stable documentation-rereview boundary before paired install.
   The complete prepared-artifact inventory contains 110 PIC decks and 16
   publication analyzers.
+- `phase0_curated_candidate_successor_v12_2026-06-01.json`: current curated
+  pre-build successor. It binds the installed `aa069bc7` paired-controller v3
+  receipt, promoted launch-prohibited pending-clean-freeze policy, 110-deck and
+  16-analyzer closure, quiescent 108-row mirrored ledger, and remaining
+  canonical HIP/MPI Release build, freeze and registered-launch gates.
 - `phase0_curated_candidate_successor_v4_2026-05-31.json`: historical Phase 0
   successor after schema-3 parallel-shock exact tag-window and restart
   fail-stop hardening. It binds the paired `4f005096` successor receipt and
