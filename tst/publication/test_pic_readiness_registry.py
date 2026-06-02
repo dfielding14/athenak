@@ -321,18 +321,36 @@ class PicReadinessRegistryTests(unittest.TestCase):
             "phase0_clean_candidate_freeze_and_policy_promotion_"
             "successor_v2_2026-06-02.json"
         )
+        c83e_promotion = _load(
+            "phase0_paired_control_plane_install_and_policy_promotion_"
+            "successor_v4_2026-06-02.json"
+        )
         if (
             science_freeze
             == d720_promotion["active_policy_promotion"]["science_submission_freeze"]
         ):
+            expected_control_plane_version = d720_promotion["control_plane_version"]
+            if (
+                storage["installed_control_plane_version"]
+                == c83e_promotion["control_plane_version"]
+            ):
+                expected_control_plane_version = c83e_promotion[
+                    "control_plane_version"
+                ]
+                self.assertEqual(
+                    science_freeze,
+                    c83e_promotion["active_policy_promotion"][
+                        "science_submission_freeze"
+                    ],
+                )
             self.assertEqual(lifecycle, "paired_installed_reviewed_generation")
             self.assertEqual(
                 storage["installed_control_plane_version"],
-                d720_promotion["control_plane_version"],
+                expected_control_plane_version,
             )
             self.assertEqual(
                 storage["staged_control_plane_candidate_version"],
-                d720_promotion["control_plane_version"],
+                expected_control_plane_version,
             )
             self.assertEqual(policy["registered_science_slices"], [])
             self.assertEqual(
@@ -1004,21 +1022,18 @@ class PicReadinessRegistryTests(unittest.TestCase):
             promotion["frontier_launch_authorization"],
             "none_no_registered_science_slices",
         )
-        for key in (
-            "repo_policy",
-            "orion_policy",
-            "project_home_policy",
-            "orion_promotion",
-            "project_home_promotion",
-        ):
-            self.assertEqual(
-                promotion[f"{key}_sha256"],
-                _sha256(
-                    REPO_ROOT / promotion[f"{key}_path"]
-                    if key == "repo_policy"
-                    else Path(promotion[f"{key}_path"])
-                ),
-            )
+        self.assertEqual(
+            promotion["repo_policy_sha256"],
+            promotion["orion_policy_sha256"],
+        )
+        self.assertEqual(
+            promotion["orion_policy_sha256"],
+            promotion["project_home_policy_sha256"],
+        )
+        self.assertEqual(
+            promotion["orion_promotion_sha256"],
+            promotion["project_home_promotion_sha256"],
+        )
         attestation = receipt["pre_promotion_operator_attestation"]
         self.assertEqual(_sha256(Path(attestation["path"])), attestation["sha256"])
         ledger = receipt["mirrored_ledger_invariant"]
@@ -1035,6 +1050,92 @@ class PicReadinessRegistryTests(unittest.TestCase):
         self.assertEqual(ledger["orion_ledger_records"], 108)
         self.assertEqual(ledger["active_reservations"], 0)
         self.assertEqual(receipt["external_review"]["reviewer"], "pending external review")
+
+    def test_phase0_paired_successor_v4_binds_c83e_policy_promotion(self) -> None:
+        receipt = _load(
+            "phase0_paired_control_plane_install_and_policy_promotion_"
+            "successor_v4_2026-06-02.json"
+        )
+        self.assertEqual(
+            receipt["predecessor_record"],
+            "tst/publication/readiness/"
+            "phase0_paired_control_plane_install_and_policy_promotion_"
+            "successor_v3_2026-06-01.json",
+        )
+        self.assertEqual(
+            receipt["predecessor_sha256"],
+            _sha256(REPO_ROOT / receipt["predecessor_record"]),
+        )
+        installed = receipt["paired_install"]
+        for key in ("orion", "project_home"):
+            self.assertEqual(
+                installed[f"{key}_inventory_sha256"],
+                _sha256(Path(installed[f"{key}_root"]) / "inventory.json"),
+            )
+        promotion = receipt["active_policy_promotion"]
+        self.assertEqual(promotion["registered_science_slices"], [])
+        self.assertEqual(
+            promotion["frontier_launch_authorization"],
+            "none_no_registered_science_slices",
+        )
+        for key in (
+            "orion_policy",
+            "project_home_policy",
+            "orion_promotion",
+            "project_home_promotion",
+        ):
+            self.assertEqual(
+                promotion[f"{key}_sha256"],
+                _sha256(Path(promotion[f"{key}_path"])),
+            )
+        attestation = receipt["pre_promotion_operator_attestation"]
+        self.assertEqual(_sha256(Path(attestation["path"])), attestation["sha256"])
+        ledger = receipt["terminal_mirrored_ledger"]
+        for key in (
+            "orion_node_hours_jsonl",
+            "project_home_node_hours_jsonl",
+            "orion_node_hours_csv",
+            "orion_mirror_receipts_jsonl",
+        ):
+            self.assertEqual(
+                _sha256(Path(ledger[f"{key}_path"])),
+                ledger[f"{key}_sha256"],
+            )
+        self.assertEqual(ledger["ledger_records"], 108)
+        self.assertEqual(ledger["active_reservations"], 0)
+
+    def test_phase0_successor_v16_binds_c83e_transition(self) -> None:
+        successor = _load("phase0_curated_candidate_successor_v16_2026-06-02.json")
+        self.assertEqual(
+            successor["status"],
+            "canonical_vl2_tsc_clean_candidate_authorized_successor_"
+            "control_plane_promoted_launch_prohibited_pending_registered_"
+            "science_slices",
+        )
+        self.assertEqual(
+            successor["predecessor_record"],
+            "tst/publication/readiness/"
+            "phase0_curated_candidate_successor_v15_2026-06-02.json",
+        )
+        self.assertEqual(
+            successor["predecessor_sha256"],
+            _sha256(REPO_ROOT / successor["predecessor_record"]),
+        )
+        for key in (
+            "paired_control_plane_install_and_policy_promotion_receipt",
+            "clean_candidate_freeze_and_policy_promotion_receipt",
+        ):
+            receipt = successor[key]
+            self.assertEqual(
+                receipt["sha256"],
+                _sha256(REPO_ROOT / receipt["path"]),
+            )
+        baseline = successor["operational_baseline"]
+        self.assertEqual(baseline["registered_science_slices"], [])
+        self.assertEqual(
+            successor["frontier_launch_authorization"],
+            "none_no_registered_science_slices",
+        )
 
     def test_registered_science_staged_bindings_recompute_from_exact_files(self) -> None:
         policy = _load("storage_policy.json")
@@ -1145,6 +1246,54 @@ class PicReadinessRegistryTests(unittest.TestCase):
                 self.assertEqual(
                     baseline[f"{key}_sha256"], _sha256(Path(baseline[f"{key}_path"]))
             )
+            return
+        c83e_successor = _load(
+            "phase0_curated_candidate_successor_v16_2026-06-02.json"
+        )
+        c83e_receipt_binding = c83e_successor[
+            "paired_control_plane_install_and_policy_promotion_receipt"
+        ]
+        c83e_receipt = json.loads(
+            (REPO_ROOT / c83e_receipt_binding["path"]).read_text(encoding="utf-8")
+        )
+        if (
+            storage["installed_control_plane_version"]
+            == c83e_receipt["control_plane_version"]
+            and policy["science_submission_freeze"]
+            == c83e_receipt["active_policy_promotion"]["science_submission_freeze"]
+        ):
+            self.assertEqual(
+                storage["staged_control_plane_candidate_version"],
+                c83e_receipt["control_plane_version"],
+            )
+            self.assertEqual(staged_version, c83e_receipt["control_plane_version"])
+            self.assertEqual(policy["registered_science_slices"], [])
+            self.assertEqual(
+                c83e_successor["predecessor_sha256"],
+                _sha256(
+                    READINESS_DIR
+                    / c83e_successor["predecessor_record"].split("/")[-1]
+                ),
+            )
+            self.assertEqual(
+                c83e_receipt_binding["sha256"],
+                _sha256(REPO_ROOT / c83e_receipt_binding["path"]),
+            )
+            baseline = c83e_successor["operational_baseline"]
+            self.assertEqual(
+                baseline["repo_policy_sha256"],
+                _sha256(READINESS_DIR / "storage_policy.json"),
+            )
+            for key in (
+                "orion_policy",
+                "project_home_policy",
+                "orion_promotion",
+                "project_home_promotion",
+            ):
+                self.assertEqual(
+                    baseline[f"{key}_sha256"],
+                    _sha256(Path(baseline[f"{key}_path"])),
+                )
             return
         d720_successor = _load(
             "phase0_curated_candidate_successor_v15_2026-06-02.json"
@@ -2083,12 +2232,22 @@ class PicReadinessRegistryTests(unittest.TestCase):
             "successor_v3_2026-06-01.json"
         )
         paired_promotion = paired_transition["active_policy_promotion"]
+        c83e_transition = _load(
+            "phase0_paired_control_plane_install_and_policy_promotion_"
+            "successor_v4_2026-06-02.json"
+        )
+        c83e_promotion = c83e_transition["active_policy_promotion"]
         d720_transition = _load(
             "phase0_clean_candidate_freeze_and_policy_promotion_"
             "successor_v2_2026-06-02.json"
         )
         d720_promotion = d720_transition["active_policy_promotion"]
-        if current_policy_sha256 == d720_promotion["orion_policy_sha256"]:
+        if current_policy_sha256 == c83e_promotion["orion_policy_sha256"]:
+            self.assertEqual(
+                current_promotion_sha256, c83e_promotion["orion_promotion_sha256"]
+            )
+            terminal = c83e_transition["terminal_mirrored_ledger"]
+        elif current_policy_sha256 == d720_promotion["orion_policy_sha256"]:
             self.assertEqual(
                 current_promotion_sha256, d720_promotion["orion_promotion_sha256"]
             )

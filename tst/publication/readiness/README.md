@@ -42,11 +42,17 @@ qualify any scientific claim by itself.
   transition policy, quiescent mirrored ledger and absent pending-submission
   markers.
 - `phase0_paired_control_plane_install_and_policy_promotion_successor_v3_2026-06-01.json`:
-  current launch-prohibited transition receipt for the paired immutable
+  historical launch-prohibited transition receipt for the paired immutable
   `aa069bc7` VL2/TSC controller install. It binds byte-identical Orion and
   Project Home inventories, the promoted pending-clean-freeze policy, the empty
   registered-science allowlist, the quiescent 108-row mirrored ledger and
   absent pending-submission and incomplete-manual-accounting markers.
+- `phase0_paired_control_plane_install_and_policy_promotion_successor_v4_2026-06-02.json`:
+  current launch-prohibited transition receipt for the paired immutable
+  `c83e7653` trusted-timeout controller install. It binds byte-identical Orion
+  and Project Home inventories, the promoted historical `d7205cd3` freeze
+  policy, the queue-clear operator attestation, the empty registered-science
+  allowlist, and the quiescent 108-row mirrored ledger.
 - `phase0_clean_candidate_freeze_and_policy_promotion_2026-06-01.json`:
   historical pre-VL2 canonical clean-candidate freeze receipt. It binds the exact
   `1171668b` source commit, double-precision HIP/MPI Release executable,
@@ -110,12 +116,18 @@ qualify any scientific claim by itself.
   double-precision HIP/MPI Release build and recursively read-only `d7205cd3`
   VL2/TSC clean-candidate freeze before queue-clear live preflight and exact
   freeze-policy promotion completed.
-- `phase0_curated_candidate_successor_v15_2026-06-02.json`: current curated
+- `phase0_curated_candidate_successor_v15_2026-06-02.json`: historical curated
   historical d720 boundary. It binds the queue-clear `d7205cd3` freeze-policy
   promotion through the installed `aa069bc7` paired controller, byte-identical
   live mirrors, the empty registered-science allowlist, the quiescent 108-row
   ledger and pending external review. Launch remains prohibited until a science
   slice is explicitly registered.
+- `phase0_curated_candidate_successor_v16_2026-06-02.json`: current curated
+  successor boundary after paired `c83e7653` trusted-timeout controller install
+  and policy promotion. It preserves the exact historical `d7205cd3` manifest
+  and `aa069bc7` build-profile-controller binding, records the queue-clear
+  operator attestation, and retains an empty registered-science allowlist.
+  Launch remains prohibited until a science slice is explicitly registered.
 - `phase0_curated_candidate_successor_v4_2026-05-31.json`: historical Phase 0
   successor after schema-3 parallel-shock exact tag-window and restart
   fail-stop hardening. It binds the paired `4f005096` successor receipt and

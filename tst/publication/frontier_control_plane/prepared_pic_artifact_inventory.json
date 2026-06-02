@@ -29,8 +29,16 @@
       "sha256": "719c9598dd07ac2e9213aa0c72e56fc4618abc5a1e698ca3b79c3f8efa52a4f1"
     },
     {
+      "path": "tst/publication/analyze_q011_section54_campaign.py",
+      "sha256": "00ef04e5ab07d0ca055e2d29a9bf3eb1198e09a08951e5da9e9a9bcf317729b3"
+    },
+    {
       "path": "tst/publication/analyze_q011_section54_outputs.py",
       "sha256": "abe664ece580f70fcde022aa15583846c4050b342d2072c8cd9c181c0b9d6d22"
+    },
+    {
+      "path": "tst/publication/analyze_q011_section54_pressure_pilot.py",
+      "sha256": "ae44303fb8bb3d230ee99056ea644faae0f177be4c880e58628f6838aa222611"
     },
     {
       "path": "tst/publication/analyze_q023_paper_bell_linear.py",

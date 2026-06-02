@@ -1,0 +1,78 @@
+{
+  "record_type": "phase0_curated_candidate_successor",
+  "schema_version": 1,
+  "date": "2026-06-02",
+  "predecessor_record": "tst/publication/readiness/phase0_curated_candidate_successor_v15_2026-06-02.json",
+  "predecessor_sha256": "48aaf3499ea29ee5e7344c7ff79e8d186dcc3b70a0d0e18f02c7d98613dd66ae",
+  "status": "canonical_vl2_tsc_clean_candidate_authorized_successor_control_plane_promoted_launch_prohibited_pending_registered_science_slices",
+  "qualification_effect": "none",
+  "live_paired_control_plane_version": "c83e7653aa7ad52669191f7549fb0793b291d0e3ddb061a8fc91deb3882bc6aa",
+  "successor_source_control_plane_version": "c83e7653aa7ad52669191f7549fb0793b291d0e3ddb061a8fc91deb3882bc6aa",
+  "candidate_freeze_source_commit": "16c103ceea42296ed3a33362ad30161e4fe60325",
+  "frontier_launch_authorization": "none_no_registered_science_slices",
+  "paired_control_plane_install_and_policy_promotion_receipt": {
+    "path": "tst/publication/readiness/phase0_paired_control_plane_install_and_policy_promotion_successor_v4_2026-06-02.json",
+    "sha256": "265a00bd9f32f72a702d80b8c76dc999809ecc22dd0600d43037eda958ba2364"
+  },
+  "clean_candidate_freeze_and_policy_promotion_receipt": {
+    "path": "tst/publication/readiness/phase0_clean_candidate_freeze_and_policy_promotion_successor_v2_2026-06-02.json",
+    "sha256": "3011c319d5f3e7118b69024779545daff0d17f75c8c40594313ef5e295664e80"
+  },
+  "prepared_artifacts": {
+    "inventory_path": "tst/publication/frontier_control_plane/prepared_pic_artifact_inventory.json",
+    "historical_freeze_inventory_sha256": "6295c9f8d762c4a03e218d1219468164583d349901cc6cd2acdbf072c2294a39",
+    "paper_deck_count": 110,
+    "publication_analyzer_count": 16,
+    "closure_policy": "historical d7205cd3 freeze binds the exact canonical inventory bytes plus archived inputs/tests/pic*.athinput, required inputs/publication/pic_parallel_shock_section54_paper_vl2_tsc.athinput and tst/publication/analyze_*.py membership"
+  },
+  "operational_baseline": {
+    "orion_policy_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/storage_policy.json",
+    "project_home_policy_path": "/ccs/proj/ast207/proj-shared/PIC/policy/storage_policy.json",
+    "repo_policy_sha256": "ae52c48c8f54bf6087e79004523e1dd41af8a9d55ba50743212c3a8539e99413",
+    "orion_policy_sha256": "ae52c48c8f54bf6087e79004523e1dd41af8a9d55ba50743212c3a8539e99413",
+    "project_home_policy_sha256": "ae52c48c8f54bf6087e79004523e1dd41af8a9d55ba50743212c3a8539e99413",
+    "orion_promotion_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/active_promotion.json",
+    "project_home_promotion_path": "/ccs/proj/ast207/proj-shared/PIC/policy/active_promotion.json",
+    "orion_promotion_sha256": "56816fab2d18ea7b2ea80ee13cc5bdb74db113cf1d764b7ae0215a480a366dfc",
+    "project_home_promotion_sha256": "56816fab2d18ea7b2ea80ee13cc5bdb74db113cf1d764b7ae0215a480a366dfc",
+    "science_submission_freeze": {
+      "status": "authorized",
+      "manifest_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/clean_candidates/d7205cd3-63fb-45ba-8e0a-c74d150df5a2/clean_candidate_manifest.json",
+      "manifest_sha256": "bcbc72a72832c6024c5b8f5b0ab245d576e93544adb349a9219883754c33be16",
+      "build_profile_control_plane_version": "aa069bc7df47f26d7d0677da69b5a1c4da6a3777151255e830d6989fced210f0"
+    },
+    "registered_science_slices": [],
+    "queue_quiescence": "pass_empty_scheduler_snapshot",
+    "pending_submission_marker": "absent",
+    "pending_manual_accounting_marker": "absent"
+  },
+  "terminal_mirrored_ledger": {
+    "orion_node_hours_jsonl_sha256": "9ea685309a478887910a25f7976ad74741fc5fc10c6f43115827e6013048f88a",
+    "orion_node_hours_csv_sha256": "9a0f1fd31763b620ce6c89aac5e997b14e6ed6ff9098405ff08fdc3213ff4493",
+    "orion_mirror_receipts_jsonl_sha256": "2d2f408f29dde6ed404dbb35864fda51584cd48b10518435b576e4e45d0a1c35",
+    "project_home_node_hours_jsonl_sha256": "9ea685309a478887910a25f7976ad74741fc5fc10c6f43115827e6013048f88a",
+    "ledger_records": 108,
+    "latest_sequence_number": 107,
+    "latest_event_type": "manual_allocation_reconciliation",
+    "cumulative_consumed_node_hours": 1.0880555555555558,
+    "pending_reservations": false
+  },
+  "external_review": {
+    "reviewer": "pending external review",
+    "disposition": "pending external review"
+  },
+  "completed_actions": [
+    "preserved the v15 historical d7205cd3 authorization boundary as immutable chronology",
+    "installed the c83e7653 trusted-timeout controller generation into paired immutable Orion and Project Home roots",
+    "ran the queue-clear live preflight and captured the c83e7653 pre-promotion operator attestation",
+    "promoted the c83e7653 active policy while preserving the exact historical d7205cd3 manifest and aa069bc7 build-profile-controller binding",
+    "confirmed byte-identical Orion and Project Home policies and promotion sidecars with no registered science slices",
+    "confirmed a quiescent 108-row mirrored ledger with zero active reservations and absent pending-submission and incomplete-manual-accounting markers"
+  ],
+  "remaining_phase0_actions": [
+    "preserve this additive c83e7653 controller transition boundary while freezing the next clean source candidate additively",
+    "register clean Frontier prerequisite and qualification slices explicitly before any science submission",
+    "execute each registered slice through the installed control plane and reconcile its scheduler accounting",
+    "retain external review as pending until a named external reviewer records a disposition"
+  ]
+}

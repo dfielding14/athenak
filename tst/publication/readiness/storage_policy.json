@@ -24,8 +24,8 @@
   "olcf_side_storage": {
     "status": "passed_user_authorized_orion_only_storage",
     "last_preflight_utc": "2026-06-02T00:21:16Z",
-    "installed_control_plane_version": "aa069bc7df47f26d7d0677da69b5a1c4da6a3777151255e830d6989fced210f0",
-    "staged_control_plane_candidate_version": "aa069bc7df47f26d7d0677da69b5a1c4da6a3777151255e830d6989fced210f0",
+    "installed_control_plane_version": "c83e7653aa7ad52669191f7549fb0793b291d0e3ddb061a8fc91deb3882bc6aa",
+    "staged_control_plane_candidate_version": "c83e7653aa7ad52669191f7549fb0793b291d0e3ddb061a8fc91deb3882bc6aa",
     "installed_control_plane_lifecycle": "paired_installed_reviewed_generation",
     "orion_simulation_root_preflight": {
       "status": "passed",
