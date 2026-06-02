@@ -4,9 +4,20 @@
 
 Read `docs/cgl_lf_phase_i_handoff.md` first for the durable current production
 boundary. Accepted corrected-E03 `R02/s18_rankio_t7_t7p25` job `4754394`
-reached exact `t = 7.25`; its F-101 recost artifact remains staged-only.
-Canonical F-101 promotion and verification are required before any `s19`
-preparation.
+reached exact `t = 7.25`. Its F-101 recost artifact appeared canonical-only
+outside the retained-companion workflow with the exact reviewed SHA-256,
+staged name absent, and no companion audit or forensic copy. Explicit legacy
+adoption and verification without claiming observation of the original
+publication transition are required before any `s19` preparation. A retained
+fail-closed publication and adoption companion now exists at
+`scripts/frontier/cgl_lf_stage_i_checkpoint.py` with SHA-256
+`10156515c4bcbfdcf57a2fe54220c2a80f0477f1a7bddbde322b9433946615c2`;
+its isolated fixture suite passes (`67 passed`). Commit, push, archive, and
+independently verify those exact bytes before canonical use at a fresh
+free-lock boundary. After F-101 adoption and before any `s19` lifecycle
+mutation, harden the retained Stage I helper to the companion's strict
+canonical-lock opening profile in a separate reviewed, committed, pushed,
+and archived transition; F-101 itself binds the current helper SHA-256.
 
 The frozen `R02`-`R17` inventory in
 `inputs/cgl_lf_paper/mks24_stage_i_manifest.json` is accepted as the Stage I

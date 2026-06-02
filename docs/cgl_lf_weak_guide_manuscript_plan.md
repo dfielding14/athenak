@@ -2,9 +2,20 @@
 
 Status: execution plan. For the durable current operational boundary, read
 `docs/cgl_lf_phase_i_handoff.md` first. Accepted corrected-E03 R02 job
-`4754394` reached exact `t = 7.25`; its F-101 recost remains staged-only and
-must be promoted, verified, documented, committed, and archived before any
-successor preparation. The preceding read-only
+`4754394` reached exact `t = 7.25`. Its F-101 recost appeared canonical-only
+outside the retained-companion workflow with the exact reviewed artifact
+SHA-256, staged name absent, and no companion audit or forensic copy. It must
+be adopted, verified, documented, committed, and archived without claiming
+observation of its original publication transition before any successor
+preparation. A retained fail-closed publication and adoption companion now
+exists at `scripts/frontier/cgl_lf_stage_i_checkpoint.py` with SHA-256
+`10156515c4bcbfdcf57a2fe54220c2a80f0477f1a7bddbde322b9433946615c2`;
+its isolated fixture suite passes (`67 passed`). Commit, push, archive, and
+independently verify that exact utility before using it at a fresh free-lock
+boundary. After F-101 adoption and before any `s19` lifecycle mutation,
+harden the retained Stage I helper to the companion's strict canonical-lock
+opening profile in a separate reviewed, committed, pushed, and archived
+transition; F-101 itself binds the current helper SHA-256. The preceding read-only
 Frontier-root audit was completed on 2026-05-29 EDT (2026-05-30 UTC). The
 first paper-production
 segment, mapped case `R16/s00_t0_t2`, completed on Frontier as job `4674731`
