@@ -960,11 +960,11 @@ class PicReadinessRegistryTests(unittest.TestCase):
             self._assert_current_registered_replay_bindings(policy, staged_version)
             return
         if storage["installed_control_plane_version"] == replay["control_plane_version"]:
-            successor = _load("phase0_curated_candidate_successor_v10_2026-06-01.json")
+            successor = _load("phase0_curated_candidate_successor_v11_2026-06-01.json")
             self.assertEqual(
                 successor["predecessor_record"],
                 "tst/publication/readiness/"
-                "phase0_curated_candidate_successor_v9_2026-06-01.json",
+                "phase0_curated_candidate_successor_v10_2026-06-01.json",
             )
             self.assertEqual(
                 successor["predecessor_sha256"],
@@ -1915,7 +1915,7 @@ class PicReadinessRegistryTests(unittest.TestCase):
             )
             terminal = manual_accounting_activation["terminal_ledger"]
         else:
-            staged = _load("phase0_curated_candidate_successor_v10_2026-06-01.json")
+            staged = _load("phase0_curated_candidate_successor_v11_2026-06-01.json")
             baseline = staged["operational_baseline"]
             self.assertEqual(current_policy_sha256, baseline["orion_policy_sha256"])
             self.assertEqual(
