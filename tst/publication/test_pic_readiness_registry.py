@@ -304,7 +304,7 @@ class PicReadinessRegistryTests(unittest.TestCase):
         science_freeze = policy["science_submission_freeze"]
         if science_freeze == {"status": "pending_clean_candidate_freeze"}:
             phase0_successor = _load(
-                "phase0_curated_candidate_successor_v6_2026-06-01.json"
+                "phase0_curated_candidate_successor_v11_2026-06-01.json"
             )
             self.assertEqual(lifecycle, "paired_installed_reviewed_generation")
             self.assertEqual(
@@ -1050,6 +1050,32 @@ class PicReadinessRegistryTests(unittest.TestCase):
                 self.assertEqual(
                     baseline[f"{key}_sha256"], _sha256(Path(baseline[f"{key}_path"]))
                 )
+            return
+        transition = _load("phase0_curated_candidate_successor_v11_2026-06-01.json")
+        if (
+            storage["installed_control_plane_version"]
+            == transition["successor_source_control_plane_version"]
+        ):
+            self.assertEqual(
+                storage["staged_control_plane_candidate_version"], staged_version
+            )
+            self.assertEqual(
+                transition["successor_source_control_plane_version"], staged_version
+            )
+            self.assertEqual(
+                transition["predecessor_sha256"],
+                _sha256(READINESS_DIR / transition["predecessor_record"].split("/")[-1]),
+            )
+            self.assertEqual(
+                policy["science_submission_freeze"],
+                {"status": "pending_clean_candidate_freeze"},
+            )
+            self.assertEqual(policy["registered_science_slices"], [])
+            prepared = transition["prepared_artifacts"]
+            self.assertEqual(
+                prepared["inventory_sha256"],
+                _sha256(REPO_ROOT / prepared["inventory_path"]),
+            )
             return
         phase0_successor = _load(
             "phase0_curated_candidate_successor_v6_2026-06-01.json"
