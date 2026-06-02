@@ -18,7 +18,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 SIDECAR = (
     REPO_ROOT
     / "tst/publication/readiness/"
-    "q029_hall_extension_parser_hardening_successor_v2_2026-06-01.json"
+    "q029_hall_extension_parser_hardening_successor_v3_2026-06-01.json"
 )
 DERIVATION = (
     REPO_ROOT

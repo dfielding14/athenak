@@ -50,15 +50,15 @@
     },
     {
       "path": "tst/publication/analyze_q029_hall_extension_candidate.py",
-      "sha256": "9be54c659e2d914ec4924f9c45cc0f35936d7ad5786714dc28af3a3837357e27"
+      "sha256": "bd5b69e76ecf1ef41146a0bddad42c21797d8df874055209a3930fedbc4c8490"
     },
     {
       "path": "tst/publication/analyze_q032_plotnikov_damped_crsi_candidate.py",
-      "sha256": "992b1d756b39ffcd5f9529d1d00c88de1ad6f7767e6823e89f3568d34f62575b"
+      "sha256": "905cf7a309094bd165dfc12dfcc7b4d81304a6c94bee3fbb9ff571d71c96373f"
     },
     {
       "path": "tst/publication/analyze_q033_crpai_transport_calibration_candidate.py",
-      "sha256": "88c8f99dc605484ac01761ae9950d997e71aa967c21b0a7f7b0f2bdbd3a1d29f"
+      "sha256": "3d1f59fb106d35217183c12a8e1fa8c5a2bdb28d89a6aed3a8f99dd4e7d5d2e5"
     },
     {
       "path": "tst/publication/analyze_q033_crpai_transport_runtime_local.py",

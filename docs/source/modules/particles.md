@@ -78,7 +78,7 @@ rho_mean    # Mean density
 | `assign_tag` | string | index_order | Tagging method |
 | `deposit_moments` | bool | false | Deposit particle charge/current moments |
 | `deposit_qscale` | Real | 1.0 | Root-grid macro-charge and macro-mass scale |
-| `pic_physical_mode` | string | engineering | `engineering`, `paper_test_particle`, `paper_mhd_pic`, or `extended_mhd_pic`; publication decks must select an explicit paper/extension identity |
+| `pic_physical_mode` | string | engineering | `engineering`, `paper_test_particle`, historical `paper_mhd_pic`, active `paper_mhd_pic_vl2_tsc`, or `extended_mhd_pic`; new coupled publication decks must select the VL2/TSC candidate or an explicit extension identity |
 | `pic_background_mode` | string | coupled | `coupled`, `passive_mhd`, or `no_mhd` |
 | `pic_feedback_mode` | string | mode-dependent | `coupled` or `test_particle` |
 | `pic_enable_2d3v` | bool | false | Required for Boris pushers on 2D meshes; keeps `vz` and `Bz` active when `nx3=1` |
@@ -147,9 +147,11 @@ enum ParticlesIndex {
 
 The shared `IPVX/IPVY/IPVZ` names are retained for restart-layout
 compatibility. They store velocity in `engineering` mode and mass-normalized
-momentum `p/m` in explicit paper/extension modes. Current deposition, timestep
-checks, VTK output, and tracked-particle output derive physical velocity from
-the selected state representation.
+momentum `p/m` in explicit paper/extension modes. The historical
+`paper_mhd_pic` identity is retained for chronology only; new coupled
+publication decks select `paper_mhd_pic_vl2_tsc`. Current deposition,
+timestep checks, VTK output, and tracked-particle output derive physical
+velocity from the selected state representation.
 
 Cosmic-ray particles created from `ppc` carry `IPWT = cell_volume/root_cell_volume`
 so refined-cell particles keep the same physical density represented by a

@@ -47,7 +47,7 @@ _SOURCE_BINDINGS = {
     "src/mhd/mhd_tasks.cpp":
         "f8b907095ca9efc7c0bac13975f29f5f5e156c74493d6927049638815da67f1b",
     "docs/source/engineering/pic_mhd_model_contract.md":
-        "38e5fb9c3a980501337366a26ca7560c5665398c8ec805188063198073b5041e",
+        "059f9a74ace30d89bf09ae07400d7a0575cb33794c2b8cac2574e64c8778c89e",
 }
 _SOURCE_REQUIRED_SNIPPETS = {
     "src/particles/particles.cpp": (

@@ -24,7 +24,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 SIDECAR = (
     REPO_ROOT
     / "tst/publication/readiness/"
-    "q006_paper_multispecies_oscillation_runtime_local_successor_v3_2026-06-01.json"
+    "q006_paper_multispecies_oscillation_runtime_local_successor_v4_2026-06-01.json"
 )
 
 

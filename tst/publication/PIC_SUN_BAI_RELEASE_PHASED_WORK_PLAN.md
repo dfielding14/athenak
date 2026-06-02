@@ -52,7 +52,7 @@ earlier milestone must not be reported as completion of a later one.
 | --- | --- | --- |
 | M1: Shock-qualified candidate | Section 5.4 is reproduced by the frozen candidate | Calibrated coarse, fine, and AMR shock runs; restart parity; MPI/HIP evidence; regenerated figures and metrics |
 | M2: Sun-Bai reproduction bundle | The complete paper test suite is reproduced | Sections 5.1-5.7 and Appendices A/B pass with archived raw artifacts and deterministic analysis |
-| M3: Production-ready `paper_mhd_pic` | Paper mode is suitable as a supported release profile | M2 plus nonlinear, reliability, portability, scaling, documentation, and archive-integrity closure |
+| M3: Production-ready `paper_mhd_pic_vl2_tsc` | The additive VL2/TSC paper mode is suitable as a supported release profile | M2 plus nonlinear, reliability, portability, scaling, documentation, and archive-integrity closure |
 | M4: Production-ready `extended_mhd_pic` | The previously selected optional extensions are supported | M3 plus qualified Hall Bell, ion-neutral-damped CRSI, and adaptive-delta-f physical-damping CRPAI |
 
 ## Current Position
@@ -64,7 +64,7 @@ release milestones is complete.
 
 | Area | Current bounded evidence | Important limitation |
 | --- | --- | --- |
-| Paper-mode identity | `paper_mhd_pic` rejects direct-current CT induction and requires coherent coupled feedback | Broader campaign matrix remains open |
+| Paper-mode identity | Active additive `paper_mhd_pic_vl2_tsc` selects the VL2/TSC paper candidate, rejects direct-current CT induction, and requires coherent coupled feedback; `paper_mhd_pic` is retained as archival chronology only | Broader campaign matrix remains open |
 | Relativistic pusher | Host convergence and a registered one-rank Frontier GPU gyro oracle pass | Full CPU/MPI/GPU portability matrix remains open |
 | Conservative coupling | Host and registered one-rank Frontier GPU coupling oracles pass | Multi-rank and paper-campaign matrix remains open |
 | True delta-f | State, deposition, restart, and bounded source-local mechanics exist | Long-horizon CRSI/CRPAI paper reproduction remains open |
@@ -81,9 +81,9 @@ The active prepared paper deck is
 The sibling deck without the `_vl2_tsc` suffix is retained as archival
 pre-successor chronology only.
 The source-local preparation record is
-[`q011_parallel_shock_section54_paper_preparation_2026-05-30.json`](readiness/q011_parallel_shock_section54_paper_preparation_2026-05-30.json).
+[`q011_parallel_shock_section54_paper_preparation_successor_v8_2026-06-01.json`](readiness/q011_parallel_shock_section54_paper_preparation_successor_v8_2026-06-01.json).
 The bounded injection audit is
-[`q011_injection_distribution_runtime_local_2026-05-30.json`](readiness/q011_injection_distribution_runtime_local_2026-05-30.json).
+[`q011_injection_distribution_runtime_local_successor_v7_2026-06-01.json`](readiness/q011_injection_distribution_runtime_local_successor_v7_2026-06-01.json).
 
 The prepared contract includes:
 
@@ -132,6 +132,11 @@ These rules apply to every phase.
    discrepancies or broaden thresholds after inspecting results.
 10. Keep paper reproduction and optional-extension results separate in
     manifests, figures, and claims.
+11. Run the opt-in Orion live-state preflight with
+    `PIC_RUN_LIVE_PREFLIGHT=1` immediately before paired control-plane install,
+    policy promotion, reservation, and launch. Require exact mirrored policy
+    and ledger state, an accepted empty-queue snapshot, no pending marker, and
+    no active reservation before proceeding.
 
 ## Phase Overview
 
@@ -143,7 +148,7 @@ These rules apply to every phase.
 | 3 | Reproduce analytical and bounded Sun-Bai tests | Phase 2 | Sections 5.1-5.3, 5.5-5.7, and Appendices A/B pass |
 | 4 | Execute the full Section 5.4 shock campaign | Phases 1-3 | M1: shock-qualified candidate |
 | 5 | Freeze the complete paper bundle | Phase 4 | M2: Sun-Bai reproduction bundle |
-| 6 | Complete paper-mode production hardening | Phase 5 | M3: production-ready `paper_mhd_pic` candidate |
+| 6 | Complete paper-mode production hardening | Phase 5 | M3: production-ready `paper_mhd_pic_vl2_tsc` candidate |
 | 7 | Qualify selected optional extensions | Phase 6 | M4: production-ready `extended_mhd_pic` candidate |
 | 8 | Perform terminal review and sign-off | Phases 6-7 as selected | Signed release disposition |
 
@@ -184,6 +189,8 @@ using additional Frontier allocation.
 - warning-as-error documentation build
 - host Debug and Release builds
 - MPI and OpenMP compile coverage
+- Orion live-state preflight with `PIC_RUN_LIVE_PREFLIGHT=1` immediately before
+  paired install and policy promotion
 
 ### Exit Gate
 
@@ -505,8 +512,9 @@ without implying broader production readiness.
 
 ### Objective
 
-Convert the paper-faithful candidate into a supported `paper_mhd_pic` release
-profile suitable for later science applications.
+Convert the paper-faithful candidate into a supported `paper_mhd_pic_vl2_tsc`
+release profile suitable for later science applications. Retain
+`paper_mhd_pic` as archival pre-VL2 chronology only.
 
 ### Required Work
 
@@ -654,7 +662,7 @@ unless all required bindings and products are present.
 | Full Section 5.4 coarse/fine/AMR paper campaign | Open |
 | M1 shock-qualified candidate | Open |
 | M2 Sun-Bai reproduction bundle | Open |
-| M3 production-ready `paper_mhd_pic` | Open |
+| M3 production-ready `paper_mhd_pic_vl2_tsc` | Open |
 | M4 production-ready `extended_mhd_pic` | Open |
 | Named external review and terminal Q-014 sign-off | Pending external review |
 

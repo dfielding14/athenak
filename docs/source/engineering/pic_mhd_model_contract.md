@@ -13,12 +13,14 @@ The runtime identity is selected with `<particles>/pic_physical_mode`.
 | --- | --- | --- | --- | --- |
 | `engineering` | Backward-compatible development and proxy tests | Historical velocity slots | Legacy opt-in current-to-CT source remains available | Legacy opt-in policies |
 | `paper_test_particle` | Particle-only analytical tests of paper mechanics | Mass-normalized momentum `p/m` | No CR-current CT source | Disabled |
-| `paper_mhd_pic` | Sun & Bai paper reproduction | Mass-normalized momentum `p/m` | Frozen-in `cE = -u x B`; no CR Hall term | Conservative momentum and kinetic-energy deltas for ideal MHD; exact-isothermal delta-f and the Q-006 runtime-local full-f carrier use momentum-only feedback |
+| `paper_mhd_pic` | Historical pre-VL2 paper-mode chronology only | Mass-normalized momentum `p/m` | Frozen-in `cE = -u x B`; no CR Hall term | Preserved for restart and source-history compatibility; do not use for new publication runs |
+| `paper_mhd_pic_vl2_tsc` | Active additive Sun & Bai VL2/TSC paper-reproduction candidate | Mass-normalized momentum `p/m` | Frozen-in `cE = -u x B`; no CR Hall term | Conservative momentum and kinetic-energy deltas for ideal MHD; exact-isothermal delta-f and the Q-006 runtime-local full-f carrier use momentum-only feedback |
 | `extended_mhd_pic` | Separately named extensions requiring separate qualification | Mass-normalized momentum `p/m` | Extension-specific, never implied by paper mode | Extension-specific and recorded |
 
 `engineering` is not a paper-reproduction mode. It exists to preserve the
-historical interface while migration tests are written. New publication decks
-must choose one of the explicit paper or extension modes.
+historical interface while migration tests are written. `paper_mhd_pic` is
+also retained as historical chronology only. New coupled publication decks
+must select `paper_mhd_pic_vl2_tsc` or a separately named extension mode.
 
 ## Particle State
 
@@ -29,7 +31,7 @@ runtime mode:
 | Mode family | Slot meaning |
 | --- | --- |
 | `engineering` | Coordinate velocity components |
-| `paper_test_particle`, `paper_mhd_pic`, `extended_mhd_pic` | Mass-normalized momentum components `p/m` |
+| `paper_test_particle`, `paper_mhd_pic`, `paper_mhd_pic_vl2_tsc`, `extended_mhd_pic` | Mass-normalized momentum components `p/m` |
 
 In a momentum-state mode, the derived quantities are
 
@@ -61,14 +63,17 @@ The configured charge-to-mass slot stores the normalized `q/(mc)` factor used
 by the AthenaK units. The relativistic Boris rotation evaluates its magnetic
 rotation with the Lorentz factor after the first electric half-kick.
 
-For `paper_mhd_pic`, the MHD induction update remains the ideal-MHD constrained
-transport update. Deposited CR current must not be added directly to the CT
-electric field. After a completed particle push, an ideal-MHD gas receives the
-negative of the deposited CR momentum and relativistic kinetic-energy changes.
-Exact-isothermal paper delta-f uses momentum-only feedback. The separately
-named `q006_paper_multispecies_oscillation_runtime_local` generator admits the
-same momentum-only contract for its bounded full-f Section 5.3 mechanics
-carrier; other exact-isothermal full-f paper-mode compositions fail closed.
+For the active `paper_mhd_pic_vl2_tsc` candidate, the MHD induction update
+remains the ideal-MHD constrained transport update. Deposited CR current must
+not be added directly to the CT electric field. After a completed particle
+push, an ideal-MHD gas receives the negative of the deposited CR momentum and
+relativistic kinetic-energy changes. Exact-isothermal paper delta-f uses
+momentum-only feedback. The separately named
+`q006_paper_multispecies_oscillation_runtime_local` generator admits the same
+momentum-only contract for its bounded full-f Section 5.3 mechanics carrier;
+other exact-isothermal full-f paper-mode compositions fail closed. The
+historical `paper_mhd_pic` identity remains available only to preserve prior
+chronology.
 
 ## Stage Ordering
 
