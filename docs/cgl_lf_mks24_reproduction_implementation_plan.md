@@ -2,6 +2,12 @@
 
 ## Status and Purpose
 
+Read `docs/cgl_lf_phase_i_handoff.md` first for the durable current production
+boundary. Accepted corrected-E03 `R02/s18_rankio_t7_t7p25` job `4754394`
+reached exact `t = 7.25`; its independently reviewed F-101 recost artifact is
+retained staged-only. Canonical F-101 promotion, verification, documentation,
+and source archival remain required before any `s19` preparation.
+
 This document is an implementation handoff for future agents working on the
 AthenaK CGL Landau-fluid (CGL-LF) feature branch. It supersedes neither the
 user documentation in `docs/source/` nor the historical planning note

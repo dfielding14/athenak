@@ -1,9 +1,10 @@
 # MKS24 Reproduction-First CGL-LF Manuscript and Later Extension Plan
 
-Status: execution plan, revised after accepted corrected-E03 R02 job `4754008`
-reached exact `t = 7.0`, the corrected F-100 recost was retained, and F-083/F-084
-controller hardening remained promoted. A new committed post-F-100 documentation
-archive remains required before successor preparation. The preceding read-only
+Status: execution plan. For the durable current operational boundary, read
+`docs/cgl_lf_phase_i_handoff.md` first. Accepted corrected-E03 R02 job
+`4754394` reached exact `t = 7.25`; its F-101 recost remains staged-only and
+must be promoted, verified, documented, committed, and archived before any
+successor preparation. The preceding read-only
 Frontier-root audit was completed on 2026-05-29 EDT (2026-05-30 UTC). The
 first paper-production
 segment, mapped case `R16/s00_t0_t2`, completed on Frontier as job `4674731`

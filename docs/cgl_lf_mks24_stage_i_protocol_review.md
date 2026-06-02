@@ -2,6 +2,12 @@
 
 ## Decision
 
+Read `docs/cgl_lf_phase_i_handoff.md` first for the durable current production
+boundary. Accepted corrected-E03 `R02/s18_rankio_t7_t7p25` job `4754394`
+reached exact `t = 7.25`; its F-101 recost artifact remains staged-only.
+Canonical F-101 promotion and verification are required before any `s19`
+preparation.
+
 The frozen `R02`-`R17` inventory in
 `inputs/cgl_lf_paper/mks24_stage_i_manifest.json` is accepted as the Stage I
 case inventory for the AthenaK reproduction of Majeski, Kunz, and Squire
