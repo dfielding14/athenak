@@ -329,6 +329,13 @@ qualify any scientific claim by itself.
   transport oracle, serial cases `a` through `p`, MPI2 and MPI3 route targets,
   corrected Project Home mirror root, and the remaining registered dynamic
   multilevel replay gate without authorizing a launch or qualifying a claim.
+- `pic_vl2_tsc_phase1_stage_ordering_review_receipt_successor_2026-06-02.json`:
+  narrow additive Phase 1 bounded source-local stage-ordering review receipt. It
+  reuses the existing `pic_paper_task_stage_trace_vl2_tsc` listed-pass result
+  and exact reviewed source/script hashes for push, deposition, feedback
+  placement, boundary synchronization, migration/communication ordering and CT
+  ordering. It adds no dynamic evidence and does not qualify or authorize
+  Frontier, MPI or HIP execution.
 - `plotting_environment_lock_candidate_2026-05-30.json`: local Python and
   plotting-dependency lock candidate pending backend, font, environment
   artifact and external-export freeze.
@@ -649,6 +656,11 @@ qualify any scientific claim by itself.
   analytical storage-planning successor after the publication deck gained a
   signed particle-current binary output and the PVTK block moved. The estimator
   binds the declared `prtcl_all` PVTK output semantically.
+- `q011_parallel_shock_storage_estimator_successor_v3_2026-06-02.json`:
+  extends the Section 5.4 estimate to a deterministic full-storage planning
+  envelope covering required raw PVTK, retained mesh-bin products, particle
+  restarts, logs, filesystem overhead, the Orion-only publication copy and a
+  safety margin. This remains planning-only and does not promote a launch.
 - `q011_parallel_shock_rk_stage_budget_successor_v6_2026-06-01.json`: bounded
   successor adding malformed live-payload rejection, immutable shock-origin
   checks, a non-decimal ledger restart round trip and a two-rank nonempty

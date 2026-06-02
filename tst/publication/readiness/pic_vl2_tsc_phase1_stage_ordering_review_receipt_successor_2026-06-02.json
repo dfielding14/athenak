@@ -1,0 +1,125 @@
+{
+  "record_type": "pic_vl2_tsc_phase1_stage_ordering_review_receipt_successor",
+  "schema_version": 1,
+  "date": "2026-06-02",
+  "phase": "phase1",
+  "finding_id": "PIC-P1-002",
+  "verification_gate": "Q-004",
+  "physical_mode": "paper_mhd_pic_vl2_tsc",
+  "status": "bounded_source_local_stage_ordering_review_receipt_only",
+  "qualification_effect": "none_bounded_source_local_review_only_no_dynamic_evidence_no_frontier_mpi_hip_qualification_no_execution_authorization_no_claim_closure",
+  "scope": "Bounded source-local Phase 1 review receipt for the paper_mhd_pic_vl2_tsc stage-ordering implementation only. This successor reuses the existing pic_paper_task_stage_trace_vl2_tsc listed-pass result and exact reviewed source/script hashes. It adds no dynamic evidence, runtime artifact, Frontier launch authorization, MPI qualification, HIP qualification, or claim closure.",
+  "predecessor": {
+    "path": "tst/publication/readiness/pic_vl2_tsc_additive_successor_registration_v4_2026-06-01.json",
+    "sha256": "49d3559faecc0b6fa622952cef25c7369275350d2c50dafd86ddfa29eeb97752"
+  },
+  "reused_stage_trace": {
+    "path": "tst/scripts/particles/pic_paper_task_stage_trace_vl2_tsc.py",
+    "sha256": "ec4411ba561c4ccd5b462b658ae3ef891505b9f7a3c0ec2d23e0e2653c3b09bb",
+    "listed_pass_result": "pic_paper_task_stage_trace_vl2_tsc",
+    "listed_pass_result_origin": "predecessor.local_validation.serial_oracles_passed",
+    "reuse_only_no_new_dynamic_execution_or_artifact": true,
+    "review_focus": "source_local_static_stage_ordering_contract"
+  },
+  "source_bindings": {
+    "src/driver/driver.cpp": "8e75ccf777a68019407ad2c613e86d616be7caf48c12831c876c8baeb7a42a43",
+    "src/mhd/mhd_tasks.cpp": "f8b907095ca9efc7c0bac13975f29f5f5e156c74493d6927049638815da67f1b",
+    "src/particles/particles.hpp": "cc75479df25c5731f46f31334ce110c2ab652549bb832772b7a9c2c4b6841fe0",
+    "src/particles/particles_moments.cpp": "a5e0f268ea20d797d7672444a5db795cb66f764d53fb36e1041d4d618961464c",
+    "src/particles/particles_pushers.cpp": "d4f25d55ffbdb24451cb0c14d6c3f251aea52c8b42bbd43e4ec0eba7e6b4141a",
+    "src/particles/particles_tasks.cpp": "2c8206b552998901ff1f94157d5850bfeb83b446ca82dfd8890d79fe538d7e80",
+    "src/pgen/tests/pic_parallel_shock.cpp": "c0a01e4960f4ebb1a96bedc61fd918b4f7fc76addb59e0f9db3f9ab35eb8c9f9"
+  },
+  "script_bindings": {
+    "tst/scripts/particles/pic_paper_task_stage_trace_vl2_tsc.py": "ec4411ba561c4ccd5b462b658ae3ef891505b9f7a3c0ec2d23e0e2653c3b09bb",
+    "tst/scripts/particles/pic_paper_coupling_conservation_vl2_tsc.py": "f00eab40361a80156e6c3b48bcc743d246a2454fe68fe3a94da9139f41149401"
+  },
+  "fixture_bindings": {
+    "inputs/tests/pic_paper_coupling_conservation_vl2_tsc.athinput": "b0b8a94ee91a32d2afa0aa5ba53d4e51185c6428e20e1b4db59d3dc0df9c2e6f"
+  },
+  "stage_ordering_review": {
+    "push": {
+      "status": "covered_bounded_source_local_review",
+      "sequence": [
+        "stage_1_inserted_push_is_predictor_no_op_at_x_ini",
+        "stage_1_post_deposit_half_step_drift_reaches_x_mid",
+        "stage_2_inserted_push_applies_midpoint_boris_kick_at_x_mid",
+        "stage_2_post_deposit_half_step_drift_reaches_x_end"
+      ]
+    },
+    "deposition": {
+      "status": "covered_bounded_source_local_review",
+      "sequence": [
+        "Particles::Push",
+        "Particles::SaveOldPositions",
+        "Particles::ZeroMoments",
+        "Particles::InitRecvMoments",
+        "Particles::DepositMoments"
+      ]
+    },
+    "feedback_placement": {
+      "status": "covered_bounded_source_local_review",
+      "sequence": [
+        "MHD::RKUpdate",
+        "paper_vl2_staged_particle_wrapper_chain",
+        "MHD::MHDSrcTerms"
+      ],
+      "interpretation": "Stage 1 deposits predictor rho/J before MHD source terms. Stage 2 deposits the post-kick impulse before MHD source terms."
+    },
+    "boundary_synchronization": {
+      "status": "covered_bounded_source_local_review",
+      "sequence": [
+        "Particles::DepositMoments",
+        "Particles::RestrictMoments",
+        "Particles::SendMoments",
+        "Particles::RecvMoments",
+        "Particles::ClearRecvMoments",
+        "Particles::ClearSendMoments",
+        "Particles::ApplyMomentPhysicalBCs",
+        "Particles::ProlongateMoments"
+      ]
+    },
+    "migration_communication_ordering": {
+      "status": "covered_bounded_source_local_review",
+      "sequence": [
+        "Particles::DriftPaperCosmicRaysHalfStep",
+        "after_stagen",
+        "Particles::NewGID",
+        "Particles::SendCnt",
+        "Particles::InitRecv",
+        "Particles::SendP",
+        "Particles::RecvP",
+        "Particles::ClearRecv",
+        "Particles::ClearSend"
+      ],
+      "interpretation": "Paper VL2 migration and particle communication run after each stage, after the post-deposit half drift."
+    },
+    "ct_ordering": {
+      "status": "covered_bounded_source_local_review",
+      "sequence": [
+        "MHD::CornerE",
+        "MHD::EFieldSrc",
+        "MHD::SendE",
+        "MHD::RecvE",
+        "MHD::CT"
+      ],
+      "interpretation": "The paper_mhd_pic_vl2_tsc identity is excluded from AddsCRCurrentToCT, so this review records ideal-MHD CT ordering without a direct paper-mode CR-current CT injection claim."
+    }
+  },
+  "qualification_boundary": {
+    "bounded_source_local_scope": true,
+    "adds_dynamic_evidence": false,
+    "frontier_execution_authorized": false,
+    "frontier_qualified": false,
+    "mpi_qualified": false,
+    "hip_qualified": false,
+    "claim_closure": false
+  },
+  "open_boundaries": [
+    "registered_mpi2_and_mpi3_route_replay_pending",
+    "frontier_hip_mpi_qualification_pending",
+    "executable_backed_dynamic_multilevel_pusher_restart_and_migration_regression_pending",
+    "paper_vl2_expanding_box_staging_pending",
+    "external_review_deferred"
+  ]
+}

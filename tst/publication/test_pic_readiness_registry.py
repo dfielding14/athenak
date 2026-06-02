@@ -2825,6 +2825,117 @@ class PicReadinessRegistryTests(unittest.TestCase):
             template["required_snapshot_commands"],
         )
 
+    def test_pic_vl2_tsc_phase1_stage_ordering_review_receipt_is_bounded(self) -> None:
+        receipt = _load(
+            "pic_vl2_tsc_phase1_stage_ordering_review_receipt_successor_"
+            "2026-06-02.json"
+        )
+        predecessor = receipt["predecessor"]
+        predecessor_path = REPO_ROOT / predecessor["path"]
+        self.assertEqual(predecessor["sha256"], _sha256(predecessor_path))
+        registration = json.loads(predecessor_path.read_text(encoding="utf-8"))
+        self.assertEqual(
+            registration["identity_split"]["successor_mode"],
+            receipt["physical_mode"],
+        )
+        self.assertEqual(receipt["phase"], "phase1")
+        self.assertEqual(receipt["finding_id"], "PIC-P1-002")
+        self.assertEqual(receipt["verification_gate"], "Q-004")
+        self.assertIn("Bounded source-local", receipt["scope"])
+
+        trace = receipt["reused_stage_trace"]
+        self.assertEqual(trace["sha256"], _sha256(REPO_ROOT / trace["path"]))
+        self.assertEqual(
+            trace["sha256"],
+            registration["active_successor_files"][trace["path"]],
+        )
+        self.assertIn(
+            trace["listed_pass_result"],
+            registration["local_validation"]["serial_oracles_passed"],
+        )
+        self.assertTrue(trace["reuse_only_no_new_dynamic_execution_or_artifact"])
+
+        for binding_group in ("source_bindings", "script_bindings", "fixture_bindings"):
+            for relative, expected_sha256 in receipt[binding_group].items():
+                with self.subTest(binding_group=binding_group, relative=relative):
+                    self.assertEqual(expected_sha256, _sha256(REPO_ROOT / relative))
+                    predecessor_sha256 = registration["active_successor_files"].get(relative)
+                    if predecessor_sha256 is not None:
+                        self.assertEqual(expected_sha256, predecessor_sha256)
+
+        review = receipt["stage_ordering_review"]
+        expected_sequences = {
+            "push": [
+                "stage_1_inserted_push_is_predictor_no_op_at_x_ini",
+                "stage_1_post_deposit_half_step_drift_reaches_x_mid",
+                "stage_2_inserted_push_applies_midpoint_boris_kick_at_x_mid",
+                "stage_2_post_deposit_half_step_drift_reaches_x_end",
+            ],
+            "deposition": [
+                "Particles::Push",
+                "Particles::SaveOldPositions",
+                "Particles::ZeroMoments",
+                "Particles::InitRecvMoments",
+                "Particles::DepositMoments",
+            ],
+            "feedback_placement": [
+                "MHD::RKUpdate",
+                "paper_vl2_staged_particle_wrapper_chain",
+                "MHD::MHDSrcTerms",
+            ],
+            "boundary_synchronization": [
+                "Particles::DepositMoments",
+                "Particles::RestrictMoments",
+                "Particles::SendMoments",
+                "Particles::RecvMoments",
+                "Particles::ClearRecvMoments",
+                "Particles::ClearSendMoments",
+                "Particles::ApplyMomentPhysicalBCs",
+                "Particles::ProlongateMoments",
+            ],
+            "migration_communication_ordering": [
+                "Particles::DriftPaperCosmicRaysHalfStep",
+                "after_stagen",
+                "Particles::NewGID",
+                "Particles::SendCnt",
+                "Particles::InitRecv",
+                "Particles::SendP",
+                "Particles::RecvP",
+                "Particles::ClearRecv",
+                "Particles::ClearSend",
+            ],
+            "ct_ordering": [
+                "MHD::CornerE",
+                "MHD::EFieldSrc",
+                "MHD::SendE",
+                "MHD::RecvE",
+                "MHD::CT",
+            ],
+        }
+        self.assertEqual(
+            set(review),
+            set(expected_sequences),
+        )
+        for topic_name, topic in review.items():
+            self.assertEqual(topic["status"], "covered_bounded_source_local_review")
+            self.assertEqual(topic["sequence"], expected_sequences[topic_name])
+        self.assertIn(
+            "excluded from AddsCRCurrentToCT",
+            review["ct_ordering"]["interpretation"],
+        )
+
+        boundary = receipt["qualification_boundary"]
+        self.assertTrue(boundary["bounded_source_local_scope"])
+        for key in (
+            "adds_dynamic_evidence",
+            "frontier_execution_authorized",
+            "frontier_qualified",
+            "mpi_qualified",
+            "hip_qualified",
+            "claim_closure",
+        ):
+            self.assertFalse(boundary[key])
+
     def test_claim_classes_and_required_extensions(self) -> None:
         registry = _load("claims_registry.json")
         self.assertEqual(registry["default_reviewer"], "pending external review")

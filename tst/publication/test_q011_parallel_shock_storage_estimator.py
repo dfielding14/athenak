@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 import tempfile
@@ -17,7 +18,7 @@ else:
 READINESS = (
     storage.REPO_ROOT
     / "tst/publication/readiness"
-    / "q011_parallel_shock_storage_estimator_successor_v2_2026-06-01.json"
+    / "q011_parallel_shock_storage_estimator_successor_v3_2026-06-02.json"
 )
 
 
@@ -25,6 +26,10 @@ def _approx_quantity(value):
     if isinstance(value, int):
         return float(value)
     return value["approx"]
+
+
+def _sha256_path(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 class Q011ParallelShockStorageEstimatorTests(unittest.TestCase):
@@ -82,12 +87,114 @@ class Q011ParallelShockStorageEstimatorTests(unittest.TestCase):
             storage.estimate_storage(grid_count=0)
 
     def test_assumptions_are_explicit(self) -> None:
-        assumptions = storage.estimate_storage()["assumptions"]
+        report = storage.estimate_storage()
+        assumptions = report["assumptions"]
         self.assertIn("no particle escape", assumptions["particle_retention"])
         self.assertIn("t=0", assumptions["cadence"])
         self.assertIn("timestep-edge", assumptions["quantization"])
-        self.assertIn("ASCII headers", assumptions["payload_scope"])
-        self.assertIn("restart files", assumptions["payload_scope"])
+        self.assertIn("raw-PVTK", assumptions["payload_scope"])
+        self.assertIn("restart planning allowances", assumptions["payload_scope"])
+        self.assertIn(
+            "ASCII headers",
+            report["planning_envelope"]["mesh_bin_policy"]["ascii_headers"],
+        )
+        self.assertIn(
+            "not observed runtime bytes",
+            report["planning_envelope"]["evidence_boundary"],
+        )
+
+    def test_mesh_bin_products_are_projected_for_each_required_variant(self) -> None:
+        variants = storage.estimate_storage()["planning_envelope"]["variants"]
+        self.assertEqual(
+            [variant["variant"] for variant in variants],
+            [
+                "coarse_uniform_dx12",
+                "three_level_amr_root_dx12_finest_dx3",
+                "fine_uniform_dx3",
+            ],
+        )
+        self.assertEqual(
+            [variant["cell_count"] for variant in variants],
+            [1_040_000, 16_640_000, 16_640_000],
+        )
+        self.assertEqual(
+            [variant["meshblock_count"] for variant in variants],
+            [2_600, 41_600, 41_600],
+        )
+        self.assertEqual(
+            [
+                variant["mesh_bin_products"][
+                    "binary_payload_bytes_before_ascii_headers"
+                ]
+                for variant in variants
+            ],
+            [228_217_600, 3_651_481_600, 3_651_481_600],
+        )
+        for variant in variants:
+            products = variant["mesh_bin_products"]["products"]
+            self.assertEqual(
+                [(product["id"], product["snapshot_count"]) for product in products],
+                [("bmag", 13), ("j2", 13), ("prtcl_jx", 13), ("rho", 13)],
+            )
+
+    def test_restart_payload_is_an_explicit_planning_allowance(self) -> None:
+        envelope = storage.estimate_storage()["planning_envelope"]
+        restart_policy = envelope["restart_policy"]
+        self.assertEqual(restart_policy["checkpoint_times"], list(range(100, 1201, 100)))
+        self.assertEqual(
+            restart_policy["particle_layout"],
+            {
+                "real_field_count": 26,
+                "integer_field_count": 4,
+                "real_bytes_planning_allowance": 8,
+                "integer_bytes_planning_allowance": 4,
+                "bytes_per_particle_planning_allowance": 224,
+                "classification": (
+                    "source-layout-derived allowance, not measured checkpoint bytes"
+                ),
+            },
+        )
+        self.assertIn("not measured", restart_policy["classification"])
+        for variant in envelope["variants"]:
+            self.assertEqual(variant["restart_payload"]["checkpoint_count"], 12)
+
+    def test_full_envelope_applies_allowances_without_claiming_replication(self) -> None:
+        envelope = storage.estimate_storage()["planning_envelope"]
+        campaign = envelope["campaign"]
+        logical = _approx_quantity(campaign["logical_bytes_before_filesystem_overhead"])
+        filesystem = _approx_quantity(
+            campaign["filesystem_allocation_overhead_bytes_allowance"]
+        )
+        replicated = _approx_quantity(campaign["bytes_after_replication_policy"])
+        margin = _approx_quantity(campaign["safety_margin_bytes_allowance"])
+        reservation = _approx_quantity(campaign["reservation_envelope_bytes"])
+        self.assertAlmostEqual(filesystem, logical * 0.10)
+        self.assertEqual(envelope["replication_policy"]["copy_count"], 1)
+        self.assertIn(
+            "does not provide",
+            envelope["replication_policy"]["durability_risk"],
+        )
+        self.assertAlmostEqual(replicated, logical + filesystem, delta=0.01)
+        self.assertAlmostEqual(margin, replicated * 0.25, delta=0.01)
+        self.assertAlmostEqual(reservation, replicated + margin, delta=0.01)
+        self.assertAlmostEqual(
+            campaign["reservation_envelope_tb_decimal"],
+            10.553535598859627,
+        )
+
+    def test_noncanonical_grid_count_uses_conservative_finest_equivalents(self) -> None:
+        variants = storage.estimate_storage(grid_count=2)["planning_envelope"]["variants"]
+        self.assertEqual(len(variants), 2)
+        self.assertEqual(
+            {variant["cell_count"] for variant in variants},
+            {16_640_000},
+        )
+        self.assertTrue(
+            all(
+                "noncanonical_grid_count_conservative" in variant["projection_method"]
+                for variant in variants
+            )
+        )
 
     def test_duplicate_parameter_fails_closed(self) -> None:
         deck = self._temporary_deck(
@@ -132,6 +239,27 @@ class Q011ParallelShockStorageEstimatorTests(unittest.TestCase):
         with self.assertRaisesRegex(storage.EstimatorError, "divide time/tlim"):
             storage.estimate_storage(deck)
 
+    def test_nondivisible_restart_cadence_fails_closed(self) -> None:
+        deck = self._temporary_deck(
+            lambda text: text.replace(
+                "<output6>\nfile_type   = rst\ndt          = 100.0",
+                "<output6>\nfile_type   = rst\ndt          = 128.0",
+            )
+        )
+        with self.assertRaisesRegex(storage.EstimatorError, "restart cadence"):
+            storage.estimate_storage(deck)
+
+    def test_missing_required_mesh_bin_product_fails_closed(self) -> None:
+        deck = self._temporary_deck(
+            lambda text: text.replace(
+                "<output4>\nfile_type   = bin\nvariable    = mhd_j2\n"
+                "id          = j2\ndt          = 100.0\nghost_zones = false\n",
+                "",
+            )
+        )
+        with self.assertRaisesRegex(storage.EstimatorError, "required Section 5.4"):
+            storage.estimate_storage(deck)
+
     def test_readiness_sidecar_matches_current_projection(self) -> None:
         frozen = json.loads(READINESS.read_text(encoding="utf-8"))
         report = storage.estimate_storage()
@@ -160,6 +288,24 @@ class Q011ParallelShockStorageEstimatorTests(unittest.TestCase):
                 report["campaign"]["raw_pvtk_payload_bytes_before_overhead"]
             ),
         )
+        campaign = report["planning_envelope"]["campaign"]
+        self.assertAlmostEqual(
+            projection["logical_campaign_bytes_before_filesystem_overhead_approx"],
+            _approx_quantity(campaign["logical_bytes_before_filesystem_overhead"]),
+        )
+        self.assertAlmostEqual(
+            projection["reservation_envelope_bytes_approx"],
+            _approx_quantity(campaign["reservation_envelope_bytes"]),
+        )
+        self.assertAlmostEqual(
+            projection["reservation_envelope_tb_decimal"],
+            campaign["reservation_envelope_tb_decimal"],
+        )
+        for binding in frozen["source_bindings"].values():
+            self.assertEqual(
+                binding["sha256"],
+                _sha256_path(storage.REPO_ROOT / binding["path"]),
+            )
 
 
 if __name__ == "__main__":
