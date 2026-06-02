@@ -1935,7 +1935,17 @@ class PicReadinessRegistryTests(unittest.TestCase):
         current_policy_sha256 = _sha256(active_policy_path)
         current_promotion_sha256 = _sha256(active_promotion_path)
         current_transition = manual_accounting_activation["control_plane_transition"]
-        if current_policy_sha256 == current_transition["active_policy_sha256"]:
+        paired_transition = _load(
+            "phase0_paired_control_plane_install_and_policy_promotion_"
+            "successor_v3_2026-06-01.json"
+        )
+        paired_promotion = paired_transition["active_policy_promotion"]
+        if current_policy_sha256 == paired_promotion["orion_policy_sha256"]:
+            self.assertEqual(
+                current_promotion_sha256, paired_promotion["orion_promotion_sha256"]
+            )
+            terminal = paired_transition["terminal_mirrored_ledger"]
+        elif current_policy_sha256 == current_transition["active_policy_sha256"]:
             self.assertEqual(
                 current_promotion_sha256, current_transition["active_promotion_sha256"]
             )
