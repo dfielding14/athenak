@@ -24,7 +24,7 @@
     "historical_project_home_bulk_artifacts": "chronology_only_superseded_by_orion_policy_copies_do_not_add_new_bulk_artifacts",
     "installed_control_plane_lifecycle": "paired_installed_reviewed_generation",
     "installed_control_plane_version": "6dc456e5858b2cbdbd7ef80cbc324b748e2cce5075023b49f7115eab4e84dfdd",
-    "last_preflight_utc": "2026-06-02T04:29:11Z",
+    "last_preflight_utc": "2026-06-02T05:08:35Z",
     "ledger_genesis": {
       "control_plane_version": "cde67c16228af41b47d70139185e92b484890db4d2a714505108ad4df6245a08",
       "event_sha256": "849bf340986f4d1e1f7cc69c0d2e2845c0313c02d935822113aa8b1df5f1f4c1",
@@ -87,13 +87,110 @@
     "staged_control_plane_candidate_version": "6dc456e5858b2cbdbd7ef80cbc324b748e2cce5075023b49f7115eab4e84dfdd",
     "status": "passed_user_authorized_orion_only_storage"
   },
-  "registered_science_slices": [],
+  "registered_science_slices": [
+    {
+      "analysis_script_sha256": [
+        "8596d95c9b8952dcb760b10fbe00bf7ba8a2c895713cc3d36dd1efa1aac11ecc",
+        "cf090115bcdfd143f67b12339115102b57e74cf3205b1ebb1521c144c3415a5a"
+      ],
+      "authorization_id": "q011-section54-pressure-ps-p0-1p00-v2",
+      "campaign": "q011_section54_pressure_ps_p0_1p00",
+      "clean_candidate_manifest_sha256": "ef527ed467995bd60fda07b5a3b09b56ea871595ace12fd64a948e246720dbe3",
+      "environment_profile_sha256": "7ff6cff3e263e8b4552bcbac1d5b55a85264a2a7af5565bbc9856584e35402c1",
+      "evidence_class": "engineering_calibration_only",
+      "executable_sha256": "0c249d339f5131a72b45ce244d84d26421fea08cab2493f0db1e3ff6cdf2c420",
+      "input_deck_sha256": "0b1cbd62d54027ec81a5f4f5c88d5ee56b86b8cc0cb018c3fbebfb37a11be7b1",
+      "job_script_sha256": "3048493d376dfa7954595e586c7cebe6740460a7455110d0fc4020bedf697999",
+      "launch_contract_sha256": "2413a91247d32fb6d93d4903bddab65ed518badc1be6c514ad29c03ca8eafb7b",
+      "maximum_attempts": 1,
+      "maximum_nodes": 1,
+      "maximum_walltime_seconds": 900,
+      "physical_mode": "paper_mhd_pic_vl2_tsc",
+      "registered_short_nonproduction": true,
+      "runtime_profile": "frontier_minimum_supported",
+      "selected_qos": "debug",
+      "status": "authorized",
+      "test_id": "pic_parallel_shock_section54_pressure_ps_p0_1p00"
+    },
+    {
+      "analysis_script_sha256": [
+        "8596d95c9b8952dcb760b10fbe00bf7ba8a2c895713cc3d36dd1efa1aac11ecc",
+        "cf090115bcdfd143f67b12339115102b57e74cf3205b1ebb1521c144c3415a5a"
+      ],
+      "authorization_id": "q011-section54-pressure-ps-p0-0p05-v2",
+      "campaign": "q011_section54_pressure_ps_p0_0p05",
+      "clean_candidate_manifest_sha256": "ef527ed467995bd60fda07b5a3b09b56ea871595ace12fd64a948e246720dbe3",
+      "environment_profile_sha256": "7ff6cff3e263e8b4552bcbac1d5b55a85264a2a7af5565bbc9856584e35402c1",
+      "evidence_class": "engineering_calibration_only",
+      "executable_sha256": "0c249d339f5131a72b45ce244d84d26421fea08cab2493f0db1e3ff6cdf2c420",
+      "input_deck_sha256": "0b1cbd62d54027ec81a5f4f5c88d5ee56b86b8cc0cb018c3fbebfb37a11be7b1",
+      "job_script_sha256": "3048493d376dfa7954595e586c7cebe6740460a7455110d0fc4020bedf697999",
+      "launch_contract_sha256": "f9f615bfaa4cc18479dcd02ed4f688f3723fc3dd30a50e754e9f69e10616a8ea",
+      "maximum_attempts": 1,
+      "maximum_nodes": 1,
+      "maximum_walltime_seconds": 900,
+      "physical_mode": "paper_mhd_pic_vl2_tsc",
+      "registered_short_nonproduction": true,
+      "runtime_profile": "frontier_minimum_supported",
+      "selected_qos": "debug",
+      "status": "authorized",
+      "test_id": "pic_parallel_shock_section54_pressure_ps_p0_0p05"
+    },
+    {
+      "analysis_script_sha256": [
+        "8596d95c9b8952dcb760b10fbe00bf7ba8a2c895713cc3d36dd1efa1aac11ecc",
+        "cf090115bcdfd143f67b12339115102b57e74cf3205b1ebb1521c144c3415a5a"
+      ],
+      "authorization_id": "q011-section54-pressure-ps-p0-0p10-v2",
+      "campaign": "q011_section54_pressure_ps_p0_0p10",
+      "clean_candidate_manifest_sha256": "ef527ed467995bd60fda07b5a3b09b56ea871595ace12fd64a948e246720dbe3",
+      "environment_profile_sha256": "7ff6cff3e263e8b4552bcbac1d5b55a85264a2a7af5565bbc9856584e35402c1",
+      "evidence_class": "engineering_calibration_only",
+      "executable_sha256": "0c249d339f5131a72b45ce244d84d26421fea08cab2493f0db1e3ff6cdf2c420",
+      "input_deck_sha256": "0b1cbd62d54027ec81a5f4f5c88d5ee56b86b8cc0cb018c3fbebfb37a11be7b1",
+      "job_script_sha256": "3048493d376dfa7954595e586c7cebe6740460a7455110d0fc4020bedf697999",
+      "launch_contract_sha256": "8ab4528b55bdf71e4a13047971aa5ccf8da35c28896ba0bf875a7dca368dfd2f",
+      "maximum_attempts": 1,
+      "maximum_nodes": 1,
+      "maximum_walltime_seconds": 900,
+      "physical_mode": "paper_mhd_pic_vl2_tsc",
+      "registered_short_nonproduction": true,
+      "runtime_profile": "frontier_minimum_supported",
+      "selected_qos": "debug",
+      "status": "authorized",
+      "test_id": "pic_parallel_shock_section54_pressure_ps_p0_0p10"
+    },
+    {
+      "analysis_script_sha256": [
+        "8596d95c9b8952dcb760b10fbe00bf7ba8a2c895713cc3d36dd1efa1aac11ecc",
+        "cf090115bcdfd143f67b12339115102b57e74cf3205b1ebb1521c144c3415a5a"
+      ],
+      "authorization_id": "q011-section54-pressure-ps-p0-0p20-v2",
+      "campaign": "q011_section54_pressure_ps_p0_0p20",
+      "clean_candidate_manifest_sha256": "ef527ed467995bd60fda07b5a3b09b56ea871595ace12fd64a948e246720dbe3",
+      "environment_profile_sha256": "7ff6cff3e263e8b4552bcbac1d5b55a85264a2a7af5565bbc9856584e35402c1",
+      "evidence_class": "engineering_calibration_only",
+      "executable_sha256": "0c249d339f5131a72b45ce244d84d26421fea08cab2493f0db1e3ff6cdf2c420",
+      "input_deck_sha256": "0b1cbd62d54027ec81a5f4f5c88d5ee56b86b8cc0cb018c3fbebfb37a11be7b1",
+      "job_script_sha256": "3048493d376dfa7954595e586c7cebe6740460a7455110d0fc4020bedf697999",
+      "launch_contract_sha256": "d84b9217c8810f33ffda995f9611b44f7eeb519bb2e7667c4691ab5833895dd4",
+      "maximum_attempts": 1,
+      "maximum_nodes": 1,
+      "maximum_walltime_seconds": 900,
+      "physical_mode": "paper_mhd_pic_vl2_tsc",
+      "registered_short_nonproduction": true,
+      "runtime_profile": "frontier_minimum_supported",
+      "selected_qos": "debug",
+      "status": "authorized",
+      "test_id": "pic_parallel_shock_section54_pressure_ps_p0_0p20"
+    }
+  ],
   "reviewer": "pending external review",
   "schema_version": 1,
   "science_submission_freeze": {
-    "build_profile_control_plane_version": "aa069bc7df47f26d7d0677da69b5a1c4da6a3777151255e830d6989fced210f0",
-    "manifest_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/clean_candidates/d7205cd3-63fb-45ba-8e0a-c74d150df5a2/clean_candidate_manifest.json",
-    "manifest_sha256": "bcbc72a72832c6024c5b8f5b0ab245d576e93544adb349a9219883754c33be16",
+    "build_profile_control_plane_version": "6dc456e5858b2cbdbd7ef80cbc324b748e2cce5075023b49f7115eab4e84dfdd",
+    "manifest_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/clean_candidates/0d1cabe6-a282-408b-953a-c2db8f0e1310/clean_candidate_manifest.json",
+    "manifest_sha256": "ef527ed467995bd60fda07b5a3b09b56ea871595ace12fd64a948e246720dbe3",
     "status": "authorized"
   }
 }

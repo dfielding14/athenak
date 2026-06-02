@@ -162,13 +162,19 @@ qualify any scientific claim by itself.
   and promoting the required same-controller empty-allowlist baseline. It binds
   the 111-row mirrored ledger and keeps launch prohibited while the repaired
   HIP/MPI Release rebuild and clean-candidate freeze remain pending.
-- `phase0_curated_candidate_successor_v19_2026-06-02.json`: current curated
+- `phase0_curated_candidate_successor_v19_2026-06-02.json`: historical curated
   Q011 retry post-freeze boundary. It binds the repaired `672818de70dc`
   double-precision HIP/MPI Release build, recursively read-only `0d1cabe6`
   clean candidate and exact non-authorizing four-slice Q011 v2 review fragment.
   Launch remains prohibited because unrelated user job `4754394` prevents a
   fresh empty-scheduler attestation and the active mirrored policy still has an
   empty registered-science allowlist.
+- `phase0_curated_candidate_successor_v20_2026-06-02.json`: current curated
+  Q011 pressure-pilot boundary. It records the fresh empty-queue operator
+  attestation, paired active-policy promotion through strict `6dc456e5`, and
+  four exact one-attempt v2 engineering-calibration slices. Pressure pilots
+  must execute serially with terminal reconciliation and immutable descriptor
+  verification before each successor materialization.
 - `phase0_curated_candidate_successor_v4_2026-05-31.json`: historical Phase 0
   successor after schema-3 parallel-shock exact tag-window and restart
   fail-stop hardening. It binds the paired `4f005096` successor receipt and

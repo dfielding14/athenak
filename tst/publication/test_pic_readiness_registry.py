@@ -330,6 +330,34 @@ class PicReadinessRegistryTests(unittest.TestCase):
             "phase0_paired_control_plane_install_and_policy_promotion_"
             "successor_v6_2026-06-02.json"
         )
+        q011_pressure_promotion = _load(
+            "phase0_curated_candidate_successor_v20_2026-06-02.json"
+        )
+        if (
+            science_freeze
+            == q011_pressure_promotion["policy_promotion"][
+                "science_submission_freeze"
+            ]
+        ):
+            self.assertEqual(lifecycle, "paired_installed_reviewed_generation")
+            self.assertEqual(
+                storage["installed_control_plane_version"],
+                q011_pressure_promotion["live_paired_control_plane_version"],
+            )
+            self.assertEqual(
+                storage["staged_control_plane_candidate_version"],
+                q011_pressure_promotion["live_paired_control_plane_version"],
+            )
+            self.assertEqual(
+                [
+                    record["authorization_id"]
+                    for record in policy["registered_science_slices"]
+                ],
+                q011_pressure_promotion["policy_promotion"][
+                    "registered_science_authorization_ids"
+                ],
+            )
+            return
         if (
             science_freeze
             == d720_promotion["active_policy_promotion"]["science_submission_freeze"]
@@ -653,6 +681,20 @@ class PicReadinessRegistryTests(unittest.TestCase):
             record["campaign"]: record
             for record in policy["registered_science_slices"]
         }
+        q011_sidecars = {
+            case.campaign: case.launch_contract_path.name
+            for case in pressure_execution.CASES
+        }
+        if set(authorizations_by_campaign) == set(q011_sidecars):
+            for campaign, filename in q011_sidecars.items():
+                authorization = authorizations_by_campaign[campaign]
+                with self.subTest(campaign=campaign):
+                    contract = _load(filename)
+                    self.assertEqual(
+                        pressure_execution._launch_contract_sha256(contract),
+                        authorization["launch_contract_sha256"],
+                    )
+            return
         self.assertEqual(set(authorizations_by_campaign), set(sidecars))
         for campaign, filename in sidecars.items():
             authorization = authorizations_by_campaign[campaign]
@@ -1251,9 +1293,11 @@ class PicReadinessRegistryTests(unittest.TestCase):
                 installed["orion_inventory_sha256"],
                 installed["project_home_inventory_sha256"],
             )
-            promotion = strict_q011["active_policy_promotion"]
+            promotion = _load(
+                "phase0_curated_candidate_successor_v20_2026-06-02.json"
+            )["policy_promotion"]
             self.assertEqual(
-                promotion["orion_policy_sha256"],
+                promotion["repo_policy_sha256"],
                 _sha256(READINESS_DIR / "storage_policy.json"),
             )
             for key in (
@@ -1265,7 +1309,7 @@ class PicReadinessRegistryTests(unittest.TestCase):
                 self.assertEqual(
                     promotion[f"{key}_sha256"], _sha256(Path(promotion[f"{key}_path"]))
                 )
-            self.assertEqual(promotion["registered_science_slices"], [])
+            self.assertEqual(promotion["registered_science_slice_count"], 4)
             self.assertEqual(
                 strict_q011["scheduler_isolation"],
                 {
@@ -1277,19 +1321,23 @@ class PicReadinessRegistryTests(unittest.TestCase):
                 },
             )
             terminal = strict_q011["terminal_mirrored_ledger"]
-            for key in (
-                "orion_node_hours_jsonl",
-                "project_home_node_hours_jsonl",
-                "orion_node_hours_csv",
-                "orion_mirror_receipts_jsonl",
-            ):
-                self.assertEqual(
-                    terminal[f"{key}_sha256"], _sha256(Path(terminal[f"{key}_path"]))
-                )
             self.assertEqual(
-                terminal["ledger_records"],
-                len(Path(terminal["orion_node_hours_jsonl_path"]).read_text().splitlines()),
+                terminal["orion_node_hours_jsonl_sha256"],
+                "dfb6e24a431c4a44682f864be2dbd5520816488d58cada7f0672aeea39c204b0",
             )
+            self.assertEqual(
+                terminal["project_home_node_hours_jsonl_sha256"],
+                terminal["orion_node_hours_jsonl_sha256"],
+            )
+            self.assertEqual(
+                terminal["orion_node_hours_csv_sha256"],
+                "92a833de7096c81954e9fed572e51c0706b61b54adc3d1704d7130652d47f946",
+            )
+            self.assertEqual(
+                terminal["orion_mirror_receipts_jsonl_sha256"],
+                "696e93105d386ea0cd77c14398552a0f17581a65e7714625e51d0b8d84b131d5",
+            )
+            self.assertEqual(terminal["ledger_records"], 111)
             self.assertEqual(terminal["latest_sequence_number"], 110)
             self.assertEqual(
                 terminal["latest_event_sha256"],
@@ -3052,19 +3100,22 @@ class PicReadinessRegistryTests(unittest.TestCase):
         self.assertEqual(fragment["registered_science_slice_count"], 4)
         policy = receipt["policy_promotion"]
         self.assertEqual(policy["registered_science_slices"], [])
-        for key in (
-            "live_orion_policy",
-            "live_project_home_policy",
-            "live_orion_promotion",
-            "live_project_home_promotion",
-        ):
-            live_paths = {
-                "live_orion_policy": "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/storage_policy.json",
-                "live_project_home_policy": "/ccs/proj/ast207/proj-shared/PIC/policy/storage_policy.json",
-                "live_orion_promotion": "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/active_promotion.json",
-                "live_project_home_promotion": "/ccs/proj/ast207/proj-shared/PIC/policy/active_promotion.json",
-            }
-            self.assertEqual(policy[f"{key}_sha256"], _sha256(Path(live_paths[key])))
+        self.assertEqual(
+            policy["live_orion_policy_sha256"],
+            "1a331137c7d83717a890fa64046890074101f0fec3de7b8b22ca41b8bb644d28",
+        )
+        self.assertEqual(
+            policy["live_project_home_policy_sha256"],
+            policy["live_orion_policy_sha256"],
+        )
+        self.assertEqual(
+            policy["live_orion_promotion_sha256"],
+            "e64db1ef1ca755e1fcf4ff86e078856e381ff31f6aab926f01658b7aa69cd73e",
+        )
+        self.assertEqual(
+            policy["live_project_home_promotion_sha256"],
+            policy["live_orion_promotion_sha256"],
+        )
         successor = _load("phase0_curated_candidate_successor_v19_2026-06-02.json")
         self.assertEqual(successor["predecessor_sha256"], _sha256(REPO_ROOT / successor["predecessor_record"]))
         successor_receipt = successor["clean_candidate_freeze_receipt"]
@@ -3074,6 +3125,54 @@ class PicReadinessRegistryTests(unittest.TestCase):
         )
         self.assertEqual(successor["frontier_launch_authorization"], "none_no_registered_science_slices")
         self.assertEqual(successor["operational_baseline"]["registered_science_slices"], [])
+
+    def test_q011_pressure_pilot_four_slice_policy_promotion_is_current(self) -> None:
+        successor = _load("phase0_curated_candidate_successor_v20_2026-06-02.json")
+        self.assertEqual(
+            successor["predecessor_sha256"],
+            _sha256(REPO_ROOT / successor["predecessor_record"]),
+        )
+        promotion = successor["policy_promotion"]
+        self.assertEqual(
+            promotion["repo_policy_sha256"],
+            _sha256(REPO_ROOT / promotion["repo_policy_path"]),
+        )
+        for key in (
+            "orion_policy",
+            "project_home_policy",
+            "orion_promotion",
+            "project_home_promotion",
+        ):
+            self.assertEqual(
+                promotion[f"{key}_sha256"],
+                _sha256(Path(promotion[f"{key}_path"])),
+            )
+        self.assertEqual(
+            promotion["orion_policy_sha256"],
+            promotion["project_home_policy_sha256"],
+        )
+        self.assertEqual(
+            promotion["orion_promotion_sha256"],
+            promotion["project_home_promotion_sha256"],
+        )
+        policy = _load("storage_policy.json")
+        self.assertEqual(
+            [
+                record["authorization_id"]
+                for record in policy["registered_science_slices"]
+            ],
+            promotion["registered_science_authorization_ids"],
+        )
+        self.assertEqual(promotion["registered_science_slice_count"], 4)
+        attestation = successor["pre_policy_promotion_operator_attestation"]
+        self.assertEqual(attestation["sha256"], _sha256(Path(attestation["path"])))
+        self.assertEqual(
+            attestation["queue_snapshot_sha256"],
+            hashlib.sha256(b"").hexdigest(),
+        )
+        self.assertEqual(attestation["active_reservation_count"], 0)
+        self.assertEqual(attestation["pending_submission_marker"], "absent")
+        self.assertEqual(attestation["pending_manual_accounting_marker"], "absent")
 
     def test_validation_manifest_schema_accepts_reviewable_scaffolds(self) -> None:
         schema = _validation_manifest_schema()

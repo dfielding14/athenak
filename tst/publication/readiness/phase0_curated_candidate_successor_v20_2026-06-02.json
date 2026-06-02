@@ -1,0 +1,70 @@
+{
+  "record_type": "phase0_curated_candidate_successor",
+  "schema_version": 1,
+  "date": "2026-06-02",
+  "predecessor_record": "tst/publication/readiness/phase0_curated_candidate_successor_v19_2026-06-02.json",
+  "predecessor_sha256": "3e2719bffdc6f675b263b9a17c9f984776cd70e29178ad12a85b94b720d5617d",
+  "status": "q011_hip_retry_repaired_clean_candidate_four_slice_policy_promoted_serial_pressure_pilots_in_progress",
+  "qualification_effect": "none_engineering_calibration_only",
+  "live_paired_control_plane_version": "6dc456e5858b2cbdbd7ef80cbc324b748e2cce5075023b49f7115eab4e84dfdd",
+  "candidate_freeze_source_commit": "672818de70dcff51543a2fa76c88aa5af1a59a65",
+  "frontier_launch_authorization": "exactly_four_registered_q011_pressure_v2_single_attempt_slices_serial_only",
+  "clean_candidate_freeze_receipt": {
+    "path": "tst/publication/readiness/phase0_clean_candidate_freeze_successor_v3_2026-06-02.json",
+    "sha256": "c77404334309734d89b86374dc0fb22d7014f95f46a8691b7e1a9716999494e4"
+  },
+  "policy_promotion": {
+    "status": "promoted_after_fresh_empty_queue_attestation",
+    "reviewed_policy_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/reviewed_q011_pressure_pilot_successor_v2_0d1cabe6.json",
+    "reviewed_policy_sha256": "647573e109852da0e343cd1c80033dbbe4ad4d2d672588cdea4e852340bad3d8",
+    "repo_policy_path": "tst/publication/readiness/storage_policy.json",
+    "repo_policy_sha256": "647573e109852da0e343cd1c80033dbbe4ad4d2d672588cdea4e852340bad3d8",
+    "orion_policy_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/storage_policy.json",
+    "orion_policy_sha256": "647573e109852da0e343cd1c80033dbbe4ad4d2d672588cdea4e852340bad3d8",
+    "project_home_policy_path": "/ccs/proj/ast207/proj-shared/PIC/policy/storage_policy.json",
+    "project_home_policy_sha256": "647573e109852da0e343cd1c80033dbbe4ad4d2d672588cdea4e852340bad3d8",
+    "orion_promotion_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/active_promotion.json",
+    "orion_promotion_sha256": "073da1d4fe7f2eb054da9f3ec2bf2860f2643c3f44ca88d6183f4592eb0681bf",
+    "project_home_promotion_path": "/ccs/proj/ast207/proj-shared/PIC/policy/active_promotion.json",
+    "project_home_promotion_sha256": "073da1d4fe7f2eb054da9f3ec2bf2860f2643c3f44ca88d6183f4592eb0681bf",
+    "science_submission_freeze": {
+      "status": "authorized",
+      "manifest_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/clean_candidates/0d1cabe6-a282-408b-953a-c2db8f0e1310/clean_candidate_manifest.json",
+      "manifest_sha256": "ef527ed467995bd60fda07b5a3b09b56ea871595ace12fd64a948e246720dbe3",
+      "build_profile_control_plane_version": "6dc456e5858b2cbdbd7ef80cbc324b748e2cce5075023b49f7115eab4e84dfdd"
+    },
+    "registered_science_authorization_ids": [
+      "q011-section54-pressure-ps-p0-1p00-v2",
+      "q011-section54-pressure-ps-p0-0p05-v2",
+      "q011-section54-pressure-ps-p0-0p10-v2",
+      "q011-section54-pressure-ps-p0-0p20-v2"
+    ],
+    "registered_science_slice_count": 4
+  },
+  "pre_policy_promotion_operator_attestation": {
+    "authorization_id": "q011-section54-pressure-four-slice-policy-v2",
+    "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/operator_attestations/20260602T050846Z-q011-section54-pressure-four-slice-policy-v2-pre_policy_promotion/attestation.json",
+    "sha256": "5d4488faaa9cd04ad35c16d312fc4193b6dc8e2a4d5c4680f2934e90a1a74638",
+    "queue_snapshot_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "ledger_record_count": 111,
+    "active_reservation_count": 0,
+    "pending_submission_marker": "absent",
+    "pending_manual_accounting_marker": "absent"
+  },
+  "serial_execution_boundary": [
+    "submit exactly one registered pressure slice at a time",
+    "wait for terminal scheduler state and reconcile through the installed control plane",
+    "verify empty same-account queue, absent pending markers and zero active reservations",
+    "run the snapshotted raw-case analyzer and retain its immutable descriptor sha256",
+    "bind every verified predecessor descriptor before materializing the next pressure slice"
+  ],
+  "external_review": {
+    "reviewer": "pending external review",
+    "disposition": "pending external review"
+  },
+  "remaining_phase0_actions": [
+    "complete and reconcile all four serial Q011 v2 pressure pilots",
+    "publish one descriptor-verified immutable four-case engineering calibration bundle",
+    "retain external review as pending until a named external reviewer records a disposition"
+  ]
+}
