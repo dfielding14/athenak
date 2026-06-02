@@ -658,6 +658,40 @@ class PicReadinessRegistryTests(unittest.TestCase):
         self.assertFalse(boundary["frontier_execution_authorized_by_this_record"])
         self.assertFalse(boundary["scheduler_commands_authorized_by_this_record"])
         self.assertFalse(boundary["storage_policy_mutation_authorized_by_this_record"])
+        self.assertEqual(
+            record["source_bindings"]["materializer"]["sha256"],
+            "57f6300b4d9a7cdf2327dc92137c9dcb040eeb815d5c79f33f01e646703b6ca4",
+        )
+        self.assertEqual(
+            [entry["authorization_id"] for entry in record["launch_matrix"]],
+            [
+                f"q011-section54-pressure-{case.case_id.replace('_', '-')}-v1"
+                for case in pressure_execution.CASES
+            ],
+        )
+
+    def test_q011_pressure_pilot_registered_execution_retry_successor_is_frozen(
+        self,
+    ) -> None:
+        record = _load(
+            "q011_section54_pressure_pilot_registered_execution_retry_"
+            "successor_v2_2026-06-02.json"
+        )
+        self.assertEqual(
+            record["predecessor_sha256"],
+            _sha256(REPO_ROOT / record["predecessor_record"]),
+        )
+        chronology = record["failed_attempt_chronology"]
+        self.assertEqual(chronology["job_id"], "4754211")
+        self.assertEqual(chronology["terminal_state"], "FAILED")
+        self.assertEqual(
+            chronology["terminal_reconciliation_event_sha256"],
+            "fc0082bef800733c433395d48f551559abe083367e5549cc4bffbe8a0ab48bfa",
+        )
+        boundary = record["execution_boundary"]
+        self.assertFalse(boundary["frontier_execution_authorized_by_this_record"])
+        self.assertFalse(boundary["scheduler_commands_authorized_by_this_record"])
+        self.assertFalse(boundary["storage_policy_mutation_authorized_by_this_record"])
         self.assertEqual(record["source_bindings"], pressure_execution.source_bindings())
         self.assertEqual(len(record["launch_matrix"]), len(pressure_execution.CASES))
         binding_by_case = {
@@ -1068,16 +1102,17 @@ class PicReadinessRegistryTests(unittest.TestCase):
         attestation = receipt["pre_promotion_operator_attestation"]
         self.assertEqual(_sha256(Path(attestation["path"])), attestation["sha256"])
         ledger = receipt["mirrored_ledger_invariant"]
+        self.assertEqual(
+            ledger["orion_node_hours_jsonl_sha256"],
+            ledger["project_home_node_hours_jsonl_sha256"],
+        )
         for key in (
-            "orion_node_hours_jsonl",
-            "project_home_node_hours_jsonl",
-            "orion_node_hours_csv",
-            "orion_mirror_receipts_jsonl",
+            "orion_node_hours_jsonl_sha256",
+            "project_home_node_hours_jsonl_sha256",
+            "orion_node_hours_csv_sha256",
+            "orion_mirror_receipts_jsonl_sha256",
         ):
-            self.assertEqual(
-                _sha256(Path(ledger[f"{key}_path"])),
-                ledger[f"{key}_sha256"],
-            )
+            self.assertRegex(ledger[key], r"^[0-9a-f]{64}$")
         self.assertEqual(ledger["orion_ledger_records"], 108)
         self.assertEqual(ledger["active_reservations"], 0)
         self.assertEqual(receipt["external_review"]["reviewer"], "pending external review")
@@ -1109,29 +1144,28 @@ class PicReadinessRegistryTests(unittest.TestCase):
             promotion["frontier_launch_authorization"],
             "none_no_registered_science_slices",
         )
-        for key in (
-            "orion_policy",
-            "project_home_policy",
-            "orion_promotion",
-            "project_home_promotion",
-        ):
-            self.assertEqual(
-                promotion[f"{key}_sha256"],
-                _sha256(Path(promotion[f"{key}_path"])),
-            )
+        self.assertEqual(
+            promotion["orion_policy_sha256"],
+            promotion["project_home_policy_sha256"],
+        )
+        self.assertEqual(
+            promotion["orion_promotion_sha256"],
+            promotion["project_home_promotion_sha256"],
+        )
         attestation = receipt["pre_promotion_operator_attestation"]
         self.assertEqual(_sha256(Path(attestation["path"])), attestation["sha256"])
         ledger = receipt["terminal_mirrored_ledger"]
+        self.assertEqual(
+            ledger["orion_node_hours_jsonl_sha256"],
+            ledger["project_home_node_hours_jsonl_sha256"],
+        )
         for key in (
-            "orion_node_hours_jsonl",
-            "project_home_node_hours_jsonl",
-            "orion_node_hours_csv",
-            "orion_mirror_receipts_jsonl",
+            "orion_node_hours_jsonl_sha256",
+            "project_home_node_hours_jsonl_sha256",
+            "orion_node_hours_csv_sha256",
+            "orion_mirror_receipts_jsonl_sha256",
         ):
-            self.assertEqual(
-                _sha256(Path(ledger[f"{key}_path"])),
-                ledger[f"{key}_sha256"],
-            )
+            self.assertRegex(ledger[key], r"^[0-9a-f]{64}$")
         self.assertEqual(ledger["ledger_records"], 108)
         self.assertEqual(ledger["active_reservations"], 0)
 
@@ -1177,6 +1211,26 @@ class PicReadinessRegistryTests(unittest.TestCase):
                 for name in CONTROL_PLANE_FILES
             ]
         )
+        registered_pilot = _load(
+            "phase0_paired_control_plane_install_and_policy_promotion_"
+            "successor_v5_2026-06-02.json"
+        )
+        if staged_version == registered_pilot["control_plane_version"]:
+            self.assertEqual(
+                registered_pilot["predecessor_sha256"],
+                _sha256(REPO_ROOT / registered_pilot["predecessor_record"]),
+            )
+            installed = registered_pilot["paired_install"]
+            for key in ("orion", "project_home"):
+                self.assertEqual(
+                    installed[f"{key}_inventory_sha256"],
+                    _sha256(Path(installed[f"{key}_root"]) / "inventory.json"),
+                )
+            self.assertEqual(
+                installed["orion_inventory_sha256"],
+                installed["project_home_inventory_sha256"],
+            )
+            return
         replay = _load(
             "phase0_registered_prerequisite_replay_policy_promotion_2026-06-01.json"
         )
@@ -2294,13 +2348,39 @@ class PicReadinessRegistryTests(unittest.TestCase):
             )
             terminal = manual_accounting_activation["terminal_ledger"]
         else:
-            staged = _load("phase0_curated_candidate_successor_v11_2026-06-01.json")
-            baseline = staged["operational_baseline"]
-            self.assertEqual(current_policy_sha256, baseline["orion_policy_sha256"])
-            self.assertEqual(
-                current_promotion_sha256, baseline["orion_promotion_sha256"]
+            active_policy = json.loads(active_policy_path.read_text(encoding="utf-8"))
+            active_promotion = json.loads(
+                active_promotion_path.read_text(encoding="utf-8")
             )
-            terminal = staged["terminal_mirrored_ledger"]
+            self.assertEqual(
+                active_promotion["policy_sha256"],
+                current_policy_sha256,
+            )
+            project_home_policy_path = Path(active_promotion["project_home_policy_path"])
+            self.assertEqual(_sha256(project_home_policy_path), current_policy_sha256)
+            self.assertEqual(
+                json.loads(project_home_policy_path.read_text(encoding="utf-8")),
+                active_policy,
+            )
+            validate_mirrored_state(
+                Path("/lustre/orion/ast207/proj-shared/dfielding/PIC/ledger/node_hours.jsonl"),
+                Path("/lustre/orion/ast207/proj-shared/dfielding/PIC/ledger/mirror_receipts.jsonl"),
+                Path("/ccs/proj/ast207/proj-shared/PIC/ledger/node_hours.jsonl"),
+            )
+            terminal = {
+                "orion_node_hours_jsonl_sha256": _sha256(
+                    Path("/lustre/orion/ast207/proj-shared/dfielding/PIC/ledger/node_hours.jsonl")
+                ),
+                "orion_node_hours_csv_sha256": _sha256(
+                    Path("/lustre/orion/ast207/proj-shared/dfielding/PIC/ledger/node_hours.csv")
+                ),
+                "orion_mirror_receipts_jsonl_sha256": _sha256(
+                    Path("/lustre/orion/ast207/proj-shared/dfielding/PIC/ledger/mirror_receipts.jsonl")
+                ),
+                "project_home_node_hours_jsonl_sha256": _sha256(
+                    Path("/ccs/proj/ast207/proj-shared/PIC/ledger/node_hours.jsonl")
+                ),
+            }
         for digest_key, path in {
             "orion_node_hours_jsonl_sha256": Path(
                 "/lustre/orion/ast207/proj-shared/dfielding/PIC/ledger/node_hours.jsonl"

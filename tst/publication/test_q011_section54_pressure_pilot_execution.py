@@ -239,11 +239,11 @@ class PressurePilotExecutionTest(unittest.TestCase):
             source_bindings["materializer"],
             {
                 "path": "tst/publication/q011_section54_pressure_pilot_execution.py",
-                "sha256": "57f6300b4d9a7cdf2327dc92137c9dcb040eeb815d5c79f33f01e646703b6ca4",
+                "sha256": "da82f9d1e213f7725336312e0db2cabc7b63e747e46f4f9ea13d46d9379a0624",
             },
         )
         self.assertNotIn(
-            "q011_section54_pressure_pilot_registered_execution_preregistration_2026-06-02.json",
+            "q011_section54_pressure_pilot_registered_execution_retry_successor_v2_2026-06-02.json",
             json.dumps(source_bindings, sort_keys=True),
         )
         self.assertNotIn(

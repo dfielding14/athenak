@@ -26,7 +26,7 @@
     },
     {
       "path": "tst/publication/analyze_q011_injection_distribution_runtime_local.py",
-      "sha256": "719c9598dd07ac2e9213aa0c72e56fc4618abc5a1e698ca3b79c3f8efa52a4f1"
+      "sha256": "baf7a5012739c521b3ecb108e12fe05960d68d948d05822887185066074ab24c"
     },
     {
       "path": "tst/publication/analyze_q011_section54_campaign.py",

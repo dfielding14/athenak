@@ -715,6 +715,11 @@ ledger counts without changing the historical incident record.
 
 The four Q011 Section 5.4 pressure-sensitivity pilots are one engineering
 calibration tranche, but they are four separate registered-science slices.
+The v1 `ps_p0_1p00` slice failed closed as scheduler job `4754211` when the
+registered HIP executable attempted a strided host-to-device particle subview
+copy. Its terminal ledger event is retained as immutable chronology. Use only
+the v2 retry authorizations below, and only after rebuilding and freezing the
+packed particle-transfer repair from a clean commit.
 Immediately after the paired successor-controller install, materialize and
 promote one complete launch-prohibited baseline successor with an empty slice
 allowlist. After the clean-candidate freeze, materialize and review one
@@ -745,7 +750,7 @@ successor:
 
 STAGING="$(
   "$PYTHON" "$ATTESTATION_HELPER" capture \
-    --authorization-id q011-section54-pressure-four-slice-policy-v1 \
+    --authorization-id q011-section54-pressure-four-slice-policy-v2 \
     --control-plane-version "$VERSION" \
     --phase pre_policy_promotion
 )"
@@ -758,7 +763,7 @@ PRE_POLICY_PROMOTION_ATTESTATION="${PRE_POLICY_PROMOTION_ATTESTATION_ROOT}/attes
 "${CONTROL_PLANE[@]}" promote_active_policy.py \
   --reviewed-policy "${PIC_ROOT}/policy/reviewed_q011_pressure_pilot_successor.json" \
   --pre-policy-promotion-attestation "$PRE_POLICY_PROMOTION_ATTESTATION" \
-  --pre-policy-promotion-authorization-id q011-section54-pressure-four-slice-policy-v1
+  --pre-policy-promotion-authorization-id q011-section54-pressure-four-slice-policy-v2
 ```
 
 Launch the cases strictly in their preregistered order. For one selected case,

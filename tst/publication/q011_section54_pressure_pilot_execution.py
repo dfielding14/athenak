@@ -34,7 +34,7 @@ PILOT_PREREGISTRATION = (
 )
 EXECUTION_PREREGISTRATION = (
     READINESS_ROOT
-    / "q011_section54_pressure_pilot_registered_execution_preregistration_2026-06-02.json"
+    / "q011_section54_pressure_pilot_registered_execution_retry_successor_v2_2026-06-02.json"
 )
 JOB_SCRIPT = REPO_ROOT / "tst/publication/frontier_q011_section54_pressure_pilot_job.sh"
 INPUT_DECK = (
@@ -69,7 +69,7 @@ QUEUE_SNAPSHOT_FORMAT = "%i|%P|%q|%T|%j|%k"
 _SHA256 = re.compile(r"[0-9a-f]{64}")
 _GIT_COMMIT = re.compile(r"[0-9a-f]{40}")
 _REGISTERED_EXECUTION_CONTRACT_SHA256 = (
-    "43edb99c6afc68055535b088800423a9df29232b0ba2a9287618dbec189d8fe9"
+    "5f5a1c7680879deb077e37b6974bbdf8efca588039a697e0870cb96ac5b79c3a"
 )
 _TIMESTAMP = re.compile(
     r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}"
@@ -121,7 +121,7 @@ class PressureCase:
 
     @property
     def authorization_id(self) -> str:
-        return f"q011-section54-pressure-{self.case_id.replace('_', '-')}-v1"
+        return f"q011-section54-pressure-{self.case_id.replace('_', '-')}-v2"
 
     @property
     def launch_contract_path(self) -> Path:

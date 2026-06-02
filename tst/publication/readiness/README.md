@@ -577,6 +577,16 @@ qualify any scientific claim by itself.
   oracle directly to `PushPaperCosmicRaysVL2`, rejects generic-Boris decoys and
   records passing bounded serial-host RK-stage, timing, startup-cohort restart
   and active-deck startup replay. Frontier pilots and qualification remain open.
+- `q011_parallel_shock_section54_paper_preparation_successor_v10_2026-06-02.json`:
+  repair successor after the first registered Q011 Frontier slice failed closed
+  on a HIP-inaccessible strided host-to-device particle subview copy. It binds
+  the packed particle-transfer repair and records passing bounded serial-host
+  append, recenter and startup-cohort compaction regressions. A rebuilt clean
+  HIP/MPI freeze and registered Frontier retry remain required.
+- `q011_injection_distribution_runtime_local_successor_v8_2026-06-02.json`:
+  retained immutable particle-payload compatibility replay rebound to the
+  packed particle-transfer repair. It does not claim fresh repaired-executable
+  runtime evidence or Frontier qualification.
 - `q011_section54_pressure_pilot_preregistration_2026-06-01.json`: source-local
   preregistration for the four engineering-only upstream-pressure sensitivity
   cases. It freezes the uniform short-run matrix before runtime inspection but
@@ -593,6 +603,14 @@ qualify any scientific claim by itself.
   requires terminal reconciliation, quiescence and immutable raw-case
   verification before materializing the next case, followed by one
   descriptor-verified four-case aggregate publication.
+- `q011_section54_pressure_pilot_registered_execution_retry_successor_v2_2026-06-02.json`:
+  fail-closed retry successor after the first v1 `ps_p0_1p00` slice
+  (`job_id=4754211`) terminated in the registered executable with the
+  HIP-inaccessible strided particle-copy error. The terminal ledger event
+  `fc0082bef800733c433395d48f551559abe083367e5549cc4bffbe8a0ab48bfa`
+  is preserved as immutable chronology. The successor authorizes exactly one
+  rebuilt-clean v2 attempt for each of the four pressure cases and requires
+  the same serial reconciliation boundary between cases.
 - `q011_parallel_shock_storage_estimator_successor_2026-06-01.json`:
   analytical storage-planning successor after the publication deck gained a
   signed particle-current binary output and the PVTK block moved. The estimator

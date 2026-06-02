@@ -70,7 +70,7 @@ release milestones is complete.
 | True delta-f | State, deposition, restart, and bounded source-local mechanics exist | Long-horizon CRSI/CRPAI paper reproduction remains open |
 | Expanding box | Bounded host CPAW, gyro-history, comoving-flux, div(B), and restart checks exist | Full paper Section 5.7 and Frontier qualification remain open |
 | AMR lifetime | Serial refine/derefine, restart, boundary, ASan, and UBSan successors pass | Multi-rank MPI migration, HIP lifetime, and scientific AMR equivalence remain open |
-| Shock generator | Paper-surface injection and startup-cohort removal are implemented; a bounded actual-particle audit passes | Physical calibration and qualifying shock campaigns remain open |
+| Shock generator | Paper-surface injection and startup-cohort removal are implemented; a bounded actual-particle audit passes; the first registered HIP pressure slice exposed a strided host-to-device copy fault and the packed-transfer repair passes bounded serial-host regressions | Rebuilt HIP/MPI v2 retry, physical calibration and qualifying shock campaigns remain open |
 | Particle provenance | Schema-7 provenance and independently reconstructed weighted spectra pass bounded local tests, including a two-rank Orion-local replay | Frontier HIP parity and shock-campaign binding remain open |
 | Frontier control plane | Serialized ledger, root restriction, registered F0/F1 slices, and bounded F2 engineering evidence exist | Remaining registered science and stress slices remain open |
 
@@ -81,9 +81,16 @@ The active prepared paper deck is
 The sibling deck without the `_vl2_tsc` suffix is retained as archival
 pre-successor chronology only.
 The source-local preparation record is
-[`q011_parallel_shock_section54_paper_preparation_successor_v9_2026-06-01.json`](readiness/q011_parallel_shock_section54_paper_preparation_successor_v9_2026-06-01.json).
+[`q011_parallel_shock_section54_paper_preparation_successor_v10_2026-06-02.json`](readiness/q011_parallel_shock_section54_paper_preparation_successor_v10_2026-06-02.json).
 The bounded injection audit is
-[`q011_injection_distribution_runtime_local_successor_v7_2026-06-01.json`](readiness/q011_injection_distribution_runtime_local_successor_v7_2026-06-01.json).
+[`q011_injection_distribution_runtime_local_successor_v8_2026-06-02.json`](readiness/q011_injection_distribution_runtime_local_successor_v8_2026-06-02.json).
+
+The first registered Frontier pressure slice failed closed before producing
+physics evidence: the HIP executable attempted a strided host-to-device
+particle subview copy during injection. The packed particle-transfer repair
+passes bounded serial-host append, recenter and startup-cohort compaction
+regressions. A rebuilt clean HIP/MPI candidate and registered v2 pressure-pilot
+retry are required before Section 5.4 calibration can advance.
 
 The prepared contract includes:
 

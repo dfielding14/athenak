@@ -30,7 +30,7 @@ DECK = REPO_ROOT / "inputs/tests/pic_q011_injection_distribution_runtime_local.a
 SOURCE = REPO_ROOT / "src/pgen/tests/pic_parallel_shock.cpp"
 EXPECTED_DECK_SHA256 = "6e84e34a91e48b4933f26ee1c3354e95139ff89ddf75ec1b358a7a7d3c1d1c17"
 EXPECTED_SOURCE_SHA256 = (
-    "1104c4d01647e6094f1322db0fd172f61d05c76f76edccb1f58d1cbb04cd0481"
+    "c0a01e4960f4ebb1a96bedc61fd918b4f7fc76addb59e0f9db3f9ab35eb8c9f9"
 )
 ORION_BULK_ROOT = Path("/lustre/orion/ast207/proj-shared/dfielding/PIC")
 ARTIFACT_ROLE = "bounded_serial_host_runtime_diagnostic_only"

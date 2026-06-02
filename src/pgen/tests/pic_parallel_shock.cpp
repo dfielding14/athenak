@@ -535,6 +535,37 @@ void FatalParticleMigrationError(const char *message) {
   restart_utils::AbortOnFatalError();
 }
 
+void CopyPackedParticleDataToDevice(particles::Particles *ppart,
+                                    const HostArray2D<int> &h_pi_source,
+                                    const HostArray2D<Real> &h_pr_source, const int npart,
+                                    const int destination_offset) {
+  if (npart <= 0) return;
+
+  const int ni = ppart->nidata;
+  const int nr = ppart->nrdata;
+  HostArray2D<int> h_pi_packed("ps_pi_packed", ni, npart);
+  HostArray2D<Real> h_pr_packed("ps_pr_packed", nr, npart);
+  for (int p = 0; p < npart; ++p) {
+    for (int q = 0; q < ni; ++q) h_pi_packed(q, p) = h_pi_source(q, p);
+    for (int q = 0; q < nr; ++q) h_pr_packed(q, p) = h_pr_source(q, p);
+  }
+
+  auto d_pi_packed = Kokkos::create_mirror_view_and_copy(DevExeSpace(), h_pi_packed);
+  auto d_pr_packed = Kokkos::create_mirror_view_and_copy(DevExeSpace(), h_pr_packed);
+  auto prtcl_idata = ppart->prtcl_idata;
+  auto prtcl_rdata = ppart->prtcl_rdata;
+  par_for("ps_copy_packed_particles", DevExeSpace(), 0, npart - 1,
+  KOKKOS_LAMBDA(const int p) {
+    for (int q = 0; q < ni; ++q) {
+      prtcl_idata(q, destination_offset + p) = d_pi_packed(q, p);
+    }
+    for (int q = 0; q < nr; ++q) {
+      prtcl_rdata(q, destination_offset + p) = d_pr_packed(q, p);
+    }
+  });
+  Kokkos::fence();
+}
+
 Real ParallelShockLedgerTolerance(const Real lhs, const Real rhs,
                                   const Real accumulated_terms = 1.0) {
   const Real scale = std::max({std::abs(lhs), std::abs(rhs),
@@ -835,18 +866,7 @@ void ApplyRecenteringShiftToParticles(Mesh *pm, const Real xshift) {
 
   Kokkos::resize(ppart->prtcl_rdata, nr, np_new);
   Kokkos::resize(ppart->prtcl_idata, ni, np_new);
-  if (np_new > 0) {
-    auto r_sub = Kokkos::subview(ppart->prtcl_rdata, Kokkos::ALL,
-                                 std::make_pair(0, np_new));
-    auto i_sub = Kokkos::subview(ppart->prtcl_idata, Kokkos::ALL,
-                                 std::make_pair(0, np_new));
-    auto r_src = Kokkos::subview(h_pr_new, Kokkos::ALL,
-                                 std::make_pair(0, np_new));
-    auto i_src = Kokkos::subview(h_pi_new, Kokkos::ALL,
-                                 std::make_pair(0, np_new));
-    Kokkos::deep_copy(r_sub, r_src);
-    Kokkos::deep_copy(i_sub, i_src);
-  }
+  CopyPackedParticleDataToDevice(ppart, h_pi_new, h_pr_new, np_new, 0);
   ppart->nprtcl_thispack = np_new;
 }
 
@@ -894,18 +914,7 @@ void RemoveExcludedEarlyInjectedParticles(Mesh *pm) {
 
   Kokkos::resize(ppart->prtcl_rdata, nr, np_new);
   Kokkos::resize(ppart->prtcl_idata, ni, np_new);
-  if (np_new > 0) {
-    auto r_sub = Kokkos::subview(ppart->prtcl_rdata, Kokkos::ALL,
-                                 std::make_pair(0, np_new));
-    auto i_sub = Kokkos::subview(ppart->prtcl_idata, Kokkos::ALL,
-                                 std::make_pair(0, np_new));
-    auto r_src = Kokkos::subview(h_pr_new, Kokkos::ALL,
-                                 std::make_pair(0, np_new));
-    auto i_src = Kokkos::subview(h_pi_new, Kokkos::ALL,
-                                 std::make_pair(0, np_new));
-    Kokkos::deep_copy(r_sub, r_src);
-    Kokkos::deep_copy(i_sub, i_src);
-  }
+  CopyPackedParticleDataToDevice(ppart, h_pi_new, h_pr_new, np_new, 0);
   ppart->nprtcl_thispack = np_new;
 #if MPI_PARALLEL_ENABLED
   Real removed_global[6] = {};
@@ -1789,12 +1798,7 @@ void PrepareParallelShockInjectionTransaction(Mesh *pm) {
 
   Kokkos::resize(ppart->prtcl_idata, ppart->nidata, new_npart);
   Kokkos::resize(ppart->prtcl_rdata, ppart->nrdata, new_npart);
-  auto idata_new = Kokkos::subview(ppart->prtcl_idata, Kokkos::ALL,
-                                   std::make_pair(old_npart, new_npart));
-  auto rdata_new = Kokkos::subview(ppart->prtcl_rdata, Kokkos::ALL,
-                                   std::make_pair(old_npart, new_npart));
-  Kokkos::deep_copy(idata_new, h_pi_new);
-  Kokkos::deep_copy(rdata_new, h_pr_new);
+  CopyPackedParticleDataToDevice(ppart, h_pi_new, h_pr_new, ninject, old_npart);
   ppart->nprtcl_thispack = new_npart;
   pm->CountParticles();
 }
