@@ -17,19 +17,18 @@ export PYTHONPATH="$PWD:$PWD/tst/publication/frontier_control_plane"
 
 git diff --check
 
-python3 -B - <<'PY'
+mapfile -t changed_python < <(
+  {
+    git diff --name-only -- '*.py'
+    git ls-files --others --exclude-standard -- '*.py'
+  } | sort -u
+)
+
+python3 -B - "${changed_python[@]}" <<'PY'
+import sys
 from pathlib import Path
 
-for relative in (
-    "tst/publication/analyze_q011_section54_campaign.py",
-    "tst/publication/analyze_q011_section54_numerical_qualification.py",
-    "tst/publication/publish_q011_section54_campaign_attempt.py",
-    "tst/publication/q011_section54_qualifying_campaign_execution.py",
-    "tst/publication/test_analyze_q011_section54_campaign.py",
-    "tst/publication/test_analyze_q011_section54_numerical_qualification.py",
-    "tst/publication/test_publish_q011_section54_campaign_attempt.py",
-    "tst/publication/test_q011_section54_qualifying_campaign_execution.py",
-):
+for relative in sys.argv[1:]:
     path = Path(relative)
     compile(path.read_bytes(), str(path), "exec")
 PY
@@ -41,6 +40,7 @@ python3 -B -m unittest \
   tst.publication.test_q011_section54_spatial \
   tst.publication.test_q011_section54_restart \
   tst.publication.test_q011_section54_artifacts \
+  tst.publication.test_q011_section54_attempt_manifest_materializer \
   tst.publication.test_q011_section54_qualifying_campaign_preregistration \
   tst.publication.test_q011_section54_pressure_selection \
   tst.publication.test_q011_section54_qualifying_campaign_execution \
