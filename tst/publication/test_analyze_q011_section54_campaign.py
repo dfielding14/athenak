@@ -148,8 +148,23 @@ def _restart_marker(payload: bytes) -> bytes:
     ).encode("ascii")
 
 
-def _stdout_telemetry(*, omit: frozenset[str] = frozenset()) -> bytes:
+def _runtime_identity_line(**replacements: str) -> str:
+    values = dict(campaign._EXPECTED_SECTION54_RUNTIME_PROJECTION)
+    values.update(replacements)
+    return "PIC runtime model: " + " ".join(
+        f"{name}={value}" for name, value in values.items()
+    )
+
+
+def _stdout_telemetry(
+    *,
+    omit: frozenset[str] = frozenset(),
+    include_runtime_identity: bool = True,
+    runtime_replacements: dict[str, str] | None = None,
+) -> bytes:
     lines = ["AthenaK retained stdout fixture"]
+    if include_runtime_identity:
+        lines.append(_runtime_identity_line(**(runtime_replacements or {})))
     for name in sorted(campaign._Q017_REQUIRED_NAMES - omit):
         value = 2.0 if name == "schema_version" else 1.0
         lines.append(f"q017.telemetry.{name}={value}")
@@ -161,6 +176,41 @@ def _write_file(root: Path, relative: str, payload: bytes) -> dict[str, str]:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(payload)
     return {"path": relative, "sha256": _sha256(payload)}
+
+
+def _json_bytes(value: object) -> bytes:
+    return (json.dumps(value, indent=2, sort_keys=True) + "\n").encode("utf-8")
+
+
+def _binding(path: str, sha256: str) -> dict[str, str]:
+    return {"path": path, "sha256": sha256}
+
+
+def _model_overrides(variant: str) -> list[str]:
+    return list(campaign._EXPECTED_MODEL_LAUNCH_OVERRIDES[variant])
+
+
+def _attempt_id(variant: str, seed: int) -> str:
+    return campaign._expected_attempt_id({"variant": variant, "seed": seed})
+
+
+def _contract_argv(attempt_id: str, variant: str, seed: int, pressure: float) -> list[str]:
+    campaign_root = (
+        campaign.ORION_BULK_ROOT / "campaigns" / f"q011-section54-{'9' * 64}"
+    )
+    attempt_root = f"{campaign_root}/baseline/{attempt_id}"
+    return [
+        "-i",
+        "bindings/pic_parallel_shock_section54_paper_vl2_tsc.athinput",
+        "-d",
+        f"{attempt_root}/raw",
+        f"job/basename={attempt_id}",
+        f"problem/ps_p0={pressure!r}",
+        f"particles/pic_random_seed={seed}",
+        f"problem/ps_inject_seed={seed}",
+        f"problem/ps_seed_noise_seed={seed}",
+        *_model_overrides(variant),
+    ]
 
 
 def _product(
@@ -290,6 +340,15 @@ def _append_restart_publication(
 
 
 def _manifest(root: Path) -> dict[str, Any]:
+    variant = "three_level_amr_root_dx12_finest_dx3"
+    seed = 23050101
+    attempt_id = _attempt_id(variant, seed)
+    selected_pressure = 0.1
+    plan_id = "9" * 64
+    planned_campaign_root = str(
+        campaign.ORION_BULK_ROOT / "campaigns" / f"q011-section54-{plan_id}"
+    )
+    planned_attempt_root = f"{planned_campaign_root}/baseline/{attempt_id}"
     executable = _write_file(root, "bindings/athena", _elf_executable())
     (root / executable["path"]).chmod(0o755)
     deck = _write_file(root, "bindings/section54.athinput", b"<job>\nbasename=q011\n")
@@ -313,6 +372,189 @@ def _manifest(root: Path) -> dict[str, Any]:
         root,
         "bindings/q011_section54_preregistration.json",
         campaign.PREREGISTRATION_PATH.read_bytes(),
+    )
+    selected_pressure_payload = _json_bytes(
+        {
+            "schema_version": 1,
+            "record_type": "q011_section54_pressure_selection_receipt",
+            "selection_method": "human_review_only",
+            "published_pressure_pilot_receipt": {
+                "path": "/fixture/published_q011_pressure_pilot_receipt.json",
+                "sha256": "a" * 64,
+            },
+            "pilot_bundle_manifest_sha256": "b" * 64,
+            "aggregate_pilot_analysis_sha256": "c" * 64,
+            "case_descriptors": [
+                {
+                    "case_id": case_id,
+                    "problem_ps_p0": pressure,
+                    "descriptor_sha256": f"{index:064x}",
+                }
+                for index, (case_id, pressure) in enumerate(
+                    campaign.pressure_selection.REGISTERED_CASES, start=1
+                )
+            ],
+            "selected_case": {
+                "case_id": "ps_p0_0p10",
+                "problem_ps_p0": selected_pressure,
+            },
+            "reviewer_identity": "fixture-reviewer",
+            "reviewed_utc": "2026-06-01T12:00:00Z",
+            "rationale": "Focused admission fixture selected the registered pressure.",
+        }
+    )
+    selected_pressure_receipt = _write_file(
+        root,
+        "bindings/q011_section54_selected_pressure_receipt.json",
+        selected_pressure_payload,
+    )
+    helper_closure_payload = _json_bytes(
+        {
+            "record_type": "q011_section54_helper_source_closure",
+            "schema_version": 1,
+            "plan_id": plan_id,
+            "sources": [
+                {
+                    "path": path,
+                    "sha256": _sha256((campaign.REPO_ROOT / path).read_bytes()),
+                }
+                for path in campaign._EXPECTED_HELPER_SOURCE_PATHS
+            ],
+        }
+    )
+    analyzer_helper_source_closure_manifest = _write_file(
+        root,
+        "bindings/q011_section54_analyzer_helper_source_closure_manifest.json",
+        helper_closure_payload,
+    )
+    environment_profile = _binding("bindings/environment_profile.json", "a" * 64)
+    paper_deck = _binding(
+        "bindings/pic_parallel_shock_section54_paper_vl2_tsc.athinput",
+        deck["sha256"],
+    )
+    plan_candidate = {
+        "clean_candidate_manifest": {
+            "path": _frozen_candidate_path("clean_candidate_manifest.json"),
+            "sha256": candidate_manifest["sha256"],
+        },
+        "freeze_id": _FREEZE_ID,
+        "git_commit": "1" * 40,
+        "git_tree": "5" * 40,
+        "source_archive_sha256": "3" * 64,
+        "source_commit_sha256": "4" * 64,
+        "source_bundle_sha256": "2" * 64,
+        "prepared_artifact_inventory_sha256": "c" * 64,
+        "build_profile": {
+            "path": _frozen_candidate_path("build_profile.json"),
+            "sha256": "6" * 64,
+        },
+        "build_profile_receipt": {
+            "path": _frozen_candidate_path("profile_receipt.json"),
+            "sha256": "7" * 64,
+        },
+        "build_invocations_sha256": "8" * 64,
+        "executable": {
+            "path": _frozen_candidate_path("athena"),
+            "sha256": executable["sha256"],
+        },
+        "environment_profile": {
+            "path": "/fixture/environment_profile.json",
+            "sha256": environment_profile["sha256"],
+        },
+    }
+    campaign_plan_payload = _json_bytes(
+        {
+            "record_type": "q011_section54_qualifying_campaign_execution_plan",
+            "schema_version": 1,
+            "plan_id": plan_id,
+            "artifact_role": (
+                "q011_section54_source_local_immutable_qualifying_campaign_plan"
+            ),
+            "qualification_effect": (
+                "plan_only_no_execution_authorization_no_claim_closure"
+            ),
+            "status": "source_local_immutable_review_plan_only",
+            "authorized_orion_root": str(campaign.ORION_BULK_ROOT),
+            "authorized_orion_campaign_root": planned_campaign_root,
+            "selected_pressure": {
+                "selection_method": "human_review_only",
+                "selected_case": {
+                    "case_id": "ps_p0_0p10",
+                    "problem_ps_p0": selected_pressure,
+                },
+                "receipt": selected_pressure_receipt,
+            },
+            "candidate_binding": plan_candidate,
+            "source_bindings": {
+                "pressure_selection_receipt": selected_pressure_receipt,
+                "clean_candidate_manifest": candidate_manifest,
+                "environment_profile": environment_profile,
+                "qualifying_preregistration": preregistration,
+                "restart_preregistration": _binding(
+                    "bindings/q011_section54_restart_preregistration.json", "d" * 64
+                ),
+                "paper_deck": paper_deck,
+            },
+            "helper_source_closure": analyzer_helper_source_closure_manifest,
+            "campaign_matrix": copy.deepcopy(
+                campaign._EXPECTED_POLICY_PROJECTION["campaign_matrix"]
+            ),
+            "baseline_attempt_count": 24,
+            "baseline_attempt_descriptors": [
+                _binding(f"attempts/baseline/attempt-{index:03d}.json", f"{index:064x}")
+                for index in range(1, 25)
+            ],
+            "restart_continuation_carrier": _binding(
+                "attempts/restart/carrier.json", "d" * 64
+            ),
+            "independent_raw_artifact_recompute_plan": _binding(
+                "independent_recompute_plan.json", "e" * 64
+            ),
+            "nonauthorizing_policy_fragment": _binding(
+                "nonauthorizing_policy_fragment.json", "f" * 64
+            ),
+            "execution_boundary": {
+                "mutates_live_policy": False,
+                "scheduler_calls": False,
+                "submits_jobs": False,
+                "infers_pressure_selection": False,
+                "launch_authorized": False,
+                "frontier_execution_authorized": False,
+                "claim_closure_authorized": False,
+            },
+            "preregistration_execution_boundary": json.loads(
+                campaign.PREREGISTRATION_PATH.read_text(encoding="utf-8")
+            )["qualifying_execution_bindings"],
+        }
+    )
+    campaign_plan = _write_file(
+        root, "bindings/q011_section54_campaign_plan.json", campaign_plan_payload
+    )
+    attempt_contract_payload = _json_bytes(
+        {
+            "record_type": "q011_section54_launch_prohibited_handoff_contract",
+            "schema_version": 1,
+            "contract_role": "source_local_review_handoff_only",
+            "launch_authorized": False,
+            "scheduler_submission_authorized": False,
+            "live_policy_mutation_authorized": False,
+            "attempt_id": attempt_id,
+            "variant": variant,
+            "qualifying_seed": seed,
+            "selected_problem_ps_p0": selected_pressure,
+            "executable": plan_candidate["executable"],
+            "environment_profile": plan_candidate["environment_profile"],
+            "paper_deck": paper_deck,
+            "authorized_orion_attempt_root": planned_attempt_root,
+            "argv": _contract_argv(attempt_id, variant, seed, selected_pressure),
+            "required_separate_boundary": (
+                "review_and_promote_a_registered_frontier_submission_policy_then_use_"
+                "the_installed_control_plane_wrapper"
+            ),
+        }
+    )
+    attempt_contract = _write_file(
+        root, "bindings/q011_section54_attempt_contract.json", attempt_contract_payload
     )
     products = []
     for cycle, time in enumerate(_TIMES):
@@ -345,10 +587,10 @@ def _manifest(root: Path) -> dict[str, Any]:
         "qualification_scope": campaign.QUALIFICATION_SCOPE,
         "authorized_orion_campaign_root": str(root),
         "run_identity": {
-            "variant": "three_level_amr_root_dx12_finest_dx3",
-            "seed": 23050101,
+            "variant": variant,
+            "seed": seed,
             "physical_mode": "paper_mhd_pic_vl2_tsc",
-            "attempt_id": "q011-amr-seed-23050101-attempt-001",
+            "attempt_id": attempt_id,
         },
         "candidate_binding": {
             "git_commit": "1" * 40,
@@ -360,6 +602,26 @@ def _manifest(root: Path) -> dict[str, Any]:
             "deck": deck,
             "analyzer": analyzer,
             "preregistration": preregistration,
+            "campaign_plan": campaign_plan,
+            "attempt_contract": attempt_contract,
+            "selected_pressure_receipt": selected_pressure_receipt,
+            "analyzer_helper_source_closure_manifest": (
+                analyzer_helper_source_closure_manifest
+            ),
+        },
+        "attempt_identity": {
+            "campaign_plan_sha256": campaign_plan["sha256"],
+            "attempt_contract_sha256": attempt_contract["sha256"],
+            "selected_pressure_receipt_sha256": selected_pressure_receipt["sha256"],
+            "model_launch_overrides": _model_overrides(variant),
+            "seed_overrides": {
+                "particles/pic_random_seed": 23050101,
+                "problem/ps_inject_seed": 23050101,
+                "problem/ps_seed_noise_seed": 23050101,
+            },
+            "analyzer_helper_source_closure_manifest_sha256": (
+                analyzer_helper_source_closure_manifest["sha256"]
+            ),
         },
         "products": products,
     }
@@ -398,6 +660,52 @@ def _rewrite_bound_artifact(
     binding = manifest["artifact_bindings"][name]
     (root / binding["path"]).write_bytes(payload)
     binding["sha256"] = _sha256(payload)
+
+
+def _rewrite_attempt_json_artifact(
+    root: Path,
+    manifest: dict[str, Any],
+    name: str,
+    mutate: Callable[[dict[str, Any]], None],
+) -> None:
+    binding = manifest["artifact_bindings"][name]
+    value = json.loads((root / binding["path"]).read_text(encoding="utf-8"))
+    mutate(value)
+    _rewrite_bound_artifact(root, manifest, name, _json_bytes(value))
+    digest_name = campaign._ATTEMPT_BINDING_SHA256_FIELDS[name]
+    manifest["attempt_identity"][digest_name] = manifest["artifact_bindings"][name][
+        "sha256"
+    ]
+
+
+def _retarget_attempt(
+    root: Path, manifest: dict[str, Any], variant: str, seed: int = 23050101
+) -> None:
+    attempt_id = _attempt_id(variant, seed)
+    manifest["run_identity"].update(
+        {"variant": variant, "seed": seed, "attempt_id": attempt_id}
+    )
+    manifest["attempt_identity"]["model_launch_overrides"] = _model_overrides(variant)
+    manifest["attempt_identity"]["seed_overrides"] = {
+        name: seed for name in campaign._SEED_OVERRIDE_NAMES
+    }
+
+    def mutate_contract(contract: dict[str, Any]) -> None:
+        pressure = contract["selected_problem_ps_p0"]
+        contract.update(
+            {
+                "attempt_id": attempt_id,
+                "variant": variant,
+                "qualifying_seed": seed,
+                "authorized_orion_attempt_root": (
+                    f"{campaign.ORION_BULK_ROOT}/campaigns/"
+                    f"q011-section54-{'9' * 64}/baseline/{attempt_id}"
+                ),
+                "argv": _contract_argv(attempt_id, variant, seed, pressure),
+            }
+        )
+
+    _rewrite_attempt_json_artifact(root, manifest, "attempt_contract", mutate_contract)
 
 
 def _rewrite_restart_payload(
@@ -507,6 +815,208 @@ class Q011Section54CampaignAdmissionTests(unittest.TestCase):
             admission["numerical_qualification_status"],
             "not_evaluated_by_artifact_admission_slice",
         )
+        self.assertEqual(
+            admission["attempt_identity"]["campaign_plan_sha256"],
+            admission["artifact_bindings"]["campaign_plan"]["sha256"],
+        )
+        self.assertEqual(
+            admission["stdout_telemetry"]["pic_runtime_identity"]["state"],
+            "momentum_p_over_m",
+        )
+
+    def test_all_preregistered_canonical_variants_are_admitted(self) -> None:
+        for variant in (
+            "coarse_uniform_dx12",
+            "three_level_amr_root_dx12_finest_dx3",
+            "fine_uniform_dx3",
+        ):
+            with self.subTest(variant=variant):
+                def mutate(
+                    root: Path, manifest: dict[str, Any], *, variant: str = variant
+                ) -> None:
+                    _retarget_attempt(root, manifest, variant)
+
+                with _frozen_fixture(mutate) as fixture:
+                    self.assertTrue(
+                        _qualify(*fixture)["admitted_for_follow_on_numerical_qualification"]
+                    )
+
+    def test_legacy_variant_aliases_are_rejected(self) -> None:
+        for variant in ("amr", "fine_uniform"):
+            with self.subTest(variant=variant):
+                def mutate(
+                    _root: Path, manifest: dict[str, Any], *, variant: str = variant
+                ) -> None:
+                    manifest["run_identity"]["variant"] = variant
+
+                with _frozen_fixture(mutate) as fixture:
+                    self.assert_rejected(_qualify(*fixture), "invalid_run_identity")
+
+    def test_attempt_identity_and_retained_binding_omissions_are_rejected(self) -> None:
+        for section, name in (
+            ("attempt_identity", "campaign_plan_sha256"),
+            ("artifact_bindings", "campaign_plan"),
+        ):
+            with self.subTest(section=section, name=name):
+                def mutate(
+                    _root: Path,
+                    manifest: dict[str, Any],
+                    *,
+                    section: str = section,
+                    name: str = name,
+                ) -> None:
+                    del manifest[section][name]
+
+                with _frozen_fixture(mutate) as fixture:
+                    self.assert_rejected(_qualify(*fixture), "schema_key_error")
+
+    def test_attempt_digest_cross_binding_drift_is_rejected(self) -> None:
+        def mutate(_root: Path, manifest: dict[str, Any]) -> None:
+            manifest["attempt_identity"]["attempt_contract_sha256"] = "f" * 64
+
+        with _frozen_fixture(mutate) as fixture:
+            self.assert_rejected(_qualify(*fixture), "attempt_binding_drift")
+
+    def test_duplicate_retained_binding_paths_are_rejected(self) -> None:
+        def mutate(_root: Path, manifest: dict[str, Any]) -> None:
+            plan = manifest["artifact_bindings"]["campaign_plan"]
+            contract = manifest["artifact_bindings"]["attempt_contract"]
+            contract["path"] = plan["path"]
+            contract["sha256"] = plan["sha256"]
+            manifest["attempt_identity"]["attempt_contract_sha256"] = plan["sha256"]
+
+        with _frozen_fixture(mutate) as fixture:
+            self.assert_rejected(_qualify(*fixture), "duplicate_declared_path")
+
+    def test_model_override_order_and_duplicates_are_rejected(self) -> None:
+        fine = campaign.frozen_model.variant_binding("fine_uniform_dx3")
+        cases = {
+            "order": list(reversed(fine.model_launch_overrides)),
+            "duplicate": [fine.model_launch_overrides[0], fine.model_launch_overrides[0]],
+        }
+        for label, overrides in cases.items():
+            with self.subTest(label=label):
+                def mutate(
+                    _root: Path,
+                    manifest: dict[str, Any],
+                    *,
+                    overrides: list[str] = overrides,
+                ) -> None:
+                    manifest["run_identity"]["variant"] = "fine_uniform_dx3"
+                    manifest["attempt_identity"]["model_launch_overrides"] = overrides
+
+                with _frozen_fixture(mutate) as fixture:
+                    expected = (
+                        "duplicate_attempt_binding"
+                        if label == "duplicate"
+                        else "invalid_attempt_identity"
+                    )
+                    self.assert_rejected(_qualify(*fixture), expected)
+
+    def test_seed_override_alias_and_drift_are_rejected(self) -> None:
+        for value, expected in ((True, "schema_type_error"), (23050102, "invalid_attempt_identity")):
+            with self.subTest(value=value):
+                def mutate(
+                    _root: Path, manifest: dict[str, Any], *, value: object = value
+                ) -> None:
+                    manifest["attempt_identity"]["seed_overrides"][
+                        "problem/ps_inject_seed"
+                    ] = value
+
+                with _frozen_fixture(mutate) as fixture:
+                    self.assert_rejected(_qualify(*fixture), expected)
+
+    def test_stdout_runtime_identity_drift_is_rejected(self) -> None:
+        complete = _runtime_identity_line()
+        for payload in (
+            _stdout_telemetry(include_runtime_identity=False),
+            _stdout_telemetry(runtime_replacements={"state": "velocity"}),
+            _stdout_telemetry().replace(b" induction=ideal_mhd_only", b""),
+            _stdout_telemetry().replace(
+                complete.encode("ascii"),
+                (complete + " unexpected_projection=on").encode("ascii"),
+            ),
+            _stdout_telemetry().replace(
+                b" background=coupled feedback=coupled",
+                b" feedback=coupled background=coupled",
+            ),
+        ):
+            with self.subTest(payload=payload):
+                def mutate(
+                    root: Path, manifest: dict[str, Any], *, payload: bytes = payload
+                ) -> None:
+                    _rewrite_product(root, _find_product(manifest, "stdout", None), payload)
+
+                with _frozen_fixture(mutate) as fixture:
+                    self.assert_rejected(_qualify(*fixture), "invalid_runtime_identity")
+
+    def test_semantic_campaign_plan_crosslink_drift_is_rejected(self) -> None:
+        def mutate(root: Path, manifest: dict[str, Any]) -> None:
+            _rewrite_attempt_json_artifact(
+                root,
+                manifest,
+                "campaign_plan",
+                lambda plan: plan["source_bindings"]["paper_deck"].__setitem__(
+                    "sha256", "0" * 64
+                ),
+            )
+
+        with _frozen_fixture(mutate) as fixture:
+            self.assert_rejected(_qualify(*fixture), "campaign_plan_crosslink_drift")
+
+    def test_semantic_attempt_contract_crosslink_drift_is_rejected(self) -> None:
+        def mutate(root: Path, manifest: dict[str, Any]) -> None:
+            _rewrite_attempt_json_artifact(
+                root,
+                manifest,
+                "attempt_contract",
+                lambda contract: contract.__setitem__("qualifying_seed", 23050102),
+            )
+
+        with _frozen_fixture(mutate) as fixture:
+            self.assert_rejected(_qualify(*fixture), "attempt_contract_crosslink_drift")
+
+    def test_semantic_selected_pressure_receipt_drift_is_rejected(self) -> None:
+        def mutate(root: Path, manifest: dict[str, Any]) -> None:
+            _rewrite_attempt_json_artifact(
+                root,
+                manifest,
+                "selected_pressure_receipt",
+                lambda receipt: receipt["selected_case"].__setitem__(
+                    "problem_ps_p0", 0.2
+                ),
+            )
+
+        with _frozen_fixture(mutate) as fixture:
+            self.assert_rejected(_qualify(*fixture), "selected_pressure_receipt_drift")
+
+    def test_helper_source_closure_requires_model_and_snapshot_members(self) -> None:
+        for path in (
+            "tst/publication/q011_section54_model.py",
+            "tst/publication/frontier_control_plane/operator_attestation.py",
+        ):
+            with self.subTest(path=path):
+                def mutate(
+                    root: Path, manifest: dict[str, Any], *, path: str = path
+                ) -> None:
+                    def remove_source(closure: dict[str, Any]) -> None:
+                        closure["sources"] = [
+                            source
+                            for source in closure["sources"]
+                            if source["path"] != path
+                        ]
+
+                    _rewrite_attempt_json_artifact(
+                        root,
+                        manifest,
+                        "analyzer_helper_source_closure_manifest",
+                        remove_source,
+                    )
+
+                with _frozen_fixture(mutate) as fixture:
+                    self.assert_rejected(
+                        _qualify(*fixture), "helper_source_closure_drift"
+                    )
 
     def test_path_escape_is_rejected_without_partial_success(self) -> None:
         def mutate(_root: Path, manifest: dict[str, Any]) -> None:

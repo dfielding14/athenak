@@ -84,13 +84,22 @@ class DeckContract:
 
 
 _VARIANT_BINDINGS = {
-    "amr": VariantBinding(
-        variant="amr",
+    "coarse_uniform_dx12": VariantBinding(
+        variant="coarse_uniform_dx12",
+        deck_path=BASE_DECK_PATH,
+        model_launch_overrides=(
+            "mesh_refinement/refinement=none",
+            "mesh_refinement/num_levels=1",
+            "problem/ps_enable_curvature_amr=false",
+        ),
+    ),
+    "three_level_amr_root_dx12_finest_dx3": VariantBinding(
+        variant="three_level_amr_root_dx12_finest_dx3",
         deck_path=BASE_DECK_PATH,
         model_launch_overrides=(),
     ),
-    "fine_uniform": VariantBinding(
-        variant="fine_uniform",
+    "fine_uniform_dx3": VariantBinding(
+        variant="fine_uniform_dx3",
         deck_path=BASE_DECK_PATH,
         model_launch_overrides=(
             "mesh/nx1=16000",
@@ -339,10 +348,12 @@ def _typed_deck_contract(blocks: Mapping[str, Mapping[str, str]]) -> DeckContrac
         "deck problem/ps_enable_curvature_amr",
     )
     layout = (nx1, nx2, refinement, num_levels, curvature_amr)
-    if layout == (4000, 260, "adaptive", 3, True):
-        variant = "amr"
+    if layout == (4000, 260, "none", 1, False):
+        variant = "coarse_uniform_dx12"
+    elif layout == (4000, 260, "adaptive", 3, True):
+        variant = "three_level_amr_root_dx12_finest_dx3"
     elif layout == (16000, 1040, "none", 1, False):
-        variant = "fine_uniform"
+        variant = "fine_uniform_dx3"
     else:
         raise ModelContractError(f"deck: unsupported bounded grid layout {layout!r}")
 
@@ -351,8 +362,9 @@ def _typed_deck_contract(blocks: Mapping[str, Mapping[str, str]]) -> DeckContrac
     refinement_scale = 2 ** (num_levels - 1) if refinement == "adaptive" else 1
     finest_dx = root_dx / refinement_scale
     finest_dy = root_dy / refinement_scale
-    _require_close(finest_dx, 3.0, "deck finest dx")
-    _require_close(finest_dy, 3.0, "deck finest dy")
+    expected_finest_spacing = 12.0 if variant == "coarse_uniform_dx12" else 3.0
+    _require_close(finest_dx, expected_finest_spacing, "deck finest dx")
+    _require_close(finest_dy, expected_finest_spacing, "deck finest dy")
     return DeckContract(
         variant=variant,
         physical_mode=physical_mode,
@@ -375,7 +387,7 @@ def _typed_deck_contract(blocks: Mapping[str, Mapping[str, str]]) -> DeckContrac
 
 
 def parse_deck_contract(deck_text: object) -> DeckContract:
-    """Parse a typed, bounded AMR or fine-uniform Section 5.4 deck contract."""
+    """Parse a typed, bounded coarse-uniform, AMR, or fine-uniform deck contract."""
     return _typed_deck_contract(_parse_athinput(deck_text))
 
 
@@ -389,7 +401,10 @@ def parse_bound_variant_deck_contract(
     binding = require_variant_binding(variant, deck_path, model_launch_overrides)
     blocks = _parse_athinput(deck_text)
     base_contract = _typed_deck_contract(blocks)
-    _require(base_contract.variant == "amr", "base deck: expected the frozen AMR layout")
+    _require(
+        base_contract.variant == "three_level_amr_root_dx12_finest_dx3",
+        "base deck: expected the frozen AMR layout",
+    )
     contract = _typed_deck_contract(
         _apply_model_launch_overrides(blocks, binding.model_launch_overrides)
     )

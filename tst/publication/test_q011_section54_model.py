@@ -70,15 +70,18 @@ def _runtime_line(**replacements: str) -> str:
 
 class Q011Section54VariantBindingTests(unittest.TestCase):
     def test_canonical_variant_identity_rejects_aliases(self) -> None:
-        self.assertEqual(model.canonical_variant_identity("amr"), "amr")
-        self.assertEqual(
-            model.canonical_variant_identity("fine_uniform"),
-            "fine_uniform",
-        )
-        for candidate in (
-            "amr_fiducial",
-            "fine_uniform_dx3",
+        canonical = (
+            "coarse_uniform_dx12",
             "three_level_amr_root_dx12_finest_dx3",
+            "fine_uniform_dx3",
+        )
+        for candidate in canonical:
+            with self.subTest(candidate=candidate):
+                self.assertEqual(model.canonical_variant_identity(candidate), candidate)
+        for candidate in (
+            "amr",
+            "fine_uniform",
+            "amr_fiducial",
             "",
             1,
         ):
@@ -87,51 +90,64 @@ class Q011Section54VariantBindingTests(unittest.TestCase):
                     model.canonical_variant_identity(candidate)
 
     def test_fine_uniform_cannot_reuse_bare_amr_binding(self) -> None:
-        amr = model.variant_binding("amr")
-        fine = model.variant_binding("fine_uniform")
+        amr = model.variant_binding("three_level_amr_root_dx12_finest_dx3")
+        fine = model.variant_binding("fine_uniform_dx3")
         self.assertEqual(amr.deck_path, fine.deck_path)
         self.assertEqual(amr.model_launch_overrides, ())
         self.assertNotEqual(fine.model_launch_overrides, ())
         with self.assertRaisesRegex(
             model.ModelContractError,
-            "fine_uniform: model launch overrides differ",
+            "fine_uniform_dx3: model launch overrides differ",
         ):
-            model.require_variant_binding("fine_uniform", fine.deck_path, ())
+            model.require_variant_binding("fine_uniform_dx3", fine.deck_path, ())
 
     def test_variant_binding_rejects_deck_and_override_drift(self) -> None:
-        fine = model.variant_binding("fine_uniform")
+        fine = model.variant_binding("fine_uniform_dx3")
         with self.assertRaisesRegex(model.ModelContractError, "deck path differs"):
             model.require_variant_binding(
-                "fine_uniform",
+                "fine_uniform_dx3",
                 "inputs/publication/common_amr_decoy.athinput",
                 fine.model_launch_overrides,
             )
         with self.assertRaisesRegex(model.ModelContractError, "duplicate mesh/nx1"):
             model.require_variant_binding(
-                "fine_uniform",
+                "fine_uniform_dx3",
                 fine.deck_path,
                 ("mesh/nx1=16000", "mesh/nx1=16000"),
             )
 
     def test_bound_variants_materialize_distinct_typed_layouts(self) -> None:
-        amr = model.parse_bound_variant_deck_contract(
-            "amr",
+        coarse = model.parse_bound_variant_deck_contract(
+            "coarse_uniform_dx12",
             model.BASE_DECK_PATH,
             _amr_deck(),
-            model.variant_binding("amr").model_launch_overrides,
+            model.variant_binding("coarse_uniform_dx12").model_launch_overrides,
+        )
+        amr = model.parse_bound_variant_deck_contract(
+            "three_level_amr_root_dx12_finest_dx3",
+            model.BASE_DECK_PATH,
+            _amr_deck(),
+            model.variant_binding(
+                "three_level_amr_root_dx12_finest_dx3"
+            ).model_launch_overrides,
         )
         fine = model.parse_bound_variant_deck_contract(
-            "fine_uniform",
+            "fine_uniform_dx3",
             model.BASE_DECK_PATH,
             _amr_deck(),
-            model.variant_binding("fine_uniform").model_launch_overrides,
+            model.variant_binding("fine_uniform_dx3").model_launch_overrides,
         )
-        self.assertEqual(amr.variant, "amr")
+        self.assertEqual(coarse.variant, "coarse_uniform_dx12")
+        self.assertEqual(coarse.refinement, "none")
+        self.assertEqual(coarse.num_levels, 1)
+        self.assertAlmostEqual(coarse.root_dx, 12.0)
+        self.assertAlmostEqual(coarse.finest_dx, 12.0)
+        self.assertEqual(amr.variant, "three_level_amr_root_dx12_finest_dx3")
         self.assertEqual(amr.refinement, "adaptive")
         self.assertEqual(amr.num_levels, 3)
         self.assertAlmostEqual(amr.root_dx, 12.0)
         self.assertAlmostEqual(amr.finest_dx, 3.0)
-        self.assertEqual(fine.variant, "fine_uniform")
+        self.assertEqual(fine.variant, "fine_uniform_dx3")
         self.assertEqual(fine.refinement, "none")
         self.assertEqual(fine.num_levels, 1)
         self.assertAlmostEqual(fine.root_dx, 3.0)
@@ -140,12 +156,12 @@ class Q011Section54VariantBindingTests(unittest.TestCase):
     def test_checked_in_active_deck_satisfies_amr_binding(self) -> None:
         deck = REPO_ROOT / model.BASE_DECK_PATH
         contract = model.parse_bound_variant_deck_contract(
-            "amr",
+            "three_level_amr_root_dx12_finest_dx3",
             model.BASE_DECK_PATH,
             deck.read_text(encoding="utf-8"),
             (),
         )
-        self.assertEqual(contract.variant, "amr")
+        self.assertEqual(contract.variant, "three_level_amr_root_dx12_finest_dx3")
 
 
 class Q011Section54RuntimeIdentityTests(unittest.TestCase):
@@ -256,7 +272,7 @@ class Q011Section54ChiReconstructionTests(unittest.TestCase):
 class Q011Section54DeckContractTests(unittest.TestCase):
     def test_typed_deck_contract_freezes_model_assumptions(self) -> None:
         contract = model.parse_deck_contract(_amr_deck())
-        self.assertEqual(contract.variant, "amr")
+        self.assertEqual(contract.variant, "three_level_amr_root_dx12_finest_dx3")
         self.assertEqual(contract.physical_mode, model.PAPER_PHYSICAL_MODE)
         self.assertEqual(contract.initial_state, "momentum")
         self.assertEqual(contract.light_speed, 10000.0)

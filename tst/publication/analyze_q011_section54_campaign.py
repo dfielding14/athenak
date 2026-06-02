@@ -22,6 +22,8 @@ import numpy as np
 
 if __package__:
     from . import analyze_q011_section54_outputs as output_primitives
+    from . import q011_section54_model as frozen_model
+    from . import q011_section54_pressure_selection as pressure_selection
     from .frontier_control_plane.control_plane_common import (
         BUILD_PROVENANCE_FILENAMES,
     )
@@ -42,6 +44,8 @@ if __package__:
     from .pvtk_particles import ParticleVTKData, read_particle_vtk
 else:
     import analyze_q011_section54_outputs as output_primitives
+    import q011_section54_model as frozen_model
+    import q011_section54_pressure_selection as pressure_selection
     from frontier_control_plane.control_plane_common import BUILD_PROVENANCE_FILENAMES
     from frontier_control_plane.control_plane_common import (
         read_json_bytes as read_control_plane_json_bytes,
@@ -86,6 +90,7 @@ RESULT_RECORD_TYPE = "q011_section54_campaign_admission_result"
 _SHA256_PATTERN = re.compile(r"[0-9a-f]{64}")
 _COMMIT_PATTERN = re.compile(r"[0-9a-f]{40}")
 _ATTEMPT_PATTERN = re.compile(r"[a-z0-9][a-z0-9._-]{0,127}")
+_MODEL_OVERRIDE_PATTERN = re.compile(r"([^/=\s]+)/([^/=\s]+)=([^\s=]+)")
 _RFC3339_UTC_PATTERN = re.compile(
     r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}"
     r"(?:\.[0-9]{1,6})?Z"
@@ -107,6 +112,93 @@ _BINDING_NAMES = (
     "deck",
     "analyzer",
     "preregistration",
+    "campaign_plan",
+    "attempt_contract",
+    "selected_pressure_receipt",
+    "analyzer_helper_source_closure_manifest",
+)
+_ATTEMPT_BINDING_SHA256_FIELDS = {
+    "campaign_plan": "campaign_plan_sha256",
+    "attempt_contract": "attempt_contract_sha256",
+    "selected_pressure_receipt": "selected_pressure_receipt_sha256",
+    "analyzer_helper_source_closure_manifest": (
+        "analyzer_helper_source_closure_manifest_sha256"
+    ),
+}
+_SEED_OVERRIDE_NAMES = (
+    "particles/pic_random_seed",
+    "problem/ps_inject_seed",
+    "problem/ps_seed_noise_seed",
+)
+_MODEL_VARIANT_ORDER = (
+    "coarse_uniform_dx12",
+    "three_level_amr_root_dx12_finest_dx3",
+    "fine_uniform_dx3",
+)
+_EXPECTED_MODEL_LAUNCH_OVERRIDES = {
+    "coarse_uniform_dx12": (
+        "mesh_refinement/refinement=none",
+        "mesh_refinement/num_levels=1",
+        "problem/ps_enable_curvature_amr=false",
+    ),
+    "three_level_amr_root_dx12_finest_dx3": (),
+    "fine_uniform_dx3": (
+        "mesh/nx1=16000",
+        "mesh/nx2=1040",
+        "mesh_refinement/refinement=none",
+        "mesh_refinement/num_levels=1",
+        "problem/ps_enable_curvature_amr=false",
+    ),
+}
+_EXPECTED_SECTION54_RUNTIME_PROJECTION = (
+    ("physical_mode", "paper_mhd_pic_vl2_tsc"),
+    ("state", "momentum_p_over_m"),
+    ("C", "10000"),
+    ("background", "coupled"),
+    ("feedback", "coupled"),
+    ("induction", "ideal_mhd_only"),
+    ("deposition", "tsc"),
+    ("deltaf", "off"),
+    ("deltaf_adapt", "off"),
+    ("deltaf_adapt_interval", "0"),
+    ("expanding_box", "off"),
+    ("expansion_law", "linear"),
+    ("wave_damping", "off"),
+    ("nu_in", "0"),
+    ("lb_cost_per_particle", "0"),
+    ("max_cell_cross", "2"),
+    ("theta_max", "0.3"),
+    ("restart_schema", "7"),
+)
+_EXPECTED_HELPER_SOURCE_PATHS = (
+    "tst/publication/q011_section54_model.py",
+    "tst/publication/q011_section54_pressure_pilot_execution.py",
+    "tst/publication/q011_section54_pressure_selection.py",
+    "tst/publication/q011_section54_restart.py",
+    "tst/publication/analyze_q011_section54_outputs.py",
+    "tst/publication/analyze_q011_section54_campaign.py",
+    "tst/publication/publish_q011_section54_campaign_attempt.py",
+    "tst/publication/immutable_orion_tree.py",
+    "tst/publication/pvtk_particles.py",
+    "tst/publication/q011_parallel_shock_storage_estimator.py",
+    "tst/publication/frontier_control_plane/control_plane_common.py",
+    "tst/publication/frontier_control_plane/operator_attestation.py",
+    "tst/publication/q011_section54_qualifying_campaign_execution.py",
+)
+_QUALIFYING_CAMPAIGN_PLAN_RECORD_TYPE = (
+    "q011_section54_qualifying_campaign_execution_plan"
+)
+_BASELINE_ATTEMPT_CONTRACT_RECORD_TYPE = "q011_section54_launch_prohibited_handoff_contract"
+_BASELINE_ATTEMPT_COUNT = 24
+_CAMPAIGN_PLAN_ARTIFACT_ROLE = (
+    "q011_section54_source_local_immutable_qualifying_campaign_plan"
+)
+_CAMPAIGN_PLAN_QUALIFICATION_EFFECT = (
+    "plan_only_no_execution_authorization_no_claim_closure"
+)
+_BASELINE_REQUIRED_SEPARATE_BOUNDARY = (
+    "review_and_promote_a_registered_frontier_submission_policy_then_use_"
+    "the_installed_control_plane_wrapper"
 )
 _PVTK_SCALARS = frozenset(
     {
@@ -520,6 +612,84 @@ def _validate_binding(value: object, label: str) -> dict[str, str]:
     }
 
 
+def _validate_model_launch_overrides(value: object, label: str) -> list[str]:
+    records = []
+    parameters = set()
+    for index, raw_record in enumerate(_list(value, label)):
+        record_label = f"{label}[{index}]"
+        record = _text(raw_record, record_label)
+        match = _MODEL_OVERRIDE_PATTERN.fullmatch(record)
+        _require(
+            match is not None,
+            "schema_type_error",
+            f"{record_label}: malformed model override",
+        )
+        parameter = match.group(1, 2)
+        _require(
+            parameter not in parameters,
+            "duplicate_attempt_binding",
+            f"{record_label}: duplicate model override {parameter[0]}/{parameter[1]}",
+        )
+        parameters.add(parameter)
+        records.append(record)
+    return records
+
+
+def _validate_seed_overrides(value: object, label: str) -> dict[str, int]:
+    overrides = _object(value, set(_SEED_OVERRIDE_NAMES), label)
+    return {
+        name: _exact_int(overrides[name], f"{label}/{name}")
+        for name in _SEED_OVERRIDE_NAMES
+    }
+
+
+def _validate_attempt_identity(
+    value: object, artifact_bindings: Mapping[str, Mapping[str, str]]
+) -> dict[str, Any]:
+    label = "campaign manifest/attempt_identity"
+    item = _object(
+        value,
+        {
+            "campaign_plan_sha256",
+            "attempt_contract_sha256",
+            "selected_pressure_receipt_sha256",
+            "model_launch_overrides",
+            "seed_overrides",
+            "analyzer_helper_source_closure_manifest_sha256",
+        },
+        label,
+    )
+    parsed = {
+        "campaign_plan_sha256": _sha256(
+            item["campaign_plan_sha256"], f"{label}/campaign_plan_sha256"
+        ),
+        "attempt_contract_sha256": _sha256(
+            item["attempt_contract_sha256"], f"{label}/attempt_contract_sha256"
+        ),
+        "selected_pressure_receipt_sha256": _sha256(
+            item["selected_pressure_receipt_sha256"],
+            f"{label}/selected_pressure_receipt_sha256",
+        ),
+        "model_launch_overrides": _validate_model_launch_overrides(
+            item["model_launch_overrides"], f"{label}/model_launch_overrides"
+        ),
+        "seed_overrides": _validate_seed_overrides(
+            item["seed_overrides"], f"{label}/seed_overrides"
+        ),
+        "analyzer_helper_source_closure_manifest_sha256": _sha256(
+            item["analyzer_helper_source_closure_manifest_sha256"],
+            f"{label}/analyzer_helper_source_closure_manifest_sha256",
+        ),
+    }
+    for binding_name, digest_name in _ATTEMPT_BINDING_SHA256_FIELDS.items():
+        _require(
+            parsed[digest_name] == artifact_bindings[binding_name]["sha256"],
+            "attempt_binding_drift",
+            f"{label}/{digest_name}: differs from retained {binding_name} binding",
+        )
+    return parsed
+
+
 def _validate_manifest_schema(manifest: object, root: Path) -> dict[str, Any]:
     item = _object(
         manifest,
@@ -532,6 +702,7 @@ def _validate_manifest_schema(manifest: object, root: Path) -> dict[str, Any]:
             "run_identity",
             "candidate_binding",
             "artifact_bindings",
+            "attempt_identity",
             "products",
         },
         "campaign manifest",
@@ -626,6 +797,7 @@ def _validate_manifest_schema(manifest: object, root: Path) -> dict[str, Any]:
         )
         for name in _BINDING_NAMES[1:]
     }
+    attempt_identity = _validate_attempt_identity(item["attempt_identity"], bindings)
     products = [
         _validate_product(product, index)
         for index, product in enumerate(
@@ -637,6 +809,7 @@ def _validate_manifest_schema(manifest: object, root: Path) -> dict[str, Any]:
         "run_identity": parsed_identity,
         "candidate_binding": parsed_candidate,
         "artifact_bindings": bindings,
+        "attempt_identity": attempt_identity,
         "products": products,
     }
 
@@ -954,7 +1127,14 @@ def _validate_clean_candidate_manifest(payload: bytes) -> dict[str, Any]:
     }
 
 
-def _validate_identity(identity: Mapping[str, Any], policy: Mapping[str, Any]) -> None:
+def _validate_identity(
+    identity: Mapping[str, Any],
+    attempt_identity_or_policy: Mapping[str, Any],
+    policy: Mapping[str, Any] | None = None,
+) -> None:
+    attempt_identity = None if policy is None else attempt_identity_or_policy
+    if policy is None:
+        policy = attempt_identity_or_policy
     matrix = policy["athenak_selected_release_criteria"]["campaign_matrix"]
     _require(
         identity["variant"] in matrix["grid_variants"],
@@ -970,6 +1150,26 @@ def _validate_identity(identity: Mapping[str, Any], policy: Mapping[str, Any]) -
         identity["physical_mode"] == matrix["physical_mode"],
         "invalid_run_identity",
         "run identity physical mode is not preregistered",
+    )
+    try:
+        binding = frozen_model.variant_binding(identity["variant"])
+    except frozen_model.ModelContractError as error:
+        _fail("invalid_run_identity", f"run identity variant is not canonical: {error}")
+    if attempt_identity is None:
+        return
+    _require(
+        tuple(attempt_identity["model_launch_overrides"])
+        == _EXPECTED_MODEL_LAUNCH_OVERRIDES[binding.variant],
+        "invalid_attempt_identity",
+        "attempt model launch overrides differ from the canonical campaign binding",
+    )
+    _require(
+        all(
+            seed == identity["seed"]
+            for seed in attempt_identity["seed_overrides"].values()
+        ),
+        "invalid_attempt_identity",
+        "attempt seed overrides must exactly match the preregistered run seed",
     )
 
 
@@ -987,6 +1187,525 @@ def _member_payload(snapshot: Any, binding: Mapping[str, str], label: str) -> by
 
 def _member_sha256(snapshot: Any, binding: Mapping[str, str], label: str) -> str:
     return _sha256_bytes(_member_payload(snapshot, binding, label))
+
+
+def _absolute_binding(value: object, label: str) -> dict[str, str]:
+    binding = _object(value, {"path", "sha256"}, label)
+    path = _text(binding["path"], f"{label}/path")
+    _require(Path(path).is_absolute(), "schema_type_error", f"{label}/path: expected absolute path")
+    return {"path": path, "sha256": _sha256(binding["sha256"], f"{label}/sha256")}
+
+
+def _validate_selected_pressure_receipt(payload: bytes) -> dict[str, Any]:
+    label = "selected pressure receipt"
+    item = _object(
+        _load_json_bytes(payload, label),
+        {
+            "schema_version",
+            "record_type",
+            "selection_method",
+            "published_pressure_pilot_receipt",
+            "pilot_bundle_manifest_sha256",
+            "aggregate_pilot_analysis_sha256",
+            "case_descriptors",
+            "selected_case",
+            "reviewer_identity",
+            "reviewed_utc",
+            "rationale",
+        },
+        label,
+    )
+    _require(
+        _exact_int(item["schema_version"], f"{label}/schema_version") == 1
+        and item["record_type"] == pressure_selection.RECORD_TYPE
+        and item["selection_method"] == pressure_selection.SELECTION_METHOD,
+        "selected_pressure_receipt_drift",
+        f"{label}: identity drifted",
+    )
+    _absolute_binding(
+        item["published_pressure_pilot_receipt"],
+        f"{label}/published_pressure_pilot_receipt",
+    )
+    _sha256(item["pilot_bundle_manifest_sha256"], f"{label}/pilot_bundle_manifest_sha256")
+    _sha256(
+        item["aggregate_pilot_analysis_sha256"],
+        f"{label}/aggregate_pilot_analysis_sha256",
+    )
+    descriptors = _list(item["case_descriptors"], f"{label}/case_descriptors")
+    _require(
+        len(descriptors) == len(pressure_selection.REGISTERED_CASES),
+        "selected_pressure_receipt_drift",
+        f"{label}: case descriptor count drifted",
+    )
+    seen_digests = set()
+    for index, ((expected_case_id, expected_pressure), raw_descriptor) in enumerate(
+        zip(pressure_selection.REGISTERED_CASES, descriptors)
+    ):
+        descriptor_label = f"{label}/case_descriptors[{index}]"
+        descriptor = _object(
+            raw_descriptor,
+            {"case_id", "problem_ps_p0", "descriptor_sha256"},
+            descriptor_label,
+        )
+        descriptor_sha256 = _sha256(
+            descriptor["descriptor_sha256"], f"{descriptor_label}/descriptor_sha256"
+        )
+        _require(
+            descriptor["case_id"] == expected_case_id
+            and _finite_float(
+                descriptor["problem_ps_p0"], f"{descriptor_label}/problem_ps_p0"
+            )
+            == expected_pressure
+            and descriptor_sha256 not in seen_digests,
+            "selected_pressure_receipt_drift",
+            f"{descriptor_label}: descriptor drifted",
+        )
+        seen_digests.add(descriptor_sha256)
+    selected = _object(
+        item["selected_case"],
+        {"case_id", "problem_ps_p0"},
+        f"{label}/selected_case",
+    )
+    selected_case_id = _text(selected["case_id"], f"{label}/selected_case/case_id")
+    selected_pressure = _finite_float(
+        selected["problem_ps_p0"], f"{label}/selected_case/problem_ps_p0"
+    )
+    registered_cases = dict(pressure_selection.REGISTERED_CASES)
+    _require(
+        selected_case_id in registered_cases
+        and selected_pressure == registered_cases[selected_case_id],
+        "selected_pressure_receipt_drift",
+        f"{label}: selected case drifted",
+    )
+    _text(item["reviewer_identity"], f"{label}/reviewer_identity")
+    _utc_timestamp(item["reviewed_utc"], f"{label}/reviewed_utc")
+    _text(item["rationale"], f"{label}/rationale")
+    return {
+        "selection_method": item["selection_method"],
+        "selected_case": {
+            "case_id": selected_case_id,
+            "problem_ps_p0": selected_pressure,
+        },
+    }
+
+
+def _validate_helper_source_closure(payload: bytes) -> dict[str, Any]:
+    label = "analyzer helper source closure manifest"
+    item = _object(
+        _load_json_bytes(payload, label),
+        {"record_type", "schema_version", "plan_id", "sources"},
+        label,
+    )
+    _require(
+        item["record_type"] == "q011_section54_helper_source_closure"
+        and _exact_int(item["schema_version"], f"{label}/schema_version") == 1,
+        "helper_source_closure_drift",
+        f"{label}: identity drifted",
+    )
+    plan_id = _sha256(item["plan_id"], f"{label}/plan_id")
+    records = [
+        _validate_binding(raw_record, f"{label}/sources[{index}]")
+        for index, raw_record in enumerate(_list(item["sources"], f"{label}/sources"))
+    ]
+    _require(
+        tuple(record["path"] for record in records) == _EXPECTED_HELPER_SOURCE_PATHS,
+        "helper_source_closure_drift",
+        f"{label}: expected helper snapshot membership or order drifted",
+    )
+    for record in records:
+        _require(
+            _sha256_path(REPO_ROOT / record["path"]) == record["sha256"],
+            "helper_source_closure_drift",
+            f"{label}: invoked helper bytes drifted for {record['path']}",
+        )
+    return {"plan_id": plan_id, "sources": records}
+
+
+def _validate_plan_candidate(
+    value: object,
+    parsed: Mapping[str, Any],
+) -> dict[str, Any]:
+    label = "campaign plan/candidate_binding"
+    item = _object(
+        value,
+        {
+            "clean_candidate_manifest",
+            "freeze_id",
+            "git_commit",
+            "git_tree",
+            "source_archive_sha256",
+            "source_commit_sha256",
+            "source_bundle_sha256",
+            "prepared_artifact_inventory_sha256",
+            "build_profile",
+            "build_profile_receipt",
+            "build_invocations_sha256",
+            "executable",
+            "environment_profile",
+        },
+        label,
+    )
+    clean_manifest = _absolute_binding(
+        item["clean_candidate_manifest"], f"{label}/clean_candidate_manifest"
+    )
+    executable = _absolute_binding(item["executable"], f"{label}/executable")
+    environment = _absolute_binding(
+        item["environment_profile"], f"{label}/environment_profile"
+    )
+    _absolute_binding(item["build_profile"], f"{label}/build_profile")
+    _absolute_binding(item["build_profile_receipt"], f"{label}/build_profile_receipt")
+    _uuid(item["freeze_id"], f"{label}/freeze_id")
+    _git_sha1(item["git_commit"], f"{label}/git_commit")
+    _git_sha1(item["git_tree"], f"{label}/git_tree")
+    for name in (
+        "source_archive_sha256",
+        "source_commit_sha256",
+        "source_bundle_sha256",
+        "prepared_artifact_inventory_sha256",
+        "build_invocations_sha256",
+    ):
+        _sha256(item[name], f"{label}/{name}")
+    _require(
+        clean_manifest["sha256"]
+        == parsed["candidate_binding"]["clean_candidate_manifest"]["sha256"]
+        and item["git_commit"] == parsed["candidate_binding"]["git_commit"]
+        and item["source_bundle_sha256"]
+        == parsed["candidate_binding"]["source_bundle_sha256"]
+        and executable["sha256"] == parsed["artifact_bindings"]["executable"]["sha256"],
+        "campaign_plan_crosslink_drift",
+        f"{label}: candidate cross-link drifted",
+    )
+    return {"executable": executable, "environment_profile": environment}
+
+
+def _expected_attempt_id(identity: Mapping[str, Any]) -> str:
+    try:
+        variant_index = _MODEL_VARIANT_ORDER.index(identity["variant"])
+        seed_index = _EXPECTED_POLICY_PROJECTION["campaign_matrix"][
+            "qualifying_seeds"
+        ].index(identity["seed"])
+    except ValueError:
+        _fail("campaign_plan_crosslink_drift", "run identity is absent from campaign matrix")
+    index = variant_index * 8 + seed_index + 1
+    return f"baseline-{index:03d}-{identity['variant']}-seed-{identity['seed']}"
+
+
+def _validate_campaign_plan(
+    payload: bytes,
+    parsed: Mapping[str, Any],
+    pressure_receipt: Mapping[str, Any],
+    helper_closure: Mapping[str, Any],
+    policy: Mapping[str, Any],
+) -> dict[str, Any]:
+    label = "campaign plan"
+    item = _object(
+        _load_json_bytes(payload, label),
+        {
+            "record_type",
+            "schema_version",
+            "plan_id",
+            "artifact_role",
+            "qualification_effect",
+            "status",
+            "authorized_orion_root",
+            "authorized_orion_campaign_root",
+            "selected_pressure",
+            "candidate_binding",
+            "source_bindings",
+            "helper_source_closure",
+            "campaign_matrix",
+            "baseline_attempt_count",
+            "baseline_attempt_descriptors",
+            "restart_continuation_carrier",
+            "independent_raw_artifact_recompute_plan",
+            "nonauthorizing_policy_fragment",
+            "execution_boundary",
+            "preregistration_execution_boundary",
+        },
+        label,
+    )
+    _require(
+        item["record_type"] == _QUALIFYING_CAMPAIGN_PLAN_RECORD_TYPE
+        and _exact_int(item["schema_version"], f"{label}/schema_version") == 1,
+        "campaign_plan_crosslink_drift",
+        f"{label}: identity drifted",
+    )
+    plan_id = _sha256(item["plan_id"], f"{label}/plan_id")
+    _require(
+        plan_id == helper_closure["plan_id"],
+        "campaign_plan_crosslink_drift",
+        f"{label}: helper closure plan ID drifted",
+    )
+    _require(
+        item["artifact_role"] == _CAMPAIGN_PLAN_ARTIFACT_ROLE
+        and item["qualification_effect"] == _CAMPAIGN_PLAN_QUALIFICATION_EFFECT
+        and item["status"] == "source_local_immutable_review_plan_only"
+        and item["authorized_orion_root"] == str(ORION_BULK_ROOT),
+        "campaign_plan_crosslink_drift",
+        f"{label}: review-only role or Orion root drifted",
+    )
+    campaign_root = _text(
+        item["authorized_orion_campaign_root"],
+        f"{label}/authorized_orion_campaign_root",
+    )
+    expected_campaign_root = str(
+        ORION_BULK_ROOT / "campaigns" / f"q011-section54-{plan_id}"
+    )
+    _require(
+        campaign_root == expected_campaign_root,
+        "campaign_plan_crosslink_drift",
+        f"{label}: authorized campaign root drifted",
+    )
+    selected_pressure = _object(
+        item["selected_pressure"],
+        {"selection_method", "selected_case", "receipt"},
+        f"{label}/selected_pressure",
+    )
+    selected_receipt = _validate_binding(
+        selected_pressure["receipt"], f"{label}/selected_pressure/receipt"
+    )
+    _exact_match(
+        selected_pressure["selected_case"],
+        pressure_receipt["selected_case"],
+        f"{label}/selected_pressure/selected_case",
+    )
+    _require(
+        selected_pressure["selection_method"] == pressure_receipt["selection_method"]
+        and selected_receipt["sha256"]
+        == parsed["artifact_bindings"]["selected_pressure_receipt"]["sha256"],
+        "campaign_plan_crosslink_drift",
+        f"{label}: selected pressure cross-link drifted",
+    )
+    source_bindings = _object(
+        item["source_bindings"],
+        {
+            "pressure_selection_receipt",
+            "clean_candidate_manifest",
+            "environment_profile",
+            "qualifying_preregistration",
+            "restart_preregistration",
+            "paper_deck",
+        },
+        f"{label}/source_bindings",
+    )
+    source_bindings = {
+        name: _validate_binding(binding, f"{label}/source_bindings/{name}")
+        for name, binding in source_bindings.items()
+    }
+    closure_binding = _validate_binding(
+        item["helper_source_closure"], f"{label}/helper_source_closure"
+    )
+    _require(
+        source_bindings["pressure_selection_receipt"]["sha256"]
+        == parsed["artifact_bindings"]["selected_pressure_receipt"]["sha256"]
+        and source_bindings["clean_candidate_manifest"]["sha256"]
+        == parsed["candidate_binding"]["clean_candidate_manifest"]["sha256"]
+        and source_bindings["qualifying_preregistration"]["sha256"]
+        == parsed["artifact_bindings"]["preregistration"]["sha256"]
+        and source_bindings["paper_deck"]["sha256"]
+        == parsed["artifact_bindings"]["deck"]["sha256"]
+        and closure_binding["sha256"]
+        == parsed["artifact_bindings"]["analyzer_helper_source_closure_manifest"][
+            "sha256"
+        ],
+        "campaign_plan_crosslink_drift",
+        f"{label}: retained source cross-link drifted",
+    )
+    _validate_plan_candidate(item["candidate_binding"], parsed)
+    _exact_match(
+        item["campaign_matrix"],
+        _EXPECTED_POLICY_PROJECTION["campaign_matrix"],
+        f"{label}/campaign_matrix",
+    )
+    _require(
+        _exact_int(item["baseline_attempt_count"], f"{label}/baseline_attempt_count")
+        == _BASELINE_ATTEMPT_COUNT,
+        "campaign_plan_crosslink_drift",
+        f"{label}: baseline attempt count drifted",
+    )
+    descriptors = [
+        _validate_binding(record, f"{label}/baseline_attempt_descriptors[{index}]")
+        for index, record in enumerate(
+            _list(item["baseline_attempt_descriptors"], f"{label}/baseline_attempt_descriptors")
+        )
+    ]
+    _require(
+        len(descriptors) == _BASELINE_ATTEMPT_COUNT
+        and len({record["path"] for record in descriptors}) == _BASELINE_ATTEMPT_COUNT,
+        "campaign_plan_crosslink_drift",
+        f"{label}: baseline attempt descriptor set drifted",
+    )
+    for name in (
+        "restart_continuation_carrier",
+        "independent_raw_artifact_recompute_plan",
+        "nonauthorizing_policy_fragment",
+    ):
+        _validate_binding(item[name], f"{label}/{name}")
+    execution = _object(
+        item["execution_boundary"],
+        {
+            "mutates_live_policy",
+            "scheduler_calls",
+            "submits_jobs",
+            "infers_pressure_selection",
+            "launch_authorized",
+            "frontier_execution_authorized",
+            "claim_closure_authorized",
+        },
+        f"{label}/execution_boundary",
+    )
+    _require(
+        all(value is False for value in execution.values()),
+        "campaign_plan_crosslink_drift",
+        f"{label}: execution boundary must remain launch-prohibited",
+    )
+    _exact_match(
+        item["preregistration_execution_boundary"],
+        policy["qualifying_execution_bindings"],
+        f"{label}/preregistration_execution_boundary",
+    )
+    expected_attempt_id = _expected_attempt_id(parsed["run_identity"])
+    _require(
+        parsed["run_identity"]["attempt_id"] == expected_attempt_id,
+        "campaign_plan_crosslink_drift",
+        f"{label}: run attempt ID differs from deterministic baseline identity",
+    )
+    return {
+        "plan_id": plan_id,
+        "authorized_orion_campaign_root": campaign_root,
+        "selected_problem_ps_p0": pressure_receipt["selected_case"]["problem_ps_p0"],
+        "source_bindings": source_bindings,
+        "candidate_binding": item["candidate_binding"],
+    }
+
+
+def _validate_attempt_contract(
+    payload: bytes,
+    parsed: Mapping[str, Any],
+    plan: Mapping[str, Any],
+) -> dict[str, Any]:
+    label = "attempt contract"
+    item = _object(
+        _load_json_bytes(payload, label),
+        {
+            "record_type",
+            "schema_version",
+            "contract_role",
+            "launch_authorized",
+            "scheduler_submission_authorized",
+            "live_policy_mutation_authorized",
+            "attempt_id",
+            "variant",
+            "qualifying_seed",
+            "selected_problem_ps_p0",
+            "executable",
+            "environment_profile",
+            "paper_deck",
+            "authorized_orion_attempt_root",
+            "argv",
+            "required_separate_boundary",
+        },
+        label,
+    )
+    identity = parsed["run_identity"]
+    _require(
+        item["record_type"] == _BASELINE_ATTEMPT_CONTRACT_RECORD_TYPE
+        and _exact_int(item["schema_version"], f"{label}/schema_version") == 1
+        and item["contract_role"] == "source_local_review_handoff_only"
+        and item["launch_authorized"] is False
+        and item["scheduler_submission_authorized"] is False
+        and item["live_policy_mutation_authorized"] is False,
+        "attempt_contract_crosslink_drift",
+        f"{label}: launch-prohibited identity drifted",
+    )
+    pressure = _finite_float(
+        item["selected_problem_ps_p0"], f"{label}/selected_problem_ps_p0"
+    )
+    executable = _absolute_binding(item["executable"], f"{label}/executable")
+    environment = _absolute_binding(
+        item["environment_profile"], f"{label}/environment_profile"
+    )
+    paper_deck = _validate_binding(item["paper_deck"], f"{label}/paper_deck")
+    attempt_root = _text(
+        item["authorized_orion_attempt_root"],
+        f"{label}/authorized_orion_attempt_root",
+    )
+    expected_attempt_root = str(
+        Path(plan["authorized_orion_campaign_root"]) / "baseline" / identity["attempt_id"]
+    )
+    _require(
+        item["attempt_id"] == identity["attempt_id"]
+        and item["variant"] == identity["variant"]
+        and _exact_int(item["qualifying_seed"], f"{label}/qualifying_seed")
+        == identity["seed"]
+        and pressure == plan["selected_problem_ps_p0"]
+        and executable["sha256"] == parsed["artifact_bindings"]["executable"]["sha256"]
+        and environment["sha256"]
+        == plan["candidate_binding"]["environment_profile"]["sha256"]
+        and paper_deck == plan["source_bindings"]["paper_deck"]
+        and attempt_root == expected_attempt_root,
+        "attempt_contract_crosslink_drift",
+        f"{label}: run or plan cross-link drifted",
+    )
+    seed = identity["seed"]
+    expected_argv = [
+        "-i",
+        "bindings/pic_parallel_shock_section54_paper_vl2_tsc.athinput",
+        "-d",
+        f"{attempt_root}/raw",
+        f"job/basename={identity['attempt_id']}",
+        f"problem/ps_p0={pressure!r}",
+        f"particles/pic_random_seed={seed}",
+        f"problem/ps_inject_seed={seed}",
+        f"problem/ps_seed_noise_seed={seed}",
+        *parsed["attempt_identity"]["model_launch_overrides"],
+    ]
+    _exact_match(item["argv"], expected_argv, f"{label}/argv")
+    _require(
+        item["required_separate_boundary"] == _BASELINE_REQUIRED_SEPARATE_BOUNDARY,
+        "attempt_contract_crosslink_drift",
+        f"{label}: required separate launch boundary drifted",
+    )
+    return {
+        "record_type": item["record_type"],
+        "attempt_id": identity["attempt_id"],
+        "launch_authorized": False,
+        "argv": expected_argv,
+    }
+
+
+def _validate_retained_attempt_semantics(
+    parsed: Mapping[str, Any], snapshot: Any, policy: Mapping[str, Any]
+) -> dict[str, Any]:
+    bindings = parsed["artifact_bindings"]
+    pressure_receipt = _validate_selected_pressure_receipt(
+        _member_payload(snapshot, bindings["selected_pressure_receipt"], "selected pressure receipt")
+    )
+    helper_closure = _validate_helper_source_closure(
+        _member_payload(
+            snapshot,
+            bindings["analyzer_helper_source_closure_manifest"],
+            "analyzer helper source closure manifest",
+        )
+    )
+    plan = _validate_campaign_plan(
+        _member_payload(snapshot, bindings["campaign_plan"], "campaign plan"),
+        parsed,
+        pressure_receipt,
+        helper_closure,
+        policy,
+    )
+    contract = _validate_attempt_contract(
+        _member_payload(snapshot, bindings["attempt_contract"], "attempt contract"),
+        parsed,
+        plan,
+    )
+    return {
+        "campaign_plan_id": plan["plan_id"],
+        "selected_pressure": pressure_receipt["selected_case"],
+        "attempt_contract": contract,
+        "helper_source_count": len(helper_closure["sources"]),
+    }
 
 
 def _validate_prepared_binding(
@@ -1707,7 +2426,9 @@ def _validate_snapshot_payloads(
     return report
 
 
-def _validate_stdout_telemetry(payload: bytes) -> dict[str, Any]:
+def _validate_stdout_telemetry(
+    payload: bytes, run_identity: Mapping[str, Any]
+) -> dict[str, Any]:
     try:
         text = payload.decode("utf-8")
     except UnicodeDecodeError as error:
@@ -1736,10 +2457,36 @@ def _validate_stdout_telemetry(payload: bytes) -> dict[str, Any]:
         "invalid_q017_telemetry",
         "stdout Q-017 telemetry contains invalid values or schema version",
     )
+    expected_runtime_line = "PIC runtime model: " + " ".join(
+        f"{name}={value}" for name, value in _EXPECTED_SECTION54_RUNTIME_PROJECTION
+    )
+    runtime_lines = [
+        line for line in text.splitlines() if line.startswith("PIC runtime model:")
+    ]
+    _require(
+        runtime_lines == [expected_runtime_line],
+        "invalid_runtime_identity",
+        "stdout PIC runtime scientific projection is incomplete, reordered, or drifted",
+    )
+    try:
+        runtime_identity = frozen_model.parse_runtime_identity(text)
+    except frozen_model.ModelContractError as error:
+        _fail("invalid_runtime_identity", f"stdout PIC runtime identity is invalid: {error}")
+    _require(
+        runtime_identity.physical_mode == run_identity["physical_mode"],
+        "runtime_identity_mismatch",
+        "stdout PIC runtime identity differs from the retained run identity",
+    )
     return {
         "schema_version": telemetry["schema_version"],
         "mpi_ranks": telemetry["mpi.ranks"],
         "retained_name_count": len(telemetry),
+        "pic_runtime_identity": {
+            "physical_mode": runtime_identity.physical_mode,
+            "state": runtime_identity.state,
+            "light_speed": runtime_identity.light_speed,
+            "restart_schema": runtime_identity.restart_schema,
+        },
     }
 
 
@@ -1871,7 +2618,10 @@ def _admit_campaign(
         policy = _load_bound_policy(
             snapshot, parsed["artifact_bindings"]["preregistration"]
         )
-        _validate_identity(parsed["run_identity"], policy)
+        _validate_identity(parsed["run_identity"], parsed["attempt_identity"], policy)
+        retained_attempt_semantics = _validate_retained_attempt_semantics(
+            parsed, snapshot, policy
+        )
         retained_snapshot_products = _select_retained_snapshot_products(
             parsed["products"], policy
         )
@@ -1885,7 +2635,8 @@ def _admit_campaign(
             parsed["products"], snapshot, policy
         )
         stdout_telemetry = _validate_stdout_telemetry(
-            _member_payload(snapshot, stdout_product, "stdout product")
+            _member_payload(snapshot, stdout_product, "stdout product"),
+            parsed["run_identity"],
         )
         particle_endpoints = {
             time: snapshot_payloads[time]["particles"] for time in endpoint_products
@@ -1896,6 +2647,8 @@ def _admit_campaign(
             "frozen_clean_candidate": frozen_candidate,
             "external_clean_candidate_closure": external_candidate_closure,
             "artifact_bindings": parsed["artifact_bindings"],
+            "attempt_identity": parsed["attempt_identity"],
+            "retained_attempt_semantics": retained_attempt_semantics,
             "preregistration_binding": {
                 "sha256": parsed["artifact_bindings"]["preregistration"]["sha256"],
                 "expected_sha256": EXPECTED_PREREGISTRATION_SHA256,
