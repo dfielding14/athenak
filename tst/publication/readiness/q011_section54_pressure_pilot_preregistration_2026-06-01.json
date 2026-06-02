@@ -1,0 +1,150 @@
+{
+  "record_type": "q011_section54_pressure_pilot_preregistration",
+  "schema_version": 1,
+  "date": "2026-06-01",
+  "gate": "Q-011",
+  "classification": "engineering_calibration_only",
+  "qualification_effect": "none_no_sun_bai_claim_no_execution_authorization",
+  "scope": "Strict offline-analysis preregistration for four short Frontier pressure-sensitivity pilots. The pilots calibrate the inferred upstream-pressure choice before any qualifying Section 5.4 campaign. This record is engineering calibration only: it is not Sun-Bai reproduction evidence, does not close a manuscript claim, and does not authorize execution.",
+  "active_deck_binding": {
+    "path": "inputs/publication/pic_parallel_shock_section54_paper_vl2_tsc.athinput",
+    "sha256": "0b1cbd62d54027ec81a5f4f5c88d5ee56b86b8cc0cb018c3fbebfb37a11be7b1"
+  },
+  "analysis_bindings": {
+    "output_primitives": {
+      "path": "tst/publication/analyze_q011_section54_outputs.py",
+      "sha256": "abe664ece580f70fcde022aa15583846c4050b342d2072c8cd9c181c0b9d6d22"
+    },
+    "particle_vtk_reader": {
+      "path": "tst/publication/pvtk_particles.py",
+      "sha256": "187254c4ed10ce20ec383e710dadfa2e03e9f45317cce53e5d644c1db2be7339"
+    }
+  },
+  "pilot_contract": {
+    "physical_mode": "paper_mhd_pic_vl2_tsc",
+    "cases": [
+      {
+        "case_id": "ps_p0_1p00",
+        "problem_ps_p0": 1.0,
+        "argv_value": "1.0"
+      },
+      {
+        "case_id": "ps_p0_0p05",
+        "problem_ps_p0": 0.05,
+        "argv_value": "0.05"
+      },
+      {
+        "case_id": "ps_p0_0p10",
+        "problem_ps_p0": 0.1,
+        "argv_value": "0.10"
+      },
+      {
+        "case_id": "ps_p0_0p20",
+        "problem_ps_p0": 0.2,
+        "argv_value": "0.20"
+      }
+    ],
+    "fixed_overrides": [
+      "mesh/nx1=100",
+      "mesh/x1max=1200",
+      "mesh/nx2=20",
+      "mesh/x2max=240",
+      "mesh_refinement/refinement=none",
+      "mesh_refinement/num_levels=1",
+      "time/tlim=60",
+      "time/nlim=4096",
+      "time/ndiag=50",
+      "problem/ps_enable_curvature_amr=false",
+      "problem/ps_feedback_diag_dcycle=50",
+      "output1/variable=mhd_w_bcc",
+      "output1/id=mhd_w_bcc",
+      "output1/dt=15",
+      "output2/dt=15",
+      "output3/dt=15",
+      "output4/dt=15",
+      "output5/dt=15",
+      "output6/dt=15"
+    ],
+    "required_times_omega0_inverse": [
+      0.0,
+      15.0,
+      30.0,
+      45.0,
+      60.0
+    ],
+    "required_snapshot_products": [
+      "mhd_w_bcc",
+      "bmag",
+      "prtcl_jx",
+      "j2",
+      "prtcl_all"
+    ],
+    "mhd_w_bcc_required_variables": [
+      "dens",
+      "eint",
+      "velx",
+      "vely",
+      "velz",
+      "bcc1",
+      "bcc2",
+      "bcc3"
+    ],
+    "pressure_formula": "p = (gamma - 1) * eint",
+    "particle_provenance_scalars": [
+      "gid",
+      "ptag",
+      "species",
+      "cr_source",
+      "macro_weight",
+      "birth_time",
+      "deltaf_f0",
+      "deltaf_weight"
+    ],
+    "particle_provenance_vectors": [
+      "vel"
+    ],
+    "terminal_particle_rule": "At t=60 reject every retained shock-injected particle with birth_time < 45.",
+    "required_q017_telemetry": [
+      "schema_version",
+      "mpi.ranks",
+      "cycles",
+      "meshblocks.total",
+      "mesh.active_cells",
+      "particles.total",
+      "throughput.zone_cycles_per_second",
+      "throughput.particle_updates_per_second",
+      "load.meshblock_efficiency",
+      "load.particle_efficiency",
+      "amr.enabled",
+      "particle_memory.resident_records.bytes_total",
+      "particle_memory.invalid_records",
+      "particle_memory.athenak_owned_tracked_kokkos_views.allocated_snapshot_bytes_total",
+      "particle_memory.athenak_owned_tracked_kokkos_views.allocated_high_water_bytes_rank_max"
+    ],
+    "required_shock_diagnostic_prefixes": [
+      "pic_parallel_shock feedback_diag_cfg:",
+      "pic_parallel_shock feedback_diag:",
+      "pic_parallel_shock source_transaction_diag:",
+      "pic_parallel_shock removed_cr_sink:"
+    ],
+    "terminal_restart_policy": "Require one completed t=60 restart publication with exact ATHENAK_RESTART_COMPLETE_V1 markers, an ATHENAK_RESTART_MANIFEST_V1 manifest, and either one shared member or contiguous rank_00000000-style members.",
+    "overlay_profile_fields": [
+      "rho",
+      "p",
+      "vx",
+      "|B|"
+    ]
+  },
+  "execution_policy": {
+    "frontier_execution_authorized_by_this_record": false,
+    "scheduler_commands_authorized_by_this_record": false,
+    "scientific_evidence_eligible": false,
+    "sun_bai_claim": false
+  },
+  "limitations": [
+    "The four short runs are engineering calibration only and cannot qualify Section 5.4 physics.",
+    "The analyzer emits overlay-ready profile records but no figures.",
+    "A separate registered execution policy is required before any Frontier launch.",
+    "Any policy revision requires a versioned successor before pilot output inspection."
+  ]
+}
