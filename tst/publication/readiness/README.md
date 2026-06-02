@@ -54,12 +54,20 @@ qualify any scientific claim by itself.
   policy, the queue-clear operator attestation, the empty registered-science
   allowlist, and the quiescent 108-row mirrored ledger.
 - `phase0_paired_control_plane_install_and_policy_promotion_successor_v5_2026-06-02.json`:
-  current launch-prohibited transition receipt for the paired immutable
+  historical launch-prohibited transition receipt for the paired immutable
   `8f0a9d7f` hardened registered-pilot controller install. It binds
   byte-identical Orion and Project Home inventories, the promoted historical
   `d7205cd3` freeze policy, the empty registered-science allowlist, and the
   quiescent 108-row mirrored ledger. The empty-allowlist promotion correctly
   does not claim a pre-policy-promotion operator attestation.
+- `phase0_paired_control_plane_install_and_policy_promotion_successor_v6_2026-06-02.json`:
+  current launch-prohibited transition receipt for the paired immutable
+  `6dc456e5` strict Q011 reservation-boundary controller install. It binds
+  byte-identical Orion and Project Home inventories, the promoted historical
+  `d7205cd3` freeze policy, the empty registered-science allowlist, and the
+  validated 111-row mirrored ledger. The empty-allowlist promotion correctly
+  does not claim a pre-policy-promotion operator attestation or scheduler
+  isolation while unrelated user job `4754394` is active.
 - `phase0_clean_candidate_freeze_and_policy_promotion_2026-06-01.json`:
   historical pre-VL2 canonical clean-candidate freeze receipt. It binds the exact
   `1171668b` source commit, double-precision HIP/MPI Release executable,
@@ -129,18 +137,24 @@ qualify any scientific claim by itself.
   live mirrors, the empty registered-science allowlist, the quiescent 108-row
   ledger and pending external review. Launch remains prohibited until a science
   slice is explicitly registered.
-- `phase0_curated_candidate_successor_v16_2026-06-02.json`: current curated
+- `phase0_curated_candidate_successor_v16_2026-06-02.json`: historical curated
   successor boundary after paired `c83e7653` trusted-timeout controller install
   and policy promotion. It preserves the exact historical `d7205cd3` manifest
   and `aa069bc7` build-profile-controller binding, records the queue-clear
   operator attestation, and retains an empty registered-science allowlist.
   Launch remains prohibited until a science slice is explicitly registered.
-- `phase0_curated_candidate_successor_v17_2026-06-02.json`: current staged
+- `phase0_curated_candidate_successor_v17_2026-06-02.json`: historical staged
   Q011 retry boundary after the failed v1 attempt was reconciled and the
   HIP-safe source repair was registered. It records the still-live paired
   `8f0a9d7f` launch-prohibited controller, the staged `6dc456e5` strict
   reservation-boundary successor, and the exact full-ledger predecessor-closure
   checks required before later serial pressure pilots can reserve a job.
+- `phase0_curated_candidate_successor_v18_2026-06-02.json`: current curated
+  Q011 retry boundary after committing the strict reservation and promotion
+  boundary, paired-installing byte-identical immutable `6dc456e5` controllers,
+  and promoting the required same-controller empty-allowlist baseline. It binds
+  the 111-row mirrored ledger and keeps launch prohibited while the repaired
+  HIP/MPI Release rebuild and clean-candidate freeze remain pending.
 - `phase0_curated_candidate_successor_v4_2026-05-31.json`: historical Phase 0
   successor after schema-3 parallel-shock exact tag-window and restart
   fail-stop hardening. It binds the paired `4f005096` successor receipt and

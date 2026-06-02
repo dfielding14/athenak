@@ -326,6 +326,10 @@ class PicReadinessRegistryTests(unittest.TestCase):
             "phase0_paired_control_plane_install_and_policy_promotion_"
             "successor_v4_2026-06-02.json"
         )
+        strict_q011_promotion = _load(
+            "phase0_paired_control_plane_install_and_policy_promotion_"
+            "successor_v6_2026-06-02.json"
+        )
         if (
             science_freeze
             == d720_promotion["active_policy_promotion"]["science_submission_freeze"]
@@ -341,6 +345,19 @@ class PicReadinessRegistryTests(unittest.TestCase):
                 self.assertEqual(
                     science_freeze,
                     c83e_promotion["active_policy_promotion"][
+                        "science_submission_freeze"
+                    ],
+                )
+            if (
+                storage["installed_control_plane_version"]
+                == strict_q011_promotion["control_plane_version"]
+            ):
+                expected_control_plane_version = strict_q011_promotion[
+                    "control_plane_version"
+                ]
+                self.assertEqual(
+                    science_freeze,
+                    strict_q011_promotion["active_policy_promotion"][
                         "science_submission_freeze"
                     ],
                 )
@@ -1211,6 +1228,96 @@ class PicReadinessRegistryTests(unittest.TestCase):
                 for name in CONTROL_PLANE_FILES
             ]
         )
+        strict_q011 = _load(
+            "phase0_paired_control_plane_install_and_policy_promotion_"
+            "successor_v6_2026-06-02.json"
+        )
+        if (
+            staged_version == strict_q011["control_plane_version"]
+            and storage["installed_control_plane_version"]
+            == strict_q011["control_plane_version"]
+        ):
+            self.assertEqual(
+                strict_q011["predecessor_sha256"],
+                _sha256(REPO_ROOT / strict_q011["predecessor_record"]),
+            )
+            installed = strict_q011["paired_install"]
+            for key in ("orion", "project_home"):
+                self.assertEqual(
+                    installed[f"{key}_inventory_sha256"],
+                    _sha256(Path(installed[f"{key}_root"]) / "inventory.json"),
+                )
+            self.assertEqual(
+                installed["orion_inventory_sha256"],
+                installed["project_home_inventory_sha256"],
+            )
+            promotion = strict_q011["active_policy_promotion"]
+            self.assertEqual(
+                promotion["orion_policy_sha256"],
+                _sha256(READINESS_DIR / "storage_policy.json"),
+            )
+            for key in (
+                "orion_policy",
+                "project_home_policy",
+                "orion_promotion",
+                "project_home_promotion",
+            ):
+                self.assertEqual(
+                    promotion[f"{key}_sha256"], _sha256(Path(promotion[f"{key}_path"]))
+                )
+            self.assertEqual(promotion["registered_science_slices"], [])
+            self.assertEqual(
+                strict_q011["scheduler_isolation"],
+                {
+                    "status": "not_claimed_empty_allowlist_transition_only",
+                    "reason": (
+                        "unrelated_user_scheduler_job_4754394_active_"
+                        "during_policy_transition"
+                    ),
+                },
+            )
+            terminal = strict_q011["terminal_mirrored_ledger"]
+            for key in (
+                "orion_node_hours_jsonl",
+                "project_home_node_hours_jsonl",
+                "orion_node_hours_csv",
+                "orion_mirror_receipts_jsonl",
+            ):
+                self.assertEqual(
+                    terminal[f"{key}_sha256"], _sha256(Path(terminal[f"{key}_path"]))
+                )
+            self.assertEqual(
+                terminal["ledger_records"],
+                len(Path(terminal["orion_node_hours_jsonl_path"]).read_text().splitlines()),
+            )
+            self.assertEqual(terminal["latest_sequence_number"], 110)
+            self.assertEqual(
+                terminal["latest_event_sha256"],
+                "fc0082bef800733c433395d48f551559abe083367e5549cc4bffbe8a0ab48bfa",
+            )
+            self.assertEqual(terminal["active_reservations"], 0)
+            successor = _load("phase0_curated_candidate_successor_v18_2026-06-02.json")
+            self.assertEqual(
+                successor["predecessor_sha256"],
+                _sha256(REPO_ROOT / successor["predecessor_record"]),
+            )
+            receipt = successor[
+                "paired_control_plane_install_and_policy_promotion_receipt"
+            ]
+            self.assertEqual(receipt["sha256"], _sha256(REPO_ROOT / receipt["path"]))
+            self.assertEqual(
+                successor["live_paired_control_plane_version"], staged_version
+            )
+            self.assertEqual(
+                successor["frontier_launch_authorization"],
+                "none_no_registered_science_slices",
+            )
+            self.assertEqual(
+                successor["operational_baseline"]["scheduler_isolation"],
+                "not_claimed_unrelated_user_scheduler_job_4754394_active_"
+                "empty_allowlist_transition_only",
+            )
+            return
         registered_pilot = _load(
             "phase0_paired_control_plane_install_and_policy_promotion_"
             "successor_v5_2026-06-02.json"

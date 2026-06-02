@@ -1,0 +1,83 @@
+{
+  "record_type": "phase0_curated_candidate_successor",
+  "schema_version": 1,
+  "date": "2026-06-02",
+  "predecessor_record": "tst/publication/readiness/phase0_curated_candidate_successor_v17_2026-06-02.json",
+  "predecessor_sha256": "a0343de11f6c5c1f90ae617d74dc27d089d697ad03dfb3ea9e2549ec2eeb0a90",
+  "status": "q011_hip_retry_strict_controller_paired_installed_launch_prohibited_baseline_promoted_rebuild_and_freeze_pending",
+  "qualification_effect": "none",
+  "live_paired_control_plane_version": "6dc456e5858b2cbdbd7ef80cbc324b748e2cce5075023b49f7115eab4e84dfdd",
+  "successor_source_control_plane_version": "6dc456e5858b2cbdbd7ef80cbc324b748e2cce5075023b49f7115eab4e84dfdd",
+  "controller_source_commit": "3ba8c95770cb5d751f3ff64cce8fd5911fec5d56",
+  "candidate_freeze_source_commit": "pending_final_clean_receipt_commit",
+  "frontier_launch_authorization": "none_no_registered_science_slices",
+  "paired_control_plane_install_and_policy_promotion_receipt": {
+    "path": "tst/publication/readiness/phase0_paired_control_plane_install_and_policy_promotion_successor_v6_2026-06-02.json",
+    "sha256": "b761d98ab5dc32383bdee6cbd81c92aa850b4321fb76ca1a512805ca8b16d4a8"
+  },
+  "q011_retry_registration": {
+    "path": "tst/publication/readiness/q011_section54_pressure_pilot_registered_execution_retry_successor_v2_2026-06-02.json",
+    "sha256": "fcee4f99009ff10efa1e2f2d18f2a8bb4af551c64a97aa5c6f10a2dacf95f3bc"
+  },
+  "prepared_artifacts": {
+    "inventory_path": "tst/publication/frontier_control_plane/prepared_pic_artifact_inventory.json",
+    "inventory_sha256": "80dfa21b2f2be8a19c2f01906d79e8f289b13821b33dfca7ee06fc0ac12003a1",
+    "paper_deck_count": 110,
+    "publication_analyzer_count": 19,
+    "closure_policy": "canonical refreshed inventory after descriptor-pinned Q011 analyzer helper loading hardening"
+  },
+  "operational_baseline": {
+    "repo_policy_sha256": "1a331137c7d83717a890fa64046890074101f0fec3de7b8b22ca41b8bb644d28",
+    "orion_policy_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/storage_policy.json",
+    "project_home_policy_path": "/ccs/proj/ast207/proj-shared/PIC/policy/storage_policy.json",
+    "orion_policy_sha256": "1a331137c7d83717a890fa64046890074101f0fec3de7b8b22ca41b8bb644d28",
+    "project_home_policy_sha256": "1a331137c7d83717a890fa64046890074101f0fec3de7b8b22ca41b8bb644d28",
+    "orion_promotion_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/active_promotion.json",
+    "project_home_promotion_path": "/ccs/proj/ast207/proj-shared/PIC/policy/active_promotion.json",
+    "orion_promotion_sha256": "e64db1ef1ca755e1fcf4ff86e078856e381ff31f6aab926f01658b7aa69cd73e",
+    "project_home_promotion_sha256": "e64db1ef1ca755e1fcf4ff86e078856e381ff31f6aab926f01658b7aa69cd73e",
+    "science_submission_freeze": {
+      "status": "authorized",
+      "manifest_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/clean_candidates/d7205cd3-63fb-45ba-8e0a-c74d150df5a2/clean_candidate_manifest.json",
+      "manifest_sha256": "bcbc72a72832c6024c5b8f5b0ab245d576e93544adb349a9219883754c33be16",
+      "build_profile_control_plane_version": "aa069bc7df47f26d7d0677da69b5a1c4da6a3777151255e830d6989fced210f0"
+    },
+    "registered_science_slices": [],
+    "scheduler_isolation": "not_claimed_unrelated_user_scheduler_job_4754394_active_empty_allowlist_transition_only",
+    "pending_submission_marker": "absent",
+    "pending_manual_accounting_marker": "absent"
+  },
+  "terminal_mirrored_ledger": {
+    "orion_node_hours_jsonl_sha256": "dfb6e24a431c4a44682f864be2dbd5520816488d58cada7f0672aeea39c204b0",
+    "project_home_node_hours_jsonl_sha256": "dfb6e24a431c4a44682f864be2dbd5520816488d58cada7f0672aeea39c204b0",
+    "orion_node_hours_csv_sha256": "92a833de7096c81954e9fed572e51c0706b61b54adc3d1704d7130652d47f946",
+    "orion_mirror_receipts_jsonl_sha256": "696e93105d386ea0cd77c14398552a0f17581a65e7714625e51d0b8d84b131d5",
+    "ledger_records": 111,
+    "latest_sequence_number": 110,
+    "latest_event_type": "reconciliation",
+    "latest_event_sha256": "fc0082bef800733c433395d48f551559abe083367e5549cc4bffbe8a0ab48bfa",
+    "cumulative_consumed_node_hours": 1.0947222222222224,
+    "active_reservations": 0,
+    "pending_submission_marker": "absent",
+    "pending_manual_accounting_marker": "absent"
+  },
+  "external_review": {
+    "reviewer": "pending external review",
+    "disposition": "pending external review"
+  },
+  "completed_actions": [
+    "preserved the v17 staged strict-controller review record as immutable chronology",
+    "committed the reviewed strict Q011 retry reservation and promotion boundary as 3ba8c95770cb5d751f3ff64cce8fd5911fec5d56",
+    "paired-installed byte-identical immutable 6dc456e5 controller generations into Orion and Project Home",
+    "promoted the required same-controller empty-allowlist launch-prohibited baseline without claiming scheduler isolation",
+    "confirmed byte-identical Orion and Project Home policy and promotion bytes with no registered science slices",
+    "validated the 111-row mirrored ledger with zero active PIC reservations and absent pending-submission and incomplete-manual-accounting markers"
+  ],
+  "remaining_phase0_actions": [
+    "commit this additive receipt boundary and rebuild the HIP/MPI Release candidate from the resulting clean source commit",
+    "freeze the repaired clean candidate and materialize the four-slice Q011 policy successor",
+    "wait for an empty scheduler snapshot before the four-slice policy attestation and promotion",
+    "register and execute each Q011 v2 pressure pilot serially through the installed control plane",
+    "retain external review as pending until a named external reviewer records a disposition"
+  ]
+}

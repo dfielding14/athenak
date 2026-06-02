@@ -1,56 +1,40 @@
 {
-  "schema_version": 1,
   "authorization_date": "2026-05-30",
   "authorized_by": "user",
-  "reviewer": "pending external review",
   "frontier": {
     "account": "AST207",
+    "maximum_node_hours": 10000,
     "partition": "batch",
     "qos_policy": "debug_preferred_normal_fallback",
     "serial_pic_submissions": true,
-    "simulation_root": "/lustre/orion/ast207/proj-shared/dfielding/PIC",
-    "maximum_node_hours": 10000
+    "simulation_root": "/lustre/orion/ast207/proj-shared/dfielding/PIC"
   },
-  "science_submission_freeze": {
-    "status": "authorized",
-    "manifest_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/clean_candidates/d7205cd3-63fb-45ba-8e0a-c74d150df5a2/clean_candidate_manifest.json",
-    "manifest_sha256": "bcbc72a72832c6024c5b8f5b0ab245d576e93544adb349a9219883754c33be16",
-    "build_profile_control_plane_version": "aa069bc7df47f26d7d0677da69b5a1c4da6a3777151255e830d6989fced210f0"
-  },
-  "registered_science_slices": [],
   "frontier_admission_smoke": {
     "status": "closed_after_pass"
   },
+  "long_term_storage": {
+    "blocks": [
+      "terminal_durable_retention_signoff_pending_external_review"
+    ],
+    "risk": "Orion-only retention is user-directed and does not provide an institutional or approved off-site durable archive.",
+    "selected_destination": "/lustre/orion/ast207/proj-shared/dfielding/PIC",
+    "status": "user_selected_orion_only_with_documented_durability_risk"
+  },
   "olcf_side_storage": {
-    "status": "passed_user_authorized_orion_only_storage",
-    "last_preflight_utc": "2026-06-02T00:21:16Z",
-    "installed_control_plane_version": "c83e7653aa7ad52669191f7549fb0793b291d0e3ddb061a8fc91deb3882bc6aa",
-    "staged_control_plane_candidate_version": "c83e7653aa7ad52669191f7549fb0793b291d0e3ddb061a8fc91deb3882bc6aa",
-    "installed_control_plane_lifecycle": "paired_installed_reviewed_generation",
-    "orion_simulation_root_preflight": {
-      "status": "passed",
-      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC",
-      "method": "local_create_write_sync_remove_probe"
-    },
-    "project_home_mirror_root": "/ccs/proj/ast207/proj-shared/PIC",
-    "project_home_usage": [
-      "small_append_only_ledger_and_control_plane_mirror"
-    ],
-    "project_home_retention_role": "operational_ledger_mirror_only",
     "historical_project_home_bulk_artifacts": "chronology_only_superseded_by_orion_policy_copies_do_not_add_new_bulk_artifacts",
-    "project_home_ledger_mirror_transport": "filesystem_copy",
-    "project_home_preflight": {
-      "status": "passed",
-      "method": "local_create_write_sync_remove_probe"
+    "installed_control_plane_lifecycle": "paired_installed_reviewed_generation",
+    "installed_control_plane_version": "6dc456e5858b2cbdbd7ef80cbc324b748e2cce5075023b49f7115eab4e84dfdd",
+    "last_preflight_utc": "2026-06-02T04:29:11Z",
+    "ledger_genesis": {
+      "control_plane_version": "cde67c16228af41b47d70139185e92b484890db4d2a714505108ad4df6245a08",
+      "event_sha256": "849bf340986f4d1e1f7cc69c0d2e2845c0313c02d935822113aa8b1df5f1f4c1",
+      "mirror_ack_sha256": "a3af8af8c3b579ee323850902aad7aab58abde98dff98618ccffd15958dbb296",
+      "mirror_transport": "filesystem_copy",
+      "status": "initialized",
+      "timestamp": "2026-05-30T12:28:40Z"
     },
-    "orion_bulk_evidence_root": "/lustre/orion/ast207/proj-shared/dfielding/PIC",
-    "orion_bulk_evidence_usage": [
-      "simulation_outputs",
-      "immutable_bulk_signoff_bundles",
-      "private_reference_artifact_staging",
-      "restore_drill_evidence"
-    ],
-    "orion_retention_role": "user_selected_sole_bulk_evidence_root_with_documented_durability_risk",
+    "ledger_genesis_allowed": false,
+    "ledger_genesis_authorization": "user_removed_kronos_dependency_and_selected_orion_only_bulk_evidence_root",
     "manual_accounting_authorizations": [
       {
         "authorization_id": "q016-orion-local-direct-srun-accounting-2026-05-30",
@@ -77,23 +61,39 @@
         "sha256": "0ef3abbf09ace206ec5b5998eb979477d0784874176ec9213fec1695ad9a24f5"
       }
     ],
-    "ledger_genesis_allowed": false,
-    "ledger_genesis_authorization": "user_removed_kronos_dependency_and_selected_orion_only_bulk_evidence_root",
-    "ledger_genesis": {
-      "status": "initialized",
-      "timestamp": "2026-05-30T12:28:40Z",
-      "control_plane_version": "cde67c16228af41b47d70139185e92b484890db4d2a714505108ad4df6245a08",
-      "event_sha256": "849bf340986f4d1e1f7cc69c0d2e2845c0313c02d935822113aa8b1df5f1f4c1",
-      "mirror_transport": "filesystem_copy",
-      "mirror_ack_sha256": "a3af8af8c3b579ee323850902aad7aab58abde98dff98618ccffd15958dbb296"
-    }
+    "orion_bulk_evidence_root": "/lustre/orion/ast207/proj-shared/dfielding/PIC",
+    "orion_bulk_evidence_usage": [
+      "simulation_outputs",
+      "immutable_bulk_signoff_bundles",
+      "private_reference_artifact_staging",
+      "restore_drill_evidence"
+    ],
+    "orion_retention_role": "user_selected_sole_bulk_evidence_root_with_documented_durability_risk",
+    "orion_simulation_root_preflight": {
+      "method": "local_create_write_sync_remove_probe",
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC",
+      "status": "passed"
+    },
+    "project_home_ledger_mirror_transport": "filesystem_copy",
+    "project_home_mirror_root": "/ccs/proj/ast207/proj-shared/PIC",
+    "project_home_preflight": {
+      "method": "local_create_write_sync_remove_probe",
+      "status": "passed"
+    },
+    "project_home_retention_role": "operational_ledger_mirror_only",
+    "project_home_usage": [
+      "small_append_only_ledger_and_control_plane_mirror"
+    ],
+    "staged_control_plane_candidate_version": "6dc456e5858b2cbdbd7ef80cbc324b748e2cce5075023b49f7115eab4e84dfdd",
+    "status": "passed_user_authorized_orion_only_storage"
   },
-  "long_term_storage": {
-    "status": "user_selected_orion_only_with_documented_durability_risk",
-    "selected_destination": "/lustre/orion/ast207/proj-shared/dfielding/PIC",
-    "risk": "Orion-only retention is user-directed and does not provide an institutional or approved off-site durable archive.",
-    "blocks": [
-      "terminal_durable_retention_signoff_pending_external_review"
-    ]
+  "registered_science_slices": [],
+  "reviewer": "pending external review",
+  "schema_version": 1,
+  "science_submission_freeze": {
+    "build_profile_control_plane_version": "aa069bc7df47f26d7d0677da69b5a1c4da6a3777151255e830d6989fced210f0",
+    "manifest_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/clean_candidates/d7205cd3-63fb-45ba-8e0a-c74d150df5a2/clean_candidate_manifest.json",
+    "manifest_sha256": "bcbc72a72832c6024c5b8f5b0ab245d576e93544adb349a9219883754c33be16",
+    "status": "authorized"
   }
 }
