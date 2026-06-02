@@ -960,11 +960,30 @@ class PicReadinessRegistryTests(unittest.TestCase):
             self._assert_current_registered_replay_bindings(policy, staged_version)
             return
         if storage["installed_control_plane_version"] == replay["control_plane_version"]:
-            successor = _load("phase0_curated_candidate_successor_v9_2026-06-01.json")
+            successor = _load("phase0_curated_candidate_successor_v10_2026-06-01.json")
             self.assertEqual(
                 successor["predecessor_record"],
                 "tst/publication/readiness/"
-                "phase0_curated_candidate_successor_v8_2026-06-01.json",
+                "phase0_curated_candidate_successor_v9_2026-06-01.json",
+            )
+            self.assertEqual(
+                successor["predecessor_sha256"],
+                _sha256(READINESS_DIR / successor["predecessor_record"].split("/")[-1]),
+            )
+            self.assertEqual(
+                successor["status"],
+                "local_vl2_tsc_successor_staged_validation_rereview_"
+                "install_build_and_freeze_pending",
+            )
+            self.assertEqual(successor["qualification_effect"], "none")
+            self.assertEqual(
+                successor["candidate_freeze_source_commit"],
+                "pending_final_clean_receipt_commit",
+            )
+            self.assertEqual(
+                successor["frontier_launch_authorization"],
+                "none_pending_validation_rereview_paired_install_"
+                "clean_build_and_freeze",
             )
             self.assertEqual(
                 successor["live_paired_control_plane_version"],
@@ -1896,7 +1915,7 @@ class PicReadinessRegistryTests(unittest.TestCase):
             )
             terminal = manual_accounting_activation["terminal_ledger"]
         else:
-            staged = _load("phase0_curated_candidate_successor_v9_2026-06-01.json")
+            staged = _load("phase0_curated_candidate_successor_v10_2026-06-01.json")
             baseline = staged["operational_baseline"]
             self.assertEqual(current_policy_sha256, baseline["orion_policy_sha256"])
             self.assertEqual(
