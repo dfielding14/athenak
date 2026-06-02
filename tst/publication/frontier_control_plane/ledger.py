@@ -31,6 +31,7 @@ from control_plane_common import open_directory_below, read_json_bytes
 from control_plane_common import read_stable_regular_file_below
 from control_plane_common import scheduler_account_matches_authorized
 from control_plane_common import stable_serialization_anchor
+from operator_attestation import validate_sealed_operator_attestation
 
 
 CSV_FIELDS = [
@@ -62,6 +63,10 @@ CSV_FIELDS = [
     "submission_scope",
     "registered_science_authorization_id",
     "clean_candidate_manifest_sha256",
+    "pre_manifest_attestation_path",
+    "pre_manifest_attestation_sha256",
+    "pre_submit_wrapper_attestation_path",
+    "pre_submit_wrapper_attestation_sha256",
     "partition",
     "qos",
     "qos_selection_reason",
@@ -185,6 +190,21 @@ RESERVATION_PAYLOAD_BOUND_FIELDS = {
 }
 RESERVATION_PAYLOAD_OPTIONAL_FIELDS = RESERVATION_PAYLOAD_BOUND_FIELDS | {
     "registered_science_authorization_id",
+    "pre_manifest_attestation_path",
+    "pre_manifest_attestation_sha256",
+    "pre_submit_wrapper_attestation_path",
+    "pre_submit_wrapper_attestation_sha256",
+}
+OPERATOR_ATTESTATION_PROVENANCE_FIELDS = {
+    "pre_manifest_attestation_path",
+    "pre_manifest_attestation_sha256",
+    "pre_submit_wrapper_attestation_path",
+    "pre_submit_wrapper_attestation_sha256",
+}
+LEGACY_OPERATOR_ATTESTATION_FREE_CONTROL_PLANE_VERSIONS = {
+    "6002c80e305d6cfd322675b3e27e17e169b1718d8edd722330464cccb0c4fd86",
+    "4ccde8dfe557fbb6450c15b2ee68d41d2ac0711d5d56d79e775fa75178177bd3",
+    "3d3d0d20ab3cedb1b650d8a19e99a0123b550ead25ebd312882d03d3be3b41d9",
 }
 RECONCILIATION_PAYLOAD_FIELDS = {
     "scheduler_reported_allocated_nodes",
@@ -739,6 +759,74 @@ def _require_purged_zero_execution_semantics(record: dict[str, object]) -> None:
             raise ValueError("Purged zero-execution reconciliation semantics differ")
 
 
+def _require_operator_attestation_provenance(record: dict[str, object]) -> None:
+    present = OPERATOR_ATTESTATION_PROVENANCE_FIELDS & set(record)
+    if present and present != OPERATOR_ATTESTATION_PROVENANCE_FIELDS:
+        raise ValueError("Registered operator-attestation provenance quartet is incomplete")
+    if not present:
+        if (
+            record.get("submission_scope") == "registered_science"
+            and record.get("control_plane_version")
+            not in LEGACY_OPERATOR_ATTESTATION_FREE_CONTROL_PLANE_VERSIONS
+        ):
+            raise ValueError(
+                "Registered science requires operator-attestation provenance"
+            )
+        return
+    if record.get("submission_scope") != "registered_science":
+        raise ValueError("Only registered science may carry operator-attestation provenance")
+    for phase in ["pre_manifest", "pre_submit_wrapper"]:
+        path = record[f"{phase}_attestation_path"]
+        digest = record[f"{phase}_attestation_sha256"]
+        if (
+            not isinstance(path, str)
+            or not os.path.isabs(path)
+            or Path(path).name != "attestation.json"
+            or Path(path).parent.parent.name != "operator_attestations"
+            or not Path(path).parent.name.endswith(f"-{phase}")
+            or not _is_lowercase_sha256(digest)
+        ):
+            raise ValueError("Registered operator-attestation provenance is malformed")
+
+
+def _validate_operator_attestation_trees(
+    records: list[dict[str, object]],
+    *,
+    ledger_jsonl: Path,
+    mirror_jsonl: Path,
+) -> None:
+    pic_root = Path(os.path.abspath(ledger_jsonl.parent.parent))
+    project_home_root = Path(os.path.abspath(mirror_jsonl.parent.parent))
+    validated: set[tuple[str, str, str, str, str]] = set()
+    for record in records:
+        if not OPERATOR_ATTESTATION_PROVENANCE_FIELDS & set(record):
+            continue
+        authorization_id = record.get("registered_science_authorization_id")
+        control_plane_version = record.get("control_plane_version")
+        if not isinstance(authorization_id, str) or not authorization_id:
+            raise ValueError("Registered operator-attestation authorization ID is invalid")
+        if not isinstance(control_plane_version, str):
+            raise ValueError("Registered operator-attestation control-plane version is invalid")
+        for phase in ["pre_manifest", "pre_submit_wrapper"]:
+            path = str(record[f"{phase}_attestation_path"])
+            digest = str(record[f"{phase}_attestation_sha256"])
+            key = (path, digest, authorization_id, control_plane_version, phase)
+            if key in validated:
+                continue
+            binding = validate_sealed_operator_attestation(
+                Path(path),
+                authorization_id=authorization_id,
+                phase=phase,
+                control_plane_version=control_plane_version,
+                authorized_pic_root=pic_root,
+                authorized_project_home_root=project_home_root,
+                enforce_freshness=False,
+            )
+            if binding != {"path": path, "sha256": digest}:
+                raise ValueError("Registered operator-attestation binding differs")
+            validated.add(key)
+
+
 def _validate_terminal_recovery_handoff_mirrors(
     records: list[dict[str, object]],
     *,
@@ -896,6 +984,7 @@ def _validate_terminal_recovery_handoff_bytes(
 def _validate_accounting_records(records: list[dict[str, object]]) -> None:
     for index, record in enumerate(records):
         _require_closed_primary_event_schema(record)
+        _require_operator_attestation_provenance(record)
         event_type = record.get("event_type")
         if "reconciled" in record and type(record["reconciled"]) is not bool:
             raise ValueError("Ledger reconciled status must be boolean")
@@ -1764,6 +1853,9 @@ def recover_incomplete_manual_accounting_locked(
         if not receipts:
             raise ValueError("Cannot recover manual accounting without its genesis receipt")
         _validate_genesis_anchors(ledger_jsonl, mirror_jsonl, local_records, receipts)
+        _validate_operator_attestation_trees(
+            local_records, ledger_jsonl=ledger_jsonl, mirror_jsonl=mirror_jsonl
+        )
         publish_incomplete_manual_accounting_marker_locked(
             ledger_jsonl, mirror_jsonl, marker
         )
@@ -1988,6 +2080,9 @@ def validate_mirrored_state(
     mirror_records = validate_primary_chain(mirror_jsonl, root=mirror_root)
     if local_records != mirror_records:
         raise ValueError("Local and mirrored PIC ledger records differ")
+    _validate_operator_attestation_trees(
+        local_records, ledger_jsonl=ledger_jsonl, mirror_jsonl=mirror_jsonl
+    )
     receipts = validate_receipts(
         receipts_jsonl,
         local_records,
@@ -2020,6 +2115,9 @@ def _validate_mirrored_state_bytes(
     )
     if local_records != mirror_records:
         raise ValueError("Local and mirrored PIC ledger records differ")
+    _validate_operator_attestation_trees(
+        local_records, ledger_jsonl=ledger_jsonl, mirror_jsonl=mirror_jsonl
+    )
     receipts = _validate_receipt_records(
         _read_jsonl_bytes(state[receipts_jsonl], path=receipts_jsonl),
         local_records,
@@ -2345,6 +2443,9 @@ def _repair_mirrored_state_pinned(
     if not receipts:
         raise ValueError("Cannot repair a mirrored ledger without its genesis receipt")
     _validate_genesis_anchors(ledger_jsonl, mirror_jsonl, local_records, receipts)
+    _validate_operator_attestation_trees(
+        local_records, ledger_jsonl=ledger_jsonl, mirror_jsonl=mirror_jsonl
+    )
     mirror_preflight(mirror_jsonl)
 
     appended_mirror = 0
@@ -2440,6 +2541,9 @@ def _append_primary_event_pinned(
     record.setdefault("timestamp", utc_now())
     record["event_sha256"] = record_sha256(record, "event_sha256")
     _validate_accounting_records([*local_records, record])
+    _validate_operator_attestation_trees(
+        [*local_records, record], ledger_jsonl=ledger_jsonl, mirror_jsonl=mirror_jsonl
+    )
     _validate_terminal_recovery_handoff_mirrors(
         [*local_records, record], ledger_jsonl=ledger_jsonl, mirror_jsonl=mirror_jsonl
     )

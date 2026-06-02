@@ -23,6 +23,8 @@ import tarfile
 from typing import Callable, Iterable
 import uuid
 
+from operator_attestation import validate_sealed_operator_attestation
+
 
 AUTHORIZED_PIC_ROOT = Path("/lustre/orion/ast207/proj-shared/dfielding/PIC")
 AUTHORIZED_PROJECT_HOME_ROOT = Path("/ccs/proj/ast207/proj-shared/PIC")
@@ -346,6 +348,7 @@ CONTROL_PLANE_FILES = [
     "launch_trampoline.py",
     "launch_with_frontier_profile.sh",
     "ledger.py",
+    "operator_attestation.py",
     "promote_active_policy.py",
     "reconcile_frontier_job.py",
     "reconcile_manual_frontier_allocations.py",
@@ -3030,12 +3033,60 @@ def require_storage_policy_unlock_snapshot(
         "project_home_policy_path": str(mirror_policy_path),
         "policy_sha256": policy_sha256,
     }
+    policy_value = read_json_bytes(policy_bytes, label=str(policy_path))
+    registered_science_slices = policy_value.get("registered_science_slices")
+    if isinstance(registered_science_slices, list) and registered_science_slices:
+        attestation_path = Path(
+            str(promotion.get("pre_policy_promotion_attestation_path", ""))
+        )
+        if (
+            not isinstance(
+                promotion.get("pre_policy_promotion_attestation_authorization_id"),
+                str,
+            )
+            or not promotion["pre_policy_promotion_attestation_authorization_id"]
+            or not _is_lowercase_sha256(
+                promotion.get("pre_policy_promotion_attestation_sha256")
+            )
+            or attestation_path.name != "attestation.json"
+            or attestation_path.parent.parent
+            != Path(os.path.abspath(authorized_pic_root)) / "operator_attestations"
+            or not attestation_path.parent.name.endswith("-pre_policy_promotion")
+        ):
+            raise ValueError("Active-policy promotion attestation binding is malformed")
+        attestation = validate_sealed_operator_attestation(
+            attestation_path,
+            authorization_id=promotion[
+                "pre_policy_promotion_attestation_authorization_id"
+            ],
+            phase="pre_policy_promotion",
+            control_plane_version=control_plane_version,
+            authorized_pic_root=authorized_pic_root,
+            authorized_project_home_root=authorized_project_home_root,
+            enforce_freshness=False,
+        )
+        if attestation != {
+            "path": str(attestation_path),
+            "sha256": promotion["pre_policy_promotion_attestation_sha256"],
+        }:
+            raise ValueError("Active-policy promotion attestation binding differs")
+        expected.update(
+            {
+                "pre_policy_promotion_attestation_authorization_id": promotion[
+                    "pre_policy_promotion_attestation_authorization_id"
+                ],
+                "pre_policy_promotion_attestation_path": str(attestation_path),
+                "pre_policy_promotion_attestation_sha256": promotion[
+                    "pre_policy_promotion_attestation_sha256"
+                ],
+            }
+        )
     if type(promotion.get("schema_version")) is not int or promotion != expected:
         raise ValueError("Active-policy promotion record is not anchored to this control plane")
     if sha256_bytes(mirror_policy_bytes) != promotion["policy_sha256"]:
         raise ValueError("Project Home active-policy mirror checksum differs")
     policy = validate_storage_policy(
-        read_json_bytes(policy_bytes, label=str(policy_path)),
+        policy_value,
         control_plane_version=control_plane_version,
         authorized_pic_root=authorized_pic_root,
         authorized_project_home_root=authorized_project_home_root,

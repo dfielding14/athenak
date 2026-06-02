@@ -55,6 +55,7 @@ METADATA_FILENAME = ".capture_metadata.json"
 ACTIVE_RESERVATION_STATES = {"reserved", "submitted"}
 AUTHORIZATION_ID_PATTERN = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9_-]{0,126}[A-Za-z0-9])?")
 SHA256_PATTERN = re.compile(r"[0-9a-f]{64}")
+CAPTURE_TO_SEAL_MAX_AGE_SECONDS = 15 * 60
 AT_FDCWD = -100
 RENAME_NOREPLACE = 1
 GATE_SNAPSHOT_FILENAMES = {
@@ -67,17 +68,22 @@ GATE_SNAPSHOT_FILENAMES = {
 CAPTURED_GATE_SNAPSHOT_FILENAMES = {
     f"capture_{filename}" for filename in GATE_SNAPSHOT_FILENAMES
 }
+CAPTURED_PROCESS_SNAPSHOT_FILENAME = "capture_same_account_process_snapshot.txt"
+CAPTURED_SNAPSHOT_FILENAMES = {
+    CAPTURED_PROCESS_SNAPSHOT_FILENAME,
+    *CAPTURED_GATE_SNAPSHOT_FILENAMES,
+}
 REVIEW_STAGING_FILENAMES = {
     METADATA_FILENAME,
     "same_account_process_snapshot.txt",
     *GATE_SNAPSHOT_FILENAMES,
-    *CAPTURED_GATE_SNAPSHOT_FILENAMES,
+    *CAPTURED_SNAPSHOT_FILENAMES,
 }
 SEALED_FILENAMES = {
     "attestation.json",
     "same_account_process_snapshot.txt",
     *GATE_SNAPSHOT_FILENAMES,
-    *CAPTURED_GATE_SNAPSHOT_FILENAMES,
+    *CAPTURED_SNAPSHOT_FILENAMES,
 }
 
 
@@ -556,6 +562,7 @@ def capture(
     }
     _write_new_file(staging / METADATA_FILENAME, _metadata_bytes(metadata))
     _write_new_file(staging / "same_account_process_snapshot.txt", process_snapshot)
+    _write_new_file(staging / CAPTURED_PROCESS_SNAPSHOT_FILENAME, process_snapshot)
     for filename, payload in _gate_snapshot_files(gate_snapshot).items():
         _write_new_file(staging / filename, payload)
         _write_new_file(staging / f"capture_{filename}", payload)
@@ -648,6 +655,23 @@ def _require_sealable(snapshot: GateSnapshot) -> None:
         raise ValueError("Isolation attestation is blocked by an outstanding reservation")
 
 
+def _require_fresh_capture(metadata: dict[str, object], sealed: datetime) -> None:
+    if sealed.tzinfo is None:
+        raise ValueError("Injected clock must return a timezone-aware datetime")
+    try:
+        recorded = datetime.strptime(
+            str(metadata["recorded_utc"]), "%Y-%m-%dT%H:%M:%SZ"
+        ).replace(tzinfo=timezone.utc)
+    except ValueError as error:
+        raise ValueError("Staged recorded UTC timestamp is malformed") from error
+    sealed = sealed.astimezone(timezone.utc)
+    if (
+        sealed < recorded
+        or (sealed - recorded).total_seconds() > CAPTURE_TO_SEAL_MAX_AGE_SECONDS
+    ):
+        raise ValueError("Staged capture-to-seal interval exceeds fifteen minutes")
+
+
 def _sha256(path: Path) -> str:
     return hashlib.sha256(_read_regular_bytes(path)).hexdigest()
 
@@ -693,6 +717,10 @@ def _attestation(
         "pending_manual_accounting_marker": pending_manual_accounting,
         "mirrored_ledger_line_counts": line_counts,
         "validated_mirrored_ledger_state": validated_state,
+        "captured_snapshots": {
+            filename: _file_record(staging, filename)
+            for filename in sorted(CAPTURED_SNAPSHOT_FILENAMES)
+        },
         "operator_statement": OPERATOR_STATEMENTS[phase],
     }
 
@@ -899,6 +927,7 @@ def seal(
     final = archive_root / str(metadata["final_directory_name"])
     _require_absent_entry(final, label="Final attestation directory")
 
+    process_snapshot = _capture_same_account_processes(runner, captured_user)
     snapshot = _capture_gate_snapshot(
         paths,
         runner=runner,
@@ -906,9 +935,12 @@ def seal(
         ledger_validator=ledger_validator,
     )
     _require_sealable(snapshot)
+    _atomic_replace_file(staging / "same_account_process_snapshot.txt", process_snapshot)
     for filename, payload in _gate_snapshot_files(snapshot).items():
         _atomic_replace_file(staging / filename, payload)
-    _, sealed_utc = _timestamp_strings(now())
+    sealed_now = now()
+    _require_fresh_capture(metadata, sealed_now)
+    _, sealed_utc = _timestamp_strings(sealed_now)
     _write_json_new(
         staging / "attestation.json",
         _attestation(staging, metadata, snapshot, phase=phase, sealed_utc=sealed_utc),

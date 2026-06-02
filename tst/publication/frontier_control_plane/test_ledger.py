@@ -23,6 +23,7 @@ from ledger import repair_mirrored_state, validate_mirrored_state
 from ledger import slurm_walltime_seconds
 from ledger import transition_payload, validate_primary_chain, validate_receipts, write_csv
 from ledger import validated_read_only_mirrored_state_snapshot
+from operator_attestation import CAPTURED_SNAPSHOT_FILENAMES, OPERATOR_STATEMENTS
 
 
 class LedgerTests(unittest.TestCase):
@@ -89,9 +90,13 @@ class LedgerTests(unittest.TestCase):
         }
 
     def _reservation_event(
-        self, *, reservation_id: str = "reservation-1"
+        self,
+        *,
+        reservation_id: str = "reservation-1",
+        include_operator_attestations: bool = True,
+        authorization_id: str = "test-authorization",
     ) -> dict[str, object]:
-        return {
+        event = {
             "event_type": "reservation",
             "reservation_id": reservation_id,
             "submission_id": "submission-1",
@@ -110,7 +115,7 @@ class LedgerTests(unittest.TestCase):
                 / "manifest.json"
             ),
             "submission_scope": "registered_science",
-            "registered_science_authorization_id": "test-authorization",
+            "registered_science_authorization_id": authorization_id,
             "clean_candidate_manifest_sha256": "e" * 64,
             "partition": "batch",
             "qos": "normal",
@@ -127,6 +132,118 @@ class LedgerTests(unittest.TestCase):
             "reserved_node_hours": 1.0 / 60.0,
             "artifact_dir": str(self.root / "artifacts" / "submission-1"),
         }
+        if include_operator_attestations:
+            event.update(self._operator_attestation_quartet(authorization_id))
+        return event
+
+    def _operator_attestation_quartet(
+        self, authorization_id: str = "test-authorization"
+    ) -> dict[str, str]:
+        archive = self.root / "orion" / "operator_attestations"
+        bindings = {}
+        for index, phase in enumerate(["pre_manifest", "pre_submit_wrapper"]):
+            timestamp = f"20260601T00000{index}Z"
+            root = archive / f"{timestamp}-{authorization_id}-{phase}"
+            if not root.exists():
+                root.mkdir(parents=True)
+                manual_paths = [
+                    self.root / "orion" / "ledger" / "pending_manual_accounting.json",
+                    self.root
+                    / "project_home"
+                    / "ledger"
+                    / "pending_manual_accounting.json",
+                ]
+                ledger_paths = [self.ledger, self.receipts, self.mirror]
+                manual = "".join(f"{path} absent\n" for path in manual_paths).encode()
+                counts = "".join(f"1 {path}\n" for path in ledger_paths).encode()
+                state = {
+                    "validation": "coherent",
+                    "validator": "existing_read_only_mirrored_state_snapshot",
+                    "ledger_record_count": 1,
+                    "ledger_tail_event_sha256": None,
+                    "active_reservation_count": 0,
+                    "active_reservation_ids": [],
+                }
+                payloads = {
+                    "same_account_process_snapshot.txt": b"test process snapshot\n",
+                    "queue_snapshot.txt": b"",
+                    "pending_submission_marker.txt": b"absent\n",
+                    "pending_manual_accounting_marker.txt": manual,
+                    "mirrored_ledger_line_counts.txt": counts,
+                    "validated_mirrored_ledger_state.json": (
+                        json.dumps(state, indent=2, sort_keys=True) + "\n"
+                    ).encode(),
+                }
+                payloads.update(
+                    {
+                        f"capture_{name}": payload
+                        for name, payload in list(payloads.items())
+                        if name != "same_account_process_snapshot.txt"
+                    }
+                )
+                payloads["capture_same_account_process_snapshot.txt"] = (
+                    b"test captured process snapshot\n"
+                )
+                for filename, payload in payloads.items():
+                    path = root / filename
+                    path.write_bytes(payload)
+                    path.chmod(0o400)
+
+                def file_record(filename: str) -> dict[str, object]:
+                    payload = (root / filename).read_bytes()
+                    return {
+                        "path": filename,
+                        "sha256": hashlib.sha256(payload).hexdigest(),
+                    }
+
+                pending = file_record("pending_submission_marker.txt")
+                pending["value"] = "absent"
+                pending_manual = file_record("pending_manual_accounting_marker.txt")
+                pending_manual["value"] = "absent"
+                pending_manual["values"] = {
+                    str(path): "absent" for path in manual_paths
+                }
+                line_counts = file_record("mirrored_ledger_line_counts.txt")
+                line_counts["counts"] = {str(path): 1 for path in ledger_paths}
+                validated_state = file_record("validated_mirrored_ledger_state.json")
+                validated_state["state"] = state
+                attestation = {
+                    "schema_version": 1,
+                    "record_type": (
+                        "q027_frontier_registered_science_same_account_isolation_attestation"
+                    ),
+                    "recorded_utc": f"2026-06-01T00:00:0{index}Z",
+                    "sealed_utc": f"2026-06-01T00:00:0{index}Z",
+                    "registered_science_authorization_id": authorization_id,
+                    "control_plane_version": "a" * 64,
+                    "phase": phase,
+                    "same_account_process_snapshot": file_record(
+                        "same_account_process_snapshot.txt"
+                    ),
+                    "queue_snapshot": file_record("queue_snapshot.txt"),
+                    "pending_submission_marker": pending,
+                    "pending_manual_accounting_marker": pending_manual,
+                    "mirrored_ledger_line_counts": line_counts,
+                    "validated_mirrored_ledger_state": validated_state,
+                    "captured_snapshots": {
+                        filename: file_record(filename)
+                        for filename in sorted(CAPTURED_SNAPSHOT_FILENAMES)
+                    },
+                    "operator_statement": OPERATOR_STATEMENTS[phase],
+                }
+                attestation_path = root / "attestation.json"
+                attestation_path.write_text(
+                    json.dumps(attestation, indent=2, sort_keys=True) + "\n",
+                    encoding="utf-8",
+                )
+                attestation_path.chmod(0o400)
+                root.chmod(0o500)
+            attestation_path = root / "attestation.json"
+            bindings[f"{phase}_attestation_path"] = str(attestation_path)
+            bindings[f"{phase}_attestation_sha256"] = hashlib.sha256(
+                attestation_path.read_bytes()
+            ).hexdigest()
+        return bindings
 
     def _recovery_handoff(
         self,
@@ -229,7 +346,9 @@ class LedgerTests(unittest.TestCase):
 
     def test_reserve_attach_reconcile_and_csv_projection(self) -> None:
         common = {
-            **transition_payload(self._reservation_event()),
+            **transition_payload(
+                self._reservation_event(authorization_id="f1-clean-gyro-v1")
+            ),
             "reservation_id": "reservation-1",
             "submission_id": "submission-1",
             "submission_scope": "registered_science",
@@ -347,7 +466,9 @@ class LedgerTests(unittest.TestCase):
 
     def test_registered_reconciliation_rejects_inconsistent_usage(self) -> None:
         common = {
-            **transition_payload(self._reservation_event()),
+            **transition_payload(
+                self._reservation_event(authorization_id="f1-clean-gyro-v1")
+            ),
             "reservation_id": "reservation-1",
             "submission_id": "submission-1",
             "submission_scope": "registered_science",
@@ -546,6 +667,64 @@ class LedgerTests(unittest.TestCase):
                 event[field] = value
                 with self.assertRaisesRegex(ValueError, "reservation"):
                     self.append(event)
+
+    def test_registered_reservation_rejects_partial_operator_attestation_quartet(
+        self,
+    ) -> None:
+        quartet = self._operator_attestation_quartet()
+        for field, value in quartet.items():
+            with self.subTest(field=field):
+                event = self._reservation_event(include_operator_attestations=False)
+                event[field] = value
+                with self.assertRaisesRegex(ValueError, "quartet is incomplete"):
+                    self.append(event)
+
+    def test_registered_reservation_accepts_complete_operator_attestation_quartet(
+        self,
+    ) -> None:
+        event = self._reservation_event()
+        event.update(self._operator_attestation_quartet())
+        reservation = self.append(event)
+        self.assertEqual(
+            reservation["pre_submit_wrapper_attestation_sha256"],
+            self._operator_attestation_quartet()[
+                "pre_submit_wrapper_attestation_sha256"
+            ],
+        )
+
+    def test_registered_reservation_rejects_missing_operator_attestation_quartet(
+        self,
+    ) -> None:
+        with self.assertRaisesRegex(
+            ValueError, "requires operator-attestation provenance"
+        ):
+            self.append(
+                self._reservation_event(include_operator_attestations=False)
+            )
+
+    def test_historical_registered_reservation_accepts_missing_operator_attestation_quartet(
+        self,
+    ) -> None:
+        event = self._reservation_event(include_operator_attestations=False)
+        event["control_plane_version"] = (
+            "6002c80e305d6cfd322675b3e27e17e169b1718d8edd722330464cccb0c4fd86"
+        )
+        self.append(event)
+
+    def test_registered_reservation_rejects_off_root_operator_attestation_quartet(
+        self,
+    ) -> None:
+        event = self._reservation_event()
+        for phase in ["pre_manifest", "pre_submit_wrapper"]:
+            event[f"{phase}_attestation_path"] = str(
+                self.root
+                / "forged"
+                / "operator_attestations"
+                / f"forged-{phase}"
+                / "attestation.json"
+            )
+        with self.assertRaisesRegex(ValueError, "fixed archive layout"):
+            self.append(event)
 
     def test_slurm_walltime_parser_rounds_and_supports_day_forms(self) -> None:
         self.assertEqual(slurm_walltime_seconds("10"), 600)
@@ -1060,6 +1239,25 @@ class LedgerTests(unittest.TestCase):
             ):
                 replacement.replace(anchor)
 
+    def test_read_only_snapshot_rejects_retained_operator_attestation_tamper(
+        self,
+    ) -> None:
+        reservation = self.append(self._reservation_event())
+        attestation = Path(str(reservation["pre_manifest_attestation_path"]))
+        attestation.chmod(0o600)
+        attestation.write_bytes(attestation.read_bytes() + b"\n")
+        attestation.chmod(0o400)
+        with self.assertRaises(ValueError):
+            with validated_read_only_mirrored_state_snapshot(
+                self.ledger,
+                self.receipts,
+                self.mirror,
+                ledger_root=self.ledger.parent.parent,
+                receipts_root=self.receipts.parent.parent,
+                mirror_root=self.mirror.parent.parent,
+            ):
+                pass
+
     def test_genesis_anchor_rejects_schema_numeric_aliases_before_equality(
         self,
     ) -> None:
@@ -1401,6 +1599,29 @@ class LedgerTests(unittest.TestCase):
                     mirror_transport="filesystem_copy",
                 )
         preflight.assert_not_called()
+
+    def test_repair_rejects_retained_operator_attestation_tamper_before_write(
+        self,
+    ) -> None:
+        reservation = self.append(self._reservation_event())
+        self._drop_last_line(self.mirror)
+        self._drop_last_line(self.receipts)
+        mirror_before = self.mirror.read_bytes()
+        receipts_before = self.receipts.read_bytes()
+        attestation = Path(str(reservation["pre_manifest_attestation_path"]))
+        attestation.chmod(0o600)
+        attestation.write_bytes(attestation.read_bytes() + b"\n")
+        attestation.chmod(0o400)
+        with self.assertRaises(ValueError):
+            repair_mirrored_state(
+                self.ledger,
+                self.csv,
+                self.receipts,
+                self.mirror,
+                mirror_transport="filesystem_copy",
+            )
+        self.assertEqual(self.mirror.read_bytes(), mirror_before)
+        self.assertEqual(self.receipts.read_bytes(), receipts_before)
 
     def test_append_rejects_missing_anchor_before_mirror_preflight(self) -> None:
         local_anchor, _ = genesis_anchor_paths(self.ledger, self.mirror)

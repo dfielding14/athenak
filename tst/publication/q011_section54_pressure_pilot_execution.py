@@ -10,15 +10,18 @@ and one fresh selected-case reviewed pre-submit config per invocation.
 from __future__ import annotations
 
 import argparse
+import copy
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
 import re
 import shutil
 import stat
+import sys
 from typing import Any
 import uuid
 
@@ -40,19 +43,34 @@ INPUT_DECK = (
 ENVIRONMENT_PROFILE_SOURCE = (
     REPO_ROOT / "tst/publication/frontier_control_plane/frontier_pic_environment.sh"
 )
+OPERATOR_ATTESTATION_SOURCE = (
+    REPO_ROOT / "tst/publication/frontier_control_plane/operator_attestation.py"
+)
+PUBLICATION_SCRIPTS = (
+    REPO_ROOT / "tst/publication/analyze_q011_section54_pressure_pilot.py",
+    REPO_ROOT / "tst/publication/publish_q011_section54_pressure_pilot_bundle.py",
+)
 ANALYSIS_SCRIPTS = (
     REPO_ROOT / "tst/publication/analyze_q011_section54_pressure_pilot_case.py",
     REPO_ROOT / "tst/publication/frontier_f1_structured_artifacts.py",
 )
 AUTHORIZED_PIC_ROOT = Path("/lustre/orion/ast207/proj-shared/dfielding/PIC")
+AUTHORIZED_PROJECT_HOME_ROOT = Path("/ccs/proj/ast207/proj-shared/PIC")
 EVIDENCE_CLASS = "engineering_calibration_only"
 PHYSICAL_MODE = "paper_mhd_pic_vl2_tsc"
 RUNTIME_PROFILE = "frontier_minimum_supported"
 SELECTED_QOS = "debug"
 WALLTIME_SECONDS = 900
+SEED_ATHENA_WALLTIME_SECONDS = 600
+SEED_TIMEOUT_MAX_VALIDITY_SECONDS = 4 * 60 * 60
+SEED_TIMEOUT_FILENAME = "timeout_margin.json"
+SEED_TIMEOUT_RATIONALE_FILENAME = "timeout_margin_seed_rationale.json"
 QUEUE_SNAPSHOT_FORMAT = "%i|%P|%q|%T|%j|%k"
 _SHA256 = re.compile(r"[0-9a-f]{64}")
 _GIT_COMMIT = re.compile(r"[0-9a-f]{40}")
+_REGISTERED_EXECUTION_CONTRACT_SHA256 = (
+    "43edb99c6afc68055535b088800423a9df29232b0ba2a9287618dbec189d8fe9"
+)
 _TIMESTAMP = re.compile(
     r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}"
     r"(?:\.[0-9]{1,6})?Z"
@@ -353,6 +371,10 @@ def source_bindings() -> dict[str, object]:
     for path in ANALYSIS_SCRIPTS:
         _, payload = _stable_regular_bytes(path, label=f"analysis source {_relative(path)}")
         analyses.append({"path": _relative(path), "sha256": _sha256_bytes(payload)})
+    publications = []
+    for path in PUBLICATION_SCRIPTS:
+        _, payload = _stable_regular_bytes(path, label=f"publication source {_relative(path)}")
+        publications.append({"path": _relative(path), "sha256": _sha256_bytes(payload)})
     contracts = []
     for case in CASES:
         payload, contract = _load_launch_contract(case)
@@ -386,6 +408,7 @@ def source_bindings() -> dict[str, object]:
             "sha256": _sha256_bytes(materializer_payload),
         },
         "analysis_scripts": analyses,
+        "publication_scripts": publications,
         "launch_contracts": contracts,
     }
 
@@ -397,6 +420,12 @@ def validate_source_tranche() -> dict[str, object]:
         label="Q-011 pressure-pilot registered-execution preregistration",
     )
     _require(isinstance(preregistration, dict), "execution preregistration is malformed")
+    contract = dict(preregistration)
+    contract.pop("source_bindings", None)
+    _require(
+        _sha256_bytes(_json_bytes(contract)) == _REGISTERED_EXECUTION_CONTRACT_SHA256,
+        "registered-execution preregistration contract drifted",
+    )
     _require(
         preregistration.get("source_bindings") == source_bindings(),
         "registered-execution source bindings drifted",
@@ -558,8 +587,81 @@ def materialize_policy_fragment(
     }
 
 
+def _control_plane_version(value: object) -> str:
+    _require(
+        isinstance(value, str) and _SHA256.fullmatch(value) is not None,
+        "control-plane version must be one lowercase SHA-256 digest",
+    )
+    return value
+
+
+def materialize_baseline_policy_successor(
+    *,
+    baseline_policy: Path,
+    control_plane_version: str,
+    last_preflight_utc: str,
+) -> dict[str, object]:
+    """Bind a full launch-prohibited policy copy to one installed successor."""
+    _, _, baseline = _read_json(baseline_policy, label="baseline storage policy")
+    _require(isinstance(baseline, dict), "baseline storage policy is malformed")
+    slices = baseline.get("registered_science_slices")
+    _require(
+        slices == [],
+        "baseline storage policy must have an empty registered-science allowlist",
+    )
+    successor = copy.deepcopy(baseline)
+    storage = successor.get("olcf_side_storage")
+    _require(isinstance(storage, dict), "baseline OLCF-side storage policy is malformed")
+    version = _control_plane_version(control_plane_version)
+    storage["installed_control_plane_version"] = version
+    storage["staged_control_plane_candidate_version"] = version
+    storage["last_preflight_utc"] = _timestamp(
+        last_preflight_utc, label="OLCF-side storage preflight time"
+    )
+    return successor
+
+
+def materialize_pilot_policy_successor(
+    *,
+    baseline_policy: Path,
+    control_plane_version: str,
+    last_preflight_utc: str,
+    clean_candidate_manifest: Path,
+    executable: Path,
+    environment_profile: Path,
+) -> dict[str, object]:
+    """Bind a complete reviewed policy successor to the fresh freeze and four pilots."""
+    successor = materialize_baseline_policy_successor(
+        baseline_policy=baseline_policy,
+        control_plane_version=control_plane_version,
+        last_preflight_utc=last_preflight_utc,
+    )
+    final = _bound_final_artifacts(
+        clean_candidate_manifest=clean_candidate_manifest,
+        executable=executable,
+        environment_profile=environment_profile,
+    )
+    successor["science_submission_freeze"] = {
+        "status": "authorized",
+        "manifest_path": final["clean_candidate_manifest_path"],
+        "manifest_sha256": final["clean_candidate_manifest_sha256"],
+        "build_profile_control_plane_version": _control_plane_version(
+            control_plane_version
+        ),
+    }
+    successor["registered_science_slices"] = materialize_registered_science_slices(
+        clean_candidate_manifest=clean_candidate_manifest,
+        executable=executable,
+        environment_profile=environment_profile,
+    )
+    return successor
+
+
 def _validate_timeout_margin(
-    path: Path, *, environment_profile_sha256: str
+    path: Path,
+    *,
+    environment_profile_sha256: str,
+    now: datetime | None = None,
 ) -> str:
     path, _, timeout = _read_json(path, label="timeout-margin artifact")
     _require(
@@ -583,6 +685,11 @@ def _validate_timeout_margin(
     measured = _utc_datetime(timeout["measured_utc"], label="timeout-margin measured_utc")
     expires = _utc_datetime(timeout["expires_utc"], label="timeout-margin expires_utc")
     _require(measured < expires, "timeout-margin validity interval is empty")
+    checked = datetime.now(timezone.utc) if now is None else now
+    _require(
+        measured <= checked < expires,
+        "timeout-margin artifact is stale or not yet valid",
+    )
     return str(path)
 
 
@@ -607,7 +714,9 @@ def _submission_id(value: object, *, case_id: str) -> str:
 
 
 def _validate_queue_snapshot(path: Path) -> tuple[Path, dict[str, str]]:
-    path, payload = _stable_regular_bytes(path, label="six-field queue snapshot")
+    path, payload = _stable_regular_bytes(
+        path, label="six-field queue snapshot", require_read_only=True
+    )
     try:
         text = payload.decode("utf-8")
     except UnicodeDecodeError as error:
@@ -626,22 +735,32 @@ def _validate_queue_snapshot(path: Path) -> tuple[Path, dict[str, str]]:
 
 
 def _validate_pre_manifest_attestation(
-    path: Path, *, case: PressureCase
+    path: Path, *, case: PressureCase, control_plane_version: str
 ) -> tuple[Path, dict[str, str]]:
-    path, payload = _stable_regular_bytes(
-        path, label="pre-manifest attestation", require_read_only=True
-    )
-    attestation = _decode_json(payload, label="pre-manifest attestation")
-    _require(isinstance(attestation, dict), "pre-manifest attestation is malformed")
-    _require(
-        attestation.get("phase") == "pre_manifest",
-        "pre-manifest attestation phase is not pre_manifest",
+    specification = importlib.util.spec_from_file_location(
+        "_q011_operator_attestation", OPERATOR_ATTESTATION_SOURCE
     )
     _require(
-        attestation.get("registered_science_authorization_id") == case.authorization_id,
-        "pre-manifest attestation belongs to another authorization",
+        specification is not None and specification.loader is not None,
+        "operator-attestation validator cannot be loaded",
     )
-    return path, {"path": str(path), "sha256": _sha256_bytes(payload)}
+    module = importlib.util.module_from_spec(specification)
+    sys.modules[specification.name] = module
+    try:
+        specification.loader.exec_module(module)
+        binding = module.validate_sealed_operator_attestation(
+            path,
+            authorization_id=case.authorization_id,
+            phase="pre_manifest",
+            control_plane_version=_control_plane_version(control_plane_version),
+            authorized_pic_root=AUTHORIZED_PIC_ROOT,
+            authorized_project_home_root=AUTHORIZED_PROJECT_HOME_ROOT,
+        )
+    except ValueError as error:
+        raise ContractError(f"pre-manifest attestation is invalid: {error}") from error
+    finally:
+        sys.modules.pop(specification.name, None)
+    return Path(binding["path"]), binding
 
 
 def materialize_reviewed_pre_submit_config(
@@ -651,6 +770,7 @@ def materialize_reviewed_pre_submit_config(
     clean_candidate_manifest: Path,
     executable: Path,
     environment_profile: Path,
+    control_plane_version: str,
     pre_manifest_attestation: Path,
     timeout_margin_artifact: Path,
     queue_snapshot: Path,
@@ -664,7 +784,11 @@ def materialize_reviewed_pre_submit_config(
         executable=executable,
         environment_profile=environment_profile,
     )
-    _validate_pre_manifest_attestation(pre_manifest_attestation, case=case)
+    _validate_pre_manifest_attestation(
+        pre_manifest_attestation,
+        case=case,
+        control_plane_version=control_plane_version,
+    )
     timeout_margin_artifact = Path(
         _validate_timeout_margin(
             timeout_margin_artifact,
@@ -679,6 +803,7 @@ def materialize_reviewed_pre_submit_config(
         "test_id": case.test_id,
         "submission_scope": "registered_science",
         "registered_science_authorization_id": case.authorization_id,
+        "pre_manifest_attestation": str(pre_manifest_attestation),
         "submission_id": identifier,
         "git_commit": final["git_commit"],
         "evidence_class": EVIDENCE_CLASS,
@@ -719,6 +844,104 @@ def _write_new_file(path: Path, payload: bytes) -> None:
     os.chmod(path, 0o444)
 
 
+def write_seed_timeout_margin(
+    output_root: Path,
+    *,
+    case_id: str,
+    environment_profile: Path,
+    materialized_utc: str,
+    expires_utc: str,
+) -> dict[str, object]:
+    """Write an explicit non-measurement timeout seed for one engineering pilot."""
+    output_root = _absolute(output_root, label="seed-timeout output root")
+    _require(output_root.parent.is_dir(), "seed-timeout output parent does not exist")
+    case = _selected_case(case_id)
+    environment_profile, environment_payload = _stable_regular_bytes(
+        environment_profile,
+        label="installed environment profile",
+        require_read_only=True,
+    )
+    materialized = _utc_datetime(materialized_utc, label="seed-timeout materialized_utc")
+    expires = _utc_datetime(expires_utc, label="seed-timeout expires_utc")
+    _require(materialized < expires, "seed-timeout validity interval is empty")
+    _require(
+        expires - materialized
+        <= timedelta(seconds=SEED_TIMEOUT_MAX_VALIDITY_SECONDS),
+        "seed-timeout validity interval exceeds four hours",
+    )
+    environment_sha256 = _sha256_bytes(environment_payload)
+    timeout = {
+        "athena_walltime_seconds": SEED_ATHENA_WALLTIME_SECONDS,
+        "scheduler_walltime_seconds": WALLTIME_SECONDS,
+        "environment_profile_sha256": environment_sha256,
+        "measured_utc": materialized_utc,
+        "expires_utc": expires_utc,
+    }
+    timeout_payload = _json_bytes(timeout)
+    rationale = {
+        "record_type": "q011_section54_pressure_pilot_seed_timeout_margin_rationale",
+        "schema_version": 1,
+        "classification": "engineering_seed_margin_bootstrap_only_not_measurement",
+        "qualification_effect": (
+            "none_not_empirical_runtime_evidence_not_production_sizing_not_"
+            "sun_bai_qualification"
+        ),
+        "case_id": case.case_id,
+        "authorization_id": case.authorization_id,
+        "environment_profile": {
+            "path": str(environment_profile),
+            "sha256": environment_sha256,
+        },
+        "timeout_margin_artifact": {
+            "path": SEED_TIMEOUT_FILENAME,
+            "sha256": _sha256_bytes(timeout_payload),
+        },
+        "controller_field_semantics": {
+            "measured_utc": (
+                "seed artifact materialization timestamp only; this bootstrap "
+                "record is explicitly not an empirical runtime measurement"
+            )
+        },
+        "selected_margin": {
+            "scheduler_walltime_seconds": WALLTIME_SECONDS,
+            "athena_walltime_seconds": SEED_ATHENA_WALLTIME_SECONDS,
+            "shutdown_margin_seconds": (
+                WALLTIME_SECONDS - SEED_ATHENA_WALLTIME_SECONDS
+            ),
+        },
+        "invalidated_by": [
+            "code_or_toolchain_change",
+            "environment_profile_change",
+            "mesh_or_ppc_change",
+            "rank_layout_change",
+            "restart_or_checkpoint_cadence_change",
+            "output_mode_change",
+            "case_change",
+            "expiry",
+        ],
+        "required_followup": [
+            "retain_scheduler_elapsed_seconds_for_this_case",
+            "retain_observed_cycle_and_checkpoint_timing_if_emitted",
+            "replace_seed_rationale_with_case_specific_empirical_margin_before_reuse",
+            "do_not_use_seed_rationale_for_production_sizing_or_qualification",
+        ],
+    }
+    try:
+        output_root.mkdir(mode=0o700)
+    except OSError as error:
+        raise ContractError("seed-timeout output root already exists") from error
+    try:
+        _write_new_file(output_root / SEED_TIMEOUT_FILENAME, timeout_payload)
+        _write_new_file(
+            output_root / SEED_TIMEOUT_RATIONALE_FILENAME, _json_bytes(rationale)
+        )
+        os.chmod(output_root, 0o555)
+        return rationale
+    except BaseException:
+        shutil.rmtree(output_root)
+        raise
+
+
 def write_policy_fragment(
     output: Path,
     *,
@@ -736,6 +959,46 @@ def write_policy_fragment(
     return fragment
 
 
+def write_baseline_policy_successor(
+    output: Path,
+    *,
+    baseline_policy: Path,
+    control_plane_version: str,
+    last_preflight_utc: str,
+) -> dict[str, object]:
+    """Write one complete launch-prohibited reviewed policy successor."""
+    successor = materialize_baseline_policy_successor(
+        baseline_policy=baseline_policy,
+        control_plane_version=control_plane_version,
+        last_preflight_utc=last_preflight_utc,
+    )
+    _write_new_file(output, _json_bytes(successor))
+    return successor
+
+
+def write_pilot_policy_successor(
+    output: Path,
+    *,
+    baseline_policy: Path,
+    control_plane_version: str,
+    last_preflight_utc: str,
+    clean_candidate_manifest: Path,
+    executable: Path,
+    environment_profile: Path,
+) -> dict[str, object]:
+    """Write one complete reviewed post-freeze four-slice policy successor."""
+    successor = materialize_pilot_policy_successor(
+        baseline_policy=baseline_policy,
+        control_plane_version=control_plane_version,
+        last_preflight_utc=last_preflight_utc,
+        clean_candidate_manifest=clean_candidate_manifest,
+        executable=executable,
+        environment_profile=environment_profile,
+    )
+    _write_new_file(output, _json_bytes(successor))
+    return successor
+
+
 def write_reviewed_pre_submit_config(
     output_root: Path,
     *,
@@ -744,6 +1007,7 @@ def write_reviewed_pre_submit_config(
     clean_candidate_manifest: Path,
     executable: Path,
     environment_profile: Path,
+    control_plane_version: str,
     pre_manifest_attestation: Path,
     timeout_margin_artifact: Path,
     queue_snapshot: Path,
@@ -759,13 +1023,16 @@ def write_reviewed_pre_submit_config(
         clean_candidate_manifest=clean_candidate_manifest,
         executable=executable,
         environment_profile=environment_profile,
+        control_plane_version=control_plane_version,
         pre_manifest_attestation=pre_manifest_attestation,
         timeout_margin_artifact=timeout_margin_artifact,
         queue_snapshot=queue_snapshot,
         site_policy_checked_utc=site_policy_checked_utc,
     )
     _, pre_manifest_binding = _validate_pre_manifest_attestation(
-        pre_manifest_attestation, case=case
+        pre_manifest_attestation,
+        case=case,
+        control_plane_version=control_plane_version,
     )
     _, queue_binding = _validate_queue_snapshot(queue_snapshot)
     timeout_path, timeout_payload = _stable_regular_bytes(
@@ -802,6 +1069,12 @@ def write_reviewed_pre_submit_config(
                 "create_pre_submit_manifest_for_this_selected_case_only",
                 "capture_fresh_pre_submit_wrapper_attestation_for_this_selected_case",
                 "invoke_registered_submission_wrapper_for_this_selected_case",
+                "wait_for_terminal_scheduler_state_for_this_selected_case",
+                "reconcile_terminal_job_through_installed_control_plane",
+                "retain_elapsed_seconds_and_checkpoint_timing_evidence",
+                "verify_absent_pending_marker_zero_active_reservations_and_empty_same_account_pic_queue",
+                "run_snapshotted_raw_case_analyzer_and_retain_descriptor_sha256",
+                "materialize_no_other_case_until_this_terminal_boundary_is_complete",
             ],
         }
         _write_new_file(output_root / "materialization_manifest.json", _json_bytes(manifest))
@@ -824,10 +1097,28 @@ def build_parser() -> argparse.ArgumentParser:
     policy = subparsers.add_parser("policy-slices")
     _add_final_binding_arguments(policy)
     policy.add_argument("--output", required=True, type=Path)
+    baseline_policy = subparsers.add_parser("baseline-policy-successor")
+    baseline_policy.add_argument("--baseline-policy", required=True, type=Path)
+    baseline_policy.add_argument("--control-plane-version", required=True)
+    baseline_policy.add_argument("--last-preflight-utc", required=True)
+    baseline_policy.add_argument("--output", required=True, type=Path)
+    pilot_policy = subparsers.add_parser("pilot-policy-successor")
+    pilot_policy.add_argument("--baseline-policy", required=True, type=Path)
+    pilot_policy.add_argument("--control-plane-version", required=True)
+    pilot_policy.add_argument("--last-preflight-utc", required=True)
+    _add_final_binding_arguments(pilot_policy)
+    pilot_policy.add_argument("--output", required=True, type=Path)
+    seed = subparsers.add_parser("seed-timeout-margin")
+    seed.add_argument("--case-id", required=True, choices=[case.case_id for case in CASES])
+    seed.add_argument("--environment-profile", required=True, type=Path)
+    seed.add_argument("--materialized-utc", required=True)
+    seed.add_argument("--expires-utc", required=True)
+    seed.add_argument("--output-root", required=True, type=Path)
     configs = subparsers.add_parser("pre-submit-config")
     _add_final_binding_arguments(configs)
     configs.add_argument("--case-id", required=True, choices=[case.case_id for case in CASES])
     configs.add_argument("--submission-id", required=True)
+    configs.add_argument("--control-plane-version", required=True)
     configs.add_argument("--output-root", required=True, type=Path)
     configs.add_argument("--pre-manifest-attestation", required=True, type=Path)
     configs.add_argument("--timeout-margin-artifact", required=True, type=Path)
@@ -838,6 +1129,25 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     arguments = build_parser().parse_args()
+    if arguments.command == "seed-timeout-margin":
+        rationale = write_seed_timeout_margin(
+            arguments.output_root,
+            case_id=arguments.case_id,
+            environment_profile=arguments.environment_profile,
+            materialized_utc=arguments.materialized_utc,
+            expires_utc=arguments.expires_utc,
+        )
+        print(json.dumps(rationale, sort_keys=True, separators=(",", ":")))
+        return
+    if arguments.command == "baseline-policy-successor":
+        successor = write_baseline_policy_successor(
+            arguments.output,
+            baseline_policy=arguments.baseline_policy,
+            control_plane_version=arguments.control_plane_version,
+            last_preflight_utc=arguments.last_preflight_utc,
+        )
+        print(json.dumps(successor, sort_keys=True, separators=(",", ":")))
+        return
     common = {
         "clean_candidate_manifest": arguments.clean_candidate_manifest,
         "executable": arguments.executable,
@@ -847,10 +1157,21 @@ def main() -> None:
         fragment = write_policy_fragment(arguments.output, **common)
         print(json.dumps(fragment, sort_keys=True, separators=(",", ":")))
         return
+    if arguments.command == "pilot-policy-successor":
+        successor = write_pilot_policy_successor(
+            arguments.output,
+            baseline_policy=arguments.baseline_policy,
+            control_plane_version=arguments.control_plane_version,
+            last_preflight_utc=arguments.last_preflight_utc,
+            **common,
+        )
+        print(json.dumps(successor, sort_keys=True, separators=(",", ":")))
+        return
     manifest = write_reviewed_pre_submit_config(
         arguments.output_root,
         case_id=arguments.case_id,
         submission_id=arguments.submission_id,
+        control_plane_version=arguments.control_plane_version,
         pre_manifest_attestation=arguments.pre_manifest_attestation,
         timeout_margin_artifact=arguments.timeout_margin_artifact,
         queue_snapshot=arguments.queue_snapshot,

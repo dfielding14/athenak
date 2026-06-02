@@ -23,9 +23,11 @@ import numpy as np
 
 if __package__:
     from . import analyze_q011_section54_outputs as output_primitives
+    from . import q011_section54_pressure_pilot_execution as execution
     from .pvtk_particles import ParticleVTKData, read_particle_vtk
 else:
     import analyze_q011_section54_outputs as output_primitives
+    import q011_section54_pressure_pilot_execution as execution
     from pvtk_particles import ParticleVTKData, read_particle_vtk
 
 
@@ -36,9 +38,17 @@ PREREGISTRATION_PATH = (
     / "tst/publication/readiness/"
     "q011_section54_pressure_pilot_preregistration_2026-06-01.json"
 )
+REGISTERED_EXECUTION_PREREGISTRATION_PATH = (
+    REPO_ROOT
+    / "tst/publication/readiness/"
+    "q011_section54_pressure_pilot_registered_execution_preregistration_2026-06-02.json"
+)
 ACTIVE_DECK_PATH = (
     REPO_ROOT
     / "inputs/publication/pic_parallel_shock_section54_paper_vl2_tsc.athinput"
+)
+AUTHORIZED_PUBLICATION_ROOT = (
+    execution.AUTHORIZED_PIC_ROOT / "publication"
 )
 RESULT_RECORD_TYPE = "q011_section54_pressure_pilot_analysis"
 EVIDENCE_CLASS = "engineering_calibration_only"
@@ -492,6 +502,7 @@ def _manifest_schema(payload: bytes) -> dict[str, Any]:
             "qualification_effect",
             "active_deck_binding",
             "preregistration_binding",
+            "registered_execution_preregistration_binding",
             "cases",
         },
         "pressure-pilot manifest",
@@ -542,6 +553,10 @@ def _manifest_schema(payload: bytes) -> dict[str, Any]:
         **manifest,
         "active_deck_binding": _binding(manifest["active_deck_binding"], "manifest/active_deck_binding"),
         "preregistration_binding": _binding(manifest["preregistration_binding"], "manifest/preregistration_binding"),
+        "registered_execution_preregistration_binding": _binding(
+            manifest["registered_execution_preregistration_binding"],
+            "manifest/registered_execution_preregistration_binding",
+        ),
         "cases": parsed_cases,
     }
 
@@ -842,16 +857,34 @@ def _snapshot_report(root: Path, case_id: str, ps_p0: float, snapshot: Mapping[s
     return {"profile": profile, "particles": particles}
 
 
-def analyze_pressure_pilot_bundle(root: str | Path, expected_manifest_sha256: str) -> dict[str, Any]:
+def analyze_pressure_pilot_bundle(
+    root: str | Path,
+    expected_manifest_sha256: str,
+    *,
+    authorized_publication_root: Path = AUTHORIZED_PUBLICATION_ROOT,
+) -> dict[str, Any]:
     """Validate one complete four-case pilot bundle and emit overlay-ready records."""
+    execution.validate_source_tranche()
     _require(_SHA256_PATTERN.fullmatch(expected_manifest_sha256) is not None,
              "expected manifest SHA-256 must contain 64 lowercase hexadecimal digits")
     bundle_root = Path(root)
     _require(bundle_root.is_absolute(), "pressure-pilot bundle root must be absolute")
+    bundle_lexical = Path(os.path.abspath(bundle_root))
     try:
-        bundle_root = bundle_root.resolve(strict=True)
+        bundle_root = bundle_lexical.resolve(strict=True)
+        publication_root = Path(os.path.abspath(authorized_publication_root)).resolve(
+            strict=True
+        )
     except OSError as error:
-        raise PilotAnalysisError("pressure-pilot bundle root is unavailable") from error
+        raise PilotAnalysisError(
+            "pressure-pilot bundle or authorized publication root is unavailable"
+        ) from error
+    _require(
+        bundle_root == bundle_lexical
+        and publication_root == Path(os.path.abspath(authorized_publication_root))
+        and bundle_root.parent == publication_root,
+        "pressure-pilot bundle is outside the authorized publication root",
+    )
     _require(bundle_root.is_dir(), "pressure-pilot bundle root must be a directory")
     policy = _load_policy()
     manifest_payload = _regular_bytes(bundle_root / MANIFEST_NAME, "pressure-pilot manifest")
@@ -864,6 +897,22 @@ def analyze_pressure_pilot_bundle(root: str | Path, expected_manifest_sha256: st
         "sha256": _sha256_bytes(_regular_bytes(PREREGISTRATION_PATH, "pressure-pilot preregistration")),
     }
     _strict_equal(manifest["preregistration_binding"], expected_prereg, "manifest/preregistration binding")
+    expected_registered_execution = {
+        "path": REGISTERED_EXECUTION_PREREGISTRATION_PATH.relative_to(
+            REPO_ROOT
+        ).as_posix(),
+        "sha256": _sha256_bytes(
+            _regular_bytes(
+                REGISTERED_EXECUTION_PREREGISTRATION_PATH,
+                "pressure-pilot registered-execution preregistration",
+            )
+        ),
+    }
+    _strict_equal(
+        manifest["registered_execution_preregistration_binding"],
+        expected_registered_execution,
+        "manifest/registered-execution preregistration binding",
+    )
     _validate_case_identity(manifest["cases"])
     _require(_actual_files(bundle_root) == _declared_paths(manifest),
              "pressure-pilot raw product inventory drifted")

@@ -398,7 +398,8 @@ MANIFEST="$(
     --config "${PIC_ROOT}/jobs/<campaign>/pre_submit_config.json"
 )"
 
-"${CONTROL_PLANE_DIR}/submit_frontier_job.sh" "$MANIFEST"
+"${CONTROL_PLANE_DIR}/submit_frontier_job.sh" \
+  "$MANIFEST" "${PRE_SUBMIT_WRAPPER_ATTESTATION}"
 ```
 
 The validator-bound queue snapshot above is intentionally the exact six-field
@@ -414,8 +415,11 @@ outside that dedicated PIC log path. The template body is never executed. It
 must also reference the executable, input deck, environment profile, queue
 snapshot, analysis scripts and timeout-margin artifact. Every config must
 declare exactly one `submission_scope`. `registered_science` configs must also
-reference the policy-authorized `clean_candidate_manifest` and one exact
-`registered_science_authorization_id`. The active policy allowlists each
+reference the policy-authorized `clean_candidate_manifest`, one exact
+`registered_science_authorization_id`, and the freshly sealed `pre_manifest`
+operator attestation. The installed wrapper requires a separately sealed
+`pre_submit_wrapper` attestation and binds both attestation digests into the
+reservation ledger before dispatch. The active policy allowlists each
 registered slice separately, binding its campaign, test identity, evidence class,
 physical mode, minimum-supported runtime profile, QoS, short-job classification,
 node, walltime and attempt ceilings, template, deck, environment profile,
@@ -657,13 +661,46 @@ Before each `registered_science` pre-submit manifest is created and again
 immediately before its submission wrapper is invoked, archive and review the
 same-account process-isolation attestation defined by
 `../readiness/q027_frontier_registered_science_same_account_isolation_attestation_template_2026-05-30.json`.
-Capture the exact `ps`, `squeue`, pending-marker and mirrored-ledger snapshots
-listed by that template beneath
-`${PIC_ROOT}/operator_attestations/<timestamp>-<authorization-id>/`, add the
-reviewed `attestation.json`, sync the files and directory, then make that
-attestation tree read-only. Do not submit if another same-account process is
-authorized to mutate either PIC root throughout registered launch and
-publication until the frozen artifact inventory is durably published.
+Use the source-controlled helper to capture the exact `ps`, `squeue`,
+pending-marker and mirrored-ledger snapshots listed by that template, review
+the hidden staging tree, and seal it only after that review:
+
+```bash
+ATTESTATION_HELPER=/ccs/home/dfielding/athenak-pic/tst/publication/capture_frontier_pre_policy_promotion_attestation.py
+STAGING="$(
+  "$PYTHON" "$ATTESTATION_HELPER" capture \
+    --authorization-id <registered-science-authorization-id> \
+    --control-plane-version "$VERSION" \
+    --phase pre_manifest
+)"
+PRE_MANIFEST_ATTESTATION="$(
+  "$PYTHON" "$ATTESTATION_HELPER" seal \
+    --staging-dir "$STAGING" \
+    --attest-reviewed
+)"
+```
+
+Repeat that capture-review-seal sequence with `--phase pre_submit_wrapper`
+immediately before invoking `submit_frontier_job.sh`. The helper publishes
+each immutable tree beneath
+`${PIC_ROOT}/operator_attestations/<timestamp>-<authorization-id>-<phase>/`.
+Use `--phase pre_policy_promotion` for the same reviewed boundary immediately
+before a registered policy promotion, then bind that sealed artifact into the
+installed promoter:
+
+```bash
+"${CONTROL_PLANE[@]}" promote_active_policy.py \
+  --reviewed-policy "${PIC_ROOT}/policy/reviewed_registered_successor.json" \
+  --pre-policy-promotion-attestation "${PRE_POLICY_PROMOTION_ATTESTATION}" \
+  --pre-policy-promotion-authorization-id "${POLICY_PROMOTION_AUTHORIZATION_ID}"
+```
+
+The helper retains the reviewed capture-time process snapshot and refreshes the
+process snapshot during sealing. It binds every retained capture snapshot by
+digest and rejects capture-to-seal intervals over fifteen minutes. Do not
+submit if another same-account process is authorized to mutate either PIC root
+throughout registered launch and publication until the frozen artifact
+inventory is durably published.
 
 Keep immutable rejected-manifest chronology separate from current live
 preflight. Immediately before policy promotion and each registered-science
@@ -672,6 +709,191 @@ chains, an absent Orion `pending_submission.json`, zero active reservations and
 zero live ledger hits for any rejected pre-reservation submission UUID. Archive
 the current result separately; later valid reservations may advance live
 ledger counts without changing the historical incident record.
+
+## Q011 Pressure-Pilot Serial Boundary
+
+The four Q011 Section 5.4 pressure-sensitivity pilots are one engineering
+calibration tranche, but they are four separate registered-science slices.
+Immediately after the paired successor-controller install, materialize and
+promote one complete launch-prohibited baseline successor with an empty slice
+allowlist. After the clean-candidate freeze, materialize and review one
+complete four-slice policy successor. Capture, review and seal one
+`pre_policy_promotion` attestation immediately before promoting the four-slice
+successor:
+
+```bash
+"$PYTHON" -I -B /ccs/home/dfielding/athenak-pic/tst/publication/q011_section54_pressure_pilot_execution.py \
+  baseline-policy-successor \
+  --baseline-policy /ccs/home/dfielding/athenak-pic/tst/publication/readiness/storage_policy.json \
+  --control-plane-version "$VERSION" \
+  --last-preflight-utc "$LAST_PREFLIGHT_UTC" \
+  --output "${PIC_ROOT}/policy/reviewed_launch_prohibited_successor.json"
+
+"${CONTROL_PLANE[@]}" promote_active_policy.py \
+  --reviewed-policy "${PIC_ROOT}/policy/reviewed_launch_prohibited_successor.json"
+
+"$PYTHON" -I -B /ccs/home/dfielding/athenak-pic/tst/publication/q011_section54_pressure_pilot_execution.py \
+  pilot-policy-successor \
+  --baseline-policy "${PIC_ROOT}/policy/reviewed_launch_prohibited_successor.json" \
+  --control-plane-version "$VERSION" \
+  --last-preflight-utc "$LAST_PREFLIGHT_UTC" \
+  --clean-candidate-manifest "$CLEAN_CANDIDATE_MANIFEST" \
+  --executable "$EXECUTABLE" \
+  --environment-profile "$ENVIRONMENT_PROFILE" \
+  --output "${PIC_ROOT}/policy/reviewed_q011_pressure_pilot_successor.json"
+
+STAGING="$(
+  "$PYTHON" "$ATTESTATION_HELPER" capture \
+    --authorization-id q011-section54-pressure-four-slice-policy-v1 \
+    --control-plane-version "$VERSION" \
+    --phase pre_policy_promotion
+)"
+PRE_POLICY_PROMOTION_ATTESTATION="$(
+  "$PYTHON" "$ATTESTATION_HELPER" seal \
+    --staging-dir "$STAGING" \
+    --attest-reviewed
+)"
+"${CONTROL_PLANE[@]}" promote_active_policy.py \
+  --reviewed-policy "${PIC_ROOT}/policy/reviewed_q011_pressure_pilot_successor.json" \
+  --pre-policy-promotion-attestation "$PRE_POLICY_PROMOTION_ATTESTATION" \
+  --pre-policy-promotion-authorization-id q011-section54-pressure-four-slice-policy-v1
+```
+
+Launch the cases strictly in their preregistered order. For one selected case,
+capture and seal its `pre_manifest` attestation, write the six-field queue
+snapshot, materialize one seed-timeout artifact and one selected-case config,
+create its immutable manifest, capture and seal a fresh `pre_submit_wrapper`
+attestation, and invoke only `submit_frontier_job.sh`. Do not materialize the
+next selected-case config yet. Use one UUID-specific handoff tree per case:
+
+```bash
+CASE=<one-preregistered-case-id>
+AUTHORIZATION_ID=<matching-preregistered-authorization-id>
+CAMPAIGN=<matching-preregistered-campaign>
+SUBMISSION_ID="$("$PYTHON" -I -c 'import uuid; print(uuid.uuid4())')"
+mkdir -p "${PIC_ROOT}/jobs/${CAMPAIGN}"
+"$PYTHON" -I -c \
+  'import os, sys; fd = os.open(sys.argv[1], os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW); os.fsync(fd); os.close(fd)' \
+  "${PIC_ROOT}/jobs/${CAMPAIGN}"
+HANDOFF_ROOT="${PIC_ROOT}/jobs/${CAMPAIGN}/${SUBMISSION_ID}"
+mkdir "$HANDOFF_ROOT"
+
+STAGING="$(
+  "$PYTHON" "$ATTESTATION_HELPER" capture \
+    --authorization-id "$AUTHORIZATION_ID" \
+    --control-plane-version "$VERSION" \
+    --phase pre_manifest
+)"
+PRE_MANIFEST_ATTESTATION="$(
+  "$PYTHON" "$ATTESTATION_HELPER" seal \
+    --staging-dir "$STAGING" \
+    --attest-reviewed
+)"
+
+(
+  umask 077
+  set -o noclobber
+  squeue -u "$USER" -h -o '%i|%P|%q|%T|%j|%k' \
+    > "${HANDOFF_ROOT}/queue_snapshot.txt"
+)
+chmod 0444 "${HANDOFF_ROOT}/queue_snapshot.txt"
+
+"$PYTHON" -I -B /ccs/home/dfielding/athenak-pic/tst/publication/q011_section54_pressure_pilot_execution.py \
+  seed-timeout-margin \
+  --case-id "$CASE" \
+  --environment-profile "$ENVIRONMENT_PROFILE" \
+  --materialized-utc "$MATERIALIZED_UTC" \
+  --expires-utc "$EXPIRES_UTC" \
+  --output-root "${HANDOFF_ROOT}/timeout"
+
+"$PYTHON" -I -B /ccs/home/dfielding/athenak-pic/tst/publication/q011_section54_pressure_pilot_execution.py \
+  pre-submit-config \
+  --case-id "$CASE" \
+  --submission-id "$SUBMISSION_ID" \
+  --control-plane-version "$VERSION" \
+  --clean-candidate-manifest "$CLEAN_CANDIDATE_MANIFEST" \
+  --executable "$EXECUTABLE" \
+  --environment-profile "$ENVIRONMENT_PROFILE" \
+  --pre-manifest-attestation "$PRE_MANIFEST_ATTESTATION" \
+  --timeout-margin-artifact "${HANDOFF_ROOT}/timeout/timeout_margin.json" \
+  --queue-snapshot "${HANDOFF_ROOT}/queue_snapshot.txt" \
+  --site-policy-checked-utc "$LAST_PREFLIGHT_UTC" \
+  --output-root "${HANDOFF_ROOT}/config"
+
+MANIFEST="$(
+  "${CONTROL_PLANE[@]}" create_pre_submit_manifest.py \
+    --config "${HANDOFF_ROOT}/config/pre_submit_config.json"
+)"
+
+STAGING="$(
+  "$PYTHON" "$ATTESTATION_HELPER" capture \
+    --authorization-id "$AUTHORIZATION_ID" \
+    --control-plane-version "$VERSION" \
+    --phase pre_submit_wrapper
+)"
+PRE_SUBMIT_WRAPPER_ATTESTATION="$(
+  "$PYTHON" "$ATTESTATION_HELPER" seal \
+    --staging-dir "$STAGING" \
+    --attest-reviewed
+)"
+
+"${CONTROL_PLANE_DIR}/submit_frontier_job.sh" \
+  "$MANIFEST" "$PRE_SUBMIT_WRAPPER_ATTESTATION"
+```
+
+After that job reaches a terminal scheduler state, run the installed
+`reconcile_frontier_job.py` command below. Then invoke the snapshotted first
+analysis script through the trusted isolated runner and retain the printed raw
+descriptor SHA-256:
+
+```bash
+/opt/cray/pe/python/3.11.7/bin/python3 -I -B \
+  "${PIC_ROOT}/manifests/<campaign>/<submission-id>/snapshot/analysis/000-analyze_q011_section54_pressure_pilot_case.py" \
+  --artifact-dir "${PIC_ROOT}/runs/<campaign>/<submission-id>" \
+  --case-id <case-id>
+```
+
+Before starting the next case, require the reconciled terminal ledger event,
+an absent `pending_submission.json`, zero active reservations, an empty
+same-account PIC queue, and the immutable raw-case descriptor. This quiescent
+terminal boundary is mandatory between every pair of cases.
+
+After all four descriptors exist, publish the descriptor-verified aggregate
+bundle once. The publisher accepts exactly four case directories and four
+descriptor checksums:
+
+```bash
+/opt/cray/pe/python/3.11.7/bin/python3 -I -B \
+  /ccs/home/dfielding/athenak-pic/tst/publication/publish_q011_section54_pressure_pilot_bundle.py \
+  "${PIC_ROOT}/publication/q011_section54_pressure_pilot_bundle" \
+  --receipt-path "${PIC_ROOT}/publication/q011_section54_pressure_pilot_bundle_receipt.json" \
+  --analysis-result-path "${PIC_ROOT}/publication/q011_section54_pressure_pilot_analysis.json" \
+  --case-artifact-dir ps_p0_1p00=<path> \
+  --case-artifact-dir ps_p0_0p05=<path> \
+  --case-artifact-dir ps_p0_0p10=<path> \
+  --case-artifact-dir ps_p0_0p20=<path> \
+  --case-descriptor-sha256 ps_p0_1p00=<sha256> \
+  --case-descriptor-sha256 ps_p0_0p05=<sha256> \
+  --case-descriptor-sha256 ps_p0_0p10=<sha256> \
+  --case-descriptor-sha256 ps_p0_0p20=<sha256>
+```
+
+The publisher reruns raw-case verification while retaining each case-root
+descriptor, emits a separate immutable aggregate-analysis result and receipt,
+and recomputes the engineering overlay analysis before and after publication.
+The receipt binds the registered-execution preregistration, publisher,
+aggregate analyzer and persisted result digests. Re-audit that retained receipt
+before using it:
+
+```bash
+/opt/cray/pe/python/3.11.7/bin/python3 -I -B \
+  /ccs/home/dfielding/athenak-pic/tst/publication/publish_q011_section54_pressure_pilot_bundle.py \
+  --verify-published-receipt \
+  "${PIC_ROOT}/publication/q011_section54_pressure_pilot_bundle_receipt.json"
+```
+
+These four pilots remain engineering calibration only; they do not qualify
+Section 5.4 physics.
 
 Scientific qualification is a separate freeze step. A Frontier qualification
 manifest is accepted only when its candidate matches the live policy and its

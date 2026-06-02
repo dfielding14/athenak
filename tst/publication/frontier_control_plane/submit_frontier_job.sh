@@ -4,7 +4,8 @@ set -euo pipefail
 
 PIC_ROOT="${PIC_ROOT:-/lustre/orion/ast207/proj-shared/dfielding/PIC}"
 PROJECT_HOME_MIRROR_ROOT="${PROJECT_HOME_MIRROR_ROOT:-/ccs/proj/ast207/proj-shared/PIC}"
-MANIFEST="${1:?usage: submit_frontier_job.sh PRE_SUBMIT_MANIFEST}"
+MANIFEST="${1:?usage: submit_frontier_job.sh PRE_SUBMIT_MANIFEST PRE_SUBMIT_WRAPPER_ATTESTATION}"
+PRE_SUBMIT_WRAPPER_ATTESTATION="${2:?usage: submit_frontier_job.sh PRE_SUBMIT_MANIFEST PRE_SUBMIT_WRAPPER_ATTESTATION}"
 CONTROL_PLANE_DIR="$(cd "$(/usr/bin/dirname "$0")" && pwd)"
 VALIDATOR="${CONTROL_PLANE_DIR}/validate_and_reserve_frontier_job.py"
 TRAMPOLINE="${CONTROL_PLANE_DIR}/launch_trampoline.py"
@@ -84,6 +85,7 @@ reservation_id="$(
     --receipts-jsonl "$RECEIPTS_JSONL" \
     --mirror-jsonl "$MIRROR_JSONL" \
     --node-hour-cap 10000 \
+    --pre-submit-wrapper-attestation "$PRE_SUBMIT_WRAPPER_ATTESTATION" \
     --pending-marker "$PENDING_FILE"
 )"
 submission_id="$("${CONTROL_PLANE[@]}" validate_and_reserve_frontier_job.py submission-id \

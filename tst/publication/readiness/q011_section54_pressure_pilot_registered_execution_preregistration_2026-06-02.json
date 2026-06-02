@@ -97,16 +97,26 @@
     },
     "materializer": {
       "path": "tst/publication/q011_section54_pressure_pilot_execution.py",
-      "sha256": "510ac6760231f39690f09afb6ec7855f0b03ba487938ea09f107fa1f68724675"
+      "sha256": "57f6300b4d9a7cdf2327dc92137c9dcb040eeb815d5c79f33f01e646703b6ca4"
     },
     "analysis_scripts": [
       {
         "path": "tst/publication/analyze_q011_section54_pressure_pilot_case.py",
-        "sha256": "d9253fdd3b573bd87f4e94a84e88ac2d8110a0cbc608ce98fecd7b9eeece9693"
+        "sha256": "7486c072d38c6c5ff78eebda0b913543327792f3aea38c7dca3b4a3d709b6d8f"
       },
       {
         "path": "tst/publication/frontier_f1_structured_artifacts.py",
         "sha256": "cf090115bcdfd143f67b12339115102b57e74cf3205b1ebb1521c144c3415a5a"
+      }
+    ],
+    "publication_scripts": [
+      {
+        "path": "tst/publication/analyze_q011_section54_pressure_pilot.py",
+        "sha256": "33944e021a5545f38a1f538a94cd76c4a147b09b7d9924f047ff465a8ad0f9af"
+      },
+      {
+        "path": "tst/publication/publish_q011_section54_pressure_pilot_bundle.py",
+        "sha256": "9b403fdf0a95fbdf21a46fe462138577a1213d43207844114ff5de4f0c4f3af9"
       }
     ],
     "launch_contracts": [
@@ -139,11 +149,15 @@
   "post_freeze_materialization": {
     "tool": "tst/publication/q011_section54_pressure_pilot_execution.py",
     "policy_command": "policy-slices --clean-candidate-manifest PATH --executable PATH --environment-profile PATH --output NEW_PATH",
-    "pre_submit_command": "pre-submit-config --case-id CASE --submission-id UUID --clean-candidate-manifest PATH --executable PATH --environment-profile PATH --pre-manifest-attestation PATH --timeout-margin-artifact PATH --queue-snapshot PATH --site-policy-checked-utc UTC --output-root NEW_PATH",
+    "baseline_policy_successor_command": "baseline-policy-successor --baseline-policy PATH --control-plane-version SHA256 --last-preflight-utc UTC --output NEW_PATH",
+    "pilot_policy_successor_command": "pilot-policy-successor --baseline-policy PATH --control-plane-version SHA256 --last-preflight-utc UTC --clean-candidate-manifest PATH --executable PATH --environment-profile PATH --output NEW_PATH",
+    "seed_timeout_margin_command": "seed-timeout-margin --case-id CASE --environment-profile PATH --materialized-utc UTC --expires-utc UTC --output-root NEW_PATH",
+    "pre_submit_command": "pre-submit-config --case-id CASE --submission-id UUID --clean-candidate-manifest PATH --executable PATH --environment-profile PATH --control-plane-version SHA256 --pre-manifest-attestation PATH --timeout-margin-artifact PATH --queue-snapshot PATH --site-policy-checked-utc UTC --output-root NEW_PATH",
     "final_cli_bindings": [
       "clean_candidate_manifest",
       "adjacent_clean_candidate_executable",
       "installed_environment_profile",
+      "installed_control_plane_version",
       "timeout_margin_artifact",
       "queue_snapshot",
       "site_policy_checked_utc",
@@ -153,11 +167,51 @@
       "one_fresh_timeout_margin_artifact_for_selected_case",
       "one_explicit_submission_uuid_for_selected_case"
     ],
-    "ordered_submission_boundary": "for_each_case_capture_pre_manifest_attestation_then_six_field_queue_snapshot_timeout_artifact_uuid_config_manifest_then_capture_pre_submit_wrapper_attestation_and_invoke_wrapper_before_materializing_another_case",
+    "ordered_submission_boundary": "for_each_case_capture_pre_manifest_attestation_then_six_field_queue_snapshot_timeout_artifact_uuid_config_manifest_then_capture_pre_submit_wrapper_attestation_and_invoke_wrapper_then_wait_terminal_reconcile_verify_raw_case_descriptor_and_require_quiescence_before_materializing_another_case",
+    "terminal_case_boundary": {
+      "required_before_next_case": [
+        "terminal_scheduler_state",
+        "installed_reconciler_terminal_ledger_event",
+        "absent_pending_submission_marker",
+        "zero_active_reservations",
+        "empty_same_account_pic_queue",
+        "immutable_raw_case_descriptor"
+      ],
+      "raw_case_analyzer_command": "/opt/cray/pe/python/3.11.7/bin/python3 -I -B MANIFEST_SNAPSHOT_ANALYSIS/000-analyze_q011_section54_pressure_pilot_case.py --artifact-dir RUN_ARTIFACT_DIR --case-id CASE",
+      "raw_case_descriptor": "analysis/analysis.json"
+    },
+    "aggregate_publication": {
+      "required_after_all_four_terminal_case_boundaries": true,
+      "publisher": "tst/publication/publish_q011_section54_pressure_pilot_bundle.py",
+      "command": "/opt/cray/pe/python/3.11.7/bin/python3 -I -B PUBLISHER OUTPUT_PATH --receipt-path RECEIPT_PATH --analysis-result-path ANALYSIS_RESULT_PATH --case-artifact-dir CASE=PATH... --case-descriptor-sha256 CASE=SHA256...",
+      "exact_case_set": [
+        "ps_p0_1p00",
+        "ps_p0_0p05",
+        "ps_p0_0p10",
+        "ps_p0_0p20"
+      ],
+      "qualification_effect": "none_engineering_calibration_only"
+    },
     "output_policy": "write_one_new_selected_case_review_artifact_exclusively_per_invocation_never_patch_live_storage_policy_or_prepared_inventory"
+  },
+  "seed_timeout_margin_bootstrap": {
+    "classification": "engineering_seed_margin_bootstrap_only_not_measurement",
+    "qualification_effect": "none_not_empirical_runtime_evidence_not_production_sizing_not_sun_bai_qualification",
+    "rationale": "The first exact pressure-pilot carrier has no matched empirical runtime measurement. The source-local materializer writes one controller-compatible five-field seed snapshot plus an adjacent immutable rationale. In that bootstrap snapshot only, measured_utc is the seed-artifact materialization timestamp, not a runtime measurement.",
+    "scheduler_walltime_seconds": 900,
+    "athena_walltime_seconds": 600,
+    "shutdown_margin_seconds": 300,
+    "maximum_validity_seconds": 14400,
+    "required_followup": [
+      "retain_scheduler_elapsed_seconds_for_each_case",
+      "retain_observed_cycle_and_checkpoint_timing_if_emitted",
+      "replace_seed_rationale_with_case_specific_empirical_margin_before_reuse",
+      "do_not_use_seed_rationale_for_production_sizing_or_qualification"
+    ]
   },
   "limitations": [
     "The four pilots remain engineering calibration only and cannot qualify Section 5.4 physics.",
+    "The first exact pressure-pilot runtime margin is an explicitly labeled engineering seed bootstrap rather than empirical timing evidence; each pilot must retain measurements before any reuse or production sizing.",
     "Each pressure case requires a separate additive storage-policy slice and consumes its one allowed attempt after reservation.",
     "A reviewer must inspect and promote a separate storage-policy successor before any Frontier launch.",
     "The clean candidate, executable and installed environment profile remain intentionally open until bound by the post-freeze CLI."

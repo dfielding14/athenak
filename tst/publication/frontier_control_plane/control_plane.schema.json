@@ -111,6 +111,13 @@
       "type": "string",
       "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
     },
+    "pre_manifest_attestation_path": {
+      "type": "string",
+      "minLength": 1
+    },
+    "pre_manifest_attestation_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
     "git_commit": {
       "type": "string",
       "minLength": 1
@@ -449,7 +456,9 @@
         "required": [
           "clean_candidate_manifest_path",
           "clean_candidate_manifest_sha256",
-          "registered_science_authorization_id"
+          "registered_science_authorization_id",
+          "pre_manifest_attestation_path",
+          "pre_manifest_attestation_sha256"
         ]
       },
       "else": {
@@ -468,6 +477,16 @@
             {
               "required": [
                 "registered_science_authorization_id"
+              ]
+            },
+            {
+              "required": [
+                "pre_manifest_attestation_path"
+              ]
+            },
+            {
+              "required": [
+                "pre_manifest_attestation_sha256"
               ]
             }
           ]

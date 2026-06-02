@@ -32,6 +32,7 @@ from control_plane_common import validate_storage_policy, verify_installed_contr
 from ledger import _path_exists, _pinned_parent_directories
 from ledger import latest_reservations, validate_mirrored_state, validate_receipts
 from ledger import require_no_incomplete_manual_accounting_marker
+from operator_attestation import validate_sealed_operator_attestation
 
 
 SCRIPT_DIR = Path(__file__).absolute().parent
@@ -250,6 +251,8 @@ def _promotion_lock(authorized_pic_root: Path) -> Iterator[int]:
 def promote(
     reviewed_policy: Path,
     *,
+    pre_policy_promotion_attestation: Path | None = None,
+    pre_policy_promotion_authorization_id: str | None = None,
     control_plane_dir: Path = SCRIPT_DIR,
     authorized_pic_root: Path = AUTHORIZED_PIC_ROOT,
     authorized_project_home_root: Path = AUTHORIZED_PROJECT_HOME_ROOT,
@@ -287,6 +290,41 @@ def promote(
         "project_home_policy_path": str(mirror_policy_path),
         "policy_sha256": sha256_bytes(reviewed_bytes),
     }
+    registered_science_slices = policy.get("registered_science_slices")
+    if isinstance(registered_science_slices, list) and registered_science_slices:
+        if (
+            pre_policy_promotion_attestation is None
+            or pre_policy_promotion_authorization_id is None
+        ):
+            raise ValueError(
+                "Registered-science policy promotion requires a sealed "
+                "pre-policy-promotion attestation"
+            )
+        attestation = validate_sealed_operator_attestation(
+            pre_policy_promotion_attestation,
+            authorization_id=pre_policy_promotion_authorization_id,
+            phase="pre_policy_promotion",
+            control_plane_version=version,
+            authorized_pic_root=authorized_pic_root,
+            authorized_project_home_root=authorized_project_home_root,
+        )
+        record.update(
+            {
+                "pre_policy_promotion_attestation_authorization_id": (
+                    pre_policy_promotion_authorization_id
+                ),
+                "pre_policy_promotion_attestation_path": attestation["path"],
+                "pre_policy_promotion_attestation_sha256": attestation["sha256"],
+            }
+        )
+    elif (
+        pre_policy_promotion_attestation is not None
+        or pre_policy_promotion_authorization_id is not None
+    ):
+        raise ValueError(
+            "Launch-prohibited policy promotion must not claim a "
+            "pre-policy-promotion attestation"
+        )
     mirror_policy_parent = Path(os.path.abspath(authorized_project_home_root)) / "policy"
     durable_mkdir_parents(mirror_policy_parent, root=authorized_project_home_root)
     with _promotion_lock(authorized_pic_root) as policy_descriptor:
@@ -299,6 +337,24 @@ def promote(
         _require_no_outstanding_submissions(
             policy, authorized_pic_root, authorized_project_home_root
         )
+        if isinstance(registered_science_slices, list) and registered_science_slices:
+            assert pre_policy_promotion_attestation is not None
+            assert pre_policy_promotion_authorization_id is not None
+            attestation = validate_sealed_operator_attestation(
+                pre_policy_promotion_attestation,
+                authorization_id=pre_policy_promotion_authorization_id,
+                phase="pre_policy_promotion",
+                control_plane_version=version,
+                authorized_pic_root=authorized_pic_root,
+                authorized_project_home_root=authorized_project_home_root,
+            )
+            if attestation != {
+                "path": record["pre_policy_promotion_attestation_path"],
+                "sha256": record["pre_policy_promotion_attestation_sha256"],
+            }:
+                raise ValueError(
+                    "Pre-policy-promotion attestation changed while acquiring lock"
+                )
         mirror_policy_descriptor = open_directory_below(
             mirror_policy_parent, root=authorized_project_home_root
         )
@@ -321,6 +377,28 @@ def promote(
                     )
 
                 require_pinned_policy_parents()
+                if (
+                    isinstance(registered_science_slices, list)
+                    and registered_science_slices
+                ):
+                    assert pre_policy_promotion_attestation is not None
+                    assert pre_policy_promotion_authorization_id is not None
+                    attestation = validate_sealed_operator_attestation(
+                        pre_policy_promotion_attestation,
+                        authorization_id=pre_policy_promotion_authorization_id,
+                        phase="pre_policy_promotion",
+                        control_plane_version=version,
+                        authorized_pic_root=authorized_pic_root,
+                        authorized_project_home_root=authorized_project_home_root,
+                    )
+                    if attestation != {
+                        "path": record["pre_policy_promotion_attestation_path"],
+                        "sha256": record["pre_policy_promotion_attestation_sha256"],
+                    }:
+                        raise ValueError(
+                            "Pre-policy-promotion attestation changed while "
+                            "acquiring mirror lock"
+                        )
                 atomic_write_bytes_at(
                     policy_descriptor,
                     policy_path.name,
@@ -364,8 +442,16 @@ def promote(
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--reviewed-policy", required=True, type=Path)
+    parser.add_argument("--pre-policy-promotion-attestation", type=Path)
+    parser.add_argument("--pre-policy-promotion-authorization-id")
     args = parser.parse_args()
-    promote(args.reviewed_policy)
+    promote(
+        args.reviewed_policy,
+        pre_policy_promotion_attestation=args.pre_policy_promotion_attestation,
+        pre_policy_promotion_authorization_id=(
+            args.pre_policy_promotion_authorization_id
+        ),
+    )
 
 
 if __name__ == "__main__":

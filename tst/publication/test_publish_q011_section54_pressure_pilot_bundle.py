@@ -13,6 +13,7 @@ import stat
 import tempfile
 from typing import Iterator
 import unittest
+from unittest.mock import patch
 
 from tst.publication import analyze_q011_section54_pressure_pilot as pilot
 from tst.publication import analyze_q011_section54_pressure_pilot_case as case_verifier
@@ -146,7 +147,6 @@ def _raw_tree(
     if not omit_stdout_checksum:
         _put(root, "athena_stdout.sha256", (stdout_digest + "\n").encode("ascii"))
     _put(root, "athena_stderr.txt", _stderr())
-    _put(root, f"output/{case_id}-errs.dat", b"# pressure-pilot fixture\n")
     _ps_p0, argv_value = case_verifier._CASE_BY_ID[case_id]
     for index, time in enumerate(case_verifier._TIMES):
         sources = case_verifier._snapshot_source_paths(case_id, index)
@@ -186,11 +186,15 @@ def _descriptor_sha256(descriptor: dict[str, object]) -> str:
 @contextmanager
 def _verified_raw_cases() -> Iterator[tuple[Path, dict[str, Path], dict[str, str]]]:
     with tempfile.TemporaryDirectory() as directory:
-        base = Path(directory)
+        pic_root = Path(directory) / "pic"
+        base = pic_root / "publication"
+        runs = pic_root / "runs"
+        base.mkdir(parents=True)
+        runs.mkdir()
         roots = {}
         digests = {}
         for case_id in case_verifier.CASE_IDS:
-            root = base / f"raw-{case_id}"
+            root = runs / f"raw-{case_id}"
             _raw_tree(root, case_id)
             descriptor = case_verifier.publish_case_descriptor(root, case_id)
             roots[case_id] = root
@@ -248,13 +252,19 @@ class Q011Section54PressurePilotBundlePublicationTests(unittest.TestCase):
     def test_case_descriptor_and_aggregate_publication_preserve_exact_closure(self) -> None:
         with _verified_raw_cases() as (base, roots, digests):
             bundle = base / "bundle"
+            receipt_path = base / "publication-receipt.json"
             receipt = publisher.publish_pressure_pilot_bundle(
                 bundle,
+                receipt_path=receipt_path,
+                analysis_result_path=base / "aggregate-analysis.json",
                 case_artifact_dirs=roots,
                 case_descriptor_sha256=digests,
+                authorized_pic_root=base.parent,
             )
             result = publisher.verify_published_pressure_pilot_bundle(
-                bundle, receipt["manifest_sha256"]
+                bundle,
+                receipt["manifest_sha256"],
+                authorized_publication_root=base,
             )
             self.assertEqual(result["status"], "pass_engineering_calibration_only")
             manifest = pilot._manifest_schema(
@@ -270,15 +280,59 @@ class Q011Section54PressurePilotBundlePublicationTests(unittest.TestCase):
             self.assertFalse(any("environment.allowlist" in path for path in actual))
             self.assertFalse(any(path.endswith("-errs.dat") for path in actual))
             self.assertFalse(any(path.endswith("athena_stderr.txt") for path in actual))
+            publication = json.loads(receipt_path.read_text(encoding="utf-8"))
+            self.assertEqual(
+                receipt["receipt_sha256"], _sha256(receipt_path.read_bytes())
+            )
+            analysis_result = Path(receipt["analysis_result_path"])
+            self.assertEqual(
+                receipt["analysis_result_sha256"],
+                _sha256(analysis_result.read_bytes()),
+            )
+            self.assertEqual(
+                publication["aggregate_analysis"],
+                {
+                    "path": str(analysis_result),
+                    "sha256": receipt["analysis_result_sha256"],
+                },
+            )
+            self.assertEqual(
+                set(publication["source_bindings"]),
+                {
+                    "registered_execution_preregistration",
+                    "publisher",
+                    "aggregate_analyzer",
+                },
+            )
+            self.assertEqual(
+                [record["case_id"] for record in publication["raw_cases"]],
+                list(case_verifier.CASE_IDS),
+            )
+            self.assertEqual(
+                {
+                    record["case_id"]: record["descriptor_sha256"]
+                    for record in publication["raw_cases"]
+                },
+                digests,
+            )
             for path in [bundle, *bundle.rglob("*")]:
                 self.assertFalse(path.stat().st_mode & 0o222)
+            self.assertFalse(receipt_path.stat().st_mode & 0o222)
+            self.assertFalse(analysis_result.stat().st_mode & 0o222)
+            retained = publisher.verify_published_pressure_pilot_receipt(
+                receipt_path, authorized_pic_root=base.parent
+            )
+            self.assertEqual(retained["receipt_sha256"], receipt["receipt_sha256"])
             with self.assertRaisesRegex(
                 publisher.PressurePilotPublicationError, "already exists"
             ):
                 publisher.publish_pressure_pilot_bundle(
                     bundle,
+                    receipt_path=base / "second-publication-receipt.json",
+                    analysis_result_path=base / "second-aggregate-analysis.json",
                     case_artifact_dirs=roots,
                     case_descriptor_sha256=digests,
+                    authorized_pic_root=base.parent,
                 )
             _make_writable(bundle)
 
@@ -321,8 +375,11 @@ class Q011Section54PressurePilotBundlePublicationTests(unittest.TestCase):
             ):
                 publisher.publish_pressure_pilot_bundle(
                     base / "bundle",
+                    receipt_path=base / "publication-receipt.json",
+                    analysis_result_path=base / "aggregate-analysis.json",
                     case_artifact_dirs=roots,
                     case_descriptor_sha256=digests,
+                    authorized_pic_root=base.parent,
                 )
 
     def test_final_verifier_rejects_payload_tamper_and_tree_addition(self) -> None:
@@ -331,8 +388,11 @@ class Q011Section54PressurePilotBundlePublicationTests(unittest.TestCase):
                 bundle = base / "bundle"
                 receipt = publisher.publish_pressure_pilot_bundle(
                     bundle,
+                    receipt_path=base / "publication-receipt.json",
+                    analysis_result_path=base / "aggregate-analysis.json",
                     case_artifact_dirs=roots,
                     case_descriptor_sha256=digests,
+                    authorized_pic_root=base.parent,
                 )
                 _make_writable(bundle)
                 if variant == "payload":
@@ -343,7 +403,9 @@ class Q011Section54PressurePilotBundlePublicationTests(unittest.TestCase):
                 _freeze_existing(bundle)
                 with self.assertRaises(publisher.PressurePilotPublicationError):
                     publisher.verify_published_pressure_pilot_bundle(
-                        bundle, receipt["manifest_sha256"]
+                        bundle,
+                        receipt["manifest_sha256"],
+                        authorized_publication_root=base,
                     )
                 _make_writable(bundle)
 
@@ -355,9 +417,107 @@ class Q011Section54PressurePilotBundlePublicationTests(unittest.TestCase):
             ):
                 publisher.publish_pressure_pilot_bundle(
                     base / "bundle",
+                    receipt_path=base / "publication-receipt.json",
+                    analysis_result_path=base / "aggregate-analysis.json",
                     case_artifact_dirs=roots,
                     case_descriptor_sha256=digests,
+                    authorized_pic_root=base.parent,
                 )
+
+    def test_publisher_rejects_off_root_output_and_raw_case(self) -> None:
+        with _verified_raw_cases() as (base, roots, digests):
+            outside = base.parent.parent / "outside"
+            outside.mkdir()
+            with self.assertRaisesRegex(
+                publisher.PressurePilotPublicationError,
+                "outside the authorized PIC publication root",
+            ):
+                publisher.publish_pressure_pilot_bundle(
+                    outside / "bundle",
+                    receipt_path=base / "publication-receipt.json",
+                    analysis_result_path=base / "aggregate-analysis.json",
+                    case_artifact_dirs=roots,
+                    case_descriptor_sha256=digests,
+                    authorized_pic_root=base.parent,
+                )
+            roots[case_verifier.CASE_IDS[0]] = base
+            with self.assertRaisesRegex(
+                publisher.PressurePilotPublicationError,
+                "outside the authorized PIC runs root",
+            ):
+                publisher.publish_pressure_pilot_bundle(
+                    base / "bundle",
+                    receipt_path=base / "publication-receipt.json",
+                    analysis_result_path=base / "aggregate-analysis.json",
+                    case_artifact_dirs=roots,
+                    case_descriptor_sha256=digests,
+                    authorized_pic_root=base.parent,
+                )
+
+    def test_retained_receipt_rejects_source_binding_tamper(self) -> None:
+        with _verified_raw_cases() as (base, roots, digests):
+            receipt_path = base / "publication-receipt.json"
+            publisher.publish_pressure_pilot_bundle(
+                base / "bundle",
+                receipt_path=receipt_path,
+                analysis_result_path=base / "aggregate-analysis.json",
+                case_artifact_dirs=roots,
+                case_descriptor_sha256=digests,
+                authorized_pic_root=base.parent,
+            )
+            receipt_path.chmod(0o600)
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            receipt["source_bindings"]["publisher"]["sha256"] = "0" * 64
+            receipt_path.write_bytes(publisher._canonical_json_bytes(receipt))
+            receipt_path.chmod(0o444)
+            with self.assertRaisesRegex(
+                publisher.PressurePilotPublicationError, "source bindings drifted"
+            ):
+                publisher.verify_published_pressure_pilot_receipt(
+                    receipt_path, authorized_pic_root=base.parent
+                )
+
+    def test_analyzer_and_publisher_require_registered_source_tranche(self) -> None:
+        with _verified_raw_cases() as (base, roots, digests), patch.object(
+            pilot.execution,
+            "validate_source_tranche",
+            side_effect=pilot.execution.ContractError("source drift"),
+        ):
+            with self.assertRaisesRegex(pilot.execution.ContractError, "source drift"):
+                publisher.publish_pressure_pilot_bundle(
+                    base / "bundle",
+                    receipt_path=base / "publication-receipt.json",
+                    analysis_result_path=base / "aggregate-analysis.json",
+                    case_artifact_dirs=roots,
+                    case_descriptor_sha256=digests,
+                    authorized_pic_root=base.parent,
+                )
+            with self.assertRaisesRegex(pilot.execution.ContractError, "source drift"):
+                pilot.analyze_pressure_pilot_bundle(base, "0" * 64)
+
+    def test_descriptor_relative_rename_fails_closed_without_atomic_no_replace(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory)
+            (parent / "source").write_text("retain source\n", encoding="utf-8")
+            descriptor = os.open(parent, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                with patch.object(
+                    publisher.ctypes, "CDLL", return_value=object()
+                ), patch.object(publisher.os, "rename") as rename:
+                    with self.assertRaisesRegex(
+                        publisher.PressurePilotPublicationError,
+                        "requires atomic no-replace rename support",
+                    ):
+                        publisher._rename_no_replace_at(
+                            descriptor, "source", "destination"
+                        )
+                rename.assert_not_called()
+                self.assertTrue((parent / "source").is_file())
+                self.assertFalse((parent / "destination").exists())
+            finally:
+                os.close(descriptor)
 
 
 if __name__ == "__main__":

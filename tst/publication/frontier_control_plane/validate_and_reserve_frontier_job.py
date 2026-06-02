@@ -49,6 +49,7 @@ from ledger import latest_reservations, require_explicit_genesis, transition_pay
 from ledger import repair_mirrored_state_locked, validate_mirrored_state
 from ledger import slurm_walltime_seconds
 from ledger import validated_read_only_mirrored_state_snapshot
+from operator_attestation import validate_sealed_operator_attestation
 
 
 DEBUG_MAX_SECONDS = 2 * 60 * 60
@@ -95,6 +96,8 @@ REGISTERED_SCIENCE_MANIFEST_KEYS = {
     "clean_candidate_manifest_path",
     "clean_candidate_manifest_sha256",
     "registered_science_authorization_id",
+    "pre_manifest_attestation_path",
+    "pre_manifest_attestation_sha256",
 }
 
 
@@ -362,6 +365,7 @@ def _verify_manifest(
     *,
     control_plane_dir: Path,
     authorized_pic_root: Path,
+    authorized_project_home_root: Path,
 ) -> dict[str, object]:
     manifest_path = require_canonical_path_below(
         manifest_path, authorized_pic_root.resolve() / "manifests"
@@ -437,6 +441,21 @@ def _verify_manifest(
             raise ValueError("Registered science is missing the clean-candidate digest")
         if not manifest.get("registered_science_authorization_id"):
             raise ValueError("Registered science is missing its authorization ID")
+        pre_manifest_attestation = validate_sealed_operator_attestation(
+            Path(str(manifest.get("pre_manifest_attestation_path", ""))),
+            authorization_id=str(manifest["registered_science_authorization_id"]),
+            phase="pre_manifest",
+            control_plane_version=str(inventory["version"]),
+            authorized_pic_root=authorized_pic_root,
+            authorized_project_home_root=authorized_project_home_root,
+        )
+        if (
+            pre_manifest_attestation["path"]
+            != manifest.get("pre_manifest_attestation_path")
+            or pre_manifest_attestation["sha256"]
+            != manifest.get("pre_manifest_attestation_sha256")
+        ):
+            raise ValueError("Registered science pre-manifest attestation binding differs")
     else:
         if clean_records:
             raise ValueError("Admission smoke must not carry a clean-candidate snapshot")
@@ -444,6 +463,8 @@ def _verify_manifest(
             "clean_candidate_manifest_path" in manifest
             or "clean_candidate_manifest_sha256" in manifest
             or "registered_science_authorization_id" in manifest
+            or "pre_manifest_attestation_path" in manifest
+            or "pre_manifest_attestation_sha256" in manifest
         ):
             raise ValueError("Admission smoke must not claim a clean-candidate freeze")
     return manifest
@@ -978,6 +999,7 @@ def reserve(
     mirror_jsonl: Path,
     node_hour_cap: float,
     pending_marker: Path | None = None,
+    pre_submit_wrapper_attestation: Path | None = None,
     reservation_id: str | None = None,
     control_plane_dir: Path = SCRIPT_DIR,
     authorized_pic_root: Path = AUTHORIZED_PIC_ROOT,
@@ -1021,6 +1043,7 @@ def reserve(
             manifest_path,
             control_plane_dir=control_plane_dir,
             authorized_pic_root=authorized_pic_root,
+            authorized_project_home_root=authorized_project_home_root,
         )
         artifact_dir = _require_run_artifact_dir(manifest)
         if artifact_dir.exists():
@@ -1039,6 +1062,25 @@ def reserve(
             authorized_pic_root=authorized_pic_root,
             authorized_project_home_root=authorized_project_home_root,
         )
+        pre_submit_wrapper_binding = None
+        if registered_science_authorization_id:
+            if pre_submit_wrapper_attestation is None:
+                raise ValueError(
+                    "Registered science requires a sealed pre-submit-wrapper attestation"
+                )
+            pre_submit_wrapper_binding = validate_sealed_operator_attestation(
+                pre_submit_wrapper_attestation,
+                authorization_id=registered_science_authorization_id,
+                phase="pre_submit_wrapper",
+                control_plane_version=version,
+                authorized_pic_root=authorized_pic_root,
+                authorized_project_home_root=authorized_project_home_root,
+                now=current_time,
+            )
+        elif pre_submit_wrapper_attestation is not None:
+            raise ValueError(
+                "Admission smoke must not claim a pre-submit-wrapper attestation"
+            )
         if directives["account"] != authorized_account:
             raise ValueError(f"Frontier PIC submissions require account={authorized_account}")
         _require_scheduler_output_path(directives["output"], authorized_pic_root)
@@ -1125,6 +1167,23 @@ def reserve(
             "state": "reserved",
             "reconciled": False,
         }
+        if pre_submit_wrapper_binding is not None:
+            event.update(
+                {
+                    "pre_manifest_attestation_path": manifest[
+                        "pre_manifest_attestation_path"
+                    ],
+                    "pre_manifest_attestation_sha256": manifest[
+                        "pre_manifest_attestation_sha256"
+                    ],
+                    "pre_submit_wrapper_attestation_path": pre_submit_wrapper_binding[
+                        "path"
+                    ],
+                    "pre_submit_wrapper_attestation_sha256": pre_submit_wrapper_binding[
+                        "sha256"
+                    ],
+                }
+            )
         _write_pending_marker(
             expected_marker,
             {
@@ -1619,6 +1678,7 @@ def reservation_bound_manifest(
             manifest_path,
             control_plane_dir=control_plane_dir,
             authorized_pic_root=authorized_pic_root,
+            authorized_project_home_root=authorized_project_home_root,
         )
         if Path(str(reservation.get("manifest_path", ""))) != manifest_path:
             raise ValueError("Manifest path differs from the reservation ledger")
@@ -1694,6 +1754,7 @@ def main() -> None:
     reserve_parser.add_argument("--manifest", required=True, type=Path)
     reserve_parser.add_argument("--node-hour-cap", required=True, type=float)
     reserve_parser.add_argument("--pending-marker", type=Path)
+    reserve_parser.add_argument("--pre-submit-wrapper-attestation", type=Path)
 
     attach_parser = subparsers.add_parser("attach-job-id")
     _common(attach_parser)
@@ -1793,6 +1854,7 @@ def main() -> None:
             manifest_path=args.manifest,
             node_hour_cap=args.node_hour_cap,
             pending_marker=args.pending_marker,
+            pre_submit_wrapper_attestation=args.pre_submit_wrapper_attestation,
             **common,
         )
     elif args.command == "mark-submitted":

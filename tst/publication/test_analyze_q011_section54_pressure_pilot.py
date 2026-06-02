@@ -335,6 +335,14 @@ def _bundle(root: Path) -> dict[str, Any]:
             "path": pilot.PREREGISTRATION_PATH.relative_to(pilot.REPO_ROOT).as_posix(),
             "sha256": _sha256(pilot.PREREGISTRATION_PATH.read_bytes()),
         },
+        "registered_execution_preregistration_binding": {
+            "path": pilot.REGISTERED_EXECUTION_PREREGISTRATION_PATH.relative_to(
+                pilot.REPO_ROOT
+            ).as_posix(),
+            "sha256": _sha256(
+                pilot.REGISTERED_EXECUTION_PREREGISTRATION_PATH.read_bytes()
+            ),
+        },
         "cases": cases,
     }
 
@@ -361,7 +369,9 @@ def _fixture(
 
 def _analyze(fixture: tuple[Path, dict[str, Any], str]) -> dict[str, Any]:
     root, _manifest, digest = fixture
-    return pilot.analyze_pressure_pilot_bundle(root, digest)
+    return pilot.analyze_pressure_pilot_bundle(
+        root, digest, authorized_publication_root=root.parent
+    )
 
 
 class Q011Section54PressurePilotTests(unittest.TestCase):
@@ -382,7 +392,18 @@ class Q011Section54PressurePilotTests(unittest.TestCase):
         self.assertEqual(
             result["case_summaries"][0]["terminal_restart"],
             {"layout": "shared", "member_count": 1},
-        )
+            )
+
+    def test_analyzer_rejects_bundle_outside_authorized_publication_root(self) -> None:
+        with _fixture() as (root, _manifest, digest):
+            authorized = root.parent / "authorized-publication"
+            authorized.mkdir()
+            with self.assertRaisesRegex(
+                pilot.PilotAnalysisError, "outside the authorized publication root"
+            ):
+                pilot.analyze_pressure_pilot_bundle(
+                    root, digest, authorized_publication_root=authorized
+                )
 
     def test_exact_four_case_identity_and_override_contract_fail_closed(self) -> None:
         mutations = {
@@ -515,7 +536,9 @@ class Q011Section54PressurePilotTests(unittest.TestCase):
     def test_manifest_sha256_is_an_external_fail_closed_binding(self) -> None:
         with _fixture() as (root, _manifest, _digest):
             with self.assertRaisesRegex(pilot.PilotAnalysisError, "manifest SHA-256 drifted"):
-                pilot.analyze_pressure_pilot_bundle(root, "0" * 64)
+                pilot.analyze_pressure_pilot_bundle(
+                    root, "0" * 64, authorized_publication_root=root.parent
+                )
 
     def test_preregistration_is_explicitly_nonqualifying_and_non_authorizing(self) -> None:
         policy = json.loads(pilot.PREREGISTRATION_PATH.read_text(encoding="utf-8"))

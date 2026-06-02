@@ -34,6 +34,7 @@ CONTROL_PLANE_FILES = [
     "launch_trampoline.py",
     "launch_with_frontier_profile.sh",
     "ledger.py",
+    "operator_attestation.py",
     "promote_active_policy.py",
     "reconcile_frontier_job.py",
     "reconcile_manual_frontier_allocations.py",

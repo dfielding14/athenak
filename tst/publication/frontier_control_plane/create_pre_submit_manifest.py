@@ -13,7 +13,8 @@ import argparse
 from pathlib import Path
 import uuid
 
-from control_plane_common import AUTHORIZED_PIC_ROOT, CONTROL_PLANE_FILES
+from control_plane_common import AUTHORIZED_PIC_ROOT, AUTHORIZED_PROJECT_HOME_ROOT
+from control_plane_common import CONTROL_PLANE_FILES
 from control_plane_common import PinnedStagingDirectory
 from control_plane_common import REGISTERED_SCIENCE_SCOPE, SUBMISSION_SCOPES
 from control_plane_common import durable_mkdir_parents
@@ -23,6 +24,7 @@ from control_plane_common import require_canonical_path_below
 from control_plane_common import require_no_symlink_components_below
 from control_plane_common import sha256, snapshot_file, verify_installed_control_plane
 from control_plane_common import validate_launch_contract, write_json_exclusive
+from operator_attestation import validate_sealed_operator_attestation
 
 
 SCRIPT_DIR = Path(__file__).absolute().parent
@@ -47,6 +49,7 @@ def create_manifest(
     *,
     control_plane_dir: Path = SCRIPT_DIR,
     authorized_pic_root: Path = AUTHORIZED_PIC_ROOT,
+    authorized_project_home_root: Path = AUTHORIZED_PROJECT_HOME_ROOT,
 ) -> Path:
     inventory = verify_installed_control_plane(
         control_plane_dir, authorized_pic_root=authorized_pic_root
@@ -91,10 +94,22 @@ def create_manifest(
             )
         )
         clean_candidate_manifest = None
+        pre_manifest_attestation = None
         if submission_scope == REGISTERED_SCIENCE_SCOPE:
+            authorization_id = _safe_filename_segment(
+                config, "registered_science_authorization_id"
+            )
             clean_candidate_manifest = require_canonical_path_below(
                 Path(_required(config, "clean_candidate_manifest")),
                 pic_root / "clean_candidates",
+            )
+            pre_manifest_attestation = validate_sealed_operator_attestation(
+                Path(_required(config, "pre_manifest_attestation")),
+                authorization_id=authorization_id,
+                phase="pre_manifest",
+                control_plane_version=str(inventory["version"]),
+                authorized_pic_root=pic_root,
+                authorized_project_home_root=authorized_project_home_root,
             )
             snapshot_files.append(
                 snapshot_file(
@@ -247,9 +262,12 @@ def create_manifest(
         if clean_candidate_manifest is not None:
             manifest["clean_candidate_manifest_path"] = str(clean_candidate_manifest)
             manifest["clean_candidate_manifest_sha256"] = sha256(clean_candidate_manifest)
-            manifest["registered_science_authorization_id"] = _safe_filename_segment(
-                config, "registered_science_authorization_id"
-            )
+            manifest["registered_science_authorization_id"] = authorization_id
+            assert pre_manifest_attestation is not None
+            manifest["pre_manifest_attestation_path"] = pre_manifest_attestation["path"]
+            manifest["pre_manifest_attestation_sha256"] = pre_manifest_attestation[
+                "sha256"
+            ]
         write_json_exclusive(temporary / "pre_submit_manifest.json", manifest)
         make_tree_read_only(snapshot_dir, executable_names={"athena"})
         (temporary / "pre_submit_manifest.json").chmod(0o444)

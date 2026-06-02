@@ -3,8 +3,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import errno
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -19,6 +20,8 @@ from unittest import mock
 SCRIPT_DIR = Path(__file__).absolute().parent
 sys.path.insert(0, str(SCRIPT_DIR))
 import capture_frontier_pre_policy_promotion_attestation as capture_attestation
+sys.path.insert(0, str(SCRIPT_DIR / "frontier_control_plane"))
+import operator_attestation
 
 
 FIXED_TIME = datetime(2026, 6, 1, 15, 16, 17, tzinfo=timezone.utc)
@@ -118,6 +121,23 @@ class CaptureFrontierPrePolicyPromotionAttestationTest(unittest.TestCase):
             ledger_validator=ledger_validator or self._validator,
         )
 
+    def _validate(
+        self,
+        final: Path,
+        *,
+        authorization_id: str = "reviewed-authorization",
+        phase: str = capture_attestation.PHASE,
+    ) -> dict[str, str]:
+        return operator_attestation.validate_sealed_operator_attestation(
+            final / "attestation.json",
+            authorization_id=authorization_id,
+            phase=phase,
+            control_plane_version=CONTROL_PLANE_VERSION,
+            authorized_pic_root=self.pic_root,
+            authorized_project_home_root=self.project_home_root,
+            now=FIXED_TIME,
+        )
+
     def test_success_uses_only_absolute_read_only_scheduler_queries(self) -> None:
         runner = ReadOnlyRunner(["", ""])
         staging = self._capture(runner=runner)
@@ -143,6 +163,13 @@ class CaptureFrontierPrePolicyPromotionAttestationTest(unittest.TestCase):
                     "-h",
                     "-o",
                     "%i|%a|%P|%q|%T|%j|%k",
+                ],
+                [
+                    "/usr/bin/ps",
+                    "-u",
+                    "dfielding",
+                    "-o",
+                    "pid=,ppid=,state=,args=",
                 ],
                 [
                     "/usr/bin/squeue",
@@ -175,6 +202,13 @@ class CaptureFrontierPrePolicyPromotionAttestationTest(unittest.TestCase):
             0,
         )
         self.assertTrue((final / "capture_queue_snapshot.txt").is_file())
+        self.assertTrue(
+            (final / "capture_same_account_process_snapshot.txt").is_file()
+        )
+        self.assertEqual(
+            set(attestation["captured_snapshots"]),
+            capture_attestation.CAPTURED_SNAPSHOT_FILENAMES,
+        )
 
     def test_capture_and_seal_encode_selected_execution_phase(self) -> None:
         for phase in ["pre_manifest", "pre_submit_wrapper"]:
@@ -209,6 +243,104 @@ class CaptureFrontierPrePolicyPromotionAttestationTest(unittest.TestCase):
                     ],
                     0,
                 )
+
+    def test_sealed_attestation_passes_installed_validator(self) -> None:
+        runner = ReadOnlyRunner(["", ""])
+        final = self._seal(self._capture(runner=runner), runner=runner)
+        binding = self._validate(final)
+        self.assertEqual(binding["path"], str(final / "attestation.json"))
+        self.assertRegex(binding["sha256"], r"^[0-9a-f]{64}$")
+
+    def test_validator_rejects_internally_consistent_unauthorized_marker_path(
+        self,
+    ) -> None:
+        runner = ReadOnlyRunner(["", ""])
+        final = self._seal(self._capture(runner=runner), runner=runner)
+        marker = final / "pending_manual_accounting_marker.txt"
+        attestation_path = final / "attestation.json"
+        final.chmod(0o700)
+        marker.chmod(0o600)
+        attestation_path.chmod(0o600)
+        attestation = json.loads(attestation_path.read_bytes())
+        values = attestation["pending_manual_accounting_marker"]["values"]
+        values[str(self.base / "unauthorized-marker.json")] = "absent"
+        payload = "".join(f"{path} {value}\n" for path, value in values.items()).encode(
+            "utf-8"
+        )
+        marker.write_bytes(payload)
+        attestation["pending_manual_accounting_marker"]["sha256"] = hashlib.sha256(
+            payload
+        ).hexdigest()
+        attestation_path.write_text(
+            json.dumps(attestation, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        marker.chmod(0o400)
+        attestation_path.chmod(0o400)
+        final.chmod(0o500)
+        with self.assertRaisesRegex(ValueError, "manual-accounting marker differs"):
+            self._validate(final)
+
+    def test_validator_rejects_duplicate_exact_cardinality_snapshot_lines(self) -> None:
+        for index, (filename, record_name, message) in enumerate([
+            (
+                "pending_manual_accounting_marker.txt",
+                "pending_manual_accounting_marker",
+                "manual-accounting marker differs",
+            ),
+            (
+                "mirrored_ledger_line_counts.txt",
+                "mirrored_ledger_line_counts",
+                "ledger line counts differ",
+            ),
+        ]):
+            with self.subTest(filename=filename):
+                runner = ReadOnlyRunner(["", ""])
+                authorization_id = f"reviewed-duplicate-{index}"
+                final = self._seal(
+                    self._capture(runner=runner, authorization_id=authorization_id),
+                    runner=runner,
+                )
+                member = final / filename
+                attestation_path = final / "attestation.json"
+                final.chmod(0o700)
+                member.chmod(0o600)
+                attestation_path.chmod(0o600)
+                payload = member.read_bytes()
+                payload += payload.splitlines(keepends=True)[0]
+                member.write_bytes(payload)
+                attestation = json.loads(attestation_path.read_bytes())
+                attestation[record_name]["sha256"] = hashlib.sha256(payload).hexdigest()
+                attestation_path.write_text(
+                    json.dumps(attestation, indent=2, sort_keys=True) + "\n",
+                    encoding="utf-8",
+                )
+                member.chmod(0o400)
+                attestation_path.chmod(0o400)
+                final.chmod(0o500)
+                with self.assertRaisesRegex(ValueError, message):
+                    self._validate(final, authorization_id=authorization_id)
+
+    def test_validator_rejects_parent_substitution_during_descriptor_walk(self) -> None:
+        runner = ReadOnlyRunner(["", ""])
+        final = self._seal(self._capture(runner=runner), runner=runner)
+        moved = final.with_name(final.name + "-moved")
+        original_listdir = operator_attestation.os.listdir
+        swapped = {"done": False}
+
+        def substitute(directory_fd: int) -> list[str]:
+            names = original_listdir(directory_fd)
+            if not swapped["done"]:
+                swapped["done"] = True
+                final.rename(moved)
+                final.symlink_to(moved, target_is_directory=True)
+            return names
+
+        with mock.patch.object(
+            operator_attestation.os, "listdir", side_effect=substitute
+        ):
+            with self.assertRaisesRegex(ValueError, "changed while"):
+                self._validate(final)
 
     def test_capture_cli_phase_choices_default_to_pre_policy_promotion(self) -> None:
         required = [
@@ -269,6 +401,21 @@ class CaptureFrontierPrePolicyPromotionAttestationTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "non-empty queue"):
             self._seal(staging, runner=runner)
         self.assertTrue(staging.is_dir())
+
+    def test_seal_rejects_stale_capture_to_seal_interval(self) -> None:
+        runner = ReadOnlyRunner(["", ""])
+        staging = self._capture(runner=runner)
+        with self.assertRaisesRegex(ValueError, "exceeds fifteen minutes"):
+            capture_attestation.seal(
+                staging,
+                attest_reviewed=True,
+                runner=runner,
+                now=lambda: FIXED_TIME
+                + timedelta(
+                    seconds=capture_attestation.CAPTURE_TO_SEAL_MAX_AGE_SECONDS + 1
+                ),
+                ledger_validator=self._validator,
+            )
 
     def test_seal_rejects_each_pending_marker(self) -> None:
         markers = [

@@ -578,9 +578,14 @@ qualify any scientific claim by itself.
   source-only registered-execution tranche for the four pressure cases. It
   freezes one directive-only Frontier template, four separate one-action
   trusted-trampoline contracts, the raw-case verifier, the adjacent structured-
-  artifact helper and post-freeze materializers. A separately reviewed clean
+  artifact helper and post-freeze materializers. The first exact-carrier
+  timeout margin is explicitly labeled as an engineering seed bootstrap, not
+  empirical timing evidence or production sizing. A separately reviewed clean
   freeze, additive storage-policy successor and per-case operator attestations
-  remain required before any scheduler mutation.
+  remain required before any scheduler mutation. Its serial execution boundary
+  requires terminal reconciliation, quiescence and immutable raw-case
+  verification before materializing the next case, followed by one
+  descriptor-verified four-case aggregate publication.
 - `q011_parallel_shock_storage_estimator_successor_2026-06-01.json`:
   analytical storage-planning successor after the publication deck gained a
   signed particle-current binary output and the PVTK block moved. The estimator

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 import fcntl
 import hashlib
@@ -24,6 +25,7 @@ import uuid
 import install_control_plane
 import launch_trampoline
 import ledger
+import promote_active_policy
 import reconcile_frontier_job
 import reconcile_manual_frontier_allocations
 import terminal_recovery_handoff
@@ -64,6 +66,7 @@ from launch_trampoline import _publish_frozen_artifact_inventory, _TASK_LOCAL_EX
 from ledger import accounting, append_primary_event, genesis_anchor_paths
 from ledger import incomplete_manual_accounting_marker_paths
 from ledger import validate_primary_chain
+from operator_attestation import OPERATOR_STATEMENTS
 from promote_active_policy import _promotion_lock, promote
 from reconcile_frontier_job import reconcile
 from reconcile_manual_frontier_allocations import reconcile_manual_allocations
@@ -174,6 +177,139 @@ class SnapshotTests(unittest.TestCase):
     def _utc(self, value: datetime) -> str:
         return value.replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
+    def _sealed_operator_attestation(
+        self,
+        authorization_id: str,
+        phase: str,
+        *,
+        control_plane_version: str | None = None,
+    ) -> Path:
+        version = control_plane_version or self.control_plane_version
+        archive = self.pic_root / "operator_attestations"
+        archive.mkdir(mode=0o700, exist_ok=True)
+        now = datetime.now(timezone.utc).replace(microsecond=0)
+        for offset in range(10):
+            timestamp = now - timedelta(seconds=offset)
+            root = archive / (
+                f"{timestamp.strftime('%Y%m%dT%H%M%SZ')}-{authorization_id}-{phase}"
+            )
+            try:
+                root.mkdir(mode=0o700)
+            except FileExistsError:
+                existing = root / "attestation.json"
+                if existing.is_file():
+                    value = json.loads(existing.read_text(encoding="utf-8"))
+                    if value.get("control_plane_version") == version:
+                        return existing
+                continue
+            break
+        else:
+            raise AssertionError("could not allocate sealed-attestation fixture")
+        manual_values = {
+            str(self.pic_root / "ledger/pending_manual_accounting.json"): "absent",
+            str(self.project_home_root / "ledger/pending_manual_accounting.json"): "absent",
+        }
+        counts = {
+            str(self.pic_root / "ledger/node_hours.jsonl"): 1,
+            str(self.pic_root / "ledger/mirror_receipts.jsonl"): 1,
+            str(self.project_home_root / "ledger/node_hours.jsonl"): 1,
+        }
+        state = {
+            "validation": "coherent",
+            "validator": "existing_read_only_mirrored_state_snapshot",
+            "ledger_record_count": 1,
+            "ledger_tail_event_sha256": "0" * 64,
+            "active_reservation_count": 0,
+            "active_reservation_ids": [],
+        }
+        payloads = {
+            "same_account_process_snapshot.txt": b"fixture same-account snapshot\n",
+            "queue_snapshot.txt": b"",
+            "pending_submission_marker.txt": b"absent\n",
+            "pending_manual_accounting_marker.txt": "".join(
+                f"{path} {value}\n" for path, value in manual_values.items()
+            ).encode("utf-8"),
+            "mirrored_ledger_line_counts.txt": "".join(
+                f"{value} {path}\n" for path, value in counts.items()
+            ).encode("utf-8"),
+            "validated_mirrored_ledger_state.json": (
+                json.dumps(state, indent=2, sort_keys=True) + "\n"
+            ).encode("utf-8"),
+        }
+        payloads["capture_same_account_process_snapshot.txt"] = payloads[
+            "same_account_process_snapshot.txt"
+        ]
+        for filename, payload in payloads.items():
+            (root / filename).write_bytes(payload)
+            if (
+                filename != "same_account_process_snapshot.txt"
+                and not filename.startswith("capture_")
+            ):
+                (root / f"capture_{filename}").write_bytes(payload)
+
+        def record(filename: str, **values: object) -> dict[str, object]:
+            return {
+                "path": filename,
+                "sha256": hashlib.sha256(payloads[filename]).hexdigest(),
+                **values,
+            }
+
+        attestation = {
+            "schema_version": 1,
+            "record_type": (
+                "q027_frontier_registered_science_same_account_isolation_attestation"
+            ),
+            "recorded_utc": self._utc(timestamp),
+            "sealed_utc": self._utc(timestamp),
+            "registered_science_authorization_id": authorization_id,
+            "control_plane_version": version,
+            "phase": phase,
+            "same_account_process_snapshot": record(
+                "same_account_process_snapshot.txt"
+            ),
+            "queue_snapshot": record("queue_snapshot.txt"),
+            "pending_submission_marker": record(
+                "pending_submission_marker.txt", value="absent"
+            ),
+            "pending_manual_accounting_marker": record(
+                "pending_manual_accounting_marker.txt",
+                value="absent",
+                values=manual_values,
+            ),
+            "mirrored_ledger_line_counts": record(
+                "mirrored_ledger_line_counts.txt", counts=counts
+            ),
+            "validated_mirrored_ledger_state": record(
+                "validated_mirrored_ledger_state.json", state=state
+            ),
+            "captured_snapshots": {
+                filename: {
+                    "path": filename,
+                    "sha256": hashlib.sha256((root / filename).read_bytes()).hexdigest(),
+                }
+                for filename in sorted(
+                    {
+                        "capture_same_account_process_snapshot.txt",
+                        "capture_queue_snapshot.txt",
+                        "capture_pending_submission_marker.txt",
+                        "capture_pending_manual_accounting_marker.txt",
+                        "capture_mirrored_ledger_line_counts.txt",
+                        "capture_validated_mirrored_ledger_state.json",
+                    }
+                )
+            },
+            "operator_statement": OPERATOR_STATEMENTS[phase],
+        }
+        attestation_path = root / "attestation.json"
+        attestation_path.write_text(
+            json.dumps(attestation, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        for path in root.iterdir():
+            path.chmod(0o400)
+        root.chmod(0o500)
+        return attestation_path
+
     def _publish_test_control_plane_successor(self, root: Path) -> Path:
         staging = root / "control_plane" / "test-successor-staging"
         shutil.copytree(self.control_plane_dir, staging)
@@ -220,6 +356,9 @@ class SnapshotTests(unittest.TestCase):
         )
         promote(
             self.policy,
+            **self._pre_policy_promotion_attestation_arguments(
+                control_plane_version=successor.name
+            ),
             control_plane_dir=successor,
             authorized_pic_root=self.pic_root,
             authorized_project_home_root=self.project_home_root,
@@ -349,6 +488,7 @@ class SnapshotTests(unittest.TestCase):
         *,
         final_event_type: str = "reservation_cancelled",
         job_id: str = "987654",
+        include_operator_attestations: bool = False,
     ) -> dict[str, object]:
         reservation_id = str(uuid.uuid4())
         reservation = {
@@ -371,6 +511,29 @@ class SnapshotTests(unittest.TestCase):
             "state": "reserved",
             "reconciled": False,
         }
+        if include_operator_attestations:
+            authorization_id = "manual-accounting-registered-probe"
+            reservation.update(
+                {
+                    "submission_scope": "registered_science",
+                    "registered_science_authorization_id": authorization_id,
+                    "clean_candidate_manifest_sha256": "c" * 64,
+                    "manifest_path": str(
+                        self.pic_root / "manifests/manual-accounting-fixture/manifest.json"
+                    ),
+                    "manifest_sha256": "d" * 64,
+                    "job_script_sha256": "e" * 64,
+                    "executable_sha256": "f" * 64,
+                    "active_policy_sha256": "1" * 64,
+                    "active_promotion_sha256": "2" * 64,
+                }
+            )
+            for phase in ("pre_manifest", "pre_submit_wrapper"):
+                attestation = self._sealed_operator_attestation(
+                    authorization_id, phase
+                )
+                reservation[f"{phase}_attestation_path"] = str(attestation)
+                reservation[f"{phase}_attestation_sha256"] = sha256(attestation)
         appended = append_primary_event(
             self.ledger,
             self.csv,
@@ -580,10 +743,27 @@ class SnapshotTests(unittest.TestCase):
     def _promote_policy(self) -> None:
         promote(
             self.policy,
+            **self._pre_policy_promotion_attestation_arguments(),
             control_plane_dir=self.control_plane_dir,
             authorized_pic_root=self.pic_root,
             authorized_project_home_root=self.project_home_root,
         )
+
+    def _pre_policy_promotion_attestation_arguments(
+        self, *, control_plane_version: str | None = None
+    ) -> dict[str, object]:
+        policy = json.loads(self.policy.read_text(encoding="utf-8"))
+        if not policy["registered_science_slices"]:
+            return {}
+        authorization_id = "reviewed-policy-promotion"
+        return {
+            "pre_policy_promotion_attestation": self._sealed_operator_attestation(
+                authorization_id,
+                "pre_policy_promotion",
+                control_plane_version=control_plane_version,
+            ),
+            "pre_policy_promotion_authorization_id": authorization_id,
+        }
 
     def _write_config(self, **overrides: object) -> None:
         now = datetime.now(timezone.utc)
@@ -1007,10 +1187,22 @@ class SnapshotTests(unittest.TestCase):
         self._promote_policy()
 
     def _create_manifest(self, *, control_plane_dir: Path | None = None) -> Path:
+        target_control_plane = control_plane_dir or self.control_plane_dir
+        config = json.loads(self.config.read_text(encoding="utf-8"))
+        if config.get("submission_scope") == "registered_science":
+            config["pre_manifest_attestation"] = str(
+                self._sealed_operator_attestation(
+                    str(config["registered_science_authorization_id"]),
+                    "pre_manifest",
+                    control_plane_version=target_control_plane.name,
+                )
+            )
+            self.config.write_text(json.dumps(config), encoding="utf-8")
         return create_manifest(
             self.config,
-            control_plane_dir=control_plane_dir or self.control_plane_dir,
+            control_plane_dir=target_control_plane,
             authorized_pic_root=self.pic_root,
+            authorized_project_home_root=self.project_home_root,
         )
 
     def _reserve(
@@ -1021,6 +1213,7 @@ class SnapshotTests(unittest.TestCase):
         control_plane_dir: Path | None = None,
         *,
         patch_clean_candidate_bundle: bool = True,
+        inject_wrapper_attestation: bool = True,
     ) -> dict[str, object]:
         def validate_with_test_roots(
             candidate: dict[str, object], **kwargs: object
@@ -1035,6 +1228,17 @@ class SnapshotTests(unittest.TestCase):
             )
 
         def invoke() -> dict[str, object]:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            wrapper_attestation = None
+            if (
+                inject_wrapper_attestation
+                and manifest.get("submission_scope") == "registered_science"
+            ):
+                wrapper_attestation = self._sealed_operator_attestation(
+                    str(manifest["registered_science_authorization_id"]),
+                    "pre_submit_wrapper",
+                    control_plane_version=(control_plane_dir or self.control_plane_dir).name,
+                )
             return reserve(
                 manifest_path=manifest_path,
                 ledger_jsonl=self.ledger,
@@ -1043,6 +1247,7 @@ class SnapshotTests(unittest.TestCase):
                 mirror_jsonl=self.mirror,
                 node_hour_cap=cap,
                 reservation_id=reservation_id,
+                pre_submit_wrapper_attestation=wrapper_attestation,
                 control_plane_dir=control_plane_dir or self.control_plane_dir,
                 authorized_pic_root=self.pic_root,
                 authorized_project_home_root=self.project_home_root,
@@ -5951,6 +6156,174 @@ PY
         self.assertEqual(len(prepared["analyzers"]), 1)
         self.assertIn("clean_candidate_manifest_sha256", self.csv.read_text())
 
+    def test_registered_science_policy_promotion_requires_pre_policy_attestation(
+        self,
+    ) -> None:
+        self._write_science_config(authorize=True)
+        with self.assertRaisesRegex(
+            ValueError, "requires a sealed pre-policy-promotion attestation"
+        ):
+            promote(
+                self.policy,
+                control_plane_dir=self.control_plane_dir,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+
+    def test_registered_science_policy_promotion_retains_attestation_binding(
+        self,
+    ) -> None:
+        self._write_science_config(authorize=True)
+        promotion = json.loads(
+            (self.pic_root / "policy" / "active_promotion.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        path = Path(str(promotion["pre_policy_promotion_attestation_path"]))
+        self.assertTrue(path.is_file())
+        self.assertEqual(
+            promotion["pre_policy_promotion_attestation_sha256"], sha256(path)
+        )
+        _, snapshot = require_storage_policy_unlock_snapshot(
+            control_plane_version=self.control_plane_version,
+            authorized_pic_root=self.pic_root,
+            authorized_project_home_root=self.project_home_root,
+        )
+        self.assertRegex(snapshot["active_promotion_sha256"], r"^[0-9a-f]{64}$")
+
+    def test_registered_science_policy_unlock_revalidates_retained_attestation_tree(
+        self,
+    ) -> None:
+        self._write_science_config(authorize=True)
+        promotion = json.loads(
+            (self.pic_root / "policy" / "active_promotion.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        path = Path(str(promotion["pre_policy_promotion_attestation_path"]))
+        member = path.parent / "same_account_process_snapshot.txt"
+        path.parent.chmod(0o700)
+        member.chmod(0o600)
+        member.write_bytes(member.read_bytes() + b"forged\n")
+        member.chmod(0o400)
+        path.parent.chmod(0o500)
+        with self.assertRaisesRegex(ValueError, "checksum differs"):
+            require_storage_policy_unlock_snapshot(
+                control_plane_version=self.control_plane_version,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+
+    def test_registered_science_policy_promotion_revalidates_attestation_inside_lock(
+        self,
+    ) -> None:
+        self._write_science_config(authorize=True)
+        arguments = self._pre_policy_promotion_attestation_arguments()
+        path = Path(str(arguments["pre_policy_promotion_attestation"]))
+        original_lock = promote_active_policy._promotion_lock
+
+        @contextmanager
+        def tampering_lock(root: Path):
+            with original_lock(root) as descriptor:
+                member = path.parent / "same_account_process_snapshot.txt"
+                path.parent.chmod(0o700)
+                member.chmod(0o600)
+                member.write_bytes(member.read_bytes() + b"forged\n")
+                member.chmod(0o400)
+                path.parent.chmod(0o500)
+                yield descriptor
+
+        with patch.object(
+            promote_active_policy, "_promotion_lock", tampering_lock
+        ), self.assertRaisesRegex(ValueError, "checksum differs"):
+            promote(
+                self.policy,
+                **arguments,
+                control_plane_dir=self.control_plane_dir,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+
+    def test_registered_science_policy_promotion_revalidates_attestation_after_mirror_lock(
+        self,
+    ) -> None:
+        self._write_science_config(authorize=True)
+        arguments = self._pre_policy_promotion_attestation_arguments()
+        path = Path(str(arguments["pre_policy_promotion_attestation"]))
+        original_open = promote_active_policy.open_directory_below
+        tampered = False
+
+        def tampering_open(directory: Path, *, root: Path) -> int:
+            nonlocal tampered
+            descriptor = original_open(directory, root=root)
+            if (
+                not tampered
+                and Path(os.path.abspath(directory))
+                == self.project_home_root / "policy"
+            ):
+                tampered = True
+                member = path.parent / "same_account_process_snapshot.txt"
+                path.parent.chmod(0o700)
+                member.chmod(0o600)
+                member.write_bytes(member.read_bytes() + b"forged\n")
+                member.chmod(0o400)
+                path.parent.chmod(0o500)
+            return descriptor
+
+        with patch.object(
+            promote_active_policy, "open_directory_below", tampering_open
+        ), self.assertRaisesRegex(ValueError, "checksum differs"):
+            promote(
+                self.policy,
+                **arguments,
+                control_plane_dir=self.control_plane_dir,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+        self.assertTrue(tampered)
+
+    def test_registered_science_rejects_missing_wrapper_attestation(self) -> None:
+        self._write_science_config(authorize=True)
+        manifest_path = self._create_manifest()
+        with self.assertRaisesRegex(
+            ValueError, "requires a sealed pre-submit-wrapper attestation"
+        ):
+            self._reserve(manifest_path, inject_wrapper_attestation=False)
+
+    def test_registered_science_rejects_legacy_two_field_manifest_attestation(
+        self,
+    ) -> None:
+        self._write_science_config(authorize=True)
+        config = json.loads(self.config.read_text(encoding="utf-8"))
+        path = self._sealed_operator_attestation(
+            str(config["registered_science_authorization_id"]),
+            "pre_manifest",
+        )
+        path.parent.chmod(0o700)
+        path.chmod(0o600)
+        path.write_text(
+            json.dumps(
+                {
+                    "phase": "pre_manifest",
+                    "registered_science_authorization_id": (
+                        config["registered_science_authorization_id"]
+                    ),
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        path.chmod(0o400)
+        path.parent.chmod(0o500)
+        config["pre_manifest_attestation"] = str(path)
+        self.config.write_text(json.dumps(config), encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "root schema"):
+            create_manifest(
+                self.config,
+                control_plane_dir=self.control_plane_dir,
+                authorized_pic_root=self.pic_root,
+            )
+
     def test_registered_science_rejects_prepared_artifact_manifest_tamper(self) -> None:
         candidate = self._write_science_config(authorize=True)
         value = json.loads(candidate.read_text(encoding="utf-8"))
@@ -6162,11 +6535,15 @@ PY
         self.assertIn(
             "registered_science_authorization_id", branch["then"]["required"]
         )
+        self.assertIn("pre_manifest_attestation_path", branch["then"]["required"])
+        self.assertIn("pre_manifest_attestation_sha256", branch["then"]["required"])
         prohibited = [
             value["required"][0]
             for value in branch["else"]["not"]["anyOf"]
         ]
         self.assertIn("registered_science_authorization_id", prohibited)
+        self.assertIn("pre_manifest_attestation_path", prohibited)
+        self.assertIn("pre_manifest_attestation_sha256", prohibited)
 
     def test_manifest_schema_closes_root_timeout_and_snapshot_records(self) -> None:
         schema = json.loads(
@@ -7979,7 +8356,11 @@ PY
         alias = wrapper_root / "control_plane" / "alias"
         alias.symlink_to(real, target_is_directory=True)
         result = subprocess.run(
-            [str(alias / "submit_frontier_job.sh"), "unused-manifest"],
+            [
+                str(alias / "submit_frontier_job.sh"),
+                "unused-manifest",
+                "unused-attestation",
+            ],
             text=True,
             capture_output=True,
         )
@@ -8873,6 +9254,32 @@ PY
             events[-1]["accounting_scope"],
             "manual_direct_scheduler_accounting_only",
         )
+
+    def test_manual_accounting_recovery_rejects_retained_attestation_tamper_before_write(
+        self,
+    ) -> None:
+        self._append_registered_probe(include_operator_attestations=True)
+        reservation = validate_primary_chain(self.ledger)[1]
+        authorization = self._write_manual_accounting_authorization()
+        arguments = self._manual_accounting_arguments(authorization)
+        self._strand_manual_accounting_after_orion_append(arguments)
+        attestation = Path(str(reservation["pre_manifest_attestation_path"]))
+        member = attestation.parent / "same_account_process_snapshot.txt"
+        attestation.parent.chmod(0o700)
+        member.chmod(0o600)
+        member.write_bytes(member.read_bytes() + b"forged\n")
+        member.chmod(0o400)
+        attestation.parent.chmod(0o500)
+        mirror_before = self.mirror.read_bytes()
+        receipts_before = self.receipts.read_bytes()
+        with patch.object(
+            reconcile_manual_frontier_allocations.subprocess,
+            "check_output",
+            side_effect=self._manual_accounting_scheduler_output,
+        ), self.assertRaisesRegex(ValueError, "checksum differs"):
+            reconcile_manual_allocations(**arguments)
+        self.assertEqual(self.mirror.read_bytes(), mirror_before)
+        self.assertEqual(self.receipts.read_bytes(), receipts_before)
 
     def test_manual_direct_scheduler_recovery_rejects_cross_scope_suffix(
         self,

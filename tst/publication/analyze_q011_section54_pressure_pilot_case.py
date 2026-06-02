@@ -450,15 +450,12 @@ def _analyze_tree(tree: object, case_id: str) -> dict[str, object]:
         raise PressurePilotCaseError("Athena stdout or stderr is not UTF-8") from error
     validate_frontier_mpich_diagnostic_stderr(stderr)
     rank_gpu_bindings = _trusted_gpu_preflight(stdout)
-    error_history_path = f"output/{case_id}-errs.dat"
-    error_history_payload = _read(tree, inventory, error_history_path)
 
     expected_paths = {
         allowlist_path,
         "athena_stdout.txt",
         "athena_stdout.sha256",
         "athena_stderr.txt",
-        error_history_path,
     }
     bundle_members = [
         _member("athena_stdout.txt", f"cases/{case_id}/stdout.txt", stdout_payload)
@@ -504,7 +501,6 @@ def _analyze_tree(tree: object, case_id: str) -> dict[str, object]:
             "athena_stdout.txt": _sha256(stdout_payload),
             "athena_stdout.sha256": _sha256(stdout_checksum_payload),
             "athena_stderr.txt": _sha256(stderr_payload),
-            error_history_path: _sha256(error_history_payload),
         },
         "runtime_profile": allowlist["PIC_FRONTIER_PROFILE"],
         "parallel_ranks": len(rank_gpu_bindings),
