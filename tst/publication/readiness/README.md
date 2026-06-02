@@ -53,6 +53,12 @@ qualify any scientific claim by itself.
   immutable clean-candidate manifest, paired-controller policy promotion,
   pre-promotion operator attestation and quiescent mirrored ledger without
   authorizing a registered-science attempt.
+- `phase0_clean_candidate_freeze_successor_v2_2026-06-01.json`: current
+  additive VL2/TSC clean-candidate freeze receipt. It binds the exact
+  `16c103ceea42` source commit, double-precision HIP/MPI Release executable,
+  recursively read-only `d7205cd3` manifest and independently validated
+  110-deck, 16-analyzer closure. Active-policy promotion remains pending until
+  the unrelated CGL allocation exits and the queue-clear live preflight passes.
 - `phase0_scheduler_accounting_controller_successor_2026-06-01.json`:
   accounting-only paired-controller successor. It widens the
   nonqualifying manual allocation importer without invalidating historical
@@ -88,12 +94,18 @@ qualify any scientific claim by itself.
   publication analyzers.
 - `phase0_curated_candidate_successor_v12_2026-06-01.json`: historical curated
   pre-build successor before the final operator-recipe correction.
-- `phase0_curated_candidate_successor_v13_2026-06-01.json`: current curated
+- `phase0_curated_candidate_successor_v13_2026-06-01.json`: historical curated
   pre-build successor. It binds the corrected operator recipe, installed
   `aa069bc7` paired-controller v3
   receipt, promoted launch-prohibited pending-clean-freeze policy, 110-deck and
   16-analyzer closure, quiescent 108-row mirrored ledger, and remaining
   canonical HIP/MPI Release build, freeze and registered-launch gates.
+- `phase0_curated_candidate_successor_v14_2026-06-01.json`: current curated
+  post-freeze successor. It binds the canonical `16c103ceea42`
+  double-precision HIP/MPI Release build and recursively read-only `d7205cd3`
+  VL2/TSC clean-candidate freeze. Launch remains prohibited while the unrelated
+  CGL allocation is active and until queue-clear live preflight and exact
+  freeze-policy promotion complete.
 - `phase0_curated_candidate_successor_v4_2026-05-31.json`: historical Phase 0
   successor after schema-3 parallel-shock exact tag-window and restart
   fail-stop hardening. It binds the paired `4f005096` successor receipt and

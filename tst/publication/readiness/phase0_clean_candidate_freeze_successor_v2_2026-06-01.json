@@ -1,0 +1,64 @@
+{
+  "record_type": "phase0_clean_candidate_freeze_successor",
+  "schema_version": 1,
+  "date": "2026-06-01",
+  "predecessor_record": "tst/publication/readiness/phase0_clean_candidate_freeze_and_policy_promotion_2026-06-01.json",
+  "predecessor_sha256": "c6c4ba48485364d0daf67b63dc3f67a332464c2d4b8b7e65a781d0e1d84c9c03",
+  "qualification_effect": "none_operational_clean_candidate_freeze_receipt_only_policy_promotion_pending",
+  "control_plane_version": "aa069bc7df47f26d7d0677da69b5a1c4da6a3777151255e830d6989fced210f0",
+  "clean_candidate": {
+    "freeze_id": "d7205cd3-63fb-45ba-8e0a-c74d150df5a2",
+    "created_utc": "2026-06-02T00:47:05Z",
+    "manifest_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/clean_candidates/d7205cd3-63fb-45ba-8e0a-c74d150df5a2/clean_candidate_manifest.json",
+    "manifest_sha256": "bcbc72a72832c6024c5b8f5b0ab245d576e93544adb349a9219883754c33be16",
+    "source_git_commit": "16c103ceea42296ed3a33362ad30161e4fe60325",
+    "source_git_tree": "74fea6d7af149b2e3eda2e9101098a5f425d4268",
+    "source_archive_sha256": "561af7cb95319319fa7806af8ca3b09fa41a0ec476f5c12caf36e10dfb880454",
+    "source_commit_sha256": "bcd71b11786dfd883d17bc206a1a962e9defb5d825d897a209a0c20af0c71a0e",
+    "source_bundle_sha256": "6d024ae55db7190fccbbd9da41b7a6c21d631951ee467c92085aa1bb9200c9ee",
+    "prepared_artifact_inventory_sha256": "6295c9f8d762c4a03e218d1219468164583d349901cc6cd2acdbf072c2294a39",
+    "paper_deck_count": 110,
+    "publication_analyzer_count": 16,
+    "build_profile_id": "hip-mpi-release-paper-pic",
+    "build_profile_sha256": "0369bce9d050059487d62593c02a57fcaafb5b25ef0a0189f97cc2a9889b5a59",
+    "profile_receipt_sha256": "3e273cfd8168471f2fe609e7785a41514418ea4641fffa93dfd28e10f2b891b8",
+    "executable_sha256": "6fb3097bd86a5f36e70bddf2a6b7d70a010cee1fdc167ddcff6df40c442685df"
+  },
+  "local_validation": {
+    "installed_clean_candidate_bundle_validator": "pass",
+    "recursive_read_only_tree": "pass",
+    "manifest_rehash": "pass",
+    "expected_tree_entries": 22,
+    "unexpected_tree_entries": 0,
+    "independent_operational_review": "approve_frozen_candidate_package"
+  },
+  "policy_promotion": {
+    "status": "pending_queue_quiescence_and_live_preflight",
+    "repo_policy_status": "pending_clean_candidate_freeze",
+    "live_orion_policy_sha256": "8d667e5dcba6179a7316fc6572ad79eaeecce6471d2b88b2f7a78fa83dc2fe8d",
+    "live_project_home_policy_sha256": "8d667e5dcba6179a7316fc6572ad79eaeecce6471d2b88b2f7a78fa83dc2fe8d",
+    "live_orion_promotion_sha256": "d7daa824b55f96e07596eb89bbf685926588cff49c6937aafaa3934a5518d8ba",
+    "live_project_home_promotion_sha256": "d7daa824b55f96e07596eb89bbf685926588cff49c6937aafaa3934a5518d8ba",
+    "registered_science_slices": [],
+    "frontier_launch_authorization": "none"
+  },
+  "queue_quiescence_blocker": {
+    "status": "unrelated_user_job_running_do_not_cancel",
+    "job_id": "4753294",
+    "account": "ast207",
+    "partition": "batch",
+    "qos": "normal",
+    "job_name": "cgl_mks24_E03_forcing_policy_R02_s16_rankio_t6p5_t6p75",
+    "workdir": "/autofs/nccs-svm1_home2/dfielding/athenak-df",
+    "stdout": "/lustre/orion/ast207/proj-shared/dfielding/CGL/logs/slurm/cgl_mks24_E03_forcing_policy_R02_s16_rankio_t6p5_t6p75.4753294.log",
+    "scheduled_start": "2026-06-01T20:40:17-04:00",
+    "scheduled_end": "2026-06-01T21:45:17-04:00"
+  },
+  "scope_limits": [
+    "This successor receipt records the immutable VL2/TSC double-precision HIP/MPI Release clean-candidate package only.",
+    "It preserves the historical pre-VL2 freeze-and-promotion receipt as immutable chronology.",
+    "The active mirrored policy remains launch-prohibited pending queue quiescence, live preflight and an installed-control-plane policy promotion.",
+    "The unrelated running CGL allocation must not be cancelled or repurposed for PIC work.",
+    "This receipt does not authorize a registered-science attempt, qualify a physical claim or close external review."
+  ]
+}

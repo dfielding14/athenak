@@ -1,0 +1,63 @@
+{
+  "record_type": "phase0_curated_candidate_successor",
+  "schema_version": 1,
+  "date": "2026-06-01",
+  "predecessor_record": "tst/publication/readiness/phase0_curated_candidate_successor_v13_2026-06-01.json",
+  "predecessor_sha256": "a49ef2cb179d479c31a1e362da66bc5b125816c479e3ab8e8dcdd0a531d7bf69",
+  "status": "canonical_vl2_tsc_clean_candidate_frozen_policy_promotion_pending_queue_quiescence",
+  "qualification_effect": "none",
+  "live_paired_control_plane_version": "aa069bc7df47f26d7d0677da69b5a1c4da6a3777151255e830d6989fced210f0",
+  "successor_source_control_plane_version": "aa069bc7df47f26d7d0677da69b5a1c4da6a3777151255e830d6989fced210f0",
+  "candidate_freeze_source_commit": "16c103ceea42296ed3a33362ad30161e4fe60325",
+  "frontier_launch_authorization": "none_pending_queue_quiescence_live_preflight_and_freeze_policy_promotion",
+  "clean_candidate_freeze_receipt": {
+    "path": "tst/publication/readiness/phase0_clean_candidate_freeze_successor_v2_2026-06-01.json",
+    "sha256": "319d5aa520c4e07ff57796e5c883472fdac097b668836f7a0086f0e083f618e9"
+  },
+  "prepared_artifacts": {
+    "inventory_path": "tst/publication/frontier_control_plane/prepared_pic_artifact_inventory.json",
+    "inventory_sha256": "6295c9f8d762c4a03e218d1219468164583d349901cc6cd2acdbf072c2294a39",
+    "paper_deck_count": 110,
+    "publication_analyzer_count": 16,
+    "closure_policy": "canonical inventory path plus exact archived inputs/tests/pic*.athinput, required inputs/publication/pic_parallel_shock_section54_paper_vl2_tsc.athinput and tst/publication/analyze_*.py membership"
+  },
+  "operational_baseline": {
+    "orion_policy_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/storage_policy.json",
+    "project_home_policy_path": "/ccs/proj/ast207/proj-shared/PIC/policy/storage_policy.json",
+    "repo_policy_sha256": "8d667e5dcba6179a7316fc6572ad79eaeecce6471d2b88b2f7a78fa83dc2fe8d",
+    "orion_policy_sha256": "8d667e5dcba6179a7316fc6572ad79eaeecce6471d2b88b2f7a78fa83dc2fe8d",
+    "project_home_policy_sha256": "8d667e5dcba6179a7316fc6572ad79eaeecce6471d2b88b2f7a78fa83dc2fe8d",
+    "orion_promotion_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/active_promotion.json",
+    "project_home_promotion_path": "/ccs/proj/ast207/proj-shared/PIC/policy/active_promotion.json",
+    "orion_promotion_sha256": "d7daa824b55f96e07596eb89bbf685926588cff49c6937aafaa3934a5518d8ba",
+    "project_home_promotion_sha256": "d7daa824b55f96e07596eb89bbf685926588cff49c6937aafaa3934a5518d8ba",
+    "science_submission_freeze": {
+      "status": "pending_clean_candidate_freeze"
+    },
+    "registered_science_slices": [],
+    "queue_quiescence": "blocked_by_unrelated_user_job_4753294_do_not_cancel"
+  },
+  "terminal_mirrored_ledger": {
+    "orion_node_hours_jsonl_sha256": "9ea685309a478887910a25f7976ad74741fc5fc10c6f43115827e6013048f88a",
+    "orion_node_hours_csv_sha256": "9a0f1fd31763b620ce6c89aac5e997b14e6ed6ff9098405ff08fdc3213ff4493",
+    "orion_mirror_receipts_jsonl_sha256": "2d2f408f29dde6ed404dbb35864fda51584cd48b10518435b576e4e45d0a1c35",
+    "project_home_node_hours_jsonl_sha256": "9ea685309a478887910a25f7976ad74741fc5fc10c6f43115827e6013048f88a",
+    "ledger_records": 108,
+    "latest_sequence_number": 107,
+    "latest_event_type": "manual_allocation_reconciliation",
+    "cumulative_consumed_node_hours": 1.0880555555555558,
+    "pending_reservations": false
+  },
+  "completed_actions": [
+    "preserved paper_mhd_pic as historical chronology and registered paper_mhd_pic_vl2_tsc additively",
+    "installed the immutable aa069bc7 paired control-plane generation in Orion and Project Home",
+    "promoted the launch-prohibited pending-clean-freeze policy with no registered science slices",
+    "built the canonical explicit-double-precision HIP/MPI Release executable from clean commit 16c103ceea42",
+    "created and independently validated the recursively read-only d7205cd3 VL2/TSC clean-candidate freeze"
+  ],
+  "remaining_phase0_actions": [
+    "wait for unrelated CGL job 4753294 to exit without cancellation",
+    "run the queue-clear live preflight and promote the exact d7205cd3 clean-candidate manifest binding through the installed control plane",
+    "register and execute the clean Frontier prerequisite and qualification slices through the installed control plane"
+  ]
+}
