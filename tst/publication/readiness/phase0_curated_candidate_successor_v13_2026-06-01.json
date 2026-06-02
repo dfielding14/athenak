@@ -1,0 +1,59 @@
+{
+  "record_type": "phase0_curated_candidate_successor",
+  "schema_version": 1,
+  "date": "2026-06-01",
+  "predecessor_record": "tst/publication/readiness/phase0_curated_candidate_successor_v12_2026-06-01.json",
+  "predecessor_sha256": "006a01e1502b4684859b3c84f9754360832e4e86717a3e4ccf6fd8c70e447941",
+  "status": "paired_vl2_tsc_controller_promoted_launch_prohibited_clean_build_and_freeze_pending",
+  "qualification_effect": "none",
+  "live_paired_control_plane_version": "aa069bc7df47f26d7d0677da69b5a1c4da6a3777151255e830d6989fced210f0",
+  "successor_source_control_plane_version": "aa069bc7df47f26d7d0677da69b5a1c4da6a3777151255e830d6989fced210f0",
+  "curated_source_predecessor_commit": "3f81db8803dfd045149c61d9035bd211a2d30717",
+  "candidate_freeze_source_commit": "pending_final_clean_receipt_commit",
+  "frontier_launch_authorization": "none_pending_canonical_clean_build_and_freeze",
+  "prepared_artifacts": {
+    "inventory_path": "tst/publication/frontier_control_plane/prepared_pic_artifact_inventory.json",
+    "inventory_sha256": "6295c9f8d762c4a03e218d1219468164583d349901cc6cd2acdbf072c2294a39",
+    "paper_deck_count": 110,
+    "publication_analyzer_count": 16,
+    "closure_policy": "canonical inventory path plus exact archived inputs/tests/pic*.athinput, required inputs/publication/pic_parallel_shock_section54_paper_vl2_tsc.athinput and tst/publication/analyze_*.py membership"
+  },
+  "paired_install_and_policy_promotion_receipt": {
+    "path": "tst/publication/readiness/phase0_paired_control_plane_install_and_policy_promotion_successor_v3_2026-06-01.json",
+    "sha256": "dd5895d0dc41b20b1a0df88b204bbb7f50d84efa476a53ff4f32616c5b38996c"
+  },
+  "operational_baseline": {
+    "orion_policy_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/storage_policy.json",
+    "project_home_policy_path": "/ccs/proj/ast207/proj-shared/PIC/policy/storage_policy.json",
+    "repo_policy_sha256": "8d667e5dcba6179a7316fc6572ad79eaeecce6471d2b88b2f7a78fa83dc2fe8d",
+    "orion_policy_sha256": "8d667e5dcba6179a7316fc6572ad79eaeecce6471d2b88b2f7a78fa83dc2fe8d",
+    "project_home_policy_sha256": "8d667e5dcba6179a7316fc6572ad79eaeecce6471d2b88b2f7a78fa83dc2fe8d",
+    "orion_promotion_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/active_promotion.json",
+    "project_home_promotion_path": "/ccs/proj/ast207/proj-shared/PIC/policy/active_promotion.json",
+    "orion_promotion_sha256": "d7daa824b55f96e07596eb89bbf685926588cff49c6937aafaa3934a5518d8ba",
+    "project_home_promotion_sha256": "d7daa824b55f96e07596eb89bbf685926588cff49c6937aafaa3934a5518d8ba"
+  },
+  "terminal_mirrored_ledger": {
+    "orion_node_hours_jsonl_sha256": "9ea685309a478887910a25f7976ad74741fc5fc10c6f43115827e6013048f88a",
+    "orion_node_hours_csv_sha256": "9a0f1fd31763b620ce6c89aac5e997b14e6ed6ff9098405ff08fdc3213ff4493",
+    "orion_mirror_receipts_jsonl_sha256": "2d2f408f29dde6ed404dbb35864fda51584cd48b10518435b576e4e45d0a1c35",
+    "project_home_node_hours_jsonl_sha256": "9ea685309a478887910a25f7976ad74741fc5fc10c6f43115827e6013048f88a",
+    "ledger_records": 108,
+    "latest_sequence_number": 107,
+    "latest_event_type": "manual_allocation_reconciliation",
+    "cumulative_consumed_node_hours": 1.0880555555555558,
+    "pending_reservations": false
+  },
+  "completed_actions": [
+    "preserved paper_mhd_pic as historical chronology and registered paper_mhd_pic_vl2_tsc additively",
+    "installed the immutable aa069bc7 paired control-plane generation in Orion and Project Home",
+    "promoted the launch-prohibited pending-clean-freeze policy with no registered science slices",
+    "clarified historical pre-VL2 readiness index entries and the dirty smooth-interface replay chronology",
+    "corrected the operator-facing installed profile-writer recipe so PYTHON is assigned before set -u expansion"
+  ],
+  "remaining_phase0_actions": [
+    "write the canonical HIP/MPI Release build profile from the final clean source commit",
+    "create the canonical clean-candidate freeze and promote its exact manifest binding",
+    "register and execute the clean Frontier prerequisite and qualification slices through the installed control plane"
+  ]
+}

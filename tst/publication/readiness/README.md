@@ -73,7 +73,7 @@ qualify any scientific claim by itself.
   successor. It binds the canonical clean-candidate freeze, terminal scheduler
   accounting closure and fresh three-slice registered prerequisite replay
   authorization. It records the historical pre-VL2 Phase 0 completion boundary;
-  v12 supersedes that boundary for new VL2/TSC work.
+  v13 supersedes that boundary for new VL2/TSC work.
 - `phase0_curated_candidate_successor_v8_2026-06-01.json`: historical curated
   Phase 0 successor. It binds the terminal passing closure for the gyro,
   paper-coupling and multirank parser/runtime-metadata registered prerequisite
@@ -86,8 +86,11 @@ qualify any scientific claim by itself.
   records the stable documentation-rereview boundary before paired install.
   The complete prepared-artifact inventory contains 110 PIC decks and 16
   publication analyzers.
-- `phase0_curated_candidate_successor_v12_2026-06-01.json`: current curated
-  pre-build successor. It binds the installed `aa069bc7` paired-controller v3
+- `phase0_curated_candidate_successor_v12_2026-06-01.json`: historical curated
+  pre-build successor before the final operator-recipe correction.
+- `phase0_curated_candidate_successor_v13_2026-06-01.json`: current curated
+  pre-build successor. It binds the corrected operator recipe, installed
+  `aa069bc7` paired-controller v3
   receipt, promoted launch-prohibited pending-clean-freeze policy, 110-deck and
   16-analyzer closure, quiescent 108-row mirrored ledger, and remaining
   canonical HIP/MPI Release build, freeze and registered-launch gates.
