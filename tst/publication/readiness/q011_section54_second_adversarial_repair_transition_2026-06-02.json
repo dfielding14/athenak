@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "record_type": "q011_section54_second_adversarial_repair_transition",
+  "recorded_utc": "2026-06-02T22:09:01Z",
+  "artifact_root": "/lustre/orion/ast207/proj-shared/dfielding/PIC",
+  "status": "qualifying_launch_prohibited_pending_second_repair_tranche",
+  "qualification_effect": "none_no_execution_authorization_no_science_claim",
+  "decisions": [
+    "Preserve the first repair tranche and extend it; do not launch or materialize a qualifying campaign from the dirty worktree.",
+    "Require paired AMR-versus-fine residuals and restart parity observations to be reconstructed from retained raw artifacts or separately trusted sealed receipts proving trusted extraction.",
+    "Require every retained numerical recompute bundle to be canonical and strictly contained below the authorized Orion PIC root.",
+    "Require campaign-plan admission to validate the exact production planner graph and all referenced children, including authoritative environment-profile and restart-preregistration cross-links.",
+    "Add descriptor-anchored freeze and rollback handling so same-owner staging-path substitution cannot publish or leave a replacement tree visible.",
+    "Reject undeclared empty directories in retained attempt trees.",
+    "Route every simulation and every materially long publication or analysis task through Slurm worker nodes."
+  ],
+  "release_blockers": [
+    "paired_amr_fine_residual_evidence_must_be_raw_artifact_derived",
+    "restart_parity_observations_must_be_raw_artifact_derived",
+    "retained_numerical_recompute_bundles_must_be_orion_root_contained",
+    "campaign_plan_admission_must_validate_exact_production_graph",
+    "campaign_plan_environment_and_restart_source_crosslinks_are_incomplete",
+    "staging_root_substitution_can_leave_attacker_replacement_visible",
+    "immutable_attempt_tree_exact_membership_ignores_empty_directories",
+    "freeze_tree_reopens_mutable_staging_pathname",
+    "attempt_cleanup_can_delete_path_replacement_after_rebinding",
+    "derived_bundle_publisher_lacks_atomic_no_replace_postverify_and_rollback",
+    "planner_to_attempt_manifest_materialization_path_lacks_real_integration_test"
+  ],
+  "parallel_repair_scopes": [
+    "numerical_qualification_provenance",
+    "campaign_plan_graph_admission",
+    "shared_immutable_tree_and_publication_races",
+    "planner_to_attempt_manifest_integration_bridge"
+  ],
+  "human_input_required_now": false,
+  "first_required_human_input_after_automated_repairs": "Select exactly one Section 5.4 problem/ps_p0 case from the verified immutable four-slice pressure-review packet."
+}

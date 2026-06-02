@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "record_type": "q011_section54_pressure_pilot_aggregate_publication_worker_transition",
+  "recorded_utc": "2026-06-02T22:07:20Z",
+  "artifact_root": "/lustre/orion/ast207/proj-shared/dfielding/PIC",
+  "job_script": "tst/publication/frontier_q011_section54_pressure_pilot_publish_job.sh",
+  "reason": "The aggregate pressure-pilot publication copies and checksum-verifies large retained artifact trees. After an initial login-node attempt proved materially long-running, reruns and future materially long publication or analysis tasks are routed through Slurm worker nodes.",
+  "scope": "operational_artifact_copy_and_checksum_verification_only",
+  "qualification_effect": "none_no_simulation_authorization_no_science_claim",
+  "inputs": [
+    "q011_section54_pressure_ps_p0_1p00/a9db403f-a174-45ae-956d-f96185a94db1",
+    "q011_section54_pressure_ps_p0_0p05/3eb84dfa-0be7-4a62-b77b-64131c08dc6f",
+    "q011_section54_pressure_ps_p0_0p10/07bd4d96-ffc8-4446-98ef-562d4d83da0c",
+    "q011_section54_pressure_ps_p0_0p20/8b4065a3-b02a-4312-8238-20d72d958bbb"
+  ],
+  "target_outputs": [
+    "/lustre/orion/ast207/proj-shared/dfielding/PIC/publication/q011_section54_pressure_pilot_bundle",
+    "/lustre/orion/ast207/proj-shared/dfielding/PIC/publication/q011_section54_pressure_pilot_bundle_receipt.json",
+    "/lustre/orion/ast207/proj-shared/dfielding/PIC/publication/q011_section54_pressure_pilot_analysis.json"
+  ],
+  "operating_rule": "All simulations and all materially long analysis or publication jobs must run on Slurm worker nodes. Qualifying simulation submissions remain restricted to registered control-plane wrappers."
+}

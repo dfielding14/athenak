@@ -1,6 +1,6 @@
 # PIC Sun and Bai release qualification handoff
 
-Last updated: 2026-06-02T21:51:34Z
+Last updated: 2026-06-02T22:07:20Z
 
 ## Purpose
 
@@ -43,10 +43,12 @@ Completed:
 
 In progress:
 
-1. A pressure-pilot aggregate publication process is copying and verifying the
-   four calibration artifacts into a retained publication bundle.
-2. Four delegated repairs are addressing adversarial-review findings in the
-   qualifying-campaign scaffolding. Preserve their dirty worktree edits.
+1. Slurm worker-node job `4756951` is copying and verifying the four
+   calibration artifacts into a retained publication bundle.
+2. The first repair tranche closed the original five adversarial findings.
+   A second adversarial pass found additional numerical-provenance and exact
+   planner-graph blockers. A second repair tranche is active. Preserve its
+   dirty worktree edits.
 
 Remaining:
 
@@ -83,6 +85,9 @@ Remaining:
 6. Do not commit generated `__pycache__` directories.
 7. Bind every production-facing run to a source commit, executable checksum,
    deck checksum, analyzer checksum, and the Orion PIC artifact root.
+8. Submit every simulation and every materially long publication or analysis
+   task to Slurm worker nodes. Login-node work is limited to bounded
+   orchestration, inspection, and short focused checks.
 
 ## Repository state
 
@@ -206,12 +211,12 @@ ledger file:   $PIC_ROOT/ledger/node_hours.jsonl
 
 ## Pressure-pilot aggregate publication
 
-At 2026-06-02T21:51:34Z a local publisher was actively copying and verifying
-the four retained calibration trees:
+An initial login-node publisher attempt proved materially long-running and did
+not expose a final receipt. The rerun is routed through Frontier Slurm worker
+node job `4756951`:
 
 ```text
-PID 3159152
-python3 -B publish_q011_section54_pressure_pilot_bundle.py ...
+/usr/bin/sbatch tst/publication/frontier_q011_section54_pressure_pilot_publish_job.sh
 ```
 
 Target outputs:
@@ -222,17 +227,16 @@ $PIC_ROOT/publication/q011_section54_pressure_pilot_bundle_receipt.json
 $PIC_ROOT/publication/q011_section54_pressure_pilot_analysis.json
 ```
 
-Two hidden staging trees existed when this handoff was drafted:
+The interrupted login-node attempt left this hidden staging tree:
 
 ```text
-$PIC_ROOT/publication/.q011_section54_pressure_pilot_bundle.staging-db7360ee-6cff-444f-b625-4c33026a5502
 $PIC_ROOT/publication/.q011_section54_pressure_pilot_bundle.staging-f39862c6-9bb6-4952-a93c-ff7a7a71abff
 ```
 
-The `f398...` tree came from an interrupted publisher run. The `db73...` tree
-belonged to the active rerun. Do not delete either tree until a visible receipt
-exists and verifies. After verification, inspect the hidden trees before
-archiving or removing stale staging.
+The `f398...` tree came from an interrupted publisher run. Job `4756951`
+creates a separate hidden staging tree while active. Do not delete any hidden
+tree until a visible receipt exists and verifies. After verification, inspect
+the hidden trees before archiving or removing stale staging.
 
 Check the publisher and visible outputs:
 
@@ -309,6 +313,30 @@ qualifying launch:
 Treat the code as launch-prohibited until the repaired implementations have
 focused tests, the full publication suite, diff checks, bytecode checks, and a
 fresh independent adversarial review.
+
+### Second adversarial pass
+
+The first repair tranche closed the original five defects structurally, but a
+fresh independent pass found additional blockers:
+
+1. Paired AMR-versus-fine residual records must be recomputed from retained raw
+   attempt trees, not trusted from caller-authored derived JSON.
+2. Restart parity observations must be reconstructed from retained restart and
+   post-checkpoint artifacts, not trusted from caller-authored dictionaries.
+3. Retained numerical recompute bundles must be canonically contained below
+   the authorized Orion PIC root.
+4. Campaign-plan admission must validate the exact production planner graph
+   and every referenced child, not accept a minimal tree with dangling
+   bindings.
+5. Campaign-plan admission must cross-link the environment profile and restart
+   preregistration to retained authoritative bytes.
+6. The generic retained derived-bundle publisher must use atomic no-replace
+   publication, descriptor-pinned postverification, and fail-closed rollback.
+7. Add a real planner-to-attempt manifest materializer and production-path
+   integration test; synthetic fixtures alone are insufficient.
+
+The second repair tranche is active. Do not materialize or launch a qualifying
+campaign until it passes another adversarial review.
 
 ## Validation baseline
 
@@ -412,4 +440,3 @@ The remaining work should stay staged:
 
 Do not skip directly to the expensive Section 5.4 campaign. The qualification
 boundary exists to make later shock and turbulence science trustworthy.
-

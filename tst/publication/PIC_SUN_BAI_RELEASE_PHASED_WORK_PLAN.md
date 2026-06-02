@@ -70,7 +70,7 @@ release milestones is complete.
 | True delta-f | State, deposition, restart, and bounded source-local mechanics exist | Long-horizon CRSI/CRPAI paper reproduction remains open |
 | Expanding box | Bounded host CPAW, gyro-history, comoving-flux, div(B), and restart checks exist | Full paper Section 5.7 and Frontier qualification remain open |
 | AMR lifetime | Serial refine/derefine, restart, boundary, ASan, and UBSan successors pass | Multi-rank MPI migration, HIP lifetime, and scientific AMR equivalence remain open |
-| Shock generator | Paper-surface injection and startup-cohort removal are implemented; a bounded actual-particle audit passes; the first registered HIP pressure slice exposed a strided host-to-device copy fault and the packed-transfer repair passes bounded serial-host regressions | Rebuilt HIP/MPI v2 retry, physical calibration and qualifying shock campaigns remain open |
+| Shock generator | Paper-surface injection and startup-cohort removal are implemented; a bounded actual-particle audit passes; the first registered HIP pressure slice exposed a strided host-to-device copy fault; the packed-transfer repair passes bounded regressions; the rebuilt HIP/MPI v2 retry completed four serialized pressure-engineering calibration slices | Aggregate calibration publication, human pressure review, prerequisite slices, and qualifying shock campaigns remain open |
 | Particle provenance | Schema-7 provenance and independently reconstructed weighted spectra pass bounded local tests, including a two-rank Orion-local replay | Frontier HIP parity and shock-campaign binding remain open |
 | Frontier control plane | Serialized ledger, root restriction, registered F0/F1 slices, and bounded F2 engineering evidence exist | Remaining registered science and stress slices remain open |
 
@@ -89,12 +89,11 @@ The first registered Frontier pressure slice failed closed before producing
 physics evidence: the HIP executable attempted a strided host-to-device
 particle subview copy during injection. The packed particle-transfer repair
 passes bounded serial-host append, recenter and startup-cohort compaction
-regressions. A rebuilt clean HIP/MPI candidate and registered v2 pressure-pilot
-retry are required before Section 5.4 calibration can advance. The retry
-materializer must reject the failed v1 carrier, validate the packed-transfer
-repair inside the frozen source archive, and require exact ordered completed
-predecessor reconciliation plus immutable raw-descriptor verification before
-materializing each non-first pressure case.
+regressions. The rebuilt clean HIP/MPI candidate then completed the registered
+v2 pressure-pilot retry for `problem/ps_p0 = 1.0`, `0.05`, `0.10`, and `0.20`.
+All four slices are reconciled with immutable raw descriptors. Their aggregate
+publication is running through a Slurm worker-node job. Human pressure review,
+qualifying-plan hardening, and prerequisite slices remain open.
 
 The prepared contract includes:
 
@@ -681,19 +680,22 @@ unless all required bindings and products are present.
 
 Execute these actions in order:
 
-1. Complete the stable-boundary rereview, install the paired successor control
-   plane, build the canonical HIP/MPI Release executable, and freeze the clean
-   release candidate.
-2. Close the Section 5.4 normalization, macro-particle-mass, gas-subtraction,
+1. Finish and verify the immutable four-slice pressure aggregate publication.
+2. Close the second qualifying-boundary adversarial repair tranche, run the
+   full worker-node validation matrix, rereview it independently, commit it,
+   push it, and freeze a fresh clean candidate.
+3. Produce the four-slice pressure-review packet and record the required human
+   `problem/ps_p0` selection receipt.
+4. Close the Section 5.4 normalization, macro-particle-mass, gas-subtraction,
    spectrum-window, snapshot-tolerance, and AMR-residual reviews.
-3. Create and freeze the qualifying Section 5.4 analyzer.
-4. Run registered Frontier AMR MPI/HIP, Q016 HIP, restart-resilience, Q017
+5. Materialize and freeze the qualifying Section 5.4 plan and analyzer.
+6. Run registered Frontier AMR MPI/HIP, Q016 HIP, restart-resilience, Q017
    telemetry, and load-balance prerequisite slices.
-5. Reproduce the cheaper analytical Sun-Bai cases.
-6. Run the full registered Section 5.4 coarse, fine, and AMR campaign.
-7. Freeze the paper reproduction bundle.
-8. Complete paper-mode production hardening.
-9. Qualify the selected optional extensions.
-10. Perform named external review and terminal sign-off.
+7. Reproduce the cheaper analytical Sun-Bai cases.
+8. Run the full registered Section 5.4 coarse, fine, and AMR campaign.
+9. Freeze the paper reproduction bundle.
+10. Complete paper-mode production hardening.
+11. Qualify the selected optional extensions.
+12. Perform named external review and terminal sign-off.
 
-Do not launch the full Section 5.4 campaign before Actions 1 through 5 close.
+Do not launch the full Section 5.4 campaign before Actions 1 through 7 close.
