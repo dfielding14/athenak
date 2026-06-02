@@ -41,6 +41,10 @@
       "sha256": "ae44303fb8bb3d230ee99056ea644faae0f177be4c880e58628f6838aa222611"
     },
     {
+      "path": "tst/publication/analyze_q011_section54_pressure_pilot_case.py",
+      "sha256": "d9253fdd3b573bd87f4e94a84e88ac2d8110a0cbc608ce98fecd7b9eeece9693"
+    },
+    {
       "path": "tst/publication/analyze_q023_paper_bell_linear.py",
       "sha256": "f128958a9eee9be53b106aed0fb8cc0efa9d05efae6811c3b7046d11f8ac7ce6"
     },

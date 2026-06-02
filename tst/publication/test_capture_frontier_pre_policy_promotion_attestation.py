@@ -86,12 +86,14 @@ class CaptureFrontierPrePolicyPromotionAttestationTest(unittest.TestCase):
         *,
         runner: ReadOnlyRunner,
         authorization_id: str = "reviewed-authorization",
+        phase: str = capture_attestation.PHASE,
         ledger_validator=None,
     ) -> Path:
         return capture_attestation.capture(
             archive_root=self.archive_root,
             authorization_id=authorization_id,
             control_plane_version=CONTROL_PLANE_VERSION,
+            phase=phase,
             pic_root=self.pic_root,
             project_home_root=self.project_home_root,
             runner=runner,
@@ -155,6 +157,13 @@ class CaptureFrontierPrePolicyPromotionAttestationTest(unittest.TestCase):
         attestation = json.loads((final / "attestation.json").read_bytes())
         self.assertEqual(attestation["schema_version"], 1)
         self.assertEqual(attestation["phase"], "pre_policy_promotion")
+        self.assertEqual(
+            attestation["operator_statement"], capture_attestation.OPERATOR_STATEMENT
+        )
+        self.assertEqual(
+            final.name,
+            "20260601T151617Z-reviewed-authorization-pre_policy_promotion",
+        )
         self.assertEqual(attestation["pending_submission_marker"]["value"], "absent")
         self.assertEqual(
             attestation["pending_manual_accounting_marker"]["value"], "absent"
@@ -166,6 +175,93 @@ class CaptureFrontierPrePolicyPromotionAttestationTest(unittest.TestCase):
             0,
         )
         self.assertTrue((final / "capture_queue_snapshot.txt").is_file())
+
+    def test_capture_and_seal_encode_selected_execution_phase(self) -> None:
+        for phase in ["pre_manifest", "pre_submit_wrapper"]:
+            with self.subTest(phase=phase):
+                runner = ReadOnlyRunner(["", ""])
+                staging = self._capture(
+                    runner=runner,
+                    authorization_id=f"reviewed-{phase}",
+                    phase=phase,
+                )
+                expected_name = f"20260601T151617Z-reviewed-{phase}-{phase}"
+                self.assertTrue(staging.name.startswith(f".{expected_name}.staging-"))
+                metadata = json.loads(
+                    (staging / capture_attestation.METADATA_FILENAME).read_bytes()
+                )
+                self.assertEqual(metadata["phase"], phase)
+
+                final = self._seal(staging, runner=runner)
+                attestation = json.loads((final / "attestation.json").read_bytes())
+                self.assertEqual(final.name, expected_name)
+                self.assertEqual(attestation["phase"], phase)
+                self.assertEqual(
+                    attestation["operator_statement"],
+                    capture_attestation.OPERATOR_STATEMENTS[phase],
+                )
+                self.assertEqual(
+                    attestation["pending_submission_marker"]["value"], "absent"
+                )
+                self.assertEqual(
+                    attestation["validated_mirrored_ledger_state"]["state"][
+                        "active_reservation_count"
+                    ],
+                    0,
+                )
+
+    def test_capture_cli_phase_choices_default_to_pre_policy_promotion(self) -> None:
+        required = [
+            "capture",
+            "--authorization-id",
+            "reviewed-authorization",
+            "--control-plane-version",
+            CONTROL_PLANE_VERSION,
+        ]
+        parser = capture_attestation._parser()
+        self.assertEqual(parser.parse_args(required).phase, "pre_policy_promotion")
+        for phase in capture_attestation.PHASES:
+            with self.subTest(phase=phase):
+                self.assertEqual(
+                    parser.parse_args([*required, "--phase", phase]).phase,
+                    phase,
+                )
+
+    def test_capture_cli_rejects_invalid_phase(self) -> None:
+        with mock.patch.object(sys, "stderr"):
+            with self.assertRaises(SystemExit) as raised:
+                capture_attestation._parser().parse_args(
+                    [
+                        "capture",
+                        "--authorization-id",
+                        "reviewed-authorization",
+                        "--control-plane-version",
+                        CONTROL_PLANE_VERSION,
+                        "--phase",
+                        "post_submit_wrapper",
+                    ]
+                )
+        self.assertEqual(raised.exception.code, 2)
+
+    def test_capture_rejects_invalid_phase_before_queries(self) -> None:
+        runner = ReadOnlyRunner([""])
+        with self.assertRaisesRegex(ValueError, "Phase must be one of"):
+            self._capture(runner=runner, phase="post_submit_wrapper")
+        self.assertEqual(runner.calls, [])
+        self.assertEqual(list(self.archive_root.iterdir()), [])
+
+    def test_seal_accepts_legacy_default_phase_staging_metadata(self) -> None:
+        runner = ReadOnlyRunner(["", ""])
+        staging = self._capture(runner=runner)
+        metadata_path = staging / capture_attestation.METADATA_FILENAME
+        metadata = json.loads(metadata_path.read_bytes())
+        del metadata["phase"]
+        metadata_path.write_text(json.dumps(metadata) + "\n", encoding="utf-8")
+
+        final = self._seal(staging, runner=runner)
+        attestation = json.loads((final / "attestation.json").read_bytes())
+        self.assertEqual(attestation["phase"], "pre_policy_promotion")
+        self.assertTrue(final.name.endswith("-pre_policy_promotion"))
 
     def test_seal_rejects_nonempty_queue(self) -> None:
         runner = ReadOnlyRunner(["", "123|ast207|batch|debug|RUNNING|job|comment\n"])

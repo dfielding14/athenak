@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "executor": "trusted_trampoline_athena_argv_v1",
+  "pre_actions": [],
+  "actions": [
+    {
+      "action_id": "q011-pressure-ps-p0-0p20",
+      "kind": "athena",
+      "resources": {
+        "nodes": 1,
+        "tasks": 1,
+        "cpus_per_task": 7,
+        "gpus_per_task": 1,
+        "gpu_bind": "closest"
+      },
+      "arguments": [
+        {"literal": "-i"},
+        {"snapshot_role": "input-deck"},
+        {"literal": "-d"},
+        {"artifact_directory": "output"},
+        {"literal": "job/basename=ps_p0_0p20"},
+        {"literal": "mesh/nx1=100"},
+        {"literal": "mesh/x1max=1200"},
+        {"literal": "mesh/nx2=20"},
+        {"literal": "mesh/x2max=240"},
+        {"literal": "mesh_refinement/refinement=none"},
+        {"literal": "mesh_refinement/num_levels=1"},
+        {"literal": "time/tlim=60"},
+        {"literal": "time/nlim=4096"},
+        {"literal": "time/ndiag=50"},
+        {"literal": "problem/ps_enable_curvature_amr=false"},
+        {"literal": "problem/ps_feedback_diag_dcycle=50"},
+        {"literal": "output1/variable=mhd_w_bcc"},
+        {"literal": "output1/id=mhd_w_bcc"},
+        {"literal": "output1/dt=15"},
+        {"literal": "output2/dt=15"},
+        {"literal": "output3/dt=15"},
+        {"literal": "output4/dt=15"},
+        {"literal": "output5/dt=15"},
+        {"literal": "output6/dt=15"},
+        {"literal": "problem/ps_p0=0.20"}
+      ],
+      "stdout_artifact": "athena_stdout.txt",
+      "stderr_artifact": "athena_stderr.txt"
+    }
+  ],
+  "post_actions": [
+    {
+      "action_id": "require-pressure-stdout",
+      "kind": "artifact_nonempty",
+      "artifact": "athena_stdout.txt"
+    },
+    {
+      "action_id": "sha-pressure-stdout",
+      "kind": "artifact_sha256",
+      "artifact": "athena_stdout.txt",
+      "output_artifact": "athena_stdout.sha256"
+    }
+  ]
+}

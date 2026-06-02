@@ -28,6 +28,7 @@ from control_plane_common import validate_launch_contract
 from ledger import record_sha256
 from ledger import incomplete_manual_accounting_marker_paths
 from ledger import validate_mirrored_state
+from tst.publication import q011_section54_pressure_pilot_execution as pressure_execution
 from tst.publication.pic_qualification_manifest import SCHEMA_PATH
 from tst.publication.pic_qualification_manifest import validate_qualification_manifest
 from tst.publication.pic_qualification_manifest import validate_schema
@@ -645,6 +646,36 @@ class PicReadinessRegistryTests(unittest.TestCase):
                 self.assertEqual(
                     launch_contract_sha256(contract),
                     authorization["launch_contract_sha256"],
+                )
+
+    def test_q011_pressure_pilot_registered_execution_source_tranche_is_frozen(
+        self,
+    ) -> None:
+        record = _load(
+            "q011_section54_pressure_pilot_registered_execution_preregistration_2026-06-02.json"
+        )
+        boundary = record["execution_boundary"]
+        self.assertFalse(boundary["frontier_execution_authorized_by_this_record"])
+        self.assertFalse(boundary["scheduler_commands_authorized_by_this_record"])
+        self.assertFalse(boundary["storage_policy_mutation_authorized_by_this_record"])
+        self.assertEqual(record["source_bindings"], pressure_execution.source_bindings())
+        self.assertEqual(len(record["launch_matrix"]), len(pressure_execution.CASES))
+        binding_by_case = {
+            binding["case_id"]: binding
+            for binding in record["source_bindings"]["launch_contracts"]
+        }
+        for case in pressure_execution.CASES:
+            with self.subTest(case_id=case.case_id):
+                contract = _load(case.launch_contract_path.name)
+                self.assertEqual(
+                    contract, pressure_execution.expected_launch_contract(case)
+                )
+                validate_launch_contract(contract)
+                binding = binding_by_case[case.case_id]
+                self.assertEqual(binding["file_sha256"], _sha256(case.launch_contract_path))
+                self.assertEqual(
+                    binding["launch_contract_sha256"],
+                    launch_contract_sha256(contract),
                 )
 
     def test_f2_multirank_runtime_metadata_candidate_resolves_source_commit(self) -> None:

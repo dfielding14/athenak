@@ -1,0 +1,864 @@
+#!/usr/bin/env python3
+"""Materialize Q-011 pressure-pilot registered-execution review artifacts.
+
+This source-local tool does not edit the live Frontier storage policy and does
+not submit jobs.  After a clean freeze, it binds that exact manifest,
+executable and installed environment profile into four separate policy slices
+and one fresh selected-case reviewed pre-submit config per invocation.
+"""
+
+from __future__ import annotations
+
+import argparse
+from dataclasses import dataclass
+from datetime import datetime, timezone
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import shutil
+import stat
+from typing import Any
+import uuid
+
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+READINESS_ROOT = REPO_ROOT / "tst/publication/readiness"
+MATERIALIZER_SOURCE = REPO_ROOT / "tst/publication/q011_section54_pressure_pilot_execution.py"
+PILOT_PREREGISTRATION = (
+    READINESS_ROOT / "q011_section54_pressure_pilot_preregistration_2026-06-01.json"
+)
+EXECUTION_PREREGISTRATION = (
+    READINESS_ROOT
+    / "q011_section54_pressure_pilot_registered_execution_preregistration_2026-06-02.json"
+)
+JOB_SCRIPT = REPO_ROOT / "tst/publication/frontier_q011_section54_pressure_pilot_job.sh"
+INPUT_DECK = (
+    REPO_ROOT / "inputs/publication/pic_parallel_shock_section54_paper_vl2_tsc.athinput"
+)
+ENVIRONMENT_PROFILE_SOURCE = (
+    REPO_ROOT / "tst/publication/frontier_control_plane/frontier_pic_environment.sh"
+)
+ANALYSIS_SCRIPTS = (
+    REPO_ROOT / "tst/publication/analyze_q011_section54_pressure_pilot_case.py",
+    REPO_ROOT / "tst/publication/frontier_f1_structured_artifacts.py",
+)
+AUTHORIZED_PIC_ROOT = Path("/lustre/orion/ast207/proj-shared/dfielding/PIC")
+EVIDENCE_CLASS = "engineering_calibration_only"
+PHYSICAL_MODE = "paper_mhd_pic_vl2_tsc"
+RUNTIME_PROFILE = "frontier_minimum_supported"
+SELECTED_QOS = "debug"
+WALLTIME_SECONDS = 900
+QUEUE_SNAPSHOT_FORMAT = "%i|%P|%q|%T|%j|%k"
+_SHA256 = re.compile(r"[0-9a-f]{64}")
+_GIT_COMMIT = re.compile(r"[0-9a-f]{40}")
+_TIMESTAMP = re.compile(
+    r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}"
+    r"(?:\.[0-9]{1,6})?Z"
+)
+_TIMEOUT_MARGIN_KEYS = {
+    "athena_walltime_seconds",
+    "scheduler_walltime_seconds",
+    "environment_profile_sha256",
+    "measured_utc",
+    "expires_utc",
+}
+FIXED_OVERRIDES = (
+    "mesh/nx1=100",
+    "mesh/x1max=1200",
+    "mesh/nx2=20",
+    "mesh/x2max=240",
+    "mesh_refinement/refinement=none",
+    "mesh_refinement/num_levels=1",
+    "time/tlim=60",
+    "time/nlim=4096",
+    "time/ndiag=50",
+    "problem/ps_enable_curvature_amr=false",
+    "problem/ps_feedback_diag_dcycle=50",
+    "output1/variable=mhd_w_bcc",
+    "output1/id=mhd_w_bcc",
+    "output1/dt=15",
+    "output2/dt=15",
+    "output3/dt=15",
+    "output4/dt=15",
+    "output5/dt=15",
+    "output6/dt=15",
+)
+
+
+@dataclass(frozen=True)
+class PressureCase:
+    case_id: str
+    problem_ps_p0: float
+    argv_value: str
+
+    @property
+    def campaign(self) -> str:
+        return f"q011_section54_pressure_{self.case_id}"
+
+    @property
+    def test_id(self) -> str:
+        return f"pic_parallel_shock_section54_pressure_{self.case_id}"
+
+    @property
+    def authorization_id(self) -> str:
+        return f"q011-section54-pressure-{self.case_id.replace('_', '-')}-v1"
+
+    @property
+    def launch_contract_path(self) -> Path:
+        return READINESS_ROOT / (
+            f"frontier_q011_section54_pressure_{self.case_id}_launch_contract.json"
+        )
+
+
+CASES = (
+    PressureCase("ps_p0_1p00", 1.0, "1.0"),
+    PressureCase("ps_p0_0p05", 0.05, "0.05"),
+    PressureCase("ps_p0_0p10", 0.1, "0.10"),
+    PressureCase("ps_p0_0p20", 0.2, "0.20"),
+)
+
+
+class ContractError(ValueError):
+    """Raised when the registered-execution source tranche drifts."""
+
+
+def _require(condition: bool, message: str) -> None:
+    if not condition:
+        raise ContractError(message)
+
+
+def _sha256_bytes(payload: bytes) -> str:
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _json_bytes(value: object) -> bytes:
+    return (
+        json.dumps(value, indent=2, sort_keys=True, allow_nan=False) + "\n"
+    ).encode("utf-8")
+
+
+def _launch_contract_sha256(value: object) -> str:
+    return _sha256_bytes(
+        json.dumps(
+            value, sort_keys=True, separators=(",", ":"), allow_nan=False
+        ).encode("utf-8")
+    )
+
+
+def _absolute(path: Path, *, label: str) -> Path:
+    _require(path.is_absolute(), f"{label} must be absolute")
+    return Path(os.path.abspath(path))
+
+
+def _stable_regular_bytes(
+    path: Path,
+    *,
+    label: str,
+    require_read_only: bool = False,
+    require_executable: bool = False,
+) -> tuple[Path, bytes]:
+    path = _absolute(path, label=label)
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        descriptor = os.open(path, flags)
+    except OSError as error:
+        raise ContractError(f"{label} is not an openable regular file: {path}") from error
+    try:
+        before = os.fstat(descriptor)
+        _require(stat.S_ISREG(before.st_mode), f"{label} is not a regular file")
+        if require_read_only:
+            _require(not before.st_mode & 0o222, f"{label} must be read-only")
+        if require_executable:
+            _require(bool(before.st_mode & 0o111), f"{label} must be executable")
+        with os.fdopen(os.dup(descriptor), "rb") as stream:
+            payload = stream.read()
+        after = os.fstat(descriptor)
+        identity = lambda value: (
+            value.st_dev,
+            value.st_ino,
+            value.st_mode,
+            value.st_size,
+            value.st_mtime_ns,
+            value.st_ctime_ns,
+        )
+        _require(identity(before) == identity(after), f"{label} changed while reading")
+        lexical = os.stat(path, follow_symlinks=False)
+        _require(
+            (lexical.st_dev, lexical.st_ino) == (after.st_dev, after.st_ino),
+            f"{label} path changed while reading",
+        )
+        return path, payload
+    finally:
+        os.close(descriptor)
+
+
+def _decode_json(payload: bytes, *, label: str) -> Any:
+    def reject_constant(value: str) -> None:
+        raise ContractError(f"{label} contains forbidden JSON constant {value}")
+
+    def reject_duplicates(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        for key, value in pairs:
+            _require(key not in result, f"{label} contains duplicate JSON key {key!r}")
+            result[key] = value
+        return result
+
+    try:
+        return json.loads(
+            payload.decode("utf-8"),
+            parse_constant=reject_constant,
+            object_pairs_hook=reject_duplicates,
+        )
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ContractError(f"{label} is not valid UTF-8 JSON") from error
+
+
+def _read_json(path: Path, *, label: str) -> tuple[Path, bytes, Any]:
+    lexical, payload = _stable_regular_bytes(path, label=label)
+    return lexical, payload, _decode_json(payload, label=label)
+
+
+def _utc_datetime(value: object, *, label: str) -> datetime:
+    _require(isinstance(value, str), f"{label} must be a canonical UTC timestamp")
+    _require(_TIMESTAMP.fullmatch(value) is not None, f"{label} must be canonical UTC")
+    try:
+        parsed = datetime.fromisoformat(value[:-1] + "+00:00")
+    except ValueError as error:
+        raise ContractError(f"{label} is invalid") from error
+    _require(parsed.tzinfo == timezone.utc, f"{label} must use UTC")
+    return parsed
+
+
+def _timestamp(value: object, *, label: str) -> str:
+    _utc_datetime(value, label=label)
+    assert isinstance(value, str)
+    return value
+
+
+def _relative(path: Path) -> str:
+    return str(path.relative_to(REPO_ROOT))
+
+
+def expected_launch_contract(case: PressureCase) -> dict[str, object]:
+    """Return one exact single-action pressure-pilot launch contract."""
+    return {
+        "schema_version": 1,
+        "executor": "trusted_trampoline_athena_argv_v1",
+        "pre_actions": [],
+        "actions": [
+            {
+                "action_id": f"q011-pressure-{case.case_id.replace('_', '-')}",
+                "kind": "athena",
+                "resources": {
+                    "nodes": 1,
+                    "tasks": 1,
+                    "cpus_per_task": 7,
+                    "gpus_per_task": 1,
+                    "gpu_bind": "closest",
+                },
+                "arguments": [
+                    {"literal": "-i"},
+                    {"snapshot_role": "input-deck"},
+                    {"literal": "-d"},
+                    {"artifact_directory": "output"},
+                    {"literal": f"job/basename={case.case_id}"},
+                    *({"literal": override} for override in FIXED_OVERRIDES),
+                    {"literal": f"problem/ps_p0={case.argv_value}"},
+                ],
+                "stdout_artifact": "athena_stdout.txt",
+                "stderr_artifact": "athena_stderr.txt",
+            }
+        ],
+        "post_actions": [
+            {
+                "action_id": "require-pressure-stdout",
+                "kind": "artifact_nonempty",
+                "artifact": "athena_stdout.txt",
+            },
+            {
+                "action_id": "sha-pressure-stdout",
+                "kind": "artifact_sha256",
+                "artifact": "athena_stdout.txt",
+                "output_artifact": "athena_stdout.sha256",
+            },
+        ],
+    }
+
+
+def _load_launch_contract(case: PressureCase) -> tuple[bytes, dict[str, object]]:
+    _, payload, contract = _read_json(
+        case.launch_contract_path, label=f"{case.case_id} launch contract"
+    )
+    _require(
+        contract == expected_launch_contract(case),
+        f"{case.case_id} launch contract differs from its exact source contract",
+    )
+    return payload, contract
+
+
+def _load_pilot_preregistration() -> tuple[bytes, dict[str, object]]:
+    _, payload, preregistration = _read_json(
+        PILOT_PREREGISTRATION, label="Q-011 pressure-pilot preregistration"
+    )
+    _require(isinstance(preregistration, dict), "pressure-pilot preregistration is malformed")
+    active_deck = preregistration.get("active_deck_binding")
+    pilot_contract = preregistration.get("pilot_contract")
+    _require(isinstance(active_deck, dict), "pressure-pilot deck binding is malformed")
+    _require(isinstance(pilot_contract, dict), "pressure-pilot contract is malformed")
+    _require(
+        active_deck
+        == {
+            "path": _relative(INPUT_DECK),
+            "sha256": "0b1cbd62d54027ec81a5f4f5c88d5ee56b86b8cc0cb018c3fbebfb37a11be7b1",
+        },
+        "pressure-pilot canonical VL2/TSC deck binding drifted",
+    )
+    _require(
+        pilot_contract.get("physical_mode") == PHYSICAL_MODE,
+        "pressure-pilot physical mode drifted",
+    )
+    _require(
+        pilot_contract.get("fixed_overrides") == list(FIXED_OVERRIDES),
+        "pressure-pilot fixed overrides drifted",
+    )
+    _require(
+        pilot_contract.get("cases")
+        == [
+            {
+                "case_id": case.case_id,
+                "problem_ps_p0": case.problem_ps_p0,
+                "argv_value": case.argv_value,
+            }
+            for case in CASES
+        ],
+        "pressure-pilot case matrix drifted",
+    )
+    return payload, preregistration
+
+
+def source_bindings() -> dict[str, object]:
+    """Measure the exact local source tranche without binding post-freeze files."""
+    pilot_payload, _ = _load_pilot_preregistration()
+    _, job_payload = _stable_regular_bytes(JOB_SCRIPT, label="pressure-pilot job template")
+    _, deck_payload = _stable_regular_bytes(INPUT_DECK, label="canonical VL2/TSC input deck")
+    _, environment_payload = _stable_regular_bytes(
+        ENVIRONMENT_PROFILE_SOURCE, label="reviewed environment-profile source"
+    )
+    _, materializer_payload = _stable_regular_bytes(
+        MATERIALIZER_SOURCE, label="registered-execution materializer source"
+    )
+    analyses = []
+    for path in ANALYSIS_SCRIPTS:
+        _, payload = _stable_regular_bytes(path, label=f"analysis source {_relative(path)}")
+        analyses.append({"path": _relative(path), "sha256": _sha256_bytes(payload)})
+    contracts = []
+    for case in CASES:
+        payload, contract = _load_launch_contract(case)
+        contracts.append(
+            {
+                "case_id": case.case_id,
+                "path": _relative(case.launch_contract_path),
+                "file_sha256": _sha256_bytes(payload),
+                "launch_contract_sha256": _launch_contract_sha256(contract),
+            }
+        )
+    return {
+        "pressure_pilot_preregistration": {
+            "path": _relative(PILOT_PREREGISTRATION),
+            "sha256": _sha256_bytes(pilot_payload),
+        },
+        "job_script": {
+            "path": _relative(JOB_SCRIPT),
+            "sha256": _sha256_bytes(job_payload),
+        },
+        "input_deck": {
+            "path": _relative(INPUT_DECK),
+            "sha256": _sha256_bytes(deck_payload),
+        },
+        "environment_profile_source": {
+            "path": _relative(ENVIRONMENT_PROFILE_SOURCE),
+            "sha256": _sha256_bytes(environment_payload),
+        },
+        "materializer": {
+            "path": _relative(MATERIALIZER_SOURCE),
+            "sha256": _sha256_bytes(materializer_payload),
+        },
+        "analysis_scripts": analyses,
+        "launch_contracts": contracts,
+    }
+
+
+def validate_source_tranche() -> dict[str, object]:
+    """Reject any drift from the committed registered-execution preregistration."""
+    _, _, preregistration = _read_json(
+        EXECUTION_PREREGISTRATION,
+        label="Q-011 pressure-pilot registered-execution preregistration",
+    )
+    _require(isinstance(preregistration, dict), "execution preregistration is malformed")
+    _require(
+        preregistration.get("source_bindings") == source_bindings(),
+        "registered-execution source bindings drifted",
+    )
+    return preregistration
+
+
+def _bound_final_artifacts(
+    *,
+    clean_candidate_manifest: Path,
+    executable: Path,
+    environment_profile: Path,
+) -> dict[str, str]:
+    validate_source_tranche()
+    clean_candidate_manifest, manifest_payload = _stable_regular_bytes(
+        clean_candidate_manifest,
+        label="clean-candidate manifest",
+        require_read_only=True,
+    )
+    executable, executable_payload = _stable_regular_bytes(
+        executable,
+        label="clean-candidate executable",
+        require_read_only=True,
+        require_executable=True,
+    )
+    environment_profile, environment_payload = _stable_regular_bytes(
+        environment_profile,
+        label="installed environment profile",
+        require_read_only=True,
+    )
+    _require(
+        clean_candidate_manifest.name == "clean_candidate_manifest.json",
+        "clean-candidate manifest filename is not canonical",
+    )
+    _require(
+        executable == clean_candidate_manifest.parent / "athena",
+        "clean-candidate executable is not adjacent to the supplied manifest",
+    )
+    manifest = _decode_json(manifest_payload, label="clean-candidate manifest")
+    _require(isinstance(manifest, dict), "clean-candidate manifest is malformed")
+    _require(
+        type(manifest.get("schema_version")) is int
+        and manifest["schema_version"] == 4,
+        "clean-candidate manifest schema is unsupported",
+    )
+    source = manifest.get("source")
+    build = manifest.get("build")
+    _require(isinstance(source, dict), "clean-candidate source binding is malformed")
+    _require(isinstance(build, dict), "clean-candidate build binding is malformed")
+    git_commit = source.get("git_commit")
+    _require(
+        isinstance(git_commit, str) and _GIT_COMMIT.fullmatch(git_commit) is not None,
+        "clean-candidate Git commit is malformed",
+    )
+    executable_sha256 = _sha256_bytes(executable_payload)
+    _require(
+        build.get("executable_path") == str(executable)
+        and build.get("executable_sha256") == executable_sha256,
+        "clean-candidate executable differs from its manifest binding",
+    )
+    expected_environment_sha256 = source_bindings()["environment_profile_source"]["sha256"]
+    environment_sha256 = _sha256_bytes(environment_payload)
+    _require(
+        environment_sha256 == expected_environment_sha256,
+        "installed environment profile differs from preregistered source bytes",
+    )
+    return {
+        "clean_candidate_manifest_path": str(clean_candidate_manifest),
+        "clean_candidate_manifest_sha256": _sha256_bytes(manifest_payload),
+        "executable_path": str(executable),
+        "executable_sha256": executable_sha256,
+        "environment_profile_path": str(environment_profile),
+        "environment_profile_sha256": environment_sha256,
+        "git_commit": git_commit,
+    }
+
+
+def materialize_registered_science_slices(
+    *,
+    clean_candidate_manifest: Path,
+    executable: Path,
+    environment_profile: Path,
+) -> list[dict[str, object]]:
+    """Bind four separate one-attempt policy slices after the clean freeze."""
+    final = _bound_final_artifacts(
+        clean_candidate_manifest=clean_candidate_manifest,
+        executable=executable,
+        environment_profile=environment_profile,
+    )
+    sources = source_bindings()
+    contract_digests = {
+        record["case_id"]: record["launch_contract_sha256"]
+        for record in sources["launch_contracts"]
+    }
+    return [
+        {
+            "authorization_id": case.authorization_id,
+            "status": "authorized",
+            "campaign": case.campaign,
+            "test_id": case.test_id,
+            "evidence_class": EVIDENCE_CLASS,
+            "physical_mode": PHYSICAL_MODE,
+            "runtime_profile": RUNTIME_PROFILE,
+            "selected_qos": SELECTED_QOS,
+            "registered_short_nonproduction": True,
+            "maximum_nodes": 1,
+            "maximum_walltime_seconds": WALLTIME_SECONDS,
+            "maximum_attempts": 1,
+            "job_script_sha256": sources["job_script"]["sha256"],
+            "input_deck_sha256": sources["input_deck"]["sha256"],
+            "environment_profile_sha256": final["environment_profile_sha256"],
+            "analysis_script_sha256": [
+                record["sha256"] for record in sources["analysis_scripts"]
+            ],
+            "executable_sha256": final["executable_sha256"],
+            "launch_contract_sha256": contract_digests[case.case_id],
+            "clean_candidate_manifest_sha256": final[
+                "clean_candidate_manifest_sha256"
+            ],
+        }
+        for case in CASES
+    ]
+
+
+def materialize_policy_fragment(
+    *,
+    clean_candidate_manifest: Path,
+    executable: Path,
+    environment_profile: Path,
+) -> dict[str, object]:
+    """Return a reviewable additive fragment; never edit storage_policy.json."""
+    validate_source_tranche()
+    _, preregistration_payload = _stable_regular_bytes(
+        EXECUTION_PREREGISTRATION,
+        label="Q-011 pressure-pilot registered-execution preregistration",
+    )
+    final = _bound_final_artifacts(
+        clean_candidate_manifest=clean_candidate_manifest,
+        executable=executable,
+        environment_profile=environment_profile,
+    )
+    return {
+        "record_type": "q011_section54_pressure_pilot_post_freeze_policy_fragment",
+        "schema_version": 1,
+        "source_preregistration": {
+            "path": _relative(EXECUTION_PREREGISTRATION),
+            "sha256": _sha256_bytes(preregistration_payload),
+        },
+        "final_clean_binding": final,
+        "registered_science_slices": materialize_registered_science_slices(
+            clean_candidate_manifest=clean_candidate_manifest,
+            executable=executable,
+            environment_profile=environment_profile,
+        ),
+        "integration_policy": (
+            "review_then_add_registered_science_slices_via_separate_storage_policy_"
+            "successor_and_installed_control_plane_promotion"
+        ),
+    }
+
+
+def _validate_timeout_margin(
+    path: Path, *, environment_profile_sha256: str
+) -> str:
+    path, _, timeout = _read_json(path, label="timeout-margin artifact")
+    _require(
+        isinstance(timeout, dict) and set(timeout) == _TIMEOUT_MARGIN_KEYS,
+        "timeout-margin artifact schema drifted",
+    )
+    _require(
+        type(timeout["scheduler_walltime_seconds"]) is int
+        and timeout["scheduler_walltime_seconds"] == WALLTIME_SECONDS,
+        "timeout-margin scheduler walltime must be exactly 900 seconds",
+    )
+    _require(
+        type(timeout["athena_walltime_seconds"]) is int
+        and 0 < timeout["athena_walltime_seconds"] < WALLTIME_SECONDS,
+        "timeout-margin Athena walltime must be a bounded exact integer",
+    )
+    _require(
+        timeout["environment_profile_sha256"] == environment_profile_sha256,
+        "timeout-margin artifact belongs to another environment profile",
+    )
+    measured = _utc_datetime(timeout["measured_utc"], label="timeout-margin measured_utc")
+    expires = _utc_datetime(timeout["expires_utc"], label="timeout-margin expires_utc")
+    _require(measured < expires, "timeout-margin validity interval is empty")
+    return str(path)
+
+
+def _selected_case(case_id: object) -> PressureCase:
+    _require(
+        isinstance(case_id, str) and bool(case_id),
+        "one pressure-pilot case ID is required",
+    )
+    matches = [case for case in CASES if case.case_id == case_id]
+    _require(len(matches) == 1, f"unknown pressure-pilot case ID: {case_id}")
+    return matches[0]
+
+
+def _submission_id(value: object, *, case_id: str) -> str:
+    _require(isinstance(value, str), f"{case_id} submission ID is malformed")
+    try:
+        parsed = uuid.UUID(value)
+    except ValueError as error:
+        raise ContractError(f"{case_id} submission ID is malformed") from error
+    _require(str(parsed) == value, f"{case_id} submission ID is not canonical")
+    return value
+
+
+def _validate_queue_snapshot(path: Path) -> tuple[Path, dict[str, str]]:
+    path, payload = _stable_regular_bytes(path, label="six-field queue snapshot")
+    try:
+        text = payload.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise ContractError("six-field queue snapshot is not UTF-8") from error
+    _require(not payload or text.endswith("\n"), "six-field queue snapshot lacks final LF")
+    for index, line in enumerate(text.splitlines()):
+        _require(
+            len(line.split("|")) == 6,
+            f"six-field queue snapshot line {index + 1} is malformed",
+        )
+    return path, {
+        "path": str(path),
+        "sha256": _sha256_bytes(payload),
+        "format": QUEUE_SNAPSHOT_FORMAT,
+    }
+
+
+def _validate_pre_manifest_attestation(
+    path: Path, *, case: PressureCase
+) -> tuple[Path, dict[str, str]]:
+    path, payload = _stable_regular_bytes(
+        path, label="pre-manifest attestation", require_read_only=True
+    )
+    attestation = _decode_json(payload, label="pre-manifest attestation")
+    _require(isinstance(attestation, dict), "pre-manifest attestation is malformed")
+    _require(
+        attestation.get("phase") == "pre_manifest",
+        "pre-manifest attestation phase is not pre_manifest",
+    )
+    _require(
+        attestation.get("registered_science_authorization_id") == case.authorization_id,
+        "pre-manifest attestation belongs to another authorization",
+    )
+    return path, {"path": str(path), "sha256": _sha256_bytes(payload)}
+
+
+def materialize_reviewed_pre_submit_config(
+    *,
+    case_id: str,
+    submission_id: str,
+    clean_candidate_manifest: Path,
+    executable: Path,
+    environment_profile: Path,
+    pre_manifest_attestation: Path,
+    timeout_margin_artifact: Path,
+    queue_snapshot: Path,
+    site_policy_checked_utc: str,
+) -> dict[str, object]:
+    """Build one exact config after a fresh selected-case pre-manifest capture."""
+    case = _selected_case(case_id)
+    identifier = _submission_id(submission_id, case_id=case.case_id)
+    final = _bound_final_artifacts(
+        clean_candidate_manifest=clean_candidate_manifest,
+        executable=executable,
+        environment_profile=environment_profile,
+    )
+    _validate_pre_manifest_attestation(pre_manifest_attestation, case=case)
+    timeout_margin_artifact = Path(
+        _validate_timeout_margin(
+            timeout_margin_artifact,
+            environment_profile_sha256=final["environment_profile_sha256"],
+        )
+    )
+    queue_snapshot, _ = _validate_queue_snapshot(queue_snapshot)
+    checked = _timestamp(site_policy_checked_utc, label="site-policy checked time")
+    return {
+        "pic_root": str(AUTHORIZED_PIC_ROOT),
+        "campaign": case.campaign,
+        "test_id": case.test_id,
+        "submission_scope": "registered_science",
+        "registered_science_authorization_id": case.authorization_id,
+        "submission_id": identifier,
+        "git_commit": final["git_commit"],
+        "evidence_class": EVIDENCE_CLASS,
+        "physical_mode": PHYSICAL_MODE,
+        "selected_qos": SELECTED_QOS,
+        "qos_selection_reason": "debug_available",
+        "site_policy_checked_utc": checked,
+        "registered_short_nonproduction": True,
+        "artifact_dir": str(AUTHORIZED_PIC_ROOT / "runs" / case.campaign / identifier),
+        "job_script_executable_env": "PIC_EXECUTABLE",
+        "job_script": str(JOB_SCRIPT),
+        "executable": final["executable_path"],
+        "input_deck": str(INPUT_DECK),
+        "environment_profile": final["environment_profile_path"],
+        "timeout_margin_artifact": str(timeout_margin_artifact),
+        "analysis_scripts": [str(path) for path in ANALYSIS_SCRIPTS],
+        "queue_snapshot": str(queue_snapshot),
+        "clean_candidate_manifest": final["clean_candidate_manifest_path"],
+        "launch_contract": _load_launch_contract(case)[1],
+    }
+
+
+def _write_new_file(path: Path, payload: bytes) -> None:
+    path = _absolute(path, label="output file")
+    _require(path.parent.is_dir(), f"output parent is not a directory: {path.parent}")
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        descriptor = os.open(path, flags, 0o444)
+    except OSError as error:
+        raise ContractError(f"refusing to overwrite output file: {path}") from error
+    try:
+        offset = 0
+        while offset < len(payload):
+            offset += os.write(descriptor, payload[offset:])
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+    os.chmod(path, 0o444)
+
+
+def write_policy_fragment(
+    output: Path,
+    *,
+    clean_candidate_manifest: Path,
+    executable: Path,
+    environment_profile: Path,
+) -> dict[str, object]:
+    """Write one new read-only additive policy fragment."""
+    fragment = materialize_policy_fragment(
+        clean_candidate_manifest=clean_candidate_manifest,
+        executable=executable,
+        environment_profile=environment_profile,
+    )
+    _write_new_file(output, _json_bytes(fragment))
+    return fragment
+
+
+def write_reviewed_pre_submit_config(
+    output_root: Path,
+    *,
+    case_id: str,
+    submission_id: str,
+    clean_candidate_manifest: Path,
+    executable: Path,
+    environment_profile: Path,
+    pre_manifest_attestation: Path,
+    timeout_margin_artifact: Path,
+    queue_snapshot: Path,
+    site_policy_checked_utc: str,
+) -> dict[str, object]:
+    """Create one new read-only selected-case config handoff directory."""
+    output_root = _absolute(output_root, label="reviewed-config output root")
+    _require(output_root.parent.is_dir(), "reviewed-config output parent does not exist")
+    case = _selected_case(case_id)
+    config = materialize_reviewed_pre_submit_config(
+        case_id=case.case_id,
+        submission_id=submission_id,
+        clean_candidate_manifest=clean_candidate_manifest,
+        executable=executable,
+        environment_profile=environment_profile,
+        pre_manifest_attestation=pre_manifest_attestation,
+        timeout_margin_artifact=timeout_margin_artifact,
+        queue_snapshot=queue_snapshot,
+        site_policy_checked_utc=site_policy_checked_utc,
+    )
+    _, pre_manifest_binding = _validate_pre_manifest_attestation(
+        pre_manifest_attestation, case=case
+    )
+    _, queue_binding = _validate_queue_snapshot(queue_snapshot)
+    timeout_path, timeout_payload = _stable_regular_bytes(
+        timeout_margin_artifact, label="timeout-margin artifact"
+    )
+    try:
+        output_root.mkdir(mode=0o700)
+    except OSError as error:
+        raise ContractError("reviewed-config output root already exists") from error
+    try:
+        filename = "pre_submit_config.json"
+        payload = _json_bytes(config)
+        _write_new_file(output_root / filename, payload)
+        manifest = {
+            "record_type": "q011_section54_pressure_pilot_reviewed_pre_submit_config",
+            "schema_version": 1,
+            "source_preregistration": _relative(EXECUTION_PREREGISTRATION),
+            "case_id": case.case_id,
+            "authorization_id": case.authorization_id,
+            "submission_id": submission_id,
+            "captured_inputs": {
+                "pre_manifest_attestation": pre_manifest_binding,
+                "six_field_queue_snapshot": queue_binding,
+                "timeout_margin_artifact": {
+                    "path": str(timeout_path),
+                    "sha256": _sha256_bytes(timeout_payload),
+                },
+            },
+            "config": {
+                "path": filename,
+                "sha256": _sha256_bytes(payload),
+            },
+            "required_next_steps": [
+                "create_pre_submit_manifest_for_this_selected_case_only",
+                "capture_fresh_pre_submit_wrapper_attestation_for_this_selected_case",
+                "invoke_registered_submission_wrapper_for_this_selected_case",
+            ],
+        }
+        _write_new_file(output_root / "materialization_manifest.json", _json_bytes(manifest))
+        os.chmod(output_root, 0o555)
+        return manifest
+    except BaseException:
+        shutil.rmtree(output_root)
+        raise
+
+
+def _add_final_binding_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--clean-candidate-manifest", required=True, type=Path)
+    parser.add_argument("--executable", required=True, type=Path)
+    parser.add_argument("--environment-profile", required=True, type=Path)
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers(dest="command", required=True)
+    policy = subparsers.add_parser("policy-slices")
+    _add_final_binding_arguments(policy)
+    policy.add_argument("--output", required=True, type=Path)
+    configs = subparsers.add_parser("pre-submit-config")
+    _add_final_binding_arguments(configs)
+    configs.add_argument("--case-id", required=True, choices=[case.case_id for case in CASES])
+    configs.add_argument("--submission-id", required=True)
+    configs.add_argument("--output-root", required=True, type=Path)
+    configs.add_argument("--pre-manifest-attestation", required=True, type=Path)
+    configs.add_argument("--timeout-margin-artifact", required=True, type=Path)
+    configs.add_argument("--queue-snapshot", required=True, type=Path)
+    configs.add_argument("--site-policy-checked-utc", required=True)
+    return parser
+
+
+def main() -> None:
+    arguments = build_parser().parse_args()
+    common = {
+        "clean_candidate_manifest": arguments.clean_candidate_manifest,
+        "executable": arguments.executable,
+        "environment_profile": arguments.environment_profile,
+    }
+    if arguments.command == "policy-slices":
+        fragment = write_policy_fragment(arguments.output, **common)
+        print(json.dumps(fragment, sort_keys=True, separators=(",", ":")))
+        return
+    manifest = write_reviewed_pre_submit_config(
+        arguments.output_root,
+        case_id=arguments.case_id,
+        submission_id=arguments.submission_id,
+        pre_manifest_attestation=arguments.pre_manifest_attestation,
+        timeout_margin_artifact=arguments.timeout_margin_artifact,
+        queue_snapshot=arguments.queue_snapshot,
+        site_policy_checked_utc=arguments.site_policy_checked_utc,
+        **common,
+    )
+    print(json.dumps(manifest, sort_keys=True, separators=(",", ":")))
+
+
+if __name__ == "__main__":
+    main()

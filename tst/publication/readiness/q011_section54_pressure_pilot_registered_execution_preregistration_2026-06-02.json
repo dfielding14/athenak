@@ -1,0 +1,165 @@
+{
+  "record_type": "q011_section54_pressure_pilot_registered_execution_preregistration",
+  "schema_version": 1,
+  "date": "2026-06-02",
+  "gate": "Q-011",
+  "classification": "engineering_calibration_only",
+  "qualification_effect": "none_registered_execution_source_tranche_only_no_policy_promotion_no_scheduler_authorization_no_claim_closure",
+  "predecessor_record": "tst/publication/readiness/q011_section54_pressure_pilot_preregistration_2026-06-01.json",
+  "scope": "Source-only registered-execution tranche for the four preregistered Q-011 Section 5.4 pressure-sensitivity pilots. It freezes one shared directive-only Frontier Slurm template, four separate one-action trusted-trampoline contracts and post-freeze materializers. It does not edit the live storage policy, promote a policy, submit a scheduler job, qualify Section 5.4 physics or close a Sun-Bai claim.",
+  "execution_boundary": {
+    "frontier_execution_authorized_by_this_record": false,
+    "scheduler_commands_authorized_by_this_record": false,
+    "storage_policy_mutation_authorized_by_this_record": false,
+    "prepared_inventory_mutation_authorized_by_this_record": false,
+    "required_next_boundary": "bind_exact_final_clean_candidate_manifest_adjacent_executable_and_installed_environment_profile_via_cli_then_review_additive_policy_successor_before_any_launch"
+  },
+  "scheduler_template": {
+    "path": "tst/publication/frontier_q011_section54_pressure_pilot_job.sh",
+    "directive_only": true,
+    "shared_by_all_cases": true,
+    "account": "AST207",
+    "partition": "batch",
+    "qos": "debug",
+    "nodes": 1,
+    "walltime": "00:15:00",
+    "walltime_seconds": 900,
+    "output": "/lustre/orion/ast207/proj-shared/dfielding/PIC/logs/slurm/%x.%j.log"
+  },
+  "launch_matrix": [
+    {
+      "case_id": "ps_p0_1p00",
+      "authorization_id": "q011-section54-pressure-ps-p0-1p00-v1",
+      "campaign": "q011_section54_pressure_ps_p0_1p00",
+      "test_id": "pic_parallel_shock_section54_pressure_ps_p0_1p00",
+      "problem_ps_p0": 1.0,
+      "argv_value": "1.0",
+      "launch_contract": "tst/publication/readiness/frontier_q011_section54_pressure_ps_p0_1p00_launch_contract.json"
+    },
+    {
+      "case_id": "ps_p0_0p05",
+      "authorization_id": "q011-section54-pressure-ps-p0-0p05-v1",
+      "campaign": "q011_section54_pressure_ps_p0_0p05",
+      "test_id": "pic_parallel_shock_section54_pressure_ps_p0_0p05",
+      "problem_ps_p0": 0.05,
+      "argv_value": "0.05",
+      "launch_contract": "tst/publication/readiness/frontier_q011_section54_pressure_ps_p0_0p05_launch_contract.json"
+    },
+    {
+      "case_id": "ps_p0_0p10",
+      "authorization_id": "q011-section54-pressure-ps-p0-0p10-v1",
+      "campaign": "q011_section54_pressure_ps_p0_0p10",
+      "test_id": "pic_parallel_shock_section54_pressure_ps_p0_0p10",
+      "problem_ps_p0": 0.1,
+      "argv_value": "0.10",
+      "launch_contract": "tst/publication/readiness/frontier_q011_section54_pressure_ps_p0_0p10_launch_contract.json"
+    },
+    {
+      "case_id": "ps_p0_0p20",
+      "authorization_id": "q011-section54-pressure-ps-p0-0p20-v1",
+      "campaign": "q011_section54_pressure_ps_p0_0p20",
+      "test_id": "pic_parallel_shock_section54_pressure_ps_p0_0p20",
+      "problem_ps_p0": 0.2,
+      "argv_value": "0.20",
+      "launch_contract": "tst/publication/readiness/frontier_q011_section54_pressure_ps_p0_0p20_launch_contract.json"
+    }
+  ],
+  "registered_slice_contract": {
+    "status": "authorized",
+    "evidence_class": "engineering_calibration_only",
+    "physical_mode": "paper_mhd_pic_vl2_tsc",
+    "runtime_profile": "frontier_minimum_supported",
+    "selected_qos": "debug",
+    "registered_short_nonproduction": true,
+    "maximum_nodes": 1,
+    "maximum_walltime_seconds": 900,
+    "maximum_attempts": 1,
+    "separate_authorization_per_case": true,
+    "one_athena_action_per_authorization": true,
+    "stdout_publication": "trusted_trampoline_artifact_nonempty_then_artifact_sha256_to_athena_stdout.sha256"
+  },
+  "source_bindings": {
+    "pressure_pilot_preregistration": {
+      "path": "tst/publication/readiness/q011_section54_pressure_pilot_preregistration_2026-06-01.json",
+      "sha256": "b0c703bc764c134b5e1c9e5c76a0dff1888bc6fa9b1e3b04456c372ec73ac045"
+    },
+    "job_script": {
+      "path": "tst/publication/frontier_q011_section54_pressure_pilot_job.sh",
+      "sha256": "3048493d376dfa7954595e586c7cebe6740460a7455110d0fc4020bedf697999"
+    },
+    "input_deck": {
+      "path": "inputs/publication/pic_parallel_shock_section54_paper_vl2_tsc.athinput",
+      "sha256": "0b1cbd62d54027ec81a5f4f5c88d5ee56b86b8cc0cb018c3fbebfb37a11be7b1"
+    },
+    "environment_profile_source": {
+      "path": "tst/publication/frontier_control_plane/frontier_pic_environment.sh",
+      "sha256": "7ff6cff3e263e8b4552bcbac1d5b55a85264a2a7af5565bbc9856584e35402c1"
+    },
+    "materializer": {
+      "path": "tst/publication/q011_section54_pressure_pilot_execution.py",
+      "sha256": "510ac6760231f39690f09afb6ec7855f0b03ba487938ea09f107fa1f68724675"
+    },
+    "analysis_scripts": [
+      {
+        "path": "tst/publication/analyze_q011_section54_pressure_pilot_case.py",
+        "sha256": "d9253fdd3b573bd87f4e94a84e88ac2d8110a0cbc608ce98fecd7b9eeece9693"
+      },
+      {
+        "path": "tst/publication/frontier_f1_structured_artifacts.py",
+        "sha256": "cf090115bcdfd143f67b12339115102b57e74cf3205b1ebb1521c144c3415a5a"
+      }
+    ],
+    "launch_contracts": [
+      {
+        "case_id": "ps_p0_1p00",
+        "path": "tst/publication/readiness/frontier_q011_section54_pressure_ps_p0_1p00_launch_contract.json",
+        "file_sha256": "4fb8f3cd3f2705dcb24b7d9647ae424ec1134bc9fd11032cd6674f65f8534294",
+        "launch_contract_sha256": "2413a91247d32fb6d93d4903bddab65ed518badc1be6c514ad29c03ca8eafb7b"
+      },
+      {
+        "case_id": "ps_p0_0p05",
+        "path": "tst/publication/readiness/frontier_q011_section54_pressure_ps_p0_0p05_launch_contract.json",
+        "file_sha256": "f9729fe30893231930a3043d76175513109bb77eebd8aba51c34bc3a5bf8aed5",
+        "launch_contract_sha256": "f9f615bfaa4cc18479dcd02ed4f688f3723fc3dd30a50e754e9f69e10616a8ea"
+      },
+      {
+        "case_id": "ps_p0_0p10",
+        "path": "tst/publication/readiness/frontier_q011_section54_pressure_ps_p0_0p10_launch_contract.json",
+        "file_sha256": "be8be2616c8fc43f2298e3a8141ac9c9437fa4c43bf62b1d56a5c67cbbc30504",
+        "launch_contract_sha256": "8ab4528b55bdf71e4a13047971aa5ccf8da35c28896ba0bf875a7dca368dfd2f"
+      },
+      {
+        "case_id": "ps_p0_0p20",
+        "path": "tst/publication/readiness/frontier_q011_section54_pressure_ps_p0_0p20_launch_contract.json",
+        "file_sha256": "b64cb161a24d7ca1a8655c43ef0e12510d29b3b7402254847d65e4a10e45cdd5",
+        "launch_contract_sha256": "d84b9217c8810f33ffda995f9611b44f7eeb519bb2e7667c4691ab5833895dd4"
+      }
+    ]
+  },
+  "post_freeze_materialization": {
+    "tool": "tst/publication/q011_section54_pressure_pilot_execution.py",
+    "policy_command": "policy-slices --clean-candidate-manifest PATH --executable PATH --environment-profile PATH --output NEW_PATH",
+    "pre_submit_command": "pre-submit-config --case-id CASE --submission-id UUID --clean-candidate-manifest PATH --executable PATH --environment-profile PATH --pre-manifest-attestation PATH --timeout-margin-artifact PATH --queue-snapshot PATH --site-policy-checked-utc UTC --output-root NEW_PATH",
+    "final_cli_bindings": [
+      "clean_candidate_manifest",
+      "adjacent_clean_candidate_executable",
+      "installed_environment_profile",
+      "timeout_margin_artifact",
+      "queue_snapshot",
+      "site_policy_checked_utc",
+      "one_selected_case_id",
+      "one_fresh_pre_manifest_attestation_for_selected_case",
+      "one_fresh_six_field_queue_snapshot_for_selected_case",
+      "one_fresh_timeout_margin_artifact_for_selected_case",
+      "one_explicit_submission_uuid_for_selected_case"
+    ],
+    "ordered_submission_boundary": "for_each_case_capture_pre_manifest_attestation_then_six_field_queue_snapshot_timeout_artifact_uuid_config_manifest_then_capture_pre_submit_wrapper_attestation_and_invoke_wrapper_before_materializing_another_case",
+    "output_policy": "write_one_new_selected_case_review_artifact_exclusively_per_invocation_never_patch_live_storage_policy_or_prepared_inventory"
+  },
+  "limitations": [
+    "The four pilots remain engineering calibration only and cannot qualify Section 5.4 physics.",
+    "Each pressure case requires a separate additive storage-policy slice and consumes its one allowed attempt after reservation.",
+    "A reviewer must inspect and promote a separate storage-policy successor before any Frontier launch.",
+    "The clean candidate, executable and installed environment profile remain intentionally open until bound by the post-freeze CLI."
+  ]
+}

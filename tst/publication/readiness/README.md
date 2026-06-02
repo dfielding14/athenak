@@ -570,6 +570,17 @@ qualify any scientific claim by itself.
   oracle directly to `PushPaperCosmicRaysVL2`, rejects generic-Boris decoys and
   records passing bounded serial-host RK-stage, timing, startup-cohort restart
   and active-deck startup replay. Frontier pilots and qualification remain open.
+- `q011_section54_pressure_pilot_preregistration_2026-06-01.json`: source-local
+  preregistration for the four engineering-only upstream-pressure sensitivity
+  cases. It freezes the uniform short-run matrix before runtime inspection but
+  does not authorize a Frontier submission or qualify Section 5.4 physics.
+- `q011_section54_pressure_pilot_registered_execution_preregistration_2026-06-02.json`:
+  source-only registered-execution tranche for the four pressure cases. It
+  freezes one directive-only Frontier template, four separate one-action
+  trusted-trampoline contracts, the raw-case verifier, the adjacent structured-
+  artifact helper and post-freeze materializers. A separately reviewed clean
+  freeze, additive storage-policy successor and per-case operator attestations
+  remain required before any scheduler mutation.
 - `q011_parallel_shock_storage_estimator_successor_2026-06-01.json`:
   analytical storage-planning successor after the publication deck gained a
   signed particle-current binary output and the PVTK block moved. The estimator

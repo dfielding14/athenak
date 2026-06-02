@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Capture and seal one reviewed Frontier pre-policy-promotion attestation."""
+"""Capture and seal one reviewed Frontier same-account isolation attestation."""
 
 from __future__ import annotations
 
@@ -28,13 +28,27 @@ DEFAULT_ARCHIVE_ROOT = AUTHORIZED_PIC_ROOT / "operator_attestations"
 TRUSTED_PS = "/usr/bin/ps"
 TRUSTED_SQUEUE = "/usr/bin/squeue"
 QUEUE_FORMAT = "%i|%a|%P|%q|%T|%j|%k"
+PHASES = ("pre_policy_promotion", "pre_manifest", "pre_submit_wrapper")
 PHASE = "pre_policy_promotion"
 RECORD_TYPE = "q027_frontier_registered_science_same_account_isolation_attestation"
-OPERATOR_STATEMENT = (
-    "Reviewed same-account process snapshot immediately before registered policy "
-    "promotion; no competing process is authorized to mutate the PIC roots "
-    "throughout the paired mirrored-policy replacement."
-)
+OPERATOR_STATEMENTS = {
+    "pre_policy_promotion": (
+        "Reviewed same-account process snapshot immediately before registered policy "
+        "promotion; no competing process is authorized to mutate the PIC roots "
+        "throughout the paired mirrored-policy replacement."
+    ),
+    "pre_manifest": (
+        "Reviewed same-account process snapshot immediately before registered manifest "
+        "creation; no competing process is authorized to mutate the PIC roots "
+        "throughout manifest snapshot publication."
+    ),
+    "pre_submit_wrapper": (
+        "Reviewed same-account process snapshot immediately before the registered "
+        "submission wrapper; no competing process is authorized to mutate the PIC "
+        "roots throughout reservation, scheduler dispatch, attachment and release."
+    ),
+}
+OPERATOR_STATEMENT = OPERATOR_STATEMENTS[PHASE]
 PENDING_SUBMISSION_FILENAME = "pending_submission.json"
 PENDING_MANUAL_ACCOUNTING_FILENAME = "pending_manual_accounting.json"
 METADATA_FILENAME = ".capture_metadata.json"
@@ -123,6 +137,12 @@ def _validate_authorization_id(authorization_id: str) -> str:
             "128 characters"
         )
     return authorization_id
+
+
+def _validate_phase(phase: str) -> str:
+    if phase not in PHASES:
+        raise ValueError(f"Phase must be one of: {', '.join(PHASES)}")
+    return phase
 
 
 def _validate_control_plane_version(control_plane_version: str) -> str:
@@ -491,6 +511,7 @@ def capture(
     archive_root: Path,
     authorization_id: str,
     control_plane_version: str,
+    phase: str = PHASE,
     pic_root: Path = AUTHORIZED_PIC_ROOT,
     project_home_root: Path = AUTHORIZED_PROJECT_HOME_ROOT,
     runner: Runner = _default_runner,
@@ -501,6 +522,7 @@ def capture(
     """Capture review inputs into one hidden staging directory."""
     authorization_id = _validate_authorization_id(authorization_id)
     control_plane_version = _validate_control_plane_version(control_plane_version)
+    phase = _validate_phase(phase)
     user = _validate_user(_current_user() if user is None else user)
     pic_root = _canonical_existing_directory(pic_root, label="PIC root")
     project_home_root = _canonical_existing_directory(
@@ -511,7 +533,7 @@ def capture(
     archive_root = _ensure_archive_root(archive_root)
     paths = _ledger_paths(pic_root, project_home_root)
     timestamp, recorded_utc = _timestamp_strings(now())
-    final_name = f"{timestamp}-{authorization_id}-{PHASE}"
+    final_name = f"{timestamp}-{authorization_id}-{phase}"
     final_path = archive_root / final_name
     _require_absent_entry(final_path, label="Final attestation directory")
 
@@ -524,6 +546,7 @@ def capture(
         "schema_version": 1,
         "registered_science_authorization_id": authorization_id,
         "control_plane_version": control_plane_version,
+        "phase": phase,
         "recorded_utc": recorded_utc,
         "final_directory_name": final_name,
         "staging_directory_name": staging.name,
@@ -540,7 +563,7 @@ def capture(
     return staging
 
 
-def _validate_metadata(metadata: dict[str, object], staging: Path) -> None:
+def _validate_metadata(metadata: dict[str, object], staging: Path) -> str:
     required = {
         "schema_version",
         "registered_science_authorization_id",
@@ -552,9 +575,14 @@ def _validate_metadata(metadata: dict[str, object], staging: Path) -> None:
         "project_home_root",
         "same_account_user",
     }
+    # Accept legacy hidden staging captures so an upgrade does not strand an
+    # already-reviewed pre-policy-promotion capture.
+    allowed_fields = [required, required | {"phase"}]
     string_fields = required - {"schema_version"}
+    if "phase" in metadata:
+        string_fields.add("phase")
     if (
-        set(metadata) != required
+        set(metadata) not in allowed_fields
         or type(metadata.get("schema_version")) is not int
         or metadata.get("schema_version") != 1
         or any(type(metadata.get(field)) is not str for field in string_fields)
@@ -563,6 +591,7 @@ def _validate_metadata(metadata: dict[str, object], staging: Path) -> None:
     authorization_id = _validate_authorization_id(
         str(metadata["registered_science_authorization_id"])
     )
+    phase = _validate_phase(str(metadata.get("phase", PHASE)))
     _validate_control_plane_version(str(metadata["control_plane_version"]))
     _validate_user(str(metadata["same_account_user"]))
     timestamp = str(metadata["final_directory_name"]).split("-", 1)[0]
@@ -576,13 +605,14 @@ def _validate_metadata(metadata: dict[str, object], staging: Path) -> None:
         raise ValueError("Staged recorded UTC timestamp is malformed") from error
     if recorded.strftime("%Y%m%dT%H%M%SZ") != timestamp:
         raise ValueError("Staged recorded UTC timestamp differs from directory name")
-    expected_final_name = f"{timestamp}-{authorization_id}-{PHASE}"
+    expected_final_name = f"{timestamp}-{authorization_id}-{phase}"
     if metadata["final_directory_name"] != expected_final_name:
         raise ValueError("Staged final directory name differs from capture metadata")
     if metadata["staging_directory_name"] != staging.name:
         raise ValueError("Staged directory name differs from capture metadata")
     if not staging.name.startswith(f".{expected_final_name}.staging-"):
         raise ValueError("Staged directory name is malformed")
+    return phase
 
 
 def _require_matching_optional_root(
@@ -606,16 +636,16 @@ def _require_matching_optional_root(
 
 def _require_sealable(snapshot: GateSnapshot) -> None:
     if snapshot.queue.strip():
-        raise ValueError("Policy promotion attestation is blocked by a non-empty queue")
+        raise ValueError("Isolation attestation is blocked by a non-empty queue")
     if snapshot.pending_submission_status != "absent":
-        raise ValueError("Policy promotion attestation is blocked by pending submission")
+        raise ValueError("Isolation attestation is blocked by pending submission")
     if any(
         status != "absent"
         for status in snapshot.pending_manual_accounting_statuses.values()
     ):
-        raise ValueError("Policy promotion attestation is blocked by pending manual accounting")
+        raise ValueError("Isolation attestation is blocked by pending manual accounting")
     if snapshot.validated_state["active_reservation_count"] != 0:
-        raise ValueError("Policy promotion attestation is blocked by an outstanding reservation")
+        raise ValueError("Isolation attestation is blocked by an outstanding reservation")
 
 
 def _sha256(path: Path) -> str:
@@ -631,6 +661,7 @@ def _attestation(
     metadata: dict[str, object],
     snapshot: GateSnapshot,
     *,
+    phase: str,
     sealed_utc: str,
 ) -> dict[str, object]:
     pending_submission = _file_record(staging, "pending_submission_marker.txt")
@@ -653,7 +684,7 @@ def _attestation(
             "registered_science_authorization_id"
         ],
         "control_plane_version": metadata["control_plane_version"],
-        "phase": PHASE,
+        "phase": phase,
         "same_account_process_snapshot": _file_record(
             staging, "same_account_process_snapshot.txt"
         ),
@@ -662,7 +693,7 @@ def _attestation(
         "pending_manual_accounting_marker": pending_manual_accounting,
         "mirrored_ledger_line_counts": line_counts,
         "validated_mirrored_ledger_state": validated_state,
-        "operator_statement": OPERATOR_STATEMENT,
+        "operator_statement": OPERATOR_STATEMENTS[phase],
     }
 
 
@@ -801,20 +832,20 @@ def _sealed_final_path(staging: Path) -> Path:
         not required.issubset(attestation)
         or attestation.get("schema_version") != 1
         or attestation.get("record_type") != RECORD_TYPE
-        or attestation.get("phase") != PHASE
         or any(type(attestation.get(field)) is not str for field in required - {"schema_version"})
     ):
         raise ValueError("Sealed attestation schema is invalid")
     authorization_id = _validate_authorization_id(
         str(attestation["registered_science_authorization_id"])
     )
+    phase = _validate_phase(str(attestation["phase"]))
     _validate_control_plane_version(str(attestation["control_plane_version"]))
     try:
         recorded = datetime.strptime(str(attestation["recorded_utc"]), "%Y-%m-%dT%H:%M:%SZ")
         datetime.strptime(str(attestation["sealed_utc"]), "%Y-%m-%dT%H:%M:%SZ")
     except ValueError as error:
         raise ValueError("Sealed attestation UTC timestamp is malformed") from error
-    final_name = f"{recorded.strftime('%Y%m%dT%H%M%SZ')}-{authorization_id}-{PHASE}"
+    final_name = f"{recorded.strftime('%Y%m%dT%H%M%SZ')}-{authorization_id}-{phase}"
     if re.fullmatch(rf"\.{re.escape(final_name)}\.staging-[0-9a-f]{{16}}", staging.name) is None:
         raise ValueError("Sealed staging directory name is malformed")
     return staging.parent / final_name
@@ -845,13 +876,13 @@ def seal(
     user: str | None = None,
     ledger_validator: LedgerValidator = _validate_with_existing_read_only_ledger_snapshot,
 ) -> Path:
-    """Revalidate the promotion boundary and atomically publish one attestation."""
+    """Revalidate the selected execution boundary and publish one attestation."""
     if not attest_reviewed:
         raise ValueError("Seal requires explicit --attest-reviewed")
     staging = _canonical_existing_directory(staging_dir, label="Staging directory")
     archive_root = _canonical_existing_directory(staging.parent, label="Archive root")
     metadata = _read_json_regular(staging / METADATA_FILENAME)
-    _validate_metadata(metadata, staging)
+    phase = _validate_metadata(metadata, staging)
     _require_exact_regular_files(staging, REVIEW_STAGING_FILENAMES)
     captured_user = _validate_user(str(metadata["same_account_user"]))
     if user is not None and _validate_user(user) != captured_user:
@@ -880,7 +911,7 @@ def seal(
     _, sealed_utc = _timestamp_strings(now())
     _write_json_new(
         staging / "attestation.json",
-        _attestation(staging, metadata, snapshot, sealed_utc=sealed_utc),
+        _attestation(staging, metadata, snapshot, phase=phase, sealed_utc=sealed_utc),
     )
     os.unlink(staging / METADATA_FILENAME)
     _require_exact_regular_files(staging, SEALED_FILENAMES)
@@ -900,6 +931,7 @@ def _parser() -> argparse.ArgumentParser:
     capture_parser.add_argument("--archive-root", type=Path, default=DEFAULT_ARCHIVE_ROOT)
     capture_parser.add_argument("--authorization-id", required=True)
     capture_parser.add_argument("--control-plane-version", required=True)
+    capture_parser.add_argument("--phase", choices=PHASES, default=PHASE)
     capture_parser.add_argument("--pic-root", type=Path, default=AUTHORIZED_PIC_ROOT)
     capture_parser.add_argument(
         "--project-home-root", type=Path, default=AUTHORIZED_PROJECT_HOME_ROOT
@@ -927,6 +959,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 archive_root=arguments.archive_root,
                 authorization_id=arguments.authorization_id,
                 control_plane_version=arguments.control_plane_version,
+                phase=arguments.phase,
                 pic_root=arguments.pic_root,
                 project_home_root=arguments.project_home_root,
             )
