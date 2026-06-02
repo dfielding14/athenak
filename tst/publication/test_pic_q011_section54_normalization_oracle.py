@@ -128,6 +128,25 @@ class PicQ011Section54NormalizationOracleTests(unittest.TestCase):
         with self.assertRaisesRegex(q011.ContractError, "C/U_A0"):
             q011.derive_normalization_and_macro_particle_calibration(blocks)
 
+    def test_vl2_pusher_guard_rejects_generic_boris_decoy(self) -> None:
+        source = """
+TaskStatus Particles::PushPaperCosmicRaysVL2(Driver *pdriver, int stage) {
+  return TaskStatus::complete;
+}
+
+TaskStatus Particles::PushCosmicRays(Driver *pdriver, int stage) {
+  Real q_over_m = pr(IPM, p);
+  Real qdt_2m = q_over_m*dt_half;
+  Real tx = qdt_2m*Bx*inv_gamma_minus;
+  return TaskStatus::complete;
+}
+"""
+        with self.assertRaisesRegex(
+            q011.ContractError,
+            "PushPaperCosmicRaysVL2 normalization contract mismatch",
+        ):
+            q011._require_vl2_pusher_source_contract(source)
+
 
 if __name__ == "__main__":
     unittest.main()

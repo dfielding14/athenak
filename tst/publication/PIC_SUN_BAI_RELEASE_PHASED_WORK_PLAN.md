@@ -81,7 +81,7 @@ The active prepared paper deck is
 The sibling deck without the `_vl2_tsc` suffix is retained as archival
 pre-successor chronology only.
 The source-local preparation record is
-[`q011_parallel_shock_section54_paper_preparation_successor_v8_2026-06-01.json`](readiness/q011_parallel_shock_section54_paper_preparation_successor_v8_2026-06-01.json).
+[`q011_parallel_shock_section54_paper_preparation_successor_v9_2026-06-01.json`](readiness/q011_parallel_shock_section54_paper_preparation_successor_v9_2026-06-01.json).
 The bounded injection audit is
 [`q011_injection_distribution_runtime_local_successor_v7_2026-06-01.json`](readiness/q011_injection_distribution_runtime_local_successor_v7_2026-06-01.json).
 

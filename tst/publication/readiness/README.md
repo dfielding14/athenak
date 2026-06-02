@@ -539,6 +539,15 @@ qualify any scientific claim by itself.
   normalized-charge and ideal downstream `640/160/40` occupancy mappings.
   The upstream pressure is an explicitly labeled inferred Bai et al. (2015)
   predecessor baseline with preregistered Frontier pressure cases.
+- `q011_parallel_shock_section54_paper_preparation_successor_v8_2026-06-01.json`:
+  historical additive VL2/TSC preparation successor carrying the locally
+  decidable thermodynamic, normalized-charge and ideal downstream occupancy
+  mappings into the active paper-mode deck.
+- `q011_parallel_shock_section54_paper_preparation_successor_v9_2026-06-01.json`:
+  current preparation-only VL2/TSC successor. It binds the charge-normalization
+  oracle directly to `PushPaperCosmicRaysVL2`, rejects generic-Boris decoys and
+  records passing bounded serial-host RK-stage, timing, startup-cohort restart
+  and active-deck startup replay. Frontier pilots and qualification remain open.
 - `q011_parallel_shock_storage_estimator_successor_2026-06-01.json`:
   analytical storage-planning successor after the publication deck gained a
   signed particle-current binary output and the PVTK block moved. The estimator

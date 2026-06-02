@@ -20,6 +20,18 @@ _INPUT_DECK = (
 )
 _PGEN_SOURCE = _REPO_ROOT / "src" / "pgen" / "tests" / "pic_parallel_shock.cpp"
 _PUSHER_SOURCE = _REPO_ROOT / "src" / "particles" / "particles_pushers.cpp"
+_VL2_PUSHER_SIGNATURE = (
+    "TaskStatus Particles::PushPaperCosmicRaysVL2(Driver *pdriver, int stage)"
+)
+_VL2_PUSHER_FRAGMENTS = [
+    "if (stage == 1) return TaskStatus::complete;",
+    '"push_cr_paper_vl2_midpoint_kick",',
+    "const Real qdt_2m = pr(IPM, p)*dt_half;",
+    "CRLorentzFactor(state_x, state_y, state_z, light_speed);",
+    "const Real tx = qdt_2m*Bx*inv_gamma_minus;",
+    "const Real ty = qdt_2m*By*inv_gamma_minus;",
+    "const Real tz = qdt_2m*Bz*inv_gamma_minus;",
+]
 _RESULTS = {}
 
 _EXPECTED_VALUES = {
@@ -164,6 +176,39 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _extract_cpp_function(source: str, signature: str) -> str:
+    """Extract one exact C++ function definition, including nested lambda braces."""
+    start = source.find(signature)
+    if start < 0:
+        raise ContractError(f"missing C++ function definition: {signature}")
+    if source.find(signature, start + len(signature)) >= 0:
+        raise ContractError(f"duplicate C++ function definition: {signature}")
+    body_start = start + len(signature)
+    while body_start < len(source) and source[body_start].isspace():
+        body_start += 1
+    if body_start >= len(source) or source[body_start] != "{":
+        raise ContractError(f"malformed C++ function definition: {signature}")
+    depth = 0
+    for end in range(body_start, len(source)):
+        if source[end] == "{":
+            depth += 1
+        elif source[end] == "}":
+            depth -= 1
+            if depth == 0:
+                return source[start:end + 1]
+    raise ContractError(f"unterminated C++ function definition: {signature}")
+
+
+def _require_vl2_pusher_source_contract(source: str) -> None:
+    vl2_pusher = _extract_cpp_function(source, _VL2_PUSHER_SIGNATURE)
+    missing = [fragment for fragment in _VL2_PUSHER_FRAGMENTS if fragment not in vl2_pusher]
+    if missing:
+        raise ContractError(
+            "Q-011 PushPaperCosmicRaysVL2 normalization contract mismatch:\n"
+            + "\n".join(missing)
+        )
+
+
 def parse_athinput(path: Path = _INPUT_DECK) -> dict[str, dict[str, str]]:
     """Parse the strict subset of Athena input syntax used by the frozen deck."""
     blocks: dict[str, dict[str, str]] = {}
@@ -225,11 +270,6 @@ def _require_source_contract() -> None:
             "const Real phi = 2.0*M_PI*TaggedUniform01(tag, 2);",
             "BoostRelativeVelocityFromSurface(ppart, surface_vx, vinj*dirx, vinj*diry,",
         ],
-        _PUSHER_SOURCE: [
-            "Real q_over_m = pr(IPM, p);",
-            "Real qdt_2m = q_over_m*dt_half;",
-            "Real tx = qdt_2m*Bx*inv_gamma_minus;",
-        ],
     }
     missing = []
     for path, fragments in required_fragments.items():
@@ -244,6 +284,7 @@ def _require_source_contract() -> None:
             "Q-011 source-local shock normalization contract mismatch:\n"
             + "\n".join(missing)
         )
+    _require_vl2_pusher_source_contract(_PUSHER_SOURCE.read_text(encoding="utf-8"))
 
 
 def derive_normalization_and_macro_particle_calibration(

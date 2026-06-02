@@ -19,7 +19,7 @@ SIDECAR = (
     / "tst"
     / "publication"
     / "readiness"
-    / "q011_parallel_shock_section54_paper_preparation_successor_v8_2026-06-01.json"
+    / "q011_parallel_shock_section54_paper_preparation_successor_v9_2026-06-01.json"
 )
 
 
