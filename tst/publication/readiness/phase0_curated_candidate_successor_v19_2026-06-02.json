@@ -1,0 +1,48 @@
+{
+  "record_type": "phase0_curated_candidate_successor",
+  "schema_version": 1,
+  "date": "2026-06-02",
+  "predecessor_record": "tst/publication/readiness/phase0_curated_candidate_successor_v18_2026-06-02.json",
+  "predecessor_sha256": "bdd0c8715f528265791471515004b1b19c32d5ee9cb11d529bb905e248209984",
+  "status": "q011_hip_retry_repaired_clean_candidate_frozen_four_slice_policy_promotion_pending_queue_quiescence",
+  "qualification_effect": "none",
+  "live_paired_control_plane_version": "6dc456e5858b2cbdbd7ef80cbc324b748e2cce5075023b49f7115eab4e84dfdd",
+  "candidate_freeze_source_commit": "672818de70dcff51543a2fa76c88aa5af1a59a65",
+  "frontier_launch_authorization": "none_no_registered_science_slices",
+  "clean_candidate_freeze_receipt": {
+    "path": "tst/publication/readiness/phase0_clean_candidate_freeze_successor_v3_2026-06-02.json",
+    "sha256": "c77404334309734d89b86374dc0fb22d7014f95f46a8691b7e1a9716999494e4"
+  },
+  "operational_baseline": {
+    "orion_policy_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/storage_policy.json",
+    "project_home_policy_path": "/ccs/proj/ast207/proj-shared/PIC/policy/storage_policy.json",
+    "orion_policy_sha256": "1a331137c7d83717a890fa64046890074101f0fec3de7b8b22ca41b8bb644d28",
+    "project_home_policy_sha256": "1a331137c7d83717a890fa64046890074101f0fec3de7b8b22ca41b8bb644d28",
+    "orion_promotion_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/active_promotion.json",
+    "project_home_promotion_path": "/ccs/proj/ast207/proj-shared/PIC/policy/active_promotion.json",
+    "orion_promotion_sha256": "e64db1ef1ca755e1fcf4ff86e078856e381ff31f6aab926f01658b7aa69cd73e",
+    "project_home_promotion_sha256": "e64db1ef1ca755e1fcf4ff86e078856e381ff31f6aab926f01658b7aa69cd73e",
+    "registered_science_slices": [],
+    "scheduler_isolation": "not_claimed_unrelated_user_scheduler_job_4754394_active_empty_allowlist_transition_only"
+  },
+  "post_freeze_policy_fragment": {
+    "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/q011_section54_pressure_pilot_post_freeze_fragment_0d1cabe6.json",
+    "sha256": "92aa445b112c9f9e7a2f355696570466bd5aa1ef354ef2ac320dc2d800a44548",
+    "status": "non_authorizing_review_fragment_only"
+  },
+  "external_review": {
+    "reviewer": "pending external review",
+    "disposition": "pending external review"
+  },
+  "completed_actions": [
+    "rebuilt the repaired HIP/MPI Release candidate from exact clean source commit 672818de70dcff51543a2fa76c88aa5af1a59a65",
+    "froze recursively read-only clean candidate 0d1cabe6-a282-408b-953a-c2db8f0e1310",
+    "materialized the exact four-slice Q011 v2 post-freeze policy fragment as a non-authorizing review artifact",
+    "retained the active same-controller empty-allowlist baseline while unrelated user job 4754394 remains active"
+  ],
+  "remaining_phase0_actions": [
+    "wait for an empty scheduler snapshot before four-slice policy attestation and promotion",
+    "register and execute each Q011 v2 pressure pilot serially through the installed control plane",
+    "retain external review as pending until a named external reviewer records a disposition"
+  ]
+}

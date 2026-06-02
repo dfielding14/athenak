@@ -79,6 +79,13 @@ qualify any scientific claim by itself.
   `16c103ceea42` source commit, double-precision HIP/MPI Release executable,
   recursively read-only `d7205cd3` manifest and independently validated
   110-deck, 16-analyzer closure before policy promotion.
+- `phase0_clean_candidate_freeze_successor_v3_2026-06-02.json`: repaired
+  additive VL2/TSC clean-candidate freeze receipt. It binds the exact
+  `672818de70dc` source commit, double-precision HIP/MPI Release executable,
+  recursively read-only `0d1cabe6` manifest, 110-deck, 19-analyzer closure and
+  non-authorizing four-slice Q011 v2 review fragment. The active mirrored
+  policy retains an empty allowlist until a fresh empty scheduler snapshot,
+  live preflight and sealed operator attestation permit promotion.
 - `phase0_clean_candidate_freeze_and_policy_promotion_successor_v2_2026-06-02.json`:
   current historical-boundary receipt for the exact `d7205cd3` manifest
   authorization through the installed `aa069bc7` paired controller. It binds
@@ -155,6 +162,13 @@ qualify any scientific claim by itself.
   and promoting the required same-controller empty-allowlist baseline. It binds
   the 111-row mirrored ledger and keeps launch prohibited while the repaired
   HIP/MPI Release rebuild and clean-candidate freeze remain pending.
+- `phase0_curated_candidate_successor_v19_2026-06-02.json`: current curated
+  Q011 retry post-freeze boundary. It binds the repaired `672818de70dc`
+  double-precision HIP/MPI Release build, recursively read-only `0d1cabe6`
+  clean candidate and exact non-authorizing four-slice Q011 v2 review fragment.
+  Launch remains prohibited because unrelated user job `4754394` prevents a
+  fresh empty-scheduler attestation and the active mirrored policy still has an
+  empty registered-science allowlist.
 - `phase0_curated_candidate_successor_v4_2026-05-31.json`: historical Phase 0
   successor after schema-3 parallel-shock exact tag-window and restart
   fail-stop hardening. It binds the paired `4f005096` successor receipt and

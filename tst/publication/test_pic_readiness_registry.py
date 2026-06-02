@@ -2902,6 +2902,68 @@ class PicReadinessRegistryTests(unittest.TestCase):
         classes = set(schema["properties"]["evidence_class"]["enum"])
         self.assertEqual(classes, CLAIM_CLASSES)
 
+    def test_q011_repaired_clean_candidate_freeze_receipt_is_frozen(self) -> None:
+        receipt = _load("phase0_clean_candidate_freeze_successor_v3_2026-06-02.json")
+        self.assertEqual(
+            receipt["predecessor_sha256"],
+            _sha256(REPO_ROOT / receipt["predecessor_record"]),
+        )
+        candidate = receipt["clean_candidate"]
+        manifest_path = Path(candidate["manifest_path"])
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        self.assertEqual(candidate["manifest_sha256"], _sha256(manifest_path))
+        self.assertEqual(candidate["manifest_sha256"], "ef527ed467995bd60fda07b5a3b09b56ea871595ace12fd64a948e246720dbe3")
+        self.assertEqual(stat.S_IMODE(manifest_path.parent.stat().st_mode) & 0o222, 0)
+        descendants = list(manifest_path.parent.rglob("*"))
+        self.assertEqual(
+            receipt["local_validation"]["expected_tree_entries"],
+            len(descendants),
+        )
+        for descendant in descendants:
+            self.assertFalse(descendant.is_symlink())
+            self.assertEqual(stat.S_IMODE(descendant.stat().st_mode) & 0o222, 0)
+        self.assertEqual(candidate["source_git_commit"], manifest["source"]["git_commit"])
+        self.assertEqual(candidate["source_git_tree"], manifest["source"]["git_tree"])
+        self.assertEqual(candidate["source_archive_sha256"], manifest["source"]["archive_sha256"])
+        self.assertEqual(candidate["source_commit_sha256"], manifest["source"]["commit_sha256"])
+        self.assertEqual(candidate["source_bundle_sha256"], manifest["source"]["source_bundle_sha256"])
+        self.assertEqual(candidate["prepared_artifact_inventory_sha256"], manifest["prepared_artifacts"]["inventory_sha256"])
+        self.assertEqual(candidate["paper_deck_count"], len(manifest["prepared_artifacts"]["paper_decks"]))
+        self.assertEqual(candidate["publication_analyzer_count"], len(manifest["prepared_artifacts"]["analyzers"]))
+        self.assertEqual(candidate["build_profile_sha256"], _sha256(Path(manifest["build"]["profile_path"])))
+        self.assertEqual(candidate["profile_receipt_sha256"], _sha256(Path(manifest["build"]["profile_receipt_path"])))
+        self.assertEqual(candidate["executable_sha256"], _sha256(Path(manifest["build"]["executable_path"])))
+        fragment = receipt["post_freeze_policy_fragment"]
+        self.assertEqual(fragment["sha256"], _sha256(Path(fragment["path"])))
+        self.assertEqual(fragment["status"], "non_authorizing_review_fragment_only")
+        fragment_payload = json.loads(Path(fragment["path"]).read_text(encoding="utf-8"))
+        self.assertEqual(fragment["registered_science_slice_count"], len(fragment_payload["registered_science_slices"]))
+        self.assertEqual(fragment["registered_science_slice_count"], 4)
+        policy = receipt["policy_promotion"]
+        self.assertEqual(policy["registered_science_slices"], [])
+        for key in (
+            "live_orion_policy",
+            "live_project_home_policy",
+            "live_orion_promotion",
+            "live_project_home_promotion",
+        ):
+            live_paths = {
+                "live_orion_policy": "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/storage_policy.json",
+                "live_project_home_policy": "/ccs/proj/ast207/proj-shared/PIC/policy/storage_policy.json",
+                "live_orion_promotion": "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/active_promotion.json",
+                "live_project_home_promotion": "/ccs/proj/ast207/proj-shared/PIC/policy/active_promotion.json",
+            }
+            self.assertEqual(policy[f"{key}_sha256"], _sha256(Path(live_paths[key])))
+        successor = _load("phase0_curated_candidate_successor_v19_2026-06-02.json")
+        self.assertEqual(successor["predecessor_sha256"], _sha256(REPO_ROOT / successor["predecessor_record"]))
+        successor_receipt = successor["clean_candidate_freeze_receipt"]
+        self.assertEqual(
+            successor_receipt["sha256"],
+            _sha256(REPO_ROOT / successor_receipt["path"]),
+        )
+        self.assertEqual(successor["frontier_launch_authorization"], "none_no_registered_science_slices")
+        self.assertEqual(successor["operational_baseline"]["registered_science_slices"], [])
+
     def test_validation_manifest_schema_accepts_reviewable_scaffolds(self) -> None:
         schema = _validation_manifest_schema()
         pending = _minimum_validation_manifest()

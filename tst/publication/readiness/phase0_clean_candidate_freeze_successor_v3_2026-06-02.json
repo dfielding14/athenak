@@ -1,0 +1,70 @@
+{
+  "record_type": "phase0_clean_candidate_freeze_successor",
+  "schema_version": 1,
+  "date": "2026-06-02",
+  "predecessor_record": "tst/publication/readiness/phase0_clean_candidate_freeze_successor_v2_2026-06-01.json",
+  "predecessor_sha256": "319d5aa520c4e07ff57796e5c883472fdac097b668836f7a0086f0e083f618e9",
+  "qualification_effect": "none_operational_clean_candidate_freeze_receipt_only_policy_promotion_pending",
+  "control_plane_version": "6dc456e5858b2cbdbd7ef80cbc324b748e2cce5075023b49f7115eab4e84dfdd",
+  "clean_candidate": {
+    "freeze_id": "0d1cabe6-a282-408b-953a-c2db8f0e1310",
+    "created_utc": "2026-06-02T04:40:25Z",
+    "manifest_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/clean_candidates/0d1cabe6-a282-408b-953a-c2db8f0e1310/clean_candidate_manifest.json",
+    "manifest_sha256": "ef527ed467995bd60fda07b5a3b09b56ea871595ace12fd64a948e246720dbe3",
+    "source_git_commit": "672818de70dcff51543a2fa76c88aa5af1a59a65",
+    "source_git_tree": "88f2c28d48e268f621302f970d59876c0598e4a1",
+    "source_archive_sha256": "463c47d6d22ec3693a6808f785ff629332f5e9b6f87d3f899e1556fced1cd486",
+    "source_commit_sha256": "10e72c85242558d5981be166602b6d8252b4ac7ccf45336c89e7f3f683659056",
+    "source_bundle_sha256": "584ea732ff0bd8b5e2adef63b916fd4bfe840bdba0b4b5cba0a4752a3a1f4443",
+    "prepared_artifact_inventory_sha256": "80dfa21b2f2be8a19c2f01906d79e8f289b13821b33dfca7ee06fc0ac12003a1",
+    "paper_deck_count": 110,
+    "publication_analyzer_count": 19,
+    "build_profile_id": "hip-mpi-release-paper-pic",
+    "build_profile_sha256": "a2b1ef2266a2b1097e4453d05f8838fcae67ecb819c759773210c04e22d0ad05",
+    "profile_receipt_sha256": "109b4c67f6f52e97bb6512fc5b1c36f3ac6dff0986ec2879b6337bd1ecc09152",
+    "executable_sha256": "0c249d339f5131a72b45ce244d84d26421fea08cab2493f0db1e3ff6cdf2c420"
+  },
+  "post_freeze_policy_fragment": {
+    "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/q011_section54_pressure_pilot_post_freeze_fragment_0d1cabe6.json",
+    "sha256": "92aa445b112c9f9e7a2f355696570466bd5aa1ef354ef2ac320dc2d800a44548",
+    "registered_science_slice_count": 4,
+    "status": "non_authorizing_review_fragment_only"
+  },
+  "local_validation": {
+    "installed_clean_candidate_bundle_validator": "pass",
+    "recursive_read_only_tree": "pass",
+    "manifest_rehash": "pass",
+    "expected_tree_entries": 21,
+    "unexpected_tree_entries": 0,
+    "independent_operational_review": "approve_frozen_candidate_package"
+  },
+  "policy_promotion": {
+    "status": "pending_queue_quiescence_live_preflight_and_operator_attestation",
+    "repo_policy_status": "launch_prohibited_same_controller_empty_allowlist_baseline",
+    "live_orion_policy_sha256": "1a331137c7d83717a890fa64046890074101f0fec3de7b8b22ca41b8bb644d28",
+    "live_project_home_policy_sha256": "1a331137c7d83717a890fa64046890074101f0fec3de7b8b22ca41b8bb644d28",
+    "live_orion_promotion_sha256": "e64db1ef1ca755e1fcf4ff86e078856e381ff31f6aab926f01658b7aa69cd73e",
+    "live_project_home_promotion_sha256": "e64db1ef1ca755e1fcf4ff86e078856e381ff31f6aab926f01658b7aa69cd73e",
+    "registered_science_slices": [],
+    "frontier_launch_authorization": "none"
+  },
+  "queue_quiescence_blocker": {
+    "status": "unrelated_user_job_running_do_not_cancel",
+    "job_id": "4754394",
+    "account": "ast207",
+    "partition": "batch",
+    "qos": "normal",
+    "job_name": "cgl_mks24_E03_forcing_policy_R02_s18_rankio_t7_t7p25",
+    "workdir": "/autofs/nccs-svm1_home2/dfielding/athenak-df",
+    "stdout": "/lustre/orion/ast207/proj-shared/dfielding/CGL/logs/slurm/cgl_mks24_E03_forcing_policy_R02_s18_rankio_t7_t7p25.4754394.log",
+    "scheduled_start": "2026-06-02T00:26:59-04:00",
+    "scheduled_end": "2026-06-02T01:31:59-04:00"
+  },
+  "scope_limits": [
+    "This successor receipt records the immutable repaired VL2/TSC double-precision HIP/MPI Release clean-candidate package only.",
+    "The active mirrored policy remains launch-prohibited with an empty registered-science allowlist pending queue quiescence, live preflight, a sealed operator attestation and an installed-control-plane four-slice policy promotion.",
+    "The post-freeze policy fragment is a non-authorizing review artifact and must not be treated as an active policy.",
+    "The unrelated running CGL allocation must not be cancelled or repurposed for PIC work.",
+    "This receipt does not authorize a registered-science attempt, qualify a physical claim or close external review."
+  ]
+}
