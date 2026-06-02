@@ -1,6 +1,6 @@
 # CGL-LF Phase I Production Handoff
 
-Checkpoint refreshed: `2026-06-02T23:16:24Z`
+Checkpoint refreshed: `2026-06-02T23:43:37Z`
 
 ## Read This First
 
@@ -14,12 +14,13 @@ protocol. This file records the newer operational boundary that had not yet
 been promoted into those longer historical records.
 
 Do not submit a new production job immediately. F-101 appeared canonical-only
-outside the retained-companion workflow. The next action is to commit, push,
-archive, and independently verify the retained companion, then use its
-explicit `adopt-legacy-canonical` action to attest the existing F-101 bytes
-without claiming observation of the original publication transition. Only
-after that adoption is verified and documented may helper hardening and the
-bounded `R02/s19_rankio_t7p25_t7p5` readiness packet proceed.
+outside the retained-companion workflow and has now been adopted exactly once
+with the retained companion's explicit `adopt-legacy-canonical` action. The
+adoption truthfully attests the present canonical bytes without claiming
+observation of the original publication transition. Do not rerun adoption.
+The next action is to commit, push, and archive this documentation checkpoint,
+then harden the retained Stage I helper before the bounded
+`R02/s19_rankio_t7p25_t7p5` readiness packet proceeds.
 
 ## Repository Boundary
 
@@ -29,13 +30,17 @@ Work in:
 /autofs/nccs-svm1_home2/dfielding/athenak-df
 ```
 
-The branch at this checkpoint is `feature/cgl-landau-fluid`. Its last
-committed documentation state before the retained utility transition was:
+The branch at this checkpoint is `feature/cgl-landau-fluid`. Its durable
+retained-utility checkpoint is:
 
 ```text
-ecf399b9097b9905d5b2fcfb8a6c80432f8f9da2
-Checkpoint CGL-LF Phase I handoff at R02 t7p25
+89ba4143c448c26fd8a66111d0409b4bcd3eea89
+Add retained Stage I recost lifecycle utility
 ```
+
+It is pushed and archived as
+`source-archives/athenak-feature-cgl-through-89ba4143c.bundle` with SHA-256
+`16f5b14610b47e1e3ca0f695bf9e5a94fba6d450e4dfe25357f0cde54fcbf597`.
 
 The shared production root is:
 
@@ -141,6 +146,41 @@ discovered. The original publication transition was not observed by the
 retained companion and must not be described retroactively as companion
 publication. Treat this as a legacy canonical-only adoption boundary.
 
+That legacy boundary has now been adopted exactly once under the retained
+companion. A fresh pre-mutation probe found an empty live user queue and a
+free root flock with profile `mode0644|links1|uid18664|regularTrue`. The
+retained companion then ran `adopt-legacy-canonical`, and a separate
+`verify-promoted-recost` invocation passed against the live root. The durable
+adoption audit is:
+
+```text
+accounting/mks24_stage_i_E03_forcing_policy_R02_t7p25_recost_evidence.json.publication_audit.json
+SHA-256 9bbfc6ee1007b0e17a4408444acb1bcdb2f59cbde9183569d506fe2606c1837d
+mode 0644, one link
+record_type legacy-canonical-adoption
+adopted_utc 2026-06-02T23:35:28+00:00
+transaction_id 2026-06-02T233522+0000-1b99386ad14d4eec84302c5005ea98f3
+original_publication_transition_observed false
+original_publication_method unknown
+original_publisher unknown
+```
+
+Its independent retained forensic copy is:
+
+```text
+accounting/mks24_stage_i_E03_forcing_policy_recost_forensics/
+  mks24_stage_i_E03_forcing_policy_R02_t7p25_recost_evidence.json/
+  2026-06-02T233522+0000-1b99386ad14d4eec84302c5005ea98f3.mks24_stage_i_E03_forcing_policy_R02_t7p25_recost_evidence.json.forensic
+SHA-256 df208829aec85c88fcc2caa757a21ad3ff3372aeb82628cbfe7bd41851faed9a
+mode 0444, one link
+```
+
+Post-adoption read-only inspection found
+`accounting/mks24_stage_i_E03_forcing_policy_recost_transactions` present
+and empty, the staged twin absent, the canonical artifact unchanged at mode
+`0644` and one link, the live user queue empty, and the root flock free with
+the strict profile above.
+
 The artifact has been independently audited against the retained
 generator, accepted ledger, `s18` evidence, and arithmetic. Its reviewed
 authorization recommendation is only:
@@ -157,7 +197,9 @@ one-segment threshold 2700 seconds
 The recost uses local `2340`, selected `2559`, projection
 `829.1011116666666`, and margin `70.89888833333339` node-hours. This is a
 recommendation inside retained evidence, not permission to prepare or submit
-`s19` before F-101 is adopted, verified, documented, committed, and archived.
+`s19` before this adoption checkpoint is committed and archived and the live
+Stage I helper is separately hardened, reviewed, committed, pushed, and
+archived.
 
 ## Interrupted Promotion Review
 
@@ -197,6 +239,12 @@ SHA-256 10156515c4bcbfdcf57a2fe54220c2a80f0477f1a7bddbde322b9433946615c2
 mode 0755, one link
 ```
 
+Those exact bytes were independently reviewed with no findings, committed as
+`89ba4143c448c26fd8a66111d0409b4bcd3eea89`, pushed, bundled as
+`source-archives/athenak-feature-cgl-through-89ba4143c.bundle`, verified, and
+cataloged. The bundle SHA-256 is
+`16f5b14610b47e1e3ca0f695bf9e5a94fba6d450e4dfe25357f0cde54fcbf597`.
+
 Its focused isolated fixture suite is:
 
 ```text
@@ -229,57 +277,43 @@ publication method and publisher. Its three durable phases are resumable.
 ## Fail-Closed Resume Checklist
 
 Resume sequentially. Shared-root mutations and queue submissions must not
-overlap with another agent.
+overlap with another agent. Steps 1 through 3 are closed at this checkpoint;
+do not rerun adoption.
 
-1. Confirm the repository branch and read this handoff plus the three guiding
-   documents.
-2. Confirm that the user queue is empty with `squeue -u "$USER"`.
-3. Confirm the recost namespace contains only the canonical F-101 file above,
-   with the expected checksum, mode, and one link. Confirm the staged path,
-   publication audit, and hidden twins are absent.
-4. Confirm
-   `accounting/mks24_stage_i_E03_forcing_policy_transactions` is empty and
-   the canonical lock is available.
-5. Run authenticated hardened reconciliation:
-
-   ```bash
-   scripts/frontier/cgl_lf_stage_i.py \
-     --root /lustre/orion/ast207/proj-shared/dfielding/CGL reconcile
-   ```
-
-   Require `19/19/19`, no active reservation, no transaction, and
-   `issues = []`.
-6. Commit, push, archive, and independently verify the retained
-   `scripts/frontier/cgl_lf_stage_i_checkpoint.py` companion above before
-   canonical use. Preserve its exact checksum and executable mode.
-7. Repeat live queue, transaction, namespace, and lock checks, and require a
-   fresh free-lock boundary.
-8. Use the retained companion's explicit `adopt-legacy-canonical` action to
-   attest F-101 exactly once without claiming observation of its original
-   publication transition. Then use `verify-promoted-recost` to require the
-   adoption audit, canonical
-   SHA-256
-   `df208829aec85c88fcc2caa757a21ad3ff3372aeb82628cbfe7bd41851faed9a`,
-   mode `0644`, one link, retained mode-`0444` forensic copy, empty queue,
-   empty transaction directory, and clean hardened reconciliation.
-9. Update the three guiding documents with the accepted `s18`/F-101 record,
-   commit documentation only, create and catalog a complete-history source
-   bundle, and independently audit the archive.
-10. Before any `s19` lifecycle mutation, harden the retained Stage I helper's
-    canonical flock opening to the companion's `O_NOFOLLOW`, regular-file,
-    mode-`0644`, one-link profile in a separate reviewed, committed, pushed,
-    and archived transition. F-101 binds the current helper SHA-256, so this
-    helper transition must occur after F-101 adoption rather than before it.
-11. Prepare and independently audit the bounded `s19` readiness packet. Only
-    then run `check-submit` and `submit`, preserving explicit acknowledgement
-    of the reviewed stale shared-root campaign
-    `beta25-accel05-gamma10001-purecgl-256`. Never mutate that stale campaign.
+1. Closed: commit, push, independently review, archive, catalog, and use the
+   retained `scripts/frontier/cgl_lf_stage_i_checkpoint.py` companion.
+2. Closed: adopt F-101 exactly once with `adopt-legacy-canonical` at a fresh
+   free-lock and empty-queue boundary, without claiming observation of the
+   original publication transition.
+3. Closed: invoke `verify-promoted-recost` separately and inspect the exact
+   audit, canonical artifact, retained mode-`0444` forensic copy, empty recost
+   transaction directory, empty queue, and free strict root lock recorded
+   above.
+4. Commit and push this documentation-only post-adoption checkpoint, create
+   and catalog a complete-history source bundle, verify the full checksum
+   ledger, and independently audit the archive.
+5. Before any `s19` lifecycle mutation, harden the retained Stage I helper's
+   canonical flock opening to the companion's `O_NOFOLLOW`, regular-file,
+   owner, mode-`0644`, one-link profile and harden its canonical queue path in
+   a separate reviewed, committed, pushed, and archived transition. F-101
+   binds the prior helper SHA-256, so this helper transition must remain
+   after F-101 adoption rather than before it.
+6. Require a fresh empty queue and free root-lock boundary before each
+   production mutation. Run authenticated hardened reconciliation and
+   require `19/19/19`, no active reservation, no Stage I transaction, and
+   `issues = []` before preparing `s19`.
+7. Prepare and independently audit the bounded `s19` readiness packet. Only
+   then run `check-submit` and `submit`, preserving explicit acknowledgement
+   of the reviewed stale shared-root campaign
+   `beta25-accel05-gamma10001-purecgl-256`. Never mutate that stale campaign.
 
 ## Overall Phase I Status
 
 The corrected forcing-policy epoch is qualified. `R02` is accepted from
-fresh `t = 0` through exact `t = 7.25`. F-101 legacy adoption is the immediate
-blocker. After it closes, finish `R02` through exact `t = 10`, then execute
-`R03` through `R16` sequentially and `R17` last under the existing protocol.
-Stage II and manuscript-result claims remain out of scope until Phase I
-production and analysis gates are complete.
+fresh `t = 0` through exact `t = 7.25`. Retained companion implementation,
+review, archival, first production use, and F-101 legacy adoption are
+complete. The immediate blocker is the separate Stage I helper hardening
+checkpoint before `s19`. After that closes, finish `R02` through exact
+`t = 10`, then execute `R03` through `R16` sequentially and `R17` last under
+the existing protocol. Stage II and manuscript-result claims remain out of
+scope until Phase I production and analysis gates are complete.

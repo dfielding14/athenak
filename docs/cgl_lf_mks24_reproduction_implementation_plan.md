@@ -7,14 +7,19 @@ boundary. Accepted corrected-E03 `R02/s18_rankio_t7_t7p25` job `4754394`
 reached exact `t = 7.25`. Its independently reviewed F-101 recost artifact
 appeared canonical-only outside the retained-companion workflow with the
 exact reviewed SHA-256, staged name absent, and no companion audit or
-forensic copy. Explicit legacy adoption, verification, documentation, and
-source archival remain required before any `s19` preparation. A retained
-fail-closed publication and adoption companion now exists at
+forensic copy. A retained fail-closed publication and adoption companion now
+exists at
 `scripts/frontier/cgl_lf_stage_i_checkpoint.py` with SHA-256
 `10156515c4bcbfdcf57a2fe54220c2a80f0477f1a7bddbde322b9433946615c2`;
-its isolated fixture suite passes (`67 passed`). Commit, push, archive, and
-independently verify those exact bytes before canonical use at a fresh
-free-lock boundary. After F-101 adoption and before any `s19` lifecycle
+its isolated fixture suite passes (`67 passed`). Reviewed commit
+`89ba4143c448c26fd8a66111d0409b4bcd3eea89` and verified source bundle
+`athenak-feature-cgl-through-89ba4143c.bundle` with SHA-256
+`16f5b14610b47e1e3ca0f695bf9e5a94fba6d450e4dfe25357f0cde54fcbf597`
+preserve those exact bytes.
+At a fresh free-lock and empty-queue boundary, that retained companion
+adopted and separately verified F-101 as a present-time legacy canonical
+artifact without claiming observation of its original publication
+transition. Before any `s19` lifecycle
 mutation, harden the retained Stage I helper to the companion's strict
 canonical-lock opening profile in a separate reviewed, committed, pushed,
 and archived transition; F-101 itself binds the current helper SHA-256.
