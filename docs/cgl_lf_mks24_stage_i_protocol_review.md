@@ -71,6 +71,10 @@ Authenticated `R02/s15_rankio_t6p25_t6p5` job `4752118` is formally and
 independently inspected and recorded `accepted` through exact `t = 6.5` for
 `0.653611` node-hours, bringing corrected E03 Stage I use to `14.818890`
 node-hours.
+Authenticated `R02/s16_rankio_t6p5_t6p75` job `4753294` is formally and
+independently inspected and recorded `accepted` through exact `t = 6.75` for
+`0.647222` displayed node-hours, bringing corrected E03 Stage I use to
+`15.466112` displayed node-hours.
 
 The `900.000000` node-hour `E02` value is an authorized measurement-based
 projected envelope, not a fully measured matrix cost. It no longer authorizes
@@ -206,6 +210,8 @@ Authenticated job `4748138` now extends that accepted lineage through exact
 `t = 6.25`.
 Authenticated job `4752118` now extends that accepted lineage through exact
 `t = 6.5`.
+Authenticated job `4753294` now extends that accepted lineage through exact
+`t = 6.75`.
 The manuscript also still needs
 compact derivation prose. That prose must:
 
@@ -503,15 +509,66 @@ envelope, leaving `70.898888` node-hours of margin. The accepted `2353`-second
 interval leaves `347` seconds beneath its reviewed threshold, and the reviewed
 `s16` estimator selects `2559 <= 2700` seconds. Hardened reconciliation closes
 with `16/16/16` ledger rows/manifests/reservations, no active reservation, and
-no transaction. Archive and catalog the current committed controller state,
-reconcile, then prepare only `R02/s16_rankio_t6p5_t6p75` on one node from the
-authenticated `s15` terminal siblings with Slurm walltime `01:05:00`, Athena
-timeout `00:55:00`, and a `2700`-second threshold retaining `600` seconds on
-both timeout margins. The threshold is scoped only to `s16` and cannot ratchet
-automatically. Any scientific, provenance, scheduler, storage, budget, or
-reconciliation failure blocks successor preparation. Inspect, account,
-reconcile, and recost before any further extension. Finish R02, execute
-R03--R16 sequentially, and complete `R17` last.
+no transaction. At that boundary, the historical next action was to archive
+and catalog the committed controller state, reconcile, then prepare only
+`R02/s16_rankio_t6p5_t6p75` on one node from the authenticated `s15` terminal
+siblings with Slurm walltime `01:05:00`, Athena timeout `00:55:00`, and a
+`2700`-second threshold retaining `600` seconds on both timeout margins. The
+threshold was scoped only to `s16` and could not ratchet automatically. Any
+scientific, provenance, scheduler, storage, budget, or reconciliation failure
+blocks successor preparation. Inspect, account, reconcile, and recost before
+any further extension. Finish R02, execute R03--R16 sequentially, and complete
+`R17` last.
+Authenticated `R02/s16_rankio_t6p5_t6p75` job `4753294` is now accepted
+through exact `t = 6.75` for `0.647222` displayed node-hours. Its exact
+scheduler row is
+`4753294|cgl_mks24_E03_forcing_policy_R02_s16_rankio_t6p5_t6p75|COMPLETED|0:0|1|2330|2026-06-01T20:40:10|2026-06-01T21:19:07`;
+retained scheduler evidence SHA-256 is
+`11b3d7bbae54e4c51fa7548134ae0e7e837fe8b624af698a2e32f30c9cd82fc9`.
+Its previously audited, non-retained submitted-state manifest SHA-256 is
+`10c469c424159ecc3ca283a2c951aa2c3456d9b7fbd01841926ee55b973c42f0`;
+formal inspection SHA-256 is
+`1149de945447eae3b274052985363c1c821720a117254662657e33d8b21467de`;
+recorded manifest SHA-256 is
+`a87787fdaf4a0a8491bdf42e834fba7399f084ffef1cd9ff5e9c4aae84037089`;
+retained independent validation SHA-256 is
+`4889d08083004d3d89f6cc8beede3521ce7f8143983c7b4bb233209d59844b05`.
+Its sampled-history forcing-work relative residual is
+`6.437727059090897e-12`; accepted-prefix residual is
+`3.1385227986388927e-12`; strict LF failure counters remain zero; terminal
+`lf_hwproj = 259077916291`; one complete eight-rank snapshot group and
+terminal eight-rank restart siblings are retained. The accepted prefix totals
+`55678` seconds (`15.466111111111111` exact and `15.466112` displayed
+node-hours). Retained quarter validator SHA-256 is
+`0ec3004247f62e2266939c94ef07cdb94513d6e8edc2ceddcf0504e3ac812789`;
+retained one-use recost generator SHA-256 is
+`e9991ec75559113fb0da5b5fae5d117f7fe6701160316237227169dde04d05af`;
+reviewed one-shot recost promoter SHA-256 is
+`08fae00aa1cc365cb39d0b935f059a732955465eb26977e7fd459791ae762883`.
+Job `4753294` used source launch bundle
+`athenak-feature-cgl-through-6c0739806.bundle` with SHA-256
+`a837ebe60d62a922dde3fc3ddd87350eec8a9e3f439f671f783346ee6290617f`.
+Retained corrected recost evidence JSON SHA-256 is
+`5b997623a3f8d83c200034f42e0c9f1b9a09c811bcb46e2fc1a0f7c1eb58815e`;
+it projects at most `829.1011116666666` exact (`829.101112` displayed) matrix
+node-hours inside the `900.000000` envelope, leaving `70.89888833333339`
+exact (`70.898888` displayed) node-hours of margin. The accepted `2330`-second
+interval leaves `370` seconds beneath its reviewed threshold. With prior
+selected `2559`, previous observed `2353`, observed `2330`, and local `2330`,
+the reviewed `s17` estimator selects `2559 <= 2700` seconds. Hardened
+reconciliation closes with `17/17/17` ledger rows/manifests/reservations, no
+active reservation, no transaction, and `issues = []`. Commit the post-F-099
+documentation state, archive and catalog its resulting actual controller
+bundle and SHA-256, rerun reconciliation, repeat the queue/shared-root audit
+with explicit acknowledgement of the stale beta-25 record, then prepare only
+`R02/s17_rankio_t6p75_t7` on one node from the authenticated `s16` terminal
+siblings with Slurm walltime `01:05:00`, Athena timeout `00:55:00`, and a
+`2700`-second threshold retaining `600` seconds on both timeout margins. The
+threshold is scoped only to `s17` and cannot ratchet automatically. Any
+scientific, provenance, scheduler, storage, budget, or reconciliation failure
+blocks successor preparation. Inspect, account, reconcile, and recost before
+any further extension. Finish R02, execute R03--R16 sequentially, and complete
+`R17` last.
 
 The first R02 preflight exposed a nonblocking preview-rendering defect:
 `check-submit` enforced the reviewed shared-root acknowledgement but omitted it
@@ -544,8 +601,13 @@ Authenticated continuation `4747500` now reaches exact `t = 5.75`.
 Authenticated continuation `4747834` now reaches exact `t = 6.0`.
 Authenticated continuation `4748138` now reaches exact `t = 6.25`.
 Authenticated continuation `4752118` now reaches exact `t = 6.5`.
-Use only job `4752118`'s
-authenticated terminal checkpoint for the next bounded R02 continuation.
+Authenticated continuation `4753294` now reaches exact `t = 6.75`.
+After the post-F-099 documentation state is committed, its resulting actual
+controller bundle and SHA-256 are archived and cataloged, reconciliation is
+rerun, and the queue/shared-root audit repeats explicit acknowledgement of the
+stale beta-25 record, use only job `4753294`'s authenticated terminal
+checkpoint for the next bounded R02 continuation
+`R02/s17_rankio_t6p75_t7`.
 Commits `9480e62764528a3f40066d22a192f0e99b369891`
 and `ef1e42fa088203ac9ef6ec8e47e668db4fb95a3c` additionally require the live
 helper to remain committed during historical authentication, reserve the

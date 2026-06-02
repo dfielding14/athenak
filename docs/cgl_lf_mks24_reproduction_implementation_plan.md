@@ -307,14 +307,30 @@ and did not ratchet automatically. Any scientific, provenance, scheduler,
 storage, budget, or reconciliation failure blocks successor preparation.
 Authenticated `R02/s15_rankio_t6p25_t6p5` job `4752118` is formally and
 independently inspected and recorded `accepted` through exact `t = 6.5` for
-`0.653611` node-hours. Corrected E03 Stage I use is now `14.818890`
+`0.653611` node-hours. Corrected E03 Stage I use was then `14.818890`
 node-hours. Retained recost evidence SHA-256
 `3603077400bd4530001155b83bfc4ac1053ec18505c56a6c29ffadc795bd1255`
-authorizes only `R02/s16_rankio_t6p5_t6p75` on one node from the authenticated
+historically authorized only `R02/s16_rankio_t6p5_t6p75` on one node from the authenticated
 `s15` terminal siblings, with Slurm walltime `01:05:00`, Athena timeout
 `00:55:00`, and a reviewed one-segment `2700`-second threshold retaining `600`
-seconds on both timeout margins. The threshold is scoped only to `s16` and
-does not ratchet automatically. Any scientific, provenance, scheduler,
+seconds on both timeout margins. The threshold was scoped only to `s16` and
+did not ratchet automatically. Any scientific, provenance, scheduler,
+storage, budget, or reconciliation failure blocks successor preparation.
+Authenticated `R02/s16_rankio_t6p5_t6p75` job `4753294` is formally and
+independently inspected and recorded `accepted` through exact `t = 6.75` for
+`0.647222` node-hours. Corrected E03 Stage I use is now `15.466112`
+displayed node-hours (`55678 / 3600 = 15.466111111111111` exact node-hours).
+Retained recost evidence SHA-256
+`5b997623a3f8d83c200034f42e0c9f1b9a09c811bcb46e2fc1a0f7c1eb58815e`
+narrowly authorizes only `R02/s17_rankio_t6p75_t7` on one node from the
+authenticated `s16` terminal siblings after these documentation bytes are
+committed, the resulting actual post-F-099 source bundle is archived and
+cataloged with its SHA-256, hardened reconciliation is rerun, and the
+queue/shared-root audit repeats the explicit stale-root acknowledgement. Use
+Slurm walltime `01:05:00`, Athena timeout `00:55:00`, and a reviewed one-segment
+`2700`-second threshold retaining `600` seconds on both timeout margins. The
+threshold is scoped only to `s17` and does not ratchet automatically. Any
+scientific, provenance, scheduler,
 storage, budget, or reconciliation failure blocks successor preparation.
 
 ## Read This First
@@ -449,12 +465,12 @@ test or run evidence.
 | Safety diagnostic truthfulness | Strict tests independent of backup correction | Yes | Implemented 2026-05-24; focused CPU test passed, broader gates pending |
 | CPU numerical accuracy | Convergence, asymptotic, cap, directional, restart, MPI/AMR checks | Yes | Partial 2026-05-30; archived `accuracy-v2` bundle covers N-001 through N-007 locally, the AMR workflow passed, and the pre-replacement full CPU suite passed (`218 passed, 15 skipped`). The focused post-merge serial CGL gate passed (`39 passed`) with F-056 layout-independent cap-fraction coverage, fixed-grid/AMR modal-driver restart identity, and CGL-LF interaction regressions. Scheduled one-node MPI CPU job `4743666` passed both current one-rank/four-rank decomposition regressions (`2 passed`). Production/statistical comparison gates remain open. |
 | Frontier GPU numerical equivalence | CPU/GPU comparison suite, MPI/GPU restart checks, strict diagnostics | Yes for Frontier use | Corrected-build reduced qualification closed 2026-05-30 for revision `9e07542281e4e6d125582f253df3ad2e3b8b154d`. E03 `g024`--`g031` qualify explicit planar/random policies, post-refresh modal restart identity, one-rank/eight-rank decomposition identity, passive semantics, reduced nonlinear hard-wall behavior, and standard-layout ranked startup/sizing. Long-time production statistics remain open. |
-| Paper pgen and forcing fidelity | Input/pgen review, forcing metadata, restartable reduced smoke | Yes for MKS24 claims | Corrected-build reduced qualification closed 2026-05-30. F-076 remains the historical E02 stop line. F-077 adds explicit restart-retained `mks24_random_unprojected` and `mks24_alfvenic_perpendicular` policies plus explicit paper-deck `spectrum = power_law`; E03 `g024`/`g025` directly qualify the force-family contracts and `g026`/`g027` qualify modal restart identity across an OU refresh. Fresh canonical production began from E03 `t = 0`; accepted R02 jobs `4745922`, `4746154`, `4746182`, `4746356`, `4746435`, `4746663`, `4746773`, `4746953`, `4747015`, `4747087`, `4747146`, `4747202`, `4747500`, `4747834`, `4748138`, and `4752118` now reach exact `t = 6.5`. |
+| Paper pgen and forcing fidelity | Input/pgen review, forcing metadata, restartable reduced smoke | Yes for MKS24 claims | Corrected-build reduced qualification closed 2026-05-30. F-076 remains the historical E02 stop line. F-077 adds explicit restart-retained `mks24_random_unprojected` and `mks24_alfvenic_perpendicular` policies plus explicit paper-deck `spectrum = power_law`; E03 `g024`/`g025` directly qualify the force-family contracts and `g026`/`g027` qualify modal restart identity across an OU refresh. Fresh canonical production began from E03 `t = 0`; accepted R02 jobs `4745922`, `4746154`, `4746182`, `4746356`, `4746435`, `4746663`, `4746773`, `4746953`, `4747015`, `4747087`, `4747146`, `4747202`, `4747500`, `4747834`, `4748138`, `4752118`, and `4753294` now reach exact `t = 6.75`. |
 | Paper observables and analysis | Synthetic analysis tests and archived reduced-run products | Yes for MKS24 claims | Partial 2026-05-25; reduced histories, restartable RK-integrated applied forcing work/global active residual, RKL2-applied heat-flux contractions with fine-side AMR ownership, AMR-corrected RK-applied total/anisotropic CGL pressure-work ledgers, operator-face cap counters, windowed snapshot PDF/spectral/transfer/alignment/local-strain products, Figure 2(a)-coordinate joint pressure-density PDFs and admitted checksum-qualified sampled surfaces, Figure 3 compressive-flow spectra, Figure 4(b) normalized-density spectra, Figure 6(a) thermal/magnetic-pressure spectra, MKS24-normalized transfer and alignment-peak curve comparisons, opt-in local-field eddy-anisotropy structure functions, deduplicated threshold-volume history curves, manifest-qualified proxies and cadence-limited estimates, generic figures, checksum/uncertainty-qualified reference-data comparison plumbing, Figure 2(b) histories, Figure 4(a) normalized-density PDFs, Figure 5(b) normalized eddy scales, Figure 7 lower-panel transfer ratios, Figure 8 selected-shell alignment PDFs, Figure 9, Figure 11 lower-panel, and Figure 12 alignment curves, and Figure 13(b),(d) dimensionless curves are implemented; guarded Figure 3 case definitions are present under `paper-compressive`; dimensional/unmatched-panel conversion, standard-run comparison, and remaining panel references remain open |
-| Standard MKS24 results | Required cases, durations, manifests, figure comparisons | Yes for reproduction claim | Only the admissible fresh E03 R02 prefix has run through exact `t = 6.5`; no corrected-epoch case is complete and long-time mapped results remain not run. The frozen sixteen-case mapped Stage I manifest remains the target matrix. Preserve E02 jobs `4743735` through `4744158` only as pipeline and cost evidence. |
-| Operational workflow | Frontier scripts, budget ledger, failure recovery, storage plan | Yes for Frontier use | Corrected E03 entry gate passed. The debug-helper ledger records `1.847784` node-hours after `g031`; corrected E03 qualification accounts for `0.485834`. E02 records `15.628610` historical pipeline/cost node-hours and remains fail closed. Token SHA-256 `e3fec9f35da42121b902f41ef752021f375aab38bc34c5ff75ae8780bfbca635` is retained. Fresh E03 R02 jobs `4745922`, `4746154`, `4746182`, `4746356`, `4746435`, `4746663`, `4746773`, `4746953`, `4747015`, `4747087`, `4747146`, `4747202`, `4747500`, `4747834`, `4748138`, and `4752118` were formally inspected and recorded `accepted` through exact `t = 6.5` for `14.818890` cumulative node-hours. F-083/F-084 hardening is promoted at canonical revision `9689c269bf329542815a1b2b137881126964b05c`; hardened reconciliation passed with `16/16/16` ledger rows/manifests/reservations, no active reservation, and no transaction. |
+| Standard MKS24 results | Required cases, durations, manifests, figure comparisons | Yes for reproduction claim | Only the admissible fresh E03 R02 prefix has run through exact `t = 6.75`; no corrected-epoch case is complete and long-time mapped results remain not run. The frozen sixteen-case mapped Stage I manifest remains the target matrix. Preserve E02 jobs `4743735` through `4744158` only as pipeline and cost evidence. |
+| Operational workflow | Frontier scripts, budget ledger, failure recovery, storage plan | Yes for Frontier use | Corrected E03 entry gate passed. The debug-helper ledger records `1.847784` node-hours after `g031`; corrected E03 qualification accounts for `0.485834`. E02 records `15.628610` historical pipeline/cost node-hours and remains fail closed. Token SHA-256 `e3fec9f35da42121b902f41ef752021f375aab38bc34c5ff75ae8780bfbca635` is retained. Fresh E03 R02 jobs `4745922`, `4746154`, `4746182`, `4746356`, `4746435`, `4746663`, `4746773`, `4746953`, `4747015`, `4747087`, `4747146`, `4747202`, `4747500`, `4747834`, `4748138`, `4752118`, and `4753294` were formally inspected and recorded `accepted` through exact `t = 6.75` for `15.466112` displayed cumulative node-hours. F-083/F-084 hardening is promoted at canonical revision `9689c269bf329542815a1b2b137881126964b05c`; hardened reconciliation passed with `17/17/17` ledger rows/manifests/reservations, no active reservation, no transaction, and no issue. |
 | User documentation | Sphinx build and accurately scoped runbook | Yes | Implemented for current functionality 2026-05-25; Sphinx warnings-as-errors and repository style suite pass in an isolated validation environment; future campaign results must still be documented when executed |
-| Performance suitability | Representative timing/memory/I/O evidence; no uninvestigated prohibitive bottleneck | Yes for production use | Partial 2026-06-01. E03 `g030b` reaches reduced nonlinear `t = 2.0` in `1516` allocated seconds with fourteen MPI-I/O records. E03 `g031` launches the exact `192 x 192 x 384` ranked layout, fits one node, and reaches startup-only `t = 0.01` in `77` seconds while retaining `509685800` terminal snapshot bytes and `1381369688` terminal checkpoint bytes. E03 R02 quarter-unit continuation job `4752118` measures `2.614444` node-hours per simulated time unit across `t = 6.25`--`6.5`; retained corrected recost evidence projects at most `829.101112` matrix node-hours. The clean `2353`-second segment leaves `347` seconds below its reviewed `s15` threshold, and the conservative `s16` estimator selects `2559 <= 2700` seconds. Independent review authorizes only `R02/s16_rankio_t6p5_t6p75` on one node from authenticated `s15` terminal siblings with Slurm walltime `01:05:00`, Athena timeout `00:55:00`, and a one-segment `2700`-second ceiling retaining `600` seconds on both timeout margins. It does not ratchet automatically. Any scientific, provenance, scheduler, storage, budget, or reconciliation failure blocks successor preparation. Archive and catalog the current committed controller state, reconcile, prepare only `R02/s16_rankio_t6p5_t6p75` on one node from authenticated `s15` terminal siblings under the full post-s15 profile, then inspect, account, reconcile, and recost. |
+| Performance suitability | Representative timing/memory/I/O evidence; no uninvestigated prohibitive bottleneck | Yes for production use | Partial 2026-06-01. E03 `g030b` reaches reduced nonlinear `t = 2.0` in `1516` allocated seconds with fourteen MPI-I/O records. E03 `g031` launches the exact `192 x 192 x 384` ranked layout, fits one node, and reaches startup-only `t = 0.01` in `77` seconds while retaining `509685800` terminal snapshot bytes and `1381369688` terminal checkpoint bytes. E03 R02 quarter-unit continuation job `4753294` measures `2.588889` node-hours per simulated time unit across `t = 6.5`--`6.75`; retained corrected recost evidence projects at most `829.101112` matrix node-hours. The clean `2330`-second segment leaves `370` seconds below its reviewed `s16` threshold, and the conservative `s17` estimator selects `2559 <= 2700` seconds. Independent review narrowly authorizes only `R02/s17_rankio_t6p75_t7` on one node from authenticated `s16` terminal siblings with Slurm walltime `01:05:00`, Athena timeout `00:55:00`, and a one-segment `2700`-second ceiling retaining `600` seconds on both timeout margins. It does not ratchet automatically. Any scientific, provenance, scheduler, storage, budget, or reconciliation failure blocks successor preparation. Before preparation, commit the post-F-099 documentation state, archive and catalog its actual controller bundle and SHA-256, rerun reconciliation, and repeat the queue/shared-root audit with explicit acknowledgement of the stale beta-25 record. |
 
 The final readiness report must distinguish:
 
@@ -479,7 +495,7 @@ while preserving all historical usage records.
 | --- | --- | --- | --- |
 | Local operator and reduced-workflow implementation | Supported for the exercised replacement-driver scope; production comparison still required | Full CPU suite (`218 passed, 15 skipped`), retained historical focused suites and bundles, F-018 through F-026 regression evidence, F-033 local exact-state hard-wall evidence, current focused serial CGL gate (`39 passed`), and scheduled current MPI CPU job `4743666` (`2 passed`); the retained current gate covers modal restart, CGL-LF turbulence-driving AMR interaction, and F-056 layout-fraction accounting | Complete production/statistical comparison gates |
 | Validated on Frontier GPU hardware | Supported for corrected reduced E03 qualification through standard-layout ranked startup/sizing | Immutable corrected revision `9e07542281e4e6d125582f253df3ad2e3b8b154d` and executable SHA-256 `68f243f9204df388b24365ae65a567f6f567dbe422a6d7a43b9fb4a499ef118c`; retained E03 `g024`--`g031` explicit-policy, restart, decomposition, passive, nonlinear-hard-wall, and sizing evidence; archived earlier GPU records remain historical context | Long-time corrected mapped production runtime and statistical qualification remain open; G012 remains the retained failure of the superseded finite-rate hard-wall interpretation |
-| Production ready for supported CGL-LF use | Not established | Corrected E03 debug qualification, retained token, token-gated accounting tooling, committed epoch isolation and shared-root controls, immutable corrected build archival, retained focused serial/MPI CPU gates, historical E02 pipeline/cost evidence, accepted fresh E03 R02 jobs `4745922`, `4746154`, `4746182`, `4746356`, `4746435`, `4746663`, `4746773`, `4746953`, `4747015`, `4747087`, `4747146`, `4747202`, `4747500`, `4747834`, `4748138`, and `4752118` through exact `t = 6.5`, and archived F-079--F-098 controller provenance plus hardened clean reconciliation exist | Archive and catalog the current committed controller state, reconcile, prepare only the authenticated R02 continuation from authenticated `s15` terminal siblings through `t = 6.75` under the reviewed non-ratcheting `s16` quarter profile, inspect, account, reconcile, and recost; any scientific, provenance, scheduler, storage, budget, or reconciliation failure blocks successor preparation; then execute representative mapped production and complete production/statistical qualification |
+| Production ready for supported CGL-LF use | Not established | Corrected E03 debug qualification, retained token, token-gated accounting tooling, committed epoch isolation and shared-root controls, immutable corrected build archival, retained focused serial/MPI CPU gates, historical E02 pipeline/cost evidence, accepted fresh E03 R02 jobs `4745922`, `4746154`, `4746182`, `4746356`, `4746435`, `4746663`, `4746773`, `4746953`, `4747015`, `4747087`, `4747146`, `4747202`, `4747500`, `4747834`, `4748138`, `4752118`, and `4753294` through exact `t = 6.75`, and archived F-079--F-099 controller provenance plus hardened clean reconciliation exist | Commit the post-F-099 documentation state, archive and catalog its actual controller bundle and SHA-256, rerun reconciliation, repeat the queue/shared-root audit with explicit acknowledgement of the stale beta-25 record, then prepare only the authenticated R02 continuation from authenticated `s16` terminal siblings through `t = 7.0` under the reviewed non-ratcheting `s17` quarter profile; any scientific, provenance, scheduler, storage, budget, or reconciliation failure blocks successor preparation; then execute representative mapped production and complete production/statistical qualification |
 | MKS24 reproduction complete | Not established | Guarded standard/limiter/heat-flux/compressive/scale-separation input matrices and paper analysis products including Figure 2(a)-coordinate joint PDFs with source-qualified sampled-surface references, Figure 3/4(b)/6(a) spectral fields, checksum/uncertainty-qualified reference-data comparison interface, populated Figure 2(b) histories, Figure 4(a) normalized-density PDFs, Figure 5(b) normalized eddy-scale curves, dimensionless Figure 7 transfer ratios, Figure 8 selected-shell alignment PDFs, Figure 9, Figure 11 lower-panel, and Figure 12 alignment curves, and Figure 13(b),(d) curves exist. E02 R16 pipeline analysis is retained but is not direct reproduction evidence. | Execute the frozen mapped Stage I matrix from fresh E03 `t = 0`; resolve remaining dimensional or unmatched spectral transforms; complete quantitative panel comparisons and archived scientific interpretation |
 
 The final audit specifically rejects two tempting overclaims:
@@ -647,6 +663,11 @@ Maintain a tracked findings register in this document or in a linked
 follow-up Markdown file once implementation begins. It must use a stable
 table such as:
 
+Rows are chronological retained records. Earlier plan-change and status cells
+are historical evidence, not live preparation authorization. For corrected E03,
+only the newest F-099 row together with the current handoff sections governs
+successor preparation.
+
 | ID | Date | Phase/run | Finding | Evidence path | Severity | Plan change | Regression added | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | F-001 | 2026-05-24 | Phase A | Collision updates covered two full timesteps per LF cycle | `src/mhd/mhd_sts.cpp`, `inputs/tests/cgl_lf_collision_relaxation.athinput`, focused CPU run | Blocker | Pass `dt_sweep = dt/2` to each LF collision call | `test_cgl_lf_background_collision_advances_one_physical_timestep` | Implemented; focused CPU passed |
@@ -747,11 +768,17 @@ table such as:
 | F-096 | 2026-05-31 | Fresh corrected E03 R02 quarter-unit continuation through exact `t = 6.0`, hardened retained recost generator, and reviewed bounded quarter continuation | F-095 authorized only one quarter-unit continuation under the reviewed `2700`-second threshold scoped to `s13`. The accepted clean interval remains inside that threshold, but later quarter units still require explicit recosting and cannot ratchet automatically. | accepted `R02/s13_rankio_t5p75_t6`; job `4747834`; source bundle `athenak-feature-cgl-through-b7d1828cf.bundle` SHA-256 `e8d83fe47a3c72365dbbefbed8eceb10a326e85926f2033158a6fd7a0e4c3203`; record-time inspection SHA-256 `91cf8bbd7f9e1592ae987f92bd296a5d2c66e7fcc941ddecd6c05b3e046c9b29`; recorded manifest SHA-256 `88fb3d27f649cc0f76f7b4540b47e963d21d01d658018d40ed04455f6c46df9a`; retained independent validation SHA-256 `fdc05bac65e860a1ac5dc3c6f5a9b8f045b54a9fd421c6ef8030fc902008a448`; retained quarter validator SHA-256 `0ec3004247f62e2266939c94ef07cdb94513d6e8edc2ceddcf0504e3ac812789`; retained one-use recost generator SHA-256 `8a2168aa1e2b71d83ff21be1ccffaf2dfd7e70d9fcc6f0d7ad31cbe3ab873087`; retained scheduler evidence SHA-256 `8f78d5d926db835c9f19fb93b5c4dd2402406f3e3dd61e0628523bf1501449b4`; retained corrected R02 recost evidence JSON SHA-256 `4bc19f5b44587e73869982425b1cf0ad459547c3e0c5de1ab1b2b5cb366c6322` | High | Continue from authenticated E03 `t = 5.75` restart siblings through exact `t = 6.0`; require formal and retained independent quarter inspection, exactly one eight-rank snapshot group, complete terminal restart siblings, zero strict LF failure counters, finite synchronized histories, forcing-work closure, accounting, reconciliation, staged recost review, and byte-preserving promotion. Retain utility bytes durably before use. | Job `4747834` reaches exact `t = 6.0` in `2159` seconds (`0.599722` node-hours). Strict LF failure counters remain zero; terminal `lf_hwproj = 239804982453`; one eight-rank snapshot group and terminal eight-rank restart siblings are retained; sampled-history forcing-work relative residual is `5.579303003548508e-12`; accepted-prefix residual is `2.628016637567e-12`; reconciliation closes with `14/14/14` ledger rows/manifests/reservations, no active reservation, and no transaction. The quarter-unit rate is `2.398889` node-hours per simulated unit. Authorization-facing projection is `814.945556` matrix node-hours with `85.054444` margin. The reviewed estimator selects `2468 <= 2700` seconds for `s14`. Carver, Linnaeus, Godel, Kierkegaard, and Newton independently reviewed the retained toolchain, staged evidence, or byte-preserving promotion. | Archive and catalog the current committed controller state, reconcile, then prepare only `R02/s14_rankio_t6_t6p25` on one node from authenticated `s13` terminal siblings with Slurm walltime `01:05:00`, Athena timeout `00:55:00`, and a reviewed one-segment `2700`-second threshold retaining `600` seconds on both timeout margins. Do not ratchet automatically. Any scientific, provenance, scheduler, storage, budget, or reconciliation failure blocks successor preparation. Inspect, account, reconcile, and recost before any further extension. Keep R17 last. |
 | F-097 | 2026-05-31 | Fresh corrected E03 R02 quarter-unit continuation through exact `t = 6.25`, retained hardened recost generator, and reviewed bounded quarter continuation | F-096 authorized only one quarter-unit continuation under the reviewed `2700`-second threshold scoped to `s14`. The accepted clean interval remains inside that threshold, but later quarter units still require explicit recosting and cannot ratchet automatically. | accepted `R02/s14_rankio_t6_t6p25`; job `4748138`; source bundle `athenak-feature-cgl-through-493fd3059.bundle` SHA-256 `9e79a393a76baf15a9252bf96920e7c0f2a5067a956f28279c232a2f7e4b3623`; record-time inspection SHA-256 `e9979a42e3e7572b233ce788b4c79a8512932746fc6c9cd46ffacc72e233854a`; recorded manifest SHA-256 `6594c6da3611209deee1ad4e3e07e9e27e491838f452f6a707bd152a15806b9c`; retained independent validation SHA-256 `f7068e64ba870a93f6b525e7168e7fa815d9364ade01b870cc3cf39b532ffb13`; retained quarter validator SHA-256 `0ec3004247f62e2266939c94ef07cdb94513d6e8edc2ceddcf0504e3ac812789`; retained one-use recost generator SHA-256 `85fa812a61cfc02020587a2a8d612e0ee16720538207715a82c33571431e5c7f`; retained scheduler evidence SHA-256 `78a21a61574ca35b0f7247a4bef497280cc010c76259ac9628943f908223eb13`; retained corrected R02 recost evidence JSON SHA-256 `5ba7aec52d3e7824cf4ccf52f95ce1e46368c84ed59f0525e2bbbcfc167fde91` | High | Continue from authenticated E03 `t = 6.0` restart siblings through exact `t = 6.25`; require formal and retained independent quarter inspection, exactly one eight-rank snapshot group, complete terminal restart siblings, zero strict LF failure counters, finite synchronized histories, forcing-work closure, accounting, reconciliation, staged recost review, and byte-preserving promotion. Retain utility bytes durably before use. | Job `4748138` reaches exact `t = 6.25` in `2359` seconds (`0.655278` node-hours). Strict LF failure counters remain zero; terminal `lf_hwproj = 246541685689`; one eight-rank snapshot group and terminal eight-rank restart siblings are retained; sampled-history forcing-work relative residual is `8.23749299161874e-12`; accepted-prefix residual is `2.8447803971679676e-12`; reconciliation closes with `15/15/15` ledger rows/manifests/reservations, no active reservation, and no transaction. The quarter-unit rate is `2.621111` node-hours per simulated unit. Authorization-facing projection is `829.101112` matrix node-hours with `70.898888` margin. The reviewed estimator selects `2559 <= 2700` seconds for `s15`. Carver, Hubble, Linnaeus, Godel, Kierkegaard, and Newton independently reviewed the retained toolchain, staged evidence, byte-preserving promotion, or post-promotion state. | Archive and catalog the current committed controller state, reconcile, then prepare only `R02/s15_rankio_t6p25_t6p5` on one node from authenticated `s14` terminal siblings with Slurm walltime `01:05:00`, Athena timeout `00:55:00`, and a reviewed one-segment `2700`-second threshold retaining `600` seconds on both timeout margins. Do not ratchet automatically. Any scientific, provenance, scheduler, storage, budget, or reconciliation failure blocks successor preparation. Inspect, account, reconcile, and recost before any further extension. Keep R17 last. |
 | F-098 | 2026-06-01 | Fresh corrected E03 R02 quarter-unit continuation through exact `t = 6.5`, retained hardened recost generator, and reviewed bounded quarter continuation | F-097 authorized only one quarter-unit continuation under the reviewed `2700`-second threshold scoped to `s15`. The accepted clean interval remains inside that threshold, but later quarter units still require explicit recosting and cannot ratchet automatically. | accepted `R02/s15_rankio_t6p25_t6p5`; job `4752118`; source bundle `athenak-feature-cgl-through-368bc86e4.bundle` SHA-256 `49a26705e9e34a203271e5a9e1b330d42bf97a8d64d1ad557d6edbc47ee76c68`; record-time inspection SHA-256 `fd1fa6f3e4218b611814b71a9081140d91f2c1d866a2f6f565de33ec040c7492`; recorded manifest SHA-256 `5cc7a5b4d67cd4f3926f5c435e23139b1103b35f5ef58d9acf892e11bb35e7f8`; retained independent validation SHA-256 `cba6a5ff33e7c5920874e78e55c8288e7863de43b80a1accfa018d45e8547968`; retained quarter validator SHA-256 `0ec3004247f62e2266939c94ef07cdb94513d6e8edc2ceddcf0504e3ac812789`; retained one-use recost generator SHA-256 `317a9ff15b8446cdc09e5e43a18dd261a80ae69ff274c28b831ec5279dc32e78`; retained scheduler evidence SHA-256 `f1bafbfc2bd875e159b7ce80ef1b7415d464da812060d3a605d13c90192fe40a`; retained corrected R02 recost evidence JSON SHA-256 `3603077400bd4530001155b83bfc4ac1053ec18505c56a6c29ffadc795bd1255` | High | Continue from authenticated E03 `t = 6.25` restart siblings through exact `t = 6.5`; require formal and retained independent quarter inspection, exactly one eight-rank snapshot group, complete terminal restart siblings, zero strict LF failure counters, finite synchronized histories, forcing-work closure, accounting, reconciliation, staged recost review, and byte-preserving promotion. Retain utility bytes durably before use. | Job `4752118` reaches exact `t = 6.5` in `2353` seconds (`0.653611` node-hours). Strict LF failure counters remain zero; terminal `lf_hwproj = 253499800091`; one eight-rank snapshot group and terminal eight-rank restart siblings are retained; sampled-history forcing-work relative residual is `7.631778891465068e-12`; accepted-prefix residual is `3.0155808676444225e-12`; reconciliation closes with `16/16/16` ledger rows/manifests/reservations, no active reservation, and no transaction. The quarter-unit rate is `2.614444` node-hours per simulated unit. Authorization-facing projection is `829.101112` matrix node-hours with `70.898888` margin. The reviewed estimator selects `2559 <= 2700` seconds for `s16`. | Archive and catalog the current committed controller state, reconcile, then prepare only `R02/s16_rankio_t6p5_t6p75` on one node from authenticated `s15` terminal siblings with Slurm walltime `01:05:00`, Athena timeout `00:55:00`, and a reviewed one-segment `2700`-second threshold retaining `600` seconds on both timeout margins. Do not ratchet automatically. Any scientific, provenance, scheduler, storage, budget, or reconciliation failure blocks successor preparation. Inspect, account, reconcile, and recost before any further extension. Keep R17 last. |
+| F-099 | 2026-06-01 | Fresh corrected E03 R02 quarter-unit continuation through exact `t = 6.75`, retained hardened recost generator, and reviewed bounded quarter continuation | F-098 historically authorized only one quarter-unit continuation under the reviewed `2700`-second threshold scoped to `s16`. The accepted clean interval remains inside that threshold, but later quarter units still require explicit recosting and cannot ratchet automatically. | accepted `R02/s16_rankio_t6p5_t6p75`; job `4753294`; exact scheduler row `4753294\|cgl_mks24_E03_forcing_policy_R02_s16_rankio_t6p5_t6p75\|COMPLETED\|0:0\|1\|2330\|2026-06-01T20:40:10\|2026-06-01T21:19:07`; source bundle `athenak-feature-cgl-through-6c0739806.bundle` SHA-256 `a837ebe60d62a922dde3fc3ddd87350eec8a9e3f439f671f783346ee6290617f`; previously audited, non-retained submitted-state manifest SHA-256 `10c469c424159ecc3ca283a2c951aa2c3456d9b7fbd01841926ee55b973c42f0`; record-time inspection SHA-256 `1149de945447eae3b274052985363c1c821720a117254662657e33d8b21467de`; recorded manifest SHA-256 `a87787fdaf4a0a8491bdf42e834fba7399f084ffef1cd9ff5e9c4aae84037089`; retained independent validation SHA-256 `4889d08083004d3d89f6cc8beede3521ce7f8143983c7b4bb233209d59844b05`; retained quarter validator SHA-256 `0ec3004247f62e2266939c94ef07cdb94513d6e8edc2ceddcf0504e3ac812789`; retained one-use recost generator SHA-256 `e9991ec75559113fb0da5b5fae5d117f7fe6701160316237227169dde04d05af`; reviewed one-shot recost promoter SHA-256 `08fae00aa1cc365cb39d0b935f059a732955465eb26977e7fd459791ae762883`; retained scheduler evidence SHA-256 `11b3d7bbae54e4c51fa7548134ae0e7e837fe8b624af698a2e32f30c9cd82fc9`; retained corrected R02 recost evidence JSON SHA-256 `5b997623a3f8d83c200034f42e0c9f1b9a09c811bcb46e2fc1a0f7c1eb58815e` | High | Continue from authenticated E03 `t = 6.5` restart siblings through exact `t = 6.75`; require formal and retained independent quarter inspection, exactly one eight-rank snapshot group, complete terminal restart siblings, zero strict LF failure counters, finite synchronized histories, forcing-work closure, accounting, reconciliation, staged recost review, and byte-preserving promotion. Retain utility bytes durably before use. | Job `4753294` reaches exact `t = 6.75` in `2330` seconds (`0.647222` displayed node-hours). Strict LF failure counters remain zero; terminal `lf_hwproj = 259077916291`; one eight-rank snapshot group and terminal eight-rank restart siblings are retained; sampled-history forcing-work relative residual is `6.437727059090897e-12`; the accepted prefix totals `55678` seconds (`15.466111111111111` exact and `15.466112` displayed node-hours) with residual `3.1385227986388927e-12`; reconciliation closes with `17/17/17` ledger rows/manifests/reservations, no active reservation, no transaction, and `issues = []`. The quarter-unit rate is `2.588889` node-hours per simulated unit. Authorization-facing projection is `829.1011116666666` exact (`829.101112` displayed) matrix node-hours with `70.89888833333339` exact (`70.898888` displayed) margin. With prior selected `2559`, previous observed `2353`, observed `2330`, and local `2330`, the reviewed estimator selects `2559 <= 2700` seconds for `s17`; the accepted segment leaves `370` seconds of threshold headroom. | Commit the post-F-099 documentation state, archive and catalog its resulting actual controller bundle and SHA-256, rerun reconciliation, repeat the queue/shared-root audit with explicit acknowledgement of the stale beta-25 record, then prepare only `R02/s17_rankio_t6p75_t7` on one node from authenticated `s16` terminal siblings with Slurm walltime `01:05:00`, Athena timeout `00:55:00`, and a reviewed one-segment `2700`-second threshold retaining `600` seconds on both timeout margins. Do not ratchet automatically. Any scientific, provenance, scheduler, storage, budget, or reconciliation failure blocks successor preparation. Inspect, account, reconcile, and recost before any further extension. Keep R17 last. |
 
 ### Implemented Core Decision Log
 
+Rows below the newest entry are retained historical decisions. They do not
+authorize preparation after accepted job `4753294`; the F-099 archive,
+reconciliation, and queue/shared-root gates remain mandatory before `s17`.
+
 | Date | Decision | Rationale | Evidence still required |
 | --- | --- | --- | --- |
+| 2026-06-01 | Accept corrected E03 R02 quarter-unit continuation job `4753294` through exact `t = 6.75` and narrowly authorize only the reviewed quarter-unit continuation through `t = 7.0` after the post-F-099 archive gate. | Job `4753294` passes formal and retained independent inspection, records `0.647222` displayed node-hours, and brings corrected E03 use to `15.466112` displayed node-hours. Retained corrected F-099 evidence SHA-256 `5b997623a3f8d83c200034f42e0c9f1b9a09c811bcb46e2fc1a0f7c1eb58815e` projects at most `829.101112` displayed matrix node-hours inside the `900.000000` envelope. The accepted `2330`-second quarter unit leaves `370` seconds of threshold headroom; the reviewed `s17` estimator selects `2559 <= 2700` seconds. The `s17` profile uses Slurm walltime `01:05:00`, Athena timeout `00:55:00`, and threshold `2700` seconds, retaining `600` seconds on both timeout margins. It is scoped only to `s17` and cannot ratchet automatically. | Commit the post-F-099 documentation state, archive and catalog its resulting actual controller bundle and SHA-256, rerun reconciliation, repeat the queue/shared-root audit with explicit acknowledgement of the stale beta-25 record, then prepare only `R02/s17_rankio_t6p75_t7` on one node from authenticated `s16` terminal siblings under the full F-099 profile. Any scientific, provenance, scheduler, storage, budget, or reconciliation failure blocks successor preparation. Inspect, account, reconcile, and recost before any extension. Finish R02, execute R03--R16 sequentially, and execute R17 last. |
 | 2026-06-01 | Accept corrected E03 R02 quarter-unit continuation job `4752118` through exact `t = 6.5` and authorize only the reviewed quarter-unit continuation through `t = 6.75`. | Job `4752118` passes formal and retained independent inspection, records `0.653611` node-hours, and brings corrected E03 use to `14.818890`. Retained corrected F-098 evidence SHA-256 `3603077400bd4530001155b83bfc4ac1053ec18505c56a6c29ffadc795bd1255` projects at most `829.101112` matrix node-hours inside the `900.000000` envelope. The accepted `2353`-second quarter unit leaves `347` seconds of threshold headroom; the reviewed `s16` estimator selects `2559 <= 2700` seconds. The `s16` profile uses Slurm walltime `01:05:00`, Athena timeout `00:55:00`, and threshold `2700` seconds, retaining `600` seconds on both timeout margins. It is scoped only to `s16` and cannot ratchet automatically. | Archive and catalog the current committed controller state, reconcile, then prepare only `R02/s16_rankio_t6p5_t6p75` on one node from authenticated `s15` terminal siblings under the full F-098 profile. Any scientific, provenance, scheduler, storage, budget, or reconciliation failure blocks successor preparation. Inspect, account, reconcile, and recost before any extension. Finish R02, execute R03--R16 sequentially, and execute R17 last. |
 | 2026-05-31 | Accept corrected E03 R02 quarter-unit continuation job `4748138` through exact `t = 6.25` and authorize only the reviewed quarter-unit continuation through `t = 6.5`. | Job `4748138` passes formal and retained independent inspection, records `0.655278` node-hours, and brings corrected E03 use to `14.165279`. Retained corrected F-097 evidence SHA-256 `5ba7aec52d3e7824cf4ccf52f95ce1e46368c84ed59f0525e2bbbcfc167fde91` projects at most `829.101112` matrix node-hours inside the `900.000000` envelope. The accepted `2359`-second quarter unit leaves `341` seconds of threshold headroom; the reviewed `s15` estimator selects `2559 <= 2700` seconds. The `s15` profile uses Slurm walltime `01:05:00`, Athena timeout `00:55:00`, and threshold `2700` seconds, retaining `600` seconds on both timeout margins. It is scoped only to `s15` and cannot ratchet automatically. | Archive and catalog the current committed controller state, reconcile, then prepare only `R02/s15_rankio_t6p25_t6p5` on one node from authenticated `s14` terminal siblings under the full F-097 profile. Any scientific, provenance, scheduler, storage, budget, or reconciliation failure blocks successor preparation. Inspect, account, reconcile, and recost before any extension. Finish R02, execute R03--R16 sequentially, and execute R17 last. |
 | 2026-05-31 | Accept corrected E03 R02 quarter-unit continuation job `4747834` through exact `t = 6.0` and authorize only the reviewed quarter-unit continuation through `t = 6.25`. | Job `4747834` passes formal and retained independent inspection, records `0.599722` node-hours, and brings corrected E03 use to `13.510001`. Retained corrected F-096 evidence SHA-256 `4bc19f5b44587e73869982425b1cf0ad459547c3e0c5de1ab1b2b5cb366c6322` projects at most `814.945556` matrix node-hours inside the `900.000000` envelope. The accepted `2159`-second quarter unit leaves `541` seconds of threshold headroom; the reviewed `s14` estimator selects `2468 <= 2700` seconds. The `s14` profile uses Slurm walltime `01:05:00`, Athena timeout `00:55:00`, and threshold `2700` seconds, retaining `600` seconds on both timeout margins. It is scoped only to `s14` and cannot ratchet automatically. | Archive and catalog the current committed controller state, reconcile, then prepare only `R02/s14_rankio_t6_t6p25` on one node from authenticated `s13` terminal siblings under the full F-096 profile. Any scientific, provenance, scheduler, storage, budget, or reconciliation failure blocks successor preparation. Inspect, account, reconcile, and recost before any extension. Finish R02, execute R03--R16 sequentially, and execute R17 last. |
@@ -2720,8 +2747,9 @@ exact `t = 5.5` for `1.268889` node-hours, bringing corrected E03 use to
 `323d7cb3cbe108eee944045c189cff75ffc07d06833c49bcfa8315f07fad8d51`.
 Hardened reconciliation closes with `12/12/12` ledger
 rows/manifests/reservations, no active reservation, and no transaction.
-At that boundary, archive and catalog the committed controller state,
-reconcile, then prepare only `R02/s12_rankio_t5p5_t5p75` on one node from the authenticated `s11` terminal
+At that historical boundary, archive and catalog the committed controller
+state, reconcile, then historically prepare only
+`R02/s12_rankio_t5p5_t5p75` on one node from the authenticated `s11` terminal
 siblings with Slurm walltime `01:05:00`, Athena timeout `00:55:00`, and its
 reviewed one-segment `2700`-second threshold retaining `600` seconds on both
 timeout margins. The threshold is scoped only to `s12` and cannot ratchet
@@ -2734,7 +2762,7 @@ exact `t = 5.75` for `0.660000` node-hours, bringing corrected E03 use to
 `d0a60e222138971e1bc9aae978bb3d62aee460f09000ee62f7f9ffdfe534165f`.
 Hardened reconciliation closes with `13/13/13` ledger
 rows/manifests/reservations, no active reservation, and no transaction.
-At that boundary, archive and catalog the committed controller state,
+At that historical boundary, archive and catalog the committed controller state,
 reconcile, then historically prepare only `R02/s13_rankio_t5p75_t6` on one node from the authenticated `s12`
 terminal siblings with Slurm walltime `01:05:00`, Athena timeout `00:55:00`,
 and its reviewed one-segment `2700`-second threshold retaining `600` seconds
@@ -2748,7 +2776,7 @@ exact `t = 6.0` for `0.599722` node-hours, bringing corrected E03 use to
 `4bc19f5b44587e73869982425b1cf0ad459547c3e0c5de1ab1b2b5cb366c6322`.
 Hardened reconciliation closes with `14/14/14` ledger
 rows/manifests/reservations, no active reservation, and no transaction.
-At that boundary, archive and catalog the committed controller state,
+At that historical boundary, archive and catalog the committed controller state,
 reconcile, then historically prepare only `R02/s14_rankio_t6_t6p25` on one node from the authenticated `s13`
 terminal siblings with Slurm walltime `01:05:00`, Athena timeout `00:55:00`,
 and its reviewed one-segment `2700`-second threshold retaining `600` seconds
@@ -2762,7 +2790,7 @@ exact `t = 6.25` for `0.655278` node-hours, bringing corrected E03 use to
 `5ba7aec52d3e7824cf4ccf52f95ce1e46368c84ed59f0525e2bbbcfc167fde91`.
 Hardened reconciliation closes with `15/15/15` ledger
 rows/manifests/reservations, no active reservation, and no transaction.
-At that boundary, archive and catalog the committed controller state,
+At that historical boundary, archive and catalog the committed controller state,
 reconcile, then historically prepare only `R02/s15_rankio_t6p25_t6p5` on one
 node from the authenticated `s14` terminal siblings with Slurm walltime
 `01:05:00`, Athena timeout `00:55:00`, and its reviewed one-segment
@@ -2777,14 +2805,27 @@ exact `t = 6.5` for `0.653611` node-hours, bringing corrected E03 use to
 `3603077400bd4530001155b83bfc4ac1053ec18505c56a6c29ffadc795bd1255`.
 Hardened reconciliation closes with `16/16/16` ledger
 rows/manifests/reservations, no active reservation, and no transaction.
-Archive and catalog the current committed controller state, reconcile, then
-prepare only `R02/s16_rankio_t6p5_t6p75` on one node from the authenticated
-`s15` terminal siblings with Slurm walltime `01:05:00`, Athena timeout
-`00:55:00`, and its reviewed one-segment `2700`-second threshold retaining
-`600` seconds on both timeout margins. The threshold is scoped only to `s16`
-and cannot ratchet automatically. Any scientific, provenance, scheduler,
-storage, budget, or reconciliation failure blocks successor preparation.
-Inspect, account, reconcile, and recost before any further extension.
+Historical authorization was only `R02/s16_rankio_t6p5_t6p75` on one node
+from the authenticated `s15` terminal siblings under the full F-098 profile;
+that segment is now accepted under F-099.
+Authenticated `R02/s16_rankio_t6p5_t6p75` job `4753294` is accepted through
+exact `t = 6.75` for `0.647222` displayed node-hours, bringing corrected E03
+use to `15.466112` displayed node-hours. Retained corrected F-099 recost
+evidence JSON SHA-256 is
+`5b997623a3f8d83c200034f42e0c9f1b9a09c811bcb46e2fc1a0f7c1eb58815e`.
+Hardened reconciliation closes with `17/17/17` ledger
+rows/manifests/reservations, no active reservation, no transaction, and no
+issue. Commit the post-F-099 documentation state, archive and catalog its
+resulting actual controller bundle and SHA-256, rerun reconciliation, repeat
+the queue/shared-root audit with explicit acknowledgement of the stale
+beta-25 record, then prepare only `R02/s17_rankio_t6p75_t7` on one node from
+the authenticated `s16` terminal siblings with Slurm walltime `01:05:00`,
+Athena timeout `00:55:00`, and its reviewed one-segment `2700`-second
+threshold retaining `600` seconds on both timeout margins. The threshold is
+scoped only to `s17` and cannot ratchet automatically. Any scientific,
+provenance, scheduler, storage, budget, or reconciliation failure blocks
+successor preparation. Inspect, account, reconcile, and recost before any
+further extension.
 
 ### Corrected E03 Successor-Segment Review Policy
 
@@ -2873,8 +2914,27 @@ selected_next_quarter = max(prior_selected_next_quarter, local_next_quarter)
 
 For accepted `s15`, `E15 = 2353`, so `local_next_quarter = 2353` and
 `selected_next_quarter = 2559 <= 2700`. Retained F-098 evidence therefore
-authorizes only `R02/s16_rankio_t6p5_t6p75`. This is a reviewed one-segment
-authorization, not an automatic quarter-unit ratchet.
+historically authorized only `R02/s16_rankio_t6p5_t6p75`. This was a reviewed
+one-segment authorization, not an automatic quarter-unit ratchet.
+
+After accepted `s16`, retain the same conservative envelope for `s17` only.
+Let `E16` be the top-level Slurm allocation `ElapsedRaw` in integer seconds.
+The reviewed `s17` estimator is:
+
+```text
+prior_selected_next_quarter = 2559
+previous_observed_quarter = 2353
+local_next_quarter = max(E16, 2 * E16 - previous_observed_quarter)
+selected_next_quarter = max(prior_selected_next_quarter, local_next_quarter)
+```
+
+For accepted `s16`, `E16 = 2330`, so `local_next_quarter = 2330` and
+`selected_next_quarter = 2559 <= 2700`. Retained F-099 evidence narrowly
+authorizes only `R02/s17_rankio_t6p75_t7` after the post-F-099 documentation
+state is committed, its resulting actual controller bundle and SHA-256 are
+archived and cataloged, reconciliation is rerun, and the queue/shared-root
+audit repeats explicit acknowledgement of the stale beta-25 record. This is a
+reviewed one-segment authorization, not an automatic quarter-unit ratchet.
 
 All Frontier simulations for this CGL-LF project must place their output,
 logs, manifests, restart products, and usage accounting beneath:
@@ -4289,14 +4349,19 @@ authenticated `R02/s14_rankio_t6_t6p25` job `4748138` is accepted through
 exact `t = 6.25`;
 authenticated `R02/s15_rankio_t6p25_t6p5` job `4752118` is accepted through
 exact `t = 6.5`;
-archive and catalog the current committed controller state, reconcile, then
-continue only with `R02/s16_rankio_t6p5_t6p75` on one node from its authenticated `s15`
-restart siblings under the full F-098 profile: Slurm walltime `01:05:00`, Athena
-timeout `00:55:00`, and a one-segment `2700`-second threshold retaining `600`
-seconds on both timeout margins. The threshold is scoped only to `s16` and
-cannot ratchet automatically. Any scientific, provenance, scheduler, storage,
-budget, or reconciliation failure blocks successor preparation. Inspect, account,
-reconcile, and recost before any further extension.
+authenticated `R02/s16_rankio_t6p5_t6p75` job `4753294` is accepted through
+exact `t = 6.75`;
+commit the post-F-099 documentation state, archive and catalog its resulting
+actual controller bundle and SHA-256, rerun reconciliation, repeat the
+queue/shared-root audit with explicit acknowledgement of the stale beta-25
+record, then continue only with `R02/s17_rankio_t6p75_t7` on one node from its
+authenticated `s16` restart siblings under the full F-099 profile: Slurm
+walltime `01:05:00`, Athena timeout `00:55:00`, and a one-segment
+`2700`-second threshold retaining `600` seconds on both timeout margins. The
+threshold is scoped only to `s17` and cannot ratchet automatically. Any
+scientific, provenance, scheduler, storage, budget, or reconciliation failure
+blocks successor preparation. Inspect, account, reconcile, and recost before
+any further extension.
 
 The debug-QOS validation launcher remains prohibited for production work.
 The archived `E01-pre-modal-driver` Stage I protocol supplied the non-debug
@@ -4452,15 +4517,19 @@ Authenticated `R02/s14_rankio_t6_t6p25` job `4748138` is accepted through
 exact `t = 6.25`.
 Authenticated `R02/s15_rankio_t6p25_t6p5` job `4752118` is accepted through
 exact `t = 6.5`.
-Archive and catalog the
-current committed controller state, reconcile, then prepare only
-`R02/s16_rankio_t6p5_t6p75` on one node from the authenticated `s15` terminal siblings under
-the full F-098 profile: Slurm walltime `01:05:00`, Athena timeout `00:55:00`,
-and a one-segment `2700`-second threshold retaining `600` seconds on both
-timeout margins. The threshold is scoped only to `s16` and cannot ratchet
-automatically. Any scientific, provenance, scheduler, storage, budget, or
-reconciliation failure blocks successor preparation. Inspect, account, reconcile, and recost
-before any further extension. Complete R02, then
+Authenticated `R02/s16_rankio_t6p5_t6p75` job `4753294` is accepted through
+exact `t = 6.75`.
+Commit the post-F-099 documentation state, archive and catalog its resulting
+actual controller bundle and SHA-256, rerun reconciliation, repeat the
+queue/shared-root audit with explicit acknowledgement of the stale beta-25
+record, then prepare only `R02/s17_rankio_t6p75_t7` on one node from the
+authenticated `s16` terminal siblings under the full F-099 profile: Slurm
+walltime `01:05:00`, Athena timeout `00:55:00`, and a one-segment
+`2700`-second threshold retaining `600` seconds on both timeout margins. The
+threshold is scoped only to `s17` and cannot ratchet automatically. Any
+scientific, provenance, scheduler, storage, budget, or reconciliation failure
+blocks successor preparation. Inspect, account, reconcile, and recost before
+any further extension. Complete R02, then
 R03--R16 sequentially, and execute R17 last.
 
 Required baseline:
@@ -5365,21 +5434,28 @@ local implementation evidence. The next critical path is:
    `0.653611` node-hours, and leaves corrected E03 cumulative use at
    `14.818890`. Retained corrected F-098 recost evidence JSON SHA-256 is
    `3603077400bd4530001155b83bfc4ac1053ec18505c56a6c29ffadc795bd1255`.
+   Authenticated `R02/s16_rankio_t6p5_t6p75` job `4753294` passes formal and
+   retained independent inspection through exact `t = 6.75`, records
+   `0.647222` displayed node-hours, and leaves corrected E03 cumulative use at
+   `15.466112` displayed node-hours. Retained corrected F-099 recost evidence
+   JSON SHA-256 is
+   `5b997623a3f8d83c200034f42e0c9f1b9a09c811bcb46e2fc1a0f7c1eb58815e`.
    F-083/F-084 controller hardening is promoted at canonical revision
    `9689c269bf329542815a1b2b137881126964b05c`, helper SHA-256
    `1c633ebb58294938a0a0609742ae8f8d1f88cd15242ffe649578796edeb39375`;
    focused tests, Sphinx
    warnings-as-errors, syntax, diff, and hardened reconciliation pass.
-   Archive and catalog the current committed controller state, reconcile,
-   then prepare only `R02/s16_rankio_t6p5_t6p75` on one node from the authenticated `s15`
-   terminal siblings with Slurm walltime `01:05:00`, Athena timeout `00:55:00`,
-   and its reviewed one-segment `2700`-second threshold retaining `600`
-   seconds on both timeout margins. The threshold is scoped only to `s16` and
-   cannot ratchet automatically. Any scientific, provenance, scheduler,
-   storage, budget, or reconciliation failure blocks successor preparation.
-   Inspect, account, reconcile,
-   and recost. Finish R02, execute R03--R16 sequentially, and execute R17
-   last.
+   Commit the post-F-099 documentation state, archive and catalog its
+   resulting actual controller bundle and SHA-256, rerun reconciliation,
+   repeat the queue/shared-root audit with explicit acknowledgement of the
+   stale beta-25 record, then prepare only `R02/s17_rankio_t6p75_t7` on one
+   node from the authenticated `s16` terminal siblings with Slurm walltime
+   `01:05:00`, Athena timeout `00:55:00`, and its reviewed one-segment
+   `2700`-second threshold retaining `600` seconds on both timeout margins.
+   The threshold is scoped only to `s17` and cannot ratchet automatically.
+   Any scientific, provenance, scheduler, storage, budget, or reconciliation
+   failure blocks successor preparation. Inspect, account, reconcile, and
+   recost. Finish R02, execute R03--R16 sequentially, and execute R17 last.
 
 3. **Recost corrected E03 and continue the frozen matrix sequentially.**
    Preserve E01 and E02 as historical pipeline and cost evidence only. No E02
