@@ -1,6 +1,6 @@
 # PIC Sun and Bai release qualification handoff
 
-Last updated: 2026-06-02T22:07:20Z
+Last updated: 2026-06-02T22:29:52Z
 
 ## Purpose
 
@@ -43,11 +43,13 @@ Completed:
 
 In progress:
 
-1. Slurm worker-node job `4756951` is copying and verifying the four
-   calibration artifacts into a retained publication bundle.
-2. The first repair tranche closed the original five adversarial findings.
-   A second adversarial pass found additional numerical-provenance and exact
-   planner-graph blockers. A second repair tranche is active. Preserve its
+1. Pressure-pilot aggregate publication is paused after one failed-closed
+   worker run and two intentionally cancelled worker runs. No public bundle,
+   receipt, or aggregate analysis artifact exists.
+2. The first and second repair tranches closed substantial structural gaps.
+   A third adversarial pass found additional pressure-publication,
+   publication-protocol, raw-attempt provenance, deterministic-root, and
+   restart-provenance blockers. A third repair tranche is active. Preserve its
    dirty worktree edits.
 
 Remaining:
@@ -101,9 +103,9 @@ Branch and pushed checkpoint at the time this handoff was drafted:
 
 ```text
 branch:     PIC
-HEAD:       ecc90185ccc2f5466a0a94dee9785a1bb2ba2d3f
-origin/PIC: ecc90185ccc2f5466a0a94dee9785a1bb2ba2d3f
-subject:    Add launch-prohibited Q011 qualifying campaign scaffolding
+HEAD:       04959b44bd03cc6e584b9bc951b41cce128ef22e
+origin/PIC: 04959b44bd03cc6e584b9bc951b41cce128ef22e
+subject:    Bind Q011 aggregate analysis parser compatibility successor
 ```
 
 The worktree is intentionally dirty because repair agents are hardening the
@@ -127,6 +129,12 @@ current diff before editing or committing. The expected repair ownership is:
 Recent pushed history:
 
 ```text
+04959b44b Bind Q011 aggregate analysis parser compatibility successor
+01141bd8a Accept empty optional Athena binary header values
+7a813e0bd Expand worker Q011 repair validation coverage
+eefbd60d6 Add worker-routed Q011 pressure review packet renderer
+dd0f66053 Record worker-routed Q011 second hardening pass
+08a235f35 Add durable PIC release qualification handoff
 ecc90185c Add launch-prohibited Q011 qualifying campaign scaffolding
 29a180d4b Record Q011 four-slice pilot policy promotion
 0d0caf468 Close local PIC shock planning reviews
@@ -212,8 +220,17 @@ ledger file:   $PIC_ROOT/ledger/node_hours.jsonl
 ## Pressure-pilot aggregate publication
 
 An initial login-node publisher attempt proved materially long-running and did
-not expose a final receipt. The rerun is routed through Frontier Slurm worker
-node job `4756951`:
+not expose a final receipt. Three Frontier Slurm worker publication attempts
+then ended without exposing a public bundle:
+
+| Slurm job | Terminal state | Elapsed | Reason |
+| --- | --- | --- | --- |
+| `4756951` | `FAILED` | `00:09:39` | Strict offline binary parser rejected runtime-added empty optional `particles/pic_deltaf_f0` |
+| `4757026` | `CANCELLED` | `00:02:16` | Cancelled when the checkout mutated during publication; superseded by worker-local `git archive HEAD` snapshots |
+| `4757047` | `CANCELLED` | `00:04:36` | Cancelled after fresh review found late-failure rollback, descriptor-anchor, and source-authorization gaps |
+
+Aggregate publication is paused until the third repair tranche closes. Do not
+rerun the publisher yet.
 
 ```text
 /usr/bin/sbatch tst/publication/frontier_q011_section54_pressure_pilot_publish_job.sh
@@ -227,16 +244,15 @@ $PIC_ROOT/publication/q011_section54_pressure_pilot_bundle_receipt.json
 $PIC_ROOT/publication/q011_section54_pressure_pilot_analysis.json
 ```
 
-The interrupted login-node attempt left this hidden staging tree:
+Preserve these hidden staging trees until the corrected publisher verifies a
+visible receipt and an explicit audit decides their disposition:
 
 ```text
-$PIC_ROOT/publication/.q011_section54_pressure_pilot_bundle.staging-f39862c6-9bb6-4952-a93c-ff7a7a71abff
+$PIC_ROOT/publication/.q011_section54_pressure_pilot_bundle.staging-a38200f5-06a0-47c8-8f24-046e0fdb556a
+$PIC_ROOT/publication/.q011_section54_pressure_pilot_bundle.staging-6b50871f-7318-41f5-9c36-c5cb4ce1dfa8
 ```
 
-The `f398...` tree came from an interrupted publisher run. Job `4756951`
-creates a separate hidden staging tree while active. Do not delete any hidden
-tree until a visible receipt exists and verifies. After verification, inspect
-the hidden trees before archiving or removing stale staging.
+Do not delete either hidden tree while repairs are active.
 
 Check the publisher and visible outputs:
 
@@ -246,45 +262,14 @@ pgrep -af publish_q011_section54_pressure_pilot_bundle || true
 find "$PIC_ROOT/publication" -maxdepth 2 -printf '%M %s %p\n' | sort
 ```
 
-When the visible receipt exists, verify it from the publication script
-directory:
+After the corrected publisher has been reviewed, committed, pushed, and
+worker-validated, inspect the hidden staging trees and rerun from the reviewed
+Slurm wrapper. The wrapper performs final receipt verification on the worker
+node. Do not use a login-node direct invocation.
 
 ```bash
-cd /ccs/home/dfielding/athenak-pic/tst/publication
-export PIC_ROOT=/lustre/orion/ast207/proj-shared/dfielding/PIC
-python3 -B publish_q011_section54_pressure_pilot_bundle.py \
-  --verify-published-receipt \
-  "$PIC_ROOT/publication/q011_section54_pressure_pilot_bundle_receipt.json"
-```
-
-If no publisher is active and no visible receipt exists, inspect the hidden
-staging trees and rerun:
-
-```bash
-cd /ccs/home/dfielding/athenak-pic/tst/publication
-export PIC_ROOT=/lustre/orion/ast207/proj-shared/dfielding/PIC
-python3 -B publish_q011_section54_pressure_pilot_bundle.py \
-  "$PIC_ROOT/publication/q011_section54_pressure_pilot_bundle" \
-  --receipt-path \
-  "$PIC_ROOT/publication/q011_section54_pressure_pilot_bundle_receipt.json" \
-  --analysis-result-path \
-  "$PIC_ROOT/publication/q011_section54_pressure_pilot_analysis.json" \
-  --case-artifact-dir \
-  "ps_p0_1p00=$PIC_ROOT/runs/q011_section54_pressure_ps_p0_1p00/a9db403f-a174-45ae-956d-f96185a94db1" \
-  --case-descriptor-sha256 \
-  "ps_p0_1p00=da322586da4831c7747e3a2f5774adf6b999835dc8636b9d971411e1dc9471b2" \
-  --case-artifact-dir \
-  "ps_p0_0p05=$PIC_ROOT/runs/q011_section54_pressure_ps_p0_0p05/3eb84dfa-0be7-4a62-b77b-64131c08dc6f" \
-  --case-descriptor-sha256 \
-  "ps_p0_0p05=978cfc63efc9503b9dd0a043793d759e930f390340b843a39d621c2b859ff85c" \
-  --case-artifact-dir \
-  "ps_p0_0p10=$PIC_ROOT/runs/q011_section54_pressure_ps_p0_0p10/07bd4d96-ffc8-4446-98ef-562d4d83da0c" \
-  --case-descriptor-sha256 \
-  "ps_p0_0p10=dba35e7b157c1646444792cfda68963dbfd2062b4887961bfb380e51a113f5d4" \
-  --case-artifact-dir \
-  "ps_p0_0p20=$PIC_ROOT/runs/q011_section54_pressure_ps_p0_0p20/8b4065a3-b02a-4312-8238-20d72d958bbb" \
-  --case-descriptor-sha256 \
-  "ps_p0_0p20=ef842e1440cbe1fd51e3ee79af5c838704e782708e2a827ec0bfcc89ca1ae312"
+cd /ccs/home/dfielding/athenak-pic
+/usr/bin/sbatch tst/publication/frontier_q011_section54_pressure_pilot_publish_job.sh
 ```
 
 ## Known launch blockers under repair
@@ -337,6 +322,33 @@ fresh independent pass found additional blockers:
 
 The second repair tranche is active. Do not materialize or launch a qualifying
 campaign until it passes another adversarial review.
+
+### Third adversarial pass
+
+The second repair tranche passed a focused `145`-test integration matrix, but
+a fresh independent pass found additional blockers before commit:
+
+1. Pressure aggregate publication needs rollback after every late failure,
+   descriptor-anchored freeze and cleanup, and a complete reviewed source
+   successor closure.
+2. Pressure review-packet publication needs the equivalent rollback, anchor,
+   source-snapshot, and receipt hardening.
+3. Planner and attempt publishers must guarantee zero public exposure when a
+   mutable staging pathname is substituted immediately before rename.
+4. Attempt final admission self-checks must stay inside the rollback envelope.
+5. Raw attempt materialization must bind a reconciled registered-execution
+   receipt and exact deterministic planner-authorized roots transactionally
+   before mutation.
+6. Restart qualification must reject aliased branches and bind the planned
+   checksum-cross-linked registered continuation.
+7. Numerical recompute bundles need post-open root binding, exact directory
+   closure, and exact analyzer-binding closure.
+
+The durable transition record is
+[`q011_section54_third_adversarial_repair_transition_2026-06-02.json`](readiness/q011_section54_third_adversarial_repair_transition_2026-06-02.json).
+The third repair tranche is active. Do not publish the aggregate bundle,
+materialize a qualifying campaign, or launch qualifying work until it passes
+another independent adversarial review.
 
 ## Validation baseline
 

@@ -91,9 +91,11 @@ particle subview copy during injection. The packed particle-transfer repair
 passes bounded serial-host append, recenter and startup-cohort compaction
 regressions. The rebuilt clean HIP/MPI candidate then completed the registered
 v2 pressure-pilot retry for `problem/ps_p0 = 1.0`, `0.05`, `0.10`, and `0.20`.
-All four slices are reconciled with immutable raw descriptors. Their aggregate
-publication is running through a Slurm worker-node job. Human pressure review,
-qualifying-plan hardening, and prerequisite slices remain open.
+All four slices are reconciled with immutable raw descriptors. Aggregate
+publication is paused after a failed-closed parser-compatibility discovery and
+two intentionally cancelled worker reruns exposed additional publication
+hardening requirements before any public bundle was accepted. Human pressure
+review, qualifying-plan hardening, and prerequisite slices remain open.
 
 The prepared contract includes:
 
@@ -681,7 +683,7 @@ unless all required bindings and products are present.
 Execute these actions in order:
 
 1. Finish and verify the immutable four-slice pressure aggregate publication.
-2. Close the second qualifying-boundary adversarial repair tranche, run the
+2. Close the third qualifying-boundary adversarial repair tranche, run the
    full worker-node validation matrix, rereview it independently, commit it,
    push it, and freeze a fresh clean candidate.
 3. Produce the four-slice pressure-review packet and record the required human
