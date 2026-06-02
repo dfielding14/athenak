@@ -4,9 +4,11 @@ import fcntl
 import hashlib
 import importlib.util
 import json
+import os
 from pathlib import Path
 import shlex
 import shutil
+import stat
 import subprocess
 import sys
 from types import SimpleNamespace
@@ -1470,15 +1472,283 @@ def test_cgl_lf_stage_i_hardens_identifiers_overrides_json_and_locking(
     canonical_root.mkdir()
     monkeypatch.setattr(stage_i, "DEFAULT_ROOT", canonical_root)
     lock_path = stage_i.canonical_root_lock_path(canonical_root)
-    with stage_i.canonical_root_lock(canonical_root):
-        assert lock_path.is_file()
+    prior_umask = os.umask(0o077)
+    try:
         with stage_i.canonical_root_lock(canonical_root):
-            pass
+            assert lock_path.is_file()
+            with stage_i.canonical_root_lock(canonical_root):
+                pass
+    finally:
+        os.umask(prior_umask)
+    lock_profile = lock_path.stat()
+    assert stat.S_IMODE(lock_profile.st_mode) == 0o644
+    assert lock_profile.st_nlink == 1
+    assert lock_profile.st_uid == os.geteuid()
     with lock_path.open("a+") as stream:
         fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         with pytest.raises(ValueError, match="another Stage I mutation"):
             with stage_i.canonical_root_lock(canonical_root):
                 pass
+    lock_path.chmod(0o600)
+    with stage_i.canonical_root_lock(canonical_root):
+        pass
+    assert stat.S_IMODE(lock_path.stat().st_mode) == 0o644
+
+    lock_path.unlink()
+    target = canonical_root / "lock-target"
+    target.write_text("")
+    lock_path.symlink_to(target.name)
+    with pytest.raises(ValueError, match="must not be a symlink"):
+        with stage_i.canonical_root_lock(canonical_root):
+            pass
+    lock_path.unlink()
+    os.link(target, lock_path)
+    with pytest.raises(ValueError, match="link count differs"):
+        with stage_i.canonical_root_lock(canonical_root):
+            pass
+    lock_path.unlink()
+    target.unlink()
+
+    lock_path.write_text("")
+    original_flock = stage_i.fcntl.flock
+
+    def replace_lock_path(descriptor, operation):
+        original_flock(descriptor, operation)
+        if operation & fcntl.LOCK_EX:
+            lock_path.unlink()
+            lock_path.write_text("")
+
+    with monkeypatch.context() as policy:
+        policy.setattr(stage_i.fcntl, "flock", replace_lock_path)
+        with pytest.raises(ValueError, match="path changed while locking"):
+            with stage_i.canonical_root_lock(canonical_root):
+                pass
+    lock_path.chmod(0o666)
+    with pytest.raises(ValueError, match="mode is too permissive"):
+        with stage_i.canonical_root_lock(canonical_root):
+            pass
+
+    queue_fixture = tmp_path / "fixture.squeue"
+    queue_fixture.write_text("")
+    fixture_args = SimpleNamespace(
+        squeue_file=str(queue_fixture), skip_slurm_test=False
+    )
+    assert stage_i.production_queue_output(fixture_args, True) == ""
+    with pytest.raises(ValueError, match="restricted to offline local roots"):
+        stage_i.validate_submission_fixture_options(fixture_args, False)
+    with pytest.raises(ValueError, match="requires --squeue-file"):
+        stage_i.production_queue_output(SimpleNamespace(squeue_file=None), True)
+    with pytest.raises(ValueError, match="restricted to offline local roots"):
+        stage_i.validate_submission_fixture_options(
+            SimpleNamespace(squeue_file=None, skip_slurm_test=True), False
+        )
+    canonical_manifest = {
+        "execution_epoch": stage_i.EXECUTION_EPOCH,
+        "project_root": str(canonical_root),
+    }
+    with pytest.raises(ValueError, match="--squeue-file"):
+        stage_i.submission_preflight(
+            SimpleNamespace(
+                allow_local_root=False,
+                squeue_file=str(queue_fixture),
+                skip_slurm_test=False,
+            ),
+            tmp_path / "canonical.json",
+            canonical_manifest,
+            run_slurm_test=True,
+        )
+    with pytest.raises(ValueError, match="--skip-slurm-test"):
+        stage_i.submission_preflight(
+            SimpleNamespace(
+                allow_local_root=False,
+                squeue_file=None,
+                skip_slurm_test=True,
+            ),
+            tmp_path / "canonical.json",
+            canonical_manifest,
+            run_slurm_test=True,
+        )
+
+    captured = {}
+
+    def capture_squeue(command, **kwargs):
+        captured["command"] = command
+        captured["environment"] = kwargs["env"]
+        return SimpleNamespace(stdout="")
+
+    with monkeypatch.context() as policy:
+        policy.setenv("USER", "forged-user")
+        policy.setenv("SLURM_CONF", "/tmp/forged-slurm.conf")
+        policy.setattr(stage_i.subprocess, "run", capture_squeue)
+        assert stage_i.production_queue_output(
+            SimpleNamespace(squeue_file=None), False
+        ) == ""
+    assert captured["command"] == [
+        "/usr/bin/squeue", "-h", "-u", stage_i.pwd.getpwuid(os.geteuid()).pw_name,
+        "-o", "%i|%P|%T|%j",
+    ]
+    assert "SLURM_CONF" not in captured["environment"]
+    expected_scheduler_user = stage_i.pwd.getpwuid(os.geteuid()).pw_name
+    assert captured["command"][3] == expected_scheduler_user
+    assert captured["command"][3] != "forged-user"
+    assert stage_i.SACCT == Path("/usr/bin/sacct")
+    assert stage_i.SBATCH == Path("/usr/bin/sbatch")
+    assert stage_i.SCONTROL == Path("/usr/bin/scontrol")
+    assert stage_i.SQUEUE == Path("/usr/bin/squeue")
+
+    scheduler_calls = []
+    submitted_script = tmp_path / "submitted.sbatch"
+    submitted_script.write_text("#!/bin/bash\n")
+    submitted_manifest_path = tmp_path / "submitted.json"
+    submitted_manifest = {
+        "execution_epoch": stage_i.EXECUTION_EPOCH,
+        "project_root": str(tmp_path / "production-root"),
+        "state": "prepared",
+        "run": {"case_id": "R16", "segment": "s00"},
+        "paths": {"batch_script": str(submitted_script)},
+    }
+
+    def capture_submit(command, **kwargs):
+        scheduler_calls.append((command, kwargs["env"]))
+        return SimpleNamespace(stdout="12345\n")
+
+    with monkeypatch.context() as policy:
+        policy.setenv("SLURM_CONF", "/tmp/forged-slurm.conf")
+        policy.setattr(stage_i.subprocess, "run", capture_submit)
+        assert stage_i.scheduler_test_only_output(submitted_script) == "12345\n"
+    assert scheduler_calls == [(
+        ["/usr/bin/sbatch", "--test-only", str(submitted_script)],
+        scheduler_calls[0][1],
+    )]
+    assert "SLURM_CONF" not in scheduler_calls[0][1]
+
+    scheduler_calls.clear()
+
+    with monkeypatch.context() as policy:
+        policy.setenv("SLURM_CONF", "/tmp/forged-slurm.conf")
+        policy.setattr(stage_i.subprocess, "run", capture_submit)
+        policy.setattr(
+            stage_i, "read_manifest", lambda _path: submitted_manifest
+        )
+        policy.setattr(stage_i, "require_root", lambda root, _allowed: root)
+        policy.setattr(stage_i, "is_offline_local_root", lambda *_args: False)
+        policy.setattr(
+            stage_i,
+            "submission_preflight",
+            lambda *_args, **_kwargs: (paths, submitted_script, {}),
+        )
+        policy.setattr(
+            stage_i,
+            "write_submit_pending_transaction",
+            lambda *_args: tmp_path / "submit-pending.json",
+        )
+        policy.setattr(stage_i, "read_reservations", lambda _paths: [])
+        policy.setattr(stage_i, "finish_submit_transaction", lambda *_args: None)
+        assert stage_i.submit.__wrapped__(SimpleNamespace(
+            manifest=str(submitted_manifest_path),
+            allow_local_root=False,
+            sbatch_output_file=None,
+        )) == 0
+    assert scheduler_calls == [(
+        ["/usr/bin/sbatch", "--parsable", str(submitted_script)],
+        scheduler_calls[0][1],
+    )]
+    assert "SLURM_CONF" not in scheduler_calls[0][1]
+
+    scheduler_calls.clear()
+    transaction = {"created_utc": stage_i.utc_now()}
+    expected_name = stage_i.expected_job_name(submitted_manifest)
+
+    def capture_recovery(command, **kwargs):
+        scheduler_calls.append((command, kwargs["env"]))
+        assert command[0] == "/usr/bin/scontrol"
+        return SimpleNamespace(
+            returncode=0,
+            stdout=(
+                f"JobId=12345 JobName={expected_name} Account={stage_i.ACCOUNT} "
+                f"Partition={stage_i.PARTITION} SubmitTime={transaction['created_utc']} "
+                f"Command={submitted_script}\n"
+            ),
+        )
+
+    with monkeypatch.context() as policy:
+        policy.setenv("SLURM_CONF", "/tmp/forged-slurm.conf")
+        policy.setattr(stage_i.subprocess, "run", capture_recovery)
+        recovered = stage_i.verify_recovered_scheduler_job(
+            submitted_manifest, "12345", False, transaction
+        )
+    assert recovered["mode"] == "scontrol"
+    assert scheduler_calls[0][0] == [
+        "/usr/bin/scontrol", "show", "job", "-o", "12345",
+    ]
+    assert "SLURM_CONF" not in scheduler_calls[0][1]
+
+    scheduler_calls.clear()
+
+    def capture_recovery_fallback(command, **kwargs):
+        scheduler_calls.append((command, kwargs["env"]))
+        if command[0] == "/usr/bin/scontrol":
+            return SimpleNamespace(returncode=1, stdout="")
+        assert command[0] == "/usr/bin/sacct"
+        return SimpleNamespace(
+            stdout=(
+                f"12345|{expected_name}|{stage_i.ACCOUNT}|{stage_i.PARTITION}|"
+                f"{transaction['created_utc']}\n"
+            ),
+        )
+
+    with monkeypatch.context() as policy:
+        policy.setenv("SLURM_CONF", "/tmp/forged-slurm.conf")
+        policy.setattr(stage_i.subprocess, "run", capture_recovery_fallback)
+        recovered = stage_i.verify_recovered_scheduler_job(
+            submitted_manifest, "12345", False, transaction
+        )
+    assert recovered["mode"] == "sacct"
+    assert [call[0][0] for call in scheduler_calls] == [
+        "/usr/bin/scontrol", "/usr/bin/sacct",
+    ]
+    assert all("SLURM_CONF" not in environment for _, environment in scheduler_calls)
+
+    scheduler_calls.clear()
+
+    def capture_absence(command, **kwargs):
+        scheduler_calls.append((command, kwargs["env"]))
+        return SimpleNamespace(stdout="")
+
+    with monkeypatch.context() as policy:
+        policy.setenv("USER", "forged-user")
+        policy.setenv("SLURM_CONF", "/tmp/forged-slurm.conf")
+        policy.setattr(stage_i.subprocess, "run", capture_absence)
+        absence = stage_i.scheduler_absence_evidence(
+            SimpleNamespace(scheduler_absence_evidence_file=None),
+            submitted_manifest,
+            transaction,
+            False,
+        )
+    assert absence["mode"] == "live scheduler absence query"
+    assert [call[0][0] for call in scheduler_calls] == [
+        "/usr/bin/squeue", "/usr/bin/sacct",
+    ]
+    assert scheduler_calls[0][0][3] == expected_scheduler_user
+    assert scheduler_calls[0][0][3] != "forged-user"
+    assert all("SLURM_CONF" not in environment for _, environment in scheduler_calls)
+
+    scheduler_calls.clear()
+
+    def capture_sacct(command, **kwargs):
+        scheduler_calls.append((command, kwargs["env"]))
+        return SimpleNamespace(stdout="")
+
+    with monkeypatch.context() as policy:
+        policy.setenv("SLURM_CONF", "/tmp/forged-slurm.conf")
+        policy.setattr(stage_i.subprocess, "run", capture_sacct)
+        assert stage_i.sacct_output(
+            SimpleNamespace(sacct_file=None, job_id="12345"),
+            paths,
+            allow_fixture=False,
+        ) == ""
+    assert scheduler_calls[0][0][0] == "/usr/bin/sacct"
+    assert "SLURM_CONF" not in scheduler_calls[0][1]
 
 
 def test_cgl_lf_stage_i_groups_rank_local_output_products(tmp_path):

@@ -23,6 +23,7 @@ import json
 import math
 import os
 from pathlib import Path
+import pwd
 import re
 import shlex
 import shutil
@@ -36,6 +37,10 @@ import uuid
 ROOT_DIR = Path(__file__).resolve().parents[2]
 PRODUCTION_UTILITY_RELATIVE = Path("scripts/frontier/cgl_lf_stage_i.py")
 DEFAULT_ROOT = Path("/lustre/orion/ast207/proj-shared/dfielding/CGL")
+SACCT = Path("/usr/bin/sacct")
+SBATCH = Path("/usr/bin/sbatch")
+SCONTROL = Path("/usr/bin/scontrol")
+SQUEUE = Path("/usr/bin/squeue")
 DEFAULT_MATRIX = ROOT_DIR / "inputs/cgl_lf_paper/mks24_stage_i_manifest.json"
 ACCOUNT = "AST207"
 PARTITION = "batch"
@@ -273,6 +278,21 @@ def canonical_root_lock_path(root: Path) -> Path:
     return root / f".mks24_stage_i_{EXECUTION_EPOCH_SLUG}.lock"
 
 
+def require_canonical_root_lock_profile(profile: os.stat_result,
+                                        lock_path: Path) -> None:
+    """Require one cooperative canonical-root lock profile."""
+
+    mode = stat.S_IMODE(profile.st_mode)
+    if not stat.S_ISREG(profile.st_mode):
+        raise ValueError(f"Stage I lock is not a regular file: {lock_path}")
+    if profile.st_uid != os.geteuid():
+        raise ValueError(f"Stage I lock owner differs: {lock_path}")
+    if profile.st_nlink != 1:
+        raise ValueError(f"Stage I lock link count differs: {lock_path}")
+    if mode & ~0o644:
+        raise ValueError(f"Stage I lock mode is too permissive: {lock_path}")
+
+
 @contextmanager
 def canonical_root_lock(root: Path):
     """Take a nonblocking reentrant lock for canonical-root mutations."""
@@ -293,7 +313,36 @@ def canonical_root_lock(root: Path):
     if not resolved.is_dir():
         raise ValueError(f"canonical Stage I root is unavailable: {resolved}")
     lock_path = canonical_root_lock_path(resolved)
-    stream = lock_path.open("a+", encoding="utf-8")
+    created = False
+    previous = os.umask(0)
+    try:
+        try:
+            descriptor = os.open(
+                lock_path,
+                os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                0o644,
+            )
+            created = True
+        except FileExistsError:
+            try:
+                descriptor = os.open(lock_path, os.O_RDWR | os.O_NOFOLLOW)
+            except OSError as error:
+                if error.errno == errno.ELOOP:
+                    raise ValueError(
+                        f"Stage I lock must not be a symlink: {lock_path}"
+                    ) from error
+                raise
+    finally:
+        os.umask(previous)
+    try:
+        profile = os.fstat(descriptor)
+        require_canonical_root_lock_profile(profile, lock_path)
+    except BaseException:
+        os.close(descriptor)
+        raise
+    if created:
+        fsync_directory(resolved)
+    stream = os.fdopen(descriptor, "a+", encoding="utf-8")
     try:
         try:
             fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -303,6 +352,26 @@ def canonical_root_lock(root: Path):
             raise ValueError(
                 f"another Stage I mutation holds {lock_path}"
             ) from error
+        profile = os.fstat(stream.fileno())
+        try:
+            named_profile = os.stat(lock_path, follow_symlinks=False)
+        except FileNotFoundError as error:
+            raise ValueError(
+                f"Stage I lock path changed while locking: {lock_path}"
+            ) from error
+        if (
+            not stat.S_ISREG(named_profile.st_mode)
+            or (named_profile.st_dev, named_profile.st_ino)
+            != (profile.st_dev, profile.st_ino)
+        ):
+            raise ValueError(
+                f"Stage I lock path changed while locking: {lock_path}"
+            )
+        require_canonical_root_lock_profile(profile, lock_path)
+        if stat.S_IMODE(os.fstat(stream.fileno()).st_mode) != 0o644:
+            os.fchmod(stream.fileno(), 0o644)
+            os.fsync(stream.fileno())
+            fsync_directory(resolved)
         _ACTIVE_ROOT_LOCKS[resolved] = (stream, 1)
         try:
             yield
@@ -3090,17 +3159,71 @@ def reservation_for_manifest(reservations: list[dict[str, object]],
     return matches[0]
 
 
-def production_queue_output(args: argparse.Namespace) -> str:
+def scheduler_environment() -> dict[str, str]:
+    """Return inherited process state without caller-selected Slurm routing."""
+
+    return {
+        key: value for key, value in os.environ.items()
+        if not key.startswith("SLURM_")
+    }
+
+
+def scheduler_account_name() -> str:
+    """Return the account name bound to this process effective UID."""
+
+    try:
+        return pwd.getpwuid(os.geteuid()).pw_name
+    except KeyError as error:
+        raise ValueError(
+            "effective UID has no account name; cannot query scheduler"
+        ) from error
+
+
+def production_queue_output(args: argparse.Namespace,
+                            offline_local_root: bool) -> str:
     """Query all of this user's queued jobs before a root-writing submission."""
 
-    if args.squeue_file:
-        return Path(args.squeue_file).read_text(encoding="utf-8")
-    user = os.environ.get("USER")
-    if not user:
-        raise ValueError("USER is not set; cannot check production queue")
+    fixture = getattr(args, "squeue_file", None)
+    if fixture:
+        if not offline_local_root:
+            raise ValueError("--squeue-file is restricted to offline local roots")
+        return Path(fixture).read_text(encoding="utf-8")
+    if offline_local_root:
+        raise ValueError("offline local-root submission requires --squeue-file")
+    user = scheduler_account_name()
+    try:
+        return subprocess.run(
+            [str(SQUEUE), "-h", "-u", user, "-o", "%i|%P|%T|%j"],
+            check=True,
+            capture_output=True,
+            text=True,
+            env=scheduler_environment(),
+        ).stdout
+    except (FileNotFoundError, subprocess.CalledProcessError) as error:
+        raise ValueError(
+            "squeue is unavailable; refusing Stage I submission"
+        ) from error
+
+
+def validate_submission_fixture_options(args: argparse.Namespace,
+                                        offline_local_root: bool) -> None:
+    """Keep scheduler fixture injection and test bypass out of production."""
+
+    if getattr(args, "squeue_file", None) and not offline_local_root:
+        raise ValueError("--squeue-file is restricted to offline local roots")
+    if getattr(args, "skip_slurm_test", False) and not offline_local_root:
+        raise ValueError("--skip-slurm-test is restricted to offline local roots")
+
+
+def scheduler_test_only_output(script: Path) -> str:
+    """Run the live Slurm submission validator with trusted routing."""
+
     return subprocess.run(
-        ["squeue", "-h", "-u", user, "-o", "%i|%P|%T|%j"],
-        check=True, capture_output=True, text=True,
+        [str(SBATCH), "--test-only", str(script)],
+        check=True,
+        capture_output=True,
+        text=True,
+        env=scheduler_environment(),
     ).stdout
 
 
@@ -3185,6 +3308,7 @@ def submission_preflight(args: argparse.Namespace, manifest_path: Path,
     require_current_epoch(manifest, "prepared segment")
     root = require_root(Path(str(manifest["project_root"])), args.allow_local_root)
     offline_local_root = is_offline_local_root(root, args.allow_local_root)
+    validate_submission_fixture_options(args, offline_local_root)
     paths = layout(root)
     require_existing_layout(paths)
     require_no_pending_transactions(paths)
@@ -3213,7 +3337,9 @@ def submission_preflight(args: argparse.Namespace, manifest_path: Path,
     actual, reserved = reservation_usage(paths)
     if actual + reserved > CURRENT_STAGE_I_RESERVED_NODE_HOURS:
         raise ValueError("active Stage I reservation exceeds its ceiling")
-    lines = [line for line in production_queue_output(args).splitlines()
+    lines = [line for line in production_queue_output(
+        args, offline_local_root
+    ).splitlines()
              if line.strip()]
     if lines:
         raise ValueError(
@@ -3231,21 +3357,21 @@ def submission_preflight(args: argparse.Namespace, manifest_path: Path,
         )
     script = Path(str(manifest["paths"]["batch_script"])).resolve()
     slurm_test_outcome = "not requested"
-    if run_slurm_test and not offline_local_root and not args.skip_slurm_test:
-        result = subprocess.run(
-            ["sbatch", "--test-only", str(script)],
-            check=True, capture_output=True, text=True,
-        )
-        print(result.stdout.strip())
+    if (
+        run_slurm_test
+        and not offline_local_root
+        and not getattr(args, "skip_slurm_test", False)
+    ):
+        print(scheduler_test_only_output(script).strip())
         slurm_test_outcome = "passed"
     elif run_slurm_test and offline_local_root:
         slurm_test_outcome = "offline local-root fixture"
-    elif run_slurm_test and args.skip_slurm_test:
+    elif run_slurm_test and getattr(args, "skip_slurm_test", False):
         slurm_test_outcome = "operator skipped with --skip-slurm-test"
     audit = {
         "created_utc": utc_now(),
         "offline_local_root": offline_local_root,
-        "skip_slurm_test": bool(args.skip_slurm_test),
+        "skip_slurm_test": bool(getattr(args, "skip_slurm_test", False)),
         "slurm_test_only": slurm_test_outcome,
         "acknowledged_shared_root_campaigns": sorted(
             set(getattr(args, "allow_shared_root_campaign", []))
@@ -3319,8 +3445,11 @@ def verify_recovered_scheduler_job(manifest: dict[str, object], job_id: str,
     expected_name = expected_job_name(manifest)
     expected_script = Path(str(manifest["paths"]["batch_script"])).resolve()
     control = subprocess.run(
-        ["scontrol", "show", "job", "-o", job_id],
-        check=False, capture_output=True, text=True,
+        [str(SCONTROL), "show", "job", "-o", job_id],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=scheduler_environment(),
     )
     if control.returncode == 0:
         fields = {
@@ -3357,10 +3486,13 @@ def verify_recovered_scheduler_job(manifest: dict[str, object], job_id: str,
             }
     accounting = subprocess.run(
         [
-            "sacct", "-X", "-j", job_id,
+            str(SACCT), "-X", "-j", job_id,
             "--format=JobIDRaw,JobName,Account,Partition,Submit", "-n", "-P",
         ],
-        check=True, capture_output=True, text=True,
+        check=True,
+        capture_output=True,
+        text=True,
+        env=scheduler_environment(),
     ).stdout
     rows = [
         row for row in csv.reader(accounting.splitlines(), delimiter="|")
@@ -3418,9 +3550,7 @@ def scheduler_absence_evidence(args: argparse.Namespace,
             "expected_job_name": expected_name,
             "ambiguity_created_utc": transaction["created_utc"],
         }
-    user = os.environ.get("USER")
-    if not user:
-        raise ValueError("USER is unavailable for scheduler absence query")
+    user = scheduler_account_name()
     barrier = parse_utc_timestamp(
         transaction.get("created_utc"), "submission ambiguity barrier time"
     )
@@ -3429,17 +3559,27 @@ def scheduler_absence_evidence(args: argparse.Namespace,
     ).strftime(
         "%Y-%m-%dT%H:%M:%S"
     )
-    squeue_command = ["squeue", "-h", "-u", user, "-o", "%i|%j|%a|%P|%V|%o"]
+    squeue_command = [
+        str(SQUEUE), "-h", "-u", user, "-o", "%i|%j|%a|%P|%V|%o",
+    ]
     sacct_command = [
-        "sacct", "-X", "-S", scheduler_start,
+        str(SACCT), "-X", "-S", scheduler_start,
         "--format=JobIDRaw,JobName,Account,Partition,Submit", "-n", "-P",
     ]
     try:
         queued = subprocess.run(
-            squeue_command, check=True, capture_output=True, text=True,
+            squeue_command,
+            check=True,
+            capture_output=True,
+            text=True,
+            env=scheduler_environment(),
         ).stdout
         accounted = subprocess.run(
-            sacct_command, check=True, capture_output=True, text=True,
+            sacct_command,
+            check=True,
+            capture_output=True,
+            text=True,
+            env=scheduler_environment(),
         ).stdout
     except (OSError, subprocess.CalledProcessError) as error:
         break_glass = getattr(args, "break_glass_clear_evidence", "")
@@ -3497,8 +3637,11 @@ def submit(args: argparse.Namespace) -> int:
         output = Path(output_file).read_text(encoding="utf-8")
     else:
         output = subprocess.run(
-            ["sbatch", "--parsable", str(script)],
-            check=True, capture_output=True, text=True,
+            [str(SBATCH), "--parsable", str(script)],
+            check=True,
+            capture_output=True,
+            text=True,
+            env=scheduler_environment(),
         ).stdout
     job_id = parse_sbatch_job_id(output)
     finish_submit_transaction(
@@ -4145,11 +4288,14 @@ def sacct_output(args: argparse.Namespace, paths: dict[str, Path],
     else:
         output = subprocess.run(
             [
-                "sacct", "-X", "-j", args.job_id,
+                str(SACCT), "-X", "-j", args.job_id,
                 "--format=JobIDRaw,JobName,State,ExitCode,AllocNodes,"
                 "ElapsedRaw,Submit,End", "-n", "-P",
             ],
-            check=True, capture_output=True, text=True,
+            check=True,
+            capture_output=True,
+            text=True,
+            env=scheduler_environment(),
         ).stdout
     write_text(paths["accounting"] / f"{args.job_id}.stage_i.sacct.txt", output)
     return output
