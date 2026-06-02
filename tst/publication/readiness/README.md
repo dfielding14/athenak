@@ -53,12 +53,17 @@ qualify any scientific claim by itself.
   immutable clean-candidate manifest, paired-controller policy promotion,
   pre-promotion operator attestation and quiescent mirrored ledger without
   authorizing a registered-science attempt.
-- `phase0_clean_candidate_freeze_successor_v2_2026-06-01.json`: current
+- `phase0_clean_candidate_freeze_successor_v2_2026-06-01.json`: historical
   additive VL2/TSC clean-candidate freeze receipt. It binds the exact
   `16c103ceea42` source commit, double-precision HIP/MPI Release executable,
   recursively read-only `d7205cd3` manifest and independently validated
-  110-deck, 16-analyzer closure. Active-policy promotion remains pending until
-  the unrelated CGL allocation exits and the queue-clear live preflight passes.
+  110-deck, 16-analyzer closure before policy promotion.
+- `phase0_clean_candidate_freeze_and_policy_promotion_successor_v2_2026-06-02.json`:
+  current historical-boundary receipt for the exact `d7205cd3` manifest
+  authorization through the installed `aa069bc7` paired controller. It binds
+  the queue-clear pre-promotion operator attestation, byte-identical Orion and
+  Project Home policy mirrors, the empty registered-science allowlist and the
+  quiescent 108-row mirrored ledger without authorizing a science launch.
 - `phase0_scheduler_accounting_controller_successor_2026-06-01.json`:
   accounting-only paired-controller successor. It widens the
   nonqualifying manual allocation importer without invalidating historical
@@ -100,12 +105,17 @@ qualify any scientific claim by itself.
   receipt, promoted launch-prohibited pending-clean-freeze policy, 110-deck and
   16-analyzer closure, quiescent 108-row mirrored ledger, and remaining
   canonical HIP/MPI Release build, freeze and registered-launch gates.
-- `phase0_curated_candidate_successor_v14_2026-06-01.json`: current curated
+- `phase0_curated_candidate_successor_v14_2026-06-01.json`: historical curated
   post-freeze successor. It binds the canonical `16c103ceea42`
   double-precision HIP/MPI Release build and recursively read-only `d7205cd3`
-  VL2/TSC clean-candidate freeze. Launch remains prohibited while the unrelated
-  CGL allocation is active and until queue-clear live preflight and exact
-  freeze-policy promotion complete.
+  VL2/TSC clean-candidate freeze before queue-clear live preflight and exact
+  freeze-policy promotion completed.
+- `phase0_curated_candidate_successor_v15_2026-06-02.json`: current curated
+  historical d720 boundary. It binds the queue-clear `d7205cd3` freeze-policy
+  promotion through the installed `aa069bc7` paired controller, byte-identical
+  live mirrors, the empty registered-science allowlist, the quiescent 108-row
+  ledger and pending external review. Launch remains prohibited until a science
+  slice is explicitly registered.
 - `phase0_curated_candidate_successor_v4_2026-05-31.json`: historical Phase 0
   successor after schema-3 parallel-shock exact tag-window and restart
   fail-stop hardening. It binds the paired `4f005096` successor receipt and
