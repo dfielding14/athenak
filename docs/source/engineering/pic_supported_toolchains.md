@@ -76,9 +76,9 @@ set -euo pipefail
 
 export PIC_ROOT=/lustre/orion/ast207/proj-shared/dfielding/PIC
 export CONTROL_PLANE_DIR="${PIC_ROOT}/control_plane/<reviewed-control-plane-digest>"
+PYTHON=/opt/cray/pe/python/3.11.7/bin/python3
 CONTROL_PLANE=("$PYTHON" -I "${CONTROL_PLANE_DIR}/run_control_plane.py")
 export SRC_DIR=/ccs/home/dfielding/athenak-pic
-PYTHON=/opt/cray/pe/python/3.11.7/bin/python3
 source "${CONTROL_PLANE_DIR}/frontier_pic_environment.sh" || exit $?
 export GIT_COMMIT_FULL="$(git -C "$SRC_DIR" rev-parse HEAD)"
 

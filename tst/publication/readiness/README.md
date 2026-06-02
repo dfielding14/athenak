@@ -48,7 +48,7 @@ qualify any scientific claim by itself.
   registered-science allowlist, the quiescent 108-row mirrored ledger and
   absent pending-submission and incomplete-manual-accounting markers.
 - `phase0_clean_candidate_freeze_and_policy_promotion_2026-06-01.json`:
-  canonical clean-candidate freeze receipt. It binds the exact
+  historical pre-VL2 canonical clean-candidate freeze receipt. It binds the exact
   `1171668b` source commit, double-precision HIP/MPI Release executable,
   immutable clean-candidate manifest, paired-controller policy promotion,
   pre-promotion operator attestation and quiescent mirrored ledger without
@@ -60,7 +60,7 @@ qualify any scientific claim by itself.
   diagnostic import, and binds the terminal 66-row mirrored ledger before any
   registered replay is submitted.
 - `phase0_registered_prerequisite_replay_policy_promotion_2026-06-01.json`:
-  current three-slice replay authorization receipt. It binds the canonical
+  historical pre-VL2 three-slice replay authorization receipt. It binds the canonical
   clean candidate and the fresh single-attempt gyro, paper-coupling and
   multirank parser/runtime-metadata short nonproduction replays after scheduler
   accounting closure.
@@ -72,8 +72,8 @@ qualify any scientific claim by itself.
 - `phase0_curated_candidate_successor_v7_2026-06-01.json`: historical Phase 0
   successor. It binds the canonical clean-candidate freeze, terminal scheduler
   accounting closure and fresh three-slice registered prerequisite replay
-  authorization. Phase 0 is complete; the serial prerequisite replays are the
-  next execution boundary.
+  authorization. It records the historical pre-VL2 Phase 0 completion boundary;
+  v12 supersedes that boundary for new VL2/TSC work.
 - `phase0_curated_candidate_successor_v8_2026-06-01.json`: historical curated
   Phase 0 successor. It binds the terminal passing closure for the gyro,
   paper-coupling and multirank parser/runtime-metadata registered prerequisite
