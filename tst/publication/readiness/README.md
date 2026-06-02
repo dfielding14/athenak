@@ -36,11 +36,17 @@ qualify any scientific claim by itself.
   inventories, promoted transition policy, quiescent mirrored ledger and
   absent pending-submission markers.
 - `phase0_paired_control_plane_install_and_policy_promotion_successor_v2_2026-06-01.json`:
-  chronology-preserving receipt for the paired immutable `66b63acd`
+  historical chronology-preserving receipt for the paired immutable `66b63acd`
   controller successor install, explicit double-precision paper release
   profile, byte-identical Orion and Project Home inventories, promoted
   transition policy, quiescent mirrored ledger and absent pending-submission
   markers.
+- `phase0_paired_control_plane_install_and_policy_promotion_successor_v3_2026-06-01.json`:
+  current launch-prohibited transition receipt for the paired immutable
+  `aa069bc7` VL2/TSC controller install. It binds byte-identical Orion and
+  Project Home inventories, the promoted pending-clean-freeze policy, the empty
+  registered-science allowlist, the quiescent 108-row mirrored ledger and
+  absent pending-submission and incomplete-manual-accounting markers.
 - `phase0_clean_candidate_freeze_and_policy_promotion_2026-06-01.json`:
   canonical clean-candidate freeze receipt. It binds the exact
   `1171668b` source commit, double-precision HIP/MPI Release executable,
@@ -68,10 +74,18 @@ qualify any scientific claim by itself.
   accounting closure and fresh three-slice registered prerequisite replay
   authorization. Phase 0 is complete; the serial prerequisite replays are the
   next execution boundary.
-- `phase0_curated_candidate_successor_v8_2026-06-01.json`: current curated
+- `phase0_curated_candidate_successor_v8_2026-06-01.json`: historical curated
   Phase 0 successor. It binds the terminal passing closure for the gyro,
   paper-coupling and multirank parser/runtime-metadata registered prerequisite
   replays and advances the work program to local Section 5.4 contract closure.
+- `phase0_curated_candidate_successor_v9_2026-06-01.json`,
+  `phase0_curated_candidate_successor_v10_2026-06-01.json` and
+  `phase0_curated_candidate_successor_v11_2026-06-01.json`: additive VL2/TSC
+  successor chronology. The v9 bytes are preserved immutably, v10 restores the
+  exact predecessor binding and terminal mirrored-ledger snapshot, and v11
+  records the stable documentation-rereview boundary before paired install.
+  The complete prepared-artifact inventory contains 110 PIC decks and 16
+  publication analyzers.
 - `phase0_curated_candidate_successor_v4_2026-05-31.json`: historical Phase 0
   successor after schema-3 parallel-shock exact tag-window and restart
   fail-stop hardening. It binds the paired `4f005096` successor receipt and
@@ -222,6 +236,16 @@ qualify any scientific claim by itself.
   allocation. OLCF policy forbids parallel login-node launches, so the retained
   outputs provide no readiness credit. Replay only through a registered,
   budget-tracked compute-node allocation using `srun`.
+- `pic_paper_smooth_tsc_interface_nonqualifying_replay_2026-06-01.json`:
+  historical dirty-tranche serial and Frontier MPI2 mechanics replay only. Its
+  pre-update analyzer and deck digests are preserved as chronology and must not
+  be used as current source bindings.
+- `pic_vl2_tsc_additive_successor_registration_v4_2026-06-01.json`: current
+  source-local VL2/TSC registration superseding that dirty-tranche pointer. It
+  binds the updated smooth-interface decks and analyzer, startup-only stage-2
+  transport oracle, serial cases `a` through `p`, MPI2 and MPI3 route targets,
+  corrected Project Home mirror root, and the remaining registered dynamic
+  multilevel replay gate without authorizing a launch or qualifying a claim.
 - `plotting_environment_lock_candidate_2026-05-30.json`: local Python and
   plotting-dependency lock candidate pending backend, font, environment
   artifact and external-export freeze.
