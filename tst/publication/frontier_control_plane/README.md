@@ -673,11 +673,12 @@ STAGING="$(
     --control-plane-version "$VERSION" \
     --phase pre_manifest
 )"
-PRE_MANIFEST_ATTESTATION="$(
+PRE_MANIFEST_ATTESTATION_ROOT="$(
   "$PYTHON" "$ATTESTATION_HELPER" seal \
     --staging-dir "$STAGING" \
     --attest-reviewed
 )"
+PRE_MANIFEST_ATTESTATION="${PRE_MANIFEST_ATTESTATION_ROOT}/attestation.json"
 ```
 
 Repeat that capture-review-seal sequence with `--phase pre_submit_wrapper`
@@ -748,11 +749,12 @@ STAGING="$(
     --control-plane-version "$VERSION" \
     --phase pre_policy_promotion
 )"
-PRE_POLICY_PROMOTION_ATTESTATION="$(
+PRE_POLICY_PROMOTION_ATTESTATION_ROOT="$(
   "$PYTHON" "$ATTESTATION_HELPER" seal \
     --staging-dir "$STAGING" \
     --attest-reviewed
 )"
+PRE_POLICY_PROMOTION_ATTESTATION="${PRE_POLICY_PROMOTION_ATTESTATION_ROOT}/attestation.json"
 "${CONTROL_PLANE[@]}" promote_active_policy.py \
   --reviewed-policy "${PIC_ROOT}/policy/reviewed_q011_pressure_pilot_successor.json" \
   --pre-policy-promotion-attestation "$PRE_POLICY_PROMOTION_ATTESTATION" \
@@ -784,11 +786,12 @@ STAGING="$(
     --control-plane-version "$VERSION" \
     --phase pre_manifest
 )"
-PRE_MANIFEST_ATTESTATION="$(
+PRE_MANIFEST_ATTESTATION_ROOT="$(
   "$PYTHON" "$ATTESTATION_HELPER" seal \
     --staging-dir "$STAGING" \
     --attest-reviewed
 )"
+PRE_MANIFEST_ATTESTATION="${PRE_MANIFEST_ATTESTATION_ROOT}/attestation.json"
 
 (
   umask 077
@@ -831,11 +834,12 @@ STAGING="$(
     --control-plane-version "$VERSION" \
     --phase pre_submit_wrapper
 )"
-PRE_SUBMIT_WRAPPER_ATTESTATION="$(
+PRE_SUBMIT_WRAPPER_ATTESTATION_ROOT="$(
   "$PYTHON" "$ATTESTATION_HELPER" seal \
     --staging-dir "$STAGING" \
     --attest-reviewed
 )"
+PRE_SUBMIT_WRAPPER_ATTESTATION="${PRE_SUBMIT_WRAPPER_ATTESTATION_ROOT}/attestation.json"
 
 "${CONTROL_PLANE_DIR}/submit_frontier_job.sh" \
   "$MANIFEST" "$PRE_SUBMIT_WRAPPER_ATTESTATION"
@@ -860,9 +864,15 @@ terminal boundary is mandatory between every pair of cases.
 
 After all four descriptors exist, publish the descriptor-verified aggregate
 bundle once. The publisher accepts exactly four case directories and four
-descriptor checksums:
+descriptor checksums. Create and sync the canonical publication root once
+before publication; do not use a Project Home bulk-artifact directory:
 
 ```bash
+mkdir "${PIC_ROOT}/publication"
+"$PYTHON" -I -c \
+  'import os, sys; fd = os.open(sys.argv[1], os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW); os.fsync(fd); os.close(fd)' \
+  "${PIC_ROOT}/publication"
+
 /opt/cray/pe/python/3.11.7/bin/python3 -I -B \
   /ccs/home/dfielding/athenak-pic/tst/publication/publish_q011_section54_pressure_pilot_bundle.py \
   "${PIC_ROOT}/publication/q011_section54_pressure_pilot_bundle" \

@@ -48,11 +48,18 @@ qualify any scientific claim by itself.
   registered-science allowlist, the quiescent 108-row mirrored ledger and
   absent pending-submission and incomplete-manual-accounting markers.
 - `phase0_paired_control_plane_install_and_policy_promotion_successor_v4_2026-06-02.json`:
-  current launch-prohibited transition receipt for the paired immutable
+  historical launch-prohibited transition receipt for the paired immutable
   `c83e7653` trusted-timeout controller install. It binds byte-identical Orion
   and Project Home inventories, the promoted historical `d7205cd3` freeze
   policy, the queue-clear operator attestation, the empty registered-science
   allowlist, and the quiescent 108-row mirrored ledger.
+- `phase0_paired_control_plane_install_and_policy_promotion_successor_v5_2026-06-02.json`:
+  current launch-prohibited transition receipt for the paired immutable
+  `8f0a9d7f` hardened registered-pilot controller install. It binds
+  byte-identical Orion and Project Home inventories, the promoted historical
+  `d7205cd3` freeze policy, the empty registered-science allowlist, and the
+  quiescent 108-row mirrored ledger. The empty-allowlist promotion correctly
+  does not claim a pre-policy-promotion operator attestation.
 - `phase0_clean_candidate_freeze_and_policy_promotion_2026-06-01.json`:
   historical pre-VL2 canonical clean-candidate freeze receipt. It binds the exact
   `1171668b` source commit, double-precision HIP/MPI Release executable,
