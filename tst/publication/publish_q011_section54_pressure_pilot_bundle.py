@@ -476,12 +476,16 @@ def verify_published_pressure_pilot_bundle(
 
 
 def _source_bindings() -> dict[str, dict[str, str]]:
-    pilot.execution.validate_source_tranche()
     publisher_source = Path(__file__).resolve()
     analyzer_source = Path(pilot.__file__).resolve()
     registered_execution_payload = pilot._regular_bytes(
         _REGISTERED_EXECUTION_PREREGISTRATION_PATH,
         "pressure-pilot registered-execution preregistration",
+    )
+    _require(
+        _sha256(registered_execution_payload)
+        == pilot.REGISTERED_EXECUTION_PREREGISTRATION_SHA256,
+        "pressure-pilot registered-execution preregistration SHA-256 drifted",
     )
     return {
         "registered_execution_preregistration": {
@@ -510,7 +514,6 @@ def _source_bindings() -> dict[str, dict[str, str]]:
 
 
 def _manifest(case_descriptors: Mapping[str, Mapping[str, object]]) -> dict[str, object]:
-    pilot.execution.validate_source_tranche()
     policy = pilot._load_policy()
     preregistration_payload = pilot._regular_bytes(
         pilot.PREREGISTRATION_PATH, "pressure-pilot preregistration"
@@ -518,6 +521,11 @@ def _manifest(case_descriptors: Mapping[str, Mapping[str, object]]) -> dict[str,
     registered_execution_payload = pilot._regular_bytes(
         _REGISTERED_EXECUTION_PREREGISTRATION_PATH,
         "pressure-pilot registered-execution preregistration",
+    )
+    _require(
+        _sha256(registered_execution_payload)
+        == pilot.REGISTERED_EXECUTION_PREREGISTRATION_SHA256,
+        "pressure-pilot registered-execution preregistration SHA-256 drifted",
     )
     return {
         "schema_version": 1,

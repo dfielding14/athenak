@@ -477,13 +477,14 @@ class Q011Section54PressurePilotBundlePublicationTests(unittest.TestCase):
                     receipt_path, authorized_pic_root=base.parent
                 )
 
-    def test_analyzer_and_publisher_require_registered_source_tranche(self) -> None:
+    def test_analyzer_and_publisher_require_registered_execution_digest(self) -> None:
         with _verified_raw_cases() as (base, roots, digests), patch.object(
-            pilot.execution,
-            "validate_source_tranche",
-            side_effect=pilot.execution.ContractError("source drift"),
+            pilot, "REGISTERED_EXECUTION_PREREGISTRATION_SHA256", "0" * 64
         ):
-            with self.assertRaisesRegex(pilot.execution.ContractError, "source drift"):
+            with self.assertRaisesRegex(
+                publisher.PressurePilotPublicationError,
+                "registered-execution preregistration SHA-256 drifted",
+            ):
                 publisher.publish_pressure_pilot_bundle(
                     base / "bundle",
                     receipt_path=base / "publication-receipt.json",
@@ -492,8 +493,18 @@ class Q011Section54PressurePilotBundlePublicationTests(unittest.TestCase):
                     case_descriptor_sha256=digests,
                     authorized_pic_root=base.parent,
                 )
-            with self.assertRaisesRegex(pilot.execution.ContractError, "source drift"):
-                pilot.analyze_pressure_pilot_bundle(base, "0" * 64)
+        with pilot_fixture._fixture() as fixture, patch.object(
+            pilot, "REGISTERED_EXECUTION_PREREGISTRATION_SHA256", "0" * 64
+        ):
+            with self.assertRaisesRegex(
+                pilot.PilotAnalysisError,
+                "registered-execution preregistration SHA-256 drifted",
+            ):
+                pilot.analyze_pressure_pilot_bundle(
+                    fixture[0],
+                    fixture[2],
+                    authorized_publication_root=fixture[0].parent,
+                )
 
     def test_descriptor_relative_rename_fails_closed_without_atomic_no_replace(
         self,

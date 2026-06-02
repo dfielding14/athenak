@@ -1,0 +1,36 @@
+{
+  "record_type": "q011_section54_pressure_pilot_aggregate_analysis_compatibility_successor",
+  "schema_version": 1,
+  "date": "2026-06-02",
+  "gate": "Q-011",
+  "classification": "engineering_calibration_only",
+  "qualification_effect": "none_parser_compatibility_repair_only_no_sun_bai_claim_no_execution_authorization",
+  "predecessor_record": "tst/publication/readiness/q011_section54_pressure_pilot_preregistration_2026-06-01.json",
+  "predecessor_sha256": "b0c703bc764c134b5e1c9e5c76a0dff1888bc6fa9b1e3b04456c372ec73ac045",
+  "failed_closed_publication": {
+    "slurm_job_id": "4756951",
+    "terminal_state": "FAILED",
+    "failure_class": "strict_offline_athena_binary_header_parser_rejected_runtime_added_empty_optional_parameter",
+    "offending_header_entry": "particles/pic_deltaf_f0",
+    "public_bundle_exposed": false
+  },
+  "compatibility_repair": {
+    "changed_source_binding": {
+      "path": "tst/publication/analyze_q011_section54_outputs.py",
+      "predecessor_sha256": "abe664ece580f70fcde022aa15583846c4050b342d2072c8cd9c181c0b9d6d22",
+      "successor_sha256": "20794ed45b80843b8e75accffc2e9336fcb7da58716fb818e466e193cd346356"
+    },
+    "accepted_runtime_header_form": "optional parameter key with an empty value before an AthenaK runtime-default comment",
+    "scientific_contract_changed": false,
+    "pilot_cases_changed": false,
+    "estimators_changed": false,
+    "thresholds_changed": false,
+    "snapshot_selection_changed": false
+  },
+  "execution_policy": {
+    "frontier_execution_authorized_by_this_record": false,
+    "scheduler_commands_authorized_by_this_record": false,
+    "scientific_evidence_eligible": false,
+    "sun_bai_claim": false
+  }
+}

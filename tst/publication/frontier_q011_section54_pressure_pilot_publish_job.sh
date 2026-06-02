@@ -23,6 +23,7 @@ SOURCE_CLOSURE=(
   tst/publication/frontier_f1_structured_artifacts.py
   tst/publication/pvtk_particles.py
   tst/publication/readiness/q011_section54_pressure_pilot_preregistration_2026-06-01.json
+  tst/publication/readiness/q011_section54_pressure_pilot_aggregate_analysis_compatibility_successor_2026-06-02.json
   tst/publication/readiness/q011_section54_pressure_pilot_registered_execution_preregistration_2026-06-02.json
 )
 
@@ -32,7 +33,10 @@ test -z "$(git ls-files --others --exclude-standard -- "${SOURCE_CLOSURE[@]}")"
 echo "source_commit=$(git rev-parse HEAD)"
 sha256sum "${SOURCE_CLOSURE[@]}"
 
-cd "$REPO_ROOT/tst/publication"
+SNAPSHOT_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/pic-q011-pressure-publish.XXXXXXXX")
+trap 'rm -rf "$SNAPSHOT_ROOT"' EXIT
+git archive HEAD | tar -xf - -C "$SNAPSHOT_ROOT"
+cd "$SNAPSHOT_ROOT/tst/publication"
 
 python3 -B publish_q011_section54_pressure_pilot_bundle.py \
   "$PIC_ROOT/publication/q011_section54_pressure_pilot_bundle" \

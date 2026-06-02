@@ -33,15 +33,24 @@ else:
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MANIFEST_NAME = "pressure_pilot_manifest.json"
-PREREGISTRATION_PATH = (
+BASE_PREREGISTRATION_PATH = (
     REPO_ROOT
     / "tst/publication/readiness/"
     "q011_section54_pressure_pilot_preregistration_2026-06-01.json"
+)
+PREREGISTRATION_PATH = (
+    REPO_ROOT
+    / "tst/publication/readiness/"
+    "q011_section54_pressure_pilot_aggregate_analysis_compatibility_"
+    "successor_2026-06-02.json"
 )
 REGISTERED_EXECUTION_PREREGISTRATION_PATH = (
     REPO_ROOT
     / "tst/publication/readiness/"
     "q011_section54_pressure_pilot_registered_execution_preregistration_2026-06-02.json"
+)
+REGISTERED_EXECUTION_PREREGISTRATION_SHA256 = (
+    "ce0216b6852b932beae695ab53c1376133a921930c001226bf5efdb70a1c463a"
 )
 ACTIVE_DECK_PATH = (
     REPO_ROOT
@@ -362,8 +371,86 @@ def _strict_equal(actual: object, expected: object, label: str) -> None:
         _require(actual == expected, f"{label}: value drifted")
 
 
+def _load_compatibility_successor() -> tuple[bytes, dict[str, str]]:
+    payload = _regular_bytes(
+        PREREGISTRATION_PATH, "pressure-pilot aggregate-analysis compatibility successor"
+    )
+    successor = _decode_json(
+        payload, "pressure-pilot aggregate-analysis compatibility successor"
+    )
+    expected = {
+        "record_type": (
+            "q011_section54_pressure_pilot_aggregate_analysis_compatibility_successor"
+        ),
+        "schema_version": 1,
+        "date": "2026-06-02",
+        "gate": "Q-011",
+        "classification": EVIDENCE_CLASS,
+        "qualification_effect": (
+            "none_parser_compatibility_repair_only_no_sun_bai_claim_"
+            "no_execution_authorization"
+        ),
+        "predecessor_record": (
+            "tst/publication/readiness/"
+            "q011_section54_pressure_pilot_preregistration_2026-06-01.json"
+        ),
+        "predecessor_sha256": (
+            "b0c703bc764c134b5e1c9e5c76a0dff1888bc6fa9b1e3b04456c372ec73ac045"
+        ),
+        "failed_closed_publication": {
+            "slurm_job_id": "4756951",
+            "terminal_state": "FAILED",
+            "failure_class": (
+                "strict_offline_athena_binary_header_parser_rejected_runtime_"
+                "added_empty_optional_parameter"
+            ),
+            "offending_header_entry": "particles/pic_deltaf_f0",
+            "public_bundle_exposed": False,
+        },
+        "compatibility_repair": {
+            "changed_source_binding": {
+                "path": "tst/publication/analyze_q011_section54_outputs.py",
+                "predecessor_sha256": (
+                    "abe664ece580f70fcde022aa15583846c4050b342d2072c8cd9c181c0b9d6d22"
+                ),
+                "successor_sha256": (
+                    "20794ed45b80843b8e75accffc2e9336fcb7da58716fb818e466e193cd346356"
+                ),
+            },
+            "accepted_runtime_header_form": (
+                "optional parameter key with an empty value before an AthenaK "
+                "runtime-default comment"
+            ),
+            "scientific_contract_changed": False,
+            "pilot_cases_changed": False,
+            "estimators_changed": False,
+            "thresholds_changed": False,
+            "snapshot_selection_changed": False,
+        },
+        "execution_policy": {
+            "frontier_execution_authorized_by_this_record": False,
+            "scheduler_commands_authorized_by_this_record": False,
+            "scientific_evidence_eligible": False,
+            "sun_bai_claim": False,
+        },
+    }
+    _strict_equal(
+        successor,
+        expected,
+        "pressure-pilot aggregate-analysis compatibility successor",
+    )
+    predecessor_payload = _regular_bytes(
+        BASE_PREREGISTRATION_PATH, "pressure-pilot base preregistration"
+    )
+    _require(
+        _sha256_bytes(predecessor_payload) == successor["predecessor_sha256"],
+        "pressure-pilot aggregate-analysis compatibility predecessor SHA-256 drifted",
+    )
+    return predecessor_payload, successor["compatibility_repair"]["changed_source_binding"]
+
+
 def _load_policy() -> dict[str, Any]:
-    payload = _regular_bytes(PREREGISTRATION_PATH, "pressure-pilot preregistration")
+    payload, output_primitives_successor = _load_compatibility_successor()
     policy = _object(
         _decode_json(payload, "pressure-pilot preregistration"),
         {
@@ -409,7 +496,7 @@ def _load_policy() -> dict[str, Any]:
         "inputs/publication/pic_parallel_shock_section54_paper_vl2_tsc.athinput",
         "0b1cbd62d54027ec81a5f4f5c88d5ee56b86b8cc0cb018c3fbebfb37a11be7b1",
     )
-    expected_analysis = {
+    base_analysis = {
         "output_primitives": _source_binding(
             "tst/publication/analyze_q011_section54_outputs.py",
             "abe664ece580f70fcde022aa15583846c4050b342d2072c8cd9c181c0b9d6d22",
@@ -419,8 +506,15 @@ def _load_policy() -> dict[str, Any]:
             "187254c4ed10ce20ec383e710dadfa2e03e9f45317cce53e5d644c1db2be7339",
         ),
     }
+    expected_analysis = {
+        **base_analysis,
+        "output_primitives": _source_binding(
+            output_primitives_successor["path"],
+            output_primitives_successor["successor_sha256"],
+        ),
+    }
     _strict_equal(policy["active_deck_binding"], expected_deck, "policy/active_deck")
-    _strict_equal(policy["analysis_bindings"], expected_analysis, "policy/analysis_bindings")
+    _strict_equal(policy["analysis_bindings"], base_analysis, "policy/analysis_bindings")
     contract = _object(
         policy["pilot_contract"],
         {
@@ -489,7 +583,7 @@ def _load_policy() -> dict[str, Any]:
         )
         measured = _sha256_bytes(_regular_bytes(path, f"bound source {relative}"))
         _require(measured == binding["sha256"], f"bound source SHA-256 drifted: {relative}")
-    return policy
+    return {**policy, "analysis_bindings": expected_analysis}
 
 
 def _manifest_schema(payload: bytes) -> dict[str, Any]:
@@ -864,7 +958,6 @@ def analyze_pressure_pilot_bundle(
     authorized_publication_root: Path = AUTHORIZED_PUBLICATION_ROOT,
 ) -> dict[str, Any]:
     """Validate one complete four-case pilot bundle and emit overlay-ready records."""
-    execution.validate_source_tranche()
     _require(_SHA256_PATTERN.fullmatch(expected_manifest_sha256) is not None,
              "expected manifest SHA-256 must contain 64 lowercase hexadecimal digits")
     bundle_root = Path(root)
@@ -897,16 +990,20 @@ def analyze_pressure_pilot_bundle(
         "sha256": _sha256_bytes(_regular_bytes(PREREGISTRATION_PATH, "pressure-pilot preregistration")),
     }
     _strict_equal(manifest["preregistration_binding"], expected_prereg, "manifest/preregistration binding")
+    registered_execution_payload = _regular_bytes(
+        REGISTERED_EXECUTION_PREREGISTRATION_PATH,
+        "pressure-pilot registered-execution preregistration",
+    )
+    _require(
+        _sha256_bytes(registered_execution_payload)
+        == REGISTERED_EXECUTION_PREREGISTRATION_SHA256,
+        "pressure-pilot registered-execution preregistration SHA-256 drifted",
+    )
     expected_registered_execution = {
         "path": REGISTERED_EXECUTION_PREREGISTRATION_PATH.relative_to(
             REPO_ROOT
         ).as_posix(),
-        "sha256": _sha256_bytes(
-            _regular_bytes(
-                REGISTERED_EXECUTION_PREREGISTRATION_PATH,
-                "pressure-pilot registered-execution preregistration",
-            )
-        ),
+        "sha256": REGISTERED_EXECUTION_PREREGISTRATION_SHA256,
     }
     _strict_equal(
         manifest["registered_execution_preregistration_binding"],

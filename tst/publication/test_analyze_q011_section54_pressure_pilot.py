@@ -541,7 +541,7 @@ class Q011Section54PressurePilotTests(unittest.TestCase):
                 )
 
     def test_preregistration_is_explicitly_nonqualifying_and_non_authorizing(self) -> None:
-        policy = json.loads(pilot.PREREGISTRATION_PATH.read_text(encoding="utf-8"))
+        policy = pilot._load_policy()
         self.assertEqual(policy["classification"], "engineering_calibration_only")
         self.assertEqual(
             policy["qualification_effect"],
@@ -555,6 +555,10 @@ class Q011Section54PressurePilotTests(unittest.TestCase):
             [item["problem_ps_p0"] for item in policy["pilot_contract"]["cases"]],
             [1.0, 0.05, 0.1, 0.2],
         )
+        successor = json.loads(pilot.PREREGISTRATION_PATH.read_text(encoding="utf-8"))
+        self.assertFalse(successor["compatibility_repair"]["scientific_contract_changed"])
+        self.assertFalse(successor["compatibility_repair"]["estimators_changed"])
+        self.assertFalse(successor["compatibility_repair"]["thresholds_changed"])
 
 
 if __name__ == "__main__":
