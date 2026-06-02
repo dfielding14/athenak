@@ -2,10 +2,13 @@
 
 ## Purpose
 
-Use this runbook to establish a clean local launch for the explicit
-`paper_mhd_pic` and `extended_mhd_pic` runtime identities. These checks are
-host-side development evidence only. They do not qualify MPI runtime, HIP/GPU
-runtime, Frontier portability, scientific reproduction, or publication claims.
+Use this runbook to establish a clean local launch for the active
+`paper_mhd_pic_vl2_tsc` and `extended_mhd_pic` runtime identities. The
+historical `paper_mhd_pic` identity remains available for restart and
+source-history compatibility only; do not use it for new publication work.
+These checks are host-side development evidence only. They do not qualify MPI
+runtime, HIP/GPU runtime, Frontier portability, scientific reproduction, or
+publication claims.
 
 The governing model boundary is documented in
 [MHD-PIC Runtime Model Contract](pic_mhd_model_contract.md). Supported build
@@ -53,18 +56,20 @@ relative to the current directory.
 ```bash
 cd /ccs/home/dfielding/athenak-pic/tst
 PYTHONPATH="$PWD" python3 - <<'PY'
-from scripts.particles import pic_parser_contract_guards
+from scripts.particles import pic_parser_contract_guards_vl2_tsc
 
-pic_parser_contract_guards.run()
-if not pic_parser_contract_guards.analyze():
+pic_parser_contract_guards_vl2_tsc.run()
+if not pic_parser_contract_guards_vl2_tsc.analyze():
     raise SystemExit("PIC parser contract guards failed")
 PY
 ```
 
-This suite must exercise positive launches for `paper_mhd_pic` and
+This suite must exercise positive launches for `paper_mhd_pic_vl2_tsc` and
 `extended_mhd_pic`, then reject unsupported modes and invalid cross-mode
-compositions. In particular, `paper_mhd_pic` must reject direct-current CT,
-Hall, reduced ion-neutral, and adaptive-delta-f extension selections.
+compositions. In particular, `paper_mhd_pic_vl2_tsc` must reject
+direct-current CT, Hall, reduced ion-neutral, and adaptive-delta-f extension
+selections. The historical `pic_parser_contract_guards.py` harness remains
+available only to replay archived `paper_mhd_pic` chronology.
 
 ## Runtime Identity
 
@@ -75,8 +80,8 @@ with:
 PIC runtime model: physical_mode=<mode> state=<state> C=<value> ...
 ```
 
-The identity line must be retained with the run log. For both `paper_mhd_pic`
-and `extended_mhd_pic`, expect:
+The identity line must be retained with the run log. For both
+`paper_mhd_pic_vl2_tsc` and `extended_mhd_pic`, expect:
 
 ```text
 state=momentum_p_over_m
@@ -84,10 +89,10 @@ deposition=tsc
 restart_schema=7
 ```
 
-For `paper_mhd_pic`, also expect:
+For `paper_mhd_pic_vl2_tsc`, also expect:
 
 ```text
-physical_mode=paper_mhd_pic
+physical_mode=paper_mhd_pic_vl2_tsc
 induction=ideal_mhd_only
 ```
 

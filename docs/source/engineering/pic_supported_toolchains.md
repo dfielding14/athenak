@@ -3,9 +3,12 @@
 ## Scope
 
 This declaration defines the bounded toolchain scope for clean-launch work on
-`paper_mhd_pic` and `extended_mhd_pic`. It is not a scientific qualification
-record. A successful configure, build, or startup check does not qualify
-Frontier portability, decomposition parity, GPU parity, or paper reproduction.
+the active `paper_mhd_pic_vl2_tsc` and `extended_mhd_pic` identities. The
+historical `paper_mhd_pic` identity remains available for restart and
+source-history compatibility only; do not use it for new publication work. A
+successful configure, build, or startup check is not a scientific qualification
+record and does not qualify Frontier portability, decomposition parity, GPU
+parity, or paper reproduction.
 
 | Profile | Supported scope now | Qualification limit |
 | --- | --- | --- |
@@ -15,8 +18,8 @@ Frontier portability, decomposition parity, GPU parity, or paper reproduction.
 | Frontier HIP/MPI | Declared AMD `gfx90a` candidate profile | Build/runtime/profile-selection evidence requires Frontier allocation and the submission unlock |
 
 Keep the runtime identity separate from the build profile. Both
-`paper_mhd_pic` and `extended_mhd_pic` use mass-normalized momentum state, but
-extension controls must never be presented as paper-mode evidence.
+`paper_mhd_pic_vl2_tsc` and `extended_mhd_pic` use mass-normalized momentum
+state, but extension controls must never be presented as paper-mode evidence.
 
 ## Host Configure Commands
 
