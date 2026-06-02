@@ -11,6 +11,7 @@ if __name__ == "__main__" and "/control_plane/" in __file__ and not getattr(
 
 import argparse
 from contextlib import contextmanager
+from datetime import datetime, timezone
 import hashlib
 import json
 import os
@@ -24,9 +25,10 @@ import uuid
 from control_plane_common import AUTHORIZED_PIC_ROOT, AUTHORIZED_PROJECT_HOME_ROOT
 from control_plane_common import durable_mkdir_parents
 from control_plane_common import PinnedDirectoryAncestry
-from control_plane_common import record_for_role, require_ledger_paths
+from control_plane_common import read_json_bytes, record_for_role, require_ledger_paths
 from control_plane_common import require_same_directory, validate_launch_contract
 from control_plane_common import stable_serialization_anchor
+from control_plane_common import utc_datetime
 from control_plane_common import verify_snapshot_files
 from validate_and_reserve_frontier_job import _require_run_artifact_dir
 from validate_and_reserve_frontier_job import executable_reservation_bound_manifest
@@ -42,6 +44,13 @@ _NEW_ARTIFACT_OPEN_FLAGS = (
 _NEW_READ_WRITE_ARTIFACT_OPEN_FLAGS = (
     os.O_RDWR | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
 )
+_TIMEOUT_MARGIN_KEYS = {
+    "athena_walltime_seconds",
+    "scheduler_walltime_seconds",
+    "environment_profile_sha256",
+    "measured_utc",
+    "expires_utc",
+}
 _TASK_LOCAL_EXEC = r"""
 import hashlib
 import os
@@ -210,6 +219,18 @@ class _PinnedSnapshot:
         require_same_directory(self.path.parent, self.parent_descriptor, root=self.root)
         self.parent_ancestry.require_same()
 
+    def read_bytes(self) -> bytes:
+        if self.descriptor is None:
+            raise ValueError("Pinned snapshot is not open")
+        self.require_lexical_parent()
+        os.lseek(self.descriptor, 0, os.SEEK_SET)
+        with os.fdopen(self.descriptor, "rb", closefd=False) as stream:
+            data = stream.read()
+        if hashlib.sha256(data).hexdigest() != self.expected_sha256:
+            raise ValueError(f"Snapshot checksum mismatch: {self.path}")
+        self.require_lexical_parent()
+        return data
+
     def __exit__(self, *_: object) -> None:
         if self.descriptor is not None:
             os.close(self.descriptor)
@@ -218,6 +239,76 @@ class _PinnedSnapshot:
             self.parent_ancestry.close()
             self.parent_ancestry = None
             self.parent_descriptor = None
+
+
+def _strict_json_equal(left: object, right: object) -> bool:
+    if type(left) is not type(right):
+        return False
+    if isinstance(left, dict):
+        return set(left) == set(right) and all(
+            _strict_json_equal(left[key], right[key]) for key in left
+        )
+    if isinstance(left, list):
+        return len(left) == len(right) and all(
+            _strict_json_equal(left_value, right_value)
+            for left_value, right_value in zip(left, right)
+        )
+    return left == right
+
+
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _trusted_athena_timeout_arguments(
+    manifest: dict[str, object], *, root: Path
+) -> tuple[str, str]:
+    record = record_for_role(manifest, "timeout-margin")
+    with _PinnedSnapshot(
+        Path(str(record["path"])),
+        root=root,
+        expected_sha256=str(record["sha256"]),
+    ) as timeout_margin:
+        margin = read_json_bytes(
+            timeout_margin.read_bytes(), label="Timeout-margin snapshot"
+        )
+    if (
+        set(margin) != _TIMEOUT_MARGIN_KEYS
+        or not _strict_json_equal(margin, manifest.get("timeout_margin"))
+    ):
+        raise ValueError("Timeout-margin snapshot differs from manifest record")
+    scheduler = margin.get("scheduler_walltime_seconds")
+    athena = margin.get("athena_walltime_seconds")
+    if type(scheduler) is not int or type(athena) is not int:
+        raise ValueError("Timeout-margin walltimes must be exact integers")
+    if not 0 < athena < scheduler:
+        raise ValueError("Athena timeout must be positive and below Slurm walltime")
+    profile = record_for_role(manifest, "environment-profile")
+    if margin.get("environment_profile_sha256") != profile.get("sha256"):
+        raise ValueError("Timeout-margin artifact does not match environment profile")
+    measured = utc_datetime(margin.get("measured_utc"), field="measured_utc")
+    expires = utc_datetime(margin.get("expires_utc"), field="expires_utc")
+    if not measured <= _utc_now() < expires:
+        raise ValueError("Timeout-margin artifact is stale or not yet valid")
+    hours, remainder = divmod(athena, 60 * 60)
+    minutes, seconds = divmod(remainder, 60)
+    return "-t", f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
+
+def _require_no_action_timeout_override(value: object) -> None:
+    if not isinstance(value, dict) or not isinstance(value.get("actions"), list):
+        return
+    for action in value["actions"]:
+        if not isinstance(action, dict) or not isinstance(action.get("arguments"), list):
+            continue
+        for argument in action["arguments"]:
+            if not isinstance(argument, dict):
+                continue
+            literal = argument.get("literal")
+            if isinstance(literal, str) and (
+                literal == "-t" or literal.startswith("-t=")
+            ):
+                raise ValueError("Launch-action timeout override is not authorized")
 
 
 def _artifact_path(artifact_dir: Path, relative: object) -> Path:
@@ -1020,12 +1111,15 @@ def _launch_actions(
     *,
     executable: _PinnedSnapshot,
     input_deck: _PinnedSnapshot,
+    athena_timeout_arguments: tuple[str, str],
     profile_launcher: str,
     control_plane_dir_fd: int,
     slurm_job_id: str,
     runner: Callable[..., object],
 ) -> None:
-    contract = validate_launch_contract(manifest.get("launch_contract"))
+    raw_contract = manifest.get("launch_contract")
+    _require_no_action_timeout_override(raw_contract)
+    contract = validate_launch_contract(raw_contract)
     pic_root = Path(str(manifest["pic_root"]))
     trusted_anchor = stable_serialization_anchor(pic_root)
     artifact_dir = _require_run_artifact_dir(manifest)
@@ -1064,6 +1158,7 @@ def _launch_actions(
                 executable.expected_sha256,
                 str(input_deck.path),
                 input_deck.expected_sha256,
+                *athena_timeout_arguments,
             ]
             for argument in action["arguments"]:
                 if "literal" in argument:
@@ -1248,6 +1343,9 @@ def launch(
     job_script = record_for_role(manifest, "job-script")
     executable = record_for_role(manifest, "executable")
     input_deck = record_for_role(manifest, "input-deck")
+    athena_timeout_arguments = _trusted_athena_timeout_arguments(
+        manifest, root=trusted_anchor
+    )
     if (
         job_script.get("sha256") != job_script_sha256
         or reservation.get("job_script_sha256") != job_script_sha256
@@ -1295,6 +1393,7 @@ def launch(
                     manifest,
                     executable=pinned_executable,
                     input_deck=pinned_input_deck,
+                    athena_timeout_arguments=athena_timeout_arguments,
                     profile_launcher=profile_launcher,
                     control_plane_dir_fd=control_plane_dir_fd,
                     slurm_job_id=slurm_job_id,

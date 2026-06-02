@@ -102,6 +102,24 @@ class ImmutableOrionTreeTests(unittest.TestCase):
             finally:
                 _make_writable_tree(tree)
 
+    def test_freeze_does_not_leak_ordinary_file_descriptors(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            tree = base / "retained"
+            tree.mkdir()
+            for index in range(64):
+                (tree / f"payload-{index:02}.txt").write_text("payload\n", encoding="utf-8")
+            baseline = len(os.listdir("/proc/self/fd"))
+            try:
+                immutable_orion_tree.freeze_tree(
+                    tree,
+                    _RECEIPT,
+                    authorized_root=base,
+                )
+                self.assertEqual(len(os.listdir("/proc/self/fd")), baseline)
+            finally:
+                _make_writable_tree(tree)
+
     def test_freeze_rejects_same_content_directory_swap_during_inventory_publication(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             base = Path(directory)

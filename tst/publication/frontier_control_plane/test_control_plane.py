@@ -2075,6 +2075,10 @@ class SnapshotTests(unittest.TestCase):
         self.assertEqual(calls[0][0][1], "/usr/bin/srun")
         self.assertEqual(calls[0][0][2], "--jobid=12345")
         self.assertEqual(calls[0][0][13], str(executable["path"]))
+        self.assertEqual(
+            calls[0][0][17:22],
+            ["-t", "00:05:00", "-i", "__PIC_INPUT_DECK_FD__", "-n"],
+        )
         self.assertTrue(calls[0][1]["check"])
         artifact_dir = Path(str(manifest["artifact_dir"]))
         inventory = json.loads(
@@ -2091,6 +2095,135 @@ class SnapshotTests(unittest.TestCase):
         )
         self.assertEqual(stat.S_IMODE(artifact_dir.stat().st_mode), 0o555)
         self.assertEqual(stat.S_IMODE((artifact_dir / "analysis").stat().st_mode), 0o700)
+
+    def test_trampoline_timeout_translation_rejects_malformed_alias_and_drift(
+        self,
+    ) -> None:
+        canonical = json.loads((self.sources / "timeout.json").read_text(encoding="utf-8"))
+        profile_sha256 = sha256(self.sources / "environment.sh")
+
+        def translate(
+            snapshot_margin: dict[str, object],
+            *,
+            manifest_margin: dict[str, object] | None = None,
+        ) -> tuple[str, str]:
+            directory = self.pic_root / "timeout-translation" / str(uuid.uuid4())
+            directory.mkdir(parents=True)
+            timeout_margin = directory / "timeout_margin.json"
+            timeout_margin.write_text(json.dumps(snapshot_margin), encoding="utf-8")
+            timeout_margin.chmod(0o444)
+            return launch_trampoline._trusted_athena_timeout_arguments(
+                {
+                    "timeout_margin": (
+                        snapshot_margin if manifest_margin is None else manifest_margin
+                    ),
+                    "snapshot_files": [
+                        {
+                            "role": "timeout-margin",
+                            "path": str(timeout_margin),
+                            "sha256": sha256(timeout_margin),
+                        },
+                        {
+                            "role": "environment-profile",
+                            "sha256": profile_sha256,
+                        },
+                    ],
+                },
+                root=self.pic_root,
+            )
+
+        self.assertEqual(translate(canonical), ("-t", "00:05:00"))
+        self.assertEqual(
+            translate(
+                {
+                    **canonical,
+                    "athena_walltime_seconds": 3661,
+                    "scheduler_walltime_seconds": 7200,
+                }
+            ),
+            ("-t", "01:01:01"),
+        )
+        for now in [
+            datetime.now(timezone.utc) - timedelta(hours=2),
+            datetime.now(timezone.utc) + timedelta(hours=2),
+        ]:
+            with self.subTest(now=now):
+                with patch("launch_trampoline._utc_now", return_value=now):
+                    with self.assertRaisesRegex(ValueError, "stale or not yet valid"):
+                        translate(canonical)
+        unsafe = [
+            (
+                "exact integers",
+                {**canonical, "athena_walltime_seconds": True},
+                None,
+            ),
+            (
+                "exact integers",
+                {**canonical, "athena_walltime_seconds": "300"},
+                None,
+            ),
+            (
+                "exact integers",
+                {**canonical, "scheduler_walltime_seconds": 600.0},
+                None,
+            ),
+            (
+                "below Slurm walltime",
+                {**canonical, "athena_walltime_seconds": 600},
+                None,
+            ),
+            (
+                "differs from manifest",
+                canonical,
+                {**canonical, "athena_walltime_seconds": 301},
+            ),
+            (
+                "differs from manifest",
+                {**canonical, "athena_timeout_seconds": 300},
+                None,
+            ),
+            (
+                "environment profile",
+                {**canonical, "environment_profile_sha256": "0" * 64},
+                None,
+            ),
+            (
+                "canonical RFC-3339",
+                {**canonical, "measured_utc": "not-a-timestamp"},
+                None,
+            ),
+        ]
+        for message, snapshot_margin, manifest_margin in unsafe:
+            with self.subTest(message=message, snapshot_margin=snapshot_margin):
+                with self.assertRaisesRegex(ValueError, message):
+                    translate(snapshot_margin, manifest_margin=manifest_margin)
+
+    def test_trampoline_rejects_timeout_margin_stale_at_launch(self) -> None:
+        manifest_path = self._create_manifest()
+        reservation = self._reserve(manifest_path)
+        calls: list[list[str]] = []
+        stale_now = datetime.now(timezone.utc) + timedelta(hours=2)
+        with patch("launch_trampoline._utc_now", return_value=stale_now):
+            with self.assertRaisesRegex(ValueError, "stale or not yet valid"):
+                self._launch(
+                    manifest_path,
+                    reservation,
+                    runner=lambda command, **_: calls.append(command),
+                )
+        self.assertEqual(calls, [])
+
+    def test_trampoline_rejects_action_level_timeout_override(self) -> None:
+        for timeout_arguments in [
+            [{"literal": "-t"}, {"literal": "00:00:01"}],
+            [{"literal": "-t=00:00:01"}],
+        ]:
+            with self.subTest(timeout_arguments=timeout_arguments):
+                contract = self._launch_contract()
+                contract["actions"][0]["arguments"].extend(timeout_arguments)
+                with self.assertRaisesRegex(ValueError, "timeout override"):
+                    launch_trampoline._require_no_action_timeout_override(contract)
+                with self.assertRaises(ValueError):
+                    validate_launch_contract(contract)
 
     def test_trampoline_rejects_run_artifact_root_swap_during_launch(self) -> None:
         manifest_path = self._create_manifest()
@@ -3613,6 +3746,8 @@ PY
             [{"literal": "-i"}, {"literal": "/outside/input.athinput"}],
             [{"literal": "-d"}, {"literal": "/tmp"}],
             [{"literal": "-r"}, {"literal": "/outside/restart.rst"}],
+            [{"literal": "-t"}, {"literal": "00:00:01"}],
+            [{"literal": "-t=00:00:01"}],
             [{"literal": "job/basename=../../outside"}],
         ]
         for arguments in unsafe_arguments:
