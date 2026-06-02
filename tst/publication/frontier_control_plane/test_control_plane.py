@@ -8,6 +8,7 @@ from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 import fcntl
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
@@ -17,6 +18,7 @@ import shutil
 import stat
 import subprocess
 import sys
+import tarfile
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -29,6 +31,7 @@ import promote_active_policy
 import reconcile_frontier_job
 import reconcile_manual_frontier_allocations
 import terminal_recovery_handoff
+import validate_and_reserve_frontier_job
 from control_plane_common import atomic_write_bytes, durable_mkdir_parents
 from control_plane_common import PinnedDirectoryAncestry
 from control_plane_common import CONTROL_PLANE_FILES, inventory_digest, make_tree_read_only
@@ -2221,6 +2224,51 @@ class SnapshotTests(unittest.TestCase):
         self._write_policy(staged_control_plane_candidate_version="0" * 64)
         with self.assertRaises(ValueError):
             self._promote_policy()
+
+    def test_q011_policy_promoter_requires_active_same_controller_empty_baseline(
+        self,
+    ) -> None:
+        policy = {
+            "registered_science_slices": [
+                {
+                    "authorization_id": "q011-section54-pressure-ps-p0-1p00-v2",
+                    "campaign": "q011_section54_pressure_ps_p0_1p00",
+                }
+            ]
+        }
+        kwargs = {
+            "control_plane_version": self.control_plane_version,
+            "authorized_pic_root": self.pic_root,
+            "authorized_project_home_root": self.project_home_root,
+            "authorized_account": "AST207",
+        }
+        with patch(
+            "promote_active_policy.require_storage_policy_unlock_snapshot",
+            return_value=({"registered_science_slices": [{}]}, {}),
+        ), self.assertRaisesRegex(ValueError, "active launch-prohibited"):
+            promote_active_policy._require_q011_launch_prohibited_baseline(
+                policy, **kwargs
+            )
+        with patch(
+            "promote_active_policy.require_storage_policy_unlock_snapshot",
+            return_value=({"registered_science_slices": []}, {}),
+        ):
+            promote_active_policy._require_q011_launch_prohibited_baseline(
+                policy, **kwargs
+            )
+        self.assertTrue(
+            promote_active_policy._requires_q011_launch_prohibited_baseline(
+                {
+                    "registered_science_slices": [
+                        {
+                            "authorization_id": "renamed",
+                            "campaign": "renamed",
+                            "input_deck_sha256": promote_active_policy.Q011_INPUT_DECK_SHA256,
+                        }
+                    ]
+                }
+            )
+        )
 
     def test_policy_promoter_rejects_uninstalled_candidate_lifecycle(self) -> None:
         self._write_policy(
@@ -6156,6 +6204,349 @@ PY
         self.assertEqual(len(prepared["analyzers"]), 1)
         self.assertIn("clean_candidate_manifest_sha256", self.csv.read_text())
 
+    def test_q011_first_pressure_case_accepts_empty_ordered_closure_list(self) -> None:
+        _, authorization_id, campaign, test_id = (
+            validate_and_reserve_frontier_job.Q011_PRESSURE_CASES[0]
+        )
+        self._write_science_config(
+            authorize=True,
+            registered_science_authorization_id=authorization_id,
+            campaign=campaign,
+            test_id=test_id,
+            artifact_dir=str(self.pic_root / "runs" / campaign / self.submission_id),
+        )
+        manifest_path = self._create_manifest()
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        self.assertEqual(manifest["prior_case_closures"], [])
+        with patch(
+            "validate_and_reserve_frontier_job._verify_q011_repaired_clean_candidate"
+        ), patch(
+            "validate_and_reserve_frontier_job._q011_selected_pressure",
+            return_value=validate_and_reserve_frontier_job.Q011_PRESSURE_BY_AUTHORIZATION[
+                authorization_id
+            ],
+        ):
+            reservation = self._reserve(manifest_path)
+        self.assertEqual(
+            reservation["registered_science_authorization_id"], authorization_id
+        )
+
+    def test_q011_later_pressure_case_rejects_handwritten_missing_closures(self) -> None:
+        _, authorization_id, campaign, test_id = (
+            validate_and_reserve_frontier_job.Q011_PRESSURE_CASES[1]
+        )
+        self._write_science_config(
+            authorize=True,
+            registered_science_authorization_id=authorization_id,
+            campaign=campaign,
+            test_id=test_id,
+            artifact_dir=str(self.pic_root / "runs" / campaign / self.submission_id),
+        )
+        manifest_path = self._create_manifest()
+        with patch(
+            "validate_and_reserve_frontier_job._verify_q011_repaired_clean_candidate"
+        ), patch(
+            "validate_and_reserve_frontier_job._q011_selected_pressure",
+            return_value=validate_and_reserve_frontier_job.Q011_PRESSURE_BY_AUTHORIZATION[
+                authorization_id
+            ],
+        ), self.assertRaisesRegex(ValueError, "exact ordered predecessor closures"):
+            self._reserve(manifest_path)
+
+    def test_q011_pressure_retry_rejects_failed_v1_and_unrepaired_carriers(self) -> None:
+        _, authorization_id, campaign, test_id = (
+            validate_and_reserve_frontier_job.Q011_PRESSURE_CASES[0]
+        )
+        repository = install_control_plane.SCRIPT_DIR.parents[2]
+        manifest = {
+            "registered_science_authorization_id": authorization_id,
+            "campaign": campaign,
+            "test_id": test_id,
+            "launch_contract": json.loads(
+                (
+                    repository
+                    / "tst/publication/readiness/"
+                    "frontier_q011_section54_pressure_ps_p0_1p00_launch_contract.json"
+                ).read_text(encoding="utf-8")
+            ),
+            "snapshot_files": [
+                {
+                    "role": "job-script",
+                    "sha256": validate_and_reserve_frontier_job.Q011_JOB_SCRIPT_SHA256,
+                },
+                {
+                    "role": "input-deck",
+                    "sha256": validate_and_reserve_frontier_job.Q011_INPUT_DECK_SHA256,
+                },
+            ],
+        }
+        candidate = {"source": {"git_commit": "a" * 40}}
+        with self.assertRaisesRegex(ValueError, "failed v1"):
+            validate_and_reserve_frontier_job._verify_q011_repaired_clean_candidate(
+                manifest,
+                {"source": {"git_commit": validate_and_reserve_frontier_job.Q011_FAILED_V1_GIT_COMMIT}},
+                candidate_sha256="a" * 64,
+                source_archive=b"",
+                executable_sha256="b" * 64,
+            )
+        with self.assertRaisesRegex(ValueError, "failed v1"):
+            validate_and_reserve_frontier_job._verify_q011_repaired_clean_candidate(
+                manifest,
+                candidate,
+                candidate_sha256=validate_and_reserve_frontier_job.Q011_FAILED_V1_CLEAN_CANDIDATE_MANIFEST_SHA256,
+                source_archive=b"",
+                executable_sha256="b" * 64,
+            )
+        with self.assertRaisesRegex(ValueError, "failed v1"):
+            validate_and_reserve_frontier_job._verify_q011_repaired_clean_candidate(
+                manifest,
+                candidate,
+                candidate_sha256="a" * 64,
+                source_archive=b"",
+                executable_sha256=validate_and_reserve_frontier_job.Q011_FAILED_V1_EXECUTABLE_SHA256,
+            )
+        archive_payload = io.BytesIO()
+        with tarfile.open(fileobj=archive_payload, mode="w") as archive:
+            payload = b"unrepaired\n"
+            member = tarfile.TarInfo(
+                validate_and_reserve_frontier_job.Q011_REPAIRED_GENERATOR_PATH
+            )
+            member.size = len(payload)
+            archive.addfile(member, io.BytesIO(payload))
+        with self.assertRaisesRegex(ValueError, "repaired generator"):
+            validate_and_reserve_frontier_job._verify_q011_repaired_clean_candidate(
+                manifest,
+                candidate,
+                candidate_sha256="a" * 64,
+                source_archive=archive_payload.getvalue(),
+                executable_sha256="b" * 64,
+            )
+
+    def test_q011_pressure_retry_rejects_equivalent_authorization_alias(self) -> None:
+        _, _, campaign, test_id = validate_and_reserve_frontier_job.Q011_PRESSURE_CASES[0]
+        with self.assertRaisesRegex(ValueError, "aliases are forbidden"):
+            validate_and_reserve_frontier_job._verify_q011_repaired_clean_candidate(
+                {
+                    "registered_science_authorization_id": "q011-equivalent-alias",
+                    "campaign": campaign,
+                    "test_id": test_id,
+                    "launch_contract": {},
+                    "snapshot_files": [],
+                },
+                {"source": {"git_commit": "a" * 40}},
+                candidate_sha256="a" * 64,
+                source_archive=b"",
+                executable_sha256="b" * 64,
+            )
+
+    def test_q011_snapshot_analyzer_rejects_inherited_helper_override(self) -> None:
+        with patch.dict(os.environ, {"PIC_F1_ANALYSIS_HELPER_FD": "7"}):
+            with self.assertRaisesRegex(ValueError, "inherited helper overrides"):
+                validate_and_reserve_frontier_job._q011_snapshot_analyzer({}, self.pic_root)
+
+    def _q011_snapshot_analyzer_fixture(
+        self,
+    ) -> tuple[dict[str, object], Path, Path]:
+        snapshot_root = self.root / "q011-snapshot" / "snapshot"
+        analysis_root = snapshot_root / "analysis"
+        analysis_root.mkdir(parents=True)
+        repository = install_control_plane.SCRIPT_DIR.parents[2]
+        records = []
+        for role, name in (
+            ("analysis-script-000", "analyze_q011_section54_pressure_pilot_case.py"),
+            ("analysis-script-001", "frontier_f1_structured_artifacts.py"),
+        ):
+            source = repository / "tst" / "publication" / name
+            target = analysis_root / (
+                f"000-{name}" if role == "analysis-script-000" else name
+            )
+            shutil.copyfile(source, target)
+            target.chmod(0o444)
+            records.append({"role": role, "path": str(target), "sha256": sha256(target)})
+        return {"snapshot_files": records}, snapshot_root.parent / "pre_submit_manifest.json", analysis_root
+
+    def test_q011_snapshot_analyzer_executes_verified_source_without_bytecode(self) -> None:
+        manifest, manifest_path, _ = self._q011_snapshot_analyzer_fixture()
+        module = validate_and_reserve_frontier_job._q011_snapshot_analyzer(
+            manifest, manifest_path
+        )
+        self.assertTrue(callable(module.verify_published_case_descriptor))
+
+    def test_q011_snapshot_analyzer_rejects_adjacent_cached_bytecode(self) -> None:
+        manifest, manifest_path, analysis_root = self._q011_snapshot_analyzer_fixture()
+        cache = analysis_root / "__pycache__"
+        cache.mkdir()
+        (cache / "injected.cpython-311.pyc").write_bytes(b"untrusted bytecode\n")
+        with self.assertRaisesRegex(ValueError, "registered bytes"):
+            validate_and_reserve_frontier_job._q011_snapshot_analyzer(
+                manifest, manifest_path
+            )
+
+    def test_q011_snapshot_analyzer_rejects_post_hash_helper_inode_mutation(self) -> None:
+        manifest, manifest_path, _ = self._q011_snapshot_analyzer_fixture()
+        original = validate_and_reserve_frontier_job._q011_open_read_only_source
+
+        def mutate_after_hash(path: Path, *, label: str) -> tuple[int, bytes]:
+            descriptor, payload = original(path, label=label)
+            if label == "Q011 predecessor helper snapshot":
+                path.chmod(0o644)
+                path.write_text(
+                    "raise RuntimeError('MUTATED_HELPER_EXECUTED')\n",
+                    encoding="utf-8",
+                )
+                path.chmod(0o444)
+            return descriptor, payload
+
+        with patch(
+            "validate_and_reserve_frontier_job._q011_open_read_only_source",
+            side_effect=mutate_after_hash,
+        ), self.assertRaisesRegex(ValueError, "differs from registered bytes"):
+            validate_and_reserve_frontier_job._q011_snapshot_analyzer(
+                manifest, manifest_path
+            )
+
+    def test_q011_second_case_accepts_real_recomputed_predecessor_descriptor(self) -> None:
+        from tst.publication import analyze_q011_section54_pressure_pilot_case as analyzer
+        from tst.publication.test_publish_q011_section54_pressure_pilot_bundle import (
+            _descriptor_sha256,
+            _make_writable,
+            _raw_tree,
+        )
+
+        first_case, first_authorization, first_campaign, first_test = (
+            validate_and_reserve_frontier_job.Q011_PRESSURE_CASES[0]
+        )
+        _, second_authorization, second_campaign, second_test = (
+            validate_and_reserve_frontier_job.Q011_PRESSURE_CASES[1]
+        )
+        first_submission = str(uuid.uuid4())
+        artifact_dir = self.pic_root / "runs" / first_campaign / first_submission
+        artifact_dir.parent.mkdir(parents=True)
+        _raw_tree(artifact_dir, first_case)
+        descriptor = analyzer.publish_case_descriptor(artifact_dir, first_case)
+        descriptor_sha256 = _descriptor_sha256(descriptor)
+        try:
+            prior_manifest_path = (
+                self.pic_root
+                / "manifests"
+                / first_campaign
+                / first_submission
+                / "pre_submit_manifest.json"
+            )
+            analysis_root = prior_manifest_path.parent / "snapshot" / "analysis"
+            analysis_root.mkdir(parents=True)
+            repository = install_control_plane.SCRIPT_DIR.parents[2]
+            analyzer_path = (
+                analysis_root / "000-analyze_q011_section54_pressure_pilot_case.py"
+            )
+            helper_path = analysis_root / "frontier_f1_structured_artifacts.py"
+            shutil.copyfile(
+                repository / "tst/publication/analyze_q011_section54_pressure_pilot_case.py",
+                analyzer_path,
+            )
+            shutil.copyfile(
+                repository / "tst/publication/frontier_f1_structured_artifacts.py",
+                helper_path,
+            )
+            analyzer_path.chmod(0o444)
+            helper_path.chmod(0o444)
+            candidate_sha256 = "c" * 64
+            executable_sha256 = "e" * 64
+            git_commit = "d" * 40
+            prior_manifest = {
+                "clean_candidate_manifest_sha256": candidate_sha256,
+                "git_commit": git_commit,
+                "snapshot_files": [
+                    {
+                        "role": "executable",
+                        "path": str(self.pic_root / "fixture-athena"),
+                        "sha256": executable_sha256,
+                    },
+                    {
+                        "role": "analysis-script-000",
+                        "path": str(analyzer_path),
+                        "sha256": sha256(analyzer_path),
+                    },
+                    {
+                        "role": "analysis-script-001",
+                        "path": str(helper_path),
+                        "sha256": sha256(helper_path),
+                    },
+                ],
+            }
+            prior_manifest_path.write_text(
+                json.dumps(prior_manifest), encoding="utf-8"
+            )
+            prior_manifest_path.chmod(0o444)
+            event_sha256 = "f" * 64
+            closure = {
+                "case_id": first_case,
+                "submission_id": first_submission,
+                "artifact_dir": str(artifact_dir),
+                "descriptor_path": str(artifact_dir / "analysis" / "analysis.json"),
+                "descriptor_sha256": descriptor_sha256,
+                "reconciliation_event_sha256": event_sha256,
+            }
+            launch_contract = json.loads(
+                (
+                    repository
+                    / "tst/publication/readiness/"
+                    "frontier_q011_section54_pressure_ps_p0_0p05_launch_contract.json"
+                ).read_text(encoding="utf-8")
+            )
+            manifest = {
+                "registered_science_authorization_id": second_authorization,
+                "campaign": second_campaign,
+                "test_id": second_test,
+                "launch_contract": launch_contract,
+                "clean_candidate_manifest_sha256": candidate_sha256,
+                "git_commit": git_commit,
+                "prior_case_closures": [closure],
+                "snapshot_files": [
+                    {
+                        "role": "job-script",
+                        "sha256": validate_and_reserve_frontier_job.Q011_JOB_SCRIPT_SHA256,
+                    },
+                    {
+                        "role": "input-deck",
+                        "sha256": validate_and_reserve_frontier_job.Q011_INPUT_DECK_SHA256,
+                    },
+                    {
+                        "role": "executable",
+                        "sha256": executable_sha256,
+                    },
+                ],
+            }
+            records = [
+                {
+                    "event_sha256": event_sha256,
+                    "event_type": "reconciliation",
+                    "submission_scope": "registered_science",
+                    "submission_id": first_submission,
+                    "campaign": first_campaign,
+                    "test_id": first_test,
+                    "registered_science_authorization_id": first_authorization,
+                    "artifact_dir": str(artifact_dir),
+                    "clean_candidate_manifest_sha256": candidate_sha256,
+                    "git_commit": git_commit,
+                    "executable_sha256": executable_sha256,
+                    "reconciled": True,
+                    "state": "COMPLETED",
+                    "manifest_path": str(prior_manifest_path),
+                    "manifest_sha256": sha256(prior_manifest_path),
+                }
+            ]
+            validate_and_reserve_frontier_job._verify_q011_prior_case_closures(
+                manifest, records, authorized_pic_root=self.pic_root
+            )
+            records[0]["manifest_sha256"] = "0" * 64
+            with self.assertRaisesRegex(ValueError, "manifest digest drifted"):
+                validate_and_reserve_frontier_job._verify_q011_prior_case_closures(
+                    manifest, records, authorized_pic_root=self.pic_root
+                )
+        finally:
+            _make_writable(artifact_dir)
+
     def test_registered_science_policy_promotion_requires_pre_policy_attestation(
         self,
     ) -> None:
@@ -6537,6 +6928,7 @@ PY
         )
         self.assertIn("pre_manifest_attestation_path", branch["then"]["required"])
         self.assertIn("pre_manifest_attestation_sha256", branch["then"]["required"])
+        self.assertIn("prior_case_closures", branch["then"]["required"])
         prohibited = [
             value["required"][0]
             for value in branch["else"]["not"]["anyOf"]
@@ -6544,6 +6936,7 @@ PY
         self.assertIn("registered_science_authorization_id", prohibited)
         self.assertIn("pre_manifest_attestation_path", prohibited)
         self.assertIn("pre_manifest_attestation_sha256", prohibited)
+        self.assertIn("prior_case_closures", prohibited)
 
     def test_manifest_schema_closes_root_timeout_and_snapshot_records(self) -> None:
         schema = json.loads(

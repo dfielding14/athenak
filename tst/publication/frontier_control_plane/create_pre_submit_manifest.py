@@ -263,6 +263,10 @@ def create_manifest(
             manifest["clean_candidate_manifest_path"] = str(clean_candidate_manifest)
             manifest["clean_candidate_manifest_sha256"] = sha256(clean_candidate_manifest)
             manifest["registered_science_authorization_id"] = authorization_id
+            prior_case_closures = config.get("prior_case_closures", [])
+            if not isinstance(prior_case_closures, list):
+                raise ValueError("Registered-science prior-case closures must be a list")
+            manifest["prior_case_closures"] = prior_case_closures
             assert pre_manifest_attestation is not None
             manifest["pre_manifest_attestation_path"] = pre_manifest_attestation["path"]
             manifest["pre_manifest_attestation_sha256"] = pre_manifest_attestation[

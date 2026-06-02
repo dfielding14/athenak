@@ -11,8 +11,6 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import importlib.machinery
-import importlib.util
 import json
 import math
 import os
@@ -20,24 +18,70 @@ from pathlib import Path, PurePosixPath
 import re
 import stat
 import sys
+import types
 from typing import Any, Mapping, Sequence
+
+
+_STRUCTURED_HELPER_SHA256 = (
+    "cf090115bcdfd143f67b12339115102b57e74cf3205b1ebb1521c144c3415a5a"
+)
+
+
+def _read_helper_source(inherited_fd: str | None) -> tuple[Path, bytes]:
+    if inherited_fd is not None:
+        if re.fullmatch(r"[0-9]+", inherited_fd) is None:
+            raise ValueError("Inherited structured F1 artifact helper descriptor is malformed")
+        descriptor = os.dup(int(inherited_fd))
+        path = Path("/proc/self/fd") / inherited_fd
+        lexical_identity: tuple[int, int] | None = None
+    else:
+        path = Path(__file__).with_name("frontier_f1_structured_artifacts.py")
+        descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        lexical = os.stat(path, follow_symlinks=False)
+        lexical_identity = (lexical.st_dev, lexical.st_ino)
+    try:
+        before = os.fstat(descriptor)
+        if not stat.S_ISREG(before.st_mode):
+            raise ValueError("Structured F1 artifact helper is not a regular file")
+        os.lseek(descriptor, 0, os.SEEK_SET)
+        with os.fdopen(descriptor, "rb", closefd=False) as stream:
+            payload = stream.read()
+        after = os.fstat(descriptor)
+        final_lexical = (
+            None if lexical_identity is None else os.stat(path, follow_symlinks=False)
+        )
+        final_lexical_identity = (
+            None
+            if final_lexical is None
+            else (final_lexical.st_dev, final_lexical.st_ino)
+        )
+        stable = ("st_dev", "st_ino", "st_mode", "st_size", "st_mtime_ns", "st_ctime_ns")
+        if (
+            any(getattr(before, field) != getattr(after, field) for field in stable)
+            or len(payload) != after.st_size
+            or (
+                lexical_identity is not None
+                and (
+                    lexical_identity != (after.st_dev, after.st_ino)
+                    or final_lexical_identity != lexical_identity
+                )
+            )
+        ):
+            raise ValueError("Structured F1 artifact helper changed while reading")
+        if hashlib.sha256(payload).hexdigest() != _STRUCTURED_HELPER_SHA256:
+            raise ValueError("Structured F1 artifact helper differs from registered bytes")
+        return path, payload
+    finally:
+        os.close(descriptor)
 
 
 def _load_artifact_helpers() -> object:
     inherited_fd = os.environ.pop("PIC_F1_ANALYSIS_HELPER_FD", None)
-    path = (
-        Path("/proc/self/fd") / inherited_fd
-        if inherited_fd is not None
-        else Path(__file__).with_name("frontier_f1_structured_artifacts.py")
-    )
-    loader = importlib.machinery.SourceFileLoader(
-        "_frontier_f1_structured_artifacts", str(path)
-    )
-    spec = importlib.util.spec_from_loader("_frontier_f1_structured_artifacts", loader)
-    if spec is None or spec.loader is None:
-        raise ValueError("Cannot load structured F1 artifact helper")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    path, payload = _read_helper_source(inherited_fd)
+    module = types.ModuleType("_frontier_f1_structured_artifacts")
+    module.__file__ = str(path)
+    code = compile(payload, str(path), "exec", dont_inherit=True)
+    exec(code, module.__dict__)
     return module
 
 

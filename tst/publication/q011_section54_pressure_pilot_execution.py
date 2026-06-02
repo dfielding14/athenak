@@ -14,6 +14,7 @@ import copy
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 import hashlib
+import io
 import importlib.util
 import json
 import os
@@ -22,6 +23,8 @@ import re
 import shutil
 import stat
 import sys
+import tarfile
+import types
 from typing import Any
 import uuid
 
@@ -29,6 +32,7 @@ import uuid
 REPO_ROOT = Path(__file__).resolve().parents[2]
 READINESS_ROOT = REPO_ROOT / "tst/publication/readiness"
 MATERIALIZER_SOURCE = REPO_ROOT / "tst/publication/q011_section54_pressure_pilot_execution.py"
+GENERATOR_SOURCE = REPO_ROOT / "src/pgen/tests/pic_parallel_shock.cpp"
 PILOT_PREREGISTRATION = (
     READINESS_ROOT / "q011_section54_pressure_pilot_preregistration_2026-06-01.json"
 )
@@ -69,7 +73,17 @@ QUEUE_SNAPSHOT_FORMAT = "%i|%P|%q|%T|%j|%k"
 _SHA256 = re.compile(r"[0-9a-f]{64}")
 _GIT_COMMIT = re.compile(r"[0-9a-f]{40}")
 _REGISTERED_EXECUTION_CONTRACT_SHA256 = (
-    "5f5a1c7680879deb077e37b6974bbdf8efca588039a697e0870cb96ac5b79c3a"
+    "bbd58928a8c5310c9f109a77f53ffe0af245889d7dd8fe84686b82315faa1b5a"
+)
+_REPAIRED_GENERATOR_SOURCE_SHA256 = (
+    "c0a01e4960f4ebb1a96bedc61fd918b4f7fc76addb59e0f9db3f9ab35eb8c9f9"
+)
+_FAILED_V1_GIT_COMMIT = "4972f998589e6f16d1ccff4f6b9facbcb127909d"
+_FAILED_V1_CLEAN_CANDIDATE_MANIFEST_SHA256 = (
+    "e09b1ab8c7eb017a929a8c063fb53f176b43ca35050b13aa5a0db1f6432b7e97"
+)
+_FAILED_V1_EXECUTABLE_SHA256 = (
+    "c7c3a986fdbd1bb68dd2e8a0aa95df13934acacb33714b38bdb77ef73a1579c5"
 )
 _TIMESTAMP = re.compile(
     r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}"
@@ -359,6 +373,13 @@ def _load_pilot_preregistration() -> tuple[bytes, dict[str, object]]:
 def source_bindings() -> dict[str, object]:
     """Measure the exact local source tranche without binding post-freeze files."""
     pilot_payload, _ = _load_pilot_preregistration()
+    _, generator_payload = _stable_regular_bytes(
+        GENERATOR_SOURCE, label="repaired parallel-shock generator source"
+    )
+    _require(
+        _sha256_bytes(generator_payload) == _REPAIRED_GENERATOR_SOURCE_SHA256,
+        "repaired parallel-shock generator source drifted",
+    )
     _, job_payload = _stable_regular_bytes(JOB_SCRIPT, label="pressure-pilot job template")
     _, deck_payload = _stable_regular_bytes(INPUT_DECK, label="canonical VL2/TSC input deck")
     _, environment_payload = _stable_regular_bytes(
@@ -390,6 +411,10 @@ def source_bindings() -> dict[str, object]:
         "pressure_pilot_preregistration": {
             "path": _relative(PILOT_PREREGISTRATION),
             "sha256": _sha256_bytes(pilot_payload),
+        },
+        "generator_source": {
+            "path": _relative(GENERATOR_SOURCE),
+            "sha256": _sha256_bytes(generator_payload),
         },
         "job_script": {
             "path": _relative(JOB_SCRIPT),
@@ -433,6 +458,23 @@ def validate_source_tranche() -> dict[str, object]:
     return preregistration
 
 
+def _generator_bytes_from_source_archive(payload: bytes) -> bytes:
+    """Read the exact repaired generator member from a frozen Git source archive."""
+    path = _relative(GENERATOR_SOURCE)
+    try:
+        with tarfile.open(fileobj=io.BytesIO(payload), mode="r:") as archive:
+            members = [member for member in archive.getmembers() if member.name == path]
+            _require(
+                len(members) == 1 and members[0].isfile(),
+                "clean-candidate source archive lacks one regular generator source",
+            )
+            stream = archive.extractfile(members[0])
+            _require(stream is not None, "clean-candidate generator source cannot be read")
+            return stream.read()
+    except tarfile.TarError as error:
+        raise ContractError("clean-candidate source archive is not a readable tar file") from error
+
+
 def _bound_final_artifacts(
     *,
     clean_candidate_manifest: Path,
@@ -464,6 +506,11 @@ def _bound_final_artifacts(
         executable == clean_candidate_manifest.parent / "athena",
         "clean-candidate executable is not adjacent to the supplied manifest",
     )
+    source_archive, source_archive_payload = _stable_regular_bytes(
+        clean_candidate_manifest.parent / "source.tar",
+        label="clean-candidate source archive",
+        require_read_only=True,
+    )
     manifest = _decode_json(manifest_payload, label="clean-candidate manifest")
     _require(isinstance(manifest, dict), "clean-candidate manifest is malformed")
     _require(
@@ -475,12 +522,36 @@ def _bound_final_artifacts(
     build = manifest.get("build")
     _require(isinstance(source, dict), "clean-candidate source binding is malformed")
     _require(isinstance(build, dict), "clean-candidate build binding is malformed")
+    clean_candidate_manifest_sha256 = _sha256_bytes(manifest_payload)
+    _require(
+        clean_candidate_manifest_sha256 != _FAILED_V1_CLEAN_CANDIDATE_MANIFEST_SHA256,
+        "clean-candidate manifest is the failed v1 carrier",
+    )
     git_commit = source.get("git_commit")
     _require(
         isinstance(git_commit, str) and _GIT_COMMIT.fullmatch(git_commit) is not None,
         "clean-candidate Git commit is malformed",
     )
+    _require(git_commit != _FAILED_V1_GIT_COMMIT, "clean-candidate Git commit is the failed v1 carrier")
+    source_archive_sha256 = _sha256_bytes(source_archive_payload)
+    _require(
+        source_archive == clean_candidate_manifest.parent / "source.tar"
+        and source.get("archive_path") == str(source_archive)
+        and source.get("archive_sha256") == source_archive_sha256
+        and build.get("source_archive_sha256") == source_archive_sha256,
+        "clean-candidate source archive differs from its manifest binding",
+    )
+    expected_generator_sha256 = source_bindings()["generator_source"]["sha256"]
+    _require(
+        _sha256_bytes(_generator_bytes_from_source_archive(source_archive_payload))
+        == expected_generator_sha256,
+        "clean-candidate source archive does not contain the repaired generator source",
+    )
     executable_sha256 = _sha256_bytes(executable_payload)
+    _require(
+        executable_sha256 != _FAILED_V1_EXECUTABLE_SHA256,
+        "clean-candidate executable is the failed v1 carrier",
+    )
     _require(
         build.get("executable_path") == str(executable)
         and build.get("executable_sha256") == executable_sha256,
@@ -494,7 +565,10 @@ def _bound_final_artifacts(
     )
     return {
         "clean_candidate_manifest_path": str(clean_candidate_manifest),
-        "clean_candidate_manifest_sha256": _sha256_bytes(manifest_payload),
+        "clean_candidate_manifest_sha256": clean_candidate_manifest_sha256,
+        "source_archive_path": str(source_archive),
+        "source_archive_sha256": source_archive_sha256,
+        "generator_source_sha256": expected_generator_sha256,
         "executable_path": str(executable),
         "executable_sha256": executable_sha256,
         "environment_profile_path": str(environment_profile),
@@ -763,6 +837,110 @@ def _validate_pre_manifest_attestation(
     return Path(binding["path"]), binding
 
 
+def _mirrored_ledger_records() -> list[dict[str, object]]:
+    local = AUTHORIZED_PIC_ROOT / "ledger/node_hours.jsonl"
+    mirror = AUTHORIZED_PROJECT_HOME_ROOT / "ledger/node_hours.jsonl"
+    receipts = AUTHORIZED_PIC_ROOT / "ledger/mirror_receipts.jsonl"
+    control_plane = REPO_ROOT / "tst/publication/frontier_control_plane"
+    specification = importlib.util.spec_from_file_location(
+        "_q011_frontier_ledger", control_plane / "ledger.py"
+    )
+    _require(
+        specification is not None and specification.loader is not None,
+        "Frontier ledger validator cannot be loaded",
+    )
+    module = importlib.util.module_from_spec(specification)
+    sys.path.insert(0, str(control_plane))
+    try:
+        specification.loader.exec_module(module)
+        records = module.validate_mirrored_state(local, receipts, mirror)
+        module.require_explicit_genesis(records)
+        return records
+    except ValueError as error:
+        raise ContractError(f"mirrored node-hours ledger is invalid: {error}") from error
+    finally:
+        sys.path.pop(0)
+
+
+def _load_raw_case_analyzer() -> object:
+    _require(
+        os.environ.get("PIC_F1_ANALYSIS_HELPER_FD") is None,
+        "raw-case analyzer rejects inherited helper overrides",
+    )
+    path = ANALYSIS_SCRIPTS[0]
+    path, payload = _stable_regular_bytes(path, label="raw-case analyzer source")
+    module = types.ModuleType("_q011_raw_case_analyzer")
+    module.__file__ = str(path)
+    code = compile(payload, str(path), "exec", dont_inherit=True)
+    exec(code, module.__dict__)
+    return module
+
+
+def _verified_prior_case_closure(
+    case: PressureCase,
+    submission_id: str,
+    descriptor_sha256: str,
+    final: dict[str, str],
+) -> dict[str, str]:
+    identifier = _submission_id(submission_id, case_id=case.case_id)
+    _require(
+        _SHA256.fullmatch(descriptor_sha256) is not None,
+        f"{case.case_id} descriptor SHA-256 is malformed",
+    )
+    artifact_dir = AUTHORIZED_PIC_ROOT / "runs" / case.campaign / identifier
+    matches = [
+        record
+        for record in _mirrored_ledger_records()
+        if record.get("event_type") == "reconciliation"
+        and record.get("submission_scope") == "registered_science"
+        and record.get("submission_id") == identifier
+        and record.get("campaign") == case.campaign
+        and record.get("registered_science_authorization_id") == case.authorization_id
+        and record.get("artifact_dir") == str(artifact_dir)
+        and record.get("clean_candidate_manifest_sha256")
+        == final["clean_candidate_manifest_sha256"]
+        and record.get("git_commit") == final["git_commit"]
+        and record.get("executable_sha256") == final["executable_sha256"]
+        and record.get("reconciled") is True
+        and record.get("state") == "COMPLETED"
+    ]
+    _require(
+        len(matches) == 1,
+        f"{case.case_id} lacks one completed registered-science reconciliation",
+    )
+    module = _load_raw_case_analyzer()
+    with module.StructuredArtifactTree(artifact_dir) as tree:
+        module.verify_published_case_descriptor(tree, case.case_id, descriptor_sha256)
+    return {
+        "case_id": case.case_id,
+        "submission_id": identifier,
+        "artifact_dir": str(artifact_dir),
+        "descriptor_path": str(artifact_dir / "analysis/analysis.json"),
+        "descriptor_sha256": descriptor_sha256,
+        "reconciliation_event_sha256": str(matches[0]["event_sha256"]),
+    }
+
+
+def _validate_prior_case_closures(
+    case: PressureCase, values: tuple[str, ...], final: dict[str, str]
+) -> list[dict[str, str]]:
+    selected_index = CASES.index(case)
+    expected = CASES[:selected_index]
+    _require(
+        len(values) == len(expected),
+        f"{case.case_id} requires exactly {len(expected)} prior-case closure bindings",
+    )
+    closures = []
+    for prior, value in zip(expected, values):
+        fields = value.split("=")
+        _require(
+            len(fields) == 3 and fields[0] == prior.case_id,
+            f"{case.case_id} prior-case closures are not in exact preregistered order",
+        )
+        closures.append(_verified_prior_case_closure(prior, fields[1], fields[2], final))
+    return closures
+
+
 def materialize_reviewed_pre_submit_config(
     *,
     case_id: str,
@@ -775,6 +953,7 @@ def materialize_reviewed_pre_submit_config(
     timeout_margin_artifact: Path,
     queue_snapshot: Path,
     site_policy_checked_utc: str,
+    prior_case_closures: tuple[str, ...] = (),
 ) -> dict[str, object]:
     """Build one exact config after a fresh selected-case pre-manifest capture."""
     case = _selected_case(case_id)
@@ -796,6 +975,7 @@ def materialize_reviewed_pre_submit_config(
         )
     )
     queue_snapshot, _ = _validate_queue_snapshot(queue_snapshot)
+    closures = _validate_prior_case_closures(case, prior_case_closures, final)
     checked = _timestamp(site_policy_checked_utc, label="site-policy checked time")
     return {
         "pic_root": str(AUTHORIZED_PIC_ROOT),
@@ -821,6 +1001,7 @@ def materialize_reviewed_pre_submit_config(
         "timeout_margin_artifact": str(timeout_margin_artifact),
         "analysis_scripts": [str(path) for path in ANALYSIS_SCRIPTS],
         "queue_snapshot": str(queue_snapshot),
+        "prior_case_closures": closures,
         "clean_candidate_manifest": final["clean_candidate_manifest_path"],
         "launch_contract": _load_launch_contract(case)[1],
     }
@@ -1012,6 +1193,7 @@ def write_reviewed_pre_submit_config(
     timeout_margin_artifact: Path,
     queue_snapshot: Path,
     site_policy_checked_utc: str,
+    prior_case_closures: tuple[str, ...] = (),
 ) -> dict[str, object]:
     """Create one new read-only selected-case config handoff directory."""
     output_root = _absolute(output_root, label="reviewed-config output root")
@@ -1028,6 +1210,7 @@ def write_reviewed_pre_submit_config(
         timeout_margin_artifact=timeout_margin_artifact,
         queue_snapshot=queue_snapshot,
         site_policy_checked_utc=site_policy_checked_utc,
+        prior_case_closures=prior_case_closures,
     )
     _, pre_manifest_binding = _validate_pre_manifest_attestation(
         pre_manifest_attestation,
@@ -1060,6 +1243,7 @@ def write_reviewed_pre_submit_config(
                     "path": str(timeout_path),
                     "sha256": _sha256_bytes(timeout_payload),
                 },
+                "verified_prior_case_closures": config["prior_case_closures"],
             },
             "config": {
                 "path": filename,
@@ -1124,6 +1308,7 @@ def build_parser() -> argparse.ArgumentParser:
     configs.add_argument("--timeout-margin-artifact", required=True, type=Path)
     configs.add_argument("--queue-snapshot", required=True, type=Path)
     configs.add_argument("--site-policy-checked-utc", required=True)
+    configs.add_argument("--prior-case-closure", action="append", default=[])
     return parser
 
 
@@ -1176,6 +1361,7 @@ def main() -> None:
         timeout_margin_artifact=arguments.timeout_margin_artifact,
         queue_snapshot=arguments.queue_snapshot,
         site_policy_checked_utc=arguments.site_policy_checked_utc,
+        prior_case_closures=tuple(arguments.prior_case_closure),
         **common,
     )
     print(json.dumps(manifest, sort_keys=True, separators=(",", ":")))

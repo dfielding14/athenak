@@ -135,6 +135,12 @@ qualify any scientific claim by itself.
   and `aa069bc7` build-profile-controller binding, records the queue-clear
   operator attestation, and retains an empty registered-science allowlist.
   Launch remains prohibited until a science slice is explicitly registered.
+- `phase0_curated_candidate_successor_v17_2026-06-02.json`: current staged
+  Q011 retry boundary after the failed v1 attempt was reconciled and the
+  HIP-safe source repair was registered. It records the still-live paired
+  `8f0a9d7f` launch-prohibited controller, the staged `6dc456e5` strict
+  reservation-boundary successor, and the exact full-ledger predecessor-closure
+  checks required before later serial pressure pilots can reserve a job.
 - `phase0_curated_candidate_successor_v4_2026-05-31.json`: historical Phase 0
   successor after schema-3 parallel-shock exact tag-window and restart
   fail-stop hardening. It binds the paired `4f005096` successor receipt and

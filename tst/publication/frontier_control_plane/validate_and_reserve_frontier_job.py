@@ -12,6 +12,8 @@ if __name__ == "__main__" and "/control_plane/" in __file__ and not getattr(
 import argparse
 from datetime import datetime, timezone
 import hashlib
+import importlib.util
+import io
 import os
 from pathlib import Path
 import pwd
@@ -19,6 +21,8 @@ import re
 import shlex
 import subprocess
 import stat
+import tarfile
+import types
 import uuid
 
 from control_plane_common import AUTHORIZED_ACCOUNT, AUTHORIZED_ADMISSION_SMOKE_STATUS
@@ -98,7 +102,110 @@ REGISTERED_SCIENCE_MANIFEST_KEYS = {
     "registered_science_authorization_id",
     "pre_manifest_attestation_path",
     "pre_manifest_attestation_sha256",
+    "prior_case_closures",
 }
+Q011_PRESSURE_CASES = (
+    (
+        "ps_p0_1p00",
+        "q011-section54-pressure-ps-p0-1p00-v2",
+        "q011_section54_pressure_ps_p0_1p00",
+        "pic_parallel_shock_section54_pressure_ps_p0_1p00",
+    ),
+    (
+        "ps_p0_0p05",
+        "q011-section54-pressure-ps-p0-0p05-v2",
+        "q011_section54_pressure_ps_p0_0p05",
+        "pic_parallel_shock_section54_pressure_ps_p0_0p05",
+    ),
+    (
+        "ps_p0_0p10",
+        "q011-section54-pressure-ps-p0-0p10-v2",
+        "q011_section54_pressure_ps_p0_0p10",
+        "pic_parallel_shock_section54_pressure_ps_p0_0p10",
+    ),
+    (
+        "ps_p0_0p20",
+        "q011-section54-pressure-ps-p0-0p20-v2",
+        "q011_section54_pressure_ps_p0_0p20",
+        "pic_parallel_shock_section54_pressure_ps_p0_0p20",
+    ),
+)
+Q011_PRESSURE_BY_AUTHORIZATION = {
+    authorization_id: (index, case_id, campaign, test_id)
+    for index, (case_id, authorization_id, campaign, test_id) in enumerate(
+        Q011_PRESSURE_CASES
+    )
+}
+Q011_PRESSURE_BY_CAMPAIGN = {
+    campaign: selected for selected in Q011_PRESSURE_CASES for campaign in [selected[2]]
+}
+Q011_PRESSURE_BY_TEST_ID = {
+    test_id: selected for selected in Q011_PRESSURE_CASES for test_id in [selected[3]]
+}
+Q011_PRESSURE_BY_LAUNCH_CONTRACT_SHA256 = {
+    "2413a91247d32fb6d93d4903bddab65ed518badc1be6c514ad29c03ca8eafb7b":
+        Q011_PRESSURE_CASES[0],
+    "f9f615bfaa4cc18479dcd02ed4f688f3723fc3dd30a50e754e9f69e10616a8ea":
+        Q011_PRESSURE_CASES[1],
+    "8ab4528b55bdf71e4a13047971aa5ccf8da35c28896ba0bf875a7dca368dfd2f":
+        Q011_PRESSURE_CASES[2],
+    "d84b9217c8810f33ffda995f9611b44f7eeb519bb2e7667c4691ab5833895dd4":
+        Q011_PRESSURE_CASES[3],
+}
+Q011_JOB_SCRIPT_SHA256 = (
+    "3048493d376dfa7954595e586c7cebe6740460a7455110d0fc4020bedf697999"
+)
+Q011_INPUT_DECK_SHA256 = (
+    "0b1cbd62d54027ec81a5f4f5c88d5ee56b86b8cc0cb018c3fbebfb37a11be7b1"
+)
+Q011_REPAIRED_GENERATOR_PATH = "src/pgen/tests/pic_parallel_shock.cpp"
+Q011_REPAIRED_GENERATOR_SHA256 = (
+    "c0a01e4960f4ebb1a96bedc61fd918b4f7fc76addb59e0f9db3f9ab35eb8c9f9"
+)
+Q011_RAW_ANALYZER_SHA256 = (
+    "8596d95c9b8952dcb760b10fbe00bf7ba8a2c895713cc3d36dd1efa1aac11ecc"
+)
+Q011_STRUCTURED_HELPER_SHA256 = (
+    "cf090115bcdfd143f67b12339115102b57e74cf3205b1ebb1521c144c3415a5a"
+)
+Q011_FAILED_V1_GIT_COMMIT = "4972f998589e6f16d1ccff4f6b9facbcb127909d"
+Q011_FAILED_V1_CLEAN_CANDIDATE_MANIFEST_SHA256 = (
+    "e09b1ab8c7eb017a929a8c063fb53f176b43ca35050b13aa5a0db1f6432b7e97"
+)
+Q011_FAILED_V1_EXECUTABLE_SHA256 = (
+    "c7c3a986fdbd1bb68dd2e8a0aa95df13934acacb33714b38bdb77ef73a1579c5"
+)
+
+
+def _q011_open_read_only_source(path: Path, *, label: str) -> tuple[int, bytes]:
+    descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    try:
+        lexical = os.stat(path, follow_symlinks=False)
+        before = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(before.st_mode)
+            or before.st_mode & 0o222
+            or (lexical.st_dev, lexical.st_ino) != (before.st_dev, before.st_ino)
+        ):
+            raise ValueError(f"{label} is not a pinned read-only regular file")
+        os.lseek(descriptor, 0, os.SEEK_SET)
+        with os.fdopen(descriptor, "rb", closefd=False) as stream:
+            payload = stream.read()
+        os.lseek(descriptor, 0, os.SEEK_SET)
+        after = os.fstat(descriptor)
+        final_lexical = os.stat(path, follow_symlinks=False)
+        stable = ("st_dev", "st_ino", "st_mode", "st_size", "st_mtime_ns", "st_ctime_ns")
+        if (
+            any(getattr(before, field) != getattr(after, field) for field in stable)
+            or (final_lexical.st_dev, final_lexical.st_ino)
+            != (after.st_dev, after.st_ino)
+            or len(payload) != after.st_size
+        ):
+            raise ValueError(f"{label} changed while reading")
+        return descriptor, payload
+    except BaseException:
+        os.close(descriptor)
+        raise
 
 
 def _strict_json_equal(left: object, right: object) -> bool:
@@ -114,6 +221,48 @@ def _strict_json_equal(left: object, right: object) -> bool:
             for left_value, right_value in zip(left, right)
         )
     return left == right
+
+
+def _q011_selected_pressure(
+    manifest: dict[str, object],
+) -> tuple[int, str, str, str] | None:
+    authorization = Q011_PRESSURE_BY_AUTHORIZATION.get(
+        manifest.get("registered_science_authorization_id")
+    )
+    campaign = Q011_PRESSURE_BY_CAMPAIGN.get(manifest.get("campaign"))
+    test_id = Q011_PRESSURE_BY_TEST_ID.get(manifest.get("test_id"))
+    try:
+        contract_sha256 = launch_contract_sha256(manifest.get("launch_contract"))
+    except ValueError:
+        contract_sha256 = None
+    contract = Q011_PRESSURE_BY_LAUNCH_CONTRACT_SHA256.get(contract_sha256)
+    try:
+        job_script_sha256 = record_for_role(manifest, "job-script").get("sha256")
+        input_deck_sha256 = record_for_role(manifest, "input-deck").get("sha256")
+    except ValueError:
+        job_script_sha256 = None
+        input_deck_sha256 = None
+    if not any(
+        (
+            authorization,
+            campaign,
+            test_id,
+            contract,
+            job_script_sha256 == Q011_JOB_SCRIPT_SHA256,
+            input_deck_sha256 == Q011_INPUT_DECK_SHA256,
+        )
+    ):
+        return None
+    if (
+        authorization is None
+        or campaign != Q011_PRESSURE_CASES[authorization[0]]
+        or test_id != Q011_PRESSURE_CASES[authorization[0]]
+        or contract != Q011_PRESSURE_CASES[authorization[0]]
+        or job_script_sha256 != Q011_JOB_SCRIPT_SHA256
+        or input_deck_sha256 != Q011_INPUT_DECK_SHA256
+    ):
+        raise ValueError("Q011-equivalent registered-science aliases are forbidden")
+    return authorization
 
 
 def _verify_installed_control_plane_pair(
@@ -441,6 +590,8 @@ def _verify_manifest(
             raise ValueError("Registered science is missing the clean-candidate digest")
         if not manifest.get("registered_science_authorization_id"):
             raise ValueError("Registered science is missing its authorization ID")
+        if not isinstance(manifest.get("prior_case_closures"), list):
+            raise ValueError("Registered science prior-case closures must be a list")
         pre_manifest_attestation = validate_sealed_operator_attestation(
             Path(str(manifest.get("pre_manifest_attestation_path", ""))),
             authorization_id=str(manifest["registered_science_authorization_id"]),
@@ -579,6 +730,46 @@ def _read_submodule_archives(
         return archives, commits
     finally:
         os.close(submodules_fd)
+
+
+def _q011_generator_bytes(source_archive: bytes) -> bytes:
+    try:
+        with tarfile.open(fileobj=io.BytesIO(source_archive), mode="r:") as archive:
+            members = [
+                member
+                for member in archive.getmembers()
+                if member.name == Q011_REPAIRED_GENERATOR_PATH
+            ]
+            if len(members) != 1 or not members[0].isfile():
+                raise ValueError("Q011 source archive lacks one regular repaired generator")
+            stream = archive.extractfile(members[0])
+            if stream is None:
+                raise ValueError("Q011 repaired generator source cannot be read")
+            return stream.read()
+    except tarfile.TarError as error:
+        raise ValueError("Q011 source archive is not a readable tar file") from error
+
+
+def _verify_q011_repaired_clean_candidate(
+    manifest: dict[str, object],
+    candidate: dict[str, object],
+    *,
+    candidate_sha256: str,
+    source_archive: bytes,
+    executable_sha256: str,
+) -> None:
+    if _q011_selected_pressure(manifest) is None:
+        return
+    source = _mapping(candidate, "source")
+    git_commit = _text(source, "git_commit")
+    if (
+        git_commit == Q011_FAILED_V1_GIT_COMMIT
+        or candidate_sha256 == Q011_FAILED_V1_CLEAN_CANDIDATE_MANIFEST_SHA256
+        or executable_sha256 == Q011_FAILED_V1_EXECUTABLE_SHA256
+    ):
+        raise ValueError("Q011 pressure retry rejects the failed v1 clean candidate")
+    if sha256_bytes(_q011_generator_bytes(source_archive)) != Q011_REPAIRED_GENERATOR_SHA256:
+        raise ValueError("Q011 pressure retry requires the frozen repaired generator source")
 
 
 def _verify_clean_candidate(
@@ -731,6 +922,13 @@ def _verify_clean_candidate(
         build_provenance=build_provenance,
         executable_sha256=executable_sha256,
     )
+    _verify_q011_repaired_clean_candidate(
+        manifest,
+        candidate,
+        candidate_sha256=candidate_sha256,
+        source_archive=source_archive,
+        executable_sha256=executable_sha256,
+    )
     receipt = read_json_bytes(
         receipt_bytes, label="clean-candidate build-profile receipt"
     )
@@ -828,6 +1026,162 @@ def _registered_science_authorization(
     ):
         raise ValueError("Registered-science launch contract is not policy authorized")
     return identifier, int(authorization["maximum_attempts"])
+
+
+def _q011_snapshot_analyzer(
+    prior_manifest: dict[str, object], prior_manifest_path: Path
+) -> object:
+    if os.environ.get("PIC_F1_ANALYSIS_HELPER_FD") is not None:
+        raise ValueError("Q011 descriptor verification rejects inherited helper overrides")
+    analyzer = record_for_role(prior_manifest, "analysis-script-000")
+    helper = record_for_role(prior_manifest, "analysis-script-001")
+    snapshot_root = prior_manifest_path.parent / "snapshot"
+    analyzer_path = require_canonical_path_below(
+        Path(str(analyzer["path"])), snapshot_root
+    )
+    helper_path = require_canonical_path_below(Path(str(helper["path"])), snapshot_root)
+    expected_analysis_entries = {
+        "000-analyze_q011_section54_pressure_pilot_case.py",
+        "frontier_f1_structured_artifacts.py",
+    }
+    if (
+        analyzer_path
+        != snapshot_root / "analysis" / "000-analyze_q011_section54_pressure_pilot_case.py"
+        or helper_path
+        != snapshot_root / "analysis" / "frontier_f1_structured_artifacts.py"
+        or {entry.name for entry in analyzer_path.parent.iterdir()}
+        != expected_analysis_entries
+        or analyzer.get("sha256") != Q011_RAW_ANALYZER_SHA256
+        or helper.get("sha256") != Q011_STRUCTURED_HELPER_SHA256
+    ):
+        raise ValueError("Q011 predecessor analyzer snapshot differs from the registered bytes")
+    require_read_only(analyzer_path)
+    require_read_only(helper_path)
+    analyzer_descriptor, analyzer_bytes = _q011_open_read_only_source(
+        analyzer_path, label="Q011 predecessor analyzer snapshot"
+    )
+    os.close(analyzer_descriptor)
+    if sha256_bytes(analyzer_bytes) != Q011_RAW_ANALYZER_SHA256:
+        raise ValueError("Q011 predecessor analyzer snapshot changed while opening source")
+    helper_descriptor, helper_bytes = _q011_open_read_only_source(
+        helper_path, label="Q011 predecessor helper snapshot"
+    )
+    try:
+        if (
+            sha256_bytes(helper_bytes) != Q011_STRUCTURED_HELPER_SHA256
+            or os.environ.get("PIC_F1_ANALYSIS_HELPER_FD") is not None
+        ):
+            raise ValueError("Q011 predecessor helper snapshot cannot be pinned")
+        module = types.ModuleType(
+            f"_q011_snapshot_analyzer_{hashlib.sha256(str(analyzer_path).encode()).hexdigest()}"
+        )
+        module.__file__ = str(analyzer_path)
+        os.environ["PIC_F1_ANALYSIS_HELPER_FD"] = str(helper_descriptor)
+        code = compile(analyzer_bytes, str(analyzer_path), "exec", dont_inherit=True)
+        exec(code, module.__dict__)
+    finally:
+        os.environ.pop("PIC_F1_ANALYSIS_HELPER_FD", None)
+        os.close(helper_descriptor)
+    return module
+
+
+def _verify_q011_prior_case_closures(
+    manifest: dict[str, object],
+    records: list[dict[str, object]],
+    *,
+    authorized_pic_root: Path,
+) -> None:
+    selected = _q011_selected_pressure(manifest)
+    if selected is None:
+        return
+    selected_index, _, campaign, test_id = selected
+    if manifest.get("campaign") != campaign or manifest.get("test_id") != test_id:
+        raise ValueError("Q011 pressure authorization does not match its exact campaign")
+    closures = manifest.get("prior_case_closures")
+    if not isinstance(closures, list) or len(closures) != selected_index:
+        raise ValueError("Q011 pressure case requires exact ordered predecessor closures")
+    current_executable_sha256 = record_for_role(manifest, "executable")["sha256"]
+    manifest_root = authorized_pic_root.resolve() / "manifests"
+    for closure, expected in zip(closures, Q011_PRESSURE_CASES[:selected_index]):
+        case_id, expected_authorization, expected_campaign, expected_test_id = expected
+        if not isinstance(closure, dict) or set(closure) != {
+            "case_id",
+            "submission_id",
+            "artifact_dir",
+            "descriptor_path",
+            "descriptor_sha256",
+            "reconciliation_event_sha256",
+        }:
+            raise ValueError("Q011 predecessor closure schema is malformed")
+        if closure.get("case_id") != case_id:
+            raise ValueError("Q011 predecessor closures are not in exact preregistered order")
+        submission_id = str(closure.get("submission_id", ""))
+        try:
+            parsed_submission_id = uuid.UUID(submission_id)
+        except ValueError as error:
+            raise ValueError("Q011 predecessor submission ID is malformed") from error
+        if str(parsed_submission_id) != submission_id:
+            raise ValueError("Q011 predecessor submission ID is not canonical")
+        artifact_dir = (
+            authorized_pic_root.resolve() / "runs" / expected_campaign / submission_id
+        )
+        descriptor_path = artifact_dir / "analysis" / "analysis.json"
+        if (
+            closure.get("artifact_dir") != str(artifact_dir)
+            or closure.get("descriptor_path") != str(descriptor_path)
+            or re.fullmatch(r"[0-9a-f]{64}", str(closure.get("descriptor_sha256", "")))
+            is None
+            or re.fullmatch(
+                r"[0-9a-f]{64}", str(closure.get("reconciliation_event_sha256", ""))
+            )
+            is None
+        ):
+            raise ValueError("Q011 predecessor closure path or digest binding is malformed")
+        matches = [
+            record
+            for record in records
+            if record.get("event_sha256") == closure["reconciliation_event_sha256"]
+            and record.get("event_type") == "reconciliation"
+            and record.get("submission_scope") == REGISTERED_SCIENCE_SCOPE
+            and record.get("submission_id") == submission_id
+            and record.get("campaign") == expected_campaign
+            and record.get("test_id") == expected_test_id
+            and record.get("registered_science_authorization_id") == expected_authorization
+            and record.get("artifact_dir") == str(artifact_dir)
+            and record.get("clean_candidate_manifest_sha256")
+            == manifest["clean_candidate_manifest_sha256"]
+            and record.get("git_commit") == manifest["git_commit"]
+            and record.get("executable_sha256") == current_executable_sha256
+            and record.get("reconciled") is True
+            and record.get("state") == "COMPLETED"
+        ]
+        if len(matches) != 1:
+            raise ValueError("Q011 predecessor lacks one matching completed reconciliation")
+        prior_manifest_path = require_canonical_path_below(
+            Path(str(matches[0].get("manifest_path", ""))), manifest_root
+        )
+        prior_manifest_descriptor, prior_manifest_bytes = _q011_open_read_only_source(
+            prior_manifest_path, label="Q011 predecessor manifest"
+        )
+        os.close(prior_manifest_descriptor)
+        if sha256_bytes(prior_manifest_bytes) != matches[0].get("manifest_sha256"):
+            raise ValueError("Q011 predecessor manifest digest drifted")
+        prior_manifest = read_json_bytes(
+            prior_manifest_bytes, label="Q011 predecessor manifest"
+        )
+        if (
+            prior_manifest.get("clean_candidate_manifest_sha256")
+            != manifest["clean_candidate_manifest_sha256"]
+            or prior_manifest.get("git_commit") != manifest["git_commit"]
+            or record_for_role(prior_manifest, "executable").get("sha256")
+            != current_executable_sha256
+        ):
+            raise ValueError("Q011 predecessor belongs to another clean candidate")
+        module = _q011_snapshot_analyzer(prior_manifest, prior_manifest_path)
+        with module.StructuredArtifactTree(artifact_dir) as tree:
+            module.verify_published_case_descriptor(
+                tree, case_id, str(closure["descriptor_sha256"])
+            )
 
 
 def _check_submission_scope(
@@ -1108,6 +1462,9 @@ def reserve(
 
         records = _records_with_matching_mirror(ledger_jsonl, receipts_jsonl, mirror_jsonl)
         if registered_science_authorization_id:
+            _verify_q011_prior_case_closures(
+                manifest, records, authorized_pic_root=authorized_pic_root
+            )
             prior_attempts = sum(
                 record.get("event_type") == "reservation"
                 and record.get("registered_science_authorization_id")

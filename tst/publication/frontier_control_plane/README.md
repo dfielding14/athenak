@@ -725,7 +725,9 @@ promote one complete launch-prohibited baseline successor with an empty slice
 allowlist. After the clean-candidate freeze, materialize and review one
 complete four-slice policy successor. Capture, review and seal one
 `pre_policy_promotion` attestation immediately before promoting the four-slice
-successor:
+successor. The installed promoter rejects a Q011 pressure-slice policy unless
+its currently active same-controller predecessor is already that coherent
+empty-allowlist baseline:
 
 ```bash
 "$PYTHON" -I -B /ccs/home/dfielding/athenak-pic/tst/publication/q011_section54_pressure_pilot_execution.py \
@@ -771,12 +773,50 @@ capture and seal its `pre_manifest` attestation, write the six-field queue
 snapshot, materialize one seed-timeout artifact and one selected-case config,
 create its immutable manifest, capture and seal a fresh `pre_submit_wrapper`
 attestation, and invoke only `submit_frontier_job.sh`. Do not materialize the
-next selected-case config yet. Use one UUID-specific handoff tree per case:
+next selected-case config yet. The config materializer validates the repaired
+generator bytes inside the frozen `source.tar`, rejects the failed v1 carrier,
+and rejects every non-first case unless all exact preregistered predecessors
+have completed reconciliation events and immutable descriptor checksums. Use
+one UUID-specific handoff tree per case.
+
+The installed reservation boundary repeats the authoritative checks under the
+mirrored-ledger lock. It rejects Q011-equivalent authorization aliases unless
+the authorization ID, campaign, test ID, job script, input deck and launch
+contract all match one exact preregistered case. For predecessor descriptors,
+it opens the immutable manifest, analyzer and helper snapshots with
+`O_NOFOLLOW`, hashes stable descriptor-pinned bytes, rejects extra analysis
+snapshot entries such as `__pycache__`, and executes verified source through
+`compile()` without consulting cached bytecode. Source-local materialization is
+only a review-artifact pre-screen; reservation through the installed controller
+is the launch authority.
+
+Set `PRIOR_CASE_CLOSURES` to the exact ordered mapping below. Omit it for
+`ps_p0_1p00`; append one `--prior-case-closure` pair after each completed raw
+analysis:
+
+| selected case | required ordered `PRIOR_CASE_CLOSURES` values |
+| --- | --- |
+| `ps_p0_1p00` | none |
+| `ps_p0_0p05` | `ps_p0_1p00=<submission-id>=<descriptor-sha256>` |
+| `ps_p0_0p10` | `ps_p0_1p00=<submission-id>=<descriptor-sha256>`, then `ps_p0_0p05=<submission-id>=<descriptor-sha256>` |
+| `ps_p0_0p20` | `ps_p0_1p00=<submission-id>=<descriptor-sha256>`, then `ps_p0_0p05=<submission-id>=<descriptor-sha256>`, then `ps_p0_0p10=<submission-id>=<descriptor-sha256>` |
+
+Use this exact selected-case mapping:
+
+| case | authorization ID | campaign |
+| --- | --- | --- |
+| `ps_p0_1p00` | `q011-section54-pressure-ps-p0-1p00-v2` | `q011_section54_pressure_ps_p0_1p00` |
+| `ps_p0_0p05` | `q011-section54-pressure-ps-p0-0p05-v2` | `q011_section54_pressure_ps_p0_0p05` |
+| `ps_p0_0p10` | `q011-section54-pressure-ps-p0-0p10-v2` | `q011_section54_pressure_ps_p0_0p10` |
+| `ps_p0_0p20` | `q011-section54-pressure-ps-p0-0p20-v2` | `q011_section54_pressure_ps_p0_0p20` |
 
 ```bash
 CASE=<one-preregistered-case-id>
 AUTHORIZATION_ID=<matching-preregistered-authorization-id>
 CAMPAIGN=<matching-preregistered-campaign>
+# Example for the first case: PRIOR_CASE_CLOSURES=()
+# Example for the second case:
+# PRIOR_CASE_CLOSURES=(--prior-case-closure "ps_p0_1p00=<submission-id>=<descriptor-sha256>")
 SUBMISSION_ID="$("$PYTHON" -I -c 'import uuid; print(uuid.uuid4())')"
 mkdir -p "${PIC_ROOT}/jobs/${CAMPAIGN}"
 "$PYTHON" -I -c \
@@ -826,6 +866,7 @@ chmod 0444 "${HANDOFF_ROOT}/queue_snapshot.txt"
   --timeout-margin-artifact "${HANDOFF_ROOT}/timeout/timeout_margin.json" \
   --queue-snapshot "${HANDOFF_ROOT}/queue_snapshot.txt" \
   --site-policy-checked-utc "$LAST_PREFLIGHT_UTC" \
+  "${PRIOR_CASE_CLOSURES[@]}" \
   --output-root "${HANDOFF_ROOT}/config"
 
 MANIFEST="$(
@@ -856,7 +897,7 @@ analysis script through the trusted isolated runner and retain the printed raw
 descriptor SHA-256:
 
 ```bash
-/opt/cray/pe/python/3.11.7/bin/python3 -I -B \
+env -u PIC_F1_ANALYSIS_HELPER_FD /opt/cray/pe/python/3.11.7/bin/python3 -I -B \
   "${PIC_ROOT}/manifests/<campaign>/<submission-id>/snapshot/analysis/000-analyze_q011_section54_pressure_pilot_case.py" \
   --artifact-dir "${PIC_ROOT}/runs/<campaign>/<submission-id>" \
   --case-id <case-id>

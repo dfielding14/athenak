@@ -11,6 +11,7 @@ import json
 import os
 from pathlib import Path
 import sys
+import tarfile
 import tempfile
 from typing import Iterator
 import unittest
@@ -147,20 +148,37 @@ def _sealed_attestation(root: Path, case: execution.PressureCase) -> Path:
 class PressurePilotExecutionTest(unittest.TestCase):
     @contextmanager
     def _final_binding(
-        self, root: Path, *, case: execution.PressureCase = execution.CASES[0]
+        self,
+        root: Path,
+        *,
+        case: execution.PressureCase = execution.CASES[0],
+        git_commit: str = "a" * 40,
     ) -> Iterator[dict[str, object]]:
         root.mkdir(parents=True, exist_ok=True)
         freeze = root / str(uuid.uuid4())
         freeze.mkdir()
         executable = _put(freeze / "athena", b"exact-clean-athena\n", 0o555)
         executable_sha256 = _sha256(executable.read_bytes())
+        archive_payload = io.BytesIO()
+        generator_payload = execution.GENERATOR_SOURCE.read_bytes()
+        with tarfile.open(fileobj=archive_payload, mode="w") as archive:
+            member = tarfile.TarInfo("src/pgen/tests/pic_parallel_shock.cpp")
+            member.size = len(generator_payload)
+            archive.addfile(member, io.BytesIO(generator_payload))
+        source_archive = _put(freeze / "source.tar", archive_payload.getvalue(), 0o444)
+        source_archive_sha256 = _sha256(source_archive.read_bytes())
         manifest = {
             "schema_version": 4,
             "freeze_id": freeze.name,
-            "source": {"git_commit": "a" * 40},
+            "source": {
+                "archive_path": str(source_archive),
+                "archive_sha256": source_archive_sha256,
+                "git_commit": git_commit,
+            },
             "build": {
                 "executable_path": str(executable),
                 "executable_sha256": executable_sha256,
+                "source_archive_sha256": source_archive_sha256,
             },
         }
         clean_manifest = _put(
@@ -204,6 +222,29 @@ class PressurePilotExecutionTest(unittest.TestCase):
                 "site_policy_checked_utc": "2026-06-02T00:00:00Z",
             }
 
+    @staticmethod
+    def _prior_case_bindings(case: execution.PressureCase) -> tuple[str, ...]:
+        return tuple(
+            f"{prior.case_id}={uuid.uuid4()}={'0' * 64}"
+            for prior in execution.CASES[: execution.CASES.index(case)]
+        )
+
+    @staticmethod
+    def _fake_prior_case_closure(
+        case: execution.PressureCase,
+        submission_id: str,
+        descriptor_sha256: str,
+        final: dict[str, str],
+    ) -> dict[str, str]:
+        return {
+            "case_id": case.case_id,
+            "submission_id": submission_id,
+            "artifact_dir": f"/fixture/{case.campaign}/{submission_id}",
+            "descriptor_path": f"/fixture/{case.campaign}/{submission_id}/analysis/analysis.json",
+            "descriptor_sha256": descriptor_sha256,
+            "reconciliation_event_sha256": "1" * 64,
+        }
+
     def test_source_preregistration_and_shared_directive_only_template(self) -> None:
         preregistration = execution.validate_source_tranche()
         self.assertEqual(
@@ -223,11 +264,18 @@ class PressurePilotExecutionTest(unittest.TestCase):
         self.assertEqual(bootstrap["scheduler_walltime_seconds"], 900)
         source_bindings = preregistration["source_bindings"]
         self.assertEqual(
+            source_bindings["generator_source"],
+            {
+                "path": "src/pgen/tests/pic_parallel_shock.cpp",
+                "sha256": "c0a01e4960f4ebb1a96bedc61fd918b4f7fc76addb59e0f9db3f9ab35eb8c9f9",
+            },
+        )
+        self.assertEqual(
             source_bindings["analysis_scripts"],
             [
                 {
                     "path": "tst/publication/analyze_q011_section54_pressure_pilot_case.py",
-                    "sha256": "7486c072d38c6c5ff78eebda0b913543327792f3aea38c7dca3b4a3d709b6d8f",
+                    "sha256": "8596d95c9b8952dcb760b10fbe00bf7ba8a2c895713cc3d36dd1efa1aac11ecc",
                 },
                 {
                     "path": "tst/publication/frontier_f1_structured_artifacts.py",
@@ -239,7 +287,7 @@ class PressurePilotExecutionTest(unittest.TestCase):
             source_bindings["materializer"],
             {
                 "path": "tst/publication/q011_section54_pressure_pilot_execution.py",
-                "sha256": "da82f9d1e213f7725336312e0db2cabc7b63e747e46f4f9ea13d46d9379a0624",
+                "sha256": "774e61be728c7bdd90f6a9d264e7ce4e5413d5f2a898608ac726ba5b8baadd08",
             },
         )
         self.assertNotIn(
@@ -428,7 +476,7 @@ class PressurePilotExecutionTest(unittest.TestCase):
             self.assertEqual(
                 record["analysis_script_sha256"],
                 [
-                    "7486c072d38c6c5ff78eebda0b913543327792f3aea38c7dca3b4a3d709b6d8f",
+                    "8596d95c9b8952dcb760b10fbe00bf7ba8a2c895713cc3d36dd1efa1aac11ecc",
                     "cf090115bcdfd143f67b12339115102b57e74cf3205b1ebb1521c144c3415a5a",
                 ],
             )
@@ -441,9 +489,15 @@ class PressurePilotExecutionTest(unittest.TestCase):
             for case in execution.CASES:
                 with self.subTest(case_id=case.case_id):
                     with self._final_binding(root / case.case_id, case=case) as binding:
-                        config = execution.materialize_reviewed_pre_submit_config(
-                            **binding
-                        )
+                        binding["prior_case_closures"] = self._prior_case_bindings(case)
+                        with patch.object(
+                            execution,
+                            "_verified_prior_case_closure",
+                            side_effect=self._fake_prior_case_closure,
+                        ):
+                            config = execution.materialize_reviewed_pre_submit_config(
+                                **binding
+                            )
                     self.assertEqual(config["campaign"], case.campaign)
                     self.assertEqual(config["test_id"], case.test_id)
                     self.assertEqual(
@@ -490,6 +544,10 @@ class PressurePilotExecutionTest(unittest.TestCase):
                         execution,
                         "AUTHORIZED_PROJECT_HOME_ROOT",
                         root / case.case_id / "project_home",
+                    ), patch.object(
+                        execution,
+                        "_verified_prior_case_closure",
+                        side_effect=self._fake_prior_case_closure,
                     ):
                         manifest = execution.write_reviewed_pre_submit_config(
                             output, **binding
@@ -517,6 +575,10 @@ class PressurePilotExecutionTest(unittest.TestCase):
                         execution,
                         "AUTHORIZED_PROJECT_HOME_ROOT",
                         root / case.case_id / "project_home",
+                    ), patch.object(
+                        execution,
+                        "_verified_prior_case_closure",
+                        side_effect=self._fake_prior_case_closure,
                     ):
                         with self.assertRaisesRegex(
                             execution.ContractError, "already exists"
@@ -679,6 +741,70 @@ class PressurePilotExecutionTest(unittest.TestCase):
                         executable=detached,
                         environment_profile=binding["environment_profile"],
                     )
+
+    def test_final_bindings_reject_failed_v1_and_unrepaired_source_archives(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with self._final_binding(
+                root / "failed", git_commit=execution._FAILED_V1_GIT_COMMIT
+            ) as binding:
+                with self.assertRaisesRegex(execution.ContractError, "failed v1 carrier"):
+                    execution.materialize_registered_science_slices(
+                        clean_candidate_manifest=binding["clean_candidate_manifest"],
+                        executable=binding["executable"],
+                        environment_profile=binding["environment_profile"],
+                    )
+            with self._final_binding(root / "unrepaired") as binding:
+                archive_payload = io.BytesIO()
+                with tarfile.open(fileobj=archive_payload, mode="w") as archive:
+                    payload = b"unrepaired generator\n"
+                    member = tarfile.TarInfo("src/pgen/tests/pic_parallel_shock.cpp")
+                    member.size = len(payload)
+                    archive.addfile(member, io.BytesIO(payload))
+                source_archive = Path(binding["clean_candidate_manifest"]).parent / "source.tar"
+                source_archive.chmod(0o644)
+                source_archive.write_bytes(archive_payload.getvalue())
+                source_archive.chmod(0o444)
+                manifest_path = Path(binding["clean_candidate_manifest"])
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                digest = _sha256(source_archive.read_bytes())
+                manifest["source"]["archive_sha256"] = digest
+                manifest["build"]["source_archive_sha256"] = digest
+                manifest_path.chmod(0o644)
+                manifest_path.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
+                manifest_path.chmod(0o444)
+                with self.assertRaisesRegex(execution.ContractError, "repaired generator"):
+                    execution.materialize_registered_science_slices(
+                        clean_candidate_manifest=manifest_path,
+                        executable=binding["executable"],
+                        environment_profile=binding["environment_profile"],
+                    )
+
+    def test_later_case_config_requires_exact_ordered_prior_case_closures(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            case = execution.CASES[2]
+            with self._final_binding(root, case=case) as binding:
+                with self.assertRaisesRegex(execution.ContractError, "requires exactly 2"):
+                    execution.materialize_reviewed_pre_submit_config(**binding)
+                reversed_bindings = tuple(reversed(self._prior_case_bindings(case)))
+                with self.assertRaisesRegex(execution.ContractError, "exact preregistered order"):
+                    execution.materialize_reviewed_pre_submit_config(
+                        **binding, prior_case_closures=reversed_bindings
+                    )
+                bindings = self._prior_case_bindings(case)
+                with patch.object(
+                    execution,
+                    "_verified_prior_case_closure",
+                    side_effect=self._fake_prior_case_closure,
+                ):
+                    config = execution.materialize_reviewed_pre_submit_config(
+                        **binding, prior_case_closures=bindings
+                    )
+                self.assertEqual(
+                    [record["case_id"] for record in config["prior_case_closures"]],
+                    ["ps_p0_1p00", "ps_p0_0p05"],
+                )
 
     def test_timeout_submission_id_and_source_drift_fail_closed(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

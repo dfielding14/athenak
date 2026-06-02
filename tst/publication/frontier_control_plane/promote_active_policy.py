@@ -36,6 +36,64 @@ from operator_attestation import validate_sealed_operator_attestation
 
 
 SCRIPT_DIR = Path(__file__).absolute().parent
+Q011_JOB_SCRIPT_SHA256 = (
+    "3048493d376dfa7954595e586c7cebe6740460a7455110d0fc4020bedf697999"
+)
+Q011_INPUT_DECK_SHA256 = (
+    "0b1cbd62d54027ec81a5f4f5c88d5ee56b86b8cc0cb018c3fbebfb37a11be7b1"
+)
+Q011_LAUNCH_CONTRACT_SHA256 = {
+    "2413a91247d32fb6d93d4903bddab65ed518badc1be6c514ad29c03ca8eafb7b",
+    "f9f615bfaa4cc18479dcd02ed4f688f3723fc3dd30a50e754e9f69e10616a8ea",
+    "8ab4528b55bdf71e4a13047971aa5ccf8da35c28896ba0bf875a7dca368dfd2f",
+    "d84b9217c8810f33ffda995f9611b44f7eeb519bb2e7667c4691ab5833895dd4",
+}
+
+
+def _requires_q011_launch_prohibited_baseline(policy: dict[str, object]) -> bool:
+    slices = policy.get("registered_science_slices")
+    return isinstance(slices, list) and any(
+        isinstance(record, dict)
+        and (
+            str(record.get("authorization_id", "")).startswith(
+                "q011-section54-pressure-"
+            )
+            or str(record.get("campaign", "")).startswith(
+                "q011_section54_pressure_"
+            )
+            or str(record.get("test_id", "")).startswith(
+                "pic_parallel_shock_section54_pressure_"
+            )
+            or record.get("job_script_sha256") == Q011_JOB_SCRIPT_SHA256
+            or record.get("input_deck_sha256") == Q011_INPUT_DECK_SHA256
+            or record.get("launch_contract_sha256") in Q011_LAUNCH_CONTRACT_SHA256
+        )
+        for record in slices
+    )
+
+
+def _require_q011_launch_prohibited_baseline(
+    policy: dict[str, object],
+    *,
+    control_plane_version: str,
+    authorized_pic_root: Path,
+    authorized_project_home_root: Path,
+    authorized_account: str,
+) -> None:
+    if not _requires_q011_launch_prohibited_baseline(policy):
+        return
+    active_policy, _ = require_storage_policy_unlock_snapshot(
+        control_plane_version=control_plane_version,
+        authorized_pic_root=authorized_pic_root,
+        authorized_project_home_root=authorized_project_home_root,
+        authorized_account=authorized_account,
+        allow_pending_genesis=True,
+    )
+    if active_policy.get("registered_science_slices") != []:
+        raise ValueError(
+            "Q011 pressure-slice promotion requires one active launch-prohibited "
+            "same-controller baseline"
+        )
 
 
 def _require_no_outstanding_submissions(
@@ -328,6 +386,13 @@ def promote(
     mirror_policy_parent = Path(os.path.abspath(authorized_project_home_root)) / "policy"
     durable_mkdir_parents(mirror_policy_parent, root=authorized_project_home_root)
     with _promotion_lock(authorized_pic_root) as policy_descriptor:
+        _require_q011_launch_prohibited_baseline(
+            policy,
+            control_plane_version=version,
+            authorized_pic_root=authorized_pic_root,
+            authorized_project_home_root=authorized_project_home_root,
+            authorized_account=authorized_account,
+        )
         require_no_incomplete_manual_accounting_marker(
             Path(os.path.abspath(authorized_pic_root)) / "ledger" / "node_hours.jsonl",
             Path(os.path.abspath(authorized_project_home_root))

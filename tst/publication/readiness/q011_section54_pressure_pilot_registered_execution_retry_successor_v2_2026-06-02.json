@@ -24,7 +24,7 @@
     "scheduler_commands_authorized_by_this_record": false,
     "storage_policy_mutation_authorized_by_this_record": false,
     "prepared_inventory_mutation_authorized_by_this_record": false,
-    "required_next_boundary": "bind_exact_rebuilt_clean_candidate_manifest_adjacent_executable_and_installed_environment_profile_via_cli_then_review_additive_v2_policy_successor_before_any_retry"
+    "required_next_boundary": "bind_exact_rebuilt_clean_candidate_manifest_adjacent_executable_installed_environment_profile_and_frozen_repaired_generator_source_archive_via_cli_then_review_additive_v2_policy_successor_before_any_retry"
   },
   "scheduler_template": {
     "path": "tst/publication/frontier_q011_section54_pressure_pilot_job.sh",
@@ -88,12 +88,17 @@
     "maximum_attempts": 1,
     "separate_authorization_per_case": true,
     "one_athena_action_per_authorization": true,
+    "later_case_materialization_requires_verified_ordered_completed_predecessor_descriptors": true,
     "stdout_publication": "trusted_trampoline_artifact_nonempty_then_artifact_sha256_to_athena_stdout.sha256"
   },
   "source_bindings": {
     "pressure_pilot_preregistration": {
       "path": "tst/publication/readiness/q011_section54_pressure_pilot_preregistration_2026-06-01.json",
       "sha256": "b0c703bc764c134b5e1c9e5c76a0dff1888bc6fa9b1e3b04456c372ec73ac045"
+    },
+    "generator_source": {
+      "path": "src/pgen/tests/pic_parallel_shock.cpp",
+      "sha256": "c0a01e4960f4ebb1a96bedc61fd918b4f7fc76addb59e0f9db3f9ab35eb8c9f9"
     },
     "job_script": {
       "path": "tst/publication/frontier_q011_section54_pressure_pilot_job.sh",
@@ -109,12 +114,12 @@
     },
     "materializer": {
       "path": "tst/publication/q011_section54_pressure_pilot_execution.py",
-      "sha256": "da82f9d1e213f7725336312e0db2cabc7b63e747e46f4f9ea13d46d9379a0624"
+      "sha256": "774e61be728c7bdd90f6a9d264e7ce4e5413d5f2a898608ac726ba5b8baadd08"
     },
     "analysis_scripts": [
       {
         "path": "tst/publication/analyze_q011_section54_pressure_pilot_case.py",
-        "sha256": "7486c072d38c6c5ff78eebda0b913543327792f3aea38c7dca3b4a3d709b6d8f"
+        "sha256": "8596d95c9b8952dcb760b10fbe00bf7ba8a2c895713cc3d36dd1efa1aac11ecc"
       },
       {
         "path": "tst/publication/frontier_f1_structured_artifacts.py",
@@ -161,8 +166,8 @@
   "post_freeze_materialization": {
     "tool": "tst/publication/q011_section54_pressure_pilot_execution.py",
     "pilot_policy_successor_command": "pilot-policy-successor --baseline-policy PATH --control-plane-version SHA256 --last-preflight-utc UTC --clean-candidate-manifest PATH --executable PATH --environment-profile PATH --output NEW_PATH",
-    "pre_submit_command": "pre-submit-config --case-id CASE --submission-id UUID --clean-candidate-manifest PATH --executable PATH --environment-profile PATH --control-plane-version SHA256 --pre-manifest-attestation PATH --timeout-margin-artifact PATH --queue-snapshot PATH --site-policy-checked-utc UTC --output-root NEW_PATH",
-    "ordered_submission_boundary": "promote_launch_prohibited_baseline_then_v2_policy_then_for_each_case_capture_attestations_and_invoke_only_the_registered_wrapper_then_wait_terminal_reconcile_verify_raw_case_descriptor_and_require_quiescence_before_materializing_another_case",
+    "pre_submit_command": "pre-submit-config --case-id CASE --submission-id UUID --clean-candidate-manifest PATH --executable PATH --environment-profile PATH --control-plane-version SHA256 --pre-manifest-attestation PATH --timeout-margin-artifact PATH --queue-snapshot PATH --site-policy-checked-utc UTC [--prior-case-closure PRIOR_CASE=SUBMISSION_ID=DESCRIPTOR_SHA256 repeated in preregistered predecessor order] --output-root NEW_PATH",
+    "ordered_submission_boundary": "promote_launch_prohibited_baseline_then_v2_policy_then_for_each_case_capture_attestations_and_invoke_only_the_registered_wrapper_then_wait_terminal_reconcile_verify_raw_case_descriptor_and_require_quiescence_before_materializing_another_case_the_materializer_and_installed_reservation_boundary_reject_each_later_case_without_exact_ordered_completed_predecessor_reconciliation_same_clean_candidate_and_recomputed_descriptor_bindings",
     "output_policy": "write_one_new_selected_case_review_artifact_exclusively_per_invocation_never_patch_live_storage_policy_or_prepared_inventory"
   },
   "seed_timeout_margin_bootstrap": {
@@ -183,7 +188,10 @@
   "limitations": [
     "The four pilots remain engineering calibration only and cannot qualify Section 5.4 physics.",
     "The reconciled v1 failure is retained as immutable chronology and is not reused.",
+    "The v2 materializer rejects the failed v1 Git commit, manifest digest and executable digest and verifies the packed-transfer repair inside the frozen source archive.",
     "Every v2 pressure case requires a separate additive storage-policy slice and consumes its one allowed attempt after reservation.",
+    "Every non-first v2 pressure case requires exact preregistered-order completed predecessor reconciliation and immutable raw-descriptor verification before its config can be materialized.",
+    "The installed reservation boundary independently revalidates each predecessor through the full mirrored ledger validator and the immutable snapshotted raw-case analyzer before reservation.",
     "A reviewer must inspect and promote a rebuilt clean-candidate storage-policy successor before any Frontier retry.",
     "HIP runtime acceptance remains required before any Section 5.4 qualification claim."
   ]

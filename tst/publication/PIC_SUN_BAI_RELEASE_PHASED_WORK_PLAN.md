@@ -90,7 +90,11 @@ physics evidence: the HIP executable attempted a strided host-to-device
 particle subview copy during injection. The packed particle-transfer repair
 passes bounded serial-host append, recenter and startup-cohort compaction
 regressions. A rebuilt clean HIP/MPI candidate and registered v2 pressure-pilot
-retry are required before Section 5.4 calibration can advance.
+retry are required before Section 5.4 calibration can advance. The retry
+materializer must reject the failed v1 carrier, validate the packed-transfer
+repair inside the frozen source archive, and require exact ordered completed
+predecessor reconciliation plus immutable raw-descriptor verification before
+materializing each non-first pressure case.
 
 The prepared contract includes:
 

@@ -1,0 +1,91 @@
+{
+  "record_type": "phase0_curated_candidate_successor",
+  "schema_version": 1,
+  "date": "2026-06-02",
+  "predecessor_record": "tst/publication/readiness/phase0_curated_candidate_successor_v16_2026-06-02.json",
+  "predecessor_sha256": "3ba9d418be5469ac045d8cedb7ed88fc0e04bc1fcd35a7caa035e4bfc8b5f9c6",
+  "status": "q011_hip_retry_reservation_boundary_strict_successor_staged_validation_rereview_commit_install_and_launch_prohibited_promotion_pending",
+  "qualification_effect": "none",
+  "live_paired_control_plane_version": "8f0a9d7f68af2518cd486ec99810624cccdf405990c51e8e148205d1577347b2",
+  "successor_source_control_plane_version": "6dc456e5858b2cbdbd7ef80cbc324b748e2cce5075023b49f7115eab4e84dfdd",
+  "curated_source_predecessor_commit": "597e0e371bb2ee08ba954864389596c746d379b3",
+  "candidate_freeze_source_commit": "pending_final_clean_receipt_commit",
+  "frontier_launch_authorization": "none_live_8f0a9d7f_empty_registered_science_allowlist",
+  "q011_retry_registration": {
+    "path": "tst/publication/readiness/q011_section54_pressure_pilot_registered_execution_retry_successor_v2_2026-06-02.json",
+    "sha256": "fcee4f99009ff10efa1e2f2d18f2a8bb4af551c64a97aa5c6f10a2dacf95f3bc"
+  },
+  "prepared_artifacts": {
+    "inventory_path": "tst/publication/frontier_control_plane/prepared_pic_artifact_inventory.json",
+    "inventory_sha256": "80dfa21b2f2be8a19c2f01906d79e8f289b13821b33dfca7ee06fc0ac12003a1",
+    "paper_deck_count": 110,
+    "publication_analyzer_count": 19,
+    "closure_policy": "canonical refreshed inventory after descriptor-pinned Q011 analyzer helper loading hardening"
+  },
+  "staged_control_plane": {
+    "version": "6dc456e5858b2cbdbd7ef80cbc324b748e2cce5075023b49f7115eab4e84dfdd",
+    "inventoried_file_count": 21,
+    "status": "source_local_strict_successor_pending_clean_commit_paired_install_and_launch_prohibited_policy_promotion",
+    "reservation_boundary": [
+      "Q011 v2 reservation rejects the failed v1 Git commit, clean-candidate manifest digest and executable digest",
+      "Q011 v2 reservation opens the canonical clean-candidate source archive and requires the exact repaired src/pgen/tests/pic_parallel_shock.cpp bytes",
+      "Q011 pressure cases after ps_p0_1p00 require exact ordered predecessor closures from the full validated mirrored ledger",
+      "each predecessor closure must bind the same clean candidate, Git commit and executable and must recompute its descriptor through exact read-only analyzer snapshots adjacent to the immutable predecessor manifest",
+      "analyzer and helper snapshots are opened with O_NOFOLLOW, hashed from descriptor-pinned stable bytes and executed from compile() output without consulting cached bytecode",
+      "inherited PIC_F1_ANALYSIS_HELPER_FD overrides are rejected before executing a predecessor analyzer snapshot",
+      "Q011-equivalent policy aliases are rejected unless authorization ID, campaign, test ID, job script, input deck and launch contract all match one exact preregistered pressure case",
+      "the installed promoter rejects a Q011 pressure-slice policy unless the active same-controller predecessor is a coherent empty-allowlist launch-prohibited baseline"
+    ]
+  },
+  "operational_baseline": {
+    "orion_policy_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/storage_policy.json",
+    "project_home_policy_path": "/ccs/proj/ast207/proj-shared/PIC/policy/storage_policy.json",
+    "orion_policy_sha256": "e0edc1a738aa0e14a4bf236eb9932202ca8d6714382be53be39dd03fed38513a",
+    "project_home_policy_sha256": "e0edc1a738aa0e14a4bf236eb9932202ca8d6714382be53be39dd03fed38513a",
+    "orion_promotion_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/active_promotion.json",
+    "project_home_promotion_path": "/ccs/proj/ast207/proj-shared/PIC/policy/active_promotion.json",
+    "orion_promotion_sha256": "b01f5a70f83576afe18ae47cb11b2ce6601d927764c1795eb6181b19ba73f3d9",
+    "project_home_promotion_sha256": "b01f5a70f83576afe18ae47cb11b2ce6601d927764c1795eb6181b19ba73f3d9",
+    "science_submission_freeze": {
+      "status": "authorized",
+      "manifest_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/clean_candidates/d7205cd3-63fb-45ba-8e0a-c74d150df5a2/clean_candidate_manifest.json",
+      "manifest_sha256": "bcbc72a72832c6024c5b8f5b0ab245d576e93544adb349a9219883754c33be16",
+      "build_profile_control_plane_version": "aa069bc7df47f26d7d0677da69b5a1c4da6a3777151255e830d6989fced210f0"
+    },
+    "registered_science_slices": [],
+    "queue_quiescence": "pass_empty_scheduler_snapshot",
+    "pending_submission_marker": "absent",
+    "pending_manual_accounting_marker": "absent"
+  },
+  "terminal_mirrored_ledger": {
+    "orion_node_hours_jsonl_sha256": "dfb6e24a431c4a44682f864be2dbd5520816488d58cada7f0672aeea39c204b0",
+    "project_home_node_hours_jsonl_sha256": "dfb6e24a431c4a44682f864be2dbd5520816488d58cada7f0672aeea39c204b0",
+    "orion_node_hours_csv_sha256": "92a833de7096c81954e9fed572e51c0706b61b54adc3d1704d7130652d47f946",
+    "orion_mirror_receipts_jsonl_sha256": "696e93105d386ea0cd77c14398552a0f17581a65e7714625e51d0b8d84b131d5",
+    "ledger_records": 111,
+    "latest_sequence_number": 110,
+    "latest_event_type": "reconciliation",
+    "latest_event_sha256": "fc0082bef800733c433395d48f551559abe083367e5549cc4bffbe8a0ab48bfa",
+    "cumulative_consumed_node_hours": 1.0947222222222224,
+    "active_reservations": 0,
+    "pending_submission_marker": "absent",
+    "pending_manual_accounting_marker": "absent"
+  },
+  "external_review": {
+    "reviewer": "pending external review",
+    "disposition": "pending external review"
+  },
+  "completed_actions": [
+    "preserved the paired immutable 8f0a9d7f live controller and launch-prohibited empty-allowlist policy as immutable chronology",
+    "reconciled the failed Q011 v1 attempt into the mirrored ledger without qualifying a scientific claim",
+    "registered the HIP-safe particle-copy source repair and the four ordered Q011 v2 serial pressure pilots",
+    "staged the 6dc456e5 reservation-boundary strict controller successor without installing or authorizing it"
+  ],
+  "remaining_phase0_actions": [
+    "complete the source-local validation matrix and independent adversarial rereview",
+    "commit the reviewed 6dc456e5 controller source successor",
+    "paired-install identical immutable 6dc456e5 generations into Orion and Project Home",
+    "promote a launch-prohibited empty-allowlist policy through 6dc456e5 before rebuilding and freezing the repaired clean candidate",
+    "register and execute each Q011 v2 pressure pilot serially through the installed control plane"
+  ]
+}

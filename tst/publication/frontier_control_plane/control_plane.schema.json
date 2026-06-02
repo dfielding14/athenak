@@ -118,6 +118,12 @@
     "pre_manifest_attestation_sha256": {
       "$ref": "#/$defs/sha256"
     },
+    "prior_case_closures": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/prior_case_closure"
+      }
+    },
     "git_commit": {
       "type": "string",
       "minLength": 1
@@ -253,6 +259,42 @@
     "positive_integer": {
       "type": "integer",
       "minimum": 1
+    },
+    "prior_case_closure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "case_id",
+        "submission_id",
+        "artifact_dir",
+        "descriptor_path",
+        "descriptor_sha256",
+        "reconciliation_event_sha256"
+      ],
+      "properties": {
+        "case_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_]{0,63}$"
+        },
+        "submission_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "artifact_dir": {
+          "type": "string",
+          "minLength": 1
+        },
+        "descriptor_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "descriptor_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "reconciliation_event_sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
     },
     "artifact_path": {
       "type": "string",
@@ -458,7 +500,8 @@
           "clean_candidate_manifest_sha256",
           "registered_science_authorization_id",
           "pre_manifest_attestation_path",
-          "pre_manifest_attestation_sha256"
+          "pre_manifest_attestation_sha256",
+          "prior_case_closures"
         ]
       },
       "else": {
@@ -487,6 +530,11 @@
             {
               "required": [
                 "pre_manifest_attestation_sha256"
+              ]
+            },
+            {
+              "required": [
+                "prior_case_closures"
               ]
             }
           ]

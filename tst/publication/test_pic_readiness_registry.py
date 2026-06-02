@@ -1231,6 +1231,42 @@ class PicReadinessRegistryTests(unittest.TestCase):
                 installed["project_home_inventory_sha256"],
             )
             return
+        q011_retry = _load("phase0_curated_candidate_successor_v17_2026-06-02.json")
+        if staged_version == q011_retry["successor_source_control_plane_version"]:
+            self.assertEqual(
+                q011_retry["predecessor_record"],
+                "tst/publication/readiness/"
+                "phase0_curated_candidate_successor_v16_2026-06-02.json",
+            )
+            self.assertEqual(
+                q011_retry["predecessor_sha256"],
+                _sha256(REPO_ROOT / q011_retry["predecessor_record"]),
+            )
+            self.assertEqual(
+                q011_retry["live_paired_control_plane_version"],
+                registered_pilot["control_plane_version"],
+            )
+            registration = q011_retry["q011_retry_registration"]
+            self.assertEqual(
+                registration["sha256"], _sha256(REPO_ROOT / registration["path"])
+            )
+            prepared = q011_retry["prepared_artifacts"]
+            prepared_path = REPO_ROOT / prepared["inventory_path"]
+            prepared_inventory = json.loads(prepared_path.read_text(encoding="utf-8"))
+            self.assertEqual(prepared["inventory_sha256"], _sha256(prepared_path))
+            self.assertEqual(prepared["paper_deck_count"], len(prepared_inventory["paper_decks"]))
+            self.assertEqual(
+                prepared["publication_analyzer_count"], len(prepared_inventory["analyzers"])
+            )
+            staged = q011_retry["staged_control_plane"]
+            self.assertEqual(staged["version"], staged_version)
+            self.assertEqual(staged["inventoried_file_count"], len(CONTROL_PLANE_FILES))
+            self.assertEqual(q011_retry["qualification_effect"], "none")
+            self.assertEqual(
+                q011_retry["frontier_launch_authorization"],
+                "none_live_8f0a9d7f_empty_registered_science_allowlist",
+            )
+            return
         replay = _load(
             "phase0_registered_prerequisite_replay_policy_promotion_2026-06-01.json"
         )
