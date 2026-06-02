@@ -83,6 +83,34 @@ _RECORD_IDS = (
     'prtcl_ebdot',
 )
 _DELTAF_SCALED_RECORD_IDS = _RECORD_IDS[:-1]
+_MANUAL_RECORD_MOMENTUM = (0.125, -0.25, 0.375)
+_MANUAL_RECORD_LIGHT_SPEED = 10.0
+_MANUAL_RECORD_GAMMA = (
+    1.0
+    + sum(component * component for component in _MANUAL_RECORD_MOMENTUM)
+    / (_MANUAL_RECORD_LIGHT_SPEED * _MANUAL_RECORD_LIGHT_SPEED)
+) ** 0.5
+_RECORD_MULTIPLIERS = {
+    'prtcl_rho': 1.0,
+    'prtcl_jx': _MANUAL_RECORD_MOMENTUM[0] / _MANUAL_RECORD_GAMMA,
+    'prtcl_jy': _MANUAL_RECORD_MOMENTUM[1] / _MANUAL_RECORD_GAMMA,
+    'prtcl_jz': _MANUAL_RECORD_MOMENTUM[2] / _MANUAL_RECORD_GAMMA,
+    'prtcl_dpxdt': 2.0,
+    'prtcl_dpydt': -3.0,
+    'prtcl_dpzdt': 4.0,
+    'prtcl_dedt': 5.0,
+    'prtcl_ebdot': 7.0,
+}
+_RECORD_ROUTES = {
+    'a': ('a', 1.0),
+    'g': ('g', 1.0),
+    'k': ('k', 1.0),
+    'j': ('j', 1.0),
+    'm': ('a', 0.5),
+    'n': ('g', -0.25),
+    'o': ('k', 0.5),
+    'p': ('j', -0.25),
+}
 _MANUAL_RECORD_OVERRIDES = [
     'time/evolution=static',
     'mhd/rsolver=advect',
@@ -232,13 +260,50 @@ def _measure_case(basename, label):
 
 
 def _measure_record_case(basename):
-    quantities = {}
+    quantities = {
+        '_block_raw_sums': {},
+        '_cell_raw_values': {},
+    }
     for output_id in _RECORD_IDS:
         data = bin_convert.read_binary(_latest_output_file(basename, output_id))
+        if '_cell_volumes' not in quantities:
+            quantities['_cell_volumes'] = np.concatenate([
+                np.full(
+                    np.asarray(values).size,
+                    (geometry[1] - geometry[0])
+                    * (geometry[3] - geometry[2])
+                    * (geometry[5] - geometry[4])
+                    / np.asarray(values).size,
+                    dtype=float,
+                )
+                for geometry, values in zip(
+                    data['mb_geometry'], data['mb_data'][output_id])
+            ])
         quantities[output_id] = np.concatenate([
             np.asarray(values, dtype=float).ravel()
             for values in data['mb_data'][output_id]
         ])
+        quantities['_block_raw_sums'][output_id] = {}
+        quantities['_cell_raw_values'][output_id] = {}
+        for geometry, values in zip(
+                data['mb_geometry'], data['mb_data'][output_id]):
+            geometry_key = tuple(float(value) for value in geometry)
+            values = np.asarray(values, dtype=float)
+            quantities['_block_raw_sums'][output_id][geometry_key] = float(
+                np.sum(values))
+            nx3, nx2, nx1 = values.shape
+            dx1 = (geometry[1] - geometry[0]) / nx1
+            dx2 = (geometry[3] - geometry[2]) / nx2
+            dx3 = (geometry[5] - geometry[4]) / nx3
+            for k in range(nx3):
+                zcenter = geometry[4] + (k + 0.5) * dx3
+                for j in range(nx2):
+                    ycenter = geometry[2] + (j + 0.5) * dx2
+                    for i in range(nx1):
+                        xcenter = geometry[0] + (i + 0.5) * dx1
+                        quantities['_cell_raw_values'][output_id][
+                            (xcenter, ycenter, zcenter)
+                        ] = float(values[k, j, i])
     return quantities
 
 
@@ -317,6 +382,25 @@ def analyze():
                     _RESULTS[weighted_key]['actual_cells'],
                     scale * _RESULTS[reference_key]['actual_cells']) and ok
     for mode in ('serial', 'mpi2', 'mpi3'):
+        for label, (reference, scale) in _RECORD_ROUTES.items():
+            case_key = mode + '_' + label
+            reference_key = mode + '_' + reference
+            if case_key not in _RECORD_RESULTS:
+                continue
+            reference_rho = _RECORD_RESULTS[reference_key]['prtcl_rho']
+            for output_id, multiplier in _RECORD_MULTIPLIERS.items():
+                if output_id == 'prtcl_ebdot':
+                    expected = (
+                        multiplier
+                        * reference_rho
+                        * _RECORD_RESULTS[reference_key]['_cell_volumes']
+                    )
+                else:
+                    expected = scale * multiplier * reference_rho
+                ok = _check_close(
+                    case_key + ':' + output_id + ':startup_stage2_route',
+                    _RECORD_RESULTS[case_key][output_id],
+                    expected) and ok
         for weighted, reference, scale in (
                 ('m', 'a', 0.5), ('n', 'g', -0.25),
                 ('o', 'k', 0.5), ('p', 'j', -0.25)):
@@ -356,4 +440,34 @@ def analyze():
             ok = _check_close(
                 case + ':remote_receiver_cell',
                 result['cell_charges'][center], cell_charge) and ok
+    record_remote_checks = {
+        'mpi2_g': ((2.0, 4.0, -2.0, 2.0, -0.5, 0.5),
+                   (3.5, -0.5, 0.0), 0.64, 0.44, 0.5, 1.0),
+        'mpi2_n': ((2.0, 4.0, -2.0, 2.0, -0.5, 0.5),
+                   (3.5, -0.5, 0.0), 0.64, 0.44, 0.5, -0.25),
+        'mpi3_j': ((-4.0, -2.0, -2.0, 0.0, 0.0, 2.0),
+                   (-3.75, -0.75, 1.75), 0.2592, 0.1944, 0.125, 1.0),
+        'mpi3_p': ((-4.0, -2.0, -2.0, 0.0, 0.0, 2.0),
+                   (-3.75, -0.75, 1.75), 0.2592, 0.1944, 0.125, -0.25),
+    }
+    for case, (geometry, center, rho_block, rho_cell, volume, scale) in (
+            record_remote_checks.items()):
+        if case not in _RECORD_RESULTS:
+            continue
+        result = _RECORD_RESULTS[case]
+        for output_id, multiplier in _RECORD_MULTIPLIERS.items():
+            if output_id == 'prtcl_ebdot':
+                expected_block = multiplier * rho_block * volume
+                expected_cell = multiplier * rho_cell * volume
+            else:
+                expected_block = scale * multiplier * rho_block
+                expected_cell = scale * multiplier * rho_cell
+            ok = _check_close(
+                case + ':' + output_id + ':remote_receiver_block',
+                result['_block_raw_sums'][output_id][geometry],
+                expected_block) and ok
+            ok = _check_close(
+                case + ':' + output_id + ':remote_receiver_cell',
+                result['_cell_raw_values'][output_id][center],
+                expected_cell) and ok
     return ok

@@ -13,7 +13,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 RECORD = (
     REPO_ROOT
     / "tst/publication/readiness/"
-    "pic_vl2_tsc_additive_successor_registration_v3_2026-06-01.json"
+    "pic_vl2_tsc_additive_successor_registration_v4_2026-06-01.json"
 )
 
 
@@ -42,6 +42,10 @@ class PicVL2TSCAdditiveSuccessorRegistrationV2Tests(unittest.TestCase):
         self.assertEqual(
             frontier["bulk_artifact_root"],
             "/lustre/orion/ast207/proj-shared/dfielding/PIC",
+        )
+        self.assertEqual(
+            frontier["project_home_root"],
+            "/ccs/proj/ast207/proj-shared/PIC",
         )
         self.assertFalse(frontier["new_qualification_launch_authorized"])
 
@@ -85,7 +89,7 @@ class PicVL2TSCAdditiveSuccessorRegistrationV2Tests(unittest.TestCase):
             },
         )
         self.assertEqual(
-            oracle["dynamic_multilevel_record_ids"],
+            oracle["startup_stage2_multilevel_record_ids"],
             [
                 "prtcl_rho", "prtcl_jx", "prtcl_jy", "prtcl_jz",
                 "prtcl_dpxdt", "prtcl_dpydt", "prtcl_dpzdt", "prtcl_dedt",
@@ -93,8 +97,21 @@ class PicVL2TSCAdditiveSuccessorRegistrationV2Tests(unittest.TestCase):
             ],
         )
         self.assertEqual(
-            oracle["dynamic_multilevel_record_cases"],
+            oracle["startup_stage2_multilevel_record_cases"],
             ["a", "g", "k", "j", "m", "n", "o", "p"],
+        )
+        self.assertIn(
+            "startup-only deterministic direct stage-2 deposition transport oracle",
+            oracle["startup_stage2_multilevel_record_contract"],
+        )
+        self.assertIn(
+            "injected nonzero EBDOT validates transport only",
+            oracle["startup_stage2_multilevel_record_contract"],
+        )
+        self.assertIn(
+            "executable_backed_dynamic_multilevel_pusher_restart_and_migration_"
+            "regression_pending",
+            self.record["open_boundaries"],
         )
 
 
