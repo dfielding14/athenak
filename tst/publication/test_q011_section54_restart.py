@@ -1,0 +1,325 @@
+#!/usr/bin/env python3
+"""Synthetic tests for the bounded Q-011 restart-continuation tranche."""
+
+from __future__ import annotations
+
+import copy
+from pathlib import Path
+import struct
+import unittest
+
+try:
+    from tst.publication import q011_section54_restart as restart
+except ModuleNotFoundError:
+    import q011_section54_restart as restart
+
+
+_VALID_LEDGER = {
+    "ps_cr_ledger_schema": "3",
+    "ps_cr_ledger_complete": "1",
+    "ps_mass_reservoir_global": "0.25",
+    "ps_injected_cr_count_global": "4.0",
+    "ps_injected_cr_mass_global": "4.0",
+    "ps_injected_cr_momentum_x1_global": "2.0",
+    "ps_injected_cr_momentum_x2_global": "-1.0",
+    "ps_injected_cr_momentum_x3_global": "0.5",
+    "ps_injected_cr_energy_global": "8.0",
+    "ps_removed_excluded_early_cohort": "1",
+    "ps_removed_cr_count_global": "2.0",
+    "ps_removed_cr_mass_global": "2.0",
+    "ps_removed_cr_momentum_x1_global": "1.0",
+    "ps_removed_cr_momentum_x2_global": "-0.5",
+    "ps_removed_cr_momentum_x3_global": "0.25",
+    "ps_removed_cr_energy_global": "3.0",
+    "ps_tag_seeded": "1",
+    "ps_injection_tag_floor": "10",
+    "ps_next_tag": "14",
+}
+
+
+def _restart_payload(
+    *,
+    restart_schema: int = 7,
+    ledger_overrides: dict[str, str | None] | None = None,
+    meshblock_particle_counts: list[int] | None = None,
+) -> bytes:
+    ledger = dict(_VALID_LEDGER)
+    for field, value in (ledger_overrides or {}).items():
+        if value is None:
+            del ledger[field]
+        else:
+            ledger[field] = value
+    header = (
+        "<job>\n"
+        "basename=q011_restart_fixture\n"
+        "<problem>\n"
+        + "".join(f"{field}={value}\n" for field, value in ledger.items())
+        + "<par_end>\n"
+    ).encode("ascii")
+    meshblock_particle_counts = meshblock_particle_counts or [1]
+    meshblock_count = len(meshblock_particle_counts)
+    real_fields = 2
+    integer_fields = 4
+    particle_count = 1
+    metadata = struct.pack(
+        "<15i",
+        restart_schema,
+        meshblock_count,
+        real_fields,
+        integer_fields,
+        *([0] * 11),
+    )
+    model_payload = (
+        struct.pack("<d", 500.0)
+        + bytes(31 * struct.calcsize("<i"))
+        + bytes(37 * struct.calcsize("<d"))
+    )
+    particle_payload = (
+        struct.pack("<Q", particle_count)
+        + struct.pack(f"<{meshblock_count}i", *meshblock_particle_counts)
+        + struct.pack("<2d", 1.0, 2.0)
+        + struct.pack("<4i", 0, 10, 1, 1)
+    )
+    return (
+        header
+        + struct.pack("<Q", restart.PIC_RESTART_MAGIC)
+        + metadata
+        + model_payload
+        + particle_payload
+    )
+
+
+def _binding(payload: bytes | None = None) -> dict[str, object]:
+    policy = restart.load_preregistration()
+    contract = policy["continuation_contract"]
+    return restart.bind_checkpoint_for_continuation(
+        payload or _restart_payload(),
+        checkpoint_time_omega0_inverse=contract["checkpoint_time_omega0_inverse"],
+        retained_output_schedule_after_checkpoint_omega0_inverse=contract[
+            "retained_output_schedule_after_checkpoint_omega0_inverse"
+        ],
+        comparison_tolerances_max_absolute_difference=contract[
+            "comparison_tolerances_max_absolute_difference"
+        ],
+        preregistration=policy,
+    )
+
+
+def _observation(binding: dict[str, object]) -> dict[str, object]:
+    outputs = []
+    for index, time in enumerate(
+        binding["retained_output_schedule_after_checkpoint_omega0_inverse"]
+    ):
+        outputs.append(
+            {
+                "time_omega0_inverse": time,
+                "fields": {
+                    "rho_bin": [1.0, 2.0 + index],
+                    "bmag_bin": [3.0, 4.0 + index],
+                    "prtcl_jx_bin": [5.0, 6.0 + index],
+                    "j2_bin": [7.0, 8.0 + index],
+                    "prtcl_all_pvtk_integer_payload": [0, 10, 1, 1],
+                    "prtcl_all_pvtk_float_payload": [1.0, 2.0 + index],
+                },
+            }
+        )
+    return {"binding": copy.deepcopy(binding), "outputs_after_checkpoint": outputs}
+
+
+class Q011Section54RestartPolicyTests(unittest.TestCase):
+    def test_checked_in_preregistration_is_exact_and_non_executing(self) -> None:
+        policy = restart.load_preregistration()
+        self.assertEqual(
+            policy["continuation_contract"]["checkpoint_time_omega0_inverse"],
+            500.0,
+        )
+        self.assertEqual(
+            policy["continuation_contract"][
+                "retained_output_schedule_after_checkpoint_omega0_inverse"
+            ],
+            [600.0, 700.0, 800.0, 900.0, 1000.0, 1100.0, 1200.0],
+        )
+        self.assertFalse(
+            policy["execution_policy"]["scheduler_calls_authorized_by_this_record"]
+        )
+        source = Path(restart.__file__).read_text(encoding="utf-8")
+        for forbidden in ("subprocess", "os.system", "sbatch", "srun"):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, source)
+
+    def test_policy_schema_and_numeric_alias_drift_fail_closed(self) -> None:
+        extra = restart.frozen_preregistration()
+        extra["unexpected"] = True
+        with self.assertRaisesRegex(restart.RestartPolicyError, "schema drift"):
+            restart.validate_preregistration(extra)
+
+        alias = restart.frozen_preregistration()
+        alias["restart_payload_probe"]["restart_schema"] = 7.0
+        with self.assertRaisesRegex(restart.RestartPolicyError, "scalar type drift"):
+            restart.validate_preregistration(alias)
+
+
+class Q011Section54RestartPayloadTests(unittest.TestCase):
+    def test_schema7_payload_probe_and_complete_startup_ledger_extract(self) -> None:
+        payload = _restart_payload()
+        probe = restart.probe_schema7_restart_payload(payload)
+        self.assertEqual(probe.restart_schema, 7)
+        self.assertEqual(probe.meshblock_count, 1)
+        self.assertEqual(probe.particle_count, 1)
+        ledger = restart.extract_startup_shock_ledger(payload)
+        self.assertEqual(set(ledger), set(restart.STARTUP_SHOCK_LEDGER_FIELDS))
+        self.assertEqual(ledger["ps_cr_ledger_schema"], 3)
+        self.assertEqual(ledger["ps_injected_cr_count_global"], 4.0)
+        self.assertTrue(ledger["ps_removed_excluded_early_cohort"])
+
+    def test_malformed_restart_schemas_fail_closed(self) -> None:
+        for schema in (6, 8):
+            with self.subTest(schema=schema):
+                with self.assertRaisesRegex(
+                    restart.RestartPolicyError, "restart schema is not 7"
+                ):
+                    restart.probe_schema7_restart_payload(
+                        _restart_payload(restart_schema=schema)
+                    )
+
+        with self.assertRaisesRegex(
+            restart.RestartPolicyError, "truncated particle restart payload"
+        ):
+            restart.probe_schema7_restart_payload(_restart_payload()[:-1])
+
+        with self.assertRaisesRegex(
+            restart.RestartPolicyError, "MeshBlock count table is inconsistent"
+        ):
+            restart.probe_schema7_restart_payload(
+                _restart_payload(meshblock_particle_counts=[0])
+            )
+
+    def test_missing_startup_ledger_entries_fail_closed(self) -> None:
+        payload = _restart_payload(
+            ledger_overrides={"ps_injected_cr_energy_global": None}
+        )
+        with self.assertRaisesRegex(
+            restart.RestartPolicyError,
+            "startup shock ledger is missing entries.*ps_injected_cr_energy_global",
+        ):
+            restart.extract_startup_shock_ledger(payload)
+
+    def test_unrecognized_startup_ledger_boolean_fails_closed(self) -> None:
+        payload = _restart_payload(ledger_overrides={"ps_tag_seeded": "yes"})
+        with self.assertRaisesRegex(
+            restart.RestartPolicyError, "expected 0, 1, false or true"
+        ):
+            restart.extract_startup_shock_ledger(payload)
+
+    def test_invalid_startup_ledger_tag_progression_fails_closed(self) -> None:
+        payload = _restart_payload(ledger_overrides={"ps_next_tag": "15"})
+        with self.assertRaisesRegex(
+            restart.RestartPolicyError, "invalid next-tag progression"
+        ):
+            restart.extract_startup_shock_ledger(payload)
+
+
+class Q011Section54ContinuationParityTests(unittest.TestCase):
+    def test_checkpoint_schedule_and_tolerances_bind_before_execution(self) -> None:
+        policy = restart.load_preregistration()
+        contract = policy["continuation_contract"]
+        cases = [
+            (
+                "checkpoint",
+                {
+                    "checkpoint_time_omega0_inverse": 600.0,
+                    "retained_output_schedule_after_checkpoint_omega0_inverse": contract[
+                        "retained_output_schedule_after_checkpoint_omega0_inverse"
+                    ],
+                    "comparison_tolerances_max_absolute_difference": contract[
+                        "comparison_tolerances_max_absolute_difference"
+                    ],
+                },
+            ),
+            (
+                "schedule",
+                {
+                    "checkpoint_time_omega0_inverse": contract[
+                        "checkpoint_time_omega0_inverse"
+                    ],
+                    "retained_output_schedule_after_checkpoint_omega0_inverse": [
+                        700.0,
+                        800.0,
+                        900.0,
+                        1000.0,
+                        1100.0,
+                        1200.0,
+                    ],
+                    "comparison_tolerances_max_absolute_difference": contract[
+                        "comparison_tolerances_max_absolute_difference"
+                    ],
+                },
+            ),
+            (
+                "tolerances",
+                {
+                    "checkpoint_time_omega0_inverse": contract[
+                        "checkpoint_time_omega0_inverse"
+                    ],
+                    "retained_output_schedule_after_checkpoint_omega0_inverse": contract[
+                        "retained_output_schedule_after_checkpoint_omega0_inverse"
+                    ],
+                    "comparison_tolerances_max_absolute_difference": {
+                        **contract["comparison_tolerances_max_absolute_difference"],
+                        "rho_bin": 1.0e-6,
+                    },
+                },
+            ),
+        ]
+        for label, values in cases:
+            with self.subTest(label=label):
+                with self.assertRaises(restart.RestartPolicyError):
+                    restart.bind_checkpoint_for_continuation(
+                        _restart_payload(),
+                        preregistration=policy,
+                        **values,
+                    )
+
+    def test_binding_identity_and_tolerance_failures_fail_closed(self) -> None:
+        binding = _binding()
+        uninterrupted = _observation(binding)
+        continued = _observation(binding)
+        continued["binding"]["startup_shock_ledger"][
+            "ps_injected_cr_momentum_x1_global"
+        ] = 2.5
+        with self.assertRaisesRegex(
+            restart.RestartPolicyError, "comparison binding identity"
+        ):
+            restart.compare_deterministic_continuation_parity(
+                uninterrupted, continued
+            )
+
+        continued = _observation(binding)
+        continued["outputs_after_checkpoint"][0]["fields"]["rho_bin"][0] += 2.0e-12
+        with self.assertRaisesRegex(restart.RestartPolicyError, "tolerance exceeded"):
+            restart.compare_deterministic_continuation_parity(
+                uninterrupted, continued
+            )
+
+    def test_valid_deterministic_continuation_parity(self) -> None:
+        binding = _binding()
+        uninterrupted = _observation(binding)
+        continued = _observation(binding)
+        continued["outputs_after_checkpoint"][3]["fields"][
+            "prtcl_all_pvtk_float_payload"
+        ][1] += 5.0e-7
+        result = restart.compare_deterministic_continuation_parity(
+            uninterrupted, continued
+        )
+        self.assertEqual(result["result"], "pass_deterministic_continuation_parity")
+        self.assertEqual(result["checkpoint_time_omega0_inverse"], 500.0)
+        self.assertAlmostEqual(
+            result["maximum_absolute_difference_by_field"][
+                "prtcl_all_pvtk_float_payload"
+            ],
+            5.0e-7,
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -1,0 +1,127 @@
+{
+  "record_type": "q011_section54_restart_continuation_preregistration",
+  "schema_version": 1,
+  "date": "2026-06-01",
+  "gate": "Q-011",
+  "claim_id": "CLAIM-PAPER-SHOCK-001",
+  "qualification_effect": "policy_freeze_only_no_execution_authorization_no_claim_closure",
+  "predecessor_record": "tst/publication/readiness/q011_section54_qualifying_campaign_preregistration_successor_v2_2026-06-01.json",
+  "scope": "Bounded additive preregistration for one future Q-011 Section 5.4 restart-continuation carrier. This record freezes the restart payload probe, startup shock-ledger extraction, checkpoint, retained post-checkpoint schedule and deterministic parity tolerances before any execution. It contains no result and authorizes no scheduler call.",
+  "schema_contract": {
+    "schema_style": "self_contained_exact_key_policy",
+    "unknown_keys": "reject",
+    "missing_keys": "reject",
+    "numeric_aliases": "reject_boolean_nonfinite_and_numeric_string_aliases",
+    "policy_drift": "requires_versioned_successor_before_execution"
+  },
+  "helper_binding": {
+    "module": "tst/publication/q011_section54_restart.py",
+    "role": "pure_fail_closed_policy_helper_only",
+    "scheduler_calls": "forbidden",
+    "artifact_discovery": "forbidden_callers_supply_retained_bytes_and_values"
+  },
+  "restart_payload_probe": {
+    "pic_restart_magic_hex": "0x5049435253543031",
+    "byte_order": "little",
+    "restart_schema": 7,
+    "metadata_integer_count": 15,
+    "model_integer_count": 31,
+    "model_real_count": 37,
+    "real_bytes": 8,
+    "minimum_meshblock_count": 1,
+    "minimum_real_fields_per_particle": 1,
+    "minimum_integer_fields_per_particle": 4,
+    "minimum_particle_count": 1
+  },
+  "startup_shock_ledger": {
+    "parameter_block": "problem",
+    "ledger_schema": 3,
+    "accepted_boolean_literals": [
+      "0",
+      "1",
+      "false",
+      "true"
+    ],
+    "required_fields": [
+      "ps_cr_ledger_schema",
+      "ps_cr_ledger_complete",
+      "ps_mass_reservoir_global",
+      "ps_injected_cr_count_global",
+      "ps_injected_cr_mass_global",
+      "ps_injected_cr_momentum_x1_global",
+      "ps_injected_cr_momentum_x2_global",
+      "ps_injected_cr_momentum_x3_global",
+      "ps_injected_cr_energy_global",
+      "ps_removed_excluded_early_cohort",
+      "ps_removed_cr_count_global",
+      "ps_removed_cr_mass_global",
+      "ps_removed_cr_momentum_x1_global",
+      "ps_removed_cr_momentum_x2_global",
+      "ps_removed_cr_momentum_x3_global",
+      "ps_removed_cr_energy_global",
+      "ps_tag_seeded",
+      "ps_injection_tag_floor",
+      "ps_next_tag"
+    ],
+    "checkpoint_state_requirements": {
+      "ps_cr_ledger_complete": true,
+      "ps_removed_excluded_early_cohort": true,
+      "ps_tag_seeded": true
+    },
+    "identity_policy": "require_exact_typed_identity_between_uninterrupted_and_continued_comparison_bindings"
+  },
+  "continuation_contract": {
+    "checkpoint_time_omega0_inverse": 500.0,
+    "retained_output_schedule_after_checkpoint_omega0_inverse": [
+      600.0,
+      700.0,
+      800.0,
+      900.0,
+      1000.0,
+      1100.0,
+      1200.0
+    ],
+    "comparison_tolerances_max_absolute_difference": {
+      "rho_bin": 1.0e-12,
+      "bmag_bin": 1.0e-12,
+      "prtcl_jx_bin": 1.0e-12,
+      "j2_bin": 1.0e-12,
+      "prtcl_all_pvtk_integer_payload": 0.0,
+      "prtcl_all_pvtk_float_payload": 1.0e-06
+    },
+    "comparison_field_kinds": {
+      "rho_bin": "float",
+      "bmag_bin": "float",
+      "prtcl_jx_bin": "float",
+      "j2_bin": "float",
+      "prtcl_all_pvtk_integer_payload": "integer",
+      "prtcl_all_pvtk_float_payload": "float"
+    },
+    "comparison_value_order": "caller_supplied_deterministically_ordered_flat_values_per_field",
+    "comparison_policy": "require_identical_restart_schema_startup_cohort_ledger_retained_output_schedule_and_tolerances_before_field_comparison",
+    "tolerance_boundary": "These are AthenaK deterministic restart-continuation release screens selected before execution, not manuscript tolerances."
+  },
+  "execution_policy": {
+    "status": "blocked_until_immutable_execution_record_binds_all_fields",
+    "required_before_execution": [
+      "checkpoint_time_omega0_inverse",
+      "restart_schema",
+      "startup_shock_ledger",
+      "retained_output_schedule_after_checkpoint_omega0_inverse",
+      "comparison_tolerances_max_absolute_difference",
+      "clean_candidate_git_commit",
+      "clean_frontier_executable_sha256",
+      "qualifying_input_deck_sha256",
+      "authorized_orion_campaign_root",
+      "registered_frontier_submission_policy"
+    ],
+    "campaign_results_inspected": false,
+    "scheduler_calls_authorized_by_this_record": false,
+    "frontier_execution_authorized_by_this_record": false
+  },
+  "limitations": [
+    "This tranche is a non-executing policy and helper freeze only.",
+    "It does not create a scheduler wrapper or authorize a Frontier submission.",
+    "It does not close Q-011 qualification, independent recompute or external review."
+  ]
+}
