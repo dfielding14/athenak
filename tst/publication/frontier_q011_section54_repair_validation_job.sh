@@ -80,6 +80,8 @@ python3 -B -m unittest \
 cd "$REPO_ROOT"
 test "$(git rev-parse HEAD)" = "$SOURCE_COMMIT"
 test -z "$(git status --porcelain --untracked-files=all)"
+TAXONOMY_DRY_RUN_SEED="$REPO_ROOT/tst/build/src/bin/pic_bell_pub_taxonomy.taxonomy.bin"
+test ! -e "$TAXONOMY_DRY_RUN_SEED"
 export PYTHONPATH="$PWD:$PWD/tst/publication/frontier_control_plane"
 
 mapfile -t modules < <(
@@ -89,4 +91,6 @@ mapfile -t modules < <(
 )
 
 python3 -B -m unittest "${modules[@]}"
+test "$(git rev-parse HEAD)" = "$SOURCE_COMMIT"
 test -z "$(git status --porcelain --untracked-files=all)"
+test ! -e "$TAXONOMY_DRY_RUN_SEED"
