@@ -14,11 +14,17 @@ export PYTHONDONTWRITEBYTECODE=1
 REPO_ROOT=/ccs/home/dfielding/athenak-pic
 cd "$REPO_ROOT"
 test -z "$(git status --porcelain --untracked-files=all)"
-echo "source_commit=$(git rev-parse HEAD)"
+SOURCE_COMMIT=$(git rev-parse HEAD)
+echo "source_commit=$SOURCE_COMMIT"
 
-SNAPSHOT_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/pic-q011-repair-validate.XXXXXXXX")
-trap 'rm -rf "$SNAPSHOT_ROOT"' EXIT
-git archive HEAD | tar -xf - -C "$SNAPSHOT_ROOT"
+SNAPSHOT_PARENT=$(mktemp -d "${TMPDIR:-/tmp}/pic-q011-repair-validate.XXXXXXXX")
+SNAPSHOT_ROOT="${SNAPSHOT_PARENT}/source"
+trap 'chmod -R u+w "$SNAPSHOT_PARENT" 2>/dev/null || true; rm -rf "$SNAPSHOT_PARENT"' EXIT
+git clone --no-checkout "$REPO_ROOT" "$SNAPSHOT_ROOT"
+git -C "$SNAPSHOT_ROOT" checkout --detach "$SOURCE_COMMIT"
+test "$(git -C "$SNAPSHOT_ROOT" rev-parse HEAD)" = "$SOURCE_COMMIT"
+test -z "$(git -C "$SNAPSHOT_ROOT" status --porcelain --untracked-files=all)"
+chmod -R a-w "$SNAPSHOT_ROOT"
 cd "$SNAPSHOT_ROOT"
 export PYTHONPATH="$PWD:$PWD/tst/publication/frontier_control_plane"
 
