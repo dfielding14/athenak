@@ -751,7 +751,19 @@ class PicReadinessRegistryTests(unittest.TestCase):
         self.assertFalse(boundary["frontier_execution_authorized_by_this_record"])
         self.assertFalse(boundary["scheduler_commands_authorized_by_this_record"])
         self.assertFalse(boundary["storage_policy_mutation_authorized_by_this_record"])
-        self.assertEqual(record["source_bindings"], pressure_execution.source_bindings())
+        self.assertEqual(
+            record["source_bindings"],
+            pressure_execution._historical_v2_preregistration()["source_bindings"],
+        )
+        status = pressure_execution.historical_v2_source_tranche_status()
+        self.assertEqual(status["state"], "historical_consumed_slice_non_authorizing")
+        self.assertFalse(status["source_bindings_match_current_checkout"])
+        self.assertFalse(status["consumed_slice_reauthorization_allowed"])
+        with self.assertRaisesRegex(
+            pressure_execution.ContractError,
+            "historical v2 registered-execution tranche is consumed",
+        ):
+            pressure_execution.validate_source_tranche()
         self.assertEqual(len(record["launch_matrix"]), len(pressure_execution.CASES))
         binding_by_case = {
             binding["case_id"]: binding
@@ -1270,6 +1282,39 @@ class PicReadinessRegistryTests(unittest.TestCase):
                 for name in CONTROL_PLANE_FILES
             ]
         )
+        current_repair = _load(
+            "q011_section54_ninth_adversarial_repair_transition_2026-06-03.json"
+        )
+        repaired_staged = current_repair["repaired_staged_control_plane"]
+        if staged_version == repaired_staged["version"]:
+            self.assertEqual(
+                current_repair["predecessor_sha256"],
+                _sha256(REPO_ROOT / current_repair["predecessor_record"]),
+            )
+            self.assertEqual(
+                repaired_staged["state"],
+                "source_local_repair_staged_pending_clean_commit_worker_validation_"
+                "install_build_and_freeze",
+            )
+            prepared = repaired_staged["prepared_artifacts"]
+            prepared_path = REPO_ROOT / prepared["inventory_path"]
+            prepared_inventory = json.loads(prepared_path.read_text(encoding="utf-8"))
+            self.assertEqual(prepared["inventory_sha256"], _sha256(prepared_path))
+            self.assertEqual(
+                prepared["paper_deck_count"], len(prepared_inventory["paper_decks"])
+            )
+            self.assertEqual(
+                prepared["publication_analyzer_count"],
+                len(prepared_inventory["analyzers"]),
+            )
+            self.assertNotEqual(
+                storage["installed_control_plane_version"], staged_version
+            )
+            self.assertEqual(
+                storage["installed_control_plane_version"],
+                storage["staged_control_plane_candidate_version"],
+            )
+            return
         strict_q011 = _load(
             "phase0_paired_control_plane_install_and_policy_promotion_"
             "successor_v6_2026-06-02.json"

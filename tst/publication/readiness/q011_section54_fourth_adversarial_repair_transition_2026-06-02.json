@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "record_type": "q011_section54_fourth_adversarial_repair_transition",
+  "recorded_utc": "2026-06-02T22:59:11Z",
+  "artifact_root": "/lustre/orion/ast207/proj-shared/dfielding/PIC",
+  "predecessor_record": "tst/publication/readiness/q011_section54_third_adversarial_repair_transition_2026-06-02.json",
+  "predecessor_sha256": "5df9d6f2f73524cc79986331b5d1e17b1d057697f65e7fae50249bb01206eae9",
+  "source_checkpoint_commit": "7324031b1cc50395c7903e73dbb153d4fdf71290",
+  "status": "fourth_repair_integrated_source_local_validation_passed_launch_and_pressure_aggregate_publication_prohibited_pending_clean_worker_validation_freeze",
+  "qualification_effect": "none_no_execution_authorization_no_science_claim",
+  "repaired_staged_control_plane": {
+    "version": "f5c656f09d616880a8f202c49bbf99b15d81e73680fdd06dbf80a93fa0565f6c",
+    "state": "source_local_repair_staged_pending_clean_commit_worker_validation_install_build_and_freeze",
+    "prepared_artifacts": {
+      "inventory_path": "tst/publication/frontier_control_plane/prepared_pic_artifact_inventory.json",
+      "inventory_sha256": "c0a64c6cbae22af24e5b9dba4678e0cc806a2eff08070113ba7a72363adf6f1a",
+      "paper_deck_count": 110,
+      "publication_analyzer_count": 20
+    }
+  },
+  "pressure_publication_state": {
+    "public_artifacts_exposed": false,
+    "publication_root_empty_after_reviewed_cleanup": true,
+    "reviewed_cleanup": [
+      {
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/publication/.q011_section54_pressure_pilot_bundle.staging-a38200f5-06a0-47c8-8f24-046e0fdb556a",
+        "classification": "discarded_pre_repair_scratch_prefix",
+        "observed_size": "97K",
+        "observed_regular_file_count": 0,
+        "removed": true
+      },
+      {
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/publication/.q011_section54_pressure_pilot_bundle.staging-6b50871f-7318-41f5-9c36-c5cb4ce1dfa8",
+        "classification": "discarded_pre_repair_partial_binary_copy_prefix",
+        "observed_size": "583K",
+        "observed_regular_file_count": 3,
+        "observed_members": [
+          "cases/ps_p0_1p00/bin/ps_p0_1p00.bmag.00000.bin",
+          "cases/ps_p0_1p00/bin/ps_p0_1p00.bmag.00001.bin",
+          "cases/ps_p0_1p00/bin/ps_p0_1p00.bmag.00002.bin"
+        ],
+        "removed": true
+      }
+    ]
+  },
+  "completed_repairs": [
+    "pressure aggregate publication now uses descriptor-anchored reads and quarantine-first withdrawal on late failure",
+    "pressure review-packet publication now uses pinned aggregate reads, exact packet closure and rollback before cleanup",
+    "historical consumed pressure-v2 launch chronology remains stale and nonauthorizing for fresh simulation launches",
+    "planner-to-attempt bridge now rejects arbitrary raw-root relabeling, validates the planner graph before mutation and stages manifest publication transactionally",
+    "numerical restart screen now rejects branch aliases and reports bounded selected-channel continuation parity rather than full-state equivalence"
+  ],
+  "new_decisions": [
+    "Keep operational registered-execution artifacts below /lustre/orion/ast207/proj-shared/dfielding/PIC/runs and deterministic retained publication below /lustre/orion/ast207/proj-shared/dfielding/PIC/campaigns as distinct namespaces.",
+    "Carry the deterministic retained-root binding in the immutable pre-submit manifest so post-Slurm reconciliation can derive the registered-execution receipt without accepting caller-authored post-submit JSON.",
+    "Publish the read-only registered-execution receipt only after the mirrored reconciliation event is durably appended.",
+    "Require restart qualification to validate authoritative registered-execution receipts, admitted source-checkpoint lineage and the admitted source-plan carrier rather than self-consistent recompute-bundle assertions.",
+    "Regenerate the committed prepared PIC artifact inventory only after the full repair set is stable, then build and freeze a fresh candidate from a clean committed worker snapshot."
+  ],
+  "release_blockers": [
+    "full_clean_worker_validation_pending",
+    "fresh_clean_candidate_build_inventory_regeneration_and_freeze_pending",
+    "pressure_aggregate_and_review_packet_worker_publication_pending"
+  ],
+  "human_input_required_now": false,
+  "first_required_human_input_after_automated_repairs": "Select exactly one Section 5.4 problem/ps_p0 case from the verified immutable four-slice pressure-review packet."
+}

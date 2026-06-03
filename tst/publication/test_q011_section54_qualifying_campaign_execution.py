@@ -380,11 +380,159 @@ def _materialize(fixture: dict[str, Path], *, output_parent: Path | None = None)
     )
 
 
+@contextmanager
+def _retained_planner(
+    fixture: dict[str, Path],
+) -> Iterator[tuple[dict[str, object], Path]]:
+    planner_parent = fixture["orion"] / "plans"
+    planner_parent.mkdir()
+    result = _materialize(fixture, output_parent=planner_parent)
+    root = Path(result["plan_root"])
+    try:
+        yield result, root
+    finally:
+        _make_writable(root)
+        if root.exists():
+            shutil.rmtree(root)
+        planner_parent.rmdir()
+
+
+def _planner_retention(
+    fixture: dict[str, Path],
+    result: dict[str, object],
+    root: Path,
+    attempt_id: str,
+) -> dict[str, object]:
+    return execution.materialize_planner_retention(
+        planner_root=root,
+        planner_inventory_sha256=str(result["inventory_sha256"]),
+        attempt_id=attempt_id,
+        authorized_pic_root=fixture["orion"],
+    )
+
+
 def _json(path: Path) -> dict[str, object]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
 class Q011Section54QualifyingCampaignExecutionTests(unittest.TestCase):
+    def test_planner_retention_overlay_is_exact_and_launch_prohibited(self) -> None:
+        with _fixture() as fixture, _retained_planner(fixture) as (result, root):
+            plan = _json(root / "campaign_plan.json")
+            descriptor = _json(root / plan["baseline_attempt_descriptors"][8]["path"])
+            contract = _json(root / descriptor["launch_contract"]["path"])
+            attempt_root = descriptor["authorized_orion_attempt_root"]
+            overlay = _planner_retention(
+                fixture, result, root, str(descriptor["attempt_id"])
+            )
+            self.assertEqual(
+                overlay,
+                {
+                    "schema_version": 1,
+                    "retention_role": (
+                        "q011_section54_deterministic_retained_attempt"
+                    ),
+                    "planner_root": str(root),
+                    "planner_inventory_sha256": result["inventory_sha256"],
+                    "planner_plan_id": result["plan_id"],
+                    "planner_materialization_receipt": result[
+                        "materialization_receipt"
+                    ],
+                    "attempt_id": descriptor["attempt_id"],
+                    "authorized_orion_attempt_root": attempt_root,
+                    "authorized_orion_raw_root": f"{attempt_root}/raw",
+                    "argv": contract["argv"],
+                },
+            )
+            self.assertEqual(
+                set(overlay),
+                {
+                    "schema_version",
+                    "retention_role",
+                    "planner_root",
+                    "planner_inventory_sha256",
+                    "planner_plan_id",
+                    "planner_materialization_receipt",
+                    "attempt_id",
+                    "authorized_orion_attempt_root",
+                    "authorized_orion_raw_root",
+                    "argv",
+                },
+            )
+            self.assertFalse(contract["launch_authorized"])
+            self.assertFalse(contract["scheduler_submission_authorized"])
+            self.assertFalse(contract["live_policy_mutation_authorized"])
+
+    def test_planner_retention_rejects_attempt_mismatch_and_nonbaseline_selection(
+        self,
+    ) -> None:
+        with _fixture() as fixture, _retained_planner(fixture) as (result, root):
+            plan = _json(root / "campaign_plan.json")
+            carrier = _json(root / plan["restart_continuation_carrier"]["path"])
+            for attempt_id in (
+                "baseline-001-coarse_uniform_dx12-seed-99999999",
+                str(carrier["carrier_id"]),
+            ):
+                with (
+                    self.subTest(attempt_id=attempt_id),
+                    self.assertRaisesRegex(
+                        execution.CampaignPlanError,
+                        "exactly one baseline planner descriptor",
+                    ),
+                ):
+                    _planner_retention(fixture, result, root, attempt_id)
+
+    def test_planner_retention_has_no_argv_or_destination_substitution_api(self) -> None:
+        with _fixture() as fixture, _retained_planner(fixture) as (result, root):
+            plan = _json(root / "campaign_plan.json")
+            descriptor = _json(root / plan["baseline_attempt_descriptors"][0]["path"])
+            arguments = {
+                "planner_root": root,
+                "planner_inventory_sha256": str(result["inventory_sha256"]),
+                "attempt_id": str(descriptor["attempt_id"]),
+                "authorized_pic_root": fixture["orion"],
+            }
+            for substitution in (
+                {"argv": ["-d", "/tmp/operator-selected"]},
+                {"authorized_orion_attempt_root": "/tmp/operator-selected"},
+                {"authorized_orion_raw_root": "/tmp/operator-selected/raw"},
+            ):
+                with (
+                    self.subTest(substitution=substitution),
+                    self.assertRaises(TypeError),
+                ):
+                    execution.materialize_planner_retention(
+                        **arguments,  # type: ignore[arg-type]
+                        **substitution,
+                    )
+
+    def test_planner_retention_rejects_root_substitution_and_inventory_drift(
+        self,
+    ) -> None:
+        with _fixture() as fixture, _retained_planner(fixture) as (result, root):
+            plan = _json(root / "campaign_plan.json")
+            descriptor = _json(root / plan["baseline_attempt_descriptors"][0]["path"])
+            attempt_id = str(descriptor["attempt_id"])
+            with self.assertRaises(execution.CampaignPlanError):
+                execution.materialize_planner_retention(
+                    planner_root=root,
+                    planner_inventory_sha256="0" * 64,
+                    attempt_id=attempt_id,
+                    authorized_pic_root=fixture["orion"],
+                )
+            alias = fixture["orion"] / "operator-substituted-planner-root"
+            alias.symlink_to(root, target_is_directory=True)
+            try:
+                with self.assertRaises(execution.CampaignPlanError):
+                    execution.materialize_planner_retention(
+                        planner_root=alias,
+                        planner_inventory_sha256=str(result["inventory_sha256"]),
+                        attempt_id=attempt_id,
+                        authorized_pic_root=fixture["orion"],
+                    )
+            finally:
+                alias.unlink()
+
     def test_materializes_exact_ordered_read_only_plan_and_one_restart_carrier(self) -> None:
         with _fixture() as fixture:
             result = _materialize(fixture)
@@ -393,6 +541,47 @@ class Q011Section54QualifyingCampaignExecutionTests(unittest.TestCase):
             self.assertEqual(result["baseline_attempt_count"], 24)
             self.assertEqual(result["restart_continuation_carrier_count"], 1)
             self.assertTrue(result["recursively_read_only"])
+            receipt_binding = result["materialization_receipt"]
+            receipt = _json(root / receipt_binding["path"])
+            self.assertEqual(
+                receipt_binding["sha256"],
+                _sha256((root / receipt_binding["path"]).read_bytes()),
+            )
+            self.assertEqual(receipt["plan_id"], result["plan_id"])
+            self.assertEqual(
+                receipt["campaign_plan"],
+                {
+                    "path": "campaign_plan.json",
+                    "sha256": result["campaign_plan_sha256"],
+                },
+            )
+            self.assertEqual(
+                receipt["tree_inventory"]["sha256"],
+                result["materialized_member_inventory_sha256"],
+            )
+            self.assertEqual(
+                receipt["tree_inventory"]["excludes"],
+                [
+                    execution.MATERIALIZATION_RECEIPT_NAME,
+                    execution.immutable_orion_tree.FREEZE_RECEIPT_NAME,
+                    execution.immutable_orion_tree.INVENTORY_NAME,
+                ],
+            )
+            materialized_members = {
+                path.relative_to(root).as_posix(): path.read_bytes()
+                for path in root.rglob("*")
+                if path.is_file()
+                and path.name
+                not in {
+                    execution.MATERIALIZATION_RECEIPT_NAME,
+                    execution.immutable_orion_tree.FREEZE_RECEIPT_NAME,
+                    execution.immutable_orion_tree.INVENTORY_NAME,
+                }
+            }
+            self.assertEqual(
+                receipt["tree_inventory"]["sha256"],
+                _sha256(execution._member_inventory_payload(materialized_members)),
+            )
             self.assertEqual(plan["authorized_orion_root"], str(fixture["orion"]))
             self.assertEqual(
                 plan["selected_pressure"]["selected_case"],
@@ -525,6 +714,282 @@ class Q011Section54QualifyingCampaignExecutionTests(unittest.TestCase):
                 "tst/publication/q011_section54_pressure_pilot_execution.py",
                 [record["path"] for record in closure["sources"]],
             )
+            for path in (
+                "tst/publication/analyze_q011_section54_numerical_qualification.py",
+                "tst/publication/q011_section54_particles.py",
+                "tst/publication/q011_section54_spatial.py",
+                "tst/publication/q011_section54_artifacts.py",
+                "tst/publication/publish_q011_section54_pressure_pilot_bundle.py",
+                "tst/publication/analyze_q011_section54_pressure_pilot.py",
+                "tst/publication/analyze_q011_section54_pressure_pilot_case.py",
+                "tst/publication/frontier_f1_structured_artifacts.py",
+                "tst/publication/q011_section54_attempt_manifest_materializer.py",
+            ):
+                with self.subTest(path=path):
+                    self.assertIn(path, [record["path"] for record in closure["sources"]])
+
+    def test_materializes_under_hidden_staging_before_atomic_no_replace_publish(self) -> None:
+        with _fixture() as fixture:
+            original_write = execution._write_new_file
+            observed_staging: list[Path] = []
+
+            def inspect_hidden_write(
+                root: Path, descriptor: int, relative: str, payload: bytes
+            ) -> None:
+                observed_staging.append(root)
+                self.assertTrue(
+                    root.parent.name.startswith(".q011-section54-qualifying-campaign-plan-")
+                )
+                self.assertEqual(root.name, execution._STAGING_ROOT_NAME)
+                self.assertFalse(
+                    any(
+                        path.name.startswith("q011-section54-qualifying-campaign-plan-")
+                        for path in fixture["output_parent"].iterdir()
+                    )
+                )
+                original_write(root, descriptor, relative, payload)
+
+            with (
+                patch.object(execution, "_write_new_file", side_effect=inspect_hidden_write),
+                patch.object(
+                    execution,
+                    "_rename_no_replace_at",
+                    wraps=execution._rename_no_replace_at,
+                ) as rename,
+            ):
+                result = _materialize(fixture)
+            self.assertTrue(observed_staging)
+            rename.assert_called_once()
+            self.assertTrue(Path(result["plan_root"]).is_dir())
+
+    def test_destination_appearing_at_atomic_rename_is_not_overwritten(self) -> None:
+        with _fixture() as fixture:
+            original_rename = execution._rename_no_replace_at
+            competing: list[Path] = []
+
+            def collide(
+                source_parent_descriptor: int,
+                source_name: str,
+                destination_parent_descriptor: int,
+                destination_name: str,
+            ) -> None:
+                destination = fixture["output_parent"] / destination_name
+                destination.mkdir()
+                (destination / "sentinel.txt").write_text(
+                    "competing publication\n", encoding="utf-8"
+                )
+                competing.append(destination)
+                original_rename(
+                    source_parent_descriptor,
+                    source_name,
+                    destination_parent_descriptor,
+                    destination_name,
+                )
+
+            with patch.object(execution, "_rename_no_replace_at", side_effect=collide):
+                with self.assertRaisesRegex(execution.CampaignPlanError, "already exists"):
+                    _materialize(fixture)
+            self.assertEqual(
+                (competing[0] / "sentinel.txt").read_text(encoding="utf-8"),
+                "competing publication\n",
+            )
+            self.assertEqual(list(fixture["output_parent"].iterdir()), competing)
+
+    def test_publication_requires_atomic_no_replace_rename_support(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory)
+            (parent / "source").mkdir()
+            descriptor = os.open(parent, execution._DIRECTORY_FLAGS)
+            try:
+                with patch.object(execution.ctypes, "CDLL", return_value=object()):
+                    with self.assertRaisesRegex(
+                        execution.CampaignPlanError,
+                        "requires atomic no-replace rename support",
+                    ):
+                        execution._rename_no_replace_at(
+                            descriptor, "source", descriptor, "destination"
+                        )
+                self.assertTrue((parent / "source").is_dir())
+                self.assertFalse((parent / "destination").exists())
+            finally:
+                os.close(descriptor)
+
+    def test_concurrent_injected_staging_member_fails_closed(self) -> None:
+        with _fixture() as fixture:
+            original_freeze = execution.immutable_orion_tree.freeze_tree_anchored
+
+            def inject_member(root: Path, *args: object, **kwargs: object) -> dict[str, object]:
+                (Path(root) / "injected-member.txt").write_text(
+                    "not planner-owned\n", encoding="utf-8"
+                )
+                return original_freeze(root, *args, **kwargs)
+
+            with patch.object(
+                execution.immutable_orion_tree,
+                "freeze_tree_anchored",
+                side_effect=inject_member,
+            ):
+                with self.assertRaisesRegex(
+                    execution.CampaignPlanError, "frozen inventory drifted"
+                ):
+                    _materialize(fixture)
+            self.assertEqual(list(fixture["output_parent"].iterdir()), [])
+
+    def test_member_injected_at_atomic_publish_is_rolled_back(self) -> None:
+        with _fixture() as fixture:
+            original_rename = execution._rename_no_replace_at
+            injected = False
+
+            def inject_then_rename(
+                source_parent_descriptor: int,
+                source_name: str,
+                destination_parent_descriptor: int,
+                destination_name: str,
+            ) -> None:
+                nonlocal injected
+                if not injected:
+                    staging = (
+                        Path("/proc/self/fd") / str(source_parent_descriptor) / source_name
+                    )
+                    mode = stat.S_IMODE(staging.stat().st_mode)
+                    staging.chmod(mode | stat.S_IWUSR | stat.S_IXUSR)
+                    (staging / "injected-member.txt").write_text(
+                        "not planner-owned\n", encoding="utf-8"
+                    )
+                    staging.chmod(mode)
+                    injected = True
+                original_rename(
+                    source_parent_descriptor,
+                    source_name,
+                    destination_parent_descriptor,
+                    destination_name,
+                )
+
+            with patch.object(
+                execution, "_rename_no_replace_at", side_effect=inject_then_rename
+            ) as rename:
+                with self.assertRaises(execution.CampaignPlanError):
+                    _materialize(fixture)
+            self.assertEqual(rename.call_count, 2)
+            self.assertEqual(list(fixture["output_parent"].iterdir()), [])
+
+    def test_private_container_substitution_never_exposes_replacement(self) -> None:
+        with _fixture() as fixture:
+            original_rename = execution._rename_no_replace_at
+            substituted = False
+            parked: list[Path] = []
+            observed_public_replacement: list[bool] = []
+            safe_public_inodes: list[int] = []
+            observed_public_inodes: list[int] = []
+            observed_public_modes: list[int] = []
+
+            def substitute_then_rename(
+                source_parent_descriptor: int,
+                source_name: str,
+                destination_parent_descriptor: int,
+                destination_name: str,
+            ) -> None:
+                nonlocal substituted
+                if not substituted:
+                    private = next(
+                        path
+                        for path in fixture["output_parent"].iterdir()
+                        if path.name.startswith(
+                            ".q011-section54-qualifying-campaign-plan-"
+                        )
+                    )
+                    parked_root = private.with_name(f"{private.name}.parked")
+                    private.rename(parked_root)
+                    safe_public_inodes.append(
+                        (parked_root / execution._STAGING_ROOT_NAME).stat().st_ino
+                    )
+                    private.mkdir()
+                    (private / execution._STAGING_ROOT_NAME).mkdir()
+                    (private / execution._STAGING_ROOT_NAME / "sentinel.txt").write_text(
+                        "attacker replacement\n", encoding="utf-8"
+                    )
+                    parked.append(parked_root)
+                    substituted = True
+                original_rename(
+                    source_parent_descriptor,
+                    source_name,
+                    destination_parent_descriptor,
+                    destination_name,
+                )
+                destination = fixture["output_parent"] / destination_name
+                published = destination.stat()
+                observed_public_inodes.append(published.st_ino)
+                observed_public_modes.append(stat.S_IMODE(published.st_mode))
+                try:
+                    replacement_is_public = (destination / "sentinel.txt").exists()
+                except PermissionError:
+                    replacement_is_public = False
+                observed_public_replacement.append(replacement_is_public)
+
+            with patch.object(
+                execution, "_rename_no_replace_at", side_effect=substitute_then_rename
+            ):
+                result = _materialize(fixture)
+            public = Path(result["plan_root"])
+            self.assertTrue(public.is_dir())
+            self.assertEqual(observed_public_replacement, [False])
+            self.assertEqual(observed_public_inodes, safe_public_inodes)
+            self.assertEqual(observed_public_modes, [stat.S_IWUSR])
+            self.assertFalse((public / "sentinel.txt").exists())
+            self.assertTrue(parked)
+
+    def test_rollback_quarantines_moved_original_and_preserves_replacement(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory)
+            destination = parent / "campaign-plan"
+            destination.mkdir()
+            (destination / "owned.txt").write_text("owned\n", encoding="utf-8")
+            moved = parent / "moved-public-campaign-plan"
+            parent_descriptor = os.open(parent, execution._DIRECTORY_FLAGS)
+            destination_descriptor = os.open(
+                destination.name,
+                execution._DIRECTORY_FLAGS,
+                dir_fd=parent_descriptor,
+            )
+            original_rename = execution._rename_no_replace_at
+            raced = False
+
+            def race_then_rename(*args: object, **kwargs: object) -> None:
+                nonlocal raced
+                if not raced:
+                    destination.rename(moved)
+                    destination.mkdir()
+                    (destination / "sentinel.txt").write_text(
+                        "replacement\n", encoding="utf-8"
+                    )
+                    raced = True
+                original_rename(*args, **kwargs)
+
+            try:
+                with patch.object(
+                    execution, "_rename_no_replace_at", side_effect=race_then_rename
+                ), self.assertRaisesRegex(
+                    execution.CampaignPlanError, "substituted public destination"
+                ):
+                    execution._rollback_published_destination(
+                        parent_descriptor,
+                        destination.name,
+                        destination_descriptor,
+                    )
+                self.assertEqual(
+                    (destination / "sentinel.txt").read_text(encoding="utf-8"),
+                    "replacement\n",
+                )
+                self.assertFalse(moved.exists())
+                self.assertFalse(
+                    any(
+                        path.name.startswith(f".{destination.name}.rollback-")
+                        for path in parent.iterdir()
+                    )
+                )
+            finally:
+                os.close(destination_descriptor)
+                os.close(parent_descriptor)
 
     def test_pressure_is_consumed_from_validated_human_receipt_and_never_inferred(self) -> None:
         with _fixture(receipt=_receipt(case_id="ps_p0_0p20", problem_ps_p0=0.2)) as fixture:

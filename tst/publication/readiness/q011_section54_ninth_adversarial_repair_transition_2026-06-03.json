@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "record_type": "q011_section54_ninth_adversarial_repair_transition",
+  "recorded_utc": "2026-06-03T17:06:00Z",
+  "artifact_root": "/lustre/orion/ast207/proj-shared/dfielding/PIC",
+  "predecessor_record": "tst/publication/readiness/q011_section54_eighth_adversarial_repair_transition_2026-06-03.json",
+  "predecessor_sha256": "fc6a8c0ada4061a5a6299608b116bca393fea2cc08adb008fd4ec1c05ffec1fe",
+  "source_checkpoint_commit": "7324031b1cc50395c7903e73dbb153d4fdf71290",
+  "status": "ninth_exact_live_historical_anchor_and_retained_candidate_lifecycle_repair_source_local_worker_validation_and_independent_rereview_passed_pending_clean_commit_full_clean_worker_validation_install_build_and_freeze",
+  "qualification_effect": "none_no_execution_authorization_no_science_claim",
+  "repaired_staged_control_plane": {
+    "version": "4bb093662299911c870bf68d57de9f22897e197d95baf8d303e34b0f5e083c8c",
+    "state": "source_local_repair_staged_pending_clean_commit_worker_validation_install_build_and_freeze",
+    "prepared_artifacts": {
+      "inventory_path": "tst/publication/frontier_control_plane/prepared_pic_artifact_inventory.json",
+      "inventory_sha256": "72a88a2b8f71d6d1fa7f7ed6195767b91b475367081dca397459f644c7a8b251",
+      "paper_deck_count": 110,
+      "publication_analyzer_count": 20
+    },
+    "installed_controller_file_count": 23
+  },
+  "historical_retirement_anchor": {
+    "policy_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/storage_policy.json",
+    "policy_sha256": "647573e109852da0e343cd1c80033dbbe4ad4d2d672588cdea4e852340bad3d8",
+    "project_home_policy_path": "/ccs/proj/ast207/proj-shared/PIC/policy/storage_policy.json",
+    "promotion_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/active_promotion.json",
+    "promotion_sha256": "073da1d4fe7f2eb054da9f3ec2bf2860f2643c3f44ca88d6183f4592eb0681bf",
+    "project_home_promotion_path": "/ccs/proj/ast207/proj-shared/PIC/policy/active_promotion.json",
+    "mirrored_bytes_checked": true,
+    "read_only_modes_checked": true
+  },
+  "pressure_publication_state": {
+    "public_artifacts_exposed": false,
+    "publication_root_empty_before_worker_validation": true,
+    "aggregate_and_review_packet_publication_prohibited_pending_clean_commit_freeze_and_reviewed_one_time_acceptance_root_provisioning": true
+  },
+  "completed_validation": [
+    "Worker job 4759742 passed the 501-test candidate ancestry-return repair suite in 134.442 seconds.",
+    "Worker job 4759746 passed the 502-test exact historical-anchor repair suite in 132.839 seconds.",
+    "Worker job 4759753 passed the 504-test retained-descriptor teardown-order repair suite in 133.879 seconds.",
+    "Worker job 4759756 passed the 506-test ancestry-descriptor teardown-order repair suite in 134.792 seconds.",
+    "Worker job 4759760 passed the exact final 507-test lifecycle suite in 133.031 seconds.",
+    "Independent read-only adversarial rereview replayed every identified candidate-substitution interval and found no remaining retained clean-candidate lifecycle blocker.",
+    "Source-local candidate revalidation passed 23 tests after the final setup-leak repair, including normal fixed closure, optional submodule closure, six late-window substitution regressions and missing-root fd-count cleanup.",
+    "Source-local scoped compile(source), shell syntax and git diff --check validations passed."
+  ],
+  "completed_repairs": [
+    "The promotion-only historical compatibility branch now requires the exact reviewed mirrored live policy and active-promotion SHA-256 anchors in addition to the historical shape, newer-controller and launch-prohibited pending-freeze constraints.",
+    "The retained clean-candidate reader drains watcher events after its final ancestry identity recheck so rename-away-and-restore cannot hide in the ancestry-return window.",
+    "Retained candidate member and directory descriptors close while inotify remains active, followed by a final watcher drain and watcher close with first-error preservation.",
+    "Pinned PIC-root and clean_candidates ancestry descriptors also close inside the watched teardown sequence before the final watcher drain.",
+    "Failure to construct the pinned candidate-root ancestry closes the already-created watcher before re-raising, preventing a setup-only descriptor leak."
+  ],
+  "new_decisions": [
+    "Bind the one-use historical policy migration to the exact currently mirrored read-only live policy and active-promotion digests, not only to a generic historical shape.",
+    "Treat the moment after watcher teardown as the inherent end of the retained-reader lifetime; close every avoidable descriptor-teardown interval under the watcher before that boundary."
+  ],
+  "release_blockers": [
+    "final_current_tree_clean_commit_and_push_pending",
+    "full_clean_worker_validation_pending",
+    "live_authenticated_storage_preflight_and_paired_controller_install_pending",
+    "historical_consumed_slice_policy_retirement_pending",
+    "fresh_worker_build_candidate_freeze_and_candidate_only_policy_promotion_pending",
+    "reviewed_one_time_publication_acceptance_root_provisioning_pending",
+    "pressure_aggregate_and_review_packet_worker_publication_pending"
+  ],
+  "human_input_required_now": false,
+  "first_required_human_input_after_automated_repairs": "Select exactly one Section 5.4 problem/ps_p0 case from the verified immutable four-slice pressure-review packet."
+}

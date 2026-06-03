@@ -1,6 +1,6 @@
 # PIC Sun and Bai release qualification handoff
 
-Last updated: 2026-06-02T22:29:52Z
+Last updated: 2026-06-03T17:06:00Z
 
 ## Purpose
 
@@ -40,31 +40,53 @@ Completed:
 6. Before the current hardening pass, the focused Q011 source tranche passed
    129 tests and the explicit full publication test suite passed all 58 test
    modules.
+7. The fifth-pass pressure publication repair passed its worker-routed
+   48-test suite in job `4759380`. No aggregate artifact is public yet.
+8. The sixth-pass control-plane, planner, and campaign-lifetime repair passed
+   its worker-routed 441-test suite in job `4759417`. A final clean committed
+   snapshot validation remains required.
+9. The seventh-pass pressure terminal-seal and caller-level reconciliation
+   repair passed its exact amended worker-routed 45-test suite in job
+   `4759724`. Independent read-only rereview found no remaining
+   pressure-publication code blocker in the modeled path-scoped writer
+   boundary.
+10. The eighth-pass authenticated storage-preflight, historical-policy
+    migration and candidate-revalidation repair passed its worker-routed
+    499-test suite in job `4759732`.
+11. The ninth-pass exact historical-anchor and retained candidate-lifecycle
+    repair passed its final worker-routed 507-test suite in job `4759760`.
+    Independent read-only adversarial rereview found no remaining retained
+    clean-candidate lifecycle blocker.
 
 In progress:
 
-1. Pressure-pilot aggregate publication is paused after one failed-closed
-   worker run and two intentionally cancelled worker runs. No public bundle,
-   receipt, or aggregate analysis artifact exists.
-2. The first and second repair tranches closed substantial structural gaps.
-   A third adversarial pass found additional pressure-publication,
-   publication-protocol, raw-attempt provenance, deterministic-root, and
-   restart-provenance blockers. A third repair tranche is active. Preserve its
-   dirty worktree edits.
+1. Pressure-pilot aggregate publication remains prohibited. No public bundle,
+   receipt, aggregate analysis artifact, or review packet exists.
+2. Preserve all integrated dirty worktree edits while the final clean-worker
+   validation, commit and push finish.
+3. The live controller and policy intentionally remain at the historical
+   consumed-slice generation until the reviewed one-time strict-storage
+   migration is performed from the committed source.
 
 Remaining:
 
-1. Finish and verify the pressure-pilot aggregate publication receipt.
-2. Complete, integrate, test, review, commit, and push all five qualifying
-   campaign hardening repairs listed below.
-3. Perform a human pressure-choice review from the immutable four-slice
+1. Commit and push the integrated source and pass the clean committed worker
+   validation.
+2. Capture authenticated mirrored storage evidence, install the paired
+   controller, retire the consumed historical slices, freeze and independently
+   revalidate a fresh worker-built candidate, and promote the candidate-only
+   policy.
+3. Provision the fixed sibling publication-acceptance authority through the
+   reviewed one-time transition, then publish and verify the pressure-pilot
+   aggregate receipt and review packet on workers.
+4. Perform a human pressure-choice review from the immutable four-slice
    calibration bundle. Do not invent or silently auto-select this science
    decision.
-4. Materialize and validate a qualifying campaign plan only after the repaired
+5. Materialize and validate a qualifying campaign plan only after the repaired
    launch boundary passes adversarial review.
-5. Run the prerequisite slices, cheaper paper-test suites, the full Section 5.4
+6. Run the prerequisite slices, cheaper paper-test suites, the full Section 5.4
    reproduction campaign, and final publication analysis in staged order.
-6. Finish optional extensions, final hardening, and the deferred external
+7. Finish optional extensions, final hardening, and the deferred external
    review before treating the implementation as production-ready.
 
 ## Mandatory operating constraints
@@ -77,9 +99,11 @@ Remaining:
 
 2. Do not launch the qualifying Section 5.4 campaign until the known
    adversarial findings are repaired, reviewed, and committed.
-3. Do not submit directly with `sbatch`. Use the registered control-plane
-   wrappers and preserve policy, attestation, reservation, manifest, and ledger
-   bindings.
+3. Do not submit production simulations directly with `sbatch`. Use the
+   registered control-plane wrappers and preserve policy, attestation,
+   reservation, manifest, and ledger bindings. Direct `/usr/bin/sbatch` is
+   allowed only for documented non-simulation worker validation and
+   publication wrappers.
 4. Keep Frontier jobs serialized until the qualification boundary is reviewed:
    one active job at a time.
 5. Do not discard dirty worktree edits or hidden publication staging trees
@@ -99,25 +123,25 @@ Primary worktree:
 /ccs/home/dfielding/athenak-pic
 ```
 
-Branch and pushed checkpoint at the time this handoff was drafted:
+Repair base before the integrated ninth-pass commit:
 
 ```text
 branch:     PIC
-HEAD:       04959b44bd03cc6e584b9bc951b41cce128ef22e
-origin/PIC: 04959b44bd03cc6e584b9bc951b41cce128ef22e
-subject:    Bind Q011 aggregate analysis parser compatibility successor
+HEAD:       7324031b1cc50395c7903e73dbb153d4fdf71290
+origin/PIC: 7324031b1cc50395c7903e73dbb153d4fdf71290
+subject:    Run Q011 repair validation from a clean worker snapshot
 ```
 
-The worktree is intentionally dirty because repair agents are hardening the
-qualifying-campaign boundary. At 2026-06-02T21:51:34Z these files were modified:
+After restart, require `git rev-parse HEAD origin/PIC` to report the same
+current pushed tip. Treat that tip, not the historical repair base above, as
+the source checkpoint for the next operational step.
 
-```text
-tst/publication/analyze_q011_section54_campaign.py
-tst/publication/q011_section54_qualifying_campaign_execution.py
-```
-
-Additional repair-owned changes may appear after that timestamp. Inspect the
-current diff before editing or committing. The expected repair ownership is:
+The integrated repair commit curates the previously dirty fourth through ninth
+repair tranches. They span pressure publication, planner retention, raw-attempt
+materialization, retained publication rollback, numerical restart provenance,
+immutable-tree helpers, strict storage migration, retained candidate
+revalidation, readiness chronology, and their focused tests. Inspect any new
+diff before editing or committing. The expected repair ownership is:
 
 | Repair area | Primary files |
 | --- | --- |
@@ -125,10 +149,16 @@ current diff before editing or committing. The expected repair ownership is:
 | Campaign admission graph | `analyze_q011_section54_campaign.py`, its test |
 | Attempt publication race | `publish_q011_section54_campaign_attempt.py`, its test |
 | Planner publication race and helper closure | `q011_section54_qualifying_campaign_execution.py`, its test |
+| Generic pre-submit planner provenance | `frontier_control_plane/`, its tests |
+| Pressure aggregate publication | `publish_q011_section54_pressure_pilot_bundle.py`, its test |
+| Pressure review packet | `render_q011_section54_pressure_pilot_review_packet.py`, its test |
+| Retained-tree descriptor pinning | `immutable_orion_tree.py`, its test |
 
 Recent pushed history:
 
 ```text
+7324031b1 Run Q011 repair validation from a clean worker snapshot
+f3128598b Record Q011 third adversarial repair transition
 04959b44b Bind Q011 aggregate analysis parser compatibility successor
 01141bd8a Accept empty optional Athena binary header values
 7a813e0bd Expand worker Q011 repair validation coverage
@@ -160,7 +190,7 @@ Artifact root:
 PIC_ROOT=/lustre/orion/ast207/proj-shared/dfielding/PIC
 ```
 
-Frozen clean candidate:
+Historical consumed-slice clean candidate:
 
 ```text
 FREEZE_ROOT=$PIC_ROOT/clean_candidates/0d1cabe6-a282-408b-953a-c2db8f0e1310
@@ -182,7 +212,7 @@ Bindings:
 | Active policy SHA-256 | `647573e109852da0e343cd1c80033dbbe4ad4d2d672588cdea4e852340bad3d8` |
 | Active promotion SHA-256 | `073da1d4fe7f2eb054da9f3ec2bf2860f2643c3f44ca88d6183f4592eb0681bf` |
 
-Reviewed pressure-pilot policy:
+Historical consumed-slice pressure-pilot policy:
 
 ```text
 $PIC_ROOT/policy/reviewed_q011_pressure_pilot_successor_v2_0d1cabe6.json
@@ -191,6 +221,11 @@ $PIC_ROOT/policy/reviewed_q011_pressure_pilot_successor_v2_0d1cabe6.json
 The cap is 10,000 node-hours. The ledger tail after the fourth engineering
 calibration reconciliation reported cumulative consumption of
 `1.3019444444444446` node-hours.
+
+These controller, candidate and policy bindings are retained historical
+chronology. Do not relaunch them. Replace them only through the ninth-pass
+strict-storage retirement, fresh worker freeze and candidate-only promotion
+sequence documented below.
 
 ## Completed pressure-engineering calibration slices
 
@@ -229,8 +264,11 @@ then ended without exposing a public bundle:
 | `4757026` | `CANCELLED` | `00:02:16` | Cancelled when the checkout mutated during publication; superseded by worker-local `git archive HEAD` snapshots |
 | `4757047` | `CANCELLED` | `00:04:36` | Cancelled after fresh review found late-failure rollback, descriptor-anchor, and source-authorization gaps |
 
-Aggregate publication is paused until the third repair tranche closes. Do not
-rerun the publisher yet.
+Aggregate publication remains prohibited until the integrated ninth-pass tree
+is committed, pushed, clean-worker validated, installed and used to freeze a
+fresh candidate. Provision the reviewed sibling acceptance authority before
+rerunning the worker publisher. Do not invoke the publisher directly on a
+login node.
 
 ```text
 /usr/bin/sbatch tst/publication/frontier_q011_section54_pressure_pilot_publish_job.sh
@@ -244,15 +282,18 @@ $PIC_ROOT/publication/q011_section54_pressure_pilot_bundle_receipt.json
 $PIC_ROOT/publication/q011_section54_pressure_pilot_analysis.json
 ```
 
-Preserve these hidden staging trees until the corrected publisher verifies a
-visible receipt and an explicit audit decides their disposition:
+The two hidden pre-repair staging trees were audited and removed on
+`2026-06-02T22:59:11Z`. One was empty. The other contained only three partial
+`ps_p0_1p00` magnetic-field binary copies and no receipt. Neither was accepted
+evidence:
 
 ```text
 $PIC_ROOT/publication/.q011_section54_pressure_pilot_bundle.staging-a38200f5-06a0-47c8-8f24-046e0fdb556a
 $PIC_ROOT/publication/.q011_section54_pressure_pilot_bundle.staging-6b50871f-7318-41f5-9c36-c5cb4ce1dfa8
 ```
 
-Do not delete either hidden tree while repairs are active.
+Do not assume that either hidden tree still exists. The publication root was
+empty immediately after the reviewed cleanup.
 
 Check the publisher and visible outputs:
 
@@ -350,6 +391,179 @@ The third repair tranche is active. Do not publish the aggregate bundle,
 materialize a qualifying campaign, or launch qualifying work until it passes
 another independent adversarial review.
 
+### Fourth adversarial pass
+
+The first third-tranche implementations were independently rereviewed before
+worker publication. The rereview rejected them and opened a fourth repair
+tranche:
+
+1. Consumed historical pressure-v2 slices must be structurally incapable of
+   authorizing fresh launches, even if historical source bytes are restored.
+2. Pressure review packets must verify the exact aggregate-receipt-bound
+   analysis digest before rendering metrics or figures.
+3. Worker archive provenance must be enforced rather than accepted from
+   caller-supplied environment strings.
+4. Operational registered-execution artifacts below `$PIC_ROOT/runs` and
+   deterministic retained publication below `$PIC_ROOT/campaigns` must remain
+   distinct namespaces with an immutable cross-link.
+5. Reconciliation must emit the read-only registered-execution receipt only
+   after the mirrored ledger event is durably appended, deriving receipt
+   fields from the immutable pre-submit manifest and reconciliation event.
+6. The qualifying planner needs a reviewed materializer for the exact
+   `planner_retention` object injected into pre-submit configuration. Do not
+   hand-author that binding during launch orchestration.
+7. The generic pre-submit boundary must independently prove that the
+   `planner_retention` overlay came from immutable qualifying-planner bytes.
+   Shape-only validation of caller-authored root and `argv` fields is
+   insufficient.
+8. Completed-attempt materialization must rebind the opened `/runs/.../raw`
+   descriptor to its public pathname before and after mutation.
+9. Retained-publication rollback must not delete a substituted destination
+   while leaving the originally published inode exposed under a moved public
+   name.
+10. Pressure publication archive proof must reject synthetic read-only tar
+    files that merely carry a forged 40-hex PAX comment. Aggregate and packet
+    publishers must recheck retained publication-root identity after their
+    final pathname verifier and reject boolean schema-version aliases.
+11. Restart qualification must prove authoritative execution receipts,
+   admitted source-checkpoint lineage, and the admitted source-plan carrier.
+12. Restart post-checkpoint outputs must be checksum-cross-linked to immutable
+    registered raw-tree inventories rather than accepted as bundle-authored
+    copies. Fixed-path receipt and mirrored-ledger consumption must retain
+    pinned ancestry for the complete validation lifetime.
+13. Numerical recompute closure needs the complete direct analyzer dependency
+    set and a second stability scan.
+
+The durable transition record is
+[`q011_section54_fourth_adversarial_repair_transition_2026-06-02.json`](readiness/q011_section54_fourth_adversarial_repair_transition_2026-06-02.json).
+The fourth repair tranche is active. Do not publish, freeze a replacement
+candidate, materialize a qualifying campaign, or launch qualifying work until
+the repaired boundary passes worker validation and another independent
+adversarial review.
+
+### Fifth pressure-publication pass
+
+The fourth-pass pressure implementation passed its scoped worker tests, but an
+independent rereview found that a coordinated byte-identical replacement could
+leave a canonical receipt verifiable after rollback failed. It also found that
+possessing genuine `git archive HEAD` bytes did not prove execution from the
+worker-extracted source snapshot. The fifth pressure pass closes both gaps:
+
+1. Aggregate and packet publishers arm a receipt-specific fail-closed guard
+   before canonical receipt rename.
+2. Public receipt consumers reject guarded receipts before and after retained
+   closure verification.
+3. Successful publication removes the guard only as its final action.
+4. Failed rollback leaves the guard retained whenever canonical withdrawal
+   cannot be proven, including coordinated byte-identical replacement.
+5. Production source binding proves that the running Python module and reviewed
+   source members come from the read-only worker-extracted `git archive HEAD`
+   snapshot. Direct API execution from the trusted checkout is rejected.
+
+Worker validation job `4759380` passed all `48` scoped pressure tests in
+`143.870s`. The durable transition record is
+[`q011_section54_fifth_adversarial_repair_transition_2026-06-03.json`](readiness/q011_section54_fifth_adversarial_repair_transition_2026-06-03.json).
+Pressure aggregate publication remains prohibited until the integrated
+clean-worker suite and a fresh independent rereview pass.
+
+### Sixth control-plane and campaign-lifetime pass
+
+The concurrent sixth pass closes the remaining retained-lifetime and planner
+provenance gaps found during integration:
+
+1. Campaign admission keeps the mirrored execution-ledger snapshot pinned
+   through retained raw-product, restart, and telemetry consumption.
+2. Ledger snapshot retention rejects transient receipt hide-and-restore
+   mutation even when final bytes and inode match.
+3. Hidden staged campaign publication uses the same retained ledger-snapshot
+   lifetime as direct aggregate admission.
+4. Qualifying planner retention reconstructs the complete reviewed graph,
+   helper closure, frozen candidate, exact matrix, contracts, restart carrier,
+   recompute plan, policy fragment, and pressure-selection review binding.
+5. Pre-submit creation, reservation, ledger retention, and reconciliation
+   cross-bind planner retention to the authorized submission clean-candidate
+   manifest digest.
+
+Worker validation job `4759417` passed all `441` control-plane tests in
+`140.865s`. The durable transition record is
+[`q011_section54_sixth_adversarial_repair_transition_2026-06-03.json`](readiness/q011_section54_sixth_adversarial_repair_transition_2026-06-03.json).
+The prepared artifact inventory now binds `110` decks and `20` analyzers with
+SHA-256 `72a88a2b8f71d6d1fa7f7ed6195767b91b475367081dca397459f644c7a8b251`.
+Launch and aggregate publication remain prohibited until the integrated tree
+is committed, pushed, validated from a clean worker snapshot, and rereviewed.
+
+### Seventh pressure terminal-seal pass
+
+The next pressure rereview found a rollback-after-commit edge: a seal helper
+wrapper could call the real terminal rename, prove the result consumable and
+then raise before its caller assigned `seal_committed = True`. Aggregate and
+review-packet publishers now reconcile that broader caller-level exception
+path by reopening the exact receipt-bound seal and requiring the public
+fail-closed guard to remain absent before returning committed success.
+
+Worker job `4759724` passed the exact amended `45`-test pressure suite in
+`248.894s`. Independent read-only rereview found no remaining
+pressure-publication code blocker under the modeled path-scoped ordinary
+concurrent-writer threat. The durable transition record is
+[`q011_section54_seventh_adversarial_repair_transition_2026-06-03.json`](readiness/q011_section54_seventh_adversarial_repair_transition_2026-06-03.json).
+
+The live fixed sibling authority directory
+`$PIC_ROOT/publication_acceptance/` is intentionally absent. Provision it once
+with reviewed owner, group, mode and ACL immediately before worker
+publication. The same-UID PIC-root mutation caveat and Lustre power-loss
+durability caveat remain explicit operational risks.
+
+### Eighth storage migration and candidate-revalidation pass
+
+The historical live policy predates authenticated mirrored storage evidence.
+The eighth pass adds a strict migration boundary:
+
+1. Source-only storage capture probes the fixed Orion artifact root and
+   Project Home ledger-mirror root, then publishes byte-identical read-only
+   evidence below both roots.
+2. Normal policy promotion, unlock and reservation require that evidence.
+3. One narrow promotion-only flag permits the exact historical predecessor to
+   be retired into a newer-controller, empty-allowlist, pending-freeze policy.
+   Runtime unlock and reservation have no legacy mode.
+4. Clean-candidate reads watch retained PIC-root ancestry and reject parent
+   substitution or rename-away-and-restore.
+5. Worker freeze creation immediately invokes the installed read-only
+   candidate verifier against the exact emitted manifest digest.
+
+Worker job `4759732` passed the integrated `499`-test lifecycle suite in
+`133.923s`. The staged controller digest is
+`dab112c006506b99415fd4885efa1dc778632ae446120dd576ff860dab5e4be9`.
+The durable transition record is
+[`q011_section54_eighth_adversarial_repair_transition_2026-06-03.json`](readiness/q011_section54_eighth_adversarial_repair_transition_2026-06-03.json).
+The ninth pass below supersedes this intermediate lifecycle checkpoint.
+
+### Ninth exact-anchor and retained-candidate lifecycle pass
+
+Adversarial rereview of the eighth pass found avoidable watcher-lifetime gaps
+around ancestry recheck and teardown. It also identified that the generic
+historical migration shape could be narrower. The ninth pass closes those
+boundaries:
+
+1. The one-use migration branch binds the exact mirrored historical live policy
+   SHA-256 `647573e109852da0e343cd1c80033dbbe4ad4d2d672588cdea4e852340bad3d8`
+   and promotion SHA-256
+   `073da1d4fe7f2eb054da9f3ec2bf2860f2643c3f44ca88d6183f4592eb0681bf`.
+2. Candidate reads drain events after ancestry recheck and close retained
+   members, candidate directories and PIC-root ancestry descriptors before the
+   final watcher drain.
+3. Missing candidate-root construction failures close the already-created
+   watcher before returning.
+4. Six adversarial late-window substitutions and the missing-root fd-count
+   cleanup now have focused regressions.
+
+Worker job `4759760` passed the exact final `507`-test lifecycle suite in
+`133.031s`. Independent read-only rereview replayed every identified interval
+and found no remaining retained clean-candidate lifecycle blocker. The staged
+controller digest is
+`4bb093662299911c870bf68d57de9f22897e197d95baf8d303e34b0f5e083c8c`.
+The durable transition record is
+[`q011_section54_ninth_adversarial_repair_transition_2026-06-03.json`](readiness/q011_section54_ninth_adversarial_repair_transition_2026-06-03.json).
+
 ## Validation baseline
 
 The committed launch-prohibited checkpoint passed these validations before the
@@ -425,11 +639,17 @@ Then:
 
 1. Read this file and both governing plans.
 2. Preserve and inspect the in-flight repair edits.
-3. Finish the pressure-pilot aggregate publication and verify its receipt.
-4. Integrate each repair separately enough that failures remain diagnosable.
-5. Run the focused and full validation suites.
-6. Request a fresh independent adversarial review.
-7. Commit and push the repaired boundary.
+3. Commit and push the integrated repaired boundary.
+4. Run focused and full validation suites from the clean committed worker
+   snapshot.
+5. Request a fresh independent adversarial review.
+6. Capture authenticated mirrored storage evidence, install the paired
+   controller, promote the historical-slice retirement successor, freeze and
+   independently revalidate a fresh worker-built candidate, and promote the
+   candidate-only successor.
+7. Provision `$PIC_ROOT/publication_acceptance/` through the reviewed one-time
+   transition. Finish the pressure-pilot worker aggregate publication and
+   review packet, then verify both receipts.
 8. Ask the human collaborator to review the immutable four-slice pressure
    calibration evidence and select the qualifying pressure option.
 9. Only then materialize the qualifying campaign plan and proceed through the

@@ -30,7 +30,6 @@ from control_plane_common import AUTHORIZED_CLEAN_CANDIDATE_FREEZE
 from control_plane_common import AUTHORIZED_NODE_HOUR_CAP
 from control_plane_common import AUTHORIZED_PIC_ROOT
 from control_plane_common import AUTHORIZED_PROJECT_HOME_ROOT, SITE_POLICY_MAX_AGE_SECONDS
-from control_plane_common import BUILD_PROVENANCE_FILENAMES
 from control_plane_common import FRONTIER_ADMISSION_SMOKE_SCOPE, REGISTERED_SCIENCE_SCOPE
 from control_plane_common import SUBMISSION_SCOPES
 from control_plane_common import TRUSTED_GIT, TRUSTED_SCONTROL, TRUSTED_SQUEUE
@@ -45,7 +44,12 @@ from control_plane_common import scheduler_account_matches_authorized
 from control_plane_common import utc_datetime, validate_clean_candidate_bundle
 from control_plane_common import verify_installed_control_plane
 from control_plane_common import verify_historical_installed_control_plane
+from control_plane_common import read_clean_candidate_tree
+from control_plane_common import (
+    _read_clean_candidate_regular_file_at as _read_regular_file_at,
+)
 from control_plane_common import launch_contract_sha256, validate_launch_contract
+from control_plane_common import validate_planner_retention_binding
 from control_plane_common import trusted_slurm_environment
 from control_plane_common import verify_snapshot_files
 from ledger import accounting, append_primary_event_locked, ledger_lock
@@ -531,6 +535,8 @@ def _verify_manifest(
     expected_manifest_keys = PRE_SUBMIT_MANIFEST_REQUIRED_KEYS | (
         REGISTERED_SCIENCE_MANIFEST_KEYS if scope == REGISTERED_SCIENCE_SCOPE else set()
     )
+    if "planner_retention" in manifest:
+        expected_manifest_keys.add("planner_retention")
     if set(manifest) != expected_manifest_keys:
         raise ValueError("Pre-submit manifest root schema is malformed")
     for key in [
@@ -607,6 +613,14 @@ def _verify_manifest(
             != manifest.get("pre_manifest_attestation_sha256")
         ):
             raise ValueError("Registered science pre-manifest attestation binding differs")
+        if "planner_retention" in manifest:
+            manifest["planner_retention"] = validate_planner_retention_binding(
+                manifest["planner_retention"],
+                authorized_pic_root=pic_root,
+                expected_clean_candidate_manifest_sha256=str(
+                    manifest["clean_candidate_manifest_sha256"]
+                ),
+            )
     else:
         if clean_records:
             raise ValueError("Admission smoke must not carry a clean-candidate snapshot")
@@ -616,6 +630,7 @@ def _verify_manifest(
             or "registered_science_authorization_id" in manifest
             or "pre_manifest_attestation_path" in manifest
             or "pre_manifest_attestation_sha256" in manifest
+            or "planner_retention" in manifest
         ):
             raise ValueError("Admission smoke must not claim a clean-candidate freeze")
     return manifest
@@ -640,96 +655,6 @@ def _digest(record: dict[str, object], key: str) -> str:
     if not re.fullmatch(r"[0-9a-f]{64}", value):
         raise ValueError(f"Clean-candidate {key} is not a SHA-256 digest")
     return value
-
-
-def _read_regular_file_at(directory_fd: int, name: str, *, label: str) -> bytes:
-    if not name or "/" in name:
-        raise ValueError(f"{label} has an invalid fixed-layout name")
-    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
-    descriptor = os.open(name, flags, dir_fd=directory_fd)
-    try:
-        metadata = os.fstat(descriptor)
-        if not stat.S_ISREG(metadata.st_mode):
-            raise ValueError(f"{label} is not a regular file")
-        if metadata.st_mode & 0o222:
-            raise ValueError(f"{label} is not read-only")
-        with os.fdopen(descriptor, "rb", closefd=False) as stream:
-            return stream.read()
-    finally:
-        os.close(descriptor)
-
-
-def _open_read_only_directory_at(directory_fd: int, name: str, *, label: str) -> int:
-    if not name or "/" in name:
-        raise ValueError(f"{label} has an invalid fixed-layout name")
-    flags = os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0)
-    descriptor = os.open(name, flags, dir_fd=directory_fd)
-    metadata = os.fstat(descriptor)
-    if metadata.st_mode & 0o222:
-        os.close(descriptor)
-        raise ValueError(f"{label} is not read-only")
-    return descriptor
-
-
-def _require_exact_directory_entries(
-    directory_fd: int, expected: set[str], *, label: str
-) -> None:
-    entries = set(os.listdir(directory_fd))
-    if entries != expected:
-        raise ValueError(f"{label} entries do not match the fixed layout")
-
-
-def _require_exact_layout_path(record: dict[str, object], key: str, expected: Path) -> None:
-    if _text(record, key) != str(expected):
-        raise ValueError(f"Clean-candidate {key} does not match the fixed layout")
-
-
-def _read_submodule_archives(
-    source: dict[str, object], *, candidate_dir: Path, candidate_fd: int
-) -> tuple[list[bytes], list[bytes]]:
-    records = source.get("submodules")
-    if not isinstance(records, list):
-        raise ValueError("Clean-candidate submodules must be a list")
-    if not records:
-        return [], []
-    submodules_fd = _open_read_only_directory_at(
-        candidate_fd, "submodules", label="Clean-candidate submodule directory"
-    )
-    try:
-        archives = []
-        commits = []
-        names = set()
-        for index, record in enumerate(records):
-            if not isinstance(record, dict):
-                raise ValueError("Clean-candidate submodule attestation must be an object")
-            name = f"{index:04d}.tar"
-            commit_name = f"{index:04d}.commit"
-            names.add(name)
-            names.add(commit_name)
-            _require_exact_layout_path(
-                record, "archive_path", candidate_dir / "submodules" / name
-            )
-            archives.append(
-                _read_regular_file_at(
-                    submodules_fd, name, label=f"Clean-candidate submodule archive {index}"
-                )
-            )
-            _require_exact_layout_path(
-                record, "commit_path", candidate_dir / "submodules" / commit_name
-            )
-            commits.append(
-                _read_regular_file_at(
-                    submodules_fd,
-                    commit_name,
-                    label=f"Clean-candidate submodule commit object {index}",
-                )
-            )
-        _require_exact_directory_entries(
-            submodules_fd, names, label="Clean-candidate submodule directory"
-        )
-        return archives, commits
-    finally:
-        os.close(submodules_fd)
 
 
 def _q011_generator_bytes(source_archive: bytes) -> bytes:
@@ -816,100 +741,24 @@ def _verify_clean_candidate(
     ):
         raise ValueError("Clean-candidate snapshot digest mismatch")
 
-    root_flags = os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0)
-    candidate_root_fd = os.open(candidate_root, root_flags)
-    try:
-        candidate_fd = _open_read_only_directory_at(
-            candidate_root_fd,
-            candidate_path.parent.name,
-            label="Clean-candidate directory",
-        )
-        try:
-            candidate_bytes = _read_regular_file_at(
-                candidate_fd,
-                "clean_candidate_manifest.json",
-                label="Clean-candidate manifest",
-            )
-            if sha256_bytes(candidate_bytes) != candidate_sha256:
-                raise ValueError("Policy-authorized clean-candidate manifest checksum mismatch")
-            candidate = read_json_bytes(candidate_bytes, label="Clean-candidate manifest")
-            freeze_id = _text(candidate, "freeze_id")
-            uuid.UUID(freeze_id)
-            if candidate_path.parent.name != freeze_id:
-                raise ValueError("Clean-candidate path does not match its freeze ID")
-            utc_datetime(candidate.get("created_utc"), field="clean_candidate.created_utc")
-            source = _mapping(candidate, "source")
-            build = _mapping(candidate, "build")
-            _require_exact_layout_path(source, "archive_path", candidate_path.parent / "source.tar")
-            _require_exact_layout_path(source, "commit_path", candidate_path.parent / "source.commit")
-            _require_exact_layout_path(
-                build, "profile_path", candidate_path.parent / "build_profile.json"
-            )
-            _require_exact_layout_path(
-                build,
-                "profile_receipt_path",
-                candidate_path.parent / "profile_receipt.json",
-            )
-            _require_exact_layout_path(
-                build, "executable_path", candidate_path.parent / "athena"
-            )
-            source_archive = _read_regular_file_at(
-                candidate_fd, "source.tar", label="Clean-candidate source archive"
-            )
-            source_commit = _read_regular_file_at(
-                candidate_fd, "source.commit", label="Clean-candidate source commit object"
-            )
-            submodule_archives, submodule_commits = _read_submodule_archives(
-                source, candidate_dir=candidate_path.parent, candidate_fd=candidate_fd
-            )
-            profile_bytes = _read_regular_file_at(
-                candidate_fd, "build_profile.json", label="Clean-candidate build profile"
-            )
-            receipt_bytes = _read_regular_file_at(
-                candidate_fd,
-                "profile_receipt.json",
-                label="Clean-candidate build-profile receipt",
-            )
-            executable_bytes = _read_regular_file_at(
-                candidate_fd, "athena", label="Clean-candidate executable"
-            )
-            provenance_fd = _open_read_only_directory_at(
-                candidate_fd, "build_provenance", label="Frozen build provenance directory"
-            )
-            try:
-                _require_exact_directory_entries(
-                    provenance_fd,
-                    set(BUILD_PROVENANCE_FILENAMES.values()),
-                    label="Frozen build provenance directory",
-                )
-                build_provenance = {
-                    label: _read_regular_file_at(
-                        provenance_fd,
-                        filename,
-                        label=f"Frozen build provenance {label}",
-                    )
-                    for label, filename in BUILD_PROVENANCE_FILENAMES.items()
-                }
-            finally:
-                os.close(provenance_fd)
-            entries = {
-                "athena",
-                "build_provenance",
-                "build_profile.json",
-                "clean_candidate_manifest.json",
-                "profile_receipt.json",
-                "source.commit",
-                "source.tar",
-            }
-            if source.get("submodules"):
-                entries.add("submodules")
-            _require_exact_directory_entries(
-                candidate_fd, entries, label="Clean-candidate directory"
-            )
-        finally:
-            os.close(candidate_fd)
-    finally:
-        os.close(candidate_root_fd)
+    tree = read_clean_candidate_tree(
+        candidate_path,
+        authorized_pic_root=authorized_pic_root,
+        read_regular_file_at=_read_regular_file_at,
+    )
+    candidate_bytes = tree["candidate_manifest_bytes"]
+    if sha256_bytes(candidate_bytes) != candidate_sha256:
+        raise ValueError("Policy-authorized clean-candidate manifest checksum mismatch")
+    candidate = tree["candidate"]
+    source = _mapping(candidate, "source")
+    source_archive = tree["source_archive"]
+    source_commit = tree["source_commit"]
+    submodule_archives = tree["submodule_archives"]
+    submodule_commits = tree["submodule_commits"]
+    profile_bytes = tree["build_profile"]
+    receipt_bytes = tree["build_profile_receipt"]
+    build_provenance = tree["build_provenance"]
+    executable_bytes = tree["executable"]
     executable_sha256 = sha256_bytes(executable_bytes)
     profile_submodules = validate_clean_candidate_bundle(
         candidate,
@@ -1524,6 +1373,8 @@ def reserve(
             "state": "reserved",
             "reconciled": False,
         }
+        if "planner_retention" in manifest:
+            event["planner_retention"] = manifest["planner_retention"]
         if pre_submit_wrapper_binding is not None:
             event.update(
                 {

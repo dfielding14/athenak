@@ -11,6 +11,7 @@ import struct
 import tempfile
 from typing import Any, Callable, Iterator
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 
@@ -555,10 +556,41 @@ class Q011Section54PressurePilotTests(unittest.TestCase):
             [item["problem_ps_p0"] for item in policy["pilot_contract"]["cases"]],
             [1.0, 0.05, 0.1, 0.2],
         )
+        compatibility = json.loads(
+            pilot.PARSER_COMPATIBILITY_SUCCESSOR_PATH.read_text(encoding="utf-8")
+        )
+        self.assertFalse(
+            compatibility["compatibility_repair"]["scientific_contract_changed"]
+        )
+        self.assertFalse(compatibility["compatibility_repair"]["estimators_changed"])
+        self.assertFalse(compatibility["compatibility_repair"]["thresholds_changed"])
         successor = json.loads(pilot.PREREGISTRATION_PATH.read_text(encoding="utf-8"))
-        self.assertFalse(successor["compatibility_repair"]["scientific_contract_changed"])
-        self.assertFalse(successor["compatibility_repair"]["estimators_changed"])
-        self.assertFalse(successor["compatibility_repair"]["thresholds_changed"])
+        self.assertEqual(
+            successor["historical_launch_chronology"]["state"],
+            "stale_non_authorizing_consumed_slices_no_reauthorization",
+        )
+        self.assertFalse(
+            successor["execution_policy"]["historical_launch_slices_reauthorized"]
+        )
+        self.assertFalse(successor["scientific_contract"]["estimators_changed"])
+        self.assertFalse(successor["scientific_contract"]["thresholds_changed"])
+
+    def test_postrun_source_authorization_rejects_role_path_swap(self) -> None:
+        original = pilot._regular_bytes
+        successor = json.loads(pilot.PREREGISTRATION_PATH.read_text(encoding="utf-8"))
+        closure = successor["source_closure"]
+        closure[0]["role"], closure[1]["role"] = closure[1]["role"], closure[0]["role"]
+        payload = (json.dumps(successor, indent=2) + "\n").encode("utf-8")
+
+        def read(path: Path, label: str) -> bytes:
+            if path == pilot.PREREGISTRATION_PATH:
+                return payload
+            return original(path, label)
+
+        with patch.object(pilot, "_regular_bytes", side_effect=read), self.assertRaisesRegex(
+            pilot.PilotAnalysisError, "source closure paths"
+        ):
+            pilot._load_postrun_source_authorization_successor()
 
 
 if __name__ == "__main__":

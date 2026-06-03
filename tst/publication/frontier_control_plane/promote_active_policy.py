@@ -26,6 +26,7 @@ from control_plane_common import open_directory_below, require_same_directory
 from control_plane_common import read_json_bytes
 from control_plane_common import read_stable_regular_file, sha256_bytes
 from control_plane_common import require_no_symlink_components_below
+from control_plane_common import require_policy_predecessor_snapshot_for_promotion
 from control_plane_common import require_storage_policy_unlock_snapshot
 from control_plane_common import stable_serialization_anchor
 from control_plane_common import validate_storage_policy, verify_installed_control_plane
@@ -311,6 +312,7 @@ def promote(
     *,
     pre_policy_promotion_attestation: Path | None = None,
     pre_policy_promotion_authorization_id: str | None = None,
+    retire_historical_storage_preflight_predecessor: bool = False,
     control_plane_dir: Path = SCRIPT_DIR,
     authorized_pic_root: Path = AUTHORIZED_PIC_ROOT,
     authorized_project_home_root: Path = AUTHORIZED_PROJECT_HOME_ROOT,
@@ -383,9 +385,28 @@ def promote(
             "Launch-prohibited policy promotion must not claim a "
             "pre-policy-promotion attestation"
         )
+    if retire_historical_storage_preflight_predecessor and (
+        registered_science_slices != []
+        or policy.get("science_submission_freeze")
+        != {"status": "pending_clean_candidate_freeze"}
+    ):
+        raise ValueError(
+            "Historical storage-preflight retirement requires one launch-prohibited "
+            "pending-freeze replacement"
+        )
     mirror_policy_parent = Path(os.path.abspath(authorized_project_home_root)) / "policy"
     durable_mkdir_parents(mirror_policy_parent, root=authorized_project_home_root)
     with _promotion_lock(authorized_pic_root) as policy_descriptor:
+        require_policy_predecessor_snapshot_for_promotion(
+            successor_policy=policy,
+            successor_control_plane_version=version,
+            permit_historical_retirement_predecessor=(
+                retire_historical_storage_preflight_predecessor
+            ),
+            authorized_pic_root=authorized_pic_root,
+            authorized_project_home_root=authorized_project_home_root,
+            authorized_account=authorized_account,
+        )
         _require_q011_launch_prohibited_baseline(
             policy,
             control_plane_version=version,
@@ -509,12 +530,19 @@ def main() -> None:
     parser.add_argument("--reviewed-policy", required=True, type=Path)
     parser.add_argument("--pre-policy-promotion-attestation", type=Path)
     parser.add_argument("--pre-policy-promotion-authorization-id")
+    parser.add_argument(
+        "--retire-historical-storage-preflight-predecessor",
+        action="store_true",
+    )
     args = parser.parse_args()
     promote(
         args.reviewed_policy,
         pre_policy_promotion_attestation=args.pre_policy_promotion_attestation,
         pre_policy_promotion_authorization_id=(
             args.pre_policy_promotion_authorization_id
+        ),
+        retire_historical_storage_preflight_predecessor=(
+            args.retire_historical_storage_preflight_predecessor
         ),
     )
 

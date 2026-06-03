@@ -23,6 +23,8 @@ cd "$SNAPSHOT_ROOT"
 export PYTHONPATH="$PWD:$PWD/tst/publication/frontier_control_plane"
 
 mapfile -t publication_python < <(find tst/publication -type f -name '*.py' | sort)
+mapfile -t publication_shell < <(find tst/publication -type f -name '*.sh' | sort)
+mapfile -t publication_json < <(find tst/publication -type f -name '*.json' | sort)
 
 python3 -B - "${publication_python[@]}" <<'PY'
 import sys
@@ -31,6 +33,33 @@ from pathlib import Path
 for relative in sys.argv[1:]:
     path = Path(relative)
     compile(path.read_bytes(), str(path), "exec")
+PY
+
+bash -n "${publication_shell[@]}"
+
+python3 -B - "${publication_json[@]}" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+for relative in sys.argv[1:]:
+    path = Path(relative)
+    with path.open(encoding="utf-8") as stream:
+        json.load(stream)
+PY
+
+python3 -B - <<'PY'
+import json
+from pathlib import Path
+
+from tst.publication.frontier_control_plane import generate_prepared_pic_artifact_inventory
+
+path = Path("tst/publication/frontier_control_plane/prepared_pic_artifact_inventory.json")
+with path.open(encoding="utf-8") as stream:
+    committed = json.load(stream)
+generated = generate_prepared_pic_artifact_inventory.prepared_artifact_inventory()
+if committed != generated:
+    raise SystemExit("Committed prepared PIC artifact inventory is stale")
 PY
 
 python3 -B -m unittest \

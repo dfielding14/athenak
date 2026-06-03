@@ -6,10 +6,12 @@ from __future__ import annotations
 from contextlib import contextmanager
 import copy
 import hashlib
+import io
 import json
 from pathlib import Path
 import stat
 import struct
+import tarfile
 import tempfile
 from typing import Any, Callable, Iterator
 import unittest
@@ -17,6 +19,7 @@ from unittest import mock
 
 from tst.publication import analyze_q011_section54_campaign as campaign
 from tst.publication import immutable_orion_tree
+from tst.publication.frontier_control_plane import control_plane_common
 
 
 _WRITE_BITS = stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH
@@ -25,6 +28,13 @@ _RECEIPT = {
     "schema_version": 1,
     "artifact_role": campaign.ARTIFACT_ROLE,
     "qualification_effect": "retained_qualifying_campaign_attempt",
+    "inventory_excludes": immutable_orion_tree.INVENTORY_NAME,
+    "freeze_policy": "remove all owner, group and other write bits recursively",
+}
+_PLANNER_RECEIPT = {
+    "schema_version": 1,
+    "artifact_role": campaign._CAMPAIGN_PLAN_ARTIFACT_ROLE,
+    "qualification_effect": campaign._CAMPAIGN_PLAN_QUALIFICATION_EFFECT,
     "inventory_excludes": immutable_orion_tree.INVENTORY_NAME,
     "freeze_policy": "remove all owner, group and other write bits recursively",
 }
@@ -186,6 +196,345 @@ def _binding(path: str, sha256: str) -> dict[str, str]:
     return {"path": path, "sha256": sha256}
 
 
+def _inventory_payload(members: dict[str, bytes]) -> bytes:
+    return "".join(
+        f"{_sha256(payload)}  {relative}\n"
+        for relative, payload in sorted(members.items())
+    ).encode("utf-8")
+
+
+def _published_pressure_receipt(
+    root: Path, descriptors: list[dict[str, Any]]
+) -> dict[str, str]:
+    publication = root.parent / "publication"
+    publication.mkdir(exist_ok=True)
+    path = publication / "q011_section54_pressure_pilot_publication_receipt.json"
+    payload = _json_bytes(
+        {
+            "aggregate_bundle": {
+                "path": str(publication / "q011_section54_pressure_pilot_bundle"),
+                "manifest_sha256": "b" * 64,
+            },
+            "aggregate_analysis": {
+                "path": str(publication / "q011_section54_pressure_pilot_analysis.json"),
+                "sha256": "c" * 64,
+            },
+            "raw_cases": [
+                {
+                    "case_id": descriptor["case_id"],
+                    "artifact_dir": f"/fixture/{descriptor['case_id']}",
+                    "descriptor_path": f"/fixture/{descriptor['case_id']}.json",
+                    "descriptor_sha256": descriptor["descriptor_sha256"],
+                    "artifact_inventory_sha256": f"{index + 100:064x}",
+                    "runtime_artifacts": [],
+                }
+                for index, descriptor in enumerate(descriptors)
+            ],
+        }
+    )
+    path.write_bytes(payload)
+    path.chmod(0o444)
+    return {"path": str(path), "sha256": _sha256(payload)}
+
+
+def _planner_materialization_receipt(
+    root: Path,
+    campaign_plan: dict[str, Any],
+    source_payloads: dict[str, bytes],
+    helper_closure_payload: bytes,
+) -> tuple[dict[str, str], dict[str, str]]:
+    planner = campaign.campaign_planner
+    plan_id = campaign_plan["plan_id"]
+    parent = root.parent / "plans"
+    parent.mkdir(exist_ok=True)
+    planner_root = parent / f"q011-section54-qualifying-campaign-plan-{plan_id}"
+    planner_root.mkdir()
+    materialized_members: dict[str, bytes] = {}
+
+    def write(relative: str, payload: bytes) -> None:
+        path = planner_root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(payload)
+        materialized_members[relative] = payload
+
+    for name, binding in campaign_plan["source_bindings"].items():
+        write(binding["path"], source_payloads[name])
+
+    campaign_root = Path(campaign_plan["authorized_orion_campaign_root"])
+    selected_pressure = campaign_plan["selected_pressure"]["selected_case"][
+        "problem_ps_p0"
+    ]
+    candidate = campaign_plan["candidate_binding"]
+    source_bindings = campaign_plan["source_bindings"]
+    contract_bindings = []
+    descriptor_bindings = []
+    descriptors = []
+    index = 0
+    for variant_id in campaign_plan["campaign_matrix"]["grid_variants"]:
+        variant = planner._variant_binding(variant_id)
+        for seed in campaign_plan["campaign_matrix"]["qualifying_seeds"]:
+            index += 1
+            attempt_id = planner._attempt_id(index, variant.variant, seed)
+            artifact_root = campaign_root / "baseline" / attempt_id
+            contract_path = f"launch_contracts/baseline/{attempt_id}.json"
+            contract = planner._baseline_launch_contract(
+                attempt_id=attempt_id,
+                variant=variant,
+                seed=seed,
+                selected_ps_p0=selected_pressure,
+                candidate=candidate,
+                paper_deck_binding=source_bindings["paper_deck"],
+                artifact_root=artifact_root,
+            )
+            contract_payload = _json_bytes(contract)
+            write(contract_path, contract_payload)
+            contract_binding = _binding(contract_path, _sha256(contract_payload))
+            contract_bindings.append(contract_binding)
+            descriptor = planner._attempt_descriptor(
+                index=index,
+                attempt_id=attempt_id,
+                variant=variant,
+                seed=seed,
+                selected_ps_p0=selected_pressure,
+                candidate=candidate,
+                artifact_root=artifact_root,
+                contract_path=contract_path,
+                contract_payload=contract_payload,
+            )
+            descriptor_path = f"attempts/baseline/{attempt_id}.json"
+            descriptor_payload = _json_bytes(descriptor)
+            write(descriptor_path, descriptor_payload)
+            descriptor_bindings.append(
+                _binding(descriptor_path, _sha256(descriptor_payload))
+            )
+            descriptors.append(descriptor)
+    campaign_plan["baseline_attempt_descriptors"] = descriptor_bindings
+
+    source_attempt = next(
+        descriptor
+        for descriptor in descriptors
+        if descriptor["variant"] == "three_level_amr_root_dx12_finest_dx3"
+        and descriptor["qualifying_seed"]
+        == campaign_plan["campaign_matrix"]["qualifying_seeds"][0]
+    )
+    restart_policy = planner.restart.decode_preregistration(
+        source_payloads["restart_preregistration"].decode("utf-8")
+    )
+    planner.restart.validate_preregistration(restart_policy)
+    carrier_id = planner._restart_carrier_id(source_attempt["qualifying_seed"])
+    restart_artifact_root = campaign_root / "restart_continuation" / carrier_id
+    restart_contract_path = f"launch_contracts/restart_continuation/{carrier_id}.json"
+    restart_contract = planner._restart_launch_contract(
+        carrier_id=carrier_id,
+        source_attempt=source_attempt,
+        restart_preregistration=restart_policy,
+        candidate=candidate,
+        paper_deck_binding=source_bindings["paper_deck"],
+        artifact_root=restart_artifact_root,
+    )
+    restart_contract_payload = _json_bytes(restart_contract)
+    write(restart_contract_path, restart_contract_payload)
+    restart_contract_binding = _binding(
+        restart_contract_path, _sha256(restart_contract_payload)
+    )
+    restart_carrier = {
+        "record_type": planner.RESTART_CARRIER_RECORD_TYPE,
+        "schema_version": 1,
+        "carrier_id": carrier_id,
+        "status": "planned_not_authorized",
+        "source_baseline_attempt_id": source_attempt["attempt_id"],
+        "variant": source_attempt["variant"],
+        "qualifying_seed": source_attempt["qualifying_seed"],
+        "selected_problem_ps_p0": selected_pressure,
+        "authorized_orion_attempt_root": str(restart_artifact_root),
+        "restart_preregistration": source_bindings["restart_preregistration"],
+        "checkpoint_time_omega0_inverse": restart_policy["continuation_contract"][
+            "checkpoint_time_omega0_inverse"
+        ],
+        "retained_output_schedule_after_checkpoint_omega0_inverse": restart_policy[
+            "continuation_contract"
+        ]["retained_output_schedule_after_checkpoint_omega0_inverse"],
+        "comparison_tolerances_max_absolute_difference": restart_policy[
+            "continuation_contract"
+        ]["comparison_tolerances_max_absolute_difference"],
+        "launch_contract": restart_contract_binding,
+    }
+    restart_carrier_payload = _json_bytes(restart_carrier)
+    restart_carrier_path = "restart_continuation/amr_restart_continuation_carrier.json"
+    write(restart_carrier_path, restart_carrier_payload)
+    campaign_plan["restart_continuation_carrier"] = _binding(
+        restart_carrier_path, _sha256(restart_carrier_payload)
+    )
+
+    write("helper_source_closure.json", helper_closure_payload)
+    campaign_plan["helper_source_closure"] = _binding(
+        "helper_source_closure.json", _sha256(helper_closure_payload)
+    )
+    recompute = planner._independent_recompute_plan(
+        plan_id=plan_id,
+        campaign_root=campaign_root,
+        qualifying_preregistration_binding=source_bindings["qualifying_preregistration"],
+    )
+    recompute_payload = _json_bytes(recompute)
+    write("independent_raw_artifact_recompute_plan.json", recompute_payload)
+    campaign_plan["independent_raw_artifact_recompute_plan"] = _binding(
+        "independent_raw_artifact_recompute_plan.json", _sha256(recompute_payload)
+    )
+    fragment = control_plane_common._planner_expected_policy_fragment(
+        plan_id=plan_id,
+        pic_root=campaign.ORION_BULK_ROOT,
+        campaign_root=campaign_root,
+        candidate=candidate,
+        pressure_receipt_binding=source_bindings["pressure_selection_receipt"],
+        contract_bindings=contract_bindings,
+        restart_contract_binding=restart_contract_binding,
+    )
+    fragment_payload = _json_bytes(fragment)
+    write("nonauthorizing_policy_fragment.json", fragment_payload)
+    campaign_plan["nonauthorizing_policy_fragment"] = _binding(
+        "nonauthorizing_policy_fragment.json", _sha256(fragment_payload)
+    )
+    campaign_plan_payload = _json_bytes(campaign_plan)
+    write("campaign_plan.json", campaign_plan_payload)
+    materialized_inventory = _inventory_payload(materialized_members)
+    internal_receipt_payload = _json_bytes(
+        {
+            "record_type": campaign._PLANNER_MATERIALIZATION_RECEIPT_RECORD_TYPE,
+            "schema_version": 1,
+            "plan_id": plan_id,
+            "campaign_plan": _binding(
+                "campaign_plan.json", _sha256(campaign_plan_payload)
+            ),
+            "helper_source_closure": _binding(
+                "helper_source_closure.json", _sha256(helper_closure_payload)
+            ),
+            "tree_inventory": {
+                "algorithm": (
+                    campaign._PLANNER_MATERIALIZED_MEMBER_INVENTORY_ALGORITHM
+                ),
+                "scope": campaign._PLANNER_MATERIALIZED_MEMBER_INVENTORY_SCOPE,
+                "excludes": [
+                    campaign._PLANNER_MATERIALIZATION_RECEIPT_NAME,
+                    immutable_orion_tree.FREEZE_RECEIPT_NAME,
+                    immutable_orion_tree.INVENTORY_NAME,
+                ],
+                "sha256": _sha256(materialized_inventory),
+                "inventoried_file_count": len(materialized_members),
+            },
+        }
+    )
+    (planner_root / campaign._PLANNER_MATERIALIZATION_RECEIPT_NAME).write_bytes(
+        internal_receipt_payload
+    )
+    frozen = immutable_orion_tree.freeze_tree(
+        planner_root,
+        _PLANNER_RECEIPT,
+        authorized_root=parent,
+    )
+    payload = _json_bytes(
+        {
+            "plan_root": str(planner_root),
+            "plan_id": plan_id,
+            "campaign_plan_sha256": _sha256(campaign_plan_payload),
+            "materialization_receipt": _binding(
+                campaign._PLANNER_MATERIALIZATION_RECEIPT_NAME,
+                _sha256(internal_receipt_payload),
+            ),
+            "materialized_member_inventory_sha256": _sha256(materialized_inventory),
+            "inventory_sha256": frozen["inventory_sha256"],
+            "inventoried_file_count": frozen["inventoried_file_count"],
+            "baseline_attempt_count": 24,
+            "restart_continuation_carrier_count": 1,
+            "recursively_read_only": True,
+        }
+    )
+    return (
+        _write_file(
+            root, "bindings/q011_section54_campaign_plan.json", campaign_plan_payload
+        ),
+        _write_file(
+            root,
+            "bindings/q011_section54_planner_materialization_receipt.json",
+            payload,
+        ),
+    )
+
+
+def _minimal_planner_materialization_receipt(
+    root: Path,
+    campaign_plan_payload: bytes,
+    helper_closure_payload: bytes,
+) -> dict[str, str]:
+    """Publish the formerly accepted two-member self-authored planner tree."""
+    plan_id = json.loads(campaign_plan_payload)["plan_id"]
+    parent = root.parent / "minimal-plans"
+    parent.mkdir(exist_ok=True)
+    planner_root = parent / f"q011-section54-qualifying-campaign-plan-{plan_id}"
+    planner_root.mkdir()
+    materialized_members = {
+        "campaign_plan.json": campaign_plan_payload,
+        "helper_source_closure.json": helper_closure_payload,
+    }
+    for relative, payload in materialized_members.items():
+        (planner_root / relative).write_bytes(payload)
+    materialized_inventory = _inventory_payload(materialized_members)
+    internal_receipt_payload = _json_bytes(
+        {
+            "record_type": campaign._PLANNER_MATERIALIZATION_RECEIPT_RECORD_TYPE,
+            "schema_version": 1,
+            "plan_id": plan_id,
+            "campaign_plan": _binding(
+                "campaign_plan.json", _sha256(campaign_plan_payload)
+            ),
+            "helper_source_closure": _binding(
+                "helper_source_closure.json", _sha256(helper_closure_payload)
+            ),
+            "tree_inventory": {
+                "algorithm": campaign._PLANNER_MATERIALIZED_MEMBER_INVENTORY_ALGORITHM,
+                "scope": campaign._PLANNER_MATERIALIZED_MEMBER_INVENTORY_SCOPE,
+                "excludes": [
+                    campaign._PLANNER_MATERIALIZATION_RECEIPT_NAME,
+                    immutable_orion_tree.FREEZE_RECEIPT_NAME,
+                    immutable_orion_tree.INVENTORY_NAME,
+                ],
+                "sha256": _sha256(materialized_inventory),
+                "inventoried_file_count": len(materialized_members),
+            },
+        }
+    )
+    (planner_root / campaign._PLANNER_MATERIALIZATION_RECEIPT_NAME).write_bytes(
+        internal_receipt_payload
+    )
+    frozen = immutable_orion_tree.freeze_tree(
+        planner_root,
+        _PLANNER_RECEIPT,
+        authorized_root=parent,
+    )
+    return _write_file(
+        root,
+        "bindings/q011_section54_planner_materialization_receipt.json",
+        _json_bytes(
+            {
+                "plan_root": str(planner_root),
+                "plan_id": plan_id,
+                "campaign_plan_sha256": _sha256(campaign_plan_payload),
+                "materialization_receipt": _binding(
+                    campaign._PLANNER_MATERIALIZATION_RECEIPT_NAME,
+                    _sha256(internal_receipt_payload),
+                ),
+                "materialized_member_inventory_sha256": _sha256(
+                    materialized_inventory
+                ),
+                "inventory_sha256": frozen["inventory_sha256"],
+                "inventoried_file_count": frozen["inventoried_file_count"],
+                "baseline_attempt_count": 24,
+                "restart_continuation_carrier_count": 1,
+                "recursively_read_only": True,
+            }
+        ),
+    )
+
+
 def _model_overrides(variant: str) -> list[str]:
     return list(campaign._EXPECTED_MODEL_LAUNCH_OVERRIDES[variant])
 
@@ -194,9 +543,11 @@ def _attempt_id(variant: str, seed: int) -> str:
     return campaign._expected_attempt_id({"variant": variant, "seed": seed})
 
 
-def _contract_argv(attempt_id: str, variant: str, seed: int, pressure: float) -> list[str]:
+def _contract_argv(
+    attempt_id: str, variant: str, seed: int, pressure: float, plan_id: str
+) -> list[str]:
     campaign_root = (
-        campaign.ORION_BULK_ROOT / "campaigns" / f"q011-section54-{'9' * 64}"
+        campaign.ORION_BULK_ROOT / "campaigns" / f"q011-section54-{plan_id}"
     )
     attempt_root = f"{campaign_root}/baseline/{attempt_id}"
     return [
@@ -211,6 +562,58 @@ def _contract_argv(attempt_id: str, variant: str, seed: int, pressure: float) ->
         f"problem/ps_seed_noise_seed={seed}",
         *_model_overrides(variant),
     ]
+
+
+def _registered_execution_receipt(
+    *,
+    attempt_id: str,
+    source_commit: str,
+    executable_sha256: str,
+    deck_sha256: str,
+    environment_sha256: str,
+    control_plane_version: str,
+    argv: list[str],
+    raw_output_root: str,
+    planner_result: dict[str, Any],
+    artifact_dir: str = "/fixture/runs/q011/submission",
+) -> dict[str, Any]:
+    attempt_root = str(Path(raw_output_root).parent)
+    return {
+        "record_type": "q011_section54_reconciled_registered_execution_receipt",
+        "schema_version": 1,
+        "receipt_role": "immutable_reconciled_registered_execution",
+        "registration_scope": "registered_science",
+        "reconciled": True,
+        "reservation_id": "11111111-1111-4111-8111-111111111111",
+        "submission_id": "22222222-2222-4222-8222-222222222222",
+        "reconciliation_event_sha256": "d" * 64,
+        "attempt_id": attempt_id,
+        "source_commit": source_commit,
+        "executable_sha256": executable_sha256,
+        "deck_sha256": deck_sha256,
+        "environment_sha256": environment_sha256,
+        "control_plane_version": control_plane_version,
+        "argv": argv,
+        "slurm_job_id": "123456",
+        "slurm_terminal_state": "COMPLETED",
+        "raw_output_root": raw_output_root,
+        "artifact_dir": artifact_dir,
+        "planner_retention": {
+            "schema_version": 1,
+            "retention_role": "q011_section54_deterministic_retained_attempt",
+            "planner_root": planner_result["plan_root"],
+            "planner_inventory_sha256": planner_result["inventory_sha256"],
+            "planner_plan_id": planner_result["plan_id"],
+            "planner_materialization_receipt": planner_result[
+                "materialization_receipt"
+            ],
+            "attempt_id": attempt_id,
+            "authorized_orion_attempt_root": attempt_root,
+            "authorized_orion_raw_root": raw_output_root,
+            "argv": argv,
+        },
+        "pre_submit_manifest_sha256": "e" * 64,
+    }
 
 
 def _product(
@@ -239,6 +642,8 @@ def _clean_candidate_manifest(
     executable: dict[str, str],
     deck: dict[str, str],
     analyzer: dict[str, str],
+    *,
+    source_archive_sha256: str,
 ) -> dict[str, Any]:
     return {
         "schema_version": 4,
@@ -264,7 +669,7 @@ def _clean_candidate_manifest(
         },
         "source": {
             "archive_path": _frozen_candidate_path("source.tar"),
-            "archive_sha256": "3" * 64,
+            "archive_sha256": source_archive_sha256,
             "commit_path": _frozen_candidate_path("source.commit"),
             "commit_sha256": "4" * 64,
             "source_bundle_sha256": "2" * 64,
@@ -280,7 +685,7 @@ def _clean_candidate_manifest(
             "profile_sha256": "6" * 64,
             "profile_receipt_path": _frozen_candidate_path("profile_receipt.json"),
             "profile_receipt_sha256": "7" * 64,
-            "source_archive_sha256": "3" * 64,
+            "source_archive_sha256": source_archive_sha256,
             "source_commit_sha256": "4" * 64,
             "source_bundle_sha256": "2" * 64,
             "toolchain": "Frontier fixture toolchain",
@@ -339,32 +744,57 @@ def _append_restart_publication(
     )
 
 
-def _manifest(root: Path) -> dict[str, Any]:
+def _manifest(
+    root: Path,
+    planner_mutate: Callable[[dict[str, Any], dict[str, bytes]], None] | None = None,
+) -> dict[str, Any]:
     variant = "three_level_amr_root_dx12_finest_dx3"
     seed = 23050101
     attempt_id = _attempt_id(variant, seed)
     selected_pressure = 0.1
-    plan_id = "9" * 64
-    planned_campaign_root = str(
-        campaign.ORION_BULK_ROOT / "campaigns" / f"q011-section54-{plan_id}"
-    )
-    planned_attempt_root = f"{planned_campaign_root}/baseline/{attempt_id}"
     executable = _write_file(root, "bindings/athena", _elf_executable())
     (root / executable["path"]).chmod(0o755)
-    deck = _write_file(root, "bindings/section54.athinput", b"<job>\nbasename=q011\n")
+    deck = _write_file(
+        root,
+        "bindings/section54.athinput",
+        (campaign.REPO_ROOT / campaign.ACTIVE_DECK_SOURCE_PATH).read_bytes(),
+    )
     analyzer = _write_file(
         root,
         "bindings/analyze_q011_section54_campaign.py",
         campaign.ANALYZER_PATH.read_bytes(),
     )
+    candidate_root = campaign.ORION_BULK_ROOT / "clean_candidates" / _FREEZE_ID
+    candidate_root.mkdir(parents=True)
+    source_archive_path = candidate_root / "source.tar"
+    with tarfile.open(source_archive_path, mode="w") as archive:
+        for relative in sorted(
+            {
+                *control_plane_common.Q011_SECTION54_HELPER_SOURCES,
+                *control_plane_common.Q011_SECTION54_ARCHIVE_SOURCE_PATHS.values(),
+            }
+        ):
+            payload = (campaign.REPO_ROOT / relative).read_bytes()
+            member = tarfile.TarInfo(relative)
+            member.size = len(payload)
+            archive.addfile(member, io.BytesIO(payload))
+    source_archive_path.chmod(0o444)
+    source_archive_sha256 = _sha256(source_archive_path.read_bytes())
     candidate_payload = (
         json.dumps(
-            _clean_candidate_manifest(executable, deck, analyzer),
+            _clean_candidate_manifest(
+                executable,
+                deck,
+                analyzer,
+                source_archive_sha256=source_archive_sha256,
+            ),
             indent=2,
             sort_keys=True,
         )
         + "\n"
     ).encode("utf-8")
+    (candidate_root / "clean_candidate_manifest.json").write_bytes(candidate_payload)
+    (candidate_root / "clean_candidate_manifest.json").chmod(0o444)
     candidate_manifest = _write_file(
         root, "bindings/clean_candidate_manifest.json", candidate_payload
     )
@@ -373,27 +803,28 @@ def _manifest(root: Path) -> dict[str, Any]:
         "bindings/q011_section54_preregistration.json",
         campaign.PREREGISTRATION_PATH.read_bytes(),
     )
+    pressure_descriptors = [
+        {
+            "case_id": case_id,
+            "problem_ps_p0": pressure,
+            "descriptor_sha256": f"{index:064x}",
+        }
+        for index, (case_id, pressure) in enumerate(
+            campaign.pressure_selection.REGISTERED_CASES, start=1
+        )
+    ]
+    published_pressure_receipt = _published_pressure_receipt(
+        root, pressure_descriptors
+    )
     selected_pressure_payload = _json_bytes(
         {
             "schema_version": 1,
             "record_type": "q011_section54_pressure_selection_receipt",
             "selection_method": "human_review_only",
-            "published_pressure_pilot_receipt": {
-                "path": "/fixture/published_q011_pressure_pilot_receipt.json",
-                "sha256": "a" * 64,
-            },
+            "published_pressure_pilot_receipt": published_pressure_receipt,
             "pilot_bundle_manifest_sha256": "b" * 64,
             "aggregate_pilot_analysis_sha256": "c" * 64,
-            "case_descriptors": [
-                {
-                    "case_id": case_id,
-                    "problem_ps_p0": pressure,
-                    "descriptor_sha256": f"{index:064x}",
-                }
-                for index, (case_id, pressure) in enumerate(
-                    campaign.pressure_selection.REGISTERED_CASES, start=1
-                )
-            ],
+            "case_descriptors": pressure_descriptors,
             "selected_case": {
                 "case_id": "ps_p0_0p10",
                 "problem_ps_p0": selected_pressure,
@@ -408,26 +839,27 @@ def _manifest(root: Path) -> dict[str, Any]:
         "bindings/q011_section54_selected_pressure_receipt.json",
         selected_pressure_payload,
     )
-    helper_closure_payload = _json_bytes(
+    helper_sources = [
         {
-            "record_type": "q011_section54_helper_source_closure",
-            "schema_version": 1,
-            "plan_id": plan_id,
-            "sources": [
-                {
-                    "path": path,
-                    "sha256": _sha256((campaign.REPO_ROOT / path).read_bytes()),
-                }
-                for path in campaign._EXPECTED_HELPER_SOURCE_PATHS
-            ],
+            "path": path,
+            "sha256": _sha256((campaign.REPO_ROOT / path).read_bytes()),
         }
+        for path in campaign._EXPECTED_HELPER_SOURCE_PATHS
+    ]
+    environment_profile_payload = (
+        campaign.REPO_ROOT
+        / control_plane_common.Q011_SECTION54_ARCHIVE_SOURCE_PATHS[
+            "environment_profile"
+        ]
+    ).read_bytes()
+    environment_profile = _binding(
+        "bindings/environment_profile.sh", _sha256(environment_profile_payload)
     )
-    analyzer_helper_source_closure_manifest = _write_file(
-        root,
-        "bindings/q011_section54_analyzer_helper_source_closure_manifest.json",
-        helper_closure_payload,
+    restart_preregistration_payload = campaign.RESTART_PREREGISTRATION_PATH.read_bytes()
+    restart_preregistration = _binding(
+        "bindings/q011_section54_restart_continuation_preregistration.json",
+        _sha256(restart_preregistration_payload),
     )
-    environment_profile = _binding("bindings/environment_profile.json", "a" * 64)
     paper_deck = _binding(
         "bindings/pic_parallel_shock_section54_paper_vl2_tsc.athinput",
         deck["sha256"],
@@ -440,10 +872,11 @@ def _manifest(root: Path) -> dict[str, Any]:
         "freeze_id": _FREEZE_ID,
         "git_commit": "1" * 40,
         "git_tree": "5" * 40,
-        "source_archive_sha256": "3" * 64,
+        "source_archive_sha256": source_archive_sha256,
         "source_commit_sha256": "4" * 64,
         "source_bundle_sha256": "2" * 64,
         "prepared_artifact_inventory_sha256": "c" * 64,
+        "validated_submodules": [],
         "build_profile": {
             "path": _frozen_candidate_path("build_profile.json"),
             "sha256": "6" * 64,
@@ -458,12 +891,82 @@ def _manifest(root: Path) -> dict[str, Any]:
             "sha256": executable["sha256"],
         },
         "environment_profile": {
-            "path": "/fixture/environment_profile.json",
+            "path": str(
+                campaign.ORION_BULK_ROOT
+                / "control_plane"
+                / ("9" * 64)
+                / "frontier_pic_environment.sh"
+            ),
             "sha256": environment_profile["sha256"],
+            "control_plane_version": "9" * 64,
+            "reviewed_source": {
+                "path": "tst/publication/frontier_control_plane/frontier_pic_environment.sh",
+                "sha256": _sha256(
+                    (
+                        campaign.REPO_ROOT
+                        / "tst/publication/frontier_control_plane/frontier_pic_environment.sh"
+                    ).read_bytes()
+                ),
+            },
         },
     }
-    campaign_plan_payload = _json_bytes(
+    planner_source_bindings = {
+        "pressure_selection_receipt": _binding(
+            "bindings/human_pressure_selection_receipt.json",
+            selected_pressure_receipt["sha256"],
+        ),
+        "clean_candidate_manifest": candidate_manifest,
+        "environment_profile": environment_profile,
+        "qualifying_preregistration": _binding(
+            "bindings/q011_section54_qualifying_campaign_preregistration.json",
+            preregistration["sha256"],
+        ),
+        "restart_preregistration": restart_preregistration,
+        "paper_deck": paper_deck,
+    }
+    campaign_matrix = copy.deepcopy(
+        campaign._EXPECTED_POLICY_PROJECTION["campaign_matrix"]
+    )
+    selected_case = {
+        "case_id": "ps_p0_0p10",
+        "problem_ps_p0": selected_pressure,
+    }
+    plan_id = campaign.campaign_planner._digest_value(
         {
+            "record_type": campaign.campaign_planner.PLAN_RECORD_TYPE,
+            "schema_version": 1,
+            "pressure_selection_receipt_sha256": planner_source_bindings[
+                "pressure_selection_receipt"
+            ]["sha256"],
+            "selected_case": selected_case,
+            "candidate_binding": plan_candidate,
+            "source_binding_sha256": {
+                name: binding["sha256"]
+                for name, binding in planner_source_bindings.items()
+            },
+            "helper_source_closure": helper_sources,
+            "campaign_matrix": campaign_matrix,
+            "authorized_orion_root": str(campaign.ORION_BULK_ROOT),
+        }
+    )
+    planned_campaign_root = str(
+        campaign.ORION_BULK_ROOT / "campaigns" / f"q011-section54-{plan_id}"
+    )
+    planned_attempt_root = f"{planned_campaign_root}/baseline/{attempt_id}"
+    helper_closure_payload = _json_bytes(
+        {
+            "record_type": "q011_section54_helper_source_closure",
+            "schema_version": 1,
+            "plan_id": plan_id,
+            "sources": helper_sources,
+        }
+    )
+    analyzer_helper_source_closure_manifest = _write_file(
+        root,
+        "bindings/q011_section54_analyzer_helper_source_closure_manifest.json",
+        helper_closure_payload,
+    )
+    campaign_plan_value = {
             "record_type": "q011_section54_qualifying_campaign_execution_plan",
             "schema_version": 1,
             "plan_id": plan_id,
@@ -478,27 +981,16 @@ def _manifest(root: Path) -> dict[str, Any]:
             "authorized_orion_campaign_root": planned_campaign_root,
             "selected_pressure": {
                 "selection_method": "human_review_only",
-                "selected_case": {
-                    "case_id": "ps_p0_0p10",
-                    "problem_ps_p0": selected_pressure,
-                },
-                "receipt": selected_pressure_receipt,
+                "selected_case": selected_case,
+                "receipt": planner_source_bindings["pressure_selection_receipt"],
             },
             "candidate_binding": plan_candidate,
-            "source_bindings": {
-                "pressure_selection_receipt": selected_pressure_receipt,
-                "clean_candidate_manifest": candidate_manifest,
-                "environment_profile": environment_profile,
-                "qualifying_preregistration": preregistration,
-                "restart_preregistration": _binding(
-                    "bindings/q011_section54_restart_preregistration.json", "d" * 64
-                ),
-                "paper_deck": paper_deck,
-            },
-            "helper_source_closure": analyzer_helper_source_closure_manifest,
-            "campaign_matrix": copy.deepcopy(
-                campaign._EXPECTED_POLICY_PROJECTION["campaign_matrix"]
+            "source_bindings": planner_source_bindings,
+            "helper_source_closure": _binding(
+                "helper_source_closure.json",
+                analyzer_helper_source_closure_manifest["sha256"],
             ),
+            "campaign_matrix": campaign_matrix,
             "baseline_attempt_count": 24,
             "baseline_attempt_descriptors": [
                 _binding(f"attempts/baseline/attempt-{index:03d}.json", f"{index:064x}")
@@ -525,10 +1017,22 @@ def _manifest(root: Path) -> dict[str, Any]:
             "preregistration_execution_boundary": json.loads(
                 campaign.PREREGISTRATION_PATH.read_text(encoding="utf-8")
             )["qualifying_execution_bindings"],
-        }
+    }
+    planner_source_payloads = {
+        "pressure_selection_receipt": selected_pressure_payload,
+        "clean_candidate_manifest": candidate_payload,
+        "environment_profile": environment_profile_payload,
+        "qualifying_preregistration": campaign.PREREGISTRATION_PATH.read_bytes(),
+        "restart_preregistration": restart_preregistration_payload,
+        "paper_deck": (root / deck["path"]).read_bytes(),
+    }
+    if planner_mutate is not None:
+        planner_mutate(campaign_plan_value, planner_source_payloads)
+    campaign_plan, planner_materialization_receipt = _planner_materialization_receipt(
+        root, campaign_plan_value, planner_source_payloads, helper_closure_payload
     )
-    campaign_plan = _write_file(
-        root, "bindings/q011_section54_campaign_plan.json", campaign_plan_payload
+    planner_result = json.loads(
+        (root / planner_materialization_receipt["path"]).read_text(encoding="utf-8")
     )
     attempt_contract_payload = _json_bytes(
         {
@@ -546,7 +1050,9 @@ def _manifest(root: Path) -> dict[str, Any]:
             "environment_profile": plan_candidate["environment_profile"],
             "paper_deck": paper_deck,
             "authorized_orion_attempt_root": planned_attempt_root,
-            "argv": _contract_argv(attempt_id, variant, seed, selected_pressure),
+            "argv": _contract_argv(
+                attempt_id, variant, seed, selected_pressure, plan_id
+            ),
             "required_separate_boundary": (
                 "review_and_promote_a_registered_frontier_submission_policy_then_use_"
                 "the_installed_control_plane_wrapper"
@@ -555,6 +1061,27 @@ def _manifest(root: Path) -> dict[str, Any]:
     )
     attempt_contract = _write_file(
         root, "bindings/q011_section54_attempt_contract.json", attempt_contract_payload
+    )
+    registered_execution_receipt = _write_file(
+        root,
+        "bindings/q011_section54_registered_execution_receipt.json",
+        _json_bytes(
+            _registered_execution_receipt(
+                attempt_id=attempt_id,
+                source_commit=plan_candidate["git_commit"],
+                executable_sha256=plan_candidate["executable"]["sha256"],
+                deck_sha256=paper_deck["sha256"],
+                environment_sha256=plan_candidate["environment_profile"]["sha256"],
+                control_plane_version=plan_candidate["environment_profile"][
+                    "control_plane_version"
+                ],
+                argv=_contract_argv(
+                    attempt_id, variant, seed, selected_pressure, plan_id
+                ),
+                raw_output_root=f"{planned_attempt_root}/raw",
+                planner_result=planner_result,
+            )
+        ),
     )
     products = []
     for cycle, time in enumerate(_TIMES):
@@ -603,14 +1130,19 @@ def _manifest(root: Path) -> dict[str, Any]:
             "analyzer": analyzer,
             "preregistration": preregistration,
             "campaign_plan": campaign_plan,
+            "planner_materialization_receipt": planner_materialization_receipt,
             "attempt_contract": attempt_contract,
             "selected_pressure_receipt": selected_pressure_receipt,
             "analyzer_helper_source_closure_manifest": (
                 analyzer_helper_source_closure_manifest
             ),
+            "registered_execution_receipt": registered_execution_receipt,
         },
         "attempt_identity": {
             "campaign_plan_sha256": campaign_plan["sha256"],
+            "planner_materialization_receipt_sha256": (
+                planner_materialization_receipt["sha256"]
+            ),
             "attempt_contract_sha256": attempt_contract["sha256"],
             "selected_pressure_receipt_sha256": selected_pressure_receipt["sha256"],
             "model_launch_overrides": _model_overrides(variant),
@@ -621,6 +1153,9 @@ def _manifest(root: Path) -> dict[str, Any]:
             },
             "analyzer_helper_source_closure_manifest_sha256": (
                 analyzer_helper_source_closure_manifest["sha256"]
+            ),
+            "registered_execution_receipt_sha256": (
+                registered_execution_receipt["sha256"]
             ),
         },
         "products": products,
@@ -682,6 +1217,11 @@ def _retarget_attempt(
     root: Path, manifest: dict[str, Any], variant: str, seed: int = 23050101
 ) -> None:
     attempt_id = _attempt_id(variant, seed)
+    plan_id = json.loads(
+        (
+            root / manifest["artifact_bindings"]["campaign_plan"]["path"]
+        ).read_text(encoding="utf-8")
+    )["plan_id"]
     manifest["run_identity"].update(
         {"variant": variant, "seed": seed, "attempt_id": attempt_id}
     )
@@ -699,13 +1239,55 @@ def _retarget_attempt(
                 "qualifying_seed": seed,
                 "authorized_orion_attempt_root": (
                     f"{campaign.ORION_BULK_ROOT}/campaigns/"
-                    f"q011-section54-{'9' * 64}/baseline/{attempt_id}"
+                    f"q011-section54-{plan_id}/baseline/{attempt_id}"
                 ),
-                "argv": _contract_argv(attempt_id, variant, seed, pressure),
+                "argv": _contract_argv(attempt_id, variant, seed, pressure, plan_id),
             }
         )
 
     _rewrite_attempt_json_artifact(root, manifest, "attempt_contract", mutate_contract)
+    contract = json.loads(
+        (
+            root / manifest["artifact_bindings"]["attempt_contract"]["path"]
+        ).read_text(encoding="utf-8")
+    )
+
+    def mutate_registered_execution_receipt(receipt: dict[str, Any]) -> None:
+        raw_output_root = f"{contract['authorized_orion_attempt_root']}/raw"
+        receipt.update(
+            {
+                "attempt_id": attempt_id,
+                "argv": contract["argv"],
+                "raw_output_root": raw_output_root,
+                "planner_retention": {
+                    "schema_version": 1,
+                    "retention_role": (
+                        "q011_section54_deterministic_retained_attempt"
+                    ),
+                    "planner_root": receipt["planner_retention"]["planner_root"],
+                    "planner_inventory_sha256": receipt["planner_retention"][
+                        "planner_inventory_sha256"
+                    ],
+                    "planner_plan_id": receipt["planner_retention"]["planner_plan_id"],
+                    "planner_materialization_receipt": receipt["planner_retention"][
+                        "planner_materialization_receipt"
+                    ],
+                    "attempt_id": attempt_id,
+                    "authorized_orion_attempt_root": contract[
+                        "authorized_orion_attempt_root"
+                    ],
+                    "authorized_orion_raw_root": raw_output_root,
+                    "argv": contract["argv"],
+                },
+            }
+        )
+
+    _rewrite_attempt_json_artifact(
+        root,
+        manifest,
+        "registered_execution_receipt",
+        mutate_registered_execution_receipt,
+    )
 
 
 def _rewrite_restart_payload(
@@ -731,49 +1313,137 @@ def _rewrite_restart_payload(
 def _frozen_fixture(
     mutate: Callable[[Path, dict[str, Any]], None] | None = None,
     *,
+    planner_mutate: (
+        Callable[[dict[str, Any], dict[str, bytes]], None] | None
+    ) = None,
     receipt: dict[str, Any] | None = None,
     external_side_effect: Exception | None = None,
+    wrong_retained_root: bool = False,
 ) -> Iterator[tuple[Path, Path, str]]:
     with tempfile.TemporaryDirectory() as directory:
         authorized_root = Path(directory)
-        tree = authorized_root / "campaign"
-        tree.mkdir()
-        manifest = _manifest(tree)
-        if mutate is not None:
-            mutate(tree, manifest)
-        (tree / campaign.MANIFEST_NAME).write_text(
-            json.dumps(manifest, indent=2, sort_keys=True) + "\n",
-            encoding="utf-8",
-        )
-        patch_kwargs = (
-            {"side_effect": external_side_effect}
-            if external_side_effect is not None
-            else {
-                "return_value": {
-                    "freeze_id": _FREEZE_ID,
-                    "referenced_manifest_sha256": manifest["candidate_binding"][
-                        "clean_candidate_manifest"
-                    ]["sha256"],
-                    "retained_executable_sha256": manifest["artifact_bindings"][
-                        "executable"
-                    ]["sha256"],
-                    "validated_submodule_count": 0,
-                    "validation": "fixture_control_plane_closure",
-                }
-            }
-        )
-        try:
-            frozen = immutable_orion_tree.freeze_tree(
-                tree,
-                _RECEIPT if receipt is None else receipt,
-                authorized_root=authorized_root,
+        with mock.patch.object(campaign, "ORION_BULK_ROOT", authorized_root):
+            staging_tree = authorized_root / "campaign-staging"
+            staging_tree.mkdir()
+            manifest = _manifest(staging_tree, planner_mutate)
+            plan = json.loads(
+                (
+                    staging_tree
+                    / manifest["artifact_bindings"]["campaign_plan"]["path"]
+                ).read_text(encoding="utf-8")
             )
-            with mock.patch.object(
-                campaign, "_validate_external_clean_candidate_closure", **patch_kwargs
-            ):
-                yield authorized_root, tree, frozen["inventory_sha256"]
-        finally:
-            _make_writable_tree(tree)
+            if mutate is not None:
+                mutate(staging_tree, manifest)
+            if wrong_retained_root:
+                tree = (
+                    authorized_root
+                    / "wrong-retained-root"
+                    / manifest["run_identity"]["attempt_id"]
+                )
+            else:
+                tree = (
+                    Path(plan["authorized_orion_campaign_root"])
+                    / "baseline"
+                    / manifest["run_identity"]["attempt_id"]
+                )
+            tree.parent.mkdir(parents=True, exist_ok=True)
+            staging_tree.rename(tree)
+            manifest["authorized_orion_campaign_root"] = str(tree)
+            (tree / campaign.MANIFEST_NAME).write_text(
+                json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            patch_kwargs = (
+                {"side_effect": external_side_effect}
+                if external_side_effect is not None
+                else {
+                    "return_value": {
+                        "freeze_id": _FREEZE_ID,
+                        "referenced_manifest_sha256": manifest["candidate_binding"][
+                            "clean_candidate_manifest"
+                        ]["sha256"],
+                        "retained_executable_sha256": manifest["artifact_bindings"][
+                            "executable"
+                        ]["sha256"],
+                        "validated_submodule_count": 0,
+                        "validation": "fixture_control_plane_closure",
+                    }
+                }
+            )
+
+            def verify_pressure_receipt(
+                path: str | Path, *, authorized_pic_root: Path
+            ) -> dict[str, str]:
+                expected_path = (
+                    authorized_root
+                    / "publication/q011_section54_pressure_pilot_publication_receipt.json"
+                )
+                if Path(path) != expected_path or authorized_pic_root != authorized_root:
+                    raise campaign.pressure_selection.pressure_pilot_publisher.PressurePilotPublicationError(
+                        "fixture pressure publication binding drifted"
+                    )
+                return {
+                    "receipt_sha256": _sha256(expected_path.read_bytes()),
+                    "manifest_sha256": "b" * 64,
+                    "analysis_result_sha256": "c" * 64,
+                }
+
+            def verify_registered_execution_ledger(
+                registered_execution_receipt: dict[str, Any],
+                *,
+                authorized_pic_root: Path,
+                **_kwargs: object,
+            ) -> dict[str, str]:
+                if authorized_pic_root != authorized_root:
+                    raise campaign.QualificationError(
+                        "fixture registered-execution ledger root drifted",
+                        code="registered_execution_receipt_ledger_drift",
+                    )
+                return {
+                    "reservation_id": registered_execution_receipt["reservation_id"],
+                    "submission_id": registered_execution_receipt["submission_id"],
+                    "reconciliation_event_sha256": registered_execution_receipt[
+                        "reconciliation_event_sha256"
+                    ],
+                }
+
+            @contextmanager
+            def verified_registered_execution_ledger_snapshot(
+                registered_execution_receipt: dict[str, Any],
+                *,
+                authorized_pic_root: Path,
+                **kwargs: object,
+            ) -> Iterator[dict[str, str]]:
+                yield verify_registered_execution_ledger(
+                    registered_execution_receipt,
+                    authorized_pic_root=authorized_pic_root,
+                    **kwargs,
+                )
+
+            try:
+                frozen = immutable_orion_tree.freeze_tree(
+                    tree,
+                    _RECEIPT if receipt is None else receipt,
+                    authorized_root=authorized_root,
+                )
+                with mock.patch.object(
+                    campaign, "_validate_external_clean_candidate_closure", **patch_kwargs
+                ), mock.patch.object(
+                    campaign.pressure_selection.pressure_pilot_publisher,
+                    "verify_published_pressure_pilot_receipt",
+                    side_effect=verify_pressure_receipt,
+                ), mock.patch.object(
+                    campaign,
+                    "_validated_registered_execution_receipt_ledger_snapshot",
+                    side_effect=verified_registered_execution_ledger_snapshot,
+                ):
+                    yield authorized_root, tree, frozen["inventory_sha256"]
+            finally:
+                _make_writable_tree(tree)
+                _make_writable_tree(authorized_root / "plans")
+                minimal_plans = authorized_root / "minimal-plans"
+                if minimal_plans.exists():
+                    _make_writable_tree(minimal_plans)
 
 
 def _qualify(
@@ -824,6 +1494,59 @@ class Q011Section54CampaignAdmissionTests(unittest.TestCase):
             "momentum_p_over_m",
         )
 
+    def test_ledger_snapshot_stays_pinned_during_raw_tree_validation(self) -> None:
+        with _frozen_fixture() as fixture:
+            authorized_root, _, _ = fixture
+            ledger_parent = authorized_root / "ledger-lifetime-probe"
+            ledger_parent.mkdir()
+            ledger_path = ledger_parent / "node_hours.jsonl"
+            hidden_path = ledger_parent / "hidden-node-hours.jsonl"
+            ledger_path.write_text("fixture ledger\n", encoding="utf-8")
+            mutation_seen = False
+            validate_product_hashes = campaign._validate_product_hashes
+
+            @contextmanager
+            def verify_registered_execution_ledger(
+                registered_execution_receipt: dict[str, Any],
+                *,
+                authorized_pic_root: Path,
+                **_kwargs: object,
+            ) -> Iterator[dict[str, str]]:
+                yield {
+                    "reservation_id": registered_execution_receipt["reservation_id"],
+                    "submission_id": registered_execution_receipt["submission_id"],
+                    "reconciliation_event_sha256": registered_execution_receipt[
+                        "reconciliation_event_sha256"
+                    ],
+                }
+                if mutation_seen:
+                    raise campaign.QualificationError(
+                        "fixture ledger namespace changed during raw-tree validation",
+                        code="registered_execution_receipt_ledger_drift",
+                    )
+
+            def hide_and_restore_ledger(*args: object, **kwargs: object) -> None:
+                nonlocal mutation_seen
+                ledger_path.rename(hidden_path)
+                hidden_path.rename(ledger_path)
+                mutation_seen = True
+                validate_product_hashes(*args, **kwargs)
+
+            with mock.patch.object(
+                campaign,
+                "_validated_registered_execution_receipt_ledger_snapshot",
+                side_effect=verify_registered_execution_ledger,
+            ), mock.patch.object(
+                campaign,
+                "_validate_product_hashes",
+                side_effect=hide_and_restore_ledger,
+            ):
+                result = _qualify(*fixture)
+        self.assertTrue(mutation_seen)
+        self.assert_rejected(
+            result, "registered_execution_receipt_ledger_drift"
+        )
+
     def test_all_preregistered_canonical_variants_are_admitted(self) -> None:
         for variant in (
             "coarse_uniform_dx12",
@@ -855,7 +1578,9 @@ class Q011Section54CampaignAdmissionTests(unittest.TestCase):
     def test_attempt_identity_and_retained_binding_omissions_are_rejected(self) -> None:
         for section, name in (
             ("attempt_identity", "campaign_plan_sha256"),
+            ("attempt_identity", "planner_materialization_receipt_sha256"),
             ("artifact_bindings", "campaign_plan"),
+            ("artifact_bindings", "planner_materialization_receipt"),
         ):
             with self.subTest(section=section, name=name):
                 def mutate(
@@ -962,6 +1687,69 @@ class Q011Section54CampaignAdmissionTests(unittest.TestCase):
             )
 
         with _frozen_fixture(mutate) as fixture:
+            self.assert_rejected(
+                _qualify(*fixture), "planner_materialization_receipt_drift"
+            )
+
+    def test_self_authored_campaign_plan_graph_is_rejected(self) -> None:
+        def mutate(root: Path, manifest: dict[str, Any]) -> None:
+            _rewrite_attempt_json_artifact(
+                root,
+                manifest,
+                "campaign_plan",
+                lambda plan: plan["nonauthorizing_policy_fragment"].__setitem__(
+                    "sha256", "0" * 64
+                ),
+            )
+
+        with _frozen_fixture(mutate) as fixture:
+            self.assert_rejected(
+                _qualify(*fixture), "planner_materialization_receipt_drift"
+            )
+
+    def test_minimal_planner_tree_with_dangling_children_is_rejected(self) -> None:
+        def mutate(root: Path, manifest: dict[str, Any]) -> None:
+            campaign_plan = manifest["artifact_bindings"]["campaign_plan"]
+            helper_closure = manifest["artifact_bindings"][
+                "analyzer_helper_source_closure_manifest"
+            ]
+            receipt = _minimal_planner_materialization_receipt(
+                root,
+                (root / campaign_plan["path"]).read_bytes(),
+                (root / helper_closure["path"]).read_bytes(),
+            )
+            manifest["artifact_bindings"]["planner_materialization_receipt"] = receipt
+            manifest["attempt_identity"][
+                "planner_materialization_receipt_sha256"
+            ] = receipt["sha256"]
+
+        with _frozen_fixture(mutate) as fixture:
+            self.assert_rejected(
+                _qualify(*fixture), "planner_materialization_receipt_drift"
+            )
+
+    def test_planner_environment_profile_rebinding_is_rejected(self) -> None:
+        def mutate(
+            plan: dict[str, Any], source_payloads: dict[str, bytes]
+        ) -> None:
+            payload = b"self-authored environment profile\n"
+            source_payloads["environment_profile"] = payload
+            plan["source_bindings"]["environment_profile"]["sha256"] = _sha256(payload)
+
+        with _frozen_fixture(planner_mutate=mutate) as fixture:
+            self.assert_rejected(_qualify(*fixture), "campaign_plan_crosslink_drift")
+
+    def test_planner_restart_preregistration_rebinding_is_rejected(self) -> None:
+        def mutate(
+            plan: dict[str, Any], source_payloads: dict[str, bytes]
+        ) -> None:
+            payload = source_payloads["restart_preregistration"] + b"\n"
+            source_payloads["restart_preregistration"] = payload
+            plan["source_bindings"]["restart_preregistration"]["sha256"] = _sha256(
+                payload
+            )
+
+        with _frozen_fixture(planner_mutate=mutate) as fixture:
             self.assert_rejected(_qualify(*fixture), "campaign_plan_crosslink_drift")
 
     def test_semantic_attempt_contract_crosslink_drift_is_rejected(self) -> None:
@@ -976,6 +1764,26 @@ class Q011Section54CampaignAdmissionTests(unittest.TestCase):
         with _frozen_fixture(mutate) as fixture:
             self.assert_rejected(_qualify(*fixture), "attempt_contract_crosslink_drift")
 
+    def test_wrong_retained_root_is_rejected(self) -> None:
+        with _frozen_fixture(wrong_retained_root=True) as fixture:
+            self.assert_rejected(_qualify(*fixture), "retained_root_binding_drift")
+
+    def test_registered_execution_receipt_raw_root_drift_is_rejected(self) -> None:
+        def mutate(root: Path, manifest: dict[str, Any]) -> None:
+            _rewrite_attempt_json_artifact(
+                root,
+                manifest,
+                "registered_execution_receipt",
+                lambda receipt: receipt.__setitem__(
+                    "raw_output_root", "/fixture/arbitrarily-relabeled-raw"
+                ),
+            )
+
+        with _frozen_fixture(mutate) as fixture:
+            self.assert_rejected(
+                _qualify(*fixture), "registered_execution_receipt_drift"
+            )
+
     def test_semantic_selected_pressure_receipt_drift_is_rejected(self) -> None:
         def mutate(root: Path, manifest: dict[str, Any]) -> None:
             _rewrite_attempt_json_artifact(
@@ -989,6 +1797,39 @@ class Q011Section54CampaignAdmissionTests(unittest.TestCase):
 
         with _frozen_fixture(mutate) as fixture:
             self.assert_rejected(_qualify(*fixture), "selected_pressure_receipt_drift")
+
+    def test_fake_pressure_receipt_path_and_digest_are_rejected(self) -> None:
+        cases = (
+            ("published_pressure_pilot_receipt", "path", "/fixture/fake_receipt.json"),
+            ("published_pressure_pilot_receipt", "sha256", "0" * 64),
+            (None, "pilot_bundle_manifest_sha256", "1" * 64),
+            (None, "aggregate_pilot_analysis_sha256", "2" * 64),
+        )
+        for section, field, value in cases:
+            with self.subTest(section=section, field=field):
+                def mutate(
+                    root: Path,
+                    manifest: dict[str, Any],
+                    *,
+                    section: str | None = section,
+                    field: str = field,
+                    value: str = value,
+                ) -> None:
+                    def rewrite(receipt: dict[str, Any]) -> None:
+                        target = receipt if section is None else receipt[section]
+                        target[field] = value
+
+                    _rewrite_attempt_json_artifact(
+                        root,
+                        manifest,
+                        "selected_pressure_receipt",
+                        rewrite,
+                    )
+
+                with _frozen_fixture(mutate) as fixture:
+                    self.assert_rejected(
+                        _qualify(*fixture), "selected_pressure_receipt_drift"
+                    )
 
     def test_helper_source_closure_requires_model_and_snapshot_members(self) -> None:
         for path in (

@@ -16,7 +16,6 @@ import json
 import os
 from pathlib import Path, PurePosixPath
 import re
-import shutil
 import stat
 from typing import Any, Mapping, Sequence
 import uuid
@@ -49,6 +48,7 @@ _RENAME_NOREPLACE = 1
 _SHA256_PATTERN = re.compile(r"[0-9a-f]{64}")
 _ATTEMPT_PATTERN = re.compile(r"[a-z0-9][a-z0-9._-]{0,127}")
 _FAILED_LOG_KINDS = ("stderr", "stdout")
+_STAGING_ROOT_NAME = "publishable"
 
 
 class PublicationError(ValueError):
@@ -228,6 +228,7 @@ def _write_anchored_member(root_fd: int, relative: str, payload: bytes, mode: in
                 )
             except FileNotFoundError:
                 os.mkdir(part, mode=0o755, dir_fd=parent_fd)
+                os.fsync(parent_fd)
                 child_fd = os.open(
                     part,
                     os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
@@ -249,6 +250,7 @@ def _write_anchored_member(root_fd: int, relative: str, payload: bytes, mode: in
             view = view[written:]
         os.fchmod(file_fd, stat.S_IMODE(mode) | stat.S_IWUSR)
         os.fsync(file_fd)
+        os.fsync(parent_fd)
     except OSError as error:
         raise PublicationError(f"cannot publish retained member {relative}: {error}") from error
     finally:
@@ -284,7 +286,11 @@ def _failed_declared_bindings(parsed: Mapping[str, Any]) -> list[dict[str, str]]
 
 
 def _validate_completed_contract(
-    parsed: Mapping[str, Any], payloads: Mapping[str, tuple[bytes, int]]
+    parsed: Mapping[str, Any],
+    payloads: Mapping[str, tuple[bytes, int]],
+    *,
+    destination: Path,
+    authorized_pic_root: Path,
 ) -> None:
     preregistration = parsed["artifact_bindings"]["preregistration"]
     retained_policy = payloads[preregistration["path"]][0]
@@ -326,6 +332,32 @@ def _validate_completed_contract(
                 raise ValueError(f"retained raw member is missing: {relative}") from error
 
     campaign._validate_restart_publications(parsed["products"], PayloadSnapshot(), policy)
+    contract_binding = parsed["artifact_bindings"]["attempt_contract"]
+    contract = immutable_orion_tree.loads_json_reject_duplicate_keys(
+        payloads[contract_binding["path"]][0].decode("utf-8"),
+        error_type=PublicationError,
+        label="completed attempt contract",
+    )
+    if type(contract) is not dict:
+        raise PublicationError("completed attempt contract must be a JSON object")
+    planner_root_value = contract.get("authorized_orion_attempt_root")
+    if type(planner_root_value) is not str:
+        raise PublicationError("completed attempt contract lacks its planner-authorized root")
+    planner_root = Path(planner_root_value)
+    if not planner_root.is_absolute() or Path(os.path.abspath(planner_root)) != planner_root:
+        raise PublicationError("completed attempt contract uses a noncanonical authorized root")
+    try:
+        planner_root.relative_to(authorized_pic_root)
+    except ValueError as error:
+        raise PublicationError("completed attempt contract escaped the authorized PIC root") from error
+    # The current planner schema exposes one deterministic per-attempt root. It
+    # therefore binds both launch handoff and retained publication. If those
+    # roles diverge later, add a distinct retained root to the planner and
+    # admission schemas before relaxing this equality.
+    if destination != planner_root:
+        raise PublicationError(
+            "completed attempt destination differs from planner-authorized retained root"
+        )
 
 
 def _snapshot_files(snapshot: Any) -> dict[str, Any]:
@@ -345,6 +377,7 @@ def _read_source_attempt(
     except OSError as error:
         raise PublicationError(f"cannot open raw source tree: {error}") from error
     try:
+        _require_same_directory(source_root, source_fd, label=label)
         before = immutable_orion_tree._scan_anchored_tree(
             source_fd, hash_regular=True, error_type=PublicationError, label=label
         )
@@ -391,6 +424,7 @@ def _read_source_attempt(
             label=label,
             phase="source-local publication copy",
         )
+        _require_same_directory(source_root, source_fd, label=label)
         if attempt_status == "failed" and not any(
             payloads[binding["path"]][0] for binding in parsed["failure_logs"]
         ):
@@ -440,7 +474,12 @@ def _require_absent_at(parent_fd: int, name: str, *, label: str) -> None:
     raise PublicationError(f"{label} already exists")
 
 
-def _rename_no_replace_at(parent_fd: int, source_name: str, destination_name: str) -> None:
+def _rename_no_replace_at(
+    source_parent_fd: int,
+    source_name: str,
+    destination_parent_fd: int,
+    destination_name: str,
+) -> None:
     if "/" in source_name or "/" in destination_name:
         raise PublicationError("descriptor-relative rename received a nested path")
     libc = ctypes.CDLL(None, use_errno=True)
@@ -456,9 +495,9 @@ def _rename_no_replace_at(parent_fd: int, source_name: str, destination_name: st
         ]
         renameat2.restype = ctypes.c_int
         if renameat2(
-            parent_fd,
+            source_parent_fd,
             os.fsencode(source_name),
-            parent_fd,
+            destination_parent_fd,
             os.fsencode(destination_name),
             _RENAME_NOREPLACE,
         ) == 0:
@@ -475,6 +514,30 @@ def _rename_no_replace_at(parent_fd: int, source_name: str, destination_name: st
     if error_number not in unsupported:
         raise OSError(error_number, os.strerror(error_number), destination_name)
     raise PublicationError("retained attempt publication requires atomic no-replace rename support")
+
+
+def _verify_frozen_tree_at(
+    parent_fd: int,
+    name: str,
+    descriptor: int,
+    expected_inventory_sha256: str,
+    *,
+    runtime_root: Path,
+    authorized_destination_root: Path,
+    label: str,
+) -> dict[str, Any]:
+    """Verify exact inventory while retaining the parent-relative root binding."""
+    _require_same_directory_at(parent_fd, name, descriptor, label=label)
+    verified = immutable_orion_tree._verify_frozen_tree_anchored(
+        runtime_root,
+        descriptor,
+        expected_inventory_sha256,
+        authorized_root=authorized_destination_root,
+        error_type=PublicationError,
+        label="Q-011 Section 5.4 retained campaign attempt",
+    )
+    _require_same_directory_at(parent_fd, name, descriptor, label=label)
+    return verified
 
 
 def _remove_anchored_tree_at(
@@ -539,51 +602,106 @@ def _remove_anchored_tree_at(
 def _rollback_published_destination(
     parent_fd: int, destination_name: str, descriptor: int
 ) -> None:
-    """Withdraw an invalid retained name before removing its anchored tree."""
+    """Withdraw only the pinned invalid publication, never a path replacement."""
     rollback_name = f".{destination_name}.rollback-{uuid.uuid4()}"
-    _require_same_directory_at(
-        parent_fd,
-        destination_name,
-        descriptor,
-        label="retained attempt published tree",
-    )
-    _rename_no_replace_at(parent_fd, destination_name, rollback_name)
-    os.fsync(parent_fd)
-    _remove_anchored_tree_at(
-        parent_fd,
-        rollback_name,
-        descriptor,
-        label="retained attempt rollback tree",
-    )
-    os.fsync(parent_fd)
 
+    def quarantine_moved_original() -> None:
+        expected = os.fstat(descriptor)
+        candidates = []
+        for name in os.listdir(parent_fd):
+            try:
+                observed = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+            except FileNotFoundError:
+                continue
+            if (
+                stat.S_ISDIR(observed.st_mode)
+                and (observed.st_dev, observed.st_ino)
+                == (expected.st_dev, expected.st_ino)
+            ):
+                candidates.append(name)
+        if len(candidates) != 1:
+            raise PublicationError(
+                "cannot locate raced retained attempt publication for quarantine"
+            )
+        _rename_no_replace_at(parent_fd, candidates[0], parent_fd, rollback_name)
+        os.fsync(parent_fd)
+        _require_same_directory_at(
+            parent_fd,
+            rollback_name,
+            descriptor,
+            label="retained attempt rollback tree",
+        )
 
-def _cleanup_staging(path: Path, descriptor: int | None = None) -> None:
-    if not os.path.lexists(path):
-        return
-    if descriptor is None:
-        try:
-            path.rmdir()
-        except OSError:
-            pass
-        return
+    raced_replacement = False
     try:
-        _require_same_directory(path, descriptor, label="retained attempt staging tree")
-    except PublicationError:
+        _rename_no_replace_at(parent_fd, destination_name, parent_fd, rollback_name)
+    except FileNotFoundError:
+        raced_replacement = True
+        os.fsync(parent_fd)
+        quarantine_moved_original()
+    else:
+        os.fsync(parent_fd)
+        try:
+            _require_same_directory_at(
+                parent_fd,
+                rollback_name,
+                descriptor,
+                label="retained attempt rollback tree",
+            )
+        except PublicationError:
+            raced_replacement = True
+            _rename_no_replace_at(parent_fd, rollback_name, parent_fd, destination_name)
+            os.fsync(parent_fd)
+            quarantine_moved_original()
+    if not raced_replacement:
+        _require_absent_at(
+            parent_fd,
+            destination_name,
+            label="invalid retained attempt destination after rollback",
+        )
+    rollback_fd = os.open(rollback_name, _DIRECTORY_FLAGS, dir_fd=parent_fd)
+    try:
+        _remove_anchored_tree_at(
+            parent_fd,
+            rollback_name,
+            rollback_fd,
+            label="retained attempt rollback tree",
+        )
+    finally:
+        os.close(rollback_fd)
+    os.fsync(parent_fd)
+    if raced_replacement:
+        raise PublicationError(
+            "retained attempt rollback rejected a substituted public destination"
+        )
+
+
+def _cleanup_staging(parent_fd: int, name: str, descriptor: int) -> None:
+    """Best-effort removal of the pinned staging inode without reopening its path."""
+    try:
+        _remove_anchored_tree_at(
+            parent_fd,
+            name,
+            descriptor,
+            label="retained attempt staging tree",
+        )
+    except (OSError, PublicationError):
         return
-    for directory, names, filenames in os.walk(path, topdown=False, followlinks=False):
-        base = Path(directory)
-        for name in filenames:
-            member = base / name
-            if not member.is_symlink():
-                os.chmod(member, 0o600, follow_symlinks=False)
-        for name in names:
-            member = base / name
-            if not member.is_symlink():
-                os.chmod(member, 0o700, follow_symlinks=False)
-        if not base.is_symlink():
-            os.chmod(base, 0o700, follow_symlinks=False)
-    shutil.rmtree(path)
+
+
+def _cleanup_private_container(parent_fd: int, name: str, descriptor: int) -> None:
+    """Best-effort removal of one empty pinned private staging container."""
+    try:
+        _require_same_directory_at(
+            parent_fd,
+            name,
+            descriptor,
+            label="retained attempt private staging container",
+        )
+        os.rmdir(name, dir_fd=parent_fd)
+        os.fsync(parent_fd)
+    except (OSError, PublicationError):
+        return
 
 
 def _validate_staged_completed_admission(
@@ -592,6 +710,7 @@ def _validate_staged_completed_admission(
     expected_inventory_sha256: str,
     *,
     authorized_destination_root: Path,
+    authorized_pic_root: Path,
 ) -> dict[str, Any]:
     """Run every campaign admission gate before publishing the intended final path."""
     root = immutable_orion_tree.authorized_tree_root(
@@ -623,59 +742,24 @@ def _validate_staged_completed_admission(
         campaign._validate_identity(parsed["run_identity"], parsed["attempt_identity"], policy)
         # Keep this sequence aligned with campaign._admit_campaign(). The manifest
         # is checked against its intended final path while the tree is still hidden.
-        retained_attempt_semantics = campaign._validate_retained_attempt_semantics(
-            parsed, snapshot, policy
+        retained_attempt_snapshot = (
+            campaign._validated_retained_attempt_semantics_snapshot(
+                parsed,
+                snapshot,
+                policy,
+                authorized_pic_root=authorized_pic_root,
+            )
         )
-        retained_snapshot_products = campaign._select_retained_snapshot_products(
-            parsed["products"], policy
-        )
-        endpoint_products = campaign._select_products(retained_snapshot_products, policy)
-        stdout_product = campaign._select_stdout_product(parsed["products"])
-        campaign._validate_product_hashes(parsed["products"], snapshot)
-        snapshot_payloads = campaign._validate_snapshot_payloads(
-            retained_snapshot_products, snapshot, policy
-        )
-        restart_publications = campaign._validate_restart_publications(
-            parsed["products"], snapshot, policy
-        )
-        stdout_telemetry = campaign._validate_stdout_telemetry(
-            campaign._member_payload(snapshot, stdout_product, "stdout product"),
-            parsed["run_identity"],
-        )
-        particle_endpoints = {
-            time: snapshot_payloads[time]["particles"] for time in endpoint_products
-        }
-        return {
-            "run_identity": parsed["run_identity"],
-            "candidate_binding": parsed["candidate_binding"],
-            "frozen_clean_candidate": frozen_candidate,
-            "external_clean_candidate_closure": external_candidate_closure,
-            "artifact_bindings": parsed["artifact_bindings"],
-            "attempt_identity": parsed["attempt_identity"],
-            "retained_attempt_semantics": retained_attempt_semantics,
-            "preregistration_binding": {
-                "sha256": parsed["artifact_bindings"]["preregistration"]["sha256"],
-                "expected_sha256": campaign.EXPECTED_PREREGISTRATION_SHA256,
-                "binding_scope": "complete_retained_bytes_equal_invoked_frozen_policy",
-            },
-            "retained_snapshot_products": retained_snapshot_products,
-            "endpoint_products": endpoint_products,
-            "run_products": {"stdout": stdout_product},
-            "snapshot_payloads": snapshot_payloads,
-            "restart_publications": restart_publications,
-            "stdout_telemetry": stdout_telemetry,
-            "particle_endpoints": particle_endpoints,
-            "immutable_tree": {
-                "inventory_sha256": tree_report["inventory_sha256"],
-                "inventoried_file_count": tree_report["inventoried_file_count"],
-                "recursively_read_only": tree_report["recursively_read_only"],
-            },
-            "weighted_spectrum": campaign.spectrum_wiring(policy),
-            "amr_pairing": campaign._pairing_schema(parsed["run_identity"], policy),
-            "numerical_qualification_status": (
-                "not_evaluated_by_artifact_admission_slice"
-            ),
-        }
+        with retained_attempt_snapshot as retained_attempt_semantics:
+            return campaign._complete_campaign_admission(
+                parsed,
+                snapshot,
+                policy,
+                retained_attempt_semantics,
+                frozen_candidate=frozen_candidate,
+                external_candidate_closure=external_candidate_closure,
+                tree_report=tree_report,
+            )
 
 
 def run_final_admission_self_check(
@@ -683,10 +767,15 @@ def run_final_admission_self_check(
     expected_inventory_sha256: str,
     *,
     authorized_destination_root: str | Path,
+    authorized_pic_root: str | Path | None = None,
 ) -> dict[str, Any]:
     """Run the existing analyzer only for one completed immutable attempt."""
     authorized = _canonical_existing_directory(
         authorized_destination_root, label="authorized destination root"
+    )
+    pic_root = _canonical_existing_directory(
+        campaign.ORION_BULK_ROOT if authorized_pic_root is None else authorized_pic_root,
+        label="authorized PIC root",
     )
     report = immutable_orion_tree.verify_frozen_tree(
         campaign_root,
@@ -700,7 +789,7 @@ def run_final_admission_self_check(
     result = campaign.qualify_campaign(
         campaign_root,
         expected_inventory_sha256,
-        authorized_orion_root=authorized,
+        authorized_orion_root=pic_root,
     )
     if not result["admitted_for_follow_on_numerical_qualification"]:
         raise PublicationError("completed attempt failed final admission self-check")
@@ -713,6 +802,7 @@ def freeze_campaign_attempt(
     *,
     attempt_status: str,
     run_admission_self_check: bool = False,
+    authorized_pic_root: str | Path | None = None,
 ) -> dict[str, Any]:
     """Exclusively publish and recursively freeze one raw campaign attempt."""
     if attempt_status not in ATTEMPT_STATUSES:
@@ -722,6 +812,10 @@ def freeze_campaign_attempt(
     source = _canonical_existing_directory(source_root, label="raw source root")
     destination_parent_path = _canonical_existing_directory(
         destination_parent, label="destination parent"
+    )
+    pic_root = _canonical_existing_directory(
+        campaign.ORION_BULK_ROOT if authorized_pic_root is None else authorized_pic_root,
+        label="authorized PIC root",
     )
     manifest, payloads, source_parsed = _read_source_attempt(
         source, attempt_status=attempt_status
@@ -740,19 +834,31 @@ def freeze_campaign_attempt(
     else:
         parsed = _validate_failed_manifest_schema(retained_manifest)
     if attempt_status == "completed":
-        _validate_completed_contract(parsed, payloads)
+        _validate_completed_contract(
+            parsed,
+            payloads,
+            destination=destination,
+            authorized_pic_root=pic_root,
+        )
 
     parent_fd = os.open(destination_parent_path, _DIRECTORY_FLAGS)
-    staging = destination_parent_path / f".{destination.name}.staging-{uuid.uuid4()}"
+    private_container = destination_parent_path / f".{destination.name}.staging-{uuid.uuid4()}"
+    staging = private_container / _STAGING_ROOT_NAME
+    private_fd: int | None = None
     staging_fd: int | None = None
     renamed = False
+    admission_self_check = None
     try:
         _require_same_directory(
             destination_parent_path, parent_fd, label="retained attempt destination parent"
         )
         _require_absent_at(parent_fd, destination.name, label="retained attempt destination")
-        os.mkdir(staging.name, mode=0o700, dir_fd=parent_fd)
-        staging_fd = os.open(staging.name, _DIRECTORY_FLAGS, dir_fd=parent_fd)
+        os.mkdir(private_container.name, mode=0o700, dir_fd=parent_fd)
+        os.fsync(parent_fd)
+        private_fd = os.open(private_container.name, _DIRECTORY_FLAGS, dir_fd=parent_fd)
+        os.mkdir(staging.name, mode=0o700, dir_fd=private_fd)
+        os.fsync(private_fd)
+        staging_fd = os.open(staging.name, _DIRECTORY_FLAGS, dir_fd=private_fd)
         _require_same_directory(staging, staging_fd, label="retained attempt staging tree")
         for relative in sorted(payloads):
             payload, mode = payloads[relative]
@@ -767,8 +873,9 @@ def freeze_campaign_attempt(
         )
         _require_same_directory(staging, staging_fd, label="retained attempt staging tree")
         receipt = _COMPLETED_RECEIPT if attempt_status == "completed" else _FAILED_RECEIPT
-        frozen = immutable_orion_tree.freeze_tree(
+        frozen = immutable_orion_tree.freeze_tree_anchored(
             staging,
+            staging_fd,
             receipt,
             authorized_root=destination_parent_path,
             error_type=PublicationError,
@@ -782,6 +889,7 @@ def freeze_campaign_attempt(
                     destination,
                     frozen["inventory_sha256"],
                     authorized_destination_root=destination_parent_path,
+                    authorized_pic_root=pic_root,
                 )
             except (campaign.QualificationError, OSError, ValueError) as error:
                 raise PublicationError(
@@ -792,31 +900,43 @@ def freeze_campaign_attempt(
         )
         _require_same_directory(staging, staging_fd, label="retained attempt staging tree")
         _require_absent_at(parent_fd, destination.name, label="retained attempt destination")
-        verified = immutable_orion_tree._verify_frozen_tree_anchored(
-            staging,
+        verified = _verify_frozen_tree_at(
+            private_fd,
+            staging.name,
             staging_fd,
             frozen["inventory_sha256"],
-            authorized_root=destination_parent_path,
-            error_type=PublicationError,
-            label="Q-011 Section 5.4 retained campaign attempt",
+            runtime_root=staging,
+            authorized_destination_root=destination_parent_path,
+            label="retained attempt staging tree",
         )
-        _rename_no_replace_at(parent_fd, staging.name, destination.name)
+        # Orion rejects cross-parent rename of a read-only directory. Descendants
+        # remain frozen; make the root owner-write-only and non-traversable for
+        # the rename, then restore its exact frozen mode through the pinned fd.
+        root_mode = stat.S_IMODE(os.fstat(staging_fd).st_mode)
+        os.fchmod(staging_fd, stat.S_IWUSR)
+        os.fsync(staging_fd)
+        _rename_no_replace_at(private_fd, staging.name, parent_fd, destination.name)
         renamed = True
+        os.fchmod(staging_fd, root_mode)
+        os.fsync(staging_fd)
+        os.fsync(private_fd)
         os.fsync(parent_fd)
-        _require_same_directory_at(
+        verified = _verify_frozen_tree_at(
             parent_fd,
             destination.name,
             staging_fd,
+            frozen["inventory_sha256"],
+            runtime_root=destination,
+            authorized_destination_root=destination_parent_path,
             label="retained attempt published tree",
         )
-        verified = immutable_orion_tree._verify_frozen_tree_anchored(
-            destination,
-            staging_fd,
-            frozen["inventory_sha256"],
-            authorized_root=destination_parent_path,
-            error_type=PublicationError,
-            label="Q-011 Section 5.4 retained campaign attempt",
-        )
+        if run_admission_self_check:
+            admission_self_check = run_final_admission_self_check(
+                destination,
+                frozen["inventory_sha256"],
+                authorized_destination_root=destination_parent_path,
+                authorized_pic_root=pic_root,
+            )
     except BaseException:
         if renamed:
             try:
@@ -825,12 +945,15 @@ def freeze_campaign_attempt(
                 raise PublicationError(
                     "cannot remove invalid retained attempt destination"
                 ) from rollback_error
-        else:
-            _cleanup_staging(staging, staging_fd)
+        elif private_fd is not None and staging_fd is not None:
+            _cleanup_staging(private_fd, staging.name, staging_fd)
         raise
     finally:
         if staging_fd is not None:
             os.close(staging_fd)
+        if private_fd is not None:
+            _cleanup_private_container(parent_fd, private_container.name, private_fd)
+            os.close(private_fd)
         os.close(parent_fd)
     result = {
         "schema_version": 1,
@@ -841,14 +964,8 @@ def freeze_campaign_attempt(
         "recursively_read_only": verified["recursively_read_only"],
         "prepublication_admission_passed": attempt_status == "completed",
         "admission_self_check_available": attempt_status == "completed",
-        "admission_self_check": None,
+        "admission_self_check": admission_self_check,
     }
-    if run_admission_self_check:
-        result["admission_self_check"] = run_final_admission_self_check(
-            destination,
-            frozen["inventory_sha256"],
-            authorized_destination_root=destination_parent_path,
-        )
     return result
 
 
@@ -858,12 +975,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("destination_parent")
     parser.add_argument("attempt_status", choices=ATTEMPT_STATUSES)
     parser.add_argument("--run-final-admission-self-check", action="store_true")
+    parser.add_argument("--authorized-pic-root", default=str(campaign.ORION_BULK_ROOT))
     args = parser.parse_args(argv)
     result = freeze_campaign_attempt(
         args.source_root,
         args.destination_parent,
         attempt_status=args.attempt_status,
         run_admission_self_check=args.run_final_admission_self_check,
+        authorized_pic_root=args.authorized_pic_root,
     )
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0

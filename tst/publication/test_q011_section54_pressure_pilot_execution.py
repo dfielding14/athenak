@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import copy
-from contextlib import contextmanager, redirect_stderr
+from contextlib import contextmanager, redirect_stderr, redirect_stdout
 import hashlib
 import io
 import json
@@ -38,6 +38,49 @@ def _put(path: Path, payload: bytes, mode: int) -> Path:
     path.write_bytes(payload)
     path.chmod(mode)
     return path
+
+
+def _storage_preflight_binding(root: Path, completed_utc: str) -> Path:
+    probe_id = "12345678-1234-4234-8234-123456789abc"
+    return _put(
+        root
+        / f"storage-preflight-{completed_utc.replace(':', '')}-{uuid.uuid4()}.json",
+        (
+            json.dumps(
+                {
+                    "last_preflight_utc": completed_utc,
+                    "orion_simulation_root_preflight": {
+                        "method": "local_create_write_sync_remove_probe",
+                        "path": str(execution.AUTHORIZED_PIC_ROOT),
+                        "status": "passed",
+                    },
+                    "project_home_preflight": {
+                        "method": "local_create_write_sync_remove_probe",
+                        "path": str(execution.AUTHORIZED_PROJECT_HOME_ROOT),
+                        "status": "passed",
+                    },
+                    "storage_preflight_evidence": {
+                        "orion_path": str(
+                            execution.AUTHORIZED_PIC_ROOT
+                            / "policy"
+                            / "storage_preflight_evidence"
+                            / f"{probe_id}.json"
+                        ),
+                        "probe_id": probe_id,
+                        "project_home_path": str(
+                            execution.AUTHORIZED_PROJECT_HOME_ROOT
+                            / "policy"
+                            / "storage_preflight_evidence"
+                            / f"{probe_id}.json"
+                        ),
+                        "sha256": "a" * 64,
+                    },
+                }
+            )
+            + "\n"
+        ).encode("utf-8"),
+        0o444,
+    )
 
 
 def _sealed_attestation(root: Path, case: execution.PressureCase) -> Path:
@@ -192,12 +235,17 @@ class PressurePilotExecutionTest(unittest.TestCase):
             0o444,
         )
         environment_sha256 = _sha256(environment.read_bytes())
+        now = execution.datetime.now(execution.timezone.utc).replace(microsecond=0)
         timeout = {
             "athena_walltime_seconds": 840,
             "scheduler_walltime_seconds": 900,
             "environment_profile_sha256": environment_sha256,
-            "measured_utc": "2026-06-02T00:00:00Z",
-            "expires_utc": "2026-06-03T00:00:00Z",
+            "measured_utc": (
+                now - execution.timedelta(seconds=1)
+            ).isoformat().replace("+00:00", "Z"),
+            "expires_utc": (
+                now + execution.timedelta(hours=1)
+            ).isoformat().replace("+00:00", "Z"),
         }
         timeout_margin = _put(
             root / "timeout_margin.json",
@@ -206,7 +254,16 @@ class PressurePilotExecutionTest(unittest.TestCase):
         )
         queue_snapshot = _put(root / "queue_snapshot.txt", b"", 0o444)
         pre_manifest_attestation = _sealed_attestation(root, case)
-        with patch.object(execution, "AUTHORIZED_PIC_ROOT", root), patch.object(
+        historical_sources = execution._historical_v2_preregistration()[
+            "source_bindings"
+        ]
+        with patch.object(
+            execution, "source_bindings", return_value=historical_sources
+        ), patch.object(
+            execution,
+            "validate_source_tranche",
+            return_value=execution._historical_v2_preregistration(),
+        ), patch.object(execution, "AUTHORIZED_PIC_ROOT", root), patch.object(
             execution, "AUTHORIZED_PROJECT_HOME_ROOT", root / "project_home"
         ):
             yield {
@@ -246,7 +303,7 @@ class PressurePilotExecutionTest(unittest.TestCase):
         }
 
     def test_source_preregistration_and_shared_directive_only_template(self) -> None:
-        preregistration = execution.validate_source_tranche()
+        preregistration = execution._historical_v2_preregistration()
         self.assertEqual(
             preregistration["record_type"],
             "q011_section54_pressure_pilot_registered_execution_preregistration",
@@ -290,6 +347,21 @@ class PressurePilotExecutionTest(unittest.TestCase):
                 "sha256": "774e61be728c7bdd90f6a9d264e7ce4e5413d5f2a898608ac726ba5b8baadd08",
             },
         )
+        status = execution.historical_v2_source_tranche_status()
+        self.assertEqual(status["state"], "historical_consumed_slice_non_authorizing")
+        self.assertFalse(status["source_bindings_match_current_checkout"])
+        self.assertEqual(status["launch_reauthorization_effect"], "none")
+        self.assertFalse(status["consumed_slice_reauthorization_allowed"])
+        with self.assertRaisesRegex(
+            execution.ContractError, "historical v2 registered-execution tranche is consumed"
+        ):
+            execution.validate_source_tranche()
+        with patch.object(
+            execution, "source_bindings", return_value=source_bindings
+        ), self.assertRaisesRegex(
+            execution.ContractError, "historical v2 registered-execution tranche is consumed"
+        ):
+            execution.validate_source_tranche()
         self.assertNotIn(
             "q011_section54_pressure_pilot_registered_execution_retry_successor_v2_2026-06-02.json",
             json.dumps(source_bindings, sort_keys=True),
@@ -538,7 +610,16 @@ class PressurePilotExecutionTest(unittest.TestCase):
                         ],
                     )
                     output = root / f"{case.case_id}-reviewed-config"
+                    historical_sources = execution._historical_v2_preregistration()[
+                        "source_bindings"
+                    ]
                     with patch.object(
+                        execution, "source_bindings", return_value=historical_sources
+                    ), patch.object(
+                        execution,
+                        "validate_source_tranche",
+                        return_value=execution._historical_v2_preregistration(),
+                    ), patch.object(
                         execution, "AUTHORIZED_PIC_ROOT", root / case.case_id
                     ), patch.object(
                         execution,
@@ -570,6 +651,12 @@ class PressurePilotExecutionTest(unittest.TestCase):
                     )
                     self.assertEqual(len(manifest["required_next_steps"]), 9)
                     with patch.object(
+                        execution, "source_bindings", return_value=historical_sources
+                    ), patch.object(
+                        execution,
+                        "validate_source_tranche",
+                        return_value=execution._historical_v2_preregistration(),
+                    ), patch.object(
                         execution, "AUTHORIZED_PIC_ROOT", root / case.case_id
                     ), patch.object(
                         execution,
@@ -663,7 +750,7 @@ class PressurePilotExecutionTest(unittest.TestCase):
             successor = execution.materialize_baseline_policy_successor(
                 baseline_policy=baseline,
                 control_plane_version="a" * 64,
-                last_preflight_utc="2026-06-02T01:02:03Z",
+                storage_preflight_binding=_storage_preflight_binding(root, "2026-06-02T01:02:03Z"),
             )
             self.assertEqual(successor["frontier"], baseline_value["frontier"])
             self.assertEqual(
@@ -681,7 +768,7 @@ class PressurePilotExecutionTest(unittest.TestCase):
                 pilot = execution.materialize_pilot_policy_successor(
                     baseline_policy=baseline,
                     control_plane_version="a" * 64,
-                    last_preflight_utc="2026-06-02T01:02:03Z",
+                    storage_preflight_binding=_storage_preflight_binding(root, "2026-06-02T01:02:03Z"),
                     clean_candidate_manifest=binding["clean_candidate_manifest"],
                     executable=binding["executable"],
                     environment_profile=binding["environment_profile"],
@@ -697,8 +784,9 @@ class PressurePilotExecutionTest(unittest.TestCase):
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
             baseline = _put(
-                Path(directory) / "baseline.json",
+                root / "baseline.json",
                 (
                     json.dumps(
                         {
@@ -714,8 +802,355 @@ class PressurePilotExecutionTest(unittest.TestCase):
                 execution.materialize_baseline_policy_successor(
                     baseline_policy=baseline,
                     control_plane_version="a" * 64,
-                    last_preflight_utc="2026-06-02T01:02:03Z",
+                    storage_preflight_binding=_storage_preflight_binding(root, "2026-06-02T01:02:03Z"),
                 )
+
+    def test_policy_successor_rejects_malformed_or_writable_storage_preflight_binding(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            baseline = _put(
+                root / "baseline.json",
+                (
+                    json.dumps(
+                        {
+                            "registered_science_slices": [],
+                            "olcf_side_storage": {
+                                "installed_control_plane_version": "0" * 64,
+                                "staged_control_plane_candidate_version": "0" * 64,
+                            },
+                        }
+                    )
+                    + "\n"
+                ).encode("utf-8"),
+                0o444,
+            )
+            binding = _storage_preflight_binding(root, "2026-06-02T01:02:03Z")
+            binding.chmod(0o644)
+            with self.assertRaisesRegex(execution.ContractError, "must be read-only"):
+                execution.materialize_baseline_policy_successor(
+                    baseline_policy=baseline,
+                    control_plane_version="a" * 64,
+                    storage_preflight_binding=binding,
+                )
+            value = json.loads(binding.read_text(encoding="utf-8"))
+            value["project_home_preflight"].pop("path")
+            binding.write_text(json.dumps(value), encoding="utf-8")
+            binding.chmod(0o444)
+            with self.assertRaisesRegex(execution.ContractError, "is malformed"):
+                execution.materialize_baseline_policy_successor(
+                    baseline_policy=baseline,
+                    control_plane_version="a" * 64,
+                    storage_preflight_binding=binding,
+                )
+
+    def test_retire_consumed_slices_successor_is_exact_additive_and_exclusive(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            historical_value = json.loads(
+                (execution.READINESS_ROOT / "storage_policy.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            baseline = _put(
+                root / "historical-policy.json",
+                (json.dumps(historical_value) + "\n").encode("utf-8"),
+                0o444,
+            )
+            output = root / "retired-baseline-successor.json"
+            successor = (
+                execution.write_retire_consumed_slices_baseline_policy_successor(
+                    output,
+                    baseline_policy=baseline,
+                    control_plane_version="a" * 64,
+                    storage_preflight_binding=_storage_preflight_binding(root, "2026-06-02T05:08:36Z"),
+                )
+            )
+            self.assertEqual(successor["frontier"], historical_value["frontier"])
+            self.assertEqual(
+                successor["long_term_storage"], historical_value["long_term_storage"]
+            )
+            self.assertEqual(successor["registered_science_slices"], [])
+            self.assertEqual(
+                successor["science_submission_freeze"],
+                {"status": "pending_clean_candidate_freeze"},
+            )
+            self.assertEqual(
+                successor["olcf_side_storage"]["installed_control_plane_version"],
+                "a" * 64,
+            )
+            self.assertEqual(
+                successor["olcf_side_storage"][
+                    "staged_control_plane_candidate_version"
+                ],
+                "a" * 64,
+            )
+            self.assertEqual(
+                successor["olcf_side_storage"]["last_preflight_utc"],
+                "2026-06-02T05:08:36Z",
+            )
+            self.assertEqual(
+                json.loads(baseline.read_text(encoding="utf-8")), historical_value
+            )
+            self.assertEqual(output.stat().st_mode & 0o222, 0)
+            with self.assertRaisesRegex(execution.ContractError, "refusing to overwrite"):
+                execution.write_retire_consumed_slices_baseline_policy_successor(
+                    output,
+                    baseline_policy=baseline,
+                    control_plane_version="a" * 64,
+                    storage_preflight_binding=_storage_preflight_binding(root, "2026-06-02T05:08:36Z"),
+                )
+            with self.assertRaisesRegex(execution.ContractError, "newer than baseline"):
+                execution.materialize_retire_consumed_slices_baseline_policy_successor(
+                    baseline_policy=baseline,
+                    control_plane_version="a" * 64,
+                    storage_preflight_binding=_storage_preflight_binding(root, "2026-06-02T05:08:35Z"),
+                )
+            with self.assertRaisesRegex(execution.ContractError, "must be new"):
+                execution.materialize_retire_consumed_slices_baseline_policy_successor(
+                    baseline_policy=baseline,
+                    control_plane_version=historical_value["olcf_side_storage"][
+                        "installed_control_plane_version"
+                    ],
+                    storage_preflight_binding=_storage_preflight_binding(root, "2026-06-02T05:08:36Z"),
+                )
+
+    def test_retire_consumed_slices_refuses_arbitrary_nonempty_policies(self) -> None:
+        historical_value = json.loads(
+            (execution.READINESS_ROOT / "storage_policy.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        variants = {
+            "arbitrary_allowlist": [{"unexpected": "slice"}],
+            "drifted_consumed_allowlist": copy.deepcopy(
+                historical_value["registered_science_slices"]
+            ),
+        }
+        variants["drifted_consumed_allowlist"][0]["status"] = "consumed"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name, slices in variants.items():
+                with self.subTest(name=name):
+                    changed = copy.deepcopy(historical_value)
+                    changed["registered_science_slices"] = slices
+                    baseline = _put(
+                        root / f"{name}.json",
+                        (json.dumps(changed) + "\n").encode("utf-8"),
+                        0o444,
+                    )
+                    with self.assertRaisesRegex(
+                        execution.ContractError, "exactly the consumed Q011"
+                    ):
+                        materialize = getattr(
+                            execution,
+                            "materialize_retire_consumed_slices_"
+                            "baseline_policy_successor",
+                        )
+                        materialize(
+                            baseline_policy=baseline,
+                            control_plane_version="a" * 64,
+                            storage_preflight_binding=_storage_preflight_binding(root, "2026-06-02T05:08:36Z"),
+                        )
+            changed = copy.deepcopy(historical_value)
+            changed["science_submission_freeze"]["manifest_sha256"] = "0" * 64
+            baseline = _put(
+                root / "drifted-freeze.json",
+                (json.dumps(changed) + "\n").encode("utf-8"),
+                0o444,
+            )
+            with self.assertRaisesRegex(execution.ContractError, "exact consumed Q011"):
+                execution.materialize_retire_consumed_slices_baseline_policy_successor(
+                    baseline_policy=baseline,
+                    control_plane_version="a" * 64,
+                    storage_preflight_binding=_storage_preflight_binding(root, "2026-06-02T05:08:36Z"),
+                )
+
+    def test_candidate_only_successor_authorizes_freeze_without_launch_slices(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            historical_value = json.loads(
+                (execution.READINESS_ROOT / "storage_policy.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            historical = _put(
+                root / "historical-policy.json",
+                (json.dumps(historical_value) + "\n").encode("utf-8"),
+                0o444,
+            )
+            retired_value = (
+                execution.materialize_retire_consumed_slices_baseline_policy_successor(
+                    baseline_policy=historical,
+                    control_plane_version="a" * 64,
+                    storage_preflight_binding=_storage_preflight_binding(root, "2026-06-02T05:08:36Z"),
+                )
+            )
+            retired = _put(
+                root / "retired-baseline.json",
+                (json.dumps(retired_value) + "\n").encode("utf-8"),
+                0o444,
+            )
+            with self._final_binding(root / "binding") as binding:
+                output = root / "candidate-only-successor.json"
+                with patch.object(
+                    execution,
+                    "validate_source_tranche",
+                    side_effect=AssertionError("candidate-only reopened consumed slices"),
+                ):
+                    successor = execution.write_candidate_only_policy_successor(
+                        output,
+                        baseline_policy=retired,
+                        control_plane_version="a" * 64,
+                        storage_preflight_binding=_storage_preflight_binding(root, "2026-06-02T05:08:37Z"),
+                        clean_candidate_manifest=binding[
+                            "clean_candidate_manifest"
+                        ],
+                        executable=binding["executable"],
+                        environment_profile=binding["environment_profile"],
+                    )
+                with self.assertRaisesRegex(execution.ContractError, "must match"):
+                    execution.materialize_candidate_only_policy_successor(
+                        baseline_policy=retired,
+                        control_plane_version="b" * 64,
+                        storage_preflight_binding=_storage_preflight_binding(root, "2026-06-02T05:08:37Z"),
+                        clean_candidate_manifest=binding[
+                            "clean_candidate_manifest"
+                        ],
+                        executable=binding["executable"],
+                        environment_profile=binding["environment_profile"],
+                    )
+                with patch.object(
+                    execution,
+                    "_bound_candidate_artifacts",
+                    return_value={
+                        "clean_candidate_manifest_sha256": (
+                            execution
+                            ._CONSUMED_HISTORICAL_V2_CLEAN_CANDIDATE_MANIFEST_SHA256
+                        )
+                    },
+                ), self.assertRaisesRegex(execution.ContractError, "must be fresh"):
+                    execution.materialize_candidate_only_policy_successor(
+                        baseline_policy=retired,
+                        control_plane_version="a" * 64,
+                        storage_preflight_binding=_storage_preflight_binding(root, "2026-06-02T05:08:37Z"),
+                        clean_candidate_manifest=binding[
+                            "clean_candidate_manifest"
+                        ],
+                        executable=binding["executable"],
+                        environment_profile=binding["environment_profile"],
+                    )
+                self.assertEqual(successor["registered_science_slices"], [])
+                self.assertEqual(
+                    successor["science_submission_freeze"]["status"], "authorized"
+                )
+                self.assertEqual(
+                    successor["science_submission_freeze"]["manifest_path"],
+                    str(binding["clean_candidate_manifest"]),
+                )
+                self.assertEqual(
+                    successor["science_submission_freeze"]["manifest_sha256"],
+                    _sha256(Path(binding["clean_candidate_manifest"]).read_bytes()),
+                )
+                self.assertEqual(
+                    successor["science_submission_freeze"][
+                        "build_profile_control_plane_version"
+                    ],
+                    "a" * 64,
+                )
+                self.assertEqual(
+                    successor["olcf_side_storage"]["installed_control_plane_version"],
+                    "a" * 64,
+                )
+                self.assertEqual(
+                    successor["olcf_side_storage"][
+                        "staged_control_plane_candidate_version"
+                    ],
+                    "a" * 64,
+                )
+                self.assertEqual(output.stat().st_mode & 0o222, 0)
+                detached = _put(root / "detached-athena", b"exact-clean-athena\n", 0o555)
+                with self.assertRaisesRegex(execution.ContractError, "not adjacent"):
+                    execution.materialize_candidate_only_policy_successor(
+                        baseline_policy=retired,
+                        control_plane_version="a" * 64,
+                        storage_preflight_binding=_storage_preflight_binding(root, "2026-06-02T05:08:37Z"),
+                        clean_candidate_manifest=binding[
+                            "clean_candidate_manifest"
+                        ],
+                        executable=detached,
+                        environment_profile=binding["environment_profile"],
+                    )
+                equal_preflight = (
+                    execution.materialize_candidate_only_policy_successor(
+                        baseline_policy=retired,
+                        control_plane_version="a" * 64,
+                        storage_preflight_binding=_storage_preflight_binding(root, "2026-06-02T05:08:36Z"),
+                        clean_candidate_manifest=binding[
+                            "clean_candidate_manifest"
+                        ],
+                        executable=binding["executable"],
+                        environment_profile=binding["environment_profile"],
+                    )
+                )
+                self.assertEqual(
+                    equal_preflight["olcf_side_storage"]["last_preflight_utc"],
+                    "2026-06-02T05:08:36Z",
+                )
+                with self.assertRaisesRegex(
+                    execution.ContractError, "equal to or newer"
+                ):
+                    execution.materialize_candidate_only_policy_successor(
+                        baseline_policy=retired,
+                        control_plane_version="a" * 64,
+                        storage_preflight_binding=_storage_preflight_binding(root, "2026-06-02T05:08:35Z"),
+                        clean_candidate_manifest=binding[
+                            "clean_candidate_manifest"
+                        ],
+                        executable=binding["executable"],
+                        environment_profile=binding["environment_profile"],
+                    )
+
+    def test_candidate_only_successor_requires_pending_empty_baseline(self) -> None:
+        baseline_value = {
+            "science_submission_freeze": {"status": "pending_clean_candidate_freeze"},
+            "registered_science_slices": [],
+            "olcf_side_storage": {"last_preflight_utc": "2026-06-02T05:08:36Z"},
+        }
+        variants = {
+            "nonempty": {
+                **baseline_value,
+                "registered_science_slices": [{"unexpected": "slice"}],
+            },
+            "authorized": {
+                **baseline_value,
+                "science_submission_freeze": {"status": "authorized"},
+            },
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name, value in variants.items():
+                with self.subTest(name=name):
+                    baseline = _put(
+                        root / f"{name}.json",
+                        (json.dumps(value) + "\n").encode("utf-8"),
+                        0o444,
+                    )
+                    message = "empty" if name == "nonempty" else "pending"
+                    with self.assertRaisesRegex(execution.ContractError, message):
+                        execution.materialize_candidate_only_policy_successor(
+                            baseline_policy=baseline,
+                            control_plane_version="b" * 64,
+                            storage_preflight_binding=_storage_preflight_binding(root, "2026-06-02T05:08:37Z"),
+                            clean_candidate_manifest=root / "unused-manifest.json",
+                            executable=root / "unused-athena",
+                            environment_profile=root / "unused-environment.sh",
+                        )
 
     def test_final_bindings_fail_closed_on_environment_and_executable_drift(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -840,7 +1275,10 @@ class PressurePilotExecutionTest(unittest.TestCase):
             with self.assertRaisesRegex(execution.ContractError, "required"):
                 execution._selected_case(None)
         with patch.object(execution, "source_bindings", return_value={}):
-            with self.assertRaisesRegex(execution.ContractError, "source bindings drifted"):
+            with self.assertRaisesRegex(
+                execution.ContractError,
+                "historical v2 registered-execution tranche is consumed",
+            ):
                 execution.validate_source_tranche()
 
     def test_pre_submit_cli_requires_one_known_case_id(self) -> None:
@@ -872,6 +1310,71 @@ class PressurePilotExecutionTest(unittest.TestCase):
                 execution.build_parser().parse_args(
                     [*required, "--case-id", "ps_p0_unknown"]
                 )
+
+    def test_policy_transition_cli_dispatches_reviewed_successor_writers(self) -> None:
+        with patch.object(
+            execution,
+            "write_retire_consumed_slices_baseline_policy_successor",
+            return_value={"transition": "retired"},
+        ) as retirement, patch.object(
+            sys,
+            "argv",
+            [
+                "q011",
+                "retire-consumed-slices-baseline-policy-successor",
+                "--baseline-policy",
+                "/tmp/historical-policy.json",
+                "--control-plane-version",
+                "a" * 64,
+                "--storage-preflight-binding",
+                "/tmp/storage-preflight.json",
+                "--output",
+                "/tmp/retired-policy.json",
+            ],
+        ), redirect_stdout(io.StringIO()):
+            execution.main()
+        retirement.assert_called_once_with(
+            Path("/tmp/retired-policy.json"),
+            baseline_policy=Path("/tmp/historical-policy.json"),
+            control_plane_version="a" * 64,
+            storage_preflight_binding=Path("/tmp/storage-preflight.json"),
+        )
+        with patch.object(
+            execution,
+            "write_candidate_only_policy_successor",
+            return_value={"transition": "candidate-only"},
+        ) as candidate, patch.object(
+            sys,
+            "argv",
+            [
+                "q011",
+                "candidate-only-policy-successor",
+                "--baseline-policy",
+                "/tmp/retired-policy.json",
+                "--control-plane-version",
+                "b" * 64,
+                "--storage-preflight-binding",
+                "/tmp/storage-preflight.json",
+                "--clean-candidate-manifest",
+                "/tmp/clean_candidate_manifest.json",
+                "--executable",
+                "/tmp/athena",
+                "--environment-profile",
+                "/tmp/frontier_pic_environment.sh",
+                "--output",
+                "/tmp/candidate-only-policy.json",
+            ],
+        ), redirect_stdout(io.StringIO()):
+            execution.main()
+        candidate.assert_called_once_with(
+            Path("/tmp/candidate-only-policy.json"),
+            baseline_policy=Path("/tmp/retired-policy.json"),
+            control_plane_version="b" * 64,
+            storage_preflight_binding=Path("/tmp/storage-preflight.json"),
+            clean_candidate_manifest=Path("/tmp/clean_candidate_manifest.json"),
+            executable=Path("/tmp/athena"),
+            environment_profile=Path("/tmp/frontier_pic_environment.sh"),
+        )
 
 
 if __name__ == "__main__":

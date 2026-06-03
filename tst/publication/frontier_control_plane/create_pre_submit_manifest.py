@@ -23,7 +23,8 @@ from control_plane_common import read_json, require_below
 from control_plane_common import require_canonical_path_below
 from control_plane_common import require_no_symlink_components_below
 from control_plane_common import sha256, snapshot_file, verify_installed_control_plane
-from control_plane_common import validate_launch_contract, write_json_exclusive
+from control_plane_common import validate_launch_contract
+from control_plane_common import validate_planner_retention_binding, write_json_exclusive
 from operator_attestation import validate_sealed_operator_attestation
 
 
@@ -272,6 +273,18 @@ def create_manifest(
             manifest["pre_manifest_attestation_sha256"] = pre_manifest_attestation[
                 "sha256"
             ]
+            if config.get("planner_retention") is not None:
+                manifest["planner_retention"] = validate_planner_retention_binding(
+                    config["planner_retention"],
+                    authorized_pic_root=pic_root,
+                    expected_clean_candidate_manifest_sha256=sha256(
+                        clean_candidate_manifest
+                    ),
+                )
+        elif config.get("planner_retention") is not None:
+            raise ValueError(
+                "Admission-smoke configs must not claim a planner-retention binding"
+            )
         write_json_exclusive(temporary / "pre_submit_manifest.json", manifest)
         make_tree_read_only(snapshot_dir, executable_names={"athena"})
         (temporary / "pre_submit_manifest.json").chmod(0o444)

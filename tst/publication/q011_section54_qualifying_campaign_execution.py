@@ -11,13 +11,14 @@ launch.
 from __future__ import annotations
 
 import argparse
+import ctypes
+import errno
 import hashlib
 import json
 import math
 import os
 from pathlib import Path, PurePosixPath
 import re
-import shutil
 import stat
 import sys
 import types
@@ -77,6 +78,11 @@ RECOMPUTE_RECORD_TYPE = "q011_section54_independent_raw_artifact_recompute_plan"
 RESTART_CARRIER_RECORD_TYPE = "q011_section54_amr_restart_continuation_carrier"
 ATTEMPT_RECORD_TYPE = "q011_section54_baseline_attempt_descriptor"
 LAUNCH_CONTRACT_RECORD_TYPE = "q011_section54_launch_prohibited_handoff_contract"
+PLANNER_RETENTION_ROLE = "q011_section54_deterministic_retained_attempt"
+MATERIALIZATION_RECEIPT_RECORD_TYPE = (
+    "q011_section54_qualifying_campaign_plan_materialization_receipt"
+)
+MATERIALIZATION_RECEIPT_NAME = "materialization_receipt.json"
 EXPECTED_BASELINE_ATTEMPTS = 24
 _SHA256 = re.compile(r"[0-9a-f]{64}")
 _GIT_COMMIT = re.compile(r"[0-9a-f]{40}")
@@ -84,6 +90,19 @@ _SAFE_SEGMENT = re.compile(r"[a-z0-9][a-z0-9._-]{0,127}")
 _DIRECTORY_FLAGS = os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0)
 _FILE_FLAGS = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
 _WRITE_BITS = stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH
+_RENAME_NOREPLACE = 1
+_STAGING_ROOT_NAME = "publishable"
+_MATERIALIZED_MEMBER_INVENTORY_ALGORITHM = (
+    "sha256 of '<file_sha256>  <root-relative-path>\\n' entries ordered "
+    "lexically by root-relative path"
+)
+_PLAN_FREEZE_RECEIPT = {
+    "schema_version": 1,
+    "artifact_role": ARTIFACT_ROLE,
+    "qualification_effect": QUALIFICATION_EFFECT,
+    "inventory_excludes": immutable_orion_tree.INVENTORY_NAME,
+    "freeze_policy": "remove all owner, group and other write bits recursively",
+}
 
 
 CANONICAL_VARIANT_IDS = (
@@ -108,11 +127,21 @@ _FIXED_HELPER_SOURCES = (
     "tst/publication/q011_section54_restart.py",
     "tst/publication/analyze_q011_section54_outputs.py",
     "tst/publication/analyze_q011_section54_campaign.py",
+    "tst/publication/analyze_q011_section54_numerical_qualification.py",
+    "tst/publication/q011_section54_particles.py",
+    "tst/publication/q011_section54_spatial.py",
+    "tst/publication/q011_section54_artifacts.py",
+    "tst/publication/publish_q011_section54_pressure_pilot_bundle.py",
+    "tst/publication/analyze_q011_section54_pressure_pilot.py",
+    "tst/publication/analyze_q011_section54_pressure_pilot_case.py",
+    "tst/publication/frontier_f1_structured_artifacts.py",
+    "tst/publication/q011_section54_attempt_manifest_materializer.py",
     "tst/publication/publish_q011_section54_campaign_attempt.py",
     "tst/publication/immutable_orion_tree.py",
     "tst/publication/pvtk_particles.py",
     "tst/publication/q011_parallel_shock_storage_estimator.py",
     "tst/publication/frontier_control_plane/control_plane_common.py",
+    "tst/publication/frontier_control_plane/ledger.py",
     "tst/publication/frontier_control_plane/operator_attestation.py",
     "tst/publication/q011_section54_qualifying_campaign_execution.py",
 )
@@ -1009,6 +1038,253 @@ def _require_same_directory(path: Path, descriptor: int, *, label: str) -> None:
     )
 
 
+def _require_absent_at(parent_descriptor: int, name: str, *, label: str) -> None:
+    try:
+        os.stat(name, dir_fd=parent_descriptor, follow_symlinks=False)
+    except FileNotFoundError:
+        return
+    except OSError as error:
+        raise CampaignPlanError(f"cannot inspect {label}") from error
+    raise CampaignPlanError(f"{label} already exists")
+
+
+def _require_same_directory_at(
+    parent_descriptor: int, name: str, descriptor: int, *, label: str
+) -> None:
+    _require(
+        "/" not in name,
+        "descriptor-relative campaign-plan directory check received a nested path",
+    )
+    try:
+        actual = os.stat(name, dir_fd=parent_descriptor, follow_symlinks=False)
+    except OSError as error:
+        raise CampaignPlanError(f"{label} changed during publication") from error
+    expected = os.fstat(descriptor)
+    _require(
+        stat.S_ISDIR(actual.st_mode)
+        and (expected.st_dev, expected.st_ino) == (actual.st_dev, actual.st_ino),
+        f"{label} changed during publication",
+    )
+
+
+def _rename_no_replace_at(
+    source_parent_descriptor: int,
+    source_name: str,
+    destination_parent_descriptor: int,
+    destination_name: str,
+) -> None:
+    _require(
+        "/" not in source_name and "/" not in destination_name,
+        "descriptor-relative campaign-plan rename received a nested path",
+    )
+    libc = ctypes.CDLL(None, use_errno=True)
+    renameat2 = getattr(libc, "renameat2", None)
+    error_number = errno.ENOSYS
+    if renameat2 is not None:
+        renameat2.argtypes = [
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_uint,
+        ]
+        renameat2.restype = ctypes.c_int
+        if renameat2(
+            source_parent_descriptor,
+            os.fsencode(source_name),
+            destination_parent_descriptor,
+            os.fsencode(destination_name),
+            _RENAME_NOREPLACE,
+        ) == 0:
+            return
+        error_number = ctypes.get_errno()
+    if error_number == errno.EEXIST:
+        raise CampaignPlanError(
+            f"deterministic campaign-plan output root already exists: {destination_name}"
+        )
+    unsupported = {
+        errno.EINVAL,
+        errno.ENOSYS,
+        getattr(errno, "ENOTSUP", errno.EINVAL),
+        getattr(errno, "EOPNOTSUPP", errno.EINVAL),
+    }
+    if error_number not in unsupported:
+        raise OSError(error_number, os.strerror(error_number), destination_name)
+    raise CampaignPlanError(
+        "campaign-plan publication requires atomic no-replace rename support"
+    )
+
+
+def _remove_anchored_tree_at(
+    parent_descriptor: int, name: str, descriptor: int, *, label: str
+) -> None:
+    """Remove one hidden tree without reopening its ancestor path."""
+    _require_same_directory_at(parent_descriptor, name, descriptor, label=label)
+
+    def remove_members(directory_descriptor: int) -> None:
+        try:
+            status = os.fstat(directory_descriptor)
+            os.fchmod(
+                directory_descriptor,
+                stat.S_IMODE(status.st_mode)
+                | stat.S_IRUSR
+                | stat.S_IWUSR
+                | stat.S_IXUSR,
+            )
+            names = os.listdir(directory_descriptor)
+        except OSError as error:
+            raise CampaignPlanError(f"cannot prepare {label} for removal") from error
+        for member_name in names:
+            try:
+                observed = os.stat(
+                    member_name,
+                    dir_fd=directory_descriptor,
+                    follow_symlinks=False,
+                )
+                if stat.S_ISDIR(observed.st_mode):
+                    child_descriptor = os.open(
+                        member_name, _DIRECTORY_FLAGS, dir_fd=directory_descriptor
+                    )
+                    try:
+                        opened = os.fstat(child_descriptor)
+                        _require(
+                            (observed.st_dev, observed.st_ino)
+                            == (opened.st_dev, opened.st_ino),
+                            f"{label} changed during descriptor-relative removal",
+                        )
+                        remove_members(child_descriptor)
+                        current = os.stat(
+                            member_name,
+                            dir_fd=directory_descriptor,
+                            follow_symlinks=False,
+                        )
+                        _require(
+                            (current.st_dev, current.st_ino)
+                            == (opened.st_dev, opened.st_ino),
+                            f"{label} changed during descriptor-relative removal",
+                        )
+                    finally:
+                        os.close(child_descriptor)
+                    os.rmdir(member_name, dir_fd=directory_descriptor)
+                else:
+                    os.unlink(member_name, dir_fd=directory_descriptor)
+            except CampaignPlanError:
+                raise
+            except OSError as error:
+                raise CampaignPlanError(f"cannot remove member from {label}") from error
+
+    remove_members(descriptor)
+    _require_same_directory_at(parent_descriptor, name, descriptor, label=label)
+    try:
+        os.rmdir(name, dir_fd=parent_descriptor)
+    except OSError as error:
+        raise CampaignPlanError(f"cannot remove {label}") from error
+
+
+def _rollback_published_destination(
+    parent_descriptor: int, destination_name: str, descriptor: int
+) -> None:
+    """Withdraw only the pinned invalid plan, never a path replacement."""
+    rollback_name = f".{destination_name}.rollback-{uuid.uuid4()}"
+
+    def quarantine_moved_original() -> None:
+        expected = os.fstat(descriptor)
+        candidates = []
+        for name in os.listdir(parent_descriptor):
+            try:
+                observed = os.stat(
+                    name, dir_fd=parent_descriptor, follow_symlinks=False
+                )
+            except FileNotFoundError:
+                continue
+            if (
+                stat.S_ISDIR(observed.st_mode)
+                and (observed.st_dev, observed.st_ino)
+                == (expected.st_dev, expected.st_ino)
+            ):
+                candidates.append(name)
+        if len(candidates) != 1:
+            raise CampaignPlanError(
+                "cannot locate raced campaign-plan publication for quarantine"
+            )
+        _rename_no_replace_at(
+            parent_descriptor, candidates[0], parent_descriptor, rollback_name
+        )
+        os.fsync(parent_descriptor)
+        _require_same_directory_at(
+            parent_descriptor,
+            rollback_name,
+            descriptor,
+            label="campaign-plan rollback tree",
+        )
+
+    raced_replacement = False
+    try:
+        _rename_no_replace_at(
+            parent_descriptor, destination_name, parent_descriptor, rollback_name
+        )
+    except FileNotFoundError:
+        raced_replacement = True
+        os.fsync(parent_descriptor)
+        quarantine_moved_original()
+    else:
+        os.fsync(parent_descriptor)
+        try:
+            _require_same_directory_at(
+                parent_descriptor,
+                rollback_name,
+                descriptor,
+                label="campaign-plan rollback tree",
+            )
+        except CampaignPlanError:
+            raced_replacement = True
+            _rename_no_replace_at(
+                parent_descriptor, rollback_name, parent_descriptor, destination_name
+            )
+            os.fsync(parent_descriptor)
+            quarantine_moved_original()
+    if not raced_replacement:
+        _require_absent_at(
+            parent_descriptor,
+            destination_name,
+            label="invalid published campaign-plan output root after rollback",
+        )
+    rollback_descriptor = os.open(
+        rollback_name, _DIRECTORY_FLAGS, dir_fd=parent_descriptor
+    )
+    try:
+        _remove_anchored_tree_at(
+            parent_descriptor,
+            rollback_name,
+            rollback_descriptor,
+            label="campaign-plan rollback tree",
+        )
+    finally:
+        os.close(rollback_descriptor)
+    os.fsync(parent_descriptor)
+    if raced_replacement:
+        raise CampaignPlanError(
+            "campaign-plan rollback rejected a substituted public destination"
+        )
+
+
+def _cleanup_private_container(
+    parent_descriptor: int, name: str, descriptor: int
+) -> None:
+    """Best-effort removal of one empty pinned private staging container."""
+    try:
+        _require_same_directory_at(
+            parent_descriptor,
+            name,
+            descriptor,
+            label="campaign-plan private staging container",
+        )
+        os.rmdir(name, dir_fd=parent_descriptor)
+        os.fsync(parent_descriptor)
+    except (CampaignPlanError, OSError):
+        return
+
+
 def _write_new_file(root: Path, root_descriptor: int, relative: str, payload: bytes) -> None:
     path = PurePosixPath(relative)
     _require(
@@ -1051,53 +1327,146 @@ def _write_new_file(root: Path, root_descriptor: int, relative: str, payload: by
         os.close(descriptor)
 
 
-def _cleanup_created_tree(root: Path) -> None:
-    if not os.path.lexists(root):
-        return
-    for directory, names, filenames in os.walk(root, topdown=False, followlinks=False):
-        base = Path(directory)
-        for name in filenames:
-            path = base / name
-            if not path.is_symlink():
-                os.chmod(path, 0o600, follow_symlinks=False)
-        for name in names:
-            path = base / name
-            if not path.is_symlink():
-                os.chmod(path, 0o700, follow_symlinks=False)
-        if not base.is_symlink():
-            os.chmod(base, 0o700, follow_symlinks=False)
-    shutil.rmtree(root)
+def _member_inventory_payload(members: Mapping[str, bytes]) -> bytes:
+    return "".join(
+        f"{_sha256_bytes(payload)}  {relative}\n"
+        for relative, payload in sorted(members.items())
+    ).encode("utf-8")
 
 
-def _reserve_output_root(output_parent: Path, plan_id: str) -> tuple[Path, int, int]:
+def _expected_directories(members: Mapping[str, bytes]) -> set[str]:
+    directories: set[str] = set()
+    for relative in members:
+        parent = PurePosixPath(relative).parent
+        while parent.as_posix() != ".":
+            directories.add(parent.as_posix())
+            parent = parent.parent
+    return directories
+
+
+def _validate_staged_inventory(
+    root_descriptor: int,
+    expected_members: Mapping[str, bytes],
+    *,
+    label: str,
+) -> None:
+    snapshot = immutable_orion_tree._scan_anchored_tree(
+        root_descriptor,
+        hash_regular=True,
+        error_type=CampaignPlanError,
+        label=label,
+    )
+    measured_files = {
+        entry.relative: entry.sha256
+        for entry in snapshot.entries
+        if entry.entry_type == "file"
+    }
+    expected_files = {
+        relative: _sha256_bytes(payload) for relative, payload in expected_members.items()
+    }
+    _require(
+        measured_files == expected_files,
+        f"{label} file whitelist or inventory drifted",
+    )
+    measured_directories = {
+        entry.relative
+        for entry in snapshot.entries
+        if entry.entry_type == "directory"
+    }
+    _require(
+        measured_directories == _expected_directories(expected_members),
+        f"{label} directory whitelist drifted",
+    )
+
+
+def _reserve_staging_root(
+    output_parent: Path, plan_id: str
+) -> tuple[Path, Path, Path, int, int, int]:
     parent = _canonical_existing_directory(output_parent, label="authorized output parent")
     name = f"q011-section54-qualifying-campaign-plan-{plan_id}"
-    root = parent / name
+    destination = parent / name
+    private_container = parent / f".{name}.staging-{uuid.uuid4()}"
+    staging = private_container / _STAGING_ROOT_NAME
     parent_descriptor = os.open(parent, _DIRECTORY_FLAGS)
-    created = False
+    private_descriptor = -1
+    root_descriptor = -1
     try:
-        os.mkdir(name, mode=0o700, dir_fd=parent_descriptor)
-        created = True
-        root_descriptor = os.open(name, _DIRECTORY_FLAGS, dir_fd=parent_descriptor)
+        _require_same_directory(
+            parent, parent_descriptor, label="campaign-plan output parent"
+        )
+        _require_absent_at(
+            parent_descriptor, destination.name, label="deterministic campaign-plan output root"
+        )
+        os.mkdir(private_container.name, mode=0o700, dir_fd=parent_descriptor)
+        os.fsync(parent_descriptor)
+        private_descriptor = os.open(
+            private_container.name, _DIRECTORY_FLAGS, dir_fd=parent_descriptor
+        )
+        os.mkdir(staging.name, mode=0o700, dir_fd=private_descriptor)
+        os.fsync(private_descriptor)
+        root_descriptor = os.open(
+            staging.name, _DIRECTORY_FLAGS, dir_fd=private_descriptor
+        )
     except OSError as error:
-        if created:
+        if root_descriptor >= 0:
+            os.close(root_descriptor)
+        if private_descriptor >= 0:
             try:
-                os.rmdir(name, dir_fd=parent_descriptor)
+                os.rmdir(staging.name, dir_fd=private_descriptor)
             except OSError:
                 pass
+            os.close(private_descriptor)
+        try:
+            os.rmdir(private_container.name, dir_fd=parent_descriptor)
+        except OSError:
+            pass
         os.close(parent_descriptor)
-        if not created and os.path.lexists(root):
-            raise CampaignPlanError("deterministic campaign-plan output root already exists") from error
-        raise CampaignPlanError("cannot reserve deterministic campaign-plan output root") from error
+        raise CampaignPlanError("cannot reserve hidden campaign-plan staging root") from error
+    except BaseException:
+        if root_descriptor >= 0:
+            os.close(root_descriptor)
+        if private_descriptor >= 0:
+            try:
+                os.rmdir(staging.name, dir_fd=private_descriptor)
+            except OSError:
+                pass
+            os.close(private_descriptor)
+        try:
+            os.rmdir(private_container.name, dir_fd=parent_descriptor)
+        except OSError:
+            pass
+        os.close(parent_descriptor)
+        raise
     try:
         os.fsync(parent_descriptor)
-        _require_same_directory(root, root_descriptor, label="campaign-plan output root")
+        _require_same_directory(
+            staging, root_descriptor, label="campaign-plan staging root"
+        )
     except BaseException:
+        try:
+            _remove_anchored_tree_at(
+                private_descriptor,
+                staging.name,
+                root_descriptor,
+                label="campaign-plan staging root",
+            )
+        except BaseException:
+            pass
         os.close(root_descriptor)
+        _cleanup_private_container(
+            parent_descriptor, private_container.name, private_descriptor
+        )
+        os.close(private_descriptor)
         os.close(parent_descriptor)
-        _cleanup_created_tree(root)
         raise
-    return root, parent_descriptor, root_descriptor
+    return (
+        destination,
+        private_container,
+        staging,
+        parent_descriptor,
+        private_descriptor,
+        root_descriptor,
+    )
 
 
 def _helper_source_closure() -> list[dict[str, str]]:
@@ -1111,6 +1480,421 @@ def _helper_source_closure() -> list[dict[str, str]]:
         "helper source closure contains duplicate paths",
     )
     return records
+
+
+def _retained_binding(value: object, *, label: str) -> dict[str, str]:
+    binding = _object(value, {"path", "sha256"}, label=f"{label} binding")
+    relative = _relative_path(binding["path"], label=f"{label} binding/path")
+    digest = _text(binding["sha256"], label=f"{label} binding/sha256")
+    _require(
+        _SHA256.fullmatch(digest) is not None,
+        f"{label} binding/sha256 must be 64 lowercase hex digits",
+    )
+    return {"path": relative, "sha256": digest}
+
+
+def _retained_member_payload(
+    snapshot: Any, value: object, *, label: str
+) -> bytes:
+    binding = _retained_binding(value, label=label)
+    try:
+        payload = snapshot.member_path(binding["path"]).read_bytes()
+    except (OSError, ValueError) as error:
+        raise CampaignPlanError(
+            f"{label} is unavailable in the immutable qualifying planner tree"
+        ) from error
+    _require(
+        _sha256_bytes(payload) == binding["sha256"],
+        f"{label} SHA-256 drifted",
+    )
+    return payload
+
+
+def _retained_json_member(
+    snapshot: Any, value: object, *, label: str
+) -> dict[str, Any]:
+    payload = _retained_member_payload(snapshot, value, label=label)
+    decoded = _decode_json(payload, label=label)
+    _require(type(decoded) is dict, f"{label} must be an object")
+    return decoded
+
+
+def _validate_retained_helper_source_closure(
+    snapshot: Any, plan: Mapping[str, Any], *, plan_id: str
+) -> list[dict[str, str]]:
+    binding = _retained_binding(
+        plan["helper_source_closure"], label="helper source closure"
+    )
+    _require(
+        binding["path"] == "helper_source_closure.json",
+        "helper source closure path drifted",
+    )
+    closure = _retained_json_member(
+        snapshot, binding, label="helper source closure"
+    )
+    _object(
+        closure,
+        {"record_type", "schema_version", "plan_id", "sources"},
+        label="helper source closure",
+    )
+    _require(
+        closure["record_type"] == "q011_section54_helper_source_closure"
+        and _exact_int(
+            closure["schema_version"], label="helper source closure/schema_version"
+        )
+        == 1
+        and closure["plan_id"] == plan_id,
+        "helper source closure identity drifted",
+    )
+    expected_sources = _helper_source_closure()
+    _require(
+        _list(closure["sources"], label="helper source closure/sources")
+        == expected_sources,
+        "helper source closure drifted from reviewed source bytes",
+    )
+    return expected_sources
+
+
+def materialize_planner_retention(
+    *,
+    planner_root: str | Path,
+    planner_inventory_sha256: str,
+    attempt_id: str,
+    authorized_pic_root: str | Path = AUTHORIZED_ORION_ROOT,
+) -> dict[str, object]:
+    """Emit one source-bound, launch-prohibited pre-submit retention overlay."""
+    authorized_root = _canonical_existing_directory(
+        Path(authorized_pic_root), label="authorized Orion PIC root"
+    )
+    inventory_sha256 = _text(
+        planner_inventory_sha256, label="qualifying planner inventory SHA-256"
+    )
+    _require(
+        _SHA256.fullmatch(inventory_sha256) is not None,
+        "qualifying planner inventory SHA-256 must be 64 lowercase hex digits",
+    )
+    selected_attempt_id = _text(attempt_id, label="baseline attempt ID")
+    _require(
+        _SAFE_SEGMENT.fullmatch(selected_attempt_id) is not None,
+        "baseline attempt ID is unsafe",
+    )
+    retained_planner_root = Path(planner_root)
+    _require(
+        retained_planner_root.is_absolute()
+        and retained_planner_root.parent == authorized_root / "plans",
+        "qualifying planner root must use the dedicated retained plans namespace",
+    )
+    try:
+        with immutable_orion_tree.staged_verified_frozen_tree(
+            retained_planner_root,
+            inventory_sha256,
+            authorized_root=authorized_root,
+            error_type=CampaignPlanError,
+            label="Q-011 immutable qualifying campaign plan",
+        ) as (_planner_report, snapshot):
+            try:
+                plan_payload = snapshot.member_path("campaign_plan.json").read_bytes()
+            except (OSError, ValueError) as error:
+                raise CampaignPlanError(
+                    "campaign plan is unavailable in the immutable "
+                    "qualifying planner tree"
+                ) from error
+            plan = _decode_json(plan_payload, label="campaign plan")
+            plan = _object(
+                plan,
+                {
+                    "record_type",
+                    "schema_version",
+                    "plan_id",
+                    "artifact_role",
+                    "qualification_effect",
+                    "status",
+                    "authorized_orion_root",
+                    "authorized_orion_campaign_root",
+                    "selected_pressure",
+                    "candidate_binding",
+                    "source_bindings",
+                    "helper_source_closure",
+                    "campaign_matrix",
+                    "baseline_attempt_count",
+                    "baseline_attempt_descriptors",
+                    "restart_continuation_carrier",
+                    "independent_raw_artifact_recompute_plan",
+                    "nonauthorizing_policy_fragment",
+                    "execution_boundary",
+                    "preregistration_execution_boundary",
+                },
+                label="campaign plan",
+            )
+            plan_id = _text(plan["plan_id"], label="campaign plan/plan_id")
+            _require(
+                _SHA256.fullmatch(plan_id) is not None,
+                "campaign plan/plan_id must be 64 lowercase hex digits",
+            )
+            _require(
+                plan["record_type"] == PLAN_RECORD_TYPE
+                and _exact_int(
+                    plan["schema_version"], label="campaign plan/schema_version"
+                )
+                == 1
+                and plan["artifact_role"] == ARTIFACT_ROLE
+                and plan["qualification_effect"] == QUALIFICATION_EFFECT
+                and plan["status"] == "source_local_immutable_review_plan_only"
+                and plan["authorized_orion_root"] == str(authorized_root),
+                "campaign plan identity or authorization boundary drifted",
+            )
+            campaign_root = (
+                authorized_root / "campaigns" / f"q011-section54-{plan_id}"
+            )
+            _require(
+                plan["authorized_orion_campaign_root"] == str(campaign_root),
+                "campaign plan authorized Orion campaign root drifted",
+            )
+            execution_boundary = _object(
+                plan["execution_boundary"],
+                {
+                    "mutates_live_policy",
+                    "scheduler_calls",
+                    "submits_jobs",
+                    "infers_pressure_selection",
+                    "launch_authorized",
+                    "frontier_execution_authorized",
+                    "claim_closure_authorized",
+                },
+                label="campaign plan/execution_boundary",
+            )
+            _require(
+                all(value is False for value in execution_boundary.values()),
+                "campaign plan must remain launch-prohibited",
+            )
+            matrix = validate_campaign_matrix(plan["campaign_matrix"])
+            selected_pressure = _object(
+                plan["selected_pressure"],
+                {"selection_method", "selected_case", "receipt"},
+                label="campaign plan/selected_pressure",
+            )
+            selected_case = _object(
+                selected_pressure["selected_case"],
+                {"case_id", "problem_ps_p0"},
+                label="campaign plan/selected_pressure/selected_case",
+            )
+            selected_ps_p0 = _exact_float(
+                selected_case["problem_ps_p0"],
+                label="campaign plan/selected_pressure/selected_case/problem_ps_p0",
+            )
+            source_bindings = _object(
+                plan["source_bindings"],
+                {
+                    "pressure_selection_receipt",
+                    "clean_candidate_manifest",
+                    "environment_profile",
+                    "qualifying_preregistration",
+                    "restart_preregistration",
+                    "paper_deck",
+                },
+                label="campaign plan/source_bindings",
+            )
+            normalized_source_bindings = {
+                name: _retained_binding(binding, label=f"source binding {name}")
+                for name, binding in source_bindings.items()
+            }
+            _require(
+                selected_pressure["receipt"]
+                == normalized_source_bindings["pressure_selection_receipt"],
+                "campaign plan selected-pressure receipt binding drifted",
+            )
+            helper_sources = _validate_retained_helper_source_closure(
+                snapshot, plan, plan_id=plan_id
+            )
+            candidate = plan["candidate_binding"]
+            _require(
+                type(candidate) is dict,
+                "campaign plan candidate binding must be an object",
+            )
+            expected_plan_id = _digest_value(
+                {
+                    "record_type": PLAN_RECORD_TYPE,
+                    "schema_version": 1,
+                    "pressure_selection_receipt_sha256": normalized_source_bindings[
+                        "pressure_selection_receipt"
+                    ]["sha256"],
+                    "selected_case": selected_case,
+                    "candidate_binding": candidate,
+                    "source_binding_sha256": {
+                        name: binding["sha256"]
+                        for name, binding in normalized_source_bindings.items()
+                    },
+                    "helper_source_closure": helper_sources,
+                    "campaign_matrix": matrix,
+                    "authorized_orion_root": str(authorized_root),
+                }
+            )
+            _require(
+                plan_id == expected_plan_id,
+                "campaign plan ID drifted from its reviewed source-bound basis",
+            )
+            descriptor_bindings = _list(
+                plan["baseline_attempt_descriptors"],
+                label="campaign plan/baseline_attempt_descriptors",
+            )
+            _require(
+                _exact_int(
+                    plan["baseline_attempt_count"],
+                    label="campaign plan/baseline_attempt_count",
+                )
+                == EXPECTED_BASELINE_ATTEMPTS
+                and len(descriptor_bindings) == EXPECTED_BASELINE_ATTEMPTS,
+                "campaign plan baseline attempt count drifted",
+            )
+            expected_attempts = []
+            index = 0
+            for variant_id in matrix["grid_variants"]:
+                variant = _variant_binding(variant_id)
+                for seed in matrix["qualifying_seeds"]:
+                    index += 1
+                    generated_attempt_id = _attempt_id(index, variant.variant, seed)
+                    expected_attempts.append(
+                        (index, generated_attempt_id, variant, seed)
+                    )
+            normalized_descriptor_bindings = [
+                _retained_binding(binding, label="baseline attempt descriptor")
+                for binding in descriptor_bindings
+            ]
+            _require(
+                [
+                    binding["path"]
+                    for binding in normalized_descriptor_bindings
+                ]
+                == [
+                    f"attempts/baseline/{generated_attempt_id}.json"
+                    for _, generated_attempt_id, _, _ in expected_attempts
+                ],
+                "campaign plan baseline descriptor path ordering drifted",
+            )
+            selected = [
+                (binding, expected)
+                for binding, expected in zip(
+                    normalized_descriptor_bindings, expected_attempts
+                )
+                if expected[1] == selected_attempt_id
+            ]
+            _require(
+                len(selected) == 1,
+                "attempt ID does not select exactly one baseline planner descriptor",
+            )
+            descriptor_binding, (
+                attempt_index,
+                _generated_attempt_id,
+                variant,
+                qualifying_seed,
+            ) = selected[0]
+            descriptor = _retained_json_member(
+                snapshot,
+                descriptor_binding,
+                label="baseline attempt descriptor",
+            )
+            attempt_root = campaign_root / "baseline" / selected_attempt_id
+            contract_path = f"launch_contracts/baseline/{selected_attempt_id}.json"
+            contract_payload = _retained_member_payload(
+                snapshot,
+                descriptor.get("launch_contract"),
+                label="baseline attempt launch contract",
+            )
+            contract = _decode_json(
+                contract_payload, label="baseline attempt launch contract"
+            )
+            _require(
+                type(contract) is dict,
+                "baseline attempt launch contract must be an object",
+            )
+            try:
+                expected_contract = _baseline_launch_contract(
+                    attempt_id=selected_attempt_id,
+                    variant=variant,
+                    seed=qualifying_seed,
+                    selected_ps_p0=selected_ps_p0,
+                    candidate=candidate,
+                    paper_deck_binding=normalized_source_bindings["paper_deck"],
+                    artifact_root=attempt_root,
+                )
+            except (KeyError, TypeError) as error:
+                raise CampaignPlanError(
+                    "campaign plan candidate binding drifted"
+                ) from error
+            immutable_orion_tree.require_exact_primitive_types(
+                contract,
+                expected_contract,
+                error_type=CampaignPlanError,
+                label="baseline attempt launch contract",
+            )
+            _require(
+                contract == expected_contract,
+                "baseline attempt launch contract drifted",
+            )
+            expected_descriptor = _attempt_descriptor(
+                index=attempt_index,
+                attempt_id=selected_attempt_id,
+                variant=variant,
+                seed=qualifying_seed,
+                selected_ps_p0=selected_ps_p0,
+                candidate=candidate,
+                artifact_root=attempt_root,
+                contract_path=contract_path,
+                contract_payload=contract_payload,
+            )
+            immutable_orion_tree.require_exact_primitive_types(
+                descriptor,
+                expected_descriptor,
+                error_type=CampaignPlanError,
+                label="baseline attempt descriptor",
+            )
+            _require(
+                descriptor == expected_descriptor,
+                "baseline attempt descriptor drifted",
+            )
+            materialization_receipt_payload = _retained_member_payload(
+                snapshot,
+                {
+                    "path": MATERIALIZATION_RECEIPT_NAME,
+                    "sha256": _sha256_bytes(
+                        snapshot.member_path(MATERIALIZATION_RECEIPT_NAME).read_bytes()
+                    ),
+                },
+                label="campaign-plan materialization receipt",
+            )
+            materialization_receipt = _decode_json(
+                materialization_receipt_payload,
+                label="campaign-plan materialization receipt",
+            )
+            _require(
+                type(materialization_receipt) is dict
+                and materialization_receipt.get("record_type")
+                == MATERIALIZATION_RECEIPT_RECORD_TYPE
+                and materialization_receipt.get("schema_version") == 1
+                and materialization_receipt.get("plan_id") == plan_id,
+                "campaign-plan materialization receipt identity drifted",
+            )
+            return {
+                "schema_version": 1,
+                "retention_role": PLANNER_RETENTION_ROLE,
+                "planner_root": str(Path(planner_root)),
+                "planner_inventory_sha256": inventory_sha256,
+                "planner_plan_id": plan_id,
+                "planner_materialization_receipt": {
+                    "path": MATERIALIZATION_RECEIPT_NAME,
+                    "sha256": _sha256_bytes(materialization_receipt_payload),
+                },
+                "attempt_id": selected_attempt_id,
+                "authorized_orion_attempt_root": str(attempt_root),
+                "authorized_orion_raw_root": str(attempt_root / "raw"),
+                "argv": list(contract["argv"]),
+            }
+    except CampaignPlanError:
+        raise
+    except (OSError, TypeError, ValueError) as error:
+        raise CampaignPlanError(
+            f"immutable qualifying planner retention materialization failed: {error}"
+        ) from error
 
 
 def materialize_qualifying_campaign_plan(
@@ -1187,14 +1971,32 @@ def materialize_qualifying_campaign_plan(
     }
     plan_id = _digest_value(plan_basis)
     campaign_root = AUTHORIZED_ORION_ROOT / "campaigns" / f"q011-section54-{plan_id}"
-    root, parent_descriptor, root_descriptor = _reserve_output_root(output_parent, plan_id)
+    (
+        destination,
+        private_container,
+        root,
+        parent_descriptor,
+        private_descriptor,
+        root_descriptor,
+    ) = _reserve_staging_root(output_parent, plan_id)
+    expected_members: dict[str, bytes] = {}
+    renamed = False
+
+    def write(relative: str, payload: bytes) -> None:
+        _require(
+            relative not in expected_members,
+            f"generated output member path is duplicated: {relative}",
+        )
+        _write_new_file(root, root_descriptor, relative, payload)
+        expected_members[relative] = payload
+
     try:
-        _write_new_file(root, root_descriptor, source_bindings["pressure_selection_receipt"]["path"], pressure_payload)
-        _write_new_file(root, root_descriptor, source_bindings["clean_candidate_manifest"]["path"], manifest_payload)
-        _write_new_file(root, root_descriptor, source_bindings["environment_profile"]["path"], environment_payload)
-        _write_new_file(root, root_descriptor, source_bindings["qualifying_preregistration"]["path"], qualifying_payload)
-        _write_new_file(root, root_descriptor, source_bindings["restart_preregistration"]["path"], restart_payload)
-        _write_new_file(root, root_descriptor, source_bindings["paper_deck"]["path"], deck_payload)
+        write(source_bindings["pressure_selection_receipt"]["path"], pressure_payload)
+        write(source_bindings["clean_candidate_manifest"]["path"], manifest_payload)
+        write(source_bindings["environment_profile"]["path"], environment_payload)
+        write(source_bindings["qualifying_preregistration"]["path"], qualifying_payload)
+        write(source_bindings["restart_preregistration"]["path"], restart_payload)
+        write(source_bindings["paper_deck"]["path"], deck_payload)
 
         contract_bindings = []
         descriptor_bindings = []
@@ -1217,7 +2019,7 @@ def materialize_qualifying_campaign_plan(
                     artifact_root=artifact_root,
                 )
                 contract_payload = _json_bytes(contract)
-                _write_new_file(root, root_descriptor, contract_path, contract_payload)
+                write(contract_path, contract_payload)
                 contract_binding = _binding(contract_path, contract_payload)
                 contract_bindings.append(contract_binding)
                 descriptor = _attempt_descriptor(
@@ -1233,7 +2035,7 @@ def materialize_qualifying_campaign_plan(
                 )
                 descriptor_path = f"attempts/baseline/{attempt_id}.json"
                 descriptor_payload = _json_bytes(descriptor)
-                _write_new_file(root, root_descriptor, descriptor_path, descriptor_payload)
+                write(descriptor_path, descriptor_payload)
                 descriptor_bindings.append(_binding(descriptor_path, descriptor_payload))
                 descriptors.append(descriptor)
         _require(index == EXPECTED_BASELINE_ATTEMPTS, "materialized baseline attempt count drifted")
@@ -1256,7 +2058,7 @@ def materialize_qualifying_campaign_plan(
             artifact_root=restart_artifact_root,
         )
         restart_contract_payload = _json_bytes(restart_contract)
-        _write_new_file(root, root_descriptor, restart_contract_path, restart_contract_payload)
+        write(restart_contract_path, restart_contract_payload)
         restart_contract_binding = _binding(restart_contract_path, restart_contract_payload)
         restart_carrier = {
             "record_type": RESTART_CARRIER_RECORD_TYPE,
@@ -1282,7 +2084,7 @@ def materialize_qualifying_campaign_plan(
         }
         restart_carrier_payload = _json_bytes(restart_carrier)
         restart_carrier_path = "restart_continuation/amr_restart_continuation_carrier.json"
-        _write_new_file(root, root_descriptor, restart_carrier_path, restart_carrier_payload)
+        write(restart_carrier_path, restart_carrier_payload)
         restart_carrier_binding = _binding(restart_carrier_path, restart_carrier_payload)
 
         helper_closure = {
@@ -1293,7 +2095,7 @@ def materialize_qualifying_campaign_plan(
         }
         helper_closure_payload = _json_bytes(helper_closure)
         helper_closure_path = "helper_source_closure.json"
-        _write_new_file(root, root_descriptor, helper_closure_path, helper_closure_payload)
+        write(helper_closure_path, helper_closure_payload)
         helper_closure_binding = _binding(helper_closure_path, helper_closure_payload)
 
         recompute = _independent_recompute_plan(
@@ -1303,7 +2105,7 @@ def materialize_qualifying_campaign_plan(
         )
         recompute_payload = _json_bytes(recompute)
         recompute_path = "independent_raw_artifact_recompute_plan.json"
-        _write_new_file(root, root_descriptor, recompute_path, recompute_payload)
+        write(recompute_path, recompute_payload)
         recompute_binding = _binding(recompute_path, recompute_payload)
 
         fragment = _policy_fragment(
@@ -1316,7 +2118,7 @@ def materialize_qualifying_campaign_plan(
         )
         fragment_payload = _json_bytes(fragment)
         fragment_path = "nonauthorizing_policy_fragment.json"
-        _write_new_file(root, root_descriptor, fragment_path, fragment_payload)
+        write(fragment_path, fragment_payload)
         fragment_binding = _binding(fragment_path, fragment_payload)
 
         campaign_plan = {
@@ -1356,62 +2158,254 @@ def materialize_qualifying_campaign_plan(
             ],
         }
         campaign_plan_payload = _json_bytes(campaign_plan)
-        _write_new_file(root, root_descriptor, "campaign_plan.json", campaign_plan_payload)
-        os.fsync(root_descriptor)
-        _require_same_directory(root, root_descriptor, label="campaign-plan output root")
-        os.close(root_descriptor)
-        root_descriptor = -1
-        os.close(parent_descriptor)
-        parent_descriptor = -1
-        freeze = immutable_orion_tree.freeze_tree(
-            root,
-            {
-                "schema_version": 1,
-                "artifact_role": ARTIFACT_ROLE,
-                "qualification_effect": QUALIFICATION_EFFECT,
-                "inventory_excludes": immutable_orion_tree.INVENTORY_NAME,
-                "freeze_policy": "remove all owner, group and other write bits recursively",
+        write("campaign_plan.json", campaign_plan_payload)
+        materialized_inventory_payload = _member_inventory_payload(expected_members)
+        materialization_receipt = {
+            "record_type": MATERIALIZATION_RECEIPT_RECORD_TYPE,
+            "schema_version": 1,
+            "plan_id": plan_id,
+            "campaign_plan": _binding("campaign_plan.json", campaign_plan_payload),
+            "helper_source_closure": helper_closure_binding,
+            "tree_inventory": {
+                "algorithm": _MATERIALIZED_MEMBER_INVENTORY_ALGORITHM,
+                "scope": (
+                    "all materialized campaign-plan members before this receipt "
+                    "and recursive-freeze metadata"
+                ),
+                "excludes": [
+                    MATERIALIZATION_RECEIPT_NAME,
+                    immutable_orion_tree.FREEZE_RECEIPT_NAME,
+                    immutable_orion_tree.INVENTORY_NAME,
+                ],
+                "sha256": _sha256_bytes(materialized_inventory_payload),
+                "inventoried_file_count": len(expected_members),
             },
+        }
+        materialization_receipt_payload = _json_bytes(materialization_receipt)
+        write(MATERIALIZATION_RECEIPT_NAME, materialization_receipt_payload)
+        os.fsync(root_descriptor)
+        _require_same_directory(root, root_descriptor, label="campaign-plan staging root")
+        _validate_staged_inventory(
+            root_descriptor,
+            expected_members,
+            label="campaign-plan materialized staging tree",
+        )
+        freeze = immutable_orion_tree.freeze_tree_anchored(
+            root,
+            root_descriptor,
+            _PLAN_FREEZE_RECEIPT,
             authorized_root=_canonical_existing_directory(
                 output_parent, label="authorized output parent"
             ),
             error_type=CampaignPlanError,
             label="Q-011 Section 5.4 immutable campaign plan",
         )
+        frozen_inventory_payload = _member_inventory_payload(
+            {
+                **expected_members,
+                immutable_orion_tree.FREEZE_RECEIPT_NAME: _json_bytes(
+                    _PLAN_FREEZE_RECEIPT
+                ),
+            }
+        )
+        _require(
+            freeze["inventory_sha256"] == _sha256_bytes(frozen_inventory_payload),
+            "campaign-plan frozen inventory drifted from expected materialized members",
+        )
+        frozen_members = {
+            **expected_members,
+            immutable_orion_tree.FREEZE_RECEIPT_NAME: _json_bytes(
+                _PLAN_FREEZE_RECEIPT
+            ),
+            immutable_orion_tree.INVENTORY_NAME: frozen_inventory_payload,
+        }
+        _require_same_directory(root, root_descriptor, label="campaign-plan staging root")
+        _validate_staged_inventory(
+            root_descriptor,
+            frozen_members,
+            label="campaign-plan frozen staging tree",
+        )
+        immutable_orion_tree._verify_frozen_tree_anchored(
+            root,
+            root_descriptor,
+            freeze["inventory_sha256"],
+            authorized_root=_canonical_existing_directory(
+                output_parent, label="authorized output parent"
+            ),
+            error_type=CampaignPlanError,
+            label="Q-011 Section 5.4 immutable campaign plan",
+        )
+        _require_same_directory(
+            output_parent,
+            parent_descriptor,
+            label="campaign-plan output parent",
+        )
+        _require_same_directory_at(
+            private_descriptor,
+            root.name,
+            root_descriptor,
+            label="campaign-plan staging root",
+        )
+        _require_absent_at(
+            parent_descriptor,
+            destination.name,
+            label="deterministic campaign-plan output root",
+        )
+        # Orion rejects cross-parent rename of a read-only directory. Descendants
+        # remain frozen; make the root owner-write-only and non-traversable for
+        # the rename, then restore its exact frozen mode through the pinned fd.
+        root_mode = stat.S_IMODE(os.fstat(root_descriptor).st_mode)
+        os.fchmod(root_descriptor, stat.S_IWUSR)
+        os.fsync(root_descriptor)
+        _rename_no_replace_at(
+            private_descriptor, root.name, parent_descriptor, destination.name
+        )
+        renamed = True
+        os.fchmod(root_descriptor, root_mode)
+        os.fsync(root_descriptor)
+        os.fsync(private_descriptor)
+        os.fsync(parent_descriptor)
+        _require_same_directory_at(
+            parent_descriptor,
+            destination.name,
+            root_descriptor,
+            label="published campaign-plan output root",
+        )
+        verified = immutable_orion_tree._verify_frozen_tree_anchored(
+            destination,
+            root_descriptor,
+            freeze["inventory_sha256"],
+            authorized_root=_canonical_existing_directory(
+                output_parent, label="authorized output parent"
+            ),
+            error_type=CampaignPlanError,
+            label="Q-011 Section 5.4 immutable campaign plan",
+        )
+        _validate_staged_inventory(
+            root_descriptor,
+            frozen_members,
+            label="published campaign-plan output tree",
+        )
+        os.close(root_descriptor)
+        root_descriptor = -1
+        _cleanup_private_container(
+            parent_descriptor, private_container.name, private_descriptor
+        )
+        os.close(private_descriptor)
+        private_descriptor = -1
+        os.close(parent_descriptor)
+        parent_descriptor = -1
         return {
-            "plan_root": str(root),
+            "plan_root": str(destination),
             "plan_id": plan_id,
             "campaign_plan_sha256": _sha256_bytes(campaign_plan_payload),
+            "materialization_receipt": _binding(
+                MATERIALIZATION_RECEIPT_NAME, materialization_receipt_payload
+            ),
+            "materialized_member_inventory_sha256": _sha256_bytes(
+                materialized_inventory_payload
+            ),
             "inventory_sha256": freeze["inventory_sha256"],
             "inventoried_file_count": freeze["inventoried_file_count"],
             "baseline_attempt_count": len(descriptor_bindings),
             "restart_continuation_carrier_count": 1,
-            "recursively_read_only": freeze["recursively_read_only"],
+            "recursively_read_only": verified["recursively_read_only"],
         }
     except BaseException:
-        if root_descriptor >= 0:
-            os.close(root_descriptor)
-        if parent_descriptor >= 0:
-            os.close(parent_descriptor)
-        _cleanup_created_tree(root)
+        rollback_error: BaseException | None = None
+        try:
+            if root_descriptor >= 0 and renamed:
+                try:
+                    _rollback_published_destination(
+                        parent_descriptor, destination.name, root_descriptor
+                    )
+                except BaseException as error:
+                    rollback_error = error
+            elif root_descriptor >= 0:
+                try:
+                    _remove_anchored_tree_at(
+                        private_descriptor,
+                        root.name,
+                        root_descriptor,
+                        label="campaign-plan staging root",
+                    )
+                except BaseException:
+                    pass
+        finally:
+            if root_descriptor >= 0:
+                os.close(root_descriptor)
+            if private_descriptor >= 0:
+                _cleanup_private_container(
+                    parent_descriptor, private_container.name, private_descriptor
+                )
+                os.close(private_descriptor)
+            if parent_descriptor >= 0:
+                os.close(parent_descriptor)
+        if rollback_error is not None:
+            raise CampaignPlanError(
+                "cannot remove invalid published campaign-plan output root"
+            ) from rollback_error
         raise
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--output-parent", required=True, type=Path)
-    parser.add_argument("--pressure-selection-receipt", required=True, type=Path)
-    parser.add_argument("--clean-candidate-manifest", required=True, type=Path)
-    parser.add_argument("--executable", required=True, type=Path)
-    parser.add_argument("--environment-profile", required=True, type=Path)
+    parser.add_argument("--output-parent", type=Path)
+    parser.add_argument("--pressure-selection-receipt", type=Path)
+    parser.add_argument("--clean-candidate-manifest", type=Path)
+    parser.add_argument("--executable", type=Path)
+    parser.add_argument("--environment-profile", type=Path)
+    parser.add_argument("--materialize-planner-retention", action="store_true")
+    parser.add_argument("--planner-root", type=Path)
+    parser.add_argument("--planner-inventory-sha256")
+    parser.add_argument("--attempt-id")
+    parser.add_argument("--authorized-pic-root", type=Path)
     arguments = parser.parse_args()
-    result = materialize_qualifying_campaign_plan(
-        output_parent=arguments.output_parent,
-        pressure_selection_receipt=arguments.pressure_selection_receipt,
-        clean_candidate_manifest=arguments.clean_candidate_manifest,
-        executable=arguments.executable,
-        environment_profile=arguments.environment_profile,
-    )
+    if arguments.materialize_planner_retention:
+        _require(
+            arguments.planner_root is not None
+            and arguments.planner_inventory_sha256 is not None
+            and arguments.attempt_id is not None
+            and arguments.authorized_pic_root is not None,
+            "planner-retention validation mode requires its complete immutable binding",
+        )
+        _require(
+            arguments.output_parent is None
+            and arguments.pressure_selection_receipt is None
+            and arguments.clean_candidate_manifest is None
+            and arguments.executable is None
+            and arguments.environment_profile is None,
+            "planner-retention validation mode cannot create a campaign plan",
+        )
+        result = materialize_planner_retention(
+            planner_root=arguments.planner_root,
+            planner_inventory_sha256=arguments.planner_inventory_sha256,
+            attempt_id=arguments.attempt_id,
+            authorized_pic_root=arguments.authorized_pic_root,
+        )
+    else:
+        _require(
+            arguments.output_parent is not None
+            and arguments.pressure_selection_receipt is not None
+            and arguments.clean_candidate_manifest is not None
+            and arguments.executable is not None
+            and arguments.environment_profile is not None,
+            "campaign-plan materialization requires its complete source binding",
+        )
+        _require(
+            arguments.planner_root is None
+            and arguments.planner_inventory_sha256 is None
+            and arguments.attempt_id is None
+            and arguments.authorized_pic_root is None,
+            "campaign-plan materialization cannot consume a planner-retention overlay",
+        )
+        result = materialize_qualifying_campaign_plan(
+            output_parent=arguments.output_parent,
+            pressure_selection_receipt=arguments.pressure_selection_receipt,
+            clean_candidate_manifest=arguments.clean_candidate_manifest,
+            executable=arguments.executable,
+            environment_profile=arguments.environment_profile,
+        )
     print(_json_bytes(result).decode("utf-8"), end="")
 
 

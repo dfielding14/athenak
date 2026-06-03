@@ -1223,6 +1223,20 @@ class LedgerTests(unittest.TestCase):
             ):
                 replacement.replace(self.receipts)
 
+    def test_read_only_snapshot_rejects_transient_receipt_hide_and_restore(self) -> None:
+        hidden = self.receipts.with_name("hidden-receipts.jsonl")
+        with self.assertRaisesRegex(ValueError, "parent namespace changed"):
+            with validated_read_only_mirrored_state_snapshot(
+                self.ledger,
+                self.receipts,
+                self.mirror,
+                ledger_root=self.ledger.parent.parent,
+                receipts_root=self.receipts.parent.parent,
+                mirror_root=self.mirror.parent.parent,
+            ):
+                self.receipts.rename(hidden)
+                hidden.rename(self.receipts)
+
     def test_read_only_snapshot_rejects_genesis_anchor_replacement(self) -> None:
         anchor, _ = genesis_anchor_paths(self.ledger, self.mirror)
         replacement = anchor.with_name("replacement-anchor.json")

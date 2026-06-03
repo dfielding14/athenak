@@ -89,8 +89,8 @@ class Q011Section54PressureSelectionTests(unittest.TestCase):
         receipt = self._receipt()
         with mock.patch.object(
             selection.pressure_pilot_publisher,
-            "verify_published_pressure_pilot_receipt",
-            wraps=publisher.verify_published_pressure_pilot_receipt,
+            "consume_published_pressure_pilot_bundle",
+            wraps=publisher.consume_published_pressure_pilot_bundle,
         ) as verifier:
             self.assertEqual(self._validate(receipt), receipt)
         verifier.assert_called_once_with(

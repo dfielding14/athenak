@@ -3,21 +3,30 @@
 
 from __future__ import annotations
 
+import ctypes
+import errno
 import hashlib
 import json
 import math
 import os
 from pathlib import Path, PurePosixPath
-import shutil
 import stat
 from typing import Any, Mapping
 import uuid
+
+if __package__:
+    from . import immutable_orion_tree
+else:
+    import immutable_orion_tree
 
 
 INVENTORY_NAME = "artifact_inventory.json"
 MANIFEST_NAME = "derived_manifest.json"
 _RESERVED_NAMES = {INVENTORY_NAME, MANIFEST_NAME}
 _SHA256_LENGTH = 64
+_DIRECTORY_FLAGS = os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0)
+_RENAME_NOREPLACE = 1
+_STAGING_ROOT_NAME = "publishable"
 
 
 class DerivedArtifactError(ValueError):
@@ -208,15 +217,364 @@ def validate_derived_manifest(value: object) -> dict[str, object]:
     return value
 
 
-def _fsync_directory(path: Path) -> None:
-    descriptor = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
+def _write_exclusive_at(root_fd: int, relative: str, payload: bytes) -> None:
+    path = PurePosixPath(relative)
+    descriptor = os.dup(root_fd)
     try:
+        for part in path.parts[:-1]:
+            try:
+                os.mkdir(part, mode=0o700, dir_fd=descriptor)
+            except FileExistsError:
+                pass
+            else:
+                os.fsync(descriptor)
+            child = os.open(part, _DIRECTORY_FLAGS, dir_fd=descriptor)
+            os.close(descriptor)
+            descriptor = child
+        output = os.open(
+            path.parts[-1],
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
+            0o600,
+            dir_fd=descriptor,
+        )
+    except OSError as error:
+        os.close(descriptor)
+        raise DerivedArtifactError(f"cannot create derived-artifact member: {relative}") from error
+    try:
+        offset = 0
+        while offset < len(payload):
+            written = os.write(output, payload[offset:])
+            _require(written > 0, f"short write for derived-artifact member: {relative}")
+            offset += written
+        os.fsync(output)
+        os.fchmod(output, 0o444)
+        os.fsync(output)
         os.fsync(descriptor)
     finally:
+        os.close(output)
         os.close(descriptor)
 
 
+def _require_same_directory_at(parent_fd: int, name: str, descriptor: int, label: str) -> None:
+    _require("/" not in name, f"{label}: nested descriptor-relative name")
+    try:
+        actual = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+    except OSError as error:
+        raise DerivedArtifactError(f"{label}: directory is unavailable") from error
+    expected = os.fstat(descriptor)
+    _require(
+        stat.S_ISDIR(actual.st_mode)
+        and (actual.st_dev, actual.st_ino) == (expected.st_dev, expected.st_ino),
+        f"{label}: directory binding changed",
+    )
+
+
+def _require_same_directory(path: Path, descriptor: int, label: str) -> None:
+    try:
+        actual = os.stat(path, follow_symlinks=False)
+    except OSError as error:
+        raise DerivedArtifactError(f"{label}: directory is unavailable") from error
+    expected = os.fstat(descriptor)
+    _require(
+        stat.S_ISDIR(actual.st_mode)
+        and (actual.st_dev, actual.st_ino) == (expected.st_dev, expected.st_ino),
+        f"{label}: directory binding changed",
+    )
+
+
+def _require_absent_at(parent_fd: int, name: str, label: str) -> None:
+    try:
+        os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+    except FileNotFoundError:
+        return
+    except OSError as error:
+        raise DerivedArtifactError(f"{label}: cannot inspect path") from error
+    raise DerivedArtifactError(f"{label}: already exists")
+
+
+def _rename_no_replace_at(
+    source_parent_fd: int,
+    source_name: str,
+    destination_parent_fd: int,
+    destination_name: str,
+) -> None:
+    _require(
+        "/" not in source_name and "/" not in destination_name,
+        "derived-artifact rename received a nested name",
+    )
+    libc = ctypes.CDLL(None, use_errno=True)
+    renameat2 = getattr(libc, "renameat2", None)
+    error_number = errno.ENOSYS
+    if renameat2 is not None:
+        renameat2.argtypes = [
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_uint,
+        ]
+        renameat2.restype = ctypes.c_int
+        if renameat2(
+            source_parent_fd,
+            os.fsencode(source_name),
+            destination_parent_fd,
+            os.fsencode(destination_name),
+            _RENAME_NOREPLACE,
+        ) == 0:
+            return
+        error_number = ctypes.get_errno()
+    if error_number == errno.EEXIST:
+        raise DerivedArtifactError(f"derived-artifact output already exists: {destination_name}")
+    unsupported = {
+        errno.EINVAL,
+        errno.ENOSYS,
+        getattr(errno, "ENOTSUP", errno.EINVAL),
+        getattr(errno, "EOPNOTSUPP", errno.EINVAL),
+    }
+    if error_number not in unsupported:
+        raise OSError(error_number, os.strerror(error_number), destination_name)
+    raise DerivedArtifactError("derived-artifact publication requires atomic no-replace rename")
+
+
+def _remove_anchored_tree_at(parent_fd: int, name: str, descriptor: int, label: str) -> None:
+    """Remove one tree recursively without reopening its ancestor pathname."""
+    _require_same_directory_at(parent_fd, name, descriptor, label)
+
+    def remove_members(directory_fd: int) -> None:
+        status = os.fstat(directory_fd)
+        os.fchmod(directory_fd, stat.S_IMODE(status.st_mode) | 0o700)
+        for member_name in os.listdir(directory_fd):
+            observed = os.stat(member_name, dir_fd=directory_fd, follow_symlinks=False)
+            if stat.S_ISDIR(observed.st_mode):
+                child_fd = os.open(member_name, _DIRECTORY_FLAGS, dir_fd=directory_fd)
+                try:
+                    opened = os.fstat(child_fd)
+                    _require(
+                        (observed.st_dev, observed.st_ino) == (opened.st_dev, opened.st_ino),
+                        f"{label}: tree changed during anchored removal",
+                    )
+                    remove_members(child_fd)
+                    current = os.stat(member_name, dir_fd=directory_fd, follow_symlinks=False)
+                    _require(
+                        (current.st_dev, current.st_ino) == (opened.st_dev, opened.st_ino),
+                        f"{label}: tree changed during anchored removal",
+                    )
+                finally:
+                    os.close(child_fd)
+                os.rmdir(member_name, dir_fd=directory_fd)
+            else:
+                os.unlink(member_name, dir_fd=directory_fd)
+
+    try:
+        remove_members(descriptor)
+        _require_same_directory_at(parent_fd, name, descriptor, label)
+        os.rmdir(name, dir_fd=parent_fd)
+    except DerivedArtifactError:
+        raise
+    except OSError as error:
+        raise DerivedArtifactError(f"{label}: cannot remove tree") from error
+
+
+def _cleanup_staging(parent_fd: int, name: str, descriptor: int) -> None:
+    try:
+        _remove_anchored_tree_at(parent_fd, name, descriptor, "derived-artifact staging tree")
+    except (DerivedArtifactError, OSError):
+        return
+
+
+def _cleanup_private_container(parent_fd: int, name: str, descriptor: int) -> None:
+    """Best-effort removal of one empty pinned private staging container."""
+    try:
+        _require_same_directory_at(
+            parent_fd, name, descriptor, "derived-artifact private staging container"
+        )
+        os.rmdir(name, dir_fd=parent_fd)
+        os.fsync(parent_fd)
+    except (DerivedArtifactError, OSError):
+        return
+
+
+def _required_directories(paths: set[str]) -> set[str]:
+    directories: set[str] = set()
+    for relative in paths:
+        parent = PurePosixPath(relative).parent
+        while parent.as_posix() != ".":
+            directories.add(parent.as_posix())
+            parent = parent.parent
+    return directories
+
+
+def _verify_anchored_bundle(
+    root_fd: int, *, expected_inventory_sha256: str | None = None
+) -> dict[str, object]:
+    snapshot = immutable_orion_tree._scan_anchored_tree(
+        root_fd,
+        hash_regular=True,
+        capture_paths=frozenset({INVENTORY_NAME, MANIFEST_NAME}),
+        error_type=DerivedArtifactError,
+        label="Q-011 derived-artifact bundle",
+    )
+    immutable_orion_tree._require_read_only(
+        snapshot,
+        include_root=True,
+        error_type=DerivedArtifactError,
+        label="Q-011 derived-artifact bundle",
+    )
+    entries = snapshot.by_relative_path()
+    inventory_entry = entries.get(INVENTORY_NAME)
+    _require(
+        inventory_entry is not None
+        and inventory_entry.entry_type == "file"
+        and inventory_entry.captured_payload is not None,
+        "derived-artifact inventory is unavailable",
+    )
+    inventory_payload = inventory_entry.captured_payload
+    if expected_inventory_sha256 is not None:
+        _require(
+            inventory_entry.sha256 == _sha256(expected_inventory_sha256, "expected inventory"),
+            "derived-artifact inventory checksum drifted",
+        )
+    inventory = _decode_json(inventory_payload, INVENTORY_NAME)
+    _require(type(inventory) is dict, "derived-artifact inventory must be an object")
+    _require(
+        set(inventory) == {"record_type", "schema_version", "members"}
+        and inventory["record_type"] == "q011_section54_derived_artifact_inventory"
+        and type(inventory["schema_version"]) is int
+        and inventory["schema_version"] == 1
+        and type(inventory["members"]) is list,
+        "derived-artifact inventory schema drifted",
+    )
+    declared = {INVENTORY_NAME}
+    for item in inventory["members"]:
+        _require(
+            type(item) is dict and set(item) == {"path", "size", "sha256"},
+            "inventory member schema drifted",
+        )
+        relative = _relative_path(item["path"], "inventory member path")
+        _require(relative not in declared, f"inventory repeats member: {relative}")
+        declared.add(relative)
+        _require(type(item["size"]) is int and item["size"] >= 0, "inventory member size drifted")
+        entry = entries.get(relative)
+        _require(
+            entry is not None
+            and entry.entry_type == "file"
+            and entry.size == item["size"]
+            and entry.sha256 == _sha256(item["sha256"], relative),
+            f"inventory member checksum drifted: {relative}",
+        )
+    measured_files = {
+        relative for relative, entry in entries.items() if entry.entry_type == "file"
+    }
+    measured_directories = {
+        relative for relative, entry in entries.items() if entry.entry_type == "directory"
+    }
+    _require(measured_files == declared, "derived-artifact tree closure drifted")
+    _require(
+        measured_directories == _required_directories(declared),
+        "derived-artifact directory closure drifted",
+    )
+    manifest_entry = entries.get(MANIFEST_NAME)
+    _require(
+        manifest_entry is not None and manifest_entry.captured_payload is not None,
+        "derived manifest is unavailable",
+    )
+    final = immutable_orion_tree._scan_anchored_tree(
+        root_fd,
+        hash_regular=False,
+        error_type=DerivedArtifactError,
+        label="Q-011 derived-artifact bundle",
+    )
+    immutable_orion_tree._require_same_snapshot(
+        snapshot,
+        final,
+        error_type=DerivedArtifactError,
+        label="Q-011 derived-artifact bundle",
+        phase="derived-artifact stability pass",
+    )
+    return validate_derived_manifest(_decode_json(manifest_entry.captured_payload, MANIFEST_NAME))
+
+
+def _verify_anchored_bundle_at(
+    parent_fd: int,
+    name: str,
+    descriptor: int,
+    *,
+    expected_inventory_sha256: str | None = None,
+) -> dict[str, object]:
+    _require_same_directory_at(parent_fd, name, descriptor, "derived-artifact bundle")
+    verified = _verify_anchored_bundle(
+        descriptor, expected_inventory_sha256=expected_inventory_sha256
+    )
+    _require_same_directory_at(parent_fd, name, descriptor, "derived-artifact bundle")
+    return verified
+
+
+def _rollback_published_destination(
+    parent_fd: int, destination_name: str, descriptor: int
+) -> None:
+    """Withdraw only the pinned invalid bundle, never a path replacement."""
+    rollback_name = f".{destination_name}.rollback-{uuid.uuid4()}"
+
+    def quarantine_moved_original() -> None:
+        expected = os.fstat(descriptor)
+        candidates = []
+        for name in os.listdir(parent_fd):
+            try:
+                observed = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+            except FileNotFoundError:
+                continue
+            if (
+                stat.S_ISDIR(observed.st_mode)
+                and (observed.st_dev, observed.st_ino)
+                == (expected.st_dev, expected.st_ino)
+            ):
+                candidates.append(name)
+        if len(candidates) != 1:
+            raise DerivedArtifactError(
+                "cannot locate raced derived-artifact publication for quarantine"
+            )
+        _rename_no_replace_at(parent_fd, candidates[0], parent_fd, rollback_name)
+        os.fsync(parent_fd)
+        _require_same_directory_at(
+            parent_fd, rollback_name, descriptor, "derived-artifact rollback tree"
+        )
+
+    raced_replacement = False
+    try:
+        _rename_no_replace_at(parent_fd, destination_name, parent_fd, rollback_name)
+    except FileNotFoundError:
+        raced_replacement = True
+        os.fsync(parent_fd)
+        quarantine_moved_original()
+    else:
+        os.fsync(parent_fd)
+        try:
+            _require_same_directory_at(
+                parent_fd, rollback_name, descriptor, "derived-artifact rollback tree"
+            )
+        except DerivedArtifactError:
+            raced_replacement = True
+            _rename_no_replace_at(parent_fd, rollback_name, parent_fd, destination_name)
+            os.fsync(parent_fd)
+            quarantine_moved_original()
+    if not raced_replacement:
+        _require_absent_at(parent_fd, destination_name, "invalid derived-artifact output")
+    rollback_fd = os.open(rollback_name, _DIRECTORY_FLAGS, dir_fd=parent_fd)
+    try:
+        _remove_anchored_tree_at(
+            parent_fd, rollback_name, rollback_fd, "derived-artifact rollback tree"
+        )
+    finally:
+        os.close(rollback_fd)
+    os.fsync(parent_fd)
+    if raced_replacement:
+        raise DerivedArtifactError(
+            "derived-artifact rollback rejected a substituted public destination"
+        )
+
+
 def _write_exclusive(path: Path, payload: bytes) -> None:
+    """Retained compatibility helper for direct path-local unit use."""
     descriptor = os.open(
         path,
         os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
@@ -241,23 +599,6 @@ def _inventory_record(relative: str, payload: bytes) -> dict[str, object]:
     }
 
 
-def _freeze_directories(root: Path) -> None:
-    directories = [Path(directory) for directory, _, _ in os.walk(root)]
-    for directory in reversed(directories):
-        os.chmod(directory, 0o555)
-        _fsync_directory(directory)
-
-
-def _cleanup_staging(path: Path) -> None:
-    if not path.exists():
-        return
-    for directory, names, _ in os.walk(path):
-        os.chmod(directory, 0o755)
-        for name in names:
-            os.chmod(Path(directory) / name, 0o755)
-    shutil.rmtree(path)
-
-
 def publish_derived_bundle(
     output_path: str | Path,
     *,
@@ -266,9 +607,12 @@ def publish_derived_bundle(
 ) -> dict[str, str]:
     """Publish one new immutable bundle by exclusive same-parent rename."""
     target = Path(os.path.abspath(output_path))
-    parent = target.parent
-    _require(parent.is_dir(), "derived-artifact parent directory is unavailable")
-    _require(not target.exists(), "derived-artifact output already exists")
+    _require(bool(target.name), "derived-artifact output name is unavailable")
+    try:
+        parent = target.parent.resolve(strict=True)
+    except OSError as error:
+        raise DerivedArtifactError("derived-artifact parent directory is unavailable") from error
+    _require(parent == target.parent, "derived-artifact parent must be canonical")
     validate_derived_manifest(manifest)
     canonical_manifest = canonical_json_bytes(dict(manifest))
     payloads: dict[str, bytes] = {}
@@ -288,21 +632,75 @@ def publish_derived_bundle(
         ],
     }
     inventory_payload = canonical_json_bytes(inventory)
-    staging = parent / f".{target.name}.staging-{uuid.uuid4()}"
-    staging.mkdir(mode=0o700)
+    private_container = parent / f".{target.name}.staging-{uuid.uuid4()}"
+    staging = private_container / _STAGING_ROOT_NAME
+    parent_fd = os.open(parent, _DIRECTORY_FLAGS)
+    private_fd: int | None = None
+    staging_fd: int | None = None
+    renamed = False
     try:
+        _require_same_directory(parent, parent_fd, "derived-artifact parent")
+        _require_absent_at(parent_fd, target.name, "derived-artifact output")
+        os.mkdir(private_container.name, mode=0o700, dir_fd=parent_fd)
+        os.fsync(parent_fd)
+        private_fd = os.open(private_container.name, _DIRECTORY_FLAGS, dir_fd=parent_fd)
+        os.mkdir(staging.name, mode=0o700, dir_fd=private_fd)
+        os.fsync(private_fd)
+        staging_fd = os.open(staging.name, _DIRECTORY_FLAGS, dir_fd=private_fd)
         for relative, payload in sorted(payloads.items()):
-            path = staging / relative
-            path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-            _write_exclusive(path, payload)
-        _write_exclusive(staging / INVENTORY_NAME, inventory_payload)
-        _freeze_directories(staging)
-        _require(not target.exists(), "derived-artifact output appeared during publication")
-        os.rename(staging, target)
-        _fsync_directory(parent)
+            _write_exclusive_at(staging_fd, relative, payload)
+        _write_exclusive_at(staging_fd, INVENTORY_NAME, inventory_payload)
+        immutable_orion_tree._remove_write_bits_below_root(
+            staging_fd,
+            error_type=DerivedArtifactError,
+            label="Q-011 derived-artifact bundle",
+        )
+        os.fchmod(staging_fd, os.fstat(staging_fd).st_mode & ~0o222)
+        _verify_anchored_bundle_at(
+            private_fd,
+            staging.name,
+            staging_fd,
+            expected_inventory_sha256=sha256_bytes(inventory_payload),
+        )
+        _require_same_directory(parent, parent_fd, "derived-artifact parent")
+        _require_absent_at(parent_fd, target.name, "derived-artifact output")
+        # Orion rejects cross-parent rename of a read-only directory. Descendants
+        # remain frozen; make the root owner-write-only and non-traversable for
+        # the rename, then restore its exact frozen mode through the pinned fd.
+        root_mode = stat.S_IMODE(os.fstat(staging_fd).st_mode)
+        os.fchmod(staging_fd, stat.S_IWUSR)
+        os.fsync(staging_fd)
+        _rename_no_replace_at(private_fd, staging.name, parent_fd, target.name)
+        renamed = True
+        os.fchmod(staging_fd, root_mode)
+        os.fsync(staging_fd)
+        os.fsync(private_fd)
+        os.fsync(parent_fd)
+        _verify_anchored_bundle_at(
+            parent_fd,
+            target.name,
+            staging_fd,
+            expected_inventory_sha256=sha256_bytes(inventory_payload),
+        )
     except BaseException:
-        _cleanup_staging(staging)
+        if staging_fd is not None:
+            if renamed:
+                try:
+                    _rollback_published_destination(parent_fd, target.name, staging_fd)
+                except BaseException as rollback_error:
+                    raise DerivedArtifactError(
+                        "cannot remove invalid derived-artifact output"
+                    ) from rollback_error
+            elif private_fd is not None:
+                _cleanup_staging(private_fd, staging.name, staging_fd)
         raise
+    finally:
+        if staging_fd is not None:
+            os.close(staging_fd)
+        if private_fd is not None:
+            _cleanup_private_container(parent_fd, private_container.name, private_fd)
+            os.close(private_fd)
+        os.close(parent_fd)
     return {
         "path": str(target),
         "manifest_sha256": sha256_bytes(canonical_manifest),
@@ -338,52 +736,32 @@ def verify_published_derived_bundle(
 ) -> dict[str, object]:
     """Recompute one immutable bundle inventory and return its manifest."""
     root = Path(os.path.abspath(output_path))
-    _require(root.is_dir() and not root.is_symlink(), "derived-artifact bundle is unavailable")
-    _require(not root.stat().st_mode & 0o222, "derived-artifact root is writable")
-    inventory_payload = _read_immutable_file(root / INVENTORY_NAME, INVENTORY_NAME)
-    if expected_inventory_sha256 is not None:
-        _require(
-            sha256_bytes(inventory_payload)
-            == _sha256(expected_inventory_sha256, "expected inventory"),
-            "derived-artifact inventory checksum drifted",
+    _require(bool(root.name), "derived-artifact bundle is unavailable")
+    parent_fd: int | None = None
+    try:
+        parent = root.parent.resolve(strict=True)
+        _require(parent == root.parent, "derived-artifact parent must be canonical")
+        parent_fd = os.open(parent, _DIRECTORY_FLAGS)
+        _require_same_directory(parent, parent_fd, "derived-artifact parent")
+        root_fd = os.open(root.name, _DIRECTORY_FLAGS, dir_fd=parent_fd)
+    except DerivedArtifactError:
+        if parent_fd is not None:
+            os.close(parent_fd)
+        raise
+    except OSError as error:
+        if parent_fd is not None:
+            os.close(parent_fd)
+        raise DerivedArtifactError("derived-artifact bundle is unavailable") from error
+    try:
+        return _verify_anchored_bundle_at(
+            parent_fd,
+            root.name,
+            root_fd,
+            expected_inventory_sha256=expected_inventory_sha256,
         )
-    inventory = _decode_json(inventory_payload, INVENTORY_NAME)
-    _require(type(inventory) is dict, "derived-artifact inventory must be an object")
-    _require(
-        set(inventory) == {"record_type", "schema_version", "members"}
-        and inventory["record_type"] == "q011_section54_derived_artifact_inventory"
-        and type(inventory["schema_version"]) is int
-        and inventory["schema_version"] == 1
-        and type(inventory["members"]) is list,
-        "derived-artifact inventory schema drifted",
-    )
-    declared = {INVENTORY_NAME}
-    for item in inventory["members"]:
-        _require(type(item) is dict and set(item) == {"path", "size", "sha256"}, "inventory member schema drifted")
-        relative = _relative_path(item["path"], "inventory member path")
-        _require(relative not in declared, f"inventory repeats member: {relative}")
-        declared.add(relative)
-        _require(type(item["size"]) is int and item["size"] >= 0, "inventory member size drifted")
-        payload = _read_immutable_file(root / relative, relative)
-        _require(
-            len(payload) == item["size"]
-            and sha256_bytes(payload) == _sha256(item["sha256"], relative),
-            f"inventory member checksum drifted: {relative}",
-        )
-    actual = set()
-    for directory, names, filenames in os.walk(root, followlinks=False):
-        base = Path(directory)
-        _require(not base.is_symlink(), "derived-artifact directory symlink is forbidden")
-        _require(not base.stat().st_mode & 0o222, "derived-artifact directory is writable")
-        for name in names:
-            _require(not (base / name).is_symlink(), "derived-artifact directory symlink is forbidden")
-        for name in filenames:
-            actual.add((base / name).relative_to(root).as_posix())
-    _require(actual == declared, "derived-artifact tree closure drifted")
-    manifest = _decode_json(
-        _read_immutable_file(root / MANIFEST_NAME, MANIFEST_NAME), MANIFEST_NAME
-    )
-    return validate_derived_manifest(manifest)
+    finally:
+        os.close(root_fd)
+        os.close(parent_fd)
 
 
 __all__ = [

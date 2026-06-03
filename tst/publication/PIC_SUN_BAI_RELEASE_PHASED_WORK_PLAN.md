@@ -682,22 +682,28 @@ unless all required bindings and products are present.
 
 Execute these actions in order:
 
-1. Finish and verify the immutable four-slice pressure aggregate publication.
-2. Close the third qualifying-boundary adversarial repair tranche, run the
-   full worker-node validation matrix, rereview it independently, commit it,
-   push it, and freeze a fresh clean candidate.
-3. Produce the four-slice pressure-review packet and record the required human
+1. Commit and push the integrated ninth authenticated-storage,
+   exact-historical-anchor and candidate-lifecycle repair tree, and run the
+   full clean-worker validation matrix from that commit.
+2. Capture authenticated mirrored storage-preflight evidence, install the
+   paired controller, promote the one-use consumed-slice retirement successor,
+   freeze and independently revalidate a fresh worker-built candidate, and
+   promote the candidate-only successor.
+3. Provision the fixed sibling publication-acceptance authority through the
+   reviewed one-time transition. Finish and verify the immutable four-slice
+   pressure aggregate publication and pressure-review packet on workers.
+4. Record the required human
    `problem/ps_p0` selection receipt.
-4. Close the Section 5.4 normalization, macro-particle-mass, gas-subtraction,
+5. Close the Section 5.4 normalization, macro-particle-mass, gas-subtraction,
    spectrum-window, snapshot-tolerance, and AMR-residual reviews.
-5. Materialize and freeze the qualifying Section 5.4 plan and analyzer.
-6. Run registered Frontier AMR MPI/HIP, Q016 HIP, restart-resilience, Q017
+6. Materialize and freeze the qualifying Section 5.4 plan and analyzer.
+7. Run registered Frontier AMR MPI/HIP, Q016 HIP, restart-resilience, Q017
    telemetry, and load-balance prerequisite slices.
-7. Reproduce the cheaper analytical Sun-Bai cases.
-8. Run the full registered Section 5.4 coarse, fine, and AMR campaign.
-9. Freeze the paper reproduction bundle.
-10. Complete paper-mode production hardening.
-11. Qualify the selected optional extensions.
-12. Perform named external review and terminal sign-off.
+8. Reproduce the cheaper analytical Sun-Bai cases.
+9. Run the full registered Section 5.4 coarse, fine, and AMR campaign.
+10. Freeze the paper reproduction bundle.
+11. Complete paper-mode production hardening.
+12. Qualify the selected optional extensions.
+13. Perform named external review and terminal sign-off.
 
-Do not launch the full Section 5.4 campaign before Actions 1 through 7 close.
+Do not launch the full Section 5.4 campaign before Actions 1 through 8 close.

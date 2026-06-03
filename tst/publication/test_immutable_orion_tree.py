@@ -120,6 +120,73 @@ class ImmutableOrionTreeTests(unittest.TestCase):
             finally:
                 _make_writable_tree(tree)
 
+    def test_freeze_rejects_hardlinked_regular_member(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            tree = base / "retained"
+            tree.mkdir()
+            payload = tree / "payload.txt"
+            payload.write_text("payload\n", encoding="utf-8")
+            os.link(payload, tree / "payload-alias.txt")
+            with self.assertRaisesRegex(ValueError, "hard-linked"):
+                immutable_orion_tree.freeze_tree(
+                    tree,
+                    _RECEIPT,
+                    authorized_root=base,
+                )
+
+    def test_reserved_metadata_creation_fsyncs_root_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            descriptor = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+            synced_inodes: list[int] = []
+            original_fsync = os.fsync
+
+            def record_fsync(fd: int) -> None:
+                status = os.fstat(fd)
+                if stat.S_ISDIR(status.st_mode):
+                    synced_inodes.append(status.st_ino)
+                original_fsync(fd)
+
+            try:
+                with mock.patch.object(
+                    immutable_orion_tree.os, "fsync", side_effect=record_fsync
+                ):
+                    immutable_orion_tree._write_new_metadata(
+                        descriptor,
+                        "metadata.txt",
+                        "payload\n",
+                        error_type=ValueError,
+                        label="metadata fsync test",
+                    )
+                self.assertIn(root.stat().st_ino, synced_inodes)
+            finally:
+                os.close(descriptor)
+
+    def test_anchored_freeze_does_not_reopen_root_path(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            tree = base / "retained"
+            tree.mkdir()
+            (tree / "payload.txt").write_text("payload\n", encoding="utf-8")
+            descriptor = os.open(tree, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                with mock.patch.object(
+                    immutable_orion_tree,
+                    "_open_anchored_root",
+                    side_effect=AssertionError("anchored freeze reopened root pathname"),
+                ):
+                    report = immutable_orion_tree.freeze_tree_anchored(
+                        tree,
+                        descriptor,
+                        _RECEIPT,
+                        authorized_root=base,
+                    )
+                self.assertRegex(report["inventory_sha256"], r"[0-9a-f]{64}")
+            finally:
+                os.close(descriptor)
+                _make_writable_tree(tree)
+
     def test_freeze_rejects_same_content_directory_swap_during_inventory_publication(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             base = Path(directory)
@@ -278,6 +345,8 @@ class ImmutableOrionTreeTests(unittest.TestCase):
             nested = tree / "nested"
             nested.mkdir(parents=True)
             (tree / "payload.txt").write_text("verified\n", encoding="utf-8")
+            (nested / "payload.txt").write_text("nested\n", encoding="utf-8")
+            parked = tree / "parked-nested"
             try:
                 report = immutable_orion_tree.freeze_tree(
                     tree,
@@ -293,11 +362,12 @@ class ImmutableOrionTreeTests(unittest.TestCase):
                     if scan_count != 4:
                         return original_scan(root_fd, **kwargs)
                     tree.chmod(tree.stat().st_mode | stat.S_IWUSR)
-                    nested.rmdir()
+                    nested.chmod(nested.stat().st_mode | stat.S_IWUSR)
+                    os.rename(nested, parked)
                     try:
                         return original_scan(root_fd, **kwargs)
                     finally:
-                        nested.mkdir()
+                        os.rename(parked, nested)
                         nested.chmod(nested.stat().st_mode & ~_WRITE_BITS)
                         tree.chmod(tree.stat().st_mode & ~_WRITE_BITS)
 
@@ -469,7 +539,9 @@ class ImmutableOrionTreeTests(unittest.TestCase):
             base = Path(directory)
             tree = base / "retained"
             tree.mkdir()
-            (tree / "topology-only").mkdir()
+            topology = tree / "topology-only"
+            topology.mkdir()
+            (topology / "payload.txt").write_text("topology\n", encoding="utf-8")
             try:
                 report = immutable_orion_tree.freeze_tree(
                     tree,
@@ -491,6 +563,32 @@ class ImmutableOrionTreeTests(unittest.TestCase):
                         with analyzer._use_staged_tree(tree, snapshot):
                             with self.assertRaisesRegex(ValueError, "regular member is absent"):
                                 analyzer._contained_regular_file(tree, tree / "topology-only")
+            finally:
+                _make_writable_tree(tree)
+
+    def test_verify_rejects_read_only_empty_directory_injection(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            tree = base / "retained"
+            tree.mkdir()
+            (tree / "payload.txt").write_text("verified\n", encoding="utf-8")
+            try:
+                report = immutable_orion_tree.freeze_tree(
+                    tree,
+                    _RECEIPT,
+                    authorized_root=base,
+                )
+                tree.chmod(tree.stat().st_mode | stat.S_IWUSR)
+                injected = tree / "injected-empty"
+                injected.mkdir()
+                injected.chmod(injected.stat().st_mode & ~_WRITE_BITS)
+                tree.chmod(tree.stat().st_mode & ~_WRITE_BITS)
+                with self.assertRaisesRegex(ValueError, "directory membership drifted"):
+                    immutable_orion_tree.verify_frozen_tree(
+                        tree,
+                        report["inventory_sha256"],
+                        authorized_root=base,
+                    )
             finally:
                 _make_writable_tree(tree)
 

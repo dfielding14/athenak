@@ -38,15 +38,25 @@ CONTROL_PLANE_FILES = [
     "promote_active_policy.py",
     "reconcile_frontier_job.py",
     "reconcile_manual_frontier_allocations.py",
+    "revalidate_clean_candidate.py",
     "run_installed_control_plane_job.sh",
     "run_control_plane.py",
+    "storage_preflight.schema.json",
     "submit_frontier_job.sh",
     "terminal_recovery_handoff.py",
     "validate_and_reserve_frontier_job.py",
     "verify_compute_node_snapshot.py",
     "write_orion_build_profile.py",
 ]
-SOURCE_CONTROL_PLANE_FILES = [*CONTROL_PLANE_FILES, "install_control_plane.py"]
+SOURCE_ONLY_ENTRYPOINTS = {
+    "capture_storage_preflight_evidence.py",
+    "install_control_plane.py",
+}
+SOURCE_CONTROL_PLANE_FILES = [
+    *CONTROL_PLANE_FILES,
+    "capture_storage_preflight_evidence.py",
+    "install_control_plane.py",
+]
 
 
 def _git(*arguments: str) -> list[str]:
@@ -175,8 +185,10 @@ def _verify_installed(
 def _verify_source(
     script_dir: Path, directory_descriptor: int, target: str
 ) -> dict[str, bytes]:
-    if target != "install_control_plane.py":
-        raise ValueError("Source runner may execute only install_control_plane.py")
+    if target not in SOURCE_ONLY_ENTRYPOINTS:
+        raise ValueError(
+            "Source runner may execute only authenticated source-only entrypoints"
+        )
     environment = _git_environment()
     repository = Path(
         subprocess.check_output(

@@ -6,10 +6,13 @@ from __future__ import annotations
 import base64
 from contextlib import contextmanager
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
+import shutil
 import stat
+import tarfile
 import tempfile
 from typing import Iterator
 import unittest
@@ -183,6 +186,90 @@ def _descriptor_sha256(descriptor: dict[str, object]) -> str:
     return _sha256(case_verifier.canonical_json_bytes(descriptor))
 
 
+def _rewrite_publication_seal(base: Path, receipt: Path) -> None:
+    publication_descriptor = os.open(base, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        seal = (
+            base.parent
+            / publisher.PUBLICATION_ACCEPTANCE_DIRECTORY
+            / publisher._publication_seal_name(receipt.name)
+        )
+        seal.chmod(0o600)
+        seal.write_bytes(
+            publisher._publication_seal_payload(
+                publication_descriptor,
+                receipt.name,
+                _sha256(receipt.read_bytes()),
+                publisher._file_identity_at(
+                    publication_descriptor, receipt.name, "test receipt"
+                ),
+            )
+        )
+        seal.chmod(0o444)
+    finally:
+        os.close(publication_descriptor)
+
+
+def _write_forged_publication_namespace_seal(base: Path, receipt: Path) -> None:
+    publication_descriptor = os.open(base, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        seal = base / publisher._publication_seal_name(receipt.name)
+        seal.write_bytes(
+            publisher._publication_seal_payload(
+                publication_descriptor,
+                receipt.name,
+                _sha256(receipt.read_bytes()),
+                publisher._file_identity_at(
+                    publication_descriptor, receipt.name, "test receipt"
+                ),
+            )
+        )
+        seal.chmod(0o444)
+    finally:
+        os.close(publication_descriptor)
+
+
+@contextmanager
+def _reviewed_source_archive() -> Iterator[tuple[Path, str]]:
+    with tempfile.TemporaryDirectory() as directory:
+        path = Path(directory) / "source.tar"
+        static = publisher._static_source_bindings()
+        required = {
+            record["path"]: record["sha256"]
+            for record in static["reviewed_source_closure"]
+        }
+        authorization = static["postrun_aggregate_source_authorization"]
+        required[authorization["path"]] = authorization["sha256"]
+        with tarfile.open(path, mode="w", pax_headers={"comment": "a" * 40}) as archive:
+            for relative in sorted(required):
+                payload = (publisher.pilot.REPO_ROOT / relative).read_bytes()
+                member = tarfile.TarInfo(relative)
+                member.size = len(payload)
+                archive.addfile(member, io.BytesIO(payload))
+        path.chmod(0o444)
+        yield path, _sha256(path.read_bytes())
+
+
+@contextmanager
+def _worker_source_snapshot(archive: Path) -> Iterator[Path]:
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory) / "snapshot"
+        root.mkdir()
+        with tarfile.open(archive, mode="r:") as source:
+            source.extractall(root)
+        _freeze_existing(root)
+        with patch.object(publisher, "EXECUTING_SOURCE_ROOT", root), patch.dict(
+            os.environ,
+            {
+                "PIC_PRESSURE_PUBLICATION_SOURCE_ARCHIVE_PATH": str(archive),
+                publisher.WORKER_SOURCE_SNAPSHOT_ROOT_ENV: str(root),
+            },
+            clear=True,
+        ):
+            yield root
+        _make_writable(root)
+
+
 @contextmanager
 def _verified_raw_cases() -> Iterator[tuple[Path, dict[str, Path], dict[str, str]]]:
     with tempfile.TemporaryDirectory() as directory:
@@ -190,6 +277,7 @@ def _verified_raw_cases() -> Iterator[tuple[Path, dict[str, Path], dict[str, str
         base = pic_root / "publication"
         runs = pic_root / "runs"
         base.mkdir(parents=True)
+        (pic_root / publisher.PUBLICATION_ACCEPTANCE_DIRECTORY).mkdir()
         runs.mkdir()
         roots = {}
         digests = {}
@@ -299,11 +387,23 @@ class Q011Section54PressurePilotBundlePublicationTests(unittest.TestCase):
             self.assertEqual(
                 set(publication["source_bindings"]),
                 {
+                    "postrun_aggregate_source_authorization",
                     "registered_execution_preregistration",
-                    "publisher",
-                    "aggregate_analyzer",
+                    "historical_v2_execution_preregistration",
+                    "reviewed_source_closure",
+                    "runtime_source_archive",
                 },
             )
+            self.assertEqual(
+                publication["source_bindings"]["runtime_source_archive"],
+                {
+                    "execution_mode": "direct_api_nonproduction_only",
+                    "git_commit": None,
+                    "archive_sha256": None,
+                    "verified_source_closure_sha256": None,
+                },
+            )
+            self.assertEqual(publication["consumption_rule"], publisher.CONSUMPTION_RULE)
             self.assertEqual(
                 [record["case_id"] for record in publication["raw_cases"]],
                 list(case_verifier.CASE_IDS),
@@ -319,6 +419,13 @@ class Q011Section54PressurePilotBundlePublicationTests(unittest.TestCase):
                 self.assertFalse(path.stat().st_mode & 0o222)
             self.assertFalse(receipt_path.stat().st_mode & 0o222)
             self.assertFalse(analysis_result.stat().st_mode & 0o222)
+            success_seal = (
+                base.parent
+                / publisher.PUBLICATION_ACCEPTANCE_DIRECTORY
+                / publisher._publication_seal_name(receipt_path.name)
+            )
+            self.assertTrue(success_seal.is_file())
+            self.assertFalse(success_seal.stat().st_mode & 0o222)
             retained = publisher.verify_published_pressure_pilot_receipt(
                 receipt_path, authorized_pic_root=base.parent
             )
@@ -467,15 +574,158 @@ class Q011Section54PressurePilotBundlePublicationTests(unittest.TestCase):
             )
             receipt_path.chmod(0o600)
             receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
-            receipt["source_bindings"]["publisher"]["sha256"] = "0" * 64
+            receipt["source_bindings"]["reviewed_source_closure"][0][
+                "sha256"
+            ] = "0" * 64
             receipt_path.write_bytes(publisher._canonical_json_bytes(receipt))
             receipt_path.chmod(0o444)
+            _rewrite_publication_seal(base, receipt_path)
             with self.assertRaisesRegex(
-                publisher.PressurePilotPublicationError, "source bindings drifted"
+                publisher.PressurePilotPublicationError,
+                "source binding drifted: reviewed_source_closure",
             ):
                 publisher.verify_published_pressure_pilot_receipt(
                     receipt_path, authorized_pic_root=base.parent
                 )
+
+    def test_mocked_worker_runtime_archive_binding_is_retained_and_strict(self) -> None:
+        with _reviewed_source_archive() as (archive, digest), _worker_source_snapshot(
+            archive
+        ), patch.object(
+            publisher,
+            "_trusted_source_archive",
+            return_value=("a" * 40, archive.read_bytes()),
+        ):
+            bindings = publisher._source_bindings(require_verified_archive=True)
+            binding = bindings["runtime_source_archive"]
+        self.assertEqual(
+            binding,
+            {
+                "execution_mode": "worker_extracted_git_archive_head_verified",
+                "git_commit": "a" * 40,
+                "archive_sha256": digest,
+                "verified_source_closure_sha256": publisher._source_closure_sha256(
+                    {key: value for key, value in bindings.items() if key != "runtime_source_archive"}
+                ),
+            },
+        )
+        with patch.dict(
+            os.environ,
+            {
+                "PIC_PRESSURE_PUBLICATION_SOURCE_COMMIT": "a" * 40,
+                "PIC_PRESSURE_PUBLICATION_SOURCE_ARCHIVE_SHA256": "b" * 64,
+            },
+            clear=True,
+        ), self.assertRaisesRegex(
+            publisher.PressurePilotPublicationError,
+            "production publication requires a verified worker source archive",
+        ):
+            publisher._source_bindings(require_verified_archive=True)
+        with patch.dict(os.environ, {}, clear=True):
+            direct = publisher._source_bindings()
+        with self.assertRaisesRegex(
+            publisher.PressurePilotPublicationError,
+            "direct API archive binding drifted",
+        ):
+            publisher._validate_retained_source_bindings(
+                direct, require_verified_archive=True
+            )
+        with patch.dict(
+            os.environ, {"PIC_PRESSURE_PUBLICATION_SOURCE_ARCHIVE_PATH": "/absent/archive"}
+        ), self.assertRaisesRegex(
+            OSError, "No such file or directory"
+        ):
+            publisher._source_bindings(require_verified_archive=True)
+
+    def test_synthetic_pax_archive_forgery_is_rejected(self) -> None:
+        with _reviewed_source_archive() as (archive, _digest), _worker_source_snapshot(
+            archive
+        ), self.assertRaisesRegex(
+            publisher.PressurePilotPublicationError,
+            "differs from trusted repository HEAD archive",
+        ):
+            publisher._source_bindings(require_verified_archive=True)
+
+    def test_production_api_rejects_direct_trusted_checkout_execution(self) -> None:
+        with _reviewed_source_archive() as (archive, _digest), patch.dict(
+            os.environ,
+            {
+                "PIC_PRESSURE_PUBLICATION_SOURCE_ARCHIVE_PATH": str(archive),
+                publisher.WORKER_SOURCE_SNAPSHOT_ROOT_ENV: str(
+                    publisher.EXECUTING_SOURCE_ROOT
+                ),
+            },
+            clear=True,
+        ), patch.object(
+            publisher,
+            "_trusted_source_archive",
+            return_value=("a" * 40, archive.read_bytes()),
+        ), self.assertRaisesRegex(
+            publisher.PressurePilotPublicationError,
+            "must not execute from the trusted checkout",
+        ):
+            publisher._source_bindings(require_verified_archive=True)
+
+    def test_receipt_is_the_only_accepted_consumption_marker(self) -> None:
+        with _verified_raw_cases() as (base, roots, digests):
+            bundle = base / "bundle"
+            receipt = base / "publication-receipt.json"
+            result = base / "aggregate-analysis.json"
+            original = publisher._rename_no_replace_at
+            observed_pre_receipt_window = False
+
+            def inspect_pre_receipt_window(
+                parent_descriptor: int, source_name: str, destination_name: str
+            ) -> None:
+                nonlocal observed_pre_receipt_window
+                original(parent_descriptor, source_name, destination_name)
+                if destination_name != bundle.name:
+                    return
+                observed_pre_receipt_window = True
+                self.assertTrue(bundle.is_dir())
+                self.assertFalse(receipt.exists())
+                with self.assertRaises(OSError):
+                    publisher.consume_published_pressure_pilot_bundle(
+                        receipt, authorized_pic_root=base.parent
+                    )
+
+            with patch.object(
+                publisher, "_rename_no_replace_at", side_effect=inspect_pre_receipt_window
+            ):
+                publisher.publish_pressure_pilot_bundle(
+                    bundle,
+                    receipt_path=receipt,
+                    analysis_result_path=result,
+                    case_artifact_dirs=roots,
+                    case_descriptor_sha256=digests,
+                    authorized_pic_root=base.parent,
+                )
+            self.assertTrue(observed_pre_receipt_window)
+            publisher.consume_published_pressure_pilot_bundle(
+                receipt, authorized_pic_root=base.parent
+            )
+
+    def test_production_publication_without_measured_archive_fails_before_exposure(
+        self,
+    ) -> None:
+        with _verified_raw_cases() as (base, roots, digests):
+            with patch.object(
+                publisher, "AUTHORIZED_PIC_ROOT", base.parent
+            ), patch.dict(os.environ, {}, clear=True), self.assertRaisesRegex(
+                publisher.PressurePilotPublicationError,
+                "production publication requires a verified worker source archive",
+            ):
+                publisher.publish_pressure_pilot_bundle(
+                    base / "bundle",
+                    receipt_path=base / "publication-receipt.json",
+                    analysis_result_path=base / "aggregate-analysis.json",
+                    case_artifact_dirs=roots,
+                    case_descriptor_sha256=digests,
+                    authorized_pic_root=base.parent,
+                )
+            self.assertFalse((base / "bundle").exists())
+            self.assertFalse((base / "publication-receipt.json").exists())
+            self.assertFalse((base / "aggregate-analysis.json").exists())
 
     def test_analyzer_and_publisher_require_registered_execution_digest(self) -> None:
         with _verified_raw_cases() as (base, roots, digests), patch.object(
@@ -505,6 +755,477 @@ class Q011Section54PressurePilotBundlePublicationTests(unittest.TestCase):
                     fixture[2],
                     authorized_publication_root=fixture[0].parent,
                 )
+
+    def test_late_aggregate_failure_withdraws_all_public_artifacts(self) -> None:
+        with _verified_raw_cases() as (base, roots, digests):
+            bundle = base / "bundle"
+            receipt = base / "publication-receipt.json"
+            result = base / "aggregate-analysis.json"
+            original = publisher._verify_pressure_pilot_bundle_at
+            calls = 0
+
+            def fail_after_all_public_renames(*args: object, **kwargs: object) -> object:
+                nonlocal calls
+                calls += 1
+                if calls == 3:
+                    raise publisher.PressurePilotPublicationError(
+                        "injected late aggregate failure"
+                    )
+                return original(*args, **kwargs)
+
+            with patch.object(
+                publisher,
+                "_verify_pressure_pilot_bundle_at",
+                side_effect=fail_after_all_public_renames,
+            ), self.assertRaisesRegex(
+                publisher.PressurePilotPublicationError,
+                "injected late aggregate failure",
+            ):
+                publisher.publish_pressure_pilot_bundle(
+                    bundle,
+                    receipt_path=receipt,
+                    analysis_result_path=result,
+                    case_artifact_dirs=roots,
+                    case_descriptor_sha256=digests,
+                    authorized_pic_root=base.parent,
+                )
+            self.assertFalse(bundle.exists())
+            self.assertFalse(receipt.exists())
+            self.assertFalse(result.exists())
+            self.assertFalse(
+                any(".rollback-" in path.name or ".staging-" in path.name for path in base.iterdir())
+            )
+
+    def test_late_publication_root_clone_is_rejected_by_retained_identity(self) -> None:
+        with _verified_raw_cases() as (base, roots, digests):
+            bundle = base / "bundle"
+            receipt = base / "publication-receipt.json"
+            result = base / "aggregate-analysis.json"
+            anchor = base.parent / (base.name + ".descriptor-anchor")
+            original = publisher._read_stable_readonly_regular_at
+            cloned = False
+
+            def clone_root(
+                parent_descriptor: int, name: str, label: str
+            ) -> bytes:
+                nonlocal cloned
+                payload = original(parent_descriptor, name, label)
+                if label == "pressure-pilot aggregate analysis result" and not cloned:
+                    cloned = True
+                    os.rename(base, anchor)
+                    shutil.copytree(anchor, base)
+                return payload
+
+            with patch.object(
+                publisher,
+                "_read_stable_readonly_regular_at",
+                side_effect=clone_root,
+            ), self.assertRaisesRegex(
+                publisher.PressurePilotPublicationError,
+                "publication root changed",
+            ):
+                publisher.publish_pressure_pilot_bundle(
+                    bundle,
+                    receipt_path=receipt,
+                    analysis_result_path=result,
+                    case_artifact_dirs=roots,
+                    case_descriptor_sha256=digests,
+                    authorized_pic_root=base.parent,
+                )
+            self.assertTrue(cloned)
+            self.assertTrue(receipt.is_file())
+            with self.assertRaisesRegex(
+                publisher.PressurePilotPublicationError,
+                "fail-closed guard",
+            ):
+                publisher.consume_published_pressure_pilot_bundle(
+                    receipt, authorized_pic_root=base.parent
+                )
+
+    def test_rollback_does_not_delete_substituted_public_bundle(self) -> None:
+        with _verified_raw_cases() as (base, roots, digests):
+            bundle = base / "bundle"
+            receipt = base / "publication-receipt.json"
+            result = base / "aggregate-analysis.json"
+            moved = base / "bundle.moved-original"
+            original = publisher._verify_pressure_pilot_bundle_at
+            calls = 0
+
+            def substitute_before_failure(
+                *args: object, **kwargs: object
+            ) -> object:
+                nonlocal calls
+                calls += 1
+                if calls == 3:
+                    os.rename(bundle, moved)
+                    shutil.copytree(moved, bundle)
+                    raise publisher.PressurePilotPublicationError(
+                        "injected post-substitution aggregate failure"
+                    )
+                return original(*args, **kwargs)
+
+            with patch.object(
+                publisher,
+                "_verify_pressure_pilot_bundle_at",
+                side_effect=substitute_before_failure,
+            ), self.assertRaisesRegex(
+                publisher.PressurePilotPublicationError,
+                "cannot withdraw invalid pressure-pilot public artifact",
+            ):
+                publisher.publish_pressure_pilot_bundle(
+                    bundle,
+                    receipt_path=receipt,
+                    analysis_result_path=result,
+                    case_artifact_dirs=roots,
+                    case_descriptor_sha256=digests,
+                    authorized_pic_root=base.parent,
+                )
+            self.assertTrue(bundle.is_dir())
+            self.assertTrue(moved.is_dir())
+            self.assertFalse(receipt.exists())
+            with self.assertRaisesRegex(
+                publisher.PressurePilotPublicationError, "fail-closed guard"
+            ):
+                publisher.consume_published_pressure_pilot_bundle(
+                    receipt, authorized_pic_root=base.parent
+                )
+            (base / publisher._publication_guard_name(receipt.name)).unlink()
+            with self.assertRaises(FileNotFoundError):
+                publisher.consume_published_pressure_pilot_bundle(
+                    receipt, authorized_pic_root=base.parent
+                )
+
+    def test_success_seal_rejects_receipt_substitution_before_publication(self) -> None:
+        with _verified_raw_cases() as (base, roots, digests):
+            receipt = base / "publication-receipt.json"
+            moved = base / "publication-receipt.json.moved-original"
+            original = publisher._publish_publication_seal_at
+
+            def substitute_before_seal(
+                acceptance_descriptor: int,
+                publication_descriptor: int,
+                receipt_name: str,
+                receipt_payload: bytes,
+                receipt_identity: tuple[int, int],
+            ) -> None:
+                os.rename(receipt, moved)
+                shutil.copy2(moved, receipt)
+                return original(
+                    acceptance_descriptor,
+                    publication_descriptor,
+                    receipt_name,
+                    receipt_payload,
+                    receipt_identity,
+                )
+
+            with patch.object(
+                publisher,
+                "_publish_publication_seal_at",
+                side_effect=substitute_before_seal,
+            ), self.assertRaisesRegex(
+                publisher.PressurePilotPublicationError,
+                "cannot withdraw invalid pressure-pilot public artifact",
+            ):
+                publisher.publish_pressure_pilot_bundle(
+                    base / "bundle",
+                    receipt_path=receipt,
+                    analysis_result_path=base / "aggregate-analysis.json",
+                    case_artifact_dirs=roots,
+                    case_descriptor_sha256=digests,
+                    authorized_pic_root=base.parent,
+                )
+            self.assertTrue(receipt.is_file())
+            self.assertFalse(
+                (
+                    base.parent
+                    / publisher.PUBLICATION_ACCEPTANCE_DIRECTORY
+                    / publisher._publication_seal_name(receipt.name)
+                ).exists()
+            )
+            (base / publisher._publication_guard_name(receipt.name)).unlink()
+            with self.assertRaisesRegex(
+                publisher.PressurePilotPublicationError, "durable success seal"
+            ):
+                publisher.consume_published_pressure_pilot_bundle(
+                    receipt, authorized_pic_root=base.parent
+                )
+
+    def test_coordinated_replacement_failure_leaves_receipt_invalidated(self) -> None:
+        with _verified_raw_cases() as (base, roots, digests):
+            bundle = base / "bundle"
+            receipt = base / "publication-receipt.json"
+            result = base / "aggregate-analysis.json"
+            original = publisher._verify_pressure_pilot_bundle_at
+            calls = 0
+
+            def replace_every_public_artifact(
+                *args: object, **kwargs: object
+            ) -> object:
+                nonlocal calls
+                calls += 1
+                if calls == 3:
+                    for path in (bundle, receipt, result):
+                        moved = base / f"{path.name}.moved-original"
+                        os.rename(path, moved)
+                        if moved.is_dir():
+                            shutil.copytree(moved, path)
+                        else:
+                            shutil.copy2(moved, path)
+                    raise publisher.PressurePilotPublicationError(
+                        "injected coordinated aggregate replacement failure"
+                    )
+                return original(*args, **kwargs)
+
+            with patch.object(
+                publisher,
+                "_verify_pressure_pilot_bundle_at",
+                side_effect=replace_every_public_artifact,
+            ), self.assertRaisesRegex(
+                publisher.PressurePilotPublicationError,
+                "cannot withdraw invalid pressure-pilot public artifact",
+            ):
+                publisher.publish_pressure_pilot_bundle(
+                    bundle,
+                    receipt_path=receipt,
+                    analysis_result_path=result,
+                    case_artifact_dirs=roots,
+                    case_descriptor_sha256=digests,
+                    authorized_pic_root=base.parent,
+                )
+            self.assertTrue(receipt.is_file())
+            self.assertTrue(
+                (base / publisher._publication_guard_name(receipt.name)).is_file()
+            )
+            with self.assertRaisesRegex(
+                publisher.PressurePilotPublicationError, "fail-closed guard"
+            ):
+                publisher.consume_published_pressure_pilot_bundle(
+                    receipt, authorized_pic_root=base.parent
+                )
+
+    def test_success_seal_rename_commit_is_reconciled_after_wrapper_raise(self) -> None:
+        with _verified_raw_cases() as (base, roots, digests):
+            receipt = base / "publication-receipt.json"
+            original = publisher._rename_no_replace_at
+            observed_committed_seal = False
+
+            def raise_after_seal_commit(
+                parent_descriptor: int, source_name: str, destination_name: str
+            ) -> None:
+                nonlocal observed_committed_seal
+                original(parent_descriptor, source_name, destination_name)
+                if (
+                    destination_name
+                    != publisher._publication_seal_name(receipt.name)
+                    or observed_committed_seal
+                ):
+                    return
+                observed_committed_seal = True
+                publisher.consume_published_pressure_pilot_bundle(
+                    receipt, authorized_pic_root=base.parent
+                )
+                raise publisher.PressurePilotPublicationError(
+                    "injected post-commit seal-wrapper failure"
+                )
+
+            with patch.object(
+                publisher, "_rename_no_replace_at", side_effect=raise_after_seal_commit
+            ):
+                published = publisher.publish_pressure_pilot_bundle(
+                    base / "bundle",
+                    receipt_path=receipt,
+                    analysis_result_path=base / "aggregate-analysis.json",
+                    case_artifact_dirs=roots,
+                    case_descriptor_sha256=digests,
+                    authorized_pic_root=base.parent,
+                )
+            self.assertTrue(observed_committed_seal)
+            self.assertEqual(published["receipt_path"], str(receipt))
+            publisher.consume_published_pressure_pilot_bundle(
+                receipt, authorized_pic_root=base.parent
+            )
+
+    def test_success_seal_helper_commit_is_reconciled_after_wrapper_raise(self) -> None:
+        with _verified_raw_cases() as (base, roots, digests):
+            receipt = base / "publication-receipt.json"
+            original = publisher._publish_publication_seal_at
+            observed_committed_seal = False
+
+            def raise_after_seal_helper_commit(
+                acceptance_descriptor: int,
+                publication_descriptor: int,
+                receipt_name: str,
+                receipt_payload: bytes,
+                receipt_identity: tuple[int, int],
+            ) -> None:
+                nonlocal observed_committed_seal
+                original(
+                    acceptance_descriptor,
+                    publication_descriptor,
+                    receipt_name,
+                    receipt_payload,
+                    receipt_identity,
+                )
+                observed_committed_seal = True
+                publisher.consume_published_pressure_pilot_bundle(
+                    receipt, authorized_pic_root=base.parent
+                )
+                raise publisher.PressurePilotPublicationError(
+                    "injected post-commit seal-helper failure"
+                )
+
+            with patch.object(
+                publisher,
+                "_publish_publication_seal_at",
+                side_effect=raise_after_seal_helper_commit,
+            ):
+                published = publisher.publish_pressure_pilot_bundle(
+                    base / "bundle",
+                    receipt_path=receipt,
+                    analysis_result_path=base / "aggregate-analysis.json",
+                    case_artifact_dirs=roots,
+                    case_descriptor_sha256=digests,
+                    authorized_pic_root=base.parent,
+                )
+            self.assertTrue(observed_committed_seal)
+            self.assertEqual(published["receipt_path"], str(receipt))
+            publisher.consume_published_pressure_pilot_bundle(
+                receipt, authorized_pic_root=base.parent
+            )
+
+    def test_post_disarm_receipt_substitution_fails_closed(self) -> None:
+        with _verified_raw_cases() as (base, roots, digests):
+            receipt = base / "publication-receipt.json"
+            moved = base / "publication-receipt.json.moved-original"
+            original = publisher._disarm_publication_guard_at
+
+            def substitute_after_disarm(parent_descriptor: int, receipt_name: str) -> None:
+                original(parent_descriptor, receipt_name)
+                os.rename(receipt, moved)
+                shutil.copy2(moved, receipt)
+
+            with patch.object(
+                publisher,
+                "_disarm_publication_guard_at",
+                side_effect=substitute_after_disarm,
+            ), self.assertRaisesRegex(
+                publisher.PressurePilotPublicationError,
+                "cannot withdraw invalid pressure-pilot public artifact",
+            ):
+                publisher.publish_pressure_pilot_bundle(
+                    base / "bundle",
+                    receipt_path=receipt,
+                    analysis_result_path=base / "aggregate-analysis.json",
+                    case_artifact_dirs=roots,
+                    case_descriptor_sha256=digests,
+                    authorized_pic_root=base.parent,
+                )
+            self.assertTrue(receipt.is_file())
+            (base / publisher._publication_guard_name(receipt.name)).unlink()
+            with self.assertRaisesRegex(
+                publisher.PressurePilotPublicationError, "durable success seal"
+            ):
+                publisher.consume_published_pressure_pilot_bundle(
+                    receipt, authorized_pic_root=base.parent
+                )
+
+    def test_retained_receipt_schema_version_rejects_json_boolean_alias(self) -> None:
+        with _verified_raw_cases() as (base, roots, digests):
+            receipt = base / "publication-receipt.json"
+            publisher.publish_pressure_pilot_bundle(
+                base / "bundle",
+                receipt_path=receipt,
+                analysis_result_path=base / "aggregate-analysis.json",
+                case_artifact_dirs=roots,
+                case_descriptor_sha256=digests,
+                authorized_pic_root=base.parent,
+            )
+            receipt.chmod(0o600)
+            record = json.loads(receipt.read_text(encoding="utf-8"))
+            record["schema_version"] = True
+            receipt.write_bytes(publisher._canonical_json_bytes(record))
+            receipt.chmod(0o444)
+            _rewrite_publication_seal(base, receipt)
+            with self.assertRaisesRegex(
+                publisher.PressurePilotPublicationError,
+                "receipt identity drifted",
+            ):
+                publisher.verify_published_pressure_pilot_receipt(
+                    receipt, authorized_pic_root=base.parent
+                )
+
+    def test_retained_receipt_requires_durable_success_seal(self) -> None:
+        with _verified_raw_cases() as (base, roots, digests):
+            receipt = base / "publication-receipt.json"
+            publisher.publish_pressure_pilot_bundle(
+                base / "bundle",
+                receipt_path=receipt,
+                analysis_result_path=base / "aggregate-analysis.json",
+                case_artifact_dirs=roots,
+                case_descriptor_sha256=digests,
+                authorized_pic_root=base.parent,
+            )
+            (
+                base.parent
+                / publisher.PUBLICATION_ACCEPTANCE_DIRECTORY
+                / publisher._publication_seal_name(receipt.name)
+            ).unlink()
+            _write_forged_publication_namespace_seal(base, receipt)
+            with self.assertRaisesRegex(
+                publisher.PressurePilotPublicationError, "durable success seal"
+            ):
+                publisher.verify_published_pressure_pilot_receipt(
+                    receipt, authorized_pic_root=base.parent
+                )
+
+    def test_staging_substitution_is_not_followed_or_deleted(self) -> None:
+        with _verified_raw_cases() as (base, roots, digests):
+            bundle = base / "bundle"
+            receipt = base / "publication-receipt.json"
+            result = base / "aggregate-analysis.json"
+            original = publisher._require_same_directory_at
+            observed_staging_names = []
+
+            def substitute_staging(
+                parent_descriptor: int, name: str, descriptor: int, label: str
+            ) -> None:
+                if label == "pressure-pilot staging tree":
+                    observed_staging_names.append(name)
+                    if len(observed_staging_names) == 2:
+                        os.rename(
+                            name,
+                            name + ".descriptor-anchor",
+                            src_dir_fd=parent_descriptor,
+                            dst_dir_fd=parent_descriptor,
+                        )
+                        os.mkdir(name, dir_fd=parent_descriptor)
+                original(parent_descriptor, name, descriptor, label)
+
+            with patch.object(
+                publisher,
+                "_require_same_directory_at",
+                side_effect=substitute_staging,
+            ), self.assertRaisesRegex(
+                publisher.PressurePilotPublicationError,
+                "staging tree changed",
+            ):
+                publisher.publish_pressure_pilot_bundle(
+                    bundle,
+                    receipt_path=receipt,
+                    analysis_result_path=result,
+                    case_artifact_dirs=roots,
+                    case_descriptor_sha256=digests,
+                    authorized_pic_root=base.parent,
+                )
+            self.assertFalse(bundle.exists())
+            self.assertFalse(receipt.exists())
+            self.assertFalse(result.exists())
+            self.assertGreaterEqual(len(observed_staging_names), 2)
+            substituted = base / observed_staging_names[0]
+            anchored = base / (observed_staging_names[0] + ".descriptor-anchor")
+            self.assertTrue(substituted.is_dir())
+            self.assertTrue(anchored.is_dir())
+            _make_writable(anchored)
 
     def test_descriptor_relative_rename_fails_closed_without_atomic_no_replace(
         self,

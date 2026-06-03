@@ -220,6 +220,10 @@ qualify any scientific claim by itself.
 - `q006_paper_multispecies_oscillation_runtime_local_successor_v2_2026-05-31.json`:
   chronology-preserving byte refresh after shared problem-generator fatal-path
   hardening.
+- `q006_paper_multispecies_oscillation_runtime_local_successor_v5_2026-06-02.json`:
+  chronology-preserving source-binding refresh after immutable Orion-tree
+  helper hardening. The retained bounded mechanics artifacts and all
+  nonqualification limits remain unchanged.
 - `q015_entity_differential_2026-05-30.json`: frozen-source Entity
   exact-overlap differential evidence and explicit non-overlap boundaries.
 - `q022_independent_comparison_preregistration_2026-05-30.json` and
@@ -502,6 +506,10 @@ qualify any scientific claim by itself.
 - `q007_paper_deltaf_linear_source_local_preparation_successor_v2_2026-05-31.json`:
   chronology-preserving byte refresh after shared problem-generator fatal-path
   and particle-VTK timestamp precision hardening.
+- `q007_paper_deltaf_linear_source_local_preparation_successor_v5_2026-06-02.json`:
+  chronology-preserving source-binding refresh after immutable Orion-tree
+  helper hardening. The retained bounded preparation replay and all
+  nonqualification limits remain unchanged.
 - `q009_amr_lifetime_policy_successor_2026-05-30.json`: bounded local AMR
   retained-state inventory and `paper_smooth` interface-policy decision with
   the coupled-boundary, MPI and HIP lifetime matrix intentionally open.
@@ -634,6 +642,10 @@ qualify any scientific claim by itself.
   retained immutable particle-payload compatibility replay rebound to the
   packed particle-transfer repair. It does not claim fresh repaired-executable
   runtime evidence or Frontier qualification.
+- `q011_injection_distribution_runtime_local_successor_v9_2026-06-02.json`:
+  chronology-preserving source-binding refresh after immutable Orion-tree
+  helper hardening. It retains the predecessor payload replay only and does not
+  claim fresh repaired-executable runtime evidence or Frontier qualification.
 - `q011_section54_pressure_pilot_preregistration_2026-06-01.json`: source-local
   preregistration for the four engineering-only upstream-pressure sensitivity
   cases. It freezes the uniform short-run matrix before runtime inspection but
@@ -658,6 +670,34 @@ qualify any scientific claim by itself.
   is preserved as immutable chronology. The successor authorizes exactly one
   rebuilt-clean v2 attempt for each of the four pressure cases and requires
   the same serial reconciliation boundary between cases.
+- `q011_section54_pressure_pilot_postrun_aggregate_source_authorization_successor_2026-06-02.json`:
+  post-run-only pressure aggregate and review-packet publication source
+  authorization. It does not reauthorize the consumed historical v2 pressure
+  slices. It binds the worker-extracted read-only `git archive HEAD` execution
+  contract and the exact aggregate and packet source closure.
+- `q011_section54_fourth_adversarial_repair_transition_2026-06-02.json`,
+  `q011_section54_fifth_adversarial_repair_transition_2026-06-03.json`,
+  `q011_section54_sixth_adversarial_repair_transition_2026-06-03.json`,
+  `q011_section54_seventh_adversarial_repair_transition_2026-06-03.json`,
+  `q011_section54_eighth_adversarial_repair_transition_2026-06-03.json` and
+  `q011_section54_ninth_adversarial_repair_transition_2026-06-03.json`:
+  source-local, non-authorizing Q011 repair checkpoints. The fifth record
+  preserves the fourth checkpoint and adds the receipt-specific fail-closed
+  publication guard, direct-checkout rejection, staged control-plane digest
+  and refreshed prepared-artifact binding. The sixth record preserves the
+  fifth checkpoint and adds retained campaign-ledger lifetime pinning,
+  transient receipt hide-and-restore rejection, full qualifying-planner
+  retained-graph reconstruction and clean-candidate cross-binding. The seventh
+  record adds sibling acceptance-root terminal seals with caller-level
+  post-commit reconciliation and an absent-guard success check. The eighth
+  record adds authenticated mirrored storage-preflight evidence, a one-use
+  promotion-only migration for the historical live policy, candidate-root
+  ancestry watches and installed post-freeze clean-candidate revalidation. The
+  ninth record binds the one-use migration to the exact mirrored live policy
+  and promotion digests and closes every avoidable retained-reader watcher
+  teardown interval plus a missing-root setup fd leak. A clean commit, final
+  current-tree worker validation, paired install, strict live-policy migration,
+  fresh build and candidate freeze remain required.
 - `q011_parallel_shock_storage_estimator_successor_2026-06-01.json`:
   analytical storage-planning successor after the publication deck gained a
   signed particle-current binary output and the PVTK block moved. The estimator

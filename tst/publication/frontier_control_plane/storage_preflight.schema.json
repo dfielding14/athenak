@@ -1,0 +1,208 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/frontier-pic-storage-preflight.schema.json",
+  "title": "Frontier PIC storage preflight evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "record_type",
+    "probe_id",
+    "started_utc",
+    "completed_utc",
+    "method",
+    "source_authentication",
+    "publication",
+    "probes",
+    "status"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "record_type": {
+      "const": "frontier_pic_storage_preflight_evidence"
+    },
+    "probe_id": {
+      "$ref": "#/$defs/uuid"
+    },
+    "started_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "completed_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "method": {
+      "const": "local_create_write_sync_remove_probe"
+    },
+    "source_authentication": {
+      "$ref": "#/$defs/sourceAuthentication"
+    },
+    "publication": {
+      "$ref": "#/$defs/publication"
+    },
+    "probes": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "prefixItems": [
+        {
+          "$ref": "#/$defs/orionProbe"
+        },
+        {
+          "$ref": "#/$defs/projectHomeProbe"
+        }
+      ],
+      "items": false
+    },
+    "status": {
+      "const": "passed"
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "gitCommit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "sourceAuthentication": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "git_commit",
+        "runner_sha256",
+        "entrypoint_sha256",
+        "schema_sha256",
+        "tracked_clean_head_blobs"
+      ],
+      "properties": {
+        "git_commit": {
+          "$ref": "#/$defs/gitCommit"
+        },
+        "runner_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "entrypoint_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "schema_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "tracked_clean_head_blobs": {
+          "const": true
+        }
+      }
+    },
+    "publication": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "orion_path",
+        "project_home_path"
+      ],
+      "properties": {
+        "orion_path": {
+          "type": "string",
+          "pattern": "^/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/storage_preflight_evidence/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.json$"
+        },
+        "project_home_path": {
+          "type": "string",
+          "pattern": "^/ccs/proj/ast207/proj-shared/PIC/policy/storage_preflight_evidence/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.json$"
+        }
+      }
+    },
+    "probe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "role",
+        "path",
+        "st_dev",
+        "st_ino",
+        "payload_bytes",
+        "payload_sha256",
+        "operations",
+        "status"
+      ],
+      "properties": {
+        "role": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "st_dev": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "st_ino": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "payload_bytes": {
+          "const": 32
+        },
+        "payload_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "operations": {
+          "const": [
+            "create_exclusive",
+            "write_all",
+            "fsync_file",
+            "read_back_exact",
+            "unlink",
+            "fsync_parent",
+            "verify_absent"
+          ]
+        },
+        "status": {
+          "const": "passed"
+        }
+      }
+    },
+    "orionProbe": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/probe"
+        },
+        {
+          "properties": {
+            "role": {
+              "const": "orion_simulation_root"
+            },
+            "path": {
+              "const": "/lustre/orion/ast207/proj-shared/dfielding/PIC"
+            }
+          }
+        }
+      ]
+    },
+    "projectHomeProbe": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/probe"
+        },
+        {
+          "properties": {
+            "role": {
+              "const": "project_home_mirror_root"
+            },
+            "path": {
+              "const": "/ccs/proj/ast207/proj-shared/PIC"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

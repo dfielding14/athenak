@@ -9,6 +9,7 @@ if __name__ == "__main__" and "/control_plane/" in __file__ and not getattr(
 ):
     raise SystemExit("Run installed control-plane tools through run_control_plane.py")
 
+import ctypes
 from datetime import datetime, timezone
 import hashlib
 import io
@@ -77,11 +78,123 @@ AUTHORIZED_LEDGER_GENESIS_AUTHORIZATION = (
     "user_removed_kronos_dependency_and_selected_orion_only_bulk_evidence_root"
 )
 AUTHORIZED_STORAGE_PREFLIGHT_METHOD = "local_create_write_sync_remove_probe"
+AUTHORIZED_STORAGE_PREFLIGHT_OPERATIONS = [
+    "create_exclusive",
+    "write_all",
+    "fsync_file",
+    "read_back_exact",
+    "unlink",
+    "fsync_parent",
+    "verify_absent",
+]
+# The capture helper authenticates a clean tracked HEAD before and after probing.
+# Pin its reviewed blob closure here; the commit records chronology for review.
+AUTHORIZED_STORAGE_PREFLIGHT_CAPTURE_SOURCE_BLOBS = {
+    "entrypoint_sha256": (
+        "2ee13003a138917a9f274a51bdae78d02a2ac5fe39e098c3feeb0bb9e32ae020"
+    ),
+    "runner_sha256": (
+        "74ab26fdf66129e018ce5a63a3827853e878b1efff71449490b0b017f48fd956"
+    ),
+    "schema_sha256": (
+        "1147e88f5949efdd6a9374e019c1b8121fdf0f72fa9aa53f228eb3d3e7ea00fd"
+    ),
+}
+AUTHORIZED_HISTORICAL_STORAGE_PREFLIGHT_RETIREMENT_POLICY_SHA256 = (
+    "647573e109852da0e343cd1c80033dbbe4ad4d2d672588cdea4e852340bad3d8"
+)
+AUTHORIZED_HISTORICAL_STORAGE_PREFLIGHT_RETIREMENT_PROMOTION_SHA256 = (
+    "073da1d4fe7f2eb054da9f3ec2bf2860f2643c3f44ca88d6183f4592eb0681bf"
+)
 PREPARED_ARTIFACT_INVENTORY_PATH = (
     "tst/publication/frontier_control_plane/prepared_pic_artifact_inventory.json"
 )
 PREPARED_ARTIFACT_REQUIRED_PUBLICATION_DECK_PATHS = (
     "inputs/publication/pic_parallel_shock_section54_paper_vl2_tsc.athinput",
+)
+Q011_PLANNER_RETENTION_ROLE = "q011_section54_deterministic_retained_attempt"
+Q011_SECTION54_PHYSICAL_MODE = "paper_mhd_pic_vl2_tsc"
+Q011_SECTION54_VARIANTS = (
+    (
+        "coarse_uniform_dx12",
+        (
+            "mesh_refinement/refinement=none",
+            "mesh_refinement/num_levels=1",
+            "problem/ps_enable_curvature_amr=false",
+        ),
+    ),
+    ("three_level_amr_root_dx12_finest_dx3", ()),
+    (
+        "fine_uniform_dx3",
+        (
+            "mesh/nx1=16000",
+            "mesh/nx2=1040",
+            "mesh_refinement/refinement=none",
+            "mesh_refinement/num_levels=1",
+            "problem/ps_enable_curvature_amr=false",
+        ),
+    ),
+)
+Q011_SECTION54_SEEDS = (
+    23050101,
+    23050102,
+    23050103,
+    23050104,
+    23050105,
+    23050106,
+    23050107,
+    23050108,
+)
+Q011_SECTION54_SOURCE_BINDING_PATHS = {
+    "pressure_selection_receipt": "bindings/human_pressure_selection_receipt.json",
+    "clean_candidate_manifest": "bindings/clean_candidate_manifest.json",
+    "environment_profile": "bindings/environment_profile.sh",
+    "qualifying_preregistration": (
+        "bindings/q011_section54_qualifying_campaign_preregistration.json"
+    ),
+    "restart_preregistration": (
+        "bindings/q011_section54_restart_continuation_preregistration.json"
+    ),
+    "paper_deck": "bindings/pic_parallel_shock_section54_paper_vl2_tsc.athinput",
+}
+Q011_SECTION54_ARCHIVE_SOURCE_PATHS = {
+    "environment_profile": (
+        "tst/publication/frontier_control_plane/frontier_pic_environment.sh"
+    ),
+    "qualifying_preregistration": (
+        "tst/publication/readiness/"
+        "q011_section54_qualifying_campaign_preregistration_successor_v2_2026-06-01.json"
+    ),
+    "restart_preregistration": (
+        "tst/publication/readiness/"
+        "q011_section54_restart_continuation_preregistration_2026-06-01.json"
+    ),
+    "paper_deck": "inputs/publication/pic_parallel_shock_section54_paper_vl2_tsc.athinput",
+}
+Q011_SECTION54_HELPER_SOURCES = (
+    "tst/publication/q011_section54_model.py",
+    "tst/publication/q011_section54_pressure_pilot_execution.py",
+    "tst/publication/q011_section54_pressure_selection.py",
+    "tst/publication/q011_section54_restart.py",
+    "tst/publication/analyze_q011_section54_outputs.py",
+    "tst/publication/analyze_q011_section54_campaign.py",
+    "tst/publication/analyze_q011_section54_numerical_qualification.py",
+    "tst/publication/q011_section54_particles.py",
+    "tst/publication/q011_section54_spatial.py",
+    "tst/publication/q011_section54_artifacts.py",
+    "tst/publication/publish_q011_section54_pressure_pilot_bundle.py",
+    "tst/publication/analyze_q011_section54_pressure_pilot.py",
+    "tst/publication/analyze_q011_section54_pressure_pilot_case.py",
+    "tst/publication/frontier_f1_structured_artifacts.py",
+    "tst/publication/q011_section54_attempt_manifest_materializer.py",
+    "tst/publication/publish_q011_section54_campaign_attempt.py",
+    "tst/publication/immutable_orion_tree.py",
+    "tst/publication/pvtk_particles.py",
+    "tst/publication/q011_parallel_shock_storage_estimator.py",
+    "tst/publication/frontier_control_plane/control_plane_common.py",
+    "tst/publication/frontier_control_plane/ledger.py",
+    "tst/publication/frontier_control_plane/operator_attestation.py",
+    "tst/publication/q011_section54_qualifying_campaign_execution.py",
 )
 
 
@@ -352,8 +465,10 @@ CONTROL_PLANE_FILES = [
     "promote_active_policy.py",
     "reconcile_frontier_job.py",
     "reconcile_manual_frontier_allocations.py",
+    "revalidate_clean_candidate.py",
     "run_installed_control_plane_job.sh",
     "run_control_plane.py",
+    "storage_preflight.schema.json",
     "submit_frontier_job.sh",
     "terminal_recovery_handoff.py",
     "validate_and_reserve_frontier_job.py",
@@ -556,13 +671,31 @@ def read_stable_regular_file(path: Path, *, require_read_only_mode: bool = False
     flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
     descriptor = os.open(path, flags)
     try:
-        metadata = os.fstat(descriptor)
-        if not stat.S_ISREG(metadata.st_mode):
+        before = os.fstat(descriptor)
+        if not stat.S_ISREG(before.st_mode):
             raise ValueError(f"Artifact is not a regular file: {path}")
-        if require_read_only_mode and metadata.st_mode & 0o222:
+        if require_read_only_mode and before.st_mode & 0o222:
             raise ValueError(f"Artifact is not read-only: {path}")
         with os.fdopen(descriptor, "rb", closefd=False) as stream:
-            return stream.read()
+            data = stream.read()
+        after = os.fstat(descriptor)
+        stable_fields = (
+            "st_dev",
+            "st_ino",
+            "st_mode",
+            "st_size",
+            "st_mtime_ns",
+            "st_ctime_ns",
+        )
+        if (
+            any(
+                getattr(before, field) != getattr(after, field)
+                for field in stable_fields
+            )
+            or len(data) != after.st_size
+        ):
+            raise ValueError(f"Artifact changed while reading: {path}")
+        return data
     finally:
         os.close(descriptor)
 
@@ -598,13 +731,31 @@ def read_stable_regular_file_below(
                 os.close(directory_descriptor)
             directory_descriptor = next_descriptor
         descriptor = os.open(relative.parts[-1], file_flags, dir_fd=directory_descriptor)
-        metadata = os.fstat(descriptor)
-        if not stat.S_ISREG(metadata.st_mode):
+        before = os.fstat(descriptor)
+        if not stat.S_ISREG(before.st_mode):
             raise ValueError(f"Artifact is not a regular file: {path}")
-        if require_read_only_mode and metadata.st_mode & 0o222:
+        if require_read_only_mode and before.st_mode & 0o222:
             raise ValueError(f"Artifact is not read-only: {path}")
         with os.fdopen(descriptor, "rb", closefd=False) as stream:
-            return stream.read()
+            data = stream.read()
+        after = os.fstat(descriptor)
+        stable_fields = (
+            "st_dev",
+            "st_ino",
+            "st_mode",
+            "st_size",
+            "st_mtime_ns",
+            "st_ctime_ns",
+        )
+        if (
+            any(
+                getattr(before, field) != getattr(after, field)
+                for field in stable_fields
+            )
+            or len(data) != after.st_size
+        ):
+            raise ValueError(f"Artifact changed while reading: {path}")
+        return data
     finally:
         if descriptor is not None:
             os.close(descriptor)
@@ -1542,6 +1693,12 @@ class PinnedDirectoryAncestry:
             raise ValueError("Pinned directory ancestry is closed")
         return self._descriptors[-1][1]
 
+    @property
+    def descriptors(self) -> tuple[int, ...]:
+        if not self._descriptors:
+            raise ValueError("Pinned directory ancestry is closed")
+        return tuple(descriptor for _, descriptor in self._descriptors)
+
     def __enter__(self) -> "PinnedDirectoryAncestry":
         return self
 
@@ -2010,6 +2167,1905 @@ def require_canonical_path_below(path: Path, root: Path) -> Path:
     if resolved != expected:
         raise ValueError(f"Path must use its trusted-root spelling: {lexical}; expected {expected}")
     return lexical
+
+
+def _clean_candidate_fixed_layout_name(name: str, *, label: str) -> None:
+    if (
+        not name
+        or name in {".", ".."}
+        or "/" in name
+        or Path(name).name != name
+    ):
+        raise ValueError(f"{label} has an invalid fixed-layout name")
+
+
+def _clean_candidate_stable_metadata(metadata: os.stat_result) -> tuple[int, ...]:
+    return (
+        metadata.st_dev,
+        metadata.st_ino,
+        metadata.st_mode,
+        metadata.st_nlink,
+        metadata.st_size,
+        metadata.st_mtime_ns,
+        metadata.st_ctime_ns,
+    )
+
+
+def _require_clean_candidate_regular_metadata(
+    metadata: os.stat_result, *, label: str
+) -> None:
+    if not stat.S_ISREG(metadata.st_mode):
+        raise ValueError(f"{label} is not a regular file")
+    if metadata.st_nlink != 1:
+        raise ValueError(f"{label} does not have exactly one hard link")
+    if metadata.st_mode & 0o222:
+        raise ValueError(f"{label} is not read-only")
+
+
+def _read_clean_candidate_regular_descriptor(
+    descriptor: int, *, label: str
+) -> tuple[bytes, tuple[int, ...]]:
+    before = os.fstat(descriptor)
+    _require_clean_candidate_regular_metadata(before, label=label)
+    payload = bytearray()
+    while chunk := os.read(descriptor, 1024 * 1024):
+        payload.extend(chunk)
+    after = os.fstat(descriptor)
+    if (
+        _clean_candidate_stable_metadata(before)
+        != _clean_candidate_stable_metadata(after)
+        or len(payload) != after.st_size
+    ):
+        raise ValueError(f"{label} changed while reading")
+    return bytes(payload), _clean_candidate_stable_metadata(after)
+
+
+def _read_clean_candidate_regular_file_at(
+    directory_descriptor: int, name: str, *, label: str
+) -> bytes:
+    """Read one fixed-layout candidate member through a retained parent descriptor."""
+    _clean_candidate_fixed_layout_name(name, label=label)
+    descriptor = os.open(
+        name,
+        os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
+        dir_fd=directory_descriptor,
+    )
+    try:
+        payload, _ = _read_clean_candidate_regular_descriptor(
+            descriptor, label=label
+        )
+        return payload
+    finally:
+        os.close(descriptor)
+
+
+class _RetainedCleanCandidateClosure:
+    """Retain and recheck every descriptor opened for one candidate closure."""
+
+    def __init__(
+        self, *, read_regular_file_at: Callable[..., bytes] | None = None
+    ) -> None:
+        self._read_regular_file_at = read_regular_file_at
+        self._directories: list[
+            tuple[int, str, int, tuple[int, ...], str]
+        ] = []
+        self._files: list[tuple[int, str, int, tuple[int, ...], str]] = []
+        self._entries: dict[int, tuple[set[str], str]] = {}
+        self._watch_descriptor = self._open_watch_descriptor()
+
+    def _open_watch_descriptor(self) -> int:
+        libc = ctypes.CDLL(None, use_errno=True)
+        try:
+            inotify_init1 = libc.inotify_init1
+        except AttributeError as error:
+            raise OSError("Clean-candidate retained closure requires Linux inotify") from error
+        inotify_init1.argtypes = [ctypes.c_int]
+        inotify_init1.restype = ctypes.c_int
+        descriptor = inotify_init1(os.O_NONBLOCK | os.O_CLOEXEC)
+        if descriptor < 0:
+            number = ctypes.get_errno()
+            raise OSError(number, os.strerror(number))
+        return descriptor
+
+    def _watch(self, descriptor: int) -> None:
+        libc = ctypes.CDLL(None, use_errno=True)
+        inotify_add_watch = libc.inotify_add_watch
+        inotify_add_watch.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_uint32]
+        inotify_add_watch.restype = ctypes.c_int
+        mask = (
+            0x00000002  # IN_MODIFY
+            | 0x00000004  # IN_ATTRIB
+            | 0x00000008  # IN_CLOSE_WRITE
+            | 0x00000040  # IN_MOVED_FROM
+            | 0x00000080  # IN_MOVED_TO
+            | 0x00000100  # IN_CREATE
+            | 0x00000200  # IN_DELETE
+            | 0x00000400  # IN_DELETE_SELF
+            | 0x00000800  # IN_MOVE_SELF
+            | 0x00002000  # IN_UNMOUNT
+        )
+        path = os.fsencode(f"/proc/{os.getpid()}/fd/{descriptor}")
+        if inotify_add_watch(self._watch_descriptor, path, mask) < 0:
+            number = ctypes.get_errno()
+            raise OSError(number, os.strerror(number), os.fsdecode(path))
+
+    def _require_no_watch_events(self) -> None:
+        try:
+            payload = os.read(self._watch_descriptor, 1024 * 1024)
+        except BlockingIOError:
+            return
+        if payload:
+            raise ValueError("Clean-candidate tree changed during retained closure")
+
+    def watch_ancestry(self, descriptors: Iterable[int]) -> None:
+        """Watch retained root ancestry so rename-away/restore cannot evade identity checks."""
+        self._require_no_watch_events()
+        for descriptor in descriptors:
+            self._watch(descriptor)
+        self._require_no_watch_events()
+
+    def open_directory_at(
+        self, directory_descriptor: int, name: str, *, label: str
+    ) -> int:
+        self._require_no_watch_events()
+        _clean_candidate_fixed_layout_name(name, label=label)
+        descriptor = os.open(
+            name,
+            os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0),
+            dir_fd=directory_descriptor,
+        )
+        metadata = os.fstat(descriptor)
+        if not stat.S_ISDIR(metadata.st_mode) or metadata.st_mode & 0o222:
+            os.close(descriptor)
+            raise ValueError(f"{label} is not a read-only directory")
+        try:
+            self._watch(descriptor)
+        except BaseException:
+            os.close(descriptor)
+            raise
+        self._directories.append(
+            (
+                directory_descriptor,
+                name,
+                descriptor,
+                _clean_candidate_stable_metadata(metadata),
+                label,
+            )
+        )
+        return descriptor
+
+    def require_exact_entries(
+        self, directory_descriptor: int, expected: set[str], *, label: str
+    ) -> None:
+        self._require_no_watch_events()
+        prior = self._entries.get(directory_descriptor)
+        if prior is not None and prior != (expected, label):
+            raise ValueError(f"{label} fixed layout changed during capture")
+        self._entries[directory_descriptor] = (set(expected), label)
+        self._require_exact_entries_now(directory_descriptor, expected, label=label)
+        self._require_no_watch_events()
+
+    def _require_exact_entries_now(
+        self, directory_descriptor: int, expected: set[str], *, label: str
+    ) -> None:
+        if set(os.listdir(directory_descriptor)) != expected:
+            raise ValueError(f"{label} entries do not match the fixed layout")
+
+    def read_regular_file_at(
+        self, directory_descriptor: int, name: str, *, label: str
+    ) -> bytes:
+        self._require_no_watch_events()
+        _clean_candidate_fixed_layout_name(name, label=label)
+        descriptor = os.open(
+            name,
+            os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
+            dir_fd=directory_descriptor,
+        )
+        try:
+            _require_clean_candidate_regular_metadata(
+                os.fstat(descriptor), label=label
+            )
+            self._watch(descriptor)
+            injected_payload: bytes | None = None
+            if (
+                self._read_regular_file_at is not None
+                and self._read_regular_file_at
+                is not _read_clean_candidate_regular_file_at
+            ):
+                injected_payload = self._read_regular_file_at(
+                    directory_descriptor, name, label=label
+                )
+                if not isinstance(injected_payload, bytes):
+                    raise ValueError(f"{label} injected reader returned malformed bytes")
+            payload, metadata = _read_clean_candidate_regular_descriptor(
+                descriptor, label=label
+            )
+            if injected_payload is not None and injected_payload != payload:
+                raise ValueError(f"{label} changed while reading")
+            self._require_no_watch_events()
+            self._files.append(
+                (directory_descriptor, name, descriptor, metadata, label)
+            )
+            descriptor = -1
+            return payload
+        finally:
+            if descriptor >= 0:
+                os.close(descriptor)
+
+    def _require_directory_same(
+        self,
+        parent_descriptor: int,
+        name: str,
+        descriptor: int,
+        expected: tuple[int, ...],
+        *,
+        label: str,
+    ) -> None:
+        retained = os.fstat(descriptor)
+        if (
+            not stat.S_ISDIR(retained.st_mode)
+            or retained.st_mode & 0o222
+            or _clean_candidate_stable_metadata(retained) != expected
+        ):
+            raise ValueError(f"{label} changed during retained closure")
+        lexical_descriptor = os.open(
+            name,
+            os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0),
+            dir_fd=parent_descriptor,
+        )
+        try:
+            if _clean_candidate_stable_metadata(
+                os.fstat(lexical_descriptor)
+            ) != expected:
+                raise ValueError(f"{label} changed during retained closure")
+        finally:
+            os.close(lexical_descriptor)
+
+    def _require_file_same(
+        self,
+        parent_descriptor: int,
+        name: str,
+        descriptor: int,
+        expected: tuple[int, ...],
+        *,
+        label: str,
+    ) -> None:
+        retained = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(retained.st_mode)
+            or retained.st_nlink != 1
+            or retained.st_mode & 0o222
+            or _clean_candidate_stable_metadata(retained) != expected
+        ):
+            raise ValueError(f"{label} changed during retained closure")
+        lexical_descriptor = os.open(
+            name,
+            os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
+            dir_fd=parent_descriptor,
+        )
+        try:
+            lexical = os.fstat(lexical_descriptor)
+            if (
+                not stat.S_ISREG(lexical.st_mode)
+                or lexical.st_nlink != 1
+                or lexical.st_mode & 0o222
+                or _clean_candidate_stable_metadata(lexical) != expected
+            ):
+                raise ValueError(f"{label} changed during retained closure")
+        finally:
+            os.close(lexical_descriptor)
+
+    def require_same(self) -> None:
+        self._require_no_watch_events()
+        for parent, name, descriptor, metadata, label in self._directories:
+            self._require_directory_same(
+                parent, name, descriptor, metadata, label=label
+            )
+        for descriptor, (expected, label) in self._entries.items():
+            self._require_exact_entries_now(descriptor, expected, label=label)
+        for parent, name, descriptor, metadata, label in self._files:
+            self._require_file_same(
+                parent, name, descriptor, metadata, label=label
+            )
+        for parent, name, descriptor, metadata, label in self._directories:
+            self._require_directory_same(
+                parent, name, descriptor, metadata, label=label
+            )
+        for descriptor, (expected, label) in self._entries.items():
+            self._require_exact_entries_now(descriptor, expected, label=label)
+        self._require_no_watch_events()
+
+    def close(self, *, close_ancestry: Callable[[], None] | None = None) -> None:
+        error: BaseException | None = None
+        for _, _, descriptor, _, _ in reversed(self._files):
+            try:
+                os.close(descriptor)
+            except BaseException as caught:
+                error = error or caught
+        self._files.clear()
+        for _, _, descriptor, _, _ in reversed(self._directories):
+            try:
+                os.close(descriptor)
+            except BaseException as caught:
+                error = error or caught
+        self._directories.clear()
+        self._entries.clear()
+        if close_ancestry is not None:
+            try:
+                close_ancestry()
+            except BaseException as caught:
+                error = error or caught
+        try:
+            self._require_no_watch_events()
+        except BaseException as caught:
+            error = error or caught
+        try:
+            os.close(self._watch_descriptor)
+        except BaseException as caught:
+            error = error or caught
+        if error is not None:
+            raise error
+
+
+def _clean_candidate_mapping(
+    record: dict[str, object], key: str
+) -> dict[str, object]:
+    value = record.get(key)
+    if not isinstance(value, dict):
+        raise ValueError(f"Clean-candidate manifest has no {key} object")
+    return value
+
+
+def _clean_candidate_text(record: dict[str, object], key: str) -> str:
+    value = record.get(key)
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"Clean-candidate manifest has no {key}")
+    return value.strip()
+
+
+def _require_exact_clean_candidate_layout_path(
+    record: dict[str, object], key: str, expected: Path
+) -> None:
+    if _clean_candidate_text(record, key) != str(expected):
+        raise ValueError(f"Clean-candidate {key} does not match the fixed layout")
+
+
+def _read_clean_candidate_submodules(
+    source: dict[str, object],
+    *,
+    candidate_dir: Path,
+    candidate_descriptor: int,
+    closure: _RetainedCleanCandidateClosure,
+) -> tuple[list[bytes], list[bytes]]:
+    records = source.get("submodules")
+    if not isinstance(records, list):
+        raise ValueError("Clean-candidate submodules must be a list")
+    if not records:
+        return [], []
+    submodules_descriptor = closure.open_directory_at(
+        candidate_descriptor,
+        "submodules",
+        label="Clean-candidate submodule directory",
+    )
+    expected: set[str] = set()
+    for index in range(len(records)):
+        expected.add(f"{index:04d}.tar")
+        expected.add(f"{index:04d}.commit")
+    closure.require_exact_entries(
+        submodules_descriptor,
+        expected,
+        label="Clean-candidate submodule directory",
+    )
+    archives: list[bytes] = []
+    commits: list[bytes] = []
+    for index, record in enumerate(records):
+        if not isinstance(record, dict):
+            raise ValueError(
+                "Clean-candidate submodule attestation must be an object"
+            )
+        archive_name = f"{index:04d}.tar"
+        commit_name = f"{index:04d}.commit"
+        _require_exact_clean_candidate_layout_path(
+            record,
+            "archive_path",
+            candidate_dir / "submodules" / archive_name,
+        )
+        archives.append(
+            closure.read_regular_file_at(
+                submodules_descriptor,
+                archive_name,
+                label=f"Clean-candidate submodule archive {index}",
+            )
+        )
+        _require_exact_clean_candidate_layout_path(
+            record,
+            "commit_path",
+            candidate_dir / "submodules" / commit_name,
+        )
+        commits.append(
+            closure.read_regular_file_at(
+                submodules_descriptor,
+                commit_name,
+                label=f"Clean-candidate submodule commit object {index}",
+            )
+        )
+    closure.require_exact_entries(
+        submodules_descriptor,
+        expected,
+        label="Clean-candidate submodule directory",
+    )
+    return archives, commits
+
+
+def read_clean_candidate_tree(
+    candidate_manifest_path: Path,
+    *,
+    authorized_pic_root: Path = AUTHORIZED_PIC_ROOT,
+    read_regular_file_at: Callable[..., bytes] | None = None,
+) -> dict[str, object]:
+    """Capture one fixed one-level clean-candidate closure without path traversal."""
+    lexical_pic_root = Path(os.path.abspath(authorized_pic_root))
+    candidate_root = lexical_pic_root / "clean_candidates"
+    candidate_path = require_canonical_path_below(
+        Path(os.path.abspath(candidate_manifest_path)), candidate_root
+    )
+    if (
+        candidate_path.name != "clean_candidate_manifest.json"
+        or candidate_path.parent.parent != candidate_root
+    ):
+        raise ValueError(
+            "Clean-candidate manifest must be one fixed level below clean_candidates"
+        )
+    closure = _RetainedCleanCandidateClosure(
+        read_regular_file_at=read_regular_file_at
+    )
+    try:
+        candidate_root_ancestry = PinnedDirectoryAncestry(
+            candidate_root, root=lexical_pic_root
+        )
+    except BaseException:
+        closure.close()
+        raise
+    with candidate_root_ancestry:
+        try:
+            closure.watch_ancestry(candidate_root_ancestry.descriptors)
+            candidate_root_descriptor = candidate_root_ancestry.descriptor
+            candidate_descriptor = closure.open_directory_at(
+                candidate_root_descriptor,
+                candidate_path.parent.name,
+                label="Clean-candidate directory",
+            )
+        except BaseException:
+            closure.close(close_ancestry=candidate_root_ancestry.close)
+            raise
+        try:
+            candidate_bytes = closure.read_regular_file_at(
+                candidate_descriptor,
+                "clean_candidate_manifest.json",
+                label="Clean-candidate manifest",
+            )
+            candidate = read_json_bytes(
+                candidate_bytes, label="Clean-candidate manifest"
+            )
+            freeze_id = _clean_candidate_text(candidate, "freeze_id")
+            try:
+                parsed_freeze_id = uuid.UUID(freeze_id)
+            except ValueError as error:
+                raise ValueError("Clean-candidate freeze ID is malformed") from error
+            if str(parsed_freeze_id) != freeze_id:
+                raise ValueError("Clean-candidate freeze ID is not canonical")
+            if candidate_path.parent.name != freeze_id:
+                raise ValueError("Clean-candidate path does not match its freeze ID")
+            utc_datetime(
+                candidate.get("created_utc"), field="clean_candidate.created_utc"
+            )
+            source = _clean_candidate_mapping(candidate, "source")
+            build = _clean_candidate_mapping(candidate, "build")
+            _require_exact_clean_candidate_layout_path(
+                source, "archive_path", candidate_path.parent / "source.tar"
+            )
+            _require_exact_clean_candidate_layout_path(
+                source, "commit_path", candidate_path.parent / "source.commit"
+            )
+            _require_exact_clean_candidate_layout_path(
+                build, "profile_path", candidate_path.parent / "build_profile.json"
+            )
+            _require_exact_clean_candidate_layout_path(
+                build,
+                "profile_receipt_path",
+                candidate_path.parent / "profile_receipt.json",
+            )
+            _require_exact_clean_candidate_layout_path(
+                build, "executable_path", candidate_path.parent / "athena"
+            )
+            expected = {
+                "athena",
+                "build_provenance",
+                "build_profile.json",
+                "clean_candidate_manifest.json",
+                "profile_receipt.json",
+                "source.commit",
+                "source.tar",
+            }
+            if source.get("submodules"):
+                expected.add("submodules")
+            closure.require_exact_entries(
+                candidate_descriptor,
+                expected,
+                label="Clean-candidate directory",
+            )
+            source_archive = closure.read_regular_file_at(
+                candidate_descriptor,
+                "source.tar",
+                label="Clean-candidate source archive",
+            )
+            source_commit = closure.read_regular_file_at(
+                candidate_descriptor,
+                "source.commit",
+                label="Clean-candidate source commit object",
+            )
+            submodule_archives, submodule_commits = _read_clean_candidate_submodules(
+                source,
+                candidate_dir=candidate_path.parent,
+                candidate_descriptor=candidate_descriptor,
+                closure=closure,
+            )
+            build_profile = closure.read_regular_file_at(
+                candidate_descriptor,
+                "build_profile.json",
+                label="Clean-candidate build profile",
+            )
+            build_profile_receipt = closure.read_regular_file_at(
+                candidate_descriptor,
+                "profile_receipt.json",
+                label="Clean-candidate build-profile receipt",
+            )
+            executable = closure.read_regular_file_at(
+                candidate_descriptor,
+                "athena",
+                label="Clean-candidate executable",
+            )
+            provenance_descriptor = closure.open_directory_at(
+                candidate_descriptor,
+                "build_provenance",
+                label="Frozen build provenance directory",
+            )
+            provenance_expected = set(BUILD_PROVENANCE_FILENAMES.values())
+            closure.require_exact_entries(
+                provenance_descriptor,
+                provenance_expected,
+                label="Frozen build provenance directory",
+            )
+            build_provenance = {
+                label: closure.read_regular_file_at(
+                    provenance_descriptor,
+                    filename,
+                    label=f"Frozen build provenance {label}",
+                )
+                for label, filename in BUILD_PROVENANCE_FILENAMES.items()
+            }
+            closure.require_exact_entries(
+                provenance_descriptor,
+                provenance_expected,
+                label="Frozen build provenance directory",
+            )
+            closure.require_exact_entries(
+                candidate_descriptor,
+                expected,
+                label="Clean-candidate directory",
+            )
+            closure.require_same()
+            candidate_root_ancestry.require_same()
+            # The ancestry recheck itself is inside the watched lifetime. Drain
+            # again so rename-away-and-restore cannot hide in its return window.
+            closure.require_same()
+            return {
+                "candidate_manifest_path": candidate_path,
+                "candidate_manifest_bytes": candidate_bytes,
+                "candidate": candidate,
+                "source_archive": source_archive,
+                "source_commit": source_commit,
+                "submodule_archives": submodule_archives,
+                "submodule_commits": submodule_commits,
+                "build_profile": build_profile,
+                "build_profile_receipt": build_profile_receipt,
+                "build_provenance": build_provenance,
+                "executable": executable,
+            }
+        finally:
+            closure.close(close_ancestry=candidate_root_ancestry.close)
+
+
+def _planner_relative_path(value: object, *, label: str) -> str:
+    if not isinstance(value, str):
+        raise ValueError(f"{label} must be text")
+    path = PurePosixPath(value)
+    if (
+        not value
+        or path.is_absolute()
+        or value != path.as_posix()
+        or any(part in {"", ".", ".."} for part in path.parts)
+    ):
+        raise ValueError(f"{label} must be one canonical relative path")
+    return value
+
+
+def _planner_binding(value: object, *, label: str) -> dict[str, str]:
+    if not isinstance(value, dict) or set(value) != {"path", "sha256"}:
+        raise ValueError(f"{label} schema is malformed")
+    relative = _planner_relative_path(value["path"], label=f"{label} path")
+    digest = value["sha256"]
+    if not _is_lowercase_sha256(digest):
+        raise ValueError(f"{label} digest is malformed")
+    return {"path": relative, "sha256": digest}
+
+
+def _planner_json(payload: bytes, *, label: str) -> dict[str, object]:
+    def reject_duplicates(pairs: list[tuple[str, object]]) -> dict[str, object]:
+        result: dict[str, object] = {}
+        for key, item in pairs:
+            if key in result:
+                raise ValueError(f"{label} repeats JSON key {key!r}")
+            result[key] = item
+        return result
+
+    try:
+        value = json.loads(
+            payload.decode("utf-8"),
+            object_pairs_hook=reject_duplicates,
+            parse_constant=lambda item: (_ for _ in ()).throw(
+                ValueError(f"{label} contains forbidden JSON constant {item}")
+            ),
+        )
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ValueError(f"{label} is not canonical UTF-8 JSON") from error
+    if not isinstance(value, dict):
+        raise ValueError(f"{label} must be an object")
+    return value
+
+
+def _planner_regular_bytes_at(parent_descriptor: int, name: str, *, label: str) -> bytes:
+    descriptor = os.open(
+        name,
+        os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
+        dir_fd=parent_descriptor,
+    )
+    try:
+        before = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(before.st_mode)
+            or before.st_nlink != 1
+            or before.st_mode & 0o222
+        ):
+            raise ValueError(f"{label} is not one read-only regular file")
+        payload = bytearray()
+        while chunk := os.read(descriptor, 1024 * 1024):
+            payload.extend(chunk)
+        after = os.fstat(descriptor)
+        current = os.stat(name, dir_fd=parent_descriptor, follow_symlinks=False)
+        identity = lambda item: (  # noqa: E731
+            item.st_dev,
+            item.st_ino,
+            item.st_mode,
+            item.st_nlink,
+            item.st_size,
+            item.st_mtime_ns,
+            item.st_ctime_ns,
+        )
+        if (
+            identity(before) != identity(after)
+            or (after.st_dev, after.st_ino) != (current.st_dev, current.st_ino)
+        ):
+            raise ValueError(f"{label} changed while reading")
+        return bytes(payload)
+    finally:
+        os.close(descriptor)
+
+
+def _scan_read_only_planner_tree(
+    descriptor: int, *, prefix: str = ""
+) -> tuple[dict[str, bytes], set[str]]:
+    metadata = os.fstat(descriptor)
+    if not stat.S_ISDIR(metadata.st_mode) or metadata.st_mode & 0o222:
+        raise ValueError("Immutable qualifying planner contains a writable directory")
+    files: dict[str, bytes] = {}
+    directories: set[str] = set()
+    for name in sorted(os.listdir(descriptor)):
+        if name in {"", ".", ".."} or "/" in name:
+            raise ValueError("Immutable qualifying planner contains an unsafe member")
+        relative = f"{prefix}/{name}" if prefix else name
+        observed = os.stat(name, dir_fd=descriptor, follow_symlinks=False)
+        if stat.S_ISDIR(observed.st_mode):
+            child = os.open(
+                name,
+                os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0),
+                dir_fd=descriptor,
+            )
+            try:
+                opened = os.fstat(child)
+                if (opened.st_dev, opened.st_ino) != (observed.st_dev, observed.st_ino):
+                    raise ValueError("Immutable qualifying planner directory changed")
+                child_files, child_directories = _scan_read_only_planner_tree(
+                    child, prefix=relative
+                )
+                current = os.stat(name, dir_fd=descriptor, follow_symlinks=False)
+                if (current.st_dev, current.st_ino) != (opened.st_dev, opened.st_ino):
+                    raise ValueError("Immutable qualifying planner directory changed")
+                files.update(child_files)
+                directories.update(child_directories)
+                directories.add(relative)
+            finally:
+                os.close(child)
+        elif stat.S_ISREG(observed.st_mode):
+            files[relative] = _planner_regular_bytes_at(
+                descriptor, name, label=f"immutable qualifying planner member {relative}"
+            )
+        else:
+            raise ValueError("Immutable qualifying planner contains a non-file member")
+    return files, directories
+
+
+def _planner_required_directories(paths: Iterable[str]) -> set[str]:
+    directories: set[str] = set()
+    for relative in paths:
+        parent = PurePosixPath(relative).parent
+        while parent.as_posix() != ".":
+            directories.add(parent.as_posix())
+            parent = parent.parent
+    return directories
+
+
+def _planner_inventory(payload: bytes) -> dict[str, str]:
+    try:
+        text = payload.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise ValueError("Immutable qualifying planner inventory is not UTF-8") from error
+    records: dict[str, str] = {}
+    for line in text.splitlines(keepends=True):
+        match = re.fullmatch(r"([0-9a-f]{64})  (.+)\n", line)
+        if match is None:
+            raise ValueError("Immutable qualifying planner inventory is malformed")
+        relative = _planner_relative_path(match.group(2), label="planner inventory member")
+        if relative == "artifact_inventory.sha256" or relative in records:
+            raise ValueError("Immutable qualifying planner inventory is malformed")
+        records[relative] = match.group(1)
+    if text != "".join(f"{records[path]}  {path}\n" for path in sorted(records)):
+        raise ValueError("Immutable qualifying planner inventory is noncanonical")
+    return records
+
+
+def _planner_member(
+    files: dict[str, bytes], binding: object, *, label: str
+) -> tuple[dict[str, str], bytes]:
+    normalized = _planner_binding(binding, label=label)
+    try:
+        payload = files[normalized["path"]]
+    except KeyError as error:
+        raise ValueError(f"{label} is absent from immutable qualifying planner") from error
+    if hashlib.sha256(payload).hexdigest() != normalized["sha256"]:
+        raise ValueError(f"{label} checksum drifted")
+    return normalized, payload
+
+
+def _planner_digest_value(value: object) -> str:
+    return hashlib.sha256(
+        json.dumps(
+            value, sort_keys=True, separators=(",", ":"), allow_nan=False
+        ).encode("utf-8")
+    ).hexdigest()
+
+
+def _planner_archive_member(archive_payload: bytes, relative: str) -> bytes:
+    """Read one regular source-archive member without accepting aliases."""
+    try:
+        with tarfile.open(fileobj=io.BytesIO(archive_payload), mode="r:") as archive:
+            members = [member for member in archive.getmembers() if member.name == relative]
+            if len(members) != 1 or not members[0].isfile():
+                raise ValueError(
+                    f"Clean-candidate source archive omits reviewed member: {relative}"
+                )
+            stream = archive.extractfile(members[0])
+            if stream is None:
+                raise ValueError(
+                    f"Clean-candidate source archive member is unreadable: {relative}"
+                )
+            return stream.read()
+    except tarfile.TarError as error:
+        raise ValueError("Clean-candidate source archive is not a readable tar file") from error
+
+
+def _planner_exact_primitive_types(actual: object, expected: object, *, label: str) -> None:
+    """Reject JSON boolean aliases and other primitive-type substitutions."""
+    if type(actual) is not type(expected):
+        raise ValueError(f"{label} primitive type drifted")
+    if isinstance(expected, dict):
+        if set(actual) != set(expected):
+            raise ValueError(f"{label} keys drifted")
+        for key in sorted(expected):
+            _planner_exact_primitive_types(actual[key], expected[key], label=f"{label}/{key}")
+    elif isinstance(expected, list):
+        if len(actual) != len(expected):
+            raise ValueError(f"{label} length drifted")
+        for index, (actual_item, expected_item) in enumerate(zip(actual, expected)):
+            _planner_exact_primitive_types(
+                actual_item, expected_item, label=f"{label}[{index}]"
+            )
+
+
+def _planner_expected_matrix() -> dict[str, object]:
+    return {
+        "physical_mode": Q011_SECTION54_PHYSICAL_MODE,
+        "grid_variants": [variant for variant, _ in Q011_SECTION54_VARIANTS],
+        "qualifying_seeds": list(Q011_SECTION54_SEEDS),
+        "expected_baseline_attempts": 24,
+        "paired_seed_rule": (
+            "Use the same qualifying seed for coarse-uniform, AMR and fine-uniform variants."
+        ),
+    }
+
+
+def _planner_attempt_id(index: int, variant: str, seed: int) -> str:
+    return f"baseline-{index:03d}-{variant}-seed-{seed}"
+
+
+def _planner_source_archive_and_candidate(
+    files: dict[str, bytes],
+    normalized_source_bindings: dict[str, dict[str, str]],
+    candidate: object,
+    *,
+    pic_root: Path,
+) -> tuple[bytes, dict[str, object]]:
+    """Derive the planner candidate solely from its bound frozen candidate bytes."""
+    if not isinstance(candidate, dict):
+        raise ValueError("Planner candidate binding must be an object")
+    manifest_binding = normalized_source_bindings["clean_candidate_manifest"]
+    manifest_payload = files[manifest_binding["path"]]
+    manifest = _planner_json(manifest_payload, label="planner clean-candidate manifest")
+    if (
+        set(manifest) != {
+            "schema_version",
+            "freeze_id",
+            "created_utc",
+            "prepared_artifacts",
+            "source",
+            "build",
+        }
+        or type(manifest.get("schema_version")) is not int
+        or manifest["schema_version"] != 4
+    ):
+        raise ValueError("Planner clean-candidate manifest schema drifted")
+    freeze_id = str(manifest.get("freeze_id", ""))
+    try:
+        uuid.UUID(freeze_id)
+    except ValueError as error:
+        raise ValueError("Planner clean-candidate freeze ID is malformed") from error
+    candidate_root = pic_root / "clean_candidates" / freeze_id
+    external_manifest = candidate_root / "clean_candidate_manifest.json"
+    external_manifest_payload = read_stable_regular_file_below(
+        external_manifest, pic_root, require_read_only_mode=True
+    )
+    if external_manifest_payload != manifest_payload:
+        raise ValueError("Planner clean-candidate manifest differs from frozen candidate")
+    source = manifest.get("source")
+    build = manifest.get("build")
+    prepared = manifest.get("prepared_artifacts")
+    if not isinstance(source, dict) or not isinstance(build, dict) or not isinstance(prepared, dict):
+        raise ValueError("Planner clean-candidate manifest objects drifted")
+    source_archive_path = candidate_root / "source.tar"
+    if source.get("archive_path") != str(source_archive_path):
+        raise ValueError("Planner clean-candidate source archive path drifted")
+    source_archive = read_stable_regular_file_below(
+        source_archive_path, pic_root, require_read_only_mode=True
+    )
+    if hashlib.sha256(source_archive).hexdigest() != source.get("archive_sha256"):
+        raise ValueError("Planner clean-candidate source archive checksum drifted")
+    submodules = source.get("submodules")
+    if not isinstance(submodules, list):
+        raise ValueError("Planner clean-candidate submodules drifted")
+    validated_submodules = []
+    for record in submodules:
+        if not isinstance(record, dict):
+            raise ValueError("Planner clean-candidate submodule binding drifted")
+        validated_submodules.append(
+            {
+                "path": record["path"],
+                "archive_sha256": record["archive_sha256"],
+                "commit_sha256": record["commit_sha256"],
+                "git_commit": record["git_commit"],
+                "git_tree": record["git_tree"],
+            }
+        )
+    environment_payload = files[normalized_source_bindings["environment_profile"]["path"]]
+    environment_digest = hashlib.sha256(environment_payload).hexdigest()
+    reviewed_environment = _planner_archive_member(
+        source_archive, Q011_SECTION54_ARCHIVE_SOURCE_PATHS["environment_profile"]
+    )
+    if environment_payload != reviewed_environment:
+        raise ValueError("Planner environment profile differs from reviewed source archive")
+    expected_candidate = {
+        "clean_candidate_manifest": {
+            "path": str(external_manifest),
+            "sha256": hashlib.sha256(manifest_payload).hexdigest(),
+        },
+        "freeze_id": freeze_id,
+        "git_commit": source["git_commit"],
+        "git_tree": source["git_tree"],
+        "source_archive_sha256": source["archive_sha256"],
+        "source_commit_sha256": source["commit_sha256"],
+        "source_bundle_sha256": source["source_bundle_sha256"],
+        "prepared_artifact_inventory_sha256": prepared["inventory_sha256"],
+        "validated_submodules": validated_submodules,
+        "build_profile": {
+            "path": build["profile_path"],
+            "sha256": build["profile_sha256"],
+        },
+        "build_profile_receipt": {
+            "path": build["profile_receipt_path"],
+            "sha256": build["profile_receipt_sha256"],
+        },
+        "build_invocations_sha256": build["build_invocations_sha256"],
+        "executable": {
+            "path": build["executable_path"],
+            "sha256": build["executable_sha256"],
+        },
+        "environment_profile": {
+            "path": str(
+                pic_root
+                / "control_plane"
+                / candidate["environment_profile"]["control_plane_version"]
+                / "frontier_pic_environment.sh"
+            ),
+            "sha256": environment_digest,
+            "control_plane_version": candidate["environment_profile"][
+                "control_plane_version"
+            ],
+            "reviewed_source": {
+                "path": Q011_SECTION54_ARCHIVE_SOURCE_PATHS["environment_profile"],
+                "sha256": environment_digest,
+            },
+        },
+    }
+    _planner_exact_primitive_types(candidate, expected_candidate, label="planner candidate binding")
+    if candidate != expected_candidate:
+        raise ValueError("Planner candidate binding drifted from frozen candidate")
+    return source_archive, expected_candidate
+
+
+def _planner_expected_baseline_contract(
+    *,
+    attempt_id: str,
+    variant: str,
+    model_overrides: tuple[str, ...],
+    seed: int,
+    selected_ps_p0: float,
+    candidate: dict[str, object],
+    paper_deck_binding: dict[str, str],
+    attempt_root: Path,
+) -> dict[str, object]:
+    return {
+        "record_type": "q011_section54_launch_prohibited_handoff_contract",
+        "schema_version": 1,
+        "contract_role": "source_local_review_handoff_only",
+        "launch_authorized": False,
+        "scheduler_submission_authorized": False,
+        "live_policy_mutation_authorized": False,
+        "attempt_id": attempt_id,
+        "variant": variant,
+        "qualifying_seed": seed,
+        "selected_problem_ps_p0": selected_ps_p0,
+        "executable": candidate["executable"],
+        "environment_profile": candidate["environment_profile"],
+        "paper_deck": paper_deck_binding,
+        "authorized_orion_attempt_root": str(attempt_root),
+        "argv": [
+            "-i",
+            Q011_SECTION54_SOURCE_BINDING_PATHS["paper_deck"],
+            "-d",
+            str(attempt_root / "raw"),
+            f"job/basename={attempt_id}",
+            f"problem/ps_p0={selected_ps_p0!r}",
+            f"particles/pic_random_seed={seed}",
+            f"problem/ps_inject_seed={seed}",
+            f"problem/ps_seed_noise_seed={seed}",
+            *model_overrides,
+        ],
+        "required_separate_boundary": (
+            "review_and_promote_a_registered_frontier_submission_policy_then_use_"
+            "the_installed_control_plane_wrapper"
+        ),
+    }
+
+
+def _planner_expected_baseline_descriptor(
+    *,
+    index: int,
+    attempt_id: str,
+    variant: str,
+    seed: int,
+    selected_ps_p0: float,
+    candidate: dict[str, object],
+    attempt_root: Path,
+    contract_path: str,
+    contract_payload: bytes,
+) -> dict[str, object]:
+    return {
+        "record_type": "q011_section54_baseline_attempt_descriptor",
+        "schema_version": 1,
+        "attempt_index": index,
+        "attempt_id": attempt_id,
+        "status": "planned_not_authorized",
+        "variant": variant,
+        "qualifying_seed": seed,
+        "physical_mode": Q011_SECTION54_PHYSICAL_MODE,
+        "selected_problem_ps_p0": selected_ps_p0,
+        "candidate_binding": {
+            "git_commit": candidate["git_commit"],
+            "source_bundle_sha256": candidate["source_bundle_sha256"],
+            "executable_sha256": candidate["executable"]["sha256"],
+            "environment_profile_sha256": candidate["environment_profile"]["sha256"],
+        },
+        "authorized_orion_attempt_root": str(attempt_root),
+        "launch_contract": {
+            "path": contract_path,
+            "sha256": hashlib.sha256(contract_payload).hexdigest(),
+        },
+        "artifact_retention": (
+            "retain_every_emitted_raw_artifact_for_every_attempt_including_failed_attempts"
+        ),
+    }
+
+
+def _planner_restart_carrier_id(seed: int) -> str:
+    return f"amr-restart-continuation-seed-{seed}"
+
+
+def _planner_expected_restart_contract(
+    *,
+    carrier_id: str,
+    source_attempt: dict[str, object],
+    restart_preregistration: dict[str, object],
+    candidate: dict[str, object],
+    paper_deck_binding: dict[str, str],
+    attempt_root: Path,
+) -> dict[str, object]:
+    continuation = restart_preregistration["continuation_contract"]
+    checkpoint = continuation["checkpoint_time_omega0_inverse"]
+    return {
+        "record_type": "q011_section54_launch_prohibited_handoff_contract",
+        "schema_version": 1,
+        "contract_role": "source_local_restart_review_handoff_only",
+        "launch_authorized": False,
+        "scheduler_submission_authorized": False,
+        "live_policy_mutation_authorized": False,
+        "carrier_id": carrier_id,
+        "source_baseline_attempt_id": source_attempt["attempt_id"],
+        "variant": source_attempt["variant"],
+        "qualifying_seed": source_attempt["qualifying_seed"],
+        "selected_problem_ps_p0": source_attempt["selected_problem_ps_p0"],
+        "executable": candidate["executable"],
+        "environment_profile": candidate["environment_profile"],
+        "paper_deck": paper_deck_binding,
+        "authorized_orion_attempt_root": str(attempt_root),
+        "checkpoint_time_omega0_inverse": checkpoint,
+        "checkpoint_input": (
+            f"retain_from_{source_attempt['attempt_id']}_at_t{int(checkpoint)}_"
+            "then_bind_exact_checksum_before_any_separately_authorized_continuation"
+        ),
+        "argv_template": [
+            "-r",
+            "<exact-retained-checkpoint-path-bound-by-separate-reviewed-successor>",
+            "-d",
+            str(attempt_root / "raw"),
+        ],
+        "required_separate_boundary": (
+            "materialize_a_checkpoint_checksum_bound_registered_restart_successor_"
+            "then_review_and_promote_policy_before_using_the_installed_control_plane_wrapper"
+        ),
+    }
+
+
+def _planner_expected_restart_carrier(
+    *,
+    carrier_id: str,
+    source_attempt: dict[str, object],
+    restart_preregistration: dict[str, object],
+    restart_preregistration_binding: dict[str, str],
+    attempt_root: Path,
+    contract_path: str,
+    contract_payload: bytes,
+) -> dict[str, object]:
+    continuation = restart_preregistration["continuation_contract"]
+    return {
+        "record_type": "q011_section54_amr_restart_continuation_carrier",
+        "schema_version": 1,
+        "carrier_id": carrier_id,
+        "status": "planned_not_authorized",
+        "source_baseline_attempt_id": source_attempt["attempt_id"],
+        "variant": source_attempt["variant"],
+        "qualifying_seed": source_attempt["qualifying_seed"],
+        "selected_problem_ps_p0": source_attempt["selected_problem_ps_p0"],
+        "authorized_orion_attempt_root": str(attempt_root),
+        "restart_preregistration": restart_preregistration_binding,
+        "checkpoint_time_omega0_inverse": continuation[
+            "checkpoint_time_omega0_inverse"
+        ],
+        "retained_output_schedule_after_checkpoint_omega0_inverse": continuation[
+            "retained_output_schedule_after_checkpoint_omega0_inverse"
+        ],
+        "comparison_tolerances_max_absolute_difference": continuation[
+            "comparison_tolerances_max_absolute_difference"
+        ],
+        "launch_contract": {
+            "path": contract_path,
+            "sha256": hashlib.sha256(contract_payload).hexdigest(),
+        },
+    }
+
+
+def _planner_expected_independent_recompute_plan(
+    *,
+    plan_id: str,
+    campaign_root: Path,
+    qualifying_preregistration_binding: dict[str, str],
+) -> dict[str, object]:
+    return {
+        "record_type": "q011_section54_independent_raw_artifact_recompute_plan",
+        "schema_version": 1,
+        "plan_id": plan_id,
+        "status": "plan_frozen_independent_implementation_and_review_artifacts_open",
+        "qualifying_preregistration": qualifying_preregistration_binding,
+        "authorized_orion_campaign_root": str(campaign_root),
+        "implementation_rule": (
+            "Recompute every primary metric from archived raw artifacts using a "
+            "reviewer-owned script or an independently implemented analyzer. The "
+            "recompute script must not import production metric-extraction functions "
+            "or the local analyzer and helper sources bound by this plan."
+        ),
+        "raw_input_policy": (
+            "consume_root_relative_sha256_inventories_and_archived_raw_bin_pvtk_rst_"
+            "bytes_for_every_attempt_including_failed_attempts"
+        ),
+        "required_records": [
+            "independent_script_path_or_archive_locator",
+            "independent_script_sha256",
+            "independent_environment_lock",
+            "attempt_inventory_sha256_values",
+            "input_artifact_checksums",
+            "metric_comparison_table",
+            "reviewer_identity",
+            "reviewer_disposition",
+        ],
+        "required_metric_table_columns": [
+            "attempt_id",
+            "variant",
+            "qualifying_seed",
+            "observable",
+            "production_metric",
+            "independent_metric",
+            "absolute_difference",
+            "relative_difference",
+            "declared_tolerance",
+            "disposition",
+        ],
+        "production_helper_imports_authorized": False,
+        "claim_closure_authorized": False,
+        "frontier_execution_authorized": False,
+    }
+
+
+def _planner_expected_policy_fragment(
+    *,
+    plan_id: str,
+    pic_root: Path,
+    campaign_root: Path,
+    candidate: dict[str, object],
+    pressure_receipt_binding: dict[str, str],
+    contract_bindings: list[dict[str, str]],
+    restart_contract_binding: dict[str, str],
+) -> dict[str, object]:
+    return {
+        "record_type": "q011_section54_qualifying_campaign_nonauthorizing_policy_fragment",
+        "schema_version": 1,
+        "plan_id": plan_id,
+        "status": "review_fragment_only_not_live_policy",
+        "qualification_effect": "plan_only_no_execution_authorization_no_claim_closure",
+        "authorized_orion_root": str(pic_root),
+        "authorized_orion_campaign_root": str(campaign_root),
+        "selected_pressure_receipt": pressure_receipt_binding,
+        "candidate_binding": candidate,
+        "baseline_launch_contracts": contract_bindings,
+        "restart_continuation_launch_contract": restart_contract_binding,
+        "integration_policy": (
+            "requires_separate_reviewed_registered_frontier_submission_policy_"
+            "successor_and_installed_control_plane_promotion"
+        ),
+        "mutates_live_policy": False,
+        "scheduler_calls_authorized": False,
+        "scheduler_submission_authorized": False,
+        "frontier_execution_authorized": False,
+        "launch_authorized": False,
+        "claim_closure_authorized": False,
+    }
+
+
+def _planner_normalized_pressure_receipt(
+    value: object, *, pic_root: Path
+) -> dict[str, object]:
+    """Require the canonical source-local human pressure-selection receipt shape."""
+    if (
+        not isinstance(value, dict)
+        or set(value)
+        != {
+            "schema_version",
+            "record_type",
+            "selection_method",
+            "published_pressure_pilot_receipt",
+            "pilot_bundle_manifest_sha256",
+            "aggregate_pilot_analysis_sha256",
+            "case_descriptors",
+            "selected_case",
+            "reviewer_identity",
+            "reviewed_utc",
+            "rationale",
+        }
+        or type(value.get("schema_version")) is not int
+        or value["schema_version"] != 1
+        or value.get("record_type") != "q011_section54_pressure_selection_receipt"
+        or value.get("selection_method") != "human_review_only"
+    ):
+        raise ValueError("Planner human pressure-selection receipt schema drifted")
+    published = value.get("published_pressure_pilot_receipt")
+    if (
+        not isinstance(published, dict)
+        or set(published) != {"path", "sha256"}
+        or not isinstance(published.get("path"), str)
+        or not Path(published["path"]).is_absolute()
+        or not _is_lowercase_sha256(published.get("sha256"))
+        or not _is_lowercase_sha256(value.get("pilot_bundle_manifest_sha256"))
+        or not _is_lowercase_sha256(value.get("aggregate_pilot_analysis_sha256"))
+    ):
+        raise ValueError("Planner human pressure-selection publication binding drifted")
+    published_path = Path(published["path"])
+    if (
+        Path(os.path.abspath(published_path)) != published_path
+        or published_path.parent != pic_root / "publication"
+    ):
+        raise ValueError("Planner human pressure-selection publication path drifted")
+    published_payload = read_stable_regular_file_below(
+        published_path,
+        pic_root,
+        require_read_only_mode=True,
+    )
+    if hashlib.sha256(published_payload).hexdigest() != published["sha256"]:
+        raise ValueError("Planner human pressure-selection publication checksum drifted")
+    registered = (
+        ("ps_p0_1p00", 1.0),
+        ("ps_p0_0p05", 0.05),
+        ("ps_p0_0p10", 0.1),
+        ("ps_p0_0p20", 0.2),
+    )
+    descriptors = value.get("case_descriptors")
+    if not isinstance(descriptors, list) or len(descriptors) != len(registered):
+        raise ValueError("Planner human pressure-selection descriptor set drifted")
+    descriptor_digests = []
+    for descriptor, (case_id, problem_ps_p0) in zip(descriptors, registered):
+        if (
+            not isinstance(descriptor, dict)
+            or set(descriptor) != {"case_id", "problem_ps_p0", "descriptor_sha256"}
+            or descriptor.get("case_id") != case_id
+            or type(descriptor.get("problem_ps_p0")) is not float
+            or descriptor["problem_ps_p0"] != problem_ps_p0
+            or not _is_lowercase_sha256(descriptor.get("descriptor_sha256"))
+        ):
+            raise ValueError("Planner human pressure-selection descriptor set drifted")
+        descriptor_digests.append(descriptor["descriptor_sha256"])
+    if len(set(descriptor_digests)) != len(descriptor_digests):
+        raise ValueError("Planner human pressure-selection descriptors are not unique")
+    selected = value.get("selected_case")
+    if (
+        not isinstance(selected, dict)
+        or set(selected) != {"case_id", "problem_ps_p0"}
+        or type(selected.get("problem_ps_p0")) is not float
+        or (selected.get("case_id"), selected.get("problem_ps_p0")) not in registered
+        or not isinstance(value.get("reviewer_identity"), str)
+        or not value["reviewer_identity"].strip()
+        or not isinstance(value.get("reviewed_utc"), str)
+        or re.fullmatch(
+            r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}"
+            r"(?:\.[0-9]{1,6})?Z",
+            value["reviewed_utc"],
+        )
+        is None
+        or not isinstance(value.get("rationale"), str)
+        or not value["rationale"].strip()
+    ):
+        raise ValueError("Planner human pressure-selection review record drifted")
+    return value
+
+
+def validate_planner_retention_binding(
+    value: object,
+    *,
+    authorized_pic_root: Path,
+    expected_clean_candidate_manifest_sha256: str | None = None,
+) -> dict[str, object]:
+    """Re-derive one Q011 retention overlay from its immutable qualifying plan."""
+    expected_keys = {
+        "schema_version",
+        "retention_role",
+        "planner_root",
+        "planner_inventory_sha256",
+        "planner_plan_id",
+        "planner_materialization_receipt",
+        "attempt_id",
+        "authorized_orion_attempt_root",
+        "authorized_orion_raw_root",
+        "argv",
+    }
+    if not isinstance(value, dict) or set(value) != expected_keys:
+        raise ValueError("Planner-retention binding schema is malformed")
+    attempt_id = value.get("attempt_id")
+    plan_id = value.get("planner_plan_id")
+    inventory_sha256 = value.get("planner_inventory_sha256")
+    if (
+        type(value.get("schema_version")) is not int
+        or value["schema_version"] != 1
+        or value.get("retention_role") != Q011_PLANNER_RETENTION_ROLE
+        or not isinstance(attempt_id, str)
+        or re.fullmatch(r"[a-z0-9][a-z0-9._-]{0,127}", attempt_id) is None
+        or not _is_lowercase_sha256(plan_id)
+        or not _is_lowercase_sha256(inventory_sha256)
+    ):
+        raise ValueError("Planner-retention binding identity is malformed")
+    pic_root = Path(os.path.abspath(authorized_pic_root))
+    planner_root = Path(str(value.get("planner_root", "")))
+    if (
+        not planner_root.is_absolute()
+        or Path(os.path.abspath(planner_root)) != planner_root
+        or planner_root.parent != pic_root / "plans"
+        or planner_root.name != f"q011-section54-qualifying-campaign-plan-{plan_id}"
+    ):
+        raise ValueError("Planner-retention immutable planner root is malformed")
+    require_no_symlink_components_below(planner_root, pic_root)
+    with PinnedDirectoryAncestry(planner_root, root=pic_root) as ancestry:
+        files, directories = _scan_read_only_planner_tree(ancestry.descriptor)
+        ancestry.require_same()
+    try:
+        inventory_payload = files["artifact_inventory.sha256"]
+    except KeyError as error:
+        raise ValueError("Immutable qualifying planner inventory is absent") from error
+    if hashlib.sha256(inventory_payload).hexdigest() != inventory_sha256:
+        raise ValueError("Immutable qualifying planner inventory checksum drifted")
+    inventory = _planner_inventory(inventory_payload)
+    measured = {
+        path: hashlib.sha256(payload).hexdigest()
+        for path, payload in files.items()
+        if path != "artifact_inventory.sha256"
+    }
+    if measured != inventory or directories != _planner_required_directories(inventory):
+        raise ValueError("Immutable qualifying planner tree closure drifted")
+    supplied_receipt = _planner_binding(
+        value["planner_materialization_receipt"],
+        label="planner materialization receipt",
+    )
+    if supplied_receipt["path"] != "materialization_receipt.json":
+        raise ValueError("Planner materialization receipt path drifted")
+    receipt_binding, receipt_payload = _planner_member(
+        files, supplied_receipt, label="planner materialization receipt"
+    )
+    receipt = _planner_json(receipt_payload, label="planner materialization receipt")
+    if (
+        set(receipt)
+        != {
+            "record_type",
+            "schema_version",
+            "plan_id",
+            "campaign_plan",
+            "helper_source_closure",
+            "tree_inventory",
+        }
+        or receipt.get("record_type")
+        != "q011_section54_qualifying_campaign_plan_materialization_receipt"
+        or type(receipt.get("schema_version")) is not int
+        or receipt["schema_version"] != 1
+        or receipt.get("plan_id") != plan_id
+    ):
+        raise ValueError("Planner materialization receipt identity drifted")
+    tree_inventory = receipt.get("tree_inventory")
+    materialized_inventory_algorithm = (
+        "sha256 of '<file_sha256>  <root-relative-path>\\n' entries ordered "
+        "lexically by root-relative path"
+    )
+    if (
+        not isinstance(tree_inventory, dict)
+        or set(tree_inventory)
+        != {
+            "algorithm",
+            "scope",
+            "excludes",
+            "sha256",
+            "inventoried_file_count",
+        }
+        or tree_inventory.get("algorithm") != materialized_inventory_algorithm
+        or tree_inventory.get("scope")
+        != (
+            "all materialized campaign-plan members before this receipt "
+            "and recursive-freeze metadata"
+        )
+        or tree_inventory.get("excludes")
+        != [
+            "materialization_receipt.json",
+            "freeze_receipt.json",
+            "artifact_inventory.sha256",
+        ]
+        or not _is_lowercase_sha256(tree_inventory.get("sha256"))
+        or type(tree_inventory.get("inventoried_file_count")) is not int
+    ):
+        raise ValueError("Planner materialization tree inventory drifted")
+    pre_receipt_files = {
+        path: payload
+        for path, payload in files.items()
+        if path
+        not in {
+            "materialization_receipt.json",
+            "freeze_receipt.json",
+            "artifact_inventory.sha256",
+        }
+    }
+    pre_receipt_inventory = "".join(
+        f"{hashlib.sha256(pre_receipt_files[path]).hexdigest()}  {path}\n"
+        for path in sorted(pre_receipt_files)
+    ).encode("utf-8")
+    if (
+        hashlib.sha256(pre_receipt_inventory).hexdigest()
+        != tree_inventory["sha256"]
+        or len(pre_receipt_files) != tree_inventory["inventoried_file_count"]
+    ):
+        raise ValueError("Planner materialization tree inventory checksum drifted")
+    freeze_receipt = _planner_json(
+        files.get("freeze_receipt.json", b""), label="planner freeze receipt"
+    )
+    if (
+        freeze_receipt
+        != {
+            "schema_version": 1,
+            "artifact_role": (
+                "q011_section54_source_local_immutable_qualifying_campaign_plan"
+            ),
+            "qualification_effect": (
+                "plan_only_no_execution_authorization_no_claim_closure"
+            ),
+            "inventory_excludes": "artifact_inventory.sha256",
+            "freeze_policy": "remove all owner, group and other write bits recursively",
+        }
+        or type(freeze_receipt.get("schema_version")) is not int
+    ):
+        raise ValueError("Planner recursive-freeze receipt drifted")
+    campaign_plan_binding, campaign_plan_payload = _planner_member(
+        files, receipt["campaign_plan"], label="planner campaign plan"
+    )
+    if campaign_plan_binding["path"] != "campaign_plan.json":
+        raise ValueError("Planner campaign-plan path drifted")
+    plan = _planner_json(campaign_plan_payload, label="planner campaign plan")
+    if (
+        set(plan)
+        != {
+            "record_type",
+            "schema_version",
+            "plan_id",
+            "artifact_role",
+            "qualification_effect",
+            "status",
+            "authorized_orion_root",
+            "authorized_orion_campaign_root",
+            "selected_pressure",
+            "candidate_binding",
+            "source_bindings",
+            "helper_source_closure",
+            "campaign_matrix",
+            "baseline_attempt_count",
+            "baseline_attempt_descriptors",
+            "restart_continuation_carrier",
+            "independent_raw_artifact_recompute_plan",
+            "nonauthorizing_policy_fragment",
+            "execution_boundary",
+            "preregistration_execution_boundary",
+        }
+        or plan.get("record_type") != "q011_section54_qualifying_campaign_execution_plan"
+        or type(plan.get("schema_version")) is not int
+        or plan["schema_version"] != 1
+        or plan.get("plan_id") != plan_id
+        or plan.get("artifact_role")
+        != "q011_section54_source_local_immutable_qualifying_campaign_plan"
+        or plan.get("qualification_effect")
+        != "plan_only_no_execution_authorization_no_claim_closure"
+        or plan.get("status") != "source_local_immutable_review_plan_only"
+        or plan.get("authorized_orion_root") != str(pic_root)
+        or plan.get("authorized_orion_campaign_root")
+        != str(pic_root / "campaigns" / f"q011-section54-{plan_id}")
+    ):
+        raise ValueError("Planner campaign-plan identity drifted")
+    source_bindings = plan.get("source_bindings")
+    if not isinstance(source_bindings, dict):
+        raise ValueError("Planner campaign-plan source bindings drifted")
+    normalized_source_bindings = {
+        name: _planner_binding(binding, label=f"planner source binding {name}")
+        for name, binding in source_bindings.items()
+    }
+    if set(normalized_source_bindings) != {
+        "pressure_selection_receipt",
+        "clean_candidate_manifest",
+        "environment_profile",
+        "qualifying_preregistration",
+        "restart_preregistration",
+        "paper_deck",
+    }:
+        raise ValueError("Planner campaign-plan source-binding schema drifted")
+    if {
+        name: binding["path"] for name, binding in normalized_source_bindings.items()
+    } != Q011_SECTION54_SOURCE_BINDING_PATHS:
+        raise ValueError("Planner campaign-plan source-binding paths drifted")
+    if expected_clean_candidate_manifest_sha256 is not None and (
+        not _is_lowercase_sha256(expected_clean_candidate_manifest_sha256)
+        or normalized_source_bindings["clean_candidate_manifest"]["sha256"]
+        != expected_clean_candidate_manifest_sha256
+    ):
+        raise ValueError(
+            "Planner clean-candidate manifest differs from submission binding"
+        )
+    for name, binding in normalized_source_bindings.items():
+        _planner_member(files, binding, label=f"planner source binding {name}")
+    source_archive, candidate = _planner_source_archive_and_candidate(
+        files,
+        normalized_source_bindings,
+        plan.get("candidate_binding"),
+        pic_root=pic_root,
+    )
+    for name, archive_relative in Q011_SECTION54_ARCHIVE_SOURCE_PATHS.items():
+        retained = files[normalized_source_bindings[name]["path"]]
+        if retained != _planner_archive_member(source_archive, archive_relative):
+            raise ValueError(f"Planner reviewed source binding drifted: {name}")
+    helper_binding, helper_payload = _planner_member(
+        files, receipt["helper_source_closure"], label="planner helper-source closure"
+    )
+    if plan.get("helper_source_closure") != helper_binding:
+        raise ValueError("Planner helper-source closure binding drifted")
+    helper = _planner_json(helper_payload, label="planner helper-source closure")
+    if (
+        set(helper) != {"record_type", "schema_version", "plan_id", "sources"}
+        or helper.get("record_type") != "q011_section54_helper_source_closure"
+        or type(helper.get("schema_version")) is not int
+        or helper["schema_version"] != 1
+        or helper.get("plan_id") != plan_id
+        or not isinstance(helper.get("sources"), list)
+    ):
+        raise ValueError("Planner helper-source closure identity drifted")
+    expected_helper_sources = [
+        {
+            "path": relative,
+            "sha256": hashlib.sha256(
+                _planner_archive_member(source_archive, relative)
+            ).hexdigest(),
+        }
+        for relative in Q011_SECTION54_HELPER_SOURCES
+    ]
+    if helper["sources"] != expected_helper_sources:
+        raise ValueError("Planner helper-source closure drifted from reviewed archive bytes")
+    matrix = _planner_expected_matrix()
+    _planner_exact_primitive_types(
+        plan.get("campaign_matrix"), matrix, label="planner campaign matrix"
+    )
+    if plan["campaign_matrix"] != matrix:
+        raise ValueError("Planner campaign matrix drifted from reviewed Section 5.4 matrix")
+    pressure_receipt_payload = files[
+        normalized_source_bindings["pressure_selection_receipt"]["path"]
+    ]
+    pressure_receipt = _planner_normalized_pressure_receipt(
+        _planner_json(
+            pressure_receipt_payload,
+            label="planner human pressure-selection receipt",
+        ),
+        pic_root=pic_root,
+    )
+    if pressure_receipt_payload != (
+        json.dumps(pressure_receipt, indent=2, sort_keys=True, allow_nan=False) + "\n"
+    ).encode("utf-8"):
+        raise ValueError("Planner human pressure-selection receipt is not canonical JSON")
+    selected_pressure = plan.get("selected_pressure")
+    if (
+        not isinstance(selected_pressure, dict)
+        or set(selected_pressure) != {"selection_method", "selected_case", "receipt"}
+        or selected_pressure.get("selection_method") != "human_review_only"
+        or selected_pressure.get("receipt")
+        != normalized_source_bindings["pressure_selection_receipt"]
+        or pressure_receipt.get("selection_method") != "human_review_only"
+        or pressure_receipt.get("selected_case") != selected_pressure.get("selected_case")
+    ):
+        raise ValueError("Planner selected-pressure binding drifted")
+    selected_case = selected_pressure["selected_case"]
+    if (
+        not isinstance(selected_case, dict)
+        or set(selected_case) != {"case_id", "problem_ps_p0"}
+        or (selected_case.get("case_id"), selected_case.get("problem_ps_p0"))
+        not in {
+            ("ps_p0_1p00", 1.0),
+            ("ps_p0_0p05", 0.05),
+            ("ps_p0_0p10", 0.1),
+            ("ps_p0_0p20", 0.2),
+        }
+        or type(selected_case["problem_ps_p0"]) is not float
+    ):
+        raise ValueError("Planner selected pressure case drifted")
+    qualifying = _planner_json(
+        files[normalized_source_bindings["qualifying_preregistration"]["path"]],
+        label="planner qualifying preregistration",
+    )
+    if (
+        not isinstance(qualifying.get("athenak_selected_release_criteria"), dict)
+        or qualifying["athenak_selected_release_criteria"].get("campaign_matrix") != matrix
+        or plan.get("preregistration_execution_boundary")
+        != qualifying.get("qualifying_execution_bindings")
+    ):
+        raise ValueError("Planner qualifying preregistration binding drifted")
+    expected_execution_boundary = {
+        "mutates_live_policy": False,
+        "scheduler_calls": False,
+        "submits_jobs": False,
+        "infers_pressure_selection": False,
+        "launch_authorized": False,
+        "frontier_execution_authorized": False,
+        "claim_closure_authorized": False,
+    }
+    _planner_exact_primitive_types(
+        plan.get("execution_boundary"),
+        expected_execution_boundary,
+        label="planner execution boundary",
+    )
+    if plan["execution_boundary"] != expected_execution_boundary:
+        raise ValueError("Planner execution boundary drifted")
+    basis = {
+        "record_type": "q011_section54_qualifying_campaign_execution_plan",
+        "schema_version": 1,
+        "pressure_selection_receipt_sha256": normalized_source_bindings[
+            "pressure_selection_receipt"
+        ]["sha256"],
+        "selected_case": selected_case,
+        "candidate_binding": candidate,
+        "source_binding_sha256": {
+            name: binding["sha256"]
+            for name, binding in normalized_source_bindings.items()
+        },
+        "helper_source_closure": expected_helper_sources,
+        "campaign_matrix": matrix,
+        "authorized_orion_root": str(pic_root),
+    }
+    if _planner_digest_value(basis) != plan_id:
+        raise ValueError("Planner campaign-plan ID drifted from source-bound bytes")
+    descriptors = plan.get("baseline_attempt_descriptors")
+    if (
+        not isinstance(descriptors, list)
+        or plan.get("baseline_attempt_count") != 24
+        or len(descriptors) != 24
+    ):
+        raise ValueError("Planner baseline-attempt descriptors drifted")
+    campaign_root = pic_root / "campaigns" / f"q011-section54-{plan_id}"
+    expected_attempts = []
+    index = 0
+    for variant, model_overrides in Q011_SECTION54_VARIANTS:
+        for seed in Q011_SECTION54_SEEDS:
+            index += 1
+            expected_attempts.append(
+                (index, _planner_attempt_id(index, variant, seed), variant, model_overrides, seed)
+            )
+    normalized_descriptors = [
+        _planner_binding(binding, label="planner baseline-attempt descriptor")
+        for binding in descriptors
+    ]
+    if [binding["path"] for binding in normalized_descriptors] != [
+        f"attempts/baseline/{generated_attempt_id}.json"
+        for _, generated_attempt_id, _, _, _ in expected_attempts
+    ]:
+        raise ValueError("Planner baseline descriptor path ordering drifted")
+    selected_contract: dict[str, object] | None = None
+    selected_attempt_root: Path | None = None
+    restart_source_attempt: dict[str, object] | None = None
+    contract_bindings: list[dict[str, str]] = []
+    for descriptor_binding, (
+        attempt_index,
+        generated_attempt_id,
+        variant,
+        model_overrides,
+        seed,
+    ) in zip(normalized_descriptors, expected_attempts):
+        _, descriptor_payload = _planner_member(
+            files, descriptor_binding, label="planner baseline-attempt descriptor"
+        )
+        descriptor = _planner_json(
+            descriptor_payload, label="planner baseline-attempt descriptor"
+        )
+        attempt_root = campaign_root / "baseline" / generated_attempt_id
+        contract_path = f"launch_contracts/baseline/{generated_attempt_id}.json"
+        contract_binding, contract_payload = _planner_member(
+            files, descriptor.get("launch_contract"), label="planner baseline launch contract"
+        )
+        if contract_binding["path"] != contract_path:
+            raise ValueError("Planner baseline launch-contract path drifted")
+        contract_bindings.append(contract_binding)
+        contract = _planner_json(contract_payload, label="planner baseline launch contract")
+        expected_contract = _planner_expected_baseline_contract(
+            attempt_id=generated_attempt_id,
+            variant=variant,
+            model_overrides=model_overrides,
+            seed=seed,
+            selected_ps_p0=selected_case["problem_ps_p0"],
+            candidate=candidate,
+            paper_deck_binding=normalized_source_bindings["paper_deck"],
+            attempt_root=attempt_root,
+        )
+        _planner_exact_primitive_types(
+            contract, expected_contract, label="planner baseline launch contract"
+        )
+        if contract != expected_contract:
+            raise ValueError("Planner baseline launch contract drifted")
+        expected_descriptor = _planner_expected_baseline_descriptor(
+            index=attempt_index,
+            attempt_id=generated_attempt_id,
+            variant=variant,
+            seed=seed,
+            selected_ps_p0=selected_case["problem_ps_p0"],
+            candidate=candidate,
+            attempt_root=attempt_root,
+            contract_path=contract_path,
+            contract_payload=contract_payload,
+        )
+        _planner_exact_primitive_types(
+            descriptor, expected_descriptor, label="planner baseline-attempt descriptor"
+        )
+        if descriptor != expected_descriptor:
+            raise ValueError("Planner baseline-attempt descriptor drifted")
+        if (
+            variant == "three_level_amr_root_dx12_finest_dx3"
+            and seed == Q011_SECTION54_SEEDS[0]
+        ):
+            restart_source_attempt = expected_descriptor
+        if generated_attempt_id == attempt_id:
+            if selected_contract is not None:
+                raise ValueError("Planner retention selects duplicate immutable descriptors")
+            selected_contract = contract
+            selected_attempt_root = attempt_root
+    if selected_contract is None or selected_attempt_root is None:
+        raise ValueError("Planner retention does not select one immutable descriptor")
+    if restart_source_attempt is None:
+        raise ValueError("Planner restart-continuation source descriptor is absent")
+    restart_preregistration = _planner_json(
+        files[normalized_source_bindings["restart_preregistration"]["path"]],
+        label="planner restart preregistration",
+    )
+    carrier_id = _planner_restart_carrier_id(
+        restart_source_attempt["qualifying_seed"]
+    )
+    restart_attempt_root = campaign_root / "restart_continuation" / carrier_id
+    restart_contract_path = f"launch_contracts/restart_continuation/{carrier_id}.json"
+    restart_carrier_binding, restart_carrier_payload = _planner_member(
+        files,
+        plan.get("restart_continuation_carrier"),
+        label="planner restart-continuation carrier",
+    )
+    if (
+        restart_carrier_binding["path"]
+        != "restart_continuation/amr_restart_continuation_carrier.json"
+    ):
+        raise ValueError("Planner restart-continuation carrier path drifted")
+    restart_carrier = _planner_json(
+        restart_carrier_payload, label="planner restart-continuation carrier"
+    )
+    restart_contract_binding, restart_contract_payload = _planner_member(
+        files,
+        restart_carrier.get("launch_contract"),
+        label="planner restart-continuation launch contract",
+    )
+    if restart_contract_binding["path"] != restart_contract_path:
+        raise ValueError("Planner restart-continuation launch-contract path drifted")
+    restart_contract = _planner_json(
+        restart_contract_payload, label="planner restart-continuation launch contract"
+    )
+    expected_restart_contract = _planner_expected_restart_contract(
+        carrier_id=carrier_id,
+        source_attempt=restart_source_attempt,
+        restart_preregistration=restart_preregistration,
+        candidate=candidate,
+        paper_deck_binding=normalized_source_bindings["paper_deck"],
+        attempt_root=restart_attempt_root,
+    )
+    _planner_exact_primitive_types(
+        restart_contract,
+        expected_restart_contract,
+        label="planner restart-continuation launch contract",
+    )
+    if restart_contract != expected_restart_contract:
+        raise ValueError("Planner restart-continuation launch contract drifted")
+    expected_restart_carrier = _planner_expected_restart_carrier(
+        carrier_id=carrier_id,
+        source_attempt=restart_source_attempt,
+        restart_preregistration=restart_preregistration,
+        restart_preregistration_binding=normalized_source_bindings[
+            "restart_preregistration"
+        ],
+        attempt_root=restart_attempt_root,
+        contract_path=restart_contract_path,
+        contract_payload=restart_contract_payload,
+    )
+    _planner_exact_primitive_types(
+        restart_carrier,
+        expected_restart_carrier,
+        label="planner restart-continuation carrier",
+    )
+    if restart_carrier != expected_restart_carrier:
+        raise ValueError("Planner restart-continuation carrier drifted")
+    recompute_binding, recompute_payload = _planner_member(
+        files,
+        plan.get("independent_raw_artifact_recompute_plan"),
+        label="planner independent raw-artifact recompute plan",
+    )
+    if recompute_binding["path"] != "independent_raw_artifact_recompute_plan.json":
+        raise ValueError("Planner independent raw-artifact recompute-plan path drifted")
+    recompute = _planner_json(
+        recompute_payload, label="planner independent raw-artifact recompute plan"
+    )
+    expected_recompute = _planner_expected_independent_recompute_plan(
+        plan_id=plan_id,
+        campaign_root=campaign_root,
+        qualifying_preregistration_binding=normalized_source_bindings[
+            "qualifying_preregistration"
+        ],
+    )
+    _planner_exact_primitive_types(
+        recompute, expected_recompute, label="planner independent raw-artifact recompute plan"
+    )
+    if recompute != expected_recompute:
+        raise ValueError("Planner independent raw-artifact recompute plan drifted")
+    fragment_binding, fragment_payload = _planner_member(
+        files,
+        plan.get("nonauthorizing_policy_fragment"),
+        label="planner nonauthorizing policy fragment",
+    )
+    if fragment_binding["path"] != "nonauthorizing_policy_fragment.json":
+        raise ValueError("Planner nonauthorizing policy-fragment path drifted")
+    fragment = _planner_json(fragment_payload, label="planner nonauthorizing policy fragment")
+    expected_fragment = _planner_expected_policy_fragment(
+        plan_id=plan_id,
+        pic_root=pic_root,
+        campaign_root=campaign_root,
+        candidate=candidate,
+        pressure_receipt_binding=normalized_source_bindings[
+            "pressure_selection_receipt"
+        ],
+        contract_bindings=contract_bindings,
+        restart_contract_binding=restart_contract_binding,
+    )
+    _planner_exact_primitive_types(
+        fragment, expected_fragment, label="planner nonauthorizing policy fragment"
+    )
+    if fragment != expected_fragment:
+        raise ValueError("Planner nonauthorizing policy fragment drifted")
+    attempt_root = selected_attempt_root
+    argv = selected_contract["argv"]
+    raw_root = attempt_root / "raw"
+    derived = {
+        "schema_version": 1,
+        "retention_role": Q011_PLANNER_RETENTION_ROLE,
+        "planner_root": str(planner_root),
+        "planner_inventory_sha256": inventory_sha256,
+        "planner_plan_id": plan_id,
+        "planner_materialization_receipt": receipt_binding,
+        "attempt_id": attempt_id,
+        "authorized_orion_attempt_root": str(attempt_root),
+        "authorized_orion_raw_root": str(raw_root),
+        "argv": list(argv),
+    }
+    if value != derived:
+        raise ValueError("Planner-retention overlay differs from immutable planner bytes")
+    return derived
 
 
 def _relative_artifact_path(value: object, *, field: str) -> str:
@@ -2503,7 +4559,204 @@ def verify_historical_installed_control_plane(
         os.close(directory_descriptor)
 
 
-def validate_storage_policy(
+_STRICT_STORAGE_PREFLIGHT_PROFILE = "strict_authenticated_mirror"
+_HISTORICAL_RETIREMENT_STORAGE_PREFLIGHT_PROFILE = "historical_retirement_predecessor"
+
+
+def _canonical_storage_preflight_bytes(value: dict[str, object]) -> bytes:
+    return (
+        json.dumps(
+            value,
+            allow_nan=False,
+            ensure_ascii=True,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        + "\n"
+    ).encode("utf-8")
+
+
+def _validate_storage_preflight_artifact(
+    payload: bytes,
+    *,
+    probe_id: str,
+    last_preflight_utc: str,
+    orion_path: Path,
+    project_home_path: Path,
+    authorized_pic_root: Path,
+    authorized_project_home_root: Path,
+) -> None:
+    artifact = read_json_bytes(payload, label="storage-preflight evidence")
+    if payload != _canonical_storage_preflight_bytes(artifact):
+        raise ValueError("Storage-preflight evidence must use canonical JSON bytes")
+    if (
+        set(artifact)
+        != {
+            "completed_utc",
+            "method",
+            "probes",
+            "probe_id",
+            "publication",
+            "record_type",
+            "schema_version",
+            "source_authentication",
+            "started_utc",
+            "status",
+        }
+        or type(artifact.get("schema_version")) is not int
+        or artifact["schema_version"] != 1
+        or artifact.get("record_type") != "frontier_pic_storage_preflight_evidence"
+        or artifact.get("probe_id") != probe_id
+        or artifact.get("method") != AUTHORIZED_STORAGE_PREFLIGHT_METHOD
+        or artifact.get("status") != "passed"
+    ):
+        raise ValueError("Storage-preflight evidence root schema is malformed")
+    started = utc_datetime(
+        artifact.get("started_utc"), field="storage_preflight_evidence.started_utc"
+    )
+    completed = utc_datetime(
+        artifact.get("completed_utc"), field="storage_preflight_evidence.completed_utc"
+    )
+    if started > completed:
+        raise ValueError("Storage-preflight evidence completion predates its start")
+    if artifact["completed_utc"] != last_preflight_utc:
+        raise ValueError(
+            "Storage-preflight evidence completion differs from policy last_preflight_utc"
+        )
+    source = artifact.get("source_authentication")
+    if (
+        not isinstance(source, dict)
+        or set(source)
+        != {
+            "entrypoint_sha256",
+            "git_commit",
+            "runner_sha256",
+            "schema_sha256",
+            "tracked_clean_head_blobs",
+        }
+        or source.get("tracked_clean_head_blobs") is not True
+        or not isinstance(source.get("git_commit"), str)
+        or re.fullmatch(r"[0-9a-f]{40}", source["git_commit"]) is None
+        or any(
+            source.get(field) != digest
+            for field, digest in AUTHORIZED_STORAGE_PREFLIGHT_CAPTURE_SOURCE_BLOBS.items()
+        )
+    ):
+        raise ValueError("Storage-preflight evidence source authentication is not authorized")
+    # git_commit is retained provenance. The reviewed tracked-file digests and
+    # tracked_clean_head_blobs=True are the cycle-free authorization boundary.
+    if artifact.get("publication") != {
+        "orion_path": str(orion_path),
+        "project_home_path": str(project_home_path),
+    }:
+        raise ValueError("Storage-preflight evidence publication binding is malformed")
+    probes = artifact.get("probes")
+    expected_probes = [
+        ("orion_simulation_root", Path(os.path.abspath(authorized_pic_root))),
+        (
+            "project_home_mirror_root",
+            Path(os.path.abspath(authorized_project_home_root)),
+        ),
+    ]
+    if not isinstance(probes, list) or len(probes) != len(expected_probes):
+        raise ValueError("Storage-preflight evidence probes are malformed")
+    for probe, (role, root) in zip(probes, expected_probes):
+        if (
+            not isinstance(probe, dict)
+            or set(probe)
+            != {
+                "operations",
+                "path",
+                "payload_bytes",
+                "payload_sha256",
+                "role",
+                "st_dev",
+                "st_ino",
+                "status",
+            }
+            or probe.get("role") != role
+            or probe.get("path") != str(root)
+            or probe.get("operations") != AUTHORIZED_STORAGE_PREFLIGHT_OPERATIONS
+            or type(probe.get("payload_bytes")) is not int
+            or probe["payload_bytes"] != 32
+            or not _is_lowercase_sha256(probe.get("payload_sha256"))
+            or type(probe.get("st_dev")) is not int
+            or probe["st_dev"] < 0
+            or type(probe.get("st_ino")) is not int
+            or probe["st_ino"] < 1
+            or probe.get("status") != "passed"
+        ):
+            raise ValueError("Storage-preflight evidence probe is malformed")
+
+
+def _validate_storage_preflight_binding(
+    storage: dict[str, object],
+    *,
+    authorized_pic_root: Path,
+    authorized_project_home_root: Path,
+    profile: str,
+) -> None:
+    if profile == _HISTORICAL_RETIREMENT_STORAGE_PREFLIGHT_PROFILE:
+        if "storage_preflight_evidence" in storage:
+            raise ValueError(
+                "Historical storage-preflight compatibility accepts only absent evidence"
+            )
+        return
+    if profile != _STRICT_STORAGE_PREFLIGHT_PROFILE:
+        raise ValueError("Unsupported storage-preflight validation profile")
+    binding = storage.get("storage_preflight_evidence")
+    if (
+        not isinstance(binding, dict)
+        or set(binding) != {"orion_path", "probe_id", "project_home_path", "sha256"}
+    ):
+        raise ValueError("Storage policy storage-preflight evidence binding is malformed")
+    probe_id = binding.get("probe_id")
+    if not isinstance(probe_id, str):
+        raise ValueError("Storage policy storage-preflight evidence probe ID is malformed")
+    try:
+        parsed_probe_id = uuid.UUID(probe_id)
+    except ValueError as error:
+        raise ValueError(
+            "Storage policy storage-preflight evidence probe ID is malformed"
+        ) from error
+    if str(parsed_probe_id) != probe_id:
+        raise ValueError("Storage policy storage-preflight evidence probe ID is malformed")
+    lexical_pic_root = Path(os.path.abspath(str(storage["orion_bulk_evidence_root"])))
+    lexical_project_home_root = Path(
+        os.path.abspath(str(storage["project_home_mirror_root"]))
+    )
+    evidence_relative = Path("policy") / "storage_preflight_evidence" / f"{probe_id}.json"
+    orion_path = lexical_pic_root / evidence_relative
+    project_home_path = lexical_project_home_root / evidence_relative
+    if binding.get("orion_path") != str(orion_path) or binding.get(
+        "project_home_path"
+    ) != str(project_home_path):
+        raise ValueError("Storage policy storage-preflight evidence paths are malformed")
+    digest = binding.get("sha256")
+    if not _is_lowercase_sha256(digest):
+        raise ValueError("Storage policy storage-preflight evidence SHA-256 is malformed")
+    orion_payload = read_stable_regular_file_below(
+        orion_path, lexical_pic_root, require_read_only_mode=True
+    )
+    project_home_payload = read_stable_regular_file_below(
+        project_home_path,
+        lexical_project_home_root,
+        require_read_only_mode=True,
+    )
+    if orion_payload != project_home_payload or sha256_bytes(orion_payload) != digest:
+        raise ValueError("Storage-preflight evidence mirrored bytes differ")
+    _validate_storage_preflight_artifact(
+        orion_payload,
+        probe_id=probe_id,
+        last_preflight_utc=str(storage["last_preflight_utc"]),
+        orion_path=orion_path,
+        project_home_path=project_home_path,
+        authorized_pic_root=lexical_pic_root,
+        authorized_project_home_root=lexical_project_home_root,
+    )
+
+
+def _validate_storage_policy(
     policy: dict[str, object],
     *,
     control_plane_version: str,
@@ -2512,6 +4765,7 @@ def validate_storage_policy(
     authorized_account: str = AUTHORIZED_ACCOUNT,
     ledger_mirror_transport: str = AUTHORIZED_LEDGER_MIRROR_TRANSPORT,
     allow_pending_genesis: bool = False,
+    storage_preflight_profile: str,
 ) -> dict[str, object]:
     allowed_policy_keys = {
         "schema_version",
@@ -2575,10 +4829,17 @@ def validate_storage_policy(
         "orion_retention_role",
         "manual_accounting_authorizations",
         "ledger_genesis_allowed",
+        "last_preflight_utc",
     }
+    if storage_preflight_profile == _STRICT_STORAGE_PREFLIGHT_PROFILE:
+        if "storage_preflight_evidence" not in storage:
+            raise ValueError(
+                "Storage policy lacks authenticated storage-preflight evidence"
+            )
+        required_storage_keys.add("storage_preflight_evidence")
     allowed_storage_keys = required_storage_keys | {
         "status",
-        "last_preflight_utc",
+        "storage_preflight_evidence",
         "historical_project_home_bulk_artifacts",
         "ledger_genesis_authorization",
         "ledger_genesis",
@@ -2595,11 +4856,10 @@ def validate_storage_policy(
         and storage["status"] != AUTHORIZED_OLCF_SIDE_STORAGE_STATUS
     ):
         raise ValueError("Storage policy OLCF-side storage status is not authorized")
-    if "last_preflight_utc" in storage:
-        utc_datetime(
-            storage["last_preflight_utc"],
-            field="olcf_side_storage.last_preflight_utc",
-        )
+    utc_datetime(
+        storage["last_preflight_utc"],
+        field="olcf_side_storage.last_preflight_utc",
+    )
     if (
         "historical_project_home_bulk_artifacts" in storage
         and storage["historical_project_home_bulk_artifacts"]
@@ -2685,30 +4945,45 @@ def validate_storage_policy(
     if long_term.get("blocks") != AUTHORIZED_LONG_TERM_STORAGE_BLOCKS:
         raise ValueError("Storage policy long-term terminal block is not authorized")
     for key, expected_path in [
-        ("orion_simulation_root_preflight", authorized_pic_root.resolve()),
-        ("project_home_preflight", authorized_project_home_root.resolve()),
+        (
+            "orion_simulation_root_preflight",
+            Path(os.path.abspath(str(storage["orion_bulk_evidence_root"]))),
+        ),
+        (
+            "project_home_preflight",
+            Path(os.path.abspath(str(storage["project_home_mirror_root"]))),
+        ),
     ]:
         record = storage.get(key)
         if (
             not isinstance(record, dict)
-            or "status" not in record
             or not set(record) <= {"status", "path", "method"}
             or record.get("status") != "passed"
+            or record.get("method") != AUTHORIZED_STORAGE_PREFLIGHT_METHOD
         ):
             raise ValueError(f"Storage policy {key} has not passed")
         if (
-            "path" in record
-            and (
-                not isinstance(record["path"], str)
-                or Path(record["path"]).resolve() != expected_path
-            )
+            storage_preflight_profile
+            == _HISTORICAL_RETIREMENT_STORAGE_PREFLIGHT_PROFILE
+            and key == "project_home_preflight"
+        ):
+            if set(record) != {"status", "method"}:
+                raise ValueError(
+                    "Historical storage policy project_home_preflight shape is malformed"
+                )
+            continue
+        if (
+            set(record) != {"status", "path", "method"}
+            or not isinstance(record["path"], str)
+            or record["path"] != str(expected_path)
         ):
             raise ValueError(f"Storage policy {key}.path is not authorized")
-        if (
-            "method" in record
-            and record["method"] != AUTHORIZED_STORAGE_PREFLIGHT_METHOD
-        ):
-            raise ValueError(f"Storage policy {key}.method is not authorized")
+    _validate_storage_preflight_binding(
+        storage,
+        authorized_pic_root=authorized_pic_root,
+        authorized_project_home_root=authorized_project_home_root,
+        profile=storage_preflight_profile,
+    )
     manual_authorizations = storage.get("manual_accounting_authorizations")
     if not isinstance(manual_authorizations, list) or len(manual_authorizations) > 16:
         raise ValueError("Storage policy manual-accounting authorizations are malformed")
@@ -2983,6 +5258,203 @@ def validate_storage_policy(
             "Storage policy frontier_admission_smoke.analysis_script_sha256 is malformed"
         )
     return policy
+
+
+def validate_storage_policy(
+    policy: dict[str, object],
+    *,
+    control_plane_version: str,
+    authorized_pic_root: Path = AUTHORIZED_PIC_ROOT,
+    authorized_project_home_root: Path = AUTHORIZED_PROJECT_HOME_ROOT,
+    authorized_account: str = AUTHORIZED_ACCOUNT,
+    ledger_mirror_transport: str = AUTHORIZED_LEDGER_MIRROR_TRANSPORT,
+    allow_pending_genesis: bool = False,
+) -> dict[str, object]:
+    """Validate one normal policy with authenticated mirrored storage evidence."""
+    return _validate_storage_policy(
+        policy,
+        control_plane_version=control_plane_version,
+        authorized_pic_root=authorized_pic_root,
+        authorized_project_home_root=authorized_project_home_root,
+        authorized_account=authorized_account,
+        ledger_mirror_transport=ledger_mirror_transport,
+        allow_pending_genesis=allow_pending_genesis,
+        storage_preflight_profile=_STRICT_STORAGE_PREFLIGHT_PROFILE,
+    )
+
+
+def require_policy_predecessor_snapshot_for_promotion(
+    *,
+    successor_policy: dict[str, object],
+    successor_control_plane_version: str,
+    permit_historical_retirement_predecessor: bool = False,
+    authorized_pic_root: Path = AUTHORIZED_PIC_ROOT,
+    authorized_project_home_root: Path = AUTHORIZED_PROJECT_HOME_ROOT,
+    authorized_account: str = AUTHORIZED_ACCOUNT,
+    ledger_mirror_transport: str = AUTHORIZED_LEDGER_MIRROR_TRANSPORT,
+) -> tuple[dict[str, object], dict[str, str]] | None:
+    """Revalidate an active predecessor, with one narrow retirement-only legacy mode."""
+    policy_path = canonical_policy_path(authorized_pic_root)
+    mirror_policy_path = canonical_policy_path(authorized_project_home_root)
+    promotion_path = active_promotion_path(authorized_pic_root)
+    mirror_promotion_path = active_promotion_path(authorized_project_home_root)
+    anchor_paths = [
+        policy_path,
+        mirror_policy_path,
+        promotion_path,
+        mirror_promotion_path,
+    ]
+    anchor_exists = [path.exists() or path.is_symlink() for path in anchor_paths]
+    if not any(anchor_exists):
+        if permit_historical_retirement_predecessor:
+            raise ValueError(
+                "Historical storage-preflight retirement requires an active predecessor"
+            )
+        return None
+    if not all(anchor_exists):
+        raise ValueError("Active-policy predecessor anchors are incomplete")
+    artifacts: dict[Path, bytes] = {}
+    for path, root in [
+        (policy_path, authorized_pic_root),
+        (mirror_policy_path, authorized_project_home_root),
+        (promotion_path, authorized_pic_root),
+        (mirror_promotion_path, authorized_project_home_root),
+    ]:
+        lexical_root = Path(os.path.abspath(root))
+        lexical_root.resolve(strict=True)
+        require_canonical_path_below(path, lexical_root)
+        artifacts[path] = read_stable_regular_file_below(
+            path, lexical_root, require_read_only_mode=True
+        )
+    promotion_bytes = artifacts[promotion_path]
+    if promotion_bytes != artifacts[mirror_promotion_path]:
+        raise ValueError("Orion and Project Home predecessor promotion bytes differ")
+    promotion = read_json_bytes(promotion_bytes, label=str(promotion_path))
+    policy_bytes = artifacts[policy_path]
+    if policy_bytes != artifacts[mirror_policy_path]:
+        raise ValueError("Orion and Project Home predecessor policy bytes differ")
+    predecessor_version = promotion.get("control_plane_version")
+    if not _is_lowercase_sha256(predecessor_version):
+        raise ValueError("Active-policy predecessor control-plane version is malformed")
+    assert isinstance(predecessor_version, str)
+    inventory: dict[str, object] | None = None
+    for root in [authorized_pic_root, authorized_project_home_root]:
+        lexical_root = Path(os.path.abspath(root))
+        current = verify_historical_installed_control_plane(
+            lexical_root / "control_plane" / predecessor_version,
+            authorized_pic_root=root,
+        )
+        if inventory is not None and current != inventory:
+            raise ValueError(
+                "Historical Orion and Project Home control-plane inventories differ"
+            )
+        inventory = current
+    policy = read_json_bytes(policy_bytes, label=str(policy_path))
+    predecessor_storage = policy.get("olcf_side_storage")
+    configured_project_home_root = (
+        Path(os.path.abspath(str(predecessor_storage["project_home_mirror_root"])))
+        if isinstance(predecessor_storage, dict)
+        and isinstance(predecessor_storage.get("project_home_mirror_root"), str)
+        else Path(os.path.abspath(authorized_project_home_root))
+    )
+    expected = {
+        "schema_version": 1,
+        "control_plane_version": predecessor_version,
+        "policy_path": str(policy_path),
+        "project_home_policy_path": str(
+            canonical_policy_path(configured_project_home_root)
+        ),
+        "policy_sha256": sha256_bytes(policy_bytes),
+    }
+    slices = policy.get("registered_science_slices")
+    if isinstance(slices, list) and slices:
+        attestation_path = Path(
+            str(promotion.get("pre_policy_promotion_attestation_path", ""))
+        )
+        authorization_id = promotion.get(
+            "pre_policy_promotion_attestation_authorization_id"
+        )
+        digest = promotion.get("pre_policy_promotion_attestation_sha256")
+        if (
+            not isinstance(authorization_id, str)
+            or not authorization_id
+            or not _is_lowercase_sha256(digest)
+            or attestation_path.name != "attestation.json"
+            or attestation_path.parent.parent
+            != Path(os.path.abspath(authorized_pic_root)) / "operator_attestations"
+            or not attestation_path.parent.name.endswith("-pre_policy_promotion")
+        ):
+            raise ValueError("Active-policy predecessor attestation binding is malformed")
+        attestation = validate_sealed_operator_attestation(
+            attestation_path,
+            authorization_id=authorization_id,
+            phase="pre_policy_promotion",
+            control_plane_version=predecessor_version,
+            authorized_pic_root=authorized_pic_root,
+            authorized_project_home_root=authorized_project_home_root,
+            enforce_freshness=False,
+        )
+        if attestation != {"path": str(attestation_path), "sha256": digest}:
+            raise ValueError("Active-policy predecessor attestation binding differs")
+        expected.update(
+            {
+                "pre_policy_promotion_attestation_authorization_id": authorization_id,
+                "pre_policy_promotion_attestation_path": str(attestation_path),
+                "pre_policy_promotion_attestation_sha256": digest,
+            }
+        )
+    if type(promotion.get("schema_version")) is not int or promotion != expected:
+        raise ValueError("Active-policy predecessor promotion record is malformed")
+    storage = policy.get("olcf_side_storage")
+    has_evidence = isinstance(storage, dict) and "storage_preflight_evidence" in storage
+    profile = _STRICT_STORAGE_PREFLIGHT_PROFILE
+    if permit_historical_retirement_predecessor and has_evidence:
+        raise ValueError(
+            "Historical storage-preflight retirement flag requires a legacy predecessor"
+        )
+    if not has_evidence:
+        if not permit_historical_retirement_predecessor:
+            raise ValueError(
+                "Active-policy predecessor lacks authenticated storage-preflight evidence"
+            )
+        if predecessor_version == successor_control_plane_version:
+            raise ValueError(
+                "Historical storage-preflight retirement requires a new control plane"
+            )
+        if (
+            successor_policy.get("registered_science_slices") != []
+            or successor_policy.get("science_submission_freeze")
+            != {"status": PENDING_CLEAN_CANDIDATE_FREEZE}
+        ):
+            raise ValueError(
+                "Historical storage-preflight retirement requires one launch-prohibited "
+                "pending-freeze replacement"
+            )
+        if (
+            sha256_bytes(policy_bytes)
+            != AUTHORIZED_HISTORICAL_STORAGE_PREFLIGHT_RETIREMENT_POLICY_SHA256
+            or sha256_bytes(promotion_bytes)
+            != AUTHORIZED_HISTORICAL_STORAGE_PREFLIGHT_RETIREMENT_PROMOTION_SHA256
+        ):
+            raise ValueError(
+                "Historical storage-preflight retirement predecessor differs from "
+                "the exact reviewed live anchors"
+            )
+        profile = _HISTORICAL_RETIREMENT_STORAGE_PREFLIGHT_PROFILE
+    _validate_storage_policy(
+        policy,
+        control_plane_version=predecessor_version,
+        authorized_pic_root=authorized_pic_root,
+        authorized_project_home_root=authorized_project_home_root,
+        authorized_account=authorized_account,
+        ledger_mirror_transport=ledger_mirror_transport,
+        allow_pending_genesis=True,
+        storage_preflight_profile=profile,
+    )
+    return policy, {
+        "active_policy_sha256": sha256_bytes(policy_bytes),
+        "active_promotion_sha256": sha256_bytes(promotion_bytes),
+    }
 
 
 def require_storage_policy_unlock_snapshot(

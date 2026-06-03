@@ -170,7 +170,7 @@ def _published_pressure_pilot_receipt(
         "published pressure-pilot receipt SHA-256 drifted",
     )
     try:
-        verified = pressure_pilot_publisher.verify_published_pressure_pilot_receipt(
+        verified = pressure_pilot_publisher.consume_published_pressure_pilot_bundle(
             path,
             authorized_pic_root=authorized_pic_root,
         )

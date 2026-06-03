@@ -714,61 +714,81 @@ ledger counts without changing the historical incident record.
 ## Q011 Pressure-Pilot Serial Boundary
 
 The four Q011 Section 5.4 pressure-sensitivity pilots are one engineering
-calibration tranche, but they are four separate registered-science slices.
+calibration tranche, but they were four separate registered-science slices.
 The v1 `ps_p0_1p00` slice failed closed as scheduler job `4754211` when the
 registered HIP executable attempted a strided host-to-device particle subview
-copy. Its terminal ledger event is retained as immutable chronology. Use only
-the v2 retry authorizations below, and only after rebuilding and freezing the
-packed particle-transfer repair from a clean commit.
-Immediately after the paired successor-controller install, materialize and
-promote one complete launch-prohibited baseline successor with an empty slice
-allowlist. After the clean-candidate freeze, materialize and review one
-complete four-slice policy successor. Capture, review and seal one
-`pre_policy_promotion` attestation immediately before promoting the four-slice
-successor. The installed promoter rejects a Q011 pressure-slice policy unless
-its currently active same-controller predecessor is already that coherent
-empty-allowlist baseline:
+copy. Its terminal ledger event is retained as immutable chronology. The four
+rebuilt v2 slices completed and are consumed historical evidence. Do not
+relaunch them.
+
+The historical live policy predates authenticated mirrored storage-preflight
+evidence. After the paired successor-controller install, capture one
+authenticated preflight binding from clean tracked source. Persist the emitted
+fragment as a read-only review artifact under `${PIC_ROOT}/policy`, then
+materialize the exact consumed-slice retirement successor. The one-use
+promotion flag accepts only the historical predecessor shape, a newer
+controller, an empty registered-slice allowlist and a pending clean-candidate
+freeze:
 
 ```bash
+SOURCE_CONTROL_PLANE=(
+  "$PYTHON" -I -B
+  /ccs/home/dfielding/athenak-pic/tst/publication/frontier_control_plane/run_control_plane.py
+)
+STORAGE_PREFLIGHT_BINDING_DIR="${PIC_ROOT}/policy/storage_preflight_bindings"
+mkdir -p "$STORAGE_PREFLIGHT_BINDING_DIR"
+chmod 0700 "$STORAGE_PREFLIGHT_BINDING_DIR"
+STORAGE_PREFLIGHT_STAGING="$(
+  mktemp -p "$STORAGE_PREFLIGHT_BINDING_DIR" .staging.XXXXXX
+)"
+"${SOURCE_CONTROL_PLANE[@]}" capture_storage_preflight_evidence.py \
+  > "$STORAGE_PREFLIGHT_STAGING"
+PROBE_ID="$(
+  "$PYTHON" -I -B -c \
+    'import json, sys; print(json.load(open(sys.argv[1]))["storage_preflight_evidence"]["probe_id"])' \
+    "$STORAGE_PREFLIGHT_STAGING"
+)"
+STORAGE_PREFLIGHT_BINDING="${STORAGE_PREFLIGHT_BINDING_DIR}/${PROBE_ID}.json"
+chmod 0400 "$STORAGE_PREFLIGHT_STAGING"
+mv -n "$STORAGE_PREFLIGHT_STAGING" "$STORAGE_PREFLIGHT_BINDING"
+"$PYTHON" -I -B -c \
+  'import os, sys; fd = os.open(sys.argv[1], os.O_RDONLY | os.O_NOFOLLOW); os.fsync(fd); os.close(fd); fd = os.open(os.path.dirname(sys.argv[1]), os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW); os.fsync(fd); os.close(fd)' \
+  "$STORAGE_PREFLIGHT_BINDING"
+
 "$PYTHON" -I -B /ccs/home/dfielding/athenak-pic/tst/publication/q011_section54_pressure_pilot_execution.py \
-  baseline-policy-successor \
-  --baseline-policy /ccs/home/dfielding/athenak-pic/tst/publication/readiness/storage_policy.json \
+  retire-consumed-slices-baseline-policy-successor \
+  --baseline-policy "${PIC_ROOT}/policy/storage_policy.json" \
   --control-plane-version "$VERSION" \
-  --last-preflight-utc "$LAST_PREFLIGHT_UTC" \
+  --storage-preflight-binding "$STORAGE_PREFLIGHT_BINDING" \
   --output "${PIC_ROOT}/policy/reviewed_launch_prohibited_successor.json"
 
 "${CONTROL_PLANE[@]}" promote_active_policy.py \
-  --reviewed-policy "${PIC_ROOT}/policy/reviewed_launch_prohibited_successor.json"
+  --reviewed-policy "${PIC_ROOT}/policy/reviewed_launch_prohibited_successor.json" \
+  --retire-historical-storage-preflight-predecessor
+
+/usr/bin/sbatch \
+  /ccs/home/dfielding/athenak-pic/tst/publication/frontier_q011_clean_candidate_build_freeze_job.sh \
+  "$FULL_GIT_COMMIT" "$VERSION"
+
+# After the worker job completes successfully, read its exact
+# clean_candidate_manifest and clean_candidate_manifest_sha256 output lines.
 
 "$PYTHON" -I -B /ccs/home/dfielding/athenak-pic/tst/publication/q011_section54_pressure_pilot_execution.py \
-  pilot-policy-successor \
+  candidate-only-policy-successor \
   --baseline-policy "${PIC_ROOT}/policy/reviewed_launch_prohibited_successor.json" \
   --control-plane-version "$VERSION" \
-  --last-preflight-utc "$LAST_PREFLIGHT_UTC" \
+  --storage-preflight-binding "$STORAGE_PREFLIGHT_BINDING" \
   --clean-candidate-manifest "$CLEAN_CANDIDATE_MANIFEST" \
   --executable "$EXECUTABLE" \
   --environment-profile "$ENVIRONMENT_PROFILE" \
-  --output "${PIC_ROOT}/policy/reviewed_q011_pressure_pilot_successor.json"
+  --output "${PIC_ROOT}/policy/reviewed_candidate_only_successor.json"
 
-STAGING="$(
-  "$PYTHON" "$ATTESTATION_HELPER" capture \
-    --authorization-id q011-section54-pressure-four-slice-policy-v2 \
-    --control-plane-version "$VERSION" \
-    --phase pre_policy_promotion
-)"
-PRE_POLICY_PROMOTION_ATTESTATION_ROOT="$(
-  "$PYTHON" "$ATTESTATION_HELPER" seal \
-    --staging-dir "$STAGING" \
-    --attest-reviewed
-)"
-PRE_POLICY_PROMOTION_ATTESTATION="${PRE_POLICY_PROMOTION_ATTESTATION_ROOT}/attestation.json"
 "${CONTROL_PLANE[@]}" promote_active_policy.py \
-  --reviewed-policy "${PIC_ROOT}/policy/reviewed_q011_pressure_pilot_successor.json" \
-  --pre-policy-promotion-attestation "$PRE_POLICY_PROMOTION_ATTESTATION" \
-  --pre-policy-promotion-authorization-id q011-section54-pressure-four-slice-policy-v2
+  --reviewed-policy "${PIC_ROOT}/policy/reviewed_candidate_only_successor.json"
 ```
 
-Launch the cases strictly in their preregistered order. For one selected case,
+The historical v2 launch procedure below is retained for audit only. It must
+not be replayed. For one selected case, it required the operator to
 capture and seal its `pre_manifest` attestation, write the six-field queue
 snapshot, materialize one seed-timeout artifact and one selected-case config,
 create its immutable manifest, capture and seal a fresh `pre_submit_wrapper`
@@ -910,28 +930,26 @@ terminal boundary is mandatory between every pair of cases.
 
 After all four descriptors exist, publish the descriptor-verified aggregate
 bundle once. The publisher accepts exactly four case directories and four
-descriptor checksums. Create and sync the canonical publication root once
-before publication; do not use a Project Home bulk-artifact directory:
+descriptor checksums. Create and sync the canonical publication root and its
+fixed sibling acceptance authority once before publication; do not use a
+Project Home bulk-artifact directory:
 
 ```bash
-mkdir "${PIC_ROOT}/publication"
-"$PYTHON" -I -c \
-  'import os, sys; fd = os.open(sys.argv[1], os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW); os.fsync(fd); os.close(fd)' \
-  "${PIC_ROOT}/publication"
+test -d "${PIC_ROOT}/publication" || mkdir "${PIC_ROOT}/publication"
+test ! -e "${PIC_ROOT}/publication_acceptance"
+mkdir -m 0700 "${PIC_ROOT}/publication_acceptance"
+for directory in \
+  "${PIC_ROOT}/publication" \
+  "${PIC_ROOT}/publication_acceptance" \
+  "${PIC_ROOT}"
+do
+  "$PYTHON" -I -c \
+    'import os, sys; fd = os.open(sys.argv[1], os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW); os.fsync(fd); os.close(fd)' \
+    "$directory"
+done
 
-/opt/cray/pe/python/3.11.7/bin/python3 -I -B \
-  /ccs/home/dfielding/athenak-pic/tst/publication/publish_q011_section54_pressure_pilot_bundle.py \
-  "${PIC_ROOT}/publication/q011_section54_pressure_pilot_bundle" \
-  --receipt-path "${PIC_ROOT}/publication/q011_section54_pressure_pilot_bundle_receipt.json" \
-  --analysis-result-path "${PIC_ROOT}/publication/q011_section54_pressure_pilot_analysis.json" \
-  --case-artifact-dir ps_p0_1p00=<path> \
-  --case-artifact-dir ps_p0_0p05=<path> \
-  --case-artifact-dir ps_p0_0p10=<path> \
-  --case-artifact-dir ps_p0_0p20=<path> \
-  --case-descriptor-sha256 ps_p0_1p00=<sha256> \
-  --case-descriptor-sha256 ps_p0_0p05=<sha256> \
-  --case-descriptor-sha256 ps_p0_0p10=<sha256> \
-  --case-descriptor-sha256 ps_p0_0p20=<sha256>
+/usr/bin/sbatch \
+  /ccs/home/dfielding/athenak-pic/tst/publication/frontier_q011_section54_pressure_pilot_publish_job.sh
 ```
 
 The publisher reruns raw-case verification while retaining each case-root

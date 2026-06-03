@@ -20,6 +20,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+from typing import Callable
 import unittest
 from unittest.mock import patch
 import uuid
@@ -33,6 +34,8 @@ import reconcile_manual_frontier_allocations
 import terminal_recovery_handoff
 import validate_and_reserve_frontier_job
 from control_plane_common import atomic_write_bytes, durable_mkdir_parents
+from control_plane_common import AUTHORIZED_STORAGE_PREFLIGHT_CAPTURE_SOURCE_BLOBS
+from control_plane_common import AUTHORIZED_STORAGE_PREFLIGHT_OPERATIONS
 from control_plane_common import PinnedDirectoryAncestry
 from control_plane_common import CONTROL_PLANE_FILES, inventory_digest, make_tree_read_only
 from control_plane_common import durable_replace_tree
@@ -50,6 +53,7 @@ from control_plane_common import trusted_git_command, trusted_git_environment
 from control_plane_common import trusted_slurm_environment
 from control_plane_common import require_storage_policy_unlock_snapshot
 from control_plane_common import validate_clean_candidate_bundle
+from control_plane_common import validate_planner_retention_binding
 from control_plane_common import validate_launch_contract, verify_installed_control_plane
 from control_plane_common import verify_historical_installed_control_plane
 from control_plane_common import verify_snapshot_files
@@ -652,18 +656,18 @@ class SnapshotTests(unittest.TestCase):
         registered_science_slices: list[dict[str, object]] | None = None,
         **storage_overrides: object,
     ) -> None:
+        storage_preflight = self._write_storage_preflight_evidence()
         storage = {
             "installed_control_plane_version": self.control_plane_version,
             "staged_control_plane_candidate_version": self.control_plane_version,
             "installed_control_plane_lifecycle": "paired_installed_reviewed_generation",
-            "orion_simulation_root_preflight": {"status": "passed"},
+            **storage_preflight,
             "project_home_mirror_root": str(self.project_home_root),
             "project_home_usage": [
                 "small_append_only_ledger_and_control_plane_mirror",
             ],
             "project_home_retention_role": "operational_ledger_mirror_only",
             "project_home_ledger_mirror_transport": "filesystem_copy",
-            "project_home_preflight": {"status": "passed"},
             "orion_bulk_evidence_root": str(self.pic_root),
             "orion_bulk_evidence_usage": [
                 "simulation_outputs",
@@ -742,6 +746,144 @@ class SnapshotTests(unittest.TestCase):
             },
         }
         self.policy.write_text(json.dumps(policy), encoding="utf-8")
+
+    def _write_storage_preflight_evidence(
+        self,
+        *,
+        orion_root: Path | None = None,
+        project_home_root: Path | None = None,
+    ) -> dict[str, object]:
+        orion_root = self.pic_root if orion_root is None else orion_root
+        project_home_root = (
+            self.project_home_root
+            if project_home_root is None
+            else project_home_root
+        )
+        probe_id = str(uuid.uuid4())
+        completed_utc = "2026-06-03T00:00:00Z"
+        relative = Path("policy/storage_preflight_evidence") / f"{probe_id}.json"
+        orion_path = orion_root / relative
+        project_home_path = project_home_root / relative
+        artifact = {
+            "completed_utc": completed_utc,
+            "method": "local_create_write_sync_remove_probe",
+            "probes": [
+                {
+                    "operations": AUTHORIZED_STORAGE_PREFLIGHT_OPERATIONS,
+                    "path": str(root),
+                    "payload_bytes": 32,
+                    "payload_sha256": digest,
+                    "role": role,
+                    "st_dev": root.stat().st_dev,
+                    "st_ino": root.stat().st_ino,
+                    "status": "passed",
+                }
+                for role, root, digest in [
+                    ("orion_simulation_root", orion_root, "1" * 64),
+                    ("project_home_mirror_root", project_home_root, "2" * 64),
+                ]
+            ],
+            "probe_id": probe_id,
+            "publication": {
+                "orion_path": str(orion_path),
+                "project_home_path": str(project_home_path),
+            },
+            "record_type": "frontier_pic_storage_preflight_evidence",
+            "schema_version": 1,
+            "source_authentication": {
+                **AUTHORIZED_STORAGE_PREFLIGHT_CAPTURE_SOURCE_BLOBS,
+                "git_commit": "a" * 40,
+                "tracked_clean_head_blobs": True,
+            },
+            "started_utc": completed_utc,
+            "status": "passed",
+        }
+        payload = (
+            json.dumps(
+                artifact,
+                allow_nan=False,
+                ensure_ascii=True,
+                separators=(",", ":"),
+                sort_keys=True,
+            )
+            + "\n"
+        ).encode("utf-8")
+        for path in [orion_path, project_home_path]:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(payload)
+            path.chmod(0o444)
+        return {
+            "last_preflight_utc": completed_utc,
+            "orion_simulation_root_preflight": {
+                "method": "local_create_write_sync_remove_probe",
+                "path": str(orion_root),
+                "status": "passed",
+            },
+            "project_home_preflight": {
+                "method": "local_create_write_sync_remove_probe",
+                "path": str(project_home_root),
+                "status": "passed",
+            },
+            "storage_preflight_evidence": {
+                "orion_path": str(orion_path),
+                "probe_id": probe_id,
+                "project_home_path": str(project_home_path),
+                "sha256": hashlib.sha256(payload).hexdigest(),
+            },
+        }
+
+    def _rewrite_reviewed_storage_preflight_artifact(
+        self, mutate: Callable[[dict[str, object]], None]
+    ) -> None:
+        policy = json.loads(self.policy.read_text(encoding="utf-8"))
+        binding = policy["olcf_side_storage"]["storage_preflight_evidence"]
+        paths = [Path(str(binding[key])) for key in ["orion_path", "project_home_path"]]
+        artifact = json.loads(paths[0].read_text(encoding="utf-8"))
+        mutate(artifact)
+        payload = (
+            json.dumps(
+                artifact,
+                allow_nan=False,
+                ensure_ascii=True,
+                separators=(",", ":"),
+                sort_keys=True,
+            )
+            + "\n"
+        ).encode("utf-8")
+        for path in paths:
+            path.chmod(0o644)
+            path.write_bytes(payload)
+            path.chmod(0o444)
+        binding["sha256"] = hashlib.sha256(payload).hexdigest()
+        self.policy.write_text(json.dumps(policy), encoding="utf-8")
+
+    def _rewrite_active_policy_as_historical_predecessor(self) -> None:
+        policy_paths = [
+            self.pic_root / "policy" / "storage_policy.json",
+            self.project_home_root / "policy" / "storage_policy.json",
+        ]
+        policy = json.loads(policy_paths[0].read_text(encoding="utf-8"))
+        storage = policy["olcf_side_storage"]
+        storage.pop("storage_preflight_evidence")
+        storage["project_home_preflight"].pop("path")
+        payload = json.dumps(policy).encode("utf-8")
+        for path in policy_paths:
+            path.chmod(0o644)
+            path.write_bytes(payload)
+            path.chmod(0o444)
+        promotion_paths = [
+            self.pic_root / "policy" / "active_promotion.json",
+            self.project_home_root / "policy" / "active_promotion.json",
+        ]
+        promotion = json.loads(promotion_paths[0].read_text(encoding="utf-8"))
+        promotion["policy_sha256"] = hashlib.sha256(payload).hexdigest()
+        promotion_payload = (json.dumps(promotion, indent=2, sort_keys=True) + "\n").encode(
+            "utf-8"
+        )
+        for path in promotion_paths:
+            path.chmod(0o644)
+            path.write_bytes(promotion_payload)
+            path.chmod(0o444)
 
     def _promote_policy(self) -> None:
         promote(
@@ -826,6 +968,880 @@ class SnapshotTests(unittest.TestCase):
             ],
             "post_actions": [],
         }
+
+    def _planner_clean_candidate(self) -> Path:
+        import control_plane_common as common
+
+        repo_root = Path(__file__).resolve().parents[3]
+        source_root = self._clean_source("planner-candidate-source")
+        self.authorized_clean_candidate_source_root = source_root
+        inventory_relative = Path(self._prepared_artifact_inventory())
+        inventory = json.loads((repo_root / inventory_relative).read_text(encoding="utf-8"))
+        prepared_paths = {
+            str(record["path"])
+            for role in ("paper_decks", "analyzers")
+            for record in inventory[role]
+        }
+        for stale in (
+            "inputs/tests/pic_paper.athinput",
+            "tst/publication/analyze_paper.py",
+        ):
+            if stale not in prepared_paths:
+                (source_root / stale).unlink()
+        relative_paths = {
+            inventory_relative.as_posix(),
+            *prepared_paths,
+            *common.Q011_SECTION54_HELPER_SOURCES,
+            *common.Q011_SECTION54_ARCHIVE_SOURCE_PATHS.values(),
+        }
+        for relative in relative_paths:
+            destination = source_root / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes((repo_root / relative).read_bytes())
+        for role in ("paper_decks", "analyzers"):
+            for record in inventory[role]:
+                record["sha256"] = sha256(source_root / str(record["path"]))
+        (source_root / inventory_relative).write_text(
+            json.dumps(inventory, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        subprocess.run(["git", "-C", str(source_root), "add", "-A"], check=True)
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(source_root),
+                "-c",
+                "user.name=PIC Test",
+                "-c",
+                "user.email=pic-test@example.invalid",
+                "commit",
+                "-m",
+                "add reviewed q011 planner sources",
+            ],
+            check=True,
+            capture_output=True,
+        )
+        executable, profile = self._build_profile(
+            source_root,
+            self.pic_root / "planner-candidate-build",
+            "hip-mpi-release-paper-pic",
+        )
+        return create_freeze(
+            source_root=source_root,
+            executable=executable,
+            build_profile=profile,
+            build_profile_id="hip-mpi-release-paper-pic",
+            prepared_artifact_inventory=self._prepared_artifact_inventory(),
+            freeze_id="b542ff53-0e5e-43d1-ae5b-988b9a94a92e",
+            control_plane_dir=self.control_plane_dir,
+            authorized_pic_root=self.pic_root,
+            authorized_source_root=source_root,
+        )
+
+    def _planner_retention(self) -> dict[str, object]:
+        cached = getattr(self, "_planner_retention_binding", None)
+        if cached is not None:
+            return json.loads(json.dumps(cached))
+
+        import control_plane_common as common
+
+        repo_root = Path(__file__).resolve().parents[3]
+        selected_case = {"case_id": "ps_p0_0p10", "problem_ps_p0": 0.1}
+        published_pressure_receipt = (
+            self.pic_root / "publication/pressure-pilot-receipt.json"
+        )
+        published_pressure_receipt.parent.mkdir(exist_ok=True)
+        published_pressure_receipt.write_bytes(b"synthetic published pressure receipt\n")
+        published_pressure_receipt.chmod(0o444)
+        pressure_receipt = {
+            "schema_version": 1,
+            "record_type": "q011_section54_pressure_selection_receipt",
+            "selection_method": "human_review_only",
+            "published_pressure_pilot_receipt": {
+                "path": str(published_pressure_receipt),
+                "sha256": hashlib.sha256(
+                    published_pressure_receipt.read_bytes()
+                ).hexdigest(),
+            },
+            "pilot_bundle_manifest_sha256": "b" * 64,
+            "aggregate_pilot_analysis_sha256": "c" * 64,
+            "case_descriptors": [
+                {
+                    "case_id": case_id,
+                    "problem_ps_p0": problem_ps_p0,
+                    "descriptor_sha256": character * 64,
+                }
+                for (case_id, problem_ps_p0), character in zip(
+                    (
+                        ("ps_p0_1p00", 1.0),
+                        ("ps_p0_0p05", 0.05),
+                        ("ps_p0_0p10", 0.1),
+                        ("ps_p0_0p20", 0.2),
+                    ),
+                    "def0",
+                )
+            ],
+            "selected_case": selected_case,
+            "reviewer_identity": "Planner Fixture Human Reviewer",
+            "reviewed_utc": "2026-06-03T00:00:00Z",
+            "rationale": "Test-only retained human pressure selection.",
+        }
+        environment_payload = (
+            self.control_plane_dir / "frontier_pic_environment.sh"
+        ).read_bytes()
+        source_payloads = {
+            "bindings/human_pressure_selection_receipt.json": (
+                json.dumps(pressure_receipt, indent=2, sort_keys=True) + "\n"
+            ).encode("utf-8"),
+            "bindings/environment_profile.sh": environment_payload,
+            "bindings/q011_section54_qualifying_campaign_preregistration.json": (
+                repo_root
+                / common.Q011_SECTION54_ARCHIVE_SOURCE_PATHS[
+                    "qualifying_preregistration"
+                ]
+            ).read_bytes(),
+            "bindings/q011_section54_restart_continuation_preregistration.json": (
+                repo_root
+                / common.Q011_SECTION54_ARCHIVE_SOURCE_PATHS["restart_preregistration"]
+            ).read_bytes(),
+            "bindings/pic_parallel_shock_section54_paper_vl2_tsc.athinput": (
+                repo_root / common.Q011_SECTION54_ARCHIVE_SOURCE_PATHS["paper_deck"]
+            ).read_bytes(),
+        }
+        source_bindings = {
+            name: path for name, path in common.Q011_SECTION54_SOURCE_BINDING_PATHS.items()
+        }
+        clean_candidate_path = self._planner_clean_candidate()
+        clean_candidate_payload = clean_candidate_path.read_bytes()
+        clean_candidate_manifest = json.loads(clean_candidate_payload)
+        source = clean_candidate_manifest["source"]
+        build = clean_candidate_manifest["build"]
+        prepared = clean_candidate_manifest["prepared_artifacts"]
+        freeze_id = str(clean_candidate_manifest["freeze_id"])
+        candidate_root = clean_candidate_path.parent
+        source_archive_path = Path(str(source["archive_path"]))
+        source_archive_sha256 = hashlib.sha256(source_archive_path.read_bytes()).hexdigest()
+        archive_members = {
+            relative: b""
+            for relative in {
+                *common.Q011_SECTION54_HELPER_SOURCES,
+                *common.Q011_SECTION54_ARCHIVE_SOURCE_PATHS.values(),
+            }
+        }
+        with tarfile.open(fileobj=io.BytesIO(source_archive_path.read_bytes())) as archive:
+            for relative in archive_members:
+                member = archive.extractfile(relative)
+                assert member is not None
+                archive_members[relative] = member.read()
+        source_payloads["bindings/clean_candidate_manifest.json"] = clean_candidate_payload
+        source_bindings = {
+            name: {"path": path, "sha256": hashlib.sha256(source_payloads[path]).hexdigest()}
+            for name, path in source_bindings.items()
+        }
+        helper_sources = [
+            {
+                "path": relative,
+                "sha256": hashlib.sha256(archive_members[relative]).hexdigest(),
+            }
+            for relative in common.Q011_SECTION54_HELPER_SOURCES
+        ]
+        candidate_binding = {
+            "clean_candidate_manifest": {
+                "path": str(clean_candidate_path),
+                "sha256": hashlib.sha256(clean_candidate_payload).hexdigest(),
+            },
+            "freeze_id": freeze_id,
+            "git_commit": source["git_commit"],
+            "git_tree": source["git_tree"],
+            "source_archive_sha256": source_archive_sha256,
+            "source_commit_sha256": source["commit_sha256"],
+            "source_bundle_sha256": source["source_bundle_sha256"],
+            "prepared_artifact_inventory_sha256": prepared["inventory_sha256"],
+            "validated_submodules": [],
+            "build_profile": {
+                "path": build["profile_path"],
+                "sha256": build["profile_sha256"],
+            },
+            "build_profile_receipt": {
+                "path": build["profile_receipt_path"],
+                "sha256": build["profile_receipt_sha256"],
+            },
+            "build_invocations_sha256": build["build_invocations_sha256"],
+            "executable": {
+                "path": build["executable_path"],
+                "sha256": build["executable_sha256"],
+            },
+            "environment_profile": {
+                "path": str(self.control_plane_dir / "frontier_pic_environment.sh"),
+                "sha256": hashlib.sha256(environment_payload).hexdigest(),
+                "control_plane_version": self.control_plane_version,
+                "reviewed_source": {
+                    "path": common.Q011_SECTION54_ARCHIVE_SOURCE_PATHS[
+                        "environment_profile"
+                    ],
+                    "sha256": hashlib.sha256(environment_payload).hexdigest(),
+                },
+            },
+        }
+        campaign_matrix = common._planner_expected_matrix()
+        basis = {
+            "record_type": "q011_section54_qualifying_campaign_execution_plan",
+            "schema_version": 1,
+            "pressure_selection_receipt_sha256": source_bindings[
+                "pressure_selection_receipt"
+            ]["sha256"],
+            "selected_case": selected_case,
+            "candidate_binding": candidate_binding,
+            "source_binding_sha256": {
+                name: binding["sha256"] for name, binding in source_bindings.items()
+            },
+            "helper_source_closure": helper_sources,
+            "campaign_matrix": campaign_matrix,
+            "authorized_orion_root": str(self.pic_root),
+        }
+        plan_id = hashlib.sha256(
+            json.dumps(
+                basis, sort_keys=True, separators=(",", ":"), allow_nan=False
+            ).encode("utf-8")
+        ).hexdigest()
+        planner_root = (
+            self.pic_root / "plans" / f"q011-section54-qualifying-campaign-plan-{plan_id}"
+        )
+        campaign_root = self.pic_root / "campaigns" / f"q011-section54-{plan_id}"
+        files = dict(source_payloads)
+        helper_payload = (
+            json.dumps(
+                {
+                    "record_type": "q011_section54_helper_source_closure",
+                    "schema_version": 1,
+                    "plan_id": plan_id,
+                    "sources": helper_sources,
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n"
+        ).encode("utf-8")
+        files["helper_source_closure.json"] = helper_payload
+        helper_binding = {
+            "path": "helper_source_closure.json",
+            "sha256": hashlib.sha256(helper_payload).hexdigest(),
+        }
+        descriptors = []
+        selected_contract = None
+        contract_bindings = []
+        restart_source_attempt = None
+        selected_attempt_id = common._planner_attempt_id(
+            1, common.Q011_SECTION54_VARIANTS[0][0], common.Q011_SECTION54_SEEDS[0]
+        )
+        index = 0
+        for variant, model_overrides in common.Q011_SECTION54_VARIANTS:
+            for seed in common.Q011_SECTION54_SEEDS:
+                index += 1
+                attempt_id = common._planner_attempt_id(index, variant, seed)
+                attempt_root = campaign_root / "baseline" / attempt_id
+                contract_path = f"launch_contracts/baseline/{attempt_id}.json"
+                contract = common._planner_expected_baseline_contract(
+                    attempt_id=attempt_id,
+                    variant=variant,
+                    model_overrides=model_overrides,
+                    seed=seed,
+                    selected_ps_p0=selected_case["problem_ps_p0"],
+                    candidate=candidate_binding,
+                    paper_deck_binding=source_bindings["paper_deck"],
+                    attempt_root=attempt_root,
+                )
+                contract_payload = (
+                    json.dumps(contract, indent=2, sort_keys=True) + "\n"
+                ).encode("utf-8")
+                files[contract_path] = contract_payload
+                contract_binding = {
+                    "path": contract_path,
+                    "sha256": hashlib.sha256(contract_payload).hexdigest(),
+                }
+                contract_bindings.append(contract_binding)
+                descriptor_path = f"attempts/baseline/{attempt_id}.json"
+                descriptor = common._planner_expected_baseline_descriptor(
+                    index=index,
+                    attempt_id=attempt_id,
+                    variant=variant,
+                    seed=seed,
+                    selected_ps_p0=selected_case["problem_ps_p0"],
+                    candidate=candidate_binding,
+                    attempt_root=attempt_root,
+                    contract_path=contract_path,
+                    contract_payload=contract_payload,
+                )
+                descriptor_payload = (
+                    json.dumps(descriptor, indent=2, sort_keys=True) + "\n"
+                ).encode("utf-8")
+                files[descriptor_path] = descriptor_payload
+                descriptors.append(
+                    {
+                        "path": descriptor_path,
+                        "sha256": hashlib.sha256(descriptor_payload).hexdigest(),
+                    }
+                )
+                if index == 1:
+                    selected_contract = contract
+                if (
+                    variant == "three_level_amr_root_dx12_finest_dx3"
+                    and seed == common.Q011_SECTION54_SEEDS[0]
+                ):
+                    restart_source_attempt = descriptor
+        assert restart_source_attempt is not None
+        restart_preregistration = json.loads(
+            source_payloads[
+                "bindings/q011_section54_restart_continuation_preregistration.json"
+            ]
+        )
+        carrier_id = common._planner_restart_carrier_id(
+            restart_source_attempt["qualifying_seed"]
+        )
+        restart_root = campaign_root / "restart_continuation" / carrier_id
+        restart_contract_path = f"launch_contracts/restart_continuation/{carrier_id}.json"
+        restart_contract = common._planner_expected_restart_contract(
+            carrier_id=carrier_id,
+            source_attempt=restart_source_attempt,
+            restart_preregistration=restart_preregistration,
+            candidate=candidate_binding,
+            paper_deck_binding=source_bindings["paper_deck"],
+            attempt_root=restart_root,
+        )
+        restart_contract_payload = (
+            json.dumps(restart_contract, indent=2, sort_keys=True) + "\n"
+        ).encode("utf-8")
+        files[restart_contract_path] = restart_contract_payload
+        restart_contract_binding = {
+            "path": restart_contract_path,
+            "sha256": hashlib.sha256(restart_contract_payload).hexdigest(),
+        }
+        restart_carrier = common._planner_expected_restart_carrier(
+            carrier_id=carrier_id,
+            source_attempt=restart_source_attempt,
+            restart_preregistration=restart_preregistration,
+            restart_preregistration_binding=source_bindings["restart_preregistration"],
+            attempt_root=restart_root,
+            contract_path=restart_contract_path,
+            contract_payload=restart_contract_payload,
+        )
+        restart_carrier_payload = (
+            json.dumps(restart_carrier, indent=2, sort_keys=True) + "\n"
+        ).encode("utf-8")
+        restart_carrier_path = (
+            "restart_continuation/amr_restart_continuation_carrier.json"
+        )
+        files[restart_carrier_path] = restart_carrier_payload
+        restart_carrier_binding = {
+            "path": restart_carrier_path,
+            "sha256": hashlib.sha256(restart_carrier_payload).hexdigest(),
+        }
+        recompute = common._planner_expected_independent_recompute_plan(
+            plan_id=plan_id,
+            campaign_root=campaign_root,
+            qualifying_preregistration_binding=source_bindings[
+                "qualifying_preregistration"
+            ],
+        )
+        recompute_payload = (
+            json.dumps(recompute, indent=2, sort_keys=True) + "\n"
+        ).encode("utf-8")
+        recompute_path = "independent_raw_artifact_recompute_plan.json"
+        files[recompute_path] = recompute_payload
+        recompute_binding = {
+            "path": recompute_path,
+            "sha256": hashlib.sha256(recompute_payload).hexdigest(),
+        }
+        fragment = common._planner_expected_policy_fragment(
+            plan_id=plan_id,
+            pic_root=self.pic_root,
+            campaign_root=campaign_root,
+            candidate=candidate_binding,
+            pressure_receipt_binding=source_bindings["pressure_selection_receipt"],
+            contract_bindings=contract_bindings,
+            restart_contract_binding=restart_contract_binding,
+        )
+        fragment_payload = (
+            json.dumps(fragment, indent=2, sort_keys=True) + "\n"
+        ).encode("utf-8")
+        fragment_path = "nonauthorizing_policy_fragment.json"
+        files[fragment_path] = fragment_payload
+        fragment_binding = {
+            "path": fragment_path,
+            "sha256": hashlib.sha256(fragment_payload).hexdigest(),
+        }
+        qualifying = json.loads(
+            source_payloads[
+                "bindings/q011_section54_qualifying_campaign_preregistration.json"
+            ]
+        )
+        plan_payload = (
+            json.dumps(
+                {
+                    "record_type": "q011_section54_qualifying_campaign_execution_plan",
+                    "schema_version": 1,
+                    "plan_id": plan_id,
+                    "artifact_role": (
+                        "q011_section54_source_local_immutable_qualifying_campaign_plan"
+                    ),
+                    "qualification_effect": (
+                        "plan_only_no_execution_authorization_no_claim_closure"
+                    ),
+                    "status": "source_local_immutable_review_plan_only",
+                    "authorized_orion_root": str(self.pic_root),
+                    "authorized_orion_campaign_root": str(campaign_root),
+                    "selected_pressure": {
+                        "selection_method": "human_review_only",
+                        "selected_case": selected_case,
+                        "receipt": source_bindings["pressure_selection_receipt"],
+                    },
+                    "candidate_binding": candidate_binding,
+                    "source_bindings": source_bindings,
+                    "helper_source_closure": helper_binding,
+                    "campaign_matrix": campaign_matrix,
+                    "baseline_attempt_count": 24,
+                    "baseline_attempt_descriptors": descriptors,
+                    "restart_continuation_carrier": restart_carrier_binding,
+                    "independent_raw_artifact_recompute_plan": recompute_binding,
+                    "nonauthorizing_policy_fragment": fragment_binding,
+                    "execution_boundary": {
+                        "mutates_live_policy": False,
+                        "scheduler_calls": False,
+                        "submits_jobs": False,
+                        "infers_pressure_selection": False,
+                        "launch_authorized": False,
+                        "frontier_execution_authorized": False,
+                        "claim_closure_authorized": False,
+                    },
+                    "preregistration_execution_boundary": qualifying[
+                        "qualifying_execution_bindings"
+                    ],
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n"
+        ).encode("utf-8")
+        files["campaign_plan.json"] = plan_payload
+        materialized_inventory_payload = "".join(
+            f"{hashlib.sha256(payload).hexdigest()}  {path}\n"
+            for path, payload in sorted(files.items())
+        ).encode("utf-8")
+        receipt_payload = (
+            json.dumps(
+                {
+                    "record_type": (
+                        "q011_section54_qualifying_campaign_plan_materialization_receipt"
+                    ),
+                    "schema_version": 1,
+                    "plan_id": plan_id,
+                    "campaign_plan": {
+                        "path": "campaign_plan.json",
+                        "sha256": hashlib.sha256(plan_payload).hexdigest(),
+                    },
+                    "helper_source_closure": helper_binding,
+                    "tree_inventory": {
+                        "algorithm": (
+                            "sha256 of '<file_sha256>  <root-relative-path>\\n' "
+                            "entries ordered lexically by root-relative path"
+                        ),
+                        "scope": (
+                            "all materialized campaign-plan members before this "
+                            "receipt and recursive-freeze metadata"
+                        ),
+                        "excludes": [
+                            "materialization_receipt.json",
+                            "freeze_receipt.json",
+                            "artifact_inventory.sha256",
+                        ],
+                        "sha256": hashlib.sha256(
+                            materialized_inventory_payload
+                        ).hexdigest(),
+                        "inventoried_file_count": len(files),
+                    },
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n"
+        ).encode("utf-8")
+        files["materialization_receipt.json"] = receipt_payload
+        files["freeze_receipt.json"] = (
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "artifact_role": (
+                        "q011_section54_source_local_immutable_qualifying_campaign_plan"
+                    ),
+                    "qualification_effect": (
+                        "plan_only_no_execution_authorization_no_claim_closure"
+                    ),
+                    "inventory_excludes": "artifact_inventory.sha256",
+                    "freeze_policy": (
+                        "remove all owner, group and other write bits recursively"
+                    ),
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n"
+        ).encode("utf-8")
+        inventory_payload = "".join(
+            f"{hashlib.sha256(payload).hexdigest()}  {path}\n"
+            for path, payload in sorted(files.items())
+        ).encode("utf-8")
+        planner_root.mkdir(parents=True)
+        for relative, payload in files.items():
+            path = planner_root / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(payload)
+        (planner_root / "artifact_inventory.sha256").write_bytes(inventory_payload)
+        for path in sorted(planner_root.rglob("*"), reverse=True):
+            path.chmod(0o555 if path.is_dir() else 0o444)
+        planner_root.chmod(0o555)
+        assert selected_contract is not None
+        attempt_root = campaign_root / "baseline" / selected_attempt_id
+        self._planner_retention_binding = {
+            "schema_version": 1,
+            "retention_role": "q011_section54_deterministic_retained_attempt",
+            "planner_root": str(planner_root),
+            "planner_inventory_sha256": hashlib.sha256(inventory_payload).hexdigest(),
+            "planner_plan_id": plan_id,
+            "planner_materialization_receipt": {
+                "path": "materialization_receipt.json",
+                "sha256": hashlib.sha256(receipt_payload).hexdigest(),
+            },
+            "attempt_id": selected_attempt_id,
+            "authorized_orion_attempt_root": str(attempt_root),
+            "authorized_orion_raw_root": str(attempt_root / "raw"),
+            "argv": selected_contract["argv"],
+        }
+        self._planner_candidate_manifest = clean_candidate_path
+        return json.loads(json.dumps(self._planner_retention_binding))
+
+    def _prepare_planner_retention_reconciliation(
+        self,
+    ) -> tuple[Path, dict[str, object], Path]:
+        self._write_science_config(
+            authorize=True, planner_retention=self._planner_retention()
+        )
+        manifest_path = self._create_manifest()
+        with patch(
+            "validate_and_reserve_frontier_job._verify_clean_candidate",
+            return_value=sha256(self._planner_candidate_manifest),
+        ):
+            reservation = self._reserve(manifest_path)
+        self._attach(str(reservation["reservation_id"]))
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        artifact_dir = Path(str(manifest["artifact_dir"]))
+        (artifact_dir / "analysis").mkdir(parents=True, mode=0o700)
+        return manifest_path, reservation, artifact_dir
+
+    @staticmethod
+    def _planner_json_payload(value: object) -> bytes:
+        return (json.dumps(value, indent=2, sort_keys=True) + "\n").encode("utf-8")
+
+    def _rewrite_closed_planner_tree(
+        self,
+        binding: dict[str, object],
+        mutate: Callable[[dict[str, bytes]], None],
+    ) -> dict[str, object]:
+        planner_root = Path(str(binding["planner_root"]))
+        planner_root.chmod(0o755)
+        for path in planner_root.rglob("*"):
+            path.chmod(0o755 if path.is_dir() else 0o644)
+        files = {
+            path.relative_to(planner_root).as_posix(): path.read_bytes()
+            for path in planner_root.rglob("*")
+            if path.is_file() and path.name != "artifact_inventory.sha256"
+        }
+        mutate(files)
+        receipt = json.loads(files["materialization_receipt.json"])
+        pre_receipt_inventory = "".join(
+            f"{hashlib.sha256(files[path]).hexdigest()}  {path}\n"
+            for path in sorted(files)
+            if path
+            not in {
+                "materialization_receipt.json",
+                "freeze_receipt.json",
+                "artifact_inventory.sha256",
+            }
+        ).encode("utf-8")
+        receipt["tree_inventory"]["sha256"] = hashlib.sha256(
+            pre_receipt_inventory
+        ).hexdigest()
+        receipt["tree_inventory"]["inventoried_file_count"] = len(
+            [
+                path
+                for path in files
+                if path not in {"materialization_receipt.json", "freeze_receipt.json"}
+            ]
+        )
+        receipt_payload = self._planner_json_payload(receipt)
+        files["materialization_receipt.json"] = receipt_payload
+        inventory_payload = "".join(
+            f"{hashlib.sha256(files[path]).hexdigest()}  {path}\n"
+            for path in sorted(files)
+        ).encode("utf-8")
+        for relative, payload in files.items():
+            (planner_root / relative).write_bytes(payload)
+        (planner_root / "artifact_inventory.sha256").write_bytes(inventory_payload)
+        for path in sorted(planner_root.rglob("*"), reverse=True):
+            path.chmod(0o555 if path.is_dir() else 0o444)
+        planner_root.chmod(0o555)
+        binding["planner_inventory_sha256"] = hashlib.sha256(
+            inventory_payload
+        ).hexdigest()
+        binding["planner_materialization_receipt"] = {
+            "path": "materialization_receipt.json",
+            "sha256": hashlib.sha256(receipt_payload).hexdigest(),
+        }
+        return binding
+
+    def _rebind_planner_campaign_plan(self, files: dict[str, bytes]) -> None:
+        receipt = json.loads(files["materialization_receipt.json"])
+        receipt["campaign_plan"]["sha256"] = hashlib.sha256(
+            files["campaign_plan.json"]
+        ).hexdigest()
+        files["materialization_receipt.json"] = self._planner_json_payload(receipt)
+
+    def test_planner_retention_rejects_caller_selected_continuation_namespace(
+        self,
+    ) -> None:
+        binding = self._planner_retention()
+        self.assertEqual(
+            validate_planner_retention_binding(
+                binding, authorized_pic_root=self.pic_root
+            ),
+            binding,
+        )
+        attempt_id = "q011-restart-fixture-001"
+        attempt_root = (
+            self.pic_root
+            / "campaigns"
+            / f"q011-section54-{binding['planner_plan_id']}"
+            / "restart_continuation"
+            / attempt_id
+        )
+        binding["attempt_id"] = attempt_id
+        binding["authorized_orion_attempt_root"] = str(
+            attempt_root
+        )
+        binding["authorized_orion_raw_root"] = str(attempt_root / "raw")
+        binding["argv"] = ["-r", "/retained/source.rst", "-d", str(attempt_root / "raw")]
+        with self.assertRaisesRegex(ValueError, "does not select one immutable descriptor"):
+            validate_planner_retention_binding(
+                binding, authorized_pic_root=self.pic_root
+            )
+
+    def test_planner_retention_rejects_shaped_caller_overlay_substitution(self) -> None:
+        accepted = self._planner_retention()
+        for key, value in [
+            ("authorized_orion_attempt_root", "/tmp/operator-selected-attempt"),
+            ("authorized_orion_raw_root", "/tmp/operator-selected-attempt/raw"),
+            ("argv", ["-i", "bindings/operator.athinput", "-d", "/tmp/raw"]),
+        ]:
+            forged = json.loads(json.dumps(accepted))
+            forged[key] = value
+            with self.subTest(key=key), self.assertRaisesRegex(
+                ValueError, "differs from immutable planner bytes"
+            ):
+                validate_planner_retention_binding(
+                    forged, authorized_pic_root=self.pic_root
+                )
+        forged = json.loads(json.dumps(accepted))
+        forged["planner_root"] = str(self.pic_root / "plans" / "operator-selected")
+        with self.assertRaisesRegex(ValueError, "planner root is malformed"):
+            validate_planner_retention_binding(
+                forged, authorized_pic_root=self.pic_root
+            )
+
+    def test_planner_retention_rejects_submission_clean_candidate_mismatch(self) -> None:
+        binding = self._planner_retention()
+        with self.assertRaisesRegex(
+            ValueError, "differs from submission binding"
+        ):
+            validate_planner_retention_binding(
+                binding,
+                authorized_pic_root=self.pic_root,
+                expected_clean_candidate_manifest_sha256="0" * 64,
+            )
+
+    def test_planner_retention_rejects_self_authored_frozen_helper_digest(self) -> None:
+        binding = self._planner_retention()
+
+        def mutate(files: dict[str, bytes]) -> None:
+            helper = json.loads(files["helper_source_closure.json"])
+            helper["sources"][0]["sha256"] = "f" * 64
+            helper_payload = self._planner_json_payload(helper)
+            files["helper_source_closure.json"] = helper_payload
+            helper_sha256 = hashlib.sha256(helper_payload).hexdigest()
+            plan = json.loads(files["campaign_plan.json"])
+            plan["helper_source_closure"]["sha256"] = helper_sha256
+            files["campaign_plan.json"] = self._planner_json_payload(plan)
+            receipt = json.loads(files["materialization_receipt.json"])
+            receipt["helper_source_closure"]["sha256"] = helper_sha256
+            files["materialization_receipt.json"] = self._planner_json_payload(receipt)
+            self._rebind_planner_campaign_plan(files)
+
+        self._rewrite_closed_planner_tree(binding, mutate)
+        with self.assertRaisesRegex(ValueError, "reviewed archive bytes"):
+            validate_planner_retention_binding(
+                binding, authorized_pic_root=self.pic_root
+            )
+
+    def test_planner_retention_rejects_self_authored_arbitrary_matrix(self) -> None:
+        binding = self._planner_retention()
+
+        def mutate(files: dict[str, bytes]) -> None:
+            plan = json.loads(files["campaign_plan.json"])
+            plan["campaign_matrix"]["physical_mode"] = "operator_authored_mode"
+            files["campaign_plan.json"] = self._planner_json_payload(plan)
+            self._rebind_planner_campaign_plan(files)
+
+        self._rewrite_closed_planner_tree(binding, mutate)
+        with self.assertRaisesRegex(ValueError, "Section 5.4 matrix"):
+            validate_planner_retention_binding(
+                binding, authorized_pic_root=self.pic_root
+            )
+
+    def test_planner_retention_rejects_self_authored_arbitrary_candidate(self) -> None:
+        binding = self._planner_retention()
+
+        def mutate(files: dict[str, bytes]) -> None:
+            plan = json.loads(files["campaign_plan.json"])
+            plan["candidate_binding"]["git_commit"] = "a" * 40
+            files["campaign_plan.json"] = self._planner_json_payload(plan)
+            self._rebind_planner_campaign_plan(files)
+
+        self._rewrite_closed_planner_tree(binding, mutate)
+        with self.assertRaisesRegex(ValueError, "candidate binding drifted"):
+            validate_planner_retention_binding(
+                binding, authorized_pic_root=self.pic_root
+            )
+
+    def test_planner_retention_rejects_self_authored_reduced_pressure_receipt(
+        self,
+    ) -> None:
+        binding = self._planner_retention()
+
+        def mutate(files: dict[str, bytes]) -> None:
+            path = "bindings/human_pressure_selection_receipt.json"
+            receipt = json.loads(files[path])
+            receipt.pop("rationale")
+            receipt_payload = self._planner_json_payload(receipt)
+            files[path] = receipt_payload
+            receipt_sha256 = hashlib.sha256(receipt_payload).hexdigest()
+            plan = json.loads(files["campaign_plan.json"])
+            plan["source_bindings"]["pressure_selection_receipt"][
+                "sha256"
+            ] = receipt_sha256
+            plan["selected_pressure"]["receipt"]["sha256"] = receipt_sha256
+            files["campaign_plan.json"] = self._planner_json_payload(plan)
+            self._rebind_planner_campaign_plan(files)
+
+        self._rewrite_closed_planner_tree(binding, mutate)
+        with self.assertRaisesRegex(ValueError, "receipt schema drifted"):
+            validate_planner_retention_binding(
+                binding, authorized_pic_root=self.pic_root
+            )
+
+    def test_planner_retention_rejects_self_authored_extra_argv(self) -> None:
+        binding = self._planner_retention()
+
+        def mutate(files: dict[str, bytes]) -> None:
+            plan = json.loads(files["campaign_plan.json"])
+            descriptor_binding = plan["baseline_attempt_descriptors"][0]
+            descriptor_path = descriptor_binding["path"]
+            descriptor = json.loads(files[descriptor_path])
+            contract_path = descriptor["launch_contract"]["path"]
+            contract = json.loads(files[contract_path])
+            contract["argv"].append("mesh/nx1=1")
+            contract_payload = self._planner_json_payload(contract)
+            files[contract_path] = contract_payload
+            descriptor["launch_contract"]["sha256"] = hashlib.sha256(
+                contract_payload
+            ).hexdigest()
+            descriptor_payload = self._planner_json_payload(descriptor)
+            files[descriptor_path] = descriptor_payload
+            descriptor_binding["sha256"] = hashlib.sha256(
+                descriptor_payload
+            ).hexdigest()
+            files["campaign_plan.json"] = self._planner_json_payload(plan)
+            self._rebind_planner_campaign_plan(files)
+
+        self._rewrite_closed_planner_tree(binding, mutate)
+        with self.assertRaisesRegex(ValueError, "launch contract.*drifted"):
+            validate_planner_retention_binding(
+                binding, authorized_pic_root=self.pic_root
+            )
+
+    def test_planner_retention_rejects_self_authored_restart_carrier(self) -> None:
+        binding = self._planner_retention()
+
+        def mutate(files: dict[str, bytes]) -> None:
+            path = "restart_continuation/amr_restart_continuation_carrier.json"
+            carrier = json.loads(files[path])
+            carrier["checkpoint_time_omega0_inverse"] = 501.0
+            carrier_payload = self._planner_json_payload(carrier)
+            files[path] = carrier_payload
+            plan = json.loads(files["campaign_plan.json"])
+            plan["restart_continuation_carrier"]["sha256"] = hashlib.sha256(
+                carrier_payload
+            ).hexdigest()
+            files["campaign_plan.json"] = self._planner_json_payload(plan)
+            self._rebind_planner_campaign_plan(files)
+
+        self._rewrite_closed_planner_tree(binding, mutate)
+        with self.assertRaisesRegex(ValueError, "restart-continuation carrier drifted"):
+            validate_planner_retention_binding(
+                binding, authorized_pic_root=self.pic_root
+            )
+
+    def test_planner_retention_rejects_self_authored_recompute_plan(self) -> None:
+        binding = self._planner_retention()
+
+        def mutate(files: dict[str, bytes]) -> None:
+            path = "independent_raw_artifact_recompute_plan.json"
+            recompute = json.loads(files[path])
+            recompute["production_helper_imports_authorized"] = True
+            recompute_payload = self._planner_json_payload(recompute)
+            files[path] = recompute_payload
+            plan = json.loads(files["campaign_plan.json"])
+            plan["independent_raw_artifact_recompute_plan"]["sha256"] = hashlib.sha256(
+                recompute_payload
+            ).hexdigest()
+            files["campaign_plan.json"] = self._planner_json_payload(plan)
+            self._rebind_planner_campaign_plan(files)
+
+        self._rewrite_closed_planner_tree(binding, mutate)
+        with self.assertRaisesRegex(ValueError, "raw-artifact recompute plan"):
+            validate_planner_retention_binding(
+                binding, authorized_pic_root=self.pic_root
+            )
+
+    def test_planner_retention_rejects_self_authored_policy_fragment(self) -> None:
+        binding = self._planner_retention()
+
+        def mutate(files: dict[str, bytes]) -> None:
+            path = "nonauthorizing_policy_fragment.json"
+            fragment = json.loads(files[path])
+            fragment["launch_authorized"] = True
+            fragment_payload = self._planner_json_payload(fragment)
+            files[path] = fragment_payload
+            plan = json.loads(files["campaign_plan.json"])
+            plan["nonauthorizing_policy_fragment"]["sha256"] = hashlib.sha256(
+                fragment_payload
+            ).hexdigest()
+            files["campaign_plan.json"] = self._planner_json_payload(plan)
+            self._rebind_planner_campaign_plan(files)
+
+        self._rewrite_closed_planner_tree(binding, mutate)
+        with self.assertRaisesRegex(ValueError, "nonauthorizing policy fragment"):
+            validate_planner_retention_binding(
+                binding, authorized_pic_root=self.pic_root
+            )
 
     def _clean_source(self, name: str) -> Path:
         source_root = self.root / name
@@ -1101,7 +2117,14 @@ class SnapshotTests(unittest.TestCase):
         }
 
     def _write_science_config(self, *, authorize: bool, **overrides: object) -> Path:
-        manifest, executable, git_commit = self._clean_candidate(authorize=authorize)
+        planner_manifest = getattr(self, "_planner_candidate_manifest", None)
+        if overrides.get("planner_retention") is None or planner_manifest is None:
+            manifest, executable, git_commit = self._clean_candidate(authorize=authorize)
+        else:
+            manifest = planner_manifest
+            planner_candidate = json.loads(manifest.read_text(encoding="utf-8"))
+            executable = Path(str(planner_candidate["build"]["executable_path"]))
+            git_commit = str(planner_candidate["source"]["git_commit"])
         config = {
             "campaign": "f1_gpu_gyro",
             "test_id": "pic_relativistic_gyro_paper",
@@ -2111,6 +3134,13 @@ class SnapshotTests(unittest.TestCase):
     ) -> None:
         baseline = self.policy.read_bytes()
         replacement = baseline + b"\n"
+        active_anchors = [
+            self.pic_root / "policy" / "storage_policy.json",
+            self.project_home_root / "policy" / "storage_policy.json",
+            self.pic_root / "policy" / "active_promotion.json",
+            self.project_home_root / "policy" / "active_promotion.json",
+        ]
+        baseline_anchors = {path: path.read_bytes() for path in active_anchors}
         for failure_index in range(1, 5):
             with self.subTest(failure_index=failure_index):
                 self.policy.write_bytes(replacement)
@@ -2144,6 +3174,10 @@ class SnapshotTests(unittest.TestCase):
                         (self.pic_root / "policy" / "storage_policy.json").read_bytes(),
                         baseline,
                     )
+                for path, payload in baseline_anchors.items():
+                    path.chmod(0o644)
+                    path.write_bytes(payload)
+                    path.chmod(0o444)
                 self.policy.write_bytes(baseline)
                 self._promote_policy()
 
@@ -5303,6 +6337,179 @@ PY
         self.assertEqual(second["event_sha256"], first["event_sha256"])
         self.assertFalse(marker_path.exists())
 
+    def test_reconcile_planner_receipt_is_derived_after_durable_mirror_append(
+        self,
+    ) -> None:
+        _, _, artifact_dir = self._prepare_planner_retention_reconciliation()
+        original_write = reconcile_frontier_job.atomic_write_bytes_at
+        observed_post_mirror_authority = False
+
+        def observe_post_mirror_authority(*args: object, **kwargs: object) -> None:
+            nonlocal observed_post_mirror_authority
+            records = ledger.validate_mirrored_state(
+                self.ledger, self.receipts, self.mirror
+            )
+            self.assertEqual(records[-1]["event_type"], "reconciliation")
+            receipts = ledger.validate_receipts(
+                self.receipts,
+                records,
+                mirror_jsonl=self.mirror,
+                mirror_transport="filesystem_copy",
+            )
+            self.assertEqual(
+                receipts[-1]["mirrored_event_sha256"], records[-1]["event_sha256"]
+            )
+            observed_post_mirror_authority = True
+            original_write(*args, **kwargs)
+
+        with patch(
+            "reconcile_frontier_job._scheduler_result",
+            return_value=("COMPLETED", 60, 1),
+        ), patch(
+            "reconcile_frontier_job.atomic_write_bytes_at",
+            side_effect=observe_post_mirror_authority,
+        ):
+            event = reconcile(
+                job_id="12345",
+                ledger_jsonl=self.ledger,
+                ledger_csv=self.csv,
+                receipts_jsonl=self.receipts,
+                mirror_jsonl=self.mirror,
+                control_plane_dir=self.control_plane_dir,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+        receipt_path = (
+            artifact_dir
+            / "analysis"
+            / reconcile_frontier_job.REGISTERED_EXECUTION_RECEIPT_NAME
+        )
+        receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+        self.assertTrue(observed_post_mirror_authority)
+        self.assertEqual(receipt["reconciliation_event_sha256"], event["event_sha256"])
+        self.assertEqual(receipt["artifact_dir"], str(artifact_dir))
+        self.assertEqual(receipt["planner_retention"], self._planner_retention())
+        self.assertNotEqual(receipt["artifact_dir"], receipt["raw_output_root"])
+        self.assertEqual(stat.S_IMODE(receipt_path.stat().st_mode), 0o444)
+
+    def test_reconcile_planner_receipt_retry_is_idempotent(self) -> None:
+        _, _, artifact_dir = self._prepare_planner_retention_reconciliation()
+        with patch(
+            "reconcile_frontier_job._scheduler_result",
+            return_value=("COMPLETED", 60, 1),
+        ):
+            first = reconcile(
+                job_id="12345",
+                ledger_jsonl=self.ledger,
+                ledger_csv=self.csv,
+                receipts_jsonl=self.receipts,
+                mirror_jsonl=self.mirror,
+                control_plane_dir=self.control_plane_dir,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+        receipt_path = (
+            artifact_dir
+            / "analysis"
+            / reconcile_frontier_job.REGISTERED_EXECUTION_RECEIPT_NAME
+        )
+        receipt_bytes = receipt_path.read_bytes()
+        with patch("reconcile_frontier_job._scheduler_result") as scheduler_result:
+            second = reconcile(
+                job_id="12345",
+                ledger_jsonl=self.ledger,
+                ledger_csv=self.csv,
+                receipts_jsonl=self.receipts,
+                mirror_jsonl=self.mirror,
+                control_plane_dir=self.control_plane_dir,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+        scheduler_result.assert_not_called()
+        self.assertEqual(second["event_sha256"], first["event_sha256"])
+        self.assertEqual(receipt_path.read_bytes(), receipt_bytes)
+
+    def test_reconcile_planner_receipt_rejects_caller_selected_restart_namespace(
+        self,
+    ) -> None:
+        retention = self._planner_retention()
+        attempt_id = "q011-restart-fixture-001"
+        attempt_root = (
+            self.pic_root
+            / "campaigns"
+            / "q011-section54-fixture"
+            / "restart_continuation"
+            / attempt_id
+        )
+        retention.update(
+            {
+                "attempt_id": attempt_id,
+                "authorized_orion_attempt_root": str(attempt_root),
+                "authorized_orion_raw_root": str(attempt_root / "raw"),
+                "argv": [
+                    "-r",
+                    "/retained/source.rst",
+                    "-d",
+                    str(attempt_root / "raw"),
+                ],
+            }
+        )
+        self._write_science_config(authorize=True, planner_retention=retention)
+        with self.assertRaisesRegex(
+            ValueError, "does not select one immutable descriptor"
+        ):
+            self._create_manifest()
+
+    def test_reconcile_planner_receipt_rejects_analysis_directory_substitution(
+        self,
+    ) -> None:
+        _, _, artifact_dir = self._prepare_planner_retention_reconciliation()
+        analysis_dir = artifact_dir / "analysis"
+        detached = artifact_dir / "analysis.detached"
+        original_write = reconcile_frontier_job.atomic_write_bytes_at
+
+        def substitute_then_write(*args: object, **kwargs: object) -> None:
+            analysis_dir.rename(detached)
+            analysis_dir.mkdir(mode=0o700)
+            original_write(*args, **kwargs)
+
+        with patch(
+            "reconcile_frontier_job._scheduler_result",
+            return_value=("COMPLETED", 60, 1),
+        ), patch(
+            "reconcile_frontier_job.atomic_write_bytes_at",
+            side_effect=substitute_then_write,
+        ), self.assertRaisesRegex(ValueError, "Directory ancestry changed"):
+            reconcile(
+                job_id="12345",
+                ledger_jsonl=self.ledger,
+                ledger_csv=self.csv,
+                receipts_jsonl=self.receipts,
+                mirror_jsonl=self.mirror,
+                control_plane_dir=self.control_plane_dir,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+        receipt_name = reconcile_frontier_job.REGISTERED_EXECUTION_RECEIPT_NAME
+        self.assertFalse((analysis_dir / receipt_name).exists())
+        self.assertFalse((detached / receipt_name).exists())
+        analysis_dir.rmdir()
+        detached.rename(analysis_dir)
+        with patch("reconcile_frontier_job._scheduler_result") as scheduler_result:
+            event = reconcile(
+                job_id="12345",
+                ledger_jsonl=self.ledger,
+                ledger_csv=self.csv,
+                receipts_jsonl=self.receipts,
+                mirror_jsonl=self.mirror,
+                control_plane_dir=self.control_plane_dir,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+        scheduler_result.assert_not_called()
+        self.assertEqual(event["event_type"], "reconciliation")
+        self.assertTrue((analysis_dir / receipt_name).is_file())
+
     def test_reconcile_terminal_retry_rejects_stale_policy_generation(self) -> None:
         manifest_path = self._create_manifest()
         reservation = self._reserve(manifest_path)
@@ -6214,11 +7421,15 @@ PY
             campaign=campaign,
             test_id=test_id,
             artifact_dir=str(self.pic_root / "runs" / campaign / self.submission_id),
+            planner_retention=self._planner_retention(),
         )
         manifest_path = self._create_manifest()
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         self.assertEqual(manifest["prior_case_closures"], [])
         with patch(
+            "validate_and_reserve_frontier_job._verify_clean_candidate",
+            return_value=sha256(self._planner_candidate_manifest),
+        ), patch(
             "validate_and_reserve_frontier_job._verify_q011_repaired_clean_candidate"
         ), patch(
             "validate_and_reserve_frontier_job._q011_selected_pressure",
@@ -6241,9 +7452,13 @@ PY
             campaign=campaign,
             test_id=test_id,
             artifact_dir=str(self.pic_root / "runs" / campaign / self.submission_id),
+            planner_retention=self._planner_retention(),
         )
         manifest_path = self._create_manifest()
         with patch(
+            "validate_and_reserve_frontier_job._verify_clean_candidate",
+            return_value=sha256(self._planner_candidate_manifest),
+        ), patch(
             "validate_and_reserve_frontier_job._verify_q011_repaired_clean_candidate"
         ), patch(
             "validate_and_reserve_frontier_job._q011_selected_pressure",
@@ -6502,6 +7717,7 @@ PY
                 "clean_candidate_manifest_sha256": candidate_sha256,
                 "git_commit": git_commit,
                 "prior_case_closures": [closure],
+                "planner_retention": self._planner_retention(),
                 "snapshot_files": [
                     {
                         "role": "job-script",
@@ -7021,7 +8237,7 @@ PY
         with self.assertRaises(ValueError):
             self._reserve(manifest_path)
 
-    def test_registered_science_manifest_path_swap_uses_stable_candidate_bytes(
+    def test_registered_science_rejects_manifest_path_swap_after_stable_capture(
         self,
     ) -> None:
         candidate = self._write_science_config(authorize=True)
@@ -7045,9 +8261,9 @@ PY
             "validate_and_reserve_frontier_job._read_regular_file_at",
             side_effect=read_and_swap,
         ):
-            reservation = self._reserve(manifest_path)
+            with self.assertRaises(ValueError):
+                self._reserve(manifest_path)
         self.assertTrue(swapped)
-        self.assertEqual(reservation["submission_scope"], "registered_science")
 
     def test_registered_science_rejects_candidate_layout_widening(self) -> None:
         candidate = self._write_science_config(authorize=True)
@@ -8178,7 +9394,6 @@ PY
     def test_policy_accepts_closed_production_storage_metadata_shape(self) -> None:
         self._write_policy(
             status="passed_user_authorized_orion_only_storage",
-            last_preflight_utc="2026-05-30T22:52:40Z",
             historical_project_home_bulk_artifacts=(
                 "chronology_only_superseded_by_orion_policy_copies_do_not_add_new_bulk_artifacts"
             ),
@@ -8192,10 +9407,195 @@ PY
             },
             project_home_preflight={
                 "status": "passed",
+                "path": str(self.project_home_root),
                 "method": "local_create_write_sync_remove_probe",
             },
         )
         self._promote_policy()
+
+    def test_storage_preflight_reviewed_source_digest_tuple_matches_current_bytes(
+        self,
+    ) -> None:
+        expected = {
+            "entrypoint_sha256": "capture_storage_preflight_evidence.py",
+            "runner_sha256": "run_control_plane.py",
+            "schema_sha256": "storage_preflight.schema.json",
+        }
+        control_plane = Path(__file__).parent
+        self.assertEqual(
+            AUTHORIZED_STORAGE_PREFLIGHT_CAPTURE_SOURCE_BLOBS,
+            {
+                key: hashlib.sha256((control_plane / filename).read_bytes()).hexdigest()
+                for key, filename in expected.items()
+            },
+        )
+
+    def test_policy_rejects_missing_storage_preflight_binding_and_root_fields(
+        self,
+    ) -> None:
+        for overrides in [
+            {"storage_preflight_evidence": None},
+            {
+                "orion_simulation_root_preflight": {
+                    "path": str(self.pic_root),
+                    "status": "passed",
+                }
+            },
+            {
+                "project_home_preflight": {
+                    "method": "local_create_write_sync_remove_probe",
+                    "status": "passed",
+                }
+            },
+        ]:
+            with self.subTest(overrides=overrides):
+                self._write_policy(**overrides)
+                with self.assertRaises(ValueError):
+                    self._promote_policy()
+
+    def test_policy_rejects_storage_preflight_completion_mismatch(self) -> None:
+        self._write_policy(last_preflight_utc="2026-06-03T00:00:01Z")
+        with self.assertRaisesRegex(ValueError, "completion differs"):
+            self._promote_policy()
+
+    def test_policy_rejects_divergent_storage_preflight_mirror(self) -> None:
+        self._write_policy()
+        policy = json.loads(self.policy.read_text(encoding="utf-8"))
+        mirror = Path(
+            str(
+                policy["olcf_side_storage"]["storage_preflight_evidence"][
+                    "project_home_path"
+                ]
+            )
+        )
+        mirror.chmod(0o644)
+        mirror.write_bytes(mirror.read_bytes() + b"divergent\n")
+        mirror.chmod(0o444)
+        with self.assertRaisesRegex(ValueError, "mirrored bytes differ"):
+            self._promote_policy()
+
+    def test_policy_rejects_unreviewed_storage_preflight_capture_source(self) -> None:
+        self._write_policy()
+        self._rewrite_reviewed_storage_preflight_artifact(
+            lambda artifact: artifact["source_authentication"].update(
+                runner_sha256="0" * 64
+            )
+        )
+        with self.assertRaisesRegex(ValueError, "source authentication"):
+            self._promote_policy()
+
+    def test_historical_storage_preflight_retirement_is_promotion_only_and_one_time(
+        self,
+    ) -> None:
+        self._rewrite_active_policy_as_historical_predecessor()
+        historical_policy_sha256 = sha256(
+            self.pic_root / "policy" / "storage_policy.json"
+        )
+        historical_promotion_sha256 = sha256(
+            self.pic_root / "policy" / "active_promotion.json"
+        )
+        with self.assertRaisesRegex(ValueError, "lacks authenticated"):
+            require_storage_policy_unlock_snapshot(
+                control_plane_version=self.control_plane_version,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+        successor = self._publish_test_control_plane_successor(self.pic_root)
+        project_home_successor = self._publish_test_control_plane_successor(
+            self.project_home_root
+        )
+        self.assertEqual(project_home_successor.name, successor.name)
+        self._write_policy(
+            installed_control_plane_version=successor.name,
+            staged_control_plane_candidate_version=successor.name,
+        )
+        with self.assertRaisesRegex(ValueError, "lacks authenticated"):
+            promote(
+                self.policy,
+                control_plane_dir=successor,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+        with patch(
+            "control_plane_common."
+            "AUTHORIZED_HISTORICAL_STORAGE_PREFLIGHT_RETIREMENT_POLICY_SHA256",
+            historical_policy_sha256,
+        ), patch(
+            "control_plane_common."
+            "AUTHORIZED_HISTORICAL_STORAGE_PREFLIGHT_RETIREMENT_PROMOTION_SHA256",
+            historical_promotion_sha256,
+        ):
+            promote(
+                self.policy,
+                retire_historical_storage_preflight_predecessor=True,
+                control_plane_dir=successor,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+        require_storage_policy_unlock_snapshot(
+            control_plane_version=successor.name,
+            authorized_pic_root=self.pic_root,
+            authorized_project_home_root=self.project_home_root,
+        )
+        self._write_policy(
+            installed_control_plane_version=successor.name,
+            staged_control_plane_candidate_version=successor.name,
+        )
+        with self.assertRaisesRegex(ValueError, "requires a legacy predecessor"):
+            promote(
+                self.policy,
+                retire_historical_storage_preflight_predecessor=True,
+                control_plane_dir=successor,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+
+    def test_historical_storage_preflight_retirement_rejects_unreviewed_live_anchors(
+        self,
+    ) -> None:
+        self._rewrite_active_policy_as_historical_predecessor()
+        successor = self._publish_test_control_plane_successor(self.pic_root)
+        project_home_successor = self._publish_test_control_plane_successor(
+            self.project_home_root
+        )
+        self.assertEqual(project_home_successor.name, successor.name)
+        self._write_policy(
+            installed_control_plane_version=successor.name,
+            staged_control_plane_candidate_version=successor.name,
+        )
+        with self.assertRaisesRegex(ValueError, "exact reviewed live anchors"):
+            promote(
+                self.policy,
+                retire_historical_storage_preflight_predecessor=True,
+                control_plane_dir=successor,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+
+    def test_historical_storage_preflight_retirement_flag_requires_launch_prohibited_policy(
+        self,
+    ) -> None:
+        self._write_policy(
+            science_submission_freeze={
+                "status": "authorized",
+                "manifest_path": str(
+                    self.pic_root
+                    / "clean_candidates"
+                    / str(uuid.uuid4())
+                    / "clean_candidate_manifest.json"
+                ),
+                "manifest_sha256": "1" * 64,
+                "build_profile_control_plane_version": self.control_plane_version,
+            }
+        )
+        with self.assertRaisesRegex(ValueError, "launch-prohibited"):
+            promote(
+                self.policy,
+                retire_historical_storage_preflight_predecessor=True,
+                control_plane_dir=self.control_plane_dir,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
 
     def test_policy_rejects_unknown_nested_storage_fields_and_boolean_metadata_aliases(
         self,
@@ -8367,7 +9767,12 @@ PY
     ) -> None:
         project_home_alias = self.root / "project_home_alias"
         project_home_alias.symlink_to(self.project_home_root, target_is_directory=True)
-        self._write_policy(project_home_mirror_root=str(project_home_alias))
+        self._write_policy(
+            project_home_mirror_root=str(project_home_alias),
+            **self._write_storage_preflight_evidence(
+                project_home_root=project_home_alias
+            ),
+        )
         promote(
             self.policy,
             control_plane_dir=self.control_plane_dir,
@@ -8610,13 +10015,11 @@ PY
 
     def test_policy_root_symlink_rejects_before_outside_write(self) -> None:
         policy_root = self.pic_root / "policy"
-        for path in policy_root.iterdir():
-            path.unlink()
-        policy_root.rmdir()
+        shutil.rmtree(policy_root)
         outside = self.root / "outside-policy"
         outside.mkdir()
         policy_root.symlink_to(outside, target_is_directory=True)
-        with self.assertRaises(ValueError):
+        with self.assertRaises((NotADirectoryError, ValueError)):
             self._promote_policy()
         self.assertEqual(list(outside.iterdir()), [])
 

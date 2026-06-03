@@ -17,17 +17,15 @@ from pathlib import Path, PurePosixPath
 import re
 import stat
 import tempfile
-from typing import Any, Mapping, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
 import numpy as np
 
 if __package__:
     from . import analyze_q011_section54_outputs as output_primitives
-    from . import q011_section54_pressure_pilot_execution as execution
     from .pvtk_particles import ParticleVTKData, read_particle_vtk
 else:
     import analyze_q011_section54_outputs as output_primitives
-    import q011_section54_pressure_pilot_execution as execution
     from pvtk_particles import ParticleVTKData, read_particle_vtk
 
 
@@ -38,10 +36,16 @@ BASE_PREREGISTRATION_PATH = (
     / "tst/publication/readiness/"
     "q011_section54_pressure_pilot_preregistration_2026-06-01.json"
 )
-PREREGISTRATION_PATH = (
+PARSER_COMPATIBILITY_SUCCESSOR_PATH = (
     REPO_ROOT
     / "tst/publication/readiness/"
     "q011_section54_pressure_pilot_aggregate_analysis_compatibility_"
+    "successor_2026-06-02.json"
+)
+PREREGISTRATION_PATH = (
+    REPO_ROOT
+    / "tst/publication/readiness/"
+    "q011_section54_pressure_pilot_postrun_aggregate_source_authorization_"
     "successor_2026-06-02.json"
 )
 REGISTERED_EXECUTION_PREREGISTRATION_PATH = (
@@ -57,7 +61,7 @@ ACTIVE_DECK_PATH = (
     / "inputs/publication/pic_parallel_shock_section54_paper_vl2_tsc.athinput"
 )
 AUTHORIZED_PUBLICATION_ROOT = (
-    execution.AUTHORIZED_PIC_ROOT / "publication"
+    Path("/lustre/orion/ast207/proj-shared/dfielding/PIC") / "publication"
 )
 RESULT_RECORD_TYPE = "q011_section54_pressure_pilot_analysis"
 EVIDENCE_CLASS = "engineering_calibration_only"
@@ -373,7 +377,8 @@ def _strict_equal(actual: object, expected: object, label: str) -> None:
 
 def _load_compatibility_successor() -> tuple[bytes, dict[str, str]]:
     payload = _regular_bytes(
-        PREREGISTRATION_PATH, "pressure-pilot aggregate-analysis compatibility successor"
+        PARSER_COMPATIBILITY_SUCCESSOR_PATH,
+        "pressure-pilot aggregate-analysis compatibility successor",
     )
     successor = _decode_json(
         payload, "pressure-pilot aggregate-analysis compatibility successor"
@@ -449,7 +454,193 @@ def _load_compatibility_successor() -> tuple[bytes, dict[str, str]]:
     return predecessor_payload, successor["compatibility_repair"]["changed_source_binding"]
 
 
+def _load_postrun_source_authorization_successor() -> dict[str, Any]:
+    payload = _regular_bytes(
+        PREREGISTRATION_PATH, "pressure-pilot post-run aggregate source authorization"
+    )
+    successor = _object(
+        _decode_json(payload, "pressure-pilot post-run aggregate source authorization"),
+        {
+            "record_type",
+            "schema_version",
+            "date",
+            "gate",
+            "classification",
+            "qualification_effect",
+            "predecessor_record",
+            "predecessor_sha256",
+            "historical_v2_execution_preregistration",
+            "historical_launch_chronology",
+            "archive_execution_contract",
+            "source_closure",
+            "scientific_contract",
+            "execution_policy",
+        },
+        "pressure-pilot post-run aggregate source authorization",
+    )
+    _strict_equal(
+        {
+            key: successor[key]
+            for key in (
+                "record_type",
+                "schema_version",
+                "date",
+                "gate",
+                "classification",
+                "qualification_effect",
+                "predecessor_record",
+                "predecessor_sha256",
+                "historical_launch_chronology",
+                "archive_execution_contract",
+                "scientific_contract",
+                "execution_policy",
+            )
+        },
+        {
+            "record_type": (
+                "q011_section54_pressure_pilot_postrun_aggregate_source_"
+                "authorization_successor"
+            ),
+            "schema_version": 1,
+            "date": "2026-06-02",
+            "gate": "Q-011",
+            "classification": "engineering_calibration_only",
+            "qualification_effect": (
+                "none_postrun_aggregate_and_review_publication_only_no_launch_"
+                "reauthorization_no_sun_bai_claim"
+            ),
+            "predecessor_record": PARSER_COMPATIBILITY_SUCCESSOR_PATH.relative_to(
+                REPO_ROOT
+            ).as_posix(),
+            "predecessor_sha256": (
+                "cfbc3bb4b184d1a9747a4b6869b2b4b578ffc1ae4b0a30a40573da8cbf972fa1"
+            ),
+            "historical_launch_chronology": {
+                "state": "stale_non_authorizing_consumed_slices_no_reauthorization",
+                "historical_v2_source_bindings_may_match_current_checkout": False,
+                "aggregate_publication_is_postrun_only": True,
+            },
+            "archive_execution_contract": {
+                "snapshot_source": "worker_extracted_readonly_git_archive_head",
+                "archive_commit_binding": (
+                    "publisher_measures_readonly_git_archive_embedded_commit_archive_"
+                    "sha256_reviewed_source_closure_and_executing_worker_snapshot_"
+                    "members"
+                ),
+                "requires_clean_reviewed_source_closure": True,
+            },
+            "scientific_contract": {
+                "pilot_cases_changed": False,
+                "estimators_changed": False,
+                "thresholds_changed": False,
+                "snapshot_selection_changed": False,
+            },
+            "execution_policy": {
+                "frontier_execution_authorized_by_this_record": False,
+                "scheduler_commands_authorized_by_this_record": False,
+                "historical_launch_slices_reauthorized": False,
+                "scientific_evidence_eligible": False,
+                "sun_bai_claim": False,
+            },
+        },
+        "pressure-pilot post-run aggregate source authorization identity",
+    )
+    historical = _binding(
+        successor["historical_v2_execution_preregistration"],
+        "pressure-pilot post-run aggregate historical v2 execution preregistration",
+    )
+    _strict_equal(
+        historical,
+        {
+            "path": (
+                "tst/publication/readiness/"
+                "q011_section54_pressure_pilot_registered_execution_retry_"
+                "successor_v2_2026-06-02.json"
+            ),
+            "sha256": (
+                "fcee4f99009ff10efa1e2f2d18f2a8bb4af551c64a97aa5c6f10a2dacf95f3bc"
+            ),
+        },
+        "pressure-pilot post-run aggregate historical v2 execution preregistration",
+    )
+    predecessor = _regular_bytes(
+        PARSER_COMPATIBILITY_SUCCESSOR_PATH,
+        "pressure-pilot parser-compatibility predecessor",
+    )
+    _require(
+        _sha256_bytes(predecessor) == successor["predecessor_sha256"],
+        "pressure-pilot post-run aggregate predecessor SHA-256 drifted",
+    )
+    historical_payload = _regular_bytes(
+        REPO_ROOT / historical["path"],
+        "pressure-pilot historical v2 execution preregistration",
+    )
+    _require(
+        _sha256_bytes(historical_payload) == historical["sha256"],
+        "pressure-pilot historical v2 execution preregistration SHA-256 drifted",
+    )
+    closure = _list(
+        successor["source_closure"],
+        "pressure-pilot post-run aggregate source closure",
+    )
+    roles = set()
+    paths = set()
+    for index, raw in enumerate(closure):
+        label = f"pressure-pilot post-run aggregate source closure[{index}]"
+        record = _object(raw, {"role", "path", "sha256"}, label)
+        role = _text(record["role"], f"{label}/role")
+        path = _relative_path(record["path"], f"{label}/path")
+        digest = _sha256(record["sha256"], f"{label}/sha256")
+        _require(role not in roles, f"{label}: duplicate role")
+        _require(path not in paths, f"{label}: duplicate path")
+        roles.add(role)
+        paths.add(path)
+        measured = _sha256_bytes(
+            _regular_bytes(REPO_ROOT / path, f"reviewed post-run source {path}")
+        )
+        _require(measured == digest, f"reviewed post-run source SHA-256 drifted: {path}")
+    expected_source_paths = {
+        "aggregate_worker_wrapper": (
+            "tst/publication/frontier_q011_section54_pressure_pilot_publish_job.sh"
+        ),
+        "aggregate_publisher": (
+            "tst/publication/publish_q011_section54_pressure_pilot_bundle.py"
+        ),
+        "aggregate_analyzer": "tst/publication/analyze_q011_section54_pressure_pilot.py",
+        "aggregate_case_verifier": (
+            "tst/publication/analyze_q011_section54_pressure_pilot_case.py"
+        ),
+        "output_primitives": "tst/publication/analyze_q011_section54_outputs.py",
+        "structured_artifact_helper": (
+            "tst/publication/frontier_f1_structured_artifacts.py"
+        ),
+        "particle_vtk_reader": "tst/publication/pvtk_particles.py",
+        "review_packet_renderer": (
+            "tst/publication/render_q011_section54_pressure_pilot_review_packet.py"
+        ),
+        "review_packet_worker_wrapper": (
+            "tst/publication/frontier_q011_section54_pressure_pilot_review_packet_job.sh"
+        ),
+    }
+    _strict_equal(
+        roles,
+        set(expected_source_paths),
+        "pressure-pilot post-run aggregate source closure roles",
+    )
+    _strict_equal(
+        {
+            record["role"]: record["path"]
+            for record in closure
+            if isinstance(record, dict)
+        },
+        expected_source_paths,
+        "pressure-pilot post-run aggregate source closure paths",
+    )
+    return successor
+
+
 def _load_policy() -> dict[str, Any]:
+    _load_postrun_source_authorization_successor()
     payload, output_primitives_successor = _load_compatibility_successor()
     policy = _object(
         _decode_json(payload, "pressure-pilot preregistration"),
@@ -655,9 +846,18 @@ def _manifest_schema(payload: bytes) -> dict[str, Any]:
     }
 
 
-def _member_payload(root: Path, binding: Mapping[str, str], label: str) -> bytes:
-    path = root / binding["path"]
-    payload = _regular_bytes(path, label)
+def _member_payload(
+    root: Path,
+    binding: Mapping[str, str],
+    label: str,
+    *,
+    member_reader: Callable[[str], bytes] | None = None,
+) -> bytes:
+    payload = (
+        _regular_bytes(root / binding["path"], label)
+        if member_reader is None
+        else member_reader(binding["path"])
+    )
     _require(_sha256_bytes(payload) == binding["sha256"], f"{label}: SHA-256 drifted")
     _require(bool(payload), f"{label}: retained product is empty")
     return payload
@@ -747,8 +947,21 @@ def _validate_runtime_parameters(dataset: output_primitives.AthenaBinaryDataset,
     return float(parameters["mhd"]["gamma"])
 
 
-def _binary_dataset(root: Path, binding: Mapping[str, str], time: float, ps_p0: float, fields: Sequence[str]) -> tuple[output_primitives.AthenaBinaryDataset, dict[str, output_primitives.CompositeGrid]]:
-    payload = _member_payload(root, binding, f"binary product {binding['path']}")
+def _binary_dataset(
+    root: Path,
+    binding: Mapping[str, str],
+    time: float,
+    ps_p0: float,
+    fields: Sequence[str],
+    *,
+    member_reader: Callable[[str], bytes] | None = None,
+) -> tuple[output_primitives.AthenaBinaryDataset, dict[str, output_primitives.CompositeGrid]]:
+    payload = _member_payload(
+        root,
+        binding,
+        f"binary product {binding['path']}",
+        member_reader=member_reader,
+    )
     try:
         dataset = output_primitives.parse_athenak_binary_bytes(payload, source=binding["path"])
     except output_primitives.AnalysisError as error:
@@ -775,8 +988,19 @@ def _particle_data(payload: bytes, label: str) -> ParticleVTKData:
             raise PilotAnalysisError(f"{label}: malformed particle VTK: {error}") from error
 
 
-def _particle_report(root: Path, binding: Mapping[str, str], time: float) -> dict[str, int]:
-    payload = _member_payload(root, binding, f"particle product {binding['path']}")
+def _particle_report(
+    root: Path,
+    binding: Mapping[str, str],
+    time: float,
+    *,
+    member_reader: Callable[[str], bytes] | None = None,
+) -> dict[str, int]:
+    payload = _member_payload(
+        root,
+        binding,
+        f"particle product {binding['path']}",
+        member_reader=member_reader,
+    )
     lines = payload.splitlines()
     _require(len(lines) >= 2, f"{binding['path']}: particle VTK provenance header is absent")
     match = _PVTK_PROVENANCE_PATTERN.fullmatch(lines[1])
@@ -818,8 +1042,19 @@ def _particle_report(root: Path, binding: Mapping[str, str], time: float) -> dic
     }
 
 
-def _stdout_report(root: Path, binding: Mapping[str, str], terminal_particles: int) -> dict[str, Any]:
-    payload = _member_payload(root, binding, f"stdout product {binding['path']}")
+def _stdout_report(
+    root: Path,
+    binding: Mapping[str, str],
+    terminal_particles: int,
+    *,
+    member_reader: Callable[[str], bytes] | None = None,
+) -> dict[str, Any]:
+    payload = _member_payload(
+        root,
+        binding,
+        f"stdout product {binding['path']}",
+        member_reader=member_reader,
+    )
     try:
         text = payload.decode("utf-8")
     except UnicodeDecodeError as error:
@@ -873,10 +1108,26 @@ def _verify_marker(payload: bytes, artifact: bytes, label: str) -> None:
     _require(lines[2] == f"fnv1a64={expected}", f"{label}: restart completion digest drifted")
 
 
-def _restart_report(root: Path, case_id: str, restart: Mapping[str, Any]) -> dict[str, Any]:
+def _restart_report(
+    root: Path,
+    case_id: str,
+    restart: Mapping[str, Any],
+    *,
+    member_reader: Callable[[str], bytes] | None = None,
+) -> dict[str, Any]:
     manifest_binding = restart["manifest"]
-    manifest_payload = _member_payload(root, manifest_binding, f"{case_id} restart manifest")
-    manifest_marker = _member_payload(root, restart["manifest_complete"], f"{case_id} restart manifest marker")
+    manifest_payload = _member_payload(
+        root,
+        manifest_binding,
+        f"{case_id} restart manifest",
+        member_reader=member_reader,
+    )
+    manifest_marker = _member_payload(
+        root,
+        restart["manifest_complete"],
+        f"{case_id} restart manifest marker",
+        member_reader=member_reader,
+    )
     _verify_marker(manifest_marker, manifest_payload, f"{case_id} restart manifest marker")
     decoded = _object(_decode_json(manifest_payload, f"{case_id} restart manifest"), {"schema", "members"}, f"{case_id} restart manifest")
     _strict_equal(decoded["schema"], "ATHENAK_RESTART_MANIFEST_V1", f"{case_id} restart schema")
@@ -914,21 +1165,63 @@ def _restart_report(root: Path, case_id: str, restart: Mapping[str, Any]) -> dic
         marker_binding = member["complete"]
         _strict_equal(artifact_binding["path"], expected["path"], f"{case_id} restart member[{index}] path")
         _strict_equal(marker_binding["path"], expected["path"] + ".complete", f"{case_id} restart member[{index}] marker path")
-        artifact = _member_payload(root, artifact_binding, f"{case_id} restart member[{index}]")
-        marker = _member_payload(root, marker_binding, f"{case_id} restart member[{index}] marker")
+        artifact = _member_payload(
+            root,
+            artifact_binding,
+            f"{case_id} restart member[{index}]",
+            member_reader=member_reader,
+        )
+        marker = _member_payload(
+            root,
+            marker_binding,
+            f"{case_id} restart member[{index}] marker",
+            member_reader=member_reader,
+        )
         _verify_marker(marker, artifact, f"{case_id} restart member[{index}] marker")
         _require(len(artifact) == expected["size"] and _fnv1a64(artifact) == expected["fnv1a64"],
                  f"{case_id}: restart manifest member digest drifted")
     return {"layout": "shared" if shared else "rank_sharded", "member_count": len(declared)}
 
 
-def _snapshot_report(root: Path, case_id: str, ps_p0: float, snapshot: Mapping[str, Any]) -> dict[str, Any]:
+def _snapshot_report(
+    root: Path,
+    case_id: str,
+    ps_p0: float,
+    snapshot: Mapping[str, Any],
+    *,
+    member_reader: Callable[[str], bytes] | None = None,
+) -> dict[str, Any]:
     time = snapshot["time"]
-    mhd_dataset, mhd = _binary_dataset(root, snapshot["mhd_w_bcc"], time, ps_p0, _MHD_FIELDS)
-    _, bmag_product = _binary_dataset(root, snapshot["bmag"], time, ps_p0, _SCALAR_BIN_FIELDS["bmag"])
-    _binary_dataset(root, snapshot["prtcl_jx"], time, ps_p0, _SCALAR_BIN_FIELDS["prtcl_jx"])
-    _binary_dataset(root, snapshot["j2"], time, ps_p0, _SCALAR_BIN_FIELDS["j2"])
-    particles = _particle_report(root, snapshot["prtcl_all"], time)
+    mhd_dataset, mhd = _binary_dataset(
+        root, snapshot["mhd_w_bcc"], time, ps_p0, _MHD_FIELDS, member_reader=member_reader
+    )
+    _, bmag_product = _binary_dataset(
+        root,
+        snapshot["bmag"],
+        time,
+        ps_p0,
+        _SCALAR_BIN_FIELDS["bmag"],
+        member_reader=member_reader,
+    )
+    _binary_dataset(
+        root,
+        snapshot["prtcl_jx"],
+        time,
+        ps_p0,
+        _SCALAR_BIN_FIELDS["prtcl_jx"],
+        member_reader=member_reader,
+    )
+    _binary_dataset(
+        root,
+        snapshot["j2"],
+        time,
+        ps_p0,
+        _SCALAR_BIN_FIELDS["j2"],
+        member_reader=member_reader,
+    )
+    particles = _particle_report(
+        root, snapshot["prtcl_all"], time, member_reader=member_reader
+    )
     rho = mhd["dens"].values
     pressure = (float(mhd_dataset.input_parameters["mhd"]["gamma"]) - 1.0) * mhd["eint"].values
     vx = mhd["velx"].values
@@ -956,6 +1249,8 @@ def analyze_pressure_pilot_bundle(
     expected_manifest_sha256: str,
     *,
     authorized_publication_root: Path = AUTHORIZED_PUBLICATION_ROOT,
+    member_reader: Callable[[str], bytes] | None = None,
+    actual_files: set[str] | None = None,
 ) -> dict[str, Any]:
     """Validate one complete four-case pilot bundle and emit overlay-ready records."""
     _require(_SHA256_PATTERN.fullmatch(expected_manifest_sha256) is not None,
@@ -980,7 +1275,11 @@ def analyze_pressure_pilot_bundle(
     )
     _require(bundle_root.is_dir(), "pressure-pilot bundle root must be a directory")
     policy = _load_policy()
-    manifest_payload = _regular_bytes(bundle_root / MANIFEST_NAME, "pressure-pilot manifest")
+    manifest_payload = (
+        _regular_bytes(bundle_root / MANIFEST_NAME, "pressure-pilot manifest")
+        if member_reader is None
+        else member_reader(MANIFEST_NAME)
+    )
     _require(_sha256_bytes(manifest_payload) == expected_manifest_sha256,
              "pressure-pilot manifest SHA-256 drifted")
     manifest = _manifest_schema(manifest_payload)
@@ -1011,19 +1310,35 @@ def analyze_pressure_pilot_bundle(
         "manifest/registered-execution preregistration binding",
     )
     _validate_case_identity(manifest["cases"])
-    _require(_actual_files(bundle_root) == _declared_paths(manifest),
+    _require((actual_files if actual_files is not None else _actual_files(bundle_root)) == _declared_paths(manifest),
              "pressure-pilot raw product inventory drifted")
     profiles = []
     case_summaries = []
     for case in manifest["cases"]:
         snapshot_reports = [
-            _snapshot_report(bundle_root, case["case_id"], case["ps_p0"], snapshot)
+            _snapshot_report(
+                bundle_root,
+                case["case_id"],
+                case["ps_p0"],
+                snapshot,
+                member_reader=member_reader,
+            )
             for snapshot in case["snapshots"]
         ]
         profiles.extend(report["profile"] for report in snapshot_reports)
         terminal_particles = snapshot_reports[-1]["particles"]["particle_count"]
-        stdout = _stdout_report(bundle_root, case["stdout"], terminal_particles)
-        restart = _restart_report(bundle_root, case["case_id"], case["terminal_restart"])
+        stdout = _stdout_report(
+            bundle_root,
+            case["stdout"],
+            terminal_particles,
+            member_reader=member_reader,
+        )
+        restart = _restart_report(
+            bundle_root,
+            case["case_id"],
+            case["terminal_restart"],
+            member_reader=member_reader,
+        )
         case_summaries.append({
             "case_id": case["case_id"],
             "ps_p0": case["ps_p0"],

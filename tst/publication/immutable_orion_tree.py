@@ -1186,6 +1186,7 @@ def _write_new_metadata(
         os.fsync(fd)
     finally:
         os.close(fd)
+    os.fsync(root_fd)
 
 
 def _remove_write_bits_below_root(
@@ -1231,6 +1232,7 @@ def _remove_write_bits_below_root(
                     )
                     freeze(child_fd, (*parent_parts, name))
                     os.fchmod(child_fd, os.fstat(child_fd).st_mode & ~_WRITE_BITS)
+                    os.fsync(child_fd)
                 finally:
                     os.close(child_fd)
                 continue
@@ -1256,6 +1258,7 @@ def _remove_write_bits_below_root(
                         error_type, label, f"retained tree contains hard-linked file: {relative}"
                     )
                 os.fchmod(fd, opened.st_mode & ~_WRITE_BITS)
+                os.fsync(fd)
             finally:
                 os.close(fd)
 
@@ -1293,6 +1296,17 @@ def _parse_inventory(
     if text != canonical:
         _raise(error_type, label, "retained inventory serialization is noncanonical")
     return expected
+
+
+def _required_inventory_directories(paths: Iterator[str] | set[str]) -> set[str]:
+    """Return the exact non-root directory closure implied by inventoried files."""
+    directories: set[str] = set()
+    for relative in paths:
+        parent = PurePosixPath(relative).parent
+        while parent.as_posix() != ".":
+            directories.add(parent.as_posix())
+            parent = parent.parent
+    return directories
 
 
 def _require_root_binding(
@@ -1713,8 +1727,15 @@ def _verify_frozen_tree_anchored(
         for relative, entry in entries.items()
         if entry.entry_type == "file" and relative != INVENTORY_NAME
     }
+    measured_directories = {
+        relative
+        for relative, entry in entries.items()
+        if entry.entry_type == "directory"
+    }
     if set(measured_payloads) != set(expected):
         _raise(error_type, label, "retained tree membership drifted from inventory")
+    if measured_directories != _required_inventory_directories(set(expected)):
+        _raise(error_type, label, "retained tree directory membership drifted from inventory")
     for relative, digest in expected.items():
         if measured_payloads[relative] != digest:
             _raise(error_type, label, f"retained artifact hash drifted: {relative}")
@@ -1780,6 +1801,83 @@ def verify_frozen_tree(
         )
 
 
+def freeze_tree_anchored(
+    runtime_root: str | Path,
+    root_fd: int,
+    receipt: dict[str, Any],
+    *,
+    authorized_root: Path,
+    error_type: type[ValueError] = ValueError,
+    label: str = "immutable-tree",
+) -> dict[str, Any]:
+    """Freeze and verify one root through a caller-owned anchored descriptor."""
+    root = _canonical_authorized_root(
+        runtime_root,
+        authorized_root=authorized_root,
+        error_type=error_type,
+        label=label,
+    )
+    _validate_receipt_payload(receipt, error_type=error_type, label=label)
+    _require_root_binding(
+        root,
+        root_fd,
+        authorized_root=authorized_root,
+        error_type=error_type,
+        label=label,
+    )
+    preflight = _scan_anchored_tree(
+        root_fd, hash_regular=False, error_type=error_type, label=label
+    )
+    _require_reserved_metadata_absent(root_fd, error_type=error_type, label=label)
+    _write_new_metadata(
+        root_fd,
+        FREEZE_RECEIPT_NAME,
+        json.dumps(receipt, indent=2, sort_keys=True) + "\n",
+        error_type=error_type,
+        label=label,
+    )
+    _remove_write_bits_below_root(root_fd, error_type=error_type, label=label)
+    boundary = _scan_anchored_tree(
+        root_fd, hash_regular=False, error_type=error_type, label=label
+    )
+    _require_freeze_boundary(preflight, boundary, error_type=error_type, label=label)
+    _require_read_only(boundary, include_root=False, error_type=error_type, label=label)
+    hashed = _scan_anchored_tree(
+        root_fd, hash_regular=True, error_type=error_type, label=label
+    )
+    _require_read_only(hashed, include_root=False, error_type=error_type, label=label)
+    _require_same_snapshot(
+        boundary,
+        hashed,
+        error_type=error_type,
+        label=label,
+        phase="immutable staging hash pass",
+    )
+    inventory = "".join(
+        f"{entry.sha256}  {entry.relative}\n"
+        for entry in hashed.entries
+        if entry.entry_type == "file" and entry.relative != INVENTORY_NAME
+    )
+    _write_new_metadata(
+        root_fd,
+        INVENTORY_NAME,
+        inventory,
+        error_type=error_type,
+        label=label,
+    )
+    os.fchmod(root_fd, os.fstat(root_fd).st_mode & ~_WRITE_BITS)
+    os.fsync(root_fd)
+    return _verify_frozen_tree_anchored(
+        root,
+        root_fd,
+        hashlib.sha256(inventory.encode("utf-8")).hexdigest(),
+        staged_snapshot=hashed,
+        authorized_root=authorized_root,
+        error_type=error_type,
+        label=label,
+    )
+
+
 def freeze_tree(
     runtime_root: str | Path,
     receipt: dict[str, Any],
@@ -1788,66 +1886,23 @@ def freeze_tree(
     error_type: type[ValueError] = ValueError,
     label: str = "immutable-tree",
 ) -> dict[str, Any]:
-    """Exclusively write metadata, recursively remove write bits, and verify."""
+    """Open one root once, then freeze and verify it through the anchored descriptor."""
     root = _canonical_authorized_root(
         runtime_root,
         authorized_root=authorized_root,
         error_type=error_type,
         label=label,
     )
-    _validate_receipt_payload(receipt, error_type=error_type, label=label)
     with _open_anchored_root(
         root,
         authorized_root=authorized_root,
         error_type=error_type,
         label=label,
     ) as root_fd:
-        preflight = _scan_anchored_tree(
-            root_fd, hash_regular=False, error_type=error_type, label=label
-        )
-        _require_reserved_metadata_absent(root_fd, error_type=error_type, label=label)
-        _write_new_metadata(
-            root_fd,
-            FREEZE_RECEIPT_NAME,
-            json.dumps(receipt, indent=2, sort_keys=True) + "\n",
-            error_type=error_type,
-            label=label,
-        )
-        _remove_write_bits_below_root(root_fd, error_type=error_type, label=label)
-        boundary = _scan_anchored_tree(
-            root_fd, hash_regular=False, error_type=error_type, label=label
-        )
-        _require_freeze_boundary(preflight, boundary, error_type=error_type, label=label)
-        _require_read_only(boundary, include_root=False, error_type=error_type, label=label)
-        hashed = _scan_anchored_tree(
-            root_fd, hash_regular=True, error_type=error_type, label=label
-        )
-        _require_read_only(hashed, include_root=False, error_type=error_type, label=label)
-        _require_same_snapshot(
-            boundary,
-            hashed,
-            error_type=error_type,
-            label=label,
-            phase="immutable staging hash pass",
-        )
-        inventory = "".join(
-            f"{entry.sha256}  {entry.relative}\n"
-            for entry in hashed.entries
-            if entry.entry_type == "file" and entry.relative != INVENTORY_NAME
-        )
-        _write_new_metadata(
-            root_fd,
-            INVENTORY_NAME,
-            inventory,
-            error_type=error_type,
-            label=label,
-        )
-        os.fchmod(root_fd, os.fstat(root_fd).st_mode & ~_WRITE_BITS)
-        return _verify_frozen_tree_anchored(
+        return freeze_tree_anchored(
             root,
             root_fd,
-            hashlib.sha256(inventory.encode("utf-8")).hexdigest(),
-            staged_snapshot=hashed,
+            receipt,
             authorized_root=authorized_root,
             error_type=error_type,
             label=label,

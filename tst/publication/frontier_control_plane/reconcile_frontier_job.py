@@ -10,16 +10,24 @@ if __name__ == "__main__" and "/control_plane/" in __file__ and not getattr(
     raise SystemExit("Run installed control-plane tools through run_control_plane.py")
 
 import argparse
+import hashlib
+import json
+import os
 from pathlib import Path
 import re
+import stat
 import subprocess
 
 from control_plane_common import AUTHORIZED_PIC_ROOT
 from control_plane_common import AUTHORIZED_SLURM_CLUSTER
 from control_plane_common import AUTHORIZED_PROJECT_HOME_ROOT
 from control_plane_common import TRUSTED_SACCT
-from control_plane_common import read_json, require_ledger_paths
+from control_plane_common import PinnedDirectoryAncestry, atomic_write_bytes_at
+from control_plane_common import read_json, read_json_bytes, record_for_role
+from control_plane_common import read_stable_regular_file_below, require_ledger_paths
+from control_plane_common import require_canonical_path_below
 from control_plane_common import scheduler_account_matches_authorized
+from control_plane_common import validate_planner_retention_binding
 from control_plane_common import trusted_slurm_environment
 from control_plane_common import verify_historical_installed_control_plane
 from control_plane_common import verify_installed_control_plane
@@ -35,6 +43,7 @@ from validate_and_reserve_frontier_job import _matching_pending_marker
 from validate_and_reserve_frontier_job import _pending_marker_path
 from validate_and_reserve_frontier_job import _require_current_reservation_marker
 from validate_and_reserve_frontier_job import _require_reservation_policy_snapshot
+from validate_and_reserve_frontier_job import _require_run_artifact_dir
 from validate_and_reserve_frontier_job import _verify_scheduler_job_binding
 
 
@@ -52,6 +61,11 @@ TERMINAL_STATES = {
     "TIMEOUT",
 }
 SCRIPT_DIR = Path(__file__).absolute().parent
+REGISTERED_EXECUTION_RECEIPT_NAME = "q011_section54_registered_execution_receipt.json"
+REGISTERED_EXECUTION_RECEIPT_RECORD_TYPE = (
+    "q011_section54_reconciled_registered_execution_receipt"
+)
+REGISTERED_EXECUTION_RECEIPT_ROLE = "immutable_reconciled_registered_execution"
 
 
 def _scheduler_result(
@@ -120,6 +134,155 @@ def _verify_reservation_control_plane_pair(
         )
         if inventory["version"] != version:
             raise ValueError("Reservation control-plane inventory digest mismatch")
+
+
+def _json_bytes(value: dict[str, object]) -> bytes:
+    return (
+        json.dumps(value, indent=2, sort_keys=True, allow_nan=False) + "\n"
+    ).encode("utf-8")
+
+
+def _registered_execution_receipt_payload(
+    event: dict[str, object], *, authorized_pic_root: Path
+) -> tuple[Path, bytes] | None:
+    """Derive one Q011 receipt solely from immutable manifest and reconciliation."""
+    retention = event.get("planner_retention")
+    if retention is None or event.get("state") != "COMPLETED":
+        return None
+    planner_retention = validate_planner_retention_binding(
+        retention,
+        authorized_pic_root=authorized_pic_root,
+        expected_clean_candidate_manifest_sha256=str(
+            event["clean_candidate_manifest_sha256"]
+        ),
+    )
+    manifest_path = require_canonical_path_below(
+        Path(str(event.get("manifest_path", ""))),
+        Path(os.path.abspath(authorized_pic_root)) / "manifests",
+    )
+    manifest_bytes = read_stable_regular_file_below(
+        manifest_path,
+        Path(os.path.abspath(authorized_pic_root)),
+        require_read_only_mode=True,
+    )
+    if hashlib.sha256(manifest_bytes).hexdigest() != event.get("manifest_sha256"):
+        raise ValueError("Registered-execution manifest digest differs from ledger")
+    manifest = read_json_bytes(manifest_bytes, label="registered-execution manifest")
+    manifest_retention = validate_planner_retention_binding(
+        manifest.get("planner_retention"),
+        authorized_pic_root=authorized_pic_root,
+        expected_clean_candidate_manifest_sha256=str(
+            manifest["clean_candidate_manifest_sha256"]
+        ),
+    )
+    artifact_dir = _require_run_artifact_dir(manifest)
+    if (
+        planner_retention != manifest_retention
+        or manifest.get("submission_scope") != "registered_science"
+        or event.get("submission_scope") != "registered_science"
+        or event.get("reconciled") is not True
+        or event.get("submission_id") != manifest.get("submission_id")
+        or event.get("control_plane_version") != manifest.get("control_plane_version")
+        or event.get("git_commit") != manifest.get("git_commit")
+        or event.get("artifact_dir") != str(artifact_dir)
+    ):
+        raise ValueError("Registered-execution reconciliation differs from manifest")
+    receipt = {
+        "record_type": REGISTERED_EXECUTION_RECEIPT_RECORD_TYPE,
+        "schema_version": 1,
+        "receipt_role": REGISTERED_EXECUTION_RECEIPT_ROLE,
+        "registration_scope": "registered_science",
+        "reconciled": True,
+        "reservation_id": event["reservation_id"],
+        "submission_id": event["submission_id"],
+        "reconciliation_event_sha256": event["event_sha256"],
+        "attempt_id": planner_retention["attempt_id"],
+        "source_commit": manifest["git_commit"],
+        "executable_sha256": record_for_role(manifest, "executable")["sha256"],
+        "deck_sha256": record_for_role(manifest, "input-deck")["sha256"],
+        "environment_sha256": record_for_role(manifest, "environment-profile")[
+            "sha256"
+        ],
+        "control_plane_version": manifest["control_plane_version"],
+        "argv": planner_retention["argv"],
+        "slurm_job_id": event["job_id"],
+        "slurm_terminal_state": event["state"],
+        "raw_output_root": planner_retention["authorized_orion_raw_root"],
+        "artifact_dir": str(artifact_dir),
+        "planner_retention": planner_retention,
+        "pre_submit_manifest_sha256": event["manifest_sha256"],
+    }
+    return artifact_dir / "analysis" / REGISTERED_EXECUTION_RECEIPT_NAME, _json_bytes(
+        receipt
+    )
+
+
+def _read_pinned_read_only_receipt(parent_fd: int, name: str) -> bytes:
+    descriptor = os.open(name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=parent_fd)
+    try:
+        before = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(before.st_mode)
+            or before.st_nlink != 1
+            or before.st_mode & 0o222
+        ):
+            raise ValueError("Registered-execution receipt is not one read-only file")
+        with os.fdopen(descriptor, "rb", closefd=False) as stream:
+            payload = stream.read()
+        after = os.fstat(descriptor)
+        current = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+        identity = lambda value: (
+            value.st_dev,
+            value.st_ino,
+            value.st_mode,
+            value.st_nlink,
+            value.st_size,
+            value.st_mtime_ns,
+            value.st_ctime_ns,
+        )
+        if (
+            identity(before) != identity(after)
+            or (after.st_dev, after.st_ino) != (current.st_dev, current.st_ino)
+        ):
+            raise ValueError("Registered-execution receipt changed while reading")
+        return payload
+    finally:
+        os.close(descriptor)
+
+
+def _publish_registered_execution_receipt(
+    event: dict[str, object], *, authorized_pic_root: Path
+) -> Path | None:
+    """Publish or verify the post-mirror Q011 receipt inside pinned /runs analysis."""
+    derived = _registered_execution_receipt_payload(
+        event, authorized_pic_root=authorized_pic_root
+    )
+    if derived is None:
+        return None
+    path, payload = derived
+    analysis_dir = path.parent
+    with PinnedDirectoryAncestry(
+        analysis_dir, root=Path(os.path.abspath(authorized_pic_root))
+    ) as ancestry:
+        metadata = os.fstat(ancestry.descriptor)
+        if not stat.S_ISDIR(metadata.st_mode) or stat.S_IMODE(metadata.st_mode) != 0o700:
+            raise ValueError("Registered-execution analysis directory is not private")
+        try:
+            atomic_write_bytes_at(
+                ancestry.descriptor,
+                path.name,
+                payload,
+                mode=0o444,
+                replace=False,
+                post_publish_check=ancestry.require_same,
+            )
+        except FileExistsError:
+            pass
+        ancestry.require_same()
+        if _read_pinned_read_only_receipt(ancestry.descriptor, path.name) != payload:
+            raise ValueError("Registered-execution receipt retry bytes differ")
+        ancestry.require_same()
+    return path
 
 
 def _require_cross_generation_recovery(
@@ -236,6 +399,9 @@ def reconcile(
                 or latest[0].get("terminal_recovery_mode") != recovery[2]
             ):
                 raise ValueError("Cross-generation retry belongs to another recovery handoff")
+            _publish_registered_execution_receipt(
+                latest[0], authorized_pic_root=authorized_pic_root
+            )
             if marker_path.is_file():
                 if recovery is not None:
                     marker = _matching_pending_marker(
@@ -432,6 +598,9 @@ def reconcile(
             mirror_jsonl,
             event,
             mirror_transport="filesystem_copy",
+        )
+        _publish_registered_execution_receipt(
+            result, authorized_pic_root=authorized_pic_root
         )
         marker_path = _pending_marker_path(authorized_pic_root)
         if marker_path.is_file():

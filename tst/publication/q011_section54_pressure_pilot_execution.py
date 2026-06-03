@@ -72,6 +72,10 @@ SEED_TIMEOUT_RATIONALE_FILENAME = "timeout_margin_seed_rationale.json"
 QUEUE_SNAPSHOT_FORMAT = "%i|%P|%q|%T|%j|%k"
 _SHA256 = re.compile(r"[0-9a-f]{64}")
 _GIT_COMMIT = re.compile(r"[0-9a-f]{40}")
+_UUID = re.compile(
+    r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+)
+_STORAGE_PREFLIGHT_METHOD = "local_create_write_sync_remove_probe"
 _REGISTERED_EXECUTION_CONTRACT_SHA256 = (
     "bbd58928a8c5310c9f109a77f53ffe0af245889d7dd8fe84686b82315faa1b5a"
 )
@@ -84,6 +88,15 @@ _FAILED_V1_CLEAN_CANDIDATE_MANIFEST_SHA256 = (
 )
 _FAILED_V1_EXECUTABLE_SHA256 = (
     "c7c3a986fdbd1bb68dd2e8a0aa95df13934acacb33714b38bdb77ef73a1579c5"
+)
+_CONSUMED_HISTORICAL_V2_SLICES_SHA256 = (
+    "a839602e625ea97f301888a18467f6bf6f6ca5b18999fe726df38e68fd1b408a"
+)
+_HISTORICAL_V2_SCIENCE_FREEZE_SHA256 = (
+    "045a80e0a646494c8644e875c7cc733c0f918c56daa981b28760a13401a72f62"
+)
+_CONSUMED_HISTORICAL_V2_CLEAN_CANDIDATE_MANIFEST_SHA256 = (
+    "ef527ed467995bd60fda07b5a3b09b56ea871595ace12fd64a948e246720dbe3"
 )
 _TIMESTAMP = re.compile(
     r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}"
@@ -438,8 +451,8 @@ def source_bindings() -> dict[str, object]:
     }
 
 
-def validate_source_tranche() -> dict[str, object]:
-    """Reject any drift from the committed registered-execution preregistration."""
+def _historical_v2_preregistration() -> dict[str, object]:
+    """Load the immutable launch preregistration without reauthorizing it."""
     _, _, preregistration = _read_json(
         EXECUTION_PREREGISTRATION,
         label="Q-011 pressure-pilot registered-execution preregistration",
@@ -451,11 +464,33 @@ def validate_source_tranche() -> dict[str, object]:
         _sha256_bytes(_json_bytes(contract)) == _REGISTERED_EXECUTION_CONTRACT_SHA256,
         "registered-execution preregistration contract drifted",
     )
-    _require(
-        preregistration.get("source_bindings") == source_bindings(),
-        "registered-execution source bindings drifted",
-    )
     return preregistration
+
+
+def historical_v2_source_tranche_status() -> dict[str, object]:
+    """Describe whether the consumed v2 launch tranche still matches checkout."""
+    preregistration = _historical_v2_preregistration()
+    matches = preregistration.get("source_bindings") == source_bindings()
+    return {
+        "record_type": "q011_section54_pressure_pilot_historical_v2_source_tranche_status",
+        "schema_version": 1,
+        "state": "historical_consumed_slice_non_authorizing",
+        "source_bindings_match_current_checkout": matches,
+        "launch_reauthorization_effect": "none",
+        "consumed_slice_reauthorization_allowed": False,
+        "required_postrun_boundary": (
+            "reviewed_immutable_postrun_aggregate_source_authorization_successor"
+        ),
+    }
+
+
+def validate_source_tranche() -> dict[str, object]:
+    """Reject every fresh launch attempt through the consumed historical v2 tranche."""
+    _historical_v2_preregistration()
+    raise ContractError(
+        "historical v2 registered-execution tranche is consumed and nonauthorizing; "
+        "fresh launches require a separately reviewed successor"
+    )
 
 
 def _generator_bytes_from_source_archive(payload: bytes) -> bytes:
@@ -475,13 +510,12 @@ def _generator_bytes_from_source_archive(payload: bytes) -> bytes:
         raise ContractError("clean-candidate source archive is not a readable tar file") from error
 
 
-def _bound_final_artifacts(
+def _bound_candidate_artifacts(
     *,
     clean_candidate_manifest: Path,
     executable: Path,
     environment_profile: Path,
 ) -> dict[str, str]:
-    validate_source_tranche()
     clean_candidate_manifest, manifest_payload = _stable_regular_bytes(
         clean_candidate_manifest,
         label="clean-candidate manifest",
@@ -577,6 +611,21 @@ def _bound_final_artifacts(
     }
 
 
+def _bound_final_artifacts(
+    *,
+    clean_candidate_manifest: Path,
+    executable: Path,
+    environment_profile: Path,
+) -> dict[str, str]:
+    """Bind candidate artifacts only through the historical v2 launch guard."""
+    validate_source_tranche()
+    return _bound_candidate_artifacts(
+        clean_candidate_manifest=clean_candidate_manifest,
+        executable=executable,
+        environment_profile=environment_profile,
+    )
+
+
 def materialize_registered_science_slices(
     *,
     clean_candidate_manifest: Path,
@@ -669,11 +718,149 @@ def _control_plane_version(value: object) -> str:
     return value
 
 
+def _storage_preflight_binding(path: Path) -> dict[str, object]:
+    """Read one immutable canonical storage-probe policy fragment."""
+    _, payload = _stable_regular_bytes(
+        path,
+        label="storage-preflight binding",
+        require_read_only=True,
+    )
+    value = _decode_json(payload, label="storage-preflight binding")
+    _require(isinstance(value, dict), "storage-preflight binding must be one object")
+    _require(
+        set(value)
+        == {
+            "last_preflight_utc",
+            "orion_simulation_root_preflight",
+            "project_home_preflight",
+            "storage_preflight_evidence",
+        },
+        "storage-preflight binding schema is malformed",
+    )
+    completed_utc = _timestamp(
+        value["last_preflight_utc"],
+        label="storage-preflight binding completion time",
+    )
+    expected_records = {
+        "orion_simulation_root_preflight": {
+            "method": _STORAGE_PREFLIGHT_METHOD,
+            "path": str(AUTHORIZED_PIC_ROOT),
+            "status": "passed",
+        },
+        "project_home_preflight": {
+            "method": _STORAGE_PREFLIGHT_METHOD,
+            "path": str(AUTHORIZED_PROJECT_HOME_ROOT),
+            "status": "passed",
+        },
+    }
+    for key, expected in expected_records.items():
+        _require(
+            value.get(key) == expected,
+            f"storage-preflight binding {key} is malformed",
+        )
+    evidence = value.get("storage_preflight_evidence")
+    _require(
+        isinstance(evidence, dict)
+        and set(evidence) == {"orion_path", "probe_id", "project_home_path", "sha256"},
+        "storage-preflight evidence binding is malformed",
+    )
+    probe_id = evidence.get("probe_id")
+    _require(
+        isinstance(probe_id, str) and _UUID.fullmatch(probe_id) is not None,
+        "storage-preflight evidence probe ID is malformed",
+    )
+    _require(
+        evidence
+        == {
+            "orion_path": str(
+                AUTHORIZED_PIC_ROOT
+                / "policy"
+                / "storage_preflight_evidence"
+                / f"{probe_id}.json"
+            ),
+            "probe_id": probe_id,
+            "project_home_path": str(
+                AUTHORIZED_PROJECT_HOME_ROOT
+                / "policy"
+                / "storage_preflight_evidence"
+                / f"{probe_id}.json"
+            ),
+            "sha256": evidence.get("sha256"),
+        }
+        and isinstance(evidence.get("sha256"), str)
+        and _SHA256.fullmatch(evidence["sha256"]) is not None,
+        "storage-preflight evidence binding is malformed",
+    )
+    return {
+        "last_preflight_utc": completed_utc,
+        **expected_records,
+        "storage_preflight_evidence": dict(evidence),
+    }
+
+
+def _advance_control_plane_fields(
+    successor: dict[str, object],
+    *,
+    control_plane_version: str,
+    storage_preflight_binding: Path,
+    require_fresh_preflight: bool = False,
+    require_new_control_plane: bool = False,
+    require_same_control_plane: bool = False,
+    allow_equal_preflight: bool = False,
+) -> dict[str, object]:
+    storage = successor.get("olcf_side_storage")
+    _require(isinstance(storage, dict), "baseline OLCF-side storage policy is malformed")
+    version = _control_plane_version(control_plane_version)
+    _require(
+        not (require_new_control_plane and require_same_control_plane),
+        "control-plane successor requirement is contradictory",
+    )
+    if require_new_control_plane or require_same_control_plane:
+        installed = storage.get("installed_control_plane_version")
+        staged = storage.get("staged_control_plane_candidate_version")
+        _require(
+            installed == staged
+            and isinstance(installed, str)
+            and _SHA256.fullmatch(installed) is not None,
+            "baseline installed/staged control-plane versions are malformed",
+        )
+    if require_new_control_plane:
+        _require(version != installed, "successor control-plane version must be new")
+    if require_same_control_plane:
+        _require(
+            version == installed,
+            "candidate-only control-plane version must match baseline "
+            "installed/staged version",
+        )
+    binding = _storage_preflight_binding(storage_preflight_binding)
+    checked = str(binding["last_preflight_utc"])
+    if require_fresh_preflight:
+        previous = storage.get("last_preflight_utc")
+        checked_time = _utc_datetime(
+            checked, label="OLCF-side storage preflight time"
+        )
+        previous_time = _utc_datetime(
+            previous, label="baseline OLCF-side storage preflight time"
+        )
+        _require(
+            checked_time >= previous_time if allow_equal_preflight
+            else checked_time > previous_time,
+            "successor OLCF-side storage preflight time must be equal to or newer "
+            "than baseline"
+            if allow_equal_preflight
+            else "successor OLCF-side storage preflight time must be newer than baseline",
+        )
+    storage["installed_control_plane_version"] = version
+    storage["staged_control_plane_candidate_version"] = version
+    storage.update(binding)
+    return successor
+
+
 def materialize_baseline_policy_successor(
     *,
     baseline_policy: Path,
     control_plane_version: str,
-    last_preflight_utc: str,
+    storage_preflight_binding: Path,
 ) -> dict[str, object]:
     """Bind a full launch-prohibited policy copy to one installed successor."""
     _, _, baseline = _read_json(baseline_policy, label="baseline storage policy")
@@ -684,14 +871,98 @@ def materialize_baseline_policy_successor(
         "baseline storage policy must have an empty registered-science allowlist",
     )
     successor = copy.deepcopy(baseline)
-    storage = successor.get("olcf_side_storage")
-    _require(isinstance(storage, dict), "baseline OLCF-side storage policy is malformed")
-    version = _control_plane_version(control_plane_version)
-    storage["installed_control_plane_version"] = version
-    storage["staged_control_plane_candidate_version"] = version
-    storage["last_preflight_utc"] = _timestamp(
-        last_preflight_utc, label="OLCF-side storage preflight time"
+    return _advance_control_plane_fields(
+        successor,
+        control_plane_version=control_plane_version,
+        storage_preflight_binding=storage_preflight_binding,
     )
+
+
+def materialize_retire_consumed_slices_baseline_policy_successor(
+    *,
+    baseline_policy: Path,
+    control_plane_version: str,
+    storage_preflight_binding: Path,
+) -> dict[str, object]:
+    """Retire only the exact consumed historical Q011 pressure-v2 allowlist."""
+    _, _, baseline = _read_json(baseline_policy, label="historical storage policy")
+    _require(isinstance(baseline, dict), "historical storage policy is malformed")
+    slices = baseline.get("registered_science_slices")
+    _require(
+        isinstance(slices, list)
+        and _sha256_bytes(_json_bytes(slices))
+        == _CONSUMED_HISTORICAL_V2_SLICES_SHA256,
+        "historical storage policy must contain exactly the consumed Q011 "
+        "pressure-v2 slices",
+    )
+    science_freeze = baseline.get("science_submission_freeze")
+    _require(
+        isinstance(science_freeze, dict)
+        and _sha256_bytes(_json_bytes(science_freeze))
+        == _HISTORICAL_V2_SCIENCE_FREEZE_SHA256,
+        "historical storage policy must retain the exact consumed Q011 frozen candidate",
+    )
+    successor = copy.deepcopy(baseline)
+    successor["registered_science_slices"] = []
+    successor["science_submission_freeze"] = {
+        "status": "pending_clean_candidate_freeze"
+    }
+    return _advance_control_plane_fields(
+        successor,
+        control_plane_version=control_plane_version,
+        storage_preflight_binding=storage_preflight_binding,
+        require_fresh_preflight=True,
+        require_new_control_plane=True,
+    )
+
+
+def materialize_candidate_only_policy_successor(
+    *,
+    baseline_policy: Path,
+    control_plane_version: str,
+    storage_preflight_binding: Path,
+    clean_candidate_manifest: Path,
+    executable: Path,
+    environment_profile: Path,
+) -> dict[str, object]:
+    """Authorize one exact clean candidate while keeping all launches prohibited."""
+    _, _, baseline = _read_json(baseline_policy, label="baseline storage policy")
+    _require(isinstance(baseline, dict), "baseline storage policy is malformed")
+    _require(
+        baseline.get("registered_science_slices") == [],
+        "baseline storage policy must have an empty registered-science allowlist",
+    )
+    _require(
+        baseline.get("science_submission_freeze")
+        == {"status": "pending_clean_candidate_freeze"},
+        "baseline storage policy must have a pending clean-candidate freeze",
+    )
+    successor = _advance_control_plane_fields(
+        copy.deepcopy(baseline),
+        control_plane_version=control_plane_version,
+        storage_preflight_binding=storage_preflight_binding,
+        require_fresh_preflight=True,
+        require_same_control_plane=True,
+        allow_equal_preflight=True,
+    )
+    final = _bound_candidate_artifacts(
+        clean_candidate_manifest=clean_candidate_manifest,
+        executable=executable,
+        environment_profile=environment_profile,
+    )
+    _require(
+        final["clean_candidate_manifest_sha256"]
+        != _CONSUMED_HISTORICAL_V2_CLEAN_CANDIDATE_MANIFEST_SHA256,
+        "candidate-only clean-candidate manifest must be fresh",
+    )
+    successor["science_submission_freeze"] = {
+        "status": "authorized",
+        "manifest_path": final["clean_candidate_manifest_path"],
+        "manifest_sha256": final["clean_candidate_manifest_sha256"],
+        "build_profile_control_plane_version": _control_plane_version(
+            control_plane_version
+        ),
+    }
     return successor
 
 
@@ -699,7 +970,7 @@ def materialize_pilot_policy_successor(
     *,
     baseline_policy: Path,
     control_plane_version: str,
-    last_preflight_utc: str,
+    storage_preflight_binding: Path,
     clean_candidate_manifest: Path,
     executable: Path,
     environment_profile: Path,
@@ -708,7 +979,7 @@ def materialize_pilot_policy_successor(
     successor = materialize_baseline_policy_successor(
         baseline_policy=baseline_policy,
         control_plane_version=control_plane_version,
-        last_preflight_utc=last_preflight_utc,
+        storage_preflight_binding=storage_preflight_binding,
     )
     final = _bound_final_artifacts(
         clean_candidate_manifest=clean_candidate_manifest,
@@ -1145,13 +1416,53 @@ def write_baseline_policy_successor(
     *,
     baseline_policy: Path,
     control_plane_version: str,
-    last_preflight_utc: str,
+    storage_preflight_binding: Path,
 ) -> dict[str, object]:
     """Write one complete launch-prohibited reviewed policy successor."""
     successor = materialize_baseline_policy_successor(
         baseline_policy=baseline_policy,
         control_plane_version=control_plane_version,
-        last_preflight_utc=last_preflight_utc,
+        storage_preflight_binding=storage_preflight_binding,
+    )
+    _write_new_file(output, _json_bytes(successor))
+    return successor
+
+
+def write_retire_consumed_slices_baseline_policy_successor(
+    output: Path,
+    *,
+    baseline_policy: Path,
+    control_plane_version: str,
+    storage_preflight_binding: Path,
+) -> dict[str, object]:
+    """Write one complete successor retiring the exact consumed Q011 slices."""
+    successor = materialize_retire_consumed_slices_baseline_policy_successor(
+        baseline_policy=baseline_policy,
+        control_plane_version=control_plane_version,
+        storage_preflight_binding=storage_preflight_binding,
+    )
+    _write_new_file(output, _json_bytes(successor))
+    return successor
+
+
+def write_candidate_only_policy_successor(
+    output: Path,
+    *,
+    baseline_policy: Path,
+    control_plane_version: str,
+    storage_preflight_binding: Path,
+    clean_candidate_manifest: Path,
+    executable: Path,
+    environment_profile: Path,
+) -> dict[str, object]:
+    """Write one exact-candidate successor without adding launch slices."""
+    successor = materialize_candidate_only_policy_successor(
+        baseline_policy=baseline_policy,
+        control_plane_version=control_plane_version,
+        storage_preflight_binding=storage_preflight_binding,
+        clean_candidate_manifest=clean_candidate_manifest,
+        executable=executable,
+        environment_profile=environment_profile,
     )
     _write_new_file(output, _json_bytes(successor))
     return successor
@@ -1162,7 +1473,7 @@ def write_pilot_policy_successor(
     *,
     baseline_policy: Path,
     control_plane_version: str,
-    last_preflight_utc: str,
+    storage_preflight_binding: Path,
     clean_candidate_manifest: Path,
     executable: Path,
     environment_profile: Path,
@@ -1171,7 +1482,7 @@ def write_pilot_policy_successor(
     successor = materialize_pilot_policy_successor(
         baseline_policy=baseline_policy,
         control_plane_version=control_plane_version,
-        last_preflight_utc=last_preflight_utc,
+        storage_preflight_binding=storage_preflight_binding,
         clean_candidate_manifest=clean_candidate_manifest,
         executable=executable,
         environment_profile=environment_profile,
@@ -1284,12 +1595,27 @@ def build_parser() -> argparse.ArgumentParser:
     baseline_policy = subparsers.add_parser("baseline-policy-successor")
     baseline_policy.add_argument("--baseline-policy", required=True, type=Path)
     baseline_policy.add_argument("--control-plane-version", required=True)
-    baseline_policy.add_argument("--last-preflight-utc", required=True)
+    baseline_policy.add_argument("--storage-preflight-binding", required=True, type=Path)
     baseline_policy.add_argument("--output", required=True, type=Path)
+    retirement_policy = subparsers.add_parser(
+        "retire-consumed-slices-baseline-policy-successor"
+    )
+    retirement_policy.add_argument("--baseline-policy", required=True, type=Path)
+    retirement_policy.add_argument("--control-plane-version", required=True)
+    retirement_policy.add_argument(
+        "--storage-preflight-binding", required=True, type=Path
+    )
+    retirement_policy.add_argument("--output", required=True, type=Path)
+    candidate_policy = subparsers.add_parser("candidate-only-policy-successor")
+    candidate_policy.add_argument("--baseline-policy", required=True, type=Path)
+    candidate_policy.add_argument("--control-plane-version", required=True)
+    candidate_policy.add_argument("--storage-preflight-binding", required=True, type=Path)
+    _add_final_binding_arguments(candidate_policy)
+    candidate_policy.add_argument("--output", required=True, type=Path)
     pilot_policy = subparsers.add_parser("pilot-policy-successor")
     pilot_policy.add_argument("--baseline-policy", required=True, type=Path)
     pilot_policy.add_argument("--control-plane-version", required=True)
-    pilot_policy.add_argument("--last-preflight-utc", required=True)
+    pilot_policy.add_argument("--storage-preflight-binding", required=True, type=Path)
     _add_final_binding_arguments(pilot_policy)
     pilot_policy.add_argument("--output", required=True, type=Path)
     seed = subparsers.add_parser("seed-timeout-margin")
@@ -1329,7 +1655,16 @@ def main() -> None:
             arguments.output,
             baseline_policy=arguments.baseline_policy,
             control_plane_version=arguments.control_plane_version,
-            last_preflight_utc=arguments.last_preflight_utc,
+            storage_preflight_binding=arguments.storage_preflight_binding,
+        )
+        print(json.dumps(successor, sort_keys=True, separators=(",", ":")))
+        return
+    if arguments.command == "retire-consumed-slices-baseline-policy-successor":
+        successor = write_retire_consumed_slices_baseline_policy_successor(
+            arguments.output,
+            baseline_policy=arguments.baseline_policy,
+            control_plane_version=arguments.control_plane_version,
+            storage_preflight_binding=arguments.storage_preflight_binding,
         )
         print(json.dumps(successor, sort_keys=True, separators=(",", ":")))
         return
@@ -1342,12 +1677,22 @@ def main() -> None:
         fragment = write_policy_fragment(arguments.output, **common)
         print(json.dumps(fragment, sort_keys=True, separators=(",", ":")))
         return
+    if arguments.command == "candidate-only-policy-successor":
+        successor = write_candidate_only_policy_successor(
+            arguments.output,
+            baseline_policy=arguments.baseline_policy,
+            control_plane_version=arguments.control_plane_version,
+            storage_preflight_binding=arguments.storage_preflight_binding,
+            **common,
+        )
+        print(json.dumps(successor, sort_keys=True, separators=(",", ":")))
+        return
     if arguments.command == "pilot-policy-successor":
         successor = write_pilot_policy_successor(
             arguments.output,
             baseline_policy=arguments.baseline_policy,
             control_plane_version=arguments.control_plane_version,
-            last_preflight_utc=arguments.last_preflight_utc,
+            storage_preflight_binding=arguments.storage_preflight_binding,
             **common,
         )
         print(json.dumps(successor, sort_keys=True, separators=(",", ":")))

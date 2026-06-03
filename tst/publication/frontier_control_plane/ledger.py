@@ -12,6 +12,7 @@ if __name__ == "__main__" and "/control_plane/" in __file__ and not getattr(
 from contextlib import contextmanager
 from contextvars import ContextVar
 import csv
+import ctypes
 from datetime import datetime, timezone
 import fcntl
 import hashlib
@@ -31,6 +32,7 @@ from control_plane_common import open_directory_below, read_json_bytes
 from control_plane_common import read_stable_regular_file_below
 from control_plane_common import scheduler_account_matches_authorized
 from control_plane_common import stable_serialization_anchor
+from control_plane_common import validate_planner_retention_binding
 from operator_attestation import validate_sealed_operator_attestation
 
 
@@ -87,12 +89,23 @@ CSV_FIELDS = [
     "state",
     "reconciled",
     "artifact_dir",
+    "planner_retention",
     "mirror_destination",
     "mirror_transport",
     "mirror_acknowledged_utc",
     "mirror_ack_sha256",
     "notes",
 ]
+_INOTIFY_MUTATION_MASK = (
+    0x00000002  # IN_MODIFY
+    | 0x00000004  # IN_ATTRIB
+    | 0x00000040  # IN_MOVED_FROM
+    | 0x00000080  # IN_MOVED_TO
+    | 0x00000100  # IN_CREATE
+    | 0x00000200  # IN_DELETE
+    | 0x00000400  # IN_DELETE_SELF
+    | 0x00000800  # IN_MOVE_SELF
+)
 GENESIS_ANCHOR_FILENAME = "genesis_anchor.json"
 INCOMPLETE_MANUAL_ACCOUNTING_MARKER_FILENAME = "pending_manual_accounting.json"
 MANUAL_DIRECT_SRUN_ACCOUNTING_SCOPE = "manual_direct_srun_accounting_only"
@@ -194,6 +207,7 @@ RESERVATION_PAYLOAD_OPTIONAL_FIELDS = RESERVATION_PAYLOAD_BOUND_FIELDS | {
     "pre_manifest_attestation_sha256",
     "pre_submit_wrapper_attestation_path",
     "pre_submit_wrapper_attestation_sha256",
+    "planner_retention",
 }
 OPERATOR_ATTESTATION_PROVENANCE_FIELDS = {
     "pre_manifest_attestation_path",
@@ -789,6 +803,25 @@ def _require_operator_attestation_provenance(record: dict[str, object]) -> None:
             raise ValueError("Registered operator-attestation provenance is malformed")
 
 
+def _require_planner_retention_provenance(record: dict[str, object]) -> None:
+    if "planner_retention" not in record:
+        return
+    if record.get("submission_scope") != "registered_science":
+        raise ValueError("Only registered science may carry planner retention")
+    manifest_path = Path(str(record.get("manifest_path", "")))
+    try:
+        pic_root = manifest_path.parents[3]
+    except IndexError as error:
+        raise ValueError("Planner-retention manifest path is malformed") from error
+    validate_planner_retention_binding(
+        record["planner_retention"],
+        authorized_pic_root=pic_root,
+        expected_clean_candidate_manifest_sha256=str(
+            record["clean_candidate_manifest_sha256"]
+        ),
+    )
+
+
 def _validate_operator_attestation_trees(
     records: list[dict[str, object]],
     *,
@@ -985,6 +1018,7 @@ def _validate_accounting_records(records: list[dict[str, object]]) -> None:
     for index, record in enumerate(records):
         _require_closed_primary_event_schema(record)
         _require_operator_attestation_provenance(record)
+        _require_planner_retention_provenance(record)
         event_type = record.get("event_type")
         if "reconciled" in record and type(record["reconciled"]) is not bool:
             raise ValueError("Ledger reconciled status must be boolean")
@@ -2203,6 +2237,95 @@ def _require_same_pinned_regular_files(descriptors: dict[Path, int]) -> None:
         )
 
 
+def _pinned_parent_namespace_identities(
+    paths: list[Path],
+) -> dict[Path, tuple[int, ...]]:
+    identities: dict[Path, tuple[int, ...]] = {}
+    for path in paths:
+        parent = Path(os.path.abspath(path.parent))
+        descriptor = _parent_descriptor(path)
+        if descriptor is None:
+            raise ValueError(f"Missing pinned parent descriptor for snapshot file: {path}")
+        metadata = os.fstat(descriptor)
+        identities[parent] = (
+            metadata.st_dev,
+            metadata.st_ino,
+            metadata.st_mode,
+            metadata.st_nlink,
+            metadata.st_size,
+            metadata.st_mtime_ns,
+            metadata.st_ctime_ns,
+        )
+    return identities
+
+
+def _require_same_pinned_parent_namespaces(
+    identities: dict[Path, tuple[int, ...]],
+) -> None:
+    descriptors = _PINNED_PARENT_DESCRIPTORS.get()
+    for parent, expected in identities.items():
+        descriptor = descriptors.get(parent)
+        if descriptor is None:
+            raise ValueError(f"Missing pinned parent descriptor for snapshot parent: {parent}")
+        _require_same_directory(parent, descriptor)
+        metadata = os.fstat(descriptor)
+        actual = (
+            metadata.st_dev,
+            metadata.st_ino,
+            metadata.st_mode,
+            metadata.st_nlink,
+            metadata.st_size,
+            metadata.st_mtime_ns,
+            metadata.st_ctime_ns,
+        )
+        if actual != expected:
+            raise ValueError(
+                f"Read-only ledger snapshot parent namespace changed during use: {parent}"
+            )
+
+
+def _watch_pinned_parent_namespaces(identities: dict[Path, tuple[int, ...]]) -> int:
+    libc = ctypes.CDLL(None, use_errno=True)
+    descriptor = libc.inotify_init1(os.O_NONBLOCK | os.O_CLOEXEC)
+    if descriptor < 0:
+        error = ctypes.get_errno()
+        raise ValueError(
+            f"Cannot watch read-only ledger snapshot parents: {os.strerror(error)}"
+        )
+    pinned = _PINNED_PARENT_DESCRIPTORS.get()
+    try:
+        for parent in identities:
+            parent_descriptor = pinned.get(parent)
+            if parent_descriptor is None:
+                raise ValueError(
+                    f"Missing pinned parent descriptor for snapshot parent: {parent}"
+                )
+            result = libc.inotify_add_watch(
+                descriptor,
+                f"/proc/self/fd/{parent_descriptor}".encode("ascii"),
+                _INOTIFY_MUTATION_MASK,
+            )
+            if result < 0:
+                error = ctypes.get_errno()
+                raise ValueError(
+                    f"Cannot watch read-only ledger snapshot parent: "
+                    f"{parent}: {os.strerror(error)}"
+                )
+        return descriptor
+    except BaseException:
+        os.close(descriptor)
+        raise
+
+
+def _require_no_pinned_parent_namespace_events(descriptor: int) -> None:
+    try:
+        payload = os.read(descriptor, 1024 * 1024)
+    except BlockingIOError:
+        return
+    if payload:
+        raise ValueError("Read-only ledger snapshot parent namespace changed during use")
+
+
 @contextmanager
 def validated_read_only_mirrored_state_snapshot(
     ledger_jsonl: Path,
@@ -2307,14 +2430,25 @@ def validated_read_only_mirrored_state_snapshot(
                 )
                 if initial != {path: validated[path] for path in initial}:
                     raise ValueError("Authoritative PIC ledger bytes changed during validation")
-                yield records
-                _require_same_pinned_regular_files(descriptors)
-                final = {
-                    path: _read_descriptor_bytes(descriptor)
-                    for path, descriptor in descriptors.items()
-                }
-                if validated != final:
-                    raise ValueError("Authoritative PIC ledger bytes changed during snapshot use")
+                parent_identities = _pinned_parent_namespace_identities(
+                    [*paths, *handoff_paths]
+                )
+                watch_descriptor = _watch_pinned_parent_namespaces(parent_identities)
+                try:
+                    yield records
+                    _require_same_pinned_regular_files(descriptors)
+                    final = {
+                        path: _read_descriptor_bytes(descriptor)
+                        for path, descriptor in descriptors.items()
+                    }
+                    if validated != final:
+                        raise ValueError(
+                            "Authoritative PIC ledger bytes changed during snapshot use"
+                        )
+                    _require_same_pinned_parent_namespaces(parent_identities)
+                    _require_no_pinned_parent_namespace_events(watch_descriptor)
+                finally:
+                    os.close(watch_descriptor)
         finally:
             for descriptor in descriptors.values():
                 os.close(descriptor)
