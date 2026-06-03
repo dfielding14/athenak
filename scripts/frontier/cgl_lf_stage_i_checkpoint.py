@@ -1047,6 +1047,8 @@ def require_empty_queue(root: Path, offline: bool, queue_file: str | None) -> No
         fields = line.split("|")
         if len(fields) != 3:
             raise ValueError("squeue output row is not exactly three fields: " + line)
+        if any(not field or field.strip() != field for field in fields):
+            raise ValueError("squeue output row has malformed fields: " + line)
         if fields[1].startswith(CGL_JOB_NAME_PREFIX):
             queued.append(line)
     if queued:

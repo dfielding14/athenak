@@ -390,6 +390,22 @@ def test_checkpoint_permits_unrelated_account_queue_job(recost_fixture):
     assert completed.returncode == 0, completed.stderr
 
 
+@pytest.mark.parametrize(
+    "row",
+    (
+        "67890||RUNNING\n",
+        "|pic_unrelated|RUNNING\n",
+        "67890|pic_unrelated|\n",
+        "67890| pic_unrelated|RUNNING\n",
+    ),
+)
+def test_checkpoint_rejects_malformed_queue_row(recost_fixture, row):
+    fixture = recost_fixture
+    fixture["queue"].write_text(row)
+    completed = run_checkpoint(fixture, "verify-staged-recost")
+    assert_rejected(completed, "squeue output row has malformed fields")
+
+
 def test_checkpoint_legacy_adoption_rejects_audit_relabeling(recost_fixture):
     fixture = recost_fixture
     expose_legacy_canonical(fixture)
