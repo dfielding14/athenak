@@ -1740,6 +1740,18 @@ preparation. Use Slurm walltime `01:05:00`, Athena timeout `00:55:00`, and a
 reviewed one-segment `2700`-second threshold retaining `600` seconds on both
 timeout margins. The threshold is scoped only to `s26` and cannot ratchet
 automatically.
+That quarter-unit continuation is now accepted as job `4759155` through exact
+`t = 9.25`; canonical F-110 recost evidence normally published under the
+retained companion authorizes aggressive bounded
+`R02/s27_rankio_t9p25_t9p75` on one node from authenticated `s26` terminal
+siblings next after the post-F-110 documentation checkpoint is committed,
+pushed, archived, and cataloged, the archive ledger is validated,
+authenticated hardened reconciliation is rerun, and the scoped
+queue/shared-root audit requires no queued `cgl_*` workflow job, a free strict
+root lock, and explicit stale beta-25 acknowledgement. Use Slurm walltime
+`02:00:00`, Athena timeout `01:50:00`, and the reviewed `6000`-second threshold
+retaining both `600`-second guards. Actual AthenaK submission retains the
+Stage I helper's separate all-user queue preflight.
 
 Progress on 2026-05-30: `g014` retained an input-parse failure because its
 archived sizing deck lacked the `mhd/limiter_hardwall` key targeted by a
@@ -2315,21 +2327,32 @@ observed-publication timestamp `2026-06-03T16:27:20+00:00`:
    `67f9096900b5ec3ce8368cd39c6f6a8c649dcff2436261fcf72aa328cd3ac0ea`;
    observed-publication audit SHA-256 is
    `f784d2bcec45dc7baea8ccba958ab959009ff0ae6f98acdf847d5dc21933beee`.
-   Hardened reconciliation closes with `26/26/26` ledger
+   Authenticated `R02/s26_rankio_t9_t9p25` job `4759155` is accepted through
+   exact `t = 9.25` for `2318` seconds (`0.643889` displayed node-hours),
+   bringing corrected-E03 use to `21.989446` displayed node-hours. It retains
+   one complete eight-rank snapshot group and terminal eight-rank restart
+   siblings, zero strict LF failure counters, no restart-marker bypass,
+   terminal `lf_hwproj = 304421455230`, and sampled-history forcing-work
+   relative residual `1.812436903704924e-12`. Canonical F-110 recost evidence
+   SHA-256 is
+   `26f6eeb1a92960c006126b64e73c51b4e2a06c14efff50a04660aad36f8b8706`;
+   observed-publication audit SHA-256 is
+   `c27b98847b7037f419ac8694a0f05c46c670fe0470ab0e86c50a6a6004255441`.
+   Hardened reconciliation closes with `27/27/27` ledger
    rows/manifests/reservations, no active reservation, no transaction, and
-   `issues = []`. Commit, push, archive, and catalog the post-F-109
+   `issues = []`. Commit, push, archive, and catalog the post-F-110
    documentation checkpoint, validate the archive ledger, rerun hardened
-   reconciliation, and repeat the queue/shared-root audit with explicit stale
-   beta-25 acknowledgement. Require completion of the durable handoff checklist
-   items 25--27 before preparation. Then prepare only
-   `R02/s26_rankio_t9_t9p25` on one node from authenticated `s25` terminal
-   siblings with Slurm walltime `01:05:00`, Athena timeout `00:55:00`, and its
-   reviewed one-segment `2700`-second threshold retaining `600` seconds on both
-   timeout margins. This threshold is scoped only to `s26` and cannot ratchet
-   automatically. Any scientific, provenance, scheduler, storage, budget, or
-   reconciliation failure blocks successor preparation. Inspect, account,
-   reconcile, and recost. Finish R02, execute R03--R16 sequentially, and
-   execute R17 last.
+   reconciliation, require no queued `cgl_*` workflow job and a free strict
+   root lock, and retain explicit stale beta-25 acknowledgement. Then prepare
+   only aggressive bounded `R02/s27_rankio_t9p25_t9p75` on one node from
+   authenticated `s26` terminal siblings with Slurm walltime `02:00:00`, Athena
+   timeout `01:50:00`, and its reviewed one-segment `6000`-second threshold
+   retaining both `600`-second guards. Actual AthenaK submission retains the
+   Stage I helper's separate all-user queue preflight. Inspect, account,
+   reconcile, and recost. Finish and analyze R02 once through exact `t = 10`;
+   use largest evidence-backed standard-layout segments for R03--R16; derive
+   R17 bounds separately from retained eight-node timing evidence and execute
+   R17 last.
 
 ## 13. Reproducibility Record
 

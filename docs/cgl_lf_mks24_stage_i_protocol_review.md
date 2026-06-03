@@ -1085,12 +1085,16 @@ Authenticated continuation `4758398` now reaches exact `t = 8.25`.
 Authenticated continuation `4758475` now reaches exact `t = 8.5`.
 Authenticated continuation `4758576` now reaches exact `t = 8.75`.
 Authenticated continuation `4758713` now reaches exact `t = 9`.
-After the post-F-109 documentation checkpoint is committed, pushed, archived,
-and cataloged, the archive ledger is validated, reconciliation is rerun, and
-the queue/shared-root audit repeats explicit acknowledgement of the stale
-beta-25 record. Require completion of the durable handoff checklist items
-25--27, then use only job `4758713`'s authenticated terminal checkpoint for the
-next bounded R02 continuation `R02/s26_rankio_t9_t9p25`.
+Authenticated continuation `4759155` now reaches exact `t = 9.25`.
+After the post-F-110 documentation checkpoint is committed, pushed, archived,
+and cataloged, validate the archive ledger, rerun authenticated hardened
+reconciliation, require no queued `cgl_*` workflow job and a free strict root
+lock, and retain explicit acknowledgement of the stale beta-25 record. Then
+prepare only aggressive bounded `R02/s27_rankio_t9p25_t9p75` from job
+`4759155`'s authenticated terminal siblings with Slurm walltime `02:00:00`,
+Athena timeout `01:50:00`, and the reviewed `6000`-second threshold retaining
+both `600`-second guards. Actual AthenaK submission retains the Stage I
+helper's separate all-user queue preflight.
 Commits `9480e62764528a3f40066d22a192f0e99b369891`
 and `ef1e42fa088203ac9ef6ec8e47e668db4fb95a3c` additionally require the live
 helper to remain committed during historical authentication, reserve the

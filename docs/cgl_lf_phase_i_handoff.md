@@ -201,7 +201,8 @@ Stephen Majeski reports expected active/passive turbulence-driver behavior:
 matching magnetic-field and anisotropy distributions, instability-threshold
 volume fractions, Kolmogorov spectra, active perpendicular pressure balance,
 its passive absence, and selective suppression of `bb:grad(u)`. This supports
-the aggressive schedule but does not replace retained campaign validation.
+the scientific expectations but does not replace retained campaign validation
+or the F-110 timing evidence that authorizes the aggressive schedule.
 
 ## Historical F-101 And F-102
 
@@ -293,13 +294,13 @@ overlap with another agent.
    `R02/s25_rankio_t8p75_t9` packet. Only then run `check-submit` and `submit`,
    preserving explicit acknowledgement of reviewed stale shared-root campaign
    `beta25-accel05-gamma10001-purecgl-256`. Never mutate that stale campaign.
-25. Required before `s26`: commit and push this documentation checkpoint,
+25. Closed: commit and push the post-F-109 documentation checkpoint,
    create and catalog its complete-history source bundle, and validate the
    full source-archive checksum ledger.
-26. Required before each production mutation: require an empty user queue,
+26. Closed for `s26`: require an empty user queue,
    a free strict root lock, authenticated hardened reconciliation with
    `26/26/26`, no active reservation, no transaction, and `issues = []`.
-27. Prepare and independently audit only the bounded
+27. Closed: prepare and independently audit only the bounded
    `R02/s26_rankio_t9_t9p25` packet. Only then run `check-submit` and `submit`,
    preserving explicit acknowledgement of reviewed stale shared-root campaign
    `beta25-accel05-gamma10001-purecgl-256`. Never mutate that stale campaign.

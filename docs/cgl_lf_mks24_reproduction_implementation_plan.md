@@ -943,7 +943,7 @@ successor preparation.
 | F-107 | 2026-06-03T09:28:03+00:00 | Accept corrected E03 R02 quarter-unit continuation through exact `t = 8.5` and normally publish the next hardened retained-companion recost checkpoint | F-106 authorized only `s23`. Its clean endpoint still requires a new one-segment recost rather than automatic threshold ratcheting. | accepted `R02/s23_rankio_t8p25_t8p5`; job `4758475`; exact scheduler row `4758475\|cgl_mks24_E03_forcing_policy_R02_s23_rankio_t8p25_t8p5\|COMPLETED\|0:0\|1\|2285\|2026-06-03T04:11:20\|2026-06-03T04:49:40`; source launch bundle `athenak-feature-cgl-through-849b052dd.bundle` SHA-256 `adf897b8f60149bdcf89bc0a42f69f224ec6486155341411df1ccd8bd2d7b8ed`; record-time inspection SHA-256 `318786f1be49ef894606f579709942bdb38f0de37c4ab23b357569b0deb36b2b`; recorded manifest SHA-256 `aa01c14794007564e708125c4be3ce1f683c3e33a92084b0f65e67944d454149`; retained independent validation SHA-256 `08cd3c894106f295eda79571faca85dc23c1aaf621ba1a5c1eb09c253bb152fe`; retained scheduler evidence SHA-256 `86bc48723ad2365729c415623ab4fc7baf47a69ccc83cf10410f84b01440e4fe`; retained recost generator SHA-256 `94548cf12706bc4abe9449bcb0d917d09ab58fa241cc3f3ec48f730ed701c479`; canonical recost artifact SHA-256 `1e4db459d7c0b5211108dee07fe1efa643ac7a655adadb907deb57f36822d699`; observed-publication audit SHA-256 `7dfca5ec22cc1bdd265a75e9aec275c81848c193562f5d7661bae1a79751e7f4`; forensic copy with the canonical artifact SHA-256 | High | Continue from authenticated E03 `t = 8.25` restart siblings through exact `t = 8.5`; require formal and retained independent quarter inspection, exactly one eight-rank snapshot group, complete terminal restart siblings, zero strict LF failure counters, finite synchronized histories, forcing-work closure, live scheduler accounting, hardened reconciliation, retained-generator review, staged recost verification, independent staged review, normal companion promotion, and separate promoted verification. | Job `4758475` reaches exact `t = 8.5` in `2285` seconds (`0.634722` displayed node-hours). Strict LF failure counters remain zero; terminal `lf_hwproj = 295614667845`; one eight-rank snapshot group and terminal eight-rank restart siblings are retained; sampled-history forcing-work relative residual is `2.3508932051548193e-12`; accepted corrected-E03 prefix totals `72239` seconds (`20.066388888888888` exact and `20.066390` displayed node-hours); hardened reconciliation closes with `24/24/24` ledger rows/manifests/reservations, no active reservation, no transaction, and `issues = []`. The reviewed estimator uses prior selected `2560`, previous observed `2345`, observed `2285`, local acceleration `2285`, and selects `2560 <= 2700` seconds for `s24`; `s23` leaves `415` seconds of threshold headroom. Authorization-facing projection is `829.2566672222222` matrix node-hours with `70.74333277777782` margin. The companion normally published canonical-only bytes with record type `observed-publication`, same-directory `link/fsync/unlink/fsync`, a mode-`0444` forensic copy, empty recost transaction directory, empty queue, and free strict lock. | Commit, push, archive, and catalog the post-F-107 documentation state, validate the full archive checksum ledger, and require completion of the durable handoff checklist items 19--21 before preparing only `R02/s24_rankio_t8p5_t8p75` on one node from authenticated `s23` terminal siblings with Slurm walltime `01:05:00`, Athena timeout `00:55:00`, and a reviewed one-segment `2700`-second threshold retaining `600` seconds on both timeout margins. Do not ratchet automatically. Any scientific, provenance, scheduler, storage, budget, or reconciliation failure blocks successor preparation. Inspect, account, reconcile, and recost before any further extension. Keep R17 last. |
 | F-108 | 2026-06-03T11:24:40+00:00 | Accept corrected E03 R02 quarter-unit continuation through exact `t = 8.75` and normally publish the next hardened retained-companion recost checkpoint | F-107 authorized only `s24`. Its clean endpoint still requires a new one-segment recost rather than automatic threshold ratcheting. | accepted `R02/s24_rankio_t8p5_t8p75`; job `4758576`; exact scheduler row `4758576\|cgl_mks24_E03_forcing_policy_R02_s24_rankio_t8p5_t8p75\|COMPLETED\|0:0\|1\|2346\|2026-06-03T06:00:56\|2026-06-03T06:40:27`; source launch bundle `athenak-feature-cgl-through-6d1f032a2.bundle` SHA-256 `62587378e8480cbe94caa174734f6d3cf6e4c56c2755b2b96ffe0e2bba525ef4`; submitted-state manifest SHA-256 `68e51623df49fa4612be49d578790023031bfbbb06b41a9df910e3737a1fc2ff`; record-time inspection SHA-256 `24a7013abca332a65196552f0ce1a6031314deb56e8ddbebb130b75be4b887de`; recorded manifest SHA-256 `24f407dcc74011479f783ccb16d08536ce87a35314d1637f93b78135adb27ed8`; retained independent validation SHA-256 `0a271b1f53f3363c2598a76356a7ca3063a38e5d8c0ab63a64e15b4ebcfa2229`; retained scheduler evidence SHA-256 `06b86448d2c4eb8c3765d9c3912ee1cb9d946f0d07ad606dfae6456ab1075f7f`; retained recost generator SHA-256 `c488c4d6f51a2d73e00e212f0e485d920876eb2ed79e8e18988788969e344d05`; canonical recost artifact SHA-256 `dbd3f5e3b9f21532da546caca4bdc66263d69c3b60b35938972edd04b2ab3e19`; observed-publication audit SHA-256 `503dad9d617456a3154f77931726b8d1edf3ccdc1602802e0db553670d0ca79c`; forensic copy with the canonical artifact SHA-256 | High | Continue from authenticated E03 `t = 8.5` restart siblings through exact `t = 8.75`; require formal and retained independent quarter inspection, exactly one eight-rank snapshot group, complete terminal restart siblings, zero strict LF failure counters, finite synchronized histories, forcing-work closure, live scheduler accounting, hardened reconciliation, retained-generator review, staged recost verification, independent staged review, normal companion promotion, and separate promoted verification. | Job `4758576` reaches exact `t = 8.75` in `2346` seconds (`0.651667` displayed node-hours). Strict LF failure counters remain zero; terminal `lf_hwproj = 299627446834`; one eight-rank snapshot group and terminal eight-rank restart siblings are retained; sampled-history forcing-work relative residual is `1.4737883591844796e-12`; accepted corrected-E03 prefix totals `74585` seconds (`20.718055555555555` exact and `20.718057` displayed node-hours); hardened reconciliation closes with `25/25/25` ledger rows/manifests/reservations, no active reservation, no transaction, and `issues = []`. The reviewed estimator uses prior selected `2560`, previous observed `2285`, observed `2346`, local acceleration `2407`, and selects `2560 <= 2700` seconds for `s25`; `s24` leaves `354` seconds of threshold headroom. Authorization-facing projection is `829.2566672222222` matrix node-hours with `70.74333277777782` margin. The companion normally published canonical-only bytes with record type `observed-publication`, same-directory `link/fsync/unlink/fsync`, a mode-`0444` forensic copy, empty recost transaction directory, empty queue, and free strict lock. | Commit, push, archive, and catalog the post-F-108 documentation state, validate the full archive checksum ledger, and require completion of the durable handoff checklist items 22--24 before preparing only `R02/s25_rankio_t8p75_t9` on one node from authenticated `s24` terminal siblings with Slurm walltime `01:05:00`, Athena timeout `00:55:00`, and a reviewed one-segment `2700`-second threshold retaining `600` seconds on both timeout margins. Do not ratchet automatically. Any scientific, provenance, scheduler, storage, budget, or reconciliation failure blocks successor preparation. Inspect, account, reconcile, and recost before any further extension. Keep R17 last. |
 | F-109 | 2026-06-03T13:28:39+00:00 | Accept corrected E03 R02 quarter-unit continuation through exact `t = 9` and normally publish the next hardened retained-companion recost checkpoint | F-108 authorized only `s25`. Its clean endpoint still requires a new one-segment recost rather than automatic threshold ratcheting. | accepted `R02/s25_rankio_t8p75_t9`; job `4758713`; exact scheduler row `4758713\|cgl_mks24_E03_forcing_policy_R02_s25_rankio_t8p75_t9\|COMPLETED\|0:0\|1\|2259\|2026-06-03T08:12:15\|2026-06-03T08:49:56`; source launch bundle `athenak-feature-cgl-through-e59a64402.bundle` SHA-256 `30819dc015eb9f4a8afd8c1e40af815969cd74cfbbbeb0b4fc03c3fd91757945`; submitted-state manifest SHA-256 `80bbe43f612c604eedad832a4d0ddbc2230f5ccc794171413af0ed6302a3303b`; record-time inspection SHA-256 `313cb0565ad7d3f7bbe63be63cbd6055de951842cb101aeb523102a37f2b2f48`; recorded manifest SHA-256 `18299de7cb6229291bcc9c40fd6e0d12076efb16ab6a64891e80983368fdd401`; retained independent validation SHA-256 `d2b8d4d044d4569c25a089bd5e3a23839c785e81ca258da091b9d718d63aa5cb`; retained scheduler evidence SHA-256 `6e9239d754639e888949b1f9699be479dd95f586ffd6d5ba8de0ac0a664328da`; retained recost generator SHA-256 `1a480a6ebf2b1f27ddd453d126fb7e58f1919f4e8825da5eb68eb5cd6007541d`; canonical recost artifact SHA-256 `67f9096900b5ec3ce8368cd39c6f6a8c649dcff2436261fcf72aa328cd3ac0ea`; observed-publication audit SHA-256 `f784d2bcec45dc7baea8ccba958ab959009ff0ae6f98acdf847d5dc21933beee`; forensic copy with the canonical artifact SHA-256 | High | Continue from authenticated E03 `t = 8.75` restart siblings through exact `t = 9`; require formal and retained independent quarter inspection, exactly one eight-rank snapshot group, complete terminal restart siblings, zero strict LF failure counters, finite synchronized histories, forcing-work closure, live scheduler accounting, hardened reconciliation, retained-generator review, staged recost verification, independent staged review, normal companion promotion, and separate promoted verification. | Job `4758713` reaches exact `t = 9` in `2259` seconds (`0.627500` displayed node-hours). Strict LF failure counters remain zero; terminal `lf_hwproj = 302201795827`; one eight-rank snapshot group and terminal eight-rank restart siblings are retained; sampled-history forcing-work relative residual is `1.83194669112365e-12`; accepted corrected-E03 prefix totals `76844` seconds (`21.345555555555556` exact and `21.345557` displayed node-hours); hardened reconciliation closes with `26/26/26` ledger rows/manifests/reservations, no active reservation, no transaction, and `issues = []`. The reviewed estimator uses prior selected `2560`, previous observed `2346`, observed `2259`, local acceleration `2259`, and selects `2560 <= 2700` seconds for `s26`; `s25` leaves `441` seconds of threshold headroom. Authorization-facing projection is `829.2566672222222` matrix node-hours with `70.74333277777782` margin. The companion normally published canonical-only bytes with record type `observed-publication`, same-directory `link/fsync/unlink/fsync`, a mode-`0444` forensic copy, empty recost transaction directory, empty queue, and free strict lock. | Commit, push, archive, and catalog the post-F-109 documentation state, validate the full archive checksum ledger, and require completion of the durable handoff checklist items 25--27 before preparing only `R02/s26_rankio_t9_t9p25` on one node from authenticated `s25` terminal siblings with Slurm walltime `01:05:00`, Athena timeout `00:55:00`, and a reviewed one-segment `2700`-second threshold retaining `600` seconds on both timeout margins. Do not ratchet automatically. Any scientific, provenance, scheduler, storage, budget, or reconciliation failure blocks successor preparation. Inspect, account, reconcile, and recost before any further extension. Keep R17 last. |
-| F-110 | 2026-06-03T16:27:20+00:00 | Accept corrected E03 R02 quarter-unit continuation through exact `t = 9.25`, harden recost queue parsing, and authorize an aggressive bounded half-unit continuation | F-109 authorized only `s26`. Its clean endpoint and the stable standard-layout timing series support replacing calibration quarter units with the largest reviewed half-unit continuation that preserves the hard two-hour limit and both `600`-second guards. | accepted `R02/s26_rankio_t9_t9p25`; job `4759155`; exact scheduler row `4759155\|cgl_mks24_E03_forcing_policy_R02_s26_rankio_t9_t9p25\|COMPLETED\|0:0\|1\|2318\|2026-06-03T10:21:06\|2026-06-03T11:00:00`; record-time inspection SHA-256 `36ab7085547ddf32eaab0acc89b8376cbe721202bc9449a6a255df7cb6136bb3`; recorded manifest SHA-256 `9bc02881126cb96f19651eb1e3f4fb954a4a867c789d3c6295daa0ff94bc7b4a`; retained independent validation SHA-256 `24ee6e4a0abefdb50e0d2ce974156b88ac22b7b9070d03a4569103a2c44fd3c9`; retained scheduler evidence SHA-256 `80d42617eeec82f8427cbcfac1e6f69b8a165e389b652fea2d3e6b185dfd1ae5`; retained recost generator SHA-256 `62aed9daf2925ca7329b04c7e3735881078a8c1820aab011b8e1a117dcc0e2a0`; canonical recost artifact SHA-256 `26f6eeb1a92960c006126b64e73c51b4e2a06c14efff50a04660aad36f8b8706`; observed-publication audit SHA-256 `c27b98847b7037f419ac8694a0f05c46c670fe0470ab0e86c50a6a6004255441`; forensic copy with the canonical artifact SHA-256 | High | Continue from authenticated E03 `t = 9` restart siblings through exact `t = 9.25`; require formal and retained independent inspection, complete ranked products, zero strict counters, forcing-work closure, live accounting, hardened reconciliation, scoped queue-parser tests, retained-generator review, staged verification, independent staged review, normal promotion, and separate promoted verification. | Job `4759155` reaches exact `t = 9.25` in `2318` seconds (`0.643889` displayed node-hours). Strict LF counters remain zero; terminal `lf_hwproj = 304421455230`; sampled-history forcing-work relative residual is `1.812436903704924e-12`; accepted corrected-E03 prefix totals `79162` seconds (`21.989444444444445` exact and `21.989446` displayed node-hours); hardened reconciliation closes with `27/27/27`, no active reservation, no transaction, and `issues = []`. F-110 projects `858.8122227777778` matrix node-hours with `41.18777722222217` margin and selects `5500 <= 6000` seconds for `s27`. The companion queue parser rejects malformed rows and queued `cgl_*` workflow jobs while permitting unrelated account jobs. | Commit, push, archive, and catalog the post-F-110 documentation state, validate the archive ledger, require checklist items 29--30, and prepare only `R02/s27_rankio_t9p25_t9p75` on one node from authenticated `s26` terminal siblings with Slurm walltime `02:00:00`, Athena timeout `01:50:00`, and threshold `6000` seconds. Finish and analyze R02 once through exact `t = 10`; then use largest evidence-backed standard-layout segments for R03--R16 and derive R17 bounds separately. |
+| F-110 | 2026-06-03T16:27:20+00:00 | Accept corrected E03 R02 quarter-unit continuation through exact `t = 9.25`, harden recost queue parsing, and authorize an aggressive bounded half-unit continuation | F-109 authorized only `s26`. Its clean endpoint and the stable standard-layout timing series support replacing calibration quarter units with the largest reviewed half-unit continuation that preserves the hard two-hour limit and both `600`-second guards. | accepted `R02/s26_rankio_t9_t9p25`; job `4759155`; exact retained scheduler projection row `4759155\|cgl_mks24_E03_forcing_policy_R02_s26_rankio_t9_t9p25\|COMPLETED\|0:0\|1\|2318\|2026-06-03T10:21:06\|2026-06-03T11:00:00`; record-time inspection SHA-256 `36ab7085547ddf32eaab0acc89b8376cbe721202bc9449a6a255df7cb6136bb3`; recorded manifest SHA-256 `9bc02881126cb96f19651eb1e3f4fb954a4a867c789d3c6295daa0ff94bc7b4a`; retained independent validation SHA-256 `24ee6e4a0abefdb50e0d2ce974156b88ac22b7b9070d03a4569103a2c44fd3c9`; retained scheduler evidence SHA-256 `80d42617eeec82f8427cbcfac1e6f69b8a165e389b652fea2d3e6b185dfd1ae5`; retained recost generator SHA-256 `62aed9daf2925ca7329b04c7e3735881078a8c1820aab011b8e1a117dcc0e2a0`; canonical recost artifact SHA-256 `26f6eeb1a92960c006126b64e73c51b4e2a06c14efff50a04660aad36f8b8706`; observed-publication audit SHA-256 `c27b98847b7037f419ac8694a0f05c46c670fe0470ab0e86c50a6a6004255441`; forensic copy with the canonical artifact SHA-256 | High | Continue from authenticated E03 `t = 9` restart siblings through exact `t = 9.25`; require formal and retained independent inspection, complete ranked products, zero strict counters, forcing-work closure, live accounting, hardened reconciliation, scoped queue-parser tests, retained-generator review, staged verification, independent staged review, normal promotion, and separate promoted verification. | Job `4759155` reaches exact `t = 9.25` in `2318` seconds (`0.643889` displayed node-hours). Strict LF counters remain zero; terminal `lf_hwproj = 304421455230`; sampled-history forcing-work relative residual is `1.812436903704924e-12`; accepted corrected-E03 prefix totals `79162` seconds (`21.989444444444445` exact and `21.989446` displayed node-hours); hardened reconciliation closes with `27/27/27`, no active reservation, no transaction, and `issues = []`. F-110 projects `858.8122227777778` matrix node-hours with `41.18777722222217` margin and selects `5500 <= 6000` seconds for `s27`. The companion queue parser rejects malformed rows and queued `cgl_*` workflow jobs while permitting unrelated account jobs. | Commit, push, archive, and catalog the post-F-110 documentation state, validate the archive ledger, require checklist items 29--30, and prepare only `R02/s27_rankio_t9p25_t9p75` on one node from authenticated `s26` terminal siblings with Slurm walltime `02:00:00`, Athena timeout `01:50:00`, and threshold `6000` seconds. Finish and analyze R02 once through exact `t = 10`; then use largest evidence-backed standard-layout segments for R03--R16 and derive R17 bounds separately. |
 
 ### Implemented Core Decision Log
 
@@ -3047,20 +3047,23 @@ Authenticated `s25` job `4758713` is accepted through exact `t = 9` for
 `0.627500` displayed node-hours, bringing corrected-E03 use to `21.345557`
 displayed node-hours. Canonical F-109 recost evidence SHA-256 is
 `67f9096900b5ec3ce8368cd39c6f6a8c649dcff2436261fcf72aa328cd3ac0ea`.
-Hardened reconciliation closes with `26/26/26` ledger
+Authenticated `s26` job `4759155` is accepted through exact `t = 9.25` for
+`0.643889` displayed node-hours, bringing corrected-E03 use to `21.989446`
+displayed node-hours. Canonical F-110 recost evidence SHA-256 is
+`26f6eeb1a92960c006126b64e73c51b4e2a06c14efff50a04660aad36f8b8706`.
+Hardened reconciliation closes with `27/27/27` ledger
 rows/manifests/reservations, no active reservation, no transaction, and
-`issues = []`. Commit, push, archive, and catalog the post-F-109 documentation
+`issues = []`. Commit, push, archive, and catalog the post-F-110 documentation
 checkpoint, validate the archive ledger, rerun hardened reconciliation, and
-repeat the queue/shared-root audit with explicit acknowledgement of the stale
-beta-25 record. Require completion of the durable handoff checklist items 25--27
-before preparation. Then prepare only `R02/s26_rankio_t9_t9p25` on one node from
-authenticated `s25` terminal siblings with Slurm walltime `01:05:00`, Athena
-timeout `00:55:00`, and its reviewed one-segment `2700`-second threshold
-retaining `600` seconds on both timeout margins. The threshold is scoped only
-to `s26` and cannot ratchet automatically. Any scientific, provenance,
-scheduler, storage, budget, or reconciliation failure blocks successor
-preparation. Inspect, account, reconcile, and recost before any further
-extension.
+require no queued `cgl_*` workflow job, a free strict root lock, and explicit
+acknowledgement of the stale beta-25 record. Then prepare only aggressive
+bounded `R02/s27_rankio_t9p25_t9p75` on one node from authenticated `s26`
+terminal siblings with Slurm walltime `02:00:00`, Athena timeout `01:50:00`,
+and its reviewed `6000`-second threshold retaining both `600`-second guards.
+Actual AthenaK submission retains the Stage I helper's separate all-user queue
+preflight. Any scientific, provenance, scheduler, storage, budget, or
+reconciliation failure blocks successor preparation. Inspect, account,
+reconcile, and recost before any further extension.
 
 ### Corrected E03 Successor-Segment Review Policy
 
@@ -3268,6 +3271,19 @@ validated, reconciliation is rerun, and the queue/shared-root audit repeats
 explicit acknowledgement of the stale beta-25 record. Require completion of
 the durable handoff checklist items 25--27 before preparation. This is a
 reviewed one-segment authorization, not an automatic quarter-unit ratchet.
+
+After accepted `s26`, F-110 replaces the calibration-quarter cadence with the
+largest reviewed bounded half-unit continuation. Its estimator uses accepted
+`s25` elapsed `2259`, accepted `s26` elapsed `2318`, local next-quarter
+estimate `2377`, linear half estimate `4577`, accelerated-half estimate
+`4695`, and selected estimate `5500 <= 6000` seconds. Canonical F-110 evidence
+authorizes only `R02/s27_rankio_t9p25_t9p75` after the post-F-110
+documentation checkpoint is committed, pushed, archived, and cataloged, the
+archive ledger is validated, authenticated hardened reconciliation is rerun,
+and the scoped queue/shared-root audit requires no queued `cgl_*` workflow
+job, a free strict root lock, and explicit stale beta-25 acknowledgement.
+Actual AthenaK submission retains the Stage I helper's separate all-user queue
+preflight.
 
 All Frontier simulations for this CGL-LF project must place their output,
 logs, manifests, restart products, and usage accounting beneath:
@@ -4702,18 +4718,19 @@ authenticated `R02/s24_rankio_t8p5_t8p75` job `4758576` is accepted through
 exact `t = 8.75`;
 authenticated `R02/s25_rankio_t8p75_t9` job `4758713` is accepted through
 exact `t = 9`;
-commit, push, archive, and catalog the post-F-109 documentation checkpoint,
-validate the archive ledger, rerun hardened reconciliation, repeat the
-queue/shared-root audit with explicit acknowledgement of the stale beta-25
-record, and require completion of the durable handoff checklist items 25--27
-before continuing only with `R02/s26_rankio_t9_t9p25` on one node from its
-authenticated `s25` restart siblings under the full F-109 profile: Slurm
-walltime `01:05:00`, Athena timeout `00:55:00`, and a one-segment
-`2700`-second threshold retaining `600` seconds on both timeout margins. The
-threshold is scoped only to `s26` and cannot ratchet automatically. Any
-scientific, provenance, scheduler, storage, budget, or reconciliation failure
-blocks successor preparation. Inspect, account, reconcile, and recost before
-any further extension.
+authenticated `R02/s26_rankio_t9_t9p25` job `4759155` is accepted through
+exact `t = 9.25`;
+commit, push, archive, and catalog the post-F-110 documentation checkpoint,
+validate the archive ledger, rerun hardened reconciliation, require no queued
+`cgl_*` workflow job and a free strict root lock, and retain explicit
+acknowledgement of the stale beta-25 record before continuing only with
+aggressive bounded `R02/s27_rankio_t9p25_t9p75` on one node from its
+authenticated `s26` restart siblings: Slurm walltime `02:00:00`, Athena
+timeout `01:50:00`, and a `6000`-second threshold retaining both `600`-second
+guards. Actual AthenaK submission retains the Stage I helper's separate
+all-user queue preflight. Any scientific, provenance, scheduler, storage,
+budget, or reconciliation failure blocks successor preparation. Inspect,
+account, reconcile, and recost before any further extension.
 
 The debug-QOS validation launcher remains prohibited for production work.
 The archived `E01-pre-modal-driver` Stage I protocol supplied the non-debug
@@ -4889,19 +4906,21 @@ Authenticated `R02/s24_rankio_t8p5_t8p75` job `4758576` is accepted through
 exact `t = 8.75`.
 Authenticated `R02/s25_rankio_t8p75_t9` job `4758713` is accepted through
 exact `t = 9`.
-Commit, push, archive, and catalog the post-F-109 documentation checkpoint,
-validate the archive ledger, rerun hardened reconciliation, repeat the
-queue/shared-root audit with explicit acknowledgement of the stale beta-25
-record, and require completion of the durable handoff checklist items 25--27
-before preparing only `R02/s26_rankio_t9_t9p25` on one node from the
-authenticated `s25` terminal siblings under the full F-109 profile: Slurm
-walltime `01:05:00`, Athena timeout `00:55:00`, and a one-segment
-`2700`-second threshold retaining `600` seconds on both timeout margins. The
-threshold is scoped only to `s26` and cannot ratchet automatically. Any
-scientific, provenance, scheduler, storage, budget, or reconciliation failure
-blocks successor preparation. Inspect, account, reconcile, and recost before
-any further extension. Complete R02, then
-R03--R16 sequentially, and execute R17 last.
+Authenticated `R02/s26_rankio_t9_t9p25` job `4759155` is accepted through
+exact `t = 9.25`.
+Commit, push, archive, and catalog the post-F-110 documentation checkpoint,
+validate the archive ledger, rerun hardened reconciliation, require no queued
+`cgl_*` workflow job and a free strict root lock, and retain explicit
+acknowledgement of the stale beta-25 record before preparing only aggressive
+bounded `R02/s27_rankio_t9p25_t9p75` on one node from the authenticated `s26`
+terminal siblings: Slurm walltime `02:00:00`, Athena timeout `01:50:00`, and a
+`6000`-second threshold retaining both `600`-second guards. Actual AthenaK
+submission retains the Stage I helper's separate all-user queue preflight.
+Any scientific, provenance, scheduler, storage, budget, or reconciliation
+failure blocks successor preparation. Inspect, account, reconcile, and recost
+before any further extension. Finish and analyze R02 once through exact
+`t = 10`; execute R03--R16 with largest evidence-backed standard-layout
+segments; derive R17 bounds separately and execute R17 last.
 
 Required baseline:
 
@@ -5860,18 +5879,26 @@ local implementation evidence. The next critical path is:
    `0.627500` displayed node-hours, and leaves corrected-E03 cumulative use at
    `21.345557` displayed node-hours. Canonical F-109 recost evidence SHA-256 is
    `67f9096900b5ec3ce8368cd39c6f6a8c649dcff2436261fcf72aa328cd3ac0ea`.
-   Commit, push, archive, and catalog the post-F-109 documentation checkpoint,
+   Authenticated `R02/s26_rankio_t9_t9p25` job `4759155` passes formal and
+   independently regenerated inspection through exact `t = 9.25`, records
+   `0.643889` displayed node-hours, and leaves corrected-E03 cumulative use at
+   `21.989446` displayed node-hours. Canonical F-110 recost evidence SHA-256 is
+   `26f6eeb1a92960c006126b64e73c51b4e2a06c14efff50a04660aad36f8b8706`.
+   Commit, push, archive, and catalog the post-F-110 documentation checkpoint,
    validate the archive ledger, rerun hardened reconciliation, repeat the
-   queue/shared-root audit with explicit acknowledgement of the stale beta-25
-   record, and require completion of the durable handoff checklist items 25--27
-   before preparing only `R02/s26_rankio_t9_t9p25` on one node from the
-   authenticated `s25` terminal siblings with Slurm walltime `01:05:00`, Athena
-   timeout `00:55:00`, and its reviewed one-segment `2700`-second threshold
-   retaining `600` seconds on both timeout margins. The threshold is scoped
-   only to `s26` and cannot ratchet automatically.
+   scoped queue/shared-root audit with explicit acknowledgement of the stale
+   beta-25 record, and require no queued `cgl_*` workflow job and a free strict
+   root lock before preparing only aggressive bounded
+   `R02/s27_rankio_t9p25_t9p75` on one node from the authenticated `s26`
+   terminal siblings with Slurm walltime `02:00:00`, Athena timeout
+   `01:50:00`, and its reviewed `6000`-second threshold retaining both
+   `600`-second guards. Actual AthenaK submission retains the Stage I helper's
+   separate all-user queue preflight.
    Any scientific, provenance, scheduler, storage, budget, or reconciliation
    failure blocks successor preparation. Inspect, account, reconcile, and
-   recost. Finish R02, execute R03--R16 sequentially, and execute R17 last.
+   recost. Finish and analyze R02 once through exact `t = 10`; execute
+   R03--R16 with largest evidence-backed standard-layout segments; derive R17
+   bounds separately and execute R17 last.
 
 3. **Recost corrected E03 and continue the frozen matrix sequentially.**
    Preserve E01 and E02 as historical pipeline and cost evidence only. No E02
