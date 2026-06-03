@@ -397,13 +397,15 @@ def test_checkpoint_permits_unrelated_account_queue_job(recost_fixture):
         "|pic_unrelated|RUNNING\n",
         "67890|pic_unrelated|\n",
         "67890| pic_unrelated|RUNNING\n",
+        " 67890|pic_unrelated|RUNNING\n",
+        "67890|pic_unrelated|RUNNING \n",
     ),
 )
 def test_checkpoint_rejects_malformed_queue_row(recost_fixture, row):
     fixture = recost_fixture
     fixture["queue"].write_text(row)
     completed = run_checkpoint(fixture, "verify-staged-recost")
-    assert_rejected(completed, "squeue output row has malformed fields")
+    assert_rejected(completed, "squeue output row has")
 
 
 def test_checkpoint_legacy_adoption_rejects_audit_relabeling(recost_fixture):

@@ -1041,9 +1041,10 @@ def require_empty_queue(root: Path, offline: bool, queue_file: str | None) -> No
             raise ValueError("squeue is unavailable; refusing recost publication") from error
     queued = []
     for line in output.splitlines():
-        line = line.strip()
-        if not line:
+        if not line.strip():
             continue
+        if line.strip() != line:
+            raise ValueError("squeue output row has surrounding whitespace: " + line)
         fields = line.split("|")
         if len(fields) != 3:
             raise ValueError("squeue output row is not exactly three fields: " + line)
