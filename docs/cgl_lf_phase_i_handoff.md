@@ -1,6 +1,6 @@
 # CGL-LF Phase I Production Handoff
 
-Checkpoint refreshed: `2026-06-02T23:43:37Z`
+Checkpoint refreshed: `2026-06-02T23:58:06Z`
 
 ## Read This First
 
@@ -18,9 +18,10 @@ outside the retained-companion workflow and has now been adopted exactly once
 with the retained companion's explicit `adopt-legacy-canonical` action. The
 adoption truthfully attests the present canonical bytes without claiming
 observation of the original publication transition. Do not rerun adoption.
-The next action is to commit, push, and archive this documentation checkpoint,
-then harden the retained Stage I helper before the bounded
-`R02/s19_rankio_t7p25_t7p5` readiness packet proceeds.
+The separate Stage I helper hardening checkpoint is also reviewed, pushed,
+archived, and cataloged. The next action is a fresh empty-queue and free-lock
+boundary, authenticated hardened reconciliation, and an independently audited
+bounded `R02/s19_rankio_t7p25_t7p5` readiness packet.
 
 ## Repository Boundary
 
@@ -41,6 +42,19 @@ Add retained Stage I recost lifecycle utility
 It is pushed and archived as
 `source-archives/athenak-feature-cgl-through-89ba4143c.bundle` with SHA-256
 `16f5b14610b47e1e3ca0f695bf9e5a94fba6d450e4dfe25357f0cde54fcbf597`.
+
+The separate post-adoption Stage I helper hardening checkpoint is:
+
+```text
+f675bd677cb582a46bbda8b5f55c335e6f259dd3
+Harden Stage I lock and scheduler routing
+```
+
+It is pushed and archived as
+`source-archives/athenak-feature-cgl-through-f675bd677.bundle` with SHA-256
+`eb32cd98a97ff57311d1a783ca6b80d3c22192370c09e85fc72843fc59ae7c42`.
+Its Stage I helper SHA-256 is
+`54ec671bb45aa27735a174d40b4b2e6009070716346ea09699bbe62421bbfada`.
 
 The shared production root is:
 
@@ -197,9 +211,8 @@ one-segment threshold 2700 seconds
 The recost uses local `2340`, selected `2559`, projection
 `829.1011116666666`, and margin `70.89888833333339` node-hours. This is a
 recommendation inside retained evidence, not permission to prepare or submit
-`s19` before this adoption checkpoint is committed and archived and the live
-Stage I helper is separately hardened, reviewed, committed, pushed, and
-archived.
+`s19` before the fresh live queue/free-lock boundary, authenticated hardened
+reconciliation, and independently audited readiness packet close.
 
 ## Interrupted Promotion Review
 
@@ -277,7 +290,7 @@ publication method and publisher. Its three durable phases are resumable.
 ## Fail-Closed Resume Checklist
 
 Resume sequentially. Shared-root mutations and queue submissions must not
-overlap with another agent. Steps 1 through 3 are closed at this checkpoint;
+overlap with another agent. Steps 1 through 5 are closed at this checkpoint;
 do not rerun adoption.
 
 1. Closed: commit, push, independently review, archive, catalog, and use the
@@ -289,15 +302,16 @@ do not rerun adoption.
    audit, canonical artifact, retained mode-`0444` forensic copy, empty recost
    transaction directory, empty queue, and free strict root lock recorded
    above.
-4. Commit and push this documentation-only post-adoption checkpoint, create
+4. Closed: commit and push the documentation-only post-adoption checkpoint, create
    and catalog a complete-history source bundle, verify the full checksum
    ledger, and independently audit the archive.
-5. Before any `s19` lifecycle mutation, harden the retained Stage I helper's
+5. Closed: before any `s19` lifecycle mutation, harden the retained Stage I helper's
    canonical flock opening to the companion's `O_NOFOLLOW`, regular-file,
-   owner, mode-`0644`, one-link profile and harden its canonical queue path in
-   a separate reviewed, committed, pushed, and archived transition. F-101
-   binds the prior helper SHA-256, so this helper transition must remain
-   after F-101 adoption rather than before it.
+   owner, mode-`0644`, one-link profile and post-lock pathname identity;
+   harden all Slurm control-plane routing; and reject production fixtures and
+   `--skip-slurm-test` in a separate reviewed, committed, pushed, archived,
+   and cataloged transition. F-101 binds the prior helper SHA-256, so this
+   helper transition remains after F-101 adoption rather than before it.
 6. Require a fresh empty queue and free root-lock boundary before each
    production mutation. Run authenticated hardened reconciliation and
    require `19/19/19`, no active reservation, no Stage I transaction, and
@@ -312,8 +326,9 @@ do not rerun adoption.
 The corrected forcing-policy epoch is qualified. `R02` is accepted from
 fresh `t = 0` through exact `t = 7.25`. Retained companion implementation,
 review, archival, first production use, and F-101 legacy adoption are
-complete. The immediate blocker is the separate Stage I helper hardening
-checkpoint before `s19`. After that closes, finish `R02` through exact
-`t = 10`, then execute `R03` through `R16` sequentially and `R17` last under
-the existing protocol. Stage II and manuscript-result claims remain out of
-scope until Phase I production and analysis gates are complete.
+complete. The separate Stage I helper hardening checkpoint is also complete.
+The immediate blocker is the fresh queue/free-lock reconciliation and bounded
+readiness-packet gate before `s19`. After that closes, finish `R02` through
+exact `t = 10`, then execute `R03` through `R16` sequentially and `R17` last
+under the existing protocol. Stage II and manuscript-result claims remain
+out of scope until Phase I production and analysis gates are complete.

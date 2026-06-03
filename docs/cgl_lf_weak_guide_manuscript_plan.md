@@ -16,10 +16,18 @@ preserve those exact bytes.
 At a fresh free-lock and empty-queue boundary, that retained companion
 adopted and separately verified F-101 as a present-time legacy canonical
 artifact without claiming observation of its original publication
-transition. Before any `s19` lifecycle mutation,
-harden the retained Stage I helper to the companion's strict canonical-lock
-opening profile in a separate reviewed, committed, pushed, and archived
-transition; F-101 itself binds the current helper SHA-256. The preceding read-only
+transition. The separate pre-`s19` Stage I helper hardening is now closed by
+reviewed commit `f675bd677cb582a46bbda8b5f55c335e6f259dd3`, helper SHA-256
+`54ec671bb45aa27735a174d40b4b2e6009070716346ea09699bbe62421bbfada`,
+and verified complete-history bundle
+`athenak-feature-cgl-through-f675bd677.bundle` with SHA-256
+`eb32cd98a97ff57311d1a783ca6b80d3c22192370c09e85fc72843fc59ae7c42`.
+The focused Stage I helper slice passes (`10 passed, 35 deselected`) and the
+retained companion suite passes (`67 passed`). F-101 remains truthfully
+bound to the prior helper SHA-256. Before preparing `s19`, require a fresh
+empty queue, free strict root lock, authenticated hardened reconciliation,
+`19/19/19`, no active reservation, no Stage I transaction, and `issues = []`.
+The preceding read-only
 Frontier-root audit was completed on 2026-05-29 EDT (2026-05-30 UTC). The
 first paper-production
 segment, mapped case `R16/s00_t0_t2`, completed on Frontier as job `4674731`
