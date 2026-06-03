@@ -48,6 +48,7 @@ COUNT_KEYS = (
     "ledger_rows",
     "manifests",
 )
+CGL_JOB_NAME_PREFIX = "cgl_"
 
 
 class LinkAttemptError(RuntimeError):
@@ -1012,7 +1013,7 @@ def scheduler_environment() -> dict[str, str]:
 
 
 def require_empty_queue(root: Path, offline: bool, queue_file: str | None) -> None:
-    """Require an empty user queue, with fixture injection only offline."""
+    """Require no queued CGL workflow job, with fixture injection only offline."""
 
     if offline and queue_file is None:
         raise ValueError("offline fixture root requires --squeue-file")
@@ -1030,7 +1031,7 @@ def require_empty_queue(root: Path, offline: bool, queue_file: str | None) -> No
             raise ValueError("effective UID has no account name; cannot check the queue") from error
         try:
             output = subprocess.run(
-                [str(SQUEUE), "-h", "-u", user],
+                [str(SQUEUE), "-h", "-u", user, "-o", "%i|%j|%T"],
                 check=True,
                 capture_output=True,
                 text=True,
@@ -1038,9 +1039,18 @@ def require_empty_queue(root: Path, offline: bool, queue_file: str | None) -> No
             ).stdout
         except (FileNotFoundError, subprocess.CalledProcessError) as error:
             raise ValueError("squeue is unavailable; refusing recost publication") from error
-    queued = [line for line in output.splitlines() if line.strip()]
+    queued = []
+    for line in output.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        fields = line.split("|")
+        if len(fields) != 3:
+            raise ValueError("squeue output row is not exactly three fields: " + line)
+        if fields[1].startswith(CGL_JOB_NAME_PREFIX):
+            queued.append(line)
     if queued:
-        raise ValueError("another user job is queued: " + "; ".join(queued))
+        raise ValueError("another CGL job is queued: " + "; ".join(queued))
 
 
 def validate_fixture_options(args: argparse.Namespace, offline: bool) -> None:

@@ -377,10 +377,17 @@ def test_checkpoint_legacy_adoption_rejects_staged_twin(recost_fixture):
 def test_checkpoint_legacy_adoption_rejects_nonempty_queue(recost_fixture):
     fixture = recost_fixture
     expose_legacy_canonical(fixture)
-    fixture["queue"].write_text("67890 batch RUNNING unrelated\n")
+    fixture["queue"].write_text("67890|cgl_other_root_writer|RUNNING\n")
     completed = run_checkpoint(fixture, "adopt-legacy-canonical")
-    assert_rejected(completed, "another user job is queued")
+    assert_rejected(completed, "another CGL job is queued")
     assert not fixture["audit"].exists()
+
+
+def test_checkpoint_permits_unrelated_account_queue_job(recost_fixture):
+    fixture = recost_fixture
+    fixture["queue"].write_text("67890|pic_unrelated|RUNNING\n")
+    completed = run_checkpoint(fixture, "verify-staged-recost")
+    assert completed.returncode == 0, completed.stderr
 
 
 def test_checkpoint_legacy_adoption_rejects_audit_relabeling(recost_fixture):
@@ -475,14 +482,14 @@ def test_checkpoint_scrubs_slurm_routing_environment(monkeypatch):
 
 def test_checkpoint_rechecks_queue_directly_before_link(recost_fixture, tmp_path):
     late_queue = tmp_path / "late-squeue.txt"
-    late_queue.write_text("67890 batch RUNNING unrelated\n")
+    late_queue.write_text("67890|cgl_late_root_writer|RUNNING\n")
     completed = run_checkpoint(
         recost_fixture,
         "promote-recost",
         "--pre-link-squeue-file",
         str(late_queue),
     )
-    assert_rejected(completed, "another user job is queued")
+    assert_rejected(completed, "another CGL job is queued")
     assert recost_fixture["staged"].is_file()
     assert not recost_fixture["canonical"].exists()
     assert list(recost_fixture["recost_transactions"].iterdir()) == []
@@ -895,14 +902,14 @@ def test_checkpoint_rechecks_queue_directly_before_recovery_unlink(recost_fixtur
     failed = run_checkpoint(fixture, "promote-recost", "--simulate-post-link-failure")
     assert_rejected(failed, "simulated post-link publication failure")
     late_queue = tmp_path / "late-unlink-squeue.txt"
-    late_queue.write_text("67890 batch RUNNING unrelated\n")
+    late_queue.write_text("67890|cgl_late_root_writer|RUNNING\n")
     completed = run_checkpoint(
         fixture,
         "finalize-linked-pair",
         "--pre-unlink-squeue-file",
         str(late_queue),
     )
-    assert_rejected(completed, "another user job is queued")
+    assert_rejected(completed, "another CGL job is queued")
     assert fixture["staged"].is_file()
     assert fixture["canonical"].is_file()
     assert len(list(fixture["recost_transactions"].iterdir())) == 1
