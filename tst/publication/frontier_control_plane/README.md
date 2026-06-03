@@ -975,6 +975,8 @@ done
 # Wait for successful aggregate worker completion before submitting the packet.
 /usr/bin/sbatch \
   /ccs/home/dfielding/athenak-pic/tst/publication/frontier_q011_section54_pressure_pilot_review_packet_job.sh
+
+# Wait for successful review-packet worker completion before verifying both receipts.
 ```
 
 The publisher reruns raw-case verification while retaining each case-root
