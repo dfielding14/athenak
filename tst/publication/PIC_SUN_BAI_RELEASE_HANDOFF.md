@@ -1,6 +1,6 @@
 # PIC Sun and Bai release qualification handoff
 
-Last updated: 2026-06-03T21:29:09Z
+Last updated: 2026-06-03T21:42:21Z
 
 ## Purpose
 
@@ -72,13 +72,16 @@ Completed:
 15. The reviewed tenth-pass operational repair was committed and pushed as
     `ee18be0f04dab3c7110c3372ccd904288d13ec7c`. Its first closed worker
     validation submission became Frontier job `4761480`.
+16. The eleventh-pass scheduler-token repair was committed and pushed as
+    `7e3f30a38d201ae438c434f9ce2ee2049f1f6455`. Its reviewed replacement
+    worker validation submission became Frontier job `4761489`.
 
 In progress:
 
 1. Pressure-pilot aggregate publication remains prohibited. No public bundle,
    receipt, aggregate analysis artifact, or review packet exists.
-2. Preserve the eleventh-pass Frontier `sbatch --parsable` token-normalization
-   closure while its narrow rereview, clean commit, push, and exact
+2. Preserve the twelfth-pass fixed trusted Cray-Python worker-path closure while
+   its clean commit, push, and exact
    committed-tree validation finish.
 3. The live controller and policy intentionally remain at the historical
    consumed-slice generation until the reviewed one-time strict-storage
@@ -86,7 +89,7 @@ In progress:
 
 Remaining:
 
-1. Commit and push the eleventh-pass scheduler-token closure and pass the clean
+1. Commit and push the twelfth-pass worker-Python-path closure and pass the clean
    committed worker validation.
 2. Capture authenticated mirrored storage evidence, install the paired
    controller, retire the consumed historical slices, freeze and independently
@@ -179,6 +182,7 @@ diff before editing or committing. The expected repair ownership is:
 Recent pushed history:
 
 ```text
+7e3f30a38 Normalize Frontier parsable job tokens
 ee18be0f0 Harden Q011 canonical storage operational boundary
 7cb4a20eb Harden Q011 validation checkout boundary
 7d157d52b Split Q011 archived and trusted checkout validation
@@ -692,6 +696,34 @@ replacement validation submission after that push.
 
 The durable append-only transition record is
 [`q011_section54_eleventh_frontier_sbatch_token_transition_2026-06-03.json`](readiness/q011_section54_eleventh_frontier_sbatch_token_transition_2026-06-03.json).
+
+### Twelfth repair-validation worker Python-path pass
+
+The reviewed eleventh-pass replacement validation submission was accepted as
+Frontier job `4761489` with raw token `4761489;frontier`; token normalization
+worked as intended. The archived focused tranche passed all `200` tests in
+`45.363s`. The full trusted-checkout sweep then ran `1246` tests in `457.364s`
+and failed one standalone-oracle test with two intentional skips.
+
+The isolated failure was operational, not scientific. The hardened worker set
+`PATH=/usr/bin:/bin`, while the executable oracle shebang is
+`#!/usr/bin/env python3`. On the compute image `/usr/bin/python3` is Python
+`3.6.15`, which rejects `from __future__ import annotations`. The reviewed
+runtime is Cray Python `3.11.7`.
+
+The twelfth pass sets the worker's fixed trusted path to
+`/opt/cray/pe/python/3.11.7/bin:/usr/bin:/bin`. Its separate hermetic Git probes
+remain constrained to `/usr/bin:/bin`. A closed-environment standalone oracle
+replay and its focused four-test module pass, and independent read-only rereview
+found no remaining worker-path blocker.
+
+Do not mutate live policy state from commit `7e3f30a38`. Freeze and push this
+twelfth-pass closure, then run one reviewed replacement committed worker
+validation without editing the trusted checkout while it executes. The
+failed-closed `4761489` record is the reviewed reason for that replacement.
+
+The durable append-only transition record is
+[`q011_section54_twelfth_worker_python_path_transition_2026-06-03.json`](readiness/q011_section54_twelfth_worker_python_path_transition_2026-06-03.json).
 
 ## Validation baseline
 

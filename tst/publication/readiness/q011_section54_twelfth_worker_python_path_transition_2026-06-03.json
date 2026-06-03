@@ -1,0 +1,70 @@
+{
+  "schema_version": 1,
+  "record_type": "q011_section54_twelfth_worker_python_path_transition",
+  "recorded_utc": "2026-06-03T21:42:21Z",
+  "artifact_root": "/lustre/orion/ast207/proj-shared/dfielding/PIC",
+  "predecessor_record": "tst/publication/readiness/q011_section54_eleventh_frontier_sbatch_token_transition_2026-06-03.json",
+  "predecessor_sha256": "0aed1d2117183462f90b6e4d41d6d2eddeefd59ce80d8d9e47ca7541c8b42eb9",
+  "source_checkpoint_commit": "7e3f30a38d201ae438c434f9ce2ee2049f1f6455",
+  "status": "twelfth_repair_validation_worker_fixed_trusted_cray_python_path_independent_rereview_passed_pending_clean_commit_push_and_replacement_clean_worker_validation",
+  "qualification_effect": "none_no_execution_authorization_no_science_claim",
+  "repaired_staged_control_plane": {
+    "version": "821d185856722bd0178acb9427f78ac82671a4b6670779ec8400fbac54c6d721",
+    "state": "source_local_repair_staged_pending_clean_commit_worker_validation_install_build_and_freeze",
+    "prepared_artifacts": {
+      "inventory_path": "tst/publication/frontier_control_plane/prepared_pic_artifact_inventory.json",
+      "inventory_sha256": "4cb878a431271d85ff64b330bffc4db1abaa7124a1a5669755da12ddb4677871",
+      "paper_deck_count": 110,
+      "publication_analyzer_count": 20
+    },
+    "installed_controller_file_count": 23
+  },
+  "reviewed_failed_checkpoint": {
+    "scheduler_job_id": "4761489",
+    "scheduler_job_token": "4761489;frontier",
+    "job_name": "pic-q011-repair-validate",
+    "terminal_state": "FAILED",
+    "elapsed": "00:08:34",
+    "exit_code": "1:0",
+    "validated_source_commit": "7e3f30a38d201ae438c434f9ce2ee2049f1f6455",
+    "log_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/logs/slurm/pic-q011-repair-validate.4761489.log",
+    "archived_focused_tests_passed": 200,
+    "archived_focused_test_elapsed_seconds": 45.363,
+    "full_publication_tests_run": 1246,
+    "full_publication_test_elapsed_seconds": 457.364,
+    "full_publication_test_errors": 1,
+    "full_publication_test_skips": 2,
+    "failing_test": "tst.publication.test_pic_paper_smooth_tsc_oracle.PicPaperSmoothTSCOracleTests.test_standalone_executable_emits_checked_report",
+    "failure_reason": "The sanitized worker PATH contained /usr/bin before any reviewed Python bin directory. The standalone oracle shebang /usr/bin/env python3 therefore selected /usr/bin/python3 version 3.6.15 instead of the reviewed Cray Python 3.11.7 and rejected future annotations.",
+    "live_policy_mutation_started": false,
+    "live_storage_preflight_binding_retained": false,
+    "replacement_validation_disposition": "one_reviewed_replacement_required_after_the_twelfth_pass_clean_commit_and_push"
+  },
+  "worker_python_path_repair": {
+    "wrapper_path": "tst/publication/frontier_q011_section54_repair_validation_job.sh",
+    "fixed_worker_path": "/opt/cray/pe/python/3.11.7/bin:/usr/bin:/bin",
+    "git_probe_path_unchanged": "/usr/bin:/bin",
+    "closed_environment_python_resolution": "/opt/cray/pe/python/3.11.7/bin/python3",
+    "closed_environment_python_version": "3.11.7",
+    "bounded_standalone_oracle_replay": "passed",
+    "bounded_oracle_unittest_count": 4,
+    "independent_read_only_rereview": "passed_no_remaining_worker_python_path_blocker"
+  },
+  "live_mutation_state": {
+    "controller_installed": false,
+    "policy_promoted": false,
+    "storage_preflight_evidence_binding_retained": false,
+    "provisioned_empty_binding_directory": "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/storage_preflight_bindings"
+  },
+  "release_blockers": [
+    "twelfth_worker_python_path_repair_clean_commit_and_push_pending",
+    "replacement_full_clean_worker_validation_pending",
+    "live_authenticated_storage_preflight_and_paired_controller_install_pending",
+    "historical_consumed_slice_policy_retirement_pending",
+    "fresh_worker_build_candidate_freeze_and_candidate_only_policy_promotion_pending",
+    "reviewed_one_time_publication_acceptance_root_provisioning_pending",
+    "pressure_aggregate_and_review_packet_worker_publication_pending"
+  ],
+  "human_input_required_now": false,
+  "first_required_human_input_after_automated_repairs": "Select exactly one Section 5.4 problem/ps_p0 case from the verified immutable four-slice pressure-review packet."
+}

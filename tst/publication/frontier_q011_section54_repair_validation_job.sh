@@ -9,7 +9,7 @@
 
 set -euo pipefail
 
-export PATH=/usr/bin:/bin
+export PATH=/opt/cray/pe/python/3.11.7/bin:/usr/bin:/bin
 export PYTHONDONTWRITEBYTECODE=1
 unset BASH_ENV ENV GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_CONFIG_COUNT
 unset GIT_CONFIG_GLOBAL GIT_CONFIG_KEY_0 GIT_CONFIG_NOSYSTEM GIT_CONFIG_SYSTEM

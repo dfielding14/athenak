@@ -1283,7 +1283,7 @@ class PicReadinessRegistryTests(unittest.TestCase):
             ]
         )
         current_repair = _load(
-            "q011_section54_eleventh_frontier_sbatch_token_transition_"
+            "q011_section54_twelfth_worker_python_path_transition_"
             "2026-06-03.json"
         )
         repaired_staged = current_repair["repaired_staged_control_plane"]
