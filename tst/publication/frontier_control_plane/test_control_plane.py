@@ -9762,7 +9762,7 @@ PY
         reservation = self._reserve(manifest_path)
         self.assertEqual(reservation["state"], "reserved")
 
-    def test_active_policy_snapshot_accepts_configured_project_home_root_alias(
+    def test_active_policy_snapshot_rejects_configured_project_home_root_alias(
         self,
     ) -> None:
         project_home_alias = self.root / "project_home_alias"
@@ -9773,23 +9773,13 @@ PY
                 project_home_root=project_home_alias
             ),
         )
-        promote(
-            self.policy,
-            control_plane_dir=self.control_plane_dir,
-            authorized_pic_root=self.pic_root,
-            authorized_project_home_root=project_home_alias,
-        )
-        policy, snapshot = require_storage_policy_unlock_snapshot(
-            control_plane_version=self.control_plane_version,
-            authorized_pic_root=self.pic_root,
-            authorized_project_home_root=project_home_alias,
-        )
-        self.assertEqual(
-            policy["olcf_side_storage"]["project_home_mirror_root"],
-            str(project_home_alias),
-        )
-        self.assertEqual(len(snapshot["active_policy_sha256"]), 64)
-        self.assertEqual(len(snapshot["active_promotion_sha256"]), 64)
+        with self.assertRaisesRegex(ValueError, "mirror root is not authorized"):
+            promote(
+                self.policy,
+                control_plane_dir=self.control_plane_dir,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=project_home_alias,
+            )
 
     def test_reservation_rejects_active_promotion_record_tamper(self) -> None:
         manifest_path = self._create_manifest()

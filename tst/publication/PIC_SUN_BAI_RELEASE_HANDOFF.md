@@ -1,6 +1,6 @@
 # PIC Sun and Bai release qualification handoff
 
-Last updated: 2026-06-03T17:06:00Z
+Last updated: 2026-06-03T21:24:45Z
 
 ## Purpose
 
@@ -57,21 +57,34 @@ Completed:
     repair passed its final worker-routed 507-test suite in job `4759760`.
     Independent read-only adversarial rereview found no remaining retained
     clean-candidate lifecycle blocker.
+12. The integrated committed snapshot passed worker job `4759862`: 200 focused
+    tests and all 1244 explicit publication tests passed, with two intentional
+    skips.
+13. The first live strict-storage preflight attempt exposed a canonical-path
+    defect before controller installation or policy mutation. The tenth-pass
+    repair passed a bounded read-only replay of the actual live predecessor.
+    Preliminary worker job `4760218` passed its then-current 449-test suite
+    before independent rereview identified the required canonical-policy and
+    frozen-ledger-root split.
+14. Worker job `4760511` passed the amended 611-test split-root suite. Worker
+    job `4760559` passed the superseding exact-final-controller-byte 611-test
+    suite after a formatting-only closure.
 
 In progress:
 
 1. Pressure-pilot aggregate publication remains prohibited. No public bundle,
    receipt, aggregate analysis artifact, or review packet exists.
-2. Preserve all integrated dirty worktree edits while the final clean-worker
-   validation, commit and push finish.
+2. Preserve the tenth-pass canonical-policy, frozen-ledger-root split, and
+   operational-wrapper closure edits while their clean commit, push, exact
+   committed-tree validation finish.
 3. The live controller and policy intentionally remain at the historical
    consumed-slice generation until the reviewed one-time strict-storage
    migration is performed from the committed source.
 
 Remaining:
 
-1. Commit and push the integrated source and pass the clean committed worker
-   validation.
+1. Commit and push the tenth-pass split-root repair and pass the clean committed
+   worker validation.
 2. Capture authenticated mirrored storage evidence, install the paired
    controller, retire the consumed historical slices, freeze and independently
    revalidate a fresh worker-built candidate, and promote the candidate-only
@@ -120,16 +133,20 @@ Remaining:
 Primary worktree:
 
 ```text
-/ccs/home/dfielding/athenak-pic
+/autofs/nccs-svm1_home2/dfielding/athenak-pic
 ```
 
-Repair base before the integrated ninth-pass commit:
+The retained clean-candidate builder still uses the reviewed lexical spelling
+`/ccs/home/dfielding/athenak-pic`. Do not rewrite that build provenance
+spelling during the Project Home migration.
+
+Repair base before the staged tenth-pass commit:
 
 ```text
 branch:     PIC
-HEAD:       7324031b1cc50395c7903e73dbb153d4fdf71290
-origin/PIC: 7324031b1cc50395c7903e73dbb153d4fdf71290
-subject:    Run Q011 repair validation from a clean worker snapshot
+HEAD:       7cb4a20eb626113d112a0512726d2754fb81569e
+origin/PIC: 7cb4a20eb626113d112a0512726d2754fb81569e
+subject:    Harden Q011 validation checkout boundary
 ```
 
 After restart, require `git rev-parse HEAD origin/PIC` to report the same
@@ -153,10 +170,19 @@ diff before editing or committing. The expected repair ownership is:
 | Pressure aggregate publication | `publish_q011_section54_pressure_pilot_bundle.py`, its test |
 | Pressure review packet | `render_q011_section54_pressure_pilot_review_packet.py`, its test |
 | Retained-tree descriptor pinning | `immutable_orion_tree.py`, its test |
+| Canonical Project Home policy and frozen lexical ledger roots | `frontier_control_plane/`, `q011_section54_pressure_pilot_execution.py`, registry and controller tests |
+| Hermetic Q011 workers and post-run source authorization | `frontier_q011_*job.sh`, `analyze_q011_section54_pressure_pilot.py`, readiness successor, prepared inventory |
 
 Recent pushed history:
 
 ```text
+7cb4a20eb Harden Q011 validation checkout boundary
+7d157d52b Split Q011 archived and trusted checkout validation
+e93f7bfd5 Run Q011 validation from read-only Git clone
+d87a8e434 Refresh Q011 clean-candidate fixtures
+f37155643 Clarify Q011 packet verification ordering
+442242516 Fix Q011 operational migration runbook
+ec47056ee Harden Q011 publication and lifecycle boundary
 7324031b1 Run Q011 repair validation from a clean worker snapshot
 f3128598b Record Q011 third adversarial repair transition
 04959b44b Bind Q011 aggregate analysis parser compatibility successor
@@ -264,15 +290,13 @@ then ended without exposing a public bundle:
 | `4757026` | `CANCELLED` | `00:02:16` | Cancelled when the checkout mutated during publication; superseded by worker-local `git archive HEAD` snapshots |
 | `4757047` | `CANCELLED` | `00:04:36` | Cancelled after fresh review found late-failure rollback, descriptor-anchor, and source-authorization gaps |
 
-Aggregate publication remains prohibited until the integrated ninth-pass tree
+Aggregate publication remains prohibited until the integrated tenth-pass tree
 is committed, pushed, clean-worker validated, installed and used to freeze a
 fresh candidate. Provision the reviewed sibling acceptance authority before
 rerunning the worker publisher. Do not invoke the publisher directly on a
-login node.
-
-```text
-/usr/bin/sbatch tst/publication/frontier_q011_section54_pressure_pilot_publish_job.sh
-```
+login node. Use only the exact hermetic, commit-bound, `--export=NIL`
+publication sequence in
+[`frontier_control_plane/README.md`](frontier_control_plane/README.md).
 
 Target outputs:
 
@@ -306,12 +330,8 @@ find "$PIC_ROOT/publication" -maxdepth 2 -printf '%M %s %p\n' | sort
 After the corrected publisher has been reviewed, committed, pushed, and
 worker-validated, inspect the hidden staging trees and rerun from the reviewed
 Slurm wrapper. The wrapper performs final receipt verification on the worker
-node. Do not use a login-node direct invocation.
-
-```bash
-cd /ccs/home/dfielding/athenak-pic
-/usr/bin/sbatch tst/publication/frontier_q011_section54_pressure_pilot_publish_job.sh
-```
+node. Do not use a login-node direct invocation or a raw wrapper submission
+without the reviewed commit argument.
 
 ## Known launch blockers under repair
 
@@ -564,6 +584,81 @@ controller digest is
 The durable transition record is
 [`q011_section54_ninth_adversarial_repair_transition_2026-06-03.json`](readiness/q011_section54_ninth_adversarial_repair_transition_2026-06-03.json).
 
+### Tenth canonical Project Home path pass
+
+The first reviewed live preflight attempt found that strict no-symlink storage
+probing and the historical `/ccs/proj` Project Home alias were incompatible by
+construction. Both attempted captures failed closed before evidence
+publication, controller installation, or policy promotion. The active policy
+and promotion hashes remained unchanged.
+
+The tenth pass moves fresh successor policy state to the physical Project Home
+root `/autofs/nccs-svm1_proj/ast207/proj-shared/PIC`. The one-use retirement
+branch still authenticates the historical `/ccs/proj` predecessor spelling
+after checking that it resolves to the authorized physical root. That narrow
+compatibility is required for the retained predecessor manual-accounting
+mirrors and sealed predecessor attestation; it is not allowed for fresh
+evidence.
+
+Independent rereview after worker job `4760218` found a second-order
+requirement: the append-only ledger mirror must retain the historical lexical
+root `/ccs/proj/ast207/proj-shared/PIC`. Existing ledger receipts, genesis
+anchors and sealed operator attestations bind those exact path bytes. Fresh
+storage evidence, installed policy controllers, successor policy mirrors and
+successor manual-accounting authorization mirrors use the canonical `/autofs`
+root. Submission wrappers continue to use `/ccs/proj` only for the frozen
+ledger mirror.
+
+A bounded read-only replay passed against the actual live predecessor and all
+`123` mirrored ledger records after the split-root repair. The focused
+storage-preflight and Q011 successor suite passed all `35` tests. Worker job
+`4760218` remains the preliminary canonical-path validation checkpoint: it
+passed the then-current 449-test affected suite in `141.748s` before the
+second-order ledger split was identified. Worker job `4760511` passed the final
+amended 611-test affected split-root suite in `157.366s`. The staged controller
+received a formatting-only closure, then superseding worker job `4760559`
+passed the exact-final-byte 611-test affected split-root suite in `155.181s`.
+Independent read-only code rereview found no remaining code-path blocker; its
+two runbook findings were repaired before commit. The staged controller digest
+is
+`821d185856722bd0178acb9427f78ac82671a4b6670779ec8400fbac54c6d721`.
+The durable transition record is
+[`q011_section54_tenth_canonical_project_home_repair_transition_2026-06-03.json`](readiness/q011_section54_tenth_canonical_project_home_repair_transition_2026-06-03.json).
+
+### Tenth-pass operational wrapper closure
+
+Operational rereview of the split-root migration path found additional
+fail-closed requirements before live mutation. The staged closure now:
+
+1. submits build-freeze, pressure aggregate, and pressure review-packet workers
+   with `--export=NIL`, fixed paths, sanitized environment variables, and an
+   exact reviewed Git commit;
+2. authenticates the installed controller before the build worker sources the
+   installed environment;
+3. runs committed repair validation from a read-only Git archive and rejects
+   source drift before and after validation;
+4. carries an append-only post-run pressure-source authorization successor for
+   the modified publication wrappers without reauthorizing historical slices;
+5. renders the engineering review packet only after proving the explicit
+   plotting-lock candidate dependency versions; and
+6. documents checkpoint-specific recovery for preflight evidence publication,
+   paired controller installation, one-use retirement promotion, worker
+   submission, and receipt publication; and
+7. makes one clean committed repair-validation worker a hard prerequisite for
+   live migration and pressure publication, using only pinned core discovery
+   tools inside the sanitized worker.
+
+The plotting lock remains an engineering-review candidate. It does not close
+the later qualification plotting or external-export review gate. Independent
+read-only operational rereview passed the exact latest dirty tranche with no
+remaining blocker after the pinned-tool and hard-prerequisite repairs. Live
+mutation remains prohibited until clean commit and push and committed-tree
+worker validation pass.
+
+The regenerated prepared-artifact inventory binds `110` decks and `20`
+analyzers with SHA-256
+`4cb878a431271d85ff64b330bffc4db1abaa7124a1a5669755da12ddb4677871`.
+
 ## Validation baseline
 
 The committed launch-prohibited checkpoint passed these validations before the
@@ -607,6 +702,10 @@ Result: all `58` explicit test modules passed. A plain
 `unittest discover -s tst/publication -t .` invocation is not the correct
 driver because the start directory is not importable in that form.
 
+Committed clean-snapshot worker job `4759862` superseded that older baseline:
+it passed 200 focused tests and all 1244 explicit publication tests, with two
+intentional skips.
+
 After integrating the repairs, rerun focused tests, the explicit full suite,
 `git diff --check`, and `python3 -B -m py_compile` for every changed Python
 module before committing.
@@ -616,7 +715,7 @@ module before committing.
 Run these first:
 
 ```bash
-cd /ccs/home/dfielding/athenak-pic
+cd /autofs/nccs-svm1_home2/dfielding/athenak-pic
 export PIC_ROOT=/lustre/orion/ast207/proj-shared/dfielding/PIC
 
 git status --short --branch
@@ -638,8 +737,9 @@ git diff -- tst/publication
 Then:
 
 1. Read this file and both governing plans.
-2. Preserve and inspect the in-flight repair edits.
-3. Commit and push the integrated repaired boundary.
+2. Preserve and inspect the in-flight tenth-pass canonical policy,
+   frozen-ledger-root split, and operational-wrapper closure edits.
+3. Commit and push the tenth-pass repaired boundary.
 4. Run focused and full validation suites from the clean committed worker
    snapshot.
 5. Request a fresh independent adversarial review.

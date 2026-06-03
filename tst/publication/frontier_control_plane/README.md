@@ -56,6 +56,7 @@ modified control-plane source files:
 
 ```bash
 export PIC_ROOT=/lustre/orion/ast207/proj-shared/dfielding/PIC
+export PROJECT_HOME_POLICY_ROOT=/autofs/nccs-svm1_proj/ast207/proj-shared/PIC
 export PROJECT_HOME_MIRROR_ROOT=/ccs/proj/ast207/proj-shared/PIC
 PYTHON=/opt/cray/pe/python/3.11.7/bin/python3
 
@@ -64,7 +65,7 @@ PYTHON=/opt/cray/pe/python/3.11.7/bin/python3
   --pic-root /lustre/orion/ast207/proj-shared/dfielding/PIC
 "$PYTHON" -I tst/publication/frontier_control_plane/run_control_plane.py \
   install_control_plane.py \
-  --pic-root /ccs/proj/ast207/proj-shared/PIC
+  --pic-root /autofs/nccs-svm1_proj/ast207/proj-shared/PIC
 ```
 
 Both commands must print the same digest. Installation retains a pinned
@@ -80,6 +81,12 @@ successful probes. Freeze `project_home_ledger_mirror_transport` as
 `filesystem_copy`. Keep the Orion-only bulk-evidence selection and documented
 durability risk explicit. Do not weaken the policy merely to create genesis.
 
+Project Home has two intentionally distinct lexical roles. Fresh storage
+evidence, policy mirrors and installed control planes use the physical
+`${PROJECT_HOME_POLICY_ROOT}` path. The append-only ledger remains bound to
+`${PROJECT_HOME_MIRROR_ROOT}` because retained receipts, genesis anchors and
+sealed attestations authenticate that historical `/ccs/proj` spelling.
+
 Promote the reviewed policy through the installed control plane:
 
 ```bash
@@ -88,7 +95,7 @@ export CONTROL_PLANE_DIR="${PIC_ROOT}/control_plane/${VERSION}"
 CONTROL_PLANE=("$PYTHON" -I "${CONTROL_PLANE_DIR}/run_control_plane.py")
 
 "${CONTROL_PLANE[@]}" promote_active_policy.py \
-  --reviewed-policy /ccs/home/dfielding/athenak-pic/tst/publication/readiness/storage_policy.json
+  --reviewed-policy <reviewed-successor-policy.json>
 ```
 
 Promotion validates the reviewed policy, serializes promoters, durably
@@ -97,6 +104,9 @@ coherent reread of both policy copies and both promotion records. Publication
 cannot be collectively atomic across the two filesystems, so readers fail
 closed while any partial generation is visible. A direct edit to the
 repository policy or either active copy is not an authorization.
+Do not promote the retained historical `readiness/storage_policy.json`
+directly. The live historical migration must use the generated one-use
+retirement successor sequence below.
 
 ## Manual Allocation Accounting
 
@@ -105,7 +115,9 @@ deviations. They are never scientific evidence. If a reviewed prerequisite
 replay used direct `srun` or direct `sbatch`, publish one exact read-only
 authorization JSON file below
 `${PIC_ROOT}/policy/manual_accounting_authorizations/` and its byte-identical
-Project Home mirror, bind both paths and the SHA-256 digest in the reviewed
+Project Home mirror below
+`${PROJECT_HOME_POLICY_ROOT}/policy/manual_accounting_authorizations/`, bind
+both paths and the SHA-256 digest in the reviewed
 storage policy, promote that policy, and reconcile the reviewed allocation IDs
 through the paired installed control plane:
 
@@ -711,6 +723,80 @@ zero live ledger hits for any rejected pre-reservation submission UUID. Archive
 the current result separately; later valid reservations may advance live
 ledger counts without changing the historical incident record.
 
+## Q011 Committed Repair-Validation Boundary
+
+Live mutation and pressure publication require a successful clean committed
+repair-validation worker first. Submit it only after the reviewed repair is
+committed and pushed:
+
+```bash
+(
+set -euo pipefail
+test "${PIC_ROOT:-}" = /lustre/orion/ast207/proj-shared/dfielding/PIC
+SOURCE_REPO=/autofs/nccs-svm1_home2/dfielding/athenak-pic
+SLURM_ENV=(/usr/bin/env -i HOME=/ LANG=C LC_ALL=C PATH=/usr/bin:/bin SLURM_CLUSTERS=frontier)
+GIT=(
+  /usr/bin/env -i HOME=/ LANG=C LC_ALL=C PATH=/usr/bin:/bin
+  /usr/bin/git -c core.fsmonitor=false -c core.hooksPath=/dev/null
+)
+SOURCE_STATUS="$("${GIT[@]}" -C "$SOURCE_REPO" status --porcelain --untracked-files=all)"
+test -z "$SOURCE_STATUS"
+FULL_GIT_COMMIT="$("${GIT[@]}" -C "$SOURCE_REPO" rev-parse HEAD)"
+test "$FULL_GIT_COMMIT" = "$("${GIT[@]}" -C "$SOURCE_REPO" rev-parse origin/PIC)"
+REPAIR_VALIDATION_JOB_ID="$("${SLURM_ENV[@]}" /usr/bin/sbatch --parsable --export=NIL \
+  "${SOURCE_REPO}/tst/publication/frontier_q011_section54_repair_validation_job.sh" \
+  "$FULL_GIT_COMMIT")"
+[[ "$REPAIR_VALIDATION_JOB_ID" =~ ^[0-9]+$ ]]
+printf 'repair_validation_commit=%s\n' "$FULL_GIT_COMMIT"
+printf 'repair_validation_job_id=%s\n' "$REPAIR_VALIDATION_JOB_ID"
+)
+```
+
+After that worker terminates, fill the printed values into this read-only
+checkpoint verifier. Preserve both values for the migration and publication
+procedures below:
+
+```bash
+(
+set -euo pipefail
+test "${PIC_ROOT:-}" = /lustre/orion/ast207/proj-shared/dfielding/PIC
+SOURCE_REPO=/autofs/nccs-svm1_home2/dfielding/athenak-pic
+SLURM_ENV=(/usr/bin/env -i HOME=/ LANG=C LC_ALL=C PATH=/usr/bin:/bin SLURM_CLUSTERS=frontier)
+GIT=(
+  /usr/bin/env -i HOME=/ LANG=C LC_ALL=C PATH=/usr/bin:/bin
+  /usr/bin/git -c core.fsmonitor=false -c core.hooksPath=/dev/null
+)
+REPAIR_VALIDATION_COMMIT='<repair_validation_commit printed by submission>'
+REPAIR_VALIDATION_JOB_ID='<repair_validation_job_id printed by submission>'
+[[ "$REPAIR_VALIDATION_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+[[ "$REPAIR_VALIDATION_JOB_ID" =~ ^[0-9]+$ ]]
+SOURCE_STATUS="$("${GIT[@]}" -C "$SOURCE_REPO" status --porcelain --untracked-files=all)"
+test -z "$SOURCE_STATUS"
+test "$REPAIR_VALIDATION_COMMIT" = "$("${GIT[@]}" -C "$SOURCE_REPO" rev-parse HEAD)"
+test "$REPAIR_VALIDATION_COMMIT" = "$("${GIT[@]}" -C "$SOURCE_REPO" rev-parse origin/PIC)"
+REPAIR_VALIDATION_STATE="$(
+  "${SLURM_ENV[@]}" /usr/bin/sacct -X --clusters=frontier -n \
+    -j "$REPAIR_VALIDATION_JOB_ID" --format=JobIDRaw,State --parsable2 |
+    /usr/bin/awk -F'|' -v job="$REPAIR_VALIDATION_JOB_ID" '
+      $1 == job {count += 1; state = $2}
+      END {if (count != 1) exit 1; print state}
+    '
+)"
+test "$REPAIR_VALIDATION_STATE" = COMPLETED
+REPAIR_VALIDATION_LOG="${PIC_ROOT}/logs/slurm/pic-q011-repair-validate.${REPAIR_VALIDATION_JOB_ID}.log"
+test -r "$REPAIR_VALIDATION_LOG"
+REPAIR_VALIDATION_LOG_COMMIT="$(
+  /usr/bin/sed -n 's/^source_commit=//p' "$REPAIR_VALIDATION_LOG"
+)"
+test "$REPAIR_VALIDATION_LOG_COMMIT" = "$REPAIR_VALIDATION_COMMIT"
+test "$(printf '%s\n' "$REPAIR_VALIDATION_LOG_COMMIT" | /usr/bin/wc -l)" -eq 1
+)
+```
+
+Treat submission of this worker as a durable checkpoint. If a session stops
+after `sbatch`, recover the one printed job ID and verify that exact job; do not
+silently submit a replacement.
+
 ## Q011 Pressure-Pilot Serial Boundary
 
 The four Q011 Section 5.4 pressure-sensitivity pilots are one engineering
@@ -731,17 +817,56 @@ historical live anchors, a newer controller, an empty registered-slice
 allowlist and a pending clean-candidate freeze:
 
 ```bash
+(
+set -euo pipefail
+test "${PIC_ROOT:-}" = /lustre/orion/ast207/proj-shared/dfielding/PIC
+test "${PYTHON:-}" = /opt/cray/pe/python/3.11.7/bin/python3
+PROJECT_HOME_POLICY_ROOT=/autofs/nccs-svm1_proj/ast207/proj-shared/PIC
 PROJECT_HOME_MIRROR_ROOT=/ccs/proj/ast207/proj-shared/PIC
+SOURCE_REPO=/autofs/nccs-svm1_home2/dfielding/athenak-pic
+SLURM_ENV=(/usr/bin/env -i HOME=/ LANG=C LC_ALL=C PATH=/usr/bin:/bin SLURM_CLUSTERS=frontier)
+GIT=(
+  /usr/bin/env -i HOME=/ LANG=C LC_ALL=C PATH=/usr/bin:/bin
+  /usr/bin/git -c core.fsmonitor=false -c core.hooksPath=/dev/null
+)
 SOURCE_CONTROL_PLANE=(
   "$PYTHON" -I -B
-  /ccs/home/dfielding/athenak-pic/tst/publication/frontier_control_plane/run_control_plane.py
+  "${SOURCE_REPO}/tst/publication/frontier_control_plane/run_control_plane.py"
 )
-STORAGE_PREFLIGHT_BINDING_DIR="${PIC_ROOT}/policy/storage_preflight_bindings"
-mkdir -p "$STORAGE_PREFLIGHT_BINDING_DIR"
-chmod 0700 "$STORAGE_PREFLIGHT_BINDING_DIR"
-STORAGE_PREFLIGHT_STAGING="$(
-  mktemp -p "$STORAGE_PREFLIGHT_BINDING_DIR" .staging.XXXXXX
+SOURCE_STATUS="$(
+  "${GIT[@]}" -C "$SOURCE_REPO" status --porcelain --untracked-files=all
 )"
+test -z "$SOURCE_STATUS"
+FULL_GIT_COMMIT="$("${GIT[@]}" -C "$SOURCE_REPO" rev-parse HEAD)"
+test "$FULL_GIT_COMMIT" = "$("${GIT[@]}" -C "$SOURCE_REPO" rev-parse origin/PIC)"
+REPAIR_VALIDATION_COMMIT='<repair_validation_commit from the completed checkpoint>'
+REPAIR_VALIDATION_JOB_ID='<repair_validation_job_id from the completed checkpoint>'
+[[ "$REPAIR_VALIDATION_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+[[ "$REPAIR_VALIDATION_JOB_ID" =~ ^[0-9]+$ ]]
+test "$REPAIR_VALIDATION_COMMIT" = "$FULL_GIT_COMMIT"
+REPAIR_VALIDATION_STATE="$(
+  "${SLURM_ENV[@]}" /usr/bin/sacct -X --clusters=frontier -n \
+    -j "$REPAIR_VALIDATION_JOB_ID" --format=JobIDRaw,State --parsable2 |
+    /usr/bin/awk -F'|' -v job="$REPAIR_VALIDATION_JOB_ID" '
+      $1 == job {count += 1; state = $2}
+      END {if (count != 1) exit 1; print state}
+    '
+)"
+test "$REPAIR_VALIDATION_STATE" = COMPLETED
+REPAIR_VALIDATION_LOG="${PIC_ROOT}/logs/slurm/pic-q011-repair-validate.${REPAIR_VALIDATION_JOB_ID}.log"
+test -r "$REPAIR_VALIDATION_LOG"
+REPAIR_VALIDATION_LOG_COMMIT="$(
+  /usr/bin/sed -n 's/^source_commit=//p' "$REPAIR_VALIDATION_LOG"
+)"
+test "$REPAIR_VALIDATION_LOG_COMMIT" = "$FULL_GIT_COMMIT"
+test "$(printf '%s\n' "$REPAIR_VALIDATION_LOG_COMMIT" | /usr/bin/wc -l)" -eq 1
+STORAGE_PREFLIGHT_BINDING_DIR="${PIC_ROOT}/policy/storage_preflight_bindings"
+/usr/bin/mkdir -p "$STORAGE_PREFLIGHT_BINDING_DIR"
+/usr/bin/chmod 0700 "$STORAGE_PREFLIGHT_BINDING_DIR"
+STORAGE_PREFLIGHT_STAGING="$(
+  /usr/bin/mktemp -p "$STORAGE_PREFLIGHT_BINDING_DIR" .staging.XXXXXX
+)"
+trap '/usr/bin/rm -f "$STORAGE_PREFLIGHT_STAGING"' EXIT
 "${SOURCE_CONTROL_PLANE[@]}" capture_storage_preflight_evidence.py \
   > "$STORAGE_PREFLIGHT_STAGING"
 PROBE_ID="$(
@@ -749,9 +874,11 @@ PROBE_ID="$(
     'import json, sys; print(json.load(open(sys.argv[1]))["storage_preflight_evidence"]["probe_id"])' \
     "$STORAGE_PREFLIGHT_STAGING"
 )"
+[[ "$PROBE_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]
 STORAGE_PREFLIGHT_BINDING="${STORAGE_PREFLIGHT_BINDING_DIR}/${PROBE_ID}.json"
-chmod 0400 "$STORAGE_PREFLIGHT_STAGING"
-mv -n "$STORAGE_PREFLIGHT_STAGING" "$STORAGE_PREFLIGHT_BINDING"
+/usr/bin/chmod 0400 "$STORAGE_PREFLIGHT_STAGING"
+/usr/bin/ln -T -- "$STORAGE_PREFLIGHT_STAGING" "$STORAGE_PREFLIGHT_BINDING"
+/usr/bin/rm "$STORAGE_PREFLIGHT_STAGING"
 "$PYTHON" -I -B -c \
   'import os, sys; fd = os.open(sys.argv[1], os.O_RDONLY | os.O_NOFOLLOW); os.fsync(fd); os.close(fd); fd = os.open(os.path.dirname(sys.argv[1]), os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW); os.fsync(fd); os.close(fd)' \
   "$STORAGE_PREFLIGHT_BINDING"
@@ -762,9 +889,13 @@ ORION_CONTROL_PLANE="$(
 )"
 PROJECT_HOME_CONTROL_PLANE="$(
   "${SOURCE_CONTROL_PLANE[@]}" install_control_plane.py \
-    --pic-root "$PROJECT_HOME_MIRROR_ROOT"
+    --pic-root "$PROJECT_HOME_POLICY_ROOT"
 )"
 VERSION="${ORION_CONTROL_PLANE##*/}"
+[[ "$VERSION" =~ ^[0-9a-f]{64}$ ]]
+test "$ORION_CONTROL_PLANE" = "${PIC_ROOT}/control_plane/${VERSION}"
+test "$PROJECT_HOME_CONTROL_PLANE" = \
+  "${PROJECT_HOME_POLICY_ROOT}/control_plane/${VERSION}"
 test "${PROJECT_HOME_CONTROL_PLANE##*/}" = "$VERSION"
 CONTROL_PLANE=("$PYTHON" -I -B "${ORION_CONTROL_PLANE}/run_control_plane.py")
 POLICY_SUFFIX="${VERSION:0:8}_${PROBE_ID}"
@@ -773,7 +904,7 @@ CANDIDATE_ONLY_POLICY="${PIC_ROOT}/policy/reviewed_candidate_only_successor_${PO
 test ! -e "$RETIREMENT_POLICY"
 test ! -e "$CANDIDATE_ONLY_POLICY"
 
-"$PYTHON" -I -B /ccs/home/dfielding/athenak-pic/tst/publication/q011_section54_pressure_pilot_execution.py \
+"$PYTHON" -I -B "${SOURCE_REPO}/tst/publication/q011_section54_pressure_pilot_execution.py" \
   retire-consumed-slices-baseline-policy-successor \
   --baseline-policy "${PIC_ROOT}/policy/storage_policy.json" \
   --control-plane-version "$VERSION" \
@@ -784,14 +915,86 @@ test ! -e "$CANDIDATE_ONLY_POLICY"
   --reviewed-policy "$RETIREMENT_POLICY" \
   --retire-historical-storage-preflight-predecessor
 
-/usr/bin/sbatch \
-  /ccs/home/dfielding/athenak-pic/tst/publication/frontier_q011_clean_candidate_build_freeze_job.sh \
-  "$FULL_GIT_COMMIT" "$VERSION"
+BUILD_FREEZE_JOB_ID="$("${SLURM_ENV[@]}" /usr/bin/sbatch --parsable --export=NIL \
+  "${SOURCE_REPO}/tst/publication/frontier_q011_clean_candidate_build_freeze_job.sh" \
+  "$FULL_GIT_COMMIT" "$VERSION")"
+[[ "$BUILD_FREEZE_JOB_ID" =~ ^[0-9]+$ ]]
+printf 'full_git_commit=%s\n' "$FULL_GIT_COMMIT"
+printf 'probe_id=%s\n' "$PROBE_ID"
+printf 'control_plane_version=%s\n' "$VERSION"
+printf 'build_freeze_job_id=%s\n' "$BUILD_FREEZE_JOB_ID"
+)
+```
 
-# After the worker job completes successfully, read its exact
-# clean_candidate_manifest and clean_candidate_manifest_sha256 output lines.
+After the worker job completes successfully, fill the values printed by the
+first phase into this independent post-worker phase. It requires exactly one
+successful top-level Slurm record and independently revalidates the immutable
+candidate through the installed controller before candidate-only promotion:
 
-"$PYTHON" -I -B /ccs/home/dfielding/athenak-pic/tst/publication/q011_section54_pressure_pilot_execution.py \
+```bash
+(
+set -euo pipefail
+test "${PIC_ROOT:-}" = /lustre/orion/ast207/proj-shared/dfielding/PIC
+test "${PYTHON:-}" = /opt/cray/pe/python/3.11.7/bin/python3
+SOURCE_REPO=/autofs/nccs-svm1_home2/dfielding/athenak-pic
+SLURM_ENV=(/usr/bin/env -i HOME=/ LANG=C LC_ALL=C PATH=/usr/bin:/bin SLURM_CLUSTERS=frontier)
+GIT=(
+  /usr/bin/env -i HOME=/ LANG=C LC_ALL=C PATH=/usr/bin:/bin
+  /usr/bin/git -c core.fsmonitor=false -c core.hooksPath=/dev/null
+)
+FULL_GIT_COMMIT='<full_git_commit printed by the first phase>'
+PROBE_ID='<probe_id printed by the first phase>'
+VERSION='<control_plane_version printed by the first phase>'
+BUILD_FREEZE_JOB_ID='<build_freeze_job_id printed by the first phase>'
+[[ "$FULL_GIT_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+[[ "$PROBE_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]
+[[ "$VERSION" =~ ^[0-9a-f]{64}$ ]]
+[[ "$BUILD_FREEZE_JOB_ID" =~ ^[0-9]+$ ]]
+SOURCE_STATUS="$(
+  "${GIT[@]}" -C "$SOURCE_REPO" status --porcelain --untracked-files=all
+)"
+test -z "$SOURCE_STATUS"
+test "$FULL_GIT_COMMIT" = "$("${GIT[@]}" -C "$SOURCE_REPO" rev-parse HEAD)"
+test "$FULL_GIT_COMMIT" = "$("${GIT[@]}" -C "$SOURCE_REPO" rev-parse origin/PIC)"
+ORION_CONTROL_PLANE="${PIC_ROOT}/control_plane/${VERSION}"
+CONTROL_PLANE=("$PYTHON" -I -B "${ORION_CONTROL_PLANE}/run_control_plane.py")
+POLICY_SUFFIX="${VERSION:0:8}_${PROBE_ID}"
+STORAGE_PREFLIGHT_BINDING="${PIC_ROOT}/policy/storage_preflight_bindings/${PROBE_ID}.json"
+RETIREMENT_POLICY="${PIC_ROOT}/policy/reviewed_launch_prohibited_strict_storage_successor_${POLICY_SUFFIX}.json"
+CANDIDATE_ONLY_POLICY="${PIC_ROOT}/policy/reviewed_candidate_only_successor_${POLICY_SUFFIX}.json"
+test -r "$STORAGE_PREFLIGHT_BINDING"
+test -r "$RETIREMENT_POLICY"
+test ! -e "$CANDIDATE_ONLY_POLICY"
+BUILD_FREEZE_STATE="$(
+  "${SLURM_ENV[@]}" /usr/bin/sacct -X --clusters=frontier -n -j "$BUILD_FREEZE_JOB_ID" \
+    --format=JobIDRaw,State --parsable2 |
+    /usr/bin/awk -F'|' -v job="$BUILD_FREEZE_JOB_ID" '
+      $1 == job {count += 1; state = $2}
+      END {if (count != 1) exit 1; print state}
+    '
+)"
+test "$BUILD_FREEZE_STATE" = COMPLETED
+BUILD_FREEZE_LOG="${PIC_ROOT}/logs/slurm/pic-q011-build-freeze.${BUILD_FREEZE_JOB_ID}.log"
+CLEAN_CANDIDATE_MANIFEST="$(
+  /usr/bin/sed -n 's/^clean_candidate_manifest=//p' "$BUILD_FREEZE_LOG"
+)"
+CLEAN_CANDIDATE_MANIFEST_SHA256="$(
+  /usr/bin/sed -n 's/^clean_candidate_manifest_sha256=//p' "$BUILD_FREEZE_LOG"
+)"
+test -n "$CLEAN_CANDIDATE_MANIFEST"
+test -n "$CLEAN_CANDIDATE_MANIFEST_SHA256"
+test "$(printf '%s\n' "$CLEAN_CANDIDATE_MANIFEST" | /usr/bin/wc -l)" -eq 1
+test "$(printf '%s\n' "$CLEAN_CANDIDATE_MANIFEST_SHA256" | /usr/bin/wc -l)" -eq 1
+[[ "$CLEAN_CANDIDATE_MANIFEST_SHA256" =~ ^[0-9a-f]{64}$ ]]
+EXECUTABLE="${CLEAN_CANDIDATE_MANIFEST%/*}/athena"
+ENVIRONMENT_PROFILE="${ORION_CONTROL_PLANE}/frontier_pic_environment.sh"
+test -x "$EXECUTABLE"
+test -r "$ENVIRONMENT_PROFILE"
+"${CONTROL_PLANE[@]}" revalidate_clean_candidate.py \
+  --manifest "$CLEAN_CANDIDATE_MANIFEST" \
+  --expected-manifest-sha256 "$CLEAN_CANDIDATE_MANIFEST_SHA256"
+
+"$PYTHON" -I -B "${SOURCE_REPO}/tst/publication/q011_section54_pressure_pilot_execution.py" \
   candidate-only-policy-successor \
   --baseline-policy "$RETIREMENT_POLICY" \
   --control-plane-version "$VERSION" \
@@ -803,7 +1006,20 @@ test ! -e "$CANDIDATE_ONLY_POLICY"
 
 "${CONTROL_PLANE[@]}" promote_active_policy.py \
   --reviewed-policy "$CANDIDATE_ONLY_POLICY"
+)
 ```
+
+Treat each mutation in the two phases above as a durable checkpoint. If the
+session stops after the preflight hard link is published, retain that immutable
+binding and resume with its exact `PROBE_ID`; do not silently capture a
+replacement. If the session stops after paired controller installation, verify
+both exact installed directories and their shared digest before resuming; do
+not blindly rerun an install. If it stops after retirement-policy promotion,
+inspect the exact active policy and promotion record, then resume with the
+worker build only; do not retry the one-use predecessor retirement. If it stops
+after `sbatch`, recover the one printed `BUILD_FREEZE_JOB_ID` through `sacct`
+and its Slurm log, then run the second phase only after that exact top-level job
+is `COMPLETED`. A replacement submission requires a reviewed failure record.
 
 The historical v2 launch procedure below is retained for audit only. It must
 not be replayed. For one selected case, it required the operator to
@@ -953,17 +1169,77 @@ fixed sibling acceptance authority once before publication; do not use a
 Project Home bulk-artifact directory:
 
 ```bash
-test -d "${PIC_ROOT}/publication" || mkdir "${PIC_ROOT}/publication"
-test ! -e "${PIC_ROOT}/publication_acceptance"
-install -d -m 0700 -o dfielding -g ast207 "${PIC_ROOT}/publication_acceptance"
-setfacl -b "${PIC_ROOT}/publication_acceptance"
-setfacl -k "${PIC_ROOT}/publication_acceptance"
+(
+set -euo pipefail
+test "${PIC_ROOT:-}" = /lustre/orion/ast207/proj-shared/dfielding/PIC
+test "${PYTHON:-}" = /opt/cray/pe/python/3.11.7/bin/python3
+SOURCE_REPO=/autofs/nccs-svm1_home2/dfielding/athenak-pic
+SLURM_ENV=(/usr/bin/env -i HOME=/ LANG=C LC_ALL=C PATH=/usr/bin:/bin SLURM_CLUSTERS=frontier)
+GIT=(
+  /usr/bin/env -i HOME=/ LANG=C LC_ALL=C PATH=/usr/bin:/bin
+  /usr/bin/git -c core.fsmonitor=false -c core.hooksPath=/dev/null
+)
+SOURCE_STATUS="$("${GIT[@]}" -C "$SOURCE_REPO" status --porcelain --untracked-files=all)"
+test -z "$SOURCE_STATUS"
+FULL_GIT_COMMIT="$("${GIT[@]}" -C "$SOURCE_REPO" rev-parse HEAD)"
+test "$FULL_GIT_COMMIT" = "$("${GIT[@]}" -C "$SOURCE_REPO" rev-parse origin/PIC)"
+REPAIR_VALIDATION_COMMIT='<repair_validation_commit from the completed checkpoint>'
+REPAIR_VALIDATION_JOB_ID='<repair_validation_job_id from the completed checkpoint>'
+[[ "$REPAIR_VALIDATION_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+[[ "$REPAIR_VALIDATION_JOB_ID" =~ ^[0-9]+$ ]]
+test "$REPAIR_VALIDATION_COMMIT" = "$FULL_GIT_COMMIT"
+REPAIR_VALIDATION_STATE="$(
+  "${SLURM_ENV[@]}" /usr/bin/sacct -X --clusters=frontier -n \
+    -j "$REPAIR_VALIDATION_JOB_ID" --format=JobIDRaw,State --parsable2 |
+    /usr/bin/awk -F'|' -v job="$REPAIR_VALIDATION_JOB_ID" '
+      $1 == job {count += 1; state = $2}
+      END {if (count != 1) exit 1; print state}
+    '
+)"
+test "$REPAIR_VALIDATION_STATE" = COMPLETED
+REPAIR_VALIDATION_LOG="${PIC_ROOT}/logs/slurm/pic-q011-repair-validate.${REPAIR_VALIDATION_JOB_ID}.log"
+test -r "$REPAIR_VALIDATION_LOG"
+REPAIR_VALIDATION_LOG_COMMIT="$(
+  /usr/bin/sed -n 's/^source_commit=//p' "$REPAIR_VALIDATION_LOG"
+)"
+test "$REPAIR_VALIDATION_LOG_COMMIT" = "$FULL_GIT_COMMIT"
+test "$(printf '%s\n' "$REPAIR_VALIDATION_LOG_COMMIT" | /usr/bin/wc -l)" -eq 1
+test -d "${PIC_ROOT}/publication" || /usr/bin/mkdir "${PIC_ROOT}/publication"
+if test ! -e "${PIC_ROOT}/publication_acceptance"
+then
+  /usr/bin/install -d -m 0700 -o dfielding -g ast207 "${PIC_ROOT}/publication_acceptance"
+  "$PYTHON" -I -B - "${PIC_ROOT}/publication_acceptance" <<'PY'
+import os
+import sys
+
+fd = os.open(sys.argv[1], os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+try:
+    acl_names = {"system.posix_acl_access", "system.posix_acl_default"}
+    for name in acl_names.intersection(os.listxattr(fd)):
+        os.removexattr(fd, name)
+    os.fsync(fd)
+finally:
+    os.close(fd)
+PY
+fi
+test -d "${PIC_ROOT}/publication_acceptance"
+"$PYTHON" -I -B - "${PIC_ROOT}/publication_acceptance" <<'PY'
+import os
+import sys
+
+fd = os.open(sys.argv[1], os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+try:
+    acl_names = {"system.posix_acl_access", "system.posix_acl_default"}
+    remaining = acl_names.intersection(os.listxattr(fd))
+    if remaining:
+        raise SystemExit(f"ACL xattrs remain: {sorted(remaining)}")
+    os.fsync(fd)
+finally:
+    os.close(fd)
+PY
 test "$(
-  stat -c '%U:%G:%a' "${PIC_ROOT}/publication_acceptance"
+  /usr/bin/stat -c '%U:%G:%a' "${PIC_ROOT}/publication_acceptance"
 )" = "dfielding:ast207:700"
-test "$(
-  getfacl -cp "${PIC_ROOT}/publication_acceptance"
-)" = $'user::rwx\ngroup::---\nother::---'
 for directory in \
   "${PIC_ROOT}/publication" \
   "${PIC_ROOT}/publication_acceptance" \
@@ -973,35 +1249,133 @@ do
     'import os, sys; fd = os.open(sys.argv[1], os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW); os.fsync(fd); os.close(fd)' \
     "$directory"
 done
+AGGREGATE_JOB_ID="$("${SLURM_ENV[@]}" /usr/bin/sbatch --parsable --export=NIL \
+  "${SOURCE_REPO}/tst/publication/frontier_q011_section54_pressure_pilot_publish_job.sh" \
+  "$FULL_GIT_COMMIT")"
+[[ "$AGGREGATE_JOB_ID" =~ ^[0-9]+$ ]]
+printf 'full_git_commit=%s\n' "$FULL_GIT_COMMIT"
+printf 'aggregate_job_id=%s\n' "$AGGREGATE_JOB_ID"
+)
+```
 
-/usr/bin/sbatch \
-  /ccs/home/dfielding/athenak-pic/tst/publication/frontier_q011_section54_pressure_pilot_publish_job.sh
+After the aggregate worker completes, fill the two values printed above into
+this packet-submission phase:
 
-# Wait for successful aggregate worker completion before submitting the packet.
-/usr/bin/sbatch \
-  /ccs/home/dfielding/athenak-pic/tst/publication/frontier_q011_section54_pressure_pilot_review_packet_job.sh
+```bash
+(
+set -euo pipefail
+SOURCE_REPO=/autofs/nccs-svm1_home2/dfielding/athenak-pic
+SLURM_ENV=(/usr/bin/env -i HOME=/ LANG=C LC_ALL=C PATH=/usr/bin:/bin SLURM_CLUSTERS=frontier)
+GIT=(
+  /usr/bin/env -i HOME=/ LANG=C LC_ALL=C PATH=/usr/bin:/bin
+  /usr/bin/git -c core.fsmonitor=false -c core.hooksPath=/dev/null
+)
+FULL_GIT_COMMIT='<full_git_commit printed by aggregate submission>'
+AGGREGATE_JOB_ID='<aggregate_job_id printed by aggregate submission>'
+[[ "$FULL_GIT_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+[[ "$AGGREGATE_JOB_ID" =~ ^[0-9]+$ ]]
+SOURCE_STATUS="$("${GIT[@]}" -C "$SOURCE_REPO" status --porcelain --untracked-files=all)"
+test -z "$SOURCE_STATUS"
+test "$FULL_GIT_COMMIT" = "$("${GIT[@]}" -C "$SOURCE_REPO" rev-parse HEAD)"
+test "$FULL_GIT_COMMIT" = "$("${GIT[@]}" -C "$SOURCE_REPO" rev-parse origin/PIC)"
+AGGREGATE_STATE="$(
+  "${SLURM_ENV[@]}" /usr/bin/sacct -X --clusters=frontier -n \
+    -j "$AGGREGATE_JOB_ID" --format=JobIDRaw,State --parsable2 |
+    /usr/bin/awk -F'|' -v job="$AGGREGATE_JOB_ID" '
+      $1 == job {count += 1; state = $2}
+      END {if (count != 1) exit 1; print state}
+    '
+)"
+test "$AGGREGATE_STATE" = COMPLETED
+REVIEW_PACKET_JOB_ID="$("${SLURM_ENV[@]}" /usr/bin/sbatch --parsable --export=NIL \
+  "${SOURCE_REPO}/tst/publication/frontier_q011_section54_pressure_pilot_review_packet_job.sh" \
+  "$FULL_GIT_COMMIT")"
+[[ "$REVIEW_PACKET_JOB_ID" =~ ^[0-9]+$ ]]
+printf 'full_git_commit=%s\n' "$FULL_GIT_COMMIT"
+printf 'review_packet_job_id=%s\n' "$REVIEW_PACKET_JOB_ID"
+)
+```
 
-# Wait for successful review-packet worker completion before verifying both receipts.
+After the review-packet worker completes, fill its printed values into this
+read-only verification phase:
+
+```bash
+(
+set -euo pipefail
+test "${PIC_ROOT:-}" = /lustre/orion/ast207/proj-shared/dfielding/PIC
+test "${PYTHON:-}" = /opt/cray/pe/python/3.11.7/bin/python3
+SOURCE_REPO=/autofs/nccs-svm1_home2/dfielding/athenak-pic
+SLURM_ENV=(/usr/bin/env -i HOME=/ LANG=C LC_ALL=C PATH=/usr/bin:/bin SLURM_CLUSTERS=frontier)
+GIT=(
+  /usr/bin/env -i HOME=/ LANG=C LC_ALL=C PATH=/usr/bin:/bin
+  /usr/bin/git -c core.fsmonitor=false -c core.hooksPath=/dev/null
+)
+FULL_GIT_COMMIT='<full_git_commit printed by packet submission>'
+REVIEW_PACKET_JOB_ID='<review_packet_job_id printed by packet submission>'
+[[ "$FULL_GIT_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+[[ "$REVIEW_PACKET_JOB_ID" =~ ^[0-9]+$ ]]
+SOURCE_STATUS="$("${GIT[@]}" -C "$SOURCE_REPO" status --porcelain --untracked-files=all)"
+test -z "$SOURCE_STATUS"
+test "$FULL_GIT_COMMIT" = "$("${GIT[@]}" -C "$SOURCE_REPO" rev-parse HEAD)"
+test "$FULL_GIT_COMMIT" = "$("${GIT[@]}" -C "$SOURCE_REPO" rev-parse origin/PIC)"
+REVIEW_PACKET_STATE="$(
+  "${SLURM_ENV[@]}" /usr/bin/sacct -X --clusters=frontier -n \
+    -j "$REVIEW_PACKET_JOB_ID" --format=JobIDRaw,State --parsable2 |
+    /usr/bin/awk -F'|' -v job="$REVIEW_PACKET_JOB_ID" '
+      $1 == job {count += 1; state = $2}
+      END {if (count != 1) exit 1; print state}
+    '
+)"
+test "$REVIEW_PACKET_STATE" = COMPLETED
+run_source_python() {
+  local script="${1:?usage: run_source_python SCRIPT [ARG ...]}"
+  shift
+  "$PYTHON" -I -B -c \
+    'import runpy, sys; root, script, *args = sys.argv[1:]; sys.path.insert(0, root); sys.argv = [script, *args]; runpy.run_path(script, run_name="__main__")' \
+    "${SOURCE_REPO}/tst/publication" \
+    "${SOURCE_REPO}/tst/publication/${script}" "$@"
+}
+run_source_python publish_q011_section54_pressure_pilot_bundle.py \
+  --verify-published-receipt \
+  "${PIC_ROOT}/publication/q011_section54_pressure_pilot_bundle_receipt.json"
+run_source_plot_python() {
+  local script="${1:?usage: run_source_plot_python SCRIPT [ARG ...]}"
+  shift
+  "$PYTHON" -I -B -c \
+    'import importlib.metadata, json, runpy, sys; root, script, package_root, lock_path, *args = sys.argv[1:]; sys.path.insert(0, package_root); lock = json.load(open(lock_path, encoding="utf-8")); actual_python = sys.version.split()[0]; expected_python = lock["python"]; actual_python == expected_python or sys.exit(f"plot Python drifted: {actual_python} != {expected_python}"); [(importlib.metadata.version(name) == version) or sys.exit(f"plot dependency drifted: {name}") for name, version in lock["dependencies"].items()]; sys.path.insert(0, root); sys.argv = [script, *args]; runpy.run_path(script, run_name="__main__")' \
+    "${SOURCE_REPO}/tst/publication" \
+    "${SOURCE_REPO}/tst/publication/${script}" \
+    /autofs/nccs-svm1_home2/dfielding/.local/lib/python3.11/site-packages \
+    "${SOURCE_REPO}/tst/publication/readiness/plotting_environment_lock_candidate_2026-05-30.json" \
+    "$@"
+}
+run_source_plot_python render_q011_section54_pressure_pilot_review_packet.py \
+  --verify-published-receipt \
+  "${PIC_ROOT}/publication/q011_section54_pressure_pilot_review_packet_receipt.json"
+)
 ```
 
 The publisher reruns raw-case verification while retaining each case-root
 descriptor, emits a separate immutable aggregate-analysis result and receipt,
 and recomputes the engineering overlay analysis before and after publication.
 The receipt binds the registered-execution preregistration, publisher,
-aggregate analyzer and persisted result digests. Re-audit that retained receipt
-before using it:
+aggregate analyzer and persisted result digests.
 
-```bash
-/opt/cray/pe/python/3.11.7/bin/python3 -I -B \
-  /ccs/home/dfielding/athenak-pic/tst/publication/publish_q011_section54_pressure_pilot_bundle.py \
-  --verify-published-receipt \
-  "${PIC_ROOT}/publication/q011_section54_pressure_pilot_bundle_receipt.json"
+The review packet is an engineering-review artifact. Its worker and read-only
+verification paths load the fixed user-site package directory explicitly and
+reject any Python or dependency version that differs from
+`plotting_environment_lock_candidate_2026-05-30.json`. That candidate lock does
+not close the separate qualification plotting and external-export review gate.
 
-/opt/cray/pe/python/3.11.7/bin/python3 -I -B \
-  /ccs/home/dfielding/athenak-pic/tst/publication/render_q011_section54_pressure_pilot_review_packet.py \
-  --verify-published-receipt \
-  "${PIC_ROOT}/publication/q011_section54_pressure_pilot_review_packet_receipt.json"
-```
+Treat publication provisioning and each `sbatch` as durable checkpoints. If a
+session stops after the acceptance root is provisioned, resume through the
+verification-only existing-root branch above; do not delete or recreate it. If
+it stops after aggregate submission, recover the one printed
+`AGGREGATE_JOB_ID` through `sacct` and inspect its log and visible artifacts
+before considering a reviewed replacement. Once the aggregate receipt verifies,
+do not republish it. Apply the same rule to the one printed
+`REVIEW_PACKET_JOB_ID`: recover and verify that exact packet job and receipt
+before considering any reviewed replacement.
 
 These four pilots remain engineering calibration only; they do not qualify
 Section 5.4 physics.

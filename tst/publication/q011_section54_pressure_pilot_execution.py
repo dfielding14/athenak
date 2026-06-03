@@ -59,7 +59,11 @@ ANALYSIS_SCRIPTS = (
     REPO_ROOT / "tst/publication/frontier_f1_structured_artifacts.py",
 )
 AUTHORIZED_PIC_ROOT = Path("/lustre/orion/ast207/proj-shared/dfielding/PIC")
-AUTHORIZED_PROJECT_HOME_ROOT = Path("/ccs/proj/ast207/proj-shared/PIC")
+AUTHORIZED_CANONICAL_PROJECT_HOME_ROOT = Path(
+    "/autofs/nccs-svm1_proj/ast207/proj-shared/PIC"
+)
+AUTHORIZED_PROJECT_HOME_ROOT = AUTHORIZED_CANONICAL_PROJECT_HOME_ROOT
+AUTHORIZED_PROJECT_HOME_LEDGER_ROOT = Path("/ccs/proj/ast207/proj-shared/PIC")
 EVIDENCE_CLASS = "engineering_calibration_only"
 PHYSICAL_MODE = "paper_mhd_pic_vl2_tsc"
 RUNTIME_PROFILE = "frontier_minimum_supported"
@@ -718,6 +722,13 @@ def _control_plane_version(value: object) -> str:
     return value
 
 
+def _project_home_ledger_root() -> Path:
+    """Retain the production ledger chain's historical lexical destination."""
+    if AUTHORIZED_PROJECT_HOME_ROOT == AUTHORIZED_CANONICAL_PROJECT_HOME_ROOT:
+        return AUTHORIZED_PROJECT_HOME_LEDGER_ROOT
+    return AUTHORIZED_PROJECT_HOME_ROOT
+
+
 def _storage_preflight_binding(path: Path) -> dict[str, object]:
     """Read one immutable canonical storage-probe policy fragment."""
     _, payload = _stable_regular_bytes(
@@ -798,6 +809,58 @@ def _storage_preflight_binding(path: Path) -> dict[str, object]:
     }
 
 
+def _canonicalize_project_home_successor_storage(storage: dict[str, object]) -> None:
+    """Move inherited policy mirrors to the strict physical Project Home root."""
+    mirror_root = storage.get("project_home_mirror_root")
+    if mirror_root is not None:
+        _require(
+            mirror_root
+            in {
+                str(AUTHORIZED_PROJECT_HOME_ROOT),
+                str(AUTHORIZED_CANONICAL_PROJECT_HOME_ROOT),
+                str(AUTHORIZED_PROJECT_HOME_LEDGER_ROOT),
+            },
+            "baseline Project Home policy root is not an expected reviewed spelling",
+        )
+    storage["project_home_mirror_root"] = str(AUTHORIZED_PROJECT_HOME_ROOT)
+    authorizations = storage.get("manual_accounting_authorizations")
+    if authorizations is None:
+        return
+    _require(
+        isinstance(authorizations, list),
+        "baseline manual-accounting authorizations are malformed",
+    )
+    for authorization in authorizations:
+        _require(
+            isinstance(authorization, dict)
+            and isinstance(authorization.get("project_home_path"), str),
+            "baseline manual-accounting authorization mirror path is malformed",
+        )
+        lexical = Path(os.path.abspath(authorization["project_home_path"]))
+        relative: Path | None = None
+        for root in [
+            AUTHORIZED_PROJECT_HOME_LEDGER_ROOT,
+            AUTHORIZED_CANONICAL_PROJECT_HOME_ROOT,
+            AUTHORIZED_PROJECT_HOME_ROOT,
+        ]:
+            try:
+                relative = lexical.relative_to(root)
+                break
+            except ValueError:
+                continue
+        _require(
+            relative is not None
+            and len(relative.parts) == 3
+            and relative.parts[:2]
+            == ("policy", "manual_accounting_authorizations")
+            and relative.name.endswith(".json"),
+            "baseline manual-accounting authorization mirror path is not reviewed",
+        )
+        authorization["project_home_path"] = str(
+            AUTHORIZED_PROJECT_HOME_ROOT / relative
+        )
+
+
 def _advance_control_plane_fields(
     successor: dict[str, object],
     *,
@@ -833,6 +896,7 @@ def _advance_control_plane_fields(
             "installed/staged version",
         )
     binding = _storage_preflight_binding(storage_preflight_binding)
+    _canonicalize_project_home_successor_storage(storage)
     checked = str(binding["last_preflight_utc"])
     if require_fresh_preflight:
         previous = storage.get("last_preflight_utc")
@@ -1099,7 +1163,7 @@ def _validate_pre_manifest_attestation(
             phase="pre_manifest",
             control_plane_version=_control_plane_version(control_plane_version),
             authorized_pic_root=AUTHORIZED_PIC_ROOT,
-            authorized_project_home_root=AUTHORIZED_PROJECT_HOME_ROOT,
+            authorized_project_home_root=_project_home_ledger_root(),
         )
     except ValueError as error:
         raise ContractError(f"pre-manifest attestation is invalid: {error}") from error
@@ -1110,7 +1174,7 @@ def _validate_pre_manifest_attestation(
 
 def _mirrored_ledger_records() -> list[dict[str, object]]:
     local = AUTHORIZED_PIC_ROOT / "ledger/node_hours.jsonl"
-    mirror = AUTHORIZED_PROJECT_HOME_ROOT / "ledger/node_hours.jsonl"
+    mirror = _project_home_ledger_root() / "ledger/node_hours.jsonl"
     receipts = AUTHORIZED_PIC_ROOT / "ledger/mirror_receipts.jsonl"
     control_plane = REPO_ROOT / "tst/publication/frontier_control_plane"
     specification = importlib.util.spec_from_file_location(

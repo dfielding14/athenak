@@ -31,7 +31,8 @@ from immutable_orion_tree import staged_verified_legacy_read_only_tree
 REPO = Path(__file__).resolve().parents[2]
 OUT = REPO / "figures" / "status_update"
 ORION = Path("/lustre/orion/ast207/proj-shared/dfielding/PIC")
-PROJECT_HOME = Path("/ccs/proj/ast207/proj-shared/PIC")
+PROJECT_HOME = Path("/autofs/nccs-svm1_proj/ast207/proj-shared/PIC")
+PROJECT_HOME_LEDGER = Path("/ccs/proj/ast207/proj-shared/PIC")
 Q006 = ORION / "q006-exact-isothermal-runtime-local-20260531-v4"
 Q007 = ORION / "local-readiness" / "q007-paper-deltaf-runtime-replay-20260531-v4"
 Q008 = ORION / "q008-cpaw-history-extension-20260531-v5"
@@ -45,7 +46,7 @@ Q023_BELL = ORION / "local-readiness" / "q023-bell-combined-observable-smoke-202
 PIN = ORION / "local-readiness" / "integrated-serial-host-binary-clean-20260531T034317Z"
 LEDGER = ORION / "ledger" / "node_hours.jsonl"
 RECEIPTS = ORION / "ledger" / "mirror_receipts.jsonl"
-MIRROR_LEDGER = PROJECT_HOME / "ledger" / "node_hours.jsonl"
+MIRROR_LEDGER = PROJECT_HOME_LEDGER / "ledger" / "node_hours.jsonl"
 ACTIVE_PROMOTION = ORION / "policy" / "active_promotion.json"
 Q007_ANALYSIS = Q007.parent / f"{Q007.name}-analysis.json"
 Q023_BELL_INITIAL = (
@@ -191,7 +192,7 @@ def verify_report_inputs() -> tuple[list[dict[str, Any]], float, dict[str, Any],
             MIRROR_LEDGER,
             ledger_root=ORION / "ledger",
             receipts_root=ORION / "ledger",
-            mirror_root=PROJECT_HOME / "ledger",
+            mirror_root=PROJECT_HOME_LEDGER / "ledger",
         )
     finally:
         sys.path.pop(0)

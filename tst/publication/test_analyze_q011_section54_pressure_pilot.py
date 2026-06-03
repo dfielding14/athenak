@@ -592,6 +592,45 @@ class Q011Section54PressurePilotTests(unittest.TestCase):
         ):
             pilot._load_postrun_source_authorization_successor()
 
+    def test_postrun_source_authorization_preserves_predecessor_chronology(self) -> None:
+        successor = json.loads(pilot.PREREGISTRATION_PATH.read_text(encoding="utf-8"))
+        predecessor_payload = (
+            pilot.POSTRUN_SOURCE_AUTHORIZATION_PREDECESSOR_PATH.read_bytes()
+        )
+        predecessor = json.loads(predecessor_payload)
+        compatibility_payload = pilot.PARSER_COMPATIBILITY_SUCCESSOR_PATH.read_bytes()
+        self.assertEqual(
+            successor["predecessor_record"],
+            pilot.POSTRUN_SOURCE_AUTHORIZATION_PREDECESSOR_PATH.relative_to(
+                pilot.REPO_ROOT
+            ).as_posix(),
+        )
+        self.assertEqual(successor["predecessor_sha256"], _sha256(predecessor_payload))
+        self.assertEqual(
+            predecessor["predecessor_record"],
+            pilot.PARSER_COMPATIBILITY_SUCCESSOR_PATH.relative_to(
+                pilot.REPO_ROOT
+            ).as_posix(),
+        )
+        self.assertEqual(
+            predecessor["predecessor_sha256"], _sha256(compatibility_payload)
+        )
+
+    def test_postrun_source_authorization_rejects_predecessor_drift(self) -> None:
+        original = pilot._regular_bytes
+
+        def read(path: Path, label: str) -> bytes:
+            payload = original(path, label)
+            if path == pilot.POSTRUN_SOURCE_AUTHORIZATION_PREDECESSOR_PATH:
+                return payload + b" "
+            return payload
+
+        with patch.object(pilot, "_regular_bytes", side_effect=read):
+            with self.assertRaisesRegex(
+                pilot.PilotAnalysisError, "predecessor SHA-256 drifted"
+            ):
+                pilot._load_postrun_source_authorization_successor()
+
 
 if __name__ == "__main__":
     unittest.main()

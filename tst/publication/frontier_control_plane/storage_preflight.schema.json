@@ -116,7 +116,7 @@
         },
         "project_home_path": {
           "type": "string",
-          "pattern": "^/ccs/proj/ast207/proj-shared/PIC/policy/storage_preflight_evidence/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.json$"
+          "pattern": "^/autofs/nccs-svm1_proj/ast207/proj-shared/PIC/policy/storage_preflight_evidence/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.json$"
         }
       }
     },
@@ -198,7 +198,7 @@
               "const": "project_home_mirror_root"
             },
             "path": {
-              "const": "/ccs/proj/ast207/proj-shared/PIC"
+              "const": "/autofs/nccs-svm1_proj/ast207/proj-shared/PIC"
             }
           }
         }

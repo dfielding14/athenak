@@ -28,7 +28,10 @@ from operator_attestation import validate_sealed_operator_attestation
 
 
 AUTHORIZED_PIC_ROOT = Path("/lustre/orion/ast207/proj-shared/dfielding/PIC")
-AUTHORIZED_PROJECT_HOME_ROOT = Path("/ccs/proj/ast207/proj-shared/PIC")
+AUTHORIZED_PROJECT_HOME_ROOT = Path(
+    "/autofs/nccs-svm1_proj/ast207/proj-shared/PIC"
+)
+AUTHORIZED_PROJECT_HOME_LEDGER_ROOT = Path("/ccs/proj/ast207/proj-shared/PIC")
 AUTHORIZED_CLEAN_CANDIDATE_SOURCE_ROOT = Path("/ccs/home/dfielding/athenak-pic")
 AUTHORIZED_ACCOUNT = "AST207"
 BUILD_PROVENANCE_FILENAMES = {
@@ -91,13 +94,13 @@ AUTHORIZED_STORAGE_PREFLIGHT_OPERATIONS = [
 # Pin its reviewed blob closure here; the commit records chronology for review.
 AUTHORIZED_STORAGE_PREFLIGHT_CAPTURE_SOURCE_BLOBS = {
     "entrypoint_sha256": (
-        "2ee13003a138917a9f274a51bdae78d02a2ac5fe39e098c3feeb0bb9e32ae020"
+        "22b8c3898154e0c687bf5bd555b7fae35826014cd5af8e33bd04b946671cb7f0"
     ),
     "runner_sha256": (
         "74ab26fdf66129e018ce5a63a3827853e878b1efff71449490b0b017f48fd956"
     ),
     "schema_sha256": (
-        "1147e88f5949efdd6a9374e019c1b8121fdf0f72fa9aa53f228eb3d3e7ea00fd"
+        "183fb8996381660a731a650e2fb42e0ee4989b248646d592fb28c0e57f8de898"
     ),
 }
 AUTHORIZED_HISTORICAL_STORAGE_PREFLIGHT_RETIREMENT_POLICY_SHA256 = (
@@ -536,6 +539,14 @@ def production_module_list_bytes() -> bytes:
             PRODUCTION_RUNTIME_LOADED_MODULES, PRODUCTION_RUNTIME_MODULEFILES
         )
     ).encode("utf-8")
+
+
+def project_home_ledger_root(authorized_project_home_root: Path) -> Path:
+    """Keep the production append-only ledger on its frozen lexical spelling."""
+    lexical = Path(os.path.abspath(authorized_project_home_root))
+    if lexical == Path(os.path.abspath(AUTHORIZED_PROJECT_HOME_ROOT)):
+        return Path(os.path.abspath(AUTHORIZED_PROJECT_HOME_LEDGER_ROOT))
+    return lexical
 
 
 def require_production_module_environment(environment: dict[str, str]) -> None:
@@ -4905,8 +4916,22 @@ def _validate_storage_policy(
     ):
         raise ValueError("Storage policy Frontier QoS policy is not authorized")
     project_home_mirror_root = storage.get("project_home_mirror_root")
+    lexical_project_home_mirror_root = (
+        Path(os.path.abspath(project_home_mirror_root))
+        if isinstance(project_home_mirror_root, str)
+        else None
+    )
     if (
         not isinstance(project_home_mirror_root, str)
+        or (
+            storage_preflight_profile == _STRICT_STORAGE_PREFLIGHT_PROFILE
+            and (
+                lexical_project_home_mirror_root
+                != Path(os.path.abspath(authorized_project_home_root))
+                or Path(os.path.abspath(authorized_project_home_root)).resolve()
+                != Path(os.path.abspath(authorized_project_home_root))
+            )
+        )
         or Path(project_home_mirror_root).resolve()
         != authorized_project_home_root.resolve()
     ):
@@ -5015,7 +5040,7 @@ def _validate_storage_policy(
             Path(authorization["path"]), manual_authorization_root
         )
         project_home_authorization_root = (
-            Path(os.path.abspath(authorized_project_home_root))
+            Path(os.path.abspath(str(project_home_mirror_root)))
             / "policy"
             / "manual_accounting_authorizations"
         )
@@ -5357,6 +5382,11 @@ def require_policy_predecessor_snapshot_for_promotion(
         and isinstance(predecessor_storage.get("project_home_mirror_root"), str)
         else Path(os.path.abspath(authorized_project_home_root))
     )
+    if (
+        configured_project_home_root.resolve(strict=True)
+        != Path(os.path.abspath(authorized_project_home_root)).resolve(strict=True)
+    ):
+        raise ValueError("Active-policy predecessor Project Home root is not authorized")
     expected = {
         "schema_version": 1,
         "control_plane_version": predecessor_version,
@@ -5391,7 +5421,7 @@ def require_policy_predecessor_snapshot_for_promotion(
             phase="pre_policy_promotion",
             control_plane_version=predecessor_version,
             authorized_pic_root=authorized_pic_root,
-            authorized_project_home_root=authorized_project_home_root,
+            authorized_project_home_root=configured_project_home_root,
             enforce_freshness=False,
         )
         if attestation != {"path": str(attestation_path), "sha256": digest}:
@@ -5534,7 +5564,9 @@ def require_storage_policy_unlock_snapshot(
             phase="pre_policy_promotion",
             control_plane_version=control_plane_version,
             authorized_pic_root=authorized_pic_root,
-            authorized_project_home_root=authorized_project_home_root,
+            authorized_project_home_root=project_home_ledger_root(
+                authorized_project_home_root
+            ),
             enforce_freshness=False,
         )
         if attestation != {
@@ -5619,8 +5651,10 @@ def require_ledger_paths(
         ),
         (
             mirror_jsonl,
-            Path(os.path.abspath(authorized_project_home_root)) / "ledger" / "node_hours.jsonl",
-            authorized_project_home_root,
+            project_home_ledger_root(authorized_project_home_root)
+            / "ledger"
+            / "node_hours.jsonl",
+            project_home_ledger_root(authorized_project_home_root),
         ),
     ]
     for supplied, required, root in expected:

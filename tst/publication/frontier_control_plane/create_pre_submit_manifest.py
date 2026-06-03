@@ -19,6 +19,7 @@ from control_plane_common import PinnedStagingDirectory
 from control_plane_common import REGISTERED_SCIENCE_SCOPE, SUBMISSION_SCOPES
 from control_plane_common import durable_mkdir_parents
 from control_plane_common import make_tree_read_only
+from control_plane_common import project_home_ledger_root
 from control_plane_common import read_json, require_below
 from control_plane_common import require_canonical_path_below
 from control_plane_common import require_no_symlink_components_below
@@ -110,7 +111,9 @@ def create_manifest(
                 phase="pre_manifest",
                 control_plane_version=str(inventory["version"]),
                 authorized_pic_root=pic_root,
-                authorized_project_home_root=authorized_project_home_root,
+                authorized_project_home_root=project_home_ledger_root(
+                    authorized_project_home_root
+                ),
             )
             snapshot_files.append(
                 snapshot_file(

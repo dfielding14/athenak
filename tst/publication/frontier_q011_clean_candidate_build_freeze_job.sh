@@ -9,6 +9,13 @@
 
 set -euo pipefail
 
+export PATH=/usr/bin:/bin
+unset BASH_ENV ENV GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_CONFIG_COUNT
+unset GIT_CONFIG_GLOBAL GIT_CONFIG_KEY_0 GIT_CONFIG_NOSYSTEM GIT_CONFIG_SYSTEM
+unset GIT_CONFIG_VALUE_0 GIT_DIR GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_WORK_TREE
+unset PYTHONHOME PYTHONINSPECT PYTHONPATH PYTHONSTARTUP PYTHONUSERBASE
+unset TMPDIR
+
 PIC_ROOT=/lustre/orion/ast207/proj-shared/dfielding/PIC
 SRC_DIR=/ccs/home/dfielding/athenak-pic
 CONTROL_PLANE_VERSION="${2:?usage: sbatch $0 FULL_GIT_COMMIT INSTALLED_CONTROL_PLANE_DIGEST}"
@@ -30,9 +37,27 @@ EXPECTED_GIT_COMMIT="${1:?usage: sbatch $0 FULL_GIT_COMMIT INSTALLED_CONTROL_PLA
 }
 
 cd "$SRC_DIR"
-test -z "$(git status --porcelain --untracked-files=all)"
-test "$(git rev-parse HEAD)" = "$EXPECTED_GIT_COMMIT"
+SOURCE_STATUS=$(
+  /usr/bin/env -i HOME=/ LANG=C LC_ALL=C PATH=/usr/bin:/bin \
+    /usr/bin/git -c core.fsmonitor=false -c core.hooksPath=/dev/null \
+    status --porcelain --untracked-files=all
+)
+test -z "$SOURCE_STATUS"
+test "$(
+  /usr/bin/env -i HOME=/ LANG=C LC_ALL=C PATH=/usr/bin:/bin \
+    /usr/bin/git -c core.fsmonitor=false -c core.hooksPath=/dev/null rev-parse HEAD
+)" = "$EXPECTED_GIT_COMMIT"
+test "$(
+  /usr/bin/env -i HOME=/ LANG=C LC_ALL=C PATH=/usr/bin:/bin \
+    /usr/bin/git -c core.fsmonitor=false -c core.hooksPath=/dev/null \
+    rev-parse origin/PIC
+)" = "$EXPECTED_GIT_COMMIT"
 
+"${CONTROL_PLANE[@]}" validate_and_reserve_frontier_job.py verify-control-plane >/dev/null
+export HOME=/
+export USER="$(/usr/bin/id -un)"
+source /opt/cray/pe/lmod/lmod/init/profile
+unset BASH_ENV ENV
 source "$ENV_FILE" || exit $?
 
 "${CONTROL_PLANE[@]}" write_orion_build_profile.py \

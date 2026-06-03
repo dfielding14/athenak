@@ -31,6 +31,7 @@ if __package__:
         AUTHORIZED_PROJECT_HOME_ROOT,
         BUILD_PROVENANCE_FILENAMES,
         _planner_expected_policy_fragment,
+        project_home_ledger_root,
     )
     from .frontier_control_plane.control_plane_common import (
         read_json_bytes as read_control_plane_json_bytes,
@@ -61,6 +62,7 @@ else:
         AUTHORIZED_PROJECT_HOME_ROOT,
         BUILD_PROVENANCE_FILENAMES,
         _planner_expected_policy_fragment,
+        project_home_ledger_root,
     )
     from frontier_control_plane.control_plane_common import (
         read_json_bytes as read_control_plane_json_bytes,
@@ -2502,7 +2504,7 @@ def _validated_registered_execution_receipt_ledger_snapshot(
 ) -> Iterator[dict[str, str]]:
     """Require one externally mirrored completed registered-science reconciliation."""
     pic_root = Path(os.path.abspath(authorized_pic_root))
-    project_home_root = Path(os.path.abspath(authorized_project_home_root))
+    project_home_root = project_home_ledger_root(authorized_project_home_root)
     ledger_jsonl = pic_root / "ledger/node_hours.jsonl"
     receipts_jsonl = pic_root / "ledger/mirror_receipts.jsonl"
     mirror_jsonl = project_home_root / "ledger/node_hours.jsonl"

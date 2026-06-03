@@ -23,6 +23,7 @@ from control_plane_common import active_promotion_path, atomic_write_bytes_at
 from control_plane_common import atomic_write_json_at
 from control_plane_common import canonical_policy_path, durable_mkdir_parents
 from control_plane_common import open_directory_below, require_same_directory
+from control_plane_common import project_home_ledger_root
 from control_plane_common import read_json_bytes
 from control_plane_common import read_stable_regular_file, sha256_bytes
 from control_plane_common import require_no_symlink_components_below
@@ -103,7 +104,9 @@ def _require_no_outstanding_submissions(
     authorized_project_home_root: Path,
 ) -> None:
     ledger_root = Path(os.path.abspath(authorized_pic_root)) / "ledger"
-    project_ledger_root = Path(os.path.abspath(authorized_project_home_root)) / "ledger"
+    project_ledger_root = (
+        project_home_ledger_root(authorized_project_home_root) / "ledger"
+    )
     marker = ledger_root / "pending_submission.json"
     ledger = ledger_root / "node_hours.jsonl"
     receipts = ledger_root / "mirror_receipts.jsonl"
@@ -366,7 +369,9 @@ def promote(
             phase="pre_policy_promotion",
             control_plane_version=version,
             authorized_pic_root=authorized_pic_root,
-            authorized_project_home_root=authorized_project_home_root,
+            authorized_project_home_root=project_home_ledger_root(
+                authorized_project_home_root
+            ),
         )
         record.update(
             {
@@ -416,7 +421,7 @@ def promote(
         )
         require_no_incomplete_manual_accounting_marker(
             Path(os.path.abspath(authorized_pic_root)) / "ledger" / "node_hours.jsonl",
-            Path(os.path.abspath(authorized_project_home_root))
+            project_home_ledger_root(authorized_project_home_root)
             / "ledger"
             / "node_hours.jsonl",
         )
@@ -432,7 +437,9 @@ def promote(
                 phase="pre_policy_promotion",
                 control_plane_version=version,
                 authorized_pic_root=authorized_pic_root,
-                authorized_project_home_root=authorized_project_home_root,
+                authorized_project_home_root=project_home_ledger_root(
+                    authorized_project_home_root
+                ),
             )
             if attestation != {
                 "path": record["pre_policy_promotion_attestation_path"],
@@ -475,7 +482,9 @@ def promote(
                         phase="pre_policy_promotion",
                         control_plane_version=version,
                         authorized_pic_root=authorized_pic_root,
-                        authorized_project_home_root=authorized_project_home_root,
+                        authorized_project_home_root=project_home_ledger_root(
+                            authorized_project_home_root
+                        ),
                     )
                     if attestation != {
                         "path": record["pre_policy_promotion_attestation_path"],

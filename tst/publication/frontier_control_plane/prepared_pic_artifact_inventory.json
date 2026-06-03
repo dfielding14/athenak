@@ -30,7 +30,7 @@
     },
     {
       "path": "tst/publication/analyze_q011_section54_campaign.py",
-      "sha256": "19bcbbad12f3024e4b7e3ec6c6e43e1b5bec4cdfe1b9178a55deeb73f687494c"
+      "sha256": "48ff1ed39d4d4c93ab8089b523a8178af1adc59969e0bafe7f6858ceb66ce064"
     },
     {
       "path": "tst/publication/analyze_q011_section54_numerical_qualification.py",
@@ -42,7 +42,7 @@
     },
     {
       "path": "tst/publication/analyze_q011_section54_pressure_pilot.py",
-      "sha256": "fdc48901a25dfa40fca8e51323bf81d11b178401fb732e9ab418980be9d2436f"
+      "sha256": "f563858ebca432be4b4aecf6e598709068b8d16c993c4a4b83f0ccea931d3eb6"
     },
     {
       "path": "tst/publication/analyze_q011_section54_pressure_pilot_case.py",

@@ -9,25 +9,55 @@
 
 set -euo pipefail
 
+export PATH=/usr/bin:/bin
 export PYTHONDONTWRITEBYTECODE=1
+unset BASH_ENV ENV GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_CONFIG_COUNT
+unset GIT_CONFIG_GLOBAL GIT_CONFIG_KEY_0 GIT_CONFIG_NOSYSTEM GIT_CONFIG_SYSTEM
+unset GIT_CONFIG_VALUE_0 GIT_DIR GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_WORK_TREE
+unset PYTHONHOME PYTHONINSPECT PYTHONPATH PYTHONSTARTUP PYTHONUSERBASE
 
-REPO_ROOT=/ccs/home/dfielding/athenak-pic
+REPO_ROOT=/autofs/nccs-svm1_home2/dfielding/athenak-pic
+PYTHON=/opt/cray/pe/python/3.11.7/bin/python3
+EXPECTED_GIT_COMMIT="${1:?usage: sbatch $0 FULL_GIT_COMMIT}"
+[[ "$EXPECTED_GIT_COMMIT" =~ ^[0-9a-f]{40}$ ]]
 cd "$REPO_ROOT"
-test -z "$(git status --porcelain --untracked-files=all)"
-SOURCE_COMMIT=$(git rev-parse HEAD)
+SOURCE_STATUS=$(
+  /usr/bin/env -i HOME=/ LANG=C LC_ALL=C PATH=/usr/bin:/bin \
+    /usr/bin/git -c core.fsmonitor=false -c core.hooksPath=/dev/null \
+    status --porcelain --untracked-files=all
+)
+test -z "$SOURCE_STATUS"
+SOURCE_COMMIT=$(
+  /usr/bin/env -i HOME=/ LANG=C LC_ALL=C PATH=/usr/bin:/bin \
+    /usr/bin/git -c core.fsmonitor=false -c core.hooksPath=/dev/null rev-parse HEAD
+)
+test "$SOURCE_COMMIT" = "$EXPECTED_GIT_COMMIT"
+test "$(
+  /usr/bin/env -i HOME=/ LANG=C LC_ALL=C PATH=/usr/bin:/bin \
+    /usr/bin/git -c core.fsmonitor=false -c core.hooksPath=/dev/null \
+    rev-parse origin/PIC
+)" = "$EXPECTED_GIT_COMMIT"
 echo "source_commit=$SOURCE_COMMIT"
 
-SNAPSHOT_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/pic-q011-repair-validate.XXXXXXXX")
-trap 'rm -rf "$SNAPSHOT_ROOT"' EXIT
-git archive "$SOURCE_COMMIT" | tar -xf - -C "$SNAPSHOT_ROOT"
+SNAPSHOT_ROOT=$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/pic-q011-repair-validate.XXXXXXXX")
+trap '/usr/bin/rm -rf "$SNAPSHOT_ROOT"' EXIT
+/usr/bin/env -i HOME=/ LANG=C LC_ALL=C PATH=/usr/bin:/bin \
+  /usr/bin/git -c core.fsmonitor=false -c core.hooksPath=/dev/null \
+  archive "$SOURCE_COMMIT" | /usr/bin/tar -xf - -C "$SNAPSHOT_ROOT"
 cd "$SNAPSHOT_ROOT"
 export PYTHONPATH="$PWD:$PWD/tst/publication/frontier_control_plane"
 
-mapfile -t publication_python < <(find tst/publication -type f -name '*.py' | sort)
-mapfile -t publication_shell < <(find tst/publication -type f -name '*.sh' | sort)
-mapfile -t publication_json < <(find tst/publication -type f -name '*.json' | sort)
+publication_python_output=$(/usr/bin/find tst/publication -type f -name '*.py' | /usr/bin/sort)
+publication_shell_output=$(/usr/bin/find tst/publication -type f -name '*.sh' | /usr/bin/sort)
+publication_json_output=$(/usr/bin/find tst/publication -type f -name '*.json' | /usr/bin/sort)
+test -n "$publication_python_output"
+test -n "$publication_shell_output"
+test -n "$publication_json_output"
+mapfile -t publication_python <<< "$publication_python_output"
+mapfile -t publication_shell <<< "$publication_shell_output"
+mapfile -t publication_json <<< "$publication_json_output"
 
-python3 -B - "${publication_python[@]}" <<'PY'
+"$PYTHON" -B - "${publication_python[@]}" <<'PY'
 import sys
 from pathlib import Path
 
@@ -36,9 +66,9 @@ for relative in sys.argv[1:]:
     compile(path.read_bytes(), str(path), "exec")
 PY
 
-bash -n "${publication_shell[@]}"
+/usr/bin/bash -n "${publication_shell[@]}"
 
-python3 -B - "${publication_json[@]}" <<'PY'
+"$PYTHON" -B - "${publication_json[@]}" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -49,7 +79,7 @@ for relative in sys.argv[1:]:
         json.load(stream)
 PY
 
-python3 -B - <<'PY'
+"$PYTHON" -B - <<'PY'
 import json
 from pathlib import Path
 
@@ -63,7 +93,7 @@ if committed != generated:
     raise SystemExit("Committed prepared PIC artifact inventory is stale")
 PY
 
-python3 -B -m unittest \
+"$PYTHON" -B -m unittest \
   tst.publication.test_analyze_q011_section54_campaign \
   tst.publication.test_q011_section54_model \
   tst.publication.test_q011_section54_particles \
@@ -78,19 +108,37 @@ python3 -B -m unittest \
   tst.publication.test_analyze_q011_section54_numerical_qualification
 
 cd "$REPO_ROOT"
-test "$(git rev-parse HEAD)" = "$SOURCE_COMMIT"
-test -z "$(git status --porcelain --untracked-files=all)"
+test "$(
+  /usr/bin/env -i HOME=/ LANG=C LC_ALL=C PATH=/usr/bin:/bin \
+    /usr/bin/git -c core.fsmonitor=false -c core.hooksPath=/dev/null rev-parse HEAD
+)" = "$SOURCE_COMMIT"
+SOURCE_STATUS=$(
+  /usr/bin/env -i HOME=/ LANG=C LC_ALL=C PATH=/usr/bin:/bin \
+    /usr/bin/git -c core.fsmonitor=false -c core.hooksPath=/dev/null \
+    status --porcelain --untracked-files=all
+)
+test -z "$SOURCE_STATUS"
 TAXONOMY_DRY_RUN_SEED="$REPO_ROOT/tst/build/src/bin/pic_bell_pub_taxonomy.taxonomy.bin"
 test ! -e "$TAXONOMY_DRY_RUN_SEED"
 export PYTHONPATH="$PWD:$PWD/tst/publication/frontier_control_plane"
 
-mapfile -t modules < <(
-  rg --files tst/publication -g 'test_*.py' |
-    sed -e 's#/#.#g' -e 's#\.py$##' |
-    sort
+modules_output=$(
+  /usr/bin/find tst/publication -type f -name 'test_*.py' |
+    /usr/bin/sed -e 's#/#.#g' -e 's#\.py$##' |
+    /usr/bin/sort
 )
+test -n "$modules_output"
+mapfile -t modules <<< "$modules_output"
 
-python3 -B -m unittest "${modules[@]}"
-test "$(git rev-parse HEAD)" = "$SOURCE_COMMIT"
-test -z "$(git status --porcelain --untracked-files=all)"
+"$PYTHON" -B -m unittest "${modules[@]}"
+test "$(
+  /usr/bin/env -i HOME=/ LANG=C LC_ALL=C PATH=/usr/bin:/bin \
+    /usr/bin/git -c core.fsmonitor=false -c core.hooksPath=/dev/null rev-parse HEAD
+)" = "$SOURCE_COMMIT"
+SOURCE_STATUS=$(
+  /usr/bin/env -i HOME=/ LANG=C LC_ALL=C PATH=/usr/bin:/bin \
+    /usr/bin/git -c core.fsmonitor=false -c core.hooksPath=/dev/null \
+    status --porcelain --untracked-files=all
+)
+test -z "$SOURCE_STATUS"
 test ! -e "$TAXONOMY_DRY_RUN_SEED"

@@ -19,7 +19,9 @@ import uuid
 
 
 AUTHORIZED_PIC_ROOT = Path("/lustre/orion/ast207/proj-shared/dfielding/PIC")
-AUTHORIZED_PROJECT_HOME_ROOT = Path("/ccs/proj/ast207/proj-shared/PIC")
+AUTHORIZED_PROJECT_HOME_ROOT = Path(
+    "/autofs/nccs-svm1_proj/ast207/proj-shared/PIC"
+)
 EVIDENCE_PARENT_PARTS = ("policy", "storage_preflight_evidence")
 ENTRYPOINT_NAME = "capture_storage_preflight_evidence.py"
 RUNNER_NAME = "run_control_plane.py"

@@ -41,6 +41,7 @@ from control_plane_common import PRODUCTION_RUNTIME_MODULEPATH  # noqa: E402
 from control_plane_common import TRUSTED_PYTHON  # noqa: E402
 from control_plane_common import active_promotion_path  # noqa: E402
 from control_plane_common import open_directory_below  # noqa: E402
+from control_plane_common import project_home_ledger_root  # noqa: E402
 from control_plane_common import read_json_bytes  # noqa: E402
 from control_plane_common import read_stable_regular_file  # noqa: E402
 from control_plane_common import read_stable_regular_file_below  # noqa: E402
@@ -861,7 +862,10 @@ def _require_frontier_completed_evidence_binding(
 
         ledger_jsonl = authorized_pic_root / "ledger" / "node_hours.jsonl"
         receipts_jsonl = authorized_pic_root / "ledger" / "mirror_receipts.jsonl"
-        mirror_jsonl = authorized_project_home_root / "ledger" / "node_hours.jsonl"
+        ledger_project_home_root = project_home_ledger_root(
+            authorized_project_home_root
+        )
+        mirror_jsonl = ledger_project_home_root / "ledger" / "node_hours.jsonl"
         require_ledger_paths(
             ledger_jsonl,
             authorized_pic_root / "ledger" / "node_hours.csv",
@@ -877,7 +881,7 @@ def _require_frontier_completed_evidence_binding(
                 mirror_jsonl,
                 ledger_root=authorized_pic_root / "ledger",
                 receipts_root=authorized_pic_root / "ledger",
-                mirror_root=authorized_project_home_root / "ledger",
+                mirror_root=ledger_project_home_root / "ledger",
             )
             require_explicit_genesis(records)
         reservation = latest_reservations(records).get(str(resources["reservation_id"]))

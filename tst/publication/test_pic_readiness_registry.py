@@ -1283,7 +1283,8 @@ class PicReadinessRegistryTests(unittest.TestCase):
             ]
         )
         current_repair = _load(
-            "q011_section54_ninth_adversarial_repair_transition_2026-06-03.json"
+            "q011_section54_tenth_canonical_project_home_repair_transition_"
+            "2026-06-03.json"
         )
         repaired_staged = current_repair["repaired_staged_control_plane"]
         if staged_version == repaired_staged["version"]:

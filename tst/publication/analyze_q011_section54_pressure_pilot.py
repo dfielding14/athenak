@@ -42,11 +42,17 @@ PARSER_COMPATIBILITY_SUCCESSOR_PATH = (
     "q011_section54_pressure_pilot_aggregate_analysis_compatibility_"
     "successor_2026-06-02.json"
 )
-PREREGISTRATION_PATH = (
+POSTRUN_SOURCE_AUTHORIZATION_PREDECESSOR_PATH = (
     REPO_ROOT
     / "tst/publication/readiness/"
     "q011_section54_pressure_pilot_postrun_aggregate_source_authorization_"
     "successor_2026-06-02.json"
+)
+PREREGISTRATION_PATH = (
+    REPO_ROOT
+    / "tst/publication/readiness/"
+    "q011_section54_pressure_pilot_postrun_aggregate_source_authorization_"
+    "successor_v2_2026-06-03.json"
 )
 REGISTERED_EXECUTION_PREREGISTRATION_PATH = (
     REPO_ROOT
@@ -502,18 +508,20 @@ def _load_postrun_source_authorization_successor() -> dict[str, Any]:
                 "authorization_successor"
             ),
             "schema_version": 1,
-            "date": "2026-06-02",
+            "date": "2026-06-03",
             "gate": "Q-011",
             "classification": "engineering_calibration_only",
             "qualification_effect": (
                 "none_postrun_aggregate_and_review_publication_only_no_launch_"
                 "reauthorization_no_sun_bai_claim"
             ),
-            "predecessor_record": PARSER_COMPATIBILITY_SUCCESSOR_PATH.relative_to(
-                REPO_ROOT
-            ).as_posix(),
+            "predecessor_record": (
+                POSTRUN_SOURCE_AUTHORIZATION_PREDECESSOR_PATH.relative_to(
+                    REPO_ROOT
+                ).as_posix()
+            ),
             "predecessor_sha256": (
-                "cfbc3bb4b184d1a9747a4b6869b2b4b578ffc1ae4b0a30a40573da8cbf972fa1"
+                "26e27ee441787a5833e830d37a9ba6e88bbd7c1e01d2822f0c1f0105c9addcf3"
             ),
             "historical_launch_chronology": {
                 "state": "stale_non_authorizing_consumed_slices_no_reauthorization",
@@ -564,8 +572,8 @@ def _load_postrun_source_authorization_successor() -> dict[str, Any]:
         "pressure-pilot post-run aggregate historical v2 execution preregistration",
     )
     predecessor = _regular_bytes(
-        PARSER_COMPATIBILITY_SUCCESSOR_PATH,
-        "pressure-pilot parser-compatibility predecessor",
+        POSTRUN_SOURCE_AUTHORIZATION_PREDECESSOR_PATH,
+        "pressure-pilot post-run aggregate source authorization predecessor",
     )
     _require(
         _sha256_bytes(predecessor) == successor["predecessor_sha256"],
@@ -617,6 +625,10 @@ def _load_postrun_source_authorization_successor() -> dict[str, Any]:
         "particle_vtk_reader": "tst/publication/pvtk_particles.py",
         "review_packet_renderer": (
             "tst/publication/render_q011_section54_pressure_pilot_review_packet.py"
+        ),
+        "plotting_environment_lock": (
+            "tst/publication/readiness/"
+            "plotting_environment_lock_candidate_2026-05-30.json"
         ),
         "review_packet_worker_wrapper": (
             "tst/publication/frontier_q011_section54_pressure_pilot_review_packet_job.sh"

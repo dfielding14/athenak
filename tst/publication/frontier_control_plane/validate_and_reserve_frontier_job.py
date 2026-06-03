@@ -45,6 +45,7 @@ from control_plane_common import utc_datetime, validate_clean_candidate_bundle
 from control_plane_common import verify_installed_control_plane
 from control_plane_common import verify_historical_installed_control_plane
 from control_plane_common import read_clean_candidate_tree
+from control_plane_common import project_home_ledger_root
 from control_plane_common import (
     _read_clean_candidate_regular_file_at as _read_regular_file_at,
 )
@@ -604,7 +605,9 @@ def _verify_manifest(
             phase="pre_manifest",
             control_plane_version=str(inventory["version"]),
             authorized_pic_root=authorized_pic_root,
-            authorized_project_home_root=authorized_project_home_root,
+            authorized_project_home_root=project_home_ledger_root(
+                authorized_project_home_root
+            ),
         )
         if (
             pre_manifest_attestation["path"]
@@ -1277,7 +1280,9 @@ def reserve(
                 phase="pre_submit_wrapper",
                 control_plane_version=version,
                 authorized_pic_root=authorized_pic_root,
-                authorized_project_home_root=authorized_project_home_root,
+                authorized_project_home_root=project_home_ledger_root(
+                    authorized_project_home_root
+                ),
                 now=current_time,
             )
         elif pre_submit_wrapper_attestation is not None:
@@ -1590,7 +1595,11 @@ def mark_submitted(
         authorized_pic_root=authorized_pic_root,
         authorized_project_home_root=authorized_project_home_root,
     )
-    mirror_jsonl = authorized_project_home_root / "ledger" / "node_hours.jsonl"
+    mirror_jsonl = (
+        project_home_ledger_root(authorized_project_home_root)
+        / "ledger"
+        / "node_hours.jsonl"
+    )
     with ledger_lock(ledger_jsonl, mirror_jsonl):
         inventory = _verify_installed_control_plane_pair(
             control_plane_dir,
@@ -1849,7 +1858,7 @@ def reservation_bound_manifest(
             mirror_jsonl,
             ledger_root=authorized_pic_root,
             receipts_root=authorized_pic_root,
-            mirror_root=authorized_project_home_root,
+            mirror_root=project_home_ledger_root(authorized_project_home_root),
         )
         if _compute_node_read_only_snapshot
         else ledger_lock(ledger_jsonl, mirror_jsonl)
