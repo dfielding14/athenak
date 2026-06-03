@@ -1078,10 +1078,12 @@ Job `4758576` used verified launch bundle
 Job `4758713` used verified launch bundle
 `athenak-feature-cgl-through-e59a64402.bundle` with SHA-256
 `30819dc015eb9f4a8afd8c1e40af815969cd74cfbbbeb0b4fc03c3fd91757945`.
-The sole candidate `s26` launch requires a new committed post-F-109
-documentation archive. Its actual bundle name
-and SHA-256 must be recorded before
-preparation; they are intentionally not guessed here.
+Job `4759155` used verified launch bundle
+`athenak-feature-cgl-through-966e92dde.bundle` with SHA-256
+`c6b217aa882646c25823e622855ad442f04e4304663b3c0bdf166761a1fc050f`.
+The sole candidate aggressive bounded `s27` launch requires the committed
+corrected post-F-110 documentation archive. Its actual bundle name and SHA-256
+must be recorded before preparation; they are intentionally not guessed here.
 
 No weak/strong-guide case family or uniform-`nu_coll` extension case should be
 implemented as a production priority while these reproduction blockers remain.
