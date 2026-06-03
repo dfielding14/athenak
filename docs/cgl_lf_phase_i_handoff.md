@@ -1,6 +1,6 @@
 # CGL-LF Phase I Production Handoff
 
-Checkpoint refreshed: `2026-06-03T11:24:40Z`
+Checkpoint refreshed: `2026-06-03T13:28:39Z`
 
 ## Read This First
 
@@ -13,13 +13,13 @@ detailed implementation and evidence record, and
 protocol.
 
 Do not submit a new production job immediately. Corrected-E03
-`R02/s24_rankio_t8p5_t8p75` is accepted and its F-108 recost artifact has
+`R02/s25_rankio_t8p75_t9` is accepted and its F-109 recost artifact has
 completed the retained companion's normal observed-publication lifecycle.
-Before any `s25` mutation, commit and push these documentation bytes, create
+Before any `s26` mutation, commit and push these documentation bytes, create
 and catalog the resulting complete-history source bundle, verify the checksum
 ledger, run authenticated hardened reconciliation, require a fresh empty user
 queue and strict free root lock, and independently audit the bounded
-`R02/s25_rankio_t8p75_t9` readiness packet.
+`R02/s26_rankio_t9_t9p25` readiness packet.
 
 ## Repository Boundary
 
@@ -50,15 +50,15 @@ commit f675bd677cb582a46bbda8b5f55c335e6f259dd3
 The last documentation checkpoint is:
 
 ```text
-6d1f032a20b4dc069e454cfe5c98c9b9f984ae28
-Record accepted R02 s23 F-107 checkpoint
+e59a64402bda1087e3da23d8699d6e94afba395a
+Record accepted R02 s24 F-108 checkpoint
 ```
 
 It is pushed and archived as:
 
 ```text
-source-archives/athenak-feature-cgl-through-6d1f032a2.bundle
-SHA-256 62587378e8480cbe94caa174734f6d3cf6e4c56c2755b2b96ffe0e2bba525ef4
+source-archives/athenak-feature-cgl-through-e59a64402.bundle
+SHA-256 30819dc015eb9f4a8afd8c1e40af815969cd74cfbbbeb0b4fc03c3fd91757945
 ```
 
 The shared production root is:
@@ -74,49 +74,49 @@ Do not modify or stage unrelated working-tree state:
 ?? scripts/frontier/rollback_codex_node_local_runtime.sh
 ```
 
-## Accepted R02 s24
+## Accepted R02 s25
 
-Corrected-E03 `R02/s24_rankio_t8p5_t8p75` completed as Slurm job `4758576`
+Corrected-E03 `R02/s25_rankio_t8p75_t9` completed as Slurm job `4758713`
 and is formally inspected, independently validated, recorded `accepted`, and
 reconciled. The exact retained scheduler row is:
 
 ```text
-4758576|cgl_mks24_E03_forcing_policy_R02_s24_rankio_t8p5_t8p75|COMPLETED|0:0|1|2346|2026-06-03T06:00:56|2026-06-03T06:40:27
+4758713|cgl_mks24_E03_forcing_policy_R02_s25_rankio_t8p75_t9|COMPLETED|0:0|1|2259|2026-06-03T08:12:15|2026-06-03T08:49:56
 ```
 
-The allocation reached exact `t = 8.75`, used `2346` elapsed seconds
-(`0.651667` displayed node-hours), and brings the accepted corrected-E03
-prefix to `74585 / 3600 = 20.718055555555555` exact node-hours
-(`20.718057` displayed). It retained one complete eight-sibling snapshot
+The allocation reached exact `t = 9`, used `2259` elapsed seconds
+(`0.627500` displayed node-hours), and brings the accepted corrected-E03
+prefix to `76844 / 3600 = 21.345555555555556` exact node-hours
+(`21.345557` displayed). It retained one complete eight-sibling snapshot
 group and one terminal eight-sibling restart group, zero strict LF failure
 counters, finite synchronized histories, no restart-marker bypass, terminal
-`lf_hwproj = 299627446834`, and sampled-history forcing-work residual
-`1.4737883591844796e-12`.
+`lf_hwproj = 302201795827`, and sampled-history forcing-work residual
+`1.83194669112365e-12`.
 
 Retained evidence:
 
 | Artifact | SHA-256 |
 | --- | --- |
-| `runs/mks24-stage-i/E03-forcing-policy/R02/s24_rankio_t8p5_t8p75/manifest/segment_inspection.json` | `24a7013abca332a65196552f0ce1a6031314deb56e8ddbebb130b75be4b887de` |
-| `runs/mks24-stage-i/E03-forcing-policy/R02/s24_rankio_t8p5_t8p75/manifest/prepared_run.json` after record | `24f407dcc74011479f783ccb16d08536ce87a35314d1637f93b78135adb27ed8` |
-| `accounting/4758576.stage_i.independent_validation.json` | `0a271b1f53f3363c2598a76356a7ca3063a38e5d8c0ab63a64e15b4ebcfa2229` |
-| `accounting/4758576.stage_i.sacct.txt` | `06b86448d2c4eb8c3765d9c3912ee1cb9d946f0d07ad606dfae6456ab1075f7f` |
+| `runs/mks24-stage-i/E03-forcing-policy/R02/s25_rankio_t8p75_t9/manifest/segment_inspection.json` | `313cb0565ad7d3f7bbe63be63cbd6055de951842cb101aeb523102a37f2b2f48` |
+| `runs/mks24-stage-i/E03-forcing-policy/R02/s25_rankio_t8p75_t9/manifest/prepared_run.json` after record | `18299de7cb6229291bcc9c40fd6e0d12076efb16ab6a64891e80983368fdd401` |
+| `accounting/4758713.stage_i.independent_validation.json` | `d2b8d4d044d4569c25a089bd5e3a23839c785e81ca258da091b9d718d63aa5cb` |
+| `accounting/4758713.stage_i.sacct.txt` | `6e9239d754639e888949b1f9699be479dd95f586ffd6d5ba8de0ac0a664328da` |
 
-Recorded reconciliation closed with `25/25/25`
+Recorded reconciliation closed with `26/26/26`
 ledger rows/manifests/reservations, no active reservation, no Stage I
 transaction, and `issues = []`.
 
-## Current F-108 Boundary
+## Current F-109 Boundary
 
-The retained and independently reviewed F-108 generator is:
+The retained and independently reviewed F-109 generator is:
 
 ```text
-accounting/utilities/generate_cgl_r02_t8p75_recost.py
-SHA-256 c488c4d6f51a2d73e00e212f0e485d920876eb2ed79e8e18988788969e344d05
+accounting/utilities/generate_cgl_r02_t9_recost.py
+SHA-256 1a480a6ebf2b1f27ddd453d126fb7e58f1919f4e8825da5eb68eb5cd6007541d
 mode 0755, one link
 ```
 
-Pre-install review verified the fully bound `s24` endpoint, strict
+Pre-install review verified the fully bound `s25` endpoint, strict
 existing-file-only root-lock opening, fixed scheduler paths with stripped
 Slurm environment, fixed source-git routing with stripped Git environment,
 derived threshold prose, and an explicit final-review marker. The corrected
@@ -131,30 +131,30 @@ same-directory `link/fsync/unlink/fsync` transition. The canonical artifact
 is:
 
 ```text
-accounting/mks24_stage_i_E03_forcing_policy_R02_t8p75_recost_evidence.json
-SHA-256 dbd3f5e3b9f21532da546caca4bdc66263d69c3b60b35938972edd04b2ab3e19
+accounting/mks24_stage_i_E03_forcing_policy_R02_t9_recost_evidence.json
+SHA-256 67f9096900b5ec3ce8368cd39c6f6a8c649dcff2436261fcf72aa328cd3ac0ea
 mode 0644, one link
 ```
 
 The durable observed-publication audit is:
 
 ```text
-accounting/mks24_stage_i_E03_forcing_policy_R02_t8p75_recost_evidence.json.publication_audit.json
-SHA-256 503dad9d617456a3154f77931726b8d1edf3ccdc1602802e0db553670d0ca79c
+accounting/mks24_stage_i_E03_forcing_policy_R02_t9_recost_evidence.json.publication_audit.json
+SHA-256 f784d2bcec45dc7baea8ccba958ab959009ff0ae6f98acdf847d5dc21933beee
 mode 0644, one link
 record_type observed-publication
 publication same-directory-link-fsync-unlink-fsync
-published_utc 2026-06-03T11:24:40+00:00
-transaction_id 2026-06-03T112440+0000-33f82f43f34f42eb9b061cabcaa3debf
+published_utc 2026-06-03T13:28:39+00:00
+transaction_id 2026-06-03T132839+0000-f2fd4c915f784838905e8ff5cfc4980c
 ```
 
 Its independent forensic copy is:
 
 ```text
 accounting/mks24_stage_i_E03_forcing_policy_recost_forensics/
-  mks24_stage_i_E03_forcing_policy_R02_t8p75_recost_evidence.json/
-  2026-06-03T112440+0000-33f82f43f34f42eb9b061cabcaa3debf.mks24_stage_i_E03_forcing_policy_R02_t8p75_recost_evidence.json.forensic
-SHA-256 dbd3f5e3b9f21532da546caca4bdc66263d69c3b60b35938972edd04b2ab3e19
+  mks24_stage_i_E03_forcing_policy_R02_t9_recost_evidence.json/
+  2026-06-03T132839+0000-f2fd4c915f784838905e8ff5cfc4980c.mks24_stage_i_E03_forcing_policy_R02_t9_recost_evidence.json.forensic
+SHA-256 67f9096900b5ec3ce8368cd39c6f6a8c649dcff2436261fcf72aa328cd3ac0ea
 mode 0444, one link
 ```
 
@@ -166,7 +166,7 @@ free with strict profile
 The artifact's sole recommendation is:
 
 ```text
-R02/s25_rankio_t8p75_t9
+R02/s26_rankio_t9_t9p25
 one node
 Slurm walltime 01:05:00
 Athena timeout 00:55:00
@@ -174,7 +174,7 @@ one-segment threshold 2700 seconds
 600-second Athena and Slurm guards
 ```
 
-The recost uses observed `2346`, local acceleration estimate `2407`,
+The recost uses observed `2259`, local acceleration estimate `2259`,
 selected estimate `2560`, projection `829.2566672222222`, and margin
 `70.74333277777782` node-hours. The threshold remains a reviewed authorization
 and post-run recost threshold, not a controller-enforced kill deadline, and
@@ -260,25 +260,35 @@ overlap with another agent.
    `submit`, preserving explicit acknowledgement of reviewed stale shared-root
    campaign `beta25-accel05-gamma10001-purecgl-256`. Never mutate that stale
    campaign.
-22. Required before `s25`: commit and push this documentation checkpoint,
+22. Closed: commit and push the post-F-108 documentation checkpoint,
    create and catalog its complete-history source bundle, and validate the
    full source-archive checksum ledger.
-23. Required before each production mutation: require an empty user queue,
+23. Closed for `s25`: require an empty user queue,
    a free strict root lock, authenticated hardened reconciliation with
    `25/25/25`, no active reservation, no transaction, and `issues = []`.
-24. Prepare and independently audit only the bounded
+24. Closed: prepare and independently audit only the bounded
    `R02/s25_rankio_t8p75_t9` packet. Only then run `check-submit` and `submit`,
+   preserving explicit acknowledgement of reviewed stale shared-root campaign
+   `beta25-accel05-gamma10001-purecgl-256`. Never mutate that stale campaign.
+25. Required before `s26`: commit and push this documentation checkpoint,
+   create and catalog its complete-history source bundle, and validate the
+   full source-archive checksum ledger.
+26. Required before each production mutation: require an empty user queue,
+   a free strict root lock, authenticated hardened reconciliation with
+   `26/26/26`, no active reservation, no transaction, and `issues = []`.
+27. Prepare and independently audit only the bounded
+   `R02/s26_rankio_t9_t9p25` packet. Only then run `check-submit` and `submit`,
    preserving explicit acknowledgement of reviewed stale shared-root campaign
    `beta25-accel05-gamma10001-purecgl-256`. Never mutate that stale campaign.
 
 ## Overall Phase I Status
 
 The corrected forcing-policy epoch is qualified. `R02` is accepted from
-fresh `t = 0` through exact `t = 8.75`. Retained companion implementation,
+fresh `t = 0` through exact `t = 9`. Retained companion implementation,
 review, archival, F-101 legacy adoption, F-102 helper hardening, and hardened
-normal observed publications at F-103 through F-108 are complete. The
+normal observed publications at F-103 through F-109 are complete. The
 immediate blocker is the documentation commit, complete-history archive, and
-fresh queue/free-lock reconciliation and readiness-packet gate before `s25`.
+fresh queue/free-lock reconciliation and readiness-packet gate before `s26`.
 After that closes, finish `R02` through exact `t = 10`, execute `R03` through
 `R16` sequentially, and execute `R17` last under the same fail-closed
 protocol. Stage II and manuscript-result claims remain out of scope until
