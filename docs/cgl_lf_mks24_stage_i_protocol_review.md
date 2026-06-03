@@ -3,35 +3,37 @@
 ## Decision
 
 Read `docs/cgl_lf_phase_i_handoff.md` first for the durable current production
-boundary. Accepted corrected-E03 `R02/s25_rankio_t8p75_t9` job `4758713`
-reached exact `t = 9` in `2259` seconds. Formal and independently
+boundary. Accepted corrected-E03 `R02/s26_rankio_t9_t9p25` job `4759155`
+reached exact `t = 9.25` in `2318` seconds. Formal and independently
 regenerated inspection pass with `18` retained products, zero strict LF
 failure counters, no restart-marker bypass, terminal
-`lf_hwproj = 302201795827`, and forcing-work residual
-`1.83194669112365e-12`. Hardened reconciliation closes at `26/26/26`, with
+`lf_hwproj = 304421455230`, and forcing-work residual
+`1.812436903704924e-12`. Hardened reconciliation closes at `27/27/27`, with
 no active reservation, no transaction, and `issues = []`.
 
 A retained fail-closed recost lifecycle companion exists at
 `scripts/frontier/cgl_lf_stage_i_checkpoint.py` with SHA-256
-`10156515c4bcbfdcf57a2fe54220c2a80f0477f1a7bddbde322b9433946615c2`;
-its isolated fixture suite passes (`67 passed`). Historical F-101 remains a
+`9b54c840ea1d5df6a54d9eec2cecdd239067bd13f60bfeb38f9495fc189b8ac6`;
+its isolated fixture suite passes (`74 passed`). Historical F-101 remains a
 truthfully adopted legacy canonical boundary. F-102 hardened the Stage I
 helper before `s19`; the helper SHA-256 is
 `54ec671bb45aa27735a174d40b4b2e6009070716346ea09699bbe62421bbfada`,
 and focused helper slice passes (`10 passed, 35 deselected`).
 
-F-109 is the latest hardened normal observed publication under the retained
+F-110 is the latest hardened normal observed publication under the retained
 companion. Its canonical recost artifact SHA-256 is
-`67f9096900b5ec3ce8368cd39c6f6a8c649dcff2436261fcf72aa328cd3ac0ea`;
+`26f6eeb1a92960c006126b64e73c51b4e2a06c14efff50a04660aad36f8b8706`;
 its observed-publication audit SHA-256 is
-`f784d2bcec45dc7baea8ccba958ab959009ff0ae6f98acdf847d5dc21933beee`.
-It authorizes only `R02/s26_rankio_t9_t9p25` on one node with Slurm
-`01:05:00`, Athena `00:55:00`, and the reviewed one-segment `2700`-second
-threshold. Before preparing `s26`, commit, push, archive, and catalog the
+`c27b98847b7037f419ac8694a0f05c46c670fe0470ab0e86c50a6a6004255441`.
+It authorizes only `R02/s27_rankio_t9p25_t9p75` on one node with Slurm
+`02:00:00`, Athena `01:50:00`, and the aggressive bounded one-segment
+`6000`-second threshold. Before preparing `s27`, commit, push, archive, and catalog the
 current documentation checkpoint, validate the full source-archive checksum
-ledger, then require a fresh empty queue, free strict root lock, authenticated
-hardened reconciliation, `26/26/26`, no active reservation, no transaction,
-`issues = []`, and an independently audited bounded readiness packet.
+ledger, then require no queued `cgl_*` workflow job, free strict root lock,
+authenticated hardened reconciliation, `27/27/27`, no active reservation, no
+transaction, `issues = []`, and an independently audited bounded readiness
+packet. Actual AthenaK submission retains the helper's all-user queue
+preflight.
 
 The frozen `R02`-`R17` inventory in
 `inputs/cgl_lf_paper/mks24_stage_i_manifest.json` is accepted as the Stage I
@@ -997,6 +999,50 @@ automatically. Any scientific, provenance, scheduler, storage, budget, or
 reconciliation failure blocks successor preparation. Inspect, account,
 reconcile, and recost before any further extension. Finish R02, execute
 R03--R16 sequentially, and complete `R17` last.
+
+That F-109 authorization is also historical. Authenticated
+`R02/s26_rankio_t9_t9p25` job `4759155` is accepted through exact `t = 9.25`
+for `2318` seconds (`0.643889` displayed node-hours). Its exact retained
+scheduler row is
+`4759155|cgl_mks24_E03_forcing_policy_R02_s26_rankio_t9_t9p25|COMPLETED|0:0|1|2318|2026-06-03T10:21:06|2026-06-03T11:00:00`;
+formal inspection SHA-256 is
+`36ab7085547ddf32eaab0acc89b8376cbe721202bc9449a6a255df7cb6136bb3`;
+recorded manifest SHA-256 is
+`9bc02881126cb96f19651eb1e3f4fb954a4a867c789d3c6295daa0ff94bc7b4a`;
+retained independent validation SHA-256 is
+`24ee6e4a0abefdb50e0d2ce974156b88ac22b7b9070d03a4569103a2c44fd3c9`;
+retained scheduler evidence SHA-256 is
+`80d42617eeec82f8427cbcfac1e6f69b8a165e389b652fea2d3e6b185dfd1ae5`.
+It retains one complete eight-rank snapshot group and terminal eight-rank
+restart siblings, zero strict LF failure counters, finite synchronized
+histories, no restart-marker bypass, terminal `lf_hwproj = 304421455230`, and
+sampled-history forcing-work relative residual `1.812436903704924e-12`.
+The accepted prefix totals `79162` seconds (`21.989444444444445` exact and
+`21.989446` displayed node-hours). Hardened reconciliation closes with
+`27/27/27` ledger rows/manifests/reservations, no active reservation, no
+transaction, and `issues = []`.
+
+The retained F-110 generator SHA-256 is
+`62aed9daf2925ca7329b04c7e3735881078a8c1820aab011b8e1a117dcc0e2a0`.
+Canonical F-110 recost evidence SHA-256 is
+`26f6eeb1a92960c006126b64e73c51b4e2a06c14efff50a04660aad36f8b8706`;
+observed-publication audit SHA-256 is
+`c27b98847b7037f419ac8694a0f05c46c670fe0470ab0e86c50a6a6004255441`.
+The normal retained-companion publication leaves canonical-only bytes, a
+mode-`0444` forensic copy, empty transaction directories, no queued `cgl_*`
+workflow job, and a free strict lock. The strict queue parser rejects
+malformed rows and queued CGL workflow jobs while permitting unrelated
+account jobs during recost publication and preparation. Actual AthenaK
+submission retains the Stage I helper's separate all-user queue preflight.
+The aggressive bounded half-unit estimator selects `5500 <= 6000` seconds and
+projects `858.8122227777778` matrix node-hours with `41.18777722222217`
+margin. After the post-F-110 checkpoint archive gate, prepare only
+`R02/s27_rankio_t9p25_t9p75` on one node from authenticated `s26` terminal
+siblings with Slurm walltime `02:00:00`, Athena timeout `01:50:00`, and a
+`6000`-second threshold retaining both `600`-second guards. Finish and analyze
+R02 once through exact `t = 10`; then use largest evidence-backed
+standard-layout segments for R03--R16. Derive R17 bounds separately from
+retained eight-node timing evidence and execute R17 last.
 
 The first R02 preflight exposed a nonblocking preview-rendering defect:
 `check-submit` enforced the reviewed shared-root acknowledgement but omitted it
