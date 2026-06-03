@@ -1,6 +1,6 @@
 # PIC Sun and Bai release qualification handoff
 
-Last updated: 2026-06-03T21:24:45Z
+Last updated: 2026-06-03T21:29:09Z
 
 ## Purpose
 
@@ -69,13 +69,16 @@ Completed:
 14. Worker job `4760511` passed the amended 611-test split-root suite. Worker
     job `4760559` passed the superseding exact-final-controller-byte 611-test
     suite after a formatting-only closure.
+15. The reviewed tenth-pass operational repair was committed and pushed as
+    `ee18be0f04dab3c7110c3372ccd904288d13ec7c`. Its first closed worker
+    validation submission became Frontier job `4761480`.
 
 In progress:
 
 1. Pressure-pilot aggregate publication remains prohibited. No public bundle,
    receipt, aggregate analysis artifact, or review packet exists.
-2. Preserve the tenth-pass canonical-policy, frozen-ledger-root split, and
-   operational-wrapper closure edits while their clean commit, push, exact
+2. Preserve the eleventh-pass Frontier `sbatch --parsable` token-normalization
+   closure while its narrow rereview, clean commit, push, and exact
    committed-tree validation finish.
 3. The live controller and policy intentionally remain at the historical
    consumed-slice generation until the reviewed one-time strict-storage
@@ -83,8 +86,8 @@ In progress:
 
 Remaining:
 
-1. Commit and push the tenth-pass split-root repair and pass the clean committed
-   worker validation.
+1. Commit and push the eleventh-pass scheduler-token closure and pass the clean
+   committed worker validation.
 2. Capture authenticated mirrored storage evidence, install the paired
    controller, retire the consumed historical slices, freeze and independently
    revalidate a fresh worker-built candidate, and promote the candidate-only
@@ -176,6 +179,7 @@ diff before editing or committing. The expected repair ownership is:
 Recent pushed history:
 
 ```text
+ee18be0f0 Harden Q011 canonical storage operational boundary
 7cb4a20eb Harden Q011 validation checkout boundary
 7d157d52b Split Q011 archived and trusted checkout validation
 e93f7bfd5 Run Q011 validation from read-only Git clone
@@ -658,6 +662,36 @@ worker validation pass.
 The regenerated prepared-artifact inventory binds `110` decks and `20`
 analyzers with SHA-256
 `4cb878a431271d85ff64b330bffc4db1abaa7124a1a5669755da12ddb4677871`.
+
+### Eleventh Frontier parsable-token pass
+
+The first committed worker-validation submission after the tenth-pass repair
+was accepted by Frontier as job `4761480`, but `sbatch --parsable` returned a
+cluster-qualified token of the form `<job-id>;frontier`. The operator shell
+required digits only and therefore exited after submission without printing the
+normalized ID. No live policy mutation began.
+
+Job `4761480` remained useful validation evidence. It passed all `200` archived
+focused tests in `46.003s`, then failed closed before the full sweep because the
+trusted checkout became dirty while the README token parser was repaired. Its
+top-level state is `FAILED`, elapsed time is `00:00:55`, and exit code is `1:0`.
+
+The eleventh pass normalizes only the exact optional `;frontier` suffix for all
+four documented `sbatch --parsable` boundaries: repair validation, build
+freeze, pressure aggregate publication, and review-packet publication. Each
+snippet prints the raw token with `%q` shell escaping immediately after
+submission, before strict normalization and rejection, so an accepted job
+remains recoverable even if Frontier returns an unexpected token. Any token
+other than `<job-id>` or `<job-id>;frontier` still fails closed.
+
+Do not mutate live policy state from commit `ee18be0f0`. Freeze and push the
+eleventh-pass documentation closure, then run the exact committed worker
+validation again without editing the trusted checkout while it executes.
+The failed-closed `4761480` record is the reviewed reason for exactly one
+replacement validation submission after that push.
+
+The durable append-only transition record is
+[`q011_section54_eleventh_frontier_sbatch_token_transition_2026-06-03.json`](readiness/q011_section54_eleventh_frontier_sbatch_token_transition_2026-06-03.json).
 
 ## Validation baseline
 

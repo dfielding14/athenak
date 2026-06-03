@@ -743,10 +743,14 @@ SOURCE_STATUS="$("${GIT[@]}" -C "$SOURCE_REPO" status --porcelain --untracked-fi
 test -z "$SOURCE_STATUS"
 FULL_GIT_COMMIT="$("${GIT[@]}" -C "$SOURCE_REPO" rev-parse HEAD)"
 test "$FULL_GIT_COMMIT" = "$("${GIT[@]}" -C "$SOURCE_REPO" rev-parse origin/PIC)"
-REPAIR_VALIDATION_JOB_ID="$("${SLURM_ENV[@]}" /usr/bin/sbatch --parsable --export=NIL \
+REPAIR_VALIDATION_JOB_TOKEN="$("${SLURM_ENV[@]}" /usr/bin/sbatch --parsable --export=NIL \
   "${SOURCE_REPO}/tst/publication/frontier_q011_section54_repair_validation_job.sh" \
   "$FULL_GIT_COMMIT")"
+printf 'repair_validation_job_token=%q\n' "$REPAIR_VALIDATION_JOB_TOKEN"
+REPAIR_VALIDATION_JOB_ID="${REPAIR_VALIDATION_JOB_TOKEN%;frontier}"
 [[ "$REPAIR_VALIDATION_JOB_ID" =~ ^[0-9]+$ ]]
+test "$REPAIR_VALIDATION_JOB_TOKEN" = "$REPAIR_VALIDATION_JOB_ID" ||
+  test "$REPAIR_VALIDATION_JOB_TOKEN" = "${REPAIR_VALIDATION_JOB_ID};frontier"
 printf 'repair_validation_commit=%s\n' "$FULL_GIT_COMMIT"
 printf 'repair_validation_job_id=%s\n' "$REPAIR_VALIDATION_JOB_ID"
 )
@@ -796,6 +800,12 @@ test "$(printf '%s\n' "$REPAIR_VALIDATION_LOG_COMMIT" | /usr/bin/wc -l)" -eq 1
 Treat submission of this worker as a durable checkpoint. If a session stops
 after `sbatch`, recover the one printed job ID and verify that exact job; do not
 silently submit a replacement.
+
+Frontier may return either `<job-id>` or `<job-id>;frontier` for
+`sbatch --parsable`. Every live snippet below prints the raw token with shell
+escaping immediately after submission, strips only that exact optional cluster
+suffix, then requires the normalized job ID to be numeric. Reject any other
+scheduler token, but retain its escaped diagnostic for recovery.
 
 ## Q011 Pressure-Pilot Serial Boundary
 
@@ -915,10 +925,14 @@ test ! -e "$CANDIDATE_ONLY_POLICY"
   --reviewed-policy "$RETIREMENT_POLICY" \
   --retire-historical-storage-preflight-predecessor
 
-BUILD_FREEZE_JOB_ID="$("${SLURM_ENV[@]}" /usr/bin/sbatch --parsable --export=NIL \
+BUILD_FREEZE_JOB_TOKEN="$("${SLURM_ENV[@]}" /usr/bin/sbatch --parsable --export=NIL \
   "${SOURCE_REPO}/tst/publication/frontier_q011_clean_candidate_build_freeze_job.sh" \
   "$FULL_GIT_COMMIT" "$VERSION")"
+printf 'build_freeze_job_token=%q\n' "$BUILD_FREEZE_JOB_TOKEN"
+BUILD_FREEZE_JOB_ID="${BUILD_FREEZE_JOB_TOKEN%;frontier}"
 [[ "$BUILD_FREEZE_JOB_ID" =~ ^[0-9]+$ ]]
+test "$BUILD_FREEZE_JOB_TOKEN" = "$BUILD_FREEZE_JOB_ID" ||
+  test "$BUILD_FREEZE_JOB_TOKEN" = "${BUILD_FREEZE_JOB_ID};frontier"
 printf 'full_git_commit=%s\n' "$FULL_GIT_COMMIT"
 printf 'probe_id=%s\n' "$PROBE_ID"
 printf 'control_plane_version=%s\n' "$VERSION"
@@ -1249,10 +1263,14 @@ do
     'import os, sys; fd = os.open(sys.argv[1], os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW); os.fsync(fd); os.close(fd)' \
     "$directory"
 done
-AGGREGATE_JOB_ID="$("${SLURM_ENV[@]}" /usr/bin/sbatch --parsable --export=NIL \
+AGGREGATE_JOB_TOKEN="$("${SLURM_ENV[@]}" /usr/bin/sbatch --parsable --export=NIL \
   "${SOURCE_REPO}/tst/publication/frontier_q011_section54_pressure_pilot_publish_job.sh" \
   "$FULL_GIT_COMMIT")"
+printf 'aggregate_job_token=%q\n' "$AGGREGATE_JOB_TOKEN"
+AGGREGATE_JOB_ID="${AGGREGATE_JOB_TOKEN%;frontier}"
 [[ "$AGGREGATE_JOB_ID" =~ ^[0-9]+$ ]]
+test "$AGGREGATE_JOB_TOKEN" = "$AGGREGATE_JOB_ID" ||
+  test "$AGGREGATE_JOB_TOKEN" = "${AGGREGATE_JOB_ID};frontier"
 printf 'full_git_commit=%s\n' "$FULL_GIT_COMMIT"
 printf 'aggregate_job_id=%s\n' "$AGGREGATE_JOB_ID"
 )
@@ -1287,10 +1305,14 @@ AGGREGATE_STATE="$(
     '
 )"
 test "$AGGREGATE_STATE" = COMPLETED
-REVIEW_PACKET_JOB_ID="$("${SLURM_ENV[@]}" /usr/bin/sbatch --parsable --export=NIL \
+REVIEW_PACKET_JOB_TOKEN="$("${SLURM_ENV[@]}" /usr/bin/sbatch --parsable --export=NIL \
   "${SOURCE_REPO}/tst/publication/frontier_q011_section54_pressure_pilot_review_packet_job.sh" \
   "$FULL_GIT_COMMIT")"
+printf 'review_packet_job_token=%q\n' "$REVIEW_PACKET_JOB_TOKEN"
+REVIEW_PACKET_JOB_ID="${REVIEW_PACKET_JOB_TOKEN%;frontier}"
 [[ "$REVIEW_PACKET_JOB_ID" =~ ^[0-9]+$ ]]
+test "$REVIEW_PACKET_JOB_TOKEN" = "$REVIEW_PACKET_JOB_ID" ||
+  test "$REVIEW_PACKET_JOB_TOKEN" = "${REVIEW_PACKET_JOB_ID};frontier"
 printf 'full_git_commit=%s\n' "$FULL_GIT_COMMIT"
 printf 'review_packet_job_id=%s\n' "$REVIEW_PACKET_JOB_ID"
 )
