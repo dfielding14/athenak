@@ -3,12 +3,12 @@
 ## Decision
 
 Read `docs/cgl_lf_phase_i_handoff.md` first for the durable current production
-boundary. Accepted corrected-E03 `R02/s21_rankio_t7p75_t8` job `4758233`
-reached exact `t = 8.0` in `2369` seconds. Formal and independently
+boundary. Accepted corrected-E03 `R02/s22_rankio_t8_t8p25` job `4758398`
+reached exact `t = 8.25` in `2345` seconds. Formal and independently
 regenerated inspection pass with `18` retained products, zero strict LF
 failure counters, no restart-marker bypass, terminal
-`lf_hwproj = 286108988748`, and forcing-work residual
-`2.8542854449297643e-12`. Hardened reconciliation closes at `22/22/22`, with
+`lf_hwproj = 290890469421`, and forcing-work residual
+`3.021717626579328e-12`. Hardened reconciliation closes at `23/23/23`, with
 no active reservation, no transaction, and `issues = []`.
 
 A retained fail-closed recost lifecycle companion exists at
@@ -20,17 +20,17 @@ helper before `s19`; the helper SHA-256 is
 `54ec671bb45aa27735a174d40b4b2e6009070716346ea09699bbe62421bbfada`,
 and focused helper slice passes (`10 passed, 35 deselected`).
 
-F-105 is the latest hardened normal observed publication under the retained
+F-106 is the latest hardened normal observed publication under the retained
 companion. Its canonical recost artifact SHA-256 is
-`242b4ae79b215690d2b552aba9e583cf209d70c822f8dd76da4e7af1b7ba6a5b`;
+`fe78232b5396d9d3ee6a5ef0e39f7aa445cf2c17125691a7d3e63d4a67978bc2`;
 its observed-publication audit SHA-256 is
-`3cbf9c53d8fea066a67f334fe6393da7c8b31d3429d0c4582047b8174e6e7e7f`.
-It authorizes only `R02/s22_rankio_t8_t8p25` on one node with Slurm
+`a8289b06194f93492f20fdc965ef6e709d3b1179fc251de29efa9af01c524b99`.
+It authorizes only `R02/s23_rankio_t8p25_t8p5` on one node with Slurm
 `01:05:00`, Athena `00:55:00`, and the reviewed one-segment `2700`-second
-threshold. Before preparing `s22`, commit, push, archive, and catalog the
+threshold. Before preparing `s23`, commit, push, archive, and catalog the
 current documentation checkpoint, validate the full source-archive checksum
 ledger, then require a fresh empty queue, free strict root lock, authenticated
-hardened reconciliation, `22/22/22`, no active reservation, no transaction,
+hardened reconciliation, `23/23/23`, no active reservation, no transaction,
 `issues = []`, and an independently audited bounded readiness packet.
 
 The frozen `R02`-`R17` inventory in
@@ -810,6 +810,53 @@ reconciliation failure blocks successor preparation. Inspect, account,
 reconcile, and recost before any further extension. Finish R02, execute
 R03--R16 sequentially, and complete `R17` last.
 
+That F-105 authorization is also historical. Authenticated
+`R02/s22_rankio_t8_t8p25` job `4758398` is accepted through exact `t = 8.25`
+for `2345` seconds (`0.651389` displayed node-hours). Its exact retained
+scheduler row is
+`4758398|cgl_mks24_E03_forcing_policy_R02_s22_rankio_t8_t8p25|COMPLETED|0:0|1|2345|2026-06-03T02:25:21|2026-06-03T03:06:00`;
+formal inspection SHA-256 is
+`77479a51cda10b1a399a9060c5a7153dec115389cd4f0ba5a6fec167c462be49`;
+recorded manifest SHA-256 is
+`b02e754cf521a0b0e2205bcd13947c0c12b6a443adb268f9ea91a2eeeff5a803`;
+retained independent validation SHA-256 is
+`e8854e4b233d7b1b64fcc53e69975041e052e98477b85e74b8e0dc1d5a332d08`;
+retained scheduler evidence SHA-256 is
+`e6af51d0cbbd1aef3e83df0fa99f64da77d7aa991a59c0375b21b4fe07c44ea1`.
+It retains one complete eight-rank snapshot group and terminal eight-rank
+restart siblings, zero strict LF failure counters, finite synchronized
+histories, no restart-marker bypass, terminal `lf_hwproj = 290890469421`, and
+sampled-history forcing-work relative residual `3.021717626579328e-12`.
+The accepted prefix totals `69954` seconds (`19.43166666666667` exact and
+`19.431668` displayed node-hours). Hardened reconciliation closes with
+`23/23/23` ledger rows/manifests/reservations, no active reservation, no
+transaction, and `issues = []`.
+
+The retained F-106 generator SHA-256 is
+`341fda3812143288806285b6f8ec3969d43d0e0bd22f150190e5e4f44c57b3b6`.
+Canonical F-106 recost evidence SHA-256 is
+`fe78232b5396d9d3ee6a5ef0e39f7aa445cf2c17125691a7d3e63d4a67978bc2`;
+observed-publication audit SHA-256 is
+`a8289b06194f93492f20fdc965ef6e709d3b1179fc251de29efa9af01c524b99`.
+The normal retained-companion publication leaves canonical-only bytes, a
+mode-`0444` forensic copy, empty transaction directories, an empty user queue,
+and a free strict lock. With prior selected `2560`, observed `2345`, and local
+acceleration `2345`, the reviewed `s23` estimator selects `2560 <= 2700`
+seconds. It projects `829.2566672222222` matrix node-hours with
+`70.74333277777782` margin. Commit, push, archive, and catalog the post-F-106
+documentation checkpoint, validate the archive ledger, rerun hardened
+reconciliation, and repeat the queue/shared-root audit with explicit
+acknowledgement of the stale beta-25 record. Require completion of the durable
+handoff checklist items 15--17 before preparation. Then prepare only
+`R02/s23_rankio_t8p25_t8p5` on one node from authenticated `s22` terminal
+siblings with Slurm walltime `01:05:00`, Athena timeout `00:55:00`, and a
+reviewed one-segment `2700`-second threshold retaining `600` seconds on both
+timeout margins. The threshold is scoped only to `s23` and cannot ratchet
+automatically. Any scientific, provenance, scheduler, storage, budget, or
+reconciliation failure blocks successor preparation. Inspect, account,
+reconcile, and recost before any further extension. Finish R02, execute
+R03--R16 sequentially, and complete `R17` last.
+
 The first R02 preflight exposed a nonblocking preview-rendering defect:
 `check-submit` enforced the reviewed shared-root acknowledgement but omitted it
 from the printed follow-up command. Atomic submission retained the required
@@ -847,12 +894,13 @@ Authenticated continuation `4754394` now reaches exact `t = 7.25`.
 Authenticated continuation `4757300` now reaches exact `t = 7.5`.
 Authenticated continuation `4757761` now reaches exact `t = 7.75`.
 Authenticated continuation `4758233` now reaches exact `t = 8.0`.
-After the post-F-105 documentation checkpoint is committed, pushed, archived,
+Authenticated continuation `4758398` now reaches exact `t = 8.25`.
+After the post-F-106 documentation checkpoint is committed, pushed, archived,
 and cataloged, the archive ledger is validated, reconciliation is rerun, and
 the queue/shared-root audit repeats explicit acknowledgement of the stale
 beta-25 record. Require completion of the durable handoff checklist items
-12--14, then use only job `4758233`'s authenticated terminal checkpoint for the
-next bounded R02 continuation `R02/s22_rankio_t8_t8p25`.
+15--17, then use only job `4758398`'s authenticated terminal checkpoint for the
+next bounded R02 continuation `R02/s23_rankio_t8p25_t8p5`.
 Commits `9480e62764528a3f40066d22a192f0e99b369891`
 and `ef1e42fa088203ac9ef6ec8e47e668db4fb95a3c` additionally require the live
 helper to remain committed during historical authentication, reserve the
