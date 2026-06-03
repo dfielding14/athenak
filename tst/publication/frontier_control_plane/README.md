@@ -767,16 +767,21 @@ PROJECT_HOME_CONTROL_PLANE="$(
 VERSION="${ORION_CONTROL_PLANE##*/}"
 test "${PROJECT_HOME_CONTROL_PLANE##*/}" = "$VERSION"
 CONTROL_PLANE=("$PYTHON" -I -B "${ORION_CONTROL_PLANE}/run_control_plane.py")
+POLICY_SUFFIX="${VERSION:0:8}_${PROBE_ID}"
+RETIREMENT_POLICY="${PIC_ROOT}/policy/reviewed_launch_prohibited_strict_storage_successor_${POLICY_SUFFIX}.json"
+CANDIDATE_ONLY_POLICY="${PIC_ROOT}/policy/reviewed_candidate_only_successor_${POLICY_SUFFIX}.json"
+test ! -e "$RETIREMENT_POLICY"
+test ! -e "$CANDIDATE_ONLY_POLICY"
 
 "$PYTHON" -I -B /ccs/home/dfielding/athenak-pic/tst/publication/q011_section54_pressure_pilot_execution.py \
   retire-consumed-slices-baseline-policy-successor \
   --baseline-policy "${PIC_ROOT}/policy/storage_policy.json" \
   --control-plane-version "$VERSION" \
   --storage-preflight-binding "$STORAGE_PREFLIGHT_BINDING" \
-  --output "${PIC_ROOT}/policy/reviewed_launch_prohibited_successor.json"
+  --output "$RETIREMENT_POLICY"
 
 "${CONTROL_PLANE[@]}" promote_active_policy.py \
-  --reviewed-policy "${PIC_ROOT}/policy/reviewed_launch_prohibited_successor.json" \
+  --reviewed-policy "$RETIREMENT_POLICY" \
   --retire-historical-storage-preflight-predecessor
 
 /usr/bin/sbatch \
@@ -788,16 +793,16 @@ CONTROL_PLANE=("$PYTHON" -I -B "${ORION_CONTROL_PLANE}/run_control_plane.py")
 
 "$PYTHON" -I -B /ccs/home/dfielding/athenak-pic/tst/publication/q011_section54_pressure_pilot_execution.py \
   candidate-only-policy-successor \
-  --baseline-policy "${PIC_ROOT}/policy/reviewed_launch_prohibited_successor.json" \
+  --baseline-policy "$RETIREMENT_POLICY" \
   --control-plane-version "$VERSION" \
   --storage-preflight-binding "$STORAGE_PREFLIGHT_BINDING" \
   --clean-candidate-manifest "$CLEAN_CANDIDATE_MANIFEST" \
   --executable "$EXECUTABLE" \
   --environment-profile "$ENVIRONMENT_PROFILE" \
-  --output "${PIC_ROOT}/policy/reviewed_candidate_only_successor.json"
+  --output "$CANDIDATE_ONLY_POLICY"
 
 "${CONTROL_PLANE[@]}" promote_active_policy.py \
-  --reviewed-policy "${PIC_ROOT}/policy/reviewed_candidate_only_successor.json"
+  --reviewed-policy "$CANDIDATE_ONLY_POLICY"
 ```
 
 The historical v2 launch procedure below is retained for audit only. It must

@@ -165,12 +165,25 @@ def _fixture_campaign_context(fixture: dict[str, Path]) -> object:
             ),
         }
 
+    @contextmanager
+    def validate_fixture_ledger_snapshot(
+        receipt: dict[str, object], *, authorized_pic_root: Path, **kwargs: object
+    ) -> object:
+        yield validate_fixture_ledger(
+            receipt, authorized_pic_root=authorized_pic_root, **kwargs
+        )
+
     with (
         patch.object(campaign, "ORION_BULK_ROOT", fixture["orion"]),
         patch.object(
             campaign,
             "_validate_registered_execution_receipt_ledger_binding",
             side_effect=validate_fixture_ledger,
+        ),
+        patch.object(
+            campaign,
+            "_validated_registered_execution_receipt_ledger_snapshot",
+            side_effect=validate_fixture_ledger_snapshot,
         ),
     ):
         yield

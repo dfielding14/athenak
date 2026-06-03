@@ -144,27 +144,27 @@ def _fixture(
             check=True,
         )
         prepared_sources = {
-            "inputs/publication/pic_parallel_shock_section54_paper_vl2_tsc.athinput": (
-                execution.PAPER_DECK.read_bytes()
-            ),
-            "tst/publication/analyze_q011_section54_campaign.py": (
-                execution.REPO_ROOT / "tst/publication/analyze_q011_section54_campaign.py"
-            ).read_bytes(),
-            "tst/publication/analyze_q011_section54_outputs.py": (
-                execution.REPO_ROOT / "tst/publication/analyze_q011_section54_outputs.py"
-            ).read_bytes(),
+            relative: (execution.REPO_ROOT / relative).read_bytes()
+            for relative in sorted(
+                {
+                    *common.Q011_SECTION54_ARCHIVE_SOURCE_PATHS.values(),
+                    *common.Q011_SECTION54_HELPER_SOURCES,
+                }
+            )
         }
         inventory = {
             "schema_version": 1,
             "paper_decks": [
                 {"path": path, "sha256": _sha256(prepared_sources[path])}
                 for path in sorted(prepared_sources)
-                if path.endswith(".athinput")
+                if path in common.PREPARED_ARTIFACT_REQUIRED_PUBLICATION_DECK_PATHS
             ],
             "analyzers": [
                 {"path": path, "sha256": _sha256(prepared_sources[path])}
                 for path in sorted(prepared_sources)
-                if path.endswith(".py")
+                if path.startswith("tst/publication/analyze_")
+                and path.endswith(".py")
+                and "/" not in path[len("tst/publication/") :]
             ],
         }
         prepared_sources[common.PREPARED_ARTIFACT_INVENTORY_PATH] = _json_bytes(inventory)
