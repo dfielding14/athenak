@@ -722,15 +722,16 @@ rebuilt v2 slices completed and are consumed historical evidence. Do not
 relaunch them.
 
 The historical live policy predates authenticated mirrored storage-preflight
-evidence. After the paired successor-controller install, capture one
-authenticated preflight binding from clean tracked source. Persist the emitted
-fragment as a read-only review artifact under `${PIC_ROOT}/policy`, then
-materialize the exact consumed-slice retirement successor. The one-use
-promotion flag accepts only the historical predecessor shape, a newer
-controller, an empty registered-slice allowlist and a pending clean-candidate
-freeze:
+evidence. Capture one authenticated preflight binding from clean tracked
+source, persist the emitted fragment as a read-only review artifact under
+`${PIC_ROOT}/policy`, then install the paired successor controller. Materialize
+the exact consumed-slice retirement successor only after both installs print
+the same digest. The one-use promotion flag accepts only the exact reviewed
+historical live anchors, a newer controller, an empty registered-slice
+allowlist and a pending clean-candidate freeze:
 
 ```bash
+PROJECT_HOME_MIRROR_ROOT=/ccs/proj/ast207/proj-shared/PIC
 SOURCE_CONTROL_PLANE=(
   "$PYTHON" -I -B
   /ccs/home/dfielding/athenak-pic/tst/publication/frontier_control_plane/run_control_plane.py
@@ -754,6 +755,18 @@ mv -n "$STORAGE_PREFLIGHT_STAGING" "$STORAGE_PREFLIGHT_BINDING"
 "$PYTHON" -I -B -c \
   'import os, sys; fd = os.open(sys.argv[1], os.O_RDONLY | os.O_NOFOLLOW); os.fsync(fd); os.close(fd); fd = os.open(os.path.dirname(sys.argv[1]), os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW); os.fsync(fd); os.close(fd)' \
   "$STORAGE_PREFLIGHT_BINDING"
+
+ORION_CONTROL_PLANE="$(
+  "${SOURCE_CONTROL_PLANE[@]}" install_control_plane.py \
+    --pic-root "$PIC_ROOT"
+)"
+PROJECT_HOME_CONTROL_PLANE="$(
+  "${SOURCE_CONTROL_PLANE[@]}" install_control_plane.py \
+    --pic-root "$PROJECT_HOME_MIRROR_ROOT"
+)"
+VERSION="${ORION_CONTROL_PLANE##*/}"
+test "${PROJECT_HOME_CONTROL_PLANE##*/}" = "$VERSION"
+CONTROL_PLANE=("$PYTHON" -I -B "${ORION_CONTROL_PLANE}/run_control_plane.py")
 
 "$PYTHON" -I -B /ccs/home/dfielding/athenak-pic/tst/publication/q011_section54_pressure_pilot_execution.py \
   retire-consumed-slices-baseline-policy-successor \
@@ -937,7 +950,15 @@ Project Home bulk-artifact directory:
 ```bash
 test -d "${PIC_ROOT}/publication" || mkdir "${PIC_ROOT}/publication"
 test ! -e "${PIC_ROOT}/publication_acceptance"
-mkdir -m 0700 "${PIC_ROOT}/publication_acceptance"
+install -d -m 0700 -o dfielding -g ast207 "${PIC_ROOT}/publication_acceptance"
+setfacl -b "${PIC_ROOT}/publication_acceptance"
+setfacl -k "${PIC_ROOT}/publication_acceptance"
+test "$(
+  stat -c '%U:%G:%a' "${PIC_ROOT}/publication_acceptance"
+)" = "dfielding:ast207:700"
+test "$(
+  getfacl -cp "${PIC_ROOT}/publication_acceptance"
+)" = $'user::rwx\ngroup::---\nother::---'
 for directory in \
   "${PIC_ROOT}/publication" \
   "${PIC_ROOT}/publication_acceptance" \
@@ -950,6 +971,10 @@ done
 
 /usr/bin/sbatch \
   /ccs/home/dfielding/athenak-pic/tst/publication/frontier_q011_section54_pressure_pilot_publish_job.sh
+
+# Wait for successful aggregate worker completion before submitting the packet.
+/usr/bin/sbatch \
+  /ccs/home/dfielding/athenak-pic/tst/publication/frontier_q011_section54_pressure_pilot_review_packet_job.sh
 ```
 
 The publisher reruns raw-case verification while retaining each case-root
@@ -964,6 +989,11 @@ before using it:
   /ccs/home/dfielding/athenak-pic/tst/publication/publish_q011_section54_pressure_pilot_bundle.py \
   --verify-published-receipt \
   "${PIC_ROOT}/publication/q011_section54_pressure_pilot_bundle_receipt.json"
+
+/opt/cray/pe/python/3.11.7/bin/python3 -I -B \
+  /ccs/home/dfielding/athenak-pic/tst/publication/render_q011_section54_pressure_pilot_review_packet.py \
+  --verify-published-receipt \
+  "${PIC_ROOT}/publication/q011_section54_pressure_pilot_review_packet_receipt.json"
 ```
 
 These four pilots remain engineering calibration only; they do not qualify
