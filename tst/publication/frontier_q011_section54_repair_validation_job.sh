@@ -17,14 +17,9 @@ test -z "$(git status --porcelain --untracked-files=all)"
 SOURCE_COMMIT=$(git rev-parse HEAD)
 echo "source_commit=$SOURCE_COMMIT"
 
-SNAPSHOT_PARENT=$(mktemp -d "${TMPDIR:-/tmp}/pic-q011-repair-validate.XXXXXXXX")
-SNAPSHOT_ROOT="${SNAPSHOT_PARENT}/source"
-trap 'chmod -R u+w "$SNAPSHOT_PARENT" 2>/dev/null || true; rm -rf "$SNAPSHOT_PARENT"' EXIT
-git clone --no-checkout "$REPO_ROOT" "$SNAPSHOT_ROOT"
-git -C "$SNAPSHOT_ROOT" checkout --detach "$SOURCE_COMMIT"
-test "$(git -C "$SNAPSHOT_ROOT" rev-parse HEAD)" = "$SOURCE_COMMIT"
-test -z "$(git -C "$SNAPSHOT_ROOT" status --porcelain --untracked-files=all)"
-chmod -R a-w "$SNAPSHOT_ROOT"
+SNAPSHOT_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/pic-q011-repair-validate.XXXXXXXX")
+trap 'rm -rf "$SNAPSHOT_ROOT"' EXIT
+git archive "$SOURCE_COMMIT" | tar -xf - -C "$SNAPSHOT_ROOT"
 cd "$SNAPSHOT_ROOT"
 export PYTHONPATH="$PWD:$PWD/tst/publication/frontier_control_plane"
 
@@ -82,6 +77,11 @@ python3 -B -m unittest \
   tst.publication.test_publish_q011_section54_campaign_attempt \
   tst.publication.test_analyze_q011_section54_numerical_qualification
 
+cd "$REPO_ROOT"
+test "$(git rev-parse HEAD)" = "$SOURCE_COMMIT"
+test -z "$(git status --porcelain --untracked-files=all)"
+export PYTHONPATH="$PWD:$PWD/tst/publication/frontier_control_plane"
+
 mapfile -t modules < <(
   rg --files tst/publication -g 'test_*.py' |
     sed -e 's#/#.#g' -e 's#\.py$##' |
@@ -89,3 +89,4 @@ mapfile -t modules < <(
 )
 
 python3 -B -m unittest "${modules[@]}"
+test -z "$(git status --porcelain --untracked-files=all)"
