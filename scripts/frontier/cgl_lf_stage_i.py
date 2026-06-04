@@ -28,6 +28,7 @@ import re
 import shlex
 import shutil
 import stat
+import struct
 import subprocess
 import sys
 import tempfile
@@ -73,9 +74,36 @@ COMPLETED_R16_NODE_HOURS = 6.145556
 COMPLETED_R02_STANDARD_LAYOUT_PILOT_NODE_HOURS = 0.473333
 COMPLETED_R17_HIGH_RESOLUTION_PILOT_NODE_HOURS = 4.235556
 MEASURED_STAGE_I_RESERVED_NODE_HOURS = 900.0
-CURRENT_STAGE_I_RESERVED_NODE_HOURS = MEASURED_STAGE_I_RESERVED_NODE_HOURS
+PROMOTED_STAGE_I_RESERVED_NODE_HOURS = 1400.0
+CURRENT_STAGE_I_RESERVED_NODE_HOURS = PROMOTED_STAGE_I_RESERVED_NODE_HOURS
 MAX_SEGMENT_SECONDS = 2 * 60 * 60
-MAX_RESTART_PARAMETER_DUMP_BYTES = 16 * 1024 * 1024
+# ParameterInput::LoadFromFile accepts a terminator found in its eleventh 4 KiB
+# chunk and then seeks one byte past the marker for the trailing newline.
+MAX_RESTART_PARAMETER_DUMP_BYTES = 11 * 4096 + 1
+QUALIFIED_RESTART_BINARY_ABIS = {
+    (
+        "9e07542281e4e6d125582f253df3ad2e3b8b154d",
+        "68f243f9204df388b24365ae65a567f6f567dbe422a6d7a43b9fb4a499ef118c",
+    ): {
+        "mesh_time_offset_after_parameter_dump": 232,
+        "mesh_time_format": "<d",
+        "allowed_marker_modes": frozenset({
+            "full_precision", "legacy_default_precision",
+        }),
+    },
+}
+HISTORICAL_SUBMITTED_R03_UTILITY_TRANSITION = {
+    "project_root": str(DEFAULT_ROOT),
+    "state": "submitted",
+    "job_id": "4762472",
+    "case_id": "R03",
+    "segment": "s00_rankio_t0_t0p5",
+    "production_utility_revision": "dbe7e50045bfe0c3a99ce0ba0b21e8735bbf1103",
+    "production_utility_sha256": "54ec671bb45aa27735a174d40b4b2e6009070716346ea09699bbe62421bbfada",
+    "source_bundle_sha256": "b8437f066f8391a696efaaaf0de531430a9dac27c95dfc38aa7328dd49fb19fe",
+    "executable_revision": "9e07542281e4e6d125582f253df3ad2e3b8b154d",
+    "executable_sha256": "68f243f9204df388b24365ae65a567f6f567dbe422a6d7a43b9fb4a499ef118c",
+}
 # Allow scheduler timestamp formatting and host-clock skew around the persisted
 # pre-sbatch ambiguity barrier, but never an unrelated later submission.
 SCHEDULER_SUBMIT_BARRIER_TOLERANCE_SECONDS = 5 * 60
@@ -646,6 +674,32 @@ def require_prepare_case_policy(paths: dict[str, Path], case_id: str,
     require_r17_last(paths, case_id)
 
 
+def require_retained_r17_policy(paths: dict[str, Path],
+                                reservations: list[dict[str, object]]) -> None:
+    """Keep the final high-resolution lane last across every retained transition."""
+
+    if paths["root"].resolve() != DEFAULT_ROOT.expanduser().resolve():
+        return
+    r17_retained = retained_case_has_started(paths, R17_CASE_ID) or any(
+        reservation.get("case_id") == R17_CASE_ID
+        for reservation in reservations
+        if isinstance(reservation, dict)
+    )
+    if not r17_retained:
+        return
+    require_r17_last(paths, R17_CASE_ID)
+    lower_active = [
+        str(reservation.get("case_id"))
+        for reservation in active_reservations(reservations)
+        if reservation.get("case_id") != R17_CASE_ID
+    ]
+    if lower_active:
+        raise ValueError(
+            f"{R17_CASE_ID} has started; active lower-resolution lanes are forbidden: "
+            + ", ".join(sorted(lower_active))
+        )
+
+
 def parse_utc_timestamp(value: object, label: str) -> datetime:
     """Parse one retained timestamp and normalize it to UTC."""
 
@@ -1068,7 +1122,11 @@ def validate_submission_audit(paths: dict[str, Path], value: object) -> None:
         "slurm_test_only",
         "acknowledged_shared_root_campaigns",
     }
-    optional = {"legacy_mark_submitted"}
+    optional = {
+        "legacy_mark_submitted",
+        "initial_queue_authentication",
+        "final_queue_authentication",
+    }
     if not required.issubset(value) or not frozenset(value).issubset(required | optional):
         raise ValueError("submission journal has invalid submission audit columns")
     parse_utc_timestamp(value["created_utc"], "submission audit created_utc")
@@ -1092,6 +1150,9 @@ def validate_submission_audit(paths: dict[str, Path], value: object) -> None:
     )
     if value["offline_local_root"] is not offline_local_root:
         raise ValueError("submission journal root mode differs from submission audit")
+    for key in ("initial_queue_authentication", "final_queue_authentication"):
+        if key in value:
+            validate_queue_authentication_evidence(value[key], key)
 
 
 def scheduler_output_contains_job(output: str, expected_job_name: str) -> bool:
@@ -1242,6 +1303,11 @@ def read_transaction(paths: dict[str, Path], path: Path) -> dict[str, object]:
             raise ValueError("pending submission journal has invalid manifest digest")
         validate_submission_audit(paths, value.get("submission_audit"))
         authenticate_canonical_reservation_snapshot(paths, prior_reservations)
+        require_retained_r17_policy(paths, prior_reservations)
+        require_reservation_budget(
+            read_ledger(paths), prior_reservations,
+            "pending submission reservation snapshot",
+        )
         return value
     manifest = value.get("manifest")
     reservations = value.get("reservations")
@@ -1328,6 +1394,13 @@ def read_transaction(paths: dict[str, Path], path: Path) -> dict[str, object]:
         validate_scheduler_absence_evidence(
             paths, value.get("scheduler_absence_evidence"), value
         )
+    baseline_ledger, prospective_ledger = transaction_ledger_views(paths, row)
+    for label, snapshot, ledger in (
+        ("transaction prior reservation snapshot", prior_reservations, baseline_ledger),
+        ("transaction payload reservation snapshot", validated, prospective_ledger),
+    ):
+        require_retained_r17_policy(paths, snapshot)
+        require_reservation_budget(ledger, snapshot, label)
     return value
 
 
@@ -1422,6 +1495,8 @@ def validate_reservation_snapshot_transition(
     authenticate_canonical_reservation_snapshot(
         paths, payload, exempt_paths=frozenset({target})
     )
+    require_retained_r17_policy(paths, prior)
+    require_retained_r17_policy(paths, payload)
     if (
         {path: record for path, record in prior_by_manifest.items() if path != target}
         != {path: record for path, record in payload_by_manifest.items() if path != target}
@@ -1460,6 +1535,19 @@ def validate_transaction_reservation_baseline(
     authenticate_canonical_reservation_snapshot(
         paths, current, exempt_paths=frozenset({target})
     )
+    require_retained_r17_policy(paths, current)
+    baseline_ledger, prospective_ledger = transaction_ledger_views(
+        paths, transaction.get("ledger_row")
+    )
+    ledger = (
+        baseline_ledger
+        if current_sha256 == transaction.get("prior_reservations_sha256")
+        else prospective_ledger
+    )
+    require_reservation_budget(
+        ledger, current,
+        "reservation replay baseline",
+    )
 
 
 def apply_transaction(paths: dict[str, Path], transaction_path: Path) -> None:
@@ -1483,6 +1571,11 @@ def apply_transaction(paths: dict[str, Path], transaction_path: Path) -> None:
         raise ValueError(f"transaction payload is incomplete: {transaction_path}")
     validate_transaction_reservation_baseline(paths, transaction)
     row = transaction.get("ledger_row")
+    _, prospective_ledger = transaction_ledger_views(paths, row)
+    require_reservation_budget(
+        prospective_ledger, reservations, "transaction payload reservation snapshot"
+    )
+    require_retained_r17_policy(paths, reservations)
     if row is not None:
         if not isinstance(row, dict):
             raise ValueError(f"transaction ledger row is invalid: {transaction_path}")
@@ -1634,6 +1727,47 @@ def active_reservations(reservations: list[dict[str, object]]
     ]
 
 
+def require_reservation_budget(ledger: list[dict[str, str]],
+                               reservations: list[dict[str, object]],
+                               label: str) -> tuple[float, float]:
+    """Require one prospective reservation snapshot to fit both budget ceilings."""
+
+    try:
+        actual = sum(float(row["actual_node_hours"]) for row in ledger)
+        reserved = sum(
+            float(item["reserved_node_hours"])
+            for item in active_reservations(reservations)
+        )
+    except (KeyError, TypeError, ValueError) as error:
+        raise ValueError(f"{label} usage is invalid") from error
+    if not math.isfinite(actual) or not math.isfinite(reserved):
+        raise ValueError(f"{label} usage is invalid")
+    if actual + reserved > CURRENT_STAGE_I_RESERVED_NODE_HOURS:
+        raise ValueError(f"{label} exceeds the Stage I reservation ceiling")
+    if actual + reserved > PROJECT_BUDGET_NODE_HOURS:
+        raise ValueError(f"{label} exceeds the incremental project ceiling")
+    return actual, reserved
+
+
+def transaction_ledger_views(paths: dict[str, Path],
+                             row: object
+                             ) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
+    """Return the modeled ledgers immediately before and after one replay."""
+
+    ledger = read_ledger(paths)
+    if row is None:
+        return ledger, ledger
+    if not isinstance(row, dict):
+        raise ValueError("transaction ledger row is invalid")
+    matches = [item for item in ledger if item.get("job_id") == row.get("job_id")]
+    if len(matches) > 1:
+        raise ValueError("transaction ledger job is duplicated")
+    if matches and matches[0] != row:
+        raise ValueError("transaction ledger row conflicts")
+    baseline = [item for item in ledger if item.get("job_id") != row.get("job_id")]
+    return baseline, [*baseline, row]
+
+
 def require_active_reservation_policy(
     reservations: list[dict[str, object]],
     candidate_case_id: str | None = None,
@@ -1701,12 +1835,9 @@ def require_active_reservation_policy(
 def reservation_usage(paths: dict[str, Path]) -> tuple[float, float]:
     """Return actual and actively reserved current-epoch Stage I node-hours."""
 
-    actual = sum(float(row["actual_node_hours"]) for row in read_ledger(paths))
-    reserved = sum(
-        float(item["reserved_node_hours"])
-        for item in active_reservations(read_reservations(paths))
+    return require_reservation_budget(
+        read_ledger(paths), read_reservations(paths), "active Stage I reservation"
     )
-    return actual, reserved
 
 
 def refresh_summary(paths: dict[str, Path]) -> None:
@@ -1756,7 +1887,7 @@ def refresh_summary(paths: dict[str, Path]) -> None:
             f"- Historical E02 R17 high-resolution timing-pilot use: "
             f"`{COMPLETED_R17_HIGH_RESOLUTION_PILOT_NODE_HOURS:.6f}` node-hours",
             f"- Current E03 mapped-matrix planning envelope: "
-            f"`{MEASURED_STAGE_I_RESERVED_NODE_HOURS:.6f}` node-hours",
+            f"`{CURRENT_STAGE_I_RESERVED_NODE_HOURS:.6f}` node-hours",
             f"- {EXECUTION_EPOCH} Stage I actual use: `{actual:.6f}` node-hours",
             f"- Active segment reservations: `{reserved:.6f}` node-hours",
             f"- Unreserved E03 mapped-matrix remainder: "
@@ -2356,26 +2487,36 @@ def prepared_restart_inventory(manifest_path: Path,
     return paths
 
 
-def restart_time_marker(path: Path) -> float:
-    """Read the explicit physical-time marker from a restart parameter dump."""
+def restart_parameter_dump(path: Path) -> tuple[str, int]:
+    """Read restart parameter text and return its exact binary payload offset."""
 
-    marker = b"<par_end>"
+    marker = b"<par_end>\n"
     header = b""
     with path.open("rb") as stream:
-        while marker not in header and len(header) <= MAX_RESTART_PARAMETER_DUMP_BYTES:
-            block = stream.read(65536)
+        while marker not in header and len(header) < MAX_RESTART_PARAMETER_DUMP_BYTES:
+            block = stream.read(
+                min(4096, MAX_RESTART_PARAMETER_DUMP_BYTES - len(header))
+            )
             if not block:
                 break
             header += block
-    if len(header) > MAX_RESTART_PARAMETER_DUMP_BYTES:
-        raise ValueError(f"restart parameter dump is implausibly large: {path}")
     end = header.find(marker)
     if end < 0:
-        raise ValueError(f"restart parameter dump lacks <par_end>: {path}")
+        raise ValueError(
+            f"restart parameter dump lacks loadable <par_end> terminator: {path}"
+        )
+    payload_offset = end + len(marker)
     try:
         text = header[:end].decode("utf-8")
     except UnicodeDecodeError as error:
         raise ValueError(f"restart parameter dump is not UTF-8 text: {path}") from error
+    return text, payload_offset
+
+
+def restart_time_marker_text(path: Path) -> str:
+    """Read the explicit physical-time marker text from a restart parameter dump."""
+
+    text, _ = restart_parameter_dump(path)
     block = ""
     markers = []
     for original in text.splitlines():
@@ -2393,8 +2534,14 @@ def restart_time_marker(path: Path) -> float:
         raise ValueError(
             f"restart parameter dump must contain one time/restart_time marker: {path}"
         )
+    return markers[0]
+
+
+def restart_time_marker(path: Path) -> float:
+    """Read the explicit physical-time marker from a restart parameter dump."""
+
     try:
-        result = float(markers[0])
+        result = float(restart_time_marker_text(path))
     except ValueError as error:
         raise ValueError(f"restart time marker is not numeric: {path}") from error
     if not math.isfinite(result):
@@ -2417,6 +2564,91 @@ def restart_product_time(paths: list[Path],
     if any(abs(value - times[0]) > 1.0e-12 for value in times[1:]):
         raise ValueError("restart sibling physical-time markers disagree")
     return times[0]
+
+
+def restart_binary_abi(command: object) -> dict[str, object]:
+    """Return the qualified binary-restart ABI for one prepared executable."""
+
+    if not isinstance(command, dict):
+        raise ValueError("prepared manifest lacks command metadata")
+    key = (
+        command.get("executable_revision"),
+        command.get("executable_sha256"),
+    )
+    abi = QUALIFIED_RESTART_BINARY_ABIS.get(key)
+    if abi is None:
+        raise ValueError("prepared executable has no qualified binary-restart ABI")
+    return abi
+
+
+def restart_binary_time_encoding(path: Path, command: object) -> tuple[bytes, str]:
+    """Read encoded Mesh::time from a restart file using its qualified ABI."""
+
+    abi = restart_binary_abi(command)
+    _, payload_offset = restart_parameter_dump(path)
+    offset = payload_offset + int(abi["mesh_time_offset_after_parameter_dump"])
+    value_format = str(abi["mesh_time_format"])
+    value_size = struct.calcsize(value_format)
+    with path.open("rb") as stream:
+        stream.seek(offset)
+        encoded = stream.read(value_size)
+    if len(encoded) != value_size:
+        raise ValueError(f"restart binary header is truncated: {path}")
+    return encoded, value_format
+
+
+def restart_binary_time(path: Path, command: object) -> float:
+    """Read Mesh::time from a restart file using its qualified executable ABI."""
+
+    encoded, value_format = restart_binary_time_encoding(path, command)
+    value = float(struct.unpack(value_format, encoded)[0])
+    if not math.isfinite(value):
+        raise ValueError(f"restart binary physical time is not finite: {path}")
+    return value
+
+
+def authenticated_restart_product_time(
+    paths: list[Path], command: object,
+) -> dict[str, object]:
+    """Bind restart marker text to synchronized binary Mesh::time evidence."""
+
+    if not paths:
+        raise ValueError("restart product has no selected siblings")
+    abi = restart_binary_abi(command)
+    encodings = [restart_binary_time_encoding(path, command) for path in paths]
+    if any(encoded != encodings[0] for encoded in encodings[1:]):
+        raise ValueError("restart sibling binary physical times disagree")
+    binary_times = []
+    for encoded, value_format in encodings:
+        value = float(struct.unpack(value_format, encoded)[0])
+        if not math.isfinite(value):
+            raise ValueError("restart binary physical time is not finite")
+        binary_times.append(value)
+    marker_modes = []
+    for path, binary_time in zip(paths, binary_times):
+        marker_text = restart_time_marker_text(path)
+        try:
+            marker_time = float(marker_text)
+        except ValueError as error:
+            raise ValueError(f"restart time marker is not numeric: {path}") from error
+        if not math.isfinite(marker_time):
+            raise ValueError(f"restart time marker is not finite: {path}")
+        if marker_text == format(binary_time, ".17g"):
+            marker_modes.append("full_precision")
+        elif marker_text == format(binary_time, ".6g"):
+            marker_modes.append("legacy_default_precision")
+        else:
+            raise ValueError(
+                f"restart time marker does not authenticate binary physical time: {path}"
+            )
+    if any(mode not in abi["allowed_marker_modes"] for mode in marker_modes):
+        raise ValueError("restart time marker mode is not qualified for this executable")
+    if any(mode != marker_modes[0] for mode in marker_modes[1:]):
+        raise ValueError("restart sibling physical-time marker modes disagree")
+    return {
+        "binary_time": binary_times[0],
+        "marker_modes": marker_modes,
+    }
 
 
 def validate_prepared_resources(manifest: dict[str, object],
@@ -2496,6 +2728,34 @@ def require_reservation_matches_manifest(reservation: dict[str, object],
         raise ValueError("transaction reservation allocation differs from manifest")
 
 
+def historical_submitted_utility_transition_authorized(
+    manifest: dict[str, object],
+) -> bool:
+    """Admit only the reviewed pre-promotion R03 submission."""
+
+    command = manifest.get("command")
+    run = manifest.get("run")
+    if not isinstance(command, dict) or not isinstance(run, dict):
+        return False
+    utility = command.get("production_utility")
+    bundle = command.get("source_bundle")
+    if not isinstance(utility, dict) or not isinstance(bundle, dict):
+        return False
+    actual = {
+        "project_root": manifest.get("project_root"),
+        "state": manifest.get("state"),
+        "job_id": manifest.get("job_id"),
+        "case_id": run.get("case_id"),
+        "segment": run.get("segment"),
+        "production_utility_revision": utility.get("revision"),
+        "production_utility_sha256": utility.get("sha256"),
+        "source_bundle_sha256": bundle.get("sha256"),
+        "executable_revision": command.get("executable_revision"),
+        "executable_sha256": command.get("executable_sha256"),
+    }
+    return actual == HISTORICAL_SUBMITTED_R03_UTILITY_TRANSITION
+
+
 def authenticate_prepared_execution(manifest: dict[str, object],
                                     manifest_path: Path,
                                     allow_legacy_local: bool = False) -> None:
@@ -2538,11 +2798,14 @@ def authenticate_prepared_execution(manifest: dict[str, object],
     validate_prepared_resources(manifest, canonical_production=not allow_legacy_local)
     bundle = command.get("source_bundle")
     recorded = manifest.get("state") == "recorded"
+    reviewed_historical_submission = (
+        historical_submitted_utility_transition_authorized(manifest)
+    )
     authenticate_production_utility(
         command.get("production_utility"),
         source_bundle=bundle,
         allow_uncommitted=allow_legacy_local,
-        allow_historical=recorded,
+        allow_historical=recorded or reviewed_historical_submission,
     )
     batch_script = Path(str(paths.get("batch_script", ""))).resolve()
     if batch_script != (manifest_path.parent / "cgl_lf_stage_i.sbatch").resolve():
@@ -2557,7 +2820,7 @@ def authenticate_prepared_execution(manifest: dict[str, object],
         "batch_script_sha256"
     ):
         raise ValueError("prepared batch script normalized checksum has changed")
-    if not recorded:
+    if not recorded and not reviewed_historical_submission:
         expected_script = generated_batch_script(manifest, manifest_path)
         if normalized_batch_script_text(script_text) != normalized_batch_script_text(
             expected_script
@@ -2657,8 +2920,14 @@ def authenticate_prepared_execution(manifest: dict[str, object],
             if not allow_legacy_local:
                 raise ValueError("prepared restart lacks inspected parent metadata")
         else:
-            marker = restart_product_time(
-                restart_paths, allow_missing_marker=marker_bypass
+            marker = (
+                restart_product_time(restart_paths, allow_missing_marker=True)
+                if marker_bypass or allow_legacy_local
+                else float(
+                    authenticated_restart_product_time(
+                        restart_paths, command
+                    )["binary_time"]
+                )
             )
             try:
                 parent_final_time = float(parent["final_time"])
@@ -3193,9 +3462,17 @@ def verify_continuation_restart(
         raise ValueError("continuation must use the inspected terminal restart")
     revalidate_retained_product(terminal)
     restart_files = retained_product_paths(terminal)
-    restart_time = restart_product_time(
-        restart_files,
-        allow_missing_marker=allow_missing_restart_time_marker,
+    restart_time = (
+        restart_product_time(
+            restart_files,
+            allow_missing_marker=allow_missing_restart_time_marker,
+        )
+        if allow_missing_restart_time_marker or parent_root != DEFAULT_ROOT.resolve()
+        else float(
+            authenticated_restart_product_time(
+                restart_files, parent.get("command")
+            )["binary_time"]
+        )
     )
     try:
         final_time = float(inspection["final_time"])
@@ -3351,6 +3628,43 @@ def authenticate_production_queue(
         )
 
 
+def validate_queue_authentication_evidence(value: object, label: str) -> None:
+    """Require retained queue rows and their deterministic digest."""
+
+    if not isinstance(value, dict) or frozenset(value) != {
+        "checked_utc", "rows", "rows_sha256",
+    }:
+        raise ValueError(f"{label} has invalid queue authentication columns")
+    parse_utc_timestamp(value["checked_utc"], f"{label} checked_utc")
+    rows = value["rows"]
+    if (
+        not isinstance(rows, list)
+        or not all(isinstance(row, str) and row.strip() == row for row in rows)
+        or stable_json_sha256(rows) != value["rows_sha256"]
+    ):
+        raise ValueError(f"{label} has invalid queue authentication evidence")
+
+
+def authenticated_production_queue_evidence(
+    args: argparse.Namespace,
+    paths: dict[str, Path],
+    reservations: list[dict[str, object]],
+    offline_local_root: bool,
+) -> dict[str, object]:
+    """Query, authenticate, and retain one complete scheduler queue snapshot."""
+
+    rows = [
+        line for line in production_queue_output(args, offline_local_root).splitlines()
+        if line.strip()
+    ]
+    authenticate_production_queue(paths, reservations, rows)
+    return {
+        "checked_utc": utc_now(),
+        "rows": rows,
+        "rows_sha256": stable_json_sha256(rows),
+    }
+
+
 def validate_submission_fixture_options(args: argparse.Namespace,
                                         offline_local_root: bool) -> None:
     """Keep scheduler fixture injection and test bypass out of production."""
@@ -3486,11 +3800,9 @@ def submission_preflight(args: argparse.Namespace, manifest_path: Path,
     actual, reserved = reservation_usage(paths)
     if actual + reserved > CURRENT_STAGE_I_RESERVED_NODE_HOURS:
         raise ValueError("active Stage I reservation exceeds its ceiling")
-    lines = [line for line in production_queue_output(
-        args, offline_local_root
-    ).splitlines()
-             if line.strip()]
-    authenticate_production_queue(paths, reservations, lines)
+    initial_queue_authentication = authenticated_production_queue_evidence(
+        args, paths, reservations, offline_local_root
+    )
     conflicts = shared_root_campaign_conflicts(
         root, set(getattr(args, "allow_shared_root_campaign", []))
     )
@@ -3521,6 +3833,7 @@ def submission_preflight(args: argparse.Namespace, manifest_path: Path,
         "acknowledged_shared_root_campaigns": sorted(
             set(getattr(args, "allow_shared_root_campaign", []))
         ),
+        "initial_queue_authentication": initial_queue_authentication,
     }
     return paths, script, audit
 
@@ -3774,6 +4087,9 @@ def submit(args: argparse.Namespace) -> int:
         raise ValueError("--sbatch-output-file is restricted to offline validation")
     paths, script, audit = submission_preflight(
         args, manifest_path, manifest, run_slurm_test=True
+    )
+    audit["final_queue_authentication"] = authenticated_production_queue_evidence(
+        args, paths, read_reservations(paths), offline_local_root
     )
     transaction_path = write_submit_pending_transaction(
         paths, manifest_path, audit
@@ -4093,6 +4409,7 @@ def revalidate_inspection_inventory(manifest: dict[str, object],
 
 
 def revalidate_inspection_restart_times(inspection: dict[str, object],
+                                        manifest: dict[str, object] | None,
                                         allow_legacy_local: bool) -> None:
     """Reparse retained restart markers and bind the terminal product to final time."""
 
@@ -4103,10 +4420,27 @@ def revalidate_inspection_restart_times(inspection: dict[str, object],
         allow_legacy_local
         and inspection.get("restart_time_marker_bypass") is True
     )
-    parsed = [
-        restart_product_time(group, allow_missing_marker=bypass)
-        for group in groups
-    ]
+    schema_version = int(inspection.get("schema_version", 0))
+    if schema_version >= 4 and not bypass:
+        if not isinstance(manifest, dict):
+            raise ValueError(
+                "binary-authenticated inspection lacks prepared manifest"
+            )
+        authenticated = [
+            authenticated_restart_product_time(group, manifest.get("command"))
+            for group in groups
+        ]
+        parsed = [float(item["binary_time"]) for item in authenticated]
+        marker_modes = [item["marker_modes"] for item in authenticated]
+        if inspection.get("restart_time_marker_modes") != marker_modes:
+            raise ValueError(
+                "segment inspection restart marker authentication has changed"
+            )
+    else:
+        parsed = [
+            restart_product_time(group, allow_missing_marker=bypass)
+            for group in groups
+        ]
     retained = inspection.get("restart_times")
     if not isinstance(retained, list) or len(retained) != len(parsed):
         raise ValueError("segment inspection restart-time evidence is incomplete")
@@ -4163,7 +4497,7 @@ def revalidate_inspection_files(inspection: dict[str, object],
         and Path(str(manifest.get("project_root", ""))).resolve()
         != DEFAULT_ROOT.expanduser().resolve()
     )
-    revalidate_inspection_restart_times(inspection, allow_legacy_local)
+    revalidate_inspection_restart_times(inspection, manifest, allow_legacy_local)
     if manifest is not None:
         revalidate_inspection_inventory(manifest, inspection)
 
@@ -4321,13 +4655,25 @@ def inspect_segment(args: argparse.Namespace) -> int:
         for label in STRICT_LF_FAILURE_COLUMNS
     }
     snapshot_times = [binary_product_time(group) for group in snapshots]
-    restart_times = [
-        restart_product_time(
-            group,
-            allow_missing_marker=allow_missing_restart_time_marker,
-        )
-        for group in restarts
-    ]
+    if allow_missing_restart_time_marker or offline_local_root:
+        restart_times = [
+            restart_product_time(
+                group, allow_missing_marker=allow_missing_restart_time_marker
+            )
+            for group in restarts
+        ]
+        restart_time_marker_modes: list[list[str]] = []
+    else:
+        authenticated_restarts = [
+            authenticated_restart_product_time(group, manifest.get("command"))
+            for group in restarts
+        ]
+        restart_times = [
+            float(item["binary_time"]) for item in authenticated_restarts
+        ]
+        restart_time_marker_modes = [
+            list(item["marker_modes"]) for item in authenticated_restarts
+        ]
     restart_records = [retained_product(group) for group in restarts]
     restart_markers_verified = bool(restart_times) and all(
         value is not None for value in restart_times
@@ -4378,7 +4724,7 @@ def inspect_segment(args: argparse.Namespace) -> int:
         )
     )
     inspection: dict[str, object] = {
-        "schema_version": 3,
+        "schema_version": 3 if offline_local_root else 4,
         "execution_epoch": EXECUTION_EPOCH,
         "inspected_utc": utc_now(),
         "manifest": str(manifest_path),
@@ -4397,6 +4743,7 @@ def inspect_segment(args: argparse.Namespace) -> int:
         "snapshot_times": snapshot_times,
         "restarts": restart_records,
         "restart_times": restart_times,
+        "restart_time_marker_modes": restart_time_marker_modes,
         "terminal_restart": terminal_restart,
         "terminal_restart_time": terminal_restart_time,
         "restart_time_marker_bypass": (
@@ -5240,21 +5587,13 @@ def reconcile_report(root: Path) -> dict[str, object]:
     except ValueError as error:
         issues.append(f"active reservation policy is invalid: {error}")
     try:
-        actual = sum(float(row["actual_node_hours"]) for row in ledger)
-        reserved = sum(float(item["reserved_node_hours"]) for item in active)
-    except (KeyError, TypeError, ValueError):
-        issues.append("active reservation usage is invalid")
-    else:
-        if (
-            not math.isfinite(actual)
-            or not math.isfinite(reserved)
-            or actual + reserved > CURRENT_STAGE_I_RESERVED_NODE_HOURS
-        ):
-            issues.append("active Stage I reservation exceeds its ceiling")
-        if actual + reserved > PROJECT_BUDGET_NODE_HOURS:
-            issues.append(
-                "active Stage I reservation exceeds the incremental project ceiling"
-            )
+        require_retained_r17_policy(paths, reservations)
+    except ValueError as error:
+        issues.append(f"retained R17 policy is invalid: {error}")
+    try:
+        require_reservation_budget(ledger, reservations, "active Stage I reservation")
+    except ValueError as error:
+        issues.append(str(error))
 
     reservations_by_manifest: dict[Path, list[dict[str, object]]] = {}
     for reservation in reservations:

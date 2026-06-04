@@ -13,6 +13,7 @@
 #include <cstdlib>
 #include <iomanip>
 #include <iostream>
+#include <limits>
 #include <sstream>
 #include <string>
 #include <utility> // make_pair
@@ -194,7 +195,10 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   }
   pin->SetInteger(out_params.block_name, "file_number", out_params.file_number);
   pin->SetReal(out_params.block_name, "last_time", out_params.last_time);
-  pin->SetReal("time", "restart_time", pm->time);
+  std::stringstream ss_restart_time;
+  ss_restart_time << std::setprecision(std::numeric_limits<Real>::max_digits10)
+                  << pm->time;
+  pin->SetString("time", "restart_time", ss_restart_time.str());
 
   // create string holding input parameters (copy of input file)
   std::stringstream ost;

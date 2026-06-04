@@ -22,8 +22,19 @@ Frontier case lanes may run concurrently.
 ### 1.1 Acceleration Transition Status
 
 The bounded-concurrency controller transition is implemented in the live
-working tree and passes the focused Stage I helper subset (`84 passed, 35
-deselected`). The implementation:
+working tree. Commit `9a33f375f` established the initial four-lane policy, and
+the required follow-up hardening closes three independently reviewed gaps
+before promotion:
+
+- prospective replay-budget validation before any ledger append,
+  reservation-store rewrite, or manifest rewrite, while permitting the durable
+  recovery journal;
+- a second authenticated queue query immediately before the durable
+  submit-pending barrier and real `sbatch`;
+- retained R17-last lifecycle enforcement during replay and reconciliation,
+  not only during preparation.
+
+The combined implementation:
 
 - permits up to four active distinct `R03` through `R16` case lanes;
 - preserves at most one prepared packet globally while allowing already
@@ -32,8 +43,8 @@ deselected`). The implementation:
   reservation manifests and rejects unknown user jobs;
 - authorizes `1/2/4`-node profiles for `R04` through `R15`, `1/2` for `R16`,
   one node for `R03`, and eight exclusive nodes for `R17`;
-- retains summed reservation accounting, durable replay validation, root-lock
-  serialization, and R17-last enforcement.
+- retains summed reservation accounting, prospective durable replay
+  validation, root-lock serialization, and retained R17-last enforcement.
 
 This is staged source code, not a production promotion. Before a shared-root
 writer uses the transition, commit, independently review, archive, checksum,
@@ -191,7 +202,11 @@ audit-metadata defect with a recoverable checkpoint candidate, not evidence of
 a scientifically invalid checkpoint. Recovery still requires an explicit
 fail-closed controller transition before any continuation.
 
-The current shared-root reconciliation is internally consistent:
+The last promoted helper reconciled the shared root cleanly before the
+acceleration work. The current live checkout intentionally fails closed during
+reconciliation until the submitted-R03 helper transition, binary-aware restart
+recovery, controller hardening, archive, and catalog promotion complete. The
+retained store itself remains:
 
 ```text
 ledger rows:         29
@@ -657,10 +672,10 @@ policy:
 - exactly one node for every canonical `R02` through `R16` segment;
 - exactly eight nodes for `R17`.
 
-The surgical transition is implemented and locally verified ahead of the R03
-recovery gate so it does not remain on the critical path. After the first
-accepted R03 continuation or fallback prefix and reviewed recost, promote the
-reviewed controller revision that:
+The combined binary-recovery and acceleration revision is implemented and
+locally verified ahead of the R03 recovery gate. Promote it before inspecting
+job `4762472`, so the binary-aware disposition and subsequent concurrent
+campaign use the reviewed controller revision that:
 
 1. permits multiple active reservations only when they belong to distinct
    `R03` through `R16` case lanes;
@@ -677,6 +692,15 @@ reviewed controller revision that:
 8. keeps `R17` fixed at eight nodes, requires accepted `t = 10` predecessors,
    and permanently locks out lower-resolution preparation after R17 starts;
 9. replays historical one-node records without rewriting their provenance.
+10. validates current, prior, and payload reservation snapshots against the
+    promoted Stage I envelope and the `4000` node-hour project ceiling before
+    any ledger append, reservation-store rewrite, or manifest rewrite, while
+    permitting the durable recovery journal and counting a recorded journal
+    row exactly once during replay;
+11. retains authenticated initial and final queue snapshots, with the final
+    query immediately before the durable ambiguity barrier and real `sbatch`;
+12. rechecks the R17-last invariant during every lifecycle replay and
+    reconciliation.
 
 Complete focused controller fixtures proving:
 
@@ -686,6 +710,12 @@ Complete focused controller fixtures proving:
 - summed reservations and the lane cap fail closed;
 - an exact authenticated Stage I queue set is accepted while one unknown user
   job is rejected;
+- a queue change between preflight and real `sbatch` is rejected before the
+  ambiguity barrier;
+- prepared and recorded replay budget overruns fail before any ledger append,
+  reservation-store rewrite, or manifest rewrite;
+- R17 submitted, recorded, and reconciliation paths fail closed without
+  complete exact-`t = 10` predecessors;
 - a pending transaction or orphaned run directory still blocks mutation;
 - approved `1`, `2`, and `4` node profiles replay correctly where authorized,
   while unapproved or decomposition-infeasible profiles are rejected;
@@ -743,8 +773,7 @@ Treat node count as a measured optimization variable:
   immediate recovery and cost-calibration gate;
 - qualify `1`, `2`, and `4` node profiles promptly for the standard-layout
   `R04` through `R15` cases;
-- qualify `1` and `2` node profiles for lower-resolution `R16`, and expand to
-  `4` only if meshblock decomposition and measured efficiency justify it;
+- qualify `1` and `2` node profiles for lower-resolution `R16`;
 - permit a larger R04-R16 profile only after explicit decomposition,
   throughput, I/O, budget, and replay review;
 - keep R17 at its separately qualified eight-node profile.
@@ -804,19 +833,22 @@ work once a family profile is stable.
 
 After the R03 recovery prefix and concurrency transition close:
 
-1. Run compact standard-layout `1/2/4`-node and R16 `1/2`-node scaling packets
-   in qualification namespaces or reviewed fresh-prefix pilot records. Do not
-   fork accepted production lineages merely to benchmark scaling.
+1. Run qualification-only fresh `R04` packets from `0 -> 0.25` on `1`, `2`,
+   and `4` nodes, plus fresh `R16` packets from `0 -> 1.50` on `1` and `2`
+   nodes. Drain these packets before production preflight. Select `Nstd` and
+   `N16` from elapsed time, node-hours, decomposition balance, I/O behavior,
+   and ranked-output completeness. Do not fork accepted production lineages
+   merely to benchmark scaling.
 2. Start an initial four-lane packet wave using `R03`, `R04`, `R12`, and
    `R16`.
 3. Let that first packet wave drain, then promote the authoritative recost,
    allocation-profile table, and storage audit.
-4. Raise the lane cap from four toward six when measured scheduler behavior,
-   filesystem pressure, storage growth, and budget headroom remain healthy.
+4. Keep the controller cap at four lanes. Any increase requires a separate
+   reviewed controller transition.
 5. Refill a lane immediately after its accepted segment is recorded if the
    provisional model, storage monitor, and reservation sum remain healthy.
-6. Fill subsequent lanes from `R05` through `R11` and `R13` through `R15`,
-   adding `R06` promptly as the passive beta-10 calibration lane.
+6. Fill subsequent lanes in this order:
+   `R06 -> R10 -> R11 -> R13 -> R05 -> R07 -> R14 -> R15 -> R08 -> R09`.
 7. Drain periodically for authoritative recost barriers and always before a
    lane-cap or allocation-profile increase.
 8. Drain every lower-resolution lane, publish the final predecessor recost,
@@ -922,13 +954,20 @@ the first wave and at every drained-wave barrier:
 Job `4762472` consumes `6613 / 3600 = 1.836944` node-hours. Account for it,
 then update the Stage I projection from measured R03 throughput.
 
-The F-112 projection has limited margin inside the current `900` node-hour
-Stage I reservation. R03's observed rate implies that the old matrix estimate
-is already likely to exceed that reservation before contingency. The
-incremental project ceiling is `4000` node-hours. Recompute the matrix now and
-promote a bounded reviewed reservation with useful headroom, likely in the
-`1100` to `1200` node-hour range if the refreshed arithmetic confirms it. Do
-not submit the next production segment under a stale `900` node-hour envelope.
+The F-112 projection had limited margin inside the historical `900` node-hour
+Stage I reservation. The measured R03 rate gives the conservative refreshed
+transition arithmetic:
+
+```text
+measured conservative projection: 1217.254885 node-hours
+promoted Stage I envelope:         1400.000000 node-hours
+remaining planning headroom:        182.745115 node-hours
+incremental project ceiling:       4000.000000 node-hours
+```
+
+Promote the reviewed `1400` node-hour envelope before the next production
+submission. Increase it again only when measured scaling or family timing
+requires another reviewed transition.
 
 ### 11.2 Reservation Transition
 
@@ -1207,14 +1246,15 @@ into a large documentation rewrite.
 - [ ] Reconcile to zero active reservations and `issues = []`.
 - [ ] Prepare and review salvaged R03 `t = 0.31282347945569927` to `0.5`, or
       fresh fallback `t = 0` to `0.25`.
-- [ ] Start the scoped restart-marker precision patch in parallel.
-- [ ] Recast and promote the reviewed Stage I budget reservation before the
-      next submission.
+- [x] Implement the scoped restart-marker precision patch in parallel.
+- [ ] Promote the reviewed `1400` node-hour Stage I budget reservation before
+      the next submission.
 - [x] Implement and run the first focused regression tranche for the
       bounded-concurrency controller transition.
 - [ ] Independently review, archive, catalog, and promote the
       bounded-concurrency controller transition.
-- [ ] Qualify standard-layout `1/2/4`-node and R16 `1/2`-node scaling packets.
+- [ ] Run qualification-only fresh R04 `1/2/4`-node and R16 `1/2`-node
+      scaling packets.
 - [ ] Request raw curves, FFT-normalization details, or donor diagnostics from
       Stephen Majeski in parallel.
 
@@ -1223,7 +1263,7 @@ into a large documentation rewrite.
 - [ ] Launch the initial four-lane `R03`, `R04`, `R12`, `R16` wave.
 - [ ] Promote the first drained-wave recost, storage audit, and node-profile
       table.
-- [ ] Raise the lane cap toward six if measured evidence supports it.
+- [ ] Keep the rolling campaign at the reviewed four-lane cap.
 - [ ] Complete and bundle `R03`.
 - [ ] Complete and bundle `R04`.
 - [ ] Complete and bundle `R05`.
@@ -1266,9 +1306,9 @@ evidence from Stephen Majeski. The shortest robust path is:
 2. continue salvaged R03 to exact `t = 0.5`, then use output-aligned
    quarter-unit endpoints;
 3. promote bounded multi-case concurrency and reviewed multi-node profiles;
-4. run R03 through R16 as four-to-six concurrent case lanes while serializing
+4. run R03 through R16 as at most four concurrent case lanes while serializing
    shared-root mutations and preserving one in-flight segment per case;
-5. use wave barriers for authoritative recost, storage review, and lane-cap
-   ratchets while analysis continues in parallel;
+5. use wave barriers for authoritative recost, storage review, and allocation
+   review while analysis continues in parallel;
 6. execute R17 last with eight-node, recosted exact increments;
 7. assemble and review the final campaign bundle.

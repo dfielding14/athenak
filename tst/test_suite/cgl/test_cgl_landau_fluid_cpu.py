@@ -6,9 +6,11 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import re
 import shlex
 import shutil
 import stat
+import struct
 import subprocess
 import sys
 from types import SimpleNamespace
@@ -413,6 +415,29 @@ def test_cgl_lf_amr_conserved_prolongation_stays_admissible():
         energy_residual = abs(mhd["tot-E"][-1] - mhd["tot-E"][0]) / energy_scale
         assert energy_residual < 5.0e-3
     finally:
+        _cleanup()
+
+
+def test_cgl_lf_restart_marker_round_trips_terminal_time():
+    try:
+        basename = "cgl_ci_restart_precision"
+        _run(
+            "cgl_lf_restart.athinput",
+            basename,
+            "time/nlim=1",
+            "time/cfl_number=0.371234567890123",
+        )
+        restart_paths = sorted(Path("rst").glob(f"{basename}.*.rst"))
+        assert restart_paths, "partial run did not write a restart checkpoint"
+        marker = re.search(
+            rb"(?m)^restart_time\s*=\s*(\S+)",
+            restart_paths[-1].read_bytes()[:40000],
+        )
+        assert marker is not None, "restart checkpoint did not contain time/restart_time"
+        terminal_time = testutils.athena_read.hst(f"{basename}.mhd.hst")["time"][-1]
+        assert float(marker.group(1)) == terminal_time
+    finally:
+        shutil.rmtree("rst", ignore_errors=True)
         _cleanup()
 
 
@@ -1662,6 +1687,15 @@ def test_cgl_lf_stage_i_hardens_identifiers_overrides_json_and_locking(
         )
         policy.setattr(
             stage_i,
+            "authenticated_production_queue_evidence",
+            lambda *_args, **_kwargs: {
+                "checked_utc": stage_i.utc_now(),
+                "rows": [],
+                "rows_sha256": stage_i.stable_json_sha256([]),
+            },
+        )
+        policy.setattr(
+            stage_i,
             "write_submit_pending_transaction",
             lambda *_args: tmp_path / "submit-pending.json",
         )
@@ -1851,6 +1885,347 @@ def test_cgl_lf_stage_i_requires_retained_source_bundle_provenance(tmp_path):
         )
 
 
+def test_cgl_lf_stage_i_authenticates_legacy_restart_marker_with_binary_time(
+    tmp_path,
+):
+    spec = importlib.util.spec_from_file_location(
+        "cgl_lf_stage_i_restart_binary_test", PAPER_STAGE_I_TOOL
+    )
+    assert spec is not None and spec.loader is not None
+    stage_i = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = stage_i
+    spec.loader.exec_module(stage_i)
+
+    executable_revision, executable_sha256 = next(
+        iter(stage_i.QUALIFIED_RESTART_BINARY_ABIS)
+    )
+    command = {
+        "executable_revision": executable_revision,
+        "executable_sha256": executable_sha256,
+    }
+    binary_time = 0.31282347945569927
+    offset = stage_i.QUALIFIED_RESTART_BINARY_ABIS[
+        executable_revision, executable_sha256
+    ]["mesh_time_offset_after_parameter_dump"]
+    assert offset == 232
+
+    def write_restart(path, marker, value, prefix=b""):
+        path.write_bytes(
+            prefix
+            + f"<time>\nrestart_time = {marker}\n<par_end>\n".encode()
+            + b"\0" * offset
+            + struct.pack("<d", value)
+        )
+
+    restart_a = tmp_path / "rank_00000000.rst"
+    restart_b = tmp_path / "rank_00000001.rst"
+    write_restart(restart_a, "0.312823", binary_time)
+    write_restart(restart_b, "0.312823", binary_time)
+    authenticated = stage_i.authenticated_restart_product_time(
+        [restart_a, restart_b], command
+    )
+    assert authenticated["binary_time"] == binary_time
+    assert authenticated["marker_modes"] == [
+        "legacy_default_precision", "legacy_default_precision",
+    ]
+
+    write_restart(restart_b, "0.31282347945569927", binary_time)
+    with pytest.raises(ValueError, match="marker modes disagree"):
+        stage_i.authenticated_restart_product_time([restart_a, restart_b], command)
+    write_restart(restart_a, "0.31282347945569927", binary_time)
+    assert stage_i.authenticated_restart_product_time(
+        [restart_a, restart_b], command
+    )["marker_modes"] == ["full_precision", "full_precision"]
+    write_restart(restart_b, "0.31282347945569927", binary_time + 5.0e-13)
+    with pytest.raises(ValueError, match="binary physical times disagree"):
+        stage_i.authenticated_restart_product_time([restart_a, restart_b], command)
+    write_restart(restart_b, "0.312824", binary_time)
+    with pytest.raises(ValueError, match="does not authenticate"):
+        stage_i.authenticated_restart_product_time([restart_a, restart_b], command)
+    with pytest.raises(ValueError, match="no qualified binary-restart ABI"):
+        stage_i.authenticated_restart_product_time(
+            [restart_a], {**command, "executable_sha256": "0" * 64}
+        )
+    prefix = b"<time>\nrestart_time = 1\n"
+    padding = b"#" * (
+        stage_i.MAX_RESTART_PARAMETER_DUMP_BYTES
+        - len(prefix)
+        - len(b"<par_end>\n")
+    )
+    boundary = tmp_path / "boundary.rst"
+    boundary.write_bytes(
+        prefix + padding + b"<par_end>\n" + b"\0" * offset + struct.pack("<d", 1.0)
+    )
+    assert stage_i.restart_binary_time(boundary, command) == 1.0
+    oversized = tmp_path / "oversized.rst"
+    oversized.write_bytes(
+        prefix + padding + b"#<par_end>\n"
+        + b"\0" * offset + struct.pack("<d", 1.0)
+    )
+    with pytest.raises(ValueError, match="lacks loadable"):
+        stage_i.restart_binary_time(oversized, command)
+
+
+def test_cgl_lf_stage_i_authorizes_only_reviewed_historical_r03_submission():
+    spec = importlib.util.spec_from_file_location(
+        "cgl_lf_stage_i_historical_r03_test", PAPER_STAGE_I_TOOL
+    )
+    assert spec is not None and spec.loader is not None
+    stage_i = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = stage_i
+    spec.loader.exec_module(stage_i)
+
+    expected = stage_i.HISTORICAL_SUBMITTED_R03_UTILITY_TRANSITION
+    manifest = {
+        "project_root": expected["project_root"],
+        "state": expected["state"],
+        "job_id": expected["job_id"],
+        "run": {
+            "case_id": expected["case_id"],
+            "segment": expected["segment"],
+        },
+        "command": {
+            "production_utility": {
+                "revision": expected["production_utility_revision"],
+                "sha256": expected["production_utility_sha256"],
+            },
+            "source_bundle": {"sha256": expected["source_bundle_sha256"]},
+            "executable_revision": expected["executable_revision"],
+            "executable_sha256": expected["executable_sha256"],
+        },
+    }
+    assert stage_i.historical_submitted_utility_transition_authorized(manifest)
+    manifest["job_id"] = "4762473"
+    assert not stage_i.historical_submitted_utility_transition_authorized(manifest)
+
+
+def test_cgl_lf_stage_i_rejects_prospective_budget_overruns_and_counts_rows_once(
+    tmp_path, monkeypatch
+):
+    spec = importlib.util.spec_from_file_location(
+        "cgl_lf_stage_i_budget_replay_test", PAPER_STAGE_I_TOOL
+    )
+    assert spec is not None and spec.loader is not None
+    stage_i = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = stage_i
+    spec.loader.exec_module(stage_i)
+
+    reservation = {"state": "prepared", "reserved_node_hours": 1.0 / 3.0}
+    with pytest.raises(ValueError, match="Stage I reservation ceiling"):
+        stage_i.require_reservation_budget(
+            [{"actual_node_hours": "1399.75"}],
+            [reservation],
+            "prospective fixture",
+        )
+    monkeypatch.setattr(stage_i, "CURRENT_STAGE_I_RESERVED_NODE_HOURS", 5000.0)
+    with pytest.raises(ValueError, match="incremental project ceiling"):
+        stage_i.require_reservation_budget(
+            [{"actual_node_hours": "3999.75"}],
+            [reservation],
+            "prospective fixture",
+        )
+
+    paths = stage_i.initialize(tmp_path / "root")
+    row = {"job_id": "123", "actual_node_hours": "0.25"}
+    monkeypatch.setattr(stage_i, "read_ledger", lambda _paths: [row])
+    baseline, prospective = stage_i.transaction_ledger_views(paths, row)
+    assert baseline == []
+    assert prospective == [row]
+
+
+def test_cgl_lf_stage_i_replay_budget_gate_precedes_controlled_writes(
+    tmp_path, monkeypatch
+):
+    spec = importlib.util.spec_from_file_location(
+        "cgl_lf_stage_i_replay_apply_budget_test", PAPER_STAGE_I_TOOL
+    )
+    assert spec is not None and spec.loader is not None
+    stage_i = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = stage_i
+    spec.loader.exec_module(stage_i)
+
+    paths = stage_i.initialize(tmp_path / "root")
+    manifest_path = (
+        paths["runs"] / "R03" / "s_replay"
+        / "manifest" / "prepared_run.json"
+    )
+    journal = paths["transactions"] / "replay.json"
+    journal.write_text("{}\n")
+    row = {"job_id": "123", "actual_node_hours": "0.25"}
+    transaction = {
+        "kind": "recorded",
+        "manifest_path": str(manifest_path),
+        "manifest": {},
+        "reservations": [{
+            "state": "submitted",
+            "reserved_node_hours": 0.1,
+        }],
+        "ledger_row": row,
+    }
+    monkeypatch.setattr(stage_i, "read_transaction", lambda *_args: transaction)
+    monkeypatch.setattr(
+        stage_i, "validate_transaction_reservation_baseline", lambda *_args: None
+    )
+    monkeypatch.setattr(
+        stage_i,
+        "read_ledger",
+        lambda _paths: [{"job_id": "seed", "actual_node_hours": "1399.75"}],
+    )
+    writes = []
+    appends = []
+    monkeypatch.setattr(stage_i, "write_json", lambda *args: writes.append(args))
+    monkeypatch.setattr(
+        stage_i, "append_ledger_row", lambda *args: appends.append(args)
+    )
+    with pytest.raises(ValueError, match="Stage I reservation ceiling"):
+        stage_i.apply_transaction(paths, journal)
+    assert writes == []
+    assert appends == []
+    assert journal.is_file()
+
+    transaction["reservations"] = []
+    monkeypatch.setattr(stage_i, "read_ledger", lambda _paths: [row])
+    unlinked = []
+    monkeypatch.setattr(stage_i, "refresh_summary", lambda *_args: None)
+    monkeypatch.setattr(stage_i, "unlink_durable", lambda path: unlinked.append(path))
+    stage_i.apply_transaction(paths, journal)
+    assert appends == []
+    assert writes == [
+        (paths["reservations"], []),
+        (manifest_path, {}),
+    ]
+    assert unlinked == [journal]
+
+
+def test_cgl_lf_stage_i_retains_r17_last_across_lifecycle(tmp_path, monkeypatch):
+    spec = importlib.util.spec_from_file_location(
+        "cgl_lf_stage_i_retained_r17_test", PAPER_STAGE_I_TOOL
+    )
+    assert spec is not None and spec.loader is not None
+    stage_i = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = stage_i
+    spec.loader.exec_module(stage_i)
+
+    paths = stage_i.initialize(tmp_path / "root")
+    monkeypatch.setattr(stage_i, "DEFAULT_ROOT", paths["root"])
+    monkeypatch.setattr(stage_i, "accepted_case_lineage", lambda *_args: [])
+    with pytest.raises(ValueError, match="R17 must remain last"):
+        stage_i.require_retained_r17_policy(
+            paths, [{"case_id": "R17", "state": "submitted"}]
+        )
+
+    r17 = paths["runs"] / "R17" / "s00" / "manifest" / "prepared_run.json"
+    r17.parent.mkdir(parents=True)
+    r17.write_text("{}\n")
+    monkeypatch.setattr(
+        stage_i,
+        "accepted_case_lineage",
+        lambda _paths, _case_id: [{"scientific_inspection": {"final_time": 10.0}}],
+    )
+    with pytest.raises(ValueError, match="active lower-resolution lanes"):
+        stage_i.require_retained_r17_policy(
+            paths, [{"case_id": "R03", "state": "submitted"}]
+        )
+
+
+def test_cgl_lf_stage_i_rejects_late_r17_replay_and_reconcile(
+    tmp_path, monkeypatch
+):
+    spec = importlib.util.spec_from_file_location(
+        "cgl_lf_stage_i_r17_replay_test", PAPER_STAGE_I_TOOL
+    )
+    assert spec is not None and spec.loader is not None
+    stage_i = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = stage_i
+    spec.loader.exec_module(stage_i)
+
+    root = tmp_path / "root"
+    paths = stage_i.initialize(root)
+    monkeypatch.setattr(stage_i, "DEFAULT_ROOT", root)
+    monkeypatch.setattr(stage_i, "accepted_case_lineage", lambda *_args: [])
+    manifest_path = (
+        paths["runs"] / "R17" / "s00"
+        / "manifest" / "prepared_run.json"
+    )
+
+    def reservation(state):
+        record = {
+            "execution_epoch": stage_i.EXECUTION_EPOCH,
+            "manifest": str(manifest_path),
+            "case_id": "R17",
+            "case_name": "case",
+            "segment": "s00",
+            "nodes": 8,
+            "requested_walltime": "00:10:00",
+            "reserved_node_hours": 8.0 / 6.0,
+            "state": state,
+            "prepared_utc": stage_i.utc_now(),
+            "execution_intent_sha256": "a" * 64,
+        }
+        if state in {"submitted", "recorded"}:
+            record["job_id"] = "321"
+        if state == "recorded":
+            record["actual_node_hours"] = 0.25
+            record["result"] = "clean_partial"
+        return record
+
+    def write_transaction(kind, prior, payload):
+        journal = paths["transactions"] / f"r17-{kind}.json"
+        value = {
+            "schema_version": 1,
+            "execution_epoch": stage_i.EXECUTION_EPOCH,
+            "transaction_id": journal.stem,
+            "kind": kind,
+            "created_utc": stage_i.utc_now(),
+            "manifest_path": str(manifest_path),
+            "prior_reservations": [prior],
+            "prior_reservations_sha256": stage_i.stable_json_sha256([prior]),
+            "manifest": {
+                "execution_epoch": stage_i.EXECUTION_EPOCH,
+                "project_root": str(root),
+                "state": kind,
+                "run": {
+                    "case_id": "R17",
+                    "case_name": "case",
+                    "segment": "s00",
+                },
+            },
+            "reservations": [payload],
+            "ledger_row": None,
+        }
+        if kind == "submitted":
+            value.update({
+                "prepared_manifest_sha256": "b" * 64,
+                "submission_audit": {},
+                "job_id": "321",
+                "submitted_recorded_utc": stage_i.utc_now(),
+            })
+        stage_i.write_json(journal, value)
+        return journal
+
+    submitted = reservation("submitted")
+    submitted_journal = write_transaction(
+        "submitted", reservation("prepared"), submitted
+    )
+    with pytest.raises(ValueError, match="R17 must remain last"):
+        stage_i.read_transaction(paths, submitted_journal)
+    submitted_journal.unlink()
+
+    recorded_journal = write_transaction(
+        "recorded", submitted, reservation("recorded")
+    )
+    with pytest.raises(ValueError, match="R17 must remain last"):
+        stage_i.read_transaction(paths, recorded_journal)
+    recorded_journal.unlink()
+
+    stage_i.write_json(paths["reservations"], [submitted])
+    report = stage_i.reconcile_report(root)
+    assert any(
+        issue.startswith("retained R17 policy is invalid: R17 must remain last")
+        for issue in report["issues"]
+    )
+
+
 def test_cgl_lf_stage_i_authenticates_historical_production_utility(
     tmp_path, monkeypatch
 ):
@@ -1991,13 +2366,25 @@ def test_cgl_lf_stage_i_authenticates_historical_production_utility(
     stage_i.authenticate_prepared_execution(
         manifest, manifest_path, allow_legacy_local=True
     )
-    for state in ("prepared", "submitted"):
-        with pytest.raises(ValueError, match="checksum has changed"):
-            stage_i.authenticate_prepared_execution(
-                {**manifest, "state": state},
-                manifest_path,
-                allow_legacy_local=True,
-            )
+    with pytest.raises(ValueError, match="checksum has changed"):
+        stage_i.authenticate_prepared_execution(
+            {**manifest, "state": "prepared"},
+            manifest_path,
+            allow_legacy_local=True,
+        )
+    submitted = {**manifest, "state": "submitted"}
+    with pytest.raises(ValueError, match="checksum has changed"):
+        stage_i.authenticate_prepared_execution(
+            submitted, manifest_path, allow_legacy_local=True,
+        )
+    monkeypatch.setattr(
+        stage_i,
+        "historical_submitted_utility_transition_authorized",
+        lambda candidate: candidate.get("state") == "submitted",
+    )
+    stage_i.authenticate_prepared_execution(
+        submitted, manifest_path, allow_legacy_local=True,
+    )
 
     bundle.write_bytes(bundle.read_bytes() + b"tampered\n")
     with pytest.raises(ValueError, match="source bundle checksum has changed"):
@@ -2036,7 +2423,12 @@ def test_cgl_lf_stage_i_isolates_epoch_and_checks_all_shared_root_jobs(
     assert stage_i.COMPLETED_R02_STANDARD_LAYOUT_PILOT_NODE_HOURS == 0.473333
     assert stage_i.COMPLETED_R17_HIGH_RESOLUTION_PILOT_NODE_HOURS == 4.235556
     assert stage_i.MEASURED_STAGE_I_RESERVED_NODE_HOURS == 900.0
-    assert stage_i.CURRENT_STAGE_I_RESERVED_NODE_HOURS == 900.0
+    assert stage_i.PROMOTED_STAGE_I_RESERVED_NODE_HOURS == 1400.0
+    assert stage_i.CURRENT_STAGE_I_RESERVED_NODE_HOURS == 1400.0
+    assert (
+        "- Current E03 mapped-matrix planning envelope: `1400.000000` node-hours"
+        in paths["summary"].read_text()
+    )
     assert stage_i.MAX_SEGMENT_SECONDS == 2 * 60 * 60
     assert stage_i.R17_CASE_ID == "R17"
     assert stage_i.MAX_ACTIVE_STAGE_I_SEGMENTS == 4
@@ -2546,6 +2938,15 @@ def test_cgl_lf_stage_i_isolates_epoch_and_checks_all_shared_root_jobs(
     with pytest.raises(ValueError, match="another user job is queued"):
         stage_i.check_submit(args)
     queue.write_text(overlap_queue_row)
+    for invalid_row in (
+        f"321|debug|RUNNING|{stage_i.expected_job_name(overlap_manifest)}",
+        "321|batch|RUNNING|wrong_name",
+        overlap_queue_row.strip() + "\n" + overlap_queue_row.strip(),
+    ):
+        with pytest.raises(ValueError, match="another user job is queued"):
+            stage_i.authenticate_production_queue(
+                paths, reservations, invalid_row.splitlines()
+            )
 
     shared_manifest = (
         root / "runs" / "exploratory" / "manifest" / "prepared_run.json"
@@ -2813,7 +3214,7 @@ def test_cgl_lf_stage_i_qualification_token_binds_corrected_build(tmp_path):
         stage_i.approve_qualification(approval_args)
 
 
-def test_cgl_lf_stage_i_recovers_ambiguous_atomic_submit(tmp_path):
+def test_cgl_lf_stage_i_recovers_ambiguous_atomic_submit(tmp_path, monkeypatch):
     spec = importlib.util.spec_from_file_location(
         "cgl_lf_stage_i_submit_recovery_test", PAPER_STAGE_I_TOOL
     )
@@ -2882,6 +3283,11 @@ def test_cgl_lf_stage_i_recovers_ambiguous_atomic_submit(tmp_path):
     with pytest.raises(ValueError, match="did not return one numeric job ID"):
         stage_i.submit(args)
     assert len(stage_i.pending_transaction_paths(paths)) == 1
+    pending = stage_i.read_transaction(
+        paths, stage_i.pending_transaction_paths(paths)[0]
+    )
+    assert "initial_queue_authentication" in pending["submission_audit"]
+    assert "final_queue_authentication" in pending["submission_audit"]
     assert json.loads(manifest_path.read_text())["state"] == "prepared"
     assert stage_i.recover_submit(SimpleNamespace(
         manifest=str(manifest_path),
@@ -2904,6 +3310,22 @@ def test_cgl_lf_stage_i_recovers_ambiguous_atomic_submit(tmp_path):
     assert cleared["state"] == "prepared"
     assert cleared["submission_recovery_notes"]
     assert not stage_i.pending_transaction_paths(paths)
+
+    paths, manifest_path, args = prepared_fixture(tmp_path / "race", "s02")
+    Path(args.sbatch_output_file).write_text("12345\n")
+    before_manifest = manifest_path.read_text()
+    before_reservations = paths["reservations"].read_text()
+    queue_results = iter(["", "999|batch|RUNNING|unrelated_job\n"])
+    monkeypatch.setattr(
+        stage_i,
+        "production_queue_output",
+        lambda *_args, **_kwargs: next(queue_results),
+    )
+    with pytest.raises(ValueError, match="another user job is queued"):
+        stage_i.submit(args)
+    assert not stage_i.pending_transaction_paths(paths)
+    assert manifest_path.read_text() == before_manifest
+    assert paths["reservations"].read_text() == before_reservations
 
 
 def test_cgl_lf_stage_i_panel_schema_pins_reference_inventory_and_admission(
