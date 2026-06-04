@@ -56,6 +56,18 @@ R17_CASE_ID = "R17"
 R17_PREDECESSOR_CASE_IDS = tuple(
     f"R{number:02d}" for number in range(2, 17)
 )
+CONCURRENT_CASE_IDS = frozenset(f"R{number:02d}" for number in range(3, 17))
+MAX_ACTIVE_STAGE_I_SEGMENTS = 4
+CASE_NODE_PROFILES = {
+    "R02": frozenset({1}),
+    "R03": frozenset({1}),
+    **{
+        f"R{number:02d}": frozenset({1, 2, 4})
+        for number in range(4, 16)
+    },
+    "R16": frozenset({1, 2}),
+    R17_CASE_ID: frozenset({8}),
+}
 REQUIRED_CASE_FINAL_TIME = 10.0
 COMPLETED_R16_NODE_HOURS = 6.145556
 COMPLETED_R02_STANDARD_LAYOUT_PILOT_NODE_HOURS = 0.473333
@@ -571,7 +583,7 @@ def require_authorized_case(case_id: str) -> None:
     if case_id not in AUTHORIZED_CASE_IDS:
         raise ValueError(
             f"{EXECUTION_EPOCH} Stage I is authorized only for mapped matrix cases "
-            "R02-R17 under sequential inspection"
+            "R02-R17"
         )
 
 
@@ -579,10 +591,11 @@ def require_case_node_count(case_id: str, nodes: int) -> None:
     """Bind each mapped case to its reviewed Frontier allocation shape."""
 
     require_authorized_case(case_id)
-    expected = 8 if case_id == R17_CASE_ID else 1
-    if nodes != expected:
+    allowed = CASE_NODE_PROFILES[case_id]
+    if nodes not in allowed:
+        choices = "/".join(str(value) for value in sorted(allowed))
         raise ValueError(
-            f"{case_id} canonical Stage I preparation requires --nodes={expected}"
+            f"{case_id} canonical Stage I preparation requires --nodes={choices}"
         )
 
 
@@ -1221,6 +1234,7 @@ def read_transaction(paths: dict[str, Path], path: Path) -> dict[str, object]:
     reservation_records_by_manifest(
         paths, prior_reservations, "transaction prior reservation snapshot"
     )
+    require_active_reservation_policy(prior_reservations)
     manifest_path = require_safe_manifest_path(paths, value["manifest_path"])
     if kind == "submit_pending":
         digest = value.get("prepared_manifest_sha256")
@@ -1400,6 +1414,8 @@ def validate_reservation_snapshot_transition(
     payload_by_manifest = reservation_records_by_manifest(
         paths, payload, "transaction reservation snapshot"
     )
+    require_active_reservation_policy(prior)
+    require_active_reservation_policy(payload)
     authenticate_canonical_reservation_snapshot(
         paths, prior, exempt_paths=frozenset({target})
     )
@@ -1430,6 +1446,7 @@ def validate_transaction_reservation_baseline(
     if not isinstance(reservations, list):
         raise ValueError("transaction reservation snapshot is invalid")
     current = read_reservations(paths)
+    require_active_reservation_policy(current)
     current_sha256 = sha256(paths["reservations"])
     payload_sha256 = stable_json_sha256(reservations)
     if current_sha256 not in {
@@ -1612,8 +1629,73 @@ def active_reservations(reservations: list[dict[str, object]]
 
     return [
         item for item in reservations
-        if item.get("state") in {"prepared", "submitted"}
+        if isinstance(item, dict)
+        and item.get("state") in {"prepared", "submitted"}
     ]
+
+
+def require_active_reservation_policy(
+    reservations: list[dict[str, object]],
+    candidate_case_id: str | None = None,
+) -> list[dict[str, object]]:
+    """Enforce bounded distinct-case overlap while keeping preparation serial."""
+
+    active = active_reservations(reservations)
+    case_ids = []
+    for reservation in active:
+        case_id = str(reservation.get("case_id", ""))
+        require_authorized_case(case_id)
+        if case_id in case_ids:
+            raise ValueError(f"active Stage I reservations duplicate case {case_id}")
+        case_ids.append(case_id)
+    prepared = [
+        reservation for reservation in active
+        if reservation.get("state") == "prepared"
+    ]
+    if len(active) > MAX_ACTIVE_STAGE_I_SEGMENTS:
+        raise ValueError(
+            f"active Stage I reservations exceed the "
+            f"{MAX_ACTIVE_STAGE_I_SEGMENTS}-segment concurrency limit"
+        )
+    if len(prepared) > 1:
+        raise ValueError("only one Stage I segment may be prepared at a time")
+    if R17_CASE_ID in case_ids and len(active) != 1:
+        raise ValueError(f"{R17_CASE_ID} requires exclusive Stage I execution")
+    if len(active) > 1 and any(
+        case_id not in CONCURRENT_CASE_IDS for case_id in case_ids
+    ):
+        raise ValueError(
+            "overlapping Stage I reservations are restricted to distinct R03-R16 cases"
+        )
+    if candidate_case_id is None:
+        return active
+    require_authorized_case(candidate_case_id)
+    if candidate_case_id in case_ids:
+        raise ValueError(
+            f"{candidate_case_id} already has an active Stage I reservation"
+        )
+    if active and (
+        candidate_case_id == R17_CASE_ID or R17_CASE_ID in case_ids
+    ):
+        raise ValueError(f"{R17_CASE_ID} requires exclusive Stage I execution")
+    if active and (
+        candidate_case_id not in CONCURRENT_CASE_IDS
+        or any(case_id not in CONCURRENT_CASE_IDS for case_id in case_ids)
+    ):
+        raise ValueError(
+            "overlapping Stage I reservations are restricted to distinct R03-R16 cases"
+        )
+    if prepared:
+        raise ValueError(
+            "another Stage I segment is prepared; submit or cancel it before "
+            "preparing a new segment"
+        )
+    if len(active) >= MAX_ACTIVE_STAGE_I_SEGMENTS:
+        raise ValueError(
+            f"active Stage I reservations reached the "
+            f"{MAX_ACTIVE_STAGE_I_SEGMENTS}-segment concurrency limit"
+        )
+    return active
 
 
 def reservation_usage(paths: dict[str, Path]) -> tuple[float, float]:
@@ -1717,8 +1799,9 @@ def refresh_summary(paths: dict[str, Path]) -> None:
             )
         lines.extend([
             "",
-            f"Only one {EXECUTION_EPOCH} Stage I segment may be prepared or "
-            "submitted at a time. "
+            f"Up to {MAX_ACTIVE_STAGE_I_SEGMENTS} distinct R03-R16 cases may "
+            "be active concurrently, with at most one prepared submission packet. "
+            f"{R17_CASE_ID} remains exclusive and last. "
             "E02 is retained only as pipeline and cost evidence after the Phase A "
             "forcing-policy audit. "
             "Jobs use the `batch` partition with Frontier's default production "
@@ -2775,7 +2858,7 @@ def require_reserved_execution_intent(reservation: dict[str, object],
 
 @locked_root_action
 def prepare(args: argparse.Namespace) -> Path:
-    """Create one retained, sequentially submitted production segment."""
+    """Create one retained production segment under the bounded overlap policy."""
 
     root = require_root(Path(args.root), args.allow_local_root)
     offline_local_root = is_offline_local_root(root, args.allow_local_root)
@@ -2789,11 +2872,8 @@ def prepare(args: argparse.Namespace) -> Path:
         require_reconciled_store_consistency(paths)
     require_authorized_case(args.case_id)
     require_safe_segment(args.segment)
-    if active_reservations(read_reservations(paths)):
-        raise ValueError(
-            "another Stage I segment is prepared or submitted; "
-            "record or cancel it before preparing a new segment"
-        )
+    reservations = read_reservations(paths)
+    require_active_reservation_policy(reservations, args.case_id)
     if args.nodes < 1:
         raise ValueError("--nodes must be positive")
     require_prepare_case_policy(
@@ -2959,7 +3039,8 @@ def prepare(args: argparse.Namespace) -> Path:
             "historical_e01_stage_i_node_hours": HISTORICAL_E01_STAGE_I_NODE_HOURS,
             "stage_i_reserved_node_hours": CURRENT_STAGE_I_RESERVED_NODE_HOURS,
             "stage_i_authorization": (
-                "frozen mapped Stage I matrix R02-R17 under sequential inspection"
+                "frozen mapped Stage I matrix R02-R17 with bounded distinct-case "
+                "overlap and exclusive R17"
             ),
             "atomic_submission_required": True,
         },
@@ -3205,6 +3286,71 @@ def production_queue_output(args: argparse.Namespace,
         ) from error
 
 
+def expected_submitted_queue_jobs(
+    paths: dict[str, Path],
+    reservations: list[dict[str, object]],
+) -> dict[str, str]:
+    """Map retained submitted reservations to their exact scheduler names."""
+
+    expected = {}
+    for reservation in active_reservations(reservations):
+        if reservation.get("state") != "submitted":
+            continue
+        job_id = require_numeric_job_id(str(reservation.get("job_id", "")))
+        if job_id in expected:
+            raise ValueError(f"submitted Stage I job ID is duplicated: {job_id}")
+        manifest_path = require_safe_manifest_path(paths, reservation["manifest"])
+        if not manifest_path.is_file():
+            raise ValueError(
+                f"submitted Stage I reservation lacks retained manifest: {manifest_path}"
+            )
+        manifest = read_manifest(manifest_path)
+        require_current_epoch(manifest, "submitted queue reservation")
+        if (
+            manifest.get("state") != "submitted"
+            or str(manifest.get("job_id", "")) != job_id
+        ):
+            raise ValueError(
+                f"submitted Stage I reservation differs from manifest: {manifest_path}"
+            )
+        require_reservation_matches_manifest(reservation, manifest)
+        expected[job_id] = expected_job_name(manifest)
+    return expected
+
+
+def authenticate_production_queue(
+    paths: dict[str, Path],
+    reservations: list[dict[str, object]],
+    lines: list[str],
+) -> None:
+    """Permit only scheduler rows bound to retained submitted Stage I jobs."""
+
+    expected = expected_submitted_queue_jobs(paths, reservations)
+    seen = set()
+    conflicts = []
+    for line in lines:
+        row = next(csv.reader([line], delimiter="|"))
+        if len(row) != 4:
+            conflicts.append(line)
+            continue
+        job_id, partition, state, job_name = (value.strip() for value in row)
+        if (
+            JOB_ID_PATTERN.fullmatch(job_id) is None
+            or not state
+            or partition != PARTITION
+            or expected.get(job_id) != job_name
+            or job_id in seen
+        ):
+            conflicts.append(line)
+            continue
+        seen.add(job_id)
+    if conflicts:
+        raise ValueError(
+            "another user job is queued without an authenticated submitted "
+            f"{EXECUTION_EPOCH} Stage I reservation: " + "; ".join(conflicts)
+        )
+
+
 def validate_submission_fixture_options(args: argparse.Namespace,
                                         offline_local_root: bool) -> None:
     """Keep scheduler fixture injection and test bypass out of production."""
@@ -3323,9 +3469,12 @@ def submission_preflight(args: argparse.Namespace, manifest_path: Path,
     require_reserved_execution_intent(
         reservation, manifest, allow_legacy_local=offline_local_root
     )
-    active = active_reservations(reservations)
-    if active != [reservation]:
-        raise ValueError("submission requires exactly one matching active reservation")
+    active = require_active_reservation_policy(reservations)
+    prepared = [
+        item for item in active if item.get("state") == "prepared"
+    ]
+    if prepared != [reservation]:
+        raise ValueError("submission requires one matching prepared reservation")
     authenticate_prepared_execution(
         manifest, manifest_path, allow_legacy_local=offline_local_root
     )
@@ -3341,11 +3490,7 @@ def submission_preflight(args: argparse.Namespace, manifest_path: Path,
         args, offline_local_root
     ).splitlines()
              if line.strip()]
-    if lines:
-        raise ValueError(
-            "another user job is queued; review shared-root concurrency before "
-            f"submitting {EXECUTION_EPOCH}: " + "; ".join(lines)
-        )
+    authenticate_production_queue(paths, reservations, lines)
     conflicts = shared_root_campaign_conflicts(
         root, set(getattr(args, "allow_shared_root_campaign", []))
     )
@@ -4437,10 +4582,24 @@ def record(args: argparse.Namespace) -> int:
         revalidate_inspection_files(inspection, manifest)
     actual = node_hours(nodes, int(sacct["elapsed_seconds"]))
     cumulative = sum(float(row["actual_node_hours"]) for row in ledger) + actual
+    remaining_reserved = sum(
+        float(item["reserved_node_hours"])
+        for item in active_reservations(reservations)
+        if item is not reservation
+    )
     if cumulative > CURRENT_STAGE_I_RESERVED_NODE_HOURS:
         raise ValueError("actual use exceeds the Stage I reservation")
     if cumulative > PROJECT_BUDGET_NODE_HOURS:
         raise ValueError("actual use exceeds the incremental project ceiling")
+    if cumulative + remaining_reserved > CURRENT_STAGE_I_RESERVED_NODE_HOURS:
+        raise ValueError(
+            "accounted use plus active Stage I reservations exceeds the ceiling"
+        )
+    if cumulative + remaining_reserved > PROJECT_BUDGET_NODE_HOURS:
+        raise ValueError(
+            "accounted use plus active Stage I reservations exceeds the "
+            "incremental project ceiling"
+        )
     command = manifest["command"]
     run = manifest["run"]
     allocation = manifest["allocation"]
@@ -5076,8 +5235,26 @@ def reconcile_report(root: Path) -> dict[str, object]:
         if isinstance(reservation, dict)
         and reservation.get("state") in {"prepared", "submitted"}
     ]
-    if len(active) > 1:
-        issues.append(f"reservation store has {len(active)} active segments")
+    try:
+        require_active_reservation_policy(reservations)
+    except ValueError as error:
+        issues.append(f"active reservation policy is invalid: {error}")
+    try:
+        actual = sum(float(row["actual_node_hours"]) for row in ledger)
+        reserved = sum(float(item["reserved_node_hours"]) for item in active)
+    except (KeyError, TypeError, ValueError):
+        issues.append("active reservation usage is invalid")
+    else:
+        if (
+            not math.isfinite(actual)
+            or not math.isfinite(reserved)
+            or actual + reserved > CURRENT_STAGE_I_RESERVED_NODE_HOURS
+        ):
+            issues.append("active Stage I reservation exceeds its ceiling")
+        if actual + reserved > PROJECT_BUDGET_NODE_HOURS:
+            issues.append(
+                "active Stage I reservation exceeds the incremental project ceiling"
+            )
 
     reservations_by_manifest: dict[Path, list[dict[str, object]]] = {}
     for reservation in reservations:

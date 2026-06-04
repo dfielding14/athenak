@@ -1191,7 +1191,30 @@ def test_cgl_lf_stage_i_acceptance_requires_clean_complete_segment(tmp_path):
         stage_i.record(record_args)
     write_snapshot_time(2.0)
     assert stage_i.inspect_segment(inspect_args) == 0
+    reservations = json.loads(paths["reservations"].read_text())
+    unrelated = {
+        "execution_epoch": stage_i.EXECUTION_EPOCH,
+        "manifest": str(
+            paths["runs"] / "R04" / "s00"
+            / "manifest" / "prepared_run.json"
+        ),
+        "case_id": "R04",
+        "case_name": "unrelated",
+        "segment": "s00",
+        "nodes": 2,
+        "requested_walltime": "00:10:00",
+        "reserved_node_hours": 1.0 / 3.0,
+        "state": "submitted",
+        "prepared_utc": stage_i.utc_now(),
+        "job_id": "67890",
+    }
+    reservations.append(unrelated)
+    stage_i.write_json(paths["reservations"], reservations)
     assert stage_i.record(record_args) == 0
+    reservations = json.loads(paths["reservations"].read_text())
+    assert reservations[1] == unrelated
+    assert stage_i.active_reservations(reservations) == [unrelated]
+    stage_i.write_json(paths["reservations"], [reservations[0]])
     accounted = json.loads(manifest_path.read_text())
     assert accounted["state"] == "recorded"
     assert accounted["scientific_inspection"]["accepted"]
@@ -2016,6 +2039,7 @@ def test_cgl_lf_stage_i_isolates_epoch_and_checks_all_shared_root_jobs(
     assert stage_i.CURRENT_STAGE_I_RESERVED_NODE_HOURS == 900.0
     assert stage_i.MAX_SEGMENT_SECONDS == 2 * 60 * 60
     assert stage_i.R17_CASE_ID == "R17"
+    assert stage_i.MAX_ACTIVE_STAGE_I_SEGMENTS == 4
     assert stage_i.R17_PREDECESSOR_CASE_IDS == tuple(
         f"R{number:02d}" for number in range(2, 17)
     )
@@ -2027,12 +2051,51 @@ def test_cgl_lf_stage_i_isolates_epoch_and_checks_all_shared_root_jobs(
     ):
         stage_i.require_authorized_case("R18")
     stage_i.require_case_node_count("R02", 1)
+    stage_i.require_case_node_count("R03", 1)
+    stage_i.require_case_node_count("R04", 1)
+    stage_i.require_case_node_count("R04", 2)
+    stage_i.require_case_node_count("R04", 4)
     stage_i.require_case_node_count("R16", 1)
+    stage_i.require_case_node_count("R16", 2)
     stage_i.require_case_node_count("R17", 8)
     with pytest.raises(ValueError, match="R02 canonical Stage I preparation"):
         stage_i.require_case_node_count("R02", 8)
+    with pytest.raises(ValueError, match="R03 canonical Stage I preparation"):
+        stage_i.require_case_node_count("R03", 2)
+    with pytest.raises(ValueError, match="R16 canonical Stage I preparation"):
+        stage_i.require_case_node_count("R16", 4)
     with pytest.raises(ValueError, match="R17 canonical Stage I preparation"):
         stage_i.require_case_node_count("R17", 1)
+    active = lambda case_id, state="submitted": {
+        "case_id": case_id, "state": state,
+    }
+    stage_i.require_active_reservation_policy([
+        active("R03"), active("R04"), active("R05"),
+    ], "R06")
+    with pytest.raises(ValueError, match="duplicate case R03"):
+        stage_i.require_active_reservation_policy([
+            active("R03"), active("R03"),
+        ])
+    with pytest.raises(ValueError, match="only one Stage I segment may be prepared"):
+        stage_i.require_active_reservation_policy([
+            active("R03", "prepared"), active("R04", "prepared"),
+        ])
+    with pytest.raises(ValueError, match="4-segment concurrency limit"):
+        stage_i.require_active_reservation_policy([
+            active("R03"), active("R04"), active("R05"), active("R06"),
+        ], "R07")
+    with pytest.raises(ValueError, match="R17 requires exclusive"):
+        stage_i.require_active_reservation_policy([active("R03")], "R17")
+    with pytest.raises(ValueError, match="R17 requires exclusive"):
+        stage_i.require_active_reservation_policy([
+            active("R17"), active("R03"),
+        ])
+    with pytest.raises(ValueError, match="distinct R03-R16"):
+        stage_i.require_active_reservation_policy([active("R02")], "R03")
+    with pytest.raises(ValueError, match="another Stage I segment is prepared"):
+        stage_i.require_active_reservation_policy([
+            active("R03", "prepared"),
+        ], "R04")
     assert not stage_i.retained_case_has_started(paths, "R17")
     stage_i.require_r17_last(paths, "R16")
     stage_i.require_prepare_case_policy(paths, "R17", 1, offline_local_root=True)
@@ -2437,7 +2500,52 @@ def test_cgl_lf_stage_i_isolates_epoch_and_checks_all_shared_root_jobs(
     queue.write_text("123|batch|RUNNING|unrelated_job\n")
     with pytest.raises(ValueError, match="another user job is queued"):
         stage_i.check_submit(args)
-    queue.write_text("")
+    overlap_manifest_path = (
+        paths["runs"] / "R04" / "s00" / "manifest" / "prepared_run.json"
+    )
+    overlap_manifest_path.parent.mkdir(parents=True)
+    overlap_manifest = {
+        "execution_epoch": stage_i.EXECUTION_EPOCH,
+        "project_root": str(root),
+        "state": "submitted",
+        "job_id": "321",
+        "run": {
+            "case_id": "R04",
+            "case_name": "overlap",
+            "segment": "s00",
+        },
+        "allocation": {
+            "nodes": 2,
+            "requested_walltime": "00:10:00",
+            "reserved_node_hours": 1.0 / 3.0,
+        },
+    }
+    stage_i.write_json(overlap_manifest_path, overlap_manifest)
+    reservations = json.loads(paths["reservations"].read_text())
+    reservations.append({
+        "execution_epoch": stage_i.EXECUTION_EPOCH,
+        "manifest": str(overlap_manifest_path),
+        "case_id": "R04",
+        "case_name": "overlap",
+        "segment": "s00",
+        "nodes": 2,
+        "requested_walltime": "00:10:00",
+        "reserved_node_hours": 1.0 / 3.0,
+        "state": "submitted",
+        "job_id": "321",
+        "prepared_utc": stage_i.utc_now(),
+    })
+    stage_i.write_json(paths["reservations"], reservations)
+    overlap_queue_row = (
+        f"321|batch|RUNNING|{stage_i.expected_job_name(overlap_manifest)}\n"
+    )
+    queue.write_text(overlap_queue_row)
+    assert stage_i.check_submit(args) == 0
+    capsys.readouterr()
+    queue.write_text(overlap_queue_row + "123|batch|RUNNING|unrelated_job\n")
+    with pytest.raises(ValueError, match="another user job is queued"):
+        stage_i.check_submit(args)
+    queue.write_text(overlap_queue_row)
 
     shared_manifest = (
         root / "runs" / "exploratory" / "manifest" / "prepared_run.json"
