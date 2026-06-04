@@ -675,6 +675,13 @@ qualify any scientific claim by itself.
   authorization. It does not reauthorize the consumed historical v2 pressure
   slices. It binds the worker-extracted read-only `git archive HEAD` execution
   contract and the exact aggregate and packet source closure.
+- `q011_section54_pressure_pilot_postrun_aggregate_source_authorization_successor_v2_2026-06-03.json`
+  and
+  `q011_section54_pressure_pilot_postrun_aggregate_source_authorization_successor_v3_2026-06-04.json`:
+  append-only source-closure successors for post-run publication only. The v3
+  successor binds the exact unordered `mhd_w_bcc` inventory compatibility
+  repair after aggregate job `4764415` failed closed on producer-order drift.
+  Neither successor reauthorizes a launch or changes the scientific contract.
 - `q011_section54_fourth_adversarial_repair_transition_2026-06-02.json`,
   `q011_section54_fifth_adversarial_repair_transition_2026-06-03.json`,
   `q011_section54_sixth_adversarial_repair_transition_2026-06-03.json`,
@@ -712,6 +719,14 @@ qualify any scientific claim by itself.
   rereview remain mandatory before recovery. Receipt publication re-attests the
   live sibling and retained authority metadata and rejects pre-link staging
   orphans rather than silently consuming them.
+- `q011_section54_fourteenth_aggregate_mhd_inventory_order_repair_transition_2026-06-04.json`:
+  append-only failed-closed aggregate-publication checkpoint after the reviewed
+  acceptance-root inode recovery. All twenty retained `mhd_w_bcc` snapshots
+  contain the same exact eight variable names with no missing or extra fields.
+  The staged repair accepts their AthenaK producer order by requiring exact
+  unordered inventory equality and composing by name. Qualifying launch remains
+  prohibited pending commit, clean-worker validation, exact-latest rereview,
+  aggregate publication, review-packet publication and human pressure choice.
 - `q011_parallel_shock_storage_estimator_successor_2026-06-01.json`:
   analytical storage-planning successor after the publication deck gained a
   signed particle-current binary output and the PVTK block moved. The estimator

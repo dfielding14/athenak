@@ -1291,6 +1291,17 @@ canonical read-only receipt with one matching retained
 that alias, syncs the receipt and policy directory, and revalidates single-link
 closure. Then run `--verify-recovery-receipt` again.
 
+The reviewed recovery completed on 2026-06-04 without replacing the retained
+inode. Aggregate worker job `4764415` then failed closed before exposing a
+public bundle, receipt or analysis artifact because the offline analyzer
+assumed one tuple order for the exact `mhd_w_bcc` variable inventory. Read-only
+forensics found one uniform eight-field inventory across all twenty retained
+snapshots, with no missing or extra variables. Do not replay job `4764415`.
+Submit one reviewed replacement aggregate worker only after the fourteenth-pass
+exact unordered inventory repair is committed, pushed, clean-worker validated
+and independently rereviewed from the exact latest patch. The replacement block
+below verifies the existing durable recovery receipt; it must not republish it.
+
 ```bash
 (
 set -euo pipefail
@@ -1334,6 +1345,7 @@ test -z "$QUEUED_JOB_IDS"
 test -d "${PIC_ROOT}/publication" || /usr/bin/mkdir "${PIC_ROOT}/publication"
 ACCEPTANCE_HELPER_RELATIVE=tst/publication/provision_q011_pressure_publication_acceptance_root.py
 EXPECTED_ACCEPTANCE_HELPER_SHA256=431787450a6fe2a37a6ee1e1a37e1626444e2f6af3d7516117f820bc17963920
+ACCEPTANCE_RECOVERY_VALIDATED_SOURCE_COMMIT=10bb501df0fa66d70f95f8983494a2156dd9ebd6
 ACCEPTANCE_HELPER_SNAPSHOT="$(
   /usr/bin/mktemp -p /tmp q011-acceptance-helper.XXXXXX.py
 )"
@@ -1348,10 +1360,10 @@ ACCEPTANCE_HELPER_SHA256="$(
 test "$ACCEPTANCE_HELPER_SHA256" = "$EXPECTED_ACCEPTANCE_HELPER_SHA256"
 ACCEPTANCE_RECOVERY_RECEIPT="${PIC_ROOT}/policy/q011_pressure_publication_acceptance_root_recovery_1554766c-21e2-48b1-8cfe-b1e7e4e75aa2.json"
 "$PYTHON" -I -B "$ACCEPTANCE_HELPER_SNAPSHOT" \
-  --validated-source-commit "$FULL_GIT_COMMIT" \
+  --validated-source-commit "$ACCEPTANCE_RECOVERY_VALIDATED_SOURCE_COMMIT" \
   --expected-helper-sha256 "$ACCEPTANCE_HELPER_SHA256"
 "$PYTHON" -I -B "$ACCEPTANCE_HELPER_SNAPSHOT" \
-  --validated-source-commit "$FULL_GIT_COMMIT" \
+  --validated-source-commit "$ACCEPTANCE_RECOVERY_VALIDATED_SOURCE_COMMIT" \
   --expected-helper-sha256 "$ACCEPTANCE_HELPER_SHA256" \
   --verify-recovery-receipt "$ACCEPTANCE_RECOVERY_RECEIPT"
 for directory in \

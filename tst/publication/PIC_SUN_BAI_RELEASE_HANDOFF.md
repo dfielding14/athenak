@@ -1,6 +1,6 @@
 # PIC Sun and Bai release qualification handoff
 
-Last updated: 2026-06-03T23:14:29Z
+Last updated: 2026-06-04T17:27:44Z
 
 ## Purpose
 
@@ -88,34 +88,45 @@ Completed:
 19. The first live acceptance-root provision failed closed before `sbatch`:
     Orion inherited the parent setgid bit and created the exact empty sibling
     directory with mode `02700`, not the required `0700`.
+20. The thirteenth-pass helper was committed and pushed as
+    `10bb501df0fa66d70f95f8983494a2156dd9ebd6`. Worker job `4764398` passed
+    `224` archived focused tests and all `1270` explicit publication tests with
+    two intentional skips. Two exact-latest-patch rereviews passed.
+21. The reviewed one-time descriptor-relative recovery normalized the retained
+    acceptance-root inode from `02700` to `0700` without replacement and
+    published durable receipt SHA-256
+    `784bc2ba4d3ee3cc198d1b34bdab393f1edd92149e4304a99c0b165423a0c9fc`.
+22. Aggregate worker job `4764415` failed closed before exposing any public
+    artifact. All twenty retained `mhd_w_bcc` snapshots have one exact
+    eight-field inventory, but AthenaK writes the fields in producer order while
+    the analyzer assumed one different tuple order.
 
 In progress:
 
 1. Pressure-pilot aggregate publication remains prohibited. No public bundle,
    receipt, aggregate analysis artifact, or review packet exists.
-2. Preserve the exact empty `publication_acceptance/` inode. Do not delete or
-   recreate it.
-3. Commit, push, validate, independently rereview, and run the thirteenth-pass
-   descriptor-relative acceptance-root helper before submitting the aggregate
-   publication worker.
+2. Preserve the exact empty recovered `publication_acceptance/` inode and its
+   durable receipt. Do not delete or recreate the directory and do not
+   republish the receipt.
+3. Commit, push, validate, and independently rereview the fourteenth-pass exact
+   unordered MHD-inventory repair before submitting one reviewed replacement
+   aggregate publication worker.
 
 Remaining:
 
-1. Commit and push the thirteenth-pass acceptance-root helper, pass one clean
-   committed worker validation, and independently rereview the exact latest
-   patch.
-2. Run the explicit exact-empty inherited-setgid recovery once, retain its
-   receipt, and verify the sibling authority at exact mode `0700`.
-3. Publish and verify the pressure-pilot
+1. Commit and push the fourteenth-pass aggregate MHD-inventory-order repair,
+   pass one clean committed worker validation, and independently rereview the
+   exact latest patch.
+2. Publish and verify the pressure-pilot
    aggregate receipt and review packet on workers.
-4. Perform a human pressure-choice review from the immutable four-slice
+3. Perform a human pressure-choice review from the immutable four-slice
    calibration bundle. Do not invent or silently auto-select this science
    decision.
-5. Materialize and validate a qualifying campaign plan only after the repaired
+4. Materialize and validate a qualifying campaign plan only after the repaired
    launch boundary passes adversarial review.
-6. Run the prerequisite slices, cheaper paper-test suites, the full Section 5.4
+5. Run the prerequisite slices, cheaper paper-test suites, the full Section 5.4
    reproduction campaign, and final publication analysis in staged order.
-7. Finish optional extensions, final hardening, and the deferred external
+6. Finish optional extensions, final hardening, and the deferred external
    review before treating the implementation as production-ready.
 
 ## Mandatory operating constraints
@@ -319,7 +330,7 @@ ledger file:   $PIC_ROOT/ledger/node_hours.jsonl
 ## Pressure-pilot aggregate publication
 
 An initial login-node publisher attempt proved materially long-running and did
-not expose a final receipt. Three Frontier Slurm worker publication attempts
+not expose a final receipt. Four Frontier Slurm worker publication attempts
 then ended without exposing a public bundle:
 
 | Slurm job | Terminal state | Elapsed | Reason |
@@ -327,13 +338,14 @@ then ended without exposing a public bundle:
 | `4756951` | `FAILED` | `00:09:39` | Strict offline binary parser rejected runtime-added empty optional `particles/pic_deltaf_f0` |
 | `4757026` | `CANCELLED` | `00:02:16` | Cancelled when the checkout mutated during publication; superseded by worker-local `git archive HEAD` snapshots |
 | `4757047` | `CANCELLED` | `00:04:36` | Cancelled after fresh review found late-failure rollback, descriptor-anchor, and source-authorization gaps |
+| `4764415` | `FAILED` | `00:05:37` | Strict offline `mhd_w_bcc` analyzer assumed one tuple order for an exact name-addressed AthenaK variable inventory |
 
-The integrated tenth-pass tree is historical. Aggregate publication remains
-prohibited until the thirteenth-pass retained-inode recovery helper is
-committed, pushed, clean-worker validated, independently rereviewed from the
-exact latest patch, and used to recover the reviewed sibling acceptance
-authority in place. Do not invoke the publisher directly on a login node. Use
-only the exact hermetic, commit-bound, `--export=NIL` publication sequence in
+The integrated thirteenth-pass tree and failed job `4764415` are historical.
+Aggregate publication remains prohibited until the fourteenth-pass exact
+unordered MHD-inventory repair is committed, pushed, clean-worker validated and
+independently rereviewed from the exact latest patch. Do not invoke the
+publisher directly on a login node. Use only the exact hermetic, commit-bound,
+`--export=NIL` publication sequence in
 [`frontier_control_plane/README.md`](frontier_control_plane/README.md).
 
 Target outputs:
@@ -569,9 +581,10 @@ The live fixed sibling authority directory was initially absent. Its first
 reviewed provisioning attempt failed closed before `sbatch`: Orion inherited
 the parent setgid bit and created the exact empty
 `$PIC_ROOT/publication_acceptance/` inode with mode `02700`, not `0700`.
-Preserve that inode. The thirteenth pass adds the reviewed descriptor-relative
-recovery below. The same-UID PIC-root mutation caveat and Lustre power-loss
-durability caveat remain explicit operational risks.
+The thirteenth pass preserved and recovered that inode in place to exact mode
+`0700`, then published its durable receipt. Preserve both. The same-UID PIC-root
+mutation caveat and Lustre power-loss durability caveat remain explicit
+operational risks.
 
 ### Eighth storage migration and candidate-revalidation pass
 
@@ -785,6 +798,28 @@ pre-link orphan is a reviewed stop, not an implicit retry input. The durable
 append-only transition record is
 [`q011_section54_thirteenth_acceptance_root_setgid_repair_transition_2026-06-03.json`](readiness/q011_section54_thirteenth_acceptance_root_setgid_repair_transition_2026-06-03.json).
 
+### Fourteenth aggregate MHD-inventory-order pass
+
+The committed thirteenth-pass worker and exact-latest rereviews passed, and the
+one-time recovery retained the reviewed sibling inode while normalizing it to
+`0700`. Aggregate worker job `4764415` then failed closed before exposing any
+public artifact. A read-only forensic replay of all twenty retained
+`mhd_w_bcc` snapshots found one exact eight-field inventory with no missing or
+extra variables. AthenaK emits those variables in producer order:
+
+```text
+dens velx vely velz eint bcc1 bcc2 bcc3
+```
+
+The analyzer preregistration lists the same required names with `eint` earlier.
+The binary parser already maps payload arrays by header name and rejects
+duplicates. The staged compatibility repair therefore requires exact unordered
+inventory equality, still rejecting missing or extra variables, and composes
+every required field by name. It does not broaden the accepted physics product,
+change estimators or thresholds, or authorize launch. The append-only transition
+record is
+[`q011_section54_fourteenth_aggregate_mhd_inventory_order_repair_transition_2026-06-04.json`](readiness/q011_section54_fourteenth_aggregate_mhd_inventory_order_repair_transition_2026-06-04.json).
+
 ## Validation baseline
 
 The committed launch-prohibited checkpoint passed these validations before the
@@ -863,20 +898,19 @@ git diff -- tst/publication
 Then:
 
 1. Read this file and both governing plans.
-2. Preserve and inspect the exact empty inherited-setgid acceptance-root
-   checkpoint and thirteenth-pass helper edits.
-3. Commit and push the thirteenth-pass repaired boundary.
+2. Verify the exact empty recovered `0700` acceptance-root inode and its durable
+   receipt. Preserve both.
+3. Inspect, commit, and push the fourteenth-pass exact unordered
+   MHD-inventory-order repair.
 4. Run focused and full validation suites from the clean committed worker
    snapshot.
 5. Request a fresh independent adversarial review.
-6. Run the explicit exact-empty acceptance-root recovery once and retain its
-   durable receipt.
-7. Verify `$PIC_ROOT/publication_acceptance/` at exact mode `0700`. Finish the
-   pressure-pilot worker aggregate publication and
+6. Verify `$PIC_ROOT/publication_acceptance/` at exact mode `0700` and its
+   existing durable receipt. Finish the pressure-pilot worker aggregate publication and
    review packet, then verify both receipts.
-8. Ask the human collaborator to review the immutable four-slice pressure
+7. Ask the human collaborator to review the immutable four-slice pressure
    calibration evidence and select the qualifying pressure option.
-9. Only then materialize the qualifying campaign plan and proceed through the
+8. Only then materialize the qualifying campaign plan and proceed through the
    staged release plan.
 
 ## Phased route to the overall goal

@@ -1283,11 +1283,15 @@ class PicReadinessRegistryTests(unittest.TestCase):
             ]
         )
         current_repair = _load(
+            "q011_section54_fourteenth_aggregate_mhd_inventory_order_repair_"
+            "transition_2026-06-04.json"
+        )
+        acceptance_repair = _load(
             "q011_section54_thirteenth_acceptance_root_setgid_repair_transition_"
             "2026-06-03.json"
         )
         repaired_staged = current_repair["repaired_staged_control_plane"]
-        helper = current_repair["acceptance_root_helper_repair"]
+        helper = acceptance_repair["acceptance_root_helper_repair"]
         self.assertEqual(
             current_repair["predecessor_sha256"],
             _sha256(REPO_ROOT / current_repair["predecessor_record"]),
@@ -1300,24 +1304,47 @@ class PicReadinessRegistryTests(unittest.TestCase):
             ),
             2,
         )
-        failed_checkpoint = current_repair["reviewed_failed_checkpoint"]
-        acceptance_root = Path(failed_checkpoint["acceptance_root"])
+        self.assertEqual(
+            runbook.count(
+                "ACCEPTANCE_RECOVERY_VALIDATED_SOURCE_COMMIT="
+                f"{current_repair['source_checkpoint_commit']}"
+            ),
+            1,
+        )
+        checkpoint = current_repair["recovered_acceptance_root"]
+        acceptance_root = Path(checkpoint["path"])
         acceptance_status = acceptance_root.stat()
         self.assertTrue(stat.S_ISDIR(acceptance_status.st_mode))
         self.assertEqual(
             (acceptance_status.st_dev, acceptance_status.st_ino),
-            (failed_checkpoint["device"], failed_checkpoint["inode"]),
+            (checkpoint["device"], checkpoint["inode"]),
         )
-        self.assertEqual(acceptance_status.st_uid, failed_checkpoint["uid"])
-        self.assertEqual(acceptance_status.st_gid, failed_checkpoint["gid"])
+        self.assertEqual(acceptance_status.st_uid, checkpoint["uid"])
+        self.assertEqual(acceptance_status.st_gid, checkpoint["gid"])
         self.assertEqual(
             f"{stat.S_IMODE(acceptance_status.st_mode):05o}",
-            failed_checkpoint["mode"],
+            checkpoint["mode"],
         )
         self.assertEqual(sorted(acceptance_root.iterdir()), [])
-        self.assertEqual(sorted(os.listxattr(acceptance_root)), failed_checkpoint["xattrs"])
-        receipt = Path(helper["recovery_receipt_path"])
-        self.assertFalse(receipt.exists())
+        self.assertEqual(sorted(os.listxattr(acceptance_root)), checkpoint["xattrs"])
+        receipt_checkpoint = checkpoint["recovery_receipt"]
+        receipt = Path(receipt_checkpoint["path"])
+        receipt_status = receipt.stat()
+        self.assertTrue(stat.S_ISREG(receipt_status.st_mode))
+        self.assertEqual(
+            (receipt_status.st_dev, receipt_status.st_ino),
+            (receipt_checkpoint["device"], receipt_checkpoint["inode"]),
+        )
+        self.assertEqual(receipt_status.st_uid, receipt_checkpoint["uid"])
+        self.assertEqual(receipt_status.st_gid, receipt_checkpoint["gid"])
+        self.assertEqual(
+            f"{stat.S_IMODE(receipt_status.st_mode):05o}",
+            receipt_checkpoint["mode"],
+        )
+        self.assertEqual(receipt_status.st_nlink, receipt_checkpoint["hard_link_count"])
+        self.assertEqual(receipt_status.st_size, receipt_checkpoint["size_bytes"])
+        self.assertEqual(_sha256(receipt), receipt_checkpoint["sha256"])
+        self.assertEqual(sorted(os.listxattr(receipt)), receipt_checkpoint["xattrs"])
         self.assertEqual(
             sorted(receipt.parent.glob(".q011-acceptance-recovery.*")),
             [],
@@ -1344,16 +1371,23 @@ class PicReadinessRegistryTests(unittest.TestCase):
                     (status.st_dev, status.st_ino),
                     (identity["device"], identity["inode"]),
                 )
-                self.assertEqual(status.st_uid, failed_checkpoint["uid"])
-                self.assertEqual(status.st_gid, failed_checkpoint["gid"])
+                self.assertEqual(status.st_uid, checkpoint["uid"])
+                self.assertEqual(status.st_gid, checkpoint["gid"])
                 self.assertEqual(f"{stat.S_IMODE(status.st_mode):05o}", expected_mode)
                 self.assertEqual(sorted(os.listxattr(path)), expected_xattrs)
+        aggregate_repair = current_repair["aggregate_inventory_order_repair"]
+        authorization = aggregate_repair["postrun_source_authorization_successor"]
+        self.assertEqual(authorization["sha256"], _sha256(REPO_ROOT / authorization["path"]))
+        self.assertEqual(
+            aggregate_repair["aggregate_analyzer"]["successor_sha256"],
+            _sha256(REPO_ROOT / aggregate_repair["aggregate_analyzer"]["path"]),
+        )
         if staged_version == repaired_staged["version"]:
             self.assertEqual(
                 repaired_staged["state"],
-                "installed_candidate_only_policy_promoted_acceptance_root_helper_"
-                "repair_staged_pending_clean_commit_worker_validation_exact_"
-                "latest_patch_rereview_and_exact_empty_root_recovery",
+                "installed_candidate_only_policy_promoted_acceptance_root_recovered_"
+                "aggregate_inventory_order_repair_staged_pending_clean_commit_push_"
+                "worker_validation_exact_latest_patch_rereview_and_aggregate_retry",
             )
             prepared = repaired_staged["prepared_artifacts"]
             prepared_path = REPO_ROOT / prepared["inventory_path"]
@@ -3259,8 +3293,8 @@ class PicReadinessRegistryTests(unittest.TestCase):
         )
         self.assertEqual(promotion["registered_science_slice_count"], 4)
         current = _load(
-            "q011_section54_thirteenth_acceptance_root_setgid_repair_transition_"
-            "2026-06-03.json"
+            "q011_section54_fourteenth_aggregate_mhd_inventory_order_repair_"
+            "transition_2026-06-04.json"
         )["candidate_only_policy_promotion"]
         self.assertEqual(
             current["orion_active_policy_sha256"],

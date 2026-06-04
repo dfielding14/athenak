@@ -153,7 +153,13 @@ def _raw_tree(
     _ps_p0, argv_value = case_verifier._CASE_BY_ID[case_id]
     for index, time in enumerate(case_verifier._TIMES):
         sources = case_verifier._snapshot_source_paths(case_id, index)
-        _put(root, sources["mhd_w_bcc"], pilot_fixture._binary(time, argv_value, pilot._MHD_FIELDS))
+        _put(
+            root,
+            sources["mhd_w_bcc"],
+            pilot_fixture._binary(
+                time, argv_value, pilot_fixture._ATHENAK_MHD_W_BCC_FIELDS
+            ),
+        )
         _put(root, sources["bmag"], pilot_fixture._binary(time, argv_value, ("bmag",)))
         _put(root, sources["prtcl_jx"], pilot_fixture._binary(time, argv_value, ("prtcl_jx",)))
         _put(root, sources["j2"], pilot_fixture._binary(time, argv_value, ("j2",)))

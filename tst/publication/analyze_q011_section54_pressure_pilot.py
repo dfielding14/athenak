@@ -46,13 +46,13 @@ POSTRUN_SOURCE_AUTHORIZATION_PREDECESSOR_PATH = (
     REPO_ROOT
     / "tst/publication/readiness/"
     "q011_section54_pressure_pilot_postrun_aggregate_source_authorization_"
-    "successor_2026-06-02.json"
+    "successor_v2_2026-06-03.json"
 )
 PREREGISTRATION_PATH = (
     REPO_ROOT
     / "tst/publication/readiness/"
     "q011_section54_pressure_pilot_postrun_aggregate_source_authorization_"
-    "successor_v2_2026-06-03.json"
+    "successor_v3_2026-06-04.json"
 )
 REGISTERED_EXECUTION_PREREGISTRATION_PATH = (
     REPO_ROOT
@@ -508,7 +508,7 @@ def _load_postrun_source_authorization_successor() -> dict[str, Any]:
                 "authorization_successor"
             ),
             "schema_version": 1,
-            "date": "2026-06-03",
+            "date": "2026-06-04",
             "gate": "Q-011",
             "classification": "engineering_calibration_only",
             "qualification_effect": (
@@ -521,7 +521,7 @@ def _load_postrun_source_authorization_successor() -> dict[str, Any]:
                 ).as_posix()
             ),
             "predecessor_sha256": (
-                "26e27ee441787a5833e830d37a9ba6e88bbd7c1e01d2822f0c1f0105c9addcf3"
+                "945d60375f39188ef1b136df1cca838f3194c2359270551eac7485fab701621f"
             ),
             "historical_launch_chronology": {
                 "state": "stale_non_authorizing_consumed_slices_no_reauthorization",
@@ -980,7 +980,7 @@ def _binary_dataset(
         raise PilotAnalysisError(f"malformed Athena bin {binding['path']}: {error}") from error
     _require(dataset.time == time, f"{binding['path']}: internal snapshot time drifted")
     _validate_runtime_parameters(dataset, ps_p0)
-    _require(tuple(dataset.variable_names) == tuple(fields), f"{binding['path']}: variable inventory drifted")
+    _require(set(dataset.variable_names) == set(fields), f"{binding['path']}: variable inventory drifted")
     composites = {}
     for field in fields:
         try:

@@ -1,0 +1,89 @@
+{
+  "record_type": "q011_section54_pressure_pilot_postrun_aggregate_source_authorization_successor",
+  "schema_version": 1,
+  "date": "2026-06-04",
+  "gate": "Q-011",
+  "classification": "engineering_calibration_only",
+  "qualification_effect": "none_postrun_aggregate_and_review_publication_only_no_launch_reauthorization_no_sun_bai_claim",
+  "predecessor_record": "tst/publication/readiness/q011_section54_pressure_pilot_postrun_aggregate_source_authorization_successor_v2_2026-06-03.json",
+  "predecessor_sha256": "945d60375f39188ef1b136df1cca838f3194c2359270551eac7485fab701621f",
+  "historical_v2_execution_preregistration": {
+    "path": "tst/publication/readiness/q011_section54_pressure_pilot_registered_execution_retry_successor_v2_2026-06-02.json",
+    "sha256": "fcee4f99009ff10efa1e2f2d18f2a8bb4af551c64a97aa5c6f10a2dacf95f3bc"
+  },
+  "historical_launch_chronology": {
+    "state": "stale_non_authorizing_consumed_slices_no_reauthorization",
+    "historical_v2_source_bindings_may_match_current_checkout": false,
+    "aggregate_publication_is_postrun_only": true
+  },
+  "archive_execution_contract": {
+    "snapshot_source": "worker_extracted_readonly_git_archive_head",
+    "archive_commit_binding": "publisher_measures_readonly_git_archive_embedded_commit_archive_sha256_reviewed_source_closure_and_executing_worker_snapshot_members",
+    "requires_clean_reviewed_source_closure": true
+  },
+  "source_closure": [
+    {
+      "role": "aggregate_worker_wrapper",
+      "path": "tst/publication/frontier_q011_section54_pressure_pilot_publish_job.sh",
+      "sha256": "0f30e96d029d08a6a204ed3473126231a30a65045ffe3440e1e105a7bc3daee1"
+    },
+    {
+      "role": "aggregate_publisher",
+      "path": "tst/publication/publish_q011_section54_pressure_pilot_bundle.py",
+      "sha256": "af12eaae3a2353e352bcfec586df898df112163a0d4c686f5afea37006ead02f"
+    },
+    {
+      "role": "aggregate_analyzer",
+      "path": "tst/publication/analyze_q011_section54_pressure_pilot.py",
+      "sha256": "1cf1cf41f9082569dd9e2abb44b65d8d31742189c829ad41f7226bcb791e0b76"
+    },
+    {
+      "role": "aggregate_case_verifier",
+      "path": "tst/publication/analyze_q011_section54_pressure_pilot_case.py",
+      "sha256": "8596d95c9b8952dcb760b10fbe00bf7ba8a2c895713cc3d36dd1efa1aac11ecc"
+    },
+    {
+      "role": "output_primitives",
+      "path": "tst/publication/analyze_q011_section54_outputs.py",
+      "sha256": "20794ed45b80843b8e75accffc2e9336fcb7da58716fb818e466e193cd346356"
+    },
+    {
+      "role": "structured_artifact_helper",
+      "path": "tst/publication/frontier_f1_structured_artifacts.py",
+      "sha256": "cf090115bcdfd143f67b12339115102b57e74cf3205b1ebb1521c144c3415a5a"
+    },
+    {
+      "role": "particle_vtk_reader",
+      "path": "tst/publication/pvtk_particles.py",
+      "sha256": "187254c4ed10ce20ec383e710dadfa2e03e9f45317cce53e5d644c1db2be7339"
+    },
+    {
+      "role": "review_packet_renderer",
+      "path": "tst/publication/render_q011_section54_pressure_pilot_review_packet.py",
+      "sha256": "39c52f14fed1a6ea63c610a057a46b371453aa92bda1c635bb565c08546f9a95"
+    },
+    {
+      "role": "plotting_environment_lock",
+      "path": "tst/publication/readiness/plotting_environment_lock_candidate_2026-05-30.json",
+      "sha256": "cfb2dda28e19609193cee99913766c34eaf032f2f279d534d991af5382c96c16"
+    },
+    {
+      "role": "review_packet_worker_wrapper",
+      "path": "tst/publication/frontier_q011_section54_pressure_pilot_review_packet_job.sh",
+      "sha256": "2b8e011bfef4022911f1c8b74b8f0468cfa758b40b51faf7efcd41d91391e25d"
+    }
+  ],
+  "scientific_contract": {
+    "pilot_cases_changed": false,
+    "estimators_changed": false,
+    "thresholds_changed": false,
+    "snapshot_selection_changed": false
+  },
+  "execution_policy": {
+    "frontier_execution_authorized_by_this_record": false,
+    "scheduler_commands_authorized_by_this_record": false,
+    "historical_launch_slices_reauthorized": false,
+    "scientific_evidence_eligible": false,
+    "sun_bai_claim": false
+  }
+}

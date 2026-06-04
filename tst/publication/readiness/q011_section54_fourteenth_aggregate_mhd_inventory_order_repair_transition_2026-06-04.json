@@ -1,0 +1,156 @@
+{
+  "schema_version": 1,
+  "record_type": "q011_section54_fourteenth_aggregate_mhd_inventory_order_repair_transition",
+  "recorded_utc": "2026-06-04T17:27:44Z",
+  "artifact_root": "/lustre/orion/ast207/proj-shared/dfielding/PIC",
+  "predecessor_record": "tst/publication/readiness/q011_section54_thirteenth_acceptance_root_setgid_repair_transition_2026-06-03.json",
+  "predecessor_sha256": "ae8085404a0983acb7d904aff36a04e71be453ae70429dfe160cf1ceac9ca2f0",
+  "source_checkpoint_commit": "10bb501df0fa66d70f95f8983494a2156dd9ebd6",
+  "status": "fourteenth_acceptance_root_recovered_aggregate_mhd_inventory_order_checkpoint_failed_closed_pending_repair_commit_push_clean_worker_validation_exact_latest_patch_rereview_and_aggregate_retry",
+  "qualification_effect": "none_no_execution_authorization_no_science_claim",
+  "repaired_staged_control_plane": {
+    "version": "821d185856722bd0178acb9427f78ac82671a4b6670779ec8400fbac54c6d721",
+    "state": "installed_candidate_only_policy_promoted_acceptance_root_recovered_aggregate_inventory_order_repair_staged_pending_clean_commit_push_worker_validation_exact_latest_patch_rereview_and_aggregate_retry",
+    "prepared_artifacts": {
+      "inventory_path": "tst/publication/frontier_control_plane/prepared_pic_artifact_inventory.json",
+      "inventory_sha256": "58a75a456812033cca86bec9bb9be27e355a0ca93517a5a9b838d25cab8b0ebc",
+      "paper_deck_count": 110,
+      "publication_analyzer_count": 20
+    },
+    "installed_controller_file_count": 23
+  },
+  "completed_thirteenth_clean_worker_validation": {
+    "scheduler_job_id": "4764398",
+    "scheduler_job_token": "4764398;frontier",
+    "job_name": "pic-q011-repair-validate",
+    "terminal_state": "COMPLETED",
+    "elapsed": "00:08:56",
+    "exit_code": "0:0",
+    "validated_source_commit": "10bb501df0fa66d70f95f8983494a2156dd9ebd6",
+    "archived_focused_tests_passed": 224,
+    "full_publication_tests_run": 1270,
+    "full_publication_test_skips": 2,
+    "independent_exact_latest_patch_rereviews": 2
+  },
+  "recovered_acceptance_root": {
+    "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/publication_acceptance",
+    "device": 135357496,
+    "inode": 720587400627193972,
+    "uid": 18664,
+    "gid": 31114,
+    "owner_group": "dfielding:ast207",
+    "mode": "00700",
+    "directory_entries": [],
+    "xattrs": [
+      "lustre.lov"
+    ],
+    "acl_xattrs": [],
+    "recovery_receipt": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/q011_pressure_publication_acceptance_root_recovery_1554766c-21e2-48b1-8cfe-b1e7e4e75aa2.json",
+      "sha256": "784bc2ba4d3ee3cc198d1b34bdab393f1edd92149e4304a99c0b165423a0c9fc",
+      "device": 135357496,
+      "inode": 720587435171381846,
+      "uid": 18664,
+      "gid": 31114,
+      "mode": "00400",
+      "hard_link_count": 1,
+      "size_bytes": 1080,
+      "xattrs": [
+        "lustre.lov"
+      ],
+      "unexpected_xattrs": [],
+      "acl_xattrs": []
+    },
+    "recovery_action": "recovered_exact_empty_inherited_setgid_root",
+    "descriptor_relative_operation": true,
+    "child_and_parent_synced": true,
+    "ordinary_helper_verification": "passed",
+    "durable_receipt_verification": "passed"
+  },
+  "failed_closed_aggregate_publication": {
+    "scheduler_job_id": "4764415",
+    "scheduler_job_token": "4764415;frontier",
+    "job_name": "pic-q011-pressure-publish",
+    "terminal_state": "FAILED",
+    "elapsed": "00:05:37",
+    "exit_code": "1:0",
+    "validated_source_commit": "10bb501df0fa66d70f95f8983494a2156dd9ebd6",
+    "source_archive_sha256": "578d01b16bc92dd4d7140c94d981987030f651775568ed8260928089f914f2d9",
+    "failure_class": "strict_offline_mhd_w_bcc_analyzer_assumed_one_exact_variable_order_for_a_name_addressed_binary_product",
+    "first_rejected_product": "cases/ps_p0_1p00/bin/ps_p0_1p00.mhd_w_bcc.00000.bin",
+    "analyzer_required_variable_order": [
+      "dens",
+      "eint",
+      "velx",
+      "vely",
+      "velz",
+      "bcc1",
+      "bcc2",
+      "bcc3"
+    ],
+    "retained_athenak_variable_order": [
+      "dens",
+      "velx",
+      "vely",
+      "velz",
+      "eint",
+      "bcc1",
+      "bcc2",
+      "bcc3"
+    ],
+    "retained_inventory_audit": {
+      "pressure_case_count": 4,
+      "mhd_w_bcc_snapshot_count": 20,
+      "distinct_retained_inventories": 1,
+      "missing_required_variables": [],
+      "unexpected_variables": [],
+      "disposition": "uniform_source_compatible_field_order_only_no_artifact_corruption"
+    },
+    "public_bundle_exposed": false,
+    "public_receipt_exposed": false,
+    "public_analysis_exposed": false,
+    "hidden_publication_staging_retained_after_wrapper_rollback": false
+  },
+  "aggregate_inventory_order_repair": {
+    "aggregate_analyzer": {
+      "path": "tst/publication/analyze_q011_section54_pressure_pilot.py",
+      "predecessor_sha256": "f563858ebca432be4b4aecf6e598709068b8d16c993c4a4b83f0ccea931d3eb6",
+      "successor_sha256": "1cf1cf41f9082569dd9e2abb44b65d8d31742189c829ad41f7226bcb791e0b76"
+    },
+    "accepted_contract": "Require exact unordered equality between the parsed mhd_w_bcc variable-name inventory and the preregistered required variables, then compose each field by name.",
+    "rejected_contracts": [
+      "missing_required_mhd_w_bcc_variable",
+      "unexpected_mhd_w_bcc_variable",
+      "duplicate_mhd_w_bcc_variable_rejected_by_strict_binary_parser"
+    ],
+    "scientific_contract_changed": false,
+    "pilot_cases_changed": false,
+    "estimators_changed": false,
+    "thresholds_changed": false,
+    "snapshot_selection_changed": false,
+    "postrun_source_authorization_successor": {
+      "path": "tst/publication/readiness/q011_section54_pressure_pilot_postrun_aggregate_source_authorization_successor_v3_2026-06-04.json",
+      "sha256": "38d778a0d26f5536bdb3a98f0c936392a724ccff0ceca53f077b28fa8247e390"
+    },
+    "independent_read_only_forensic_reviews": {
+      "requested": 2,
+      "status": "pending_exact_latest_patch_rereview_after_local_validation"
+    }
+  },
+  "candidate_only_policy_promotion": {
+    "reviewed_policy_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/reviewed_candidate_only_successor_821d1858_1554766c-21e2-48b1-8cfe-b1e7e4e75aa2.json",
+    "reviewed_policy_sha256": "23a73b868146f63d4b363713f988d55e9dadffa15b26f2b2f1d07da66331f5c3",
+    "orion_active_policy_sha256": "23a73b868146f63d4b363713f988d55e9dadffa15b26f2b2f1d07da66331f5c3",
+    "project_home_active_policy_sha256": "23a73b868146f63d4b363713f988d55e9dadffa15b26f2b2f1d07da66331f5c3",
+    "orion_active_promotion_sha256": "4824ea825e7b9e42becdca4b9a8b72c0454bd1a2e02d5e365b1878ed94c53243",
+    "project_home_active_promotion_sha256": "4824ea825e7b9e42becdca4b9a8b72c0454bd1a2e02d5e365b1878ed94c53243"
+  },
+  "release_blockers": [
+    "fourteenth_aggregate_inventory_order_repair_clean_commit_and_push_pending",
+    "replacement_full_clean_worker_validation_pending",
+    "exact_latest_patch_independent_rereview_pending",
+    "pressure_aggregate_and_review_packet_worker_publication_pending"
+  ],
+  "human_input_required_now": false,
+  "first_required_human_input_after_automated_repairs": "Select exactly one Section 5.4 problem/ps_p0 case from the verified immutable four-slice pressure-review packet."
+}

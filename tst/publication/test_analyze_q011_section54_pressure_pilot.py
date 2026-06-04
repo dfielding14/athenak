@@ -18,6 +18,18 @@ import numpy as np
 from tst.publication import analyze_q011_section54_pressure_pilot as pilot
 
 
+_ATHENAK_MHD_W_BCC_FIELDS = (
+    "dens",
+    "velx",
+    "vely",
+    "velz",
+    "eint",
+    "bcc1",
+    "bcc2",
+    "bcc3",
+)
+
+
 def _sha256(payload: bytes) -> str:
     return hashlib.sha256(payload).hexdigest()
 
@@ -119,6 +131,7 @@ def _binary(
         "bcc1": np.ones(shape, dtype=np.float32),
         "bcc2": np.full(shape, 0.5, dtype=np.float32),
         "bcc3": np.zeros(shape, dtype=np.float32),
+        "unused": np.zeros(shape, dtype=np.float32),
         "bmag": np.full(shape, np.sqrt(1.25), dtype=np.float32),
         "prtcl_jx": np.full(shape, 0.25, dtype=np.float32),
         "j2": np.full(shape, 0.125, dtype=np.float32),
@@ -309,7 +322,11 @@ def _bundle(root: Path) -> dict[str, Any]:
             paths = pilot._expected_snapshot_paths(case_id, index)
             snapshots.append({
                 "time": time,
-                "mhd_w_bcc": _put(root, paths["mhd_w_bcc"], _binary(time, argv, pilot._MHD_FIELDS)),
+                "mhd_w_bcc": _put(
+                    root,
+                    paths["mhd_w_bcc"],
+                    _binary(time, argv, _ATHENAK_MHD_W_BCC_FIELDS),
+                ),
                 "bmag": _put(root, paths["bmag"], _binary(time, argv, ("bmag",))),
                 "prtcl_jx": _put(root, paths["prtcl_jx"], _binary(time, argv, ("prtcl_jx",))),
                 "j2": _put(root, paths["j2"], _binary(time, argv, ("j2",))),
@@ -460,6 +477,22 @@ class Q011Section54PressurePilotTests(unittest.TestCase):
                     with self.assertRaises(pilot.PilotAnalysisError):
                         _analyze(fixture)
 
+    def test_mhd_variable_order_is_name_based_but_extras_fail_closed(self) -> None:
+        def reordered(root: Path, manifest: dict[str, Any]) -> None:
+            binding = manifest["cases"][0]["snapshots"][0]["mhd_w_bcc"]
+            _rewrite(root, binding, _binary(0.0, "1.0", pilot._MHD_FIELDS))
+
+        with _fixture(reordered) as fixture:
+            _analyze(fixture)
+
+        def extra(root: Path, manifest: dict[str, Any]) -> None:
+            binding = manifest["cases"][0]["snapshots"][0]["mhd_w_bcc"]
+            _rewrite(root, binding, _binary(0.0, "1.0", pilot._MHD_FIELDS + ("unused",)))
+
+        with _fixture(extra) as fixture:
+            with self.assertRaisesRegex(pilot.PilotAnalysisError, "variable inventory drifted"):
+                _analyze(fixture)
+
     def test_particle_provenance_and_terminal_startup_cohort_fail_closed(self) -> None:
         def provenance(root: Path, manifest: dict[str, Any]) -> None:
             binding = manifest["cases"][0]["snapshots"][0]["prtcl_all"]
@@ -598,6 +631,11 @@ class Q011Section54PressurePilotTests(unittest.TestCase):
             pilot.POSTRUN_SOURCE_AUTHORIZATION_PREDECESSOR_PATH.read_bytes()
         )
         predecessor = json.loads(predecessor_payload)
+        first_successor_path = (
+            pilot.REPO_ROOT / predecessor["predecessor_record"]
+        )
+        first_successor_payload = first_successor_path.read_bytes()
+        first_successor = json.loads(first_successor_payload)
         compatibility_payload = pilot.PARSER_COMPATIBILITY_SUCCESSOR_PATH.read_bytes()
         self.assertEqual(
             successor["predecessor_record"],
@@ -608,12 +646,19 @@ class Q011Section54PressurePilotTests(unittest.TestCase):
         self.assertEqual(successor["predecessor_sha256"], _sha256(predecessor_payload))
         self.assertEqual(
             predecessor["predecessor_record"],
+            "tst/publication/readiness/"
+            "q011_section54_pressure_pilot_postrun_aggregate_source_authorization_"
+            "successor_2026-06-02.json",
+        )
+        self.assertEqual(predecessor["predecessor_sha256"], _sha256(first_successor_payload))
+        self.assertEqual(
+            first_successor["predecessor_record"],
             pilot.PARSER_COMPATIBILITY_SUCCESSOR_PATH.relative_to(
                 pilot.REPO_ROOT
             ).as_posix(),
         )
         self.assertEqual(
-            predecessor["predecessor_sha256"], _sha256(compatibility_payload)
+            first_successor["predecessor_sha256"], _sha256(compatibility_payload)
         )
 
     def test_postrun_source_authorization_rejects_predecessor_drift(self) -> None:

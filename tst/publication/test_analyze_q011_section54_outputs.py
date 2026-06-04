@@ -174,12 +174,36 @@ class Q011Section54BinaryTests(unittest.TestCase):
         dataset = q011.parse_athenak_binary_bytes(payload)
         self.assertEqual(dataset.input_parameters["particles"]["pic_deltaf_f0"], "")
 
+    def test_parser_maps_reordered_fields_by_header_name(self) -> None:
+        fields = ("dens", "velx", "eint")
+        payload = _payload(
+            [
+                _block((0, 0, 0), 0, 1.0, fields=fields),
+                _block((1, 0, 0), 0, 3.0, fields=fields),
+            ],
+            fields=fields,
+        )
+        dataset = q011.parse_athenak_binary_bytes(payload)
+        self.assertEqual(dataset.variable_names, fields)
+        np.testing.assert_array_equal(dataset.blocks[0].fields["dens"], np.full((1, 2, 2), 1.0))
+        np.testing.assert_array_equal(dataset.blocks[0].fields["velx"], np.full((1, 2, 2), 2.0))
+        np.testing.assert_array_equal(dataset.blocks[0].fields["eint"], np.full((1, 2, 2), 3.0))
+
     def test_parser_rejects_empty_parameter_key(self) -> None:
         payload = _payload(
             [_block((0, 0, 0), 0, 1.0), _block((1, 0, 0), 0, 3.0)],
             additional_parameter_header="<particles>\n = value\n",
         )
         with self.assertRaisesRegex(q011.AnalysisError, "empty parameter key"):
+            q011.parse_athenak_binary_bytes(payload)
+
+    def test_parser_rejects_duplicate_variable_names(self) -> None:
+        fields = ("dens", "dens")
+        payload = _payload(
+            [_block((0, 0, 0), 0, 1.0, fields=fields)],
+            fields=fields,
+        )
+        with self.assertRaisesRegex(q011.AnalysisError, "duplicate variable name"):
             q011.parse_athenak_binary_bytes(payload)
 
     def test_parser_rejects_nonfinite_field_geometry_and_invalid_logical_level(self) -> None:

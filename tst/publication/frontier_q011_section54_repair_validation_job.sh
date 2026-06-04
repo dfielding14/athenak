@@ -58,7 +58,7 @@ mapfile -t publication_shell <<< "$publication_shell_output"
 mapfile -t publication_json <<< "$publication_json_output"
 test "${#publication_python[@]}" -eq 141
 test "${#publication_shell[@]}" -eq 16
-test "${#publication_json[@]}" -eq 280
+test "${#publication_json[@]}" -eq 282
 
 "$PYTHON" -B - "${publication_python[@]}" <<'PY'
 import sys
@@ -109,6 +109,7 @@ PY
   tst.publication.test_q011_section54_qualifying_campaign_execution \
   tst.publication.test_publish_q011_section54_campaign_attempt \
   tst.publication.test_analyze_q011_section54_numerical_qualification \
+  tst.publication.test_analyze_q011_section54_pressure_pilot \
   tst.publication.test_provision_q011_pressure_publication_acceptance_root
 
 cd "$REPO_ROOT"
