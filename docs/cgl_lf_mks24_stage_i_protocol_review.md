@@ -3,13 +3,18 @@
 ## Decision
 
 Read `docs/cgl_lf_phase_i_handoff.md` first for the durable current production
-boundary. Accepted corrected-E03 `R02/s27_rankio_t9p25_t9p75` job `4759856`
-reached exact `t = 9.75` in `4889` seconds. Formal and independently
-regenerated inspection pass with `26` retained products, zero strict LF
-failure counters, no restart-marker bypass, terminal
-`lf_hwproj = 308629878188`, and forcing-work residual
-`4.667144504856836e-13`. Hardened reconciliation closes at `28/28/28`, with
-no active reservation, no transaction, and `issues = []`.
+boundary. Accepted corrected-E03 `R02/s28_rankio_t9p75_t10` job `4761058`
+reached exact `t = 10` in `2335` seconds. Formal and independently
+regenerated inspection pass with complete terminal ranked products, zero
+strict LF failure counters, no restart-marker bypass, terminal
+`lf_hwproj = 310229365059`, and forcing-work residual
+`1.0355057701962676e-12`. Hardened reconciliation closes at `29/29/29`,
+with no active reservation, no transaction, and `issues = []`. The accepted
+R02 standard-layout outputs were then assembled and analyzed exactly once as
+a single whole-case bundle. Its manifest SHA-256 is
+`aa3e3b7294bc432a53b09cf04b85252691f56574e2ea8f001f830d38153f6b55`;
+diagnostics SHA-256 is
+`49b3230a37558014c17de675dbcde4c122fbdd5aa5145317b7a82a8e42ec3cea`.
 
 A retained fail-closed recost lifecycle companion exists at
 `scripts/frontier/cgl_lf_stage_i_checkpoint.py` with SHA-256
@@ -20,20 +25,25 @@ helper before `s19`; the helper SHA-256 is
 `54ec671bb45aa27735a174d40b4b2e6009070716346ea09699bbe62421bbfada`,
 and focused helper slice passes (`10 passed, 35 deselected`).
 
-F-111 is the latest hardened normal observed publication under the retained
+F-112 is the latest hardened normal observed publication under the retained
 companion. Its canonical recost artifact SHA-256 is
-`354dde3f93a6ebe73532e2b7f851a8068675b7798964c707146c37428cb9b195`;
+`580a860ac5a04dbe2c8a1ecbd898c5c82eb9f4d4ed255255e99808ede0bdf356`;
 its observed-publication audit SHA-256 is
-`bd20e3d7e1e9d1df8cb77ea1b443601a9586f55cdb413f3b6f205cc2283152e6`.
-It authorizes only `R02/s28_rankio_t9p75_t10` on one node with Slurm
-`01:10:00`, Athena `01:00:00`, and the bounded one-segment
-`3000`-second threshold. Before preparing `s28`, commit, push, archive, and catalog the
+`320631c7286705ff750ac93df9eb71b4a15bc0396856f1b87796195bba49cba7`.
+It authorizes only fresh `R03/s00_rankio_t0_t0p5` on one node with Slurm
+`02:00:00`, Athena `01:50:00`, and the aggressive bounded one-segment
+`6000`-second threshold against a reviewed `5700`-second estimate. Before
+preparing fresh `R03`, commit, push, archive, and catalog the
 current documentation checkpoint, validate the full source-archive checksum
 ledger, then require no queued `cgl_*` workflow job, free strict root lock,
-authenticated hardened reconciliation, `28/28/28`, no active reservation, no
+authenticated hardened reconciliation, `29/29/29`, no active reservation, no
 transaction, `issues = []`, and an independently audited bounded readiness
 packet. Actual AthenaK submission retains the helper's all-user queue
 preflight.
+
+The detailed log below remains chronological. Any later references to F-111
+or `R02/s28_rankio_t9p75_t10` are superseded historical boundaries unless
+they explicitly describe retained evidence.
 
 The frozen `R02`-`R17` inventory in
 `inputs/cgl_lf_paper/mks24_stage_i_manifest.json` is accepted as the Stage I
