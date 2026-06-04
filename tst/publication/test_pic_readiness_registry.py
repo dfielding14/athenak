@@ -1283,19 +1283,77 @@ class PicReadinessRegistryTests(unittest.TestCase):
             ]
         )
         current_repair = _load(
-            "q011_section54_twelfth_worker_python_path_transition_"
+            "q011_section54_thirteenth_acceptance_root_setgid_repair_transition_"
             "2026-06-03.json"
         )
         repaired_staged = current_repair["repaired_staged_control_plane"]
+        helper = current_repair["acceptance_root_helper_repair"]
+        self.assertEqual(
+            current_repair["predecessor_sha256"],
+            _sha256(REPO_ROOT / current_repair["predecessor_record"]),
+        )
+        self.assertEqual(helper["sha256"], _sha256(REPO_ROOT / helper["path"]))
+        runbook = (CONTROL_PLANE_DIR / "README.md").read_text(encoding="utf-8")
+        self.assertEqual(
+            runbook.count(
+                f"EXPECTED_ACCEPTANCE_HELPER_SHA256={helper['sha256']}"
+            ),
+            2,
+        )
+        failed_checkpoint = current_repair["reviewed_failed_checkpoint"]
+        acceptance_root = Path(failed_checkpoint["acceptance_root"])
+        acceptance_status = acceptance_root.stat()
+        self.assertTrue(stat.S_ISDIR(acceptance_status.st_mode))
+        self.assertEqual(
+            (acceptance_status.st_dev, acceptance_status.st_ino),
+            (failed_checkpoint["device"], failed_checkpoint["inode"]),
+        )
+        self.assertEqual(acceptance_status.st_uid, failed_checkpoint["uid"])
+        self.assertEqual(acceptance_status.st_gid, failed_checkpoint["gid"])
+        self.assertEqual(
+            f"{stat.S_IMODE(acceptance_status.st_mode):05o}",
+            failed_checkpoint["mode"],
+        )
+        self.assertEqual(sorted(acceptance_root.iterdir()), [])
+        self.assertEqual(sorted(os.listxattr(acceptance_root)), failed_checkpoint["xattrs"])
+        receipt = Path(helper["recovery_receipt_path"])
+        self.assertFalse(receipt.exists())
+        self.assertEqual(
+            sorted(receipt.parent.glob(".q011-acceptance-recovery.*")),
+            [],
+        )
+        for label, path, identity, expected_mode, expected_xattrs in (
+            (
+                "pic",
+                acceptance_root.parent,
+                helper["reviewed_pic_root_identity"],
+                helper["reviewed_pic_root_mode"],
+                helper["reviewed_pic_root_xattrs"],
+            ),
+            (
+                "policy",
+                receipt.parent,
+                helper["reviewed_policy_root_identity"],
+                helper["reviewed_policy_root_mode"],
+                helper["reviewed_policy_root_xattrs"],
+            ),
+        ):
+            with self.subTest(authority=label):
+                status = path.stat()
+                self.assertEqual(
+                    (status.st_dev, status.st_ino),
+                    (identity["device"], identity["inode"]),
+                )
+                self.assertEqual(status.st_uid, failed_checkpoint["uid"])
+                self.assertEqual(status.st_gid, failed_checkpoint["gid"])
+                self.assertEqual(f"{stat.S_IMODE(status.st_mode):05o}", expected_mode)
+                self.assertEqual(sorted(os.listxattr(path)), expected_xattrs)
         if staged_version == repaired_staged["version"]:
             self.assertEqual(
-                current_repair["predecessor_sha256"],
-                _sha256(REPO_ROOT / current_repair["predecessor_record"]),
-            )
-            self.assertEqual(
                 repaired_staged["state"],
-                "source_local_repair_staged_pending_clean_commit_worker_validation_"
-                "install_build_and_freeze",
+                "installed_candidate_only_policy_promoted_acceptance_root_helper_"
+                "repair_staged_pending_clean_commit_worker_validation_exact_"
+                "latest_patch_rereview_and_exact_empty_root_recovery",
             )
             prepared = repaired_staged["prepared_artifacts"]
             prepared_path = REPO_ROOT / prepared["inventory_path"]
@@ -3172,7 +3230,7 @@ class PicReadinessRegistryTests(unittest.TestCase):
         self.assertEqual(successor["frontier_launch_authorization"], "none_no_registered_science_slices")
         self.assertEqual(successor["operational_baseline"]["registered_science_slices"], [])
 
-    def test_q011_pressure_pilot_four_slice_policy_promotion_is_current(self) -> None:
+    def test_q011_pressure_pilot_four_slice_policy_promotion_is_historical(self) -> None:
         successor = _load("phase0_curated_candidate_successor_v20_2026-06-02.json")
         self.assertEqual(
             successor["predecessor_sha256"],
@@ -3183,16 +3241,6 @@ class PicReadinessRegistryTests(unittest.TestCase):
             promotion["repo_policy_sha256"],
             _sha256(REPO_ROOT / promotion["repo_policy_path"]),
         )
-        for key in (
-            "orion_policy",
-            "project_home_policy",
-            "orion_promotion",
-            "project_home_promotion",
-        ):
-            self.assertEqual(
-                promotion[f"{key}_sha256"],
-                _sha256(Path(promotion[f"{key}_path"])),
-            )
         self.assertEqual(
             promotion["orion_policy_sha256"],
             promotion["project_home_policy_sha256"],
@@ -3210,6 +3258,52 @@ class PicReadinessRegistryTests(unittest.TestCase):
             promotion["registered_science_authorization_ids"],
         )
         self.assertEqual(promotion["registered_science_slice_count"], 4)
+        current = _load(
+            "q011_section54_thirteenth_acceptance_root_setgid_repair_transition_"
+            "2026-06-03.json"
+        )["candidate_only_policy_promotion"]
+        self.assertEqual(
+            current["orion_active_policy_sha256"],
+            _sha256(
+                Path(
+                    "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/"
+                    "storage_policy.json"
+                )
+            ),
+        )
+        self.assertEqual(
+            current["project_home_active_policy_sha256"],
+            _sha256(
+                Path(
+                    "/autofs/nccs-svm1_proj/ast207/proj-shared/PIC/policy/"
+                    "storage_policy.json"
+                )
+            ),
+        )
+        self.assertEqual(
+            current["orion_active_promotion_sha256"],
+            _sha256(
+                Path(
+                    "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/"
+                    "active_promotion.json"
+                )
+            ),
+        )
+        self.assertEqual(
+            current["project_home_active_promotion_sha256"],
+            _sha256(
+                Path(
+                    "/autofs/nccs-svm1_proj/ast207/proj-shared/PIC/policy/"
+                    "active_promotion.json"
+                )
+            ),
+        )
+        current_policy = json.loads(
+            Path(
+                "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/storage_policy.json"
+            ).read_text(encoding="utf-8")
+        )
+        self.assertEqual(current_policy["registered_science_slices"], [])
         attestation = successor["pre_policy_promotion_operator_attestation"]
         self.assertEqual(attestation["sha256"], _sha256(Path(attestation["path"])))
         self.assertEqual(

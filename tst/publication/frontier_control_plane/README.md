@@ -1182,6 +1182,16 @@ descriptor checksums. Create and sync the canonical publication root and its
 fixed sibling acceptance authority once before publication; do not use a
 Project Home bulk-artifact directory:
 
+The first live acceptance-root provisioning attempt on 2026-06-03 failed
+closed before `sbatch`: Orion inherited the parent setgid bit and left the exact
+empty sibling root at mode `02700`, rather than the required `0700`. Preserve
+that checkpoint. After the repaired helper is committed, pushed, validated by
+the clean committed repair worker, and independently rereviewed from the exact
+latest patch, run this incident-specific recovery once. It accepts only the
+exact empty inherited-setgid checkpoint, requires an empty receipt-staging
+namespace, mutates the retained no-follow descriptor to `0700`, syncs the child
+and parent, and publishes one durable recovery receipt:
+
 ```bash
 (
 set -euo pipefail
@@ -1218,42 +1228,132 @@ REPAIR_VALIDATION_LOG_COMMIT="$(
 )"
 test "$REPAIR_VALIDATION_LOG_COMMIT" = "$FULL_GIT_COMMIT"
 test "$(printf '%s\n' "$REPAIR_VALIDATION_LOG_COMMIT" | /usr/bin/wc -l)" -eq 1
+QUEUED_JOB_IDS="$(
+  "${SLURM_ENV[@]}" /usr/bin/squeue --clusters=frontier -u dfielding -h -o '%i'
+)"
+test -z "$QUEUED_JOB_IDS"
+ACCEPTANCE_HELPER_RELATIVE=tst/publication/provision_q011_pressure_publication_acceptance_root.py
+EXPECTED_ACCEPTANCE_HELPER_SHA256=431787450a6fe2a37a6ee1e1a37e1626444e2f6af3d7516117f820bc17963920
+ACCEPTANCE_HELPER_SNAPSHOT="$(
+  /usr/bin/mktemp -p /tmp q011-acceptance-helper.XXXXXX.py
+)"
+ACCEPTANCE_RECOVERY_RECEIPT="${PIC_ROOT}/policy/q011_pressure_publication_acceptance_root_recovery_1554766c-21e2-48b1-8cfe-b1e7e4e75aa2.json"
+test ! -e "$ACCEPTANCE_RECOVERY_RECEIPT"
+trap '/usr/bin/rm -f "$ACCEPTANCE_HELPER_SNAPSHOT"' EXIT
+"${GIT[@]}" -C "$SOURCE_REPO" show \
+  "${FULL_GIT_COMMIT}:${ACCEPTANCE_HELPER_RELATIVE}" \
+  > "$ACCEPTANCE_HELPER_SNAPSHOT"
+/usr/bin/chmod 0444 "$ACCEPTANCE_HELPER_SNAPSHOT"
+ACCEPTANCE_HELPER_SHA256="$(
+  /usr/bin/sha256sum "$ACCEPTANCE_HELPER_SNAPSHOT" | /usr/bin/awk '{print $1}'
+)"
+test "$ACCEPTANCE_HELPER_SHA256" = "$EXPECTED_ACCEPTANCE_HELPER_SHA256"
+ACCEPTANCE_RECOVERY_PAYLOAD="$("$PYTHON" -I -B "$ACCEPTANCE_HELPER_SNAPSHOT" \
+  --validated-source-commit "$FULL_GIT_COMMIT" \
+  --expected-helper-sha256 "$ACCEPTANCE_HELPER_SHA256" \
+  --recover-exact-empty-inherited-setgid-root
+)"
+ACCEPTANCE_RECOVERY_STAGING="$(
+  /usr/bin/mktemp -p "${PIC_ROOT}/policy" .q011-acceptance-recovery.XXXXXX
+)"
+trap '/usr/bin/rm -f "$ACCEPTANCE_RECOVERY_STAGING" "$ACCEPTANCE_HELPER_SNAPSHOT"' EXIT
+printf '%s\n' "$ACCEPTANCE_RECOVERY_PAYLOAD" > "$ACCEPTANCE_RECOVERY_STAGING"
+"$PYTHON" -I -B "$ACCEPTANCE_HELPER_SNAPSHOT" \
+  --validated-source-commit "$FULL_GIT_COMMIT" \
+  --expected-helper-sha256 "$ACCEPTANCE_HELPER_SHA256" \
+  --publish-recovery-receipt "$ACCEPTANCE_RECOVERY_STAGING"
+"$PYTHON" -I -B "$ACCEPTANCE_HELPER_SNAPSHOT" \
+  --validated-source-commit "$FULL_GIT_COMMIT" \
+  --expected-helper-sha256 "$ACCEPTANCE_HELPER_SHA256" \
+  --verify-recovery-receipt "$ACCEPTANCE_RECOVERY_RECEIPT"
+/usr/bin/sha256sum "$ACCEPTANCE_RECOVERY_RECEIPT"
+)
+```
+
+If the explicit recovery is interrupted after the retained inode reaches
+`0700` but before its receipt is durably published, inspect that checkpoint and
+rerun the same block with
+`--reconcile-exact-empty-normalized-root` in place of
+`--recover-exact-empty-inherited-setgid-root`. That mode accepts only the same
+reviewed empty inode already at exact `0700`; it does not normalize a new path.
+Before rerunning, require that `policy/` contains no retained
+`.q011-acceptance-recovery.*` alias. A killed shell can leave an empty, partial,
+or complete pre-link staging file after normalization. Stop for reviewed
+inspection and removal of that exact orphan before retrying; do not let an
+ordinary retry silently consume or overwrite it.
+If the fixed recovery receipt already exists, verify it and do not republish it.
+If that verification reports a receipt link-count drift after an interruption
+inside the hard-link publication interval, inspect the fixed `policy/`
+directory and invoke the same authenticated helper snapshot once with
+`--reconcile-linked-recovery-receipt`. That explicit mode accepts only one
+canonical read-only receipt with one matching retained
+`.q011-acceptance-recovery.*` alias beneath the reviewed policy inode, removes
+that alias, syncs the receipt and policy directory, and revalidates single-link
+closure. Then run `--verify-recovery-receipt` again.
+
+```bash
+(
+set -euo pipefail
+test "${PIC_ROOT:-}" = /lustre/orion/ast207/proj-shared/dfielding/PIC
+test "${PYTHON:-}" = /opt/cray/pe/python/3.11.7/bin/python3
+SOURCE_REPO=/autofs/nccs-svm1_home2/dfielding/athenak-pic
+SLURM_ENV=(/usr/bin/env -i HOME=/ LANG=C LC_ALL=C PATH=/usr/bin:/bin SLURM_CLUSTERS=frontier)
+GIT=(
+  /usr/bin/env -i HOME=/ LANG=C LC_ALL=C PATH=/usr/bin:/bin
+  /usr/bin/git -c core.fsmonitor=false -c core.hooksPath=/dev/null
+)
+SOURCE_STATUS="$("${GIT[@]}" -C "$SOURCE_REPO" status --porcelain --untracked-files=all)"
+test -z "$SOURCE_STATUS"
+FULL_GIT_COMMIT="$("${GIT[@]}" -C "$SOURCE_REPO" rev-parse HEAD)"
+test "$FULL_GIT_COMMIT" = "$("${GIT[@]}" -C "$SOURCE_REPO" rev-parse origin/PIC)"
+REPAIR_VALIDATION_COMMIT='<repair_validation_commit from the completed checkpoint>'
+REPAIR_VALIDATION_JOB_ID='<repair_validation_job_id from the completed checkpoint>'
+[[ "$REPAIR_VALIDATION_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+[[ "$REPAIR_VALIDATION_JOB_ID" =~ ^[0-9]+$ ]]
+test "$REPAIR_VALIDATION_COMMIT" = "$FULL_GIT_COMMIT"
+REPAIR_VALIDATION_STATE="$(
+  "${SLURM_ENV[@]}" /usr/bin/sacct -X --clusters=frontier -n \
+    -j "$REPAIR_VALIDATION_JOB_ID" --format=JobIDRaw,State --parsable2 |
+    /usr/bin/awk -F'|' -v job="$REPAIR_VALIDATION_JOB_ID" '
+      $1 == job {count += 1; state = $2}
+      END {if (count != 1) exit 1; print state}
+    '
+)"
+test "$REPAIR_VALIDATION_STATE" = COMPLETED
+REPAIR_VALIDATION_LOG="${PIC_ROOT}/logs/slurm/pic-q011-repair-validate.${REPAIR_VALIDATION_JOB_ID}.log"
+test -r "$REPAIR_VALIDATION_LOG"
+REPAIR_VALIDATION_LOG_COMMIT="$(
+  /usr/bin/sed -n 's/^source_commit=//p' "$REPAIR_VALIDATION_LOG"
+)"
+test "$REPAIR_VALIDATION_LOG_COMMIT" = "$FULL_GIT_COMMIT"
+test "$(printf '%s\n' "$REPAIR_VALIDATION_LOG_COMMIT" | /usr/bin/wc -l)" -eq 1
+QUEUED_JOB_IDS="$(
+  "${SLURM_ENV[@]}" /usr/bin/squeue --clusters=frontier -u dfielding -h -o '%i'
+)"
+test -z "$QUEUED_JOB_IDS"
 test -d "${PIC_ROOT}/publication" || /usr/bin/mkdir "${PIC_ROOT}/publication"
-if test ! -e "${PIC_ROOT}/publication_acceptance"
-then
-  /usr/bin/install -d -m 0700 -o dfielding -g ast207 "${PIC_ROOT}/publication_acceptance"
-  "$PYTHON" -I -B - "${PIC_ROOT}/publication_acceptance" <<'PY'
-import os
-import sys
-
-fd = os.open(sys.argv[1], os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-try:
-    acl_names = {"system.posix_acl_access", "system.posix_acl_default"}
-    for name in acl_names.intersection(os.listxattr(fd)):
-        os.removexattr(fd, name)
-    os.fsync(fd)
-finally:
-    os.close(fd)
-PY
-fi
-test -d "${PIC_ROOT}/publication_acceptance"
-"$PYTHON" -I -B - "${PIC_ROOT}/publication_acceptance" <<'PY'
-import os
-import sys
-
-fd = os.open(sys.argv[1], os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-try:
-    acl_names = {"system.posix_acl_access", "system.posix_acl_default"}
-    remaining = acl_names.intersection(os.listxattr(fd))
-    if remaining:
-        raise SystemExit(f"ACL xattrs remain: {sorted(remaining)}")
-    os.fsync(fd)
-finally:
-    os.close(fd)
-PY
-test "$(
-  /usr/bin/stat -c '%U:%G:%a' "${PIC_ROOT}/publication_acceptance"
-)" = "dfielding:ast207:700"
+ACCEPTANCE_HELPER_RELATIVE=tst/publication/provision_q011_pressure_publication_acceptance_root.py
+EXPECTED_ACCEPTANCE_HELPER_SHA256=431787450a6fe2a37a6ee1e1a37e1626444e2f6af3d7516117f820bc17963920
+ACCEPTANCE_HELPER_SNAPSHOT="$(
+  /usr/bin/mktemp -p /tmp q011-acceptance-helper.XXXXXX.py
+)"
+trap '/usr/bin/rm -f "$ACCEPTANCE_HELPER_SNAPSHOT"' EXIT
+"${GIT[@]}" -C "$SOURCE_REPO" show \
+  "${FULL_GIT_COMMIT}:${ACCEPTANCE_HELPER_RELATIVE}" \
+  > "$ACCEPTANCE_HELPER_SNAPSHOT"
+/usr/bin/chmod 0444 "$ACCEPTANCE_HELPER_SNAPSHOT"
+ACCEPTANCE_HELPER_SHA256="$(
+  /usr/bin/sha256sum "$ACCEPTANCE_HELPER_SNAPSHOT" | /usr/bin/awk '{print $1}'
+)"
+test "$ACCEPTANCE_HELPER_SHA256" = "$EXPECTED_ACCEPTANCE_HELPER_SHA256"
+ACCEPTANCE_RECOVERY_RECEIPT="${PIC_ROOT}/policy/q011_pressure_publication_acceptance_root_recovery_1554766c-21e2-48b1-8cfe-b1e7e4e75aa2.json"
+"$PYTHON" -I -B "$ACCEPTANCE_HELPER_SNAPSHOT" \
+  --validated-source-commit "$FULL_GIT_COMMIT" \
+  --expected-helper-sha256 "$ACCEPTANCE_HELPER_SHA256"
+"$PYTHON" -I -B "$ACCEPTANCE_HELPER_SNAPSHOT" \
+  --validated-source-commit "$FULL_GIT_COMMIT" \
+  --expected-helper-sha256 "$ACCEPTANCE_HELPER_SHA256" \
+  --verify-recovery-receipt "$ACCEPTANCE_RECOVERY_RECEIPT"
 for directory in \
   "${PIC_ROOT}/publication" \
   "${PIC_ROOT}/publication_acceptance" \
@@ -1305,6 +1405,10 @@ AGGREGATE_STATE="$(
     '
 )"
 test "$AGGREGATE_STATE" = COMPLETED
+QUEUED_JOB_IDS="$(
+  "${SLURM_ENV[@]}" /usr/bin/squeue --clusters=frontier -u dfielding -h -o '%i'
+)"
+test -z "$QUEUED_JOB_IDS"
 REVIEW_PACKET_JOB_TOKEN="$("${SLURM_ENV[@]}" /usr/bin/sbatch --parsable --export=NIL \
   "${SOURCE_REPO}/tst/publication/frontier_q011_section54_pressure_pilot_review_packet_job.sh" \
   "$FULL_GIT_COMMIT")"
@@ -1391,8 +1495,10 @@ not close the separate qualification plotting and external-export review gate.
 
 Treat publication provisioning and each `sbatch` as durable checkpoints. If a
 session stops after the acceptance root is provisioned, resume through the
-verification-only existing-root branch above; do not delete or recreate it. If
-it stops after aggregate submission, recover the one printed
+helper's verification-only existing-root branch above; do not delete or
+recreate it. The explicit inherited-setgid recovery option is reserved only for
+the retained empty `02700` checkpoint described above. If the session stops
+after aggregate submission, recover the one printed
 `AGGREGATE_JOB_ID` through `sacct` and inspect its log and visible artifacts
 before considering a reviewed replacement. Once the aggregate receipt verifies,
 do not republish it. Apply the same rule to the one printed

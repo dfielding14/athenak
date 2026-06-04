@@ -1,6 +1,6 @@
 # PIC Sun and Bai release qualification handoff
 
-Last updated: 2026-06-03T21:42:21Z
+Last updated: 2026-06-03T23:14:29Z
 
 ## Purpose
 
@@ -75,28 +75,38 @@ Completed:
 16. The eleventh-pass scheduler-token repair was committed and pushed as
     `7e3f30a38d201ae438c434f9ce2ee2049f1f6455`. Its reviewed replacement
     worker validation submission became Frontier job `4761489`.
+17. The twelfth-pass fixed Cray-Python worker path was committed and pushed as
+    `749c95bb7492d67bd3765eadd5287f54663c4052`. Worker job `4761549` passed
+    `200` archived focused tests and all `1246` explicit publication tests with
+    two intentional skips.
+18. Authenticated storage probe
+    `1554766c-21e2-48b1-8cfe-b1e7e4e75aa2`, paired controller install
+    `821d185856722bd0178acb9427f78ac82671a4b6670779ec8400fbac54c6d721`,
+    historical-slice retirement, worker build-freeze job `4761634`, immutable
+    candidate freeze `98a372c9-2ea0-47e6-ad34-e66343e7eea1`, independent
+    candidate revalidation, and candidate-only policy promotion all passed.
+19. The first live acceptance-root provision failed closed before `sbatch`:
+    Orion inherited the parent setgid bit and created the exact empty sibling
+    directory with mode `02700`, not the required `0700`.
 
 In progress:
 
 1. Pressure-pilot aggregate publication remains prohibited. No public bundle,
    receipt, aggregate analysis artifact, or review packet exists.
-2. Preserve the twelfth-pass fixed trusted Cray-Python worker-path closure while
-   its clean commit, push, and exact
-   committed-tree validation finish.
-3. The live controller and policy intentionally remain at the historical
-   consumed-slice generation until the reviewed one-time strict-storage
-   migration is performed from the committed source.
+2. Preserve the exact empty `publication_acceptance/` inode. Do not delete or
+   recreate it.
+3. Commit, push, validate, independently rereview, and run the thirteenth-pass
+   descriptor-relative acceptance-root helper before submitting the aggregate
+   publication worker.
 
 Remaining:
 
-1. Commit and push the twelfth-pass worker-Python-path closure and pass the clean
-   committed worker validation.
-2. Capture authenticated mirrored storage evidence, install the paired
-   controller, retire the consumed historical slices, freeze and independently
-   revalidate a fresh worker-built candidate, and promote the candidate-only
-   policy.
-3. Provision the fixed sibling publication-acceptance authority through the
-   reviewed one-time transition, then publish and verify the pressure-pilot
+1. Commit and push the thirteenth-pass acceptance-root helper, pass one clean
+   committed worker validation, and independently rereview the exact latest
+   patch.
+2. Run the explicit exact-empty inherited-setgid recovery once, retain its
+   receipt, and verify the sibling authority at exact mode `0700`.
+3. Publish and verify the pressure-pilot
    aggregate receipt and review packet on workers.
 4. Perform a human pressure-choice review from the immutable four-slice
    calibration bundle. Do not invent or silently auto-select this science
@@ -178,10 +188,12 @@ diff before editing or committing. The expected repair ownership is:
 | Retained-tree descriptor pinning | `immutable_orion_tree.py`, its test |
 | Canonical Project Home policy and frozen lexical ledger roots | `frontier_control_plane/`, `q011_section54_pressure_pilot_execution.py`, registry and controller tests |
 | Hermetic Q011 workers and post-run source authorization | `frontier_q011_*job.sh`, `analyze_q011_section54_pressure_pilot.py`, readiness successor, prepared inventory |
+| Publication-acceptance retained-inode recovery | `provision_q011_pressure_publication_acceptance_root.py`, its focused test, controller runbook, readiness transition |
 
 Recent pushed history:
 
 ```text
+749c95bb7 Pin Q011 validation worker Python path
 7e3f30a38 Normalize Frontier parsable job tokens
 ee18be0f0 Harden Q011 canonical storage operational boundary
 7cb4a20eb Harden Q011 validation checkout boundary
@@ -224,6 +236,25 @@ Artifact root:
 PIC_ROOT=/lustre/orion/ast207/proj-shared/dfielding/PIC
 ```
 
+Current fresh candidate-only checkpoint:
+
+```text
+FREEZE_ROOT=$PIC_ROOT/clean_candidates/98a372c9-2ea0-47e6-ad34-e66343e7eea1
+CLEAN_CANDIDATE_MANIFEST=$FREEZE_ROOT/clean_candidate_manifest.json
+EXECUTABLE=$FREEZE_ROOT/athena
+ENVIRONMENT_PROFILE=$PIC_ROOT/control_plane/821d185856722bd0178acb9427f78ac82671a4b6670779ec8400fbac54c6d721/frontier_pic_environment.sh
+```
+
+| Item | Value |
+| --- | --- |
+| Frozen source commit | `749c95bb7492d67bd3765eadd5287f54663c4052` |
+| Controller version | `821d185856722bd0178acb9427f78ac82671a4b6670779ec8400fbac54c6d721` |
+| Storage probe ID | `1554766c-21e2-48b1-8cfe-b1e7e4e75aa2` |
+| Clean-candidate manifest SHA-256 | `dee6be45657e99ec477eec513c45be4ba6ac43b4fd5deb5655750f51c668e42f` |
+| Executable SHA-256 | `53e72bf57818a451e219cac950a891b48f23dc333fe8d2648a7907e51950c3ce` |
+| Candidate-only active policy SHA-256 | `23a73b868146f63d4b363713f988d55e9dadffa15b26f2b2f1d07da66331f5c3` |
+| Candidate-only active promotion SHA-256 | `4824ea825e7b9e42becdca4b9a8b72c0454bd1a2e02d5e365b1878ed94c53243` |
+
 Historical consumed-slice clean candidate:
 
 ```text
@@ -256,10 +287,9 @@ The cap is 10,000 node-hours. The ledger tail after the fourth engineering
 calibration reconciliation reported cumulative consumption of
 `1.3019444444444446` node-hours.
 
-These controller, candidate and policy bindings are retained historical
-chronology. Do not relaunch them. Replace them only through the ninth-pass
-strict-storage retirement, fresh worker freeze and candidate-only promotion
-sequence documented below.
+The older controller, candidate and policy bindings are retained historical
+chronology. Do not relaunch them. The current fresh candidate-only checkpoint
+above supersedes them for the next staged qualification steps.
 
 ## Completed pressure-engineering calibration slices
 
@@ -298,12 +328,12 @@ then ended without exposing a public bundle:
 | `4757026` | `CANCELLED` | `00:02:16` | Cancelled when the checkout mutated during publication; superseded by worker-local `git archive HEAD` snapshots |
 | `4757047` | `CANCELLED` | `00:04:36` | Cancelled after fresh review found late-failure rollback, descriptor-anchor, and source-authorization gaps |
 
-Aggregate publication remains prohibited until the integrated tenth-pass tree
-is committed, pushed, clean-worker validated, installed and used to freeze a
-fresh candidate. Provision the reviewed sibling acceptance authority before
-rerunning the worker publisher. Do not invoke the publisher directly on a
-login node. Use only the exact hermetic, commit-bound, `--export=NIL`
-publication sequence in
+The integrated tenth-pass tree is historical. Aggregate publication remains
+prohibited until the thirteenth-pass retained-inode recovery helper is
+committed, pushed, clean-worker validated, independently rereviewed from the
+exact latest patch, and used to recover the reviewed sibling acceptance
+authority in place. Do not invoke the publisher directly on a login node. Use
+only the exact hermetic, commit-bound, `--export=NIL` publication sequence in
 [`frontier_control_plane/README.md`](frontier_control_plane/README.md).
 
 Target outputs:
@@ -535,10 +565,12 @@ pressure-publication code blocker under the modeled path-scoped ordinary
 concurrent-writer threat. The durable transition record is
 [`q011_section54_seventh_adversarial_repair_transition_2026-06-03.json`](readiness/q011_section54_seventh_adversarial_repair_transition_2026-06-03.json).
 
-The live fixed sibling authority directory
-`$PIC_ROOT/publication_acceptance/` is intentionally absent. Provision it once
-with reviewed owner, group, mode and ACL immediately before worker
-publication. The same-UID PIC-root mutation caveat and Lustre power-loss
+The live fixed sibling authority directory was initially absent. Its first
+reviewed provisioning attempt failed closed before `sbatch`: Orion inherited
+the parent setgid bit and created the exact empty
+`$PIC_ROOT/publication_acceptance/` inode with mode `02700`, not `0700`.
+Preserve that inode. The thirteenth pass adds the reviewed descriptor-relative
+recovery below. The same-UID PIC-root mutation caveat and Lustre power-loss
 durability caveat remain explicit operational risks.
 
 ### Eighth storage migration and candidate-revalidation pass
@@ -725,6 +757,34 @@ failed-closed `4761489` record is the reviewed reason for that replacement.
 The durable append-only transition record is
 [`q011_section54_twelfth_worker_python_path_transition_2026-06-03.json`](readiness/q011_section54_twelfth_worker_python_path_transition_2026-06-03.json).
 
+### Thirteenth acceptance-root inherited-setgid pass
+
+The first post-freeze pressure-publication provisioning attempt failed closed
+before aggregate `sbatch`. The reviewed shell path used
+`install -d -m 0700`, but Orion inherited the parent setgid bit. The retained
+sibling authority is empty, owned by `dfielding:ast207`, has no ACL xattrs, and
+has exact mode `02700`.
+
+Two independent read-only audits agreed that the directory must not be deleted
+or recreated. The staged source-side helper opens the fixed Orion PIC root
+component-by-component with no-follow descriptors, opens the fixed sibling
+relative to the retained parent, verifies identity, owner, group, xattrs and
+contents, and permits only an explicit exact-empty `02700 -> 0700` recovery.
+Fresh creation also normalizes inherited mode through `fchmod`, while ordinary
+production resume is verification-only for the exact reviewed existing `0700`
+root. Receipt publication remains beneath the reviewed `policy/` inode and
+requires a fixed-digest authenticated helper, canonical read-only receipt, and
+single-link closure. A separate explicit mode reconciles the narrowly bounded
+post-link staging-alias interruption state.
+
+Commit and push the helper, pass one clean committed repair-validation worker,
+independently rereview the exact latest patch, then run the incident-specific
+durable recovery-receipt block in the controller README. That block requires an
+empty policy-side receipt-staging namespace before normalization; any retained
+pre-link orphan is a reviewed stop, not an implicit retry input. The durable
+append-only transition record is
+[`q011_section54_thirteenth_acceptance_root_setgid_repair_transition_2026-06-03.json`](readiness/q011_section54_thirteenth_acceptance_root_setgid_repair_transition_2026-06-03.json).
+
 ## Validation baseline
 
 The committed launch-prohibited checkpoint passed these validations before the
@@ -803,18 +863,16 @@ git diff -- tst/publication
 Then:
 
 1. Read this file and both governing plans.
-2. Preserve and inspect the in-flight tenth-pass canonical policy,
-   frozen-ledger-root split, and operational-wrapper closure edits.
-3. Commit and push the tenth-pass repaired boundary.
+2. Preserve and inspect the exact empty inherited-setgid acceptance-root
+   checkpoint and thirteenth-pass helper edits.
+3. Commit and push the thirteenth-pass repaired boundary.
 4. Run focused and full validation suites from the clean committed worker
    snapshot.
 5. Request a fresh independent adversarial review.
-6. Capture authenticated mirrored storage evidence, install the paired
-   controller, promote the historical-slice retirement successor, freeze and
-   independently revalidate a fresh worker-built candidate, and promote the
-   candidate-only successor.
-7. Provision `$PIC_ROOT/publication_acceptance/` through the reviewed one-time
-   transition. Finish the pressure-pilot worker aggregate publication and
+6. Run the explicit exact-empty acceptance-root recovery once and retain its
+   durable receipt.
+7. Verify `$PIC_ROOT/publication_acceptance/` at exact mode `0700`. Finish the
+   pressure-pilot worker aggregate publication and
    review packet, then verify both receipts.
 8. Ask the human collaborator to review the immutable four-slice pressure
    calibration evidence and select the qualifying pressure option.

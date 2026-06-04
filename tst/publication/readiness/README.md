@@ -698,6 +698,20 @@ qualify any scientific claim by itself.
   teardown interval plus a missing-root setup fd leak. A clean commit, final
   current-tree worker validation, paired install, strict live-policy migration,
   fresh build and candidate freeze remain required.
+- `q011_section54_tenth_canonical_project_home_repair_transition_2026-06-03.json`,
+  `q011_section54_eleventh_frontier_sbatch_token_transition_2026-06-03.json`,
+  `q011_section54_twelfth_worker_python_path_transition_2026-06-03.json` and
+  `q011_section54_thirteenth_acceptance_root_setgid_repair_transition_2026-06-03.json`:
+  append-only operational successors. They close the canonical Project Home
+  split, Frontier `sbatch --parsable` cluster suffix, trusted Cray-Python worker
+  path, and inherited-setgid publication-acceptance checkpoint in order. The
+  thirteenth record preserves the exact empty live `02700` sibling inode after
+  publication failed closed before `sbatch`; it stages one descriptor-relative
+  explicit recovery to `0700` without deleting or recreating that directory.
+  Commit, push, clean-worker validation and independent exact-latest-patch
+  rereview remain mandatory before recovery. Receipt publication re-attests the
+  live sibling and retained authority metadata and rejects pre-link staging
+  orphans rather than silently consuming them.
 - `q011_parallel_shock_storage_estimator_successor_2026-06-01.json`:
   analytical storage-planning successor after the publication deck gained a
   signed particle-current binary output and the PVTK block moved. The estimator
