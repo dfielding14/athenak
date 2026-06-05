@@ -1,0 +1,137 @@
+# Tiegan SGS inverse-cascade steady-state run: fully 2D, isothermal turbulence.
+# Run with: mpirun -np 8 BUILD/src/athena -d RUN_DIR \
+#             -i inputs/hydro/tiegan_sgs/mach025_512_k16_mpi8_steady.athinput
+#
+# Nominal scales:
+#   c_s = 1, target v_rms = 0.25, target Mach = 0.25
+#   sparse global annulus 15 <= |k| <= 17, npeak = 16, 64 complex modes
+#   L_drive = L_box/16 = 0.0625, t_eddy = L_drive/v_rms = 0.25
+#   tlim = 40 t_eddy = 10, output cadence = t_eddy/20 = 0.0125
+#   drag_rate = v_rms/L_box = 0.25, dedt = drag_rate*v_rms^2 = 0.015625
+#   k_drag ~ (drag_rate^3/dedt)^(1/2) = 1
+#
+# The 128 x 256 MeshBlocks form a 4 x 2 decomposition, giving one MeshBlock
+# to each of eight MPI ranks.
+
+<comment>
+problem = Tiegan SGS Mach-0.25 k16 steady-state eight-rank run
+
+<job>
+basename = tiegan_sgs_m025_512_k16_mpi8_steady
+
+<mesh>
+nghost = 3
+nx1 = 512
+x1min = -0.5
+x1max = 0.5
+ix1_bc = periodic
+ox1_bc = periodic
+nx2 = 512
+x2min = -0.5
+x2max = 0.5
+ix2_bc = periodic
+ox2_bc = periodic
+nx3 = 1
+x3min = -0.5
+x3max = 0.5
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 128
+nx2 = 256
+nx3 = 1
+
+<time>
+evolution = dynamic
+integrator = rk3
+cfl_number = 0.4
+nlim = -1
+tlim = 10.0
+ndiag = 100
+
+<hydro>
+eos = isothermal
+reconstruct = wenoz
+rsolver = roe
+iso_sound_speed = 1.0
+
+<hydro_srcterms>
+linear_drag = true
+drag_rate = 0.25
+
+<problem>
+d_n = 1.0
+
+<turb_driving>
+turb_flag = 2
+tcorr = 0.25
+dt_update = 0.0025
+normalization = edot
+dedt = 0.015625
+nlow = 15
+nhigh = 17
+npeak = 16
+spectrum = parabolic
+mode_sampling = sparse_annulus
+sparse_mode_count = 64
+min_kz = 0
+max_kz = 0
+sol_fraction = 1.0
+rseed = 2718
+
+<output1>
+file_type = hst
+dt = 0.0125
+
+<output2>
+file_type = rst
+dt = 0.25
+
+<output3>
+file_type = bin
+variable = hydro_w
+id = prim
+dt = 0.0125
+
+<output4>
+file_type = cbin
+variable = hydro_sgs_2d
+id = sgs_f004
+coarsen_factor = 4
+dt = 0.0125
+
+<output5>
+file_type = cbin
+variable = hydro_sgs_2d
+id = sgs_f008
+coarsen_factor = 8
+dt = 0.0125
+
+<output6>
+file_type = cbin
+variable = hydro_sgs_2d
+id = sgs_f016
+coarsen_factor = 16
+dt = 0.0125
+
+<output7>
+file_type = cbin
+variable = hydro_sgs_2d
+id = sgs_f032
+coarsen_factor = 32
+dt = 0.0125
+
+<output8>
+file_type = cbin
+variable = hydro_sgs_2d
+id = sgs_f064
+coarsen_factor = 64
+dt = 0.0125
+
+<output9>
+file_type = cbin
+variable = hydro_sgs_2d
+id = sgs_f128
+coarsen_factor = 128
+dt = 0.0125

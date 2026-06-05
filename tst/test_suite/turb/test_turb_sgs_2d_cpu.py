@@ -187,7 +187,19 @@ def test_sparse_annulus_has_global_isotropic_fourier_support(tmp_path):
 
 
 def test_sparse_annulus_construction_does_not_scan_mode_volume(tmp_path):
-    """A large annulus mode number still constructs only the requested sparse modes."""
+    """Sparse construction fills a narrow shell without scanning a large mode volume."""
+    narrow_result = run_athena(
+        tmp_path / "narrow_sparse_mode",
+        "time/nlim=0",
+        "turb_driving/mode_sampling=sparse_annulus",
+        "turb_driving/sparse_mode_count=64",
+        "turb_driving/nlow=15",
+        "turb_driving/nhigh=17",
+        "turb_driving/npeak=16",
+    )
+    require_success(narrow_result)
+    assert "turbulence modes = 64" in narrow_result.stdout
+
     result = run_athena(
         tmp_path / "large_sparse_mode",
         "time/nlim=0",

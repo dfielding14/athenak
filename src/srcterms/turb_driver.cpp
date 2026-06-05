@@ -397,22 +397,49 @@ void TurbulenceDriver::BuildModeList() {
           "sparse_annulus mode sampling currently requires a square box");
     }
 
+    int search_radius = std::max(2, nhigh - nlow + 1);
     for (int n = 0; n < sparse_mode_count; ++n) {
       Real theta = -0.5 * M_PI +
                    M_PI * (static_cast<Real>(n) + 0.5) / sparse_mode_count;
-      int nkx = static_cast<int>(std::lround(npeak * std::cos(theta)));
-      int nky = static_cast<int>(std::lround(npeak * std::sin(theta)));
-      if (nkx < 0 || (nkx == 0 && nky < 0)) {
-        nkx = -nkx;
-        nky = -nky;
-      }
-      int nsqr = SQR(nkx) + SQR(nky);
-      std::array<int, 3> mode = {nkx, nky, 0};
-      if (nsqr >= nlow_sqr && nsqr <= nhigh_sqr &&
-          std::find(mode_indices_.begin(), mode_indices_.end(), mode) ==
+      Real target_kx = npeak * std::cos(theta);
+      Real target_ky = npeak * std::sin(theta);
+      int center_kx = static_cast<int>(std::lround(target_kx));
+      int center_ky = static_cast<int>(std::lround(target_ky));
+      bool found = false;
+      Real best_distance = std::numeric_limits<Real>::max();
+      Real best_radial_distance = std::numeric_limits<Real>::max();
+      std::array<int, 3> best_mode = {0, 0, 0};
+
+      for (int dkx = -search_radius; dkx <= search_radius; ++dkx) {
+        for (int dky = -search_radius; dky <= search_radius; ++dky) {
+          int nkx = center_kx + dkx;
+          int nky = center_ky + dky;
+          if (nkx < 0 || (nkx == 0 && nky < 0)) continue;
+          int nsqr = SQR(nkx) + SQR(nky);
+          if (nsqr < nlow_sqr || nsqr > nhigh_sqr) continue;
+          std::array<int, 3> mode = {nkx, nky, 0};
+          if (std::find(mode_indices_.begin(), mode_indices_.end(), mode) !=
               mode_indices_.end()) {
-        mode_indices_.push_back(mode);
+            continue;
+          }
+          Real distance = SQR(static_cast<Real>(nkx) - target_kx) +
+                          SQR(static_cast<Real>(nky) - target_ky);
+          Real radial_distance = fabs(sqrt(static_cast<Real>(nsqr)) - npeak);
+          bool better = !found || distance < best_distance ||
+                        (distance == best_distance &&
+                         (radial_distance < best_radial_distance ||
+                          (radial_distance == best_radial_distance &&
+                           (nkx < best_mode[0] ||
+                            (nkx == best_mode[0] && nky < best_mode[1])))));
+          if (better) {
+            found = true;
+            best_distance = distance;
+            best_radial_distance = radial_distance;
+            best_mode = mode;
+          }
+        }
       }
+      if (found) mode_indices_.push_back(best_mode);
     }
     if (static_cast<int>(mode_indices_.size()) != sparse_mode_count) {
       FatalTurbulenceError(
@@ -1561,7 +1588,7 @@ TaskStatus TurbulenceDriver::EnsureBasisSize(Driver* pdrive, int stage) {
 
 TurbulenceRestartMetadata TurbulenceDriver::RestartMetadata() const {
   TurbulenceRestartMetadata metadata{};
-  metadata.version = 2;
+  metadata.version = 3;
   metadata.mode_count = mode_count;
   metadata.mode_sampling = static_cast<int>(mode_sampling);
   metadata.sparse_mode_count = sparse_mode_count;

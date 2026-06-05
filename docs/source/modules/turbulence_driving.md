@@ -79,16 +79,17 @@ term timestep is limited by `1/drag_rate` before applying the run CFL number.
 
 `mode_sampling = sparse_annulus` constructs a fixed, global set of two-dimensional
 wavevectors without enumerating the Cartesian mode volume. The sampler places
-`sparse_mode_count` targets at equal angles over one Fourier half-plane, rounds
-them to the nearest lattice wavevectors at `npeak`, and requires every resulting
-mode to be unique and lie between `nlow` and `nhigh`. The complex modal
+`sparse_mode_count` targets at equal angles over one Fourier half-plane and
+selects the nearest unused lattice wavevector in the `nlow <= |n| <= nhigh`
+annulus. The local search around each target allows narrow low-mode annuli to
+contain more modes than single-radius rounding would provide. The complex modal
 coefficients supply the conjugate half-plane.
 
 This mode is intended for narrow-annulus forcing at moderately large mode number:
-the OU update and force-rendering costs scale with `sparse_mode_count`, not with
-the volume enclosed by `nhigh`. It currently requires a square two-dimensional
-box, `driving_type = 0`, an explicit `npeak`, default x/y directional bounds,
-and disabled tiling. For example:
+construction does not scan the volume enclosed by `nhigh`, while OU update and
+force-rendering costs scale with `sparse_mode_count`. It currently requires a
+square two-dimensional box, `driving_type = 0`, an explicit `npeak`, default x/y
+directional bounds, and disabled tiling. For example:
 
 ```text
 <turb_driving>

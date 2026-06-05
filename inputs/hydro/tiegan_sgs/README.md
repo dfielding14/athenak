@@ -95,6 +95,19 @@ The fiducial `mach010_1024.athinput` uses the same numerical and output setup wi
 commissioning run. It uses `256 x 512 x 1` MeshBlocks, forming a `4 x 2`
 decomposition intended for eight MPI ranks.
 
+`mach025_512_k16_mpi8_steady.athinput` is the first inverse-cascade steady-state
+run. It uses a `512 x 512 x 1` mesh split into eight `128 x 256 x 1` MeshBlocks,
+64 complex modes in the narrow annulus `15 <= |k| <= 17`, and `npeak = 16`.
+With `drag_rate = 0.25` and `dedt = 0.015625`, the inverse-cascade friction-scale
+estimate is `k_drag ~ (drag_rate^3/dedt)^(1/2) = 1`, while drag changes the
+forcing-scale velocity by only `drag_rate*t_eddy = 1/16` per turnover. The run
+lasts 40 forcing-scale turnover times, or five linear energy-relaxation times.
+A completed eight-rank calibration reached a final `v_rms = 0.24452`; over the
+last time unit its mean and standard deviation were `0.24464` and `0.00012`.
+The final velocity spectrum placed `1.31%` of its energy in the box mode,
+`21.2%` at `k <= 4`, and `81.8%` below the forcing band, indicating an active
+inverse cascade without a box-scale condensate. The third velocity remained zero.
+
 For the isothermal hydro history file,
 `v_rms = sqrt(2 * (1-KE + 2-KE + 3-KE) / mass)`. The `3-KE` column should remain
 zero for these fully 2D runs.
