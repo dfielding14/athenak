@@ -651,6 +651,26 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
     });
   }
 
+  // Raw fields needed to construct Favre-filtered 2D Hydro SGS output.
+  if (name.compare("hydro_sgs_2d") == 0) {
+    int n_sgs = 6;
+    Kokkos::realloc(derived_var, nmb, n_sgs, n3, n2, n1);
+    auto dv = derived_var;
+    auto u0_ = pm->pmb_pack->phydro->u0;
+    par_for("hydro_sgs_2d", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
+    KOKKOS_LAMBDA(int m, int k, int j, int i) {
+      Real rho = u0_(m,IDN,k,j,i);
+      Real mx = u0_(m,IM1,k,j,i);
+      Real my = u0_(m,IM2,k,j,i);
+      dv(m,0,k,j,i) = rho;
+      dv(m,1,k,j,i) = mx;
+      dv(m,2,k,j,i) = my;
+      dv(m,3,k,j,i) = mx*mx/rho;
+      dv(m,4,k,j,i) = mx*my/rho;
+      dv(m,5,k,j,i) = my*my/rho;
+    });
+  }
+
 // get all moments terms for |v| and |B|
   if (name.compare("mhd_v_B_moments") == 0) {
     int n_moments = 8;

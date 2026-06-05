@@ -143,6 +143,10 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack* pp, ParameterInput* pin)
   max_kx = pin->GetOrAddInteger(block_name, "max_kx", nhigh);
   min_ky = pin->GetOrAddInteger(block_name, "min_ky", 0);
   max_ky = pin->GetOrAddInteger(block_name, "max_ky", nhigh);
+  if (pmy_pack->pmesh->mesh_indcs.nx3 <= 1 && (min_kz != 0 || max_kz != 0)) {
+    FatalTurbulenceError(
+        "two-dimensional meshes require min_kz = max_kz = 0 to keep forcing in-plane");
+  }
   // power-law exponent for isotropic driving
   expo = get_serialized_real("expo", 5.0 / 3.0);
   exp_prp = get_serialized_real("exp_prp", 5.0 / 3.0);
@@ -664,7 +668,7 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver* pdrive, int stage) {
       turb_flag != 1) {  // Update forcing if continuous or t<tdriv_duration
     for (int i_turb_update = n_turb_updates_yet; i_turb_update < n_turb_updates_reqd;
          i_turb_update++) {
-      int no_dir = 3;
+      int no_dir = (pm->mesh_indcs.nx3 > 1) ? 3 : 2;
       int nmode = 0;
 
       // Cartesian mode generation

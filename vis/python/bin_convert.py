@@ -403,9 +403,9 @@ def read_coarsened_binary(filename):
     filedata["cycle"] = cycle
     filedata["var_names"] = var_list
 
-    filedata["Nx1"] = Nx1 // coarsen_factor
-    filedata["Nx2"] = Nx2 // coarsen_factor
-    filedata["Nx3"] = Nx3 // coarsen_factor
+    filedata["Nx1"] = Nx1 // coarsen_factor if Nx1 > 1 else 1
+    filedata["Nx2"] = Nx2 // coarsen_factor if Nx2 > 1 else 1
+    filedata["Nx3"] = Nx3 // coarsen_factor if Nx3 > 1 else 1
     filedata["nvars"] = nvars
     filedata["number_of_moments"] = int(pheader["number of moments"])
 
@@ -417,9 +417,9 @@ def read_coarsened_binary(filename):
     filedata["x3max"] = x3max
 
     filedata["n_mbs"] = mb_count
-    filedata["nx1_mb"] = nx1 // coarsen_factor
-    filedata["nx2_mb"] = nx2 // coarsen_factor
-    filedata["nx3_mb"] = nx3 // coarsen_factor
+    filedata["nx1_mb"] = nx1 // coarsen_factor if nx1 > 1 else 1
+    filedata["nx2_mb"] = nx2 // coarsen_factor if nx2 > 1 else 1
+    filedata["nx3_mb"] = nx3 // coarsen_factor if nx3 > 1 else 1
     filedata["nx1_out_mb"] = (mb_index[0][1] - mb_index[0][0]) + 1
     filedata["nx2_out_mb"] = (mb_index[0][3] - mb_index[0][2]) + 1
     filedata["nx3_out_mb"] = (mb_index[0][5] - mb_index[0][4]) + 1

@@ -26,12 +26,42 @@
 #include "mesh/mesh.hpp"
 #include "outputs.hpp"
 
+namespace {
+
+int ActiveCoarsenFactor(int extent, int coarsen_factor) {
+  return (extent > 1) ? coarsen_factor : 1;
+}
+
+[[noreturn]] void FatalCoarsenedBinaryError(const std::string &message) {
+  std::cout << "### FATAL ERROR in " << __FILE__ << std::endl
+            << message << std::endl;
+  std::exit(EXIT_FAILURE);
+}
+
+}  // namespace
+
 //----------------------------------------------------------------------------------------
 // Constructor: also calls BaseTypeOutput base class constructor
 
 CoarsenedBinaryOutput::CoarsenedBinaryOutput(ParameterInput *pin, Mesh *pm,
                                              OutputParameters op) :
   BaseTypeOutput(pin, pm, op) {
+  int factor = out_params.coarsen_factor;
+  if (factor < 1) {
+    FatalCoarsenedBinaryError("coarsen_factor must be positive.");
+  }
+  auto &indcs = pm->pmb_pack->pmesh->mb_indcs;
+  if ((indcs.nx1 > 1 && indcs.nx1 % factor != 0) ||
+      (indcs.nx2 > 1 && indcs.nx2 % factor != 0) ||
+      (indcs.nx3 > 1 && indcs.nx3 % factor != 0)) {
+    FatalCoarsenedBinaryError(
+        "Every active MeshBlock dimension must be divisible by coarsen_factor.");
+  }
+  if (out_params.variable.compare("hydro_sgs_2d") == 0 &&
+      out_params.compute_moments) {
+    FatalCoarsenedBinaryError(
+        "hydro_sgs_2d does not support compute_moments=true.");
+  }
   // create directories for outputs
   // useful for mpiio-based outputs because on some supercomputers you may need to
   // set different stripe counts depending on whether mpiio is used in order to
@@ -157,11 +187,14 @@ void CoarsenedBinaryOutput::LoadOutputData(Mesh *pm) {
   // note that while ois,oie,etc. can be different on each MB, the number of cells output
   // on each MeshBlock, i.e. (ois-ois+1), etc. is the same.
   if (nout_mbs > 0) {
-    int nout1 = ((outmbs[0].oie - outmbs[0].ois + 1)/out_params.coarsen_factor);
-    int nout2 = ((outmbs[0].oje - outmbs[0].ojs + 1)/out_params.coarsen_factor);
-    int nout3 = ((outmbs[0].oke - outmbs[0].oks + 1)/out_params.coarsen_factor);
+    int full_nout1 = outmbs[0].oie - outmbs[0].ois + 1;
+    int full_nout2 = outmbs[0].oje - outmbs[0].ojs + 1;
+    int full_nout3 = outmbs[0].oke - outmbs[0].oks + 1;
+    int nout1 = full_nout1/ActiveCoarsenFactor(full_nout1, out_params.coarsen_factor);
+    int nout2 = full_nout2/ActiveCoarsenFactor(full_nout2, out_params.coarsen_factor);
+    int nout3 = full_nout3/ActiveCoarsenFactor(full_nout3, out_params.coarsen_factor);
     // NB: outarray stores all output data on Host
-    // DBF: outarray is smaller by a factor of coarsen_factor in each dimension
+    // Degenerate dimensions remain one cell wide.
     Kokkos::realloc(outarray, nout_vars_with_moments, nout_mbs, nout3, nout2, nout1);
   }
 
@@ -186,9 +219,12 @@ void CoarsenedBinaryOutput::LoadOutputData(Mesh *pm) {
       int nout1 = (outmbs[0].oie - outmbs[0].ois + 1);
       int nout2 = (outmbs[0].oje - outmbs[0].ojs + 1);
       int nout3 = (outmbs[0].oke - outmbs[0].oks + 1);
-      int coarsened_nout1 = nout1/out_params.coarsen_factor;
-      int coarsened_nout2 = nout2/out_params.coarsen_factor;
-      int coarsened_nout3 = nout3/out_params.coarsen_factor;
+      int coarsen1 = ActiveCoarsenFactor(nout1, out_params.coarsen_factor);
+      int coarsen2 = ActiveCoarsenFactor(nout2, out_params.coarsen_factor);
+      int coarsen3 = ActiveCoarsenFactor(nout3, out_params.coarsen_factor);
+      int coarsened_nout1 = nout1/coarsen1;
+      int coarsened_nout2 = nout2/coarsen2;
+      int coarsened_nout3 = nout3/coarsen3;
 
       // copy output variable to new device View
       DvceArray3D<Real> d_output_var("d_out_var",nout3,nout2,nout1);
@@ -207,18 +243,15 @@ void CoarsenedBinaryOutput::LoadOutputData(Mesh *pm) {
 
       // Coarsen the d_slice and store the result in d_output_var
       // CoarsenVariable(d_output_var, d_output_var_coarsened, out_params.coarsen_factor);
-      int coarsen_factor = out_params.coarsen_factor;
-      int coarsen_factor_cubed = coarsen_factor * coarsen_factor * coarsen_factor;
+      int coarsen_cells = coarsen1 * coarsen2 * coarsen3;
 
-      if (nout1 % coarsen_factor != 0 || nout2 % coarsen_factor != 0
-                                      || nout3 % coarsen_factor != 0) {
-          std::cout << "Error: Full data dimensions are not divisible by coarsen_factor"
-          << std::endl;
-          exit(EXIT_FAILURE);
+      if (nout1 % coarsen1 != 0 || nout2 % coarsen2 != 0 || nout3 % coarsen3 != 0) {
+        FatalCoarsenedBinaryError(
+            "Active output dimensions must be divisible by coarsen_factor.");
       }
 
       int total_iterations = coarsened_nout3
-        * coarsened_nout2 * coarsened_nout1 * coarsen_factor_cubed;
+        * coarsened_nout2 * coarsened_nout1 * coarsen_cells;
 
       bool compute_moments = out_params.compute_moments;
       Kokkos::parallel_for("coarsen_variable",
@@ -230,16 +263,16 @@ void CoarsenedBinaryOutput::LoadOutputData(Mesh *pm) {
         int j_c = (idx / coarsened_nout1) % coarsened_nout2;
         int i_c = idx % coarsened_nout1;
 
-        // Calculate the offset within the coarsen_factor_cubed cube
+        // Calculate the offset within the active-dimension box filter.
         int offset = idx / total_coarsened_elements;
-        int kk = offset / (coarsen_factor * coarsen_factor);
-        int jj = (offset / coarsen_factor) % coarsen_factor;
-        int ii = offset % coarsen_factor;
+        int kk = offset / (coarsen2 * coarsen1);
+        int jj = (offset / coarsen1) % coarsen2;
+        int ii = offset % coarsen1;
 
         // Calculate the corresponding indices in the full data
-        int k = k_c * coarsen_factor + kk;
-        int j = j_c * coarsen_factor + jj;
-        int i = i_c * coarsen_factor + ii;
+        int k = k_c * coarsen3 + kk;
+        int j = j_c * coarsen2 + jj;
+        int i = i_c * coarsen1 + ii;
 
         // Perform the coarsening operation
         if(k < nout3 && j < nout2 && i < nout1) {
@@ -267,7 +300,7 @@ void CoarsenedBinaryOutput::LoadOutputData(Mesh *pm) {
         int j = (idx / coarsened_nout1) % coarsened_nout2;
         int i = idx % coarsened_nout1;
 
-        d_output_var_coarsened(moment_idx, k, j, i) /= coarsen_factor_cubed;
+        d_output_var_coarsened(moment_idx, k, j, i) /= coarsen_cells;
       });
 
 
@@ -286,6 +319,29 @@ void CoarsenedBinaryOutput::LoadOutputData(Mesh *pm) {
         moment_range,m,Kokkos::ALL,Kokkos::ALL,Kokkos::ALL
       );
       Kokkos::deep_copy(h_slice,h_output_var);
+    }
+  }
+
+  if (out_params.variable.compare("hydro_sgs_2d") == 0) {
+    for (int m=0; m<nout_mbs; ++m) {
+      for (int k=0; k<outarray.extent_int(2); ++k) {
+        for (int j=0; j<outarray.extent_int(3); ++j) {
+          for (int i=0; i<outarray.extent_int(4); ++i) {
+            Real rho = outarray(0,m,k,j,i);
+            if (rho <= 0.0) {
+              FatalCoarsenedBinaryError(
+                  "hydro_sgs_2d encountered non-positive filtered density.");
+            }
+            Real mx = outarray(1,m,k,j,i);
+            Real my = outarray(2,m,k,j,i);
+            outarray(1,m,k,j,i) = mx/rho;
+            outarray(2,m,k,j,i) = my/rho;
+            outarray(3,m,k,j,i) -= mx*mx/rho;
+            outarray(4,m,k,j,i) -= mx*my/rho;
+            outarray(5,m,k,j,i) -= my*my/rho;
+          }
+        }
+      }
     }
   }
 }
@@ -392,9 +448,12 @@ void CoarsenedBinaryOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     nout_vars *= 4;
   }
   int nout_mbs = outmbs.size();
-  int nout1 = ((outmbs[0].oie - outmbs[0].ois + 1)/out_params.coarsen_factor);
-  int nout2 = ((outmbs[0].oje - outmbs[0].ojs + 1)/out_params.coarsen_factor);
-  int nout3 = ((outmbs[0].oke - outmbs[0].oks + 1)/out_params.coarsen_factor);
+  int full_nout1 = outmbs[0].oie - outmbs[0].ois + 1;
+  int full_nout2 = outmbs[0].oje - outmbs[0].ojs + 1;
+  int full_nout3 = outmbs[0].oke - outmbs[0].oks + 1;
+  int nout1 = full_nout1/ActiveCoarsenFactor(full_nout1, out_params.coarsen_factor);
+  int nout2 = full_nout2/ActiveCoarsenFactor(full_nout2, out_params.coarsen_factor);
+  int nout3 = full_nout3/ActiveCoarsenFactor(full_nout3, out_params.coarsen_factor);
   int cells = nout1*nout2*nout3;
 
 

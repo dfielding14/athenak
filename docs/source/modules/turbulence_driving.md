@@ -41,6 +41,12 @@ innovation. With negligible `tcorr`, each update replaces the previous state
 with a white-noise realization. `sol_fraction=1` gives solenoidal forcing and
 `sol_fraction=0` gives compressive forcing.
 
+For fully two-dimensional turbulence, use `nx3=1` and set both `min_kz=0`
+and `max_kz=0`. The driver then generates only the two in-plane force
+components; nonzero `kz` bounds on a two-dimensional mesh are rejected rather
+than silently producing 2.5D forcing. Periodic `x3` boundaries are sufficient
+for the degenerate dimension.
+
 `mode_amp_real` and `mode_amp_imag` are the authoritative OU state. The
 cell-centered `force` field is rendered from those coefficients and the
 current MeshBlock geometry.
@@ -167,7 +173,7 @@ The following keys belong in `<turb_driving>`.
 | `npeak` / `kpeak` | `kpeak=4*pi` | Parabolic spectral peak; `npeak` is tile-local mode number. |
 | `spectrum` | `parabolic` | `parabolic` or `power_law`. |
 | `expo`, `exp_prp`, `exp_prl` | `5/3`, `5/3`, `0` | Power-law spectrum exponents. |
-| `min_kx/y/z`, `max_kx/y/z` | `0`, `nhigh` | Optional directional mode bounds. |
+| `min_kx/y/z`, `max_kx/y/z` | `0`, `nhigh` | Optional directional mode bounds; 2D meshes require `min_kz=max_kz=0`. |
 | `driving_type` | `0` | `0` for three-dimensional; `1` for planar driving. |
 | `sol_fraction` | `1.0` | Solenoidal fraction in `[0,1]`. |
 | `rseed` | `-1` | Non-negative values select reproducible sequences. |

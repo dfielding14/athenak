@@ -168,6 +168,25 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
        << std::endl << "Input file is likely missing corresponding block" << std::endl;
     exit(EXIT_FAILURE);
   }
+  if ((ivar==153) && (pm->pmb_pack->phydro == nullptr)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
+       << "Output of 2D Hydro SGS variables requested in <output> block '"
+       << out_params.block_name << "' but no Hydro object has been constructed."
+       << std::endl << "Input file is likely missing a <hydro> block" << std::endl;
+    exit(EXIT_FAILURE);
+  }
+  if ((ivar==153) && (out_params.file_type.compare("cbin") != 0)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
+       << "Variable 'hydro_sgs_2d' is only supported for coarsened-binary output."
+       << std::endl;
+    exit(EXIT_FAILURE);
+  }
+  if ((ivar==153) && (pm->mesh_indcs.nx3 != 1)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
+       << "Variable 'hydro_sgs_2d' requires a two-dimensional mesh with nx3=1."
+       << std::endl;
+    exit(EXIT_FAILURE);
+  }
 
   // Now load STL vector of output variables
   outvars.clear();
@@ -572,6 +591,18 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
           out_params.n_derived += 1;
           outvars.emplace_back(variable_name,i,&(derived_var));
       }
+    }
+
+    // Favre-filtered 2D Hydro state and SGS stress tensor
+    if (variable.compare("hydro_sgs_2d") == 0) {
+      out_params.contains_derived = true;
+      out_params.n_derived += 6;
+      outvars.emplace_back("dens",0,&(derived_var));
+      outvars.emplace_back("velx",1,&(derived_var));
+      outvars.emplace_back("vely",2,&(derived_var));
+      outvars.emplace_back("tau_xx",3,&(derived_var));
+      outvars.emplace_back("tau_xy",4,&(derived_var));
+      outvars.emplace_back("tau_yy",5,&(derived_var));
     }
 
     // Mhd SGS tensor
