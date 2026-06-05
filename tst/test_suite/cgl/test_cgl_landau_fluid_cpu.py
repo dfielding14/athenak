@@ -2432,6 +2432,7 @@ def test_cgl_lf_stage_i_isolates_epoch_and_checks_all_shared_root_jobs(
     assert stage_i.MAX_SEGMENT_SECONDS == 2 * 60 * 60
     assert stage_i.R17_CASE_ID == "R17"
     assert stage_i.MAX_ACTIVE_STAGE_I_SEGMENTS == 4
+    assert stage_i.MAX_ACTIVE_STAGE_I_NODES == 10
     assert stage_i.R17_PREDECESSOR_CASE_IDS == tuple(
         f"R{number:02d}" for number in range(2, 17)
     )
@@ -2458,12 +2459,32 @@ def test_cgl_lf_stage_i_isolates_epoch_and_checks_all_shared_root_jobs(
         stage_i.require_case_node_count("R16", 4)
     with pytest.raises(ValueError, match="R17 canonical Stage I preparation"):
         stage_i.require_case_node_count("R17", 1)
-    active = lambda case_id, state="submitted": {
-        "case_id": case_id, "state": state,
+    active = lambda case_id, state="submitted", nodes=1: {
+        "case_id": case_id, "state": state, "nodes": nodes,
     }
     stage_i.require_active_reservation_policy([
-        active("R03"), active("R04"), active("R05"),
-    ], "R06")
+        active("R03"), active("R04", nodes=4), active("R05", nodes=4),
+    ], "R06", 1)
+    stage_i.require_active_reservation_policy([
+        active("R04", nodes=4), active("R05", nodes=4), active("R06", nodes=2),
+    ])
+    with pytest.raises(ValueError, match="10-node concurrency limit"):
+        stage_i.require_active_reservation_policy([
+            active("R04", nodes=4), active("R05", nodes=4),
+            active("R06", nodes=4),
+        ])
+    with pytest.raises(ValueError, match="would exceed the 10-node"):
+        stage_i.require_active_reservation_policy([
+            active("R04", nodes=4), active("R05", nodes=4),
+        ], "R06", 4)
+    with pytest.raises(ValueError, match="invalid nodes"):
+        stage_i.require_active_reservation_policy([
+            {"case_id": "R03", "state": "submitted"},
+        ])
+    with pytest.raises(ValueError, match="invalid nodes"):
+        stage_i.require_active_reservation_policy([], "R03", 0)
+    with pytest.raises(ValueError, match="candidate nodes require"):
+        stage_i.require_active_reservation_policy([], candidate_nodes=1)
     with pytest.raises(ValueError, match="duplicate case R03"):
         stage_i.require_active_reservation_policy([
             active("R03"), active("R03"),
@@ -2475,19 +2496,19 @@ def test_cgl_lf_stage_i_isolates_epoch_and_checks_all_shared_root_jobs(
     with pytest.raises(ValueError, match="4-segment concurrency limit"):
         stage_i.require_active_reservation_policy([
             active("R03"), active("R04"), active("R05"), active("R06"),
-        ], "R07")
+        ], "R07", 1)
     with pytest.raises(ValueError, match="R17 requires exclusive"):
-        stage_i.require_active_reservation_policy([active("R03")], "R17")
+        stage_i.require_active_reservation_policy([active("R03")], "R17", 8)
     with pytest.raises(ValueError, match="R17 requires exclusive"):
         stage_i.require_active_reservation_policy([
             active("R17"), active("R03"),
         ])
     with pytest.raises(ValueError, match="distinct R03-R16"):
-        stage_i.require_active_reservation_policy([active("R02")], "R03")
+        stage_i.require_active_reservation_policy([active("R02")], "R03", 1)
     with pytest.raises(ValueError, match="another Stage I segment is prepared"):
         stage_i.require_active_reservation_policy([
             active("R03", "prepared"),
-        ], "R04")
+        ], "R04", 1)
     assert not stage_i.retained_case_has_started(paths, "R17")
     stage_i.require_r17_last(paths, "R16")
     stage_i.require_prepare_case_policy(paths, "R17", 1, offline_local_root=True)
@@ -3326,6 +3347,248 @@ def test_cgl_lf_stage_i_recovers_ambiguous_atomic_submit(tmp_path, monkeypatch):
     assert not stage_i.pending_transaction_paths(paths)
     assert manifest_path.read_text() == before_manifest
     assert paths["reservations"].read_text() == before_reservations
+
+
+def test_cgl_lf_stage_i_cancels_only_terminal_never_started_submitted_job(tmp_path):
+    spec = importlib.util.spec_from_file_location(
+        "cgl_lf_stage_i_submitted_cancel_test", PAPER_STAGE_I_TOOL
+    )
+    assert spec is not None and spec.loader is not None
+    stage_i = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = stage_i
+    spec.loader.exec_module(stage_i)
+
+    def fixture(root, scheduler_state="CANCELLED by 1234", elapsed="0",
+                allocated_nodes="0"):
+        paths = stage_i.initialize(root)
+        manifest_path = (
+            paths["runs"] / "R16" / "s_cancel"
+            / "manifest" / "prepared_run.json"
+        )
+        manifest_path.parent.mkdir(parents=True)
+        batch_script = manifest_path.parent / "cgl_lf_stage_i.sbatch"
+        batch_script.write_text(
+            "#!/bin/bash\nBATCH_SCRIPT_SHA256=" + "0" * 64 + "\n"
+        )
+        source_bundle = root / "source-archives" / "corrupt.bundle"
+        source_bundle.parent.mkdir()
+        source_bundle.write_text("corrupt\n")
+        manifest = {
+            "schema_version": 3,
+            "execution_epoch": stage_i.EXECUTION_EPOCH,
+            "project_root": str(root),
+            "state": "submitted",
+            "job_id": "12345",
+            "policy": {},
+            "run": {
+                "case_id": "R16",
+                "case_name": "case",
+                "segment": "s_cancel",
+            },
+            "allocation": {
+                "nodes": 1,
+                "requested_walltime": "00:10:00",
+                "reserved_node_hours": 1.0 / 6.0,
+            },
+            "command": {
+                "batch_script_sha256": stage_i.normalized_batch_script_sha256(
+                    batch_script
+                ),
+                "source_bundle": {
+                    "path": str(source_bundle),
+                    "sha256": "a" * 64,
+                    "verified_revisions": ["b" * 40],
+                },
+            },
+            "paths": {
+                "batch_script": str(batch_script),
+                "output_dir": str(manifest_path.parents[1] / "output"),
+            },
+        }
+        stage_i.write_json(manifest_path, manifest)
+        reservation = {
+            "execution_epoch": stage_i.EXECUTION_EPOCH,
+            "manifest": str(manifest_path),
+            "case_id": "R16",
+            "case_name": "case",
+            "segment": "s_cancel",
+            "nodes": 1,
+            "requested_walltime": "00:10:00",
+            "reserved_node_hours": 1.0 / 6.0,
+            "state": "submitted",
+            "prepared_utc": stage_i.utc_now(),
+            "job_id": "12345",
+            "execution_intent_sha256": stage_i.execution_intent_sha256(manifest),
+        }
+        stage_i.write_json(paths["reservations"], [reservation])
+        incident = paths["accounting"] / "incidents" / "incident.json"
+        incident.parent.mkdir()
+        stage_i.write_json(incident, {
+            "schema_version": 1,
+            "record_type": "stage-i-source-bundle-corruption-incident",
+            "execution_epoch": stage_i.EXECUTION_EPOCH,
+            "expected": {"sha256": "a" * 64},
+            "observed": {
+                "path": str(source_bundle),
+                "sha256": stage_i.sha256(source_bundle),
+            },
+            "scheduler_containment": {
+                "job_id": "12345",
+                "reason": "JobHeldUser",
+                "released": False,
+            },
+        })
+        incident.chmod(0o444)
+        evidence = stage_i.submitted_cancellation_evidence_paths(paths, "12345")
+        submitted_snapshot = evidence["submitted_manifest"]
+        stage_i.write_json(submitted_snapshot, manifest)
+        submitted_snapshot.chmod(0o444)
+        scheduler_batch_script = evidence["scheduler_batch_script"]
+        scheduler_batch_script.write_bytes(batch_script.read_bytes())
+        scheduler_batch_script.chmod(0o444)
+        hold = evidence["pre_cancel_hold"]
+        hold.write_text(
+            f"12345|{stage_i.expected_job_name(manifest)}|PENDING|0:00|1|"
+            "(JobHeldUser)\n"
+        )
+        hold.chmod(0o444)
+        authorization = evidence["authorization"]
+        stage_i.write_json(authorization, {
+            "schema_version": 1,
+            "record_type":
+                "stage-i-source-bundle-recovery-cancellation-authorization",
+            "execution_epoch": stage_i.EXECUTION_EPOCH,
+            "job_id": "12345",
+            "decision": "cancel-held-job-without-start",
+            "reason": "the immutable launch source bundle is corrupt",
+            "manifest": {
+                "live_path": str(manifest_path),
+                "snapshot_path": str(submitted_snapshot),
+                "sha256": stage_i.sha256(submitted_snapshot),
+            },
+            "batch_script": {
+                "path": str(batch_script),
+                "sha256": stage_i.sha256(batch_script),
+                "normalized_sha256": stage_i.normalized_batch_script_sha256(
+                    batch_script
+                ),
+                "scheduler_snapshot_path": str(scheduler_batch_script),
+                "scheduler_snapshot_sha256": stage_i.sha256(
+                    scheduler_batch_script
+                ),
+            },
+            "pre_cancel_hold": {
+                "path": str(hold),
+                "sha256": stage_i.sha256(hold),
+            },
+            "source_bundle": {
+                "path": str(source_bundle),
+                "expected_sha256": "a" * 64,
+                "observed_sha256": stage_i.sha256(source_bundle),
+                "incident": {
+                    "path": str(incident),
+                    "sha256": stage_i.sha256(incident),
+                },
+            },
+        })
+        authorization.chmod(0o444)
+        audit = evidence["publication_audit"]
+        stage_i.write_json(audit, {
+            "schema_version": 1,
+            "record_type":
+                "stage-i-source-bundle-recovery-cancellation-publication-audit",
+            "execution_epoch": stage_i.EXECUTION_EPOCH,
+            "published_utc": stage_i.utc_now(),
+            "authorization": {
+                "path": str(authorization),
+                "sha256": stage_i.sha256(authorization),
+                "mode": "0444",
+            },
+            "review": {
+                "status": "approved",
+                "authority": "independent-source-bundle-recovery-review",
+                "reviewed_by": "test reviewer",
+            },
+        })
+        audit.chmod(0o444)
+        sacct = evidence["post_cancel_sacct"]
+        sacct.write_text(
+            f"12345|{stage_i.expected_job_name(manifest)}|{scheduler_state}|0:0|"
+            f"{allocated_nodes}|{elapsed}|2026-06-05T00:00:00|"
+            "2026-06-05T00:01:00|\n"
+        )
+        sacct.chmod(0o444)
+        squeue = evidence["post_cancel_queue"]
+        squeue.write_text("")
+        squeue.chmod(0o444)
+        args = SimpleNamespace(
+            manifest=str(manifest_path),
+            allow_local_root=True,
+            job_id="12345",
+            notes="cancelled before start for formal source-bundle recovery",
+            sacct_file=str(sacct),
+            squeue_file=str(squeue),
+        )
+        return paths, manifest_path, args
+
+    paths, manifest_path, args = fixture(tmp_path / "accepted")
+    assert stage_i.cancel_submitted(args) == 0
+    cancelled = json.loads(manifest_path.read_text())
+    assert cancelled["state"] == "cancelled"
+    assert cancelled["cancellation"]["mode"] == "authenticated-submitted-no-start"
+    assert cancelled["cancellation"]["scheduler"]["state"] == "CANCELLED"
+    assert json.loads(paths["reservations"].read_text())[0]["state"] == "cancelled"
+    assert not stage_i.pending_transaction_paths(paths)
+
+    paths, manifest_path, args = fixture(
+        tmp_path / "running", scheduler_state="CANCELLED by 1234", elapsed="1"
+    )
+    with pytest.raises(ValueError, match="terminal CANCELLED no-start"):
+        stage_i.cancel_submitted(args)
+    assert json.loads(manifest_path.read_text())["state"] == "submitted"
+    assert json.loads(paths["reservations"].read_text())[0]["state"] == "submitted"
+
+    paths, manifest_path, args = fixture(
+        tmp_path / "allocated", scheduler_state="CANCELLED by 1234",
+        allocated_nodes="1"
+    )
+    with pytest.raises(ValueError, match="terminal CANCELLED no-start"):
+        stage_i.cancel_submitted(args)
+    assert json.loads(manifest_path.read_text())["state"] == "submitted"
+
+    paths, manifest_path, args = fixture(tmp_path / "queued")
+    Path(args.squeue_file).chmod(0o644)
+    Path(args.squeue_file).write_text(
+        "12345|batch|PENDING|"
+        + stage_i.expected_job_name(json.loads(manifest_path.read_text()))
+        + "\n"
+    )
+    Path(args.squeue_file).chmod(0o444)
+    with pytest.raises(ValueError, match="remains present in squeue"):
+        stage_i.cancel_submitted(args)
+    assert json.loads(manifest_path.read_text())["state"] == "submitted"
+
+    paths, manifest_path, args = fixture(tmp_path / "scheduler-script-drift")
+    evidence = stage_i.submitted_cancellation_evidence_paths(paths, "12345")
+    authorization = json.loads(evidence["authorization"].read_text())
+    Path(authorization["batch_script"]["scheduler_snapshot_path"]).chmod(0o644)
+    Path(authorization["batch_script"]["scheduler_snapshot_path"]).write_text(
+        "#!/bin/bash\nchanged\n"
+    )
+    with pytest.raises(
+        ValueError, match="scheduler-retained submitted batch script"
+    ):
+        stage_i.cancel_submitted(args)
+    assert json.loads(manifest_path.read_text())["state"] == "submitted"
+
+    paths, manifest_path, args = fixture(tmp_path / "submitted-snapshot-drift")
+    evidence = stage_i.submitted_cancellation_evidence_paths(paths, "12345")
+    authorization = json.loads(evidence["authorization"].read_text())
+    Path(authorization["manifest"]["snapshot_path"]).chmod(0o644)
+    Path(authorization["manifest"]["snapshot_path"]).write_text("{}\n")
+    with pytest.raises(ValueError, match="submitted manifest snapshot"):
+        stage_i.cancel_submitted(args)
+    assert json.loads(manifest_path.read_text())["state"] == "submitted"
 
 
 def test_cgl_lf_stage_i_panel_schema_pins_reference_inventory_and_admission(

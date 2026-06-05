@@ -59,6 +59,7 @@ R17_PREDECESSOR_CASE_IDS = tuple(
 )
 CONCURRENT_CASE_IDS = frozenset(f"R{number:02d}" for number in range(3, 17))
 MAX_ACTIVE_STAGE_I_SEGMENTS = 4
+MAX_ACTIVE_STAGE_I_NODES = 10
 CASE_NODE_PROFILES = {
     "R02": frozenset({1}),
     "R03": frozenset({1}),
@@ -103,6 +104,35 @@ HISTORICAL_SUBMITTED_R03_UTILITY_TRANSITION = {
     "source_bundle_sha256": "b8437f066f8391a696efaaaf0de531430a9dac27c95dfc38aa7328dd49fb19fe",
     "executable_revision": "9e07542281e4e6d125582f253df3ad2e3b8b154d",
     "executable_sha256": "68f243f9204df388b24365ae65a567f6f567dbe422a6d7a43b9fb4a499ef118c",
+}
+CANONICAL_SOURCE_BUNDLE_RECOVERY = {
+    "job_id": "4766485",
+    "manifest_relative": (
+        "runs/mks24-stage-i/E03-forcing-policy/R03/"
+        "s01_rankio_t0p312823_t0p5/manifest/prepared_run.json"
+    ),
+    "source_bundle_relative": (
+        "source-archives/athenak-feature-cgl-through-c7e4fa30e.bundle"
+    ),
+    "source_bundle_expected_sha256": (
+        "d94d559108470157f07981c9da8fec343a992128c0c4333df87181b81f0c505e"
+    ),
+    "source_bundle_observed_sha256": (
+        "10fbc6a736efc36054c594b2ef1f0f33700586366c7de483d00d37c1ca28a0c8"
+    ),
+    "incident_relative": (
+        "accounting/mks24_stage_i_E03_forcing_policy_source_bundle_incidents/"
+        "20260605T035710Z-c7e4fa30e-corruption/incident.json"
+    ),
+    "incident_sha256": (
+        "7e017a4eed5d3a056f7a8dc0b24c131f5a2a1ab89093878d3d83a2473a4992fd"
+    ),
+    "authorization_sha256": (
+        "b9218128173b11d245eeced1e7115a88a5a865508d9a6bc1e024177b9dbc4fa1"
+    ),
+    "publication_audit_sha256": (
+        "7f3f9c402a90cd1381061345a0b781c6e8e7a4363d67bb4c6623ac77e5818400"
+    ),
 }
 # Allow scheduler timestamp formatting and host-clock skew around the persisted
 # pre-sbatch ambiguity barrier, but never an unrelated later submission.
@@ -164,7 +194,7 @@ RESERVATION_OPTIONAL_COLUMNS = frozenset({
 })
 TRANSACTION_KINDS = frozenset({
     "prepared", "submit_pending", "submitted", "submit_cleared",
-    "recorded", "cancelled",
+    "recorded", "cancelled", "cancelled_submitted",
 })
 TRANSACTION_COMMON_COLUMNS = frozenset({
     "schema_version",
@@ -1342,6 +1372,7 @@ def read_transaction(paths: dict[str, Path], path: Path) -> dict[str, object]:
         "submit_cleared": "prepared",
         "recorded": "recorded",
         "cancelled": "cancelled",
+        "cancelled_submitted": "cancelled",
     }[str(kind)]
     if manifest.get("state") != expected_state:
         raise ValueError(f"transaction manifest state is invalid for {kind}")
@@ -1394,6 +1425,8 @@ def read_transaction(paths: dict[str, Path], path: Path) -> dict[str, object]:
         validate_scheduler_absence_evidence(
             paths, value.get("scheduler_absence_evidence"), value
         )
+    if kind == "cancelled_submitted":
+        validate_submitted_cancellation_metadata(paths, manifest_path, manifest)
     baseline_ledger, prospective_ledger = transaction_ledger_views(paths, row)
     for label, snapshot, ledger in (
         ("transaction prior reservation snapshot", prior_reservations, baseline_ledger),
@@ -1421,6 +1454,9 @@ def expected_pretransition_reservation(kind: str,
         result.pop("result", None)
     elif kind == "cancelled":
         result["state"] = "prepared"
+        result.pop("notes", None)
+    elif kind == "cancelled_submitted":
+        result["state"] = "submitted"
         result.pop("notes", None)
     elif kind != "submit_cleared":
         raise ValueError(f"transaction kind has no reservation transition: {kind}")
@@ -1561,7 +1597,8 @@ def apply_transaction(paths: dict[str, Path], transaction_path: Path) -> None:
             f"scheduler job ID: {transaction_path}"
         )
     if kind not in {
-        "prepared", "submitted", "submit_cleared", "recorded", "cancelled"
+        "prepared", "submitted", "submit_cleared", "recorded", "cancelled",
+        "cancelled_submitted",
     }:
         raise ValueError(f"transaction journal has invalid kind: {transaction_path}")
     manifest_path = Path(str(transaction["manifest_path"])).resolve()
@@ -1771,17 +1808,25 @@ def transaction_ledger_views(paths: dict[str, Path],
 def require_active_reservation_policy(
     reservations: list[dict[str, object]],
     candidate_case_id: str | None = None,
+    candidate_nodes: int | None = None,
 ) -> list[dict[str, object]]:
-    """Enforce bounded distinct-case overlap while keeping preparation serial."""
+    """Enforce bounded distinct-case/node overlap while keeping preparation serial."""
 
     active = active_reservations(reservations)
     case_ids = []
+    active_nodes = 0
     for reservation in active:
         case_id = str(reservation.get("case_id", ""))
         require_authorized_case(case_id)
         if case_id in case_ids:
             raise ValueError(f"active Stage I reservations duplicate case {case_id}")
         case_ids.append(case_id)
+        nodes = reservation.get("nodes")
+        if isinstance(nodes, bool) or not isinstance(nodes, int) or nodes < 1:
+            raise ValueError(
+                f"active Stage I reservation {case_id} has invalid nodes"
+            )
+        active_nodes += nodes
     prepared = [
         reservation for reservation in active
         if reservation.get("state") == "prepared"
@@ -1790,6 +1835,11 @@ def require_active_reservation_policy(
         raise ValueError(
             f"active Stage I reservations exceed the "
             f"{MAX_ACTIVE_STAGE_I_SEGMENTS}-segment concurrency limit"
+        )
+    if active_nodes > MAX_ACTIVE_STAGE_I_NODES:
+        raise ValueError(
+            f"active Stage I reservations exceed the "
+            f"{MAX_ACTIVE_STAGE_I_NODES}-node concurrency limit"
         )
     if len(prepared) > 1:
         raise ValueError("only one Stage I segment may be prepared at a time")
@@ -1802,8 +1852,18 @@ def require_active_reservation_policy(
             "overlapping Stage I reservations are restricted to distinct R03-R16 cases"
         )
     if candidate_case_id is None:
+        if candidate_nodes is not None:
+            raise ValueError("candidate nodes require a candidate Stage I case")
         return active
     require_authorized_case(candidate_case_id)
+    if (
+        isinstance(candidate_nodes, bool)
+        or not isinstance(candidate_nodes, int)
+        or candidate_nodes < 1
+    ):
+        raise ValueError(
+            f"candidate Stage I reservation {candidate_case_id} has invalid nodes"
+        )
     if candidate_case_id in case_ids:
         raise ValueError(
             f"{candidate_case_id} already has an active Stage I reservation"
@@ -1828,6 +1888,11 @@ def require_active_reservation_policy(
         raise ValueError(
             f"active Stage I reservations reached the "
             f"{MAX_ACTIVE_STAGE_I_SEGMENTS}-segment concurrency limit"
+        )
+    if active_nodes + candidate_nodes > MAX_ACTIVE_STAGE_I_NODES:
+        raise ValueError(
+            f"candidate Stage I reservation would exceed the "
+            f"{MAX_ACTIVE_STAGE_I_NODES}-node concurrency limit"
         )
     return active
 
@@ -1931,7 +1996,8 @@ def refresh_summary(paths: dict[str, Path]) -> None:
         lines.extend([
             "",
             f"Up to {MAX_ACTIVE_STAGE_I_SEGMENTS} distinct R03-R16 cases may "
-            "be active concurrently, with at most one prepared submission packet. "
+            f"be active concurrently within {MAX_ACTIVE_STAGE_I_NODES} total "
+            "nodes, with at most one prepared submission packet. "
             f"{R17_CASE_ID} remains exclusive and last. "
             "E02 is retained only as pipeline and cost evidence after the Phase A "
             "forcing-policy audit. "
@@ -3142,9 +3208,9 @@ def prepare(args: argparse.Namespace) -> Path:
     require_authorized_case(args.case_id)
     require_safe_segment(args.segment)
     reservations = read_reservations(paths)
-    require_active_reservation_policy(reservations, args.case_id)
-    if args.nodes < 1:
+    if isinstance(args.nodes, bool) or args.nodes < 1:
         raise ValueError("--nodes must be positive")
+    require_active_reservation_policy(reservations, args.case_id, args.nodes)
     require_prepare_case_policy(
         paths, args.case_id, args.nodes, offline_local_root
     )
@@ -3560,6 +3626,43 @@ def production_queue_output(args: argparse.Namespace,
     except (FileNotFoundError, subprocess.CalledProcessError) as error:
         raise ValueError(
             "squeue is unavailable; refusing Stage I submission"
+        ) from error
+
+
+def cancelled_job_queue_output(args: argparse.Namespace,
+                               offline_local_root: bool) -> str:
+    """Query one cancelled job ID and require it to be absent from squeue."""
+
+    fixture = getattr(args, "squeue_file", None)
+    if fixture:
+        if not offline_local_root:
+            raise ValueError("--squeue-file is restricted to offline local roots")
+        return Path(fixture).read_text(encoding="utf-8")
+    if offline_local_root:
+        raise ValueError(
+            "offline local-root submitted cancellation requires --squeue-file"
+        )
+    return live_cancelled_job_queue_output(args.job_id)
+
+
+def live_cancelled_job_queue_output(job_id: str) -> str:
+    """Query one exact job ID from trusted live squeue."""
+
+    require_numeric_job_id(job_id)
+    try:
+        return subprocess.run(
+            [
+                str(SQUEUE), "-h", "-j", job_id,
+                "-o", "%i|%P|%T|%j",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            env=scheduler_environment(),
+        ).stdout
+    except (FileNotFoundError, subprocess.CalledProcessError) as error:
+        raise ValueError(
+            "squeue is unavailable; refusing submitted Stage I cancellation"
         ) from error
 
 
@@ -4793,6 +4896,39 @@ def sacct_output(args: argparse.Namespace, paths: dict[str, Path],
     return output
 
 
+def cancellation_sacct_output(args: argparse.Namespace,
+                              allow_fixture: bool) -> str:
+    """Read no-start cancellation evidence without publishing it prematurely."""
+
+    if args.sacct_file:
+        if not allow_fixture:
+            raise ValueError("--sacct-file is allowed only for offline local roots")
+        return Path(args.sacct_file).read_text(encoding="utf-8")
+    return live_cancellation_sacct_output(args.job_id)
+
+
+def live_cancellation_sacct_output(job_id: str) -> str:
+    """Query one exact job ID from trusted live sacct."""
+
+    require_numeric_job_id(job_id)
+    try:
+        return subprocess.run(
+            [
+                str(SACCT), "-X", "-j", job_id,
+                "--format=JobIDRaw,JobName,State,ExitCode,AllocNodes,"
+                "ElapsedRaw,Submit,End", "-n", "-P",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            env=scheduler_environment(),
+        ).stdout
+    except (FileNotFoundError, subprocess.CalledProcessError) as error:
+        raise ValueError(
+            "sacct is unavailable; refusing submitted Stage I cancellation"
+        ) from error
+
+
 def parse_sacct(output: str, job_id: str) -> dict[str, str]:
     """Select a completed top-level allocation row."""
 
@@ -5457,6 +5593,552 @@ def bundle_campaign(args: argparse.Namespace) -> int:
     return 0
 
 
+def require_accounting_evidence_path(paths: dict[str, Path], value: object,
+                                     label: str) -> Path:
+    """Require retained cancellation evidence to remain beneath accounting."""
+
+    declared = Path(str(value)).expanduser()
+    if not declared.is_absolute():
+        raise ValueError(f"{label} path must be absolute")
+    resolved = declared.resolve()
+    try:
+        resolved.relative_to(paths["accounting"].resolve())
+    except ValueError as error:
+        raise ValueError(f"{label} must remain beneath Stage I accounting") from error
+    if declared != resolved:
+        raise ValueError(f"{label} path must resolve exactly")
+    return resolved
+
+
+def submitted_cancellation_evidence_paths(
+    paths: dict[str, Path], job_id: str
+) -> dict[str, Path]:
+    """Return the fixed evidence namespace for one no-start cancellation."""
+
+    require_numeric_job_id(job_id)
+    prefix = paths["accounting"] / (
+        f"mks24_stage_i_{EXECUTION_EPOCH_SLUG}_{job_id}_"
+        "source_bundle_recovery_cancellation"
+    )
+    return {
+        "authorization": prefix.with_suffix(".authorization.json"),
+        "publication_audit": prefix.with_suffix(".authorization.json.publication_audit.json"),
+        "submitted_manifest": prefix.with_suffix(".submitted_manifest.json"),
+        "scheduler_batch_script": prefix.with_suffix(".scheduler_batch_script.sbatch"),
+        "pre_cancel_hold": prefix.with_suffix(".pre_cancel_hold.squeue.txt"),
+        "post_cancel_sacct": prefix.with_suffix(".post_cancel.sacct.txt"),
+        "post_cancel_queue": prefix.with_suffix(".post_cancel.squeue.txt"),
+    }
+
+
+def require_immutable_recovery_evidence(
+    path: Path, expected_sha256: object, label: str
+) -> None:
+    """Require one owner-controlled, immutable, single-link evidence file."""
+
+    try:
+        profile = path.stat(follow_symlinks=False)
+    except FileNotFoundError as error:
+        raise ValueError(f"{label} is missing: {path}") from error
+    if (
+        not stat.S_ISREG(profile.st_mode)
+        or profile.st_uid != os.geteuid()
+        or profile.st_nlink != 1
+        or stat.S_IMODE(profile.st_mode) != 0o444
+    ):
+        raise ValueError(f"{label} must be an owner-controlled immutable file: {path}")
+    require_file_sha256(path, expected_sha256, label)
+
+
+def require_canonical_source_bundle_recovery_identity(
+    paths: dict[str, Path],
+    manifest_path: Path,
+    submitted_manifest: dict[str, object],
+) -> None:
+    """Pin the sole canonical corruption-recovery cancellation identity."""
+
+    if paths["root"].resolve() != DEFAULT_ROOT.resolve():
+        return
+    policy = CANONICAL_SOURCE_BUNDLE_RECOVERY
+    job_id = str(submitted_manifest.get("job_id", ""))
+    if (
+        job_id != policy["job_id"]
+        or manifest_path
+        != (paths["root"] / str(policy["manifest_relative"])).resolve()
+    ):
+        raise ValueError("submitted cancellation is not the promoted recovery identity")
+    command = submitted_manifest.get("command")
+    bundle = command.get("source_bundle") if isinstance(command, dict) else None
+    if (
+        not isinstance(bundle, dict)
+        or Path(str(bundle.get("path", ""))).resolve()
+        != (paths["root"] / str(policy["source_bundle_relative"])).resolve()
+        or bundle.get("sha256") != policy["source_bundle_expected_sha256"]
+    ):
+        raise ValueError("submitted cancellation source-bundle identity is not promoted")
+
+
+def validate_pre_cancel_hold_evidence(
+    path: Path,
+    job_id: str,
+    expected_job_name_value: str,
+) -> None:
+    """Require one exact held, pending, never-started scheduler row."""
+
+    lines = [line for line in path.read_text(encoding="utf-8").splitlines() if line]
+    if len(lines) != 1:
+        raise ValueError("pre-cancel hold evidence must contain one scheduler row")
+    row = next(csv.reader(lines, delimiter="|"))
+    if len(row) != 6:
+        raise ValueError("pre-cancel hold evidence scheduler row is malformed")
+    retained_job_id, job_name, state, elapsed, nodes, reason = row
+    if (
+        retained_job_id != job_id
+        or job_name != expected_job_name_value
+        or state != "PENDING"
+        or elapsed != "0:00"
+        or nodes != "1"
+        or reason not in {"JobHeldUser", "(JobHeldUser)"}
+    ):
+        raise ValueError("pre-cancel hold evidence does not prove a held no-start job")
+
+
+def validate_recovery_publication_audit(
+    evidence: dict[str, Path],
+    authorization_sha256: str,
+    expected_audit_sha256: object,
+) -> None:
+    """Require an independently reviewed fixed-path recovery authorization."""
+
+    audit_path = evidence["publication_audit"]
+    require_immutable_recovery_evidence(
+        audit_path,
+        expected_audit_sha256,
+        "submitted cancellation publication audit",
+    )
+    try:
+        audit = json.loads(audit_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise ValueError("submitted cancellation publication audit is invalid") from error
+    required = {
+        "schema_version",
+        "record_type",
+        "execution_epoch",
+        "published_utc",
+        "authorization",
+        "review",
+    }
+    if not isinstance(audit, dict) or frozenset(audit) != required:
+        raise ValueError("submitted cancellation publication audit schema is invalid")
+    binding = audit["authorization"]
+    review = audit["review"]
+    if (
+        audit["schema_version"] != 1
+        or audit["record_type"]
+        != "stage-i-source-bundle-recovery-cancellation-publication-audit"
+        or audit["execution_epoch"] != EXECUTION_EPOCH
+        or not isinstance(binding, dict)
+        or frozenset(binding) != {"path", "sha256", "mode"}
+        or Path(str(binding["path"])).resolve() != evidence["authorization"]
+        or binding["sha256"] != authorization_sha256
+        or binding["mode"] != "0444"
+        or not isinstance(review, dict)
+        or frozenset(review) != {"status", "authority", "reviewed_by"}
+        or review["status"] != "approved"
+        or review["authority"] != "independent-source-bundle-recovery-review"
+        or not isinstance(review["reviewed_by"], str)
+        or not review["reviewed_by"].strip()
+    ):
+        raise ValueError("submitted cancellation publication audit is not approved")
+    parse_utc_timestamp(audit["published_utc"], "recovery authorization publication UTC")
+
+
+def source_bundle_cancellation_authorization(
+    paths: dict[str, Path],
+    manifest_path: Path,
+    submitted_manifest: dict[str, object],
+) -> tuple[Path, str]:
+    """Authenticate a one-use held-job cancellation caused by bundle corruption."""
+
+    require_canonical_source_bundle_recovery_identity(
+        paths, manifest_path, submitted_manifest
+    )
+    job_id = require_numeric_job_id(str(submitted_manifest.get("job_id", "")))
+    evidence = submitted_cancellation_evidence_paths(paths, job_id)
+    authorization = evidence["authorization"]
+    expected_sha256: object = (
+        sha256(authorization) if authorization.is_file() else None
+    )
+    if paths["root"].resolve() == DEFAULT_ROOT.resolve():
+        expected_sha256 = CANONICAL_SOURCE_BUNDLE_RECOVERY["authorization_sha256"]
+    require_immutable_recovery_evidence(
+        authorization, expected_sha256, "submitted cancellation authorization"
+    )
+    try:
+        retained = json.loads(authorization.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise ValueError("submitted cancellation authorization is invalid JSON") from error
+    required = {
+        "schema_version",
+        "record_type",
+        "execution_epoch",
+        "job_id",
+        "decision",
+        "reason",
+        "manifest",
+        "batch_script",
+        "pre_cancel_hold",
+        "source_bundle",
+    }
+    if not isinstance(retained, dict) or frozenset(retained) != required:
+        raise ValueError("submitted cancellation authorization schema is invalid")
+    if (
+        retained["schema_version"] != 1
+        or retained["record_type"]
+        != "stage-i-source-bundle-recovery-cancellation-authorization"
+        or retained["execution_epoch"] != EXECUTION_EPOCH
+        or retained["job_id"] != submitted_manifest.get("job_id")
+        or retained["decision"] != "cancel-held-job-without-start"
+        or not isinstance(retained["reason"], str)
+        or not retained["reason"].strip()
+    ):
+        raise ValueError("submitted cancellation authorization identity is invalid")
+    manifest_evidence = retained["manifest"]
+    if (
+        not isinstance(manifest_evidence, dict)
+        or frozenset(manifest_evidence)
+        != {"live_path", "snapshot_path", "sha256"}
+        or Path(str(manifest_evidence["live_path"])).resolve() != manifest_path
+        or Path(str(manifest_evidence["snapshot_path"])).resolve()
+        != evidence["submitted_manifest"]
+    ):
+        raise ValueError("submitted cancellation authorization manifest differs")
+    snapshot_path = evidence["submitted_manifest"]
+    require_immutable_recovery_evidence(
+        snapshot_path, manifest_evidence["sha256"], "submitted manifest snapshot"
+    )
+    if read_manifest(snapshot_path) != submitted_manifest:
+        raise ValueError("submitted manifest snapshot differs from launch manifest")
+    manifest_paths = submitted_manifest.get("paths")
+    command = submitted_manifest.get("command")
+    if not isinstance(manifest_paths, dict) or not isinstance(command, dict):
+        raise ValueError("submitted manifest lacks retained launch metadata")
+    batch_script = Path(str(manifest_paths.get("batch_script", ""))).resolve()
+    batch_evidence = retained["batch_script"]
+    if (
+        not isinstance(batch_evidence, dict)
+        or frozenset(batch_evidence)
+        != {
+            "path",
+            "sha256",
+            "normalized_sha256",
+            "scheduler_snapshot_path",
+            "scheduler_snapshot_sha256",
+        }
+        or Path(str(batch_evidence["path"])).resolve() != batch_script
+        or Path(str(batch_evidence["scheduler_snapshot_path"])).resolve()
+        != evidence["scheduler_batch_script"]
+    ):
+        raise ValueError("submitted cancellation authorization batch script differs")
+    require_file_sha256(
+        batch_script, batch_evidence["sha256"], "submitted cancellation batch script"
+    )
+    if (
+        batch_evidence["normalized_sha256"] != command.get("batch_script_sha256")
+        or normalized_batch_script_sha256(batch_script)
+        != batch_evidence["normalized_sha256"]
+    ):
+        raise ValueError("submitted cancellation batch script launch digest differs")
+    scheduler_script = evidence["scheduler_batch_script"]
+    require_immutable_recovery_evidence(
+        scheduler_script,
+        batch_evidence["scheduler_snapshot_sha256"],
+        "scheduler-retained submitted batch script",
+    )
+    if (
+        batch_evidence["scheduler_snapshot_sha256"] != batch_evidence["sha256"]
+        or normalized_batch_script_sha256(scheduler_script)
+        != batch_evidence["normalized_sha256"]
+    ):
+        raise ValueError("scheduler-retained submitted batch script differs")
+    hold = retained["pre_cancel_hold"]
+    if (
+        not isinstance(hold, dict)
+        or frozenset(hold) != {"path", "sha256"}
+        or Path(str(hold["path"])).resolve() != evidence["pre_cancel_hold"]
+    ):
+        raise ValueError("pre-cancel hold evidence binding differs")
+    require_immutable_recovery_evidence(
+        evidence["pre_cancel_hold"], hold["sha256"], "pre-cancel hold evidence"
+    )
+    validate_pre_cancel_hold_evidence(
+        evidence["pre_cancel_hold"], job_id, expected_job_name(submitted_manifest)
+    )
+    if not isinstance(command.get("source_bundle"), dict):
+        raise ValueError("submitted manifest lacks source-bundle provenance")
+    bundle = command["source_bundle"]
+    bundle_evidence = retained["source_bundle"]
+    if (
+        not isinstance(bundle_evidence, dict)
+        or frozenset(bundle_evidence)
+        != {"path", "expected_sha256", "observed_sha256", "incident"}
+        or Path(str(bundle_evidence["path"])).resolve()
+        != Path(str(bundle.get("path", ""))).resolve()
+        or bundle_evidence["expected_sha256"] != bundle.get("sha256")
+        or bundle_evidence["observed_sha256"] == bundle_evidence["expected_sha256"]
+    ):
+        raise ValueError("submitted cancellation source-bundle evidence differs")
+    require_file_sha256(
+        Path(str(bundle_evidence["path"])).resolve(),
+        bundle_evidence["observed_sha256"],
+        "observed corrupt source bundle",
+    )
+    incident = bundle_evidence["incident"]
+    if not isinstance(incident, dict) or frozenset(incident) != {"path", "sha256"}:
+        raise ValueError("submitted cancellation incident binding is invalid")
+    incident_path = require_accounting_evidence_path(
+        paths, incident["path"], "source-bundle corruption incident"
+    )
+    if paths["root"].resolve() == DEFAULT_ROOT.resolve():
+        policy = CANONICAL_SOURCE_BUNDLE_RECOVERY
+        if (
+            incident_path
+            != (paths["root"] / str(policy["incident_relative"])).resolve()
+            or incident["sha256"] != policy["incident_sha256"]
+            or bundle_evidence["expected_sha256"]
+            != policy["source_bundle_expected_sha256"]
+            or bundle_evidence["observed_sha256"]
+            != policy["source_bundle_observed_sha256"]
+        ):
+            raise ValueError("canonical source-bundle recovery evidence is not promoted")
+    require_immutable_recovery_evidence(
+        incident_path, incident["sha256"], "source-bundle corruption incident"
+    )
+    incident_value = json.loads(incident_path.read_text(encoding="utf-8"))
+    if (
+        not isinstance(incident_value, dict)
+        or incident_value.get("schema_version") != 1
+        or incident_value.get("record_type")
+        != "stage-i-source-bundle-corruption-incident"
+        or incident_value.get("execution_epoch") != EXECUTION_EPOCH
+        or incident_value.get("expected", {}).get("sha256")
+        != bundle_evidence["expected_sha256"]
+        or incident_value.get("observed", {}).get("path")
+        != str(Path(str(bundle_evidence["path"])).resolve())
+        or incident_value.get("observed", {}).get("sha256")
+        != bundle_evidence["observed_sha256"]
+        or incident_value.get("scheduler_containment", {}).get("job_id") != job_id
+        or incident_value.get("scheduler_containment", {}).get("reason")
+        != "JobHeldUser"
+        or incident_value.get("scheduler_containment", {}).get("released") is not False
+    ):
+        raise ValueError("source-bundle corruption incident schema or binding differs")
+    expected_audit_sha256: object = (
+        sha256(evidence["publication_audit"])
+        if evidence["publication_audit"].is_file() else None
+    )
+    if paths["root"].resolve() == DEFAULT_ROOT.resolve():
+        expected_audit_sha256 = CANONICAL_SOURCE_BUNDLE_RECOVERY[
+            "publication_audit_sha256"
+        ]
+    validate_recovery_publication_audit(
+        evidence, str(expected_sha256), expected_audit_sha256
+    )
+    return authorization, str(expected_sha256)
+
+
+def submitted_manifest_before_cancellation(
+    cancelled_manifest: dict[str, object],
+) -> dict[str, object]:
+    """Reconstruct the immutable submitted-state manifest for replay checks."""
+
+    submitted = json.loads(json.dumps(cancelled_manifest))
+    if submitted.get("state") != "cancelled":
+        raise ValueError("submitted cancellation replay requires cancelled state")
+    submitted["state"] = "submitted"
+    submitted.pop("cancellation", None)
+    submitted.pop("cancellation_notes", None)
+    return submitted
+
+
+def validate_submitted_cancellation_metadata(
+    paths: dict[str, Path], manifest_path: Path, manifest: dict[str, object]
+) -> None:
+    """Authenticate retained no-start scheduler cancellation evidence."""
+
+    cancellation = manifest.get("cancellation")
+    required = {
+        "cancelled_utc",
+        "mode",
+        "notes",
+        "job_id",
+        "scheduler",
+        "scheduler_evidence",
+        "queue_absence_evidence",
+        "recovery_authorization",
+    }
+    if not isinstance(cancellation, dict) or frozenset(cancellation) != required:
+        raise ValueError("submitted cancellation metadata schema is invalid")
+    parse_utc_timestamp(cancellation["cancelled_utc"], "submitted cancellation UTC")
+    if (
+        cancellation["mode"] != "authenticated-submitted-no-start"
+        or cancellation["job_id"] != manifest.get("job_id")
+        or not isinstance(cancellation["notes"], str)
+    ):
+        raise ValueError("submitted cancellation metadata identity is invalid")
+    scheduler = cancellation["scheduler"]
+    if (
+        not isinstance(scheduler, dict)
+        or scheduler.get("job_id") != manifest.get("job_id")
+        or scheduler.get("job_name") != expected_job_name(manifest)
+        or scheduler.get("state") != "CANCELLED"
+        or scheduler.get("exit_code") != "0:0"
+        or scheduler.get("elapsed_seconds") != "0"
+        or scheduler.get("nodes") != "0"
+    ):
+        raise ValueError("submitted cancellation scheduler evidence is invalid")
+    job_id = require_numeric_job_id(str(manifest["job_id"]))
+    fixed = submitted_cancellation_evidence_paths(paths, job_id)
+    bindings = {
+        "scheduler_evidence": (
+            "post_cancel_sacct", "submitted cancellation scheduler evidence"
+        ),
+        "queue_absence_evidence": (
+            "post_cancel_queue", "submitted cancellation queue-absence evidence"
+        ),
+        "recovery_authorization": (
+            "authorization", "submitted cancellation recovery authorization"
+        ),
+    }
+    retained_paths = {}
+    for key, (fixed_key, label) in bindings.items():
+        binding = cancellation[key]
+        if not isinstance(binding, dict) or frozenset(binding) != {"path", "sha256"}:
+            raise ValueError(f"{label} binding is invalid")
+        evidence_path = require_accounting_evidence_path(paths, binding["path"], label)
+        if evidence_path != fixed[fixed_key]:
+            raise ValueError(f"{label} path differs from the fixed recovery namespace")
+        require_immutable_recovery_evidence(evidence_path, binding["sha256"], label)
+        retained_paths[key] = evidence_path
+    source_bundle_cancellation_authorization(
+        paths,
+        manifest_path,
+        submitted_manifest_before_cancellation(manifest),
+    )
+    parsed = parse_sacct(
+        retained_paths["scheduler_evidence"].read_text(encoding="utf-8"),
+        str(manifest["job_id"]),
+    )
+    if parsed != scheduler:
+        raise ValueError("submitted cancellation scheduler evidence changed")
+    if retained_paths["queue_absence_evidence"].read_text(encoding="utf-8").strip():
+        raise ValueError("submitted cancellation queue-absence evidence is nonempty")
+    if paths["root"].resolve() == DEFAULT_ROOT.resolve():
+        if parse_sacct(live_cancellation_sacct_output(job_id), job_id) != scheduler:
+            raise ValueError(
+                "submitted cancellation scheduler evidence differs from live Slurm"
+            )
+        if live_cancelled_job_queue_output(job_id).strip():
+            raise ValueError("cancelled submitted job remains present in live squeue")
+
+
+@locked_manifest_action
+def cancel_submitted(args: argparse.Namespace) -> int:
+    """Close a terminally cancelled submitted reservation that never started."""
+
+    manifest_path = Path(args.manifest).resolve()
+    manifest = read_manifest(manifest_path)
+    require_current_epoch(manifest, "submitted segment")
+    root = require_root(Path(str(manifest["project_root"])), args.allow_local_root)
+    offline_local_root = is_offline_local_root(root, args.allow_local_root)
+    paths = initialize(root) if offline_local_root else layout(root)
+    require_existing_layout(paths)
+    require_no_pending_transactions(paths)
+    require_no_orphaned_segment_runs(paths)
+    if manifest.get("state") != "submitted":
+        raise ValueError("only a submitted segment may use submitted cancellation")
+    require_numeric_job_id(args.job_id)
+    if manifest.get("job_id") != args.job_id:
+        raise ValueError("job ID does not match the submitted segment")
+    reservations = read_reservations(paths)
+    require_active_reservation_policy(reservations)
+    require_reservation_budget(
+        read_ledger(paths), reservations, "submitted cancellation baseline"
+    )
+    require_retained_r17_policy(paths, reservations)
+    reservation = reservation_for_manifest(reservations, manifest_path)
+    if (
+        reservation.get("state") != "submitted"
+        or reservation.get("job_id") != args.job_id
+    ):
+        raise ValueError("reservation does not match the submitted segment")
+    require_reservation_matches_manifest(reservation, manifest)
+    require_reserved_execution_intent(
+        reservation, manifest, allow_legacy_local=offline_local_root
+    )
+    authorization, authorization_sha256 = source_bundle_cancellation_authorization(
+        paths, manifest_path, manifest
+    )
+    evidence = submitted_cancellation_evidence_paths(paths, args.job_id)
+    for key, label in (
+        ("post_cancel_sacct", "submitted cancellation scheduler evidence"),
+        ("post_cancel_queue", "submitted cancellation queue-absence evidence"),
+    ):
+        require_immutable_recovery_evidence(
+            evidence[key],
+            sha256(evidence[key]) if evidence[key].is_file() else None,
+            label,
+        )
+    scheduler_output = cancellation_sacct_output(args, offline_local_root)
+    if scheduler_output != evidence["post_cancel_sacct"].read_text(encoding="utf-8"):
+        raise ValueError("live scheduler cancellation evidence differs from retained bytes")
+    scheduler = parse_sacct(scheduler_output, args.job_id)
+    if (
+        scheduler["job_name"] != expected_job_name(manifest)
+        or scheduler["state"] != "CANCELLED"
+        or scheduler["exit_code"] != "0:0"
+        or scheduler["elapsed_seconds"] != "0"
+        or scheduler["nodes"] != "0"
+    ):
+        raise ValueError(
+            "submitted cancellation requires a terminal CANCELLED no-start job"
+        )
+    queue_output = cancelled_job_queue_output(args, offline_local_root)
+    if queue_output.strip():
+        raise ValueError("cancelled submitted job remains present in squeue")
+    if queue_output != evidence["post_cancel_queue"].read_text(encoding="utf-8"):
+        raise ValueError("live queue-absence evidence differs from retained bytes")
+    reservation["state"] = "cancelled"
+    reservation["notes"] = args.notes
+    manifest["state"] = "cancelled"
+    manifest["cancellation_notes"] = args.notes
+    manifest["cancellation"] = {
+        "cancelled_utc": utc_now(),
+        "mode": "authenticated-submitted-no-start",
+        "notes": args.notes,
+        "job_id": args.job_id,
+        "scheduler": scheduler,
+        "scheduler_evidence": {
+            "path": str(evidence["post_cancel_sacct"]),
+            "sha256": sha256(evidence["post_cancel_sacct"]),
+        },
+        "queue_absence_evidence": {
+            "path": str(evidence["post_cancel_queue"]),
+            "sha256": sha256(evidence["post_cancel_queue"]),
+        },
+        "recovery_authorization": {
+            "path": str(authorization),
+            "sha256": authorization_sha256,
+        },
+    }
+    validate_submitted_cancellation_metadata(paths, manifest_path, manifest)
+    durable_transition(
+        paths, "cancelled_submitted", manifest_path, manifest, reservations
+    )
+    print(f"Cancelled never-started submitted Stage I reservation: {manifest_path}")
+    return 0
+
+
 @locked_manifest_action
 def cancel(args: argparse.Namespace) -> int:
     """Release a segment that was prepared but never submitted."""
@@ -5977,6 +6659,14 @@ def parser() -> argparse.ArgumentParser:
     cancelled.add_argument("--notes", required=True)
     cancelled.add_argument("--break-glass-cancel-evidence")
     cancelled.add_argument("--confirm-break-glass-cancel", action="store_true")
+    cancelled_submitted = actions.add_parser("cancel-submitted")
+    cancelled_submitted.add_argument("--manifest", required=True)
+    cancelled_submitted.add_argument(
+        "--job-id", type=require_numeric_job_id, required=True
+    )
+    cancelled_submitted.add_argument("--notes", required=True)
+    cancelled_submitted.add_argument("--sacct-file")
+    cancelled_submitted.add_argument("--squeue-file")
     actions.add_parser("summary")
     actions.add_parser("reconcile")
     actions.add_parser("recover-transactions")
@@ -6025,6 +6715,8 @@ def main() -> int:
             return bundle_campaign(args)
         if args.action == "cancel":
             return cancel(args)
+        if args.action == "cancel-submitted":
+            return cancel_submitted(args)
         if args.action == "summary":
             with canonical_root_lock(root):
                 if is_offline_local_root(root, args.allow_local_root):
