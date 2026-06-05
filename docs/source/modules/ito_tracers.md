@@ -93,6 +93,82 @@ python scripts/plot_ito_tracer_figures.py \
   --two-d run_ito_2d/prtcl_thermo_history/ito_tracers_2d_cloud.prtcl_thermo_history.thp
 ```
 
+## Thermodynamic Tracing of 2D Thermal Instability
+
+Here is the simple picture. The gas starts in exact heating-cooling balance,
+but on the unstable middle branch of the ISM equilibrium curve. The imposed
+`1%` density fluctuations leave its initial temperature uniform. Slightly
+denser patches then cool faster because radiative cooling scales as `n^2`
+while the constant per-particle heating scales as `n`; they lose pressure and
+condense. Slightly underdense patches net heat and expand. Ito-2 particles act
+as mass-weighted observers that move with the resolved mass flux and record
+the temperature history of the phase they occupy.
+
+`inputs/particles/ito_tracers_thermal_instability_2d.athinput` is a worked
+integration problem combining Ito-2 tracers, standalone ISM cooling, and the
+initial-perturbation module. It uses the uniform `cooling_test` problem
+generator rather than embedding a custom perturbation in a new problem
+generator. Density-only perturbations were chosen over temperature or pressure
+noise because they provide a clean causal trigger while preserving a uniform
+initial temperature.
+
+The `20 pc x 20 pc`, `128 x 128` periodic Hydro problem starts at
+
+```text
+P/k_B = 3000 K cm^-3
+n0    = 1.9071755 cm^-3
+T0    = 1573.0068 K
+```
+
+The constant per-particle heating rate is exactly balanced against `ISMCoolFn`
+at that state. At the initial pressure, the equilibrium curve has stable roots
+near `52 K` and `6353 K`, with the initialized `1573 K` state between them on
+the unstable branch. A density-only Fourier perturbation with `1%` RMS seeds
+the instability. The run seeds 4096 mass-weighted Ito-2 tracers and records
+their density, pressure, temperature, and velocity histories.
+
+After `100` code time units (`30.47 Myr`), the evolved mass-weighted median
+pressure is `P/k_B = 2024 K cm^-3`. At that pressure the cooling curve's stable
+equilibria are `79.5 K` and `6720 K`, separated by an unstable root at `589 K`.
+The measured median tracer temperatures are `79.5 K` in the cold phase and
+`6673 K` in the warm phase. The final particle fractions are `81.8%` below
+`300 K`, `15.5%` above `5000 K`, and `2.7%` between those thresholds. Because
+the tracers are mass-weighted, these are estimates of mass fractions, not
+volume fractions.
+
+![Ito-2 particle temperature histories and 2D thermal-instability phase separation](figures/ito_tracers_thermal_instability_2d.png)
+
+**What to look for.** The left panel follows individual particles and the
+ensemble percentiles as the initially single-temperature population separates.
+Sharp changes in an individual history occur when its stochastic Ito trajectory
+crosses a thin cold/warm interface: thermodynamic-history output samples the
+fluid cell containing the particle. The middle panel shows the final
+mass-tracer temperatures. The right panel follows the same sample tracers
+through density-temperature phase space; the dashed and dotted isobars show the
+initial and evolved median pressures, respectively. The convergence of the
+cold and warm paths toward the two stable intersections is the main evidence
+that the histories are tracing the expected thermal phases.
+
+Run and reproduce the figure with:
+
+```bash
+./build/src/athena \
+  -i inputs/particles/ito_tracers_thermal_instability_2d.athinput \
+  -d run_ito_ti_2d
+
+python scripts/plot_ito_thermal_instability.py \
+  run_ito_ti_2d/prtcl_thermo_history/ito_tracers_thermal_instability_2d.prtcl_thermo_history.thp
+```
+
+This experiment establishes that the cooling, perturbation, Ito-2 transport,
+and thermodynamic-history paths work together and recover the expected
+two-phase thermal evolution. It does not establish a converged fragmentation
+solution. Thermal conduction is intentionally omitted, so the Field length is
+unresolved and the interfaces and smallest condensations are resolution
+dependent. The reported phase fractions are also specific to this resolution,
+domain, perturbation seed, and runtime. The final particle map samples the
+mass distribution; it is not a complete volume-filling gas-temperature map.
+
 ## Quick Start
 
 ```ini
@@ -179,6 +255,7 @@ rejection, and the pre-existing MC tracer Hydro and MPI/AMR inputs.
 | `src/particles/particles_lagrangian_ito.cpp` | Itô-2 coefficients, AMR communication, CIC interpolation, and Euler-Maruyama push. |
 | `src/particles/particles_lagrangian_mc.cpp` | Shared seeding, restart, and post-AMR remapping. |
 | `src/hydro/hydro_fluxes.cpp`, `src/mhd/mhd_fluxes.cpp` | Final-RK-weighted mass-flux accumulation. |
-| `inputs/particles/ito_tracers*.athinput` | Uniform-flow and AMR smoke inputs. |
+| `inputs/particles/ito_tracers*.athinput` | Uniform-flow, AMR, and 2D thermal-instability inputs. |
 | `scripts/plot_ito_tracer_figures.py` | Reproducible 1D-style and 2D behavior figures. |
+| `scripts/plot_ito_thermal_instability.py` | Reproducible thermodynamic-history and phase-space figure. |
 | `tst/test_suite/particles/test_particles_ito_*.py` | CPU and MPI regression coverage. |

@@ -3,17 +3,19 @@
 ## Role in AthenaK
 
 The source-terms module contains physics that is applied outside the conservative flux
-divergence. Three paths live in this area:
+divergence. Four paths live in this area:
 
 - `SourceTerms` (`src/srcterms/srcterms.{hpp,cpp}`) owns constant acceleration,
-  optically thin ISM cooling, relativistic cooling, and radiation beam injection.
+  general radiative cooling/heating, relativistic cooling, and radiation beam injection.
 - `TurbulenceDriver` (`src/srcterms/turb_driver.{hpp,cpp}`) drives turbulence through
   stochastic acceleration fields that are inserted into the runtime task lists.
 - `InitialPerturbations` (`src/srcterms/initial_perturbations.{hpp,cpp}`) applies
   one-time Fourier perturbations to newly generated initial conditions.
+- `GeneralCooling` (`src/srcterms/cooling.{hpp,cpp}`) selects and applies standalone
+  cooling and heating models configured by `<cooling>`.
 
-`SourceTerms::NewTimeStep` contributes source-term timestep constraints, currently for
-relativistic cooling, to the global timestep reduction.
+`SourceTerms::NewTimeStep` contributes configured cooling and relativistic-cooling
+timestep constraints to the global timestep reduction.
 
 ## File Layout
 
@@ -21,14 +23,16 @@ relativistic cooling, to the global timestep reduction.
 |------|---------|
 | `srcterms.hpp/cpp` | Runtime source-term selection and application for hydro, MHD, and radiation states. |
 | `srcterms_newdt.cpp` | Timestep constraints from source terms. |
+| `cooling.hpp/cpp`, `cooling_hooks.hpp` | Standalone radiative cooling/heating models, tables, history accounting, and pgen hooks. |
 | `turb_driver.hpp/cpp` | Ornstein-Uhlenbeck-style turbulence forcing machinery. |
 | `initial_perturbations.hpp/cpp` | One-time Fourier perturbations applied after problem generation and before driver initialization. |
-| `ismcooling.hpp` | Analytic and tabulated cooling coefficients used by ISM cooling. |
+| `ismcooling.hpp` | Analytic ISM cooling curve used by `cooling_model = ism`. |
 
 ## Runtime Wiring
 
-1. `Hydro`, `MHD`, and `Radiation` construct a `SourceTerms` object when their
-   corresponding `<hydro_srcterms>`, `<mhd_srcterms>`, or `<rad_srcterms>` block exists.
+1. `Hydro` and `MHD` construct a `SourceTerms` object when their corresponding
+   source-term block exists or `<cooling>/enabled = true`. `Radiation` constructs one
+   when `<rad_srcterms>` exists.
 2. `MeshBlockPack` constructs a `TurbulenceDriver` when `<turb_driving>` exists.
    The driver contributes tasks before the time integrator and during each stage.
 3. `main.cpp` calls `ApplyInitialPerturbations` only for brand-new runs, immediately
@@ -48,14 +52,20 @@ relativistic cooling, to the global timestep reduction.
 
 The term updates momentum and, for ideal equations of state, the corresponding energy.
 
-### ISM Cooling (`<hydro_srcterms>` or `<mhd_srcterms>`)
+### General Cooling and Heating (`<cooling>`)
 
 | Parameter | Type | Notes |
 |-----------|------|-------|
-| `ism_cooling` | bool | Enables optically thin ISM cooling. |
-| `hrate` | real | Uniform heating rate in code units. |
+| `enabled` | bool | Enables the standalone cooling/heating source. |
+| `cooling_model` | string | Selects `ism`, `cgm`, `table`, `powerlaw`, `piecewise_powerlaw`, `user`, or `none`. |
+| `heating_model` | string | Selects `constant`, `table`, `powerlaw`, `piecewise_powerlaw`, `user`, or `none`. |
+| `timestep` | bool | Enables the cooling/heating timestep constraint. |
+| `history` | bool | Adds interval-integrated cooling columns to Hydro or MHD history output. |
 
-The cooling coefficient is evaluated from `ISMCoolFn(temp)` and applied to the gas energy.
+Cooling and heating are configured only through the standalone `<cooling>` block.
+Legacy `ism_cooling` and `cgm_cooling` parameters fail explicitly. See
+[Module: General Cooling and Heating](cooling.md) for the model-specific parameters,
+unit conventions, and validation suite.
 
 ### Relativistic Cooling (`<hydro_srcterms>` or `<mhd_srcterms>`)
 
