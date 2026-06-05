@@ -7,6 +7,7 @@ import copy
 import hashlib
 import importlib.util
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -478,6 +479,7 @@ def product_parameter_text(
     run_basename: str,
     target_time: float,
     restart_time: float | None,
+    output_last_times: dict[str, float] | None = None,
 ) -> str:
     """Return one production-shaped closed runtime parameter dump."""
 
@@ -490,6 +492,8 @@ def product_parameter_text(
     blocks["time"]["tlim"] = format(target_time, ".17g")
     if restart_time is not None:
         blocks["time"]["restart_time"] = format(restart_time, ".17g")
+    for block, value in (output_last_times or {}).items():
+        blocks[block]["last_time"] = format(value, ".6g")
     for block, key in VALIDATOR.PRODUCT_NONNEGATIVE_INTEGER_PARAMETERS:
         blocks[block][key] = "0"
     for block, key in VALIDATOR.PRODUCT_NONNEGATIVE_FINITE_PARAMETERS:
@@ -622,7 +626,9 @@ def write_restart(
     *,
     passive: bool,
     hardwall: bool,
+    dt: float = 0.001,
     diagnostic_divisor: int = 1,
+    output_last_times: dict[str, float] | None = None,
 ) -> None:
     """Write one structurally complete qualified native restart."""
 
@@ -632,9 +638,13 @@ def write_restart(
         marker = format(time, ".6g")
     else:
         marker = marker_mode
+    if output_last_times is None:
+        cadence = 0.02
+        scheduled_index = math.ceil(time / cadence - 1.0e-12)
+        output_last_times = {"output1": scheduled_index * cadence}
     path.parent.mkdir(parents=True, exist_ok=True)
     restart_parameters = product_parameter_text(
-        parameters, run_basename, target_time, time
+        parameters, run_basename, target_time, time, output_last_times
     )
     restart_parameters = restart_parameters.replace(
         f"restart_time = {format(time, '.17g')}",
@@ -649,7 +659,7 @@ def write_restart(
     )
     header.extend(region_indices(1, (4, 1, 1)))
     header.extend(region_indices(1, (1, 1, 1)))
-    header.extend(struct.pack("<ddi", time, 0.01, cycle))
+    header.extend(struct.pack("<ddi", time, dt, cycle))
     assert len(header) == 252
     locations = b"".join(struct.pack("<4i", *location) for location in logical_locations())
     costs = struct.pack("<4f", 1.0, 2.0, 3.0, 4.0)
@@ -920,6 +930,23 @@ def mutate_restart_header(
     refresh_inspection(fixture)
 
 
+def mutate_product_parameter_text(
+    fixture: dict[str, object],
+    kind: str,
+    original: bytes,
+    replacement: bytes,
+) -> None:
+    """Apply one same-size parameter mutation to a retained product."""
+
+    assert kind in {"snapshot", "restart"}
+    assert len(original) == len(replacement)
+    path = Path(fixture[f"{kind}_groups"][-1]["paths"][-1])
+    payload = path.read_bytes()
+    assert payload.count(original) == 1
+    path.write_bytes(payload.replace(original, replacement, 1))
+    refresh_inspection(fixture)
+
+
 def swap_first_two_snapshot_blocks(path: Path) -> None:
     """Apply a valid logical-MeshBlock permutation to one snapshot."""
 
@@ -978,6 +1005,8 @@ def mutate_terminal_replicated_restart_state(
             struct.pack_into("<i", payload, metadata + 80, 0)
         elif field == "turbulence_tcorr":
             struct.pack_into("<d", payload, metadata + 96, 9.0)
+        elif field == "turbulence_sol_fraction":
+            struct.pack_into("<d", payload, metadata + 128, 0.0)
         elif field == "rng_idum":
             payload[rng] ^= 1
         elif field == "rng_positive_idum":
@@ -1434,7 +1463,11 @@ def add_restart(fixture: dict[str, object], time: float) -> None:
     refresh_inspection(fixture)
 
 
-def configure_continuation(fixture: dict[str, object], start: float = 0.1) -> None:
+def configure_continuation(
+    fixture: dict[str, object],
+    start: float = 0.1,
+    history_last_time: float | None = None,
+) -> None:
     """Configure one production-shaped rank-local continuation launch."""
 
     manifest_path = Path(fixture["manifest"])
@@ -1478,6 +1511,9 @@ def configure_continuation(fixture: dict[str, object], start: float = 0.1) -> No
                 if str(fixture["layout"]) == "per_rank"
                 else 1
             ),
+            output_last_times={
+                "output1": start if history_last_time is None else history_last_time
+            },
         ),
     )
     parent_terminal = product_record(parent_paths, str(fixture["layout"]))
@@ -1568,7 +1604,7 @@ def remove_history_data_row(path: Path, row_index: int) -> None:
 
 
 def trim_history_before(path: Path, start: float) -> None:
-    """Retain the exact history header and rows at or after one boundary."""
+    """Retain the exact history header and child rows after one restart boundary."""
 
     lines = path.read_text().splitlines()
     retained = [
@@ -1576,9 +1612,99 @@ def trim_history_before(path: Path, start: float) -> None:
         for line in lines
         if line.startswith("#")
         or not line
-        or float(line.split()[0]) >= start
+        or float(line.split()[0]) > start
     ]
     path.write_text("\n".join(retained) + "\n")
+
+
+def replace_history_timeline(
+    path: Path, times: list[float], dts: list[float]
+) -> None:
+    """Replace one history timeline while preserving selected diagnostic rows."""
+
+    assert len(times) == len(dts) and len(times) >= 2
+    lines = path.read_text().splitlines()
+    data_indices = [
+        index for index, line in enumerate(lines) if line and not line.startswith("#")
+    ]
+    assert len(times) <= len(data_indices)
+    selected_indices = data_indices[:len(times) - 1] + [data_indices[-1]]
+    selected = []
+    for index, time, dt in zip(selected_indices, times, dts):
+        row = lines[index].split()
+        row[0] = format(time, ".17g")
+        row[1] = format(dt, ".17g")
+        selected.append(" ".join(row))
+    headers = [line for line in lines if line.startswith("#")]
+    path.write_text("\n".join(headers + selected) + "\n")
+
+
+def replace_synchronized_history_timeline(
+    fixture: dict[str, object], times: list[float], dts: list[float]
+) -> None:
+    """Replace both synchronized fixture histories and refresh formal hashes."""
+
+    replace_history_timeline(Path(fixture["mhd"]), times, dts)
+    replace_history_timeline(Path(fixture["user"]), times, dts)
+    mutate_restart_header(
+        fixture,
+        240,
+        struct.pack("<d", dts[-1]),
+        every_terminal_sibling=True,
+    )
+
+
+def append_terminal_history_duplicate(path: Path, dt: float) -> None:
+    """Append AthenaK's clean-partial Finalize row after a scheduled terminal row."""
+
+    lines = path.read_text().splitlines()
+    index = max(
+        index for index, line in enumerate(lines) if line and not line.startswith("#")
+    )
+    row = lines[index].split()
+    row[1] = format(dt, ".17g")
+    lines.append(" ".join(row))
+    path.write_text("\n".join(lines) + "\n")
+
+
+def append_synchronized_terminal_history_duplicate(
+    fixture: dict[str, object], dt: float
+) -> None:
+    """Append synchronized clean-partial Finalize rows and refresh formal hashes."""
+
+    append_terminal_history_duplicate(Path(fixture["mhd"]), dt)
+    append_terminal_history_duplicate(Path(fixture["user"]), dt)
+    terminal = next(
+        item
+        for item in fixture["restart_groups"]
+        if item["time"] == fixture["final_time"]
+    )
+    partitions = rank_partitions(int(fixture["rank_count"]))
+    for index, path in enumerate(terminal["paths"]):
+        write_restart(
+            Path(path),
+            float(fixture["final_time"]),
+            fixture_cycle(float(fixture["final_time"])),
+            str(terminal["marker_mode"]),
+            (
+                4
+                if str(fixture["layout"]) == "shared_mpiio"
+                else len(partitions[index])
+            ),
+            str(fixture["parameters"]),
+            str(fixture["basename"]),
+            float(fixture["required_time"]),
+            passive=bool(fixture["passive"]),
+            hardwall=bool(fixture["hardwall"]),
+            dt=dt,
+            diagnostic_divisor=(
+                int(fixture["rank_count"])
+                if str(fixture["layout"]) == "per_rank"
+                else 1
+            ),
+            output_last_times={"output1": float(fixture["final_time"]) + 0.02},
+        )
+    refresh_inspection(fixture)
 
 
 def test_validator_accepts_real_payload_rank_local_inventory(segment_factory):
@@ -2414,6 +2540,215 @@ def test_validator_rejects_missing_history_cadence(segment_factory):
     require_rejected(fixture, "MHD history time does not provide expected cadence coverage")
 
 
+def test_validator_accepts_timestep_jittered_fresh_history_schedule(segment_factory):
+    fixture = segment_factory(final_time=0.1)
+    times = [0.0, 0.0207, 0.0406, 0.0608, 0.0805, 0.1]
+    dts = [0.001, 0.0008, 0.0007, 0.0009, 0.0006, 0.0005]
+    replace_synchronized_history_timeline(fixture, times, dts)
+    result = validate(fixture)
+    schedule = result["history_time_schedule_validation"]["mhd"]
+    assert schedule["origin"] == "fresh_initial_output"
+    assert schedule["scheduled_nonterminal_outputs"] == 4
+    assert schedule["exact_terminal_output"] == 0.1
+
+
+def test_validator_rejects_history_later_than_schedule_plus_completed_dt(
+    segment_factory,
+):
+    fixture = segment_factory(final_time=0.1)
+    times = [0.0, 0.0211, 0.04, 0.06, 0.08, 0.1]
+    dts = [0.001, 0.001, 0.001, 0.001, 0.001, 0.001]
+    replace_synchronized_history_timeline(fixture, times, dts)
+    require_rejected(fixture, "MHD history time does not provide expected cadence coverage")
+
+
+def test_validator_rejects_history_when_previous_state_already_crossed_schedule(
+    segment_factory,
+):
+    fixture = segment_factory(final_time=0.1)
+    times = [0.0, 0.021, 0.04, 0.06, 0.08, 0.1]
+    dts = [0.001, 0.001, 0.001, 0.001, 0.001, 0.001]
+    replace_synchronized_history_timeline(fixture, times, dts)
+    require_rejected(fixture, "MHD history time does not provide expected cadence coverage")
+
+
+def test_validator_rejects_omitted_row_masked_by_reverse_subtraction(
+    segment_factory,
+):
+    fixture = segment_factory(final_time=0.1)
+    previous = 0.01999999862164259
+    dt = 0.021780528980478626
+    current = previous + dt
+    previous_32 = struct.unpack("<f", struct.pack("<f", previous))[0]
+    reconstructed_32 = struct.unpack("<f", struct.pack("<f", current - dt))[0]
+    trigger_32 = struct.unpack("<f", struct.pack("<f", 0.02))[0]
+    assert previous_32 == trigger_32
+    assert reconstructed_32 < trigger_32
+    catchup_dt = 0.0001
+    catchup = current + catchup_dt
+    times = [0.0, current, catchup, 0.0601, 0.0801, 0.1]
+    dts = [0.001, dt, catchup_dt, 0.001, 0.001, 0.001]
+    replace_synchronized_history_timeline(fixture, times, dts)
+    require_rejected(fixture, "MHD history time does not provide expected cadence coverage")
+
+
+def test_validator_rejects_ambiguous_nonbacklog_first_crossing_fail_closed(
+    segment_factory,
+):
+    fixture = segment_factory(final_time=0.1)
+    previous = 0.05999999679625034
+    alternate = math.nextafter(previous, math.inf)
+    dt = 0.005
+    current = previous + dt
+    trigger_32 = struct.unpack("<f", struct.pack("<f", 0.06))[0]
+    previous_32 = struct.unpack("<f", struct.pack("<f", previous))[0]
+    alternate_32 = struct.unpack("<f", struct.pack("<f", alternate))[0]
+    assert alternate + dt == current
+    assert previous_32 < trigger_32
+    assert alternate_32 == trigger_32
+    times = [0.0, 0.0201, 0.0401, current, 0.0801, 0.1]
+    dts = [0.001, 0.001, 0.001, dt, 0.001, 0.001]
+    replace_synchronized_history_timeline(fixture, times, dts)
+    require_rejected(fixture, "MHD history time does not provide expected cadence coverage")
+
+
+def test_validator_rejects_nonadvancing_predecessor_endpoint_ambiguity(
+    segment_factory,
+):
+    fixture = segment_factory(final_time=0.04)
+    current = float.fromhex("0x1.47ae130000000p-6")
+    previous = float.fromhex("0x1.47ae12fffffffp-6")
+    dt = float.fromhex("0x1.0000000000000p-59")
+    trigger_32 = struct.unpack("<f", struct.pack("<f", 0.02))[0]
+    previous_32 = struct.unpack("<f", struct.pack("<f", previous))[0]
+    current_32 = struct.unpack("<f", struct.pack("<f", current))[0]
+    assert previous + dt == current
+    assert current + dt == current
+    assert previous_32 < trigger_32
+    assert current_32 == trigger_32
+    replace_synchronized_history_timeline(
+        fixture, [0.0, current, 0.04], [0.001, dt, 0.001]
+    )
+    require_rejected(fixture, "MHD history time does not provide expected cadence coverage")
+
+
+def test_validator_rejects_history_step_preceding_prior_retained_row(segment_factory):
+    fixture = segment_factory(final_time=0.1)
+    times = [0.0, 0.0201, 0.0401, 0.0601, 0.0801, 0.1]
+    dts = [0.001, 0.001, 0.03, 0.001, 0.001, 0.001]
+    replace_synchronized_history_timeline(fixture, times, dts)
+    require_rejected(fixture, "MHD history time does not provide expected cadence coverage")
+
+
+def test_validator_rejects_deleted_history_slot_masked_by_cadence_sized_dt(
+    segment_factory,
+):
+    fixture = segment_factory(final_time=0.1)
+    times = [0.0, 0.04, 0.06, 0.08, 0.1]
+    dts = [0.001, 0.02, 0.02, 0.02, 0.02]
+    replace_synchronized_history_timeline(fixture, times, dts)
+    require_rejected(fixture, "MHD history time does not provide expected cadence coverage")
+
+
+def test_validator_rejects_terminal_history_masking_all_scheduled_rows(segment_factory):
+    fixture = segment_factory(final_time=0.1)
+    replace_synchronized_history_timeline(fixture, [0.0, 0.1], [0.001, 0.001])
+    require_rejected(fixture, "MHD history time does not provide expected cadence coverage")
+
+
+def test_validator_accepts_terminal_history_replacing_exact_scheduled_boundary(
+    segment_factory,
+):
+    fixture = segment_factory(final_time=0.1)
+    times = [0.0, 0.02, 0.04, 0.06, 0.08, 0.1]
+    dts = [0.001, 0.001, 0.001, 0.001, 0.001, 0.001]
+    replace_synchronized_history_timeline(fixture, times, dts)
+    schedule = validate(fixture)["history_time_schedule_validation"]["mhd"]
+    assert schedule["scheduled_nonterminal_outputs"] == 4
+    assert schedule["next_scheduled_time"] == 0.1
+
+
+def test_validator_accepts_history_backlog_catchup_one_output_per_step(segment_factory):
+    fixture = segment_factory(final_time=0.1)
+    times = [0.0, 0.045, 0.046, 0.0605, 0.0805, 0.1]
+    dts = [0.001, 0.045, 0.001, 0.0145, 0.02, 0.001]
+    replace_synchronized_history_timeline(fixture, times, dts)
+    schedule = validate(fixture)["history_time_schedule_validation"]["mhd"]
+    assert schedule["scheduled_nonterminal_outputs"] == 4
+    assert schedule["terminal_form"] == "exact_target_finalize_only"
+
+
+def test_validator_rejects_history_backlog_with_omitted_catchup_step(segment_factory):
+    fixture = segment_factory(final_time=0.1)
+    times = [0.0, 0.045, 0.0605, 0.061, 0.0805, 0.1]
+    dts = [0.001, 0.045, 0.0005, 0.0005, 0.0195, 0.001]
+    replace_synchronized_history_timeline(fixture, times, dts)
+    require_rejected(fixture, "MHD history time does not provide expected cadence coverage")
+
+
+def test_validator_rejects_ambiguous_backlog_step_masking_omitted_row(
+    segment_factory,
+):
+    fixture = segment_factory(final_time=0.12)
+    previous_output = 0.1
+    omitted = math.nextafter(previous_output, math.inf)
+    dt = 1.5 * (omitted - previous_output)
+    current = omitted + dt
+    assert previous_output + dt == current
+    assert omitted + dt == current
+    times = [0.0, previous_output, current, 0.12]
+    dts = [0.001, 0.1, dt, 0.001]
+    replace_synchronized_history_timeline(fixture, times, dts)
+    require_rejected(fixture, "MHD history time does not provide expected cadence coverage")
+
+
+def test_validator_rejects_clean_partial_missing_scheduled_terminal_normal_row(
+    segment_factory,
+):
+    fixture = segment_factory(final_time=0.1, required_time=0.2)
+    require_rejected(
+        fixture,
+        "MHD history time does not provide expected cadence coverage",
+        result="clean_partial",
+    )
+
+
+def test_validator_accepts_clean_partial_scheduled_normal_then_finalize_duplicate(
+    segment_factory,
+):
+    fixture = segment_factory(final_time=0.1, required_time=0.2)
+    append_synchronized_terminal_history_duplicate(fixture, 0.001)
+    schedule = validate(fixture, result="clean_partial")[
+        "history_time_schedule_validation"
+    ]["mhd"]
+    assert schedule["terminal_form"] == "scheduled_normal_then_finalize_duplicate"
+    assert schedule["terminal_normal_output_due"]
+
+
+def test_validator_accepts_clean_partial_unscheduled_finalize_only(segment_factory):
+    fixture = segment_factory(final_time=0.11, required_time=0.2)
+    schedule = validate(fixture, result="clean_partial")[
+        "history_time_schedule_validation"
+    ]["mhd"]
+    assert schedule["terminal_form"] == "unscheduled_finalize_only"
+    assert not schedule["terminal_normal_output_due"]
+
+
+def test_validator_rejects_unsynchronized_history_dt(segment_factory):
+    fixture = segment_factory()
+    path = Path(fixture["user"])
+    lines = path.read_text().splitlines()
+    index = next(
+        index for index, line in enumerate(lines) if line and not line.startswith("#")
+    )
+    row = lines[index].split()
+    row[1] = "0.0005"
+    lines[index] = " ".join(row)
+    path.write_text("\n".join(lines) + "\n")
+    refresh_inspection(fixture)
+    require_rejected(fixture, "MHD and user histories are not exactly synchronized")
+
+
 def test_validator_rejects_missing_snapshot_cadence(segment_factory):
     fixture = segment_factory()
     missing = fixture["snapshot_groups"].pop(1)
@@ -2464,7 +2799,15 @@ def test_validator_rejects_restart_sibling_dt_disagreement(segment_factory):
     require_rejected(fixture, "restart sibling dt metadata disagree")
 
 
-def test_validator_requires_continuation_histories_to_begin_at_parent_time(
+def test_validator_binds_terminal_restart_dt_to_terminal_histories(segment_factory):
+    fixture = segment_factory()
+    mutate_restart_header(
+        fixture, 240, struct.pack("<d", 0.02), every_terminal_sibling=True
+    )
+    require_rejected(fixture, "terminal restart dt differs from terminal histories")
+
+
+def test_validator_rejects_continuation_histories_before_parent_time(
     segment_factory,
 ):
     fixture = segment_factory()
@@ -2475,21 +2818,23 @@ def test_validator_requires_continuation_histories_to_begin_at_parent_time(
                 Path(path).unlink()
         fixture[f"{kind}_groups"] = fixture[f"{kind}_groups"][-1:]
     refresh_inspection(fixture)
-    require_rejected(fixture, "MHD history time does not begin at the prepared segment start")
+    require_rejected(
+        fixture,
+        "MHD history time continuation products precede the authenticated start",
+    )
 
 
 def test_validator_accepts_continuation_with_only_terminal_child_products(
     segment_factory,
 ):
-    fixture = segment_factory()
+    fixture = segment_factory(final_time=0.33)
     configure_continuation(fixture, start=0.3)
     for kind in ("snapshot", "restart"):
         for group in fixture[f"{kind}_groups"][:-1]:
             for path in group["paths"]:
                 Path(path).unlink()
         fixture[f"{kind}_groups"] = fixture[f"{kind}_groups"][-1:]
-    trim_history_before(Path(fixture["mhd"]), 0.3)
-    trim_history_before(Path(fixture["user"]), 0.3)
+    replace_synchronized_history_timeline(fixture, [0.32, 0.33], [0.001, 0.001])
     refresh_inspection(fixture)
     result = validate(fixture)
     assert result["snapshot_times"] == [fixture["final_time"]]
@@ -2499,6 +2844,153 @@ def test_validator_accepts_continuation_with_only_terminal_child_products(
         "trusted_authenticated_controller_record"
     )
     assert not result["parent_acceptance_validation"]["authorizing"]
+
+
+def test_validator_rejects_impossible_exact_start_continuation_history(
+    segment_factory,
+):
+    fixture = segment_factory(final_time=0.12)
+    configure_continuation(fixture, start=0.1)
+    for kind in ("snapshot", "restart"):
+        for group in fixture[f"{kind}_groups"][:-1]:
+            for path in group["paths"]:
+                Path(path).unlink()
+        fixture[f"{kind}_groups"] = fixture[f"{kind}_groups"][-1:]
+    replace_synchronized_history_timeline(fixture, [0.1, 0.12], [0.001, 0.001])
+    require_rejected(
+        fixture,
+        "MHD history time continuation contains impossible exact-start output",
+    )
+
+
+def test_validator_rejects_continuation_step_preceding_authenticated_start(
+    segment_factory,
+):
+    fixture = segment_factory(final_time=0.4)
+    configure_continuation(fixture, start=0.3, history_last_time=0.32)
+    for kind in ("snapshot", "restart"):
+        for group in fixture[f"{kind}_groups"][:-1]:
+            for path in group["paths"]:
+                Path(path).unlink()
+        fixture[f"{kind}_groups"] = fixture[f"{kind}_groups"][-1:]
+    times = [0.3401, 0.3601, 0.3801, 0.4]
+    dts = [0.05, 0.001, 0.001, 0.001]
+    replace_synchronized_history_timeline(fixture, times, dts)
+    require_rejected(fixture, "MHD history time does not provide expected cadence coverage")
+
+
+def test_validator_accepts_inherited_continuation_history_backlog(segment_factory):
+    fixture = segment_factory(final_time=0.1)
+    configure_continuation(fixture, start=0.065, history_last_time=0.04)
+    for kind in ("snapshot", "restart"):
+        for group in fixture[f"{kind}_groups"][:-1]:
+            for path in group["paths"]:
+                Path(path).unlink()
+        fixture[f"{kind}_groups"] = fixture[f"{kind}_groups"][-1:]
+    times = [0.066, 0.0805, 0.1]
+    dts = [0.001, 0.0145, 0.001]
+    replace_synchronized_history_timeline(fixture, times, dts)
+    schedule = validate(fixture)["history_time_schedule_validation"]["mhd"]
+    assert schedule["authenticated_parent_history_last_time"] == 0.04
+    assert schedule["scheduled_nonterminal_outputs"] == 2
+    assert schedule["next_scheduled_time"] == 0.1
+
+
+def test_validator_rejects_noninvertible_ambiguous_forward_addition_during_backlog(
+    segment_factory,
+):
+    fixture = segment_factory(final_time=0.36)
+    start = 0.3400101370534894
+    dt = 0.00012760147700000002
+    first_output = start + dt
+    assert first_output - dt != start
+    configure_continuation(fixture, start=start, history_last_time=0.32)
+    for kind in ("snapshot", "restart"):
+        for group in fixture[f"{kind}_groups"][:-1]:
+            for path in group["paths"]:
+                Path(path).unlink()
+        fixture[f"{kind}_groups"] = fixture[f"{kind}_groups"][-1:]
+    replace_synchronized_history_timeline(
+        fixture, [first_output, 0.36], [dt, 0.001]
+    )
+    require_rejected(fixture, "MHD history time does not provide expected cadence coverage")
+
+
+def test_validator_accepts_float32_early_parent_schedule_state(segment_factory):
+    fixture = segment_factory(final_time=0.15)
+    start = 0.099999999
+    dt = 0.040100001
+    first_output = start + dt
+    configure_continuation(fixture, start=start, history_last_time=0.12)
+    for kind in ("snapshot", "restart"):
+        for group in fixture[f"{kind}_groups"][:-1]:
+            for path in group["paths"]:
+                Path(path).unlink()
+        fixture[f"{kind}_groups"] = fixture[f"{kind}_groups"][-1:]
+    replace_synchronized_history_timeline(
+        fixture, [first_output, 0.15], [dt, 0.001]
+    )
+    schedule = validate(fixture)["history_time_schedule_validation"]["mhd"]
+    assert schedule["authenticated_parent_history_last_time"] == 0.12
+    assert schedule["scheduled_nonterminal_outputs"] == 1
+    assert schedule["next_scheduled_time"] == pytest.approx(0.16)
+
+
+def test_validator_accepts_r03_style_inherited_history_schedule(segment_factory):
+    fixture = segment_factory(case_id="R03", final_time=0.5)
+    start = 0.31282347945569927
+    configure_continuation(fixture, start=start, history_last_time=0.32)
+    for kind in ("snapshot", "restart"):
+        for group in fixture[f"{kind}_groups"][:-1]:
+            for path in group["paths"]:
+                Path(path).unlink()
+        fixture[f"{kind}_groups"] = fixture[f"{kind}_groups"][-1:]
+    times = [
+        0.34001013705348943,
+        0.36005229939367456,
+        0.38009490295646342,
+        0.4000066620516799,
+        0.420042241644354,
+        0.44007811947982028,
+        0.46011687227650577,
+        0.48002823606179329,
+        0.5,
+    ]
+    dts = [
+        0.00012764864411168649,
+        0.00012765888955014961,
+        0.0001276550725455171,
+        0.0001276235585600234,
+        0.0001276116640636247,
+        0.00012762681003999291,
+        0.00012763386072651197,
+        0.00012764370927375676,
+        0.00011776633773796785,
+    ]
+    replace_synchronized_history_timeline(fixture, times, dts)
+    refresh_inspection(fixture)
+    result = validate(fixture)
+    schedule = result["history_time_schedule_validation"]["mhd"]
+    assert schedule["origin"] == "authenticated_parent_restart_schedule"
+    assert schedule["authenticated_parent_history_last_time"] == 0.32
+    assert schedule["scheduled_nonterminal_outputs"] == 8
+    assert result["continuation_origin_validation"]["start_time"] == start
+
+
+def test_validator_rejects_inconsistent_inherited_history_schedule(segment_factory):
+    fixture = segment_factory(final_time=0.5)
+    configure_continuation(fixture, start=0.3, history_last_time=0.35)
+    for kind in ("snapshot", "restart"):
+        for group in fixture[f"{kind}_groups"][:-1]:
+            for path in group["paths"]:
+                Path(path).unlink()
+        fixture[f"{kind}_groups"] = fixture[f"{kind}_groups"][-1:]
+    trim_history_before(Path(fixture["mhd"]), 0.3)
+    trim_history_before(Path(fixture["user"]), 0.3)
+    refresh_inspection(fixture)
+    require_rejected(
+        fixture, "MHD history time authenticated parent schedule is inconsistent"
+    )
 
 
 def test_validator_rejects_terminal_only_continuation_snapshot_cadence_gap(
@@ -2859,6 +3351,7 @@ def test_validator_requires_exact_replicated_restart_sibling_state(
         ("turbulence_nlow", "nlow"),
         ("turbulence_projection_policy", "projection_policy"),
         ("turbulence_tcorr", "tcorr"),
+        ("turbulence_sol_fraction", "sol_fraction"),
     ],
 )
 def test_validator_binds_turbulence_configuration_to_frozen_input(
@@ -3117,6 +3610,126 @@ def test_validator_rejects_restart_parameter_contract_mutation(segment_factory):
     path.write_bytes(payload.replace(b"beta0 = 10", b"beta0 = 11", 1))
     refresh_inspection(fixture)
     require_rejected(fixture, "restart parameter dump violates qualified problem/beta0=10")
+
+
+def test_validator_binds_serialized_random_forcing_sol_fraction_default(
+    segment_factory,
+):
+    fixture = segment_factory(case_id="R04")
+    path = Path(fixture["restart_groups"][-1]["paths"][-1])
+    payload = path.read_bytes()
+    assert payload.count(b"sol_fraction = 1.0") == 1
+    path.write_bytes(payload.replace(b"sol_fraction = 1.0", b"sol_fraction = 0.0", 1))
+    refresh_inspection(fixture)
+    require_rejected(
+        fixture,
+        "restart parameter dump violates qualified turb_driving/sol_fraction=1.0",
+    )
+
+
+@pytest.mark.parametrize("kind", ("snapshot", "restart"))
+def test_validator_accepts_numeric_random_forcing_sol_fraction_product_format(
+    segment_factory, kind
+):
+    fixture = segment_factory(case_id="R04")
+    mutate_product_parameter_text(
+        fixture, kind, b"sol_fraction = 1.0", b"sol_fraction = 1  "
+    )
+    assert validate(fixture)["validation_accepted"]
+
+
+def test_validator_binds_terminal_restart_history_schedule(segment_factory):
+    fixture = segment_factory(final_time=0.1)
+    for path in fixture["restart_groups"][-1]["paths"]:
+        path = Path(path)
+        payload = path.read_bytes()
+        assert payload.count(b"last_time = 0.1") == 1
+        path.write_bytes(payload.replace(b"last_time = 0.1", b"last_time = 0.2", 1))
+    refresh_inspection(fixture)
+    require_rejected(fixture, "terminal restart history schedule differs from histories")
+
+
+def test_validator_accepts_long_horizon_serialized_terminal_history_schedule():
+    next_scheduled_time = 4.5
+    for _ in range(150):
+        next_scheduled_time += 0.02
+    assert next_scheduled_time == 7.499999999999936
+    evidence = VALIDATOR.validate_terminal_restart_history_schedule(
+        {"history_last_time": 7.5, "history_last_time_text": "7.5"},
+        {"next_scheduled_time": next_scheduled_time},
+    )
+    assert evidence["serialization_contract"] == (
+        "cxx_defaultfloat_six_significant_digits"
+    )
+    assert evidence["expected_serialized_history_last_time_text"] == "7.5"
+
+
+@pytest.mark.parametrize(
+    ("kind", "replacement", "message"),
+    [
+        (
+            "snapshot",
+            b"bad_fraction = 1.0",
+            "binary snapshot parameter header parameter inventory differs from "
+            "qualified contract",
+        ),
+        (
+            "restart",
+            b"bad_fraction = 1.0",
+            "restart parameter dump parameter inventory differs from qualified contract",
+        ),
+        (
+            "snapshot",
+            b"sol_fraction = 0.0",
+            "binary snapshot parameter header violates qualified "
+            "turb_driving/sol_fraction=1.0",
+        ),
+        (
+            "restart",
+            b"sol_fraction = 0.0",
+            "restart parameter dump violates qualified turb_driving/sol_fraction=1.0",
+        ),
+    ],
+)
+def test_validator_requires_serialized_random_forcing_sol_fraction_product_default(
+    segment_factory, kind, replacement, message
+):
+    fixture = segment_factory(case_id="R04")
+    mutate_product_parameter_text(
+        fixture, kind, b"sol_fraction = 1.0", replacement
+    )
+    require_rejected(fixture, message)
+
+
+def test_validator_rejects_random_forcing_sol_fraction_in_archived_input(
+    segment_factory,
+):
+    fixture = segment_factory(case_id="R04")
+    path = Path(fixture["run_dir"]) / "manifest" / "submitted_input.athinput"
+    text = path.read_text()
+    marker = "projection_policy = mks24_random_unprojected\n"
+    assert text.count(marker) == 1
+    path.write_text(text.replace(marker, marker + "sol_fraction = 1.0\n", 1))
+    bind_fixture_artifact(fixture, "input", path, "input_sha256")
+    require_rejected(
+        fixture, "archived input contains forbidden parameter turb_driving/sol_fraction"
+    )
+
+
+@pytest.mark.parametrize("case_id", ("R03", "R16"))
+def test_validator_requires_explicit_alfvenic_sol_fraction_input(
+    segment_factory, case_id
+):
+    fixture = segment_factory(case_id=case_id)
+    path = Path(fixture["run_dir"]) / "manifest" / "submitted_input.athinput"
+    text = path.read_text()
+    marker = "sol_fraction = 1.0\n"
+    assert text.count(marker) == 1
+    path.write_text(text.replace(marker, "", 1))
+    bind_fixture_artifact(fixture, "input", path, "input_sha256")
+    require_rejected(
+        fixture, "archived input lacks required parameter turb_driving/sol_fraction"
+    )
 
 
 def test_validator_rejects_unqualified_archived_input_parameter(segment_factory):
@@ -3456,7 +4069,7 @@ def test_validator_enforces_only_approved_standard_active_closure(segment_factor
 
 
 def test_validator_requires_exact_partial_result(segment_factory):
-    fixture = segment_factory(final_time=0.5, required_time=1.0)
+    fixture = segment_factory(final_time=0.51, required_time=1.0)
     require_rejected(
         fixture, "accepted validation requires the exact prepared endpoint"
     )

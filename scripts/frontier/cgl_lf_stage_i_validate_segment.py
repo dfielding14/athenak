@@ -17,7 +17,7 @@ import struct
 import subprocess
 import sys
 import tempfile
-from typing import BinaryIO, Iterator
+from typing import BinaryIO, Callable, Iterator
 
 
 EXECUTION_EPOCH = "E03-forcing-policy"
@@ -348,6 +348,7 @@ QUALIFIED_PRODUCT_PARAMETER_ADDITIONS = {
     ("turb_driving", "sigma_x1"): "-1",
     ("turb_driving", "sigma_x2"): "-1",
     ("turb_driving", "sigma_x3"): "-1",
+    ("turb_driving", "sol_fraction"): "1.0",
     ("turb_driving", "tdriv_start"): "0",
     ("turb_driving", "tile_nx"): "1",
     ("turb_driving", "tile_ny"): "1",
@@ -2197,6 +2198,7 @@ def authenticate_parent_continuation(
         "start_time": final_time,
         "initial_restart_cycle": initial_state["cycle"],
         "initial_restart_dt": initial_state["dt"],
+        "initial_history_last_time": initial_state["history_last_time"],
         "initial_restart_ordered_location_inventory": initial_state[
             "ordered_location_inventory"
         ],
@@ -2724,6 +2726,192 @@ def require_time_coverage(
         or any(right - left > maximum_gap for left, right in zip(values, values[1:]))
     ):
         raise ValidationError(f"{label} does not provide expected cadence coverage")
+
+
+def require_history_time_coverage(
+    values: list[float],
+    dts: list[float],
+    start: float,
+    final: float,
+    target: float,
+    segment_result: str,
+    cadence: float,
+    label: str,
+    continuation_history_last_time: float | None,
+) -> dict[str, object]:
+    """Replay AthenaK's history schedule, failing closed on terminal ambiguity."""
+
+    def as_float32(value: float) -> float:
+        try:
+            return struct.unpack("<f", struct.pack("<f", value))[0]
+        except (OverflowError, struct.error) as error:
+            raise ValidationError(f"{label} schedule is not representable") from error
+
+    def latest_forward_addition_predecessor(
+        current: float, dt: float, predecessor_floor: float
+    ) -> float:
+        """Find the latest binary64 state that can advance exactly to current."""
+
+        upper = current
+        if predecessor_floor < 0.0 or upper < predecessor_floor:
+            raise ValidationError(f"{label} does not provide expected cadence coverage")
+
+        def bits(value: float) -> int:
+            return struct.unpack("<Q", struct.pack("<d", value))[0]
+
+        def value(encoded: int) -> float:
+            return struct.unpack("<d", struct.pack("<Q", encoded))[0]
+
+        lower_encoded = bits(predecessor_floor)
+        upper_exclusive = bits(upper) + 1
+
+        def first_true(predicate: Callable[[float], bool]) -> int:
+            lower = lower_encoded
+            upper_bound = upper_exclusive
+            while lower < upper_bound:
+                middle = lower + (upper_bound - lower) // 2
+                if predicate(value(middle)):
+                    upper_bound = middle
+                else:
+                    lower = middle + 1
+            return lower
+
+        first_equal = first_true(lambda predecessor: predecessor + dt >= current)
+        first_greater = first_true(lambda predecessor: predecessor + dt > current)
+        if (
+            first_equal == upper_exclusive
+            or first_equal == first_greater
+            or value(first_equal) + dt != current
+        ):
+            raise ValidationError(f"{label} does not provide expected cadence coverage")
+        return value(first_greater - 1)
+
+    if not values:
+        raise ValidationError(f"{label} is empty")
+    if len(values) != len(dts) or any(
+        not math.isfinite(dt) or dt <= 0.0 for dt in dts
+    ):
+        raise ValidationError(f"{label} timestep evidence is invalid")
+    if not math.isfinite(cadence) or cadence <= 0.0:
+        raise ValidationError(f"{label} cadence is invalid")
+    if segment_result not in {"accepted", "clean_partial"}:
+        raise ValidationError(f"{label} segment result is invalid")
+    if values[-1] != final:
+        raise ValidationError(f"{label} does not end at the exact segment endpoint")
+    if any(value < start for value in values):
+        raise ValidationError(
+            f"{label} continuation products precede the authenticated start"
+        )
+    duplicate_terminal = len(values) >= 2 and values[-2] == final
+    if duplicate_terminal and segment_result != "clean_partial":
+        raise ValidationError(f"{label} contains an impossible duplicate terminal output")
+    normal_rows_end = len(values) - 1
+    if any(
+        right <= left
+        for left, right in zip(values[:normal_rows_end], values[1:normal_rows_end])
+    ) or (
+        not duplicate_terminal
+        and normal_rows_end > 0
+        and values[normal_rows_end - 1] >= final
+    ):
+        raise ValidationError(f"{label} is not a valid retained output timeline")
+
+    first_scheduled_index = 0
+    if continuation_history_last_time is None:
+        if values[0] != start:
+            raise ValidationError(f"{label} does not begin at the prepared segment start")
+        schedule_last_time = start
+        first_scheduled_index = 1
+        origin = "fresh_initial_output"
+    else:
+        if (
+            not math.isfinite(continuation_history_last_time)
+            or continuation_history_last_time < 0.0
+            or as_float32(continuation_history_last_time - cadence)
+            > as_float32(start)
+        ):
+            raise ValidationError(
+                f"{label} authenticated parent schedule is inconsistent"
+            )
+        schedule_last_time = continuation_history_last_time
+        if values[0] == start:
+            raise ValidationError(
+                f"{label} continuation contains impossible exact-start output"
+            )
+        origin = "authenticated_parent_restart_schedule"
+
+    scheduled_outputs = 0
+    backlog = (
+        continuation_history_last_time is not None
+        and as_float32(start) >= as_float32(schedule_last_time + cadence)
+    )
+    target_32 = as_float32(target)
+    for index in range(first_scheduled_index, normal_rows_end):
+        value = values[index]
+        expected = schedule_last_time + cadence
+        predecessor_floor = values[index - 1] if index > 0 else start
+        earliest_current = predecessor_floor + dts[index]
+        value_32 = as_float32(value)
+        expected_32 = as_float32(expected)
+        latest_previous = latest_forward_addition_predecessor(
+            value, dts[index], predecessor_floor
+        )
+        if (
+            value < earliest_current
+            or (
+                backlog
+                and (
+                    value != earliest_current
+                    or latest_previous != predecessor_floor
+                )
+            )
+            or (
+                not backlog
+                and as_float32(latest_previous) >= expected_32
+            )
+            or value_32 < expected_32
+            or value_32 >= target_32
+        ):
+            raise ValidationError(f"{label} does not provide expected cadence coverage")
+        schedule_last_time = expected
+        scheduled_outputs += 1
+        backlog = value_32 >= as_float32(schedule_last_time + cadence)
+
+    next_scheduled_time = schedule_last_time + cadence
+    final_32 = as_float32(final)
+    terminal_normal_due = duplicate_terminal or (
+        final_32 >= as_float32(next_scheduled_time) and final_32 < target_32
+    )
+    if segment_result == "clean_partial":
+        if not duplicate_terminal and terminal_normal_due:
+            raise ValidationError(f"{label} does not provide expected cadence coverage")
+        terminal_form = (
+            "scheduled_normal_then_finalize_duplicate"
+            if duplicate_terminal
+            else "unscheduled_finalize_only"
+        )
+    else:
+        if as_float32(next_scheduled_time) < final_32:
+            raise ValidationError(f"{label} does not provide expected cadence coverage")
+        terminal_form = "exact_target_finalize_only"
+
+    return {
+        "status": "athenak_timestep_triggered_schedule_complete",
+        "origin": origin,
+        "cadence": cadence,
+        "authenticated_parent_history_last_time": continuation_history_last_time,
+        "retained_rows": len(values),
+        "scheduled_nonterminal_outputs": scheduled_outputs,
+        "next_scheduled_time": next_scheduled_time,
+        "terminal_form": terminal_form,
+        "terminal_normal_output_due": terminal_normal_due,
+        "terminal_completeness_policy": (
+            "fail_closed_no_unconsumed_nominal_schedule_before_terminal"
+            if segment_result == "accepted"
+            else "exact_clean_partial_normal_output_plus_finalize_form"
+        ),
+        "exact_terminal_output": final,
+    }
 
 
 def require_cycle_timeline(values: list[int], label: str) -> None:
@@ -3394,13 +3582,18 @@ def restart_binary_evidence(
         remember_profile(profiles, path, profile, "restart product")
         text, parameter_size = restart_parameter_dump(stream, path)
         marker_text = restart_marker_text(text, path)
+        parameter_blocks = parse_athinput(
+            text.encode("utf-8"), "restart parameter dump"
+        )
         require_product_parameter_contract(
-            parse_athinput(text.encode("utf-8"), "restart parameter dump"),
+            parameter_blocks,
             input_contract,
             runtime_contract,
             "restart parameter dump",
             restart_product=True,
         )
+        history_last_time_text = parameter_blocks["output1"]["last_time"]
+        history_last_time = float(history_last_time_text)
         header = read_exact(stream, int(abi["mesh_header_size"]), "restart mesh header")
         nmb_total, root_level = struct.unpack_from("<ii", header, 0)
         mesh_geometry = struct.unpack_from("<9d", header, 8)
@@ -3562,6 +3755,8 @@ def restart_binary_evidence(
         "time": binary_time,
         "dt": dt,
         "cycle": ncycle,
+        "history_last_time": history_last_time,
+        "history_last_time_text": history_last_time_text,
         "marker_mode": marker_mode,
         "locations": locations,
         "ordered_location_inventory": ordered_locations,
@@ -3606,6 +3801,8 @@ def grouped_restart_evidence(
         "time",
         "dt",
         "cycle",
+        "history_last_time",
+        "history_last_time_text",
         "locations",
         "ordered_location_inventory",
         "ordered_cost_inventory",
@@ -3649,6 +3846,8 @@ def grouped_restart_evidence(
         "time": evidence[0]["time"],
         "dt": evidence[0]["dt"],
         "cycle": evidence[0]["cycle"],
+        "history_last_time": evidence[0]["history_last_time"],
+        "history_last_time_text": evidence[0]["history_last_time_text"],
         "marker_modes": [str(item["marker_mode"]) for item in evidence],
         "locations": evidence[0]["locations"],
         "ordered_location_inventory": evidence[0]["ordered_location_inventory"],
@@ -3921,6 +4120,10 @@ def validate_terminal_restart_history(
     injected_work = float(restart["injected_work"])
     if not values_close(injected_work, user["force_work"][-1], absolute, relative):
         raise ValidationError("terminal restart injected work differs from user history")
+    restart_dt = float(restart["dt"])
+    history_dt = mhd["dt"][-1]
+    if restart_dt != history_dt:
+        raise ValidationError("terminal restart dt differs from terminal histories")
     diagnostics = tuple(float(value) for value in restart["lf_diagnostics"])
     if len(diagnostics) != len(LF_RESTART_HISTORY_COLUMNS):
         raise ValidationError("terminal restart LF diagnostic inventory is invalid")
@@ -3937,9 +4140,34 @@ def validate_terminal_restart_history(
             raise ValidationError(f"terminal restart {name} differs from MHD history")
         residuals[name] = actual - expected
     return {
+        "restart_dt": restart_dt,
+        "history_dt": history_dt,
+        "dt_residual": restart_dt - history_dt,
         "injected_work_residual": injected_work - user["force_work"][-1],
         "lf_diagnostic_residuals": residuals,
         "tolerances": tolerances,
+    }
+
+
+def validate_terminal_restart_history_schedule(
+    restart: dict[str, object],
+    history_schedule: dict[str, object],
+) -> dict[str, object]:
+    """Bind the continuation schedule serialized by the terminal restart."""
+
+    actual = float(restart["history_last_time"])
+    expected = float(history_schedule["next_scheduled_time"])
+    actual_text = str(restart["history_last_time_text"])
+    expected_text = format(expected, ".6g")
+    if actual_text != expected_text:
+        raise ValidationError("terminal restart history schedule differs from histories")
+    return {
+        "status": "terminal_restart_continuation_schedule_bound",
+        "serialized_history_last_time": actual,
+        "serialized_history_last_time_text": actual_text,
+        "replayed_history_last_time": expected,
+        "expected_serialized_history_last_time_text": expected_text,
+        "serialization_contract": "cxx_defaultfloat_six_significant_digits",
     }
 
 
@@ -3951,6 +4179,9 @@ def validate_physics(
     policy: dict[str, object],
     segment_start: float,
     final_time: float,
+    required_time: float,
+    segment_result: str,
+    continuation: dict[str, object] | None,
 ) -> dict[str, object]:
     """Apply case-appropriate plasma-physics and conservation gates."""
 
@@ -3971,21 +4202,34 @@ def validate_physics(
         "MHD history",
     )
     require_columns(user, {"time", "mass", "hard_vol", "force_work"}, "user history")
-    require_time_coverage(
+    continuation_history_last_time = (
+        float(continuation["initial_history_last_time"])
+        if isinstance(continuation, dict)
+        else None
+    )
+    mhd_history_schedule = require_history_time_coverage(
         mhd["time"],
+        mhd["dt"],
         segment_start,
         final_time,
+        required_time,
+        segment_result,
         float(input_contract["history_cadence"]),
         "MHD history time",
+        continuation_history_last_time,
     )
-    require_time_coverage(
+    user_history_schedule = require_history_time_coverage(
         user["time"],
+        user["dt"],
         segment_start,
         final_time,
+        required_time,
+        segment_result,
         float(input_contract["history_cadence"]),
         "user history time",
+        continuation_history_last_time,
     )
-    if mhd["time"] != user["time"]:
+    if mhd["time"] != user["time"] or mhd["dt"] != user["dt"]:
         raise ValidationError("MHD and user histories are not exactly synchronized")
     mass_drift = {
         "mhd": relative_drift(mhd["mass"]),
@@ -4069,6 +4313,10 @@ def validate_physics(
         "strict_maxima": strict_maxima,
         "mass_relative_drift": mass_drift,
         "mass_relative_mismatch": mass_mismatch,
+        "history_time_schedule_validation": {
+            "mhd": mhd_history_schedule,
+            "user": user_history_schedule,
+        },
         "lf_work_diagnostics_finite": lf_work_finite,
         "activity": {
             "forcing_work": forcing_activity,
@@ -4201,7 +4449,16 @@ def validate_segment(args: argparse.Namespace) -> dict[str, object]:
         args.policy, manifest, args.result, required_time, final_time
     )
     physics = validate_physics(
-        mhd, user, abi, input_contract, policy, segment_start, final_time
+        mhd,
+        user,
+        abi,
+        input_contract,
+        policy,
+        segment_start,
+        final_time,
+        required_time,
+        args.result,
+        continuation,
     )
     require_inspection_record(
         inspection, "maximum_strict_failure_counts", physics["strict_maxima"]
@@ -4327,6 +4584,10 @@ def validate_segment(args: argparse.Namespace) -> dict[str, object]:
     restart_history = validate_terminal_restart_history(
         restart_evidence[terminal_restart_index], mhd, user, policy
     )
+    terminal_restart_history_schedule = validate_terminal_restart_history_schedule(
+        restart_evidence[terminal_restart_index],
+        physics["history_time_schedule_validation"]["mhd"],
+    )
 
     checks = {
         "required_time_reached": final_time >= required_time - 1.0e-10,
@@ -4425,6 +4686,12 @@ def validate_segment(args: argparse.Namespace) -> dict[str, object]:
         "strict_failure_maxima": physics["strict_maxima"],
         "mass_relative_drift": physics["mass_relative_drift"],
         "mass_relative_mismatch": physics["mass_relative_mismatch"],
+        "history_time_schedule_validation": physics[
+            "history_time_schedule_validation"
+        ],
+        "terminal_restart_history_schedule_validation": (
+            terminal_restart_history_schedule
+        ),
         "lf_work_diagnostics_finite": physics["lf_work_diagnostics_finite"],
         "named_activity_validation": physics["activity"],
         "final_hardwall_projection_count": physics[
