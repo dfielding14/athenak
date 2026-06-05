@@ -37,6 +37,7 @@ SourceTerms::SourceTerms(std::string block, MeshBlockPack *pp, ParameterInput *p
     pmy_pack(pp) {
   // Read flags for each source term implemented (default false)
   const_accel = pin->GetOrAddBoolean(block, "const_accel", false);
+  linear_drag = pin->GetOrAddBoolean(block, "linear_drag", false);
   ism_cooling = pin->GetOrAddBoolean(block, "ism_cooling", false);
   rel_cooling = pin->GetOrAddBoolean(block, "rel_cooling", false);
   rad_beam = pin->GetOrAddBoolean(block, "rad_beam", false);
@@ -52,18 +53,37 @@ SourceTerms::SourceTerms(std::string block, MeshBlockPack *pp, ParameterInput *p
     }
   }
 
-  // (2) Optically thin ISM cooling
+  // (2) linear Rayleigh drag
+  if (linear_drag) {
+    drag_rate = pin->GetReal(block, "drag_rate");
+    if (drag_rate < 0.0) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "drag_rate must not be negative" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    if (pmy_pack->pcoord->is_special_relativistic ||
+        pmy_pack->pcoord->is_general_relativistic ||
+        pmy_pack->pcoord->is_dynamical_relativistic) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "linear_drag is only implemented for non-relativistic fluids"
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+  }
+
+  // (3) Optically thin ISM cooling
   if (ism_cooling) {
     hrate = pin->GetReal(block, "hrate");
   }
 
-  // (3) optically thin relativistic cooling
+  // (4) optically thin relativistic cooling
   if (rel_cooling) {
     crate_rel = pin->GetReal(block, "crate_rel");
     cpower_rel = pin->GetOrAddReal(block, "cpower_rel", 1.);
   }
 
-  // (4) radiation beam source (radiation)
+  // (5) radiation beam source (radiation)
   if (rad_beam) {
     dii_dt = pin->GetReal(block, "dii_dt");
     pos1 = pin->GetReal(block, "pos_1");
@@ -92,6 +112,7 @@ void SourceTerms::ApplySrcTerms(const DvceArray5D<Real> &w0, const EOS_Data &eos
                                 const Real bdt, DvceArray5D<Real> &u0) {
   // NOTE source terms must be computed using primitive (w0) and NOT conserved (u0) vars
   if (const_accel) ConstantAccel(w0, eos_data,  bdt, u0);
+  if (linear_drag) LinearDrag(w0, eos_data, bdt, u0);
   if (ism_cooling) ISMCooling(w0, eos_data, bdt, u0);
   if (rel_cooling) RelCooling(w0, eos_data, bdt, u0);
   return;
@@ -123,6 +144,38 @@ void SourceTerms::ConstantAccel(const DvceArray5D<Real> &w0, const EOS_Data &eos
     Real src = bdt*g*w0(m,IDN,k,j,i);
     u0(m,dir,k,j,i) += src;
     if (eos_data.is_ideal) { u0(m,IEN,k,j,i) += src*w0(m,dir,k,j,i); }
+  });
+
+  return;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn SourceTerms::LinearDrag
+//! \brief Add uniform linear Rayleigh drag, dv/dt = -drag_rate*v
+//! NOTE source terms must be computed using primitive (w0) and NOT conserved (u0) vars
+
+void SourceTerms::LinearDrag(const DvceArray5D<Real> &w0, const EOS_Data &eos_data,
+                             const Real bdt, DvceArray5D<Real> &u0) {
+  auto &indcs = pmy_pack->pmesh->mb_indcs;
+  int is = indcs.is, ie = indcs.ie;
+  int js = indcs.js, je = indcs.je;
+  int ks = indcs.ks, ke = indcs.ke;
+  int nmb1 = pmy_pack->nmb_thispack - 1;
+  Real alpha = drag_rate;
+
+  par_for("linear_drag", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    Real rho = w0(m,IDN,k,j,i);
+    Real vx = w0(m,IVX,k,j,i);
+    Real vy = w0(m,IVY,k,j,i);
+    Real vz = w0(m,IVZ,k,j,i);
+    Real coeff = bdt*alpha*rho;
+    u0(m,IM1,k,j,i) -= coeff*vx;
+    u0(m,IM2,k,j,i) -= coeff*vy;
+    u0(m,IM3,k,j,i) -= coeff*vz;
+    if (eos_data.is_ideal) {
+      u0(m,IEN,k,j,i) -= coeff*(vx*vx + vy*vy + vz*vz);
+    }
   });
 
   return;

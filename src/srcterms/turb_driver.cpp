@@ -653,8 +653,16 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver* pdrive, int stage) {
   Real& ex_prp = exp_prp;
   Real& ex_prl = exp_prl;
   Real norm, kprl, kprp, kiso;
-  Real khigh = nhigh * fmax(fmax(dkx, dky), dkz);
-  Real klow = nlow * fmin(fmin(dkx, dky), dkz);
+  Real khigh = nhigh * dkx;
+  Real klow = nlow * dkx;
+  if (pm->mesh_indcs.nx2 > 1) {
+    khigh = fmax(khigh, nhigh * dky);
+    klow = fmin(klow, nlow * dky);
+  }
+  if (pm->mesh_indcs.nx3 > 1) {
+    khigh = fmax(khigh, nhigh * dkz);
+    klow = fmin(klow, nlow * dkz);
+  }
   Real parab_prefact = 0.0;
   if (spectrum == TurbSpectrum::parabolic) {
     parab_prefact = -4.0 / pow(khigh - klow, 2.0);

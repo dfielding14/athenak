@@ -51,6 +51,30 @@ for the degenerate dimension.
 cell-centered `force` field is rendered from those coefficients and the
 current MeshBlock geometry.
 
+## Rayleigh Drag For Two-Dimensional Turbulence
+
+A standard sink for the inverse cascade is uniform linear Rayleigh or Ekman
+friction,
+
+```{math}
+\left.\frac{\partial\boldsymbol{u}}{\partial t}\right|_{\rm drag}
+=-\alpha\boldsymbol{u}.
+```
+
+Enable it for a non-relativistic fluid with:
+
+```text
+<hydro_srcterms>
+linear_drag = true
+drag_rate = alpha
+```
+
+or use the corresponding `<mhd_srcterms>` block. The source damps every Fourier
+mode at the same rate; it is called a large-scale sink because an inverse cascade
+places most kinetic energy at large scales. For an ideal-gas fluid, the associated
+kinetic energy is removed rather than converted into internal energy. The source
+term timestep is limited by `1/drag_rate` before applying the run CFL number.
+
 ## Tiled Evaluation
 
 `tile_nx`, `tile_ny`, and `tile_nz` specify the number of repetitions in each

@@ -9,6 +9,7 @@
 
 #include <float.h>
 
+#include <algorithm>
 #include <limits>
 
 #include "athena.hpp"
@@ -31,6 +32,10 @@ void SourceTerms::NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eos_d
   const int nkji = nx3*nx2*nx1;
   const int nji  = nx2*nx1;
   dtnew = static_cast<Real>(std::numeric_limits<float>::max());
+
+  if (linear_drag && drag_rate > 0.0) {
+    dtnew = std::min(dtnew, static_cast<Real>(1.0)/drag_rate);
+  }
 
   if (ism_cooling) {
     Real use_e = eos_data.use_e;

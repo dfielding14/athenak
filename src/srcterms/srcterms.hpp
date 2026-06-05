@@ -9,8 +9,9 @@
 //! \brief Data, functions, and classes to implement various source terms in the hydro
 //! and/or MHD equations of motion.  Currently implemented:
 //!  (1) constant (gravitational) acceleration - for RTI
-//!  (2) shearing box in 2D (x-z), for both hydro and MHD
-//!  (3) random forcing to drive turbulence - implemented in TurbulenceDriver class
+//!  (2) linear Rayleigh drag
+//!  (3) shearing box in 2D (x-z), for both hydro and MHD
+//!  (4) random forcing to drive turbulence - implemented in TurbulenceDriver class
 
 #include <map>
 #include <string>
@@ -31,6 +32,7 @@ class SourceTerms {
   // data
   // flags for various source terms
   bool const_accel;
+  bool linear_drag;
   bool ism_cooling;
   bool rel_cooling;
   bool rad_beam;
@@ -41,6 +43,9 @@ class SourceTerms {
   // data for constant accel
   Real const_accel_val;   // magnitude of accn
   int const_accel_dir;    // direction of accn
+
+  // data for linear Rayleigh drag
+  Real drag_rate;
 
   // data for ISM cooling
   Real hrate;
@@ -61,6 +66,8 @@ class SourceTerms {
   void ApplySrcTerms(DvceArray5D<Real> &i0, const Real bdt);
   void ConstantAccel(const DvceArray5D<Real> &w0, const EOS_Data &eos,
                      const Real bdt, DvceArray5D<Real> &u0);
+  void LinearDrag(const DvceArray5D<Real> &w0, const EOS_Data &eos,
+                  const Real bdt, DvceArray5D<Real> &u0);
   void ISMCooling(const DvceArray5D<Real> &w0, const EOS_Data &eos,
                   const Real bdt, DvceArray5D<Real> &u0);
   void RelCooling(const DvceArray5D<Real> &w0, const EOS_Data &eos,

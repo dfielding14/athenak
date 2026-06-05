@@ -4,15 +4,16 @@
 #
 # Nominal scales:
 #   c_s = 1, target v_rms = 0.25, target Mach = 0.25
-#   L_box = 1, npeak = 2, L_drive = L_box/npeak = 0.5
-#   t_eddy = L_drive/v_rms = 2
-#   tlim = 10 t_eddy = 20
-#   cbin cadence = t_eddy/20 = 0.1
-#   dedt = v_rms^3/L_drive = 0.03125
+#   L_box = 1, tile_nx = tile_ny = 16, npeak = 2
+#   global peak mode = tile_nx*npeak = 32, L_drive = L_box/32 = 0.03125
+#   t_eddy = L_drive/v_rms = 0.125
+#   tlim = 10 t_eddy = 1.25
+#   output cadence = t_eddy/20 = 0.00625
+#   drag_rate = v_rms/L_box = 0.25, dedt = drag_rate*v_rms^2 = 0.015625
 #
-# Constant-Edot driving is the initial choice because it directly fixes the injection
-# rate associated with the target velocity scale. The achieved Mach number must still
-# be measured: 2D turbulence has an inverse cascade and no large-scale drag is included.
+# Repeating a small local Fourier driver avoids enumerating modes through global k=32.
+# Uniform Rayleigh drag arrests the inverse cascade near the box scale. The achieved
+# Mach number must still be measured because this balance is not a thermostat.
 
 <comment>
 problem = Tiegan SGS Mach-0.25 commissioning run
@@ -48,7 +49,7 @@ evolution = dynamic
 integrator = rk3
 cfl_number = 0.4
 nlim = -1
-tlim = 20.0
+tlim = 1.25
 ndiag = 100
 
 <hydro>
@@ -57,15 +58,19 @@ reconstruct = wenoz
 rsolver = roe
 iso_sound_speed = 1.0
 
+<hydro_srcterms>
+linear_drag = true
+drag_rate = 0.25
+
 <problem>
 d_n = 1.0
 
 <turb_driving>
 turb_flag = 2
-tcorr = 2.0
-dt_update = 0.02
+tcorr = 0.125
+dt_update = 0.00125
 normalization = edot
-dedt = 0.03125
+dedt = 0.015625
 nlow = 1
 nhigh = 3
 npeak = 2
@@ -74,59 +79,62 @@ min_kz = 0
 max_kz = 0
 sol_fraction = 1.0
 rseed = 2718
+tile_nx = 16
+tile_ny = 16
+tile_nz = 1
 
 <output1>
 file_type = hst
-dt = 0.1
+dt = 0.00625
 
 <output2>
 file_type = rst
-dt = 2.0
+dt = 0.125
 
 <output3>
 file_type = bin
 variable = hydro_w
 id = prim
-dt = 0.1
+dt = 0.00625
 
 <output4>
 file_type = cbin
 variable = hydro_sgs_2d
 id = sgs_f004
 coarsen_factor = 4
-dt = 0.1
+dt = 0.00625
 
 <output5>
 file_type = cbin
 variable = hydro_sgs_2d
 id = sgs_f008
 coarsen_factor = 8
-dt = 0.1
+dt = 0.00625
 
 <output6>
 file_type = cbin
 variable = hydro_sgs_2d
 id = sgs_f016
 coarsen_factor = 16
-dt = 0.1
+dt = 0.00625
 
 <output7>
 file_type = cbin
 variable = hydro_sgs_2d
 id = sgs_f032
 coarsen_factor = 32
-dt = 0.1
+dt = 0.00625
 
 <output8>
 file_type = cbin
 variable = hydro_sgs_2d
 id = sgs_f064
 coarsen_factor = 64
-dt = 0.1
+dt = 0.00625
 
 <output9>
 file_type = cbin
 variable = hydro_sgs_2d
 id = sgs_f128
 coarsen_factor = 128
-dt = 0.1
+dt = 0.00625

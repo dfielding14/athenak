@@ -1,25 +1,22 @@
-# Tiegan SGS fiducial run: fully 2D, isothermal, solenoidally driven turbulence.
-# Build with: cmake -S . -B build-tiegan-sgs -DPROBLEM=turb
-#             cmake --build build-tiegan-sgs -j
+# Tiegan SGS five-eddy run: fully 2D, isothermal, solenoidally driven turbulence.
+# Run with: mpirun -np 8 BUILD/src/athena -d RUN_DIR \
+#             -i inputs/hydro/tiegan_sgs/mach025_1024_mpi8_5eddy.athinput
 #
 # Nominal scales:
-#   c_s = 1, target v_rms = 0.1, target Mach = 0.1
-#   L_box = 1, tile_nx = tile_ny = 16, npeak = 2
-#   global peak mode = tile_nx*npeak = 32, L_drive = L_box/32 = 0.03125
-#   t_eddy = L_drive/v_rms = 0.3125
-#   tlim = 10 t_eddy = 3.125
-#   output cadence = t_eddy/20 = 0.015625
-#   drag_rate = v_rms/L_box = 0.1, dedt = drag_rate*v_rms^2 = 0.001
+#   c_s = 1, target v_rms = 0.25, target Mach = 0.25
+#   global peak mode = tile_nx*npeak = 16*2 = 32
+#   L_drive = L_box/32 = 0.03125, t_eddy = L_drive/v_rms = 0.125
+#   tlim = 5 t_eddy = 0.625, output cadence = t_eddy/20 = 0.00625
+#   drag_rate = v_rms/L_box = 0.25, dedt = drag_rate*v_rms^2 = 0.015625
 #
-# Repeating a small local Fourier driver avoids enumerating modes through global k=32.
-# Uniform Rayleigh drag arrests the inverse cascade near the box scale. The achieved
-# Mach number must still be measured because this balance is not a thermostat.
+# The 256 x 512 MeshBlocks form a 4 x 2 decomposition, giving one MeshBlock
+# to each of eight MPI ranks. The local Fourier driver repeats on 16 x 16 tiles.
 
 <comment>
-problem = Tiegan SGS fiducial Mach-0.1 run
+problem = Tiegan SGS Mach-0.25 five-eddy eight-rank run
 
 <job>
-basename = tiegan_sgs_m010_1024
+basename = tiegan_sgs_m025_1024_mpi8_5eddy
 
 <mesh>
 nghost = 3
@@ -40,7 +37,7 @@ ix3_bc = periodic
 ox3_bc = periodic
 
 <meshblock>
-nx1 = 512
+nx1 = 256
 nx2 = 512
 nx3 = 1
 
@@ -49,7 +46,7 @@ evolution = dynamic
 integrator = rk3
 cfl_number = 0.4
 nlim = -1
-tlim = 3.125
+tlim = 0.625
 ndiag = 100
 
 <hydro>
@@ -60,17 +57,17 @@ iso_sound_speed = 1.0
 
 <hydro_srcterms>
 linear_drag = true
-drag_rate = 0.1
+drag_rate = 0.25
 
 <problem>
 d_n = 1.0
 
 <turb_driving>
 turb_flag = 2
-tcorr = 0.3125
-dt_update = 0.003125
+tcorr = 0.125
+dt_update = 0.00125
 normalization = edot
-dedt = 0.001
+dedt = 0.015625
 nlow = 1
 nhigh = 3
 npeak = 2
@@ -85,56 +82,56 @@ tile_nz = 1
 
 <output1>
 file_type = hst
-dt = 0.015625
+dt = 0.00625
 
 <output2>
 file_type = rst
-dt = 0.3125
+dt = 0.125
 
 <output3>
 file_type = bin
 variable = hydro_w
 id = prim
-dt = 0.015625
+dt = 0.00625
 
 <output4>
 file_type = cbin
 variable = hydro_sgs_2d
 id = sgs_f004
 coarsen_factor = 4
-dt = 0.015625
+dt = 0.00625
 
 <output5>
 file_type = cbin
 variable = hydro_sgs_2d
 id = sgs_f008
 coarsen_factor = 8
-dt = 0.015625
+dt = 0.00625
 
 <output6>
 file_type = cbin
 variable = hydro_sgs_2d
 id = sgs_f016
 coarsen_factor = 16
-dt = 0.015625
+dt = 0.00625
 
 <output7>
 file_type = cbin
 variable = hydro_sgs_2d
 id = sgs_f032
 coarsen_factor = 32
-dt = 0.015625
+dt = 0.00625
 
 <output8>
 file_type = cbin
 variable = hydro_sgs_2d
 id = sgs_f064
 coarsen_factor = 64
-dt = 0.015625
+dt = 0.00625
 
 <output9>
 file_type = cbin
 variable = hydro_sgs_2d
 id = sgs_f128
 coarsen_factor = 128
-dt = 0.015625
+dt = 0.00625

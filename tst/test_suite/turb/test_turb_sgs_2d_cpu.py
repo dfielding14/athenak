@@ -42,6 +42,28 @@ def square_mean(values, factor):
     )
 
 
+def assemble_2d_blocks(data, names):
+    """Assemble uniform-grid MeshBlocks into global two-dimensional arrays."""
+    logical = np.asarray(data["mb_logical"])
+    sample = np.asarray(data["mb_data"][names[0]][0])[0]
+    ny_block, nx_block = sample.shape
+    result = {
+        name: np.empty(
+            ((logical[:, 1].max() + 1) * ny_block,
+             (logical[:, 0].max() + 1) * nx_block)
+        )
+        for name in names
+    }
+    for block, (lx1, lx2, _lx3, _level) in enumerate(logical):
+        j0 = lx2 * ny_block
+        i0 = lx1 * nx_block
+        for name in names:
+            result[name][j0:j0 + ny_block, i0:i0 + nx_block] = np.asarray(
+                data["mb_data"][name][block]
+            )[0]
+    return result
+
+
 def test_2d_sgs_output_matches_direct_favre_filter(tmp_path):
     """The producer writes final Favre velocities and SGS stresses on a 2D mesh."""
     run_dir = tmp_path / "run"
@@ -83,6 +105,23 @@ def test_2d_sgs_output_matches_direct_favre_filter(tmp_path):
     history = np.loadtxt(run_dir / "turb_sgs_2d_test.hydro.hst")
     assert np.all(history[:, 5] == 0.0)
     assert np.all(history[:, 8] == 0.0)
+
+
+def test_2d_parabolic_spectrum_uses_active_dimensions(tmp_path):
+    """Inactive x3 spacing cannot broaden a two-dimensional forcing spectrum."""
+    run_dir = tmp_path / "spectrum"
+    require_success(run_athena(run_dir))
+    force = read_binary(str(latest(run_dir / "bin", "*.force.*.bin")))
+    global_force = assemble_2d_blocks(force, ("force1", "force2"))
+    power = sum(
+        np.abs(np.fft.rfft2(global_force[name])) ** 2
+        for name in ("force1", "force2")
+    )
+
+    peak_power = power[0, 2] + power[2, 0]
+    edge_power = power[0, 1] + power[1, 0] + power[0, 3] + power[3, 0]
+    assert peak_power > 0.0
+    assert edge_power < peak_power * 1.0e-12
 
 
 def test_2d_turbulence_rejects_kz_modes(tmp_path):
