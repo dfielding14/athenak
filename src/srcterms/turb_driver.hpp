@@ -8,7 +8,9 @@
 //! \file turb_driver.hpp
 //  \brief defines the stochastic turbulence forcing driver
 
+#include <array>
 #include <memory>
+#include <vector>
 
 #include "athena.hpp"
 #include "mesh/mesh.hpp"
@@ -18,12 +20,15 @@
 enum class TurbNormalization { edot, accel_rms };
 enum class TurbLocalization { none, include, exclude };
 enum class TurbSpectrum { parabolic, power_law };
+enum class TurbModeSampling { cartesian, sparse_annulus };
 
 // Native restart records are only intended for restarts from the same executable
 // precision and feature version, consistent with the existing AthenaK restart format.
 struct TurbulenceRestartMetadata {
   int version;
   int mode_count;
+  int mode_sampling;
+  int sparse_mode_count;
   int n_updates;
   int nlow;
   int nhigh;
@@ -95,6 +100,7 @@ class TurbulenceDriver {
 
  private:
   void Initialize();
+  void BuildModeList();
   void BuildBasis();
   void RenderForce();
 
@@ -113,6 +119,9 @@ class TurbulenceDriver {
   TurbNormalization normalization;
   Real accel_rms;
   TurbSpectrum spectrum;
+  TurbModeSampling mode_sampling;
+  int sparse_mode_count;
+  std::vector<std::array<int, 3>> mode_indices_;
 
   TurbLocalization localization;
   Real sigma_x1, sigma_x2, sigma_x3;

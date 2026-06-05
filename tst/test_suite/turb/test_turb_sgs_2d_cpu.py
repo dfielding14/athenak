@@ -15,10 +15,15 @@ sys.path.insert(0, str(REPO_ROOT / "vis" / "python"))
 from bin_convert import read_binary, read_coarsened_binary  # noqa: E402
 
 
-def run_athena(output_dir, *overrides):
+def run_athena(output_dir, *overrides, restart=None):
     """Run the focused input in an isolated output directory."""
     output_dir.mkdir(parents=True, exist_ok=True)
-    command = [str(ATHENA), "-d", str(output_dir), "-i", str(INPUT), *overrides]
+    command = [str(ATHENA), "-d", str(output_dir)]
+    if restart is None:
+        command.extend(["-i", str(INPUT)])
+    else:
+        command.extend(["-r", str(restart)])
+    command.extend(overrides)
     return subprocess.run(command, capture_output=True, text=True, check=False)
 
 
@@ -122,6 +127,78 @@ def test_2d_parabolic_spectrum_uses_active_dimensions(tmp_path):
     edge_power = power[0, 1] + power[1, 0] + power[0, 3] + power[3, 0]
     assert peak_power > 0.0
     assert edge_power < peak_power * 1.0e-12
+
+
+def test_sparse_annulus_has_global_isotropic_fourier_support(tmp_path):
+    """Sparse annulus forcing uses only its global, angularly balanced mode set."""
+    run_dir = tmp_path / "sparse"
+    sparse_overrides = (
+        "turb_driving/mode_sampling=sparse_annulus",
+        "turb_driving/sparse_mode_count=8",
+        "turb_driving/nlow=5",
+        "turb_driving/nhigh=7",
+        "turb_driving/npeak=6",
+    )
+    require_success(run_athena(run_dir, *sparse_overrides))
+    force = read_binary(str(latest(run_dir / "bin", "*.force.*.bin")))
+    global_force = assemble_2d_blocks(force, ("force1", "force2"))
+    force_fft = {
+        name: np.fft.fft2(global_force[name]) for name in ("force1", "force2")
+    }
+    power = sum(np.abs(values) ** 2 for values in force_fft.values())
+    ny, nx = power.shape
+    ky = np.fft.fftfreq(ny) * ny
+    kx = np.fft.fftfreq(nx) * nx
+    kx_grid, ky_grid = np.meshgrid(kx, ky)
+    radius = np.sqrt(kx_grid * kx_grid + ky_grid * ky_grid)
+    support = (radius > 0.0) & (power > power.max() * 1.0e-12)
+
+    assert np.count_nonzero(support) == 16
+    assert np.all((radius[support] >= 5.0) & (radius[support] <= 7.0))
+    assert np.any((kx_grid * ky_grid)[support] < 0.0)
+    assert np.any((kx_grid * ky_grid)[support] > 0.0)
+    divergence = kx_grid * force_fft["force1"] + ky_grid * force_fft["force2"]
+    relative_divergence = np.max(np.abs(divergence[support])) / np.max(
+        radius[support] * np.sqrt(power[support])
+    )
+    assert relative_divergence < 1.0e-7
+    assert np.max(
+        np.abs(global_force["force1"] - np.roll(global_force["force1"], nx // 2, axis=1))
+    ) > 1.0e-6
+
+    split_dir = tmp_path / "sparse_split"
+    require_success(
+        run_athena(
+            split_dir,
+            *sparse_overrides,
+            "time/nlim=1",
+            "output4/file_type=rst",
+            "output4/dcycle=1",
+        )
+    )
+    restart = latest(split_dir / "rst", "*.rst")
+    resume_dir = tmp_path / "sparse_resume"
+    require_success(run_athena(resume_dir, "time/nlim=3", restart=restart))
+    resumed_force = read_binary(str(latest(resume_dir / "bin", "*.force.*.bin")))
+    for name in ("force1", "force2", "force3"):
+        np.testing.assert_array_equal(
+            force["mb_data"][name], resumed_force["mb_data"][name]
+        )
+
+
+def test_sparse_annulus_construction_does_not_scan_mode_volume(tmp_path):
+    """A large annulus mode number still constructs only the requested sparse modes."""
+    result = run_athena(
+        tmp_path / "large_sparse_mode",
+        "time/nlim=0",
+        "turb_driving/mode_sampling=sparse_annulus",
+        "turb_driving/sparse_mode_count=8",
+        "turb_driving/nlow=9999",
+        "turb_driving/nhigh=10001",
+        "turb_driving/npeak=10000",
+    )
+    require_success(result)
+    assert "turbulence modes = 8" in result.stdout
 
 
 def test_2d_turbulence_rejects_kz_modes(tmp_path):

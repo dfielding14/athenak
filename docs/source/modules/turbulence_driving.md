@@ -75,6 +75,30 @@ places most kinetic energy at large scales. For an ideal-gas fluid, the associat
 kinetic energy is removed rather than converted into internal energy. The source
 term timestep is limited by `1/drag_rate` before applying the run CFL number.
 
+## Sparse Annulus Sampling
+
+`mode_sampling = sparse_annulus` constructs a fixed, global set of two-dimensional
+wavevectors without enumerating the Cartesian mode volume. The sampler places
+`sparse_mode_count` targets at equal angles over one Fourier half-plane, rounds
+them to the nearest lattice wavevectors at `npeak`, and requires every resulting
+mode to be unique and lie between `nlow` and `nhigh`. The complex modal
+coefficients supply the conjugate half-plane.
+
+This mode is intended for narrow-annulus forcing at moderately large mode number:
+the OU update and force-rendering costs scale with `sparse_mode_count`, not with
+the volume enclosed by `nhigh`. It currently requires a square two-dimensional
+box, `driving_type = 0`, an explicit `npeak`, default x/y directional bounds,
+and disabled tiling. For example:
+
+```text
+<turb_driving>
+mode_sampling = sparse_annulus
+sparse_mode_count = 32
+nlow = 31
+nhigh = 33
+npeak = 32
+```
+
 ## Tiled Evaluation
 
 `tile_nx`, `tile_ny`, and `tile_nz` specify the number of repetitions in each
@@ -90,6 +114,9 @@ q_{\rm tile} = q - q_{\min}
 The basis is evaluated at \(q_{\rm tile}\), so every tile receives the same
 modal realization. Tile counts must be positive and evenly divide the
 root-grid cell count; inactive dimensions require a tile count of one.
+This exact repetition imposes an artificial periodicity at the tile length and
+is inappropriate when turbulence statistics or coarse-graining include that
+scale. Use global Cartesian or sparse-annulus modes for those applications.
 
 ## Spatial Localization
 
@@ -194,8 +221,10 @@ The following keys belong in `<turb_driving>`.
 | `dedt` | required for `edot` | Target volume-averaged injection rate. |
 | `accel_rms` | required for `accel_rms` | Target volume-weighted RMS acceleration. |
 | `nlow`, `nhigh` | `1`, `3` | Inclusive driven mode-radius bounds. |
-| `npeak` / `kpeak` | `kpeak=4*pi` | Parabolic spectral peak; `npeak` is tile-local mode number. |
+| `npeak` / `kpeak` | `kpeak=4*pi` | Parabolic spectral peak; `npeak` is the forcing-domain x1 mode number. |
 | `spectrum` | `parabolic` | `parabolic` or `power_law`. |
+| `mode_sampling` | `cartesian` | `cartesian` or global 2D `sparse_annulus`. |
+| `sparse_mode_count` | `0` | Number of complex modes for `sparse_annulus`; must be zero for `cartesian`. |
 | `expo`, `exp_prp`, `exp_prl` | `5/3`, `5/3`, `0` | Power-law spectrum exponents. |
 | `min_kx/y/z`, `max_kx/y/z` | `0`, `nhigh` | Optional directional mode bounds; 2D meshes require `min_kz=max_kz=0`. |
 | `driving_type` | `0` | `0` for three-dimensional; `1` for planar driving. |

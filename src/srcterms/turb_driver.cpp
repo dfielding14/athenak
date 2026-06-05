@@ -113,8 +113,8 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack* pp, ParameterInput* pin)
   if (nlow < 1 || nhigh < nlow) {
     FatalTurbulenceError("nlow and nhigh must satisfy 1 <= nlow <= nhigh");
   }
-  // Peak of power when spectral form is parabolic. Interpret npeak in
-  // tile-local x1 mode units once the tile dimensions have been established.
+  // Peak of power when spectral form is parabolic. Interpret npeak in the
+  // forcing-domain x1 mode units established below.
   use_npeak = pin->DoesParameterExist(block_name, "npeak");
   if (use_npeak) {
     npeak = pin->GetReal(block_name, "npeak");
@@ -130,6 +130,24 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack* pp, ParameterInput* pin)
     spectrum = TurbSpectrum::power_law;
   } else {
     FatalTurbulenceError("spectrum must be parabolic or power_law");
+  }
+  std::string mode_sampling_name =
+      pin->GetOrAddString(block_name, "mode_sampling", "cartesian");
+  sparse_mode_count = pin->GetOrAddInteger(block_name, "sparse_mode_count", 0);
+  if (mode_sampling_name == "cartesian") {
+    mode_sampling = TurbModeSampling::cartesian;
+    if (sparse_mode_count != 0) {
+      FatalTurbulenceError(
+          "sparse_mode_count must be zero with mode_sampling = cartesian");
+    }
+  } else if (mode_sampling_name == "sparse_annulus") {
+    mode_sampling = TurbModeSampling::sparse_annulus;
+    if (sparse_mode_count < 1) {
+      FatalTurbulenceError(
+          "mode_sampling = sparse_annulus requires positive sparse_mode_count");
+    }
+  } else {
+    FatalTurbulenceError("mode_sampling must be cartesian or sparse_annulus");
   }
   // driving type - 0 for 3D isotropic, 1 for planar (xy) driving
   driving_type = pin->GetOrAddInteger(block_name, "driving_type", 0);
@@ -304,52 +322,14 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack* pp, ParameterInput* pin)
   }
   n_turb_updates_yet = 0;
 
-  Real nlow_sqr = nlow * nlow;
-  Real nhigh_sqr = nhigh * nhigh;
-
-  mode_count = 0;
-
-  // Count Cartesian modes
-  int nkx, nky, nkz;
-  Real nsqr;
-  for (nkx = min_kx; nkx <= max_kx; nkx++) {
-    for (nky = min_ky; nky <= max_ky; nky++) {
-      for (nkz = min_kz; nkz <= max_kz; nkz++) {
-        if (nkx == 0 && nky == 0 && nkz == 0) continue;
-        nsqr = 0.0;
-        bool flag_prl = true;
-        if (driving_type == 0) {
-          nsqr = SQR(nkx) + SQR(nky) + SQR(nkz);
-        } else if (driving_type == 1) {
-          nsqr = SQR(nkx) + SQR(nky);
-          Real nprlsqr = SQR(nkz);
-          if (nprlsqr >= nlow_sqr && nprlsqr <= nhigh_sqr) {
-            flag_prl = true;
-          } else {
-            flag_prl = false;
-          }
-        }
-        if (nsqr >= nlow_sqr && nsqr <= nhigh_sqr && flag_prl) {
-          mode_count++;
-        }
-      }
-    }
-  }
-
-  if (mode_count == 0) {
-    std::cout << "ERROR: mode_count is 0! Check turbulence driving parameters."
-              << std::endl;
-    std::cout << "  nlow=" << nlow << ", nhigh=" << nhigh << std::endl;
-    std::cout << "  driving_type=" << driving_type << std::endl;
-    exit(EXIT_FAILURE);
-  }
+  BuildModeList();
 
   Kokkos::realloc(mode_amp_real, 3, mode_count);
   Kokkos::realloc(mode_amp_imag, 3, mode_count);
   Kokkos::realloc(mode_noise_real, 3, mode_count);
   Kokkos::realloc(mode_noise_imag, 3, mode_count);
 
-  // Allocate Cartesian mode arrays
+  // Allocate selected mode arrays
   Kokkos::realloc(kx_mode, mode_count);
   Kokkos::realloc(ky_mode, mode_count);
   Kokkos::realloc(kz_mode, mode_count);
@@ -362,6 +342,92 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack* pp, ParameterInput* pin)
   Kokkos::realloc(zsin, nmb_alloc, mode_count, ncells3);
 
   Initialize();
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn BuildModeList()
+//  \brief Construct the fixed set of integer wavevectors evolved by the OU process.
+
+void TurbulenceDriver::BuildModeList() {
+  mode_indices_.clear();
+  const int nlow_sqr = SQR(nlow);
+  const int nhigh_sqr = SQR(nhigh);
+
+  if (mode_sampling == TurbModeSampling::cartesian) {
+    for (int nkx = min_kx; nkx <= max_kx; ++nkx) {
+      for (int nky = min_ky; nky <= max_ky; ++nky) {
+        for (int nkz = min_kz; nkz <= max_kz; ++nkz) {
+          if (nkx == 0 && nky == 0 && nkz == 0) continue;
+          int nsqr = SQR(nkx) + SQR(nky);
+          bool include = true;
+          if (driving_type == 0) {
+            nsqr += SQR(nkz);
+          } else {
+            int nprlsqr = SQR(nkz);
+            include = (nprlsqr >= nlow_sqr && nprlsqr <= nhigh_sqr);
+          }
+          if (include && nsqr >= nlow_sqr && nsqr <= nhigh_sqr) {
+            mode_indices_.push_back({nkx, nky, nkz});
+          }
+        }
+      }
+    }
+  } else {
+    Mesh* pm = pmy_pack->pmesh;
+    if (pm->mesh_indcs.nx2 <= 1 || pm->mesh_indcs.nx3 > 1) {
+      FatalTurbulenceError("sparse_annulus mode sampling currently requires a 2D mesh");
+    }
+    if (driving_type != 0) {
+      FatalTurbulenceError("sparse_annulus mode sampling requires driving_type = 0");
+    }
+    if (min_kx != 0 || max_kx != nhigh || min_ky != 0 || max_ky != nhigh) {
+      FatalTurbulenceError(
+          "sparse_annulus mode sampling requires default x/y directional bounds");
+    }
+    if (!use_npeak) {
+      FatalTurbulenceError("sparse_annulus mode sampling requires npeak");
+    }
+    if (tile_nx != 1 || tile_ny != 1 || tile_nz != 1) {
+      FatalTurbulenceError("sparse_annulus mode sampling is incompatible with tiling");
+    }
+    Real length_scale = std::max(tile_lx, tile_ly);
+    if (fabs(tile_lx - tile_ly) >
+        10.0 * std::numeric_limits<Real>::epsilon() * length_scale) {
+      FatalTurbulenceError(
+          "sparse_annulus mode sampling currently requires a square box");
+    }
+
+    for (int n = 0; n < sparse_mode_count; ++n) {
+      Real theta = -0.5 * M_PI +
+                   M_PI * (static_cast<Real>(n) + 0.5) / sparse_mode_count;
+      int nkx = static_cast<int>(std::lround(npeak * std::cos(theta)));
+      int nky = static_cast<int>(std::lround(npeak * std::sin(theta)));
+      if (nkx < 0 || (nkx == 0 && nky < 0)) {
+        nkx = -nkx;
+        nky = -nky;
+      }
+      int nsqr = SQR(nkx) + SQR(nky);
+      std::array<int, 3> mode = {nkx, nky, 0};
+      if (nsqr >= nlow_sqr && nsqr <= nhigh_sqr &&
+          std::find(mode_indices_.begin(), mode_indices_.end(), mode) ==
+              mode_indices_.end()) {
+        mode_indices_.push_back(mode);
+      }
+    }
+    if (static_cast<int>(mode_indices_.size()) != sparse_mode_count) {
+      FatalTurbulenceError(
+          "sparse_annulus could not construct sparse_mode_count unique lattice modes; "
+          "reduce sparse_mode_count or widen the annulus");
+    }
+  }
+
+  mode_count = static_cast<int>(mode_indices_.size());
+  if (mode_count == 0) {
+    FatalTurbulenceError("mode_count is zero; check turbulence driving parameters");
+  }
+  if (global_variable::my_rank == 0) {
+    std::cout << " turbulence modes = " << mode_count << std::endl;
+  }
 }
 
 //----------------------------------------------------------------------------------------
@@ -424,39 +490,14 @@ void TurbulenceDriver::Initialize() {
   dky = (ly > 0.0) ? 2.0 * M_PI / ly : 0.0;
   dkz = (lz > 0.0) ? 2.0 * M_PI / lz : 0.0;
 
-  int nmode = 0;
-  int nkx, nky, nkz;
-  Real nsqr;
-  Real nlow_sqr = nlow * nlow;
-  Real nhigh_sqr = nhigh * nhigh;
-  for (nkx = min_kx; nkx <= max_kx; nkx++) {
-    for (nky = min_ky; nky <= max_ky; nky++) {
-      for (nkz = min_kz; nkz <= max_kz; nkz++) {
-        if (nkx == 0 && nky == 0 && nkz == 0) continue;
-        nsqr = 0.0;
-        bool flag_prl = true;
-        if (driving_type == 0) {
-          nsqr = SQR(nkx) + SQR(nky) + SQR(nkz);
-        } else if (driving_type == 1) {
-          nsqr = SQR(nkx) + SQR(nky);
-          Real nprlsqr = SQR(nkz);
-          if (nprlsqr >= nlow_sqr && nprlsqr <= nhigh_sqr) {
-            flag_prl = true;
-          } else {
-            flag_prl = false;
-          }
-        }
-        if (nsqr >= nlow_sqr && nsqr <= nhigh_sqr && flag_prl) {
-          kx = dkx * nkx;
-          ky = dky * nky;
-          kz = dkz * nkz;
-          kx_mode_.h_view(nmode) = kx;
-          ky_mode_.h_view(nmode) = ky;
-          kz_mode_.h_view(nmode) = kz;
-          nmode++;
-        }
-      }
-    }
+  for (int nmode = 0; nmode < mode_count; ++nmode) {
+    const auto& mode = mode_indices_[nmode];
+    kx = dkx * mode[0];
+    ky = dky * mode[1];
+    kz = dkz * mode[2];
+    kx_mode_.h_view(nmode) = kx;
+    ky_mode_.h_view(nmode) = ky;
+    kz_mode_.h_view(nmode) = kz;
   }
 
   kx_mode_.template modify<HostMemSpace>();
@@ -633,15 +674,18 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver* pdrive, int stage) {
   Real t_since_start = current_time - tdriv_start;
   int n_turb_updates_reqd = static_cast<int>(t_since_start / dt_update) + 1;
 
-  int nlow_sqr = SQR(nlow);
-  int nhigh_sqr = SQR(nhigh);
-
   auto mode_amp_real_ = mode_amp_real;
   auto mode_amp_imag_ = mode_amp_imag;
   auto mode_noise_real_ = mode_noise_real;
   auto mode_noise_imag_ = mode_noise_imag;
+  auto kx_mode_ = kx_mode;
+  auto ky_mode_ = ky_mode;
+  auto kz_mode_ = kz_mode;
+  kx_mode_.template sync<HostMemSpace>();
+  ky_mode_.template sync<HostMemSpace>();
+  kz_mode_.template sync<HostMemSpace>();
 
-  Real dkx, dky, dkz, kx, ky, kz;
+  Real dkx, dky, dkz;
   Real lx = tile_lx;
   Real ly = tile_ly;
   Real lz = tile_lz;
@@ -676,118 +720,64 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver* pdrive, int stage) {
       turb_flag != 1) {  // Update forcing if continuous or t<tdriv_duration
     for (int i_turb_update = n_turb_updates_yet; i_turb_update < n_turb_updates_reqd;
          i_turb_update++) {
-      int no_dir = (pm->mesh_indcs.nx3 > 1) ? 3 : 2;
-      int nmode = 0;
+      for (int nmode = 0; nmode < mode_count; ++nmode) {
+        int no_dir = (pm->mesh_indcs.nx3 > 1) ? 3 : 2;
+        Real kx = kx_mode_.h_view(nmode);
+        Real ky = ky_mode_.h_view(nmode);
+        Real kz = kz_mode_.h_view(nmode);
+        Real k[3] = {kx, ky, kz};
+        kiso = sqrt(SQR(kx) + SQR(ky) + SQR(kz));
+        norm = 0.0;
 
-      // Cartesian mode generation
-      int nkx, nky, nkz, nsqr;
-
-      for (nkx = min_kx; nkx <= max_kx; nkx++) {
-        for (nky = min_ky; nky <= max_ky; nky++) {
-          for (nkz = min_kz; nkz <= max_kz; nkz++) {
-            if (nkx == 0 && nky == 0 && nkz == 0) continue;
-            norm = 0.0;
-            nsqr = 0.0;
-            bool flag_prl = true;
-            if (driving_type == 0) {
-              nsqr = SQR(nkx) + SQR(nky) + SQR(nkz);
-            } else if (driving_type == 1) {
-              nsqr = SQR(nkx) + SQR(nky);
-              Real nprlsqr = SQR(nkz);
-              if (nprlsqr >= nlow_sqr && nprlsqr <= nhigh_sqr) {
-                flag_prl = true;
-              } else {
-                flag_prl = false;
-              }
+        if (driving_type == 0) {
+          if (kiso > 1e-16) {
+            if (spectrum == TurbSpectrum::power_law) {
+              norm = 1.0 / pow(kiso, (ex + 2.0) / 2.0);
+            } else if (spectrum == TurbSpectrum::parabolic) {
+              norm = fabs(parab_prefact * pow(kiso - k_peak, 2.0) + 1.0);
+              norm = pow(norm, 0.5) * pow(k_peak / kiso, (no_dir - 1) / 2.0);
             }
-            if (nsqr >= nlow_sqr && nsqr <= nhigh_sqr && flag_prl) {
-              kx = dkx * nkx;
-              ky = dky * nky;
-              kz = dkz * nkz;
-
-              Real k[3] = {kx, ky, kz};
-              // Always define kiso; used below for the solenoidal/compressive split
-              kiso = sqrt(SQR(kx) + SQR(ky) + SQR(kz));
-
-              // Generate Fourier amplitudes
-
-              if (driving_type == 0) {
-                if (kiso > 1e-16) {
-                  if (spectrum == TurbSpectrum::power_law) {
-                    norm = 1.0 / pow(kiso, (ex + 2.0) / 2.0);  // power-law driving
-                  } else if (spectrum == TurbSpectrum::parabolic) {
-                    norm = fabs(parab_prefact * pow(kiso - k_peak, 2.0) +
-                                1.0);  // parabola in k-space
-                    norm = pow(norm, 0.5) * pow(k_peak / kiso, (no_dir - 1) / 2.0);
-                  } else {
-                    norm = 0.0;
-                  }
-                } else {
-                  norm = 0.0;
-                }
-              } else if (driving_type == 1) {
-                no_dir = 2;
-                kprl = sqrt(SQR(kx));
-                kprp = sqrt(SQR(ky) + SQR(kz));
-                if (kprl > 1e-16 && kprp > 1e-16) {
-                  if (spectrum == TurbSpectrum::power_law) {
-                    norm =
-                        1.0 / pow(kprp, (ex_prp + 1.0) / 2.0) / pow(kprl, ex_prl / 2.0);
-                  } else if (spectrum == TurbSpectrum::parabolic) {
-                    norm = fabs(parab_prefact * pow(kprp - k_peak, 2.0) +
-                                1.0);  // parabola in kperp-space
-                    norm = pow(norm, 0.5) * pow(k_peak / kprp, (no_dir - 1) / 2.0);
-                  }
-                } else {
-                  norm = 0.0;
-                }
-              }
-              // Generate complex Fourier amplitudes for this mode:
-              //   amp_real_dir (real part) and amp_imag_dir (imaginary part),
-              // scaled by norm. Also accumulate k·Re(A) and k·Im(A) to construct
-              // solenoidal/compressive projections below.
-              Real k_dot_amp_imag = 0.0;
-              Real k_dot_amp_real = 0.0;
-
-              for (int dir = 0; dir < 3; dir++) {
-                mode_noise_real_.h_view(dir, nmode) = 0.0;
-                mode_noise_imag_.h_view(dir, nmode) = 0.0;
-              }
-              for (int dir = 0; dir < no_dir; dir++) {
-                Real amp_real_dir = norm * RanGaussianSt(&(rstate));
-                Real amp_imag_dir = norm * RanGaussianSt(&(rstate));
-                mode_noise_real_.h_view(dir, nmode) = amp_real_dir;
-                mode_noise_imag_.h_view(dir, nmode) = amp_imag_dir;
-
-                k_dot_amp_imag += k[dir] * amp_imag_dir;  // k·Im(A)
-                k_dot_amp_real += k[dir] * amp_real_dir;  // k·Re(A)
-              }
-
-              // Now decompose into solenoidal/compressive modes.
-              if (norm > 0.) {
-                for (int dir = 0; dir < no_dir; dir++) {
-                  // Compressible (longitudinal) projections:
-                  //   A_div = k (k·Re(A)) / |k|^2,  B_div = k (k·Im(A)) / |k|^2
-                  Real A_div = k[dir] * k_dot_amp_real / SQR(kiso);
-                  Real B_div = k[dir] * k_dot_amp_imag / SQR(kiso);
-
-                  // Solenoidal parts (divergence-free):
-                  //   A_sol = A - A_div,  B_sol = B - B_div
-                  Real A_sol = mode_noise_real_.h_view(dir, nmode) - A_div;
-                  Real B_sol = mode_noise_imag_.h_view(dir, nmode) - B_div;
-
-                  // Blend in amplitude-space:
-                  //   sol_fraction = 1.0 -> purely solenoidal,
-                  //   sol_fraction = 0.0 -> purely compressive.
-                  mode_noise_real_.h_view(dir, nmode) =
-                      sol_fraction * A_sol + (1.0 - sol_fraction) * A_div;
-                  mode_noise_imag_.h_view(dir, nmode) =
-                      sol_fraction * B_sol + (1.0 - sol_fraction) * B_div;
-                }
-              }
-
-              nmode++;
+          }
+        } else if (driving_type == 1) {
+          no_dir = 2;
+          kprl = sqrt(SQR(kx));
+          kprp = sqrt(SQR(ky) + SQR(kz));
+          if (kprl > 1e-16 && kprp > 1e-16) {
+            if (spectrum == TurbSpectrum::power_law) {
+              norm =
+                  1.0 / pow(kprp, (ex_prp + 1.0) / 2.0) / pow(kprl, ex_prl / 2.0);
+            } else if (spectrum == TurbSpectrum::parabolic) {
+              norm = fabs(parab_prefact * pow(kprp - k_peak, 2.0) + 1.0);
+              norm = pow(norm, 0.5) * pow(k_peak / kprp, (no_dir - 1) / 2.0);
             }
+          }
+        }
+
+        Real k_dot_amp_imag = 0.0;
+        Real k_dot_amp_real = 0.0;
+        for (int dir = 0; dir < 3; dir++) {
+          mode_noise_real_.h_view(dir, nmode) = 0.0;
+          mode_noise_imag_.h_view(dir, nmode) = 0.0;
+        }
+        for (int dir = 0; dir < no_dir; dir++) {
+          Real amp_real_dir = norm * RanGaussianSt(&(rstate));
+          Real amp_imag_dir = norm * RanGaussianSt(&(rstate));
+          mode_noise_real_.h_view(dir, nmode) = amp_real_dir;
+          mode_noise_imag_.h_view(dir, nmode) = amp_imag_dir;
+          k_dot_amp_imag += k[dir] * amp_imag_dir;
+          k_dot_amp_real += k[dir] * amp_real_dir;
+        }
+
+        if (norm > 0.) {
+          for (int dir = 0; dir < no_dir; dir++) {
+            Real A_div = k[dir] * k_dot_amp_real / SQR(kiso);
+            Real B_div = k[dir] * k_dot_amp_imag / SQR(kiso);
+            Real A_sol = mode_noise_real_.h_view(dir, nmode) - A_div;
+            Real B_sol = mode_noise_imag_.h_view(dir, nmode) - B_div;
+            mode_noise_real_.h_view(dir, nmode) =
+                sol_fraction * A_sol + (1.0 - sol_fraction) * A_div;
+            mode_noise_imag_.h_view(dir, nmode) =
+                sol_fraction * B_sol + (1.0 - sol_fraction) * B_div;
           }
         }
       }
@@ -1571,8 +1561,10 @@ TaskStatus TurbulenceDriver::EnsureBasisSize(Driver* pdrive, int stage) {
 
 TurbulenceRestartMetadata TurbulenceDriver::RestartMetadata() const {
   TurbulenceRestartMetadata metadata{};
-  metadata.version = 1;
+  metadata.version = 2;
   metadata.mode_count = mode_count;
+  metadata.mode_sampling = static_cast<int>(mode_sampling);
+  metadata.sparse_mode_count = sparse_mode_count;
   metadata.n_updates = n_turb_updates_yet;
   metadata.nlow = nlow;
   metadata.nhigh = nhigh;
@@ -1623,6 +1615,8 @@ void TurbulenceDriver::ValidateRestartMetadata(
   };
   check(metadata.version != expected.version, "version");
   check(metadata.mode_count != expected.mode_count, "mode_count");
+  check(metadata.mode_sampling != expected.mode_sampling, "mode_sampling");
+  check(metadata.sparse_mode_count != expected.sparse_mode_count, "sparse_mode_count");
   check(metadata.nlow != expected.nlow, "nlow");
   check(metadata.nhigh != expected.nhigh, "nhigh");
   check(metadata.driving_type != expected.driving_type, "driving_type");

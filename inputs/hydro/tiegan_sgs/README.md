@@ -8,10 +8,12 @@ run.
 ## Two-Dimensional Forcing And Drag
 
 For `Nres = 1024`, the supplied inputs target global mode
-`k_drive = sqrt(Nres) = 32`. They use a tile-local parabolic spectrum over modes
-`1-3`, peaked at `npeak = 2`, and repeat the realization on `16 x 16` tiles. Thus
-the global peak is `tile_nx*npeak = 32`, while the driver only evolves the small
-tile-local Fourier mode set.
+`k_drive = sqrt(Nres) = 32`. They use a global parabolic spectrum over the narrow
+annulus `31 <= |k| <= 33`, peaked at `npeak = 32`. The sparse-annulus sampler
+selects 32 equal-angle complex modes from one Fourier half-plane; their conjugates
+supply the other half-plane. The driver therefore evolves 32 modes without
+enumerating the full Cartesian mode volume or periodically repeating a smaller
+forcing realization.
 
 The standard large-scale sink is uniform linear Rayleigh drag,
 `dv/dt = -drag_rate*v`. It damps every Fourier mode at the same rate, but removes
@@ -64,7 +66,8 @@ a global non-overlapping square filter. The supplied inputs use powers of two.
 - a `1024 x 1024 x 1` mesh with `512 x 512 x 1` MeshBlocks;
 - isothermal sound speed `c_s = 1`;
 - target steady-state `v_rms = 0.25` and Mach `0.25`;
-- forcing peaked at global mode `32`, so `L_drive = 1/32`;
+- sparse global forcing over `31 <= |k| <= 33`, peaked at mode `32`, so
+  `L_drive = 1/32`;
 - OU correlation time `tcorr = t_eddy = L_drive/v_rms = 0.125`;
 - Rayleigh `drag_rate = 0.25` and constant-Edot normalization with
   `dedt = drag_rate*v_rms^2 = 0.015625`;
@@ -78,9 +81,11 @@ The history output should be used to measure `v_rms` and decide whether `dedt` o
 The target Mach number is a steady-state calibration. Starting from rest, five
 or ten forcing-scale eddy times are commissioning spin-up runs, not long enough
 to reach the target RMS velocity: `t_drag = 1/drag_rate = 4 = 32*t_eddy`. The
-completed five-eddy MPI run reached `v_rms = 0.128946` at `t = 0.625`, with
-`v3 = 0`. Statistically steady production measurements should begin after
-several drag/box-turnover times or from a saturated restart.
+earlier tiled five-eddy MPI pipeline test reached `v_rms = 0.128946` at
+`t = 0.625`, with `v3 = 0`. Its repeated forcing pattern makes it unsuitable for
+SGS science; the sparse-annulus setup requires a fresh spin-up and calibration.
+Statistically steady production measurements should begin after several
+drag/box-turnover times or from a saturated restart.
 
 The fiducial `mach010_1024.athinput` uses the same numerical and output setup with
 `v_rms = 0.1`, `t_eddy = tcorr = 0.3125`, `drag_rate = 0.1`, `dedt = 0.001`,

@@ -4,14 +4,14 @@
 #
 # Nominal scales:
 #   c_s = 1, target v_rms = 0.25, target Mach = 0.25
-#   L_box = 1, tile_nx = tile_ny = 16, npeak = 2
-#   global peak mode = tile_nx*npeak = 32, L_drive = L_box/32 = 0.03125
+#   L_box = 1, sparse global annulus 31 <= |k| <= 33, npeak = 32
+#   L_drive = L_box/32 = 0.03125
 #   t_eddy = L_drive/v_rms = 0.125
 #   tlim = 10 t_eddy = 1.25
 #   output cadence = t_eddy/20 = 0.00625
 #   drag_rate = v_rms/L_box = 0.25, dedt = drag_rate*v_rms^2 = 0.015625
 #
-# Repeating a small local Fourier driver avoids enumerating modes through global k=32.
+# Sparse annulus sampling evolves 32 global modes without enumerating the mode volume.
 # Uniform Rayleigh drag arrests the inverse cascade near the box scale. The achieved
 # Mach number must still be measured because this balance is not a thermostat.
 
@@ -71,17 +71,16 @@ tcorr = 0.125
 dt_update = 0.00125
 normalization = edot
 dedt = 0.015625
-nlow = 1
-nhigh = 3
-npeak = 2
+nlow = 31
+nhigh = 33
+npeak = 32
 spectrum = parabolic
+mode_sampling = sparse_annulus
+sparse_mode_count = 32
 min_kz = 0
 max_kz = 0
 sol_fraction = 1.0
 rseed = 2718
-tile_nx = 16
-tile_ny = 16
-tile_nz = 1
 
 <output1>
 file_type = hst
