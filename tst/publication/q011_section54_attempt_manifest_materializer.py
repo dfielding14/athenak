@@ -718,6 +718,22 @@ def materialize_completed_attempt_manifest(
                 source_bindings["pressure_selection_receipt"],
                 label="selected pressure receipt",
             )
+            try:
+                pressure_receipt = campaign._validate_selected_pressure_receipt(
+                    pressure_payload,
+                    authorized_pic_root=authorized_root,
+                )
+            except campaign.QualificationError as error:
+                raise AttemptManifestMaterializationError(str(error)) from error
+            _require(
+                plan.get("selected_pressure")
+                == {
+                    "selection_method": pressure_receipt["selection_method"],
+                    "selected_case": pressure_receipt["selected_case"],
+                    "receipt": source_bindings["pressure_selection_receipt"],
+                },
+                "validated selected pressure receipt disagrees with campaign plan",
+            )
             helper_payload = _member_payload(
                 snapshot, plan["helper_source_closure"], label="helper source closure"
             )

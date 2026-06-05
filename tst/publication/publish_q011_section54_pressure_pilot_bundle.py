@@ -36,7 +36,17 @@ else:
 
 _ARTIFACT_HELPERS = case_verifier._ARTIFACT_HELPERS
 _DIRECTORY_FLAGS = os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0)
-_FILE_FLAGS = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+_FILE_FLAGS = (
+    os.O_RDONLY
+    | getattr(os, "O_NOFOLLOW", 0)
+    | getattr(os, "O_NONBLOCK", 0)
+)
+MAX_RETAINED_FILE_BYTES = 128 * 1024 * 1024
+MAX_JSON_BYTES = 8 * 1024 * 1024
+MAX_DIRECTORY_ENTRIES = 256
+MAX_TREE_ENTRIES = 1024
+MAX_TREE_DEPTH = 16
+_READ_CHUNK_BYTES = 1024 * 1024
 _SHA256_PATTERN = re.compile(r"[0-9a-f]{64}")
 _GIT_COMMIT_PATTERN = re.compile(r"[0-9a-f]{40}")
 _RENAME_NOREPLACE = 1
@@ -77,11 +87,16 @@ def _sha256(payload: bytes) -> str:
 
 def _canonical_json_bytes(value: Mapping[str, object]) -> bytes:
     try:
-        return (
+        payload = (
             json.dumps(dict(value), indent=2, sort_keys=True, allow_nan=False) + "\n"
         ).encode("utf-8")
-    except (TypeError, ValueError) as error:
+    except (RecursionError, TypeError, ValueError) as error:
         raise PressurePilotPublicationError("pressure-pilot manifest is not canonical JSON") from error
+    _require(
+        len(payload) <= MAX_JSON_BYTES,
+        f"pressure-pilot JSON exceeds the {MAX_JSON_BYTES}-byte size limit",
+    )
+    return payload
 
 
 def _fsync_descriptor(descriptor: int) -> None:
@@ -261,7 +276,10 @@ def _validated_publication_guard_identity_at(
     )
     _require(
         _read_stable_readonly_regular_at(
-            parent_descriptor, guard_name, "receipt publication guard"
+            parent_descriptor,
+            guard_name,
+            "receipt publication guard",
+            max_bytes=len(_PUBLICATION_GUARD_PAYLOAD),
         )
         == _PUBLICATION_GUARD_PAYLOAD,
         "receipt publication guard payload drifted",
@@ -410,6 +428,7 @@ def _publish_publication_seal_at(
             acceptance_descriptor,
             seal_name,
             "receipt durable success seal",
+            max_bytes=MAX_JSON_BYTES,
         )
         _require(
             canonical_payload == seal_payload,
@@ -433,6 +452,7 @@ def _publish_publication_seal_at(
             acceptance_descriptor,
             seal_name,
             "receipt durable success seal",
+            max_bytes=MAX_JSON_BYTES,
         )
         == seal_payload,
         "receipt durable success seal drifted after commit",
@@ -453,7 +473,10 @@ def _require_publication_seal_at(
     seal_name = _publication_seal_name(receipt_name)
     try:
         payload = _read_stable_readonly_regular_at(
-            acceptance_descriptor, seal_name, f"{label} durable success seal"
+            acceptance_descriptor,
+            seal_name,
+            f"{label} durable success seal",
+            max_bytes=MAX_JSON_BYTES,
         )
     except OSError as error:
         raise PressurePilotPublicationError(
@@ -498,8 +521,22 @@ def _write_exclusive_below(root_descriptor: int, relative: str, payload: bytes) 
 def _freeze_anchored_tree(root_descriptor: int) -> None:
     """Remove write bits recursively without reopening the staging pathname."""
 
-    def freeze(directory_descriptor: int) -> None:
-        for name in sorted(os.listdir(directory_descriptor)):
+    entry_count = [0]
+
+    def freeze(directory_descriptor: int, depth: int = 0) -> None:
+        _require(
+            depth <= MAX_TREE_DEPTH,
+            f"pressure-pilot tree exceeds the {MAX_TREE_DEPTH}-level depth limit",
+        )
+        for name in _bounded_directory_names(
+            directory_descriptor,
+            "pressure-pilot staging directory",
+        ):
+            _require(
+                entry_count[0] < MAX_TREE_ENTRIES,
+                f"pressure-pilot tree exceeds the {MAX_TREE_ENTRIES}-entry limit",
+            )
+            entry_count[0] += 1
             observed = os.stat(name, dir_fd=directory_descriptor, follow_symlinks=False)
             if stat.S_ISDIR(observed.st_mode):
                 child = os.open(name, _DIRECTORY_FLAGS, dir_fd=directory_descriptor)
@@ -510,7 +547,7 @@ def _freeze_anchored_tree(root_descriptor: int) -> None:
                         == (opened.st_dev, opened.st_ino),
                         "pressure-pilot tree changed during anchored freeze",
                     )
-                    freeze(child)
+                    freeze(child, depth + 1)
                     os.fchmod(child, opened.st_mode & ~_WRITE_BITS)
                     os.fsync(child)
                 finally:
@@ -753,7 +790,44 @@ def _rename_no_replace_at(parent_descriptor: int, source_name: str, destination_
     )
 
 
-def _read_stable_readonly_regular(path: Path, label: str) -> bytes:
+def _bounded_directory_names(directory_fd: int, label: str) -> list[str]:
+    names: list[str] = []
+    with os.scandir(directory_fd) as entries:
+        for entry in entries:
+            _require(
+                len(names) < MAX_DIRECTORY_ENTRIES,
+                f"{label} exceeds the {MAX_DIRECTORY_ENTRIES}-entry directory limit",
+            )
+            names.append(entry.name)
+    return sorted(names)
+
+
+def _read_bounded_descriptor(descriptor: int, label: str, max_bytes: int) -> bytes:
+    _require(
+        os.fstat(descriptor).st_size <= max_bytes,
+        f"{label} exceeds the {max_bytes}-byte size limit",
+    )
+    payload = bytearray()
+    while True:
+        chunk = os.read(
+            descriptor,
+            min(_READ_CHUNK_BYTES, max_bytes + 1 - len(payload)),
+        )
+        if not chunk:
+            return bytes(payload)
+        payload.extend(chunk)
+        _require(
+            len(payload) <= max_bytes,
+            f"{label} exceeds the {max_bytes}-byte size limit",
+        )
+
+
+def _read_stable_readonly_regular(
+    path: Path,
+    label: str,
+    *,
+    max_bytes: int = MAX_RETAINED_FILE_BYTES,
+) -> bytes:
     descriptor = os.open(path, _FILE_FLAGS)
     try:
         before = os.fstat(descriptor)
@@ -761,18 +835,14 @@ def _read_stable_readonly_regular(path: Path, label: str) -> bytes:
             stat.S_ISREG(before.st_mode) and not before.st_mode & 0o222,
             f"{label} is not a read-only regular file",
         )
-        payload = b""
-        while True:
-            chunk = os.read(descriptor, 1024 * 1024)
-            if not chunk:
-                break
-            payload += chunk
+        payload = _read_bounded_descriptor(descriptor, label, max_bytes)
         after = os.fstat(descriptor)
         current = os.stat(path, follow_symlinks=False)
         _require(
             (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns)
             == (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns)
-            and (after.st_dev, after.st_ino) == (current.st_dev, current.st_ino),
+            and (after.st_dev, after.st_ino) == (current.st_dev, current.st_ino)
+            and len(payload) == after.st_size,
             f"{label} changed while reading",
         )
         return payload
@@ -781,7 +851,11 @@ def _read_stable_readonly_regular(path: Path, label: str) -> bytes:
 
 
 def _read_stable_readonly_regular_at(
-    parent_descriptor: int, name: str, label: str
+    parent_descriptor: int,
+    name: str,
+    label: str,
+    *,
+    max_bytes: int = MAX_RETAINED_FILE_BYTES,
 ) -> bytes:
     _require("/" not in name, f"{label}: descriptor-relative read received a nested path")
     descriptor = os.open(name, _FILE_FLAGS, dir_fd=parent_descriptor)
@@ -793,24 +867,69 @@ def _read_stable_readonly_regular_at(
             and before.st_nlink == 1,
             f"{label} is not a singly linked read-only regular file",
         )
-        payload = b""
-        while True:
-            chunk = os.read(descriptor, 1024 * 1024)
-            if not chunk:
-                break
-            payload += chunk
+        payload = _read_bounded_descriptor(descriptor, label, max_bytes)
         after = os.fstat(descriptor)
         current = os.stat(name, dir_fd=parent_descriptor, follow_symlinks=False)
         _require(
             (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns)
             == (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns)
             and (after.st_dev, after.st_ino) == (current.st_dev, current.st_ino)
-            and after.st_nlink == current.st_nlink == 1,
+            and after.st_nlink == current.st_nlink == 1
+            and len(payload) == after.st_size,
             f"{label} changed while reading",
         )
         return payload
     finally:
         os.close(descriptor)
+
+
+def _verify_published_case_descriptor_bounded(
+    tree: object,
+    case_id: str,
+    expected_descriptor_sha256: str,
+) -> dict[str, object]:
+    """Recompute a raw-case descriptor without the producer's unbounded reader."""
+    try:
+        _require(
+            _SHA256_PATTERN.fullmatch(expected_descriptor_sha256) is not None,
+            "expected raw-case descriptor SHA-256 is malformed",
+        )
+        case_verifier.load_inventory(tree)
+        payload = _read_stable_readonly_regular_at(
+            tree.analysis_fd,
+            "analysis.json",
+            "published raw-case descriptor",
+            max_bytes=MAX_JSON_BYTES,
+        )
+        _require(
+            _sha256(payload) == expected_descriptor_sha256,
+            "raw-case descriptor SHA-256 drifted",
+        )
+        decoded = case_verifier._decode_json(payload, "raw-case descriptor")
+        _require(type(decoded) is dict, "raw-case descriptor must be an object")
+        _require(
+            payload == case_verifier.canonical_json_bytes(decoded),
+            "raw-case descriptor is not canonical JSON",
+        )
+        recomputed = case_verifier._analyze_tree(tree, case_id)
+        case_verifier._strict_equal(decoded, recomputed, "raw-case descriptor")
+        tree.require_tree_closure()
+        tree.require_analysis_identity()
+        _require(
+            _read_stable_readonly_regular_at(
+                tree.analysis_fd,
+                "analysis.json",
+                "published raw-case descriptor",
+                max_bytes=MAX_JSON_BYTES,
+            )
+            == payload,
+            "raw-case descriptor changed after verification",
+        )
+        return recomputed
+    except RecursionError as error:
+        raise PressurePilotPublicationError(
+            "raw-case descriptor exceeds the supported nesting depth"
+        ) from error
 
 
 def _open_absolute_directory(path: Path) -> int:
@@ -908,12 +1027,30 @@ class ImmutablePressurePilotBundle:
         self,
         directory_fd: int,
         prefix: tuple[str, ...] = (),
+        *,
+        _entry_count: list[int] | None = None,
+        _depth: int = 0,
     ) -> tuple[list[str], dict[str, tuple[int, int]], dict[str, tuple[int, int]]]:
+        _require(
+            _depth <= MAX_TREE_DEPTH,
+            f"pressure-pilot tree exceeds the {MAX_TREE_DEPTH}-level depth limit",
+        )
+        if _entry_count is None:
+            _entry_count = [0]
         paths = []
         directories = {}
         files = {}
-        names = sorted(os.listdir(directory_fd))
+        label = "/".join(prefix) or "."
+        names = _bounded_directory_names(
+            directory_fd,
+            f"pressure-pilot directory {label}",
+        )
         for name in names:
+            _require(
+                _entry_count[0] < MAX_TREE_ENTRIES,
+                f"pressure-pilot tree exceeds the {MAX_TREE_ENTRIES}-entry limit",
+            )
+            _entry_count[0] += 1
             relative = "/".join((*prefix, name))
             metadata = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
             if stat.S_ISREG(metadata.st_mode):
@@ -927,6 +1064,11 @@ class ImmutablePressurePilotBundle:
                         and (metadata.st_dev, metadata.st_ino)
                         == (opened.st_dev, opened.st_ino),
                         f"pressure-pilot member changed during verification: {relative}",
+                    )
+                    _require(
+                        opened.st_size <= MAX_RETAINED_FILE_BYTES,
+                        f"pressure-pilot member exceeds the {MAX_RETAINED_FILE_BYTES}-byte "
+                        f"size limit: {relative}",
                     )
                     files[relative] = (opened.st_dev, opened.st_ino)
                 finally:
@@ -946,7 +1088,10 @@ class ImmutablePressurePilotBundle:
                     )
                     directories[relative] = (opened.st_dev, opened.st_ino)
                     child_paths, child_directories, child_files = self._scan(
-                        child_fd, (*prefix, name)
+                        child_fd,
+                        (*prefix, name),
+                        _entry_count=_entry_count,
+                        _depth=_depth + 1,
                     )
                     _require(bool(child_paths), f"pressure-pilot tree contains empty directory: {relative}")
                     paths.extend(child_paths)
@@ -964,13 +1109,21 @@ class ImmutablePressurePilotBundle:
                 raise PressurePilotPublicationError(f"pressure-pilot tree has unsupported entry: {relative}")
         return paths, directories, files
 
-    def read(self, relative: str) -> bytes:
+    def read(
+        self,
+        relative: str,
+        *,
+        max_bytes: int = MAX_RETAINED_FILE_BYTES,
+    ) -> bytes:
+        if relative == pilot.MANIFEST_NAME or relative.endswith(".rst.manifest"):
+            max_bytes = min(max_bytes, MAX_JSON_BYTES)
         self.require_path_identity()
         payload = _ARTIFACT_HELPERS._read_at(
             self.root_fd,
             relative,
             self._directory_identities,
             self._file_identities,
+            max_bytes=max_bytes,
         )
         self.require_path_identity()
         return payload
@@ -980,9 +1133,14 @@ class ImmutablePressurePilotBundle:
             _SHA256_PATTERN.fullmatch(expected_manifest_sha256) is not None,
             "expected pressure-pilot manifest SHA-256 is malformed",
         )
-        manifest_payload = self.read(pilot.MANIFEST_NAME)
+        manifest_payload = self.read(pilot.MANIFEST_NAME, max_bytes=MAX_JSON_BYTES)
         _require(_sha256(manifest_payload) == expected_manifest_sha256, "pressure-pilot manifest SHA-256 drifted")
-        manifest = pilot._manifest_schema(manifest_payload)
+        try:
+            manifest = pilot._manifest_schema(manifest_payload)
+        except RecursionError as error:
+            raise PressurePilotPublicationError(
+                "pressure-pilot manifest exceeds the supported JSON nesting depth"
+            ) from error
         pilot._validate_case_identity(manifest["cases"])
         expected = {pilot.MANIFEST_NAME: (len(manifest_payload), _sha256(manifest_payload))}
         for case in manifest["cases"]:
@@ -1030,22 +1188,27 @@ def _verify_pressure_pilot_bundle_at(
     authorized_publication_root: Path,
 ) -> dict[str, Any]:
     """Verify one aggregate tree through the caller's retained root descriptor."""
-    with ImmutablePressurePilotBundle(
-        root,
-        inherited_root_fd=root_descriptor,
-        parent_fd=parent_descriptor,
-        entry_name=entry_name,
-    ) as bundle:
-        bundle.verify(expected_manifest_sha256)
-        result = pilot.analyze_pressure_pilot_bundle(
+    try:
+        with ImmutablePressurePilotBundle(
             root,
-            expected_manifest_sha256,
-            authorized_publication_root=authorized_publication_root,
-            member_reader=bundle.read,
-            actual_files=bundle.file_paths(),
-        )
-        bundle.verify(expected_manifest_sha256)
-        return result
+            inherited_root_fd=root_descriptor,
+            parent_fd=parent_descriptor,
+            entry_name=entry_name,
+        ) as bundle:
+            bundle.verify(expected_manifest_sha256)
+            result = pilot.analyze_pressure_pilot_bundle(
+                root,
+                expected_manifest_sha256,
+                authorized_publication_root=authorized_publication_root,
+                member_reader=bundle.read,
+                actual_files=bundle.file_paths(),
+            )
+            bundle.verify(expected_manifest_sha256)
+            return result
+    except RecursionError as error:
+        raise PressurePilotPublicationError(
+            "pressure-pilot aggregate evidence exceeds the supported nesting depth"
+        ) from error
 
 
 def verify_published_pressure_pilot_bundle(
@@ -1143,9 +1306,18 @@ def _archive_member_payload(
         len(members) == 1 and members[0].isfile(),
         f"{label} is absent or not one regular archive member",
     )
+    _require(
+        members[0].size <= MAX_RETAINED_FILE_BYTES,
+        f"{label} exceeds the {MAX_RETAINED_FILE_BYTES}-byte size limit",
+    )
     stream = archive.extractfile(members[0])
     _require(stream is not None, f"{label} cannot be read from source archive")
-    return stream.read()
+    payload = stream.read(MAX_RETAINED_FILE_BYTES + 1)
+    _require(
+        len(payload) == members[0].size and len(payload) <= MAX_RETAINED_FILE_BYTES,
+        f"{label} changed while reading or exceeds its size limit",
+    )
+    return payload
 
 
 def _trusted_source_archive(commitish: str = "HEAD") -> tuple[str, bytes]:
@@ -1455,10 +1627,8 @@ def publish_pressure_pilot_bundle(
             tree = preflight_stack.enter_context(
                 case_verifier.StructuredArtifactTree(Path(case_artifact_dirs[case_id]))
             )
-            preflight_descriptors[case_id] = (
-                case_verifier.verify_published_case_descriptor(
-                    tree, case_id, case_descriptor_sha256[case_id]
-                )
+            preflight_descriptors[case_id] = _verify_published_case_descriptor_bounded(
+                tree, case_id, case_descriptor_sha256[case_id]
             )
             tree.require_tree_closure()
         preflight_manifest = _manifest(preflight_descriptors)
@@ -1547,7 +1717,7 @@ def publish_pressure_pilot_bundle(
                 tree = stack.enter_context(
                     case_verifier.StructuredArtifactTree(Path(case_artifact_dirs[case_id]))
                 )
-                descriptor = case_verifier.verify_published_case_descriptor(
+                descriptor = _verify_published_case_descriptor_bounded(
                     tree, case_id, case_descriptor_sha256[case_id]
                 )
                 trees[case_id] = tree
@@ -1701,6 +1871,7 @@ def publish_pressure_pilot_bundle(
                 publication_descriptor,
                 result_target.name,
                 "pressure-pilot aggregate analysis result",
+                max_bytes=MAX_JSON_BYTES,
             )
             == result_payload,
             "pressure-pilot aggregate analysis result drifted after publication",
@@ -1897,7 +2068,10 @@ def _verify_published_pressure_pilot_receipt(
             publication_descriptor, receipt_target.name, "pressure-pilot receipt"
         )
         receipt_payload = _read_stable_readonly_regular_at(
-            publication_descriptor, receipt_target.name, "pressure-pilot receipt"
+            publication_descriptor,
+            receipt_target.name,
+            "pressure-pilot receipt",
+            max_bytes=MAX_JSON_BYTES,
         )
         if require_publication_seal:
             _require_publication_seal_at(
@@ -1908,7 +2082,12 @@ def _verify_published_pressure_pilot_receipt(
                 receipt_identity,
                 "pressure-pilot receipt",
             )
-        receipt = pilot._decode_json(receipt_payload, "pressure-pilot receipt")
+        try:
+            receipt = pilot._decode_json(receipt_payload, "pressure-pilot receipt")
+        except RecursionError as error:
+            raise PressurePilotPublicationError(
+                "pressure-pilot receipt exceeds the supported JSON nesting depth"
+            ) from error
         _require(isinstance(receipt, dict), "pressure-pilot receipt is malformed")
         _require(
             set(receipt)
@@ -1996,7 +2175,7 @@ def _verify_published_pressure_pilot_receipt(
                 case_id = str(case["case_id"])
                 raw_root = _authorized_raw_case_root(str(case["artifact_dir"]), pic_root)
                 tree = stack.enter_context(case_verifier.StructuredArtifactTree(raw_root))
-                descriptor = case_verifier.verify_published_case_descriptor(
+                descriptor = _verify_published_case_descriptor_bounded(
                     tree, case_id, str(case["descriptor_sha256"])
                 )
                 _require(
@@ -2022,6 +2201,7 @@ def _verify_published_pressure_pilot_receipt(
             publication_descriptor,
             analysis_result.name,
             "pressure-pilot retained aggregate analysis",
+            max_bytes=MAX_JSON_BYTES,
         )
         _require(
             actual_result_payload == expected_result_payload

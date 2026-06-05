@@ -9,20 +9,25 @@ the immutable four-case pressure-pilot bundle and names exactly one registered
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-import hashlib
 import json
 import math
-import os
 from pathlib import Path
 import re
-import stat
 from typing import Any
 
 if __package__:
-    from . import publish_q011_section54_pressure_pilot_bundle as pressure_pilot_publisher
+    from . import (
+        q011_section54_historical_pressure_pilot_consumer
+        as historical_pressure_pilot_consumer,
+    )
+    from .frontier_control_plane import (
+        q011_pressure_review_packet_verifier as pressure_review_packet_verifier,
+    )
 else:
-    import publish_q011_section54_pressure_pilot_bundle as pressure_pilot_publisher
+    import q011_section54_historical_pressure_pilot_consumer as historical_pressure_pilot_consumer
+    from frontier_control_plane import (
+        q011_pressure_review_packet_verifier as pressure_review_packet_verifier,
+    )
 
 
 RECORD_TYPE = "q011_section54_pressure_selection_receipt"
@@ -35,11 +40,7 @@ REGISTERED_CASES = (
 )
 _CASE_BY_ID = dict(REGISTERED_CASES)
 _SHA256_PATTERN = re.compile(r"[0-9a-f]{64}")
-_UTC_PATTERN = re.compile(
-    r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}"
-    r"(?:\.[0-9]{1,6})?Z"
-)
-_FILE_FLAGS = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+MAX_PRESSURE_SELECTION_RECEIPT_BYTES = 1024 * 1024
 
 
 class PressureSelectionReceiptError(ValueError):
@@ -79,52 +80,9 @@ def _sha256(value: object, label: str) -> str:
     return value
 
 
-def _sha256_bytes(payload: bytes) -> str:
-    return hashlib.sha256(payload).hexdigest()
-
-
 def _problem_ps_p0(value: object, label: str) -> float:
     _require(type(value) is float and math.isfinite(value), f"{label}: expected JSON float")
     return value
-
-
-def _reviewed_utc(value: object) -> str:
-    text = _text(value, "reviewed_utc")
-    _require(_UTC_PATTERN.fullmatch(text) is not None, "reviewed_utc: expected canonical UTC")
-    try:
-        parsed = datetime.fromisoformat(text[:-1] + "+00:00")
-    except ValueError as error:
-        raise PressureSelectionReceiptError("reviewed_utc: invalid UTC timestamp") from error
-    _require(parsed.tzinfo == timezone.utc, "reviewed_utc: expected UTC")
-    return text
-
-
-def _stable_readonly_regular_bytes(path: str | Path, label: str) -> bytes:
-    target = Path(path)
-    _require(target.is_absolute(), f"{label}: expected absolute path")
-    try:
-        descriptor = os.open(target, _FILE_FLAGS)
-    except OSError as error:
-        raise PressureSelectionReceiptError(f"{label}: cannot open immutable file") from error
-    try:
-        before = os.fstat(descriptor)
-        _require(
-            stat.S_ISREG(before.st_mode) and not before.st_mode & 0o222,
-            f"{label}: expected read-only regular file",
-        )
-        payload = bytearray()
-        while chunk := os.read(descriptor, 1024 * 1024):
-            payload.extend(chunk)
-        after = os.fstat(descriptor)
-        stable = ("st_dev", "st_ino", "st_mode", "st_size", "st_mtime_ns", "st_ctime_ns")
-        _require(
-            all(getattr(before, field) == getattr(after, field) for field in stable)
-            and len(payload) == after.st_size,
-            f"{label}: file changed while reading",
-        )
-        return bytes(payload)
-    finally:
-        os.close(descriptor)
 
 
 def _decode_json_bytes(payload: bytes, label: str) -> Any:
@@ -144,15 +102,11 @@ def _decode_json_bytes(payload: bytes, label: str) -> Any:
             object_pairs_hook=reject_duplicates,
             parse_constant=reject_constant,
         )
-    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+    except (UnicodeDecodeError, json.JSONDecodeError, RecursionError) as error:
         raise PressureSelectionReceiptError(f"{label}: not valid UTF-8 JSON") from error
 
 
-def _published_pressure_pilot_receipt(
-    value: object,
-    *,
-    authorized_pic_root: Path,
-) -> tuple[dict[str, object], dict[str, object]]:
+def _published_pressure_pilot_receipt_binding(value: object) -> dict[str, object]:
     binding = _object(
         value,
         {"path", "sha256"},
@@ -162,39 +116,143 @@ def _published_pressure_pilot_receipt(
     expected_sha256 = _sha256(
         binding["sha256"], "published_pressure_pilot_receipt/sha256"
     )
-    payload = _stable_readonly_regular_bytes(
-        path, "published_pressure_pilot_receipt/path"
-    )
-    _require(
-        _sha256_bytes(payload) == expected_sha256,
-        "published pressure-pilot receipt SHA-256 drifted",
-    )
-    try:
-        verified = pressure_pilot_publisher.consume_published_pressure_pilot_bundle(
-            path,
-            authorized_pic_root=authorized_pic_root,
-        )
-    except (pressure_pilot_publisher.PressurePilotPublicationError, OSError) as error:
-        raise PressureSelectionReceiptError(
-            "published pressure-pilot receipt failed immutable verification"
-        ) from error
-    _require(
-        verified["receipt_sha256"] == expected_sha256,
-        "published pressure-pilot receipt verifier SHA-256 drifted",
-    )
-    published = _decode_json_bytes(payload, "published pressure-pilot receipt")
-    _require(type(published) is dict, "published pressure-pilot receipt: expected object")
-    _require(
-        payload == canonical_json_bytes(published),
-        "published pressure-pilot receipt is not canonical JSON",
-    )
     return {
         "path": path,
         "sha256": expected_sha256,
-    }, {
-        "verified": verified,
-        "published": published,
     }
+
+
+def _pressure_gate_attestation_binding(value: object, label: str) -> dict[str, object]:
+    binding = _object(value, {"path", "sha256"}, label)
+    return {
+        "path": _text(binding["path"], f"{label}/path"),
+        "sha256": _sha256(binding["sha256"], f"{label}/sha256"),
+    }
+
+
+def _published_pressure_pilot_review_packet_receipt(
+    value: object,
+    *,
+    aggregate_receipt_binding: dict[str, object],
+    authorized_pic_root: Path,
+) -> tuple[dict[str, object], dict[str, object]]:
+    binding = _object(
+        value,
+        {"path", "sha256"},
+        "published_pressure_pilot_review_packet_receipt",
+    )
+    normalized = {
+        "path": _text(
+            binding["path"],
+            "published_pressure_pilot_review_packet_receipt/path",
+        ),
+        "sha256": _sha256(
+            binding["sha256"],
+            "published_pressure_pilot_review_packet_receipt/sha256",
+        ),
+    }
+    try:
+        verified = (
+            pressure_review_packet_verifier.consume_published_pressure_pilot_review_packet(
+                normalized["path"],
+                aggregate_receipt_binding=aggregate_receipt_binding,
+                authorized_pic_root=authorized_pic_root,
+            )
+        )
+    except (
+        pressure_review_packet_verifier.PressureReviewPacketVerificationError,
+        OSError,
+    ) as error:
+        raise PressureSelectionReceiptError(
+            "published pressure-pilot review-packet receipt failed immutable verification"
+        ) from error
+    verified = _object(
+        verified,
+        {
+            "receipt_binding",
+            "aggregate_receipt_binding",
+            "packet_receipt",
+            "aggregate_receipt",
+            "aggregate_bundle",
+            "aggregate_analysis",
+            "source_bindings",
+            "inventory",
+        },
+        "verified pressure-pilot review packet",
+    )
+    _require(
+        verified["receipt_binding"] == normalized,
+        "published pressure-pilot review-packet receipt binding drifted",
+    )
+    _require(
+        verified["aggregate_receipt_binding"] == aggregate_receipt_binding,
+        "published pressure-pilot review packet is bound to a different aggregate receipt",
+    )
+    return normalized, verified
+
+
+def _authoritative_pressure_pilot_publication(
+    aggregate_receipt_binding: dict[str, object],
+    review_packet_receipt_binding: dict[str, object],
+    packet_publication: dict[str, object],
+    *,
+    authorized_pic_root: Path,
+) -> dict[str, object]:
+    try:
+        verified = (
+            historical_pressure_pilot_consumer.consume_exact_historical_production_pressure_pilot()
+        )
+    except (
+        historical_pressure_pilot_consumer.HistoricalPressurePilotConsumerError,
+        OSError,
+        TypeError,
+        ValueError,
+    ) as error:
+        raise PressureSelectionReceiptError(
+            "published pressure-pilot receipt failed authoritative verification"
+        ) from error
+    verified = _object(
+        verified,
+        {
+            "packet_receipt_sha256",
+            "aggregate_receipt_sha256",
+            "manifest_sha256",
+            "analysis_result_sha256",
+            "status",
+        },
+        "authoritative pressure-pilot publication",
+    )
+    packet_bundle = _object(
+        packet_publication["aggregate_bundle"],
+        {"path", "manifest_sha256"},
+        "verified aggregate bundle",
+    )
+    packet_analysis = _object(
+        packet_publication["aggregate_analysis"],
+        {"path", "sha256"},
+        "verified aggregate analysis",
+    )
+    _require(
+        verified["packet_receipt_sha256"] == review_packet_receipt_binding["sha256"],
+        "authoritative pressure-pilot packet receipt SHA-256 differs from immutable publication binding",
+    )
+    _require(
+        verified["aggregate_receipt_sha256"] == aggregate_receipt_binding["sha256"],
+        "authoritative pressure-pilot receipt SHA-256 differs from immutable publication binding",
+    )
+    _require(
+        verified["manifest_sha256"] == packet_bundle["manifest_sha256"],
+        "authoritative pressure-pilot manifest SHA-256 differs from immutable publication binding",
+    )
+    _require(
+        verified["analysis_result_sha256"] == packet_analysis["sha256"],
+        "authoritative pressure-pilot analysis SHA-256 differs from immutable publication binding",
+    )
+    _require(
+        verified["status"] == "pass_engineering_calibration_only",
+        "authoritative pressure-pilot aggregate status is not pass_engineering_calibration_only",
+    )
+    return verified
 
 
 def _case_descriptor(value: object, index: int) -> dict[str, object]:
@@ -219,7 +277,9 @@ def _case_descriptor(value: object, index: int) -> dict[str, object]:
 def validate_pressure_selection_receipt(
     value: object,
     *,
-    authorized_pic_root: Path = pressure_pilot_publisher.AUTHORIZED_PIC_ROOT,
+    authorized_pic_root: Path = (
+        historical_pressure_pilot_consumer.AUTHORIZED_PRODUCTION_PIC_ROOT
+    ),
 ) -> dict[str, object]:
     """Validate and normalize one human-authored pressure-selection receipt."""
     receipt = _object(
@@ -229,23 +289,33 @@ def validate_pressure_selection_receipt(
             "record_type",
             "selection_method",
             "published_pressure_pilot_receipt",
+            "published_pressure_pilot_review_packet_receipt",
             "pilot_bundle_manifest_sha256",
             "aggregate_pilot_analysis_sha256",
             "case_descriptors",
             "selected_case",
-            "reviewer_identity",
-            "reviewed_utc",
-            "rationale",
+            "authoritative_reanalysis_attestation",
+            "reviewer_attestation",
         },
         "pressure-selection receipt",
     )
-    _require(receipt["schema_version"] == 1, "receipt schema version drifted")
+    _require(receipt["schema_version"] == 3, "receipt schema version drifted")
     _require(type(receipt["schema_version"]) is int, "receipt schema version must be integer")
     _require(receipt["record_type"] == RECORD_TYPE, "receipt record type drifted")
     _require(receipt["selection_method"] == SELECTION_METHOD, "selection must remain human-only")
 
-    published_binding, publication = _published_pressure_pilot_receipt(
-        receipt["published_pressure_pilot_receipt"],
+    published_binding = _published_pressure_pilot_receipt_binding(
+        receipt["published_pressure_pilot_receipt"]
+    )
+    review_packet_binding, publication = _published_pressure_pilot_review_packet_receipt(
+        receipt["published_pressure_pilot_review_packet_receipt"],
+        aggregate_receipt_binding=published_binding,
+        authorized_pic_root=authorized_pic_root,
+    )
+    authoritative_publication = _authoritative_pressure_pilot_publication(
+        published_binding,
+        review_packet_binding,
+        publication,
         authorized_pic_root=authorized_pic_root,
     )
     descriptors = [
@@ -267,8 +337,8 @@ def validate_pressure_selection_receipt(
         len(set(descriptor_sha256)) == len(REGISTERED_CASES),
         "case descriptor SHA-256 values must be unique",
     )
-    published = publication["published"]
-    verified = publication["verified"]
+    published = publication["aggregate_receipt"]
+    _require(type(published) is dict, "verified aggregate receipt: expected object")
     published_bundle = _object(
         published["aggregate_bundle"],
         {"path", "manifest_sha256"},
@@ -282,6 +352,24 @@ def validate_pressure_selection_receipt(
     published_cases = _list(
         published["raw_cases"],
         "published pressure-pilot receipt/raw_cases",
+    )
+    verified_bundle = _object(
+        publication["aggregate_bundle"],
+        {"path", "manifest_sha256"},
+        "verified aggregate bundle",
+    )
+    verified_analysis = _object(
+        publication["aggregate_analysis"],
+        {"path", "sha256"},
+        "verified aggregate analysis",
+    )
+    _require(
+        published_bundle == verified_bundle,
+        "verified aggregate bundle differs from immutable publication receipt",
+    )
+    _require(
+        published_analysis == verified_analysis,
+        "verified aggregate analysis differs from immutable publication receipt",
     )
     _require(
         len(published_cases) == len(REGISTERED_CASES),
@@ -318,14 +406,43 @@ def validate_pressure_selection_receipt(
     _require(
         pilot_bundle_manifest_sha256
         == published_bundle["manifest_sha256"]
-        == verified["manifest_sha256"],
+        == verified_bundle["manifest_sha256"]
+        == authoritative_publication["manifest_sha256"],
         "pilot bundle manifest SHA-256 differs from immutable publication receipt",
     )
     _require(
         aggregate_pilot_analysis_sha256
         == published_analysis["sha256"]
-        == verified["analysis_result_sha256"],
+        == verified_analysis["sha256"]
+        == authoritative_publication["analysis_result_sha256"],
         "aggregate pilot-analysis SHA-256 differs from immutable publication receipt",
+    )
+    reanalysis_binding = _pressure_gate_attestation_binding(
+        receipt["authoritative_reanalysis_attestation"],
+        "authoritative_reanalysis_attestation",
+    )
+    try:
+        reanalysis = (
+            pressure_review_packet_verifier.consume_sealed_pressure_reanalysis_attestation(
+                reanalysis_binding,
+                aggregate_receipt_binding=published_binding,
+                packet_receipt_binding=review_packet_binding,
+                pilot_bundle_manifest_sha256=pilot_bundle_manifest_sha256,
+                aggregate_pilot_analysis_sha256=aggregate_pilot_analysis_sha256,
+                authorized_pic_root=authorized_pic_root,
+                expected_result=authoritative_publication,
+            )
+        )
+    except (
+        pressure_review_packet_verifier.PressureReviewPacketVerificationError,
+        OSError,
+    ) as error:
+        raise PressureSelectionReceiptError(
+            "authoritative pressure-pilot reanalysis attestation failed immutable verification"
+        ) from error
+    _require(
+        reanalysis["binding"] == reanalysis_binding,
+        "authoritative reanalysis attestation binding drifted",
     )
 
     selected = _object(
@@ -342,41 +459,80 @@ def validate_pressure_selection_receipt(
         selected_ps_p0 == _CASE_BY_ID[selected_case_id],
         "selected_case problem/ps_p0 does not match its registered case",
     )
+    selected_case = {
+        "case_id": selected_case_id,
+        "problem_ps_p0": selected_ps_p0,
+    }
+    reviewer_binding = _pressure_gate_attestation_binding(
+        receipt["reviewer_attestation"],
+        "reviewer_attestation",
+    )
+    try:
+        reviewer = (
+            pressure_review_packet_verifier.consume_sealed_pressure_reviewer_attestation(
+                reviewer_binding,
+                aggregate_receipt_binding=published_binding,
+                packet_receipt_binding=review_packet_binding,
+                reanalysis_verification=reanalysis,
+                selected_case=selected_case,
+                authorized_pic_root=authorized_pic_root,
+            )
+        )
+    except (
+        pressure_review_packet_verifier.PressureReviewPacketVerificationError,
+        OSError,
+    ) as error:
+        raise PressureSelectionReceiptError(
+            "human pressure-selection reviewer attestation failed immutable verification"
+        ) from error
+    _require(
+        reviewer["binding"] == reviewer_binding,
+        "human pressure-selection reviewer attestation binding drifted",
+    )
 
     return {
-        "schema_version": 1,
+        "schema_version": 3,
         "record_type": RECORD_TYPE,
         "selection_method": SELECTION_METHOD,
         "published_pressure_pilot_receipt": published_binding,
+        "published_pressure_pilot_review_packet_receipt": review_packet_binding,
         "pilot_bundle_manifest_sha256": pilot_bundle_manifest_sha256,
         "aggregate_pilot_analysis_sha256": aggregate_pilot_analysis_sha256,
         "case_descriptors": descriptors,
-        "selected_case": {
-            "case_id": selected_case_id,
-            "problem_ps_p0": selected_ps_p0,
-        },
-        "reviewer_identity": _text(receipt["reviewer_identity"], "reviewer_identity"),
-        "reviewed_utc": _reviewed_utc(receipt["reviewed_utc"]),
-        "rationale": _text(receipt["rationale"], "rationale"),
+        "selected_case": selected_case,
+        "authoritative_reanalysis_attestation": reanalysis_binding,
+        "reviewer_attestation": reviewer_binding,
     }
 
 
 def canonical_json_bytes(value: object) -> bytes:
     """Serialize one receipt deterministically and reject non-finite values."""
     try:
-        return (
+        payload = (
             json.dumps(value, indent=2, sort_keys=True, allow_nan=False) + "\n"
         ).encode("utf-8")
-    except (TypeError, ValueError) as error:
+    except (RecursionError, TypeError, ValueError) as error:
         raise PressureSelectionReceiptError("receipt is not canonical JSON") from error
+    _require(
+        len(payload) <= MAX_PRESSURE_SELECTION_RECEIPT_BYTES,
+        "receipt exceeds the pressure-selection receipt size limit",
+    )
+    return payload
 
 
 def validate_pressure_selection_receipt_bytes(
     payload: bytes,
     *,
-    authorized_pic_root: Path = pressure_pilot_publisher.AUTHORIZED_PIC_ROOT,
+    authorized_pic_root: Path = (
+        historical_pressure_pilot_consumer.AUTHORIZED_PRODUCTION_PIC_ROOT
+    ),
 ) -> dict[str, object]:
     """Decode canonical JSON bytes and validate one immutable human receipt."""
+    _require(type(payload) is bytes, "receipt: expected immutable bytes")
+    _require(
+        len(payload) <= MAX_PRESSURE_SELECTION_RECEIPT_BYTES,
+        "receipt exceeds the pressure-selection receipt size limit",
+    )
     decoded = _decode_json_bytes(payload, "receipt")
     receipt = validate_pressure_selection_receipt(
         decoded,
@@ -386,12 +542,82 @@ def validate_pressure_selection_receipt_bytes(
     return receipt
 
 
+def validate_pressure_selection_source_snapshot(
+    receipt: object,
+    *,
+    git_commit: object,
+    source_archive_sha256: object,
+    helper_source_closure: object,
+    authorized_pic_root: Path = (
+        historical_pressure_pilot_consumer.AUTHORIZED_PRODUCTION_PIC_ROOT
+    ),
+) -> None:
+    """Bind an accepted selection receipt to one frozen qualifying source snapshot."""
+    normalized = _object(
+        receipt,
+        {
+            "schema_version",
+            "record_type",
+            "selection_method",
+            "published_pressure_pilot_receipt",
+            "published_pressure_pilot_review_packet_receipt",
+            "pilot_bundle_manifest_sha256",
+            "aggregate_pilot_analysis_sha256",
+            "case_descriptors",
+            "selected_case",
+            "authoritative_reanalysis_attestation",
+            "reviewer_attestation",
+        },
+        "pressure-selection receipt",
+    )
+    _require(
+        type(normalized["schema_version"]) is int
+        and normalized["schema_version"] == 3
+        and normalized["record_type"] == RECORD_TYPE
+        and normalized["selection_method"] == SELECTION_METHOD,
+        "pressure-selection receipt identity drifted",
+    )
+    try:
+        reanalysis = (
+            pressure_review_packet_verifier.consume_sealed_pressure_reanalysis_attestation(
+                normalized["authoritative_reanalysis_attestation"],
+                aggregate_receipt_binding=normalized["published_pressure_pilot_receipt"],
+                packet_receipt_binding=normalized[
+                    "published_pressure_pilot_review_packet_receipt"
+                ],
+                pilot_bundle_manifest_sha256=normalized["pilot_bundle_manifest_sha256"],
+                aggregate_pilot_analysis_sha256=normalized[
+                    "aggregate_pilot_analysis_sha256"
+                ],
+                authorized_pic_root=authorized_pic_root,
+            )
+        )
+        pressure_review_packet_verifier.validate_pressure_reanalysis_source_snapshot(
+            reanalysis,
+            git_commit=git_commit,
+            source_archive_sha256=source_archive_sha256,
+            helper_source_closure=helper_source_closure,
+            authorized_pic_root=authorized_pic_root,
+        )
+    except (
+        pressure_review_packet_verifier.PressureReviewPacketVerificationError,
+        OSError,
+        TypeError,
+        ValueError,
+    ) as error:
+        raise PressureSelectionReceiptError(
+            "pressure-selection reanalysis differs from the frozen qualifying source snapshot"
+        ) from error
+
+
 __all__ = [
     "PressureSelectionReceiptError",
+    "MAX_PRESSURE_SELECTION_RECEIPT_BYTES",
     "RECORD_TYPE",
     "REGISTERED_CASES",
     "SELECTION_METHOD",
     "canonical_json_bytes",
     "validate_pressure_selection_receipt",
     "validate_pressure_selection_receipt_bytes",
+    "validate_pressure_selection_source_snapshot",
 ]

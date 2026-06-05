@@ -1,0 +1,371 @@
+{
+  "schema_version": 1,
+  "record_type": "q011_section54_post_publication_pressure_gate_status_successor",
+  "recorded_utc": "2026-06-05T09:23:34Z",
+  "source_checkpoint_commit": "ce41d4b29bc646b4f0740468e1026f7308b29026",
+  "predecessor_record": "tst/publication/readiness/q011_section54_sixteenth_lustre_publication_rename_compatibility_transition_2026-06-05.json",
+  "predecessor_sha256": "8efd2b349da6c0c150448528b3656a84767cacc5bf08eae84f5b4848c9aeb422",
+  "postrun_source_authorization_successor": {
+    "path": "tst/publication/readiness/q011_section54_pressure_pilot_postrun_aggregate_source_authorization_successor_v5_2026-06-05.json",
+    "sha256": "93c2b9174d1546b883ac4910afe3f7f021ed4324f2831f80b19aee9395e5bd3e"
+  },
+  "clean_snapshot_pressure_gate_validation_worker": {
+    "path": "tst/publication/frontier_q011_section54_pressure_gate_validation_job.sh",
+    "sha256": "e9f38f56c944622270a80ec804dbb4e7a9a127331f36dec068929aefa0690e01",
+    "expected_publication_python_files": 145,
+    "expected_publication_shell_files": 17,
+    "expected_publication_json_files": 290,
+    "expected_publication_test_modules": 65,
+    "status": "no_retained_clean_snapshot_validation_evidence_bound_by_this_status_successor"
+  },
+  "staged_packet_gate_control_plane": {
+    "version": "ccc9d8aef994bb64465f9b16de58236ff42ed2df028e8d9897ababb30f2cb7f1",
+    "state": "source_local_candidate_differs_from_active_live_generation",
+    "inventoried_file_count": 24,
+    "prepared_artifact_inventory": {
+      "path": "tst/publication/frontier_control_plane/prepared_pic_artifact_inventory.json",
+      "sha256": "87f63ab91587b963347909b7d116ce0e1395f3488e5f61cd9249cb8a69dc02bc"
+    },
+    "pair_install_authorization_by_this_status": "none",
+    "policy_promotion_authorization_by_this_status": "none"
+  },
+  "live_operational_baseline": {
+    "installed_control_plane_version": "821d185856722bd0178acb9427f78ac82671a4b6670779ec8400fbac54c6d721",
+    "inventoried_member_count": 23,
+    "inventories": [
+      {
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/control_plane/821d185856722bd0178acb9427f78ac82671a4b6670779ec8400fbac54c6d721/inventory.json",
+        "sha256": "5e8764df23df793212a19f1f7365e077c5be3f6ab58c423560dcc7d557f7ae7b"
+      },
+      {
+        "path": "/autofs/nccs-svm1_proj/ast207/proj-shared/PIC/control_plane/821d185856722bd0178acb9427f78ac82671a4b6670779ec8400fbac54c6d721/inventory.json",
+        "sha256": "5e8764df23df793212a19f1f7365e077c5be3f6ab58c423560dcc7d557f7ae7b"
+      }
+    ],
+    "inventories_byte_identical": true,
+    "active_policies": [
+      {
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/storage_policy.json",
+        "sha256": "23a73b868146f63d4b363713f988d55e9dadffa15b26f2b2f1d07da66331f5c3"
+      },
+      {
+        "path": "/autofs/nccs-svm1_proj/ast207/proj-shared/PIC/policy/storage_policy.json",
+        "sha256": "23a73b868146f63d4b363713f988d55e9dadffa15b26f2b2f1d07da66331f5c3"
+      }
+    ],
+    "active_policies_byte_identical": true,
+    "active_promotions": [
+      {
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/active_promotion.json",
+        "sha256": "4824ea825e7b9e42becdca4b9a8b72c0454bd1a2e02d5e365b1878ed94c53243"
+      },
+      {
+        "path": "/autofs/nccs-svm1_proj/ast207/proj-shared/PIC/policy/active_promotion.json",
+        "sha256": "4824ea825e7b9e42becdca4b9a8b72c0454bd1a2e02d5e365b1878ed94c53243"
+      }
+    ],
+    "active_promotions_byte_identical": true,
+    "projected_policy_state": {
+      "installed_control_plane_version": "821d185856722bd0178acb9427f78ac82671a4b6670779ec8400fbac54c6d721",
+      "staged_control_plane_candidate_version": "821d185856722bd0178acb9427f78ac82671a4b6670779ec8400fbac54c6d721",
+      "build_profile_control_plane_version": "821d185856722bd0178acb9427f78ac82671a4b6670779ec8400fbac54c6d721",
+      "registered_science_slices": [],
+      "science_submission_freeze_status": "authorized"
+    },
+    "projected_promotion_state": {
+      "control_plane_version": "821d185856722bd0178acb9427f78ac82671a4b6670779ec8400fbac54c6d721",
+      "policy_sha256": "23a73b868146f63d4b363713f988d55e9dadffa15b26f2b2f1d07da66331f5c3"
+    }
+  },
+  "source_test_closure": {
+    "status": "source_local_change_and_validation_bytes_bound_by_this_status_successor",
+    "scope": "pressure_selection_v3_sealed_reanalysis_reviewer_and_replay_change_validation_closure_not_transitive_runtime_closure",
+    "file_count": 29,
+    "closure_sha256": "fbbfaef4a414c243dd68c10d043fde5a9d137faf164d2a8d1e0496d46c89a5f4",
+    "files": [
+      {
+        "path": "tst/publication/frontier_control_plane/q011_pressure_review_packet_verifier.py",
+        "sha256": "26cfec86d1f3d0f2583d57cc1c8d8994a09199b110e3a55afd01201dbd96a902"
+      },
+      {
+        "path": "tst/publication/frontier_control_plane/control_plane_common.py",
+        "sha256": "6d9d9d11c4ff2b733117b7e4ef517cbf9b659428306ddb4c1d2595442403c283"
+      },
+      {
+        "path": "tst/publication/frontier_control_plane/run_control_plane.py",
+        "sha256": "029daff53c82ddc30ff560a1ab87d45966c2ef47514d550c38d1497e293a27e2"
+      },
+      {
+        "path": "tst/publication/q011_section54_pressure_selection.py",
+        "sha256": "960eb320618c474f11c81113393492562753632c94a66c959bf48d84d7118a0e"
+      },
+      {
+        "path": "tst/publication/q011_section54_historical_pressure_pilot_consumer.py",
+        "sha256": "806c50eb425b5379badecb8308784897b5a99797f6f96b32d9416d85ca290cde"
+      },
+      {
+        "path": "tst/publication/q011_section54_qualifying_campaign_execution.py",
+        "sha256": "a7c2d46bc67b0b2cd1c42394ffab21f528bff8cae8499ca5a7768f77a73a50a1"
+      },
+      {
+        "path": "tst/publication/q011_section54_attempt_manifest_materializer.py",
+        "sha256": "41fabcab908eb0d6e591e4d1d53a6ed41bfcc44f3f90d118f86f64c8c38f2af9"
+      },
+      {
+        "path": "tst/publication/analyze_q011_section54_campaign.py",
+        "sha256": "ff4276e13cc676d24483c8166cff1fbc3374fe8a6b1ddc57eb71e5b1dae6e099"
+      },
+      {
+        "path": "tst/publication/analyze_q011_section54_numerical_qualification.py",
+        "sha256": "2c857a402db4517465962426fb25b767cad44f94c50e46c21b975db242fc36e5"
+      },
+      {
+        "path": "tst/publication/analyze_q011_section54_pressure_pilot.py",
+        "sha256": "bd3cb8b80b74a9ef865ac24344ce59b65cea1c4e2942c70c5cd5e75394d33f0d"
+      },
+      {
+        "path": "tst/publication/analyze_q011_section54_pressure_pilot_case.py",
+        "sha256": "4a2114a0b459f4cd54aa53f41bfe15222eeb520324ad036fb465bce93fd8e7ce"
+      },
+      {
+        "path": "tst/publication/publish_q011_section54_pressure_pilot_bundle.py",
+        "sha256": "ef9444df3ad16e0b9e574aaac7368a7e96b3bad36f83c99c88e9c465f61321d7"
+      },
+      {
+        "path": "tst/publication/frontier_f1_structured_artifacts.py",
+        "sha256": "7be737cff07035f494c4ccec5b291eb84306b443e9408b55dad618336914b13b"
+      },
+      {
+        "path": "tst/publication/publish_q011_section54_campaign_attempt.py",
+        "sha256": "7050ad230c99de49fbe215ba9fddc70bea9b83606c486fb71b960eaf12bd1d60"
+      },
+      {
+        "path": "tst/publication/frontier_control_plane/test_q011_pressure_review_packet_verifier.py",
+        "sha256": "ba2ef033f0d5eab3247397c7c18a0d9278d6a8617e8174496845cb485a29ea86"
+      },
+      {
+        "path": "tst/publication/frontier_control_plane/test_control_plane.py",
+        "sha256": "327109b6aa76a0ef675fd2b2e43eb8f1882ee51c93a196fce1efb98d16e07f38"
+      },
+      {
+        "path": "tst/publication/test_q011_section54_pressure_selection.py",
+        "sha256": "ba65109ff50e72c9257d21c3b3e78ec3397fac8f7c30bb6278232d2458efd318"
+      },
+      {
+        "path": "tst/publication/test_q011_section54_historical_pressure_pilot_consumer.py",
+        "sha256": "0af85947c8682073e9ff4f65969c0af90eb25f37c545236eb9b02b68a0c58adb"
+      },
+      {
+        "path": "tst/publication/test_q011_section54_qualifying_campaign_execution.py",
+        "sha256": "f3979ecb2563a54e45576881e35f67cec654f87120b506f8b384e86d3cec7efe"
+      },
+      {
+        "path": "tst/publication/test_q011_section54_attempt_manifest_materializer.py",
+        "sha256": "2c2db0b23cea8bbac130e772bd14fb27b830f266e2f2c690b58507881770ee3e"
+      },
+      {
+        "path": "tst/publication/test_analyze_q011_section54_campaign.py",
+        "sha256": "157db478d40bb97f959b4bc5b44d2d65c8f4d2c490206a6bfc31b2b85632fd5b"
+      },
+      {
+        "path": "tst/publication/test_analyze_q011_section54_numerical_qualification.py",
+        "sha256": "f20b1b4fdfd902ce24f47d6d36e0565994d99fd4ee15321aa85c0f0406967637"
+      },
+      {
+        "path": "tst/publication/test_analyze_q011_section54_pressure_pilot.py",
+        "sha256": "9b0755c0aff04884bce3f345f1faed5032eba1876f786abaccc916779b80f7b5"
+      },
+      {
+        "path": "tst/publication/test_publish_q011_section54_pressure_pilot_bundle.py",
+        "sha256": "54f04df55f19934c6c6db777a92c6990265f52e9424f7cad82ae126c986a2c7b"
+      },
+      {
+        "path": "tst/publication/test_publish_q011_section54_campaign_attempt.py",
+        "sha256": "5a054c8fff428f6939fd0d758f6064986a5cfa80a7a6c61a8f2ab43318a0a947"
+      },
+      {
+        "path": "tst/publication/test_pic_readiness_registry.py",
+        "sha256": "f012f1ccaa1380fe8f723b9d9c9c126e581851327ff94d2d4cfd048427244ece"
+      },
+      {
+        "path": "tst/publication/frontier_q011_section54_pressure_gate_validation_job.sh",
+        "sha256": "e9f38f56c944622270a80ec804dbb4e7a9a127331f36dec068929aefa0690e01"
+      },
+      {
+        "path": "tst/publication/readiness/q011_section54_pressure_pilot_postrun_aggregate_source_authorization_successor_v6_2026-06-05.json",
+        "sha256": "be7d06eba2a38c5045e5a4df8810ca5f5178b1fe262672ddb2c67e85a20629a5"
+      },
+      {
+        "path": "tst/publication/frontier_control_plane/prepared_pic_artifact_inventory.json",
+        "sha256": "87f63ab91587b963347909b7d116ce0e1395f3488e5f61cd9249cb8a69dc02bc"
+      }
+    ]
+  },
+  "published_pressure_evidence": {
+    "aggregate_manifest": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/publication/q011_section54_pressure_pilot_bundle/pressure_pilot_manifest.json",
+      "sha256": "7b3fb8de9e4dc8d6d8b2320a2c2aeaadf8bc6f076dab6b3e98ef8a415abdbf55"
+    },
+    "aggregate_analysis": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/publication/q011_section54_pressure_pilot_analysis.json",
+      "sha256": "d55b4c2020716df899c86dfe5a9018d48194d63590616ff60541067243daacb7"
+    },
+    "aggregate_receipt": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/publication/q011_section54_pressure_pilot_bundle_receipt.json",
+      "sha256": "9117b3dbc7573187b2d080568e69bdbbee0642f2a965aa543273ab3ea3d67be9"
+    },
+    "review_packet_receipt": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/publication/q011_section54_pressure_pilot_review_packet_receipt.json",
+      "sha256": "3f20d3d26a479aa508439f9d038ec6510643bf407aa081fae22959a57571de5d"
+    },
+    "review_packet_inventory": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/publication/q011_section54_pressure_pilot_review_packet/packet_inventory.json",
+      "sha256": "ba38e86575baee720871e1f624e20edb5482f9a4a00afb4286ee136f821112c1"
+    }
+  },
+  "publication_acceptance_state": {
+    "publication_root": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/publication",
+      "identity": {
+        "device": 135357496,
+        "inode": 720587416766821486
+      },
+      "mode": "02755",
+      "exact_entries": [
+        "q011_section54_pressure_pilot_analysis.json",
+        "q011_section54_pressure_pilot_bundle",
+        "q011_section54_pressure_pilot_bundle_receipt.json",
+        "q011_section54_pressure_pilot_review_packet",
+        "q011_section54_pressure_pilot_review_packet_receipt.json"
+      ]
+    },
+    "acceptance_root": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/publication_acceptance",
+      "identity": {
+        "device": 135357496,
+        "inode": 720587400627193972
+      },
+      "mode": "0700",
+      "exact_entries": [
+        ".q011_section54_pressure_pilot_bundle_receipt.json.publication-success",
+        ".q011_section54_pressure_pilot_review_packet_receipt.json.publication-success"
+      ]
+    },
+    "success_seals": [
+      {
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/publication_acceptance/.q011_section54_pressure_pilot_bundle_receipt.json.publication-success",
+        "sha256": "8eeb7eb24f9aa64652a27d619b155e959a302788eb99b8b4fa166052ae0158f8",
+        "identity": {
+          "device": 135357496,
+          "inode": 720587443073450467
+        },
+        "mode": "0444",
+        "receipt": {
+          "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/publication/q011_section54_pressure_pilot_bundle_receipt.json",
+          "sha256": "9117b3dbc7573187b2d080568e69bdbbee0642f2a965aa543273ab3ea3d67be9",
+          "identity": {
+            "device": 135357496,
+            "inode": 720587443073450466
+          }
+        }
+      },
+      {
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/publication_acceptance/.q011_section54_pressure_pilot_review_packet_receipt.json.publication-success",
+        "sha256": "109bc4522579feab92ef1778c0318a58e96aa8d059e481283c6faa83cd6c9e94",
+        "identity": {
+          "device": 135357496,
+          "inode": 720587443090227212
+        },
+        "mode": "0444",
+        "receipt": {
+          "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/publication/q011_section54_pressure_pilot_review_packet_receipt.json",
+          "sha256": "3f20d3d26a479aa508439f9d038ec6510643bf407aa081fae22959a57571de5d",
+          "identity": {
+            "device": 135357496,
+            "inode": 720587443090227211
+          }
+        }
+      }
+    ],
+    "absent_publication_paths": [
+      "/lustre/orion/ast207/proj-shared/dfielding/PIC/publication/.q011_section54_pressure_pilot_bundle_receipt.json.publication-invalid",
+      "/lustre/orion/ast207/proj-shared/dfielding/PIC/publication/.q011_section54_pressure_pilot_review_packet_receipt.json.publication-invalid"
+    ],
+    "absent_namespace_globs": [
+      {
+        "root": "/lustre/orion/ast207/proj-shared/dfielding/PIC/publication",
+        "glob": ".*.staging-*",
+        "matches": []
+      },
+      {
+        "root": "/lustre/orion/ast207/proj-shared/dfielding/PIC/publication_acceptance",
+        "glob": ".*.staging-*",
+        "matches": []
+      }
+    ]
+  },
+  "scoped_absence_evidence": {
+    "pressure_selection_receipt_searches": [
+      {
+        "root": "/ccs/home/dfielding/athenak-pic/tst/publication",
+        "glob": "**/*pressure*selection*receipt*.json",
+        "max_depth": 8,
+        "matches": []
+      },
+      {
+        "root": "/lustre/orion/ast207/proj-shared/dfielding/PIC",
+        "glob": "**/*pressure*selection*receipt*.json",
+        "max_depth": 6,
+        "matches": []
+      },
+      {
+        "root": "/autofs/nccs-svm1_proj/ast207/proj-shared/PIC",
+        "glob": "**/*pressure*selection*receipt*.json",
+        "max_depth": 6,
+        "matches": []
+      }
+    ],
+    "clean_snapshot_validation_log_search": {
+      "root": "/lustre/orion/ast207/proj-shared/dfielding/PIC/logs/slurm",
+      "glob": "pic-q011-pressure-gate-validate.*.log",
+      "max_depth": 1,
+      "matches": []
+    },
+    "registered_science_slices": []
+  },
+  "advisory_pressure_options_memo": {
+    "path": "tst/publication/readiness/q011_section54_pressure_selection_options_2026-06-05.md",
+    "sha256": "330dba02daed0f3cf633d04e5e50da5d3208bbb54daba18f0828ae744e91ba86",
+    "role": "human_review_memo_only_not_a_pressure_selection_receipt"
+  },
+  "pressure_selection": {
+    "status": "no_selection_receipt_bound_by_this_status_successor",
+    "selection_receipt": null,
+    "selected_case": null,
+    "advisory_recommendation_is_selection": false
+  },
+  "packet_gate": {
+    "status": "blocked",
+    "acceptance_authorization": "none",
+    "required_receipt_schema_version": 3,
+    "required_acceptance_and_replay_paths": [
+      "source_local_pressure_selection_acceptance",
+      "retained_qualifying_plan_replay",
+      "installed_control_plane_pressure_selection_acceptance",
+      "completed_attempt_replay"
+    ],
+    "blockers_bound_by_this_status_successor": [
+      "pressure_selection_v3_gate_repair_commit_not_bound_by_this_status_successor",
+      "pressure_selection_v3_gate_repair_independent_review_not_bound_by_this_status_successor",
+      "pressure_selection_v3_gate_repair_clean_worker_validation_not_bound_by_this_status_successor",
+      "pressure_selection_v3_gate_repair_pair_install_and_promotion_not_bound_by_this_status_successor",
+      "sealed_authoritative_reanalysis_attestation_not_bound_by_this_status_successor",
+      "sealed_human_reviewer_attestation_and_v3_selection_receipt_not_bound_by_this_status_successor"
+    ]
+  },
+  "human_input_required_now": false,
+  "first_required_human_input_after_packet_gate_repair": "Review the ranked pressure options, select exactly one Section 5.4 problem/ps_p0 case, and seal the required reviewer attestation and schema-v3 receipt.",
+  "frontier_launch_authorization": "none_no_bound_selection_receipt_and_packet_gate_blocked",
+  "status": "post_publication_pressure_evidence_bound_no_selection_receipt_bound_packet_gate_blocked",
+  "qualification_effect": "none_no_selection_no_execution_authorization_no_science_claim"
+}

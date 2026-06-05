@@ -52,13 +52,22 @@ POSTRUN_SOURCE_AUTHORIZATION_PREDECESSOR_PATH = (
     REPO_ROOT
     / "tst/publication/readiness/"
     "q011_section54_pressure_pilot_postrun_aggregate_source_authorization_"
-    "successor_v4_2026-06-04.json"
+    "successor_v5_2026-06-05.json"
 )
 PREREGISTRATION_PATH = (
     REPO_ROOT
     / "tst/publication/readiness/"
     "q011_section54_pressure_pilot_postrun_aggregate_source_authorization_"
+    "successor_v6_2026-06-05.json"
+)
+EXACT_HISTORICAL_PRODUCTION_SOURCE_AUTHORIZATION_PATH = (
+    REPO_ROOT
+    / "tst/publication/readiness/"
+    "q011_section54_pressure_pilot_postrun_aggregate_source_authorization_"
     "successor_v5_2026-06-05.json"
+)
+EXACT_HISTORICAL_PRODUCTION_SOURCE_AUTHORIZATION_SHA256 = (
+    "93c2b9174d1546b883ac4910afe3f7f021ed4324f2831f80b19aee9395e5bd3e"
 )
 REGISTERED_EXECUTION_PREREGISTRATION_PATH = (
     REPO_ROOT
@@ -680,7 +689,7 @@ def _load_postrun_source_authorization_successor(
                 ).as_posix()
             ),
             "predecessor_sha256": (
-                "8bf0b76d228a25030165ac3f741426ec927e25757e1564d222f2d544b82acbd0"
+                "93c2b9174d1546b883ac4910afe3f7f021ed4324f2831f80b19aee9395e5bd3e"
             ),
             "historical_launch_chronology": {
                 "state": "stale_non_authorizing_consumed_slices_no_reauthorization",
@@ -818,14 +827,119 @@ def _load_postrun_source_authorization_successor(
     return successor
 
 
-def _load_policy_and_snapshot_metadata(
+def _load_exact_historical_production_source_authorization(
+    *, source_payloads: dict[str, bytes]
+) -> dict[str, Any]:
+    """Load the exact v5 production authorization without authorizing current producers."""
+    source_payloads.clear()
+    payload = _regular_bytes(
+        EXACT_HISTORICAL_PRODUCTION_SOURCE_AUTHORIZATION_PATH,
+        "exact historical production source authorization",
+    )
+    _require(
+        _sha256_bytes(payload)
+        == EXACT_HISTORICAL_PRODUCTION_SOURCE_AUTHORIZATION_SHA256,
+        "exact historical production source authorization SHA-256 drifted",
+    )
+    successor = _object(
+        _decode_json(payload, "exact historical production source authorization"),
+        {
+            "record_type",
+            "schema_version",
+            "date",
+            "gate",
+            "classification",
+            "qualification_effect",
+            "predecessor_record",
+            "predecessor_sha256",
+            "historical_v2_execution_preregistration",
+            "historical_launch_chronology",
+            "archive_execution_contract",
+            "source_closure",
+            "scientific_contract",
+            "execution_policy",
+        },
+        "exact historical production source authorization",
+    )
+    _strict_equal(
+        {
+            key: successor[key]
+            for key in (
+                "record_type",
+                "schema_version",
+                "date",
+                "gate",
+                "classification",
+                "qualification_effect",
+                "execution_policy",
+            )
+        },
+        {
+            "record_type": (
+                "q011_section54_pressure_pilot_postrun_aggregate_source_"
+                "authorization_successor"
+            ),
+            "schema_version": 1,
+            "date": "2026-06-05",
+            "gate": "Q-011",
+            "classification": "engineering_calibration_only",
+            "qualification_effect": (
+                "none_postrun_aggregate_and_review_publication_only_no_launch_"
+                "reauthorization_no_sun_bai_claim"
+            ),
+            "execution_policy": {
+                "frontier_execution_authorized_by_this_record": False,
+                "scheduler_commands_authorized_by_this_record": False,
+                "historical_launch_slices_reauthorized": False,
+                "scientific_evidence_eligible": False,
+                "sun_bai_claim": False,
+            },
+        },
+        "exact historical production source authorization identity",
+    )
+    expected_snapshot_binding = {
+        "role": "snapshot_time_compatibility_successor",
+        "path": (
+            "tst/publication/readiness/"
+            "q011_section54_pressure_pilot_snapshot_time_compatibility_"
+            "successor_2026-06-04.json"
+        ),
+        "sha256": "2e608404604d85963f8371876ce0dc3243e5d0b1398820c5724c94ffc631c287",
+    }
+    snapshot_bindings = [
+        record
+        for record in _list(
+            successor["source_closure"],
+            "exact historical production source closure",
+        )
+        if type(record) is dict
+        and record.get("role") == "snapshot_time_compatibility_successor"
+    ]
+    _strict_equal(
+        snapshot_bindings,
+        [expected_snapshot_binding],
+        "exact historical production snapshot-time binding",
+    )
+    snapshot_payload = _regular_bytes(
+        REPO_ROOT / expected_snapshot_binding["path"],
+        "exact historical production snapshot-time successor",
+    )
+    _require(
+        _sha256_bytes(snapshot_payload) == expected_snapshot_binding["sha256"],
+        "exact historical production snapshot-time successor SHA-256 drifted",
+    )
+    source_payloads["postrun_aggregate_source_authorization"] = payload
+    source_payloads["snapshot_time_compatibility_successor"] = snapshot_payload
+    return successor
+
+
+def _load_policy_and_snapshot_metadata_from_source_payloads(
+    source_payloads: Mapping[str, bytes],
 ) -> tuple[
     dict[str, Any],
     dict[tuple[str, float], dict[str, int | float]],
     bytes,
 ]:
-    source_payloads: dict[str, bytes] = {}
-    _load_postrun_source_authorization_successor(source_payloads=source_payloads)
     approved_snapshot_metadata = _load_snapshot_time_compatibility_successor(
         source_payloads["snapshot_time_compatibility_successor"]
     )
@@ -967,6 +1081,30 @@ def _load_policy_and_snapshot_metadata(
         approved_snapshot_metadata,
         source_payloads["postrun_aggregate_source_authorization"],
     )
+
+
+def _load_policy_and_snapshot_metadata(
+) -> tuple[
+    dict[str, Any],
+    dict[tuple[str, float], dict[str, int | float]],
+    bytes,
+]:
+    source_payloads: dict[str, bytes] = {}
+    _load_postrun_source_authorization_successor(source_payloads=source_payloads)
+    return _load_policy_and_snapshot_metadata_from_source_payloads(source_payloads)
+
+
+def _load_exact_historical_production_policy_and_snapshot_metadata(
+) -> tuple[
+    dict[str, Any],
+    dict[tuple[str, float], dict[str, int | float]],
+    bytes,
+]:
+    source_payloads: dict[str, bytes] = {}
+    _load_exact_historical_production_source_authorization(
+        source_payloads=source_payloads
+    )
+    return _load_policy_and_snapshot_metadata_from_source_payloads(source_payloads)
 
 
 def _load_policy() -> dict[str, Any]:
@@ -1480,10 +1618,19 @@ def _snapshot_report(
     return {"profile": profile, "particles": particles, "schedule": schedule}
 
 
-def analyze_pressure_pilot_bundle(
+def _analyze_pressure_pilot_bundle(
     root: str | Path,
     expected_manifest_sha256: str,
     *,
+    policy_loader: Callable[
+        [],
+        tuple[
+            dict[str, Any],
+            dict[tuple[str, float], dict[str, int | float]],
+            bytes,
+        ],
+    ],
+    expected_preregistration_binding: Mapping[str, object],
     authorized_publication_root: Path = AUTHORIZED_PUBLICATION_ROOT,
     member_reader: Callable[[str], bytes] | None = None,
     actual_files: set[str] | None = None,
@@ -1511,7 +1658,7 @@ def analyze_pressure_pilot_bundle(
     )
     _require(bundle_root.is_dir(), "pressure-pilot bundle root must be a directory")
     policy, approved_snapshot_metadata, postrun_authorization_payload = (
-        _load_policy_and_snapshot_metadata()
+        policy_loader()
     )
     manifest_payload = (
         _regular_bytes(bundle_root / MANIFEST_NAME, "pressure-pilot manifest")
@@ -1522,10 +1669,14 @@ def analyze_pressure_pilot_bundle(
              "pressure-pilot manifest SHA-256 drifted")
     manifest = _manifest_schema(manifest_payload)
     _strict_equal(manifest["active_deck_binding"], policy["active_deck_binding"], "manifest/active deck binding")
-    expected_prereg = {
-        "path": PREREGISTRATION_PATH.relative_to(REPO_ROOT).as_posix(),
-        "sha256": _sha256_bytes(postrun_authorization_payload),
-    }
+    expected_prereg = _binding(
+        expected_preregistration_binding,
+        "expected post-run source authorization binding",
+    )
+    _require(
+        _sha256_bytes(postrun_authorization_payload) == expected_prereg["sha256"],
+        "post-run source authorization payload differs from expected binding",
+    )
     _strict_equal(manifest["preregistration_binding"], expected_prereg, "manifest/preregistration binding")
     registered_execution_payload = _regular_bytes(
         REGISTERED_EXECUTION_PREREGISTRATION_PATH,
@@ -1602,6 +1753,58 @@ def analyze_pressure_pilot_bundle(
         "overlay_profiles": profiles,
         "case_summaries": case_summaries,
     }
+
+
+def analyze_pressure_pilot_bundle(
+    root: str | Path,
+    expected_manifest_sha256: str,
+    *,
+    authorized_publication_root: Path = AUTHORIZED_PUBLICATION_ROOT,
+    member_reader: Callable[[str], bytes] | None = None,
+    actual_files: set[str] | None = None,
+) -> dict[str, Any]:
+    """Validate a bundle against the exact current producer source authorization."""
+    current_payload = _regular_bytes(
+        PREREGISTRATION_PATH,
+        "current pressure-pilot post-run source authorization",
+    )
+    return _analyze_pressure_pilot_bundle(
+        root,
+        expected_manifest_sha256,
+        policy_loader=_load_policy_and_snapshot_metadata,
+        expected_preregistration_binding={
+            "path": PREREGISTRATION_PATH.relative_to(REPO_ROOT).as_posix(),
+            "sha256": _sha256_bytes(current_payload),
+        },
+        authorized_publication_root=authorized_publication_root,
+        member_reader=member_reader,
+        actual_files=actual_files,
+    )
+
+
+def analyze_exact_historical_production_pressure_pilot_bundle(
+    root: str | Path,
+    expected_manifest_sha256: str,
+    *,
+    authorized_publication_root: Path = AUTHORIZED_PUBLICATION_ROOT,
+    member_reader: Callable[[str], bytes] | None = None,
+    actual_files: set[str] | None = None,
+) -> dict[str, Any]:
+    """Recompute the exact v5 production bundle without granting producer authority."""
+    return _analyze_pressure_pilot_bundle(
+        root,
+        expected_manifest_sha256,
+        policy_loader=_load_exact_historical_production_policy_and_snapshot_metadata,
+        expected_preregistration_binding={
+            "path": EXACT_HISTORICAL_PRODUCTION_SOURCE_AUTHORIZATION_PATH.relative_to(
+                REPO_ROOT
+            ).as_posix(),
+            "sha256": EXACT_HISTORICAL_PRODUCTION_SOURCE_AUTHORIZATION_SHA256,
+        },
+        authorized_publication_root=authorized_publication_root,
+        member_reader=member_reader,
+        actual_files=actual_files,
+    )
 
 
 def main(argv: Sequence[str] | None = None) -> int:

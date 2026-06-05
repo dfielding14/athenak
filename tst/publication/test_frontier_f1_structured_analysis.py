@@ -257,7 +257,9 @@ class FrontierF1StructuredAnalysisTests(unittest.TestCase):
             with StructuredArtifactTree(root) as artifact_tree:
                 inventory = load_inventory(artifact_tree)
                 path.chmod(0o644)
-                path.write_bytes(path.read_bytes() + b"forged=1\n")
+                payload = path.read_bytes()
+                self.assertTrue(payload)
+                path.write_bytes(bytes([payload[0] ^ 1]) + payload[1:])
                 path.chmod(0o444)
                 with self.assertRaisesRegex(ValueError, "checksum mismatch"):
                     read_inventory_bytes(artifact_tree, inventory, path.name)

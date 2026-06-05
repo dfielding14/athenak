@@ -1,6 +1,6 @@
 # PIC Sun and Bai release qualification handoff
 
-Last updated: 2026-06-05T05:25:32Z
+Last updated: 2026-06-05T09:20:03Z
 
 ## Purpose
 
@@ -146,36 +146,84 @@ Completed:
     immutable review artifact binds the frozen sixteenth transition and its
     four reviewed runtime successors. No scheduler job was launched and no
     execution authorization or science claim was granted.
+32. The sixteenth-pass repair was committed and pushed as
+    `ce41d4b29bc646b4f0740468e1026f7308b29026`. Serialized clean worker job
+    `4766688` passed `244` focused tests and all `1309` explicit publication
+    tests with two intentional skips.
+33. Aggregate worker job `4766725` and review-packet worker job `4766781`
+    completed successfully. Documented read-only consumer verification passed
+    for aggregate receipt SHA-256
+    `9117b3dbc7573187b2d080568e69bdbbee0642f2a965aa543273ab3ea3d67be9`
+    and review-packet receipt SHA-256
+    `3f20d3d26a479aa508439f9d038ec6510643bf407aa081fae22959a57571de5d`.
+    The immutable packet inventory SHA-256 is
+    `ba38e86575baee720871e1f624e20edb5482f9a4a00afb4286ee136f821112c1`.
+34. The human pressure-review memo ranks and explores all four viable cases
+    from the immutable packet. It recommends `problem/ps_p0=1.0` on a strictly
+    advisory basis. The scoped audit found no retained pressure-selection
+    receipt, and the gate has accepted no choice. Audit found that the
+    acceptance gate must bind the exact review-packet receipt and close
+    retained-plan, installed-control-plane, and completed-attempt replay paths
+    before accepting a human choice.
+35. The additive post-publication pressure-gate successor binds the exact
+    source-local `ccc9d8ae` packet-gate candidate and its explicitly scoped
+    change/validation closure against the mirrored live `821d1858` control
+    plane, active policy, and promotion. It also binds the immutable publication
+    and acceptance roots, both receipt-bound success seals, and scoped
+    zero-match searches for any retained pressure-selection receipt or
+    pressure-gate validation-worker log. The absence evidence is explicitly
+    scoped and grants no authority.
+36. The pressure-selection acceptance boundary is now schema v3 and fail
+    closed. It requires the immutable packet, exact historical production
+    recomputation, a sealed authoritative reanalysis bound to the qualifying
+    clean-candidate archive and source closure, and a sealed human reviewer
+    attestation whose chronology follows the pressure-gate not-before boundary
+    and authoritative reanalysis seal. A canonical v3 receipt must bind that
+    complete chain. Source-local validation/replay, retained-plan replay,
+    installed-control-plane replay, and completed-attempt replay each
+    revalidate it.
+    This gate implementation creates no selection: no pressure-selection
+    receipt exists, no case is selected, and no launch or science authority is
+    granted.
 
 In progress:
 
-1. Pressure-pilot aggregate publication remains prohibited. No public bundle,
-   receipt, aggregate analysis artifact, or review packet exists.
-2. Preserve the exact empty recovered `publication_acceptance/` inode and its
-   durable receipt. Do not delete or recreate the directory and do not
-   republish the receipt.
-3. Commit, push, and pass one clean committed worker validation for the
-   independently rereviewed sixteenth-pass Lustre publication compatibility
-   repair before submitting one reviewed replacement aggregate publication
-   worker.
+1. Preserve the immutable aggregate bundle, aggregate receipt, aggregate
+   analysis, review packet, review-packet receipt, success seals, and exact
+   recovered `publication_acceptance/` inode. Do not republish or replace them.
+2. Finish independent review and clean-worker validation of the source-local
+   and installed-control-plane pressure-selection schema-v3 gate, then
+   pair-install and promote it under a launch-prohibited policy.
+3. Keep the human pressure choice and qualifying campaign launch blocked. No
+   selection exists until the complete v3 attestation and receipt chain is
+   created by the human-gate process and accepted by every replay boundary.
+
+The authoritative current pressure-gate checkpoint is
+[`q011_section54_post_publication_pressure_gate_status_successor_2026-06-05.json`](readiness/q011_section54_post_publication_pressure_gate_status_successor_2026-06-05.json).
+The advisory option ranking is
+[`q011_section54_pressure_selection_options_2026-06-05.md`](readiness/q011_section54_pressure_selection_options_2026-06-05.md).
+Neither artifact is a human pressure-selection receipt.
 
 Remaining:
 
-1. Commit and push the independently rereviewed sixteenth-pass Lustre
-   publication compatibility repair and pass one clean committed worker
-   validation.
-2. Publish and verify the pressure-pilot
-   aggregate receipt and review packet on workers.
-3. Perform a human pressure-choice review from the immutable four-slice
+1. Commit, push, independently review, and clean-worker validate the
+   packet-bound pressure-selection schema-v3 gate repair.
+2. Pair-install and promote the repaired control plane while retaining a
+   launch-prohibited policy.
+3. Perform the human pressure-choice review from the immutable four-slice
    calibration bundle. Do not invent or silently auto-select this science
    decision.
-4. Before accepting that human choice, require its selection record to bind and
-   verify the immutable review-packet receipt as well as the aggregate receipt.
-5. Materialize and validate a qualifying campaign plan only after the repaired
-   launch boundary passes adversarial review.
-6. Run the prerequisite slices, cheaper paper-test suites, the full Section 5.4
+4. Accept only a canonical schema-v3 human selection receipt that binds and
+   verifies the exact immutable packet and aggregate receipts, exact historical
+   recomputation, sealed source-bound authoritative reanalysis, and sealed
+   post-gate human reviewer attestation.
+5. Make `planner_retention` conditionally mandatory at manifest creation and
+   reservation before any qualifying-science policy authorization.
+6. Materialize and validate a fresh qualifying campaign plan only after the
+   repaired launch boundary passes adversarial review.
+7. Run the prerequisite slices, cheaper paper-test suites, the full Section 5.4
    reproduction campaign, and final publication analysis in staged order.
-7. Finish optional extensions, final hardening, and the deferred external
+8. Finish optional extensions, final hardening, and the deferred external
    review before treating the implementation as production-ready.
 
 ## Mandatory operating constraints
@@ -216,13 +264,13 @@ The retained clean-candidate builder still uses the reviewed lexical spelling
 `/ccs/home/dfielding/athenak-pic`. Do not rewrite that build provenance
 spelling during the Project Home migration.
 
-Repair base before the staged tenth-pass commit:
+Current pushed source checkpoint:
 
 ```text
 branch:     PIC
-HEAD:       7cb4a20eb626113d112a0512726d2754fb81569e
-origin/PIC: 7cb4a20eb626113d112a0512726d2754fb81569e
-subject:    Harden Q011 validation checkout boundary
+HEAD:       ce41d4b29bc646b4f0740468e1026f7308b29026
+origin/PIC: ce41d4b29bc646b4f0740468e1026f7308b29026
+subject:    repair Q011 Lustre publication compatibility
 ```
 
 After restart, require `git rev-parse HEAD origin/PIC` to report the same
@@ -392,14 +440,13 @@ then ended without exposing a public bundle:
 | `4766456` | `FAILED` | `00:06:01` | Orion Lustre rejected the first `renameat2(RENAME_NOREPLACE)` canonical directory promotion |
 
 The fifteenth-pass tree, clean validation job `4766444`, and failed publication
-job `4766456` are historical. Aggregate publication remains prohibited until
-the sixteenth-pass Lustre publication compatibility repair is committed,
-pushed, and clean-worker validated. Its exact-current independent rereview is
-recorded separately in
+job `4766456` are historical. The sixteenth-pass repair was committed, pushed,
+clean-worker validated, and used by successful aggregate job `4766725` and
+review-packet job `4766781`. Its exact-current independent rereview is recorded
+separately in
 [`q011_section54_sixteenth_lustre_publication_exact_current_rereview_2026-06-05.json`](readiness/q011_section54_sixteenth_lustre_publication_exact_current_rereview_2026-06-05.json).
-Do not invoke the publisher directly on a login node. Use only the exact
-hermetic, commit-bound, `--export=NIL` publication sequence in
-[`frontier_control_plane/README.md`](frontier_control_plane/README.md).
+Both receipts passed documented read-only verification. Do not invoke the
+publisher again or republish these canonical artifacts.
 
 Target outputs:
 
@@ -407,7 +454,55 @@ Target outputs:
 $PIC_ROOT/publication/q011_section54_pressure_pilot_bundle
 $PIC_ROOT/publication/q011_section54_pressure_pilot_bundle_receipt.json
 $PIC_ROOT/publication/q011_section54_pressure_pilot_analysis.json
+$PIC_ROOT/publication/q011_section54_pressure_pilot_review_packet
+$PIC_ROOT/publication/q011_section54_pressure_pilot_review_packet_receipt.json
 ```
+
+These outputs now exist immutably. Their aggregate and packet receipt SHA-256
+values are respectively
+`9117b3dbc7573187b2d080568e69bdbbee0642f2a965aa543273ab3ea3d67be9`
+and
+`3f20d3d26a479aa508439f9d038ec6510643bf407aa081fae22959a57571de5d`.
+The v5 post-run source authorization remains the exact immutable production
+source authorization. Its v6 successor binds only the current bounded producer
+generation; it neither retroactively rebinds those production receipts nor
+grants launch or science authority.
+`q011_section54_historical_pressure_pilot_consumer.py` is the zero-argument,
+read-only exact-production recomputation consumer. The generic publisher
+consumer, `consume_published_pressure_pilot_bundle`, remains bound to the
+current producer generation.
+
+### Pressure-selection schema-v3 acceptance chain
+
+The v3 pressure-selection gate validates a human-authored selection but never
+creates, ranks, or infers one. Acceptance is fail closed through this exact
+chain:
+
+1. The standalone verifier reopens and verifies the exact immutable
+   pressure-review packet, aggregate receipt, aggregate bundle, aggregate
+   analysis, raw-case descriptors, and historical production source bindings.
+2. The zero-argument historical consumer independently recomputes the exact
+   historical production bundle and requires byte-identical retained aggregate
+   analysis.
+3. A recursively sealed authoritative-reanalysis attestation binds that exact
+   result to `clean_candidate_archive_reanalysis`, one clean-candidate Git
+   commit, its source-archive SHA-256, the exact reanalysis source closure, and
+   the immutable v5 historical production source authorization.
+4. A separately sealed human reviewer attestation binds exactly one registered
+   pressure case, the exact packet and aggregate receipts, and the sealed
+   reanalysis. Its chronology must satisfy the pressure-gate review not-before
+   time `2026-06-05T09:09:42Z`, follow the reanalysis seal, and complete its
+   review-to-seal interval within the bounded gate window.
+5. The canonical schema-v3 pressure-selection receipt binds the immutable
+   publication tuple, all four case descriptors, the selected case, and both
+   sealed attestation bindings.
+6. Source-local validation/replay, retained-plan replay,
+   installed-control-plane replay, and completed-attempt replay through
+   materialization/admission reopen the receipt and attestations and rebind the
+   reanalysis to the frozen clean-candidate archive and helper-source closure.
+
+No schema-v3 pressure-selection receipt exists, the selected case remains
+unset, and this gate grants no launch authority or science authority.
 
 The two hidden pre-repair staging trees were audited and removed on
 `2026-06-02T22:59:11Z`. One was empty. The other contained only three partial
@@ -586,8 +681,9 @@ worker-extracted source snapshot. The fifth pressure pass closes both gaps:
 Worker validation job `4759380` passed all `48` scoped pressure tests in
 `143.870s`. The durable transition record is
 [`q011_section54_fifth_adversarial_repair_transition_2026-06-03.json`](readiness/q011_section54_fifth_adversarial_repair_transition_2026-06-03.json).
-Pressure aggregate publication remains prohibited until the integrated
-clean-worker suite and a fresh independent rereview pass.
+This historical publication prohibition was later closed by the sixteenth-pass
+repair, clean worker validation, independent rereview, and successful immutable
+aggregate and packet publications recorded above.
 
 ### Sixth control-plane and campaign-lifetime pass
 
@@ -1000,20 +1096,18 @@ git diff -- tst/publication
 Then:
 
 1. Read this file and both governing plans.
-2. Verify the exact empty recovered `0700` acceptance-root inode and its durable
-   receipt. Preserve both.
-3. Inspect, commit, and push the sixteenth-pass Lustre publication
-   compatibility repair.
-4. Run focused and full validation suites from the clean committed worker
-   snapshot.
-5. Verify that the committed exact-current review artifact still binds the
-   unchanged sixteenth transition and four reviewed runtime hashes.
-6. Verify `$PIC_ROOT/publication_acceptance/` at exact mode `0700` and its
-   existing durable receipt. Finish the pressure-pilot worker aggregate publication and
-   review packet, then verify both receipts.
-7. Ask the human collaborator to review the immutable four-slice pressure
+2. Verify the exact aggregate and review-packet receipts and their success
+   seals without mutating or republishing them.
+3. Read the post-publication pressure-gate successor, inspect the packet-bound
+   pressure-selection schema-v3 gate, and recompute its scoped absence
+   evidence. Confirm no selection receipt exists or is accepted by the gate.
+4. Finish focused and full local validation, independent adversarial review,
+   commit, push, and clean committed worker validation.
+5. Pair-install and promote the repaired control plane under a
+   launch-prohibited policy.
+6. Ask the human collaborator to review the immutable four-slice pressure
    calibration evidence and select the qualifying pressure option.
-8. Only then materialize the qualifying campaign plan and proceed through the
+7. Only then materialize a fresh qualifying campaign plan and proceed through the
    staged release plan.
 
 ## Phased route to the overall goal
@@ -1023,7 +1117,7 @@ The remaining work should stay staged:
 | Phase | Purpose | Launch condition |
 | --- | --- | --- |
 | Repair and aggregate publication | Close known software blockers and publish the four-slice calibration evidence | No qualifying launch |
-| Human pressure selection | Choose the Section 5.4 pressure parameter from immutable evidence | Human-reviewed selection receipt |
+| Human pressure selection | Choose the Section 5.4 pressure parameter from immutable evidence | Complete schema-v3 human-reviewed selection receipt and sealed attestation chain |
 | Qualifying campaign planning | Materialize retained plan, helper closure, manifests, and receipts | Repaired boundary plus adversarial review |
 | Prerequisite slices | Exercise restart, spatial, particle, artifact, and analysis paths cheaply | Each slice reconciled and reviewed |
 | Paper-test reproduction suite | Reproduce the cheaper Sun and Bai validation tests | Quantitative acceptance criteria met |

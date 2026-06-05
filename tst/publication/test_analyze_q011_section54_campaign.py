@@ -816,12 +816,40 @@ def _manifest(
     published_pressure_receipt = _published_pressure_receipt(
         root, pressure_descriptors
     )
+    published_review_packet_receipt = {
+        "path": str(
+            root.parent
+            / "publication/q011_section54_pressure_pilot_review_packet_receipt.json"
+        ),
+        "sha256": "d" * 64,
+    }
+    authoritative_reanalysis_attestation = {
+        "path": str(
+            root.parent
+            / "pressure_gate_attestations"
+            / "20260605T091100Z-q011-section54-pressure-reanalysis-fixture.operator"
+            / "attestation.json"
+        ),
+        "sha256": "e" * 64,
+    }
+    reviewer_attestation = {
+        "path": str(
+            root.parent
+            / "pressure_gate_attestations"
+            / "20260605T091300Z-q011-section54-pressure-selection-fixture.reviewer"
+            / "attestation.json"
+        ),
+        "sha256": "f" * 64,
+    }
     selected_pressure_payload = _json_bytes(
         {
-            "schema_version": 1,
+            "schema_version": 3,
             "record_type": "q011_section54_pressure_selection_receipt",
             "selection_method": "human_review_only",
             "published_pressure_pilot_receipt": published_pressure_receipt,
+            "published_pressure_pilot_review_packet_receipt": (
+                published_review_packet_receipt
+            ),
             "pilot_bundle_manifest_sha256": "b" * 64,
             "aggregate_pilot_analysis_sha256": "c" * 64,
             "case_descriptors": pressure_descriptors,
@@ -829,9 +857,10 @@ def _manifest(
                 "case_id": "ps_p0_0p10",
                 "problem_ps_p0": selected_pressure,
             },
-            "reviewer_identity": "fixture-reviewer",
-            "reviewed_utc": "2026-06-01T12:00:00Z",
-            "rationale": "Focused admission fixture selected the registered pressure.",
+            "authoritative_reanalysis_attestation": (
+                authoritative_reanalysis_attestation
+            ),
+            "reviewer_attestation": reviewer_attestation,
         }
     )
     selected_pressure_receipt = _write_file(
@@ -1318,6 +1347,7 @@ def _frozen_fixture(
     ) = None,
     receipt: dict[str, Any] | None = None,
     external_side_effect: Exception | None = None,
+    reanalysis_source_snapshot_side_effect: Exception | None = None,
     wrong_retained_root: bool = False,
 ) -> Iterator[tuple[Path, Path, str]]:
     with tempfile.TemporaryDirectory() as directory:
@@ -1332,6 +1362,26 @@ def _frozen_fixture(
                     / manifest["artifact_bindings"]["campaign_plan"]["path"]
                 ).read_text(encoding="utf-8")
             )
+            planner_materialization = json.loads(
+                (
+                    staging_tree
+                    / manifest["artifact_bindings"]["planner_materialization_receipt"][
+                        "path"
+                    ]
+                ).read_text(encoding="utf-8")
+            )
+            planner_root = Path(planner_materialization["plan_root"])
+            retained_pressure_receipt = json.loads(
+                (
+                    planner_root
+                    / plan["source_bindings"]["pressure_selection_receipt"]["path"]
+                ).read_text(encoding="utf-8")
+            )
+            retained_helper_closure = json.loads(
+                (
+                    planner_root / plan["helper_source_closure"]["path"]
+                ).read_text(encoding="utf-8")
+            )["sources"]
             if mutate is not None:
                 mutate(staging_tree, manifest)
             if wrong_retained_root:
@@ -1371,21 +1421,281 @@ def _frozen_fixture(
                 }
             )
 
-            def verify_pressure_receipt(
-                path: str | Path, *, authorized_pic_root: Path
-            ) -> dict[str, str]:
+            def consume_pressure_pilot_bundle() -> dict[str, str]:
                 expected_path = (
                     authorized_root
                     / "publication/q011_section54_pressure_pilot_publication_receipt.json"
                 )
-                if Path(path) != expected_path or authorized_pic_root != authorized_root:
-                    raise campaign.pressure_selection.pressure_pilot_publisher.PressurePilotPublicationError(
-                        "fixture pressure publication binding drifted"
-                    )
                 return {
-                    "receipt_sha256": _sha256(expected_path.read_bytes()),
+                    "packet_receipt_sha256": "d" * 64,
+                    "aggregate_receipt_sha256": _sha256(expected_path.read_bytes()),
                     "manifest_sha256": "b" * 64,
                     "analysis_result_sha256": "c" * 64,
+                    "status": "pass_engineering_calibration_only",
+                }
+
+            def expected_pressure_review_packet_bindings(
+                authorized_pic_root: Path,
+            ) -> tuple[dict[str, str], dict[str, str]]:
+                expected_packet = {
+                    "path": str(
+                        authorized_root
+                        / "publication/q011_section54_pressure_pilot_review_packet_receipt.json"
+                    ),
+                    "sha256": "d" * 64,
+                }
+                expected_aggregate_path = (
+                    authorized_root
+                    / "publication/q011_section54_pressure_pilot_publication_receipt.json"
+                )
+                expected_aggregate = {
+                    "path": str(expected_aggregate_path),
+                    "sha256": _sha256(expected_aggregate_path.read_bytes()),
+                }
+                if authorized_pic_root != authorized_root:
+                    raise campaign.pressure_selection.pressure_review_packet_verifier.PressureReviewPacketVerificationError(
+                        "fixture pressure review-packet root drifted"
+                    )
+                return expected_packet, expected_aggregate
+
+            def verify_pressure_review_packet(
+                path: str | Path,
+                *,
+                aggregate_receipt_binding: object,
+                authorized_pic_root: Path,
+            ) -> dict[str, object]:
+                expected_packet, expected_aggregate = (
+                    expected_pressure_review_packet_bindings(authorized_pic_root)
+                )
+                if (
+                    Path(path) != Path(expected_packet["path"])
+                    or aggregate_receipt_binding != expected_aggregate
+                ):
+                    raise campaign.pressure_selection.pressure_review_packet_verifier.PressureReviewPacketVerificationError(
+                        "fixture pressure review-packet binding drifted"
+                    )
+                return {
+                    "receipt_binding": expected_packet,
+                    "aggregate_receipt_binding": expected_aggregate,
+                    "packet_receipt": {},
+                    "aggregate_receipt": aggregate_record,
+                    "aggregate_bundle": aggregate_record["aggregate_bundle"],
+                    "aggregate_analysis": aggregate_record["aggregate_analysis"],
+                    "source_bindings": {},
+                    "inventory": {},
+                }
+
+            aggregate_record = {
+                "aggregate_bundle": {
+                    "path": str(
+                        authorized_root / "publication" / "pressure-pilot-bundle"
+                    ),
+                    "manifest_sha256": retained_pressure_receipt[
+                        "pilot_bundle_manifest_sha256"
+                    ],
+                },
+                "aggregate_analysis": {
+                    "path": str(
+                        authorized_root
+                        / "publication"
+                        / "pressure-pilot-analysis.json"
+                    ),
+                    "sha256": retained_pressure_receipt[
+                        "aggregate_pilot_analysis_sha256"
+                    ],
+                },
+                "raw_cases": [
+                    {
+                        "case_id": descriptor["case_id"],
+                        "artifact_dir": str(
+                            authorized_root
+                            / "runs"
+                            / "pressure-pilot"
+                            / descriptor["case_id"]
+                        ),
+                        "descriptor_path": str(
+                            authorized_root
+                            / "runs"
+                            / "pressure-pilot"
+                            / descriptor["case_id"]
+                            / "descriptor.json"
+                        ),
+                        "descriptor_sha256": descriptor["descriptor_sha256"],
+                        "artifact_inventory_sha256": "f" * 64,
+                        "runtime_artifacts": {},
+                    }
+                    for descriptor in retained_pressure_receipt["case_descriptors"]
+                ],
+            }
+            pressure_verifier = (
+                campaign.pressure_selection.pressure_review_packet_verifier
+            )
+            expected_reanalysis_binding = retained_pressure_receipt[
+                "authoritative_reanalysis_attestation"
+            ]
+            expected_reviewer_binding = retained_pressure_receipt[
+                "reviewer_attestation"
+            ]
+            helper_by_path = {
+                record["path"]: record["sha256"] for record in retained_helper_closure
+            }
+            reanalysis_source_closure = [
+                {"path": path, "sha256": helper_by_path[path]}
+                for path in pressure_verifier.PRESSURE_REANALYSIS_SOURCE_PATHS
+            ]
+            reanalysis_source_authorization = {
+                "execution_mode": pressure_verifier.PRESSURE_REANALYSIS_EXECUTION_MODE,
+                "git_commit": plan["candidate_binding"]["git_commit"],
+                "source_archive_sha256": plan["candidate_binding"][
+                    "source_archive_sha256"
+                ],
+                "source_closure_sha256": pressure_verifier._source_closure_digest(
+                    reanalysis_source_closure
+                ),
+                "source_closure": reanalysis_source_closure,
+                "historical_production_source_authorization": dict(
+                    pressure_verifier.AUTHORIZED_HISTORICAL_REANALYSIS_SOURCE_AUTHORIZATION
+                ),
+            }
+
+            def reanalysis_verification(
+                attestation_binding: object,
+                *,
+                aggregate_receipt_binding: object,
+                packet_receipt_binding: object,
+                pilot_bundle_manifest_sha256: object,
+                aggregate_pilot_analysis_sha256: object,
+                authorized_pic_root: Path,
+                expected_result: object | None = None,
+                now: object | None = None,
+                reject_source_snapshot: bool,
+            ) -> dict[str, object]:
+                del now
+                expected_packet, expected_aggregate = (
+                    expected_pressure_review_packet_bindings(authorized_pic_root)
+                )
+                result = consume_pressure_pilot_bundle()
+                if (
+                    attestation_binding != expected_reanalysis_binding
+                    or aggregate_receipt_binding != expected_aggregate
+                    or packet_receipt_binding != expected_packet
+                    or pilot_bundle_manifest_sha256
+                    != retained_pressure_receipt["pilot_bundle_manifest_sha256"]
+                    or aggregate_pilot_analysis_sha256
+                    != retained_pressure_receipt["aggregate_pilot_analysis_sha256"]
+                    or (expected_result is not None and expected_result != result)
+                ):
+                    raise pressure_verifier.PressureReviewPacketVerificationError(
+                        "fixture sealed reanalysis attestation binding drifted"
+                    )
+                if (
+                    reject_source_snapshot
+                    and expected_result is None
+                    and reanalysis_source_snapshot_side_effect is not None
+                ):
+                    raise reanalysis_source_snapshot_side_effect
+                return {
+                    "binding": expected_reanalysis_binding,
+                    "attestation": {},
+                    "operator_id": "fixture.operator",
+                    "recomputed_utc": "2026-06-05T09:10:00Z",
+                    "sealed_utc": "2026-06-05T09:11:00Z",
+                    "evidence": {
+                        "published_pressure_pilot_receipt": expected_aggregate,
+                        "published_pressure_pilot_review_packet_receipt": (
+                            expected_packet
+                        ),
+                        "pilot_bundle_manifest_sha256": retained_pressure_receipt[
+                            "pilot_bundle_manifest_sha256"
+                        ],
+                        "aggregate_pilot_analysis_sha256": retained_pressure_receipt[
+                            "aggregate_pilot_analysis_sha256"
+                        ],
+                    },
+                    "source_authorization": reanalysis_source_authorization,
+                    "result": result,
+                }
+
+            def consume_reanalysis_attestation(
+                attestation_binding: object,
+                **kwargs: object,
+            ) -> dict[str, object]:
+                return reanalysis_verification(
+                    attestation_binding,
+                    **kwargs,
+                    reject_source_snapshot=True,
+                )
+
+            def consume_installed_reanalysis_attestation(
+                attestation_binding: object,
+                **kwargs: object,
+            ) -> dict[str, object]:
+                return reanalysis_verification(
+                    attestation_binding,
+                    **kwargs,
+                    reject_source_snapshot=False,
+                )
+
+            def reviewer_verification(
+                attestation_binding: object,
+                *,
+                aggregate_receipt_binding: object,
+                packet_receipt_binding: object,
+                reanalysis_verification: object,
+                selected_case: object,
+                authorized_pic_root: Path,
+            ) -> dict[str, object]:
+                expected_packet, expected_aggregate = (
+                    expected_pressure_review_packet_bindings(authorized_pic_root)
+                )
+                if (
+                    attestation_binding != expected_reviewer_binding
+                    or aggregate_receipt_binding != expected_aggregate
+                    or packet_receipt_binding != expected_packet
+                    or not isinstance(reanalysis_verification, dict)
+                    or reanalysis_verification.get("binding")
+                    != expected_reanalysis_binding
+                    or selected_case != retained_pressure_receipt["selected_case"]
+                ):
+                    raise pressure_verifier.PressureReviewPacketVerificationError(
+                        "fixture sealed reviewer attestation binding drifted"
+                    )
+                return {
+                    "binding": expected_reviewer_binding,
+                    "attestation": {},
+                    "reviewer_id": "fixture.reviewer",
+                    "reviewed_utc": "2026-06-05T09:12:00Z",
+                    "sealed_utc": "2026-06-05T09:13:00Z",
+                    "rationale": "Fixture-only reviewed selection.",
+                    "selected_case": retained_pressure_receipt["selected_case"],
+                    "authoritative_reanalysis_attestation": (
+                        expected_reanalysis_binding
+                    ),
+                }
+
+            def consume_installed_pressure_review_packet(
+                path: str | Path,
+                *,
+                aggregate_receipt_binding: object,
+                authorized_pic_root: Path,
+            ) -> dict[str, object]:
+                expected_packet, expected_aggregate = (
+                    expected_pressure_review_packet_bindings(authorized_pic_root)
+                )
+                if (
+                    Path(path) != Path(expected_packet["path"])
+                    or aggregate_receipt_binding != expected_aggregate
+                ):
+                    raise ValueError("fixture installed pressure review-packet drifted")
+                return {
+                    "receipt_binding": expected_packet,
+                    "aggregate_receipt_binding": expected_aggregate,
+                    "packet_receipt": {},
+                    "aggregate_receipt": aggregate_record,
+                    "aggregate_bundle": aggregate_record["aggregate_bundle"],
+                    "aggregate_analysis": aggregate_record["aggregate_analysis"],
+                    "source_bindings": {},
+                    "inventory": {},
                 }
 
             def verify_registered_execution_ledger(
@@ -1429,9 +1739,40 @@ def _frozen_fixture(
                 with mock.patch.object(
                     campaign, "_validate_external_clean_candidate_closure", **patch_kwargs
                 ), mock.patch.object(
-                    campaign.pressure_selection.pressure_pilot_publisher,
-                    "verify_published_pressure_pilot_receipt",
-                    side_effect=verify_pressure_receipt,
+                    campaign.pressure_selection.historical_pressure_pilot_consumer,
+                    "consume_exact_historical_production_pressure_pilot",
+                    side_effect=consume_pressure_pilot_bundle,
+                ), mock.patch.object(
+                    campaign.pressure_selection.pressure_review_packet_verifier,
+                    "consume_published_pressure_pilot_review_packet",
+                    side_effect=verify_pressure_review_packet,
+                ), mock.patch.object(
+                    campaign.pressure_selection.pressure_review_packet_verifier,
+                    "consume_sealed_pressure_reanalysis_attestation",
+                    side_effect=consume_reanalysis_attestation,
+                ), mock.patch.object(
+                    campaign.pressure_selection.pressure_review_packet_verifier,
+                    "consume_sealed_pressure_reviewer_attestation",
+                    side_effect=reviewer_verification,
+                ), mock.patch.object(
+                    control_plane_common,
+                    "consume_published_pressure_pilot_review_packet",
+                    side_effect=consume_installed_pressure_review_packet,
+                ), mock.patch.object(
+                    control_plane_common,
+                    "consume_sealed_pressure_reanalysis_attestation",
+                    side_effect=consume_installed_reanalysis_attestation,
+                ), mock.patch.dict(
+                    control_plane_common.validate_pressure_reanalysis_source_snapshot.__globals__,
+                    {
+                        "consume_sealed_pressure_reanalysis_attestation": (
+                            consume_installed_reanalysis_attestation
+                        )
+                    },
+                ), mock.patch.object(
+                    control_plane_common,
+                    "consume_sealed_pressure_reviewer_attestation",
+                    side_effect=reviewer_verification,
                 ), mock.patch.object(
                     campaign,
                     "_validated_registered_execution_receipt_ledger_snapshot",
@@ -1798,10 +2139,80 @@ class Q011Section54CampaignAdmissionTests(unittest.TestCase):
         with _frozen_fixture(mutate) as fixture:
             self.assert_rejected(_qualify(*fixture), "selected_pressure_receipt_drift")
 
-    def test_fake_pressure_receipt_path_and_digest_are_rejected(self) -> None:
+    def test_pressure_reanalysis_source_snapshot_rejection_is_rejected(self) -> None:
+        error_type = (
+            campaign.pressure_selection.pressure_review_packet_verifier
+            .PressureReviewPacketVerificationError
+        )
+        with _frozen_fixture(
+            reanalysis_source_snapshot_side_effect=error_type(
+                "fixture source-snapshot rejection"
+            )
+        ) as fixture:
+            self.assert_rejected(_qualify(*fixture), "selected_pressure_receipt_drift")
+
+    def test_selected_pressure_receipt_resource_limits_fail_closed(self) -> None:
+        cases = (
+            (
+                "oversized",
+                b" "
+                * (
+                    campaign.pressure_selection.MAX_PRESSURE_SELECTION_RECEIPT_BYTES
+                    + 1
+                ),
+            ),
+            (
+                "deeply_nested",
+                b'{"nested":'
+                + (b"[" * 2000)
+                + b"0"
+                + (b"]" * 2000)
+                + b"}\n",
+            ),
+        )
+        for label, payload in cases:
+            with self.subTest(label=label):
+                def mutate(root: Path, manifest: dict[str, Any]) -> None:
+                    _rewrite_bound_artifact(
+                        root,
+                        manifest,
+                        "selected_pressure_receipt",
+                        payload,
+                    )
+                    manifest["attempt_identity"][
+                        "selected_pressure_receipt_sha256"
+                    ] = manifest["artifact_bindings"]["selected_pressure_receipt"][
+                        "sha256"
+                    ]
+
+                with _frozen_fixture(mutate) as fixture:
+                    self.assert_rejected(
+                        _qualify(*fixture),
+                        "selected_pressure_receipt_drift",
+                    )
+
+    def test_fake_pressure_and_attestation_bindings_are_rejected(self) -> None:
         cases = (
             ("published_pressure_pilot_receipt", "path", "/fixture/fake_receipt.json"),
             ("published_pressure_pilot_receipt", "sha256", "0" * 64),
+            (
+                "published_pressure_pilot_review_packet_receipt",
+                "path",
+                "/fixture/fake_review_packet_receipt.json",
+            ),
+            ("published_pressure_pilot_review_packet_receipt", "sha256", "3" * 64),
+            (
+                "authoritative_reanalysis_attestation",
+                "path",
+                "/fixture/fake_reanalysis_attestation.json",
+            ),
+            ("authoritative_reanalysis_attestation", "sha256", "4" * 64),
+            (
+                "reviewer_attestation",
+                "path",
+                "/fixture/fake_reviewer_attestation.json",
+            ),
+            ("reviewer_attestation", "sha256", "5" * 64),
             (None, "pilot_bundle_manifest_sha256", "1" * 64),
             (None, "aggregate_pilot_analysis_sha256", "2" * 64),
         )
@@ -1834,6 +2245,8 @@ class Q011Section54CampaignAdmissionTests(unittest.TestCase):
     def test_helper_source_closure_requires_model_and_snapshot_members(self) -> None:
         for path in (
             "tst/publication/q011_section54_model.py",
+            "tst/publication/q011_section54_historical_pressure_pilot_consumer.py",
+            "tst/publication/frontier_control_plane/q011_pressure_review_packet_verifier.py",
             "tst/publication/frontier_control_plane/operator_attestation.py",
         ):
             with self.subTest(path=path):

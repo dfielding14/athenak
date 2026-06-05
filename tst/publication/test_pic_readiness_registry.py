@@ -15,6 +15,7 @@ import re
 import stat
 import subprocess
 import sys
+import tempfile
 import unittest
 from collections.abc import Iterator
 
@@ -27,9 +28,11 @@ from control_plane_common import PREPARED_ARTIFACT_REQUIRED_PUBLICATION_DECK_PAT
 from control_plane_common import inventory_digest
 from control_plane_common import launch_contract_sha256
 from control_plane_common import validate_launch_contract
+from control_plane_common import verify_historical_installed_control_plane
 from ledger import record_sha256
 from ledger import incomplete_manual_accounting_marker_paths
 from ledger import validate_mirrored_state
+import q011_pressure_review_packet_verifier as pressure_packet_verifier
 from tst.publication import q011_section54_pressure_pilot_execution as pressure_execution
 from tst.publication.pic_qualification_manifest import SCHEMA_PATH
 from tst.publication.pic_qualification_manifest import validate_qualification_manifest
@@ -69,6 +72,38 @@ REQUIRED_EXTENSION_CLAIMS = {
 
 _REVIEWER_ID_PATTERN = re.compile(
     r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+)
+
+_Q011_PACKET_GATE_SOURCE_TEST_CLOSURE_PATHS = (
+    "tst/publication/frontier_control_plane/q011_pressure_review_packet_verifier.py",
+    "tst/publication/frontier_control_plane/control_plane_common.py",
+    "tst/publication/frontier_control_plane/run_control_plane.py",
+    "tst/publication/q011_section54_pressure_selection.py",
+    "tst/publication/q011_section54_historical_pressure_pilot_consumer.py",
+    "tst/publication/q011_section54_qualifying_campaign_execution.py",
+    "tst/publication/q011_section54_attempt_manifest_materializer.py",
+    "tst/publication/analyze_q011_section54_campaign.py",
+    "tst/publication/analyze_q011_section54_numerical_qualification.py",
+    "tst/publication/analyze_q011_section54_pressure_pilot.py",
+    "tst/publication/analyze_q011_section54_pressure_pilot_case.py",
+    "tst/publication/publish_q011_section54_pressure_pilot_bundle.py",
+    "tst/publication/frontier_f1_structured_artifacts.py",
+    "tst/publication/publish_q011_section54_campaign_attempt.py",
+    "tst/publication/frontier_control_plane/test_q011_pressure_review_packet_verifier.py",
+    "tst/publication/frontier_control_plane/test_control_plane.py",
+    "tst/publication/test_q011_section54_pressure_selection.py",
+    "tst/publication/test_q011_section54_historical_pressure_pilot_consumer.py",
+    "tst/publication/test_q011_section54_qualifying_campaign_execution.py",
+    "tst/publication/test_q011_section54_attempt_manifest_materializer.py",
+    "tst/publication/test_analyze_q011_section54_campaign.py",
+    "tst/publication/test_analyze_q011_section54_numerical_qualification.py",
+    "tst/publication/test_analyze_q011_section54_pressure_pilot.py",
+    "tst/publication/test_publish_q011_section54_pressure_pilot_bundle.py",
+    "tst/publication/test_publish_q011_section54_campaign_attempt.py",
+    "tst/publication/test_pic_readiness_registry.py",
+    "tst/publication/frontier_q011_section54_pressure_gate_validation_job.sh",
+    "tst/publication/readiness/q011_section54_pressure_pilot_postrun_aggregate_source_authorization_successor_v6_2026-06-05.json",
+    "tst/publication/frontier_control_plane/prepared_pic_artifact_inventory.json",
 )
 
 
@@ -182,6 +217,581 @@ def _canonical_nonempty_fact_list(value: object) -> list[str]:
         ):
             raise ValueError("facts inspected contains a noncanonical fact")
     return value
+
+
+def _exact_json_equal(value: object, expected: object) -> bool:
+    if type(value) is not type(expected):
+        return False
+    if type(expected) is dict:
+        if len(value) != len(expected):
+            return False
+        for expected_key, expected_value in expected.items():
+            matching_keys = [
+                key
+                for key in value
+                if type(key) is type(expected_key) and key == expected_key
+            ]
+            if len(matching_keys) != 1 or not _exact_json_equal(
+                value[matching_keys[0]], expected_value
+            ):
+                return False
+        return True
+    if type(expected) is list:
+        return len(value) == len(expected) and all(
+            _exact_json_equal(observed, wanted)
+            for observed, wanted in zip(value, expected)
+        )
+    return value == expected
+
+
+def _regular_files_below(root: Path, pattern: str) -> list[Path]:
+    def fail(error: OSError) -> None:
+        raise ValueError(f"regular-file count failed below {root}: {error}")
+
+    matches = []
+    for current, _directories, files in os.walk(
+        root,
+        followlinks=False,
+        onerror=fail,
+    ):
+        for name in files:
+            path = Path(current) / name
+            if Path(name).match(pattern) and stat.S_ISREG(path.lstat().st_mode):
+                matches.append(path)
+    return sorted(matches)
+
+
+def _bounded_relative_matches(root: Path, pattern: str, max_depth: int) -> list[str]:
+    if type(max_depth) is not int or max_depth < 0:
+        raise ValueError("bounded absence search depth is not a nonnegative integer")
+
+    def fail(error: OSError) -> None:
+        raise ValueError(f"bounded absence search failed below {root}: {error}")
+
+    matches = []
+    for current, directories, files in os.walk(
+        root,
+        followlinks=False,
+        onerror=fail,
+    ):
+        relative_current = Path(current).relative_to(root)
+        depth = len(relative_current.parts)
+        if depth >= max_depth:
+            directories[:] = []
+        for name in files:
+            relative = relative_current / name
+            root_level_double_star_match = (
+                len(relative.parts) == 1
+                and pattern.startswith("**/")
+                and relative.match(pattern[3:])
+            )
+            if len(relative.parts) <= max_depth and (
+                relative.match(pattern) or root_level_double_star_match
+            ):
+                matches.append(relative.as_posix())
+    return sorted(matches)
+
+
+def _installed_policy_unlock_snapshot(
+    installed_control_plane_dir: Path,
+    control_plane_version: str,
+) -> dict[str, object]:
+    if (
+        type(control_plane_version) is not str
+        or installed_control_plane_dir.name != control_plane_version
+    ):
+        raise ValueError("installed control-plane policy verifier binding is malformed")
+    script = """
+import json
+import sys
+
+sys.path.insert(0, sys.argv[1])
+from control_plane_common import require_storage_policy_unlock_snapshot
+
+policy, snapshot = require_storage_policy_unlock_snapshot(
+    control_plane_version=sys.argv[2],
+)
+sys.stdout.write(json.dumps({"policy": policy, "snapshot": snapshot}, sort_keys=True))
+"""
+    payload = subprocess.check_output(
+        [
+            sys.executable,
+            "-I",
+            "-B",
+            "-c",
+            script,
+            str(installed_control_plane_dir),
+            control_plane_version,
+        ],
+        cwd="/",
+        env={
+            "LANG": "C",
+            "LC_ALL": "C",
+            "PATH": "/usr/bin:/bin",
+            "PYTHONDONTWRITEBYTECODE": "1",
+        },
+        text=True,
+    )
+    value = json.loads(payload)
+    if type(value) is not dict or set(value) != {"policy", "snapshot"}:
+        raise ValueError("installed control-plane policy verifier returned malformed output")
+    return value
+
+
+def _validate_q011_post_publication_pressure_gate_status_successor(
+    value: object,
+) -> None:
+    if type(value) is not dict:
+        raise ValueError("post-publication pressure-gate status is not an object")
+    if set(value) != {
+        "schema_version",
+        "record_type",
+        "recorded_utc",
+        "source_checkpoint_commit",
+        "predecessor_record",
+        "predecessor_sha256",
+        "postrun_source_authorization_successor",
+        "clean_snapshot_pressure_gate_validation_worker",
+        "staged_packet_gate_control_plane",
+        "live_operational_baseline",
+        "source_test_closure",
+        "published_pressure_evidence",
+        "publication_acceptance_state",
+        "scoped_absence_evidence",
+        "advisory_pressure_options_memo",
+        "pressure_selection",
+        "packet_gate",
+        "human_input_required_now",
+        "first_required_human_input_after_packet_gate_repair",
+        "frontier_launch_authorization",
+        "status",
+        "qualification_effect",
+    }:
+        raise ValueError("post-publication pressure-gate status shape drifted")
+    expected_scalars = {
+        "schema_version": 1,
+        "record_type": "q011_section54_post_publication_pressure_gate_status_successor",
+        "recorded_utc": "2026-06-05T09:23:34Z",
+        "source_checkpoint_commit": "ce41d4b29bc646b4f0740468e1026f7308b29026",
+        "predecessor_record": (
+            "tst/publication/readiness/"
+            "q011_section54_sixteenth_lustre_publication_rename_compatibility_"
+            "transition_2026-06-05.json"
+        ),
+        "predecessor_sha256": (
+            "8efd2b349da6c0c150448528b3656a84767cacc5bf08eae84f5b4848c9aeb422"
+        ),
+        "human_input_required_now": False,
+        "first_required_human_input_after_packet_gate_repair": (
+            "Review the ranked pressure options, select exactly one Section 5.4 "
+            "problem/ps_p0 case, and seal the required reviewer attestation and "
+            "schema-v3 receipt."
+        ),
+        "frontier_launch_authorization": (
+            "none_no_bound_selection_receipt_and_packet_gate_blocked"
+        ),
+        "status": (
+            "post_publication_pressure_evidence_bound_no_selection_receipt_bound_"
+            "packet_gate_blocked"
+        ),
+        "qualification_effect": (
+            "none_no_selection_no_execution_authorization_no_science_claim"
+        ),
+    }
+    for key, expected in expected_scalars.items():
+        if not _exact_json_equal(value[key], expected):
+            raise ValueError(f"post-publication pressure-gate status {key} drifted")
+    if (
+        type(value["schema_version"]) is not int
+        or type(value["human_input_required_now"]) is not bool
+    ):
+        raise ValueError("post-publication pressure-gate status scalar type drifted")
+    if _canonical_utc_second(value["recorded_utc"]) <= _canonical_utc_second(
+        "2026-06-05T05:06:20Z"
+    ):
+        raise ValueError("post-publication pressure-gate status chronology drifted")
+    if not _exact_json_equal(value["postrun_source_authorization_successor"], {
+        "path": (
+            "tst/publication/readiness/"
+            "q011_section54_pressure_pilot_postrun_aggregate_source_authorization_"
+            "successor_v5_2026-06-05.json"
+        ),
+        "sha256": (
+            "93c2b9174d1546b883ac4910afe3f7f021ed4324f2831f80b19aee9395e5bd3e"
+        ),
+    }):
+        raise ValueError("postrun source authorization binding drifted")
+    clean_snapshot_worker = value["clean_snapshot_pressure_gate_validation_worker"]
+    if (
+        type(clean_snapshot_worker) is not dict
+        or any(
+            type(clean_snapshot_worker.get(key)) is not int
+            for key in (
+                "expected_publication_python_files",
+                "expected_publication_shell_files",
+                "expected_publication_json_files",
+                "expected_publication_test_modules",
+            )
+        )
+        or not _exact_json_equal(clean_snapshot_worker, {
+            "path": (
+                "tst/publication/"
+                "frontier_q011_section54_pressure_gate_validation_job.sh"
+            ),
+            "sha256": (
+                "e9f38f56c944622270a80ec804dbb4e7a9a127331f36dec068929aefa0690e01"
+            ),
+            "expected_publication_python_files": 145,
+            "expected_publication_shell_files": 17,
+            "expected_publication_json_files": 290,
+            "expected_publication_test_modules": 65,
+            "status": (
+                "no_retained_clean_snapshot_validation_evidence_bound_by_this_"
+                "status_successor"
+            ),
+        })
+    ):
+        raise ValueError("clean-snapshot pressure-gate validation worker drifted")
+    staged_packet_gate = value["staged_packet_gate_control_plane"]
+    if (
+        type(staged_packet_gate) is not dict
+        or type(staged_packet_gate.get("inventoried_file_count")) is not int
+        or not _exact_json_equal(staged_packet_gate, {
+            "version": (
+                "ccc9d8aef994bb64465f9b16de58236ff42ed2df028e8d9897ababb30f2cb7f1"
+            ),
+            "state": (
+                "source_local_candidate_differs_from_active_live_generation"
+            ),
+            "inventoried_file_count": 24,
+            "prepared_artifact_inventory": {
+                "path": (
+                    "tst/publication/frontier_control_plane/"
+                    "prepared_pic_artifact_inventory.json"
+                ),
+                "sha256": (
+                    "87f63ab91587b963347909b7d116ce0e1395f3488e5f61cd9249cb8a69dc02bc"
+                ),
+            },
+            "pair_install_authorization_by_this_status": "none",
+            "policy_promotion_authorization_by_this_status": "none",
+        })
+    ):
+        raise ValueError("staged packet-gate control-plane candidate drifted")
+    live = value["live_operational_baseline"]
+    live_version = "821d185856722bd0178acb9427f78ac82671a4b6670779ec8400fbac54c6d721"
+    inventory_sha256 = (
+        "5e8764df23df793212a19f1f7365e077c5be3f6ab58c423560dcc7d557f7ae7b"
+    )
+    policy_sha256 = (
+        "23a73b868146f63d4b363713f988d55e9dadffa15b26f2b2f1d07da66331f5c3"
+    )
+    promotion_sha256 = (
+        "4824ea825e7b9e42becdca4b9a8b72c0454bd1a2e02d5e365b1878ed94c53243"
+    )
+    orion_root = "/lustre/orion/ast207/proj-shared/dfielding/PIC"
+    project_root = "/autofs/nccs-svm1_proj/ast207/proj-shared/PIC"
+    if not _exact_json_equal(live, {
+        "installed_control_plane_version": live_version,
+        "inventoried_member_count": 23,
+        "inventories": [
+            {
+                "path": f"{orion_root}/control_plane/{live_version}/inventory.json",
+                "sha256": inventory_sha256,
+            },
+            {
+                "path": f"{project_root}/control_plane/{live_version}/inventory.json",
+                "sha256": inventory_sha256,
+            },
+        ],
+        "inventories_byte_identical": True,
+        "active_policies": [
+            {
+                "path": f"{orion_root}/policy/storage_policy.json",
+                "sha256": policy_sha256,
+            },
+            {
+                "path": f"{project_root}/policy/storage_policy.json",
+                "sha256": policy_sha256,
+            },
+        ],
+        "active_policies_byte_identical": True,
+        "active_promotions": [
+            {
+                "path": f"{orion_root}/policy/active_promotion.json",
+                "sha256": promotion_sha256,
+            },
+            {
+                "path": f"{project_root}/policy/active_promotion.json",
+                "sha256": promotion_sha256,
+            },
+        ],
+        "active_promotions_byte_identical": True,
+        "projected_policy_state": {
+            "installed_control_plane_version": live_version,
+            "staged_control_plane_candidate_version": live_version,
+            "build_profile_control_plane_version": live_version,
+            "registered_science_slices": [],
+            "science_submission_freeze_status": "authorized",
+        },
+        "projected_promotion_state": {
+            "control_plane_version": live_version,
+            "policy_sha256": policy_sha256,
+        },
+    }):
+        raise ValueError("live operational baseline drifted")
+    closure = value["source_test_closure"]
+    closure_files = closure.get("files") if type(closure) is dict else None
+    if (
+        type(closure) is not dict
+        or set(closure)
+        != {"status", "scope", "file_count", "closure_sha256", "files"}
+        or closure["status"]
+        != "source_local_change_and_validation_bytes_bound_by_this_status_successor"
+        or closure["scope"]
+        != (
+            "pressure_selection_v3_sealed_reanalysis_reviewer_and_replay_change_"
+            "validation_closure_not_transitive_runtime_closure"
+        )
+        or type(closure["file_count"]) is not int
+        or closure["file_count"] != len(_Q011_PACKET_GATE_SOURCE_TEST_CLOSURE_PATHS)
+        or type(closure["closure_sha256"]) is not str
+        or re.fullmatch(r"[0-9a-f]{64}", closure["closure_sha256"]) is None
+        or type(closure_files) is not list
+        or any(type(binding) is not dict for binding in closure_files)
+        or [binding.get("path") for binding in closure_files]
+        != list(_Q011_PACKET_GATE_SOURCE_TEST_CLOSURE_PATHS)
+    ):
+        raise ValueError("packet-gate source/test closure drifted")
+    for binding in closure_files:
+        if (
+            type(binding) is not dict
+            or set(binding) != {"path", "sha256"}
+            or type(binding["sha256"]) is not str
+            or re.fullmatch(r"[0-9a-f]{64}", binding["sha256"]) is None
+        ):
+            raise ValueError("packet-gate source/test closure binding drifted")
+    if not _exact_json_equal(value["published_pressure_evidence"], {
+        "aggregate_manifest": {
+            "path": (
+                "/lustre/orion/ast207/proj-shared/dfielding/PIC/publication/"
+                "q011_section54_pressure_pilot_bundle/pressure_pilot_manifest.json"
+            ),
+            "sha256": (
+                "7b3fb8de9e4dc8d6d8b2320a2c2aeaadf8bc6f076dab6b3e98ef8a415abdbf55"
+            ),
+        },
+        "aggregate_analysis": {
+            "path": (
+                "/lustre/orion/ast207/proj-shared/dfielding/PIC/publication/"
+                "q011_section54_pressure_pilot_analysis.json"
+            ),
+            "sha256": (
+                "d55b4c2020716df899c86dfe5a9018d48194d63590616ff60541067243daacb7"
+            ),
+        },
+        "aggregate_receipt": {
+            "path": (
+                "/lustre/orion/ast207/proj-shared/dfielding/PIC/publication/"
+                "q011_section54_pressure_pilot_bundle_receipt.json"
+            ),
+            "sha256": (
+                "9117b3dbc7573187b2d080568e69bdbbee0642f2a965aa543273ab3ea3d67be9"
+            ),
+        },
+        "review_packet_receipt": {
+            "path": (
+                "/lustre/orion/ast207/proj-shared/dfielding/PIC/publication/"
+                "q011_section54_pressure_pilot_review_packet_receipt.json"
+            ),
+            "sha256": (
+                "3f20d3d26a479aa508439f9d038ec6510643bf407aa081fae22959a57571de5d"
+            ),
+        },
+        "review_packet_inventory": {
+            "path": (
+                "/lustre/orion/ast207/proj-shared/dfielding/PIC/publication/"
+                "q011_section54_pressure_pilot_review_packet/packet_inventory.json"
+            ),
+            "sha256": (
+                "ba38e86575baee720871e1f624e20edb5482f9a4a00afb4286ee136f821112c1"
+            ),
+        },
+    }):
+        raise ValueError("published pressure-evidence binding drifted")
+    publication_root = f"{orion_root}/publication"
+    acceptance_root = f"{orion_root}/publication_acceptance"
+    aggregate_receipt_path = (
+        f"{publication_root}/q011_section54_pressure_pilot_bundle_receipt.json"
+    )
+    packet_receipt_path = (
+        f"{publication_root}/q011_section54_pressure_pilot_review_packet_receipt.json"
+    )
+    if not _exact_json_equal(value["publication_acceptance_state"], {
+        "publication_root": {
+            "path": publication_root,
+            "identity": {"device": 135357496, "inode": 720587416766821486},
+            "mode": "02755",
+            "exact_entries": [
+                "q011_section54_pressure_pilot_analysis.json",
+                "q011_section54_pressure_pilot_bundle",
+                "q011_section54_pressure_pilot_bundle_receipt.json",
+                "q011_section54_pressure_pilot_review_packet",
+                "q011_section54_pressure_pilot_review_packet_receipt.json",
+            ],
+        },
+        "acceptance_root": {
+            "path": acceptance_root,
+            "identity": {"device": 135357496, "inode": 720587400627193972},
+            "mode": "0700",
+            "exact_entries": [
+                ".q011_section54_pressure_pilot_bundle_receipt.json.publication-success",
+                ".q011_section54_pressure_pilot_review_packet_receipt.json.publication-success",
+            ],
+        },
+        "success_seals": [
+            {
+                "path": (
+                    f"{acceptance_root}/"
+                    ".q011_section54_pressure_pilot_bundle_receipt.json."
+                    "publication-success"
+                ),
+                "sha256": (
+                    "8eeb7eb24f9aa64652a27d619b155e959a302788eb99b8b4fa166052ae0158f8"
+                ),
+                "identity": {"device": 135357496, "inode": 720587443073450467},
+                "mode": "0444",
+                "receipt": {
+                    "path": aggregate_receipt_path,
+                    "sha256": (
+                        "9117b3dbc7573187b2d080568e69bdbbee0642f2a965aa543273ab3ea3d67be9"
+                    ),
+                    "identity": {"device": 135357496, "inode": 720587443073450466},
+                },
+            },
+            {
+                "path": (
+                    f"{acceptance_root}/"
+                    ".q011_section54_pressure_pilot_review_packet_receipt.json."
+                    "publication-success"
+                ),
+                "sha256": (
+                    "109bc4522579feab92ef1778c0318a58e96aa8d059e481283c6faa83cd6c9e94"
+                ),
+                "identity": {"device": 135357496, "inode": 720587443090227212},
+                "mode": "0444",
+                "receipt": {
+                    "path": packet_receipt_path,
+                    "sha256": (
+                        "3f20d3d26a479aa508439f9d038ec6510643bf407aa081fae22959a57571de5d"
+                    ),
+                    "identity": {"device": 135357496, "inode": 720587443090227211},
+                },
+            },
+        ],
+        "absent_publication_paths": [
+            (
+                f"{publication_root}/"
+                ".q011_section54_pressure_pilot_bundle_receipt.json."
+                "publication-invalid"
+            ),
+            (
+                f"{publication_root}/"
+                ".q011_section54_pressure_pilot_review_packet_receipt.json."
+                "publication-invalid"
+            ),
+        ],
+        "absent_namespace_globs": [
+            {"root": publication_root, "glob": ".*.staging-*", "matches": []},
+            {"root": acceptance_root, "glob": ".*.staging-*", "matches": []},
+        ],
+    }):
+        raise ValueError("publication acceptance state drifted")
+    if not _exact_json_equal(value["scoped_absence_evidence"], {
+        "pressure_selection_receipt_searches": [
+            {
+                "root": "/ccs/home/dfielding/athenak-pic/tst/publication",
+                "glob": "**/*pressure*selection*receipt*.json",
+                "max_depth": 8,
+                "matches": [],
+            },
+            {
+                "root": orion_root,
+                "glob": "**/*pressure*selection*receipt*.json",
+                "max_depth": 6,
+                "matches": [],
+            },
+            {
+                "root": project_root,
+                "glob": "**/*pressure*selection*receipt*.json",
+                "max_depth": 6,
+                "matches": [],
+            },
+        ],
+        "clean_snapshot_validation_log_search": {
+            "root": f"{orion_root}/logs/slurm",
+            "glob": "pic-q011-pressure-gate-validate.*.log",
+            "max_depth": 1,
+            "matches": [],
+        },
+        "registered_science_slices": [],
+    }):
+        raise ValueError("scoped pressure-gate absence evidence drifted")
+    if not _exact_json_equal(value["advisory_pressure_options_memo"], {
+        "path": (
+            "tst/publication/readiness/"
+            "q011_section54_pressure_selection_options_2026-06-05.md"
+        ),
+        "sha256": (
+            "330dba02daed0f3cf633d04e5e50da5d3208bbb54daba18f0828ae744e91ba86"
+        ),
+        "role": "human_review_memo_only_not_a_pressure_selection_receipt",
+    }):
+        raise ValueError("advisory pressure-options memo binding drifted")
+    pressure_selection = value["pressure_selection"]
+    if (
+        type(pressure_selection) is not dict
+        or type(pressure_selection.get("advisory_recommendation_is_selection"))
+        is not bool
+        or not _exact_json_equal(pressure_selection, {
+            "status": "no_selection_receipt_bound_by_this_status_successor",
+            "selection_receipt": None,
+            "selected_case": None,
+            "advisory_recommendation_is_selection": False,
+        })
+    ):
+        raise ValueError("pressure-selection absence contract drifted")
+    packet_gate = value["packet_gate"]
+    if (
+        type(packet_gate) is not dict
+        or type(packet_gate.get("required_receipt_schema_version")) is not int
+        or not _exact_json_equal(packet_gate, {
+            "status": "blocked",
+            "acceptance_authorization": "none",
+            "required_receipt_schema_version": 3,
+            "required_acceptance_and_replay_paths": [
+                "source_local_pressure_selection_acceptance",
+                "retained_qualifying_plan_replay",
+                "installed_control_plane_pressure_selection_acceptance",
+                "completed_attempt_replay",
+            ],
+            "blockers_bound_by_this_status_successor": [
+                "pressure_selection_v3_gate_repair_commit_not_bound_by_"
+                "this_status_successor",
+                "pressure_selection_v3_gate_repair_independent_review_not_"
+                "bound_by_this_status_successor",
+                "pressure_selection_v3_gate_repair_clean_worker_validation_"
+                "not_bound_by_this_status_successor",
+                "pressure_selection_v3_gate_repair_pair_install_and_"
+                "promotion_not_bound_by_this_status_successor",
+                "sealed_authoritative_reanalysis_attestation_not_bound_by_this_"
+                "status_successor",
+                "sealed_human_reviewer_attestation_and_v3_selection_receipt_not_bound_"
+                "by_this_status_successor",
+            ],
+        })
+    ):
+        raise ValueError("pressure-selection packet-gate contract drifted")
 
 
 def _validation_manifest_schema() -> dict[str, object]:
@@ -1401,7 +2011,69 @@ class PicReadinessRegistryTests(unittest.TestCase):
             f"{stat.S_IMODE(acceptance_status.st_mode):05o}",
             checkpoint["mode"],
         )
-        self.assertEqual(sorted(acceptance_root.iterdir()), [])
+        expected_acceptance_seals = {
+            ".q011_section54_pressure_pilot_bundle_receipt.json.publication-success": {
+                "seal_sha256": (
+                    "8eeb7eb24f9aa64652a27d619b155e959a302788eb99b8b4fa166052ae0158f8"
+                ),
+                "receipt_name": "q011_section54_pressure_pilot_bundle_receipt.json",
+                "receipt_sha256": (
+                    "9117b3dbc7573187b2d080568e69bdbbee0642f2a965aa543273ab3ea3d67be9"
+                ),
+            },
+            (
+                ".q011_section54_pressure_pilot_review_packet_receipt.json."
+                "publication-success"
+            ): {
+                "seal_sha256": (
+                    "109bc4522579feab92ef1778c0318a58e96aa8d059e481283c6faa83cd6c9e94"
+                ),
+                "receipt_name": (
+                    "q011_section54_pressure_pilot_review_packet_receipt.json"
+                ),
+                "receipt_sha256": (
+                    "3f20d3d26a479aa508439f9d038ec6510643bf407aa081fae22959a57571de5d"
+                ),
+            },
+        }
+        self.assertEqual(
+            {path.name for path in acceptance_root.iterdir()},
+            set(expected_acceptance_seals),
+        )
+        for seal_name, expected in expected_acceptance_seals.items():
+            with self.subTest(acceptance_seal=seal_name):
+                seal_path = acceptance_root / seal_name
+                seal_status = seal_path.lstat()
+                self.assertTrue(stat.S_ISREG(seal_status.st_mode))
+                self.assertEqual(stat.S_IMODE(seal_status.st_mode), 0o444)
+                self.assertEqual(_sha256(seal_path), expected["seal_sha256"])
+                seal = json.loads(seal_path.read_text(encoding="utf-8"))
+                published_receipt = (
+                    acceptance_root.parent
+                    / "publication"
+                    / expected["receipt_name"]
+                )
+                published_receipt_status = published_receipt.lstat()
+                published_root_status = published_receipt.parent.lstat()
+                self.assertEqual(
+                    seal,
+                    {
+                        "schema_version": 1,
+                        "record_type": (
+                            "q011_receipt_inode_bound_publication_success_seal"
+                        ),
+                        "receipt_name": expected["receipt_name"],
+                        "receipt_sha256": expected["receipt_sha256"],
+                        "receipt_identity": {
+                            "device": published_receipt_status.st_dev,
+                            "inode": published_receipt_status.st_ino,
+                        },
+                        "publication_root_identity": {
+                            "device": published_root_status.st_dev,
+                            "inode": published_root_status.st_ino,
+                        },
+                    },
+                )
         self.assertEqual(sorted(os.listxattr(acceptance_root)), checkpoint["xattrs"])
         publication_checkpoint = current_repair["publication_root_authority"]
         publication_root = Path(publication_checkpoint["path"])
@@ -1420,7 +2092,78 @@ class PicReadinessRegistryTests(unittest.TestCase):
             f"{stat.S_IMODE(publication_status.st_mode):05o}",
             publication_checkpoint["mode"],
         )
-        self.assertEqual(sorted(publication_root.iterdir()), [])
+        expected_publication_entries = {
+            "q011_section54_pressure_pilot_analysis.json": {
+                "kind": "file",
+                "mode": 0o444,
+                "sha256": (
+                    "d55b4c2020716df899c86dfe5a9018d48194d63590616ff60541067243daacb7"
+                ),
+            },
+            "q011_section54_pressure_pilot_bundle": {
+                "kind": "directory",
+                "mode": 0o2500,
+            },
+            "q011_section54_pressure_pilot_bundle_receipt.json": {
+                "kind": "file",
+                "mode": 0o444,
+                "sha256": (
+                    "9117b3dbc7573187b2d080568e69bdbbee0642f2a965aa543273ab3ea3d67be9"
+                ),
+            },
+            "q011_section54_pressure_pilot_review_packet": {
+                "kind": "directory",
+                "mode": 0o2500,
+            },
+            "q011_section54_pressure_pilot_review_packet_receipt.json": {
+                "kind": "file",
+                "mode": 0o444,
+                "sha256": (
+                    "3f20d3d26a479aa508439f9d038ec6510643bf407aa081fae22959a57571de5d"
+                ),
+            },
+        }
+        self.assertEqual(
+            {path.name for path in publication_root.iterdir()},
+            set(expected_publication_entries),
+        )
+        for entry_name, expected in expected_publication_entries.items():
+            with self.subTest(publication_entry=entry_name):
+                entry = publication_root / entry_name
+                entry_status = entry.lstat()
+                if expected["kind"] == "file":
+                    self.assertTrue(stat.S_ISREG(entry_status.st_mode))
+                    self.assertEqual(_sha256(entry), expected["sha256"])
+                else:
+                    self.assertTrue(stat.S_ISDIR(entry_status.st_mode))
+                self.assertEqual(
+                    stat.S_IMODE(entry_status.st_mode),
+                    expected["mode"],
+                )
+        published_aggregate_receipt = json.loads(
+            (
+                publication_root
+                / "q011_section54_pressure_pilot_bundle_receipt.json"
+            ).read_text(encoding="utf-8")
+        )
+        aggregate_bundle = published_aggregate_receipt["aggregate_bundle"]
+        self.assertEqual(
+            _sha256(Path(aggregate_bundle["path"]) / "pressure_pilot_manifest.json"),
+            aggregate_bundle["manifest_sha256"],
+        )
+        published_packet_receipt = json.loads(
+            (
+                publication_root
+                / "q011_section54_pressure_pilot_review_packet_receipt.json"
+            ).read_text(encoding="utf-8")
+        )
+        self.assertEqual(
+            _sha256(
+                Path(published_packet_receipt["packet_root"])
+                / "packet_inventory.json"
+            ),
+            published_packet_receipt["inventory_sha256"],
+        )
         self.assertEqual(
             sorted(os.listxattr(publication_root)),
             publication_checkpoint["xattrs"],
@@ -1540,6 +2283,13 @@ class PicReadinessRegistryTests(unittest.TestCase):
         aggregate_repair = current_repair["lustre_publication_rename_compatibility_repair"]
         authorization = aggregate_repair["postrun_source_authorization_successor"]
         self.assertEqual(authorization["sha256"], _sha256(REPO_ROOT / authorization["path"]))
+        historical_authorization = json.loads(
+            (REPO_ROOT / authorization["path"]).read_text(encoding="utf-8")
+        )
+        historical_source_by_path = {
+            record["path"]: record["sha256"]
+            for record in historical_authorization["source_closure"]
+        }
         compatibility = aggregate_repair["snapshot_time_compatibility_successor"]
         self.assertEqual(compatibility["sha256"], _sha256(REPO_ROOT / compatibility["path"]))
         for key in (
@@ -1559,7 +2309,32 @@ class PicReadinessRegistryTests(unittest.TestCase):
                 )
                 self.assertEqual(
                     source_change["successor_sha256"],
-                    _sha256(REPO_ROOT / source_change["path"]),
+                    historical_source_by_path.get(
+                        source_change["path"],
+                        _sha256(REPO_ROOT / source_change["path"]),
+                    ),
+                )
+        current_authorization_path = (
+            READINESS_DIR
+            / "q011_section54_pressure_pilot_postrun_aggregate_source_authorization_"
+            "successor_v6_2026-06-05.json"
+        )
+        current_authorization = json.loads(
+            current_authorization_path.read_text(encoding="utf-8")
+        )
+        self.assertEqual(
+            current_authorization["predecessor_record"],
+            authorization["path"],
+        )
+        self.assertEqual(
+            current_authorization["predecessor_sha256"],
+            authorization["sha256"],
+        )
+        for record in current_authorization["source_closure"]:
+            with self.subTest(current_postrun_source=record["role"]):
+                self.assertEqual(
+                    record["sha256"],
+                    _sha256(REPO_ROOT / record["path"]),
                 )
         self.assertTrue(
             aggregate_repair["repair_validation_worker"]["compute_node_lock_preflight"]
@@ -1649,6 +2424,28 @@ class PicReadinessRegistryTests(unittest.TestCase):
                 "qualifying_campaign_publishers_lustre_compatibility_repair_pending_before_any_qualifying_launch",
             ],
         )
+        post_publication_status = _load(
+            "q011_section54_post_publication_pressure_gate_status_successor_"
+            "2026-06-05.json"
+        )
+        staged_packet_gate = post_publication_status[
+            "staged_packet_gate_control_plane"
+        ]
+        if staged_version == staged_packet_gate["version"]:
+            live_baseline = post_publication_status["live_operational_baseline"]
+            self.assertNotEqual(
+                staged_version,
+                live_baseline["installed_control_plane_version"],
+            )
+            self.assertEqual(
+                staged_packet_gate["pair_install_authorization_by_this_status"],
+                "none",
+            )
+            self.assertEqual(
+                staged_packet_gate["policy_promotion_authorization_by_this_status"],
+                "none",
+            )
+            return
         if staged_version == repaired_staged["version"]:
             self.assertEqual(
                 repaired_staged["state"],
@@ -2436,11 +3233,24 @@ class PicReadinessRegistryTests(unittest.TestCase):
             reviewed_runtime,
             expected_reviewed_runtime,
         )
+        historical_authorization = json.loads(
+            (
+                REPO_ROOT
+                / reviewed_runtime["postrun_source_authorization_successor"]["path"]
+            ).read_text(encoding="utf-8")
+        )
+        historical_source_by_path = {
+            record["path"]: record["sha256"]
+            for record in historical_authorization["source_closure"]
+        }
         for label, binding in reviewed_runtime.items():
             with self.subTest(reviewed_runtime=label):
                 self.assertEqual(
                     binding["sha256"],
-                    _sha256(REPO_ROOT / binding["path"]),
+                    historical_source_by_path.get(
+                        binding["path"],
+                        _sha256(REPO_ROOT / binding["path"]),
+                    ),
                 )
 
         required_scopes = {"filesystem_publication", "provenance_chronology"}
@@ -2493,6 +3303,737 @@ class PicReadinessRegistryTests(unittest.TestCase):
                 self.assertIs(review["read_only"], True)
                 self.assertIs(review["no_files_edited"], True)
                 self.assertIs(review["no_jobs_launched"], True)
+
+    def test_q011_bounded_absence_search_matches_root_level_double_star(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            root_receipt = root / "human_pressure_selection_receipt.json"
+            root_receipt.write_text("{}\n", encoding="utf-8")
+            nested = root / "nested"
+            nested.mkdir()
+            nested_receipt = nested / "human_pressure_selection_receipt.json"
+            nested_receipt.write_text("{}\n", encoding="utf-8")
+            too_deep = nested / "deeper"
+            too_deep.mkdir()
+            (too_deep / "human_pressure_selection_receipt.json").write_text(
+                "{}\n", encoding="utf-8"
+            )
+            self.assertEqual(
+                _bounded_relative_matches(
+                    root,
+                    "**/*pressure*selection*receipt*.json",
+                    2,
+                ),
+                [
+                    "human_pressure_selection_receipt.json",
+                    "nested/human_pressure_selection_receipt.json",
+                ],
+            )
+            with self.assertRaisesRegex(ValueError, "nonnegative integer"):
+                _bounded_relative_matches(root, "**/*.json", True)
+
+    def test_q011_clean_snapshot_counts_exclude_symlinked_files(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            temporary_root = Path(temporary)
+            root = temporary_root / "root"
+            root.mkdir()
+            regular = root / "test_regular.py"
+            regular.write_text("pass\n", encoding="utf-8")
+            (root / "test_symlink.py").symlink_to(regular)
+            external = temporary_root / "external"
+            external.mkdir()
+            (external / "test_external.py").write_text("pass\n", encoding="utf-8")
+            (root / "symlinked_directory").symlink_to(
+                external,
+                target_is_directory=True,
+            )
+            self.assertEqual(_regular_files_below(root, "test_*.py"), [regular])
+
+    def test_q011_live_policy_uses_installed_production_unlock_snapshot(self) -> None:
+        status = _load(
+            "q011_section54_post_publication_pressure_gate_status_successor_"
+            "2026-06-05.json"
+        )
+        live = status["live_operational_baseline"]
+        installed_dir = Path(live["inventories"][0]["path"]).parent
+        verify_historical_installed_control_plane(
+            installed_dir,
+            authorized_pic_root=installed_dir.parents[1],
+        )
+        verified = _installed_policy_unlock_snapshot(
+            installed_dir,
+            live["installed_control_plane_version"],
+        )
+        policy = json.loads(
+            Path(live["active_policies"][0]["path"]).read_text(encoding="utf-8")
+        )
+        self.assertTrue(_exact_json_equal(verified["policy"], policy))
+        self.assertTrue(
+            _exact_json_equal(
+                verified["snapshot"],
+                {
+                    "active_policy_sha256": live["active_policies"][0]["sha256"],
+                    "active_promotion_sha256": live["active_promotions"][0]["sha256"],
+                },
+            )
+        )
+
+    def test_q011_post_publication_pressure_gate_status_successor_recomputes(
+        self,
+    ) -> None:
+        status_path = (
+            READINESS_DIR
+            / "q011_section54_post_publication_pressure_gate_status_successor_"
+            "2026-06-05.json"
+        )
+        status_payload = status_path.read_text(encoding="utf-8")
+        status = json.loads(status_payload)
+        _validate_q011_post_publication_pressure_gate_status_successor(status)
+        self.assertEqual(status_payload, json.dumps(status, indent=2) + "\n")
+
+        predecessor_path = REPO_ROOT / status["predecessor_record"]
+        self.assertEqual(_sha256(predecessor_path), status["predecessor_sha256"])
+        predecessor = json.loads(predecessor_path.read_text(encoding="utf-8"))
+        self.assertGreater(
+            _canonical_utc_second(status["recorded_utc"]),
+            _canonical_utc_second(predecessor["exact_patch_frozen_utc"]),
+        )
+
+        authorization = status["postrun_source_authorization_successor"]
+        self.assertEqual(
+            _sha256(REPO_ROOT / authorization["path"]),
+            authorization["sha256"],
+        )
+        clean_snapshot_worker = status[
+            "clean_snapshot_pressure_gate_validation_worker"
+        ]
+        clean_snapshot_worker_path = REPO_ROOT / clean_snapshot_worker["path"]
+        self.assertTrue(stat.S_ISREG(clean_snapshot_worker_path.lstat().st_mode))
+        self.assertEqual(
+            _sha256(clean_snapshot_worker_path),
+            clean_snapshot_worker["sha256"],
+        )
+        publication_root = REPO_ROOT / "tst" / "publication"
+        expected_counts = {
+            "expected_publication_python_files": len(
+                _regular_files_below(publication_root, "*.py")
+            ),
+            "expected_publication_shell_files": len(
+                _regular_files_below(publication_root, "*.sh")
+            ),
+            "expected_publication_json_files": len(
+                _regular_files_below(publication_root, "*.json")
+            ),
+            "expected_publication_test_modules": len(
+                _regular_files_below(publication_root, "test_*.py")
+            ),
+        }
+        for key, observed in expected_counts.items():
+            with self.subTest(clean_snapshot_count=key):
+                self.assertEqual(clean_snapshot_worker[key], observed)
+        clean_snapshot_worker_text = clean_snapshot_worker_path.read_text(
+            encoding="utf-8"
+        )
+        for array, count in (
+            ("publication_python", 145),
+            ("publication_shell", 17),
+            ("publication_json", 290),
+            ("modules", 65),
+        ):
+            with self.subTest(clean_snapshot_wrapper_count=array):
+                self.assertIn(
+                    f'test "${{#{array}[@]}}" -eq {count}',
+                    clean_snapshot_worker_text,
+                )
+        staged_packet_gate = status["staged_packet_gate_control_plane"]
+        self.assertEqual(
+            staged_packet_gate["version"],
+            inventory_digest(
+                [
+                    {"path": name, "sha256": _sha256(CONTROL_PLANE_DIR / name)}
+                    for name in CONTROL_PLANE_FILES
+                ]
+            ),
+        )
+        self.assertEqual(
+            staged_packet_gate["inventoried_file_count"],
+            len(CONTROL_PLANE_FILES),
+        )
+        staged_inventory = staged_packet_gate["prepared_artifact_inventory"]
+        self.assertEqual(
+            _sha256(REPO_ROOT / staged_inventory["path"]),
+            staged_inventory["sha256"],
+        )
+        live = status["live_operational_baseline"]
+        inventory_payloads = []
+        installed_inventories = []
+        for binding in live["inventories"]:
+            path = Path(binding["path"])
+            with self.subTest(live_inventory=path):
+                with _pinned_regular_bytes(path) as payload:
+                    self.assertEqual(hashlib.sha256(payload).hexdigest(), binding["sha256"])
+                    inventory_payloads.append(payload)
+                installed_inventories.append(
+                    verify_historical_installed_control_plane(
+                        path.parent,
+                        authorized_pic_root=path.parents[2],
+                    )
+                )
+        self.assertEqual(len(set(inventory_payloads)), 1)
+        installed_inventory = json.loads(inventory_payloads[0])
+        self.assertEqual(installed_inventories, [installed_inventory] * 2)
+        self.assertEqual(
+            installed_inventory["version"],
+            live["installed_control_plane_version"],
+        )
+        self.assertEqual(
+            len(installed_inventory["files"]),
+            live["inventoried_member_count"],
+        )
+        installed_policy_verification = _installed_policy_unlock_snapshot(
+            Path(live["inventories"][0]["path"]).parent,
+            live["installed_control_plane_version"],
+        )
+
+        policy_payloads = []
+        for binding in live["active_policies"]:
+            path = Path(binding["path"])
+            with self.subTest(live_policy=path):
+                with _pinned_regular_bytes(path) as payload:
+                    self.assertEqual(hashlib.sha256(payload).hexdigest(), binding["sha256"])
+                    policy_payloads.append(payload)
+        self.assertEqual(len(set(policy_payloads)), 1)
+        live_policy = json.loads(policy_payloads[0])
+        self.assertTrue(
+            _exact_json_equal(installed_policy_verification["policy"], live_policy)
+        )
+        side_storage = live_policy["olcf_side_storage"]
+        freeze = live_policy["science_submission_freeze"]
+        self.assertEqual(
+            live["projected_policy_state"],
+            {
+                "installed_control_plane_version": side_storage[
+                    "installed_control_plane_version"
+                ],
+                "staged_control_plane_candidate_version": side_storage[
+                    "staged_control_plane_candidate_version"
+                ],
+                "build_profile_control_plane_version": freeze[
+                    "build_profile_control_plane_version"
+                ],
+                "registered_science_slices": live_policy["registered_science_slices"],
+                "science_submission_freeze_status": freeze["status"],
+            },
+        )
+
+        promotion_payloads = []
+        for binding in live["active_promotions"]:
+            path = Path(binding["path"])
+            with self.subTest(live_promotion=path):
+                with _pinned_regular_bytes(path) as payload:
+                    self.assertEqual(hashlib.sha256(payload).hexdigest(), binding["sha256"])
+                    promotion_payloads.append(payload)
+        self.assertEqual(len(set(promotion_payloads)), 1)
+        live_promotion = json.loads(promotion_payloads[0])
+        self.assertEqual(
+            live["projected_promotion_state"],
+            {
+                "control_plane_version": live_promotion["control_plane_version"],
+                "policy_sha256": live_promotion["policy_sha256"],
+            },
+        )
+        self.assertEqual(
+            live_promotion["control_plane_version"],
+            live["installed_control_plane_version"],
+        )
+        self.assertEqual(
+            live_promotion["policy_sha256"],
+            live["active_policies"][0]["sha256"],
+        )
+        self.assertEqual(
+            live_promotion["policy_path"],
+            live["active_policies"][0]["path"],
+        )
+        self.assertEqual(
+            live_promotion["project_home_policy_path"],
+            live["active_policies"][1]["path"],
+        )
+        self.assertTrue(
+            _exact_json_equal(
+                installed_policy_verification["snapshot"],
+                {
+                    "active_policy_sha256": live["active_policies"][0]["sha256"],
+                    "active_promotion_sha256": live["active_promotions"][0]["sha256"],
+                },
+            )
+        )
+        self.assertNotEqual(
+            staged_packet_gate["version"],
+            live["installed_control_plane_version"],
+        )
+
+        closure = status["source_test_closure"]
+        recomputed_closure = []
+        for relative in _Q011_PACKET_GATE_SOURCE_TEST_CLOSURE_PATHS:
+            with _pinned_regular_bytes(REPO_ROOT / relative) as payload:
+                recomputed_closure.append(
+                    {"path": relative, "sha256": hashlib.sha256(payload).hexdigest()}
+                )
+        self.assertEqual(closure["files"], recomputed_closure)
+        self.assertEqual(closure["file_count"], len(recomputed_closure))
+        self.assertEqual(
+            closure["closure_sha256"],
+            inventory_digest(recomputed_closure),
+        )
+        evidence = status["published_pressure_evidence"]
+        for label, binding in evidence.items():
+            with self.subTest(published_pressure_evidence=label):
+                path = Path(binding["path"])
+                self.assertTrue(stat.S_ISREG(path.lstat().st_mode))
+                self.assertEqual(_sha256(path), binding["sha256"])
+                self.assertEqual(stat.S_IMODE(path.stat().st_mode) & 0o222, 0)
+
+        aggregate_receipt = json.loads(
+            Path(evidence["aggregate_receipt"]["path"]).read_text(encoding="utf-8")
+        )
+        packet_receipt = json.loads(
+            Path(evidence["review_packet_receipt"]["path"]).read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(
+            packet_receipt["aggregate_receipt"],
+            evidence["aggregate_receipt"],
+        )
+        self.assertEqual(
+            packet_receipt["inventory_sha256"],
+            evidence["review_packet_inventory"]["sha256"],
+        )
+        self.assertEqual(
+            aggregate_receipt["aggregate_analysis"],
+            evidence["aggregate_analysis"],
+        )
+        self.assertEqual(
+            aggregate_receipt["aggregate_bundle"]["manifest_sha256"],
+            evidence["aggregate_manifest"]["sha256"],
+        )
+        for label, receipt in (
+            ("aggregate", aggregate_receipt),
+            ("review_packet", packet_receipt),
+        ):
+            with self.subTest(published_receipt=label):
+                self.assertEqual(
+                    receipt["source_bindings"]["postrun_aggregate_source_authorization"],
+                    authorization,
+                )
+                self.assertEqual(
+                    receipt["source_bindings"]["runtime_source_archive"]["git_commit"],
+                    status["source_checkpoint_commit"],
+                )
+        consumed = pressure_packet_verifier.consume_published_pressure_pilot_review_packet(
+            evidence["review_packet_receipt"]["path"],
+            aggregate_receipt_binding=evidence["aggregate_receipt"],
+            authorized_pic_root=Path(evidence["aggregate_receipt"]["path"]).parents[1],
+        )
+        self.assertEqual(
+            consumed["receipt_binding"],
+            evidence["review_packet_receipt"],
+        )
+        self.assertEqual(
+            consumed["aggregate_receipt_binding"],
+            evidence["aggregate_receipt"],
+        )
+        self.assertEqual(
+            subprocess.check_output(
+                ["git", "cat-file", "-t", status["source_checkpoint_commit"]],
+                cwd=REPO_ROOT,
+                text=True,
+            ).strip(),
+            "commit",
+        )
+
+        acceptance = status["publication_acceptance_state"]
+        publication_root_path = Path(acceptance["publication_root"]["path"])
+        publication_root_status = publication_root_path.lstat()
+        self.assertEqual(
+            acceptance["publication_root"]["identity"],
+            {
+                "device": publication_root_status.st_dev,
+                "inode": publication_root_status.st_ino,
+            },
+        )
+        self.assertEqual(
+            acceptance["publication_root"]["mode"],
+            f"{stat.S_IMODE(publication_root_status.st_mode):05o}",
+        )
+        self.assertEqual(
+            acceptance["publication_root"]["exact_entries"],
+            sorted(path.name for path in publication_root_path.iterdir()),
+        )
+        acceptance_root_path = Path(acceptance["acceptance_root"]["path"])
+        acceptance_root_status = acceptance_root_path.lstat()
+        self.assertEqual(
+            acceptance["acceptance_root"]["identity"],
+            {
+                "device": acceptance_root_status.st_dev,
+                "inode": acceptance_root_status.st_ino,
+            },
+        )
+        self.assertEqual(
+            acceptance["acceptance_root"]["mode"],
+            f"{stat.S_IMODE(acceptance_root_status.st_mode):04o}",
+        )
+        self.assertEqual(
+            acceptance["acceptance_root"]["exact_entries"],
+            sorted(path.name for path in acceptance_root_path.iterdir()),
+        )
+        for binding in acceptance["success_seals"]:
+            seal_path = Path(binding["path"])
+            seal_status = seal_path.lstat()
+            self.assertEqual(_sha256(seal_path), binding["sha256"])
+            self.assertEqual(
+                binding["identity"],
+                {"device": seal_status.st_dev, "inode": seal_status.st_ino},
+            )
+            self.assertEqual(binding["mode"], f"{stat.S_IMODE(seal_status.st_mode):04o}")
+            receipt_path = Path(binding["receipt"]["path"])
+            receipt_status = receipt_path.lstat()
+            self.assertEqual(_sha256(receipt_path), binding["receipt"]["sha256"])
+            self.assertEqual(
+                binding["receipt"]["identity"],
+                {"device": receipt_status.st_dev, "inode": receipt_status.st_ino},
+            )
+            seal = json.loads(seal_path.read_text(encoding="utf-8"))
+            self.assertEqual(seal["receipt_sha256"], binding["receipt"]["sha256"])
+            self.assertEqual(seal["receipt_identity"], binding["receipt"]["identity"])
+            self.assertEqual(
+                seal["publication_root_identity"],
+                acceptance["publication_root"]["identity"],
+            )
+        for path in acceptance["absent_publication_paths"]:
+            with self.assertRaises(FileNotFoundError):
+                Path(path).lstat()
+        for search in acceptance["absent_namespace_globs"]:
+            self.assertEqual(
+                sorted(path.name for path in Path(search["root"]).glob(search["glob"])),
+                search["matches"],
+            )
+
+        absence = status["scoped_absence_evidence"]
+        for search in absence["pressure_selection_receipt_searches"]:
+            root = Path(search["root"])
+            self.assertTrue(root.is_dir())
+            self.assertEqual(
+                _bounded_relative_matches(root, search["glob"], search["max_depth"]),
+                search["matches"],
+            )
+        validation_log_search = absence["clean_snapshot_validation_log_search"]
+        validation_log_root = Path(validation_log_search["root"])
+        self.assertTrue(validation_log_root.is_dir())
+        self.assertEqual(
+            _bounded_relative_matches(
+                validation_log_root,
+                validation_log_search["glob"],
+                validation_log_search["max_depth"],
+            ),
+            validation_log_search["matches"],
+        )
+        self.assertEqual(
+            absence["registered_science_slices"],
+            live_policy["registered_science_slices"],
+        )
+
+        memo = status["advisory_pressure_options_memo"]
+        memo_path = REPO_ROOT / memo["path"]
+        self.assertEqual(_sha256(memo_path), memo["sha256"])
+        memo_text = memo_path.read_text(encoding="utf-8")
+        self.assertIn("no pressure selected; no execution", memo_text)
+        self.assertIn(
+            "recommendation is not a human pressure-selection receipt",
+            memo_text,
+        )
+
+    def test_q011_post_publication_pressure_gate_status_successor_rejects_drift(
+        self,
+    ) -> None:
+        status = _load(
+            "q011_section54_post_publication_pressure_gate_status_successor_"
+            "2026-06-05.json"
+        )
+        rejection_cases = [
+            ("non-successor chronology", ("recorded_utc",), "2026-06-05T05:06:20Z"),
+            ("later unbound timestamp", ("recorded_utc",), "2026-06-05T07:55:57Z"),
+            ("schema boolean", ("schema_version",), True),
+            ("source checkpoint", ("source_checkpoint_commit",), "0" * 40),
+            ("predecessor", ("predecessor_sha256",), "0" * 64),
+            (
+                "v5 authorization",
+                ("postrun_source_authorization_successor", "sha256"),
+                "0" * 64,
+            ),
+            (
+                "clean-snapshot worker",
+                ("clean_snapshot_pressure_gate_validation_worker", "sha256"),
+                "0" * 64,
+            ),
+            (
+                "clean-snapshot Python count",
+                (
+                    "clean_snapshot_pressure_gate_validation_worker",
+                    "expected_publication_python_files",
+                ),
+                142,
+            ),
+            (
+                "clean-snapshot shell count type",
+                (
+                    "clean_snapshot_pressure_gate_validation_worker",
+                    "expected_publication_shell_files",
+                ),
+                True,
+            ),
+            (
+                "clean-snapshot worker launch status",
+                ("clean_snapshot_pressure_gate_validation_worker", "status"),
+                "passed",
+            ),
+            (
+                "unscoped clean-snapshot worker status",
+                ("clean_snapshot_pressure_gate_validation_worker", "status"),
+                "no_retained_clean_snapshot_validation_evidence",
+            ),
+            (
+                "staged packet-gate control-plane version",
+                ("staged_packet_gate_control_plane", "version"),
+                "0" * 64,
+            ),
+            (
+                "staged packet-gate file count type",
+                ("staged_packet_gate_control_plane", "inventoried_file_count"),
+                True,
+            ),
+            (
+                "staged packet-gate prepared inventory",
+                (
+                    "staged_packet_gate_control_plane",
+                    "prepared_artifact_inventory",
+                    "sha256",
+                ),
+                "0" * 64,
+            ),
+            (
+                "staged packet-gate pair install authorization",
+                (
+                    "staged_packet_gate_control_plane",
+                    "pair_install_authorization_by_this_status",
+                ),
+                "authorized",
+            ),
+            (
+                "live inventory",
+                ("live_operational_baseline", "inventories", 0, "sha256"),
+                "0" * 64,
+            ),
+            (
+                "live inventoried count numeric alias",
+                ("live_operational_baseline", "inventoried_member_count"),
+                23.0,
+            ),
+            (
+                "live byte-identical boolean alias",
+                ("live_operational_baseline", "inventories_byte_identical"),
+                1,
+            ),
+            (
+                "live policy projection",
+                (
+                    "live_operational_baseline",
+                    "projected_policy_state",
+                    "registered_science_slices",
+                ),
+                ["q011"],
+            ),
+            (
+                "live promotion",
+                ("live_operational_baseline", "active_promotions", 0, "sha256"),
+                "0" * 64,
+            ),
+            (
+                "source/test closure path",
+                ("source_test_closure", "files", 0, "path"),
+                "tst/publication/other.py",
+            ),
+            (
+                "unscoped source/test closure status",
+                ("source_test_closure", "status"),
+                "source_local_change_and_validation_bytes_bound_uncommitted",
+            ),
+            (
+                "source/test closure malformed hash",
+                ("source_test_closure", "files", 0, "sha256"),
+                "0",
+            ),
+            (
+                "aggregate receipt",
+                ("published_pressure_evidence", "aggregate_receipt", "sha256"),
+                "0" * 64,
+            ),
+            (
+                "aggregate manifest",
+                ("published_pressure_evidence", "aggregate_manifest", "sha256"),
+                "0" * 64,
+            ),
+            (
+                "packet receipt",
+                ("published_pressure_evidence", "review_packet_receipt", "sha256"),
+                "0" * 64,
+            ),
+            (
+                "packet inventory",
+                ("published_pressure_evidence", "review_packet_inventory", "sha256"),
+                "0" * 64,
+            ),
+            (
+                "publication root identity",
+                (
+                    "publication_acceptance_state",
+                    "publication_root",
+                    "identity",
+                    "inode",
+                ),
+                0,
+            ),
+            (
+                "publication root identity numeric alias",
+                (
+                    "publication_acceptance_state",
+                    "publication_root",
+                    "identity",
+                    "device",
+                ),
+                135357496.0,
+            ),
+            (
+                "success seal",
+                ("publication_acceptance_state", "success_seals", 0, "sha256"),
+                "0" * 64,
+            ),
+            (
+                "publication guard absence",
+                ("publication_acceptance_state", "absent_publication_paths"),
+                [],
+            ),
+            (
+                "selection-receipt absence",
+                (
+                    "scoped_absence_evidence",
+                    "pressure_selection_receipt_searches",
+                    0,
+                    "matches",
+                ),
+                ["human_pressure_selection_receipt.json"],
+            ),
+            (
+                "selection-receipt search depth numeric alias",
+                (
+                    "scoped_absence_evidence",
+                    "pressure_selection_receipt_searches",
+                    0,
+                    "max_depth",
+                ),
+                8.0,
+            ),
+            (
+                "validation-log absence",
+                (
+                    "scoped_absence_evidence",
+                    "clean_snapshot_validation_log_search",
+                    "matches",
+                ),
+                ["pic-q011-pressure-gate-validate.1.log"],
+            ),
+            (
+                "advisory memo",
+                ("advisory_pressure_options_memo", "sha256"),
+                "0" * 64,
+            ),
+            (
+                "implied selection status",
+                ("pressure_selection", "status"),
+                "human_selection_complete",
+            ),
+            (
+                "selection receipt",
+                ("pressure_selection", "selection_receipt"),
+                {},
+            ),
+            (
+                "selected case",
+                ("pressure_selection", "selected_case"),
+                {"problem_ps_p0": 1.0},
+            ),
+            (
+                "advisory recommendation promoted",
+                ("pressure_selection", "advisory_recommendation_is_selection"),
+                True,
+            ),
+            ("packet gate unblocked", ("packet_gate", "status"), "ready"),
+            (
+                "packet gate acceptance authorization",
+                ("packet_gate", "acceptance_authorization"),
+                "human_review_only",
+            ),
+            (
+                "packet gate schema downgrade",
+                ("packet_gate", "required_receipt_schema_version"),
+                1,
+            ),
+            (
+                "packet gate schema type drift",
+                ("packet_gate", "required_receipt_schema_version"),
+                True,
+            ),
+            (
+                "acceptance path removed",
+                ("packet_gate", "required_acceptance_and_replay_paths"),
+                status["packet_gate"]["required_acceptance_and_replay_paths"][:-1],
+            ),
+            (
+                "blocker removed",
+                ("packet_gate", "blockers_bound_by_this_status_successor"),
+                status["packet_gate"]["blockers_bound_by_this_status_successor"][:-1],
+            ),
+            (
+                "unscoped blocker claim",
+                ("packet_gate", "blockers_bound_by_this_status_successor"),
+                ["packet_bound_pressure_selection_gate_repair_not_committed"],
+            ),
+            ("human input enabled", ("human_input_required_now",), True),
+            (
+                "human input type drift",
+                ("human_input_required_now",),
+                0,
+            ),
+            (
+                "launch authorization granted",
+                ("frontier_launch_authorization",),
+                "authorized",
+            ),
+        ]
+        for label, path, replacement in rejection_cases:
+            with self.subTest(label=label):
+                candidate = copy.deepcopy(status)
+                _replace_nested(candidate, path, replacement)
+                with self.assertRaises(ValueError):
+                    _validate_q011_post_publication_pressure_gate_status_successor(
+                        candidate
+                    )
+        status_with_extra_key = copy.deepcopy(status)
+        status_with_extra_key["unexpected"] = True
+        with self.assertRaises(ValueError):
+            _validate_q011_post_publication_pressure_gate_status_successor(
+                status_with_extra_key
+            )
 
     def test_reviewed_mpich_stderr_fixture_matches_failed_attempt_provenance(self) -> None:
         successor = _load(

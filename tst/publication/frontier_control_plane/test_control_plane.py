@@ -29,6 +29,7 @@ import install_control_plane
 import launch_trampoline
 import ledger
 import promote_active_policy
+import q011_pressure_review_packet_verifier as pressure_packet_verifier
 import reconcile_frontier_job
 import reconcile_manual_frontier_allocations
 import terminal_recovery_handoff
@@ -1048,68 +1049,17 @@ class SnapshotTests(unittest.TestCase):
 
         repo_root = Path(__file__).resolve().parents[3]
         selected_case = {"case_id": "ps_p0_0p10", "problem_ps_p0": 0.1}
-        published_pressure_receipt = (
-            self.pic_root / "publication/pressure-pilot-receipt.json"
+        published_pressure_receipt, published_packet_receipt = (
+            self._planner_pressure_publication()
         )
-        published_pressure_receipt.parent.mkdir(exist_ok=True)
-        published_pressure_receipt.write_bytes(b"synthetic published pressure receipt\n")
-        published_pressure_receipt.chmod(0o444)
-        pressure_receipt = {
-            "schema_version": 1,
-            "record_type": "q011_section54_pressure_selection_receipt",
-            "selection_method": "human_review_only",
-            "published_pressure_pilot_receipt": {
-                "path": str(published_pressure_receipt),
-                "sha256": hashlib.sha256(
-                    published_pressure_receipt.read_bytes()
-                ).hexdigest(),
-            },
-            "pilot_bundle_manifest_sha256": "b" * 64,
-            "aggregate_pilot_analysis_sha256": "c" * 64,
-            "case_descriptors": [
-                {
-                    "case_id": case_id,
-                    "problem_ps_p0": problem_ps_p0,
-                    "descriptor_sha256": character * 64,
-                }
-                for (case_id, problem_ps_p0), character in zip(
-                    (
-                        ("ps_p0_1p00", 1.0),
-                        ("ps_p0_0p05", 0.05),
-                        ("ps_p0_0p10", 0.1),
-                        ("ps_p0_0p20", 0.2),
-                    ),
-                    "def0",
-                )
-            ],
-            "selected_case": selected_case,
-            "reviewer_identity": "Planner Fixture Human Reviewer",
-            "reviewed_utc": "2026-06-03T00:00:00Z",
-            "rationale": "Test-only retained human pressure selection.",
-        }
+        aggregate_receipt = json.loads(
+            Path(published_pressure_receipt["path"]).read_text(encoding="utf-8")
+        )
+        aggregate_cases = aggregate_receipt["raw_cases"]
         environment_payload = (
             self.control_plane_dir / "frontier_pic_environment.sh"
         ).read_bytes()
-        source_payloads = {
-            "bindings/human_pressure_selection_receipt.json": (
-                json.dumps(pressure_receipt, indent=2, sort_keys=True) + "\n"
-            ).encode("utf-8"),
-            "bindings/environment_profile.sh": environment_payload,
-            "bindings/q011_section54_qualifying_campaign_preregistration.json": (
-                repo_root
-                / common.Q011_SECTION54_ARCHIVE_SOURCE_PATHS[
-                    "qualifying_preregistration"
-                ]
-            ).read_bytes(),
-            "bindings/q011_section54_restart_continuation_preregistration.json": (
-                repo_root
-                / common.Q011_SECTION54_ARCHIVE_SOURCE_PATHS["restart_preregistration"]
-            ).read_bytes(),
-            "bindings/pic_parallel_shock_section54_paper_vl2_tsc.athinput": (
-                repo_root / common.Q011_SECTION54_ARCHIVE_SOURCE_PATHS["paper_deck"]
-            ).read_bytes(),
-        }
-        source_bindings = {
+        source_binding_paths = {
             name: path for name, path in common.Q011_SECTION54_SOURCE_BINDING_PATHS.items()
         }
         clean_candidate_path = self._planner_clean_candidate()
@@ -1134,11 +1084,6 @@ class SnapshotTests(unittest.TestCase):
                 member = archive.extractfile(relative)
                 assert member is not None
                 archive_members[relative] = member.read()
-        source_payloads["bindings/clean_candidate_manifest.json"] = clean_candidate_payload
-        source_bindings = {
-            name: {"path": path, "sha256": hashlib.sha256(source_payloads[path]).hexdigest()}
-            for name, path in source_bindings.items()
-        }
         helper_sources = [
             {
                 "path": relative,
@@ -1183,6 +1128,78 @@ class SnapshotTests(unittest.TestCase):
                     "sha256": hashlib.sha256(environment_payload).hexdigest(),
                 },
             },
+        }
+        reanalysis_attestation, reviewer_attestation = (
+            self._planner_pressure_gate_attestations(
+                published_pressure_receipt=published_pressure_receipt,
+                published_packet_receipt=published_packet_receipt,
+                pilot_bundle_manifest_sha256=aggregate_receipt["aggregate_bundle"][
+                    "manifest_sha256"
+                ],
+                aggregate_pilot_analysis_sha256=aggregate_receipt[
+                    "aggregate_analysis"
+                ]["sha256"],
+                selected_case=selected_case,
+                git_commit=str(source["git_commit"]),
+                source_archive_sha256=source_archive_sha256,
+                helper_sources=helper_sources,
+            )
+        )
+        pressure_receipt = {
+            "schema_version": 3,
+            "record_type": "q011_section54_pressure_selection_receipt",
+            "selection_method": "human_review_only",
+            "published_pressure_pilot_receipt": published_pressure_receipt,
+            "published_pressure_pilot_review_packet_receipt": published_packet_receipt,
+            "pilot_bundle_manifest_sha256": aggregate_receipt["aggregate_bundle"][
+                "manifest_sha256"
+            ],
+            "aggregate_pilot_analysis_sha256": aggregate_receipt[
+                "aggregate_analysis"
+            ]["sha256"],
+            "case_descriptors": [
+                {
+                    "case_id": aggregate_case["case_id"],
+                    "problem_ps_p0": problem_ps_p0,
+                    "descriptor_sha256": aggregate_case["descriptor_sha256"],
+                }
+                for aggregate_case, (_, problem_ps_p0) in zip(
+                    aggregate_cases,
+                    (
+                        ("ps_p0_1p00", 1.0),
+                        ("ps_p0_0p05", 0.05),
+                        ("ps_p0_0p10", 0.1),
+                        ("ps_p0_0p20", 0.2),
+                    ),
+                )
+            ],
+            "selected_case": selected_case,
+            "authoritative_reanalysis_attestation": reanalysis_attestation,
+            "reviewer_attestation": reviewer_attestation,
+        }
+        source_payloads = {
+            "bindings/human_pressure_selection_receipt.json": (
+                json.dumps(pressure_receipt, indent=2, sort_keys=True) + "\n"
+            ).encode("utf-8"),
+            "bindings/clean_candidate_manifest.json": clean_candidate_payload,
+            "bindings/environment_profile.sh": environment_payload,
+            "bindings/q011_section54_qualifying_campaign_preregistration.json": (
+                repo_root
+                / common.Q011_SECTION54_ARCHIVE_SOURCE_PATHS[
+                    "qualifying_preregistration"
+                ]
+            ).read_bytes(),
+            "bindings/q011_section54_restart_continuation_preregistration.json": (
+                repo_root
+                / common.Q011_SECTION54_ARCHIVE_SOURCE_PATHS["restart_preregistration"]
+            ).read_bytes(),
+            "bindings/pic_parallel_shock_section54_paper_vl2_tsc.athinput": (
+                repo_root / common.Q011_SECTION54_ARCHIVE_SOURCE_PATHS["paper_deck"]
+            ).read_bytes(),
+        }
+        source_bindings = {
+            name: {"path": path, "sha256": hashlib.sha256(source_payloads[path]).hexdigest()}
+            for name, path in source_binding_paths.items()
         }
         campaign_matrix = common._planner_expected_matrix()
         basis = {
@@ -1520,6 +1537,442 @@ class SnapshotTests(unittest.TestCase):
         self._planner_candidate_manifest = clean_candidate_path
         return json.loads(json.dumps(self._planner_retention_binding))
 
+    def _planner_pressure_publication(
+        self,
+    ) -> tuple[dict[str, str], dict[str, str]]:
+        publication = self.pic_root / "publication"
+        acceptance = self.pic_root / "publication_acceptance"
+        runs = self.pic_root / "runs"
+        publication.mkdir(exist_ok=True)
+        acceptance.mkdir(exist_ok=True)
+        runs.mkdir(exist_ok=True)
+        publication_identity = {
+            "device": publication.stat().st_dev,
+            "inode": publication.stat().st_ino,
+        }
+        source_bindings = {
+            "postrun_aggregate_source_authorization": {
+                "path": "tst/publication/readiness/source-authorization.json",
+                "sha256": "1" * 64,
+            },
+            "registered_execution_preregistration": {
+                "path": "tst/publication/readiness/registered-execution.json",
+                "sha256": "2" * 64,
+            },
+            "historical_v2_execution_preregistration": {
+                "path": "tst/publication/readiness/historical-v2.json",
+                "sha256": "3" * 64,
+            },
+            "reviewed_source_closure": [
+                {
+                    "role": "aggregate_publisher",
+                    "path": "tst/publication/publish_q011_section54_pressure_pilot_bundle.py",
+                    "sha256": "4" * 64,
+                },
+                {
+                    "role": "review_packet_renderer",
+                    "path": "tst/publication/render_q011_section54_pressure_pilot_review_packet.py",
+                    "sha256": "5" * 64,
+                },
+            ],
+            "runtime_source_archive": {
+                "execution_mode": "direct_api_nonproduction_only",
+                "git_commit": None,
+                "archive_sha256": None,
+                "verified_source_closure_sha256": None,
+            },
+        }
+        aggregate_bundle = publication / "pressure-pilot-bundle"
+        aggregate_bundle.mkdir()
+        raw_cases = []
+        manifest_cases = []
+        for case_id, pressure, argv_value in zip(
+            pressure_packet_verifier.RAW_CASE_IDS,
+            pressure_packet_verifier.RAW_CASE_PRESSURES,
+            pressure_packet_verifier.RAW_CASE_ARGV_VALUES,
+        ):
+            artifact_dir = runs / f"raw-{case_id}" / "attempt"
+            artifact_dir.mkdir(parents=True)
+            raw_payloads: dict[str, bytes] = {}
+            aggregate_payloads: dict[str, bytes] = {}
+            raw_inventory: dict[str, dict[str, object]] = {}
+            bundle_members: list[dict[str, object]] = []
+
+            def bind_raw(source: str, payload: bytes) -> None:
+                existing = raw_payloads.get(source)
+                if existing is not None and existing != payload:
+                    raise AssertionError(f"fixture payload collision: {source}")
+                raw_payloads[source] = payload
+                raw_inventory[source] = {
+                    "path": source,
+                    "sha256": hashlib.sha256(payload).hexdigest(),
+                    "size": len(payload),
+                }
+
+            def bind_bundle(source: str, target: str, payload: bytes) -> dict[str, str]:
+                bind_raw(source, payload)
+                aggregate_payloads[target] = payload
+                bundle_members.append(
+                    {
+                        "path": target,
+                        "sha256": hashlib.sha256(payload).hexdigest(),
+                        "size": len(payload),
+                        "source_path": source,
+                    }
+                )
+                return {"path": target, "sha256": hashlib.sha256(payload).hexdigest()}
+
+            snapshots = []
+            for snapshot_index, time in enumerate(
+                pressure_packet_verifier.RAW_CASE_TIMES
+            ):
+                suffix = f"{snapshot_index:05d}"
+                snapshot: dict[str, object] = {"time": time}
+                for kind, directory, extension in (
+                    ("mhd_w_bcc", "bin", "bin"),
+                    ("bmag", "bin", "bin"),
+                    ("prtcl_jx", "bin", "bin"),
+                    ("j2", "bin", "bin"),
+                    ("prtcl_all", "pvtk", "part.vtk"),
+                ):
+                    target = (
+                        f"cases/{case_id}/{directory}/"
+                        f"{case_id}.{kind}.{suffix}.{extension}"
+                    )
+                    source = (
+                        f"output/{directory}/{case_id}.{kind}.{suffix}.{extension}"
+                    )
+                    snapshot[kind] = bind_bundle(
+                        source,
+                        target,
+                        f"{case_id}:{kind}:{suffix}\n".encode("ascii"),
+                    )
+                snapshots.append(snapshot)
+
+            stdout_payload = f"{case_id}: stdout\n".encode("ascii")
+            stdout = bind_bundle(
+                "athena_stdout.txt",
+                f"cases/{case_id}/stdout.txt",
+                stdout_payload,
+            )
+            restart_prefix = f"{case_id}.00004.rst"
+            restart_bindings = {}
+            for name, suffix in (
+                ("manifest", ".manifest"),
+                ("manifest_complete", ".manifest.complete"),
+                ("artifact", ""),
+                ("complete", ".complete"),
+            ):
+                filename = restart_prefix + suffix
+                restart_bindings[name] = bind_bundle(
+                    f"output/rst/{filename}",
+                    f"cases/{case_id}/rst/{filename}",
+                    f"{case_id}:{name}\n".encode("ascii"),
+                )
+            manifest_case = {
+                "case_id": case_id,
+                "ps_p0": pressure,
+                "overrides": [
+                    *pressure_packet_verifier.AUTHORIZED_COMMON_OVERRIDES,
+                    f"problem/ps_p0={argv_value}",
+                ],
+                "snapshots": snapshots,
+                "stdout": stdout,
+                "terminal_restart": {
+                    "time": pressure_packet_verifier.RAW_CASE_TIMES[-1],
+                    "manifest": restart_bindings["manifest"],
+                    "manifest_complete": restart_bindings["manifest_complete"],
+                    "members": [
+                        {
+                            "artifact": restart_bindings["artifact"],
+                            "complete": restart_bindings["complete"],
+                        }
+                    ],
+                },
+            }
+            manifest_cases.append(manifest_case)
+
+            allowlist = (
+                f"q011-pressure-{case_id.replace('_', '-')}.environment.allowlist.txt"
+            )
+            runtime_payloads = {
+                allowlist: b"PIC_FRONTIER_PROFILE=frontier_minimum_supported\n",
+                "athena_stdout.txt": stdout_payload,
+                "athena_stdout.sha256": (
+                    hashlib.sha256(stdout_payload).hexdigest() + "\n"
+                ).encode("ascii"),
+                "athena_stderr.txt": b"frontier diagnostic stderr\n",
+            }
+            for path, payload in runtime_payloads.items():
+                bind_raw(path, payload)
+            runtime_artifacts = {
+                path: hashlib.sha256(payload).hexdigest()
+                for path, payload in runtime_payloads.items()
+            }
+            inventory_payload = self._planner_json_payload(
+                {
+                    "schema_version": 1,
+                    "files": [raw_inventory[path] for path in sorted(raw_inventory)],
+                }
+            )
+            self._write_planner_readonly(
+                artifact_dir / pressure_packet_verifier.RAW_CASE_INVENTORY_NAME,
+                inventory_payload,
+            )
+            descriptor = {
+                "schema_version": 1,
+                "record_type": pressure_packet_verifier.RAW_CASE_RECORD_TYPE,
+                "evidence_class": pressure_packet_verifier.AGGREGATE_EVIDENCE_CLASS,
+                "qualification_effect": (
+                    pressure_packet_verifier.AGGREGATE_QUALIFICATION_EFFECT
+                ),
+                "launch_contract": "trusted_trampoline_athena_argv_v1",
+                "case_id": case_id,
+                "ps_p0": pressure,
+                "argv_value": argv_value,
+                "artifact_inventory_sha256": hashlib.sha256(
+                    inventory_payload
+                ).hexdigest(),
+                "runtime_artifacts": runtime_artifacts,
+                "runtime_profile": pressure_packet_verifier.AUTHORIZED_RUNTIME_PROFILE,
+                "parallel_ranks": pressure_packet_verifier.AUTHORIZED_PARALLEL_RANKS,
+                "rank_gpu_bindings": [
+                    {
+                        "host": "frontier00000",
+                        "rank": 0,
+                        "rocr_visible_device": (
+                            pressure_packet_verifier.AUTHORIZED_ROCR_VISIBLE_DEVICE
+                        ),
+                    }
+                ],
+                "manifest_case": manifest_case,
+                "bundle_members": sorted(
+                    bundle_members, key=lambda member: member["path"]
+                ),
+            }
+            descriptor_path = (
+                artifact_dir / pressure_packet_verifier.RAW_CASE_DESCRIPTOR_PATH
+            )
+            descriptor_path.parent.mkdir()
+            descriptor_payload = self._planner_json_payload(descriptor)
+            self._write_planner_readonly(descriptor_path, descriptor_payload)
+            for path, payload in raw_payloads.items():
+                destination = artifact_dir / path
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                self._write_planner_readonly(destination, payload)
+            for path, payload in aggregate_payloads.items():
+                destination = aggregate_bundle / path
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                self._write_planner_readonly(destination, payload)
+            for path in sorted(
+                artifact_dir.rglob("*"),
+                key=lambda candidate: len(candidate.parts),
+                reverse=True,
+            ):
+                path.chmod(0o555 if path.is_dir() else 0o444)
+            artifact_dir.chmod(0o555)
+            (artifact_dir / "analysis").chmod(0o700)
+            raw_cases.append(
+                {
+                    "case_id": case_id,
+                    "artifact_dir": str(artifact_dir),
+                    "descriptor_path": pressure_packet_verifier.RAW_CASE_DESCRIPTOR_PATH,
+                    "descriptor_sha256": hashlib.sha256(descriptor_payload).hexdigest(),
+                    "artifact_inventory_sha256": hashlib.sha256(
+                        inventory_payload
+                    ).hexdigest(),
+                    "runtime_artifacts": runtime_artifacts,
+                }
+            )
+
+        aggregate_manifest_payload = self._planner_json_payload(
+            {
+                "schema_version": 1,
+                "record_type": pressure_packet_verifier.AGGREGATE_MANIFEST_RECORD_TYPE,
+                "evidence_class": pressure_packet_verifier.AGGREGATE_EVIDENCE_CLASS,
+                "qualification_effect": (
+                    pressure_packet_verifier.AGGREGATE_QUALIFICATION_EFFECT
+                ),
+                "active_deck_binding": dict(
+                    pressure_packet_verifier.AUTHORIZED_ACTIVE_DECK_BINDING
+                ),
+                "preregistration_binding": source_bindings[
+                    "postrun_aggregate_source_authorization"
+                ],
+                "registered_execution_preregistration_binding": source_bindings[
+                    "registered_execution_preregistration"
+                ],
+                "cases": manifest_cases,
+            }
+        )
+        self._write_planner_readonly(
+            aggregate_bundle / pressure_packet_verifier.AGGREGATE_MANIFEST_NAME,
+            aggregate_manifest_payload,
+        )
+        for path in sorted(
+            aggregate_bundle.rglob("*"),
+            key=lambda candidate: len(candidate.parts),
+            reverse=True,
+        ):
+            path.chmod(0o555 if path.is_dir() else 0o444)
+        aggregate_bundle.chmod(0o555)
+        aggregate_analysis = publication / "pressure-pilot-analysis.json"
+        self._write_planner_readonly(
+            aggregate_analysis,
+            self._planner_json_payload({"status": "pass"}),
+        )
+        aggregate_receipt = publication / "pressure-pilot-receipt.json"
+        aggregate_payload = self._planner_json_payload(
+            {
+                "schema_version": 1,
+                "record_type": pressure_packet_verifier.AGGREGATE_RECEIPT_RECORD_TYPE,
+                "evidence_class": pressure_packet_verifier.AGGREGATE_EVIDENCE_CLASS,
+                "qualification_effect": (
+                    pressure_packet_verifier.AGGREGATE_QUALIFICATION_EFFECT
+                ),
+                "consumption_rule": pressure_packet_verifier.CONSUMPTION_RULE,
+                "publication_root_identity": publication_identity,
+                "aggregate_bundle": {
+                    "path": str(aggregate_bundle),
+                    "manifest_sha256": hashlib.sha256(
+                        aggregate_manifest_payload
+                    ).hexdigest(),
+                },
+                "aggregate_analysis": {
+                    "path": str(aggregate_analysis),
+                    "sha256": hashlib.sha256(aggregate_analysis.read_bytes()).hexdigest(),
+                },
+                "source_bindings": source_bindings,
+                "raw_cases": raw_cases,
+            }
+        )
+        self._write_planner_readonly(aggregate_receipt, aggregate_payload)
+        aggregate_binding = {
+            "path": str(aggregate_receipt),
+            "sha256": hashlib.sha256(aggregate_payload).hexdigest(),
+        }
+        packet_root = publication / "pressure-review-packet"
+        figures = packet_root / "figures"
+        figures.mkdir(parents=True)
+        packet_payloads = {
+            "PRESSURE_REVIEW_PACKET.md": b"test-only pressure review packet\n",
+            "figures/terminal_mhd_pic_pressure_comparison.png": b"pressure comparison\n",
+            "figures/terminal_profile_overlays.png": b"profile overlays\n",
+            "pressure_review_metrics.json": self._planner_json_payload(
+                {
+                    "schema_version": 1,
+                    "record_type": pressure_packet_verifier.REVIEW_METRICS_RECORD_TYPE,
+                    "watermark": pressure_packet_verifier.WATERMARK,
+                    "qualification_effect": pressure_packet_verifier.QUALIFICATION_EFFECT,
+                    "aggregate_receipt": aggregate_binding,
+                    "cases": [
+                        {
+                            "case_id": case_id,
+                            "problem_ps_p0": float(problem_ps_p0),
+                            "terminal_particle_count": 1,
+                            "particle_efficiency": 1.0,
+                            "zone_cycles_per_second": 1.0,
+                            "particle_updates_per_second": 1.0,
+                            "tracked_gpu_memory_high_water_bytes": 1.0,
+                        }
+                        for case_id, problem_ps_p0 in zip(
+                            pressure_packet_verifier.RAW_CASE_IDS,
+                            pressure_packet_verifier.RAW_CASE_PRESSURES,
+                        )
+                    ],
+                }
+            ),
+        }
+        for relative, payload in packet_payloads.items():
+            self._write_planner_readonly(packet_root / relative, payload)
+        inventory_payload = self._planner_json_payload(
+            {
+                "schema_version": 1,
+                "record_type": pressure_packet_verifier.INVENTORY_RECORD_TYPE,
+                "members": [
+                    {
+                        "path": relative,
+                        "sha256": hashlib.sha256(packet_payloads[relative]).hexdigest(),
+                        "size": len(packet_payloads[relative]),
+                    }
+                    for relative in sorted(packet_payloads)
+                ],
+            }
+        )
+        self._write_planner_readonly(
+            packet_root / pressure_packet_verifier.INVENTORY_NAME,
+            inventory_payload,
+        )
+        figures.chmod(0o555)
+        packet_root.chmod(0o555)
+        packet_receipt = publication / "pressure-review-packet-receipt.json"
+        packet_receipt_payload = self._planner_json_payload(
+            {
+                "schema_version": 1,
+                "record_type": pressure_packet_verifier.PACKET_RECEIPT_RECORD_TYPE,
+                "watermark": pressure_packet_verifier.WATERMARK,
+                "qualification_effect": pressure_packet_verifier.QUALIFICATION_EFFECT,
+                "consumption_rule": pressure_packet_verifier.CONSUMPTION_RULE,
+                "publication_root_identity": publication_identity,
+                "aggregate_receipt": aggregate_binding,
+                "packet_root": str(packet_root),
+                "inventory_sha256": hashlib.sha256(inventory_payload).hexdigest(),
+                "source_bindings": source_bindings,
+            }
+        )
+        self._write_planner_readonly(packet_receipt, packet_receipt_payload)
+        packet_binding = {
+            "path": str(packet_receipt),
+            "sha256": hashlib.sha256(packet_receipt_payload).hexdigest(),
+        }
+        self._seal_planner_pressure_receipt(aggregate_receipt)
+        self._seal_planner_pressure_receipt(packet_receipt)
+        self._planner_pressure_aggregate_receipt = aggregate_receipt
+        return aggregate_binding, packet_binding
+
+    @staticmethod
+    def _write_planner_readonly(path: Path, payload: bytes) -> None:
+        path.write_bytes(payload)
+        path.chmod(0o444)
+
+    def _seal_planner_pressure_receipt(self, receipt: Path) -> None:
+        publication = self.pic_root / "publication"
+        metadata = receipt.stat()
+        payload = receipt.read_bytes()
+        seal = self.pic_root / "publication_acceptance" / (
+            f".{receipt.name}.publication-success"
+        )
+        self._write_planner_readonly(
+            seal,
+            self._planner_json_payload(
+                {
+                    "schema_version": 1,
+                    "record_type": pressure_packet_verifier.SUCCESS_SEAL_RECORD_TYPE,
+                    "publication_root_identity": {
+                        "device": publication.stat().st_dev,
+                        "inode": publication.stat().st_ino,
+                    },
+                    "receipt_name": receipt.name,
+                    "receipt_sha256": hashlib.sha256(payload).hexdigest(),
+                    "receipt_identity": {
+                        "device": metadata.st_dev,
+                        "inode": metadata.st_ino,
+                    },
+                }
+            ),
+        )
+
+    def _alternate_planner_pressure_aggregate_binding(self) -> dict[str, str]:
+        source = self._planner_pressure_aggregate_receipt
+        alternate = source.with_name("alternate-pressure-pilot-receipt.json")
+        payload = source.read_bytes()
+        self._write_planner_readonly(alternate, payload)
+        self._seal_planner_pressure_receipt(alternate)
+        return {
+            "path": str(alternate),
+            "sha256": hashlib.sha256(payload).hexdigest(),
+        }
+
     def _prepare_planner_retention_reconciliation(
         self,
     ) -> tuple[Path, dict[str, object], Path]:
@@ -1541,6 +1994,178 @@ class SnapshotTests(unittest.TestCase):
     @staticmethod
     def _planner_json_payload(value: object) -> bytes:
         return (json.dumps(value, indent=2, sort_keys=True) + "\n").encode("utf-8")
+
+    def _planner_pressure_gate_attestations(
+        self,
+        *,
+        published_pressure_receipt: dict[str, str],
+        published_packet_receipt: dict[str, str],
+        pilot_bundle_manifest_sha256: str,
+        aggregate_pilot_analysis_sha256: str,
+        selected_case: dict[str, object],
+        git_commit: str,
+        source_archive_sha256: str,
+        helper_sources: list[dict[str, str]],
+    ) -> tuple[dict[str, str], dict[str, str]]:
+        helper_by_path = {
+            source["path"]: source["sha256"] for source in helper_sources
+        }
+        self.assertEqual(len(helper_by_path), len(helper_sources))
+        reanalysis_source_closure = [
+            {"path": path, "sha256": helper_by_path[path]}
+            for path in pressure_packet_verifier.PRESSURE_REANALYSIS_SOURCE_PATHS
+        ]
+        source_closure_sha256 = hashlib.sha256(
+            json.dumps(
+                reanalysis_source_closure,
+                separators=(",", ":"),
+                sort_keys=True,
+                allow_nan=False,
+            ).encode("utf-8")
+        ).hexdigest()
+        timestamp = self._utc(datetime.now(timezone.utc))
+        compact_timestamp = datetime.strptime(
+            timestamp, "%Y-%m-%dT%H:%M:%SZ"
+        ).strftime("%Y%m%dT%H%M%SZ")
+        operator_id = "planner-fixture-operator"
+        reviewer_id = "planner-fixture-reviewer"
+        evidence = {
+            "published_pressure_pilot_receipt": published_pressure_receipt,
+            "published_pressure_pilot_review_packet_receipt": published_packet_receipt,
+            "pilot_bundle_manifest_sha256": pilot_bundle_manifest_sha256,
+            "aggregate_pilot_analysis_sha256": aggregate_pilot_analysis_sha256,
+        }
+        result = {
+            "packet_receipt_sha256": published_packet_receipt["sha256"],
+            "aggregate_receipt_sha256": published_pressure_receipt["sha256"],
+            "manifest_sha256": pilot_bundle_manifest_sha256,
+            "analysis_result_sha256": aggregate_pilot_analysis_sha256,
+            "status": "pass_engineering_calibration_only",
+        }
+        reanalysis_binding = self._write_planner_pressure_gate_attestation(
+            (
+                f"{compact_timestamp}-q011-section54-pressure-reanalysis-"
+                f"{operator_id}"
+            ),
+            {
+                "schema_version": 1,
+                "record_type": pressure_packet_verifier.PRESSURE_REANALYSIS_RECORD_TYPE,
+                "qualification_effect": (
+                    pressure_packet_verifier.PRESSURE_REANALYSIS_QUALIFICATION_EFFECT
+                ),
+                "operator_id": operator_id,
+                "recomputed_utc": timestamp,
+                "sealed_utc": timestamp,
+                "operator_statement": (
+                    pressure_packet_verifier.PRESSURE_REANALYSIS_OPERATOR_STATEMENT
+                ),
+                "evidence": evidence,
+                "source_authorization": {
+                    "execution_mode": (
+                        pressure_packet_verifier.PRESSURE_REANALYSIS_EXECUTION_MODE
+                    ),
+                    "git_commit": git_commit,
+                    "source_archive_sha256": source_archive_sha256,
+                    "source_closure_sha256": source_closure_sha256,
+                    "source_closure": reanalysis_source_closure,
+                    "historical_production_source_authorization": dict(
+                        pressure_packet_verifier.AUTHORIZED_HISTORICAL_REANALYSIS_SOURCE_AUTHORIZATION
+                    ),
+                },
+                "result": result,
+            },
+        )
+        reviewer_binding = self._write_planner_pressure_gate_attestation(
+            (
+                f"{compact_timestamp}-q011-section54-pressure-selection-"
+                f"{reviewer_id}"
+            ),
+            {
+                "schema_version": 1,
+                "record_type": pressure_packet_verifier.PRESSURE_REVIEWER_RECORD_TYPE,
+                "qualification_effect": (
+                    pressure_packet_verifier.PRESSURE_REVIEWER_QUALIFICATION_EFFECT
+                ),
+                "selection_method": "human_review_only",
+                "reviewer_id": reviewer_id,
+                "reviewed_utc": timestamp,
+                "sealed_utc": timestamp,
+                "rationale": "Test-only retained human pressure selection.",
+                "reviewer_statement": pressure_packet_verifier.PRESSURE_REVIEWER_STATEMENT,
+                "published_pressure_pilot_receipt": published_pressure_receipt,
+                "published_pressure_pilot_review_packet_receipt": (
+                    published_packet_receipt
+                ),
+                "authoritative_reanalysis_attestation": reanalysis_binding,
+                "selected_case": selected_case,
+            },
+        )
+        return reanalysis_binding, reviewer_binding
+
+    def _write_planner_pressure_gate_attestation(
+        self,
+        directory_name: str,
+        attestation: dict[str, object],
+    ) -> dict[str, str]:
+        archive = (
+            self.pic_root / pressure_packet_verifier.PRESSURE_GATE_ATTESTATION_ROOT_NAME
+        )
+        archive.mkdir(mode=0o700, exist_ok=True)
+        directory = archive / directory_name
+        directory.mkdir(mode=0o700)
+        path = directory / pressure_packet_verifier.PRESSURE_GATE_ATTESTATION_FILENAME
+        payload = self._planner_json_payload(attestation)
+        path.write_bytes(payload)
+        path.chmod(0o400)
+        directory.chmod(0o500)
+        return {"path": str(path), "sha256": hashlib.sha256(payload).hexdigest()}
+
+    def _rewrite_planner_pressure_gate_attestation(
+        self,
+        binding: dict[str, str],
+        mutate: Callable[[dict[str, object]], None],
+    ) -> dict[str, str]:
+        path = Path(binding["path"])
+        directory = path.parent
+        attestation = json.loads(path.read_text(encoding="utf-8"))
+        mutate(attestation)
+        payload = self._planner_json_payload(attestation)
+        directory.chmod(0o700)
+        path.chmod(0o600)
+        path.write_bytes(payload)
+        path.chmod(0o400)
+        directory.chmod(0o500)
+        return {"path": str(path), "sha256": hashlib.sha256(payload).hexdigest()}
+
+    def _rewrite_planner_pressure_reanalysis_attestation(
+        self,
+        binding: dict[str, object],
+        mutate_reanalysis: Callable[[dict[str, object]], None],
+    ) -> None:
+        planner_root = Path(str(binding["planner_root"]))
+        pressure_receipt = json.loads(
+            (
+                planner_root / "bindings/human_pressure_selection_receipt.json"
+            ).read_text(encoding="utf-8")
+        )
+        reanalysis_binding = self._rewrite_planner_pressure_gate_attestation(
+            pressure_receipt["authoritative_reanalysis_attestation"],
+            mutate_reanalysis,
+        )
+
+        def rebind_reviewer(reviewer: dict[str, object]) -> None:
+            reviewer["authoritative_reanalysis_attestation"] = reanalysis_binding
+
+        reviewer_binding = self._rewrite_planner_pressure_gate_attestation(
+            pressure_receipt["reviewer_attestation"],
+            rebind_reviewer,
+        )
+
+        def rebind_receipt(receipt: dict[str, object]) -> None:
+            receipt["authoritative_reanalysis_attestation"] = reanalysis_binding
+            receipt["reviewer_attestation"] = reviewer_binding
+
+        self._rewrite_planner_pressure_receipt(binding, rebind_receipt)
 
     def _rewrite_closed_planner_tree(
         self,
@@ -1606,6 +2231,28 @@ class SnapshotTests(unittest.TestCase):
         ).hexdigest()
         files["materialization_receipt.json"] = self._planner_json_payload(receipt)
 
+    def _rewrite_planner_pressure_receipt(
+        self,
+        binding: dict[str, object],
+        mutate_receipt: Callable[[dict[str, object]], None],
+    ) -> None:
+        def mutate(files: dict[str, bytes]) -> None:
+            path = "bindings/human_pressure_selection_receipt.json"
+            pressure_receipt = json.loads(files[path])
+            mutate_receipt(pressure_receipt)
+            pressure_payload = self._planner_json_payload(pressure_receipt)
+            files[path] = pressure_payload
+            pressure_sha256 = hashlib.sha256(pressure_payload).hexdigest()
+            plan = json.loads(files["campaign_plan.json"])
+            plan["source_bindings"]["pressure_selection_receipt"][
+                "sha256"
+            ] = pressure_sha256
+            plan["selected_pressure"]["receipt"]["sha256"] = pressure_sha256
+            files["campaign_plan.json"] = self._planner_json_payload(plan)
+            self._rebind_planner_campaign_plan(files)
+
+        self._rewrite_closed_planner_tree(binding, mutate)
+
     def test_planner_retention_rejects_caller_selected_continuation_namespace(
         self,
     ) -> None:
@@ -1668,6 +2315,42 @@ class SnapshotTests(unittest.TestCase):
                 expected_clean_candidate_manifest_sha256="0" * 64,
             )
 
+    def test_q011_helper_source_order_matches_execution_and_analyzer(self) -> None:
+        import ast
+        import control_plane_common as common
+
+        repo_root = Path(__file__).resolve().parents[3]
+
+        def source_tuple(relative: str, name: str) -> tuple[str, ...]:
+            tree = ast.parse((repo_root / relative).read_text(encoding="utf-8"))
+            for node in tree.body:
+                if (
+                    isinstance(node, ast.Assign)
+                    and len(node.targets) == 1
+                    and isinstance(node.targets[0], ast.Name)
+                    and node.targets[0].id == name
+                ):
+                    value = ast.literal_eval(node.value)
+                    self.assertIsInstance(value, tuple)
+                    return value
+            self.fail(f"Missing {name} in {relative}")
+
+        expected = common.Q011_SECTION54_HELPER_SOURCES
+        self.assertEqual(
+            expected,
+            source_tuple(
+                "tst/publication/q011_section54_qualifying_campaign_execution.py",
+                "_FIXED_HELPER_SOURCES",
+            ),
+        )
+        self.assertEqual(
+            expected,
+            source_tuple(
+                "tst/publication/analyze_q011_section54_campaign.py",
+                "_EXPECTED_HELPER_SOURCE_PATHS",
+            ),
+        )
+
     def test_planner_retention_rejects_self_authored_frozen_helper_digest(self) -> None:
         binding = self._planner_retention()
 
@@ -1721,6 +2404,74 @@ class SnapshotTests(unittest.TestCase):
                 binding, authorized_pic_root=self.pic_root
             )
 
+    def test_planner_retention_rejects_replayed_pressure_reanalysis_source_snapshot(
+        self,
+    ) -> None:
+        binding = self._planner_retention()
+        planner_root = Path(str(binding["planner_root"]))
+        pressure_receipt = json.loads(
+            (
+                planner_root / "bindings/human_pressure_selection_receipt.json"
+            ).read_text(encoding="utf-8")
+        )
+        original_reanalysis = json.loads(
+            Path(
+                pressure_receipt["authoritative_reanalysis_attestation"]["path"]
+            ).read_text(encoding="utf-8")
+        )
+
+        def alternate(value: str, length: int) -> str:
+            candidate = "0" * length
+            return candidate if value != candidate else "f" * length
+
+        def drift_commit(authorization: dict[str, object]) -> None:
+            authorization["git_commit"] = alternate(
+                str(authorization["git_commit"]), 40
+            )
+
+        def drift_archive(authorization: dict[str, object]) -> None:
+            authorization["source_archive_sha256"] = alternate(
+                str(authorization["source_archive_sha256"]), 64
+            )
+
+        def drift_closure(authorization: dict[str, object]) -> None:
+            closure = authorization["source_closure"]
+            closure[0]["sha256"] = alternate(str(closure[0]["sha256"]), 64)
+            authorization["source_closure_sha256"] = hashlib.sha256(
+                json.dumps(
+                    closure,
+                    separators=(",", ":"),
+                    sort_keys=True,
+                    allow_nan=False,
+                ).encode("utf-8")
+            ).hexdigest()
+
+        for label, drift in (
+            ("git commit", drift_commit),
+            ("source archive", drift_archive),
+            ("source closure", drift_closure),
+        ):
+            def replay_from_alternate_source(
+                attestation: dict[str, object],
+                *,
+                drift: Callable[[dict[str, object]], None] = drift,
+            ) -> None:
+                attestation.clear()
+                attestation.update(json.loads(json.dumps(original_reanalysis)))
+                drift(attestation["source_authorization"])
+
+            with self.subTest(binding=label):
+                self._rewrite_planner_pressure_reanalysis_attestation(
+                    binding, replay_from_alternate_source
+                )
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "Planner pressure reanalysis source-snapshot binding failed",
+                ):
+                    validate_planner_retention_binding(
+                        binding, authorized_pic_root=self.pic_root
+                    )
+
     def test_planner_retention_rejects_self_authored_reduced_pressure_receipt(
         self,
     ) -> None:
@@ -1729,7 +2480,7 @@ class SnapshotTests(unittest.TestCase):
         def mutate(files: dict[str, bytes]) -> None:
             path = "bindings/human_pressure_selection_receipt.json"
             receipt = json.loads(files[path])
-            receipt.pop("rationale")
+            receipt.pop("reviewer_attestation")
             receipt_payload = self._planner_json_payload(receipt)
             files[path] = receipt_payload
             receipt_sha256 = hashlib.sha256(receipt_payload).hexdigest()
@@ -1743,6 +2494,134 @@ class SnapshotTests(unittest.TestCase):
 
         self._rewrite_closed_planner_tree(binding, mutate)
         with self.assertRaisesRegex(ValueError, "receipt schema drifted"):
+            validate_planner_retention_binding(
+                binding, authorized_pic_root=self.pic_root
+            )
+
+    def test_planner_retention_rejects_missing_pressure_packet_binding(self) -> None:
+        binding = self._planner_retention()
+
+        def mutate(files: dict[str, bytes]) -> None:
+            path = "bindings/human_pressure_selection_receipt.json"
+            receipt = json.loads(files[path])
+            receipt.pop("published_pressure_pilot_review_packet_receipt")
+            receipt_payload = self._planner_json_payload(receipt)
+            files[path] = receipt_payload
+            receipt_sha256 = hashlib.sha256(receipt_payload).hexdigest()
+            plan = json.loads(files["campaign_plan.json"])
+            plan["source_bindings"]["pressure_selection_receipt"][
+                "sha256"
+            ] = receipt_sha256
+            plan["selected_pressure"]["receipt"]["sha256"] = receipt_sha256
+            files["campaign_plan.json"] = self._planner_json_payload(plan)
+            self._rebind_planner_campaign_plan(files)
+
+        self._rewrite_closed_planner_tree(binding, mutate)
+        with self.assertRaisesRegex(ValueError, "receipt schema drifted"):
+            validate_planner_retention_binding(
+                binding, authorized_pic_root=self.pic_root
+            )
+
+    def test_planner_retention_rejects_pressure_packet_hash_drift(self) -> None:
+        binding = self._planner_retention()
+
+        def mutate(files: dict[str, bytes]) -> None:
+            path = "bindings/human_pressure_selection_receipt.json"
+            receipt = json.loads(files[path])
+            receipt["published_pressure_pilot_review_packet_receipt"][
+                "sha256"
+            ] = "0" * 64
+            receipt_payload = self._planner_json_payload(receipt)
+            files[path] = receipt_payload
+            receipt_sha256 = hashlib.sha256(receipt_payload).hexdigest()
+            plan = json.loads(files["campaign_plan.json"])
+            plan["source_bindings"]["pressure_selection_receipt"][
+                "sha256"
+            ] = receipt_sha256
+            plan["selected_pressure"]["receipt"]["sha256"] = receipt_sha256
+            files["campaign_plan.json"] = self._planner_json_payload(plan)
+            self._rebind_planner_campaign_plan(files)
+
+        self._rewrite_closed_planner_tree(binding, mutate)
+        with self.assertRaisesRegex(
+            ValueError,
+            "Planner human pressure-selection review packet verifier result drifted",
+        ):
+            validate_planner_retention_binding(
+                binding, authorized_pic_root=self.pic_root
+            )
+
+    def test_planner_retention_rejects_cross_bound_pressure_packet_aggregate(
+        self,
+    ) -> None:
+        binding = self._planner_retention()
+        alternate_aggregate = self._alternate_planner_pressure_aggregate_binding()
+
+        def mutate(files: dict[str, bytes]) -> None:
+            path = "bindings/human_pressure_selection_receipt.json"
+            receipt = json.loads(files[path])
+            receipt["published_pressure_pilot_receipt"] = alternate_aggregate
+            receipt_payload = self._planner_json_payload(receipt)
+            files[path] = receipt_payload
+            receipt_sha256 = hashlib.sha256(receipt_payload).hexdigest()
+            plan = json.loads(files["campaign_plan.json"])
+            plan["source_bindings"]["pressure_selection_receipt"][
+                "sha256"
+            ] = receipt_sha256
+            plan["selected_pressure"]["receipt"]["sha256"] = receipt_sha256
+            files["campaign_plan.json"] = self._planner_json_payload(plan)
+            self._rebind_planner_campaign_plan(files)
+
+        self._rewrite_closed_planner_tree(binding, mutate)
+        with self.assertRaisesRegex(
+            ValueError, "does not bind the supplied aggregate receipt"
+        ):
+            validate_planner_retention_binding(
+                binding, authorized_pic_root=self.pic_root
+            )
+
+    def test_planner_retention_rejects_pressure_bundle_manifest_hash_drift(
+        self,
+    ) -> None:
+        binding = self._planner_retention()
+        self._rewrite_planner_pressure_receipt(
+            binding,
+            lambda receipt: receipt.__setitem__(
+                "pilot_bundle_manifest_sha256", "0" * 64
+            ),
+        )
+        with self.assertRaisesRegex(ValueError, "aggregate evidence binding drifted"):
+            validate_planner_retention_binding(
+                binding, authorized_pic_root=self.pic_root
+            )
+
+    def test_planner_retention_rejects_pressure_aggregate_analysis_hash_drift(
+        self,
+    ) -> None:
+        binding = self._planner_retention()
+        self._rewrite_planner_pressure_receipt(
+            binding,
+            lambda receipt: receipt.__setitem__(
+                "aggregate_pilot_analysis_sha256", "0" * 64
+            ),
+        )
+        with self.assertRaisesRegex(ValueError, "aggregate evidence binding drifted"):
+            validate_planner_retention_binding(
+                binding, authorized_pic_root=self.pic_root
+            )
+
+    def test_planner_retention_rejects_pressure_aggregate_descriptor_drift(
+        self,
+    ) -> None:
+        binding = self._planner_retention()
+
+        def mutate(receipt: dict[str, object]) -> None:
+            receipt["case_descriptors"][0]["descriptor_sha256"] = "0" * 64
+
+        self._rewrite_planner_pressure_receipt(binding, mutate)
+        with self.assertRaisesRegex(
+            ValueError, "aggregate descriptor binding drifted"
+        ):
             validate_planner_retention_binding(
                 binding, authorized_pic_root=self.pic_root
             )
@@ -7582,9 +8461,18 @@ PY
 
     def test_q011_snapshot_analyzer_executes_verified_source_without_bytecode(self) -> None:
         manifest, manifest_path, _ = self._q011_snapshot_analyzer_fixture()
-        module = validate_and_reserve_frontier_job._q011_snapshot_analyzer(
-            manifest, manifest_path
-        )
+        with patch.multiple(
+            validate_and_reserve_frontier_job,
+            Q011_RAW_ANALYZER_SHA256=record_for_role(
+                manifest, "analysis-script-000"
+            )["sha256"],
+            Q011_STRUCTURED_HELPER_SHA256=record_for_role(
+                manifest, "analysis-script-001"
+            )["sha256"],
+        ):
+            module = validate_and_reserve_frontier_job._q011_snapshot_analyzer(
+                manifest, manifest_path
+            )
         self.assertTrue(callable(module.verify_published_case_descriptor))
 
     def test_q011_snapshot_analyzer_rejects_adjacent_cached_bytecode(self) -> None:
@@ -7592,7 +8480,15 @@ PY
         cache = analysis_root / "__pycache__"
         cache.mkdir()
         (cache / "injected.cpython-311.pyc").write_bytes(b"untrusted bytecode\n")
-        with self.assertRaisesRegex(ValueError, "registered bytes"):
+        with patch.multiple(
+            validate_and_reserve_frontier_job,
+            Q011_RAW_ANALYZER_SHA256=record_for_role(
+                manifest, "analysis-script-000"
+            )["sha256"],
+            Q011_STRUCTURED_HELPER_SHA256=record_for_role(
+                manifest, "analysis-script-001"
+            )["sha256"],
+        ), self.assertRaisesRegex(ValueError, "registered bytes"):
             validate_and_reserve_frontier_job._q011_snapshot_analyzer(
                 manifest, manifest_path
             )
@@ -7615,6 +8511,14 @@ PY
         with patch(
             "validate_and_reserve_frontier_job._q011_open_read_only_source",
             side_effect=mutate_after_hash,
+        ), patch.multiple(
+            validate_and_reserve_frontier_job,
+            Q011_RAW_ANALYZER_SHA256=record_for_role(
+                manifest, "analysis-script-000"
+            )["sha256"],
+            Q011_STRUCTURED_HELPER_SHA256=record_for_role(
+                manifest, "analysis-script-001"
+            )["sha256"],
         ), self.assertRaisesRegex(ValueError, "differs from registered bytes"):
             validate_and_reserve_frontier_job._q011_snapshot_analyzer(
                 manifest, manifest_path
@@ -7752,9 +8656,14 @@ PY
                     "manifest_sha256": sha256(prior_manifest_path),
                 }
             ]
-            validate_and_reserve_frontier_job._verify_q011_prior_case_closures(
-                manifest, records, authorized_pic_root=self.pic_root
-            )
+            with patch.multiple(
+                validate_and_reserve_frontier_job,
+                Q011_RAW_ANALYZER_SHA256=sha256(analyzer_path),
+                Q011_STRUCTURED_HELPER_SHA256=sha256(helper_path),
+            ):
+                validate_and_reserve_frontier_job._verify_q011_prior_case_closures(
+                    manifest, records, authorized_pic_root=self.pic_root
+                )
             records[0]["manifest_sha256"] = "0" * 64
             with self.assertRaisesRegex(ValueError, "manifest digest drifted"):
                 validate_and_reserve_frontier_job._verify_q011_prior_case_closures(
@@ -10324,7 +11233,11 @@ PY
         entrypoints = [
             path
             for path in self.control_plane_dir.glob("*.py")
-            if path.name != "test_control_plane.py"
+            if path.name
+            not in {
+                "q011_pressure_review_packet_verifier.py",
+                "test_control_plane.py",
+            }
         ]
         self.assertTrue(entrypoints)
         for entrypoint in entrypoints:

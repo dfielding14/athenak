@@ -25,6 +25,12 @@ from typing import Callable, Iterable
 import uuid
 
 from operator_attestation import validate_sealed_operator_attestation
+from q011_pressure_review_packet_verifier import (
+    consume_sealed_pressure_reanalysis_attestation,
+    consume_sealed_pressure_reviewer_attestation,
+    consume_published_pressure_pilot_review_packet,
+    validate_pressure_reanalysis_source_snapshot,
+)
 
 
 AUTHORIZED_PIC_ROOT = Path("/lustre/orion/ast207/proj-shared/dfielding/PIC")
@@ -97,7 +103,7 @@ AUTHORIZED_STORAGE_PREFLIGHT_CAPTURE_SOURCE_BLOBS = {
         "22b8c3898154e0c687bf5bd555b7fae35826014cd5af8e33bd04b946671cb7f0"
     ),
     "runner_sha256": (
-        "74ab26fdf66129e018ce5a63a3827853e878b1efff71449490b0b017f48fd956"
+        "029daff53c82ddc30ff560a1ab87d45966c2ef47514d550c38d1497e293a27e2"
     ),
     "schema_sha256": (
         "183fb8996381660a731a650e2fb42e0ee4989b248646d592fb28c0e57f8de898"
@@ -178,6 +184,8 @@ Q011_SECTION54_HELPER_SOURCES = (
     "tst/publication/q011_section54_model.py",
     "tst/publication/q011_section54_pressure_pilot_execution.py",
     "tst/publication/q011_section54_pressure_selection.py",
+    "tst/publication/q011_section54_historical_pressure_pilot_consumer.py",
+    "tst/publication/frontier_control_plane/q011_pressure_review_packet_verifier.py",
     "tst/publication/q011_section54_restart.py",
     "tst/publication/analyze_q011_section54_outputs.py",
     "tst/publication/analyze_q011_section54_campaign.py",
@@ -466,6 +474,7 @@ CONTROL_PLANE_FILES = [
     "ledger.py",
     "operator_attestation.py",
     "promote_active_policy.py",
+    "q011_pressure_review_packet_verifier.py",
     "reconcile_frontier_job.py",
     "reconcile_manual_frontier_allocations.py",
     "revalidate_clean_candidate.py",
@@ -3411,44 +3420,86 @@ def _planner_normalized_pressure_receipt(
             "record_type",
             "selection_method",
             "published_pressure_pilot_receipt",
+            "published_pressure_pilot_review_packet_receipt",
             "pilot_bundle_manifest_sha256",
             "aggregate_pilot_analysis_sha256",
             "case_descriptors",
             "selected_case",
-            "reviewer_identity",
-            "reviewed_utc",
-            "rationale",
+            "authoritative_reanalysis_attestation",
+            "reviewer_attestation",
         }
         or type(value.get("schema_version")) is not int
-        or value["schema_version"] != 1
+        or value["schema_version"] != 3
         or value.get("record_type") != "q011_section54_pressure_selection_receipt"
         or value.get("selection_method") != "human_review_only"
     ):
         raise ValueError("Planner human pressure-selection receipt schema drifted")
     published = value.get("published_pressure_pilot_receipt")
+    packet = value.get("published_pressure_pilot_review_packet_receipt")
     if (
         not isinstance(published, dict)
         or set(published) != {"path", "sha256"}
         or not isinstance(published.get("path"), str)
         or not Path(published["path"]).is_absolute()
         or not _is_lowercase_sha256(published.get("sha256"))
+        or not isinstance(packet, dict)
+        or set(packet) != {"path", "sha256"}
+        or not isinstance(packet.get("path"), str)
+        or not Path(packet["path"]).is_absolute()
+        or not _is_lowercase_sha256(packet.get("sha256"))
         or not _is_lowercase_sha256(value.get("pilot_bundle_manifest_sha256"))
         or not _is_lowercase_sha256(value.get("aggregate_pilot_analysis_sha256"))
     ):
         raise ValueError("Planner human pressure-selection publication binding drifted")
     published_path = Path(published["path"])
+    packet_path = Path(packet["path"])
     if (
         Path(os.path.abspath(published_path)) != published_path
         or published_path.parent != pic_root / "publication"
+        or Path(os.path.abspath(packet_path)) != packet_path
+        or packet_path.parent != pic_root / "publication"
     ):
         raise ValueError("Planner human pressure-selection publication path drifted")
-    published_payload = read_stable_regular_file_below(
-        published_path,
-        pic_root,
-        require_read_only_mode=True,
-    )
-    if hashlib.sha256(published_payload).hexdigest() != published["sha256"]:
-        raise ValueError("Planner human pressure-selection publication checksum drifted")
+    try:
+        packet_verification = consume_published_pressure_pilot_review_packet(
+            packet["path"],
+            aggregate_receipt_binding=published,
+            authorized_pic_root=pic_root,
+        )
+    except ValueError as error:
+        raise ValueError(
+            f"Planner human pressure-selection review packet verification failed: {error}"
+        ) from error
+    if (
+        not isinstance(packet_verification, dict)
+        or set(packet_verification)
+        != {
+            "receipt_binding",
+            "aggregate_receipt_binding",
+            "packet_receipt",
+            "aggregate_receipt",
+            "aggregate_bundle",
+            "aggregate_analysis",
+            "source_bindings",
+            "inventory",
+        }
+        or packet_verification["receipt_binding"] != packet
+        or packet_verification["aggregate_receipt_binding"] != published
+    ):
+        raise ValueError(
+            "Planner human pressure-selection review packet verifier result drifted"
+        )
+    aggregate_receipt = packet_verification["aggregate_receipt"]
+    if (
+        not isinstance(aggregate_receipt, dict)
+        or packet_verification["aggregate_bundle"]
+        != aggregate_receipt.get("aggregate_bundle")
+        or packet_verification["aggregate_analysis"]
+        != aggregate_receipt.get("aggregate_analysis")
+    ):
+        raise ValueError(
+            "Planner human pressure-selection aggregate verifier result drifted"
+        )
     registered = (
         ("ps_p0_1p00", 1.0),
         ("ps_p0_0p05", 0.05),
@@ -3472,25 +3523,77 @@ def _planner_normalized_pressure_receipt(
         descriptor_digests.append(descriptor["descriptor_sha256"])
     if len(set(descriptor_digests)) != len(descriptor_digests):
         raise ValueError("Planner human pressure-selection descriptors are not unique")
+    aggregate_bundle = aggregate_receipt.get("aggregate_bundle")
+    aggregate_analysis = aggregate_receipt.get("aggregate_analysis")
+    aggregate_cases = aggregate_receipt.get("raw_cases")
+    if (
+        not isinstance(aggregate_bundle, dict)
+        or set(aggregate_bundle) != {"path", "manifest_sha256"}
+        or not isinstance(aggregate_analysis, dict)
+        or set(aggregate_analysis) != {"path", "sha256"}
+        or not isinstance(aggregate_cases, list)
+        or len(aggregate_cases) != len(descriptors)
+        or value["pilot_bundle_manifest_sha256"]
+        != aggregate_bundle.get("manifest_sha256")
+        or value["aggregate_pilot_analysis_sha256"]
+        != aggregate_analysis.get("sha256")
+    ):
+        raise ValueError(
+            "Planner human pressure-selection aggregate evidence binding drifted"
+        )
+    for descriptor, aggregate_case in zip(descriptors, aggregate_cases):
+        if (
+            not isinstance(aggregate_case, dict)
+            or set(aggregate_case)
+            != {
+                "case_id",
+                "artifact_dir",
+                "descriptor_path",
+                "descriptor_sha256",
+                "artifact_inventory_sha256",
+                "runtime_artifacts",
+            }
+            or descriptor["case_id"] != aggregate_case.get("case_id")
+            or descriptor["descriptor_sha256"]
+            != aggregate_case.get("descriptor_sha256")
+        ):
+            raise ValueError(
+                "Planner human pressure-selection aggregate descriptor binding drifted"
+            )
     selected = value.get("selected_case")
     if (
         not isinstance(selected, dict)
         or set(selected) != {"case_id", "problem_ps_p0"}
         or type(selected.get("problem_ps_p0")) is not float
         or (selected.get("case_id"), selected.get("problem_ps_p0")) not in registered
-        or not isinstance(value.get("reviewer_identity"), str)
-        or not value["reviewer_identity"].strip()
-        or not isinstance(value.get("reviewed_utc"), str)
-        or re.fullmatch(
-            r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}"
-            r"(?:\.[0-9]{1,6})?Z",
-            value["reviewed_utc"],
-        )
-        is None
-        or not isinstance(value.get("rationale"), str)
-        or not value["rationale"].strip()
     ):
         raise ValueError("Planner human pressure-selection review record drifted")
+    try:
+        reanalysis = consume_sealed_pressure_reanalysis_attestation(
+            value["authoritative_reanalysis_attestation"],
+            aggregate_receipt_binding=published,
+            packet_receipt_binding=packet,
+            pilot_bundle_manifest_sha256=value["pilot_bundle_manifest_sha256"],
+            aggregate_pilot_analysis_sha256=value["aggregate_pilot_analysis_sha256"],
+            authorized_pic_root=pic_root,
+        )
+        reviewer = consume_sealed_pressure_reviewer_attestation(
+            value["reviewer_attestation"],
+            aggregate_receipt_binding=published,
+            packet_receipt_binding=packet,
+            reanalysis_verification=reanalysis,
+            selected_case=selected,
+            authorized_pic_root=pic_root,
+        )
+    except ValueError as error:
+        raise ValueError(
+            f"Planner human pressure-selection attestation verification failed: {error}"
+        ) from error
+    if (
+        reanalysis.get("binding") != value["authoritative_reanalysis_attestation"]
+        or reviewer.get("binding") != value["reviewer_attestation"]
+    ):
+        raise ValueError("Planner human pressure-selection attestation binding drifted")
     return value
 
 
@@ -3782,6 +3885,34 @@ def validate_planner_retention_binding(
         json.dumps(pressure_receipt, indent=2, sort_keys=True, allow_nan=False) + "\n"
     ).encode("utf-8"):
         raise ValueError("Planner human pressure-selection receipt is not canonical JSON")
+    try:
+        pressure_reanalysis = consume_sealed_pressure_reanalysis_attestation(
+            pressure_receipt["authoritative_reanalysis_attestation"],
+            aggregate_receipt_binding=pressure_receipt[
+                "published_pressure_pilot_receipt"
+            ],
+            packet_receipt_binding=pressure_receipt[
+                "published_pressure_pilot_review_packet_receipt"
+            ],
+            pilot_bundle_manifest_sha256=pressure_receipt[
+                "pilot_bundle_manifest_sha256"
+            ],
+            aggregate_pilot_analysis_sha256=pressure_receipt[
+                "aggregate_pilot_analysis_sha256"
+            ],
+            authorized_pic_root=pic_root,
+        )
+        validate_pressure_reanalysis_source_snapshot(
+            pressure_reanalysis,
+            git_commit=candidate["git_commit"],
+            source_archive_sha256=candidate["source_archive_sha256"],
+            helper_source_closure=expected_helper_sources,
+            authorized_pic_root=pic_root,
+        )
+    except ValueError as error:
+        raise ValueError(
+            f"Planner pressure reanalysis source-snapshot binding failed: {error}"
+        ) from error
     selected_pressure = plan.get("selected_pressure")
     if (
         not isinstance(selected_pressure, dict)

@@ -211,6 +211,8 @@ _EXPECTED_HELPER_SOURCE_PATHS = (
     "tst/publication/q011_section54_model.py",
     "tst/publication/q011_section54_pressure_pilot_execution.py",
     "tst/publication/q011_section54_pressure_selection.py",
+    "tst/publication/q011_section54_historical_pressure_pilot_consumer.py",
+    "tst/publication/frontier_control_plane/q011_pressure_review_packet_verifier.py",
     "tst/publication/q011_section54_restart.py",
     "tst/publication/analyze_q011_section54_outputs.py",
     "tst/publication/analyze_q011_section54_campaign.py",
@@ -1264,12 +1266,34 @@ def _validate_identity(
     )
 
 
-def _member_payload(snapshot: Any, binding: Mapping[str, str], label: str) -> bytes:
+def _member_payload(
+    snapshot: Any,
+    binding: Mapping[str, str],
+    label: str,
+    *,
+    max_bytes: int | None = None,
+    oversized_code: str = "oversized_bound_file",
+) -> bytes:
+    _require(
+        max_bytes is None or (type(max_bytes) is int and max_bytes >= 0),
+        "schema_type_error",
+        f"{label}: byte limit is invalid",
+    )
     try:
         path = snapshot.member_path(binding["path"])
-        payload = path.read_bytes()
+        if max_bytes is None:
+            payload = path.read_bytes()
+        else:
+            with path.open("rb") as stream:
+                payload = stream.read(max_bytes + 1)
     except (OSError, ValueError) as error:
         _fail("missing_bound_file", f"{label}: retained member is unavailable: {error}")
+    if max_bytes is not None:
+        _require(
+            len(payload) <= max_bytes,
+            oversized_code,
+            f"{label}: retained member exceeds its size limit",
+        )
     measured = _sha256_bytes(payload)
     _require(measured == binding["sha256"], "hash_drift", f"{label}: SHA-256 drifted")
     _require(bool(payload), "empty_bound_file", f"{label}: retained member is empty")
@@ -2601,7 +2625,11 @@ def _validated_retained_attempt_semantics_snapshot(
     bindings = parsed["artifact_bindings"]
     pressure_receipt = _validate_selected_pressure_receipt(
         _member_payload(
-            snapshot, bindings["selected_pressure_receipt"], "selected pressure receipt"
+            snapshot,
+            bindings["selected_pressure_receipt"],
+            "selected pressure receipt",
+            max_bytes=pressure_selection.MAX_PRESSURE_SELECTION_RECEIPT_BYTES,
+            oversized_code="selected_pressure_receipt_drift",
         ),
         authorized_pic_root=authorized_pic_root,
     )
@@ -2633,6 +2661,19 @@ def _validated_retained_attempt_semantics_snapshot(
         helper_closure,
         policy,
     )
+    try:
+        pressure_selection.validate_pressure_selection_source_snapshot(
+            pressure_receipt,
+            git_commit=plan["candidate_binding"]["git_commit"],
+            source_archive_sha256=plan["candidate_binding"]["source_archive_sha256"],
+            helper_source_closure=helper_closure["sources"],
+            authorized_pic_root=authorized_pic_root,
+        )
+    except pressure_selection.PressureSelectionReceiptError as error:
+        _fail(
+            "selected_pressure_receipt_drift",
+            f"selected pressure reanalysis source snapshot drifted: {error}",
+        )
     contract = _validate_attempt_contract(
         _member_payload(snapshot, bindings["attempt_contract"], "attempt contract"),
         parsed,

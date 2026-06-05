@@ -23,7 +23,7 @@ from typing import Any, Mapping, Sequence
 
 
 _STRUCTURED_HELPER_SHA256 = (
-    "cf090115bcdfd143f67b12339115102b57e74cf3205b1ebb1521c144c3415a5a"
+    "7be737cff07035f494c4ccec5b291eb84306b443e9408b55dad618336914b13b"
 )
 
 

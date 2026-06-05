@@ -11,7 +11,17 @@ import stat
 
 
 _DIRECTORY_FLAGS = os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0)
-_FILE_FLAGS = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+_FILE_FLAGS = (
+    os.O_RDONLY
+    | getattr(os, "O_NOFOLLOW", 0)
+    | getattr(os, "O_NONBLOCK", 0)
+)
+MAX_RETAINED_FILE_BYTES = 128 * 1024 * 1024
+MAX_JSON_BYTES = 8 * 1024 * 1024
+MAX_DIRECTORY_ENTRIES = 256
+MAX_TREE_ENTRIES = 1024
+MAX_TREE_DEPTH = 16
+_READ_CHUNK_BYTES = 1024 * 1024
 TRUSTED_PYTHON = "/opt/cray/pe/python/3.11.7/bin/python3"
 REVIEWED_FRONTIER_MPICH_DIAGNOSTIC_SHA256 = (
     "fecd6e9635eb80d47efa65ec0789ad03c2ea1375ac96bfa9c801b3cbb7dc00ac"
@@ -38,7 +48,40 @@ def _parts(relative: str) -> tuple[str, ...]:
         or any(part in {"", ".", ".."} for part in path.parts)
     ):
         raise ValueError(f"Unsafe structured artifact path: {relative!r}")
+    if len(path.parts) > MAX_TREE_DEPTH:
+        raise ValueError(
+            f"Structured artifact path exceeds the {MAX_TREE_DEPTH}-component limit: {relative}"
+        )
     return path.parts
+
+
+def _bounded_directory_names(directory_fd: int, label: str) -> list[str]:
+    names: list[str] = []
+    with os.scandir(directory_fd) as entries:
+        for entry in entries:
+            if len(names) >= MAX_DIRECTORY_ENTRIES:
+                raise ValueError(
+                    f"{label} exceeds the {MAX_DIRECTORY_ENTRIES}-entry directory limit"
+                )
+            names.append(entry.name)
+    return sorted(names)
+
+
+def _read_bounded_descriptor(descriptor: int, label: str, max_bytes: int) -> bytes:
+    metadata = os.fstat(descriptor)
+    if metadata.st_size > max_bytes:
+        raise ValueError(f"{label} exceeds the {max_bytes}-byte size limit")
+    payload = bytearray()
+    while True:
+        chunk = os.read(
+            descriptor,
+            min(_READ_CHUNK_BYTES, max_bytes + 1 - len(payload)),
+        )
+        if not chunk:
+            return bytes(payload)
+        payload.extend(chunk)
+        if len(payload) > max_bytes:
+            raise ValueError(f"{label} exceeds the {max_bytes}-byte size limit")
 
 
 def _read_at(
@@ -46,6 +89,8 @@ def _read_at(
     relative: str,
     directory_identities: dict[str, tuple[int, int]] | None = None,
     file_identities: dict[str, tuple[int, int]] | None = None,
+    *,
+    max_bytes: int = MAX_RETAINED_FILE_BYTES,
 ) -> bytes:
     parts = _parts(relative)
     parent_fd = os.dup(root_fd)
@@ -93,8 +138,7 @@ def _read_at(
             != (before.st_dev, before.st_ino)
         ):
             raise ValueError(f"Structured artifact changed during analysis: {relative}")
-        with os.fdopen(descriptor, "rb", closefd=False) as stream:
-            data = stream.read()
+        data = _read_bounded_descriptor(descriptor, relative, max_bytes)
         after = os.fstat(descriptor)
         entry = os.stat(parts[-1], dir_fd=parent_fd, follow_symlinks=False)
         stable = ("st_dev", "st_ino", "st_mode", "st_size", "st_mtime_ns", "st_ctime_ns")
@@ -135,9 +179,15 @@ def _reject_duplicate_keys(pairs: list[tuple[str, object]]) -> dict[str, object]
 
 
 def canonical_json_bytes(value: dict[str, object]) -> bytes:
-    return (
-        json.dumps(value, indent=2, sort_keys=True, allow_nan=False) + "\n"
-    ).encode("utf-8")
+    try:
+        payload = (
+            json.dumps(value, indent=2, sort_keys=True, allow_nan=False) + "\n"
+        ).encode("utf-8")
+    except RecursionError as error:
+        raise ValueError("JSON document exceeds the supported nesting depth") from error
+    if len(payload) > MAX_JSON_BYTES:
+        raise ValueError(f"JSON document exceeds the {MAX_JSON_BYTES}-byte size limit")
+    return payload
 
 
 def read_only_file_sha256(path: Path) -> str:
@@ -146,8 +196,7 @@ def read_only_file_sha256(path: Path) -> str:
         metadata = os.fstat(descriptor)
         if not stat.S_ISREG(metadata.st_mode) or metadata.st_mode & 0o222:
             raise ValueError(f"Offline analysis source is not read-only: {path}")
-        with os.fdopen(descriptor, "rb", closefd=False) as stream:
-            data = stream.read()
+        data = _read_bounded_descriptor(descriptor, str(path), MAX_RETAINED_FILE_BYTES)
         after = os.fstat(descriptor)
         if (
             (metadata.st_dev, metadata.st_ino, metadata.st_mode, metadata.st_size)
@@ -190,7 +239,9 @@ def offline_analysis_receipt(
         ],
         "artifact_inventory": {
             "path": "artifact_inventory.json",
-            "sha256": hashlib.sha256(tree.read("artifact_inventory.json")).hexdigest(),
+            "sha256": hashlib.sha256(
+                tree.read("artifact_inventory.json", max_bytes=MAX_JSON_BYTES)
+            ).hexdigest(),
         },
         "analysis_result": {
             "path": "analysis/analysis.json",
@@ -295,14 +346,22 @@ class StructuredArtifactTree:
             or (expected.st_dev, expected.st_ino) != (actual.st_dev, actual.st_ino)
         ):
             raise ValueError("Structured artifact analysis directory changed during analysis")
-        for name in os.listdir(self.analysis_fd):
+        for name in _bounded_directory_names(
+            self.analysis_fd,
+            "Structured artifact analysis directory",
+        ):
             if name not in {"analysis.json", "offline_analysis_receipt.json"}:
                 raise ValueError("Structured artifact analysis directory has an unexpected entry")
             metadata = os.stat(name, dir_fd=self.analysis_fd, follow_symlinks=False)
             if not stat.S_ISREG(metadata.st_mode) or metadata.st_mode & 0o222:
                 raise ValueError("Structured artifact analysis result is not read-only")
+            if metadata.st_size > MAX_JSON_BYTES:
+                raise ValueError(
+                    f"Structured artifact analysis result exceeds the {MAX_JSON_BYTES}-byte "
+                    "size limit"
+                )
 
-    def read(self, relative: str) -> bytes:
+    def read(self, relative: str, *, max_bytes: int = MAX_RETAINED_FILE_BYTES) -> bytes:
         self.require_path_identity()
         if self._inventory is not None:
             self.require_tree_closure()
@@ -311,6 +370,7 @@ class StructuredArtifactTree:
             relative,
             self._directory_identities,
             self._file_identities,
+            max_bytes=max_bytes,
         )
         if self._inventory is not None:
             self.require_tree_closure()
@@ -323,9 +383,27 @@ class StructuredArtifactTree:
         prefix: tuple[str, ...] = (),
         directory_identities: dict[str, tuple[int, int]] | None = None,
         file_identities: dict[str, tuple[int, int]] | None = None,
+        *,
+        _entry_count: list[int] | None = None,
+        _depth: int = 0,
     ) -> list[str]:
+        if _depth > MAX_TREE_DEPTH:
+            raise ValueError(
+                f"Structured artifact tree exceeds the {MAX_TREE_DEPTH}-level depth limit"
+            )
+        if _entry_count is None:
+            _entry_count = [0]
         paths = []
-        for name in sorted(os.listdir(directory_fd)):
+        label = "/".join(prefix) or "."
+        for name in _bounded_directory_names(
+            directory_fd,
+            f"Structured artifact directory {label}",
+        ):
+            if _entry_count[0] >= MAX_TREE_ENTRIES:
+                raise ValueError(
+                    f"Structured artifact tree exceeds the {MAX_TREE_ENTRIES}-entry limit"
+                )
+            _entry_count[0] += 1
             if not prefix and name == "artifact_inventory.json":
                 continue
             if not prefix and name == "analysis":
@@ -352,6 +430,11 @@ class StructuredArtifactTree:
                     ):
                         raise ValueError(
                             f"Structured artifact changed during analysis: {relative}"
+                        )
+                    if opened.st_size > MAX_RETAINED_FILE_BYTES:
+                        raise ValueError(
+                            f"Structured artifact exceeds the {MAX_RETAINED_FILE_BYTES}-byte "
+                            f"size limit: {relative}"
                         )
                     if file_identities is not None:
                         identity = (opened.st_dev, opened.st_ino)
@@ -386,6 +469,8 @@ class StructuredArtifactTree:
                         (*prefix, name),
                         directory_identities,
                         file_identities,
+                        _entry_count=_entry_count,
+                        _depth=_depth + 1,
                     )
                     if not child_paths:
                         raise ValueError(
@@ -422,6 +507,7 @@ class StructuredArtifactTree:
             self.root_fd,
             "artifact_inventory.json",
             file_identities=file_identities,
+            max_bytes=MAX_JSON_BYTES,
         )
         if inventory_bytes != self._inventory_bytes:
             raise ValueError("Structured artifact inventory changed during analysis")
@@ -436,7 +522,13 @@ class StructuredArtifactTree:
         if file_identities != self._file_identities:
             raise ValueError("Structured artifact file identity changed during analysis")
         for relative, record in self._inventory.items():
-            data = _read_at(self.root_fd, relative, identities, file_identities)
+            data = _read_at(
+                self.root_fd,
+                relative,
+                identities,
+                file_identities,
+                max_bytes=min(MAX_RETAINED_FILE_BYTES, int(record["size"])),
+            )
             if (
                 len(data) != record["size"]
                 or hashlib.sha256(data).hexdigest() != record["sha256"]
@@ -452,13 +544,14 @@ class StructuredArtifactTree:
             self.root_fd,
             "artifact_inventory.json",
             file_identities=file_identities,
+            max_bytes=MAX_JSON_BYTES,
         )
         try:
             value = json.loads(
                 inventory_bytes.decode("utf-8"),
                 object_pairs_hook=_reject_duplicate_keys,
             )
-        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        except (UnicodeDecodeError, json.JSONDecodeError, RecursionError) as error:
             raise ValueError("Structured artifact inventory is not UTF-8 JSON") from error
         if (
             not isinstance(value, dict)
@@ -468,6 +561,10 @@ class StructuredArtifactTree:
             or not isinstance(value.get("files"), list)
         ):
             raise ValueError("Structured artifact inventory is malformed")
+        if len(value["files"]) > MAX_TREE_ENTRIES:
+            raise ValueError(
+                f"Structured artifact inventory exceeds the {MAX_TREE_ENTRIES}-record limit"
+            )
         result: dict[str, dict[str, object]] = {}
         for record in value["files"]:
             if (
@@ -502,6 +599,7 @@ class StructuredArtifactTree:
                 relative,
                 directory_identities,
                 file_identities,
+                max_bytes=min(MAX_RETAINED_FILE_BYTES, int(result[relative]["size"])),
             )
             if (
                 len(data) != result[relative]["size"]
@@ -526,7 +624,10 @@ class StructuredArtifactTree:
         record = inventory.get(relative)
         if record is None:
             raise ValueError(f"Structured artifact inventory omits required path: {relative}")
-        data = self.read(relative)
+        data = self.read(
+            relative,
+            max_bytes=min(MAX_RETAINED_FILE_BYTES, int(record["size"])),
+        )
         if (
             len(data) != record["size"]
             or hashlib.sha256(data).hexdigest() != record["sha256"]
@@ -538,8 +639,11 @@ class StructuredArtifactTree:
         for name, (descriptor, expected_bytes) in self._analysis_result_bindings.items():
             os.lseek(descriptor, 0, os.SEEK_SET)
             before = os.fstat(descriptor)
-            with os.fdopen(descriptor, "rb", closefd=False) as stream:
-                data = stream.read()
+            data = _read_bounded_descriptor(
+                descriptor,
+                f"analysis/{name}",
+                MAX_JSON_BYTES,
+            )
             after = os.fstat(descriptor)
             entry = os.stat(name, dir_fd=self.analysis_fd, follow_symlinks=False)
             stable = (
@@ -633,7 +737,10 @@ def require_inventory_sha256(tree: StructuredArtifactTree, expected: str) -> Non
     if (
         len(expected) != 64
         or any(character not in "0123456789abcdef" for character in expected)
-        or hashlib.sha256(tree.read("artifact_inventory.json")).hexdigest() != expected
+        or hashlib.sha256(
+            tree.read("artifact_inventory.json", max_bytes=MAX_JSON_BYTES)
+        ).hexdigest()
+        != expected
     ):
         raise ValueError("Structured artifact inventory differs from parent binding")
 

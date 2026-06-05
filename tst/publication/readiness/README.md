@@ -697,6 +697,15 @@ qualify any scientific claim by itself.
   lock-honoring reviewed workers; noncooperating same-UID processes remain
   outside that trust boundary.
   None reauthorizes a launch or changes the scientific contract.
+- `q011_section54_pressure_pilot_postrun_aggregate_source_authorization_successor_v6_2026-06-05.json`:
+  source closure binding only the current bounded producer generation. The v5
+  predecessor remains the exact immutable production source authorization.
+  This v6 successor neither retroactively rebinds production receipts nor
+  grants launch or science authority.
+  `q011_section54_historical_pressure_pilot_consumer.py` is the zero-argument,
+  read-only exact-production recomputation consumer, while the generic
+  publisher consumer, `consume_published_pressure_pilot_bundle`, remains bound
+  to the current producer generation.
 - `q011_section54_pressure_pilot_snapshot_time_compatibility_successor_2026-06-04.json`:
   append-only engineering-only snapshot-time compatibility record. It freezes
   the exact observed particle-header time, six-significant-digit mesh-header
@@ -773,6 +782,61 @@ qualify any scientific claim by itself.
   successors, records independent filesystem-publication and
   provenance-chronology no-finding dispositions, and grants no execution
   authorization or science claim.
+- `q011_section54_post_publication_pressure_gate_status_successor_2026-06-05.json`:
+  additive immutable status successor binding the frozen sixteenth transition,
+  `ce41d4` source checkpoint, v5 source authorization, exact aggregate and
+  review-packet receipts, packet inventory, and advisory pressure-options memo.
+  It records that no selection receipt is bound by the successor, keeps all
+  packet-gate acceptance and replay paths blocked, and binds the additive
+  clean-snapshot pressure-gate validation wrapper and its exact `145` Python,
+  `17` shell, `290` JSON, and `65` test-module counts. It binds the exact
+  source-local `ccc9d8ae` packet-gate candidate and its explicitly scoped
+  change/validation closure against the mirrored live `821d1858`
+  generation, policies, and promotions. It also binds the exact immutable
+  publication-root, acceptance-root, receipt, and success-seal identities plus
+  scoped zero-match searches for a pressure-selection receipt and retained
+  validation-worker log. It grants no pair-install, policy-promotion, launch,
+  or science authority.
+- `q011_section54_pressure_selection_options_2026-06-05.md`: non-authorizing
+  human-review memo for the successfully published immutable four-case pressure
+  packet. It ranks and explores every viable pressure option, relates them to
+  the primary MHD-PIC shock literature, recommends `problem/ps_p0=1.0` only on
+  an advisory basis, and is explicitly not a human selection receipt.
+
+### Q011 pressure-selection schema-v3 gate
+
+The schema-v3 pressure-selection gate is a fail-closed acceptance and replay
+boundary, not a selection creator. Its exact chain is:
+
+1. Reopen and verify the immutable pressure-review packet and its exact
+   aggregate receipt, retained artifacts, raw-case descriptors, and historical
+   production source bindings.
+2. Independently recompute the exact historical production bundle through the
+   zero-argument read-only historical consumer and require byte-identical
+   retained aggregate analysis.
+3. Verify a recursively sealed authoritative-reanalysis attestation that binds
+   the exact recomputation to `clean_candidate_archive_reanalysis`, one
+   clean-candidate Git commit, its source-archive SHA-256, the exact reanalysis
+   source closure, and the immutable v5 historical production source
+   authorization.
+4. Verify a separately sealed human reviewer attestation binding exactly one
+   registered pressure case, the packet and aggregate receipts, and the sealed
+   authoritative reanalysis. The review must occur after the gate not-before
+   time `2026-06-05T09:09:42Z` and after the reanalysis seal, with bounded
+   review-to-seal chronology.
+5. Validate one canonical schema-v3 human-only pressure-selection receipt
+   binding the immutable publication tuple, four case descriptors, selected
+   case, authoritative-reanalysis attestation, and reviewer attestation.
+6. Reopen and revalidate the complete chain during source-local
+   validation/replay, retained-plan replay, installed-control-plane replay, and
+   completed-attempt replay through materialization/admission. Each
+   source-snapshot replay binds the reanalysis back to the frozen
+   clean-candidate archive and helper-source closure.
+
+No pressure-selection receipt exists and no case has been selected. The gate,
+status successor, advisory options memo, and all replay validations grant no
+launch authority and no science authority.
+
 - `q011_parallel_shock_storage_estimator_successor_2026-06-01.json`:
   analytical storage-planning successor after the publication deck gained a
   signed particle-current binary output and the PVTK block moved. The estimator

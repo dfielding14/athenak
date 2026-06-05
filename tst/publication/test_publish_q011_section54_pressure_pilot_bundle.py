@@ -316,6 +316,343 @@ class Q011Section54PressurePilotBundlePublicationTests(unittest.TestCase):
             ["receipt_path", "authorized_pic_root"],
         )
 
+    def test_authoritative_readers_reject_actual_oversized_files_before_read(
+        self,
+    ) -> None:
+        helpers = case_verifier._ARTIFACT_HELPERS
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            publisher_file = root / "publisher-oversized.bin"
+            with publisher_file.open("wb") as stream:
+                stream.truncate(publisher.MAX_RETAINED_FILE_BYTES + 1)
+            publisher_file.chmod(0o444)
+            with patch.object(
+                publisher.os,
+                "read",
+                side_effect=AssertionError("oversized publisher file was read"),
+            ), self.assertRaisesRegex(
+                publisher.PressurePilotPublicationError,
+                "size limit",
+            ):
+                publisher._read_stable_readonly_regular(
+                    publisher_file,
+                    "oversized publisher fixture",
+                )
+
+            artifact_root = root / "artifact"
+            artifact_root.mkdir()
+            artifact_file = artifact_root / "oversized.bin"
+            with artifact_file.open("wb") as stream:
+                stream.truncate(helpers.MAX_RETAINED_FILE_BYTES + 1)
+            artifact_file.chmod(0o444)
+            artifact_root.chmod(0o555)
+            descriptor = os.open(artifact_root, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                with patch.object(
+                    helpers.os,
+                    "read",
+                    side_effect=AssertionError("oversized structured artifact was read"),
+                ), self.assertRaisesRegex(ValueError, "size limit"):
+                    helpers._read_at(descriptor, "oversized.bin")
+            finally:
+                os.close(descriptor)
+                artifact_root.chmod(0o755)
+
+            bundle_root = root / "bundle"
+            bundle_root.mkdir()
+            restart_manifest = bundle_root / "case.rst.manifest"
+            with restart_manifest.open("wb") as stream:
+                stream.truncate(publisher.MAX_JSON_BYTES + 1)
+            restart_manifest.chmod(0o444)
+            bundle_root.chmod(0o555)
+            try:
+                with publisher.ImmutablePressurePilotBundle(
+                    bundle_root
+                ) as bundle, self.assertRaisesRegex(
+                    ValueError,
+                    "size limit",
+                ):
+                    bundle.read("case.rst.manifest")
+            finally:
+                bundle_root.chmod(0o755)
+
+    def test_authoritative_tree_scans_reject_actual_entry_and_depth_excess(
+        self,
+    ) -> None:
+        helpers = case_verifier._ARTIFACT_HELPERS
+        with self.subTest("publisher directory entry limit"), tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "bundle"
+            root.mkdir()
+            for index in range(publisher.MAX_DIRECTORY_ENTRIES + 1):
+                _put(root, f"member-{index:04d}.bin", b"x")
+            _freeze_existing(root)
+            try:
+                with publisher.ImmutablePressurePilotBundle(root) as bundle, self.assertRaisesRegex(
+                    publisher.PressurePilotPublicationError,
+                    "directory limit",
+                ):
+                    bundle._scan(bundle.root_fd)
+            finally:
+                _make_writable(root)
+
+        with self.subTest("structured helper directory entry limit"), tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "artifact"
+            root.mkdir()
+            (root / "analysis").mkdir(mode=0o700)
+            for index in range(helpers.MAX_DIRECTORY_ENTRIES):
+                _put(root, f"member-{index:04d}.bin", b"x")
+            _freeze_existing(root)
+            (root / "analysis").chmod(0o700)
+            try:
+                with helpers.StructuredArtifactTree(root) as tree, self.assertRaisesRegex(
+                    ValueError,
+                    "directory limit",
+                ):
+                    tree._tree_files(tree.root_fd)
+            finally:
+                _make_writable(root)
+
+        with self.subTest("publisher tree entry limit"), tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "bundle"
+            root.mkdir()
+            for directory_index in range(5):
+                for file_index in range(205):
+                    _put(
+                        root,
+                        f"group-{directory_index}/member-{file_index:04d}.bin",
+                        b"x",
+                    )
+            _freeze_existing(root)
+            try:
+                with publisher.ImmutablePressurePilotBundle(root) as bundle, self.assertRaisesRegex(
+                    publisher.PressurePilotPublicationError,
+                    "tree exceeds",
+                ):
+                    bundle._scan(bundle.root_fd)
+            finally:
+                _make_writable(root)
+
+        for label, tree_type, error_type in (
+            (
+                "publisher",
+                publisher.ImmutablePressurePilotBundle,
+                publisher.PressurePilotPublicationError,
+            ),
+            ("structured helper", helpers.StructuredArtifactTree, ValueError),
+        ):
+            with self.subTest(f"{label} depth limit"), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory) / "tree"
+                root.mkdir()
+                if tree_type is helpers.StructuredArtifactTree:
+                    (root / "analysis").mkdir(mode=0o700)
+                nested = root
+                for index in range(publisher.MAX_TREE_DEPTH + 1):
+                    nested = nested / f"level-{index:02d}"
+                    nested.mkdir()
+                (nested / "member.bin").write_bytes(b"x")
+                _freeze_existing(root)
+                if tree_type is helpers.StructuredArtifactTree:
+                    (root / "analysis").chmod(0o700)
+                try:
+                    with tree_type(root) as tree, self.assertRaisesRegex(
+                        error_type,
+                        "depth limit",
+                    ):
+                        tree._scan(tree.root_fd) if tree_type is publisher.ImmutablePressurePilotBundle else tree._tree_files(tree.root_fd)
+                finally:
+                    _make_writable(root)
+
+    def test_authoritative_json_consumers_reject_actual_oversized_and_deep_json(
+        self,
+    ) -> None:
+        helpers = case_verifier._ARTIFACT_HELPERS
+        with self.subTest("oversized inventory"), tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "artifact"
+            root.mkdir()
+            (root / "analysis").mkdir(mode=0o700)
+            inventory = root / "artifact_inventory.json"
+            with inventory.open("wb") as stream:
+                stream.truncate(helpers.MAX_JSON_BYTES + 1)
+            inventory.chmod(0o444)
+            root.chmod(0o555)
+            try:
+                with helpers.StructuredArtifactTree(root) as tree, patch.object(
+                    helpers.os,
+                    "read",
+                    side_effect=AssertionError("oversized inventory was read"),
+                ), self.assertRaisesRegex(ValueError, "size limit"):
+                    tree.load_inventory()
+            finally:
+                _make_writable(root)
+
+        with self.subTest("deep inventory"), tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "artifact"
+            root.mkdir()
+            (root / "analysis").mkdir(mode=0o700)
+            deep_array = b"[" * 2000 + b"]" * 2000
+            inventory = root / "artifact_inventory.json"
+            inventory.write_bytes(
+                b'{"schema_version":1,"files":' + deep_array + b"}"
+            )
+            inventory.chmod(0o444)
+            root.chmod(0o555)
+            try:
+                with helpers.StructuredArtifactTree(root) as tree, self.assertRaisesRegex(
+                    ValueError,
+                    "UTF-8 JSON",
+                ):
+                    tree.load_inventory()
+            finally:
+                _make_writable(root)
+
+        with self.subTest("inventory exact-size replacement"), tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "artifact"
+            root.mkdir()
+            (root / "analysis").mkdir(mode=0o700)
+            payload_path = root / "payload.bin"
+            payload_path.write_bytes(b"x")
+            payload_path.chmod(0o444)
+            inventory = root / "artifact_inventory.json"
+            inventory.write_bytes(
+                helpers.canonical_json_bytes(
+                    {
+                        "schema_version": 1,
+                        "files": [
+                            {
+                                "path": "payload.bin",
+                                "sha256": _sha256(b"x"),
+                                "size": 1,
+                            }
+                        ],
+                    }
+                )
+            )
+            inventory.chmod(0o444)
+            root.chmod(0o555)
+            try:
+                with helpers.StructuredArtifactTree(root) as tree:
+                    records = tree.load_inventory()
+                    payload_path.chmod(0o600)
+                    with payload_path.open("wb") as stream:
+                        stream.truncate(helpers.MAX_JSON_BYTES + 1)
+                    payload_path.chmod(0o444)
+                    with self.assertRaisesRegex(ValueError, "size limit"):
+                        helpers.read_inventory_bytes(tree, records, "payload.bin")
+            finally:
+                _make_writable(root)
+
+        with self.subTest("oversized receipt"), tempfile.TemporaryDirectory() as directory:
+            pic_root = Path(directory) / "pic"
+            publication = pic_root / "publication"
+            publication.mkdir(parents=True)
+            (pic_root / publisher.PUBLICATION_ACCEPTANCE_DIRECTORY).mkdir()
+            receipt = publication / "receipt.json"
+            with receipt.open("wb") as stream:
+                stream.truncate(publisher.MAX_JSON_BYTES + 1)
+            receipt.chmod(0o444)
+            with self.assertRaisesRegex(
+                publisher.PressurePilotPublicationError,
+                "size limit",
+            ):
+                publisher.verify_published_pressure_pilot_receipt(
+                    receipt,
+                    authorized_pic_root=pic_root,
+                )
+
+        with self.subTest("deep receipt"), tempfile.TemporaryDirectory() as directory:
+            pic_root = Path(directory) / "pic"
+            publication = pic_root / "publication"
+            acceptance = pic_root / publisher.PUBLICATION_ACCEPTANCE_DIRECTORY
+            publication.mkdir(parents=True)
+            acceptance.mkdir()
+            receipt = publication / "receipt.json"
+            payload = b"[" * 2000 + b"]" * 2000
+            receipt.write_bytes(payload)
+            receipt.chmod(0o444)
+            publication_descriptor = os.open(publication, os.O_RDONLY | os.O_DIRECTORY)
+            acceptance_descriptor = os.open(acceptance, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                publisher._publish_publication_seal_at(
+                    acceptance_descriptor,
+                    publication_descriptor,
+                    receipt.name,
+                    payload,
+                    publisher._file_identity_at(
+                        publication_descriptor,
+                        receipt.name,
+                        "deep receipt fixture",
+                    ),
+                )
+            finally:
+                os.close(acceptance_descriptor)
+                os.close(publication_descriptor)
+            with self.assertRaisesRegex(
+                publisher.PressurePilotPublicationError,
+                "nesting depth",
+            ):
+                publisher.verify_published_pressure_pilot_receipt(
+                    receipt,
+                    authorized_pic_root=pic_root,
+                )
+
+    def test_authoritative_raw_descriptor_recompute_uses_bounded_reader(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "raw"
+            case_id = case_verifier.CASE_IDS[0]
+            _raw_tree(root, case_id)
+            descriptor = case_verifier.publish_case_descriptor(root, case_id)
+            descriptor_path = root / case_verifier.CASE_DESCRIPTOR_PATH
+            try:
+                with case_verifier.StructuredArtifactTree(root) as tree:
+                    inventory = case_verifier.load_inventory(tree)
+                    descriptor_path.chmod(0o600)
+                    with descriptor_path.open("wb") as stream:
+                        stream.truncate(publisher.MAX_JSON_BYTES + 1)
+                    descriptor_path.chmod(0o444)
+                    with self.assertRaisesRegex(ValueError, "size limit"), patch.object(
+                        case_verifier,
+                        "load_inventory",
+                        return_value=inventory,
+                    ), patch.object(
+                        case_verifier,
+                        "_descriptor_bytes",
+                        side_effect=AssertionError("producer descriptor reader was called"),
+                    ):
+                        publisher._verify_published_case_descriptor_bounded(
+                            tree,
+                            case_id,
+                            _descriptor_sha256(descriptor),
+                        )
+
+                descriptor_path.chmod(0o600)
+                descriptor_path.write_bytes(case_verifier.canonical_json_bytes(descriptor))
+                descriptor_path.chmod(0o444)
+                deep_payload = b"[" * 2000 + b"]" * 2000
+                with case_verifier.StructuredArtifactTree(root) as tree:
+                    inventory = case_verifier.load_inventory(tree)
+                    descriptor_path.chmod(0o600)
+                    descriptor_path.write_bytes(deep_payload)
+                    descriptor_path.chmod(0o444)
+                    with self.assertRaisesRegex(
+                        publisher.PressurePilotPublicationError,
+                        "nesting depth",
+                    ), patch.object(
+                        case_verifier,
+                        "load_inventory",
+                        return_value=inventory,
+                    ), patch.object(
+                        case_verifier,
+                        "_descriptor_bytes",
+                        side_effect=AssertionError("producer descriptor reader was called"),
+                    ):
+                        publisher._verify_published_case_descriptor_bounded(
+                            tree,
+                            case_id,
+                            _sha256(deep_payload),
+                        )
+            finally:
+                _make_writable(root)
+
     def test_guard_disarm_rejects_replacement_inode(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -497,7 +834,7 @@ class Q011Section54PressurePilotBundlePublicationTests(unittest.TestCase):
             path.chmod(0o644)
             path.write_bytes(path.read_bytes() + b"forged")
             path.chmod(0o444)
-            with self.assertRaisesRegex(ValueError, "checksum mismatch"):
+            with self.assertRaisesRegex(ValueError, "size limit|checksum mismatch"):
                 case_verifier.analyze_case_tree(root, case_id)
             _make_writable(root)
 
@@ -885,10 +1222,19 @@ class Q011Section54PressurePilotBundlePublicationTests(unittest.TestCase):
             cloned = False
 
             def clone_root(
-                parent_descriptor: int, name: str, label: str
+                parent_descriptor: int,
+                name: str,
+                label: str,
+                *,
+                max_bytes: int = publisher.MAX_RETAINED_FILE_BYTES,
             ) -> bytes:
                 nonlocal cloned
-                payload = original(parent_descriptor, name, label)
+                payload = original(
+                    parent_descriptor,
+                    name,
+                    label,
+                    max_bytes=max_bytes,
+                )
                 if label == "pressure-pilot aggregate analysis result" and not cloned:
                     cloned = True
                     os.rename(base, anchor)

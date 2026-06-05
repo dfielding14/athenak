@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+import copy
 import hashlib
 import json
 import os
@@ -196,16 +197,43 @@ def _completed_external_closure() -> dict[str, object]:
     return {"validation": "fixture_external_candidate_closure"}
 
 
-def _completed_pressure_pilot_publication(
-    path: str | Path, *, authorized_pic_root: Path
-) -> dict[str, str]:
+def _completed_pressure_review_packet(
+    path: str | Path,
+    *,
+    aggregate_receipt_binding: object,
+    authorized_pic_root: Path,
+) -> dict[str, object]:
+    if type(aggregate_receipt_binding) is not dict:
+        raise ValueError("fixture aggregate receipt binding drifted")
+    expected_packet = {
+        "path": str(Path(path)),
+        "sha256": "d" * 64,
+    }
     del authorized_pic_root
-    payload = Path(path).read_bytes()
-    parsed = json.loads(payload)
+    aggregate_path = Path(str(aggregate_receipt_binding["path"]))
+    payload = aggregate_path.read_bytes()
+    if aggregate_receipt_binding != {
+        "path": str(aggregate_path),
+        "sha256": _sha256(payload),
+    }:
+        raise ValueError("fixture aggregate receipt binding drifted")
+    if Path(path) != (
+        aggregate_path.parent
+        / "q011_section54_pressure_pilot_review_packet_receipt.json"
+    ):
+        raise campaign.pressure_selection.pressure_review_packet_verifier.PressureReviewPacketVerificationError(
+            "fixture review-packet receipt binding drifted"
+        )
+    aggregate_record = json.loads(payload)
     return {
-        "receipt_sha256": _sha256(payload),
-        "manifest_sha256": parsed["aggregate_bundle"]["manifest_sha256"],
-        "analysis_result_sha256": parsed["aggregate_analysis"]["sha256"],
+        "receipt_binding": expected_packet,
+        "aggregate_receipt_binding": aggregate_receipt_binding,
+        "packet_receipt": {},
+        "aggregate_receipt": aggregate_record,
+        "aggregate_bundle": aggregate_record["aggregate_bundle"],
+        "aggregate_analysis": aggregate_record["aggregate_analysis"],
+        "source_bindings": {},
+        "inventory": {},
     }
 
 
@@ -239,14 +267,191 @@ def _completed_planner_tree(
 
 @contextmanager
 def _completed_external_closures() -> Iterator[None]:
+    pressure_publication: dict[str, object] = {}
+    pressure_attestations: dict[str, object] = {}
+    pressure_verifier = campaign.pressure_selection.pressure_review_packet_verifier
+    candidate = json.loads(
+        (
+            campaign.ORION_BULK_ROOT
+            / "clean_candidates"
+            / fixtures._FREEZE_ID
+            / "clean_candidate_manifest.json"
+        ).read_text(encoding="utf-8")
+    )
+    reanalysis_source_closure = [
+        {
+            "path": path,
+            "sha256": _sha256((campaign.REPO_ROOT / path).read_bytes()),
+        }
+        for path in pressure_verifier.PRESSURE_REANALYSIS_SOURCE_PATHS
+    ]
+    reanalysis_source_authorization = {
+        "execution_mode": pressure_verifier.PRESSURE_REANALYSIS_EXECUTION_MODE,
+        "git_commit": candidate["source"]["git_commit"],
+        "source_archive_sha256": candidate["source"]["archive_sha256"],
+        "source_closure_sha256": pressure_verifier._source_closure_digest(
+            reanalysis_source_closure
+        ),
+        "source_closure": reanalysis_source_closure,
+        "historical_production_source_authorization": copy.deepcopy(
+            pressure_verifier.AUTHORIZED_HISTORICAL_REANALYSIS_SOURCE_AUTHORIZATION
+        ),
+    }
+
+    def verify_pressure_packet(*args: object, **kwargs: object) -> dict[str, object]:
+        verified = _completed_pressure_review_packet(*args, **kwargs)
+        pressure_publication.update(verified)
+        return verified
+
+    def consume_pressure_publication() -> dict[str, object]:
+        aggregate_binding = pressure_publication["aggregate_receipt_binding"]
+        aggregate_record = pressure_publication["aggregate_receipt"]
+        packet_binding = pressure_publication["receipt_binding"]
+        assert type(aggregate_binding) is dict
+        assert type(aggregate_record) is dict
+        assert type(packet_binding) is dict
+        return {
+            "packet_receipt_sha256": packet_binding["sha256"],
+            "aggregate_receipt_sha256": aggregate_binding["sha256"],
+            "manifest_sha256": aggregate_record["aggregate_bundle"]["manifest_sha256"],
+            "analysis_result_sha256": aggregate_record["aggregate_analysis"]["sha256"],
+            "status": "pass_engineering_calibration_only",
+        }
+
+    def expected_attestation_binding(kind: str) -> dict[str, str]:
+        aggregate_binding = pressure_publication["aggregate_receipt_binding"]
+        assert type(aggregate_binding) is dict
+        root = Path(str(aggregate_binding["path"])).parent.parent
+        if kind == "reanalysis":
+            directory = (
+                "20260605T091100Z-q011-section54-pressure-reanalysis-fixture.operator"
+            )
+            digest = "e" * 64
+        elif kind == "reviewer":
+            directory = (
+                "20260605T091300Z-q011-section54-pressure-selection-fixture.reviewer"
+            )
+            digest = "f" * 64
+        else:
+            raise AssertionError(f"unexpected pressure attestation kind: {kind}")
+        return {
+            "path": str(
+                root / "pressure_gate_attestations" / directory / "attestation.json"
+            ),
+            "sha256": digest,
+        }
+
+    def consume_reanalysis_attestation(
+        attestation_binding: object,
+        *,
+        aggregate_receipt_binding: object,
+        packet_receipt_binding: object,
+        pilot_bundle_manifest_sha256: object,
+        aggregate_pilot_analysis_sha256: object,
+        authorized_pic_root: Path,
+        expected_result: object | None = None,
+        now: object | None = None,
+    ) -> dict[str, object]:
+        del authorized_pic_root, now
+        aggregate_record = pressure_publication["aggregate_receipt"]
+        assert type(aggregate_record) is dict
+        result = consume_pressure_publication()
+        expected_binding = expected_attestation_binding("reanalysis")
+        if (
+            attestation_binding != expected_binding
+            or aggregate_receipt_binding
+            != pressure_publication["aggregate_receipt_binding"]
+            or packet_receipt_binding != pressure_publication["receipt_binding"]
+            or pilot_bundle_manifest_sha256
+            != aggregate_record["aggregate_bundle"]["manifest_sha256"]
+            or aggregate_pilot_analysis_sha256
+            != aggregate_record["aggregate_analysis"]["sha256"]
+            or (expected_result is not None and expected_result != result)
+        ):
+            raise pressure_verifier.PressureReviewPacketVerificationError(
+                "fixture sealed reanalysis attestation cross-binding drifted"
+            )
+        verification = {
+            "binding": copy.deepcopy(expected_binding),
+            "attestation": {},
+            "operator_id": "fixture.operator",
+            "recomputed_utc": "2026-06-05T09:10:00Z",
+            "sealed_utc": "2026-06-05T09:11:00Z",
+            "evidence": {
+                "published_pressure_pilot_receipt": copy.deepcopy(
+                    aggregate_receipt_binding
+                ),
+                "published_pressure_pilot_review_packet_receipt": copy.deepcopy(
+                    packet_receipt_binding
+                ),
+                "pilot_bundle_manifest_sha256": pilot_bundle_manifest_sha256,
+                "aggregate_pilot_analysis_sha256": (
+                    aggregate_pilot_analysis_sha256
+                ),
+            },
+            "source_authorization": copy.deepcopy(reanalysis_source_authorization),
+            "result": copy.deepcopy(result),
+        }
+        pressure_attestations["reanalysis"] = verification
+        return copy.deepcopy(verification)
+
+    def consume_reviewer_attestation(
+        attestation_binding: object,
+        *,
+        aggregate_receipt_binding: object,
+        packet_receipt_binding: object,
+        reanalysis_verification: object,
+        selected_case: object,
+        authorized_pic_root: Path,
+        now: object | None = None,
+    ) -> dict[str, object]:
+        del authorized_pic_root, now
+        expected_binding = expected_attestation_binding("reviewer")
+        if (
+            attestation_binding != expected_binding
+            or aggregate_receipt_binding
+            != pressure_publication["aggregate_receipt_binding"]
+            or packet_receipt_binding != pressure_publication["receipt_binding"]
+            or reanalysis_verification != pressure_attestations.get("reanalysis")
+            or selected_case
+            != {"case_id": "ps_p0_0p10", "problem_ps_p0": 0.1}
+        ):
+            raise pressure_verifier.PressureReviewPacketVerificationError(
+                "fixture sealed reviewer attestation cross-binding drifted"
+            )
+        return {
+            "binding": copy.deepcopy(expected_binding),
+            "attestation": {},
+            "reviewer_id": "fixture.reviewer",
+            "reviewed_utc": "2026-06-05T09:12:00Z",
+            "sealed_utc": "2026-06-05T09:13:00Z",
+            "rationale": "Fixture-only reviewed selection.",
+            "selected_case": copy.deepcopy(selected_case),
+            "authoritative_reanalysis_attestation": copy.deepcopy(
+                pressure_attestations["reanalysis"]["binding"]
+            ),
+        }
+
     with mock.patch.object(
         campaign,
         "_validate_external_clean_candidate_closure",
         return_value=_completed_external_closure(),
     ), mock.patch.object(
-        campaign.pressure_selection.pressure_pilot_publisher,
-        "verify_published_pressure_pilot_receipt",
-        side_effect=_completed_pressure_pilot_publication,
+        campaign.pressure_selection.pressure_review_packet_verifier,
+        "consume_published_pressure_pilot_review_packet",
+        side_effect=verify_pressure_packet,
+    ), mock.patch.object(
+        campaign.pressure_selection.historical_pressure_pilot_consumer,
+        "consume_exact_historical_production_pressure_pilot",
+        side_effect=consume_pressure_publication,
+    ), mock.patch.object(
+        campaign.pressure_selection.pressure_review_packet_verifier,
+        "consume_sealed_pressure_reanalysis_attestation",
+        side_effect=consume_reanalysis_attestation,
+    ), mock.patch.object(
+        campaign.pressure_selection.pressure_review_packet_verifier,
+        "consume_sealed_pressure_reviewer_attestation",
+        side_effect=consume_reviewer_attestation,
     ), mock.patch.object(
         campaign,
         "staged_verified_frozen_tree",
@@ -875,17 +1080,35 @@ class Q011Section54CampaignAttemptPublisherTests(unittest.TestCase):
             stdout = fixtures._find_product(manifest, "stdout", None)
             fixtures._rewrite_product(source, stdout, b"invalid retained stdout\n")
             _write_manifest(source, manifest)
-            with mock.patch.object(
-                campaign,
-                "_validate_external_clean_candidate_closure",
-                return_value=_completed_external_closure(),
-            ):
-                with self.assertRaisesRegex(
-                    publisher.PublicationError, "failed prepublication campaign admission"
-                ):
-                    publisher.freeze_campaign_attempt(
-                        source, destination_parent, attempt_status="completed"
-                    )
+            with self.assertRaisesRegex(
+                publisher.PublicationError, "failed prepublication campaign admission"
+            ) as raised:
+                _freeze_completed(source, destination_parent)
+            cause = raised.exception.__cause__
+            self.assertIsInstance(cause, campaign.QualificationError)
+            self.assertEqual(cause.code, "invalid_q017_telemetry")
+            self.assertIn("stdout is missing required Q-017 telemetry", str(cause))
+            self.assertEqual(list(destination_parent.iterdir()), [])
+
+    def test_packet_binding_tamper_never_becomes_visible(self) -> None:
+        with _raw_attempt() as (_, source, destination_parent, manifest):
+            fixtures._rewrite_attempt_json_artifact(
+                source,
+                manifest,
+                "selected_pressure_receipt",
+                lambda receipt: receipt[
+                    "published_pressure_pilot_review_packet_receipt"
+                ].__setitem__("sha256", "0" * 64),
+            )
+            _write_manifest(source, manifest)
+            with self.assertRaisesRegex(
+                publisher.PublicationError, "failed prepublication campaign admission"
+            ) as raised:
+                _freeze_completed(source, destination_parent)
+            cause = raised.exception.__cause__
+            self.assertIsInstance(cause, campaign.QualificationError)
+            self.assertEqual(cause.code, "selected_pressure_receipt_drift")
+            self.assertIn("review-packet receipt binding drifted", str(cause))
             self.assertEqual(list(destination_parent.iterdir()), [])
 
 

@@ -36,6 +36,7 @@ CONTROL_PLANE_FILES = [
     "ledger.py",
     "operator_attestation.py",
     "promote_active_policy.py",
+    "q011_pressure_review_packet_verifier.py",
     "reconcile_frontier_job.py",
     "reconcile_manual_frontier_allocations.py",
     "revalidate_clean_candidate.py",

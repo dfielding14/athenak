@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import copy
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 import hashlib
 import json
 import os
@@ -20,6 +20,9 @@ from unittest.mock import patch
 
 from tst.publication import q011_section54_pressure_selection as selection
 from tst.publication import q011_section54_qualifying_campaign_execution as execution
+from tst.publication.frontier_control_plane import (
+    test_q011_pressure_review_packet_verifier as packet_fixtures,
+)
 
 
 _WRITE_BITS = stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH
@@ -46,10 +49,14 @@ def _make_writable(root: Path) -> None:
 
 def _receipt(*, case_id: str = "ps_p0_0p10", problem_ps_p0: float = 0.1) -> dict[str, object]:
     return {
-        "schema_version": 1,
+        "schema_version": 3,
         "record_type": selection.RECORD_TYPE,
         "selection_method": selection.SELECTION_METHOD,
         "published_pressure_pilot_receipt": {
+            "path": "/fixture/replaced-by-fixture.json",
+            "sha256": "0" * 64,
+        },
+        "published_pressure_pilot_review_packet_receipt": {
             "path": "/fixture/replaced-by-fixture.json",
             "sha256": "0" * 64,
         },
@@ -69,9 +76,14 @@ def _receipt(*, case_id: str = "ps_p0_0p10", problem_ps_p0: float = 0.1) -> dict
             "case_id": case_id,
             "problem_ps_p0": problem_ps_p0,
         },
-        "reviewer_identity": "Focused Test Human Reviewer",
-        "reviewed_utc": "2026-06-02T12:34:56Z",
-        "rationale": "Focused test-only human pressure selection.",
+        "authoritative_reanalysis_attestation": {
+            "path": "/fixture/replaced-by-fixture.json",
+            "sha256": "0" * 64,
+        },
+        "reviewer_attestation": {
+            "path": "/fixture/replaced-by-fixture.json",
+            "sha256": "0" * 64,
+        },
     }
 
 
@@ -98,27 +110,21 @@ def _pressure_publication(root: Path) -> tuple[dict[str, str], dict[str, object]
         }
         for (case_id, _), character in zip(selection.REGISTERED_CASES, "cdef")
     ]
-    payload = _json_bytes(
-        {
-            "aggregate_bundle": {
-                "path": str(root / "publication" / "aggregate"),
-                "manifest_sha256": "a" * 64,
-            },
-            "aggregate_analysis": {
-                "path": str(root / "publication" / "aggregate-analysis.json"),
-                "sha256": "b" * 64,
-            },
-            "raw_cases": cases,
-        }
-    )
+    aggregate_record = {
+        "aggregate_bundle": {
+            "path": str(root / "publication" / "aggregate"),
+            "manifest_sha256": "a" * 64,
+        },
+        "aggregate_analysis": {
+            "path": str(root / "publication" / "aggregate-analysis.json"),
+            "sha256": "b" * 64,
+        },
+        "raw_cases": cases,
+    }
+    payload = _json_bytes(aggregate_record)
     receipt = _put(root / "publication" / "pressure-pilot-receipt.json", payload)
     digest = _sha256(payload)
-    return {"path": str(receipt), "sha256": digest}, {
-        "receipt_sha256": digest,
-        "manifest_sha256": "a" * 64,
-        "analysis_result_sha256": "b" * 64,
-        "status": "passed",
-    }
+    return {"path": str(receipt), "sha256": digest}, aggregate_record
 
 
 @contextmanager
@@ -126,11 +132,14 @@ def _fixture(
     *,
     receipt: dict[str, object] | None = None,
     executable_payload: bytes | None = None,
+    published_packet: packet_fixtures._PublishedPacket | None = None,
+    archive_source_overrides: dict[str, bytes] | None = None,
 ) -> Iterator[dict[str, Path]]:
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
-        orion = root / "orion"
-        orion.mkdir()
+        orion = root / "orion" if published_packet is None else published_packet.root
+        if published_packet is None:
+            orion.mkdir()
         common = execution._load_control_plane_common()
         authorized_source = root / "source-authorized"
         authorized_source.mkdir()
@@ -152,6 +161,10 @@ def _fixture(
                 }
             )
         }
+        for relative, payload in (archive_source_overrides or {}).items():
+            if relative not in prepared_sources:
+                raise AssertionError(f"unknown archive source override: {relative}")
+            prepared_sources[relative] = payload
         inventory = {
             "schema_version": 1,
             "paper_decks": [
@@ -337,23 +350,227 @@ def _fixture(
             candidate_root / "clean_candidate_manifest.json",
             (json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode("utf-8"),
         )
-        publication_binding, verified_publication = _pressure_publication(orion)
+        if published_packet is None:
+            publication_binding, aggregate_record = _pressure_publication(orion)
+            packet_binding = {
+                "path": str(
+                    orion
+                    / "publication"
+                    / "pressure-pilot-review-packet-receipt.json"
+                ),
+                "sha256": "8" * 64,
+            }
+        else:
+            publication_binding = dict(published_packet.aggregate_binding)
+            aggregate_record = json.loads(
+                published_packet.aggregate_receipt.read_text(encoding="utf-8")
+            )
+            packet_binding = dict(published_packet.packet_binding)
         receipt_value = copy.deepcopy(_receipt() if receipt is None else receipt)
         receipt_value["published_pressure_pilot_receipt"] = publication_binding
+        receipt_value["published_pressure_pilot_review_packet_receipt"] = packet_binding
+        receipt_value["authoritative_reanalysis_attestation"] = {
+            "path": str(
+                orion
+                / "pressure_gate_attestations"
+                / "focused-pressure-reanalysis"
+                / "attestation.json"
+            ),
+            "sha256": "6" * 64,
+        }
+        receipt_value["reviewer_attestation"] = {
+            "path": str(
+                orion
+                / "pressure_gate_attestations"
+                / "focused-pressure-review"
+                / "attestation.json"
+            ),
+            "sha256": "7" * 64,
+        }
+        if published_packet is not None:
+            receipt_value["pilot_bundle_manifest_sha256"] = aggregate_record[
+                "aggregate_bundle"
+            ]["manifest_sha256"]
+            receipt_value["aggregate_pilot_analysis_sha256"] = aggregate_record[
+                "aggregate_analysis"
+            ]["sha256"]
+            receipt_value["case_descriptors"] = [
+                {
+                    "case_id": case_id,
+                    "problem_ps_p0": problem_ps_p0,
+                    "descriptor_sha256": raw_case["descriptor_sha256"],
+                }
+                for (case_id, problem_ps_p0), raw_case in zip(
+                    selection.REGISTERED_CASES,
+                    aggregate_record["raw_cases"],
+                )
+            ]
         pressure_receipt = _put(
             root / "human_pressure_selection_receipt.json",
             selection.canonical_json_bytes(receipt_value),
         )
         output_parent = root / "plans"
         output_parent.mkdir()
+        aggregate_verification = {
+            "packet_receipt_sha256": packet_binding["sha256"],
+            "aggregate_receipt_sha256": publication_binding["sha256"],
+            "manifest_sha256": aggregate_record["aggregate_bundle"][
+                "manifest_sha256"
+            ],
+            "analysis_result_sha256": aggregate_record["aggregate_analysis"][
+                "sha256"
+            ],
+            "status": "pass_engineering_calibration_only",
+        }
+        pressure_verifier = selection.pressure_review_packet_verifier
+        reanalysis_source_closure = [
+            {
+                "path": path,
+                "sha256": _sha256(prepared_sources[path]),
+            }
+            for path in pressure_verifier.PRESSURE_REANALYSIS_SOURCE_PATHS
+        ]
+        reanalysis_verification = {
+            "binding": copy.deepcopy(
+                receipt_value["authoritative_reanalysis_attestation"]
+            ),
+            "attestation": {},
+            "operator_id": "focused-reanalysis-operator",
+            "recomputed_utc": "2026-06-05T12:00:00Z",
+            "sealed_utc": "2026-06-05T12:01:00Z",
+            "evidence": {
+                "published_pressure_pilot_receipt": copy.deepcopy(
+                    publication_binding
+                ),
+                "published_pressure_pilot_review_packet_receipt": copy.deepcopy(
+                    packet_binding
+                ),
+                "pilot_bundle_manifest_sha256": receipt_value[
+                    "pilot_bundle_manifest_sha256"
+                ],
+                "aggregate_pilot_analysis_sha256": receipt_value[
+                    "aggregate_pilot_analysis_sha256"
+                ],
+            },
+            "source_authorization": {
+                "execution_mode": pressure_verifier.PRESSURE_REANALYSIS_EXECUTION_MODE,
+                "git_commit": git_commit,
+                "source_archive_sha256": _sha256(archive_payload),
+                "source_closure_sha256": pressure_verifier._source_closure_digest(
+                    reanalysis_source_closure
+                ),
+                "source_closure": reanalysis_source_closure,
+                "historical_production_source_authorization": copy.deepcopy(
+                    pressure_verifier.AUTHORIZED_HISTORICAL_REANALYSIS_SOURCE_AUTHORIZATION
+                ),
+            },
+            "result": copy.deepcopy(aggregate_verification),
+        }
+
+        def consume_reanalysis_attestation(
+            attestation_binding: object,
+            *,
+            aggregate_receipt_binding: object,
+            packet_receipt_binding: object,
+            pilot_bundle_manifest_sha256: object,
+            aggregate_pilot_analysis_sha256: object,
+            authorized_pic_root: Path,
+            expected_result: object | None = None,
+            now: object | None = None,
+        ) -> dict[str, object]:
+            if (
+                attestation_binding
+                != receipt_value["authoritative_reanalysis_attestation"]
+                or aggregate_receipt_binding != publication_binding
+                or packet_receipt_binding != packet_binding
+                or pilot_bundle_manifest_sha256
+                != receipt_value["pilot_bundle_manifest_sha256"]
+                or aggregate_pilot_analysis_sha256
+                != receipt_value["aggregate_pilot_analysis_sha256"]
+                or authorized_pic_root != orion
+                or (
+                    expected_result is not None
+                    and expected_result != aggregate_verification
+                )
+            ):
+                raise pressure_verifier.PressureReviewPacketVerificationError(
+                    "focused authoritative reanalysis attestation cross-binding drifted"
+                )
+            return copy.deepcopy(reanalysis_verification)
+
+        def consume_reviewer_attestation(
+            attestation_binding: object,
+            *,
+            aggregate_receipt_binding: object,
+            packet_receipt_binding: object,
+            reanalysis_verification: object,
+            selected_case: object,
+            authorized_pic_root: Path,
+            now: object | None = None,
+        ) -> dict[str, object]:
+            if (
+                attestation_binding != receipt_value["reviewer_attestation"]
+                or aggregate_receipt_binding != publication_binding
+                or packet_receipt_binding != packet_binding
+                or reanalysis_verification
+                != reanalysis_verification_record
+                or selected_case != receipt_value["selected_case"]
+                or authorized_pic_root != orion
+            ):
+                raise pressure_verifier.PressureReviewPacketVerificationError(
+                    "focused reviewer attestation cross-binding drifted"
+                )
+            return {
+                "binding": copy.deepcopy(receipt_value["reviewer_attestation"]),
+                "attestation": {},
+                "reviewer_id": "focused-human-reviewer",
+                "reviewed_utc": "2026-06-05T12:02:00Z",
+                "sealed_utc": "2026-06-05T12:03:00Z",
+                "rationale": "Focused test-only human pressure selection.",
+                "selected_case": copy.deepcopy(receipt_value["selected_case"]),
+                "authoritative_reanalysis_attestation": copy.deepcopy(
+                    receipt_value["authoritative_reanalysis_attestation"]
+                ),
+            }
+
+        reanalysis_verification_record = copy.deepcopy(reanalysis_verification)
+        packet_verifier_context = (
+            nullcontext()
+            if published_packet is not None
+            else patch.object(
+                selection.pressure_review_packet_verifier,
+                "consume_published_pressure_pilot_review_packet",
+                return_value={
+                    "receipt_binding": packet_binding,
+                    "aggregate_receipt_binding": publication_binding,
+                    "packet_receipt": {},
+                    "aggregate_receipt": aggregate_record,
+                    "aggregate_bundle": aggregate_record["aggregate_bundle"],
+                    "aggregate_analysis": aggregate_record["aggregate_analysis"],
+                    "source_bindings": {},
+                    "inventory": {},
+                },
+            )
+        )
         with (
             patch.object(execution, "AUTHORIZED_ORION_ROOT", orion),
             patch.object(execution, "AUTHORIZED_SOURCE_ROOT", authorized_source),
             patch.object(
-                selection.pressure_pilot_publisher,
-                "verify_published_pressure_pilot_receipt",
-                return_value=verified_publication,
+                selection.historical_pressure_pilot_consumer,
+                "consume_exact_historical_production_pressure_pilot",
+                return_value=aggregate_verification,
             ),
+            patch.object(
+                selection.pressure_review_packet_verifier,
+                "consume_sealed_pressure_reanalysis_attestation",
+                side_effect=consume_reanalysis_attestation,
+            ),
+            patch.object(
+                selection.pressure_review_packet_verifier,
+                "consume_sealed_pressure_reviewer_attestation",
+                side_effect=consume_reviewer_attestation,
+            ),
+            packet_verifier_context,
         ):
             yield {
                 "root": root,
@@ -481,6 +698,179 @@ class Q011Section54QualifyingCampaignExecutionTests(unittest.TestCase):
                     ),
                 ):
                     _planner_retention(fixture, result, root, attempt_id)
+
+    def test_planner_retention_rejects_tampered_published_pressure_packet_replay(
+        self,
+    ) -> None:
+        with (
+            packet_fixtures._published_packet() as packet,
+            _fixture(published_packet=packet) as fixture,
+            _retained_planner(fixture) as (result, root),
+        ):
+            plan = _json(root / "campaign_plan.json")
+            descriptor = _json(root / plan["baseline_attempt_descriptors"][0]["path"])
+            packet.tamper_packet_member(
+                "PRESSURE_REVIEW_PACKET.md",
+                b"tampered after immutable planner materialization\n",
+            )
+            with (
+                patch.object(
+                    execution,
+                    "_validate_retained_helper_source_closure",
+                    wraps=execution._validate_retained_helper_source_closure,
+                ) as helper_closure,
+                self.assertRaisesRegex(
+                    execution.CampaignPlanError,
+                    "human pressure-selection receipt is invalid: "
+                    "published pressure-pilot review-packet receipt failed "
+                    "immutable verification",
+                ),
+            ):
+                _planner_retention(
+                    fixture, result, root, str(descriptor["attempt_id"])
+                )
+            helper_closure.assert_not_called()
+
+    def test_pressure_receipt_read_and_recursion_limits_fail_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            oversized = _put(
+                root / "oversized-pressure-selection.json",
+                b" " * (selection.MAX_PRESSURE_SELECTION_RECEIPT_BYTES + 1),
+            )
+            deeply_nested = _put(
+                root / "deep-pressure-selection.json",
+                b'{"nested":' + (b"[" * 2000) + b"0" + (b"]" * 2000) + b"}\n",
+            )
+            with self.assertRaisesRegex(
+                execution.CampaignPlanError,
+                "human pressure-selection receipt exceeds its size limit",
+            ):
+                execution._load_pressure_receipt(
+                    oversized,
+                    authorized_pic_root=root,
+                )
+            with self.assertRaisesRegex(
+                execution.CampaignPlanError,
+                "human pressure-selection receipt is invalid: receipt: not valid UTF-8 JSON",
+            ):
+                execution._load_pressure_receipt(
+                    deeply_nested,
+                    authorized_pic_root=root,
+                )
+
+    def test_materialization_rejects_pressure_selection_source_snapshot_drift(
+        self,
+    ) -> None:
+        with _fixture() as fixture:
+            with patch.object(
+                selection.pressure_review_packet_verifier,
+                "validate_pressure_reanalysis_source_snapshot",
+                side_effect=selection.pressure_review_packet_verifier.PressureReviewPacketVerificationError(
+                    "focused source snapshot drift"
+                ),
+            ) as source_snapshot, self.assertRaisesRegex(
+                execution.CampaignPlanError,
+                "human pressure-selection source snapshot is invalid: "
+                "pressure-selection reanalysis differs from the frozen qualifying "
+                "source snapshot",
+            ):
+                _materialize(fixture)
+            source_snapshot.assert_called_once()
+            self.assertEqual(list(fixture["output_parent"].iterdir()), [])
+
+    def test_materialization_rejects_real_archive_vs_live_helper_mismatch(
+        self,
+    ) -> None:
+        relative = "tst/publication/q011_section54_model.py"
+        archive_payload = (execution.REPO_ROOT / relative).read_bytes()
+        with _fixture(
+            archive_source_overrides={
+                relative: archive_payload + b"\n# archive-only focused drift\n"
+            }
+        ) as fixture:
+            with self.assertRaisesRegex(
+                execution.CampaignPlanError,
+                "source archive helper/source closure differs from live checkout",
+            ):
+                _materialize(fixture)
+            self.assertEqual(list(fixture["output_parent"].iterdir()), [])
+
+    def test_planner_retention_rejects_real_archive_vs_live_helper_mismatch(
+        self,
+    ) -> None:
+        with _fixture() as fixture, _retained_planner(fixture) as (result, root):
+            plan = _json(root / "campaign_plan.json")
+            descriptor = _json(root / plan["baseline_attempt_descriptors"][0]["path"])
+            drifted_live = fixture["root"] / "drifted-live-checkout"
+            for relative in execution._FIXED_HELPER_SOURCES:
+                _put(
+                    drifted_live / relative,
+                    (execution.REPO_ROOT / relative).read_bytes(),
+                )
+            drifted = drifted_live / "tst/publication/q011_section54_model.py"
+            drifted.chmod(0o644)
+            drifted.write_bytes(drifted.read_bytes() + b"\n# live-only focused drift\n")
+            drifted.chmod(0o444)
+
+            with (
+                patch.object(execution, "REPO_ROOT", drifted_live),
+                self.assertRaisesRegex(
+                    execution.CampaignPlanError,
+                    "source archive helper/source closure differs from live checkout",
+                ),
+            ):
+                _planner_retention(
+                    fixture,
+                    result,
+                    root,
+                    str(descriptor["attempt_id"]),
+                )
+
+    def test_planner_retention_rejects_pressure_selection_disagreement(self) -> None:
+        with _fixture() as fixture, _retained_planner(fixture) as (result, root):
+            plan = _json(root / "campaign_plan.json")
+            descriptor = _json(root / plan["baseline_attempt_descriptors"][0]["path"])
+            pressure_binding = plan["source_bindings"]["pressure_selection_receipt"]
+            pressure_payload, validated = execution._load_pressure_receipt(
+                root / pressure_binding["path"],
+                authorized_pic_root=fixture["orion"],
+            )
+            disagreements = (
+                (
+                    "method",
+                    {
+                        **validated,
+                        "selection_method": "operator_substituted",
+                    },
+                ),
+                (
+                    "case",
+                    {
+                        **validated,
+                        "selected_case": {
+                            "case_id": "ps_p0_0p20",
+                            "problem_ps_p0": 0.2,
+                        },
+                    },
+                ),
+            )
+            for label, disagreement in disagreements:
+                with (
+                    self.subTest(label=label),
+                    patch.object(
+                        execution,
+                        "_load_pressure_receipt",
+                        return_value=(pressure_payload, disagreement),
+                    ),
+                    self.assertRaisesRegex(
+                        execution.CampaignPlanError,
+                        f"selected-pressure {label} drifted",
+                    ),
+                ):
+                    _planner_retention(
+                        fixture, result, root, str(descriptor["attempt_id"])
+                    )
 
     def test_planner_retention_has_no_argv_or_destination_substitution_api(self) -> None:
         with _fixture() as fixture, _retained_planner(fixture) as (result, root):
@@ -724,6 +1114,8 @@ class Q011Section54QualifyingCampaignExecutionTests(unittest.TestCase):
                 "tst/publication/analyze_q011_section54_pressure_pilot_case.py",
                 "tst/publication/frontier_f1_structured_artifacts.py",
                 "tst/publication/q011_section54_attempt_manifest_materializer.py",
+                "tst/publication/q011_section54_historical_pressure_pilot_consumer.py",
+                "tst/publication/frontier_control_plane/q011_pressure_review_packet_verifier.py",
             ):
                 with self.subTest(path=path):
                     self.assertIn(path, [record["path"] for record in closure["sources"]])

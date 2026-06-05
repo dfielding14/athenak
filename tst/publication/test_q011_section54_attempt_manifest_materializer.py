@@ -20,6 +20,16 @@ from tst.publication import test_analyze_q011_section54_campaign as raw_fixtures
 from tst.publication import (
     test_q011_section54_qualifying_campaign_execution as planner_fixtures,
 )
+from tst.publication.frontier_control_plane import (
+    test_q011_pressure_review_packet_verifier as packet_fixtures,
+)
+
+_REAL_CONSUME_SEALED_PRESSURE_REANALYSIS_ATTESTATION = (
+    packet_fixtures.verifier.consume_sealed_pressure_reanalysis_attestation
+)
+_REAL_CONSUME_SEALED_PRESSURE_REVIEWER_ATTESTATION = (
+    packet_fixtures.verifier.consume_sealed_pressure_reviewer_attestation
+)
 
 
 def _json(path: Path) -> dict[str, object]:
@@ -92,59 +102,139 @@ def _write_registered_execution_receipt(
 
 
 @contextmanager
-def _prepared_real_attempt() -> object:
-    with planner_fixtures._fixture() as fixture:
+def _published_packet_fixture(
+    published_packet: packet_fixtures._PublishedPacket | None,
+) -> object:
+    if published_packet is not None:
+        yield published_packet
+        return
+    with packet_fixtures._published_packet() as packet:
+        yield packet
+
+
+def _install_real_pressure_gate_attestations(
+    fixture: dict[str, Path],
+    packet: packet_fixtures._PublishedPacket,
+) -> None:
+    gate = packet_fixtures._SealedPressureGateAttestations(packet)
+    candidate = _json(fixture["candidate"])
+    helper_by_path = {
+        record["path"]: record["sha256"] for record in planner._helper_source_closure()
+    }
+    source_closure = [
+        {"path": path, "sha256": helper_by_path[path]}
+        for path in packet_fixtures.verifier.PRESSURE_REANALYSIS_SOURCE_PATHS
+    ]
+    source_authorization = {
+        "execution_mode": packet_fixtures.verifier.PRESSURE_REANALYSIS_EXECUTION_MODE,
+        "git_commit": candidate["source"]["git_commit"],
+        "source_archive_sha256": candidate["source"]["archive_sha256"],
+        "source_closure_sha256": packet_fixtures.verifier._source_closure_digest(
+            source_closure
+        ),
+        "source_closure": source_closure,
+        "historical_production_source_authorization": dict(
+            packet_fixtures.verifier.AUTHORIZED_HISTORICAL_REANALYSIS_SOURCE_AUTHORIZATION
+        ),
+    }
+    gate.rewrite(
+        "reanalysis",
+        lambda value: value.__setitem__(
+            "source_authorization",
+            source_authorization,
+        ),
+    )
+    gate.rewrite(
+        "reviewer",
+        lambda value: value.__setitem__(
+            "authoritative_reanalysis_attestation",
+            dict(gate.reanalysis_binding),
+        ),
+    )
+
+    receipt = _json(fixture["pressure_receipt"])
+    receipt["authoritative_reanalysis_attestation"] = dict(gate.reanalysis_binding)
+    receipt["reviewer_attestation"] = dict(gate.reviewer_binding)
+    fixture["pressure_receipt"].chmod(0o644)
+    fixture["pressure_receipt"].write_bytes(
+        planner.pressure_selection.canonical_json_bytes(receipt)
+    )
+    fixture["pressure_receipt"].chmod(0o444)
+
+
+@contextmanager
+def _prepared_real_attempt(
+    *,
+    published_packet: packet_fixtures._PublishedPacket | None = None,
+) -> object:
+    with (
+        _published_packet_fixture(published_packet) as packet,
+        planner_fixtures._fixture(published_packet=packet) as fixture,
+    ):
+        _install_real_pressure_gate_attestations(fixture, packet)
         planner_parent = fixture["orion"] / "plans"
         planner_parent.mkdir()
-        planner_result = planner_fixtures._materialize(
-            fixture, output_parent=planner_parent
-        )
-        planner_root = Path(planner_result["plan_root"])
-        plan = _json(planner_root / "campaign_plan.json")
-        descriptor = _json(
-            planner_root / plan["baseline_attempt_descriptors"][8]["path"]
-        )
-        attempt_root = Path(descriptor["authorized_orion_attempt_root"])
-        artifact_dir = (
-            fixture["orion"]
-            / "runs"
-            / "q011_section54_qualifying"
-            / "22222222-2222-4222-8222-222222222222"
-        )
-        raw_root = artifact_dir / "raw"
-        raw_root.mkdir(parents=True)
-        _write_completed_raw_outputs(raw_root)
-        contract = _json(planner_root / descriptor["launch_contract"]["path"])
-        receipt = _write_registered_execution_receipt(
-            attempt_root,
-            artifact_dir,
-            planner_root,
-            str(planner_result["inventory_sha256"]),
-            planner_result,
-            plan,
-            contract,
-        )
-        try:
-            yield {
-                "fixture": fixture,
-                "planner_parent": planner_parent,
-                "planner_result": planner_result,
-                "planner_root": planner_root,
-                "plan": plan,
-                "descriptor": descriptor,
-                "attempt_root": attempt_root,
-                "artifact_dir": artifact_dir,
-                "raw_root": raw_root,
-                "registered_execution_receipt": receipt,
-            }
-        finally:
-            raw_fixtures._make_writable_tree(planner_root)
-            if planner_root.exists():
-                shutil.rmtree(planner_root)
-            if planner_parent.exists():
-                planner_parent.rmdir()
-            if artifact_dir.exists():
-                shutil.rmtree(artifact_dir)
+        with (
+            patch.object(
+                planner.pressure_selection.pressure_review_packet_verifier,
+                "consume_sealed_pressure_reanalysis_attestation",
+                new=_REAL_CONSUME_SEALED_PRESSURE_REANALYSIS_ATTESTATION,
+            ),
+            patch.object(
+                planner.pressure_selection.pressure_review_packet_verifier,
+                "consume_sealed_pressure_reviewer_attestation",
+                new=_REAL_CONSUME_SEALED_PRESSURE_REVIEWER_ATTESTATION,
+            ),
+        ):
+            planner_result = planner_fixtures._materialize(
+                fixture, output_parent=planner_parent
+            )
+            planner_root = Path(planner_result["plan_root"])
+            plan = _json(planner_root / "campaign_plan.json")
+            descriptor = _json(
+                planner_root / plan["baseline_attempt_descriptors"][8]["path"]
+            )
+            attempt_root = Path(descriptor["authorized_orion_attempt_root"])
+            artifact_dir = (
+                fixture["orion"]
+                / "runs"
+                / "q011_section54_qualifying"
+                / "22222222-2222-4222-8222-222222222222"
+            )
+            raw_root = artifact_dir / "raw"
+            raw_root.mkdir(parents=True)
+            _write_completed_raw_outputs(raw_root)
+            contract = _json(planner_root / descriptor["launch_contract"]["path"])
+            receipt = _write_registered_execution_receipt(
+                attempt_root,
+                artifact_dir,
+                planner_root,
+                str(planner_result["inventory_sha256"]),
+                planner_result,
+                plan,
+                contract,
+            )
+            try:
+                yield {
+                    "fixture": fixture,
+                    "planner_parent": planner_parent,
+                    "planner_result": planner_result,
+                    "planner_root": planner_root,
+                    "plan": plan,
+                    "descriptor": descriptor,
+                    "attempt_root": attempt_root,
+                    "artifact_dir": artifact_dir,
+                    "raw_root": raw_root,
+                    "registered_execution_receipt": receipt,
+                }
+            finally:
+                raw_fixtures._make_writable_tree(planner_root)
+                if planner_root.exists():
+                    shutil.rmtree(planner_root)
+                if planner_parent.exists():
+                    planner_parent.rmdir()
+                if artifact_dir.exists():
+                    shutil.rmtree(artifact_dir)
 
 
 @contextmanager
@@ -428,6 +518,47 @@ class Q011Section54AttemptManifestMaterializerTests(unittest.TestCase):
             finally:
                 raw_fixtures._make_writable_tree(fixture["orion"] / "minimal-plans")
 
+    def test_tampered_packet_bound_pressure_selection_replay_is_rejected_before_write(
+        self,
+    ) -> None:
+        with (
+            packet_fixtures._published_packet() as packet,
+            _prepared_real_attempt(published_packet=packet) as prepared,
+        ):
+            fixture = prepared["fixture"]
+            packet.tamper_packet_member(
+                "PRESSURE_REVIEW_PACKET.md",
+                b"tampered before completed-attempt replay\n",
+            )
+            with (
+                _fixture_campaign_context(fixture),
+                patch.object(
+                    campaign, "_validate_materialized_planner_graph"
+                ) as validate_planner_graph,
+                patch.object(bridge, "_write_member") as write_member,
+                self.assertRaisesRegex(
+                    bridge.AttemptManifestMaterializationError,
+                    "published pressure-pilot review-packet receipt failed "
+                    "immutable verification",
+                ),
+            ):
+                bridge.materialize_completed_attempt_manifest(
+                    planner_root=prepared["planner_root"],
+                    planner_inventory_sha256=prepared["planner_result"][
+                        "inventory_sha256"
+                    ],
+                    raw_output_root=prepared["raw_root"],
+                    registered_execution_receipt=prepared[
+                        "registered_execution_receipt"
+                    ],
+                    attempt_id=prepared["descriptor"]["attempt_id"],
+                    authorized_pic_root=fixture["orion"],
+                )
+            validate_planner_graph.assert_not_called()
+            write_member.assert_not_called()
+            self.assertFalse((prepared["raw_root"] / "bindings").exists())
+            self.assertFalse((prepared["raw_root"] / campaign.MANIFEST_NAME).exists())
+
     def test_self_authored_execution_receipt_is_rejected_before_write(self) -> None:
         with _prepared_real_attempt() as prepared:
             fixture = prepared["fixture"]
@@ -436,7 +567,7 @@ class Q011Section54AttemptManifestMaterializerTests(unittest.TestCase):
                 code="registered_execution_receipt_ledger_drift",
             )
             with (
-                patch.object(campaign, "ORION_BULK_ROOT", fixture["orion"]),
+                _fixture_campaign_context(fixture),
                 patch.object(
                     campaign,
                     "_validate_registered_execution_receipt_ledger_binding",

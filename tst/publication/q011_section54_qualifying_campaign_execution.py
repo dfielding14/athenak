@@ -51,6 +51,10 @@ CONTROL_PLANE_COMMON_SOURCE = (
 CONTROL_PLANE_OPERATOR_ATTESTATION_SOURCE = (
     REPO_ROOT / "tst/publication/frontier_control_plane/operator_attestation.py"
 )
+CONTROL_PLANE_PRESSURE_REVIEW_PACKET_VERIFIER_SOURCE = (
+    REPO_ROOT
+    / "tst/publication/frontier_control_plane/q011_pressure_review_packet_verifier.py"
+)
 QUALIFYING_PREREGISTRATION = (
     READINESS_ROOT
     / "q011_section54_qualifying_campaign_preregistration_successor_v2_2026-06-01.json"
@@ -124,6 +128,8 @@ _FIXED_HELPER_SOURCES = (
     "tst/publication/q011_section54_model.py",
     "tst/publication/q011_section54_pressure_pilot_execution.py",
     "tst/publication/q011_section54_pressure_selection.py",
+    "tst/publication/q011_section54_historical_pressure_pilot_consumer.py",
+    "tst/publication/frontier_control_plane/q011_pressure_review_packet_verifier.py",
     "tst/publication/q011_section54_restart.py",
     "tst/publication/analyze_q011_section54_outputs.py",
     "tst/publication/analyze_q011_section54_campaign.py",
@@ -217,6 +223,7 @@ def _stable_regular_bytes(
     label: str,
     require_read_only: bool = False,
     require_executable: bool = False,
+    max_bytes: int | None = None,
 ) -> tuple[Path, bytes]:
     lexical = Path(os.path.abspath(path))
     _require(path.is_absolute(), f"{label} must be absolute")
@@ -233,6 +240,12 @@ def _stable_regular_bytes(
         before = os.fstat(descriptor)
         _require(stat.S_ISREG(before.st_mode), f"{label} must be a regular file")
         _require(before.st_nlink == 1, f"{label} must not be hard linked")
+        if max_bytes is not None:
+            _require(
+                type(max_bytes) is int and max_bytes >= 0,
+                f"{label} byte limit is invalid",
+            )
+            _require(before.st_size <= max_bytes, f"{label} exceeds its size limit")
         if require_read_only:
             _require(not before.st_mode & _WRITE_BITS, f"{label} must be read-only")
         if require_executable:
@@ -240,6 +253,8 @@ def _stable_regular_bytes(
         payload = bytearray()
         while chunk := os.read(descriptor, 1024 * 1024):
             payload.extend(chunk)
+            if max_bytes is not None:
+                _require(len(payload) <= max_bytes, f"{label} exceeds its size limit")
         after = os.fstat(descriptor)
         current = os.stat(lexical, follow_symlinks=False)
         identity = lambda value: (
@@ -345,6 +360,10 @@ def _load_control_plane_common() -> types.ModuleType:
         CONTROL_PLANE_OPERATOR_ATTESTATION_SOURCE,
         label="control-plane operator-attestation helper",
     )
+    _, pressure_review_packet_verifier_payload = _stable_regular_bytes(
+        CONTROL_PLANE_PRESSURE_REVIEW_PACKET_VERIFIER_SOURCE,
+        label="control-plane pressure-review-packet verifier",
+    )
     _, common_payload = _stable_regular_bytes(
         CONTROL_PLANE_COMMON_SOURCE,
         label="control-plane shared validator",
@@ -360,8 +379,29 @@ def _load_control_plane_common() -> types.ModuleType:
         ),
         operator_module.__dict__,
     )
-    previous = sys.modules.get("operator_attestation")
+    pressure_review_packet_verifier_module = types.ModuleType(
+        "q011_pressure_review_packet_verifier"
+    )
+    pressure_review_packet_verifier_module.__file__ = str(
+        CONTROL_PLANE_PRESSURE_REVIEW_PACKET_VERIFIER_SOURCE
+    )
+    exec(
+        compile(
+            pressure_review_packet_verifier_payload,
+            str(CONTROL_PLANE_PRESSURE_REVIEW_PACKET_VERIFIER_SOURCE),
+            "exec",
+            dont_inherit=True,
+        ),
+        pressure_review_packet_verifier_module.__dict__,
+    )
+    previous_operator = sys.modules.get("operator_attestation")
+    previous_pressure_review_packet_verifier = sys.modules.get(
+        "q011_pressure_review_packet_verifier"
+    )
     sys.modules["operator_attestation"] = operator_module
+    sys.modules[
+        "q011_pressure_review_packet_verifier"
+    ] = pressure_review_packet_verifier_module
     try:
         common_module = types.ModuleType("_q011_section54_control_plane_common")
         common_module.__file__ = str(CONTROL_PLANE_COMMON_SOURCE)
@@ -376,10 +416,16 @@ def _load_control_plane_common() -> types.ModuleType:
         )
         return common_module
     finally:
-        if previous is None:
+        if previous_operator is None:
             del sys.modules["operator_attestation"]
         else:
-            sys.modules["operator_attestation"] = previous
+            sys.modules["operator_attestation"] = previous_operator
+        if previous_pressure_review_packet_verifier is None:
+            del sys.modules["q011_pressure_review_packet_verifier"]
+        else:
+            sys.modules[
+                "q011_pressure_review_packet_verifier"
+            ] = previous_pressure_review_packet_verifier
 
 
 def _installed_environment_profile(
@@ -577,7 +623,10 @@ def _load_pressure_receipt(
     path: Path, *, authorized_pic_root: Path
 ) -> tuple[bytes, dict[str, object]]:
     _, payload = _stable_regular_bytes(
-        path, label="human pressure-selection receipt", require_read_only=True
+        path,
+        label="human pressure-selection receipt",
+        require_read_only=True,
+        max_bytes=pressure_selection.MAX_PRESSURE_SELECTION_RECEIPT_BYTES,
     )
     try:
         receipt = pressure_selection.validate_pressure_selection_receipt_bytes(
@@ -602,9 +651,7 @@ def _candidate_binding(
     executable: Path,
     environment_profile: Path,
     paper_deck_sha256: str,
-    admission_analyzer_sha256: str,
-    output_primitives_sha256: str,
-) -> tuple[bytes, bytes, dict[str, object]]:
+) -> tuple[bytes, bytes, dict[str, object], list[dict[str, str]]]:
     authorized_root = _canonical_existing_directory(
         AUTHORIZED_ORION_ROOT, label="authorized Orion PIC root"
     )
@@ -740,6 +787,12 @@ def _candidate_binding(
         raise
     except (OSError, ValueError) as error:
         raise CampaignPlanError(f"clean-candidate bundle failed shared validation: {error}") from error
+    helper_sources = _archive_helper_source_closure(
+        archive_payload,
+        common=common,
+    )
+    _require_archive_helper_source_closure_matches_live(helper_sources)
+    helper_by_path = {record["path"]: record["sha256"] for record in helper_sources}
     prepared = manifest["prepared_artifacts"]
     measured_prepared = {
         record["path"]: record["sha256"]
@@ -747,8 +800,12 @@ def _candidate_binding(
     }
     for path, digest in {
         model.BASE_DECK_PATH: paper_deck_sha256,
-        "tst/publication/analyze_q011_section54_campaign.py": admission_analyzer_sha256,
-        "tst/publication/analyze_q011_section54_outputs.py": output_primitives_sha256,
+        "tst/publication/analyze_q011_section54_campaign.py": helper_by_path[
+            "tst/publication/analyze_q011_section54_campaign.py"
+        ],
+        "tst/publication/analyze_q011_section54_outputs.py": helper_by_path[
+            "tst/publication/analyze_q011_section54_outputs.py"
+        ],
     }.items():
         _require(
             measured_prepared.get(path) == digest,
@@ -756,36 +813,41 @@ def _candidate_binding(
         )
     profile_sha256 = _sha256_bytes(profile_payload)
     profile_receipt_sha256 = _sha256_bytes(profile_receipt_payload)
-    return manifest_payload, environment_payload, {
-        "clean_candidate_manifest": {
-            "path": str(manifest_path),
-            "sha256": _sha256_bytes(manifest_payload),
+    return (
+        manifest_payload,
+        environment_payload,
+        {
+            "clean_candidate_manifest": {
+                "path": str(manifest_path),
+                "sha256": _sha256_bytes(manifest_payload),
+            },
+            "freeze_id": freeze_id,
+            "git_commit": git_commit,
+            "git_tree": source["git_tree"],
+            "source_archive_sha256": source["archive_sha256"],
+            "source_commit_sha256": source["commit_sha256"],
+            "source_bundle_sha256": source["source_bundle_sha256"],
+            "prepared_artifact_inventory_sha256": prepared["inventory_sha256"],
+            "validated_submodules": validated_submodules,
+            "build_profile": {"path": str(profile), "sha256": profile_sha256},
+            "build_profile_receipt": {
+                "path": str(profile_receipt),
+                "sha256": profile_receipt_sha256,
+            },
+            "build_invocations_sha256": build["build_invocations_sha256"],
+            "executable": {"path": str(executable_path), "sha256": executable_sha256},
+            "environment_profile": {
+                "path": str(environment_path),
+                "sha256": _sha256_bytes(environment_payload),
+                "control_plane_version": control_plane_version,
+                "reviewed_source": _binding(
+                    "tst/publication/frontier_control_plane/frontier_pic_environment.sh",
+                    reviewed_environment_payload,
+                ),
+            },
         },
-        "freeze_id": freeze_id,
-        "git_commit": git_commit,
-        "git_tree": source["git_tree"],
-        "source_archive_sha256": source["archive_sha256"],
-        "source_commit_sha256": source["commit_sha256"],
-        "source_bundle_sha256": source["source_bundle_sha256"],
-        "prepared_artifact_inventory_sha256": prepared["inventory_sha256"],
-        "validated_submodules": validated_submodules,
-        "build_profile": {"path": str(profile), "sha256": profile_sha256},
-        "build_profile_receipt": {
-            "path": str(profile_receipt),
-            "sha256": profile_receipt_sha256,
-        },
-        "build_invocations_sha256": build["build_invocations_sha256"],
-        "executable": {"path": str(executable_path), "sha256": executable_sha256},
-        "environment_profile": {
-            "path": str(environment_path),
-            "sha256": _sha256_bytes(environment_payload),
-            "control_plane_version": control_plane_version,
-            "reviewed_source": _binding(
-                "tst/publication/frontier_control_plane/frontier_pic_environment.sh",
-                reviewed_environment_payload,
-            ),
-        },
-    }
+        helper_sources,
+    )
 
 
 def _attempt_id(index: int, variant: str, seed: int) -> str:
@@ -1482,6 +1544,44 @@ def _helper_source_closure() -> list[dict[str, str]]:
     return records
 
 
+def _archive_helper_source_closure(
+    source_archive: bytes,
+    *,
+    common: Any | None = None,
+) -> list[dict[str, str]]:
+    """Derive the helper closure solely from exact regular source.tar members."""
+    shared = _load_control_plane_common() if common is None else common
+    try:
+        records = [
+            {
+                "path": relative,
+                "sha256": _sha256_bytes(
+                    shared._planner_archive_member(source_archive, relative)
+                ),
+            }
+            for relative in _FIXED_HELPER_SOURCES
+        ]
+    except (OSError, TypeError, ValueError) as error:
+        raise CampaignPlanError(
+            f"clean-candidate source archive helper/source closure is invalid: {error}"
+        ) from error
+    _require(
+        [record["path"] for record in records] == list(_FIXED_HELPER_SOURCES),
+        "clean-candidate source archive helper/source closure order drifted",
+    )
+    return records
+
+
+def _require_archive_helper_source_closure_matches_live(
+    archive_sources: list[dict[str, str]],
+) -> None:
+    _require(
+        archive_sources == _helper_source_closure(),
+        "clean-candidate source archive helper/source closure differs from "
+        "live checkout",
+    )
+
+
 def _retained_binding(value: object, *, label: str) -> dict[str, str]:
     binding = _object(value, {"path", "sha256"}, label=f"{label} binding")
     relative = _relative_path(binding["path"], label=f"{label} binding/path")
@@ -1519,8 +1619,118 @@ def _retained_json_member(
     return decoded
 
 
+def _retained_claimed_source_archive(
+    snapshot: Any,
+    normalized_source_bindings: Mapping[str, dict[str, str]],
+    candidate: Mapping[str, Any],
+    *,
+    authorized_root: Path,
+) -> bytes:
+    """Read the exact external source.tar claimed by the retained candidate."""
+    manifest_binding = normalized_source_bindings["clean_candidate_manifest"]
+    manifest_payload = _retained_member_payload(
+        snapshot,
+        manifest_binding,
+        label="clean-candidate manifest",
+    )
+    manifest = _decode_json(manifest_payload, label="clean-candidate manifest")
+    manifest = _object(
+        manifest,
+        {
+            "schema_version",
+            "freeze_id",
+            "created_utc",
+            "prepared_artifacts",
+            "source",
+            "build",
+        },
+        label="clean-candidate manifest",
+    )
+    _require(
+        _exact_int(
+            manifest["schema_version"],
+            label="clean-candidate manifest/schema_version",
+        )
+        == 4,
+        "clean-candidate manifest schema version drifted",
+    )
+    freeze_id = _uuid(
+        manifest["freeze_id"],
+        label="clean-candidate manifest/freeze_id",
+    )
+    candidate_root = authorized_root / "clean_candidates" / freeze_id
+    external_manifest = candidate_root / "clean_candidate_manifest.json"
+    _, external_manifest_payload, _ = _stable_regular_bytes_below(
+        external_manifest,
+        authorized_root,
+        label="external clean-candidate manifest",
+        require_read_only=True,
+    )
+    _require(
+        external_manifest_payload == manifest_payload,
+        "retained clean-candidate manifest differs from frozen candidate",
+    )
+    candidate_manifest = _object(
+        candidate.get("clean_candidate_manifest"),
+        {"path", "sha256"},
+        label="campaign plan candidate/clean_candidate_manifest",
+    )
+    _require(
+        candidate_manifest
+        == {
+            "path": str(external_manifest),
+            "sha256": manifest_binding["sha256"],
+        }
+        and candidate.get("freeze_id") == freeze_id,
+        "campaign plan candidate differs from retained clean-candidate manifest",
+    )
+    source = _object(
+        manifest["source"],
+        {
+            "archive_path",
+            "archive_sha256",
+            "commit_path",
+            "commit_sha256",
+            "source_bundle_sha256",
+            "git_commit",
+            "git_tree",
+            "worktree_status",
+            "submodule_status",
+            "submodules",
+        },
+        label="clean-candidate manifest/source",
+    )
+    build = manifest["build"]
+    _require(type(build) is dict, "clean-candidate manifest/build must be an object")
+    source_archive_path = candidate_root / "source.tar"
+    _require(
+        source["archive_path"] == str(source_archive_path),
+        "clean-candidate source archive path drifted",
+    )
+    _, source_archive, _ = _stable_regular_bytes_below(
+        source_archive_path,
+        authorized_root,
+        label="clean-candidate source archive",
+        require_read_only=True,
+    )
+    source_archive_sha256 = _sha256_bytes(source_archive)
+    _require(
+        source_archive_sha256 == source["archive_sha256"]
+        and source_archive_sha256 == build.get("source_archive_sha256")
+        and source_archive_sha256 == candidate.get("source_archive_sha256")
+        and candidate.get("git_commit") == source["git_commit"]
+        and candidate.get("git_tree") == source["git_tree"],
+        "campaign plan candidate differs from claimed clean-candidate source archive",
+    )
+    return source_archive
+
+
 def _validate_retained_helper_source_closure(
-    snapshot: Any, plan: Mapping[str, Any], *, plan_id: str
+    snapshot: Any,
+    plan: Mapping[str, Any],
+    *,
+    plan_id: str,
+    expected_sources: list[dict[str, str]],
 ) -> list[dict[str, str]]:
     binding = _retained_binding(
         plan["helper_source_closure"], label="helper source closure"
@@ -1546,11 +1756,10 @@ def _validate_retained_helper_source_closure(
         and closure["plan_id"] == plan_id,
         "helper source closure identity drifted",
     )
-    expected_sources = _helper_source_closure()
     _require(
         _list(closure["sources"], label="helper source closure/sources")
         == expected_sources,
-        "helper source closure drifted from reviewed source bytes",
+        "helper source closure drifted from clean-candidate source archive",
     )
     return expected_sources
 
@@ -1703,14 +1912,69 @@ def materialize_planner_retention(
                 == normalized_source_bindings["pressure_selection_receipt"],
                 "campaign plan selected-pressure receipt binding drifted",
             )
-            helper_sources = _validate_retained_helper_source_closure(
-                snapshot, plan, plan_id=plan_id
+            pressure_receipt_binding = normalized_source_bindings[
+                "pressure_selection_receipt"
+            ]
+            retained_pressure_payload = _retained_member_payload(
+                snapshot,
+                pressure_receipt_binding,
+                label="human pressure-selection receipt",
+            )
+            validated_pressure_payload, validated_pressure_receipt = (
+                _load_pressure_receipt(
+                    retained_planner_root / pressure_receipt_binding["path"],
+                    authorized_pic_root=authorized_root,
+                )
+            )
+            _require(
+                validated_pressure_payload == retained_pressure_payload,
+                "centrally validated pressure-selection receipt bytes drifted "
+                "from the immutable campaign plan",
+            )
+            _require(
+                validated_pressure_receipt["selection_method"]
+                == selected_pressure["selection_method"],
+                "campaign plan selected-pressure method drifted from the "
+                "centrally validated receipt",
+            )
+            _require(
+                validated_pressure_receipt["selected_case"] == selected_case,
+                "campaign plan selected-pressure case drifted from the "
+                "centrally validated receipt",
             )
             candidate = plan["candidate_binding"]
             _require(
                 type(candidate) is dict,
                 "campaign plan candidate binding must be an object",
             )
+            source_archive = _retained_claimed_source_archive(
+                snapshot,
+                normalized_source_bindings,
+                candidate,
+                authorized_root=authorized_root,
+            )
+            archive_helper_sources = _archive_helper_source_closure(source_archive)
+            _require_archive_helper_source_closure_matches_live(
+                archive_helper_sources
+            )
+            helper_sources = _validate_retained_helper_source_closure(
+                snapshot,
+                plan,
+                plan_id=plan_id,
+                expected_sources=archive_helper_sources,
+            )
+            try:
+                pressure_selection.validate_pressure_selection_source_snapshot(
+                    validated_pressure_receipt,
+                    git_commit=candidate["git_commit"],
+                    source_archive_sha256=candidate["source_archive_sha256"],
+                    helper_source_closure=helper_sources,
+                    authorized_pic_root=authorized_root,
+                )
+            except (KeyError, pressure_selection.PressureSelectionReceiptError) as error:
+                raise CampaignPlanError(
+                    "campaign plan pressure reanalysis differs from its frozen source snapshot"
+                ) from error
             expected_plan_id = _digest_value(
                 {
                     "record_type": PLAN_RECORD_TYPE,
@@ -1919,16 +2183,26 @@ def materialize_qualifying_campaign_plan(
     restart_payload, restart_policy = _load_restart_preregistration(restart_preregistration)
     _, deck_payload = _stable_regular_bytes(paper_deck, label="Section 5.4 paper deck")
     _require(_sha256_bytes(deck_payload) == PAPER_DECK_SHA256, "Section 5.4 paper deck SHA-256 drifted")
-    helper_sources = _helper_source_closure()
-    helper_by_path = {record["path"]: record["sha256"] for record in helper_sources}
-    manifest_payload, environment_payload, candidate = _candidate_binding(
-        clean_candidate_manifest=clean_candidate_manifest,
-        executable=executable,
-        environment_profile=environment_profile,
-        paper_deck_sha256=PAPER_DECK_SHA256,
-        admission_analyzer_sha256=helper_by_path["tst/publication/analyze_q011_section54_campaign.py"],
-        output_primitives_sha256=helper_by_path["tst/publication/analyze_q011_section54_outputs.py"],
+    manifest_payload, environment_payload, candidate, helper_sources = (
+        _candidate_binding(
+            clean_candidate_manifest=clean_candidate_manifest,
+            executable=executable,
+            environment_profile=environment_profile,
+            paper_deck_sha256=PAPER_DECK_SHA256,
+        )
     )
+    try:
+        pressure_selection.validate_pressure_selection_source_snapshot(
+            pressure_receipt,
+            git_commit=candidate["git_commit"],
+            source_archive_sha256=candidate["source_archive_sha256"],
+            helper_source_closure=helper_sources,
+            authorized_pic_root=AUTHORIZED_ORION_ROOT,
+        )
+    except pressure_selection.PressureSelectionReceiptError as error:
+        raise CampaignPlanError(
+            f"human pressure-selection source snapshot is invalid: {error}"
+        ) from error
     selected_case = pressure_receipt["selected_case"]
     selected_ps_p0 = _exact_float(
         selected_case["problem_ps_p0"], label="selected pressure receipt/problem_ps_p0"

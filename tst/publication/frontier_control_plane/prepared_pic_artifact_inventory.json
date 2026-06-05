@@ -30,11 +30,11 @@
     },
     {
       "path": "tst/publication/analyze_q011_section54_campaign.py",
-      "sha256": "48ff1ed39d4d4c93ab8089b523a8178af1adc59969e0bafe7f6858ceb66ce064"
+      "sha256": "ff4276e13cc676d24483c8166cff1fbc3374fe8a6b1ddc57eb71e5b1dae6e099"
     },
     {
       "path": "tst/publication/analyze_q011_section54_numerical_qualification.py",
-      "sha256": "40763081e96f0bdbef42a875904185db52817083667db0c1bd89f1c3fd01a8d0"
+      "sha256": "2c857a402db4517465962426fb25b767cad44f94c50e46c21b975db242fc36e5"
     },
     {
       "path": "tst/publication/analyze_q011_section54_outputs.py",
@@ -42,11 +42,11 @@
     },
     {
       "path": "tst/publication/analyze_q011_section54_pressure_pilot.py",
-      "sha256": "da745b3e52a86127455fd9f70d0341e1f3563b4344979cd4266df18d4695a316"
+      "sha256": "bd3cb8b80b74a9ef865ac24344ce59b65cea1c4e2942c70c5cd5e75394d33f0d"
     },
     {
       "path": "tst/publication/analyze_q011_section54_pressure_pilot_case.py",
-      "sha256": "8596d95c9b8952dcb760b10fbe00bf7ba8a2c895713cc3d36dd1efa1aac11ecc"
+      "sha256": "4a2114a0b459f4cd54aa53f41bfe15222eeb520324ad036fb465bce93fd8e7ce"
     },
     {
       "path": "tst/publication/analyze_q023_paper_bell_linear.py",

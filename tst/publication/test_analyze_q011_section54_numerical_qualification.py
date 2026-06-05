@@ -23,10 +23,39 @@ from . import analyze_q011_section54_campaign as admission
 from . import analyze_q011_section54_numerical_qualification as qualifier
 from . import q011_section54_artifacts as artifacts
 from . import q011_section54_particles as particles
+from . import test_analyze_q011_section54_campaign as campaign_fixture
 
 
 def _sha256(character: str) -> str:
     return character * 64
+
+
+@contextmanager
+def _authoritative_pressure_pilot_consumer_fixture(
+    authorized_root: Path,
+) -> Iterator[mock.Mock]:
+    expected_path = (
+        authorized_root
+        / "publication/q011_section54_pressure_pilot_publication_receipt.json"
+    )
+
+    def consume() -> dict[str, object]:
+        return {
+            "packet_receipt_sha256": "d" * 64,
+            "aggregate_receipt_sha256": hashlib.sha256(
+                expected_path.read_bytes()
+            ).hexdigest(),
+            "manifest_sha256": "b" * 64,
+            "analysis_result_sha256": "c" * 64,
+            "status": "pass_engineering_calibration_only",
+        }
+
+    with mock.patch.object(
+        qualifier.admission.pressure_selection.historical_pressure_pilot_consumer,
+        "consume_exact_historical_production_pressure_pilot",
+        side_effect=consume,
+    ) as consumer:
+        yield consumer
 
 
 def _identity(index: int, variant: str, seed: int) -> dict[str, object]:
@@ -1075,6 +1104,115 @@ class Q011Section54NumericalQualificationTests(unittest.TestCase):
                 reviewer_disposition=_pending(),
             )
 
+    def test_bind_retained_attempt_tree_accepts_admitted_frozen_campaign(self) -> None:
+        def reduce_fixture(
+            result: dict[str, object],
+            _snapshot: object,
+        ) -> dict[str, object]:
+            admitted = result["admission"]
+            attempt = copy.deepcopy(_attempts()[0]["attempt"])
+            attempt["run_identity"] = copy.deepcopy(admitted["run_identity"])
+            attempt["raw_inventory_sha256"] = admitted["immutable_tree"][
+                "inventory_sha256"
+            ]
+            attempt["source_checkpoint_lineage"] = _source_checkpoint_lineage(
+                attempt["run_identity"]
+            )
+            attempt["admission_result"] = copy.deepcopy(result)
+            return attempt
+
+        with campaign_fixture._frozen_fixture() as (
+            authorized_root,
+            tree,
+            inventory_sha256,
+        ):
+            with _authoritative_pressure_pilot_consumer_fixture(
+                authorized_root
+            ) as consumer, mock.patch.object(
+                qualifier,
+                "_reduce_retained_attempt",
+                side_effect=reduce_fixture,
+            ) as reducer:
+                binding = qualifier.bind_retained_attempt_tree(
+                    tree,
+                    inventory_sha256,
+                    authorized_orion_root=authorized_root,
+                )
+
+        wrapper = qualifier._load_json_bytes(
+            binding.wrapper_payload,
+            label="direct retained-attempt binding fixture",
+        )
+        self.assertIsInstance(binding, qualifier._RetainedAttemptBinding)
+        self.assertTrue(
+            wrapper["attempt"]["admission_result"][
+                "admitted_for_follow_on_numerical_qualification"
+            ]
+        )
+        self.assertEqual(
+            wrapper["attempt_sha256"],
+            qualifier._canonical_sha256(wrapper["attempt"]),
+        )
+        consumer.assert_called_once()
+        reducer.assert_called_once()
+
+    def test_bind_retained_attempt_tree_rejects_review_packet_binding_drift(
+        self,
+    ) -> None:
+        def drift_review_packet_binding(
+            root: Path,
+            manifest: dict[str, object],
+        ) -> None:
+            campaign_fixture._rewrite_attempt_json_artifact(
+                root,
+                manifest,
+                "selected_pressure_receipt",
+                lambda receipt: receipt[
+                    "published_pressure_pilot_review_packet_receipt"
+                ].__setitem__("sha256", "3" * 64),
+            )
+
+        observed: dict[str, object] = {}
+        qualify_campaign = qualifier.admission.qualify_campaign
+
+        def capture_admission(*args: object, **kwargs: object) -> dict[str, object]:
+            result = qualify_campaign(*args, **kwargs)
+            observed.update(copy.deepcopy(result))
+            return result
+
+        with campaign_fixture._frozen_fixture(drift_review_packet_binding) as (
+            authorized_root,
+            tree,
+            inventory_sha256,
+        ):
+            with _authoritative_pressure_pilot_consumer_fixture(
+                authorized_root
+            ) as consumer, mock.patch.object(
+                qualifier.admission,
+                "qualify_campaign",
+                side_effect=capture_admission,
+            ), mock.patch.object(qualifier, "_reduce_retained_attempt") as reducer:
+                with self.assertRaisesRegex(
+                    qualifier.NumericalQualificationError,
+                    "retained attempt was not admitted",
+                ):
+                    qualifier.bind_retained_attempt_tree(
+                        tree,
+                        inventory_sha256,
+                        authorized_orion_root=authorized_root,
+                    )
+
+        self.assertEqual(
+            observed["failure_reasons"][0]["code"],
+            "selected_pressure_receipt_drift",
+        )
+        self.assertIn(
+            "review-packet receipt binding drifted",
+            observed["failure_reasons"][0]["message"],
+        )
+        consumer.assert_not_called()
+        reducer.assert_not_called()
+
     def test_public_aggregate_loads_retained_descriptors_before_passing(self) -> None:
         attempts = _attempts()
         retained_attempts = _retained_attempt_bindings(attempts)
@@ -1495,6 +1633,10 @@ class Q011Section54NumericalQualificationTests(unittest.TestCase):
             )
 
     def test_recompute_analyzer_closure_lists_direct_semantic_dependencies(self) -> None:
+        self.assertEqual(
+            qualifier.PRESSURE_REVIEW_PACKET_VERIFIER_RECOMPUTE_ANALYZER,
+            "tst/publication/frontier_control_plane/q011_pressure_review_packet_verifier.py",
+        )
         self.assertTrue(
             {
                 qualifier.ARTIFACTS_RECOMPUTE_ANALYZER,
@@ -1512,6 +1654,8 @@ class Q011Section54NumericalQualificationTests(unittest.TestCase):
                 qualifier.PLANNER_RECOMPUTE_ANALYZER,
                 qualifier.MODEL_RECOMPUTE_ANALYZER,
                 qualifier.PRESSURE_SELECTION_RECOMPUTE_ANALYZER,
+                qualifier.PRESSURE_HISTORICAL_CONSUMER_RECOMPUTE_ANALYZER,
+                qualifier.PRESSURE_REVIEW_PACKET_VERIFIER_RECOMPUTE_ANALYZER,
                 qualifier.PRESSURE_PILOT_EXECUTION_RECOMPUTE_ANALYZER,
                 qualifier.PRESSURE_PILOT_PUBLISHER_RECOMPUTE_ANALYZER,
                 qualifier.PRESSURE_PILOT_RECOMPUTE_ANALYZER,

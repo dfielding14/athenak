@@ -807,8 +807,13 @@ class Q011Section54PressurePilotTests(unittest.TestCase):
             pilot.POSTRUN_SOURCE_AUTHORIZATION_PREDECESSOR_PATH.read_bytes()
         )
         predecessor = json.loads(predecessor_payload)
-        snapshot_successor_path = (
+        prior_source_successor_path = (
             pilot.REPO_ROOT / predecessor["predecessor_record"]
+        )
+        prior_source_successor_payload = prior_source_successor_path.read_bytes()
+        prior_source_successor = json.loads(prior_source_successor_payload)
+        snapshot_successor_path = (
+            pilot.REPO_ROOT / prior_source_successor["predecessor_record"]
         )
         snapshot_successor_payload = snapshot_successor_path.read_bytes()
         snapshot_successor = json.loads(snapshot_successor_payload)
@@ -825,12 +830,23 @@ class Q011Section54PressurePilotTests(unittest.TestCase):
         self.assertEqual(successor["predecessor_sha256"], _sha256(predecessor_payload))
         self.assertEqual(
             predecessor["predecessor_record"],
+            "tst/publication/readiness/"
+            "q011_section54_pressure_pilot_postrun_aggregate_source_authorization_"
+            "successor_v4_2026-06-04.json",
+        )
+        self.assertEqual(
+            predecessor["predecessor_sha256"],
+            _sha256(prior_source_successor_payload),
+        )
+        self.assertEqual(
+            prior_source_successor["predecessor_record"],
             pilot.SNAPSHOT_TIME_COMPATIBILITY_SUCCESSOR_PATH.relative_to(
                 pilot.REPO_ROOT
             ).as_posix(),
         )
         self.assertEqual(
-            predecessor["predecessor_sha256"], _sha256(snapshot_successor_payload)
+            prior_source_successor["predecessor_sha256"],
+            _sha256(snapshot_successor_payload),
         )
         self.assertEqual(
             snapshot_successor["predecessor_record"],
@@ -869,6 +885,35 @@ class Q011Section54PressurePilotTests(unittest.TestCase):
         )
         self.assertEqual(
             original_successor["predecessor_sha256"], _sha256(compatibility_payload)
+        )
+
+    def test_exact_historical_production_source_authorization_is_separate(self) -> None:
+        source_payloads: dict[str, bytes] = {}
+        historical = pilot._load_exact_historical_production_source_authorization(
+            source_payloads=source_payloads
+        )
+        self.assertEqual(
+            _sha256(source_payloads["postrun_aggregate_source_authorization"]),
+            pilot.EXACT_HISTORICAL_PRODUCTION_SOURCE_AUTHORIZATION_SHA256,
+        )
+        self.assertEqual(
+            historical["source_closure"][-1]["role"],
+            "snapshot_time_compatibility_successor",
+        )
+        self.assertEqual(
+            _sha256(source_payloads["snapshot_time_compatibility_successor"]),
+            historical["source_closure"][-1]["sha256"],
+        )
+        current = json.loads(pilot.PREREGISTRATION_PATH.read_text(encoding="utf-8"))
+        self.assertEqual(
+            current["predecessor_record"],
+            pilot.EXACT_HISTORICAL_PRODUCTION_SOURCE_AUTHORIZATION_PATH.relative_to(
+                pilot.REPO_ROOT
+            ).as_posix(),
+        )
+        self.assertNotEqual(
+            pilot.PREREGISTRATION_PATH,
+            pilot.EXACT_HISTORICAL_PRODUCTION_SOURCE_AUTHORIZATION_PATH,
         )
 
     def test_postrun_source_authorization_rejects_predecessor_drift(self) -> None:
