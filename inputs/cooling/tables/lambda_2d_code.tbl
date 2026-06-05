@@ -1,0 +1,19 @@
+ATHENAK_COOLING_TABLE 1
+ndim 2
+value_kind Lambda
+value_units code
+value_scale linear
+bounds zero
+data_order c_row_major_last_axis_fastest
+axis0 temperature code linear 0.0 2.0 3
+axis1 density code linear 0.0 2.0 3 density_kind=mass_density
+data
+5.0e-3
+8.0e-3
+1.1e-2
+7.0e-3
+1.0e-2
+1.3e-2
+9.0e-3
+1.2e-2
+1.5e-2

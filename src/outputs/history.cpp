@@ -20,6 +20,7 @@
 #include "eos/eos.hpp"
 #include "hydro/hydro.hpp"
 #include "mhd/mhd.hpp"
+#include "srcterms/srcterms.hpp"
 #include "z4c/z4c.hpp"
 #include "coordinates/adm.hpp"
 #include "outputs.hpp"
@@ -104,6 +105,18 @@ void HistoryOutput::LoadHydroHistoryData(HistoryData *pdata, Mesh *pm) {
     labelSS << "scal-" << s;
     pdata->label[nhydro_+3+s] = labelSS.str();
   }
+  const int cooling_hist_start = nhydro_ + 3 + nscalars_;
+  if (pm->pmb_pack->phydro->psrc != nullptr &&
+      pm->pmb_pack->phydro->psrc->CoolingHistoryEnabled()) {
+    pdata->nhist += pm->pmb_pack->phydro->psrc->AddCoolingHistoryLabels(
+        pdata->label, cooling_hist_start, NHISTORY_VARIABLES);
+  }
+  if (pdata->nhist > NHISTORY_VARIABLES) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "Hydro history variables exceed NHISTORY_VARIABLES"
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
 
   // capture class variables for kernel
   auto &u0_ = pm->pmb_pack->phydro->u0;
@@ -151,8 +164,8 @@ void HistoryOutput::LoadHydroHistoryData(HistoryData *pdata, Mesh *pm) {
       hvars.the_array[nhydro_+3+s] = vol*u0_(m,nhydro_+s,k,j,i);
     }
 
-    // fill rest of the_array with zeros, if nhist < NHISTORY_VARIABLES
-    for (int n=nhist_; n<NHISTORY_VARIABLES; ++n) {
+    // Cooling history columns are filled from source-term accumulators on the host.
+    for (int n=cooling_hist_start; n<NHISTORY_VARIABLES; ++n) {
       hvars.the_array[n] = 0.0;
     }
 
@@ -163,6 +176,11 @@ void HistoryOutput::LoadHydroHistoryData(HistoryData *pdata, Mesh *pm) {
   // store data into hdata array
   for (int n=0; n<pdata->nhist; ++n) {
     pdata->hdata[n] = sum_this_mb.the_array[n];
+  }
+  if (pm->pmb_pack->phydro->psrc != nullptr &&
+      pm->pmb_pack->phydro->psrc->CoolingHistoryEnabled()) {
+    pm->pmb_pack->phydro->psrc->AddCoolingHistoryData(
+        pdata->hdata, cooling_hist_start, NHISTORY_VARIABLES, pm->time);
   }
 
   return;
@@ -302,6 +320,18 @@ void HistoryOutput::LoadMHDHistoryData(HistoryData *pdata, Mesh *pm) {
     labelSS << "scal-" << s;
     pdata->label[nmhd_+6+s] = labelSS.str();
   }
+  const int cooling_hist_start = nmhd_ + 6 + nscalars_;
+  if (pm->pmb_pack->pmhd->psrc != nullptr &&
+      pm->pmb_pack->pmhd->psrc->CoolingHistoryEnabled()) {
+    pdata->nhist += pm->pmb_pack->pmhd->psrc->AddCoolingHistoryLabels(
+        pdata->label, cooling_hist_start, NHISTORY_VARIABLES);
+  }
+  if (pdata->nhist > NHISTORY_VARIABLES) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "MHD history variables exceed NHISTORY_VARIABLES"
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
 
   // capture class variabels for kernel
   auto &u0_ = pm->pmb_pack->pmhd->u0;
@@ -357,8 +387,8 @@ void HistoryOutput::LoadMHDHistoryData(HistoryData *pdata, Mesh *pm) {
       hvars.the_array[nmhd_+6+s] = vol*u0_(m,nmhd_+s,k,j,i);
     }
 
-    // fill rest of the_array with zeros, if nhist < NHISTORY_VARIABLES
-    for (int n=nhist_; n<NHISTORY_VARIABLES; ++n) {
+    // Cooling history columns are filled from source-term accumulators on the host.
+    for (int n=cooling_hist_start; n<NHISTORY_VARIABLES; ++n) {
       hvars.the_array[n] = 0.0;
     }
 
@@ -370,6 +400,11 @@ void HistoryOutput::LoadMHDHistoryData(HistoryData *pdata, Mesh *pm) {
   // store data into hdata array
   for (int n=0; n<pdata->nhist; ++n) {
     pdata->hdata[n] = sum_this_mb.the_array[n];
+  }
+  if (pm->pmb_pack->pmhd->psrc != nullptr &&
+      pm->pmb_pack->pmhd->psrc->CoolingHistoryEnabled()) {
+    pm->pmb_pack->pmhd->psrc->AddCoolingHistoryData(
+        pdata->hdata, cooling_hist_start, NHISTORY_VARIABLES, pm->time);
   }
 
   return;

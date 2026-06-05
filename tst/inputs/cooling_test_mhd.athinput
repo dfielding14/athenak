@@ -1,0 +1,91 @@
+# AthenaK input file for isolated 1D MHD cooling source-term regression tests.
+
+<comment>
+problem = uniform MHD cooling source-term test
+
+<job>
+basename = cooling_test_mhd
+
+<mesh>
+nghost = 2
+nx1 = 8
+x1min = 0.0
+x1max = 1.0
+ix1_bc = periodic
+ox1_bc = periodic
+
+nx2 = 1
+x2min = 0.0
+x2max = 1.0
+ix2_bc = periodic
+ox2_bc = periodic
+
+nx3 = 1
+x3min = 0.0
+x3max = 1.0
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 8
+nx2 = 1
+nx3 = 1
+
+<time>
+evolution = dynamic
+integrator = rk2
+cfl_number = 0.4
+nlim = 1
+tlim = 1.0e-3
+ndiag = 100
+
+<units>
+length_cgs = 1.0
+mass_cgs = 1.0
+time_cgs = 1.0
+
+<mhd>
+eos = ideal
+reconstruct = plm
+rsolver = llf
+gamma = 1.6666666666666667
+nscalars = 1
+
+<problem>
+pgen_name = cooling_test
+density = 1.0
+pressure = 1.0
+vx = 0.0
+vy = 0.0
+vz = 0.0
+bx = 0.1
+by = 0.2
+bz = 0.3
+scalar0 = 0.0
+register_user_cooling = false
+
+<cooling>
+enabled = true
+units = code
+cooling_model = powerlaw
+heating_model = none
+cooling_density = mass_density
+heating_density = mass_density
+cooling_bounds = zero
+heating_bounds = zero
+cooling_powerlaw_axis = temperature
+cooling_powerlaw_axis_units = code
+cooling_powerlaw_value_units = code
+cooling_reference_axis = 1.0
+cooling_reference_value = 1.0e-2
+cooling_slope = 0.0
+timestep = false
+timestep_factor = 1.0
+history = true
+history_gross = true
+history_net = true
+
+<output1>
+file_type = hst
+data_format = %24.16e
+dcycle = 1

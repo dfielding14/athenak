@@ -1,0 +1,75 @@
+# AthenaK input file for exercising the general <cooling> table path
+
+<comment>
+problem = general cooling source term smoke test with a 1D table
+
+<job>
+basename = cooling_table
+
+<mesh>
+nghost = 2
+nx1 = 8
+x1min = 0.0
+x1max = 1.0
+ix1_bc = periodic
+ox1_bc = periodic
+
+nx2 = 1
+x2min = 0.0
+x2max = 1.0
+ix2_bc = periodic
+ox2_bc = periodic
+
+nx3 = 1
+x3min = 0.0
+x3max = 1.0
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 8
+nx2 = 1
+nx3 = 1
+
+<time>
+evolution = dynamic
+integrator = rk2
+cfl_number = 0.3
+nlim = 2
+tlim = 1.0e-2
+ndiag = 1
+
+<hydro>
+eos = ideal
+reconstruct = plm
+rsolver = llf
+gamma = 1.6666666666666667
+
+<problem>
+pgen_name = linear_wave
+wave_flag = 0
+amp = 0.0
+dens = 1.0
+pgas = 1.0
+vx0 = 0.0
+along_x1 = true
+along_x2 = false
+along_x3 = false
+
+<cooling>
+enabled = true
+cooling_model = table
+heating_model = none
+units = code
+cooling_density = mass_density
+cooling_table = inputs/unit_tests/cooling_table_1d.tbl
+timestep = true
+timestep_factor = 0.5
+history = true
+history_gross = true
+history_net = true
+
+<output1>
+file_type = hst
+data_format = %16.8e
+dt = 1.0e-3

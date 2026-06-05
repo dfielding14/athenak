@@ -1,0 +1,11 @@
+ATHENAK_COOLING_TABLE 1
+ndim 1
+value_kind Lambda
+value_units code
+value_scale linear
+data_order c_row_major_last_axis_fastest
+axis0 scalar code linear -1.0 1.0 3 scalar_index=1
+data
+1.0e-2
+1.0e-2
+1.0e-2

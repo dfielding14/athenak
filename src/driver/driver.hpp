@@ -55,6 +55,7 @@ class Driver {
   void Finalize(Mesh *pmesh, ParameterInput *pin, Outputs *pout);
   void InitBoundaryValuesAndPrimitives(Mesh *pm);
   Real FinalFluxWeight(int stage) const;
+  Real SourceTermHistoryWeight(int stage) const;
 
  private:
   Kokkos::Timer run_time_;      // generalized timer for cpu/gpu/etc
