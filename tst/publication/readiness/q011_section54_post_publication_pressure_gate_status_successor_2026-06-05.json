@@ -11,7 +11,7 @@
   },
   "clean_snapshot_pressure_gate_validation_worker": {
     "path": "tst/publication/frontier_q011_section54_pressure_gate_validation_job.sh",
-    "sha256": "e9f38f56c944622270a80ec804dbb4e7a9a127331f36dec068929aefa0690e01",
+    "sha256": "63ee6ca57229a96c0448134a7c105dcd0de820bbf46bd70182f49ff6514ed4d7",
     "expected_publication_python_files": 145,
     "expected_publication_shell_files": 17,
     "expected_publication_json_files": 290,
@@ -81,7 +81,7 @@
     "status": "source_local_change_and_validation_bytes_bound_by_this_status_successor",
     "scope": "pressure_selection_v3_sealed_reanalysis_reviewer_and_replay_change_validation_closure_not_transitive_runtime_closure",
     "file_count": 29,
-    "closure_sha256": "fbbfaef4a414c243dd68c10d043fde5a9d137faf164d2a8d1e0496d46c89a5f4",
+    "closure_sha256": "580520c5095cead4b28ae78f299b407886f40dc539a8420d911cdb0184567818",
     "files": [
       {
         "path": "tst/publication/frontier_control_plane/q011_pressure_review_packet_verifier.py",
@@ -185,11 +185,11 @@
       },
       {
         "path": "tst/publication/test_pic_readiness_registry.py",
-        "sha256": "f012f1ccaa1380fe8f723b9d9c9c126e581851327ff94d2d4cfd048427244ece"
+        "sha256": "66cd7cec7abd929c2c9ae0b47c428691266e34d916a5a420afb73bf7367b92bb"
       },
       {
         "path": "tst/publication/frontier_q011_section54_pressure_gate_validation_job.sh",
-        "sha256": "e9f38f56c944622270a80ec804dbb4e7a9a127331f36dec068929aefa0690e01"
+        "sha256": "63ee6ca57229a96c0448134a7c105dcd0de820bbf46bd70182f49ff6514ed4d7"
       },
       {
         "path": "tst/publication/readiness/q011_section54_pressure_pilot_postrun_aggregate_source_authorization_successor_v6_2026-06-05.json",

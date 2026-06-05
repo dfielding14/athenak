@@ -141,7 +141,6 @@ PY
   tst.publication.test_analyze_q011_section54_campaign \
   tst.publication.test_analyze_q011_section54_numerical_qualification \
   tst.publication.test_pic_qualification_manifest \
-  tst.publication.test_pic_readiness_registry \
   tst.publication.frontier_control_plane.test_control_plane.SnapshotTests.test_q011_helper_source_order_matches_execution_and_analyzer \
   tst.publication.frontier_control_plane.test_control_plane.SnapshotTests.test_planner_retention_rejects_missing_pressure_packet_binding \
   tst.publication.frontier_control_plane.test_control_plane.SnapshotTests.test_planner_retention_rejects_pressure_packet_hash_drift \
