@@ -6033,13 +6033,6 @@ def validate_submitted_cancellation_metadata(
         raise ValueError("submitted cancellation scheduler evidence changed")
     if retained_paths["queue_absence_evidence"].read_text(encoding="utf-8").strip():
         raise ValueError("submitted cancellation queue-absence evidence is nonempty")
-    if paths["root"].resolve() == DEFAULT_ROOT.resolve():
-        if parse_sacct(live_cancellation_sacct_output(job_id), job_id) != scheduler:
-            raise ValueError(
-                "submitted cancellation scheduler evidence differs from live Slurm"
-            )
-        if live_cancelled_job_queue_output(job_id).strip():
-            raise ValueError("cancelled submitted job remains present in live squeue")
 
 
 @locked_manifest_action

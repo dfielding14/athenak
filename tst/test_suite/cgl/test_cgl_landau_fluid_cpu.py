@@ -3553,6 +3553,48 @@ def test_cgl_lf_stage_i_cancels_only_terminal_never_started_submitted_job(
     assert report["consistent"]
     assert report["counts"]["active_reservations"] == 0
 
+    root = tmp_path / "accepted"
+    evidence = stage_i.submitted_cancellation_evidence_paths(paths, "12345")
+    source_bundle = root / "source-archives" / "corrupt.bundle"
+    incident = paths["accounting"] / "incidents" / "incident.json"
+    with monkeypatch.context() as context:
+        context.setattr(stage_i, "DEFAULT_ROOT", root.resolve())
+        for key, value in {
+            "job_id": "12345",
+            "manifest_relative": str(manifest_path.relative_to(root)),
+            "source_bundle_relative": str(source_bundle.relative_to(root)),
+            "source_bundle_expected_sha256": "a" * 64,
+            "source_bundle_observed_sha256": stage_i.sha256(source_bundle),
+            "incident_relative": str(incident.relative_to(root)),
+            "incident_sha256": stage_i.sha256(incident),
+            "authorization_sha256": stage_i.sha256(evidence["authorization"]),
+            "publication_audit_sha256": stage_i.sha256(
+                evidence["publication_audit"]
+            ),
+        }.items():
+            context.setitem(stage_i.CANONICAL_SOURCE_BUNDLE_RECOVERY, key, value)
+        context.setattr(
+            stage_i,
+            "live_cancellation_sacct_output",
+            lambda *_args: (_ for _ in ()).throw(
+                AssertionError("reconcile queried live historical sacct")
+            ),
+        )
+        context.setattr(
+            stage_i,
+            "live_cancelled_job_queue_output",
+            lambda *_args: (_ for _ in ()).throw(
+                AssertionError("reconcile queried live historical squeue")
+            ),
+        )
+        context.setattr(
+            stage_i,
+            "qualification_approval_status",
+            lambda *_args: {"state": "approved"},
+        )
+        report = stage_i.reconcile_report(root)
+    assert report["consistent"], report["issues"]
+
     audit = stage_i.submitted_cancellation_evidence_paths(
         paths, "12345"
     )["publication_audit"]
