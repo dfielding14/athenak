@@ -5,7 +5,10 @@ from __future__ import annotations
 
 import base64
 from contextlib import contextmanager
+import errno
+import fcntl
 import hashlib
+import inspect
 import io
 import json
 import os
@@ -307,6 +310,36 @@ def _verified_raw_cases() -> Iterator[tuple[Path, dict[str, Path], dict[str, str
 
 
 class Q011Section54PressurePilotBundlePublicationTests(unittest.TestCase):
+    def test_public_receipt_verifier_exposes_no_marker_bypass_flags(self) -> None:
+        self.assertEqual(
+            list(inspect.signature(publisher.verify_published_pressure_pilot_receipt).parameters),
+            ["receipt_path", "authorized_pic_root"],
+        )
+
+    def test_guard_disarm_rejects_replacement_inode(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            descriptor = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+            receipt_name = "receipt.json"
+            guard_name = publisher._publication_guard_name(receipt_name)
+            moved = root / "moved-guard"
+            try:
+                identity = publisher._arm_publication_guard_at(descriptor, receipt_name)
+                (root / guard_name).rename(moved)
+                (root / guard_name).write_bytes(publisher._PUBLICATION_GUARD_PAYLOAD)
+                (root / guard_name).chmod(0o444)
+                with self.assertRaisesRegex(
+                    publisher.PressurePilotPublicationError,
+                    "changed during publication",
+                ):
+                    publisher._disarm_publication_guard_at(
+                        descriptor, receipt_name, identity
+                    )
+                self.assertTrue((root / guard_name).is_file())
+                self.assertTrue(moved.is_file())
+            finally:
+                os.close(descriptor)
+
     def test_case_descriptor_requires_execution_tranche_action_id_and_stdout_checksum(
         self,
     ) -> None:
@@ -501,6 +534,30 @@ class Q011Section54PressurePilotBundlePublicationTests(unittest.TestCase):
                     authorized_pic_root=base.parent,
                 )
 
+    def test_direct_bundle_verifier_rejects_production_namespace(self) -> None:
+        production_root = Path(os.path.abspath(publisher.AUTHORIZED_PUBLICATION_ROOT))
+        drifted_analyzer_root = production_root.parent / "drifted-analyzer-authority"
+
+        def canonical(path: Path, _label: str) -> Path:
+            return Path(os.path.abspath(path))
+
+        with patch.object(
+            pilot, "AUTHORIZED_PUBLICATION_ROOT", drifted_analyzer_root
+        ), patch.object(
+            publisher, "_canonical_existing_directory", side_effect=canonical
+        ), patch.object(
+            publisher, "_open_absolute_directory"
+        ) as open_directory, self.assertRaisesRegex(
+            publisher.PressurePilotPublicationError,
+            "requires receipt consumption",
+        ):
+            publisher.verify_published_pressure_pilot_bundle(
+                production_root / "must-not-open",
+                "0" * 64,
+                authorized_publication_root=production_root,
+            )
+        open_directory.assert_not_called()
+
     def test_final_verifier_rejects_payload_tamper_and_tree_addition(self) -> None:
         for variant in ("payload", "addition"):
             with self.subTest(variant=variant), _verified_raw_cases() as (base, roots, digests):
@@ -683,26 +740,33 @@ class Q011Section54PressurePilotBundlePublicationTests(unittest.TestCase):
             bundle = base / "bundle"
             receipt = base / "publication-receipt.json"
             result = base / "aggregate-analysis.json"
-            original = publisher._rename_no_replace_at
+            original = publisher._require_same_directory_at
             observed_pre_receipt_window = False
 
             def inspect_pre_receipt_window(
-                parent_descriptor: int, source_name: str, destination_name: str
+                parent_descriptor: int, name: str, descriptor: int, label: str
             ) -> None:
                 nonlocal observed_pre_receipt_window
-                original(parent_descriptor, source_name, destination_name)
-                if destination_name != bundle.name:
+                original(parent_descriptor, name, descriptor, label)
+                if label != "pressure-pilot public build tree" or observed_pre_receipt_window:
                     return
                 observed_pre_receipt_window = True
                 self.assertTrue(bundle.is_dir())
                 self.assertFalse(receipt.exists())
-                with self.assertRaises(OSError):
+                self.assertTrue(
+                    (base / publisher._publication_guard_name(receipt.name)).is_file()
+                )
+                with self.assertRaisesRegex(
+                    publisher.PressurePilotPublicationError, "fail-closed guard"
+                ):
                     publisher.consume_published_pressure_pilot_bundle(
                         receipt, authorized_pic_root=base.parent
                     )
 
             with patch.object(
-                publisher, "_rename_no_replace_at", side_effect=inspect_pre_receipt_window
+                publisher,
+                "_require_same_directory_at",
+                side_effect=inspect_pre_receipt_window,
             ):
                 publisher.publish_pressure_pilot_bundle(
                     bundle,
@@ -768,7 +832,7 @@ class Q011Section54PressurePilotBundlePublicationTests(unittest.TestCase):
                     authorized_publication_root=fixture[0].parent,
                 )
 
-    def test_late_aggregate_failure_withdraws_all_public_artifacts(self) -> None:
+    def test_late_aggregate_failure_retains_guarded_public_artifacts(self) -> None:
         with _verified_raw_cases() as (base, roots, digests):
             bundle = base / "bundle"
             receipt = base / "publication-receipt.json"
@@ -791,7 +855,7 @@ class Q011Section54PressurePilotBundlePublicationTests(unittest.TestCase):
                 side_effect=fail_after_all_public_renames,
             ), self.assertRaisesRegex(
                 publisher.PressurePilotPublicationError,
-                "injected late aggregate failure",
+                "reviewed reconciliation required",
             ):
                 publisher.publish_pressure_pilot_bundle(
                     bundle,
@@ -801,11 +865,14 @@ class Q011Section54PressurePilotBundlePublicationTests(unittest.TestCase):
                     case_descriptor_sha256=digests,
                     authorized_pic_root=base.parent,
                 )
-            self.assertFalse(bundle.exists())
-            self.assertFalse(receipt.exists())
-            self.assertFalse(result.exists())
+            self.assertTrue(bundle.is_dir())
+            self.assertTrue(receipt.is_file())
+            self.assertTrue(result.is_file())
+            self.assertTrue(
+                (base / publisher._publication_guard_name(receipt.name)).is_file()
+            )
             self.assertFalse(
-                any(".rollback-" in path.name or ".staging-" in path.name for path in base.iterdir())
+                any(".staging-" in path.name for path in base.iterdir())
             )
 
     def test_late_publication_root_clone_is_rejected_by_retained_identity(self) -> None:
@@ -834,7 +901,7 @@ class Q011Section54PressurePilotBundlePublicationTests(unittest.TestCase):
                 side_effect=clone_root,
             ), self.assertRaisesRegex(
                 publisher.PressurePilotPublicationError,
-                "publication root changed",
+                "reviewed reconciliation required",
             ):
                 publisher.publish_pressure_pilot_bundle(
                     bundle,
@@ -854,7 +921,7 @@ class Q011Section54PressurePilotBundlePublicationTests(unittest.TestCase):
                     receipt, authorized_pic_root=base.parent
                 )
 
-    def test_rollback_does_not_delete_substituted_public_bundle(self) -> None:
+    def test_failure_does_not_delete_substituted_public_bundle(self) -> None:
         with _verified_raw_cases() as (base, roots, digests):
             bundle = base / "bundle"
             receipt = base / "publication-receipt.json"
@@ -882,7 +949,7 @@ class Q011Section54PressurePilotBundlePublicationTests(unittest.TestCase):
                 side_effect=substitute_before_failure,
             ), self.assertRaisesRegex(
                 publisher.PressurePilotPublicationError,
-                "cannot withdraw invalid pressure-pilot public artifact",
+                "reviewed reconciliation required",
             ):
                 publisher.publish_pressure_pilot_bundle(
                     bundle,
@@ -894,15 +961,10 @@ class Q011Section54PressurePilotBundlePublicationTests(unittest.TestCase):
                 )
             self.assertTrue(bundle.is_dir())
             self.assertTrue(moved.is_dir())
-            self.assertFalse(receipt.exists())
+            self.assertTrue(receipt.is_file())
             with self.assertRaisesRegex(
                 publisher.PressurePilotPublicationError, "fail-closed guard"
             ):
-                publisher.consume_published_pressure_pilot_bundle(
-                    receipt, authorized_pic_root=base.parent
-                )
-            (base / publisher._publication_guard_name(receipt.name)).unlink()
-            with self.assertRaises(FileNotFoundError):
                 publisher.consume_published_pressure_pilot_bundle(
                     receipt, authorized_pic_root=base.parent
                 )
@@ -936,7 +998,7 @@ class Q011Section54PressurePilotBundlePublicationTests(unittest.TestCase):
                 side_effect=substitute_before_seal,
             ), self.assertRaisesRegex(
                 publisher.PressurePilotPublicationError,
-                "cannot withdraw invalid pressure-pilot public artifact",
+                "reviewed reconciliation required",
             ):
                 publisher.publish_pressure_pilot_bundle(
                     base / "bundle",
@@ -954,9 +1016,8 @@ class Q011Section54PressurePilotBundlePublicationTests(unittest.TestCase):
                     / publisher._publication_seal_name(receipt.name)
                 ).exists()
             )
-            (base / publisher._publication_guard_name(receipt.name)).unlink()
             with self.assertRaisesRegex(
-                publisher.PressurePilotPublicationError, "durable success seal"
+                publisher.PressurePilotPublicationError, "fail-closed guard"
             ):
                 publisher.consume_published_pressure_pilot_bundle(
                     receipt, authorized_pic_root=base.parent
@@ -994,7 +1055,7 @@ class Q011Section54PressurePilotBundlePublicationTests(unittest.TestCase):
                 side_effect=replace_every_public_artifact,
             ), self.assertRaisesRegex(
                 publisher.PressurePilotPublicationError,
-                "cannot withdraw invalid pressure-pilot public artifact",
+                "reviewed reconciliation required",
             ):
                 publisher.publish_pressure_pilot_bundle(
                     bundle,
@@ -1057,7 +1118,7 @@ class Q011Section54PressurePilotBundlePublicationTests(unittest.TestCase):
                 receipt, authorized_pic_root=base.parent
             )
 
-    def test_success_seal_helper_commit_is_reconciled_after_wrapper_raise(self) -> None:
+    def test_success_seal_helper_wrapper_failure_rearms_guard(self) -> None:
         with _verified_raw_cases() as (base, roots, digests):
             receipt = base / "publication-receipt.json"
             original = publisher._publish_publication_seal_at
@@ -1090,6 +1151,94 @@ class Q011Section54PressurePilotBundlePublicationTests(unittest.TestCase):
                 publisher,
                 "_publish_publication_seal_at",
                 side_effect=raise_after_seal_helper_commit,
+            ), self.assertRaisesRegex(
+                publisher.PressurePilotPublicationError,
+                "reviewed reconciliation required",
+            ):
+                publisher.publish_pressure_pilot_bundle(
+                    base / "bundle",
+                    receipt_path=receipt,
+                    analysis_result_path=base / "aggregate-analysis.json",
+                    case_artifact_dirs=roots,
+                    case_descriptor_sha256=digests,
+                    authorized_pic_root=base.parent,
+                )
+            self.assertTrue(observed_committed_seal)
+            self.assertTrue(
+                (base / publisher._publication_guard_name(receipt.name)).is_file()
+            )
+            with self.assertRaisesRegex(
+                publisher.PressurePilotPublicationError, "fail-closed guard"
+            ):
+                publisher.consume_published_pressure_pilot_bundle(
+                    receipt, authorized_pic_root=base.parent
+                )
+
+    def test_success_seal_is_committed_while_guard_remains_armed(self) -> None:
+        with _verified_raw_cases() as (base, roots, digests):
+            receipt = base / "publication-receipt.json"
+            original = publisher._publish_publication_seal_at
+            observed_guard = False
+
+            def inspect_guard_before_seal(
+                acceptance_descriptor: int,
+                publication_descriptor: int,
+                receipt_name: str,
+                receipt_payload: bytes,
+                receipt_identity: tuple[int, int],
+            ) -> tuple[int, int]:
+                nonlocal observed_guard
+                publisher._file_identity_at(
+                    publication_descriptor,
+                    publisher._publication_guard_name(receipt_name),
+                    "receipt publication guard",
+                )
+                observed_guard = True
+                return original(
+                    acceptance_descriptor,
+                    publication_descriptor,
+                    receipt_name,
+                    receipt_payload,
+                    receipt_identity,
+                )
+
+            with patch.object(
+                publisher,
+                "_publish_publication_seal_at",
+                side_effect=inspect_guard_before_seal,
+            ):
+                publisher.publish_pressure_pilot_bundle(
+                    base / "bundle",
+                    receipt_path=receipt,
+                    analysis_result_path=base / "aggregate-analysis.json",
+                    case_artifact_dirs=roots,
+                    case_descriptor_sha256=digests,
+                    authorized_pic_root=base.parent,
+                )
+            self.assertTrue(observed_guard)
+            publisher.consume_published_pressure_pilot_bundle(
+                receipt, authorized_pic_root=base.parent
+            )
+
+    def test_guard_disarm_commit_is_reconciled_after_wrapper_raise(self) -> None:
+        with _verified_raw_cases() as (base, roots, digests):
+            receipt = base / "publication-receipt.json"
+            original = publisher._disarm_publication_guard_at
+
+            def raise_after_disarm(
+                parent_descriptor: int,
+                receipt_name: str,
+                guard_identity: tuple[int, int],
+            ) -> None:
+                original(parent_descriptor, receipt_name, guard_identity)
+                raise publisher.PressurePilotPublicationError(
+                    "injected post-commit guard-disarm wrapper failure"
+                )
+
+            with patch.object(
+                publisher,
+                "_disarm_publication_guard_at",
+                side_effect=raise_after_disarm,
             ):
                 published = publisher.publish_pressure_pilot_bundle(
                     base / "bundle",
@@ -1099,11 +1248,230 @@ class Q011Section54PressurePilotBundlePublicationTests(unittest.TestCase):
                     case_descriptor_sha256=digests,
                     authorized_pic_root=base.parent,
                 )
-            self.assertTrue(observed_committed_seal)
             self.assertEqual(published["receipt_path"], str(receipt))
             publisher.consume_published_pressure_pilot_bundle(
                 receipt, authorized_pic_root=base.parent
             )
+
+    def test_guard_unlink_without_parent_sync_is_reconciled_durably(self) -> None:
+        with _verified_raw_cases() as (base, roots, digests):
+            receipt = base / "publication-receipt.json"
+            guard_unlinked = False
+            observed_retry_sync = False
+            publication_descriptor: int | None = None
+            original_fsync = publisher._fsync_descriptor
+            original_require_same_file = publisher._require_same_file_at
+            original_require_guard_absent = publisher._require_publication_guard_absent_at
+
+            def unlink_then_raise(
+                parent_descriptor: int,
+                receipt_name: str,
+                guard_identity: tuple[int, int],
+            ) -> None:
+                nonlocal guard_unlinked, publication_descriptor
+                publication_descriptor = parent_descriptor
+                guard_name = publisher._publication_guard_name(receipt_name)
+                publisher._require_same_file_at(
+                    parent_descriptor,
+                    guard_name,
+                    guard_identity,
+                    "receipt publication guard",
+                )
+                os.unlink(guard_name, dir_fd=parent_descriptor)
+                guard_unlinked = True
+                raise OSError("injected failure before parent sync")
+
+            def record_fsync(descriptor: int) -> None:
+                nonlocal observed_retry_sync
+                if guard_unlinked and descriptor == publication_descriptor:
+                    observed_retry_sync = True
+                original_fsync(descriptor)
+
+            def require_same_file_after_sync(
+                parent_descriptor: int,
+                name: str,
+                identity: tuple[int, int],
+                label: str,
+            ) -> None:
+                if guard_unlinked:
+                    self.assertTrue(observed_retry_sync)
+                original_require_same_file(parent_descriptor, name, identity, label)
+
+            def require_guard_absent_after_sync(
+                parent_descriptor: int, receipt_name: str, label: str
+            ) -> None:
+                if guard_unlinked:
+                    self.assertTrue(observed_retry_sync)
+                original_require_guard_absent(parent_descriptor, receipt_name, label)
+
+            with patch.object(
+                publisher,
+                "_disarm_publication_guard_at",
+                side_effect=unlink_then_raise,
+            ), patch.object(
+                publisher,
+                "_fsync_descriptor",
+                side_effect=record_fsync,
+            ), patch.object(
+                publisher,
+                "_require_same_file_at",
+                side_effect=require_same_file_after_sync,
+            ), patch.object(
+                publisher,
+                "_require_publication_guard_absent_at",
+                side_effect=require_guard_absent_after_sync,
+            ):
+                publisher.publish_pressure_pilot_bundle(
+                    base / "bundle",
+                    receipt_path=receipt,
+                    analysis_result_path=base / "aggregate-analysis.json",
+                    case_artifact_dirs=roots,
+                    case_descriptor_sha256=digests,
+                    authorized_pic_root=base.parent,
+                )
+            self.assertTrue(observed_retry_sync)
+            self.assertIsNotNone(publication_descriptor)
+            publisher.consume_published_pressure_pilot_bundle(
+                receipt, authorized_pic_root=base.parent
+            )
+
+    def test_publication_holds_transaction_lock_through_guard_disarm(self) -> None:
+        with _verified_raw_cases() as (base, roots, digests):
+            receipt = base / "publication-receipt.json"
+            acceptance = base.parent / publisher.PUBLICATION_ACCEPTANCE_DIRECTORY
+            anchor = publisher._publication_transaction_anchor(base.parent)
+            observed_lock = False
+            original = publisher._disarm_publication_guard_at
+
+            def inspect_lock_before_disarm(
+                parent_descriptor: int,
+                receipt_name: str,
+                guard_identity: tuple[int, int],
+            ) -> None:
+                nonlocal observed_lock
+                for path in (anchor, acceptance):
+                    descriptor = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
+                    try:
+                        with self.assertRaises(BlockingIOError):
+                            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    finally:
+                        os.close(descriptor)
+                observed_lock = True
+                original(parent_descriptor, receipt_name, guard_identity)
+
+            with patch.object(
+                publisher,
+                "_disarm_publication_guard_at",
+                side_effect=inspect_lock_before_disarm,
+            ):
+                publisher.publish_pressure_pilot_bundle(
+                    base / "bundle",
+                    receipt_path=receipt,
+                    analysis_result_path=base / "aggregate-analysis.json",
+                    case_artifact_dirs=roots,
+                    case_descriptor_sha256=digests,
+                    authorized_pic_root=base.parent,
+                )
+            self.assertTrue(observed_lock)
+
+    def test_descriptor_close_failure_does_not_retain_transaction_lock(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            publication = root / "publication"
+            transaction_anchor = root / "transaction-anchor"
+            publication.mkdir()
+            transaction_anchor.mkdir()
+            publication_descriptor = os.open(
+                publication, os.O_RDONLY | os.O_DIRECTORY
+            )
+            transaction_descriptor = os.open(
+                transaction_anchor, os.O_RDONLY | os.O_DIRECTORY
+            )
+            fcntl.flock(publication_descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fcntl.flock(transaction_descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            original_close = publisher.os.close
+            injected_error = OSError(errno.EIO, os.strerror(errno.EIO))
+
+            def close_then_raise(descriptor: int) -> None:
+                original_close(descriptor)
+                if descriptor == publication_descriptor:
+                    raise injected_error
+
+            with patch.object(publisher.os, "close", side_effect=close_then_raise):
+                observed_error = publisher._close_descriptors(
+                    (publication_descriptor, transaction_descriptor)
+                )
+
+            self.assertIs(observed_error, injected_error)
+            for path in (publication, transaction_anchor):
+                descriptor = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
+                try:
+                    fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                finally:
+                    os.close(descriptor)
+
+    def test_success_seal_rejects_byte_identical_different_inode_collision(self) -> None:
+        with _verified_raw_cases() as (base, roots, digests):
+            receipt = base / "publication-receipt.json"
+            acceptance = base.parent / publisher.PUBLICATION_ACCEPTANCE_DIRECTORY
+            seal_name = publisher._publication_seal_name(receipt.name)
+            original = publisher._rename_no_replace_at
+
+            def collide_with_byte_identical_seal(
+                parent_descriptor: int, source_name: str, destination_name: str
+            ) -> None:
+                if destination_name != seal_name:
+                    original(parent_descriptor, source_name, destination_name)
+                    return
+                payload = publisher._read_stable_readonly_regular_at(
+                    parent_descriptor,
+                    source_name,
+                    "receipt staged durable success seal",
+                )
+                descriptor = os.open(
+                    destination_name,
+                    os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
+                    0o600,
+                    dir_fd=parent_descriptor,
+                )
+                try:
+                    os.write(descriptor, payload)
+                    os.fsync(descriptor)
+                    os.fchmod(descriptor, 0o444)
+                    os.fsync(descriptor)
+                finally:
+                    os.close(descriptor)
+                os.unlink(source_name, dir_fd=parent_descriptor)
+                raise publisher.PressurePilotPublicationError(
+                    "injected byte-identical different-inode seal collision"
+                )
+
+            with patch.object(
+                publisher,
+                "_rename_no_replace_at",
+                side_effect=collide_with_byte_identical_seal,
+            ), self.assertRaisesRegex(
+                publisher.PressurePilotPublicationError,
+                "reviewed reconciliation required",
+            ):
+                publisher.publish_pressure_pilot_bundle(
+                    base / "bundle",
+                    receipt_path=receipt,
+                    analysis_result_path=base / "aggregate-analysis.json",
+                    case_artifact_dirs=roots,
+                    case_descriptor_sha256=digests,
+                    authorized_pic_root=base.parent,
+                )
+            self.assertTrue((acceptance / seal_name).is_file())
+            self.assertTrue(
+                (base / publisher._publication_guard_name(receipt.name)).is_file()
+            )
+            with self.assertRaisesRegex(
+                publisher.PressurePilotPublicationError, "fail-closed guard"
+            ):
+                publisher.consume_published_pressure_pilot_bundle(
+                    receipt, authorized_pic_root=base.parent
+                )
 
     def test_post_disarm_receipt_substitution_fails_closed(self) -> None:
         with _verified_raw_cases() as (base, roots, digests):
@@ -1111,8 +1479,12 @@ class Q011Section54PressurePilotBundlePublicationTests(unittest.TestCase):
             moved = base / "publication-receipt.json.moved-original"
             original = publisher._disarm_publication_guard_at
 
-            def substitute_after_disarm(parent_descriptor: int, receipt_name: str) -> None:
-                original(parent_descriptor, receipt_name)
+            def substitute_after_disarm(
+                parent_descriptor: int,
+                receipt_name: str,
+                guard_identity: tuple[int, int],
+            ) -> None:
+                original(parent_descriptor, receipt_name, guard_identity)
                 os.rename(receipt, moved)
                 shutil.copy2(moved, receipt)
 
@@ -1122,7 +1494,7 @@ class Q011Section54PressurePilotBundlePublicationTests(unittest.TestCase):
                 side_effect=substitute_after_disarm,
             ), self.assertRaisesRegex(
                 publisher.PressurePilotPublicationError,
-                "cannot withdraw invalid pressure-pilot public artifact",
+                "reviewed reconciliation required",
             ):
                 publisher.publish_pressure_pilot_bundle(
                     base / "bundle",
@@ -1133,9 +1505,8 @@ class Q011Section54PressurePilotBundlePublicationTests(unittest.TestCase):
                     authorized_pic_root=base.parent,
                 )
             self.assertTrue(receipt.is_file())
-            (base / publisher._publication_guard_name(receipt.name)).unlink()
             with self.assertRaisesRegex(
-                publisher.PressurePilotPublicationError, "durable success seal"
+                publisher.PressurePilotPublicationError, "fail-closed guard"
             ):
                 publisher.consume_published_pressure_pilot_bundle(
                     receipt, authorized_pic_root=base.parent
@@ -1190,36 +1561,35 @@ class Q011Section54PressurePilotBundlePublicationTests(unittest.TestCase):
                     receipt, authorized_pic_root=base.parent
                 )
 
-    def test_staging_substitution_is_not_followed_or_deleted(self) -> None:
+    def test_public_build_substitution_is_not_followed_or_deleted(self) -> None:
         with _verified_raw_cases() as (base, roots, digests):
             bundle = base / "bundle"
             receipt = base / "publication-receipt.json"
             result = base / "aggregate-analysis.json"
             original = publisher._require_same_directory_at
-            observed_staging_names = []
+            observed_build_names = []
 
-            def substitute_staging(
+            def substitute_public_build(
                 parent_descriptor: int, name: str, descriptor: int, label: str
             ) -> None:
-                if label == "pressure-pilot staging tree":
-                    observed_staging_names.append(name)
-                    if len(observed_staging_names) == 2:
-                        os.rename(
-                            name,
-                            name + ".descriptor-anchor",
-                            src_dir_fd=parent_descriptor,
-                            dst_dir_fd=parent_descriptor,
-                        )
-                        os.mkdir(name, dir_fd=parent_descriptor)
+                if label == "pressure-pilot public build tree" and not observed_build_names:
+                    observed_build_names.append(name)
+                    os.rename(
+                        name,
+                        name + ".descriptor-anchor",
+                        src_dir_fd=parent_descriptor,
+                        dst_dir_fd=parent_descriptor,
+                    )
+                    os.mkdir(name, dir_fd=parent_descriptor)
                 original(parent_descriptor, name, descriptor, label)
 
             with patch.object(
                 publisher,
                 "_require_same_directory_at",
-                side_effect=substitute_staging,
+                side_effect=substitute_public_build,
             ), self.assertRaisesRegex(
                 publisher.PressurePilotPublicationError,
-                "staging tree changed",
+                "reviewed reconciliation required",
             ):
                 publisher.publish_pressure_pilot_bundle(
                     bundle,
@@ -1229,35 +1599,333 @@ class Q011Section54PressurePilotBundlePublicationTests(unittest.TestCase):
                     case_descriptor_sha256=digests,
                     authorized_pic_root=base.parent,
                 )
-            self.assertFalse(bundle.exists())
+            self.assertTrue(bundle.is_dir())
             self.assertFalse(receipt.exists())
             self.assertFalse(result.exists())
-            self.assertGreaterEqual(len(observed_staging_names), 2)
-            substituted = base / observed_staging_names[0]
-            anchored = base / (observed_staging_names[0] + ".descriptor-anchor")
+            self.assertEqual(len(observed_build_names), 1)
+            substituted = base / observed_build_names[0]
+            anchored = base / (observed_build_names[0] + ".descriptor-anchor")
             self.assertTrue(substituted.is_dir())
             self.assertTrue(anchored.is_dir())
+            self.assertTrue(
+                (base / publisher._publication_guard_name(receipt.name)).is_file()
+            )
             _make_writable(anchored)
 
-    def test_descriptor_relative_rename_fails_closed_without_atomic_no_replace(
+    def test_lustre_file_rename_fallback_uses_atomic_link_and_preserves_identity(
+        self,
+    ) -> None:
+        class UnsupportedRenameat2:
+            argtypes: object = None
+            restype: object = None
+
+            def __call__(self, *_args: object) -> int:
+                return -1
+
+        class UnsupportedLibc:
+            renameat2 = UnsupportedRenameat2()
+
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory)
+            (parent / "source").write_text("retain source\n", encoding="utf-8")
+            identity = os.stat(parent / "source").st_ino
+            descriptor = os.open(parent, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                with patch.object(
+                    publisher.ctypes, "CDLL", return_value=UnsupportedLibc()
+                ), patch.object(
+                    publisher.ctypes, "get_errno", return_value=errno.EINVAL
+                ), patch.object(publisher.os, "rename") as rename:
+                    publisher._rename_no_replace_at(
+                        descriptor, "source", "destination"
+                    )
+                rename.assert_not_called()
+                self.assertFalse((parent / "source").exists())
+                self.assertEqual(os.stat(parent / "destination").st_ino, identity)
+                self.assertEqual(
+                    (parent / "destination").read_text(encoding="utf-8"),
+                    "retain source\n",
+                )
+            finally:
+                os.close(descriptor)
+
+    def test_lustre_file_rename_fallback_rejects_collision(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory)
+            (parent / "source").write_text("retain source\n", encoding="utf-8")
+            (parent / "destination").write_text("retain collision\n", encoding="utf-8")
+            descriptor = os.open(parent, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                with patch.object(
+                    publisher.ctypes, "CDLL", return_value=object()
+                ), self.assertRaisesRegex(
+                    publisher.PressurePilotPublicationError, "collided"
+                ):
+                    publisher._rename_no_replace_at(
+                        descriptor, "source", "destination"
+                    )
+                self.assertEqual(
+                    (parent / "source").read_text(encoding="utf-8"),
+                    "retain source\n",
+                )
+                self.assertEqual(
+                    (parent / "destination").read_text(encoding="utf-8"),
+                    "retain collision\n",
+                )
+            finally:
+                os.close(descriptor)
+
+    def test_lustre_file_rename_fallback_reconciles_post_link_wrapper_failure(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as directory:
             parent = Path(directory)
             (parent / "source").write_text("retain source\n", encoding="utf-8")
+            identity = os.stat(parent / "source").st_ino
+            descriptor = os.open(parent, os.O_RDONLY | os.O_DIRECTORY)
+            original_link = publisher.os.link
+
+            def link_then_raise(*args: object, **kwargs: object) -> None:
+                original_link(*args, **kwargs)
+                raise OSError(errno.EIO, os.strerror(errno.EIO))
+
+            try:
+                with patch.object(
+                    publisher.ctypes, "CDLL", return_value=object()
+                ), patch.object(publisher.os, "link", side_effect=link_then_raise):
+                    publisher._rename_no_replace_at(
+                        descriptor, "source", "destination"
+                    )
+                self.assertFalse((parent / "source").exists())
+                self.assertEqual(os.stat(parent / "destination").st_ino, identity)
+            finally:
+                os.close(descriptor)
+
+    def test_lustre_file_rename_fallback_reconciles_post_unlink_wrapper_failure(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory)
+            (parent / "source").write_text("retain source\n", encoding="utf-8")
+            identity = os.stat(parent / "source").st_ino
+            descriptor = os.open(parent, os.O_RDONLY | os.O_DIRECTORY)
+            original_unlink = publisher.os.unlink
+
+            def unlink_then_raise(path: object, *args: object, **kwargs: object) -> None:
+                original_unlink(path, *args, **kwargs)
+                if path == "source":
+                    raise OSError(errno.EIO, os.strerror(errno.EIO))
+
+            try:
+                with patch.object(
+                    publisher.ctypes, "CDLL", return_value=object()
+                ), patch.object(publisher.os, "unlink", side_effect=unlink_then_raise):
+                    publisher._rename_no_replace_at(
+                        descriptor, "source", "destination"
+                    )
+                self.assertFalse((parent / "source").exists())
+                destination = os.stat(parent / "destination")
+                self.assertEqual(destination.st_ino, identity)
+                self.assertEqual(destination.st_nlink, 1)
+            finally:
+                os.close(descriptor)
+
+    def test_lustre_file_rename_fallback_reconciles_terminal_check_wrapper_failure(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory)
+            (parent / "source").write_text("retain source\n", encoding="utf-8")
+            identity = os.stat(parent / "source").st_ino
+            descriptor = os.open(parent, os.O_RDONLY | os.O_DIRECTORY)
+            original_require_absent = publisher._require_absent_at
+            injected = False
+
+            def require_absent_then_raise(
+                parent_descriptor: int, name: str, label: str
+            ) -> None:
+                nonlocal injected
+                original_require_absent(parent_descriptor, name, label)
+                if name == "source" and not injected:
+                    injected = True
+                    raise RuntimeError("injected terminal-check wrapper failure")
+
+            try:
+                with patch.object(
+                    publisher.ctypes, "CDLL", return_value=object()
+                ), patch.object(
+                    publisher,
+                    "_require_absent_at",
+                    side_effect=require_absent_then_raise,
+                ):
+                    publisher._rename_no_replace_at(
+                        descriptor, "source", "destination"
+                    )
+                self.assertTrue(injected)
+                self.assertFalse((parent / "source").exists())
+                destination = os.stat(parent / "destination")
+                self.assertEqual(destination.st_ino, identity)
+                self.assertEqual(destination.st_nlink, 1)
+            finally:
+                os.close(descriptor)
+
+    def test_lustre_file_fallback_failure_retains_canonical_and_staging_links(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory)
+            source = parent / "source"
+            destination = parent / "destination"
+            source.write_text("retain for reconciliation\n", encoding="utf-8")
+            descriptor = os.open(parent, os.O_RDONLY | os.O_DIRECTORY)
+            original_unlink = publisher.os.unlink
+
+            def reject_source_unlink(
+                path: object, *args: object, **kwargs: object
+            ) -> None:
+                if path == "source":
+                    raise OSError(errno.EIO, os.strerror(errno.EIO))
+                original_unlink(path, *args, **kwargs)
+
+            try:
+                with patch.object(
+                    publisher.ctypes, "CDLL", return_value=object()
+                ), patch.object(
+                    publisher.os, "unlink", side_effect=reject_source_unlink
+                ), self.assertRaises(OSError):
+                    publisher._rename_no_replace_at(
+                        descriptor, source.name, destination.name
+                    )
+                self.assertTrue(source.is_file())
+                self.assertTrue(destination.is_file())
+                self.assertEqual(source.stat().st_ino, destination.stat().st_ino)
+                self.assertEqual(source.stat().st_nlink, 2)
+            finally:
+                os.close(descriptor)
+
+    def test_retained_reader_rejects_interrupted_two_link_commit(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory)
+            source = parent / "source"
+            destination = parent / "destination"
+            source.write_text("sealed\n", encoding="utf-8")
+            source.chmod(0o444)
+            os.link(source, destination)
+            descriptor = os.open(parent, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                with self.assertRaisesRegex(
+                    publisher.PressurePilotPublicationError, "singly linked"
+                ):
+                    publisher._read_stable_readonly_regular_at(
+                        descriptor, destination.name, "interrupted commit"
+                    )
+            finally:
+                os.close(descriptor)
+
+    def test_lustre_directory_rename_fallback_is_rejected_without_overwrite(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory)
+            source = parent / "source"
+            source.mkdir()
+            (source / "member").write_text("sealed\n", encoding="utf-8")
             descriptor = os.open(parent, os.O_RDONLY | os.O_DIRECTORY)
             try:
                 with patch.object(
                     publisher.ctypes, "CDLL", return_value=object()
-                ), patch.object(publisher.os, "rename") as rename:
-                    with self.assertRaisesRegex(
-                        publisher.PressurePilotPublicationError,
-                        "requires atomic no-replace rename support",
-                    ):
-                        publisher._rename_no_replace_at(
-                            descriptor, "source", "destination"
-                        )
-                rename.assert_not_called()
+                ), self.assertRaisesRegex(
+                    publisher.PressurePilotPublicationError,
+                    "exclusive final-name creation",
+                ):
+                    publisher._rename_no_replace_at(
+                        descriptor, "source", "destination"
+                    )
+                self.assertTrue(source.is_dir())
+                self.assertFalse((parent / "destination").exists())
+            finally:
+                os.close(descriptor)
+
+    def test_lustre_file_fallback_publishes_complete_bundle_and_seal(self) -> None:
+        with _verified_raw_cases() as (base, roots, digests), patch.object(
+            publisher.ctypes, "CDLL", return_value=object()
+        ):
+            receipt = base / "publication-receipt.json"
+            publisher.publish_pressure_pilot_bundle(
+                base / "bundle",
+                receipt_path=receipt,
+                analysis_result_path=base / "aggregate-analysis.json",
+                case_artifact_dirs=roots,
+                case_descriptor_sha256=digests,
+                authorized_pic_root=base.parent,
+            )
+            publisher.consume_published_pressure_pilot_bundle(
+                receipt, authorized_pic_root=base.parent
+            )
+            self.assertFalse(any(".staging-" in path.name for path in base.iterdir()))
+
+    def test_lustre_file_fallback_runs_under_transaction_lock(self) -> None:
+        with _verified_raw_cases() as (base, roots, digests):
+            acceptance = base.parent / publisher.PUBLICATION_ACCEPTANCE_DIRECTORY
+            anchor = publisher._publication_transaction_anchor(base.parent)
+            observed_locked_commits = 0
+            original = publisher._link_no_replace_file_at
+
+            def inspect_lock_during_link_commit(
+                parent_descriptor: int,
+                source_name: str,
+                destination_name: str,
+                identity: tuple[int, int],
+            ) -> None:
+                nonlocal observed_locked_commits
+                for path in (anchor, acceptance):
+                    descriptor = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
+                    try:
+                        with self.assertRaises(BlockingIOError):
+                            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    finally:
+                        os.close(descriptor)
+                observed_locked_commits += 1
+                original(
+                    parent_descriptor,
+                    source_name,
+                    destination_name,
+                    identity,
+                )
+
+            with patch.object(
+                publisher.ctypes, "CDLL", return_value=object()
+            ), patch.object(
+                publisher,
+                "_link_no_replace_file_at",
+                side_effect=inspect_lock_during_link_commit,
+            ):
+                publisher.publish_pressure_pilot_bundle(
+                    base / "bundle",
+                    receipt_path=base / "publication-receipt.json",
+                    analysis_result_path=base / "aggregate-analysis.json",
+                    case_artifact_dirs=roots,
+                    case_descriptor_sha256=digests,
+                    authorized_pic_root=base.parent,
+                )
+            self.assertGreaterEqual(observed_locked_commits, 3)
+
+    def test_lustre_file_rename_fallback_requires_isolated_parent(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory)
+            (parent / "source").write_text("retain source\n", encoding="utf-8")
+            os.chmod(parent, 0o770)
+            descriptor = os.open(parent, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                with patch.object(
+                    publisher.ctypes, "CDLL", return_value=object()
+                ), self.assertRaisesRegex(
+                    publisher.PressurePilotPublicationError,
+                    "same-account isolated parent",
+                ):
+                    publisher._rename_no_replace_at(
+                        descriptor, "source", "destination"
+                    )
                 self.assertTrue((parent / "source").is_file())
                 self.assertFalse((parent / "destination").exists())
             finally:

@@ -1,6 +1,6 @@
 # PIC Sun and Bai release qualification handoff
 
-Last updated: 2026-06-04T17:27:44Z
+Last updated: 2026-06-05T05:25:32Z
 
 ## Purpose
 
@@ -120,6 +120,32 @@ Completed:
     review-packet binary-reader call contract, a compatibility-sidecar
     hash-check/use reopen window, a predecessor chronology fork, and missing
     coherent unauthorized-cycle coverage.
+28. The fifteenth-pass repair was committed and pushed as
+    `af7b4e28f4323d49337707c2c68bf8823f80b2c4`. Clean worker job `4766444`
+    passed `244` archived focused tests and all `1278` explicit publication
+    tests with two intentional skips. Two exact-latest-patch rereviews passed.
+29. Replacement aggregate worker job `4766456` failed closed at the first
+    canonical directory promotion because Orion Lustre rejects
+    `renameat2(RENAME_NOREPLACE)` with nonzero flags. Both publication
+    namespaces remain empty.
+30. The staged sixteenth repair arms the receipt guard before exposing a
+    canonical directory, holds nonblocking exclusive locks on the stable
+    account serialization anchor outside the replaceable PIC root and the
+    exact retained acceptance-root descriptor throughout publication, builds
+    directories exclusively at their final names, and publishes regular files
+    and seals through hard-link no-replace commits. It preflights source
+    authorization and raw-case descriptors before exposure and retains every
+    exposed artifact, any still-present staging alias, and the guard for
+    reviewed reconciliation on failure. For lock-honoring reviewed workers,
+    staging-link and final-guard removal target retained inodes. The
+    inode-bound success seal commits while the guard remains armed, a
+    post-unlink reconciliation retries the publication-parent sync, and the
+    public production verifier exposes no guard/seal bypass flags.
+31. Independent exact-current filesystem-publication and
+    provenance-chronology rereviews closed with no findings. Their separate
+    immutable review artifact binds the frozen sixteenth transition and its
+    four reviewed runtime successors. No scheduler job was launched and no
+    execution authorization or science claim was granted.
 
 In progress:
 
@@ -128,25 +154,28 @@ In progress:
 2. Preserve the exact empty recovered `publication_acceptance/` inode and its
    durable receipt. Do not delete or recreate the directory and do not
    republish the receipt.
-3. Commit, push, validate, and independently rereview the fifteenth-pass exact
-   retained snapshot-metadata repair before submitting one reviewed
-   replacement aggregate publication worker.
+3. Commit, push, and pass one clean committed worker validation for the
+   independently rereviewed sixteenth-pass Lustre publication compatibility
+   repair before submitting one reviewed replacement aggregate publication
+   worker.
 
 Remaining:
 
-1. Commit and push the fifteenth-pass aggregate snapshot-metadata repair,
-   pass one clean committed worker validation, and independently rereview the
-   exact latest patch.
+1. Commit and push the independently rereviewed sixteenth-pass Lustre
+   publication compatibility repair and pass one clean committed worker
+   validation.
 2. Publish and verify the pressure-pilot
    aggregate receipt and review packet on workers.
 3. Perform a human pressure-choice review from the immutable four-slice
    calibration bundle. Do not invent or silently auto-select this science
    decision.
-4. Materialize and validate a qualifying campaign plan only after the repaired
+4. Before accepting that human choice, require its selection record to bind and
+   verify the immutable review-packet receipt as well as the aggregate receipt.
+5. Materialize and validate a qualifying campaign plan only after the repaired
    launch boundary passes adversarial review.
-5. Run the prerequisite slices, cheaper paper-test suites, the full Section 5.4
+6. Run the prerequisite slices, cheaper paper-test suites, the full Section 5.4
    reproduction campaign, and final publication analysis in staged order.
-6. Finish optional extensions, final hardening, and the deferred external
+7. Finish optional extensions, final hardening, and the deferred external
    review before treating the implementation as production-ready.
 
 ## Mandatory operating constraints
@@ -360,13 +389,16 @@ then ended without exposing a public bundle:
 | `4757047` | `CANCELLED` | `00:04:36` | Cancelled after fresh review found late-failure rollback, descriptor-anchor, and source-authorization gaps |
 | `4764415` | `FAILED` | `00:05:37` | Strict offline `mhd_w_bcc` analyzer assumed one tuple order for an exact name-addressed AthenaK variable inventory |
 | `4764674` | `FAILED` | `00:05:34` | Strict offline analyzer assumed exact nominal times for AthenaK interior `dt`-scheduled products |
+| `4766456` | `FAILED` | `00:06:01` | Orion Lustre rejected the first `renameat2(RENAME_NOREPLACE)` canonical directory promotion |
 
-The integrated fourteenth-pass tree and failed job `4764674` are historical.
-Aggregate publication remains prohibited until the fifteenth-pass exact
-retained snapshot-metadata repair is committed, pushed, clean-worker validated
-and independently rereviewed from the exact latest patch. Do not invoke the
-publisher directly on a login node. Use only the exact hermetic, commit-bound,
-`--export=NIL` publication sequence in
+The fifteenth-pass tree, clean validation job `4766444`, and failed publication
+job `4766456` are historical. Aggregate publication remains prohibited until
+the sixteenth-pass Lustre publication compatibility repair is committed,
+pushed, and clean-worker validated. Its exact-current independent rereview is
+recorded separately in
+[`q011_section54_sixteenth_lustre_publication_exact_current_rereview_2026-06-05.json`](readiness/q011_section54_sixteenth_lustre_publication_exact_current_rereview_2026-06-05.json).
+Do not invoke the publisher directly on a login node. Use only the exact
+hermetic, commit-bound, `--export=NIL` publication sequence in
 [`frontier_control_plane/README.md`](frontier_control_plane/README.md).
 
 Target outputs:
@@ -398,11 +430,11 @@ pgrep -af publish_q011_section54_pressure_pilot_bundle || true
 find "$PIC_ROOT/publication" -maxdepth 2 -printf '%M %s %p\n' | sort
 ```
 
-After the corrected publisher has been reviewed, committed, pushed, and
-worker-validated, inspect the hidden staging trees and rerun from the reviewed
-Slurm wrapper. The wrapper performs final receipt verification on the worker
-node. Do not use a login-node direct invocation or a raw wrapper submission
-without the reviewed commit argument.
+After the corrected publisher has been committed, pushed, and worker-validated,
+inspect the hidden staging trees and rerun from the reviewed Slurm wrapper. The
+wrapper performs final receipt verification on the worker node. Do not use a
+login-node direct invocation or a raw wrapper submission without the reviewed
+commit argument.
 
 ## Known launch blockers under repair
 
@@ -587,10 +619,11 @@ is committed, pushed, validated from a clean worker snapshot, and rereviewed.
 
 The next pressure rereview found a rollback-after-commit edge: a seal helper
 wrapper could call the real terminal rename, prove the result consumable and
-then raise before its caller assigned `seal_committed = True`. Aggregate and
-review-packet publishers now reconcile that broader caller-level exception
-path by reopening the exact receipt-bound seal and requiring the public
-fail-closed guard to remain absent before returning committed success.
+then raise before its caller assigned `seal_committed = True`. The later
+sixteenth pass supersedes broad caller-level recovery: the seal helper
+reconciles only the exact staged seal inode, and a reported post-disarm error
+is accepted only when the exact retained receipt and seal inodes remain bound.
+Every other post-exposure failure retains or re-arms the guard.
 
 Worker job `4759724` passed the exact amended `45`-test pressure suite in
 `248.894s`. Independent read-only rereview found no remaining
@@ -861,6 +894,34 @@ retained case slot, checks those tuples against a strict `< 0.1` engineering
 compatibility cap, and requires exact tuple matches during publication. It does
 not change the scientific contract or authorize launch.
 
+### Sixteenth Lustre publication compatibility pass
+
+The committed fifteenth-pass worker and two exact-latest rereviews passed.
+Replacement aggregate worker job `4766456` then failed closed before exposing
+any public artifact because Orion Lustre 2.15 rejects nonzero `renameat2`
+flags, including `RENAME_NOREPLACE`.
+
+The staged repair does not use ordinary directory rename as a fallback.
+Receipt-specific guards are armed before canonical directory exposure.
+Aggregate and review-packet directories are created exclusively at their final
+names inside the owner-only-write publication namespace, while results,
+receipts, and inode-bound success seals use atomic no-replace hard links with
+single-link closure checks. Source authorization and raw-case descriptors are
+preflighted before exposure. After any canonical exposure, failure never
+automatically deletes canonical artifacts or any still-present staging aliases;
+it retains the guard for reviewed reconciliation. Both workers hold nonblocking
+exclusive advisory locks on the stable account serialization anchor outside the
+replaceable PIC-root name and on the exact retained acceptance-root descriptor
+from before exposure through final reconciliation. For lock-honoring reviewed
+workers, staging-link and final-guard removal target retained inodes. The
+success seal commits while the guard remains armed, and guard removal is the
+final state transition. Any reported post-unlink failure retries the
+publication-parent sync before exact-inode reconciliation, and the public
+production verifier has no marker-bypass flags. Noncooperating same-UID
+processes remain outside this reviewed-worker trust boundary. Interrupted builds
+remain guarded and unconsumable. The scientific contract and launch prohibition
+are unchanged.
+
 ## Validation baseline
 
 The committed launch-prohibited checkpoint passed these validations before the
@@ -941,11 +1002,12 @@ Then:
 1. Read this file and both governing plans.
 2. Verify the exact empty recovered `0700` acceptance-root inode and its durable
    receipt. Preserve both.
-3. Inspect, commit, and push the fifteenth-pass exact retained
-   snapshot-metadata repair.
+3. Inspect, commit, and push the sixteenth-pass Lustre publication
+   compatibility repair.
 4. Run focused and full validation suites from the clean committed worker
    snapshot.
-5. Request a fresh independent adversarial review.
+5. Verify that the committed exact-current review artifact still binds the
+   unchanged sixteenth transition and four reviewed runtime hashes.
 6. Verify `$PIC_ROOT/publication_acceptance/` at exact mode `0700` and its
    existing durable receipt. Finish the pressure-pilot worker aggregate publication and
    review packet, then verify both receipts.

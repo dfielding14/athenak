@@ -782,7 +782,7 @@ class Q011Section54PressurePilotTests(unittest.TestCase):
             pilot.PilotAnalysisError, "approved retained snapshot metadata"
         ):
             _analyze(fixture)
-        self.assertEqual(sidecar_reads, 2)
+        self.assertEqual(sidecar_reads, 1)
 
     def test_postrun_source_authorization_rejects_role_path_swap(self) -> None:
         original = pilot._regular_bytes
@@ -807,9 +807,12 @@ class Q011Section54PressurePilotTests(unittest.TestCase):
             pilot.POSTRUN_SOURCE_AUTHORIZATION_PREDECESSOR_PATH.read_bytes()
         )
         predecessor = json.loads(predecessor_payload)
-        first_successor_path = (
+        snapshot_successor_path = (
             pilot.REPO_ROOT / predecessor["predecessor_record"]
         )
+        snapshot_successor_payload = snapshot_successor_path.read_bytes()
+        snapshot_successor = json.loads(snapshot_successor_payload)
+        first_successor_path = pilot.REPO_ROOT / snapshot_successor["predecessor_record"]
         first_successor_payload = first_successor_path.read_bytes()
         first_successor = json.loads(first_successor_payload)
         compatibility_payload = pilot.PARSER_COMPATIBILITY_SUCCESSOR_PATH.read_bytes()
@@ -822,11 +825,22 @@ class Q011Section54PressurePilotTests(unittest.TestCase):
         self.assertEqual(successor["predecessor_sha256"], _sha256(predecessor_payload))
         self.assertEqual(
             predecessor["predecessor_record"],
+            pilot.SNAPSHOT_TIME_COMPATIBILITY_SUCCESSOR_PATH.relative_to(
+                pilot.REPO_ROOT
+            ).as_posix(),
+        )
+        self.assertEqual(
+            predecessor["predecessor_sha256"], _sha256(snapshot_successor_payload)
+        )
+        self.assertEqual(
+            snapshot_successor["predecessor_record"],
             "tst/publication/readiness/"
             "q011_section54_pressure_pilot_postrun_aggregate_source_authorization_"
             "successor_v3_2026-06-04.json",
         )
-        self.assertEqual(predecessor["predecessor_sha256"], _sha256(first_successor_payload))
+        self.assertEqual(
+            snapshot_successor["predecessor_sha256"], _sha256(first_successor_payload)
+        )
         self.assertEqual(
             first_successor["predecessor_record"],
             "tst/publication/readiness/"

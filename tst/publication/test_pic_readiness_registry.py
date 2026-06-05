@@ -6,10 +6,12 @@ from __future__ import annotations
 import base64
 from contextlib import contextmanager
 import copy
+from datetime import datetime, timezone
 import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import stat
 import subprocess
 import sys
@@ -64,6 +66,10 @@ REQUIRED_EXTENSION_CLAIMS = {
     "CLAIM-STATEART-CRPAI-SCATTERING-001",
     "CLAIM-RELEASE-EXTENDED-MHD-PIC-001",
 }
+
+_REVIEWER_ID_PATTERN = re.compile(
+    r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+)
 
 
 def _load(name: str) -> dict[str, object]:
@@ -122,6 +128,60 @@ def _git_blob_sha256(commit: str, relative_path: str) -> str:
         cwd=REPO_ROOT,
     )
     return hashlib.sha256(contents).hexdigest()
+
+
+def _git_archive_sha256(commit: str) -> str:
+    contents = subprocess.check_output(
+        ["git", "archive", "--format=tar", commit],
+        cwd=REPO_ROOT,
+    )
+    return hashlib.sha256(contents).hexdigest()
+
+
+def _canonical_decimal_integer(value: object) -> int:
+    if (
+        type(value) is not str
+        or not value.isascii()
+        or not value.isdecimal()
+        or value != str(int(value))
+    ):
+        raise ValueError("identity is not a canonical decimal string")
+    return int(value)
+
+
+def _canonical_utc_second(value: object) -> datetime:
+    if type(value) is not str or len(value) != 20:
+        raise ValueError("timestamp is not a canonical UTC second")
+    try:
+        parsed = datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ").replace(
+            tzinfo=timezone.utc
+        )
+    except ValueError as error:
+        raise ValueError("timestamp is not a canonical UTC second") from error
+    if parsed.strftime("%Y-%m-%dT%H:%M:%SZ") != value:
+        raise ValueError("timestamp is not a canonical UTC second")
+    return parsed
+
+
+def _canonical_reviewer_id(value: object) -> str:
+    if type(value) is not str or _REVIEWER_ID_PATTERN.fullmatch(value) is None:
+        raise ValueError("reviewer identity is not a canonical lowercase UUID")
+    return value
+
+
+def _canonical_nonempty_fact_list(value: object) -> list[str]:
+    if type(value) is not list or not value:
+        raise ValueError("facts inspected must be a nonempty list")
+    for fact in value:
+        if (
+            type(fact) is not str
+            or not fact
+            or not fact.isascii()
+            or not fact.isprintable()
+            or fact != " ".join(fact.split())
+        ):
+            raise ValueError("facts inspected contains a noncanonical fact")
+    return value
 
 
 def _validation_manifest_schema() -> dict[str, object]:
@@ -1283,8 +1343,8 @@ class PicReadinessRegistryTests(unittest.TestCase):
             ]
         )
         current_repair = _load(
-            "q011_section54_fifteenth_aggregate_snapshot_metadata_repair_"
-            "transition_2026-06-04.json"
+            "q011_section54_sixteenth_lustre_publication_rename_compatibility_"
+            "transition_2026-06-05.json"
         )
         acceptance_repair = _load(
             "q011_section54_thirteenth_acceptance_root_setgid_repair_transition_"
@@ -1296,12 +1356,20 @@ class PicReadinessRegistryTests(unittest.TestCase):
             current_repair["predecessor_sha256"],
             _sha256(REPO_ROOT / current_repair["predecessor_record"]),
         )
+        self.assertGreater(
+            _canonical_utc_second(current_repair["exact_patch_frozen_utc"]),
+            _canonical_utc_second(current_repair["recorded_utc"]),
+        )
         self.assertEqual(helper["sha256"], _sha256(REPO_ROOT / helper["path"]))
         runbook = (CONTROL_PLANE_DIR / "README.md").read_text(encoding="utf-8")
         recovery_receipt = json.loads(
             Path(
                 current_repair["recovered_acceptance_root"]["recovery_receipt"]["path"]
             ).read_text(encoding="utf-8")
+        )
+        self.assertEqual(
+            helper["sha256"],
+            _git_blob_sha256(recovery_receipt["validated_source_commit"], helper["path"]),
         )
         self.assertEqual(
             runbook.count(
@@ -1322,7 +1390,10 @@ class PicReadinessRegistryTests(unittest.TestCase):
         self.assertTrue(stat.S_ISDIR(acceptance_status.st_mode))
         self.assertEqual(
             (acceptance_status.st_dev, acceptance_status.st_ino),
-            (checkpoint["device"], checkpoint["inode"]),
+            (
+                _canonical_decimal_integer(checkpoint["device"]),
+                _canonical_decimal_integer(checkpoint["inode"]),
+            ),
         )
         self.assertEqual(acceptance_status.st_uid, checkpoint["uid"])
         self.assertEqual(acceptance_status.st_gid, checkpoint["gid"])
@@ -1332,13 +1403,99 @@ class PicReadinessRegistryTests(unittest.TestCase):
         )
         self.assertEqual(sorted(acceptance_root.iterdir()), [])
         self.assertEqual(sorted(os.listxattr(acceptance_root)), checkpoint["xattrs"])
+        publication_checkpoint = current_repair["publication_root_authority"]
+        publication_root = Path(publication_checkpoint["path"])
+        publication_status = publication_root.stat()
+        self.assertTrue(stat.S_ISDIR(publication_status.st_mode))
+        self.assertEqual(
+            (publication_status.st_dev, publication_status.st_ino),
+            (
+                _canonical_decimal_integer(publication_checkpoint["device"]),
+                _canonical_decimal_integer(publication_checkpoint["inode"]),
+            ),
+        )
+        self.assertEqual(publication_status.st_uid, publication_checkpoint["uid"])
+        self.assertEqual(publication_status.st_gid, publication_checkpoint["gid"])
+        self.assertEqual(
+            f"{stat.S_IMODE(publication_status.st_mode):05o}",
+            publication_checkpoint["mode"],
+        )
+        self.assertEqual(sorted(publication_root.iterdir()), [])
+        self.assertEqual(
+            sorted(os.listxattr(publication_root)),
+            publication_checkpoint["xattrs"],
+        )
+        self.assertEqual(
+            [
+                name
+                for name in sorted(os.listxattr(publication_root))
+                if name in {"system.posix_acl_access", "system.posix_acl_default"}
+            ],
+            publication_checkpoint["acl_xattrs"],
+        )
+        self.assertTrue(publication_checkpoint["same_account_isolated_parent"])
+        self.assertFalse(publication_checkpoint["group_or_other_write_bits"])
+        anchor_checkpoint = current_repair[
+            "stable_account_serialization_anchor_authority"
+        ]
+        anchor = Path(anchor_checkpoint["path"])
+        anchor_status = anchor.stat()
+        self.assertTrue(stat.S_ISDIR(anchor_status.st_mode))
+        self.assertEqual(
+            (anchor_status.st_dev, anchor_status.st_ino),
+            (
+                _canonical_decimal_integer(anchor_checkpoint["device"]),
+                _canonical_decimal_integer(anchor_checkpoint["inode"]),
+            ),
+        )
+        self.assertEqual(anchor_status.st_uid, anchor_checkpoint["uid"])
+        self.assertEqual(anchor_status.st_gid, anchor_checkpoint["gid"])
+        self.assertEqual(
+            f"{stat.S_IMODE(anchor_status.st_mode):05o}",
+            anchor_checkpoint["mode"],
+        )
+        self.assertEqual(sorted(os.listxattr(anchor)), anchor_checkpoint["xattrs"])
+        self.assertEqual(
+            [
+                name
+                for name in sorted(os.listxattr(anchor))
+                if name in {"system.posix_acl_access", "system.posix_acl_default"}
+            ],
+            anchor_checkpoint["acl_xattrs"],
+        )
+        self.assertTrue(anchor_checkpoint["outside_replaceable_pic_root_name"])
+        self.assertIn(anchor, acceptance_root.parent.parents)
+        completed_validation = current_repair["completed_fifteenth_clean_worker_validation"]
+        self.assertEqual(
+            completed_validation["archived_log_sha256"],
+            _sha256(Path(completed_validation["archived_log_path"])),
+        )
+        failed_publication = current_repair["failed_closed_aggregate_publication"]
+        self.assertEqual(failed_publication["scheduler_job_token"], "4766456;frontier")
+        self.assertEqual(failed_publication["terminal_state"], "FAILED")
+        self.assertEqual(failed_publication["exit_code"], "1:0")
+        self.assertEqual(
+            failed_publication["archived_log_sha256"],
+            _sha256(Path(failed_publication["archived_log_path"])),
+        )
+        self.assertEqual(
+            failed_publication["source_archive_sha256"],
+            _git_archive_sha256(failed_publication["validated_source_commit"]),
+        )
+        self.assertTrue(failed_publication["publication_root_empty_after_failure"])
+        self.assertTrue(
+            failed_publication["publication_acceptance_root_empty_after_failure"]
+        )
         receipt_checkpoint = checkpoint["recovery_receipt"]
         receipt = Path(receipt_checkpoint["path"])
         receipt_status = receipt.stat()
         self.assertTrue(stat.S_ISREG(receipt_status.st_mode))
         self.assertEqual(
             (receipt_status.st_dev, receipt_status.st_ino),
-            (receipt_checkpoint["device"], receipt_checkpoint["inode"]),
+            (
+                _canonical_decimal_integer(receipt_checkpoint["device"]),
+                _canonical_decimal_integer(receipt_checkpoint["inode"]),
+            ),
         )
         self.assertEqual(receipt_status.st_uid, receipt_checkpoint["uid"])
         self.assertEqual(receipt_status.st_gid, receipt_checkpoint["gid"])
@@ -1380,20 +1537,123 @@ class PicReadinessRegistryTests(unittest.TestCase):
                 self.assertEqual(status.st_gid, checkpoint["gid"])
                 self.assertEqual(f"{stat.S_IMODE(status.st_mode):05o}", expected_mode)
                 self.assertEqual(sorted(os.listxattr(path)), expected_xattrs)
-        aggregate_repair = current_repair["aggregate_snapshot_metadata_repair"]
+        aggregate_repair = current_repair["lustre_publication_rename_compatibility_repair"]
         authorization = aggregate_repair["postrun_source_authorization_successor"]
         self.assertEqual(authorization["sha256"], _sha256(REPO_ROOT / authorization["path"]))
         compatibility = aggregate_repair["snapshot_time_compatibility_successor"]
         self.assertEqual(compatibility["sha256"], _sha256(REPO_ROOT / compatibility["path"]))
+        for key in (
+            "aggregate_analyzer",
+            "aggregate_publisher",
+            "review_packet_renderer",
+            "repair_validation_worker",
+        ):
+            source_change = aggregate_repair[key]
+            with self.subTest(source_change=key):
+                self.assertEqual(
+                    source_change["predecessor_sha256"],
+                    _git_blob_sha256(
+                        current_repair["source_checkpoint_commit"],
+                        source_change["path"],
+                    ),
+                )
+                self.assertEqual(
+                    source_change["successor_sha256"],
+                    _sha256(REPO_ROOT / source_change["path"]),
+                )
+        self.assertTrue(
+            aggregate_repair["repair_validation_worker"]["compute_node_lock_preflight"]
+        )
+        self.assertIn(
+            "never automatically delete canonical artifacts or any still-present staging aliases",
+            aggregate_repair["accepted_contract"],
+        )
+        self.assertIn(
+            "for lock-honoring reviewed workers, remove the retained guard inode",
+            aggregate_repair["accepted_contract"],
+        )
+        self.assertIn(
+            "Preflight aggregate and renderer source authorization",
+            aggregate_repair["accepted_contract"],
+        )
+        self.assertIn(
+            "exclusive advisory transaction lock",
+            aggregate_repair["accepted_contract"],
+        )
+        self.assertIn(
+            "durably sync the publication parent",
+            aggregate_repair["accepted_contract"],
+        )
+        self.assertIn(
+            "expose no public production verifier flags",
+            aggregate_repair["accepted_contract"],
+        )
+        self.assertIn(
+            "destructive_rollback_after_any_canonical_artifact_exposure",
+            aggregate_repair["rejected_contracts"],
+        )
+        self.assertIn(
+            "success_seal_is_committed_and_inode_bound_while_the_guard_remains_armed",
+            aggregate_repair["compatibility_guarantees"],
+        )
+        self.assertIn(
+            "guard_removal_is_the_final_publication_state_transition",
+            aggregate_repair["compatibility_guarantees"],
+        )
+        self.assertIn(
+            "reviewed_publication_workers_are_serialized_by_the_stable_account_anchor_and_exact_acceptance_root_descriptor_locks",
+            aggregate_repair["compatibility_guarantees"],
+        )
+        self.assertIn(
+            "clean_frontier_repair_validation_preflights_both_production_transaction_locks_on_a_compute_node",
+            aggregate_repair["compatibility_guarantees"],
+        )
+        self.assertIn(
+            "final_guard_removal_targets_the_retained_guard_inode_for_lock_honoring_reviewed_workers",
+            aggregate_repair["compatibility_guarantees"],
+        )
+        self.assertIn(
+            "staging_link_removal_targets_the_retained_source_inode_for_lock_honoring_reviewed_workers",
+            aggregate_repair["compatibility_guarantees"],
+        )
+        self.assertIn(
+            "public_production_receipt_verification_always_requires_guard_absence_and_the_inode_bound_success_seal",
+            aggregate_repair["compatibility_guarantees"],
+        )
+        reviews = aggregate_repair["independent_read_only_forensic_reviews"]
+        self.assertEqual(reviews["requested"], 2)
         self.assertEqual(
-            aggregate_repair["aggregate_analyzer"]["successor_sha256"],
-            _sha256(REPO_ROOT / aggregate_repair["aggregate_analyzer"]["path"]),
+            reviews["requirement"],
+            "publish_a_separate_exact_current_readiness_review_artifact_after_this_"
+            "transition_is_frozen",
+        )
+        self.assertEqual(
+            reviews["status"],
+            "prior_findings_integrated_pending_separate_exact_current_review_artifact",
+        )
+        self.assertNotIn("completed", reviews)
+        self.assertFalse(current_repair["human_input_required_now"])
+        self.assertEqual(
+            current_repair["first_required_human_input_after_automated_repairs"],
+            "Select exactly one Section 5.4 problem/ps_p0 case from the verified "
+            "immutable four-slice pressure-review packet.",
+        )
+        self.assertEqual(
+            current_repair["release_blockers"],
+            [
+                "sixteenth_lustre_publication_compatibility_repair_clean_commit_and_push_pending",
+                "replacement_full_clean_worker_validation_pending",
+                "exact_latest_patch_independent_rereview_pending",
+                "pressure_aggregate_and_review_packet_worker_publication_pending",
+                "pressure_selection_review_packet_binding_pending_before_human_selection_acceptance",
+                "qualifying_campaign_publishers_lustre_compatibility_repair_pending_before_any_qualifying_launch",
+            ],
         )
         if staged_version == repaired_staged["version"]:
             self.assertEqual(
                 repaired_staged["state"],
                 "installed_candidate_only_policy_promoted_acceptance_root_recovered_"
-                "aggregate_snapshot_metadata_repair_staged_pending_clean_commit_push_"
+                "lustre_publication_compatibility_repair_staged_pending_clean_commit_push_"
                 "worker_validation_exact_latest_patch_rereview_and_aggregate_retry",
             )
             prepared = repaired_staged["prepared_artifacts"]
@@ -2010,6 +2270,229 @@ class PicReadinessRegistryTests(unittest.TestCase):
                 self.assertEqual(
                     authorization["executable_sha256"], _sha256(executable_path)
                 )
+
+    def test_exact_current_identity_bindings_require_canonical_decimal_strings(
+        self,
+    ) -> None:
+        self.assertEqual(_canonical_decimal_integer("0"), 0)
+        self.assertEqual(
+            _canonical_decimal_integer("720587400627193972"),
+            720587400627193972,
+        )
+        for invalid in (
+            1,
+            True,
+            None,
+            1.0,
+            "",
+            "01",
+            "+1",
+            "-1",
+            " 1",
+            "1 ",
+            "\u0661",
+        ):
+            with self.subTest(invalid=invalid):
+                with self.assertRaises(ValueError):
+                    _canonical_decimal_integer(invalid)
+
+    def test_exact_current_review_chronology_requires_canonical_utc_seconds(
+        self,
+    ) -> None:
+        self.assertEqual(
+            _canonical_utc_second("2026-06-05T05:17:39Z"),
+            datetime(2026, 6, 5, 5, 17, 39, tzinfo=timezone.utc),
+        )
+        for invalid in (
+            None,
+            0,
+            "2026-06-05T05:17:39",
+            "2026-06-05T05:17:39+00:00",
+            "2026-06-05T05:17:39.0Z",
+            "2026-6-05T05:17:39Z",
+            "2026-06-05t05:17:39Z",
+            "2026-02-30T05:17:39Z",
+        ):
+            with self.subTest(invalid=invalid):
+                with self.assertRaises(ValueError):
+                    _canonical_utc_second(invalid)
+
+    def test_exact_current_review_summary_requires_canonical_identity_and_facts(
+        self,
+    ) -> None:
+        self.assertEqual(
+            _canonical_reviewer_id("019e95d8-49db-7400-9aa8-b53aba417431"),
+            "019e95d8-49db-7400-9aa8-b53aba417431",
+        )
+        self.assertEqual(
+            _canonical_nonempty_fact_list(["frozen basis matched", "roots empty"]),
+            ["frozen basis matched", "roots empty"],
+        )
+        for invalid in (None, False, "", " reviewer", "reviewer ", "review er"):
+            with self.subTest(invalid_reviewer_id=invalid):
+                with self.assertRaises(ValueError):
+                    _canonical_reviewer_id(invalid)
+        for invalid in (
+            "019E95D8-49DB-7400-9AA8-B53ABA417431",
+            "019e95d8-49db-7400-9aa8-b53aba417431\u200b",
+            "019e95d8-49db-7400-9aa8-b53aba417431\0",
+        ):
+            with self.subTest(invalid_reviewer_id=invalid):
+                with self.assertRaises(ValueError):
+                    _canonical_reviewer_id(invalid)
+        for invalid in (
+            None,
+            {},
+            "fact",
+            [],
+            [""],
+            [" fact"],
+            ["fact "],
+            ["two  spaces"],
+            ["two\twords"],
+            ["two\nlines"],
+            ["fact\0"],
+            ["fact\u200b"],
+            ["valid", None],
+        ):
+            with self.subTest(invalid_facts=invalid):
+                with self.assertRaises(ValueError):
+                    _canonical_nonempty_fact_list(invalid)
+
+    def test_exact_current_lustre_publication_rereview_artifact_recomputes(
+        self,
+    ) -> None:
+        rereview = _load(
+            "q011_section54_sixteenth_lustre_publication_exact_current_"
+            "rereview_2026-06-05.json"
+        )
+        self.assertEqual(
+            set(rereview),
+            {
+                "schema_version",
+                "record_type",
+                "recorded_utc",
+                "source_checkpoint_commit",
+                "transition",
+                "reviewed_runtime",
+                "required_scopes",
+                "reviews",
+                "status",
+                "qualification_effect",
+            },
+        )
+        self.assertEqual(rereview["schema_version"], 1)
+        self.assertEqual(
+            rereview["record_type"],
+            "q011_section54_sixteenth_lustre_publication_exact_current_rereview",
+        )
+        self.assertEqual(
+            rereview["status"],
+            "exact_current_read_only_rereviews_complete_no_findings",
+        )
+        self.assertEqual(
+            rereview["qualification_effect"],
+            "none_no_execution_authorization_no_science_claim",
+        )
+
+        transition_binding = rereview["transition"]
+        transition_path = (
+            READINESS_DIR
+            / "q011_section54_sixteenth_lustre_publication_rename_compatibility_"
+            "transition_2026-06-05.json"
+        )
+        self.assertEqual(
+            transition_binding,
+            {
+                "path": transition_path.relative_to(REPO_ROOT).as_posix(),
+                "sha256": _sha256(transition_path),
+            },
+        )
+        transition = json.loads(transition_path.read_text(encoding="utf-8"))
+        self.assertEqual(
+            rereview["source_checkpoint_commit"],
+            transition["source_checkpoint_commit"],
+        )
+        self.assertGreater(
+            _canonical_utc_second(rereview["recorded_utc"]),
+            _canonical_utc_second(transition["exact_patch_frozen_utc"]),
+        )
+
+        reviewed_runtime = rereview["reviewed_runtime"]
+        repair = transition["lustre_publication_rename_compatibility_repair"]
+        expected_reviewed_runtime = {
+            label: {
+                "path": repair[label]["path"],
+                "sha256": repair[label][hash_key],
+            }
+            for label, hash_key in (
+                ("aggregate_publisher", "successor_sha256"),
+                ("review_packet_renderer", "successor_sha256"),
+                ("postrun_source_authorization_successor", "sha256"),
+                ("repair_validation_worker", "successor_sha256"),
+            )
+        }
+        self.assertEqual(
+            reviewed_runtime,
+            expected_reviewed_runtime,
+        )
+        for label, binding in reviewed_runtime.items():
+            with self.subTest(reviewed_runtime=label):
+                self.assertEqual(
+                    binding["sha256"],
+                    _sha256(REPO_ROOT / binding["path"]),
+                )
+
+        required_scopes = {"filesystem_publication", "provenance_chronology"}
+        self.assertEqual(set(rereview["required_scopes"]), required_scopes)
+        self.assertEqual(len(rereview["required_scopes"]), len(required_scopes))
+        reviews = rereview["reviews"]
+        self.assertEqual(len(reviews), 2)
+        self.assertEqual(
+            {review["scope"] for review in reviews},
+            required_scopes,
+        )
+        reviewer_ids = [
+            _canonical_reviewer_id(review["reviewer_id"]) for review in reviews
+        ]
+        self.assertEqual(len(set(reviewer_ids)), 2)
+        exact_hash_basis = {
+            "source_checkpoint_commit": rereview["source_checkpoint_commit"],
+            "transition_sha256": transition_binding["sha256"],
+            **{
+                f"{label}_sha256": binding["sha256"]
+                for label, binding in reviewed_runtime.items()
+            },
+        }
+        frozen_utc = _canonical_utc_second(transition["exact_patch_frozen_utc"])
+        recorded_utc = _canonical_utc_second(rereview["recorded_utc"])
+        for review in reviews:
+            with self.subTest(reviewer=review["reviewer_id"]):
+                self.assertEqual(
+                    set(review),
+                    {
+                        "reviewer_id",
+                        "reviewed_utc",
+                        "scope",
+                        "exact_hash_basis",
+                        "facts_inspected",
+                        "findings",
+                        "disposition",
+                        "read_only",
+                        "no_files_edited",
+                        "no_jobs_launched",
+                    },
+                )
+                reviewed_utc = _canonical_utc_second(review["reviewed_utc"])
+                self.assertGreater(reviewed_utc, frozen_utc)
+                self.assertLessEqual(reviewed_utc, recorded_utc)
+                self.assertEqual(review["exact_hash_basis"], exact_hash_basis)
+                _canonical_nonempty_fact_list(review["facts_inspected"])
+                self.assertEqual(review["findings"], [])
+                self.assertEqual(review["disposition"], "no_findings")
+                self.assertIs(review["read_only"], True)
+                self.assertIs(review["no_files_edited"], True)
+                self.assertIs(review["no_jobs_launched"], True)
 
     def test_reviewed_mpich_stderr_fixture_matches_failed_attempt_provenance(self) -> None:
         successor = _load(
@@ -3300,8 +3783,8 @@ class PicReadinessRegistryTests(unittest.TestCase):
         )
         self.assertEqual(promotion["registered_science_slice_count"], 4)
         current = _load(
-            "q011_section54_fifteenth_aggregate_snapshot_metadata_repair_"
-            "transition_2026-06-04.json"
+            "q011_section54_sixteenth_lustre_publication_rename_compatibility_"
+            "transition_2026-06-05.json"
         )["candidate_only_policy_promotion"]
         self.assertEqual(
             current["orion_active_policy_sha256"],

@@ -42,7 +42,7 @@
     },
     {
       "path": "tst/publication/analyze_q011_section54_pressure_pilot.py",
-      "sha256": "9a6918bcefe89eb6fe1a6d65134027b97fde961e7cd18e006cf734eaac3790ad"
+      "sha256": "da745b3e52a86127455fd9f70d0341e1f3563b4344979cd4266df18d4695a316"
     },
     {
       "path": "tst/publication/analyze_q011_section54_pressure_pilot_case.py",

@@ -1,0 +1,86 @@
+{
+  "schema_version": 1,
+  "record_type": "q011_section54_sixteenth_lustre_publication_exact_current_rereview",
+  "recorded_utc": "2026-06-05T05:25:32Z",
+  "source_checkpoint_commit": "af7b4e28f4323d49337707c2c68bf8823f80b2c4",
+  "transition": {
+    "path": "tst/publication/readiness/q011_section54_sixteenth_lustre_publication_rename_compatibility_transition_2026-06-05.json",
+    "sha256": "8efd2b349da6c0c150448528b3656a84767cacc5bf08eae84f5b4848c9aeb422"
+  },
+  "reviewed_runtime": {
+    "aggregate_publisher": {
+      "path": "tst/publication/publish_q011_section54_pressure_pilot_bundle.py",
+      "sha256": "56d54edef24249d03b6c1c0913cc64dd829999109e5d516fffc78f17c5328637"
+    },
+    "review_packet_renderer": {
+      "path": "tst/publication/render_q011_section54_pressure_pilot_review_packet.py",
+      "sha256": "5838b83733a991ffc00ee6464ce648d91fccc8e2819a44ff6726bd778d98277d"
+    },
+    "postrun_source_authorization_successor": {
+      "path": "tst/publication/readiness/q011_section54_pressure_pilot_postrun_aggregate_source_authorization_successor_v5_2026-06-05.json",
+      "sha256": "93c2b9174d1546b883ac4910afe3f7f021ed4324f2831f80b19aee9395e5bd3e"
+    },
+    "repair_validation_worker": {
+      "path": "tst/publication/frontier_q011_section54_repair_validation_job.sh",
+      "sha256": "ccbdecda9c47462784cc44d3e56ae0e4546a5000e1f52b5d01a9635bdc872286"
+    }
+  },
+  "required_scopes": [
+    "filesystem_publication",
+    "provenance_chronology"
+  ],
+  "reviews": [
+    {
+      "reviewer_id": "019e95d8-49db-7400-9aa8-b53aba417431",
+      "reviewed_utc": "2026-06-05T05:25:02Z",
+      "scope": "filesystem_publication",
+      "exact_hash_basis": {
+        "source_checkpoint_commit": "af7b4e28f4323d49337707c2c68bf8823f80b2c4",
+        "transition_sha256": "8efd2b349da6c0c150448528b3656a84767cacc5bf08eae84f5b4848c9aeb422",
+        "aggregate_publisher_sha256": "56d54edef24249d03b6c1c0913cc64dd829999109e5d516fffc78f17c5328637",
+        "review_packet_renderer_sha256": "5838b83733a991ffc00ee6464ce648d91fccc8e2819a44ff6726bd778d98277d",
+        "postrun_source_authorization_successor_sha256": "93c2b9174d1546b883ac4910afe3f7f021ed4324f2831f80b19aee9395e5bd3e",
+        "repair_validation_worker_sha256": "ccbdecda9c47462784cc44d3e56ae0e4546a5000e1f52b5d01a9635bdc872286"
+      },
+      "facts_inspected": [
+        "Frozen transition and four runtime hashes matched the exact review basis.",
+        "Canonical transition-derived runtime bindings and file recomputation passed.",
+        "Canonical lowercase UUID, UTC-second, decimal identity, and fact validation passed.",
+        "Publication and acceptance roots remained empty with retained identities.",
+        "Publication safety invariants and registry rejection coverage were inspected.",
+        "The worktree contained 288 publication JSON files and git diff --check passed."
+      ],
+      "findings": [],
+      "disposition": "no_findings",
+      "read_only": true,
+      "no_files_edited": true,
+      "no_jobs_launched": true
+    },
+    {
+      "reviewer_id": "019e95d8-5cf6-7cc0-ad92-378d66e26c09",
+      "reviewed_utc": "2026-06-05T05:25:14Z",
+      "scope": "provenance_chronology",
+      "exact_hash_basis": {
+        "source_checkpoint_commit": "af7b4e28f4323d49337707c2c68bf8823f80b2c4",
+        "transition_sha256": "8efd2b349da6c0c150448528b3656a84767cacc5bf08eae84f5b4848c9aeb422",
+        "aggregate_publisher_sha256": "56d54edef24249d03b6c1c0913cc64dd829999109e5d516fffc78f17c5328637",
+        "review_packet_renderer_sha256": "5838b83733a991ffc00ee6464ce648d91fccc8e2819a44ff6726bd778d98277d",
+        "postrun_source_authorization_successor_sha256": "93c2b9174d1546b883ac4910afe3f7f021ed4324f2831f80b19aee9395e5bd3e",
+        "repair_validation_worker_sha256": "ccbdecda9c47462784cc44d3e56ae0e4546a5000e1f52b5d01a9635bdc872286"
+      },
+      "facts_inspected": [
+        "Frozen transition, four runtime hashes, and source checkpoint matched.",
+        "The v5 and transition predecessor chains and changed runtime source authorizations recomputed.",
+        "Canonical reviewer UUID, fact, UTC-second, and decimal identity hardening passed.",
+        "Live roots, recovery binding, logs, archive, policies, inventory, blockers, and human gate matched."
+      ],
+      "findings": [],
+      "disposition": "no_findings",
+      "read_only": true,
+      "no_files_edited": true,
+      "no_jobs_launched": true
+    }
+  ],
+  "status": "exact_current_read_only_rereviews_complete_no_findings",
+  "qualification_effect": "none_no_execution_authorization_no_science_claim"
+}

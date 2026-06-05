@@ -1,0 +1,94 @@
+{
+  "record_type": "q011_section54_pressure_pilot_postrun_aggregate_source_authorization_successor",
+  "schema_version": 1,
+  "date": "2026-06-05",
+  "gate": "Q-011",
+  "classification": "engineering_calibration_only",
+  "qualification_effect": "none_postrun_aggregate_and_review_publication_only_no_launch_reauthorization_no_sun_bai_claim",
+  "predecessor_record": "tst/publication/readiness/q011_section54_pressure_pilot_postrun_aggregate_source_authorization_successor_v4_2026-06-04.json",
+  "predecessor_sha256": "8bf0b76d228a25030165ac3f741426ec927e25757e1564d222f2d544b82acbd0",
+  "historical_v2_execution_preregistration": {
+    "path": "tst/publication/readiness/q011_section54_pressure_pilot_registered_execution_retry_successor_v2_2026-06-02.json",
+    "sha256": "fcee4f99009ff10efa1e2f2d18f2a8bb4af551c64a97aa5c6f10a2dacf95f3bc"
+  },
+  "historical_launch_chronology": {
+    "state": "stale_non_authorizing_consumed_slices_no_reauthorization",
+    "historical_v2_source_bindings_may_match_current_checkout": false,
+    "aggregate_publication_is_postrun_only": true
+  },
+  "archive_execution_contract": {
+    "snapshot_source": "worker_extracted_readonly_git_archive_head",
+    "archive_commit_binding": "publisher_measures_readonly_git_archive_embedded_commit_archive_sha256_reviewed_source_closure_and_executing_worker_snapshot_members",
+    "requires_clean_reviewed_source_closure": true
+  },
+  "source_closure": [
+    {
+      "role": "aggregate_worker_wrapper",
+      "path": "tst/publication/frontier_q011_section54_pressure_pilot_publish_job.sh",
+      "sha256": "049293d07db11353b9862a2d0ba1347c5e5ea0f3985a3e30fb61d0da2793c359"
+    },
+    {
+      "role": "aggregate_publisher",
+      "path": "tst/publication/publish_q011_section54_pressure_pilot_bundle.py",
+      "sha256": "56d54edef24249d03b6c1c0913cc64dd829999109e5d516fffc78f17c5328637"
+    },
+    {
+      "role": "aggregate_analyzer",
+      "path": "tst/publication/analyze_q011_section54_pressure_pilot.py",
+      "sha256": "da745b3e52a86127455fd9f70d0341e1f3563b4344979cd4266df18d4695a316"
+    },
+    {
+      "role": "aggregate_case_verifier",
+      "path": "tst/publication/analyze_q011_section54_pressure_pilot_case.py",
+      "sha256": "8596d95c9b8952dcb760b10fbe00bf7ba8a2c895713cc3d36dd1efa1aac11ecc"
+    },
+    {
+      "role": "output_primitives",
+      "path": "tst/publication/analyze_q011_section54_outputs.py",
+      "sha256": "20794ed45b80843b8e75accffc2e9336fcb7da58716fb818e466e193cd346356"
+    },
+    {
+      "role": "structured_artifact_helper",
+      "path": "tst/publication/frontier_f1_structured_artifacts.py",
+      "sha256": "cf090115bcdfd143f67b12339115102b57e74cf3205b1ebb1521c144c3415a5a"
+    },
+    {
+      "role": "particle_vtk_reader",
+      "path": "tst/publication/pvtk_particles.py",
+      "sha256": "187254c4ed10ce20ec383e710dadfa2e03e9f45317cce53e5d644c1db2be7339"
+    },
+    {
+      "role": "review_packet_renderer",
+      "path": "tst/publication/render_q011_section54_pressure_pilot_review_packet.py",
+      "sha256": "5838b83733a991ffc00ee6464ce648d91fccc8e2819a44ff6726bd778d98277d"
+    },
+    {
+      "role": "plotting_environment_lock",
+      "path": "tst/publication/readiness/plotting_environment_lock_candidate_2026-05-30.json",
+      "sha256": "cfb2dda28e19609193cee99913766c34eaf032f2f279d534d991af5382c96c16"
+    },
+    {
+      "role": "review_packet_worker_wrapper",
+      "path": "tst/publication/frontier_q011_section54_pressure_pilot_review_packet_job.sh",
+      "sha256": "f13577a6f5f1dc557f40e2403fa210eaa0f6571d666835f36fda817987c708d1"
+    },
+    {
+      "role": "snapshot_time_compatibility_successor",
+      "path": "tst/publication/readiness/q011_section54_pressure_pilot_snapshot_time_compatibility_successor_2026-06-04.json",
+      "sha256": "2e608404604d85963f8371876ce0dc3243e5d0b1398820c5724c94ffc631c287"
+    }
+  ],
+  "scientific_contract": {
+    "pilot_cases_changed": false,
+    "estimators_changed": false,
+    "thresholds_changed": false,
+    "snapshot_selection_changed": false
+  },
+  "execution_policy": {
+    "frontier_execution_authorized_by_this_record": false,
+    "scheduler_commands_authorized_by_this_record": false,
+    "historical_launch_slices_reauthorized": false,
+    "scientific_evidence_eligible": false,
+    "sun_bai_claim": false
+  }
+}

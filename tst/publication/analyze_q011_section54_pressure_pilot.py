@@ -49,13 +49,16 @@ SNAPSHOT_TIME_COMPATIBILITY_SUCCESSOR_PATH = (
     "successor_2026-06-04.json"
 )
 POSTRUN_SOURCE_AUTHORIZATION_PREDECESSOR_PATH = (
-    SNAPSHOT_TIME_COMPATIBILITY_SUCCESSOR_PATH
+    REPO_ROOT
+    / "tst/publication/readiness/"
+    "q011_section54_pressure_pilot_postrun_aggregate_source_authorization_"
+    "successor_v4_2026-06-04.json"
 )
 PREREGISTRATION_PATH = (
     REPO_ROOT
     / "tst/publication/readiness/"
     "q011_section54_pressure_pilot_postrun_aggregate_source_authorization_"
-    "successor_v4_2026-06-04.json"
+    "successor_v5_2026-06-05.json"
 )
 REGISTERED_EXECUTION_PREREGISTRATION_PATH = (
     REPO_ROOT
@@ -664,7 +667,7 @@ def _load_postrun_source_authorization_successor(
                 "authorization_successor"
             ),
             "schema_version": 1,
-            "date": "2026-06-04",
+            "date": "2026-06-05",
             "gate": "Q-011",
             "classification": "engineering_calibration_only",
             "qualification_effect": (
@@ -677,7 +680,7 @@ def _load_postrun_source_authorization_successor(
                 ).as_posix()
             ),
             "predecessor_sha256": (
-                "2e608404604d85963f8371876ce0dc3243e5d0b1398820c5724c94ffc631c287"
+                "8bf0b76d228a25030165ac3f741426ec927e25757e1564d222f2d544b82acbd0"
             ),
             "historical_launch_chronology": {
                 "state": "stale_non_authorizing_consumed_slices_no_reauthorization",

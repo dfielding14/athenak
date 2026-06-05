@@ -107,10 +107,12 @@ class ImmutableReadonlyPublicationFile:
         )
         try:
             self.require_path_identity()
+            opened = os.fstat(self.descriptor)
             _require(
-                stat.S_ISREG(os.fstat(self.descriptor).st_mode)
-                and not os.fstat(self.descriptor).st_mode & 0o222,
-                f"{self._label} is not a read-only regular file",
+                stat.S_ISREG(opened.st_mode)
+                and not opened.st_mode & 0o222
+                and opened.st_nlink == 1,
+                f"{self._label} is not a singly linked read-only regular file",
             )
             return self
         except BaseException:
@@ -129,8 +131,9 @@ class ImmutableReadonlyPublicationFile:
         opened = os.fstat(self.descriptor)
         _require(
             stat.S_ISREG(current.st_mode)
-            and (current.st_dev, current.st_ino) == (opened.st_dev, opened.st_ino),
-            f"{self._label} path changed while retained",
+            and (current.st_dev, current.st_ino) == (opened.st_dev, opened.st_ino)
+            and current.st_nlink == opened.st_nlink == 1,
+            f"{self._label} path changed or is not singly linked while retained",
         )
 
     def read(self) -> bytes:
@@ -156,7 +159,8 @@ class ImmutableReadonlyPublicationFile:
                 after.st_ino,
                 after.st_size,
                 after.st_mtime_ns,
-            ),
+            )
+            and before.st_nlink == after.st_nlink == 1,
             f"{self._label} changed while reading",
         )
         self.require_path_identity()
@@ -750,6 +754,7 @@ def verify_published_review_packet_receipt(
         receipt_path,
         authorized_pic_root=authorized_pic_root,
         allow_publication_guard=False,
+        require_publication_seal=True,
     )
 
 
@@ -763,6 +768,7 @@ def render_packet(
     """Render, freeze, verify, publish, and durably receipt one review packet."""
     _pic_root, publication_root = publisher._publication_root(authorized_pic_root)
     acceptance_root = publisher._publication_acceptance_root(_pic_root)
+    transaction_anchor = publisher._publication_transaction_anchor(_pic_root)
     receipt_path = _direct_publication_path(
         receipt_path, publication_root=publication_root, label="aggregate receipt"
     )
@@ -772,9 +778,13 @@ def render_packet(
     output_receipt = _direct_publication_path(
         output_receipt, publication_root=publication_root, label="packet receipt"
     )
+    source_bindings = publisher._source_bindings(
+        require_verified_archive=publisher._is_production_pic_root(_pic_root)
+    )
     parent_descriptor = publisher._open_absolute_directory(publication_root)
     acceptance_descriptor = publisher._open_absolute_directory(acceptance_root)
-    staging = publication_root / f".{output_path.name}.staging-{uuid.uuid4()}"
+    transaction_descriptor = publisher._open_absolute_directory(transaction_anchor)
+    build_output = output_path
     receipt_staging = publication_root / f".{output_receipt.name}.staging-{uuid.uuid4()}"
     staging_descriptor: int | None = None
     aggregate_receipt_file: ImmutableReadonlyPublicationFile | None = None
@@ -783,8 +793,18 @@ def render_packet(
     receipt_renamed = False
     guard_armed = False
     seal_committed = False
+    seal_identity: tuple[int, int] | None = None
     receipt_identity: tuple[int, int] | None = None
+    guard_identity: tuple[int, int] | None = None
     try:
+        publisher._lock_publication_transaction(
+            transaction_descriptor, acceptance_descriptor
+        )
+        publisher._require_same_directory(
+            transaction_anchor,
+            transaction_descriptor,
+            "stable review-packet transaction anchor",
+        )
         publisher._require_same_directory(
             publication_root, parent_descriptor, "review-packet publication root"
         )
@@ -844,9 +864,21 @@ def render_packet(
             ) as bundle:
                 bundle.verify(aggregate["aggregate_bundle"]["manifest_sha256"])
                 manifest = pilot._manifest_schema(bundle.read(pilot.MANIFEST_NAME))
-                os.mkdir(staging.name, mode=0o700, dir_fd=parent_descriptor)
+                guard_identity = publisher._arm_publication_guard_at(
+                    parent_descriptor, output_receipt.name
+                )
+                guard_armed = True
+                publisher._require_same_account_isolated_parent(parent_descriptor)
+                os.mkdir(build_output.name, mode=0o700, dir_fd=parent_descriptor)
+                packet_renamed = True
                 staging_descriptor = os.open(
-                    staging.name, _DIRECTORY_FLAGS, dir_fd=parent_descriptor
+                    build_output.name, _DIRECTORY_FLAGS, dir_fd=parent_descriptor
+                )
+                publisher._require_same_directory_at(
+                    parent_descriptor,
+                    build_output.name,
+                    staging_descriptor,
+                    "review-packet public build tree",
                 )
                 with tempfile.TemporaryDirectory() as directory:
                     temporary = Path(directory)
@@ -879,9 +911,9 @@ def render_packet(
         publisher._freeze_anchored_tree(staging_descriptor)
         inventory_sha256 = _sha256(inventory_payload)
         _verify_packet_at(
-            staging,
+            build_output,
             parent_descriptor,
-            staging.name,
+            build_output.name,
             staging_descriptor,
             inventory_sha256,
         )
@@ -898,9 +930,7 @@ def render_packet(
             },
             "packet_root": str(output_path),
             "inventory_sha256": inventory_sha256,
-            "source_bindings": publisher._source_bindings(
-                require_verified_archive=publisher._is_production_pic_root(_pic_root)
-            ),
+            "source_bindings": source_bindings,
         }
         packet_receipt_payload = _json_bytes(packet_receipt)
         publisher._write_exclusive_at(
@@ -921,13 +951,11 @@ def render_packet(
             publication_root, parent_descriptor, "review-packet publication root"
         )
         publisher._require_same_directory_at(
-            parent_descriptor, staging.name, staging_descriptor, "review-packet staging tree"
+            parent_descriptor,
+            build_output.name,
+            staging_descriptor,
+            "review-packet public build tree",
         )
-        publisher._require_absent_at(parent_descriptor, output_path.name, "packet output")
-        publisher._rename_no_replace_at(
-            parent_descriptor, staging.name, output_path.name
-        )
-        packet_renamed = True
         publisher._fsync_descriptor(parent_descriptor)
         publisher._require_same_directory(
             publication_root, parent_descriptor, "review-packet publication root"
@@ -945,8 +973,6 @@ def render_packet(
         publisher._require_same_directory(
             publication_root, parent_descriptor, "review-packet publication root"
         )
-        publisher._arm_publication_guard_at(parent_descriptor, output_receipt.name)
-        guard_armed = True
         publisher._rename_no_replace_at(
             parent_descriptor, receipt_staging.name, output_receipt.name
         )
@@ -977,13 +1003,35 @@ def render_packet(
         if aggregate_receipt_file is not None:
             aggregate_receipt_file.__exit__(None, None, None)
             aggregate_receipt_file = None
-        publisher._disarm_publication_guard_at(parent_descriptor, output_receipt.name)
-        guard_armed = False
-        publisher._require_same_file_at(
+        publisher._require_same_directory(
+            publication_root, parent_descriptor, "review-packet publication root"
+        )
+        publisher._require_same_directory(
+            acceptance_root,
+            acceptance_descriptor,
+            "review-packet publication acceptance root",
+        )
+        seal_identity = publisher._publish_publication_seal_at(
+            acceptance_descriptor,
             parent_descriptor,
             output_receipt.name,
+            packet_receipt_payload,
             receipt_identity,
-            "canonical review-packet receipt",
+        )
+        seal_committed = True
+        publisher._require(
+            guard_identity is not None,
+            "review-packet publication guard identity is absent",
+        )
+        publisher._disarm_publication_guard_at(
+            parent_descriptor, output_receipt.name, guard_identity
+        )
+        guard_armed = False
+        guard_identity = None
+        publisher._require_same_directory(
+            transaction_anchor,
+            transaction_descriptor,
+            "stable review-packet transaction anchor",
         )
         publisher._require_same_directory(
             publication_root, parent_descriptor, "review-packet publication root"
@@ -993,18 +1041,37 @@ def render_packet(
             acceptance_descriptor,
             "review-packet publication acceptance root",
         )
-        publisher._publish_publication_seal_at(
-            acceptance_descriptor,
+        publisher._require_same_file_at(
             parent_descriptor,
             output_receipt.name,
-            packet_receipt_payload,
             receipt_identity,
+            "canonical review-packet receipt",
         )
-        seal_committed = True
+        publisher._require_same_file_at(
+            acceptance_descriptor,
+            publisher._publication_seal_name(output_receipt.name),
+            seal_identity,
+            "canonical review-packet receipt durable success seal",
+        )
+        publisher._require_publication_guard_absent_at(
+            parent_descriptor,
+            output_receipt.name,
+            "canonical review-packet receipt",
+        )
         return packet_receipt
-    except BaseException:
-        if receipt_renamed and receipt_identity is not None:
+    except BaseException as publication_error:
+        if (
+            seal_committed
+            and receipt_identity is not None
+            and seal_identity is not None
+        ):
             try:
+                publisher._fsync_descriptor(parent_descriptor)
+                publisher._require_same_directory(
+                    transaction_anchor,
+                    transaction_descriptor,
+                    "stable review-packet transaction anchor",
+                )
                 publisher._require_same_directory(
                     publication_root,
                     parent_descriptor,
@@ -1015,13 +1082,17 @@ def render_packet(
                     acceptance_descriptor,
                     "review-packet publication acceptance root",
                 )
-                publisher._require_publication_seal_at(
-                    acceptance_descriptor,
+                publisher._require_same_file_at(
                     parent_descriptor,
                     output_receipt.name,
-                    packet_receipt_payload,
                     receipt_identity,
                     "canonical review-packet receipt",
+                )
+                publisher._require_same_file_at(
+                    acceptance_descriptor,
+                    publisher._publication_seal_name(output_receipt.name),
+                    seal_identity,
+                    "canonical review-packet receipt durable success seal",
                 )
                 publisher._require_publication_guard_absent_at(
                     parent_descriptor,
@@ -1031,77 +1102,51 @@ def render_packet(
             except BaseException:
                 pass
             else:
-                seal_committed = True
+                guard_armed = False
                 return packet_receipt
-        rollback_error: BaseException | None = None
-        if receipt_renamed:
+        if guard_armed or packet_renamed or receipt_renamed:
             try:
-                publisher._ensure_publication_guard_at(
+                publisher._require_same_directory(
+                    transaction_anchor,
+                    transaction_descriptor,
+                    "stable review-packet transaction anchor",
+                )
+                guard_identity = publisher._ensure_publication_guard_at(
                     parent_descriptor, output_receipt.name
                 )
                 guard_armed = True
             except BaseException as error:
-                rollback_error = error
-        for published, name, rollback, identity in (
-            (
-                receipt_renamed,
-                output_receipt.name,
-                publisher._rollback_published_file,
-                receipt_identity,
-            ),
-            (
-                packet_renamed,
-                output_path.name,
-                publisher._rollback_published_directory,
-                staging_descriptor,
-            ),
-        ):
-            if not published:
-                continue
-            try:
-                _require(identity is not None, "review-packet rollback identity is absent")
-                rollback(parent_descriptor, name, identity)
-            except BaseException as error:
-                rollback_error = rollback_error or error
-        if not packet_renamed and staging_descriptor is not None:
-            publisher._cleanup_anchored_tree(
-                parent_descriptor,
-                staging.name,
-                staging_descriptor,
-                "review-packet staging tree",
-            )
-        if not receipt_renamed:
-            publisher._cleanup_anchored_file(
-                parent_descriptor, receipt_staging.name, "review-packet staged receipt"
-            )
-        if guard_armed and rollback_error is None:
-            try:
-                publisher._disarm_publication_guard_at(
-                    parent_descriptor, output_receipt.name
-                )
-                guard_armed = False
-            except BaseException as error:
-                rollback_error = error
-        if rollback_error is not None:
-            raise PacketError("cannot withdraw invalid review packet") from rollback_error
+                raise PacketError(
+                    "review-packet public artifacts require reviewed reconciliation "
+                    "and the fail-closed guard could not be assured"
+                ) from error
+            raise PacketError(
+                "review-packet public artifacts retained under fail-closed guard; "
+                f"reviewed reconciliation required: {publication_error}"
+            ) from publication_error
         raise
     finally:
-        if aggregate_analysis_file is not None:
-            aggregate_analysis_file.__exit__(None, None, None)
-        if aggregate_receipt_file is not None:
-            aggregate_receipt_file.__exit__(None, None, None)
-        if staging_descriptor is not None:
+        first_close_error: OSError | None = None
+        for retained_file in (aggregate_analysis_file, aggregate_receipt_file):
+            if retained_file is None:
+                continue
             try:
-                os.close(staging_descriptor)
-            except OSError:
-                if not seal_committed:
-                    raise
-        try:
-            os.close(acceptance_descriptor)
-            os.close(parent_descriptor)
-        except OSError:
-            if not seal_committed:
-                raise
+                retained_file.__exit__(None, None, None)
+            except OSError as error:
+                if first_close_error is None:
+                    first_close_error = error
+        descriptor_error = publisher._close_descriptors(
+            (
+                staging_descriptor,
+                acceptance_descriptor,
+                parent_descriptor,
+                transaction_descriptor,
+            )
+        )
+        if first_close_error is None:
+            first_close_error = descriptor_error
+        if first_close_error is not None and not seal_committed:
+            raise first_close_error
 
 
 def main() -> int:

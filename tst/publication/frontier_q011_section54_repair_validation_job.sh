@@ -58,7 +58,7 @@ mapfile -t publication_shell <<< "$publication_shell_output"
 mapfile -t publication_json <<< "$publication_json_output"
 test "${#publication_python[@]}" -eq 141
 test "${#publication_shell[@]}" -eq 16
-test "${#publication_json[@]}" -eq 285
+test "${#publication_json[@]}" -eq 288
 
 "$PYTHON" -B - "${publication_python[@]}" <<'PY'
 import sys
@@ -94,6 +94,43 @@ with path.open(encoding="utf-8") as stream:
 generated = generate_prepared_pic_artifact_inventory.prepared_artifact_inventory()
 if committed != generated:
     raise SystemExit("Committed prepared PIC artifact inventory is stale")
+PY
+
+"$PYTHON" -B - <<'PY'
+import fcntl
+import os
+
+from tst.publication import publish_q011_section54_pressure_pilot_bundle as publisher
+
+pic_root, _publication_root = publisher._publication_root(publisher.AUTHORIZED_PIC_ROOT)
+acceptance_root = publisher._publication_acceptance_root(pic_root)
+anchor = publisher._publication_transaction_anchor(pic_root)
+anchor_descriptor = publisher._open_absolute_directory(anchor)
+acceptance_descriptor = publisher._open_absolute_directory(acceptance_root)
+try:
+    publisher._lock_publication_transaction(anchor_descriptor, acceptance_descriptor)
+    publisher._require_same_directory(
+        anchor, anchor_descriptor, "stable publication transaction anchor"
+    )
+    publisher._require_same_directory(
+        acceptance_root,
+        acceptance_descriptor,
+        "authorized PIC publication acceptance root",
+    )
+    for path in (anchor, acceptance_root):
+        competitor = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            try:
+                fcntl.flock(competitor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                pass
+            else:
+                raise SystemExit(f"publication transaction lock did not serialize: {path}")
+        finally:
+            os.close(competitor)
+finally:
+    os.close(acceptance_descriptor)
+    os.close(anchor_descriptor)
 PY
 
 "$PYTHON" -B -m unittest \

@@ -678,13 +678,25 @@ qualify any scientific claim by itself.
 - `q011_section54_pressure_pilot_postrun_aggregate_source_authorization_successor_v2_2026-06-03.json`,
   `q011_section54_pressure_pilot_postrun_aggregate_source_authorization_successor_v3_2026-06-04.json`
   and
-  `q011_section54_pressure_pilot_postrun_aggregate_source_authorization_successor_v4_2026-06-04.json`:
+  `q011_section54_pressure_pilot_postrun_aggregate_source_authorization_successor_v4_2026-06-04.json`,
+  and
+  `q011_section54_pressure_pilot_postrun_aggregate_source_authorization_successor_v5_2026-06-05.json`:
   append-only source-closure successors for post-run publication only. The v3
   successor binds the exact unordered `mhd_w_bcc` inventory compatibility
   repair after aggregate job `4764415` failed closed on producer-order drift.
   The v4 successor binds the exact retained snapshot-metadata compatibility
   repair after aggregate job `4764674` failed closed on AthenaK `dt` scheduling
-  semantics. None reauthorizes a launch or changes the scientific contract.
+  semantics. The v5 successor binds the preflighted, guarded direct-final-name
+  directory build, hard-link no-replace regular-file publication, stable
+  account-anchor plus exact acceptance-root descriptor transaction locks,
+  retained guard-inode disarm, durable post-unlink reconciliation, strict
+  public production verifier,
+  nondestructive post-exposure reconciliation, and seal-before-final-guard-
+  removal repair after Orion Lustre rejected `renameat2(RENAME_NOREPLACE)` in
+  aggregate job `4766456`. Exact-inode pathname removal guarantees apply to
+  lock-honoring reviewed workers; noncooperating same-UID processes remain
+  outside that trust boundary.
+  None reauthorizes a launch or changes the scientific contract.
 - `q011_section54_pressure_pilot_snapshot_time_compatibility_successor_2026-06-04.json`:
   append-only engineering-only snapshot-time compatibility record. It freezes
   the exact observed particle-header time, six-significant-digit mesh-header
@@ -742,6 +754,25 @@ qualify any scientific claim by itself.
   committed fourteenth repair and clean-worker validation. It records failed
   job `4764674`, the coherent retained metadata for all `100` products, the
   exact-tuple compatibility repair, and the unchanged launch prohibition.
+- `q011_section54_sixteenth_lustre_publication_rename_compatibility_transition_2026-06-05.json`:
+  append-only failed-closed aggregate-publication checkpoint after the
+  committed fifteenth repair and clean-worker validation. It records failed
+  job `4766456`, the empty public namespaces, Orion Lustre's rejection of
+  nonzero `renameat2` flags, and the preflighted guarded direct-final-name plus
+  hard-link no-replace repair. It records that post-exposure failures retain
+  artifacts and any still-present staging aliases under the guard, that both
+  publication workers hold the stable account-anchor and exact acceptance-root
+  descriptor transaction locks, that lock-honoring reviewed workers target the
+  retained guard inode at disarm, that post-unlink reconciliation retries the
+  parent sync, that public production verification exposes no marker bypass,
+  and that the inode-bound success seal commits before final guard removal.
+  Qualifying launch remains prohibited.
+- `q011_section54_sixteenth_lustre_publication_exact_current_rereview_2026-06-05.json`:
+  separate exact-current read-only review closure for the frozen sixteenth
+  transition. It binds the canonical transition and its four reviewed runtime
+  successors, records independent filesystem-publication and
+  provenance-chronology no-finding dispositions, and grants no execution
+  authorization or science claim.
 - `q011_parallel_shock_storage_estimator_successor_2026-06-01.json`:
   analytical storage-planning successor after the publication deck gained a
   signed particle-current binary output and the PVTK block moved. The estimator

@@ -1304,11 +1304,16 @@ cadence while the analyzer still required exact nominal times. Read-only
 forensics verified all `100` retained snapshot products and froze the exact
 observed particle-header time, six-significant-digit mesh-header time and common
 cycle tuple for every immutable case slot. Do not replay job `4764415` or
-`4764674`. Submit one reviewed replacement aggregate worker only after the
-fifteenth-pass exact retained snapshot-metadata repair is committed, pushed,
-clean-worker validated and independently rereviewed from the exact latest
-patch. The replacement block below verifies the existing durable recovery
-receipt; it must not republish it.
+`4764674`. The fifteenth-pass repair was committed and clean worker job
+`4766444` passed. Replacement aggregate job `4766456` then failed closed
+before exposing a public artifact because Orion Lustre rejects nonzero
+`renameat2` flags, including `RENAME_NOREPLACE`. Do not replay job `4766456`.
+Submit one reviewed replacement aggregate worker only after the sixteenth-pass
+preflighted guarded direct-final-name, hard-link no-replace, nondestructive
+post-exposure reconciliation, and seal-before-final-guard-removal compatibility
+repair is committed, pushed, clean-worker validated and independently
+rereviewed from the exact latest patch. The replacement block below verifies
+the existing durable recovery receipt; it must not republish it.
 
 ```bash
 (

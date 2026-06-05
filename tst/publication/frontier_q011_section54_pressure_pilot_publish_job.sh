@@ -45,6 +45,7 @@ SOURCE_CLOSURE=(
   tst/publication/readiness/q011_section54_pressure_pilot_postrun_aggregate_source_authorization_successor_v2_2026-06-03.json
   tst/publication/readiness/q011_section54_pressure_pilot_postrun_aggregate_source_authorization_successor_v3_2026-06-04.json
   tst/publication/readiness/q011_section54_pressure_pilot_postrun_aggregate_source_authorization_successor_v4_2026-06-04.json
+  tst/publication/readiness/q011_section54_pressure_pilot_postrun_aggregate_source_authorization_successor_v5_2026-06-05.json
   tst/publication/readiness/plotting_environment_lock_candidate_2026-05-30.json
 )
 

@@ -12,6 +12,7 @@ import argparse
 from contextlib import ExitStack
 import ctypes
 import errno
+import fcntl
 import hashlib
 import io
 import json
@@ -46,6 +47,7 @@ _REGISTERED_EXECUTION_PREREGISTRATION_PATH = (
     "q011_section54_pressure_pilot_registered_execution_preregistration_2026-06-02.json"
 )
 AUTHORIZED_PIC_ROOT = Path("/lustre/orion/ast207/proj-shared/dfielding/PIC")
+AUTHORIZED_PUBLICATION_ROOT = AUTHORIZED_PIC_ROOT / "publication"
 TRUSTED_SOURCE_REPOSITORY = Path("/ccs/home/dfielding/athenak-pic")
 GIT_EXECUTABLE = Path("/usr/bin/git")
 EXECUTING_SOURCE_ROOT = Path(__file__).resolve().parents[2]
@@ -184,6 +186,12 @@ def _publication_acceptance_root(pic_root: Path) -> Path:
     )
 
 
+def _publication_transaction_anchor(pic_root: Path) -> Path:
+    production_root = Path(os.path.abspath(AUTHORIZED_PIC_ROOT))
+    anchor = production_root.parents[2] if pic_root == production_root else pic_root.parent
+    return _canonical_existing_directory(anchor, "stable publication transaction anchor")
+
+
 def _is_production_pic_root(pic_root: Path) -> bool:
     return pic_root == Path(os.path.abspath(AUTHORIZED_PIC_ROOT))
 
@@ -244,32 +252,52 @@ def _require_publication_guard_absent_at(
     )
 
 
-def _arm_publication_guard_at(parent_descriptor: int, receipt_name: str) -> None:
-    guard_name = _publication_guard_name(receipt_name)
-    _require_absent_at(parent_descriptor, guard_name, "receipt publication guard")
-    _write_exclusive_at(parent_descriptor, guard_name, _PUBLICATION_GUARD_PAYLOAD)
-    _fsync_descriptor(parent_descriptor)
-
-
-def _ensure_publication_guard_at(parent_descriptor: int, receipt_name: str) -> None:
-    guard_name = _publication_guard_name(receipt_name)
-    try:
-        metadata = os.stat(guard_name, dir_fd=parent_descriptor, follow_symlinks=False)
-    except FileNotFoundError:
-        _write_exclusive_at(parent_descriptor, guard_name, _PUBLICATION_GUARD_PAYLOAD)
-    else:
-        _require(
-            stat.S_ISREG(metadata.st_mode),
-            "receipt publication guard is not a regular file",
-        )
-    _fsync_descriptor(parent_descriptor)
-
-
-def _disarm_publication_guard_at(parent_descriptor: int, receipt_name: str) -> None:
+def _validated_publication_guard_identity_at(
+    parent_descriptor: int, receipt_name: str
+) -> tuple[int, int]:
     guard_name = _publication_guard_name(receipt_name)
     identity = _file_identity_at(
         parent_descriptor, guard_name, "receipt publication guard"
     )
+    _require(
+        _read_stable_readonly_regular_at(
+            parent_descriptor, guard_name, "receipt publication guard"
+        )
+        == _PUBLICATION_GUARD_PAYLOAD,
+        "receipt publication guard payload drifted",
+    )
+    _require_same_file_at(
+        parent_descriptor, guard_name, identity, "receipt publication guard"
+    )
+    return identity
+
+
+def _arm_publication_guard_at(
+    parent_descriptor: int, receipt_name: str
+) -> tuple[int, int]:
+    guard_name = _publication_guard_name(receipt_name)
+    _require_absent_at(parent_descriptor, guard_name, "receipt publication guard")
+    _write_exclusive_at(parent_descriptor, guard_name, _PUBLICATION_GUARD_PAYLOAD)
+    _fsync_descriptor(parent_descriptor)
+    return _validated_publication_guard_identity_at(parent_descriptor, receipt_name)
+
+
+def _ensure_publication_guard_at(
+    parent_descriptor: int, receipt_name: str
+) -> tuple[int, int]:
+    guard_name = _publication_guard_name(receipt_name)
+    try:
+        os.stat(guard_name, dir_fd=parent_descriptor, follow_symlinks=False)
+    except FileNotFoundError:
+        _write_exclusive_at(parent_descriptor, guard_name, _PUBLICATION_GUARD_PAYLOAD)
+    _fsync_descriptor(parent_descriptor)
+    return _validated_publication_guard_identity_at(parent_descriptor, receipt_name)
+
+
+def _disarm_publication_guard_at(
+    parent_descriptor: int, receipt_name: str, identity: tuple[int, int]
+) -> None:
+    guard_name = _publication_guard_name(receipt_name)
     _require_same_file_at(
         parent_descriptor, guard_name, identity, "receipt publication guard"
     )
@@ -327,7 +355,7 @@ def _publish_publication_seal_at(
     receipt_name: str,
     receipt_payload: bytes,
     receipt_identity: tuple[int, int],
-) -> None:
+) -> tuple[int, int]:
     _require_same_file_at(
         publication_descriptor, receipt_name, receipt_identity, "canonical published receipt"
     )
@@ -340,49 +368,77 @@ def _publish_publication_seal_at(
         _sha256(receipt_payload),
         receipt_identity,
     )
-    committed = False
+    _write_exclusive_at(
+        acceptance_descriptor,
+        staging_name,
+        seal_payload,
+    )
+    staging_identity = _file_identity_at(
+        acceptance_descriptor, staging_name, "receipt staged durable success seal"
+    )
+    _fsync_descriptor(acceptance_descriptor)
+    _require_same_file_at(
+        publication_descriptor,
+        receipt_name,
+        receipt_identity,
+        "canonical published receipt",
+    )
     try:
-        _write_exclusive_at(
+        _rename_no_replace_at(acceptance_descriptor, staging_name, seal_name)
+    except BaseException:
+        # A rename wrapper can raise after the kernel committed the marker.
+        # Reconcile the exact canonical seal so callers never report failure
+        # after making this receipt externally consumable.
+        _require_absent_at(
             acceptance_descriptor,
             staging_name,
-            seal_payload,
+            "receipt staged durable success seal",
         )
-        _fsync_descriptor(acceptance_descriptor)
+        _require_same_file_at(
+            acceptance_descriptor,
+            seal_name,
+            staging_identity,
+            "receipt durable success seal",
+        )
         _require_same_file_at(
             publication_descriptor,
             receipt_name,
             receipt_identity,
             "canonical published receipt",
         )
-        try:
-            _rename_no_replace_at(acceptance_descriptor, staging_name, seal_name)
-        except BaseException:
-            # A rename wrapper can raise after the kernel committed the marker.
-            # Reconcile the exact canonical seal so callers never report failure
-            # after making this receipt externally consumable.
-            _require_same_file_at(
-                publication_descriptor,
-                receipt_name,
-                receipt_identity,
-                "canonical published receipt",
-            )
-            canonical_payload = _read_stable_readonly_regular_at(
-                acceptance_descriptor,
-                seal_name,
-                "receipt durable success seal",
-            )
-            _require(
-                canonical_payload == seal_payload,
-                "receipt durable success seal drifted during commit reconciliation",
-            )
-            committed = True
-            return
-        committed = True
-    finally:
-        if not committed:
-            _cleanup_anchored_file(
-                acceptance_descriptor, staging_name, "receipt staged durable success seal"
-            )
+        canonical_payload = _read_stable_readonly_regular_at(
+            acceptance_descriptor,
+            seal_name,
+            "receipt durable success seal",
+        )
+        _require(
+            canonical_payload == seal_payload,
+            "receipt durable success seal drifted during commit reconciliation",
+        )
+        _fsync_descriptor(acceptance_descriptor)
+        return staging_identity
+    _require_absent_at(
+        acceptance_descriptor,
+        staging_name,
+        "receipt staged durable success seal",
+    )
+    _require_same_file_at(
+        acceptance_descriptor,
+        seal_name,
+        staging_identity,
+        "receipt durable success seal",
+    )
+    _require(
+        _read_stable_readonly_regular_at(
+            acceptance_descriptor,
+            seal_name,
+            "receipt durable success seal",
+        )
+        == seal_payload,
+        "receipt durable success seal drifted after commit",
+    )
+    _fsync_descriptor(acceptance_descriptor)
+    return staging_identity
 
 
 def _require_publication_seal_at(
@@ -483,89 +539,173 @@ def _freeze_anchored_tree(root_descriptor: int) -> None:
     os.fsync(root_descriptor)
 
 
-def _remove_anchored_tree_at(
-    parent_descriptor: int, name: str, descriptor: int, label: str
-) -> None:
-    """Remove one tree recursively without reopening an ancestor pathname."""
-    _require_same_directory_at(parent_descriptor, name, descriptor, label)
-
-    def remove_members(directory_descriptor: int) -> None:
-        os.fchmod(directory_descriptor, os.fstat(directory_descriptor).st_mode | 0o700)
-        for member_name in os.listdir(directory_descriptor):
-            observed = os.stat(
-                member_name, dir_fd=directory_descriptor, follow_symlinks=False
-            )
-            if stat.S_ISDIR(observed.st_mode):
-                child = os.open(member_name, _DIRECTORY_FLAGS, dir_fd=directory_descriptor)
-                try:
-                    opened = os.fstat(child)
-                    _require(
-                        (observed.st_dev, observed.st_ino)
-                        == (opened.st_dev, opened.st_ino),
-                        f"{label} changed during anchored removal",
-                    )
-                    remove_members(child)
-                    current = os.stat(
-                        member_name,
-                        dir_fd=directory_descriptor,
-                        follow_symlinks=False,
-                    )
-                    _require(
-                        (current.st_dev, current.st_ino)
-                        == (opened.st_dev, opened.st_ino),
-                        f"{label} changed during anchored removal",
-                    )
-                finally:
-                    os.close(child)
-                os.rmdir(member_name, dir_fd=directory_descriptor)
-            else:
-                os.unlink(member_name, dir_fd=directory_descriptor)
-
-    remove_members(descriptor)
-    _require_same_directory_at(parent_descriptor, name, descriptor, label)
-    os.rmdir(name, dir_fd=parent_descriptor)
+def _require_same_account_isolated_parent(parent_descriptor: int) -> None:
+    metadata = os.fstat(parent_descriptor)
+    _require(
+        stat.S_ISDIR(metadata.st_mode)
+        and metadata.st_uid == os.geteuid()
+        and not metadata.st_mode & (stat.S_IWGRP | stat.S_IWOTH),
+        "pressure-pilot publication requires a same-account isolated parent",
+    )
 
 
-def _cleanup_anchored_tree(
-    parent_descriptor: int, name: str, descriptor: int, label: str
+def _lock_publication_transaction(
+    anchor_descriptor: int, acceptance_descriptor: int
 ) -> None:
     try:
-        _remove_anchored_tree_at(parent_descriptor, name, descriptor, label)
-    except (OSError, PressurePilotPublicationError):
-        return
-
-
-def _cleanup_anchored_file(parent_descriptor: int, name: str, label: str) -> None:
+        fcntl.flock(anchor_descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError as error:
+        raise PressurePilotPublicationError(
+            "pressure-pilot stable publication transaction lock is unavailable"
+        ) from error
     try:
-        observed = os.stat(name, dir_fd=parent_descriptor, follow_symlinks=False)
-        descriptor = os.open(name, _FILE_FLAGS, dir_fd=parent_descriptor)
+        fcntl.flock(acceptance_descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError as error:
+        fcntl.flock(anchor_descriptor, fcntl.LOCK_UN)
+        raise PressurePilotPublicationError(
+            "pressure-pilot acceptance-root publication transaction lock is unavailable"
+        ) from error
+
+
+def _close_descriptors(descriptors: Sequence[int | None]) -> OSError | None:
+    first_error: OSError | None = None
+    for descriptor in descriptors:
+        if descriptor is None:
+            continue
         try:
-            opened = os.fstat(descriptor)
-            _require(
-                stat.S_ISREG(opened.st_mode)
-                and (observed.st_dev, observed.st_ino)
-                == (opened.st_dev, opened.st_ino),
-                f"{label} changed during anchored cleanup",
-            )
-            os.fchmod(descriptor, opened.st_mode | 0o600)
-            current = os.stat(name, dir_fd=parent_descriptor, follow_symlinks=False)
-            _require(
-                (current.st_dev, current.st_ino) == (opened.st_dev, opened.st_ino),
-                f"{label} changed during anchored cleanup",
-            )
-        finally:
             os.close(descriptor)
-        os.unlink(name, dir_fd=parent_descriptor)
-    except FileNotFoundError:
-        return
+        except OSError as error:
+            if first_error is None:
+                first_error = error
+    return first_error
+
+
+def _require_linked_commit_complete_at(
+    parent_descriptor: int,
+    source_name: str,
+    destination_name: str,
+    identity: tuple[int, int],
+) -> None:
+    _require_absent_at(
+        parent_descriptor, source_name, "pressure-pilot linked fallback source"
+    )
+    _require_same_file_at(
+        parent_descriptor,
+        destination_name,
+        identity,
+        "pressure-pilot linked fallback destination",
+    )
+    destination = os.stat(
+        destination_name, dir_fd=parent_descriptor, follow_symlinks=False
+    )
+    _require(
+        destination.st_nlink == 1,
+        "pressure-pilot linked fallback destination has an invalid link count",
+    )
+
+
+def _link_no_replace_file_at(
+    parent_descriptor: int,
+    source_name: str,
+    destination_name: str,
+    identity: tuple[int, int],
+) -> None:
+    source = os.stat(source_name, dir_fd=parent_descriptor, follow_symlinks=False)
+    _require(
+        stat.S_ISREG(source.st_mode)
+        and (source.st_dev, source.st_ino) == identity
+        and source.st_nlink == 1,
+        "pressure-pilot linked fallback source is not singly linked",
+    )
+    try:
+        os.link(
+            source_name,
+            destination_name,
+            src_dir_fd=parent_descriptor,
+            dst_dir_fd=parent_descriptor,
+            follow_symlinks=False,
+        )
+    except OSError as error:
+        if error.errno == errno.EEXIST:
+            raise PressurePilotPublicationError(
+                f"pressure-pilot output collided during rename: {destination_name}"
+            ) from error
+        try:
+            _require_same_file_at(
+                parent_descriptor,
+                source_name,
+                identity,
+                "pressure-pilot linked fallback source",
+            )
+            _require_same_file_at(
+                parent_descriptor,
+                destination_name,
+                identity,
+                "pressure-pilot linked fallback destination",
+            )
+        except (OSError, PressurePilotPublicationError):
+            raise error
+    except BaseException as error:
+        try:
+            _require_same_file_at(
+                parent_descriptor,
+                source_name,
+                identity,
+                "pressure-pilot linked fallback source",
+            )
+            _require_same_file_at(
+                parent_descriptor,
+                destination_name,
+                identity,
+                "pressure-pilot linked fallback destination",
+            )
+        except (OSError, PressurePilotPublicationError):
+            raise error
+
+    try:
+        _require_same_file_at(
+            parent_descriptor,
+            source_name,
+            identity,
+            "pressure-pilot linked fallback source",
+        )
+        _require_same_file_at(
+            parent_descriptor,
+            destination_name,
+            identity,
+            "pressure-pilot linked fallback destination",
+        )
+        linked = os.stat(
+            destination_name, dir_fd=parent_descriptor, follow_symlinks=False
+        )
+        _require(
+            linked.st_nlink == 2,
+            "pressure-pilot linked fallback commit has an invalid link count",
+        )
     except (OSError, PressurePilotPublicationError):
-        return
+        raise
+
+    try:
+        os.unlink(source_name, dir_fd=parent_descriptor)
+        _require_linked_commit_complete_at(
+            parent_descriptor, source_name, destination_name, identity
+        )
+    except BaseException as error:
+        try:
+            _require_linked_commit_complete_at(
+                parent_descriptor, source_name, destination_name, identity
+            )
+        except BaseException:
+            raise error
 
 
 def _rename_no_replace_at(parent_descriptor: int, source_name: str, destination_name: str) -> None:
     _require(
-        "/" not in source_name and "/" not in destination_name,
-        "pressure-pilot descriptor-relative rename received a nested path",
+        all(
+            "/" not in name and name not in {"", ".", ".."}
+            for name in (source_name, destination_name)
+        ),
+        "pressure-pilot descriptor-relative rename received an invalid name",
     )
     libc = ctypes.CDLL(None, use_errno=True)
     renameat2 = getattr(libc, "renameat2", None)
@@ -600,62 +740,17 @@ def _rename_no_replace_at(parent_descriptor: int, source_name: str, destination_
     }
     if error_number not in unsupported:
         raise OSError(error_number, os.strerror(error_number), destination_name)
-    raise PressurePilotPublicationError(
-        "pressure-pilot publication requires atomic no-replace rename support"
-    )
-
-
-def _rollback_published_directory(
-    parent_descriptor: int, destination_name: str, descriptor: int
-) -> None:
-    """Withdraw an invalid public directory before attempting hidden cleanup."""
-    _require_same_directory_at(
-        parent_descriptor,
-        destination_name,
-        descriptor,
-        "invalid pressure-pilot public directory",
-    )
-    rollback_name = f".{destination_name}.rollback-{uuid.uuid4()}"
-    _rename_no_replace_at(parent_descriptor, destination_name, rollback_name)
-    _fsync_descriptor(parent_descriptor)
-    _require_absent_at(
-        parent_descriptor, destination_name, "invalid pressure-pilot public directory"
-    )
-    rollback_descriptor = os.open(
-        rollback_name, _DIRECTORY_FLAGS, dir_fd=parent_descriptor
-    )
-    try:
-        _cleanup_anchored_tree(
-            parent_descriptor,
-            rollback_name,
-            rollback_descriptor,
-            "pressure-pilot rollback tree",
+    _require_same_account_isolated_parent(parent_descriptor)
+    source = os.stat(source_name, dir_fd=parent_descriptor, follow_symlinks=False)
+    identity = source.st_dev, source.st_ino
+    if stat.S_ISREG(source.st_mode):
+        _link_no_replace_file_at(
+            parent_descriptor, source_name, destination_name, identity
         )
-    finally:
-        os.close(rollback_descriptor)
-    _fsync_descriptor(parent_descriptor)
-
-
-def _rollback_published_file(
-    parent_descriptor: int, destination_name: str, identity: tuple[int, int]
-) -> None:
-    """Withdraw an invalid public file before attempting hidden cleanup."""
-    _require_same_file_at(
-        parent_descriptor,
-        destination_name,
-        identity,
-        "invalid pressure-pilot public file",
+        return
+    raise PressurePilotPublicationError(
+        "pressure-pilot directory publication requires exclusive final-name creation"
     )
-    rollback_name = f".{destination_name}.rollback-{uuid.uuid4()}"
-    _rename_no_replace_at(parent_descriptor, destination_name, rollback_name)
-    _fsync_descriptor(parent_descriptor)
-    _require_absent_at(
-        parent_descriptor, destination_name, "invalid pressure-pilot public file"
-    )
-    _cleanup_anchored_file(
-        parent_descriptor, rollback_name, "pressure-pilot rollback file"
-    )
-    _fsync_descriptor(parent_descriptor)
 
 
 def _read_stable_readonly_regular(path: Path, label: str) -> bytes:
@@ -693,8 +788,10 @@ def _read_stable_readonly_regular_at(
     try:
         before = os.fstat(descriptor)
         _require(
-            stat.S_ISREG(before.st_mode) and not before.st_mode & 0o222,
-            f"{label} is not a read-only regular file",
+            stat.S_ISREG(before.st_mode)
+            and not before.st_mode & 0o222
+            and before.st_nlink == 1,
+            f"{label} is not a singly linked read-only regular file",
         )
         payload = b""
         while True:
@@ -707,7 +804,8 @@ def _read_stable_readonly_regular_at(
         _require(
             (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns)
             == (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns)
-            and (after.st_dev, after.st_ino) == (current.st_dev, current.st_ino),
+            and (after.st_dev, after.st_ino) == (current.st_dev, current.st_ino)
+            and after.st_nlink == current.st_nlink == 1,
             f"{label} changed while reading",
         )
         return payload
@@ -954,11 +1052,15 @@ def verify_published_pressure_pilot_bundle(
     output_path: str | Path,
     expected_manifest_sha256: str,
     *,
-    authorized_publication_root: Path = pilot.AUTHORIZED_PUBLICATION_ROOT,
+    authorized_publication_root: Path = AUTHORIZED_PUBLICATION_ROOT,
 ) -> dict[str, Any]:
-    """Verify immutable closure, run the strict analyzer, then recheck closure."""
+    """Verify a nonproduction fixture bundle without accepting it for consumption."""
     publication_root = _canonical_existing_directory(
         authorized_publication_root, "authorized PIC publication root"
+    )
+    _require(
+        publication_root != Path(os.path.abspath(AUTHORIZED_PUBLICATION_ROOT)),
+        "production pressure-pilot bundle verification requires receipt consumption",
     )
     root = _direct_publication_target(
         output_path, publication_root, "pressure-pilot retained bundle"
@@ -1333,6 +1435,7 @@ def publish_pressure_pilot_bundle(
     """Copy four descriptor-verified raw cases into one immutable aggregate tree."""
     pic_root, parent = _publication_root(authorized_pic_root)
     acceptance_root = _publication_acceptance_root(pic_root)
+    transaction_anchor = _publication_transaction_anchor(pic_root)
     target = _direct_publication_target(output_path, parent, "pressure-pilot output")
     receipt_target = _direct_publication_target(
         receipt_path, parent, "pressure-pilot receipt"
@@ -1346,27 +1449,63 @@ def publish_pressure_pilot_bundle(
         case_id: _authorized_raw_case_root(case_artifact_dirs[case_id], pic_root)
         for case_id in case_verifier.CASE_IDS
     }
-    staging = parent / f".{target.name}.staging-{uuid.uuid4()}"
+    with ExitStack() as preflight_stack:
+        preflight_descriptors = {}
+        for case_id in case_verifier.CASE_IDS:
+            tree = preflight_stack.enter_context(
+                case_verifier.StructuredArtifactTree(Path(case_artifact_dirs[case_id]))
+            )
+            preflight_descriptors[case_id] = (
+                case_verifier.verify_published_case_descriptor(
+                    tree, case_id, case_descriptor_sha256[case_id]
+                )
+            )
+            tree.require_tree_closure()
+        preflight_manifest = _manifest(preflight_descriptors)
+        pilot._validate_case_identity(preflight_manifest["cases"])
+        preflight_expected_targets = pilot._declared_paths(preflight_manifest) - {
+            pilot.MANIFEST_NAME
+        }
+        preflight_declared_targets = {
+            str(member["path"])
+            for descriptor in preflight_descriptors.values()
+            for member in descriptor["bundle_members"]
+        }
+        _require(
+            preflight_declared_targets == preflight_expected_targets,
+            "verified raw-case bundle member closure drifted",
+        )
+    _source_bindings(require_verified_archive=_is_production_pic_root(pic_root))
+    build_target = target
     receipt_staging = parent / f".{receipt_target.name}.staging-{uuid.uuid4()}"
     result_staging = parent / f".{result_target.name}.staging-{uuid.uuid4()}"
     publication_descriptor = _open_absolute_directory(parent)
     acceptance_descriptor = _open_absolute_directory(acceptance_root)
-    _require_same_directory(parent, publication_descriptor, "authorized PIC publication root")
-    _require_same_directory(
-        acceptance_root,
-        acceptance_descriptor,
-        "authorized PIC publication acceptance root",
-    )
-    os.mkdir(staging.name, mode=0o700, dir_fd=publication_descriptor)
-    staging_descriptor = os.open(staging.name, _DIRECTORY_FLAGS, dir_fd=publication_descriptor)
+    transaction_descriptor = _open_absolute_directory(transaction_anchor)
+    staging_descriptor: int | None = None
     renamed = False
     receipt_renamed = False
     result_renamed = False
     guard_armed = False
     seal_committed = False
+    seal_identity: tuple[int, int] | None = None
     receipt_identity: tuple[int, int] | None = None
-    result_identity: tuple[int, int] | None = None
+    guard_identity: tuple[int, int] | None = None
     try:
+        _lock_publication_transaction(transaction_descriptor, acceptance_descriptor)
+        _require_same_directory(
+            transaction_anchor,
+            transaction_descriptor,
+            "stable publication transaction anchor",
+        )
+        _require_same_directory(
+            parent, publication_descriptor, "authorized PIC publication root"
+        )
+        _require_same_directory(
+            acceptance_root,
+            acceptance_descriptor,
+            "authorized PIC publication acceptance root",
+        )
         _require_absent_at(publication_descriptor, target.name, "pressure-pilot output")
         _require_absent_at(
             publication_descriptor, receipt_target.name, "pressure-pilot receipt"
@@ -1383,6 +1522,22 @@ def publish_pressure_pilot_bundle(
             acceptance_descriptor,
             receipt_target.name,
             "pressure-pilot receipt",
+        )
+        guard_identity = _arm_publication_guard_at(
+            publication_descriptor, receipt_target.name
+        )
+        guard_armed = True
+        _require_same_account_isolated_parent(publication_descriptor)
+        os.mkdir(build_target.name, mode=0o700, dir_fd=publication_descriptor)
+        renamed = True
+        staging_descriptor = os.open(
+            build_target.name, _DIRECTORY_FLAGS, dir_fd=publication_descriptor
+        )
+        _require_same_directory_at(
+            publication_descriptor,
+            build_target.name,
+            staging_descriptor,
+            "pressure-pilot public build tree",
         )
         with ExitStack() as stack:
             trees = {}
@@ -1429,21 +1584,21 @@ def publish_pressure_pilot_bundle(
             _write_exclusive_at(staging_descriptor, pilot.MANIFEST_NAME, manifest_payload)
             _require_same_directory_at(
                 publication_descriptor,
-                staging.name,
+                build_target.name,
                 staging_descriptor,
-                "pressure-pilot staging tree",
+                "pressure-pilot public build tree",
             )
             _freeze_anchored_tree(staging_descriptor)
             _require_same_directory_at(
                 publication_descriptor,
-                staging.name,
+                build_target.name,
                 staging_descriptor,
-                "pressure-pilot staging tree",
+                "pressure-pilot public build tree",
             )
             result = _verify_pressure_pilot_bundle_at(
-                staging,
+                build_target,
                 publication_descriptor,
-                staging.name,
+                build_target.name,
                 staging_descriptor,
                 manifest_sha256,
                 authorized_publication_root=parent,
@@ -1489,17 +1644,15 @@ def publish_pressure_pilot_bundle(
             receipt_identity = _file_identity_at(
                 publication_descriptor, receipt_staging.name, "pressure-pilot staged receipt"
             )
-            result_identity = _file_identity_at(
-                publication_descriptor, result_staging.name, "pressure-pilot staged result"
-            )
             for tree in trees.values():
                 tree.require_tree_closure()
             _require_same_directory(parent, publication_descriptor, "authorized PIC publication root")
-            _require_absent_at(
-                publication_descriptor, target.name, "pressure-pilot output"
+            _require_same_directory_at(
+                publication_descriptor,
+                target.name,
+                staging_descriptor,
+                "pressure-pilot public build tree",
             )
-            _rename_no_replace_at(publication_descriptor, staging.name, target.name)
-            renamed = True
             _fsync_descriptor(publication_descriptor)
             verified_result = _verify_pressure_pilot_bundle_at(
                 target,
@@ -1526,8 +1679,6 @@ def publish_pressure_pilot_bundle(
             _require_absent_at(
                 publication_descriptor, receipt_target.name, "pressure-pilot receipt"
             )
-            _arm_publication_guard_at(publication_descriptor, receipt_target.name)
-            guard_armed = True
             _rename_no_replace_at(
                 publication_descriptor, receipt_staging.name, receipt_target.name
             )
@@ -1567,19 +1718,11 @@ def publish_pressure_pilot_bundle(
             receipt_identity,
             "canonical pressure-pilot receipt",
         )
-        verify_published_pressure_pilot_receipt(
+        _verify_published_pressure_pilot_receipt(
             receipt_target,
             authorized_pic_root=authorized_pic_root,
             allow_publication_guard=True,
             require_publication_seal=False,
-        )
-        _disarm_publication_guard_at(publication_descriptor, receipt_target.name)
-        guard_armed = False
-        _require_same_file_at(
-            publication_descriptor,
-            receipt_target.name,
-            receipt_identity,
-            "canonical pressure-pilot receipt",
         )
         _require_same_directory(
             acceptance_root,
@@ -1594,7 +1737,7 @@ def publish_pressure_pilot_bundle(
             "receipt_path": str(receipt_target),
             "receipt_sha256": receipt_sha256,
         }
-        _publish_publication_seal_at(
+        seal_identity = _publish_publication_seal_at(
             acceptance_descriptor,
             publication_descriptor,
             receipt_target.name,
@@ -1602,10 +1745,59 @@ def publish_pressure_pilot_bundle(
             receipt_identity,
         )
         seal_committed = True
+        _require(
+            guard_identity is not None,
+            "pressure-pilot publication guard identity is absent",
+        )
+        _disarm_publication_guard_at(
+            publication_descriptor, receipt_target.name, guard_identity
+        )
+        guard_armed = False
+        guard_identity = None
+        _require_same_directory(
+            transaction_anchor,
+            transaction_descriptor,
+            "stable publication transaction anchor",
+        )
+        _require_same_directory(
+            parent, publication_descriptor, "authorized PIC publication root"
+        )
+        _require_same_directory(
+            acceptance_root,
+            acceptance_descriptor,
+            "authorized PIC publication acceptance root",
+        )
+        _require_same_file_at(
+            publication_descriptor,
+            receipt_target.name,
+            receipt_identity,
+            "canonical pressure-pilot receipt",
+        )
+        _require_same_file_at(
+            acceptance_descriptor,
+            _publication_seal_name(receipt_target.name),
+            seal_identity,
+            "canonical pressure-pilot receipt durable success seal",
+        )
+        _require_publication_guard_absent_at(
+            publication_descriptor,
+            receipt_target.name,
+            "canonical pressure-pilot receipt",
+        )
         return publication_result
-    except BaseException:
-        if receipt_renamed and receipt_identity is not None:
+    except BaseException as publication_error:
+        if (
+            seal_committed
+            and receipt_identity is not None
+            and seal_identity is not None
+        ):
             try:
+                _fsync_descriptor(publication_descriptor)
+                _require_same_directory(
+                    transaction_anchor,
+                    transaction_descriptor,
+                    "stable publication transaction anchor",
+                )
                 _require_same_directory(
                     parent, publication_descriptor, "authorized PIC publication root"
                 )
@@ -1614,13 +1806,17 @@ def publish_pressure_pilot_bundle(
                     acceptance_descriptor,
                     "authorized PIC publication acceptance root",
                 )
-                _require_publication_seal_at(
-                    acceptance_descriptor,
+                _require_same_file_at(
                     publication_descriptor,
                     receipt_target.name,
-                    receipt_payload,
                     receipt_identity,
                     "canonical pressure-pilot receipt",
+                )
+                _require_same_file_at(
+                    acceptance_descriptor,
+                    _publication_seal_name(receipt_target.name),
+                    seal_identity,
+                    "canonical pressure-pilot receipt durable success seal",
                 )
                 _require_publication_guard_absent_at(
                     publication_descriptor,
@@ -1630,85 +1826,43 @@ def publish_pressure_pilot_bundle(
             except BaseException:
                 pass
             else:
-                seal_committed = True
+                guard_armed = False
                 return publication_result
-        rollback_error: BaseException | None = None
-        if receipt_renamed:
+        if guard_armed or renamed or result_renamed or receipt_renamed:
             try:
-                _ensure_publication_guard_at(
+                _require_same_directory(
+                    transaction_anchor,
+                    transaction_descriptor,
+                    "stable publication transaction anchor",
+                )
+                guard_identity = _ensure_publication_guard_at(
                     publication_descriptor, receipt_target.name
                 )
                 guard_armed = True
             except BaseException as error:
-                rollback_error = error
-        for published, name, rollback, identity in (
-            (
-                receipt_renamed,
-                receipt_target.name,
-                _rollback_published_file,
-                receipt_identity,
-            ),
-            (
-                result_renamed,
-                result_target.name,
-                _rollback_published_file,
-                result_identity,
-            ),
-            (renamed, target.name, _rollback_published_directory, staging_descriptor),
-        ):
-            if not published:
-                continue
-            try:
-                _require(identity is not None, "pressure-pilot rollback identity is absent")
-                rollback(publication_descriptor, name, identity)
-            except BaseException as error:
-                rollback_error = rollback_error or error
-        if not renamed:
-            _cleanup_anchored_tree(
-                publication_descriptor,
-                staging.name,
-                staging_descriptor,
-                "pressure-pilot staging tree",
-            )
-        if not receipt_renamed:
-            _cleanup_anchored_file(
-                publication_descriptor,
-                receipt_staging.name,
-                "pressure-pilot staged receipt",
-            )
-        if not result_renamed:
-            _cleanup_anchored_file(
-                publication_descriptor,
-                result_staging.name,
-                "pressure-pilot staged result",
-            )
-        if guard_armed and rollback_error is None:
-            try:
-                _disarm_publication_guard_at(
-                    publication_descriptor, receipt_target.name
-                )
-                guard_armed = False
-            except BaseException as error:
-                rollback_error = error
-        if rollback_error is not None:
+                raise PressurePilotPublicationError(
+                    "pressure-pilot public artifacts require reviewed reconciliation "
+                    "and the fail-closed guard could not be assured"
+                ) from error
             raise PressurePilotPublicationError(
-                "cannot withdraw invalid pressure-pilot public artifact"
-            ) from rollback_error
+                "pressure-pilot public artifacts retained under fail-closed guard; "
+                f"reviewed reconciliation required: {publication_error}"
+            ) from publication_error
         raise
     finally:
-        for descriptor in (
-            staging_descriptor,
-            acceptance_descriptor,
-            publication_descriptor,
-        ):
-            try:
-                os.close(descriptor)
-            except OSError:
-                if not seal_committed:
-                    raise
+        close_error = _close_descriptors(
+            (
+                staging_descriptor,
+                acceptance_descriptor,
+                publication_descriptor,
+                transaction_descriptor,
+            )
+        )
+        if close_error is not None and not seal_committed:
+            raise close_error
 
 
-def verify_published_pressure_pilot_receipt(
+def _verify_published_pressure_pilot_receipt(
     receipt_path: str | Path,
     *,
     authorized_pic_root: Path = AUTHORIZED_PIC_ROOT,
@@ -1908,6 +2062,20 @@ def verify_published_pressure_pilot_receipt(
             os.close(bundle_descriptor)
         os.close(acceptance_descriptor)
         os.close(publication_descriptor)
+
+
+def verify_published_pressure_pilot_receipt(
+    receipt_path: str | Path,
+    *,
+    authorized_pic_root: Path = AUTHORIZED_PIC_ROOT,
+) -> dict[str, object]:
+    """Re-audit one externally consumable retained publication receipt."""
+    return _verify_published_pressure_pilot_receipt(
+        receipt_path,
+        authorized_pic_root=authorized_pic_root,
+        allow_publication_guard=False,
+        require_publication_seal=True,
+    )
 
 
 def consume_published_pressure_pilot_bundle(
