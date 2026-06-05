@@ -3349,7 +3349,9 @@ def test_cgl_lf_stage_i_recovers_ambiguous_atomic_submit(tmp_path, monkeypatch):
     assert paths["reservations"].read_text() == before_reservations
 
 
-def test_cgl_lf_stage_i_cancels_only_terminal_never_started_submitted_job(tmp_path):
+def test_cgl_lf_stage_i_cancels_only_terminal_never_started_submitted_job(
+    tmp_path, monkeypatch
+):
     spec = importlib.util.spec_from_file_location(
         "cgl_lf_stage_i_submitted_cancel_test", PAPER_STAGE_I_TOOL
     )
@@ -3539,6 +3541,28 @@ def test_cgl_lf_stage_i_cancels_only_terminal_never_started_submitted_job(tmp_pa
     assert cancelled["cancellation"]["scheduler"]["state"] == "CANCELLED"
     assert json.loads(paths["reservations"].read_text())[0]["state"] == "cancelled"
     assert not stage_i.pending_transaction_paths(paths)
+    with monkeypatch.context() as context:
+        context.setattr(
+            stage_i,
+            "authenticate_prepared_execution",
+            lambda *_args, **_kwargs: (_ for _ in ()).throw(
+                AssertionError("cancelled-submitted reconcile used launch authentication")
+            ),
+        )
+        report = stage_i.reconcile_report(tmp_path / "accepted")
+    assert report["consistent"]
+    assert report["counts"]["active_reservations"] == 0
+
+    audit = stage_i.submitted_cancellation_evidence_paths(
+        paths, "12345"
+    )["publication_audit"]
+    audit.chmod(0o644)
+    report = stage_i.reconcile_report(tmp_path / "accepted")
+    assert not report["consistent"]
+    assert any(
+        "submitted cancellation evidence drift" in issue
+        for issue in report["issues"]
+    )
 
     paths, manifest_path, args = fixture(
         tmp_path / "running", scheduler_state="CANCELLED by 1234", elapsed="1"
@@ -3589,6 +3613,123 @@ def test_cgl_lf_stage_i_cancels_only_terminal_never_started_submitted_job(tmp_pa
     with pytest.raises(ValueError, match="submitted manifest snapshot"):
         stage_i.cancel_submitted(args)
     assert json.loads(manifest_path.read_text())["state"] == "submitted"
+
+    paths, manifest_path, args = fixture(tmp_path / "job-id-mismatch")
+    assert stage_i.cancel_submitted(args) == 0
+    reservations = json.loads(paths["reservations"].read_text())
+    reservations[0]["job_id"] = "99999"
+    stage_i.write_json(paths["reservations"], reservations)
+    report = stage_i.reconcile_report(tmp_path / "job-id-mismatch")
+    assert not report["consistent"]
+    assert any("reservation job ID differs from manifest" in issue
+               for issue in report["issues"])
+
+    paths, manifest_path, args = fixture(tmp_path / "job-id-erasure")
+    assert stage_i.cancel_submitted(args) == 0
+    manifest = json.loads(manifest_path.read_text())
+    manifest.pop("job_id")
+    stage_i.write_json(manifest_path, manifest)
+    reservations = json.loads(paths["reservations"].read_text())
+    reservations[0].pop("job_id")
+    stage_i.write_json(paths["reservations"], reservations)
+    report = stage_i.reconcile_report(tmp_path / "job-id-erasure")
+    assert not report["consistent"]
+    assert any(
+        "submitted cancellation evidence drift" in issue
+        for issue in report["issues"]
+    )
+
+    root = tmp_path / "prepared-cancel"
+    paths, manifest_path, _ = fixture(root)
+    manifest = json.loads(manifest_path.read_text())
+    manifest["state"] = "prepared"
+    manifest.pop("job_id")
+    stage_i.write_json(manifest_path, manifest)
+    reservations = json.loads(paths["reservations"].read_text())
+    reservations[0]["state"] = "prepared"
+    reservations[0].pop("job_id")
+    reservations[0]["execution_intent_sha256"] = (
+        stage_i.execution_intent_sha256(manifest)
+    )
+    stage_i.write_json(paths["reservations"], reservations)
+    with monkeypatch.context() as context:
+        context.setattr(
+            stage_i, "require_reconciled_store_consistency", lambda *_args: None
+        )
+        context.setattr(
+            stage_i, "authenticate_prepared_execution", lambda *_args, **_kwargs: None
+        )
+        assert stage_i.cancel(SimpleNamespace(
+            manifest=str(manifest_path),
+            allow_local_root=True,
+            notes="cancel ordinary prepared packet",
+        )) == 0
+        context.setattr(
+            stage_i,
+            "validate_submitted_cancellation_metadata",
+            lambda *_args: (_ for _ in ()).throw(
+                AssertionError("prepared cancellation treated as submitted cancellation")
+            ),
+        )
+        report = stage_i.reconcile_report(root)
+    assert report["consistent"], report["issues"]
+    assert report["counts"]["active_reservations"] == 0
+
+    root = tmp_path / "canonical-erasure"
+    paths, manifest_path, args = fixture(root)
+    assert stage_i.cancel_submitted(args) == 0
+    manifest = json.loads(manifest_path.read_text())
+    manifest.pop("job_id")
+    manifest.pop("cancellation")
+    stage_i.write_json(manifest_path, manifest)
+    reservations = json.loads(paths["reservations"].read_text())
+    reservations[0].pop("job_id")
+    stage_i.write_json(paths["reservations"], reservations)
+    with monkeypatch.context() as context:
+        context.setattr(stage_i, "DEFAULT_ROOT", root.resolve())
+        context.setitem(
+            stage_i.CANONICAL_SOURCE_BUNDLE_RECOVERY,
+            "manifest_relative",
+            str(manifest_path.relative_to(root)),
+        )
+        report = stage_i.reconcile_report(root)
+    assert not report["consistent"]
+    assert any(
+        "submitted cancellation evidence drift" in issue
+        for issue in report["issues"]
+    )
+
+
+def test_cgl_lf_stage_i_reconcile_holds_root_lock(tmp_path, monkeypatch):
+    spec = importlib.util.spec_from_file_location(
+        "cgl_lf_stage_i_locked_reconcile_test", PAPER_STAGE_I_TOOL
+    )
+    assert spec is not None and spec.loader is not None
+    stage_i = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = stage_i
+    spec.loader.exec_module(stage_i)
+
+    events = []
+
+    class Lock:
+        def __enter__(self):
+            events.append("lock-enter")
+
+        def __exit__(self, *_args):
+            events.append("lock-exit")
+
+    monkeypatch.setattr(
+        stage_i, "canonical_root_lock", lambda _root: Lock()
+    )
+    monkeypatch.setattr(
+        stage_i,
+        "reconcile_report",
+        lambda _root: events.append("report") or {"consistent": True},
+    )
+    assert stage_i.reconcile(
+        SimpleNamespace(root=str(tmp_path), allow_local_root=True)
+    ) == 0
+    assert events == ["lock-enter", "report", "lock-exit"]
 
 
 def test_cgl_lf_stage_i_panel_schema_pins_reference_inventory_and_admission(

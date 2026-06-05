@@ -6335,7 +6335,7 @@ def reconcile_report(root: Path) -> dict[str, object]:
                 f"{manifest_path}: {error}"
             )
         if (
-            reservation.get("state") in {"submitted", "recorded"}
+            reservation.get("state") in {"submitted", "recorded", "cancelled"}
             and reservation.get("job_id") != manifest.get("job_id")
         ):
             issues.append(f"reservation job ID differs from manifest: {manifest_path}")
@@ -6367,7 +6367,41 @@ def reconcile_report(root: Path) -> dict[str, object]:
         state = manifest.get("state")
         if state not in {"prepared", "submitted", "recorded", "cancelled"}:
             issues.append(f"manifest has invalid state {state!r}: {manifest_path}")
-        if state in {"prepared", "submitted", "recorded"}:
+        cancellation = manifest.get("cancellation")
+        submitted_cancellation_fields = {
+            "scheduler",
+            "scheduler_evidence",
+            "queue_absence_evidence",
+            "recovery_authorization",
+        }
+        canonical_recovery_manifest = (
+            paths["root"].resolve() == DEFAULT_ROOT.resolve()
+            and manifest_path
+            == (
+                paths["root"]
+                / str(CANONICAL_SOURCE_BUNDLE_RECOVERY["manifest_relative"])
+            ).resolve()
+        )
+        submitted_cancellation_candidate = (
+            state == "cancelled"
+            and (
+                canonical_recovery_manifest
+                or manifest.get("job_id") is not None
+                or any(match.get("job_id") is not None for match in matches)
+                or (
+                    isinstance(cancellation, dict)
+                    and bool(submitted_cancellation_fields.intersection(cancellation))
+                )
+            )
+        )
+        if submitted_cancellation_candidate:
+            try:
+                validate_submitted_cancellation_metadata(paths, manifest_path, manifest)
+            except (OSError, ValueError, KeyError, TypeError) as error:
+                issues.append(
+                    f"submitted cancellation evidence drift for {manifest_path}: {error}"
+                )
+        elif state in {"prepared", "submitted", "recorded"}:
             try:
                 command = manifest.get("command", {})
                 if (
@@ -6493,6 +6527,7 @@ def reconcile_report(root: Path) -> dict[str, object]:
     }
 
 
+@locked_root_action
 def reconcile(args: argparse.Namespace) -> int:
     """Print a read-only reservations, ledger, and manifest consistency report."""
 
