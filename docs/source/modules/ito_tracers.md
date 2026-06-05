@@ -5,7 +5,8 @@ GitHub Pages integration checklist:
 3. Add a row for this page under Physics Modules in docs/source/modules/index.md.
 4. Add a short link from docs/source/modules/particles.md and, optionally,
    docs/source/modules/outputs.md.
-5. Rebuild with: cd docs && make html.
+5. Copy docs/source/modules/figures/ito_tracers_*.png with this page.
+6. Rebuild with: cd docs && make html.
 -->
 
 # Module: Second-Moment Itô Mass-Flux Tracers
@@ -59,6 +60,38 @@ The stored mass flux is accumulated with the weights that contribute to the
 final `rk1`, `rk2`, or `rk3` state, after AMR flux correction. This differs from
 a simple arithmetic average of stage fluxes and is required for the Itô moments
 to match the final finite-volume update.
+
+## Behavior in 1D and 2D Tests
+
+The particle module requires a 2D or 3D mesh, so the 1D-style sheet test uses a
+`128 x 4` mesh with fluid velocity and stochastic transport confined to `x1`.
+It seeds 4096 tracers in one `x1` cell and follows them for 64 RK2 steps. The
+individual trajectories are continuous, while their ensemble mean and variance
+follow the first two moments of the underlying MC jump process. The measured
+final mean displacement is `0.05616`, compared with the expected `0.05625`.
+
+![Ito-2 1D-style sheet trajectories and final displacement distribution](figures/ito_tracers_1d_sheet.png)
+
+The 2D cloud test seeds 4096 tracers in a compact circular region on a `64 x 64`
+mesh and advects them diagonally with `(v1, v2) = (0.45, 0.25)` for 48 RK2
+steps. The left panel shows the initial cell-centered cloud and its continuous,
+diffused final state. The right panel resolves sample paths against the mesh
+lines; unlike MC tracers, the Itô-2 particles do not remain restricted to cell
+centers or make discrete cell-to-cell jumps.
+
+![Ito-2 2D cloud transport and continuous sample paths](figures/ito_tracers_2d_cloud.png)
+
+The figures are generated from `inputs/particles/ito_tracers_1d_sheet.athinput`
+and `inputs/particles/ito_tracers_2d_cloud.athinput`:
+
+```bash
+./build/src/athena -i inputs/particles/ito_tracers_1d_sheet.athinput -d run_ito_1d
+./build/src/athena -i inputs/particles/ito_tracers_2d_cloud.athinput -d run_ito_2d
+
+python scripts/plot_ito_tracer_figures.py \
+  --one-d run_ito_1d/prtcl_thermo_history/ito_tracers_1d_sheet.prtcl_thermo_history.thp \
+  --two-d run_ito_2d/prtcl_thermo_history/ito_tracers_2d_cloud.prtcl_thermo_history.thp
+```
 
 ## Quick Start
 
@@ -147,4 +180,5 @@ rejection, and the pre-existing MC tracer Hydro and MPI/AMR inputs.
 | `src/particles/particles_lagrangian_mc.cpp` | Shared seeding, restart, and post-AMR remapping. |
 | `src/hydro/hydro_fluxes.cpp`, `src/mhd/mhd_fluxes.cpp` | Final-RK-weighted mass-flux accumulation. |
 | `inputs/particles/ito_tracers*.athinput` | Uniform-flow and AMR smoke inputs. |
+| `scripts/plot_ito_tracer_figures.py` | Reproducible 1D-style and 2D behavior figures. |
 | `tst/test_suite/particles/test_particles_ito_*.py` | CPU and MPI regression coverage. |

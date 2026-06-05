@@ -1,0 +1,86 @@
+# AthenaK visualization input for a 2D Ito-2 tracer cloud
+
+<comment>
+problem   = Compact Ito-2 tracer cloud under diagonal advection
+
+<job>
+basename  = ito_tracers_2d_cloud
+
+<mesh>
+nghost    = 2
+nx1       = 64
+x1min     = 0.0
+x1max     = 1.0
+ix1_bc    = periodic
+ox1_bc    = periodic
+
+nx2       = 64
+x2min     = 0.0
+x2max     = 1.0
+ix2_bc    = periodic
+ox2_bc    = periodic
+
+nx3       = 1
+x3min     = 0.0
+x3max     = 1.0
+ix3_bc    = periodic
+ox3_bc    = periodic
+
+<meshblock>
+nx1       = 32
+nx2       = 32
+nx3       = 1
+
+<time>
+evolution  = dynamic
+integrator = rk2
+cfl_number = 0.3
+nlim       = 48
+tlim       = 1.0
+ndiag      = 12
+
+<hydro>
+eos             = isothermal
+iso_sound_speed = 1.0
+reconstruct     = plm
+rsolver         = llf
+
+<particles>
+particle_type   = lagrangian_ito
+pusher          = ito2
+ito_order       = 2
+tracer_kick_pdf = uniform
+random_seed     = 67890
+track_variables = v1, v2
+
+<tracer_seed1>
+id              = 1
+start_time      = 0.0
+end_time        = 0.0
+cadence         = -1.0
+count_per_event = 4096
+weight          = mass
+region          = sphere
+center1         = 0.30
+center2         = 0.35
+center3         = 0.50
+radius          = 0.035
+seed            = 112233
+
+<problem>
+pgen_name = linear_wave
+wave_flag = 0
+amp       = 0.0
+dens      = 1.0
+pgas      = 1.0
+vx0       = 0.45
+vy0       = 0.25
+vz0       = 0.0
+along_x1  = true
+along_x2  = false
+along_x3  = false
+
+<output1>
+file_type = prtcl_thermo_history
+dcycle    = 1
+variables = v1, v2
