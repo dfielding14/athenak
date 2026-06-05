@@ -25,10 +25,15 @@
 class IOWrapper;
 
 // constants that enumerate ParticlesPusher options
-enum class ParticlesPusher {drift, leap_frog, lagrangian_tracer, lagrangian_mc};
+enum class ParticlesPusher {drift, leap_frog, lagrangian_tracer, lagrangian_mc, ito2};
 
 // constants that enumerate ParticleTypes
-enum class ParticleType {cosmic_ray, lagrangian_mc};
+enum class ParticleType {cosmic_ray, lagrangian_mc, lagrangian_ito};
+
+enum ItoCoefficientIndex {
+  ITO_U1=0, ITO_U2=1, ITO_U3=2, ITO_KAPPA1=3, ITO_KAPPA2=4, ITO_KAPPA3=5,
+  ITO_NCOEFF=6
+};
 
 enum class TracerSeedWeight {mass, volume};
 enum class TracerSeedRegion {all, box, sphere, slab};
@@ -65,6 +70,14 @@ struct TracerSeedSchedule {
 //  \brief container to hold TaskIDs of all particles tasks
 
 struct ParticlesTaskIDs {
+  TaskID ito_build;
+  TaskID ito_restrict;
+  TaskID ito_irecv;
+  TaskID ito_send;
+  TaskID ito_recv;
+  TaskID ito_crecv;
+  TaskID ito_csend;
+  TaskID ito_prolong;
   TaskID push;
   TaskID newgid;
   TaskID count;
@@ -100,11 +113,15 @@ class Particles {
   Real dtnew;
   std::int64_t random_seed = 0;
   std::int64_t next_tracer_tag = 0;
+  DvceArray5D<Real> ito_coeff;
+  DvceArray5D<Real> coarse_ito_coeff;
+  DvceArray1D<int> ito_invalid;
 
   ParticlesPusher pusher;
 
   // Boundary communication buffers and functions for particles
   ParticlesBoundaryValues *pbval_part;
+  MeshBoundaryValuesCC *pbval_ito = nullptr;
 
   // container to hold names of TaskIDs
   ParticlesTaskIDs id;
@@ -123,12 +140,23 @@ class Particles {
   TaskStatus AdjustMeshRefinement(Driver *pdriver, int stage);
   TaskStatus SeedDueTracers(Driver *pdriver, int stage);
   TaskStatus PushLagrangianMC(Driver *pdriver, int stage);
+  TaskStatus BuildItoCoefficients(Driver *pdriver, int stage);
+  TaskStatus RestrictItoCoefficients(Driver *pdriver, int stage);
+  TaskStatus InitRecvItoCoefficients(Driver *pdriver, int stage);
+  TaskStatus SendItoCoefficients(Driver *pdriver, int stage);
+  TaskStatus RecvItoCoefficients(Driver *pdriver, int stage);
+  TaskStatus ClearRecvItoCoefficients(Driver *pdriver, int stage);
+  TaskStatus ClearSendItoCoefficients(Driver *pdriver, int stage);
+  TaskStatus ProlongateItoCoefficients(Driver *pdriver, int stage);
+  TaskStatus PushIto2(Driver *pdriver, int stage);
   void SeedInitialTracers();
   void RemapAfterMeshRefinement();
   void WriteRestartData(IOWrapper &resfile, bool single_file_per_rank);
   void ReadRestartData(IOWrapper &resfile, bool single_file_per_rank);
   int GetLagrangianMCScalarCount() const;
   bool IsLagrangianMC() const {return particle_type == ParticleType::lagrangian_mc;}
+  bool IsIto2() const {return particle_type == ParticleType::lagrangian_ito;}
+  bool IsFluxTracer() const {return IsLagrangianMC() || IsIto2();}
 
  private:
   MeshBlockPack* pmy_pack;  // ptr to MeshBlockPack containing this Particles

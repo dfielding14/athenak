@@ -29,11 +29,28 @@ void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> t
   TaskID none(0);
 
   std::shared_ptr<TaskList> list = tl["before_timeintegrator"];
-  if (pusher == ParticlesPusher::lagrangian_mc) {
+  if (IsFluxTracer()) {
     list = tl["after_timeintegrator"];
   }
 
-  id.push   = list->AddTask(&Particles::Push, this, none);
+  TaskID push_dependency = none;
+  if (IsIto2()) {
+    id.ito_build = list->AddTask(&Particles::BuildItoCoefficients, this, none);
+    id.ito_restrict = list->AddTask(&Particles::RestrictItoCoefficients, this,
+                                    id.ito_build);
+    id.ito_irecv = list->AddTask(&Particles::InitRecvItoCoefficients, this,
+                                 id.ito_restrict);
+    id.ito_send = list->AddTask(&Particles::SendItoCoefficients, this, id.ito_irecv);
+    id.ito_recv = list->AddTask(&Particles::RecvItoCoefficients, this, id.ito_send);
+    id.ito_crecv = list->AddTask(&Particles::ClearRecvItoCoefficients, this, id.ito_recv);
+    id.ito_csend = list->AddTask(&Particles::ClearSendItoCoefficients, this,
+                                 id.ito_crecv);
+    id.ito_prolong = list->AddTask(&Particles::ProlongateItoCoefficients, this,
+                                   id.ito_csend);
+    push_dependency = id.ito_prolong;
+  }
+
+  id.push   = list->AddTask(&Particles::Push, this, push_dependency);
   id.newgid = list->AddTask(&Particles::NewGID, this, id.push);
   id.count  = list->AddTask(&Particles::SendCnt, this, id.newgid);
   id.irecv  = list->AddTask(&Particles::InitRecv, this, id.count);
@@ -41,9 +58,11 @@ void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> t
   id.recvp  = list->AddTask(&Particles::RecvP, this, id.sendp);
   id.crecv  = list->AddTask(&Particles::ClearRecv, this, id.recvp);
   id.csend  = list->AddTask(&Particles::ClearSend, this, id.crecv);
-  if (pusher == ParticlesPusher::lagrangian_mc) {
+  if (IsLagrangianMC()) {
     id.mradj  = list->AddTask(&Particles::AdjustMeshRefinement, this, id.csend);
     id.seed   = list->AddTask(&Particles::SeedDueTracers, this, id.mradj);
+  } else if (IsIto2()) {
+    id.seed   = list->AddTask(&Particles::SeedDueTracers, this, id.csend);
   }
 
   return;
@@ -121,7 +140,7 @@ TaskStatus Particles::ClearRecv(Driver *pdrive, int stage) {
 //----------------------------------------------------------------------------------------
 
 TaskStatus Particles::SeedDueTracers(Driver *pdrive, int stage) {
-  if (particle_type == ParticleType::lagrangian_mc) {
+  if (IsFluxTracer()) {
     SeedTracersAtTime(pmy_pack->pmesh->time + pmy_pack->pmesh->dt, false);
   }
   return TaskStatus::complete;

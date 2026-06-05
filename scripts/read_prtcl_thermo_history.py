@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read AthenaK lagrangian_mc particle thermodynamic history files."""
+"""Read AthenaK flux-tracer particle thermodynamic history files."""
 
 from __future__ import annotations
 
@@ -72,7 +72,15 @@ def read_history(path: str | Path) -> dict[str, np.ndarray]:
             if len(prefix) != prefix_size:
                 raise ValueError("truncated block header")
             if version == 1:
-                magic, block_version, nrecords, block_nscalars, int_per, real_per, cycle = (
+                (
+                    magic,
+                    block_version,
+                    nrecords,
+                    block_nscalars,
+                    int_per,
+                    real_per,
+                    cycle,
+                ) = (
                     BLOCK_PREFIX_V1.unpack(prefix)
                 )
                 if block_nscalars != nscalars:
@@ -81,8 +89,10 @@ def read_history(path: str | Path) -> dict[str, np.ndarray]:
                 magic, block_version, nrecords, int_per, real_per, cycle = (
                     BLOCK_PREFIX_V2.unpack(prefix)
                 )
-            time = struct.unpack("d" if real_size == 8 else "f",
-                                 _read_exact(handle, real_size, "block time"))[0]
+            struct.unpack(
+                "d" if real_size == 8 else "f",
+                _read_exact(handle, real_size, "block time"),
+            )
             if not magic.rstrip(b"\0").startswith(b"ATHKTHPBLK"):
                 raise ValueError("unrecognized block magic")
             if block_version != version:

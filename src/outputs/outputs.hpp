@@ -370,7 +370,7 @@ class ParticleVTKOutput : public BaseTypeOutput {
 
 //----------------------------------------------------------------------------------------
 //! \class ParticleThermoHistoryOutput
-//  \brief append-only binary thermodynamic history for lagrangian_mc particles
+//  \brief append-only binary thermodynamic history for flux-tracer particles
 
 class ParticleThermoHistoryOutput : public BaseTypeOutput {
  public:
@@ -381,6 +381,8 @@ class ParticleThermoHistoryOutput : public BaseTypeOutput {
   int npout_thisrank;
   int npout_total;
   Real tracer_gamma;
+  Real tracer_iso_cs;
+  bool tracer_is_ideal;
   std::vector<particles::TracerField> tracer_fields;
   std::vector<std::string> tracer_field_names;
   HostArray2D<Real> outpart_rdata;

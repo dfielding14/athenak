@@ -63,7 +63,7 @@ enum BFieldIndex {IBX=0, IBY=1, IBZ=2, NMAG=3};
 enum MetricIndex {I00=0, I01=1, I02=2, I03=3, I11=4, I12=5, I13=6, I22=7, I23=8, I33=9,
                   NMETRIC=10};
 // array indices for particle arrays.  IPX/IPY/IPZ are also the position slots used by
-// lagrangian_mc particles so existing particle boundary and VTK paths can read positions.
+// flux-tracer particles so existing particle boundary and VTK paths can read positions.
 enum ParticlesIndex {PGID=0, PTAG=1, IPX=0, IPVX=1, IPY=2, IPVY=3, IPZ=4, IPVZ=5};
 enum LagrangianMCIntIndex {PLASTMOVE=2, PLASTLEVEL=3, PSEEDID=4};
 enum LagrangianMCRealIndex {LMCX=IPX, LMCY=IPY, LMCZ=IPZ, LMC_CREATE_TIME=6,

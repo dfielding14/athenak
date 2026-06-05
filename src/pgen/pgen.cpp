@@ -616,11 +616,11 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
     myoffset = offset_myrank;
   }
 
-  if (pm->pmb_pack->ppart != nullptr && pm->pmb_pack->ppart->IsLagrangianMC()) {
+  if (pm->pmb_pack->ppart != nullptr && pm->pmb_pack->ppart->IsFluxTracer()) {
 #if MPI_PARALLEL_ENABLED
     if (!single_file_per_rank && global_variable::nranks > 1) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "lagrangian_mc particle restarts currently require "
+                << std::endl << "flux tracer particle restarts currently require "
                 << "<output>/single_file_per_rank=true in MPI runs" << std::endl;
       std::exit(EXIT_FAILURE);
     }

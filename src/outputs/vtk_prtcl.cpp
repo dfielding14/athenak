@@ -254,7 +254,7 @@ void ParticleVTKOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     header_offset += pm->nprtcl_total*datasize;
   }
 
-  if (pm->pmb_pack->ppart->IsLagrangianMC()) {
+  if (pm->pmb_pack->ppart->IsFluxTracer()) {
     std::stringstream msg;
     msg << std::endl << "SCALARS creation_time float" << std::endl
         << "LOOKUP_TABLE default" << std::endl;

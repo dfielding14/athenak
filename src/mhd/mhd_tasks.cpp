@@ -47,10 +47,10 @@ void MHD::AssembleMHDTasks(std::map<std::string, std::shared_ptr<TaskList>> tl) 
   // assemble "stagen" task list
   id.copyu     = tl["stagen"]->AddTask(&MHD::CopyCons, this, none);
   id.flux      = tl["stagen"]->AddTask(&MHD::Fluxes, this, id.copyu);
-  id.saveflx   = tl["stagen"]->AddTask(&MHD::SaveFlux, this, id.flux);
-  id.sendf     = tl["stagen"]->AddTask(&MHD::SendFlux, this, id.saveflx);
+  id.sendf     = tl["stagen"]->AddTask(&MHD::SendFlux, this, id.flux);
   id.recvf     = tl["stagen"]->AddTask(&MHD::RecvFlux, this, id.sendf);
-  id.rkupdt    = tl["stagen"]->AddTask(&MHD::RKUpdate, this, id.recvf);
+  id.saveflx   = tl["stagen"]->AddTask(&MHD::SaveFlux, this, id.recvf);
+  id.rkupdt    = tl["stagen"]->AddTask(&MHD::RKUpdate, this, id.saveflx);
   id.srctrms   = tl["stagen"]->AddTask(&MHD::MHDSrcTerms, this, id.rkupdt);
   id.sendu_oa  = tl["stagen"]->AddTask(&MHD::SendU_OA, this, id.srctrms);
   id.recvu_oa  = tl["stagen"]->AddTask(&MHD::RecvU_OA, this, id.sendu_oa);

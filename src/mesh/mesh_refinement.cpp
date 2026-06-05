@@ -614,7 +614,7 @@ void MeshRefinement::RedistAndRefineMeshBlocks(ParameterInput *pin, int nnew, in
   pm->pmb_pack->AddMeshBlocks(pin);
   pm->pmb_pack->AddCoordinates(pin);
   pm->pmb_pack->pmb->SetNeighbors(pm->ptree, pm->rank_eachmb);
-  if (pm->pmb_pack->ppart != nullptr && pm->pmb_pack->ppart->IsLagrangianMC()) {
+  if (pm->pmb_pack->ppart != nullptr && pm->pmb_pack->ppart->IsFluxTracer()) {
     pm->pmb_pack->ppart->RemapAfterMeshRefinement();
   }
 

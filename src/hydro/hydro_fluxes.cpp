@@ -367,8 +367,7 @@ TaskStatus Hydro::SaveFlux(Driver *pdrive, int stage) {
   auto flxidn2 = uflxidnsaved.x2f;
   auto flxidn3 = uflxidnsaved.x3f;
 
-  int nstages = pdrive->nexp_stages;
-  Real dtfactor = pmy_pack->pmesh->dt/static_cast<Real>(nstages);
+  Real dtfactor = pmy_pack->pmesh->dt*pdrive->FinalFluxWeight(stage);
 
   par_for("save_hydro_idn_flx1", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie+1,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {

@@ -4,7 +4,7 @@
 // Licensed under the 3-clause BSD License, see LICENSE file for details
 //========================================================================================
 //! \file tracer_fields.cpp
-//! \brief parser and host-side evaluators for lagrangian_mc tracer fields
+//! \brief parser and host-side evaluators for flux-tracer fields
 
 #include <algorithm>
 #include <cctype>
@@ -49,7 +49,7 @@ bool IsMHDOnly(particles::TracerFieldKind kind) {
 }
 
 void CheckAvailability(const particles::TracerField &field, bool has_mhd, int nscalars,
-                       const std::string &context) {
+                       bool is_ideal, const std::string &context) {
   if (IsMHDOnly(field.kind) && !has_mhd) {
     FatalTracerField(context, "field '" + field.name + "' requires MHD");
   }
@@ -57,6 +57,10 @@ void CheckAvailability(const particles::TracerField &field, bool has_mhd, int ns
       (field.scalar_index < 0 || field.scalar_index >= nscalars)) {
     FatalTracerField(context, "field '" + field.name + "' is out of range for nscalars=" +
                               std::to_string(nscalars));
+  }
+  if (!is_ideal && (field.kind == particles::TracerFieldKind::entropy ||
+                    field.kind == particles::TracerFieldKind::internal_energy)) {
+    FatalTracerField(context, "field '" + field.name + "' requires an ideal-gas EOS");
   }
 }
 
@@ -73,7 +77,8 @@ void AppendUnique(std::vector<particles::TracerField> &fields,
 namespace particles {
 
 TracerField ParseTracerFieldName(const std::string &field_name, bool has_mhd,
-                                 int nscalars, const std::string &context) {
+                                 int nscalars, bool is_ideal,
+                                 const std::string &context) {
   const std::string name = Lower(field_name);
   TracerField field;
 
@@ -127,12 +132,12 @@ TracerField ParseTracerFieldName(const std::string &field_name, bool has_mhd,
     FatalTracerField(context, "unknown field '" + field_name + "'");
   }
 
-  CheckAvailability(field, has_mhd, nscalars, context);
+  CheckAvailability(field, has_mhd, nscalars, is_ideal, context);
   return field;
 }
 
 std::vector<TracerField> ParseTracerFieldList(const std::string &field_list,
-                                              bool has_mhd, int nscalars,
+                                              bool has_mhd, int nscalars, bool is_ideal,
                                               const std::string &context) {
   std::string normalized = Lower(field_list);
   std::replace(normalized.begin(), normalized.end(), ',', ' ');
@@ -142,18 +147,27 @@ std::vector<TracerField> ParseTracerFieldList(const std::string &field_list,
 
   while (stream >> token) {
     if (token == "default") {
-      AppendUnique(fields, ParseTracerFieldName("density", has_mhd, nscalars, context));
-      AppendUnique(fields, ParseTracerFieldName("pressure", has_mhd, nscalars, context));
+      AppendUnique(fields, ParseTracerFieldName("density", has_mhd, nscalars, is_ideal,
+                                                context));
+      AppendUnique(fields, ParseTracerFieldName("pressure", has_mhd, nscalars, is_ideal,
+                                                context));
       AppendUnique(fields, ParseTracerFieldName("temperature", has_mhd, nscalars,
+                                                is_ideal, context));
+      if (is_ideal) {
+        AppendUnique(fields, ParseTracerFieldName("entropy", has_mhd, nscalars, is_ideal,
+                                                  context));
+        AppendUnique(fields, ParseTracerFieldName("internal_energy", has_mhd, nscalars,
+                                                  is_ideal, context));
+      }
+      AppendUnique(fields, ParseTracerFieldName("v1", has_mhd, nscalars, is_ideal,
                                                 context));
-      AppendUnique(fields, ParseTracerFieldName("entropy", has_mhd, nscalars, context));
-      AppendUnique(fields, ParseTracerFieldName("internal_energy", has_mhd, nscalars,
+      AppendUnique(fields, ParseTracerFieldName("v2", has_mhd, nscalars, is_ideal,
                                                 context));
-      AppendUnique(fields, ParseTracerFieldName("v1", has_mhd, nscalars, context));
-      AppendUnique(fields, ParseTracerFieldName("v2", has_mhd, nscalars, context));
-      AppendUnique(fields, ParseTracerFieldName("v3", has_mhd, nscalars, context));
+      AppendUnique(fields, ParseTracerFieldName("v3", has_mhd, nscalars, is_ideal,
+                                                context));
     } else {
-      AppendUnique(fields, ParseTracerFieldName(token, has_mhd, nscalars, context));
+      AppendUnique(fields, ParseTracerFieldName(token, has_mhd, nscalars, is_ideal,
+                                                context));
     }
   }
 
@@ -172,15 +186,16 @@ std::vector<std::string> TracerFieldNames(const std::vector<TracerField> &fields
 
 Real EvaluateTracerFieldHost(const TracerField &field, const HostArray5D<Real> &w0,
                              const HostArray5D<Real> &bcc, bool has_mhd,
-                             Real gamma, int nfluid, int m, int k, int j, int i) {
+                             Real gamma, Real iso_cs, bool is_ideal, int nfluid,
+                             int m, int k, int j, int i) {
   const Real rho = w0(m,IDN,k,j,i);
-  const Real eint = w0(m,IEN,k,j,i);
-  const Real press = (gamma - 1.0)*eint;
+  const Real eint = is_ideal ? w0(m,IEN,k,j,i) : 0.0;
+  const Real press = is_ideal ? (gamma - 1.0)*eint : rho*iso_cs*iso_cs;
   const Real v1 = w0(m,IVX,k,j,i);
   const Real v2 = w0(m,IVY,k,j,i);
   const Real v3 = w0(m,IVZ,k,j,i);
   const Real vsq = SQR(v1) + SQR(v2) + SQR(v3);
-  const Real cs2 = std::max(gamma*press/rho, 0.0);
+  const Real cs2 = is_ideal ? std::max(gamma*press/rho, 0.0) : iso_cs*iso_cs;
   const Real cs = std::sqrt(cs2);
 
   switch (field.kind) {

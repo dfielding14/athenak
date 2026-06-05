@@ -6,7 +6,7 @@
 // Licensed under the 3-clause BSD License, see LICENSE file for details
 //========================================================================================
 //! \file tracer_fields.hpp
-//! \brief parser and host-side evaluators for lagrangian_mc tracer fields
+//! \brief parser and host-side evaluators for flux-tracer fields
 
 #include <string>
 #include <vector>
@@ -28,17 +28,19 @@ struct TracerField {
 };
 
 std::vector<TracerField> ParseTracerFieldList(const std::string &field_list,
-                                              bool has_mhd, int nscalars,
+                                              bool has_mhd, int nscalars, bool is_ideal,
                                               const std::string &context);
 
 TracerField ParseTracerFieldName(const std::string &field_name, bool has_mhd,
-                                 int nscalars, const std::string &context);
+                                 int nscalars, bool is_ideal,
+                                 const std::string &context);
 
 std::vector<std::string> TracerFieldNames(const std::vector<TracerField> &fields);
 
 Real EvaluateTracerFieldHost(const TracerField &field, const HostArray5D<Real> &w0,
                              const HostArray5D<Real> &bcc, bool has_mhd,
-                             Real gamma, int nfluid, int m, int k, int j, int i);
+                             Real gamma, Real iso_cs, bool is_ideal, int nfluid,
+                             int m, int k, int j, int i);
 
 } // namespace particles
 

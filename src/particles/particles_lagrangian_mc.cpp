@@ -180,6 +180,9 @@ void Particles::ParseTracerSeedSchedules(ParameterInput *pin) {
   int fallback_id = 1;
   bool has_mhd = (pmy_pack->pmhd != nullptr);
   int nscalars = GetLagrangianMCScalarCount();
+  EquationOfState *peos = (pmy_pack->phydro != nullptr) ?
+                          pmy_pack->phydro->peos : pmy_pack->pmhd->peos;
+  bool is_ideal = peos->eos_data.is_ideal;
 
   for (auto it = pin->block.begin(); it != pin->block.end(); ++it) {
     const std::string &block = it->block_name;
@@ -244,7 +247,8 @@ void Particles::ParseTracerSeedSchedules(ParameterInput *pin) {
     if (pin->DoesParameterExist(block, "target")) {
       sched.has_target = true;
       sched.target_field = ParseTracerFieldName(pin->GetString(block, "target"),
-                                                has_mhd, nscalars, block + "/target");
+                                                has_mhd, nscalars, is_ideal,
+                                                block + "/target");
       sched.has_target_min = pin->DoesParameterExist(block, "target_min");
       sched.has_target_max = pin->DoesParameterExist(block, "target_max");
       if (sched.has_target_min) sched.target_min = pin->GetReal(block, "target_min");
@@ -296,7 +300,7 @@ void Particles::AppendParticles(const HostArray2D<Real> &new_rdata,
 //! \fn void Particles::SeedInitialTracers
 
 void Particles::SeedInitialTracers() {
-  if (particle_type != ParticleType::lagrangian_mc) return;
+  if (!IsFluxTracer()) return;
   SeedTracersAtTime(pmy_pack->pmesh->time, true);
 }
 
@@ -304,7 +308,7 @@ void Particles::SeedInitialTracers() {
 //! \fn void Particles::SeedTracersAtTime
 
 void Particles::SeedTracersAtTime(Real event_time, bool initial_only) {
-  if (particle_type != ParticleType::lagrangian_mc) return;
+  if (!IsFluxTracer()) return;
 
   Mesh *pm = pmy_pack->pmesh;
   auto &indcs = pm->mb_indcs;
@@ -381,6 +385,7 @@ void Particles::SeedTracersAtTime(Real event_time, bool initial_only) {
               if (sched.has_target) {
                 Real target_value = EvaluateTracerFieldHost(sched.target_field, h_w0,
                                                             h_bcc, has_mhd, eos.gamma,
+                                                            eos.iso_cs, eos.is_ideal,
                                                             nfluid, m, k, j, i);
                 if (sched.has_target_min && target_value < sched.target_min) continue;
                 if (sched.has_target_max && target_value > sched.target_max) continue;
@@ -462,7 +467,8 @@ void Particles::SeedTracersAtTime(Real event_time, bool initial_only) {
 
       sched.event_index++;
       next_tracer_tag += sched.count_per_event;
-      if (sched.cadence <= 0.0 || sched.next_time + sched.cadence > sched.end_time + eps) {
+      if (sched.cadence <= 0.0 ||
+          sched.next_time + sched.cadence > sched.end_time + eps) {
         sched.complete = true;
       } else {
         sched.next_time += sched.cadence;
@@ -678,17 +684,29 @@ TaskStatus Particles::AdjustMeshRefinement(Driver *pdriver, int stage) {
       else if (draw < flx[0] + flx[1] + flx[2]) target = 3;
 
       if (lastmove == 1 || lastmove == 2) {
-        if (target == 2) pr(LMCY,p) += dx2;
-        else if (target == 3) pr(LMCZ,p) += dx3;
-        else if (target == 4) {pr(LMCY,p) += dx2; pr(LMCZ,p) += dx3;}
+        if (target == 2) {
+          pr(LMCY,p) += dx2;
+        } else if (target == 3) {
+          pr(LMCZ,p) += dx3;
+        } else if (target == 4) {
+          pr(LMCY,p) += dx2; pr(LMCZ,p) += dx3;
+        }
       } else if (lastmove == 3 || lastmove == 4) {
-        if (target == 2) pr(LMCX,p) += dx1;
-        else if (target == 3) pr(LMCZ,p) += dx3;
-        else if (target == 4) {pr(LMCX,p) += dx1; pr(LMCZ,p) += dx3;}
+        if (target == 2) {
+          pr(LMCX,p) += dx1;
+        } else if (target == 3) {
+          pr(LMCZ,p) += dx3;
+        } else if (target == 4) {
+          pr(LMCX,p) += dx1; pr(LMCZ,p) += dx3;
+        }
       } else if (lastmove == 5 || lastmove == 6) {
-        if (target == 2) pr(LMCX,p) += dx1;
-        else if (target == 3) pr(LMCY,p) += dx2;
-        else if (target == 4) {pr(LMCX,p) += dx1; pr(LMCY,p) += dx2;}
+        if (target == 2) {
+          pr(LMCX,p) += dx1;
+        } else if (target == 3) {
+          pr(LMCY,p) += dx2;
+        } else if (target == 4) {
+          pr(LMCX,p) += dx1; pr(LMCY,p) += dx2;
+        }
       }
     } else if (level < lastlevel) {
       pr(LMCX,p) += (i_parity ? -0.25 : 0.25)*dx1;
@@ -710,7 +728,7 @@ TaskStatus Particles::AdjustMeshRefinement(Driver *pdriver, int stage) {
 //! \fn void Particles::RemapAfterMeshRefinement
 
 void Particles::RemapAfterMeshRefinement() {
-  if (particle_type != ParticleType::lagrangian_mc) return;
+  if (!IsFluxTracer()) return;
 
   Mesh *pm = pmy_pack->pmesh;
   Kokkos::fence();
@@ -722,22 +740,27 @@ void Particles::RemapAfterMeshRefinement() {
   }
 
   std::vector<int> dest_rank(nprtcl_thispack, global_variable::my_rank);
+  bool x1_periodic = (pm->mesh_bcs[BoundaryFace::inner_x1] == BoundaryFlag::periodic ||
+                      pm->mesh_bcs[BoundaryFace::outer_x1] == BoundaryFlag::periodic);
+  bool x2_periodic = (pm->mesh_bcs[BoundaryFace::inner_x2] == BoundaryFlag::periodic ||
+                      pm->mesh_bcs[BoundaryFace::outer_x2] == BoundaryFlag::periodic);
+  bool x3_periodic = (pm->mesh_bcs[BoundaryFace::inner_x3] == BoundaryFlag::periodic ||
+                      pm->mesh_bcs[BoundaryFace::outer_x3] == BoundaryFlag::periodic);
   for (int p=0; p<nprtcl_thispack; ++p) {
     hr(LMCX,p) = WrapOrClamp(hr(LMCX,p), pm->mesh_size.x1min, pm->mesh_size.x1max,
-                             pm->mesh_bcs[BoundaryFace::inner_x1] == BoundaryFlag::periodic ||
-                             pm->mesh_bcs[BoundaryFace::outer_x1] == BoundaryFlag::periodic);
+                             x1_periodic);
     hr(LMCY,p) = WrapOrClamp(hr(LMCY,p), pm->mesh_size.x2min, pm->mesh_size.x2max,
-                             pm->mesh_bcs[BoundaryFace::inner_x2] == BoundaryFlag::periodic ||
-                             pm->mesh_bcs[BoundaryFace::outer_x2] == BoundaryFlag::periodic);
+                             x2_periodic);
     hr(LMCZ,p) = WrapOrClamp(hr(LMCZ,p), pm->mesh_size.x3min, pm->mesh_size.x3max,
-                             pm->mesh_bcs[BoundaryFace::inner_x3] == BoundaryFlag::periodic ||
-                             pm->mesh_bcs[BoundaryFace::outer_x3] == BoundaryFlag::periodic);
+                             x3_periodic);
 
     int gid = LocateMeshBlockGID(pm, hr(LMCX,p), hr(LMCY,p), hr(LMCZ,p));
     if (gid < 0) {
       FatalParticleInput("could not locate tracer particle after mesh refinement");
     }
-    SnapToMeshBlockCellCenter(pm, gid, hr(LMCX,p), hr(LMCY,p), hr(LMCZ,p));
+    if (IsLagrangianMC()) {
+      SnapToMeshBlockCellCenter(pm, gid, hr(LMCX,p), hr(LMCY,p), hr(LMCZ,p));
+    }
     hi(PGID,p) = gid;
     hi(PLASTMOVE,p) = 0;
     hi(PLASTLEVEL,p) = pm->lloc_eachmb[gid].level;
@@ -845,8 +868,8 @@ void Particles::WriteRestartData(IOWrapper &resfile, bool single_file_per_rank) 
   ParticleRestartHeader header;
   std::memset(&header, 0, sizeof(header));
   std::strncpy(header.magic, "ATHKPRTCLMC", sizeof(header.magic)-1);
-  header.version = 1;
-  header.enabled = IsLagrangianMC() ? 1 : 0;
+  header.version = 2;
+  header.enabled = IsLagrangianMC() ? 1 : (IsIto2() ? 2 : 0);
   header.nrdata = nrdata;
   header.nidata = nidata;
   header.nlocal = nprtcl_thispack;
@@ -867,7 +890,8 @@ void Particles::WriteRestartData(IOWrapper &resfile, bool single_file_per_rank) 
   if (header.nschedules > 0) {
     resfile.Write_any_type(sched_real.data(), sched_real.size(), "Real",
                            single_file_per_rank);
-    resfile.Write_any_type(sched_int.data(), sched_int.size(), "int", single_file_per_rank);
+    resfile.Write_any_type(sched_int.data(), sched_int.size(), "int",
+                           single_file_per_rank);
   }
 
   HostArray2D<Real> hr("rst_prtcl_rdata", nrdata, nprtcl_thispack);
@@ -875,8 +899,10 @@ void Particles::WriteRestartData(IOWrapper &resfile, bool single_file_per_rank) 
   if (nprtcl_thispack > 0) {
     Kokkos::deep_copy(hr, prtcl_rdata);
     Kokkos::deep_copy(hi, prtcl_idata);
-    resfile.Write_any_type(hr.data(), nrdata*nprtcl_thispack, "Real", single_file_per_rank);
-    resfile.Write_any_type(hi.data(), nidata*nprtcl_thispack, "int", single_file_per_rank);
+    resfile.Write_any_type(hr.data(), nrdata*nprtcl_thispack, "Real",
+                           single_file_per_rank);
+    resfile.Write_any_type(hi.data(), nidata*nprtcl_thispack, "int",
+                           single_file_per_rank);
   }
 }
 
@@ -899,10 +925,16 @@ void Particles::ReadRestartData(IOWrapper &resfile, bool single_file_per_rank) {
   if (resfile.Read_bytes(&header, sizeof(header), 1, single_file_per_rank) != 1) {
     FatalParticleInput("particle restart section is missing or truncated");
   }
-  if (std::strncmp(header.magic, "ATHKPRTCLMC", 11) != 0 || header.version != 1) {
+  if (std::strncmp(header.magic, "ATHKPRTCLMC", 11) != 0 ||
+      header.version < 1 || header.version > 2) {
     FatalParticleInput("particle restart section has an unrecognized format");
   }
   if (!header.enabled) return;
+  int restart_transport = (header.version == 1) ? 1 : header.enabled;
+  int expected_transport = IsLagrangianMC() ? 1 : (IsIto2() ? 2 : 0);
+  if (restart_transport != expected_transport) {
+    FatalParticleInput("particle restart transport does not match the configured pusher");
+  }
   if (header.nrdata != nrdata || header.nidata != nidata) {
     FatalParticleInput("particle restart array dimensions do not match this executable");
   }

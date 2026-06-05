@@ -281,6 +281,21 @@ Driver::Driver(ParameterInput *pin, Mesh *pmesh, Real wtlim, Kokkos::Timer* ptim
 }
 
 //----------------------------------------------------------------------------------------
+//! \fn Real Driver::FinalFluxWeight
+//! \brief Return the contribution of one explicit stage flux to the final RK update.
+
+Real Driver::FinalFluxWeight(int stage) const {
+  if (integrator != "rk1" && integrator != "rk2" && integrator != "rk3") {
+    return 1.0/static_cast<Real>(nexp_stages);
+  }
+  Real weight = beta[stage-1];
+  for (int n=stage; n<nexp_stages; ++n) {
+    weight *= gam0[n];
+  }
+  return weight;
+}
+
+//----------------------------------------------------------------------------------------
 //! \fn Driver::ExecuteTaskList()
 //! \brief Perform tasks over all MeshBlocks for the TaskList specified by string "tl".
 //! Integer argument "stage" can be used to indicate at which step in overall algorithm
@@ -315,7 +330,7 @@ void Driver::Initialize(Mesh *pmesh, ParameterInput *pin, Outputs *pout, bool re
   InitBoundaryValuesAndPrimitives(pmesh);
 
   if (!res_flag && pmesh->pmb_pack->ppart != nullptr &&
-      pmesh->pmb_pack->ppart->IsLagrangianMC()) {
+      pmesh->pmb_pack->ppart->IsFluxTracer()) {
     pmesh->pmb_pack->ppart->SeedInitialTracers();
   }
 

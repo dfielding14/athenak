@@ -382,7 +382,7 @@ void MHD::SetSaveWBcc() {
 }
 
 //----------------------------------------------------------------------------------------
-// SetSaveUFlxIdn: set flag to save RK-accumulated density fluxes for MC tracers.
+// SetSaveUFlxIdn: set flag to save RK-accumulated density fluxes for flux tracers.
 
 void MHD::SetSaveUFlxIdn() {
   int nmb = std::max((pmy_pack->nmb_thispack), (pmy_pack->pmesh->nmb_maxperrank));

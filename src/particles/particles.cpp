@@ -15,6 +15,7 @@
 #include "globals.hpp"
 #include "parameter_input.hpp"
 #include "mesh/mesh.hpp"
+#include "coordinates/coordinates.hpp"
 #include "eos/eos.hpp"
 #include "hydro/hydro.hpp"
 #include "mhd/mhd.hpp"
@@ -41,6 +42,8 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
       particle_type = ParticleType::cosmic_ray;
     } else if (ptype.compare("lagrangian_mc") == 0) {
       particle_type = ParticleType::lagrangian_mc;
+    } else if (ptype.compare("lagrangian_ito") == 0) {
+      particle_type = ParticleType::lagrangian_ito;
     } else {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "Particle type = '" << ptype << "' not recognized"
@@ -56,6 +59,13 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
       pusher = ParticlesPusher::drift;
     } else if (ppush.compare("lagrangian_mc") == 0) {
       pusher = ParticlesPusher::lagrangian_mc;
+    } else if (ppush.compare("ito2") == 0) {
+      pusher = ParticlesPusher::ito2;
+    } else if (ppush.compare("ito3") == 0) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "pusher=ito3 is intentionally not implemented"
+                << std::endl;
+      std::exit(EXIT_FAILURE);
     } else {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "Particle pusher must be specified in <particles> block"
@@ -69,6 +79,20 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl << "particle_type=lagrangian_mc requires "
               << "pusher=lagrangian_mc" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if (particle_type == ParticleType::lagrangian_ito &&
+      pusher != ParticlesPusher::ito2) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "particle_type=lagrangian_ito requires "
+              << "pusher=ito2; Ito-3 is intentionally not implemented" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if (particle_type != ParticleType::lagrangian_ito &&
+      pusher == ParticlesPusher::ito2) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "pusher=ito2 requires particle_type=lagrangian_ito"
+              << std::endl;
     std::exit(EXIT_FAILURE);
   }
 
@@ -93,20 +117,60 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
         break;
       }
     case ParticleType::lagrangian_mc:
+    case ParticleType::lagrangian_ito:
       {
         if (pmy_pack->phydro == nullptr && pmy_pack->pmhd == nullptr) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                    << std::endl << "lagrangian_mc particles require hydro or mhd"
+                    << std::endl << "flux tracer particles require hydro or mhd"
                     << std::endl;
           std::exit(EXIT_FAILURE);
         }
         EquationOfState *peos = (pmy_pack->phydro != nullptr) ?
                                 pmy_pack->phydro->peos : pmy_pack->pmhd->peos;
-        if (!peos->eos_data.is_ideal) {
+        if (particle_type == ParticleType::lagrangian_mc && !peos->eos_data.is_ideal) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                     << std::endl << "lagrangian_mc thermo tracers require an ideal-gas "
                     << "EOS in this implementation" << std::endl;
           std::exit(EXIT_FAILURE);
+        }
+        if (particle_type == ParticleType::lagrangian_ito) {
+          if (pin->DoesParameterExist("particles", "ito_order") &&
+              pin->GetInteger("particles", "ito_order") != 2) {
+            std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                      << std::endl << "lagrangian_ito supports only ito_order=2"
+                      << std::endl;
+            std::exit(EXIT_FAILURE);
+          }
+          if (pin->DoesParameterExist("particles", "tracer_kick_pdf") &&
+              pin->GetString("particles", "tracer_kick_pdf") != "uniform") {
+            std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                      << std::endl << "lagrangian_ito uses only the bounded uniform "
+                      << "Ito-2 kick distribution" << std::endl;
+            std::exit(EXIT_FAILURE);
+          }
+          std::string evolution = pin->GetString("time", "evolution");
+          std::string integrator = pin->GetOrAddString("time", "integrator", "rk2");
+          if (evolution != "dynamic" ||
+              (integrator != "rk1" && integrator != "rk2" && integrator != "rk3")) {
+            std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                      << std::endl << "lagrangian_ito requires dynamic evolution with "
+                      << "integrator=rk1, rk2, or rk3" << std::endl;
+            std::exit(EXIT_FAILURE);
+          }
+          if (!pmy_pack->pmesh->strictly_periodic) {
+            std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                      << std::endl << "lagrangian_ito currently requires periodic "
+                      << "boundaries in every active dimension" << std::endl;
+            std::exit(EXIT_FAILURE);
+          }
+          if (pmy_pack->pcoord->is_special_relativistic ||
+              pmy_pack->pcoord->is_general_relativistic ||
+              pmy_pack->pcoord->is_dynamical_relativistic) {
+            std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                      << std::endl << "lagrangian_ito currently supports only "
+                      << "non-relativistic Cartesian fluid evolution" << std::endl;
+            std::exit(EXIT_FAILURE);
+          }
         }
         nprtcl_thispack = 0;
         nrdata = LMC_NREAL;
@@ -120,6 +184,23 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
           pmy_pack->pmhd->SetSaveUFlxIdn();
         }
         dtnew = std::numeric_limits<Real>::max();
+        if (particle_type == ParticleType::lagrangian_ito) {
+          int nmb = std::max((pmy_pack->nmb_thispack),
+                             (pmy_pack->pmesh->nmb_maxperrank));
+          auto &indcs = pmy_pack->pmesh->mb_indcs;
+          int ncells1 = indcs.nx1 + 2*indcs.ng;
+          int ncells2 = (indcs.nx2 > 1) ? indcs.nx2 + 2*indcs.ng : 1;
+          int ncells3 = (indcs.nx3 > 1) ? indcs.nx3 + 2*indcs.ng : 1;
+          Kokkos::realloc(ito_coeff, nmb, ITO_NCOEFF, ncells3, ncells2, ncells1);
+          if (pmy_pack->pmesh->multilevel) {
+            int nccells1 = indcs.cnx1 + 2*indcs.ng;
+            int nccells2 = (indcs.cnx2 > 1) ? indcs.cnx2 + 2*indcs.ng : 1;
+            int nccells3 = (indcs.cnx3 > 1) ? indcs.cnx3 + 2*indcs.ng : 1;
+            Kokkos::realloc(coarse_ito_coeff, nmb, ITO_NCOEFF,
+                            nccells3, nccells2, nccells1);
+          }
+          Kokkos::realloc(ito_invalid, 1);
+        }
         break;
       }
     default:
@@ -130,12 +211,17 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
 
   // allocate boundary object
   pbval_part = new ParticlesBoundaryValues(this, pin);
+  if (IsIto2()) {
+    pbval_ito = new MeshBoundaryValuesCC(ppack, pin, false);
+    pbval_ito->InitializeBuffers(ITO_NCOEFF);
+  }
 }
 
 //----------------------------------------------------------------------------------------
 // destructor
 
 Particles::~Particles() {
+  if (pbval_ito != nullptr) delete pbval_ito;
 }
 
 //----------------------------------------------------------------------------------------
@@ -153,7 +239,7 @@ int Particles::GetLagrangianMCScalarCount() const {
 // those with tag numbers less than ntrack.
 
 void Particles::CreateParticleTags(ParameterInput *pin) {
-  if (particle_type == ParticleType::lagrangian_mc) return;
+  if (IsFluxTracer()) return;
 
   std::string assign = pin->GetOrAddString("particles","assign_tag","index_order");
 

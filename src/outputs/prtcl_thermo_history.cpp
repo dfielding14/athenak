@@ -4,7 +4,7 @@
 // Licensed under the 3-clause BSD License, see LICENSE file for details
 //========================================================================================
 //! \file prtcl_thermo_history.cpp
-//! \brief append-only binary thermodynamic history output for lagrangian_mc particles
+//! \brief append-only binary thermodynamic history output for flux-tracer particles
 
 #include <sys/stat.h>
 
@@ -139,24 +139,30 @@ ParticleThermoHistoryOutput::ParticleThermoHistoryOutput(ParameterInput *pin, Me
     BaseTypeOutput(pin, pm, op),
     npout_thisrank(0),
     npout_total(0),
-    tracer_gamma(5.0/3.0) {
+    tracer_gamma(5.0/3.0),
+    tracer_iso_cs(0.0),
+    tracer_is_ideal(true) {
   mkdir("prtcl_thermo_history", 0775);
   if (pm->pmb_pack->ppart == nullptr ||
-      !pm->pmb_pack->ppart->IsLagrangianMC()) {
+      !pm->pmb_pack->ppart->IsFluxTracer()) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl << "file_type=prtcl_thermo_history requires "
-              << "particle_type=lagrangian_mc" << std::endl;
+              << "a flux tracer particle type" << std::endl;
     std::exit(EXIT_FAILURE);
   }
 
   bool has_mhd = (pm->pmb_pack->pmhd != nullptr);
-  tracer_gamma = has_mhd ? pin->GetOrAddReal("mhd", "gamma", 5.0/3.0) :
-                           pin->GetOrAddReal("hydro", "gamma", 5.0/3.0);
+  std::string fluid_block = has_mhd ? "mhd" : "hydro";
+  tracer_is_ideal = (pin->GetString(fluid_block, "eos") == "ideal");
+  tracer_gamma = tracer_is_ideal ? pin->GetReal(fluid_block, "gamma") : 0.0;
+  tracer_iso_cs = tracer_is_ideal ? 0.0 :
+                  pin->GetReal(fluid_block, "iso_sound_speed");
   int nscalars = pm->pmb_pack->ppart->GetLagrangianMCScalarCount();
   std::string field_list = pin->DoesParameterExist(op.block_name, "variables") ?
                            pin->GetString(op.block_name, "variables") :
                            pin->GetOrAddString("particles", "track_variables", "default");
   tracer_fields = particles::ParseTracerFieldList(field_list, has_mhd, nscalars,
+                                                  tracer_is_ideal,
                                                   op.block_name + "/variables");
   tracer_field_names = particles::TracerFieldNames(tracer_fields);
 }
@@ -226,7 +232,8 @@ void ParticleThermoHistoryOutput::LoadOutputData(Mesh *pm) {
     for (int n=0; n<static_cast<int>(tracer_fields.size()); ++n) {
       outfield_data(n,p) = particles::EvaluateTracerFieldHost(tracer_fields[n], h_w0,
                                                               h_bcc, has_mhd,
-                                                              tracer_gamma,
+                                                              tracer_gamma, tracer_iso_cs,
+                                                              tracer_is_ideal,
                                                               nfluid, m, k, j, i);
     }
   }
