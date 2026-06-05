@@ -1,0 +1,175 @@
+{
+  "record_type": "q011_section54_pressure_pilot_snapshot_time_compatibility_successor",
+  "schema_version": 1,
+  "date": "2026-06-04",
+  "gate": "Q-011",
+  "classification": "engineering_calibration_only",
+  "qualification_effect": "none_snapshot_time_compatibility_repair_only_no_sun_bai_claim_no_execution_authorization",
+  "predecessor_record": "tst/publication/readiness/q011_section54_pressure_pilot_postrun_aggregate_source_authorization_successor_v3_2026-06-04.json",
+  "predecessor_sha256": "38d778a0d26f5536bdb3a98f0c936392a724ccff0ceca53f077b28fa8247e390",
+  "failed_closed_publication": {
+    "slurm_job_id": "4764674",
+    "terminal_state": "FAILED",
+    "failure_class": "strict_offline_snapshot_time_analyzer_assumed_exact_nominal_cadence_for_dt_scheduled_athenak_products",
+    "first_rejected_product": "cases/ps_p0_1p00/bin/ps_p0_1p00.mhd_w_bcc.00001.bin",
+    "public_bundle_exposed": false
+  },
+  "compatibility_repair": {
+    "accepted_runtime_semantics": "initial_and_terminal_times_exact_interior_dt_scheduled_outputs_first_committed_step_after_nominal_cadence_with_registered_engineering_overshoot_cap_all_products_cycle_coherent_all_mesh_products_header_time_coherent_particle_max_digits10_time_projects_exactly_to_mesh_default_six_significant_digits",
+    "interior_snapshot_overshoot_cap_omega0_inverse": 0.1,
+    "cap_boundary": "strict_less_than",
+    "scientific_contract_changed": false,
+    "pilot_cases_changed": false,
+    "estimators_changed": false,
+    "thresholds_changed": false,
+    "snapshot_selection_changed": false
+  },
+  "approved_retained_snapshot_metadata": [
+    {
+      "case_id": "ps_p0_1p00",
+      "snapshots": [
+        {
+          "scheduled_time_omega0_inverse": 0.0,
+          "observed_particle_vtk_time_omega0_inverse": 0.0,
+          "mesh_binary_header_time_omega0_inverse": 0.0,
+          "cycle": 0
+        },
+        {
+          "scheduled_time_omega0_inverse": 15.0,
+          "observed_particle_vtk_time_omega0_inverse": 15.016471325774145,
+          "mesh_binary_header_time_omega0_inverse": 15.0165,
+          "cycle": 218
+        },
+        {
+          "scheduled_time_omega0_inverse": 30.0,
+          "observed_particle_vtk_time_omega0_inverse": 30.053496025736649,
+          "mesh_binary_header_time_omega0_inverse": 30.0535,
+          "cycle": 437
+        },
+        {
+          "scheduled_time_omega0_inverse": 45.0,
+          "observed_particle_vtk_time_omega0_inverse": 45.021746505817639,
+          "mesh_binary_header_time_omega0_inverse": 45.0217,
+          "cycle": 655
+        },
+        {
+          "scheduled_time_omega0_inverse": 60.0,
+          "observed_particle_vtk_time_omega0_inverse": 60.0,
+          "mesh_binary_header_time_omega0_inverse": 60.0,
+          "cycle": 874
+        }
+      ]
+    },
+    {
+      "case_id": "ps_p0_0p05",
+      "snapshots": [
+        {
+          "scheduled_time_omega0_inverse": 0.0,
+          "observed_particle_vtk_time_omega0_inverse": 0.0,
+          "mesh_binary_header_time_omega0_inverse": 0.0,
+          "cycle": 0
+        },
+        {
+          "scheduled_time_omega0_inverse": 15.0,
+          "observed_particle_vtk_time_omega0_inverse": 15.017551286485171,
+          "mesh_binary_header_time_omega0_inverse": 15.0176,
+          "cycle": 218
+        },
+        {
+          "scheduled_time_omega0_inverse": 30.0,
+          "observed_particle_vtk_time_omega0_inverse": 30.054575852044824,
+          "mesh_binary_header_time_omega0_inverse": 30.0546,
+          "cycle": 437
+        },
+        {
+          "scheduled_time_omega0_inverse": 45.0,
+          "observed_particle_vtk_time_omega0_inverse": 45.022825700733854,
+          "mesh_binary_header_time_omega0_inverse": 45.0228,
+          "cycle": 655
+        },
+        {
+          "scheduled_time_omega0_inverse": 60.0,
+          "observed_particle_vtk_time_omega0_inverse": 60.0,
+          "mesh_binary_header_time_omega0_inverse": 60.0,
+          "cycle": 874
+        }
+      ]
+    },
+    {
+      "case_id": "ps_p0_0p10",
+      "snapshots": [
+        {
+          "scheduled_time_omega0_inverse": 0.0,
+          "observed_particle_vtk_time_omega0_inverse": 0.0,
+          "mesh_binary_header_time_omega0_inverse": 0.0,
+          "cycle": 0
+        },
+        {
+          "scheduled_time_omega0_inverse": 15.0,
+          "observed_particle_vtk_time_omega0_inverse": 15.017551293891469,
+          "mesh_binary_header_time_omega0_inverse": 15.0176,
+          "cycle": 218
+        },
+        {
+          "scheduled_time_omega0_inverse": 30.0,
+          "observed_particle_vtk_time_omega0_inverse": 30.054575872649249,
+          "mesh_binary_header_time_omega0_inverse": 30.0546,
+          "cycle": 437
+        },
+        {
+          "scheduled_time_omega0_inverse": 45.0,
+          "observed_particle_vtk_time_omega0_inverse": 45.022825767251661,
+          "mesh_binary_header_time_omega0_inverse": 45.0228,
+          "cycle": 655
+        },
+        {
+          "scheduled_time_omega0_inverse": 60.0,
+          "observed_particle_vtk_time_omega0_inverse": 60.0,
+          "mesh_binary_header_time_omega0_inverse": 60.0,
+          "cycle": 874
+        }
+      ]
+    },
+    {
+      "case_id": "ps_p0_0p20",
+      "snapshots": [
+        {
+          "scheduled_time_omega0_inverse": 0.0,
+          "observed_particle_vtk_time_omega0_inverse": 0.0,
+          "mesh_binary_header_time_omega0_inverse": 0.0,
+          "cycle": 0
+        },
+        {
+          "scheduled_time_omega0_inverse": 15.0,
+          "observed_particle_vtk_time_omega0_inverse": 15.017551288028917,
+          "mesh_binary_header_time_omega0_inverse": 15.0176,
+          "cycle": 218
+        },
+        {
+          "scheduled_time_omega0_inverse": 30.0,
+          "observed_particle_vtk_time_omega0_inverse": 30.054575889532856,
+          "mesh_binary_header_time_omega0_inverse": 30.0546,
+          "cycle": 437
+        },
+        {
+          "scheduled_time_omega0_inverse": 45.0,
+          "observed_particle_vtk_time_omega0_inverse": 45.022825847525340,
+          "mesh_binary_header_time_omega0_inverse": 45.0228,
+          "cycle": 655
+        },
+        {
+          "scheduled_time_omega0_inverse": 60.0,
+          "observed_particle_vtk_time_omega0_inverse": 60.0,
+          "mesh_binary_header_time_omega0_inverse": 60.0,
+          "cycle": 874
+        }
+      ]
+    }
+  ],
+  "execution_policy": {
+    "frontier_execution_authorized_by_this_record": false,
+    "scheduler_commands_authorized_by_this_record": false,
+    "scientific_evidence_eligible": false,
+    "sun_bai_claim": false
+  }
+}

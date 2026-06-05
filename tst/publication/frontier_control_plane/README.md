@@ -1296,11 +1296,19 @@ inode. Aggregate worker job `4764415` then failed closed before exposing a
 public bundle, receipt or analysis artifact because the offline analyzer
 assumed one tuple order for the exact `mhd_w_bcc` variable inventory. Read-only
 forensics found one uniform eight-field inventory across all twenty retained
-snapshots, with no missing or extra variables. Do not replay job `4764415`.
-Submit one reviewed replacement aggregate worker only after the fourteenth-pass
-exact unordered inventory repair is committed, pushed, clean-worker validated
-and independently rereviewed from the exact latest patch. The replacement block
-below verifies the existing durable recovery receipt; it must not republish it.
+snapshots, with no missing or extra variables. The committed fourteenth-pass
+repair and worker validation passed. Replacement aggregate worker job `4764674`
+then failed closed before exposing a public artifact because AthenaK emits
+interior `dt`-scheduled products on the first committed step after each nominal
+cadence while the analyzer still required exact nominal times. Read-only
+forensics verified all `100` retained snapshot products and froze the exact
+observed particle-header time, six-significant-digit mesh-header time and common
+cycle tuple for every immutable case slot. Do not replay job `4764415` or
+`4764674`. Submit one reviewed replacement aggregate worker only after the
+fifteenth-pass exact retained snapshot-metadata repair is committed, pushed,
+clean-worker validated and independently rereviewed from the exact latest
+patch. The replacement block below verifies the existing durable recovery
+receipt; it must not republish it.
 
 ```bash
 (

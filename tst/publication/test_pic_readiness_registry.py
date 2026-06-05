@@ -1283,7 +1283,7 @@ class PicReadinessRegistryTests(unittest.TestCase):
             ]
         )
         current_repair = _load(
-            "q011_section54_fourteenth_aggregate_mhd_inventory_order_repair_"
+            "q011_section54_fifteenth_aggregate_snapshot_metadata_repair_"
             "transition_2026-06-04.json"
         )
         acceptance_repair = _load(
@@ -1298,6 +1298,11 @@ class PicReadinessRegistryTests(unittest.TestCase):
         )
         self.assertEqual(helper["sha256"], _sha256(REPO_ROOT / helper["path"]))
         runbook = (CONTROL_PLANE_DIR / "README.md").read_text(encoding="utf-8")
+        recovery_receipt = json.loads(
+            Path(
+                current_repair["recovered_acceptance_root"]["recovery_receipt"]["path"]
+            ).read_text(encoding="utf-8")
+        )
         self.assertEqual(
             runbook.count(
                 f"EXPECTED_ACCEPTANCE_HELPER_SHA256={helper['sha256']}"
@@ -1307,7 +1312,7 @@ class PicReadinessRegistryTests(unittest.TestCase):
         self.assertEqual(
             runbook.count(
                 "ACCEPTANCE_RECOVERY_VALIDATED_SOURCE_COMMIT="
-                f"{current_repair['source_checkpoint_commit']}"
+                f"{recovery_receipt['validated_source_commit']}"
             ),
             1,
         )
@@ -1375,9 +1380,11 @@ class PicReadinessRegistryTests(unittest.TestCase):
                 self.assertEqual(status.st_gid, checkpoint["gid"])
                 self.assertEqual(f"{stat.S_IMODE(status.st_mode):05o}", expected_mode)
                 self.assertEqual(sorted(os.listxattr(path)), expected_xattrs)
-        aggregate_repair = current_repair["aggregate_inventory_order_repair"]
+        aggregate_repair = current_repair["aggregate_snapshot_metadata_repair"]
         authorization = aggregate_repair["postrun_source_authorization_successor"]
         self.assertEqual(authorization["sha256"], _sha256(REPO_ROOT / authorization["path"]))
+        compatibility = aggregate_repair["snapshot_time_compatibility_successor"]
+        self.assertEqual(compatibility["sha256"], _sha256(REPO_ROOT / compatibility["path"]))
         self.assertEqual(
             aggregate_repair["aggregate_analyzer"]["successor_sha256"],
             _sha256(REPO_ROOT / aggregate_repair["aggregate_analyzer"]["path"]),
@@ -1386,7 +1393,7 @@ class PicReadinessRegistryTests(unittest.TestCase):
             self.assertEqual(
                 repaired_staged["state"],
                 "installed_candidate_only_policy_promoted_acceptance_root_recovered_"
-                "aggregate_inventory_order_repair_staged_pending_clean_commit_push_"
+                "aggregate_snapshot_metadata_repair_staged_pending_clean_commit_push_"
                 "worker_validation_exact_latest_patch_rereview_and_aggregate_retry",
             )
             prepared = repaired_staged["prepared_artifacts"]
@@ -3293,7 +3300,7 @@ class PicReadinessRegistryTests(unittest.TestCase):
         )
         self.assertEqual(promotion["registered_science_slice_count"], 4)
         current = _load(
-            "q011_section54_fourteenth_aggregate_mhd_inventory_order_repair_"
+            "q011_section54_fifteenth_aggregate_snapshot_metadata_repair_"
             "transition_2026-06-04.json"
         )["candidate_only_policy_promotion"]
         self.assertEqual(

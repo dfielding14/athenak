@@ -59,6 +59,21 @@ def _fast_figures() -> Iterator[None]:
 
 
 class Q011Section54PressurePilotReviewPacketTests(unittest.TestCase):
+    def test_terminal_products_accept_dt_scheduled_binary_headers(self) -> None:
+        with _published_aggregate() as (base, _aggregate_receipt):
+            bundle = base / "aggregate-bundle"
+            manifest = publisher.pilot._manifest_schema(
+                (bundle / publisher.pilot.MANIFEST_NAME).read_bytes()
+            )
+            products = renderer._terminal_products(
+                bundle,
+                manifest["cases"][0],
+                member_reader=lambda relative: (bundle / relative).read_bytes(),
+            )
+            self.assertEqual(len(products), 5)
+            self.assertEqual(products[2].shape, products[3].shape)
+            self.assertEqual(products[2].shape, products[4].shape)
+
     def test_review_packet_publishes_and_verifies_exact_closure(self) -> None:
         with _published_aggregate() as (base, aggregate_receipt), _fast_figures():
             packet = base / "review-packet"

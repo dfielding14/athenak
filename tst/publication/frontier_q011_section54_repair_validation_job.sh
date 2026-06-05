@@ -58,7 +58,7 @@ mapfile -t publication_shell <<< "$publication_shell_output"
 mapfile -t publication_json <<< "$publication_json_output"
 test "${#publication_python[@]}" -eq 141
 test "${#publication_shell[@]}" -eq 16
-test "${#publication_json[@]}" -eq 282
+test "${#publication_json[@]}" -eq 285
 
 "$PYTHON" -B - "${publication_python[@]}" <<'PY'
 import sys

@@ -38,11 +38,13 @@ SOURCE_CLOSURE=(
   tst/publication/frontier_q011_section54_pressure_pilot_review_packet_job.sh
   tst/publication/readiness/q011_section54_pressure_pilot_preregistration_2026-06-01.json
   tst/publication/readiness/q011_section54_pressure_pilot_aggregate_analysis_compatibility_successor_2026-06-02.json
+  tst/publication/readiness/q011_section54_pressure_pilot_snapshot_time_compatibility_successor_2026-06-04.json
   tst/publication/readiness/q011_section54_pressure_pilot_registered_execution_preregistration_2026-06-02.json
   tst/publication/readiness/q011_section54_pressure_pilot_registered_execution_retry_successor_v2_2026-06-02.json
   tst/publication/readiness/q011_section54_pressure_pilot_postrun_aggregate_source_authorization_successor_2026-06-02.json
   tst/publication/readiness/q011_section54_pressure_pilot_postrun_aggregate_source_authorization_successor_v2_2026-06-03.json
   tst/publication/readiness/q011_section54_pressure_pilot_postrun_aggregate_source_authorization_successor_v3_2026-06-04.json
+  tst/publication/readiness/q011_section54_pressure_pilot_postrun_aggregate_source_authorization_successor_v4_2026-06-04.json
   tst/publication/readiness/plotting_environment_lock_candidate_2026-05-30.json
 )
 

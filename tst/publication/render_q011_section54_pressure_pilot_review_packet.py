@@ -394,12 +394,10 @@ def _terminal_products(
     _require(type(snapshots) is list and bool(snapshots), "case snapshots are unavailable")
     snapshot = snapshots[-1]
     _require(type(snapshot) is dict, "terminal snapshot is malformed")
-    time = float(snapshot["time"])
     ps_p0 = float(case["ps_p0"])
     _, mhd = pilot._binary_dataset(
         bundle_root,
         snapshot["mhd_w_bcc"],
-        time,
         ps_p0,
         pilot._MHD_FIELDS,
         member_reader=member_reader,
@@ -407,7 +405,6 @@ def _terminal_products(
     _, bmag = pilot._binary_dataset(
         bundle_root,
         snapshot["bmag"],
-        time,
         ps_p0,
         pilot._SCALAR_BIN_FIELDS["bmag"],
         member_reader=member_reader,
@@ -415,7 +412,6 @@ def _terminal_products(
     _, jx = pilot._binary_dataset(
         bundle_root,
         snapshot["prtcl_jx"],
-        time,
         ps_p0,
         pilot._SCALAR_BIN_FIELDS["prtcl_jx"],
         member_reader=member_reader,

@@ -117,6 +117,7 @@ def _binary(
     ps_p0: str,
     fields: tuple[str, ...],
     *,
+    cycle: int = 50,
     negative_pressure: bool = False,
 ) -> bytes:
     shape = (1, 20, 100)
@@ -140,9 +141,9 @@ def _binary(
     header = (
         b"Athena binary output version=1.1\n"
         b"  size of preheader=5\n"
-        + f"  time={time}\n".encode("ascii")
-        + b"  cycle=50\n"
-        b"  size of location=8\n"
+        + f"  time={time:.6g}\n".encode("ascii")
+        + f"  cycle={cycle}\n".encode("ascii")
+        + b"  size of location=8\n"
         b"  size of variable=4\n"
         + f"  number of variables={len(fields)}\n".encode("ascii")
         + b"  variables:  "
@@ -159,7 +160,7 @@ def _binary(
     return header + block
 
 
-def _particle_vtk(time: float, *, source: tuple[int, int] = (1, 1),
+def _particle_vtk(time: float, *, cycle: int = 50, source: tuple[int, int] = (1, 1),
                   birth_time: tuple[float, float] = (45.0, 46.0)) -> bytes:
     points = ((100.0, 1.0, 0.0), (200.0, 2.0, 0.0))
     integer_scalars = {
@@ -178,7 +179,7 @@ def _particle_vtk(time: float, *, source: tuple[int, int] = (1, 1),
         (
             "# vtk DataFile Version 2.0\n"
             f"# AthenaK particle data at time= {time}  nranks= 1  "
-            "cycle=50  variables=prtcl_all\n"
+            f"cycle={cycle}  variables=prtcl_all\n"
             "BINARY\n"
             "DATASET UNSTRUCTURED_GRID\n"
             "\n"
@@ -273,6 +274,12 @@ def _restart(root: Path, case_id: str) -> dict[str, Any]:
     }
 
 
+def _approved_snapshot_metadata(case_id: str, index: int) -> dict[str, int | float]:
+    return pilot._load_snapshot_time_compatibility_successor()[
+        (case_id, pilot._TIMES[index])
+    ]
+
+
 def _rank_shard_restart(
     root: Path,
     manifest: dict[str, Any],
@@ -320,17 +327,20 @@ def _bundle(root: Path) -> dict[str, Any]:
         snapshots = []
         for index, time in enumerate(pilot._TIMES):
             paths = pilot._expected_snapshot_paths(case_id, index)
+            metadata = _approved_snapshot_metadata(case_id, index)
+            observed_time = float(metadata["observed_time_omega0_inverse"])
+            cycle = int(metadata["cycle"])
             snapshots.append({
                 "time": time,
                 "mhd_w_bcc": _put(
                     root,
                     paths["mhd_w_bcc"],
-                    _binary(time, argv, _ATHENAK_MHD_W_BCC_FIELDS),
+                    _binary(observed_time, argv, _ATHENAK_MHD_W_BCC_FIELDS, cycle=cycle),
                 ),
-                "bmag": _put(root, paths["bmag"], _binary(time, argv, ("bmag",))),
-                "prtcl_jx": _put(root, paths["prtcl_jx"], _binary(time, argv, ("prtcl_jx",))),
-                "j2": _put(root, paths["j2"], _binary(time, argv, ("j2",))),
-                "prtcl_all": _put(root, paths["prtcl_all"], _particle_vtk(time)),
+                "bmag": _put(root, paths["bmag"], _binary(observed_time, argv, ("bmag",), cycle=cycle)),
+                "prtcl_jx": _put(root, paths["prtcl_jx"], _binary(observed_time, argv, ("prtcl_jx",), cycle=cycle)),
+                "j2": _put(root, paths["j2"], _binary(observed_time, argv, ("j2",), cycle=cycle)),
+                "prtcl_all": _put(root, paths["prtcl_all"], _particle_vtk(observed_time, cycle=cycle)),
             })
         cases.append({
             "case_id": case_id,
@@ -480,7 +490,7 @@ class Q011Section54PressurePilotTests(unittest.TestCase):
     def test_mhd_variable_order_is_name_based_but_extras_fail_closed(self) -> None:
         def reordered(root: Path, manifest: dict[str, Any]) -> None:
             binding = manifest["cases"][0]["snapshots"][0]["mhd_w_bcc"]
-            _rewrite(root, binding, _binary(0.0, "1.0", pilot._MHD_FIELDS))
+            _rewrite(root, binding, _binary(0.0, "1.0", pilot._MHD_FIELDS, cycle=0))
 
         with _fixture(reordered) as fixture:
             _analyze(fixture)
@@ -492,6 +502,80 @@ class Q011Section54PressurePilotTests(unittest.TestCase):
         with _fixture(extra) as fixture:
             with self.assertRaisesRegex(pilot.PilotAnalysisError, "variable inventory drifted"):
                 _analyze(fixture)
+
+    def test_dt_scheduled_snapshot_overshoot_retains_precise_time_and_cycle(self) -> None:
+        precise_time = 15.016471325774145
+
+        def overshoot(root: Path, manifest: dict[str, Any]) -> None:
+            snapshot = manifest["cases"][0]["snapshots"][1]
+            for name, fields in (
+                ("mhd_w_bcc", _ATHENAK_MHD_W_BCC_FIELDS),
+                ("bmag", ("bmag",)),
+                ("prtcl_jx", ("prtcl_jx",)),
+                ("j2", ("j2",)),
+            ):
+                _rewrite(root, snapshot[name], _binary(precise_time, "1.0", fields, cycle=218))
+            _rewrite(root, snapshot["prtcl_all"], _particle_vtk(precise_time, cycle=218))
+
+        with _fixture(overshoot) as fixture:
+            result = _analyze(fixture)
+        schedule = result["case_summaries"][0]["snapshot_schedule"][1]
+        self.assertEqual(schedule["scheduled_time_omega0_inverse"], 15.0)
+        self.assertEqual(schedule["observed_time_omega0_inverse"], precise_time)
+        self.assertEqual(schedule["mesh_binary_header_time_omega0_inverse"], 15.0165)
+        self.assertEqual(schedule["cycle"], 218)
+
+    def test_dt_scheduled_snapshot_window_and_cross_product_drift_fail_closed(self) -> None:
+        def rewrite_snapshot(
+            root: Path,
+            manifest: dict[str, Any],
+            precise_time: float,
+            *,
+            bmag_time: float | None = None,
+            bmag_cycle: int = 218,
+            common_cycle: int = 218,
+        ) -> None:
+            snapshot = manifest["cases"][0]["snapshots"][1]
+            for name, fields in (
+                ("mhd_w_bcc", _ATHENAK_MHD_W_BCC_FIELDS),
+                ("bmag", ("bmag",)),
+                ("prtcl_jx", ("prtcl_jx",)),
+                ("j2", ("j2",)),
+            ):
+                product_time = bmag_time if name == "bmag" and bmag_time is not None else precise_time
+                cycle = bmag_cycle if name == "bmag" else common_cycle
+                _rewrite(root, snapshot[name], _binary(product_time, "1.0", fields, cycle=cycle))
+            _rewrite(root, snapshot["prtcl_all"], _particle_vtk(precise_time, cycle=common_cycle))
+
+        failures = {
+            "window": lambda root, manifest: rewrite_snapshot(root, manifest, 30.0),
+            "mesh time": lambda root, manifest: rewrite_snapshot(
+                root, manifest, 15.016471325774145, bmag_time=15.02
+            ),
+            "cycle": lambda root, manifest: rewrite_snapshot(
+                root, manifest, 15.016471325774145, bmag_cycle=219
+            ),
+            "coherent unauthorized cycle": lambda root, manifest: rewrite_snapshot(
+                root,
+                manifest,
+                15.016471325774145,
+                bmag_cycle=219,
+                common_cycle=219,
+            ),
+            "particle ulp": lambda root, manifest: _rewrite(
+                root,
+                manifest["cases"][0]["snapshots"][1]["prtcl_all"],
+                _particle_vtk(
+                    np.nextafter(15.016471325774145, np.inf),
+                    cycle=218,
+                ),
+            ),
+        }
+        for label, mutate in failures.items():
+            with self.subTest(label=label):
+                with _fixture(mutate) as fixture:
+                    with self.assertRaises(pilot.PilotAnalysisError):
+                        _analyze(fixture)
 
     def test_particle_provenance_and_terminal_startup_cohort_fail_closed(self) -> None:
         def provenance(root: Path, manifest: dict[str, Any]) -> None:
@@ -608,6 +692,98 @@ class Q011Section54PressurePilotTests(unittest.TestCase):
         self.assertFalse(successor["scientific_contract"]["estimators_changed"])
         self.assertFalse(successor["scientific_contract"]["thresholds_changed"])
 
+    def test_snapshot_time_compatibility_sidecar_enforces_half_open_windows(self) -> None:
+        original = pilot._regular_bytes
+        def load_with(observed_time: float, mesh_time: float, *, index: int = 1) -> None:
+            successor = json.loads(
+                pilot.SNAPSHOT_TIME_COMPATIBILITY_SUCCESSOR_PATH.read_text(encoding="utf-8")
+            )
+            snapshot = successor["approved_retained_snapshot_metadata"][0]["snapshots"][index]
+            snapshot["observed_particle_vtk_time_omega0_inverse"] = observed_time
+            snapshot["mesh_binary_header_time_omega0_inverse"] = mesh_time
+            payload = (json.dumps(successor, indent=2) + "\n").encode("utf-8")
+
+            def read(path: Path, label: str) -> bytes:
+                if path == pilot.SNAPSHOT_TIME_COMPATIBILITY_SUCCESSOR_PATH:
+                    return payload
+                return original(path, label)
+
+            with patch.object(pilot, "_regular_bytes", side_effect=read):
+                pilot._load_snapshot_time_compatibility_successor()
+
+        for index, cap in enumerate((15.1, 30.1, 45.1), start=1):
+            with self.subTest(label="below cap", cap=cap):
+                load_with(float(np.nextafter(cap, -np.inf)), cap, index=index)
+        for label, observed_time, mesh_time, index, message in (
+            ("early", float(np.nextafter(15.0, -np.inf)), 15.0, 1, "cadence window"),
+            (
+                "initial endpoint",
+                float(np.nextafter(0.0, np.inf)),
+                float(format(float(np.nextafter(0.0, np.inf)), ".6g")),
+                0,
+                "endpoint time",
+            ),
+            ("endpoint", float(np.nextafter(60.0, -np.inf)), 60.0, 4, "endpoint time"),
+            ("mesh projection", 15.016471325774145, 15.0164, 1, "mesh and particle"),
+        ):
+            with self.subTest(label=label), self.assertRaisesRegex(
+                pilot.PilotAnalysisError, message
+            ):
+                load_with(observed_time, mesh_time, index=index)
+        for index, cap in enumerate((15.1, 30.1, 45.1), start=1):
+            with self.subTest(label="at cap", cap=cap), self.assertRaisesRegex(
+                pilot.PilotAnalysisError, "cadence window"
+            ):
+                load_with(cap, cap, index=index)
+
+    def test_analysis_consumes_exact_authorized_snapshot_sidecar_bytes(self) -> None:
+        precise_time = 15.02
+
+        def coherent_substitution(root: Path, manifest: dict[str, Any]) -> None:
+            snapshot = manifest["cases"][0]["snapshots"][1]
+            for name, fields in (
+                ("mhd_w_bcc", _ATHENAK_MHD_W_BCC_FIELDS),
+                ("bmag", ("bmag",)),
+                ("prtcl_jx", ("prtcl_jx",)),
+                ("j2", ("j2",)),
+            ):
+                _rewrite(
+                    root,
+                    snapshot[name],
+                    _binary(precise_time, "1.0", fields, cycle=218),
+                )
+            _rewrite(
+                root,
+                snapshot["prtcl_all"],
+                _particle_vtk(precise_time, cycle=218),
+            )
+
+        original = pilot._regular_bytes
+        successor = json.loads(
+            pilot.SNAPSHOT_TIME_COMPATIBILITY_SUCCESSOR_PATH.read_text(encoding="utf-8")
+        )
+        snapshot = successor["approved_retained_snapshot_metadata"][0]["snapshots"][1]
+        snapshot["observed_particle_vtk_time_omega0_inverse"] = precise_time
+        snapshot["mesh_binary_header_time_omega0_inverse"] = precise_time
+        substituted_payload = (json.dumps(successor, indent=2) + "\n").encode("utf-8")
+        sidecar_reads = 0
+
+        def read(path: Path, label: str) -> bytes:
+            nonlocal sidecar_reads
+            if path == pilot.SNAPSHOT_TIME_COMPATIBILITY_SUCCESSOR_PATH:
+                sidecar_reads += 1
+                if sidecar_reads > 2:
+                    return substituted_payload
+            return original(path, label)
+
+        with _fixture(coherent_substitution) as fixture, patch.object(
+            pilot, "_regular_bytes", side_effect=read
+        ), self.assertRaisesRegex(
+            pilot.PilotAnalysisError, "approved retained snapshot metadata"
+        ):
+            _analyze(fixture)
+        self.assertEqual(sidecar_reads, 2)
+
     def test_postrun_source_authorization_rejects_role_path_swap(self) -> None:
         original = pilot._regular_bytes
         successor = json.loads(pilot.PREREGISTRATION_PATH.read_text(encoding="utf-8"))
@@ -648,17 +824,37 @@ class Q011Section54PressurePilotTests(unittest.TestCase):
             predecessor["predecessor_record"],
             "tst/publication/readiness/"
             "q011_section54_pressure_pilot_postrun_aggregate_source_authorization_"
-            "successor_2026-06-02.json",
+            "successor_v3_2026-06-04.json",
         )
         self.assertEqual(predecessor["predecessor_sha256"], _sha256(first_successor_payload))
         self.assertEqual(
             first_successor["predecessor_record"],
+            "tst/publication/readiness/"
+            "q011_section54_pressure_pilot_postrun_aggregate_source_authorization_"
+            "successor_v2_2026-06-03.json",
+        )
+        second_successor_path = pilot.REPO_ROOT / first_successor["predecessor_record"]
+        second_successor_payload = second_successor_path.read_bytes()
+        second_successor = json.loads(second_successor_payload)
+        self.assertEqual(first_successor["predecessor_sha256"], _sha256(second_successor_payload))
+        self.assertEqual(
+            second_successor["predecessor_record"],
+            "tst/publication/readiness/"
+            "q011_section54_pressure_pilot_postrun_aggregate_source_authorization_"
+            "successor_2026-06-02.json",
+        )
+        original_successor_path = pilot.REPO_ROOT / second_successor["predecessor_record"]
+        original_successor_payload = original_successor_path.read_bytes()
+        original_successor = json.loads(original_successor_payload)
+        self.assertEqual(second_successor["predecessor_sha256"], _sha256(original_successor_payload))
+        self.assertEqual(
+            original_successor["predecessor_record"],
             pilot.PARSER_COMPATIBILITY_SUCCESSOR_PATH.relative_to(
                 pilot.REPO_ROOT
             ).as_posix(),
         )
         self.assertEqual(
-            first_successor["predecessor_sha256"], _sha256(compatibility_payload)
+            original_successor["predecessor_sha256"], _sha256(compatibility_payload)
         )
 
     def test_postrun_source_authorization_rejects_predecessor_drift(self) -> None:

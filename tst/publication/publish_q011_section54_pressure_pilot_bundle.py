@@ -988,11 +988,11 @@ def verify_published_pressure_pilot_bundle(
 
 
 def _static_source_bindings() -> dict[str, object]:
-    successor = pilot._load_postrun_source_authorization_successor()
-    successor_payload = pilot._regular_bytes(
-        pilot.PREREGISTRATION_PATH,
-        "pressure-pilot post-run aggregate source authorization",
+    source_payloads: dict[str, bytes] = {}
+    successor = pilot._load_postrun_source_authorization_successor(
+        source_payloads=source_payloads
     )
+    successor_payload = source_payloads["postrun_aggregate_source_authorization"]
     registered_execution_payload = pilot._regular_bytes(
         _REGISTERED_EXECUTION_PREREGISTRATION_PATH,
         "pressure-pilot registered-execution preregistration",
@@ -1286,9 +1286,8 @@ def _validate_retained_source_bindings(
 
 
 def _manifest(case_descriptors: Mapping[str, Mapping[str, object]]) -> dict[str, object]:
-    policy = pilot._load_policy()
-    preregistration_payload = pilot._regular_bytes(
-        pilot.PREREGISTRATION_PATH, "pressure-pilot preregistration"
+    policy, _approved_snapshot_metadata, preregistration_payload = (
+        pilot._load_policy_and_snapshot_metadata()
     )
     registered_execution_payload = pilot._regular_bytes(
         _REGISTERED_EXECUTION_PREREGISTRATION_PATH,

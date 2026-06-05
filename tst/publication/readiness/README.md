@@ -675,13 +675,23 @@ qualify any scientific claim by itself.
   authorization. It does not reauthorize the consumed historical v2 pressure
   slices. It binds the worker-extracted read-only `git archive HEAD` execution
   contract and the exact aggregate and packet source closure.
-- `q011_section54_pressure_pilot_postrun_aggregate_source_authorization_successor_v2_2026-06-03.json`
+- `q011_section54_pressure_pilot_postrun_aggregate_source_authorization_successor_v2_2026-06-03.json`,
+  `q011_section54_pressure_pilot_postrun_aggregate_source_authorization_successor_v3_2026-06-04.json`
   and
-  `q011_section54_pressure_pilot_postrun_aggregate_source_authorization_successor_v3_2026-06-04.json`:
+  `q011_section54_pressure_pilot_postrun_aggregate_source_authorization_successor_v4_2026-06-04.json`:
   append-only source-closure successors for post-run publication only. The v3
   successor binds the exact unordered `mhd_w_bcc` inventory compatibility
   repair after aggregate job `4764415` failed closed on producer-order drift.
-  Neither successor reauthorizes a launch or changes the scientific contract.
+  The v4 successor binds the exact retained snapshot-metadata compatibility
+  repair after aggregate job `4764674` failed closed on AthenaK `dt` scheduling
+  semantics. None reauthorizes a launch or changes the scientific contract.
+- `q011_section54_pressure_pilot_snapshot_time_compatibility_successor_2026-06-04.json`:
+  append-only engineering-only snapshot-time compatibility record. It freezes
+  the exact observed particle-header time, six-significant-digit mesh-header
+  time and common cycle tuple for every immutable pressure-pilot case slot,
+  validates interior post-cadence lateness against a strict `< 0.1` engineering
+  cap, and preserves exact initialization and finalization times. It is not a
+  manuscript tolerance and does not authorize a launch.
 - `q011_section54_fourth_adversarial_repair_transition_2026-06-02.json`,
   `q011_section54_fifth_adversarial_repair_transition_2026-06-03.json`,
   `q011_section54_sixth_adversarial_repair_transition_2026-06-03.json`,
@@ -727,6 +737,11 @@ qualify any scientific claim by itself.
   unordered inventory equality and composing by name. Qualifying launch remains
   prohibited pending commit, clean-worker validation, exact-latest rereview,
   aggregate publication, review-packet publication and human pressure choice.
+- `q011_section54_fifteenth_aggregate_snapshot_metadata_repair_transition_2026-06-04.json`:
+  append-only failed-closed aggregate-publication checkpoint after the
+  committed fourteenth repair and clean-worker validation. It records failed
+  job `4764674`, the coherent retained metadata for all `100` products, the
+  exact-tuple compatibility repair, and the unchanged launch prohibition.
 - `q011_parallel_shock_storage_estimator_successor_2026-06-01.json`:
   analytical storage-planning successor after the publication deck gained a
   signed particle-current binary output and the PVTK block moved. The estimator

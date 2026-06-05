@@ -100,6 +100,26 @@ Completed:
     artifact. All twenty retained `mhd_w_bcc` snapshots have one exact
     eight-field inventory, but AthenaK writes the fields in producer order while
     the analyzer assumed one different tuple order.
+23. The fourteenth-pass exact unordered inventory repair was committed and
+    pushed as `0ac4bb1bf8d0fe10867db2b7d776e692acea9b0b`. Worker job `4764639`
+    passed `240` archived focused tests and all `1273` explicit publication
+    tests with two intentional skips. An exact-latest-patch rereview passed.
+24. Replacement aggregate worker job `4764674` failed closed before exposing
+    any public artifact. AthenaK writes interior `dt=15` products on the first
+    committed step after each nominal cadence, while the analyzer still
+    required exact nominal times.
+25. Read-only forensics verified all `100` retained snapshot products and
+    froze the exact observed particle-header time, six-significant-digit
+    mesh-header time, and common cycle tuple for every immutable case slot.
+26. Keep a separate qualification-launch blocker open: before any qualifying
+    materialization, audit the attempt-manifest binary/particle time equality
+    and the numerical analyzer's nominal-time tolerance against AthenaK's
+    committed-step output scheduling. This is not part of the immutable pilot
+    publication recovery and must not broaden its accepted contract.
+27. Independent software and scientific reviews found and repaired a stale
+    review-packet binary-reader call contract, a compatibility-sidecar
+    hash-check/use reopen window, a predecessor chronology fork, and missing
+    coherent unauthorized-cycle coverage.
 
 In progress:
 
@@ -108,13 +128,13 @@ In progress:
 2. Preserve the exact empty recovered `publication_acceptance/` inode and its
    durable receipt. Do not delete or recreate the directory and do not
    republish the receipt.
-3. Commit, push, validate, and independently rereview the fourteenth-pass exact
-   unordered MHD-inventory repair before submitting one reviewed replacement
-   aggregate publication worker.
+3. Commit, push, validate, and independently rereview the fifteenth-pass exact
+   retained snapshot-metadata repair before submitting one reviewed
+   replacement aggregate publication worker.
 
 Remaining:
 
-1. Commit and push the fourteenth-pass aggregate MHD-inventory-order repair,
+1. Commit and push the fifteenth-pass aggregate snapshot-metadata repair,
    pass one clean committed worker validation, and independently rereview the
    exact latest patch.
 2. Publish and verify the pressure-pilot
@@ -330,7 +350,7 @@ ledger file:   $PIC_ROOT/ledger/node_hours.jsonl
 ## Pressure-pilot aggregate publication
 
 An initial login-node publisher attempt proved materially long-running and did
-not expose a final receipt. Four Frontier Slurm worker publication attempts
+not expose a final receipt. Five Frontier Slurm worker publication attempts
 then ended without exposing a public bundle:
 
 | Slurm job | Terminal state | Elapsed | Reason |
@@ -339,11 +359,12 @@ then ended without exposing a public bundle:
 | `4757026` | `CANCELLED` | `00:02:16` | Cancelled when the checkout mutated during publication; superseded by worker-local `git archive HEAD` snapshots |
 | `4757047` | `CANCELLED` | `00:04:36` | Cancelled after fresh review found late-failure rollback, descriptor-anchor, and source-authorization gaps |
 | `4764415` | `FAILED` | `00:05:37` | Strict offline `mhd_w_bcc` analyzer assumed one tuple order for an exact name-addressed AthenaK variable inventory |
+| `4764674` | `FAILED` | `00:05:34` | Strict offline analyzer assumed exact nominal times for AthenaK interior `dt`-scheduled products |
 
-The integrated thirteenth-pass tree and failed job `4764415` are historical.
-Aggregate publication remains prohibited until the fourteenth-pass exact
-unordered MHD-inventory repair is committed, pushed, clean-worker validated and
-independently rereviewed from the exact latest patch. Do not invoke the
+The integrated fourteenth-pass tree and failed job `4764674` are historical.
+Aggregate publication remains prohibited until the fifteenth-pass exact
+retained snapshot-metadata repair is committed, pushed, clean-worker validated
+and independently rereviewed from the exact latest patch. Do not invoke the
 publisher directly on a login node. Use only the exact hermetic, commit-bound,
 `--export=NIL` publication sequence in
 [`frontier_control_plane/README.md`](frontier_control_plane/README.md).
@@ -820,6 +841,26 @@ change estimators or thresholds, or authorize launch. The append-only transition
 record is
 [`q011_section54_fourteenth_aggregate_mhd_inventory_order_repair_transition_2026-06-04.json`](readiness/q011_section54_fourteenth_aggregate_mhd_inventory_order_repair_transition_2026-06-04.json).
 
+### Fifteenth aggregate snapshot-metadata pass
+
+The committed fourteenth-pass worker and exact-latest rereview passed.
+Replacement aggregate worker job `4764674` then failed closed before exposing
+any public artifact. AthenaK increments time before testing whether `dt`-based
+outputs are due, so each interior product is written on the first committed
+step after its nominal cadence. Mesh binary headers serialize that time with
+default six-significant-digit stream precision; particle VTK headers retain
+`max_digits10`.
+
+Read-only forensics verified all `100` retained snapshot products. Within every
+immutable case slot, the four mesh products share one binary-header time and all
+five products share one cycle. The particle-header lateness above nominal is at
+most `0.054575889532856081`, and every mesh-header time is exactly the
+six-significant-digit rendering of its particle-header time. The staged repair
+does not add a general tolerance. It freezes the exact observed tuple for every
+retained case slot, checks those tuples against a strict `< 0.1` engineering
+compatibility cap, and requires exact tuple matches during publication. It does
+not change the scientific contract or authorize launch.
+
 ## Validation baseline
 
 The committed launch-prohibited checkpoint passed these validations before the
@@ -900,8 +941,8 @@ Then:
 1. Read this file and both governing plans.
 2. Verify the exact empty recovered `0700` acceptance-root inode and its durable
    receipt. Preserve both.
-3. Inspect, commit, and push the fourteenth-pass exact unordered
-   MHD-inventory-order repair.
+3. Inspect, commit, and push the fifteenth-pass exact retained
+   snapshot-metadata repair.
 4. Run focused and full validation suites from the clean committed worker
    snapshot.
 5. Request a fresh independent adversarial review.

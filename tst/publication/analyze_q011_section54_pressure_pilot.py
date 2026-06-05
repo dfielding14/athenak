@@ -42,17 +42,20 @@ PARSER_COMPATIBILITY_SUCCESSOR_PATH = (
     "q011_section54_pressure_pilot_aggregate_analysis_compatibility_"
     "successor_2026-06-02.json"
 )
-POSTRUN_SOURCE_AUTHORIZATION_PREDECESSOR_PATH = (
+SNAPSHOT_TIME_COMPATIBILITY_SUCCESSOR_PATH = (
     REPO_ROOT
     / "tst/publication/readiness/"
-    "q011_section54_pressure_pilot_postrun_aggregate_source_authorization_"
-    "successor_v2_2026-06-03.json"
+    "q011_section54_pressure_pilot_snapshot_time_compatibility_"
+    "successor_2026-06-04.json"
+)
+POSTRUN_SOURCE_AUTHORIZATION_PREDECESSOR_PATH = (
+    SNAPSHOT_TIME_COMPATIBILITY_SUCCESSOR_PATH
 )
 PREREGISTRATION_PATH = (
     REPO_ROOT
     / "tst/publication/readiness/"
     "q011_section54_pressure_pilot_postrun_aggregate_source_authorization_"
-    "successor_v3_2026-06-04.json"
+    "successor_v4_2026-06-04.json"
 )
 REGISTERED_EXECUTION_PREREGISTRATION_PATH = (
     REPO_ROOT
@@ -174,6 +177,7 @@ _CASES = (
     ("ps_p0_0p20", 0.2, "0.20"),
 )
 _TIMES = (0.0, 15.0, 30.0, 45.0, 60.0)
+_INTERIOR_SNAPSHOT_OVERSHOOT_CAP = 0.1
 _FIXED_OVERRIDES = (
     "mesh/nx1=100",
     "mesh/x1max=1200",
@@ -460,10 +464,162 @@ def _load_compatibility_successor() -> tuple[bytes, dict[str, str]]:
     return predecessor_payload, successor["compatibility_repair"]["changed_source_binding"]
 
 
-def _load_postrun_source_authorization_successor() -> dict[str, Any]:
+def _load_snapshot_time_compatibility_successor(
+    payload: bytes | None = None,
+) -> dict[tuple[str, float], dict[str, int | float]]:
+    if payload is None:
+        payload = _regular_bytes(
+            SNAPSHOT_TIME_COMPATIBILITY_SUCCESSOR_PATH,
+            "pressure-pilot snapshot-time compatibility successor",
+        )
+    successor = _decode_json(
+        payload, "pressure-pilot snapshot-time compatibility successor"
+    )
+    expected = {
+        "record_type": "q011_section54_pressure_pilot_snapshot_time_compatibility_successor",
+        "schema_version": 1,
+        "date": "2026-06-04",
+        "gate": "Q-011",
+        "classification": EVIDENCE_CLASS,
+        "qualification_effect": (
+            "none_snapshot_time_compatibility_repair_only_no_sun_bai_claim_"
+            "no_execution_authorization"
+        ),
+        "predecessor_record": (
+            "tst/publication/readiness/"
+            "q011_section54_pressure_pilot_postrun_aggregate_source_authorization_"
+            "successor_v3_2026-06-04.json"
+        ),
+        "predecessor_sha256": (
+            "38d778a0d26f5536bdb3a98f0c936392a724ccff0ceca53f077b28fa8247e390"
+        ),
+        "failed_closed_publication": {
+            "slurm_job_id": "4764674",
+            "terminal_state": "FAILED",
+            "failure_class": (
+                "strict_offline_snapshot_time_analyzer_assumed_exact_nominal_"
+                "cadence_for_dt_scheduled_athenak_products"
+            ),
+            "first_rejected_product": (
+                "cases/ps_p0_1p00/bin/ps_p0_1p00.mhd_w_bcc.00001.bin"
+            ),
+            "public_bundle_exposed": False,
+        },
+        "compatibility_repair": {
+            "accepted_runtime_semantics": (
+                "initial_and_terminal_times_exact_interior_dt_scheduled_outputs_"
+                "first_committed_step_after_nominal_cadence_with_registered_"
+                "engineering_overshoot_cap_all_products_cycle_coherent_all_mesh_"
+                "products_header_time_coherent_particle_max_digits10_time_"
+                "projects_exactly_to_mesh_default_six_significant_digits"
+            ),
+            "interior_snapshot_overshoot_cap_omega0_inverse": 0.1,
+            "cap_boundary": "strict_less_than",
+            "scientific_contract_changed": False,
+            "pilot_cases_changed": False,
+            "estimators_changed": False,
+            "thresholds_changed": False,
+            "snapshot_selection_changed": False,
+        },
+        "execution_policy": {
+            "frontier_execution_authorized_by_this_record": False,
+            "scheduler_commands_authorized_by_this_record": False,
+            "scientific_evidence_eligible": False,
+            "sun_bai_claim": False,
+        },
+    }
+    _strict_equal(
+        {
+            key: successor[key]
+            for key in expected
+        },
+        expected,
+        "pressure-pilot snapshot-time compatibility successor",
+    )
+    _require(
+        set(successor) == {*expected, "approved_retained_snapshot_metadata"},
+        "pressure-pilot snapshot-time compatibility successor keys drifted",
+    )
+    predecessor = _regular_bytes(
+        REPO_ROOT / successor["predecessor_record"],
+        "pressure-pilot snapshot-time compatibility predecessor",
+    )
+    _require(
+        _sha256_bytes(predecessor) == successor["predecessor_sha256"],
+        "pressure-pilot snapshot-time compatibility predecessor SHA-256 drifted",
+    )
+    cases = _list(
+        successor["approved_retained_snapshot_metadata"],
+        "pressure-pilot approved retained snapshot metadata",
+    )
+    _require(len(cases) == len(_CASES), "pressure-pilot approved snapshot case count drifted")
+    approved: dict[tuple[str, float], dict[str, int | float]] = {}
+    for raw_case, (expected_case_id, _, _) in zip(cases, _CASES):
+        record = _object(raw_case, {"case_id", "snapshots"}, "pressure-pilot approved snapshot case")
+        _strict_equal(record["case_id"], expected_case_id, "pressure-pilot approved snapshot case ID")
+        snapshots = _list(record["snapshots"], f"{expected_case_id} approved snapshots")
+        _require(len(snapshots) == len(_TIMES), f"{expected_case_id}: approved snapshot count drifted")
+        previous_cycle = -1
+        for raw_snapshot, scheduled_time in zip(snapshots, _TIMES):
+            snapshot = _object(
+                raw_snapshot,
+                {
+                    "scheduled_time_omega0_inverse",
+                    "observed_particle_vtk_time_omega0_inverse",
+                    "mesh_binary_header_time_omega0_inverse",
+                    "cycle",
+                },
+                f"{expected_case_id} approved snapshot",
+            )
+            _strict_equal(
+                snapshot["scheduled_time_omega0_inverse"],
+                scheduled_time,
+                f"{expected_case_id} approved scheduled time",
+            )
+            observed_time = _float(
+                snapshot["observed_particle_vtk_time_omega0_inverse"],
+                f"{expected_case_id} approved observed time",
+            )
+            binary_time = _float(
+                snapshot["mesh_binary_header_time_omega0_inverse"],
+                f"{expected_case_id} approved mesh-binary time",
+            )
+            cycle = _int(snapshot["cycle"], f"{expected_case_id} approved cycle")
+            _require(cycle > previous_cycle, f"{expected_case_id}: approved cycles are not increasing")
+            previous_cycle = cycle
+            _require(
+                binary_time == float(format(observed_time, ".6g")),
+                f"{expected_case_id}: approved mesh and particle times disagree",
+            )
+            index = _TIMES.index(scheduled_time)
+            if index in (0, len(_TIMES) - 1):
+                _require(observed_time == scheduled_time, f"{expected_case_id}: approved endpoint time drifted")
+            else:
+                _require(
+                    scheduled_time
+                    <= observed_time
+                    < scheduled_time + _INTERIOR_SNAPSHOT_OVERSHOOT_CAP,
+                    f"{expected_case_id}: approved dt-scheduled cadence window drifted",
+                )
+            approved[(expected_case_id, scheduled_time)] = {
+                "scheduled_time_omega0_inverse": scheduled_time,
+                "observed_time_omega0_inverse": observed_time,
+                "mesh_binary_header_time_omega0_inverse": binary_time,
+                "cycle": cycle,
+            }
+    return approved
+
+
+def _load_postrun_source_authorization_successor(
+    *, source_payloads: dict[str, bytes] | None = None
+) -> dict[str, Any]:
+    if source_payloads is not None:
+        source_payloads.clear()
     payload = _regular_bytes(
         PREREGISTRATION_PATH, "pressure-pilot post-run aggregate source authorization"
     )
+    if source_payloads is not None:
+        source_payloads["postrun_aggregate_source_authorization"] = payload
     successor = _object(
         _decode_json(payload, "pressure-pilot post-run aggregate source authorization"),
         {
@@ -521,7 +677,7 @@ def _load_postrun_source_authorization_successor() -> dict[str, Any]:
                 ).as_posix()
             ),
             "predecessor_sha256": (
-                "945d60375f39188ef1b136df1cca838f3194c2359270551eac7485fab701621f"
+                "2e608404604d85963f8371876ce0dc3243e5d0b1398820c5724c94ffc631c287"
             ),
             "historical_launch_chronology": {
                 "state": "stale_non_authorizing_consumed_slices_no_reauthorization",
@@ -603,10 +759,13 @@ def _load_postrun_source_authorization_successor() -> dict[str, Any]:
         _require(path not in paths, f"{label}: duplicate path")
         roles.add(role)
         paths.add(path)
-        measured = _sha256_bytes(
-            _regular_bytes(REPO_ROOT / path, f"reviewed post-run source {path}")
+        source_payload = _regular_bytes(
+            REPO_ROOT / path, f"reviewed post-run source {path}"
         )
+        measured = _sha256_bytes(source_payload)
         _require(measured == digest, f"reviewed post-run source SHA-256 drifted: {path}")
+        if source_payloads is not None:
+            source_payloads[role] = source_payload
     expected_source_paths = {
         "aggregate_worker_wrapper": (
             "tst/publication/frontier_q011_section54_pressure_pilot_publish_job.sh"
@@ -633,6 +792,11 @@ def _load_postrun_source_authorization_successor() -> dict[str, Any]:
         "review_packet_worker_wrapper": (
             "tst/publication/frontier_q011_section54_pressure_pilot_review_packet_job.sh"
         ),
+        "snapshot_time_compatibility_successor": (
+            "tst/publication/readiness/"
+            "q011_section54_pressure_pilot_snapshot_time_compatibility_"
+            "successor_2026-06-04.json"
+        ),
     }
     _strict_equal(
         roles,
@@ -651,8 +815,17 @@ def _load_postrun_source_authorization_successor() -> dict[str, Any]:
     return successor
 
 
-def _load_policy() -> dict[str, Any]:
-    _load_postrun_source_authorization_successor()
+def _load_policy_and_snapshot_metadata(
+) -> tuple[
+    dict[str, Any],
+    dict[tuple[str, float], dict[str, int | float]],
+    bytes,
+]:
+    source_payloads: dict[str, bytes] = {}
+    _load_postrun_source_authorization_successor(source_payloads=source_payloads)
+    approved_snapshot_metadata = _load_snapshot_time_compatibility_successor(
+        source_payloads["snapshot_time_compatibility_successor"]
+    )
     payload, output_primitives_successor = _load_compatibility_successor()
     policy = _object(
         _decode_json(payload, "pressure-pilot preregistration"),
@@ -786,7 +959,15 @@ def _load_policy() -> dict[str, Any]:
         )
         measured = _sha256_bytes(_regular_bytes(path, f"bound source {relative}"))
         _require(measured == binding["sha256"], f"bound source SHA-256 drifted: {relative}")
-    return {**policy, "analysis_bindings": expected_analysis}
+    return (
+        {**policy, "analysis_bindings": expected_analysis},
+        approved_snapshot_metadata,
+        source_payloads["postrun_aggregate_source_authorization"],
+    )
+
+
+def _load_policy() -> dict[str, Any]:
+    return _load_policy_and_snapshot_metadata()[0]
 
 
 def _manifest_schema(payload: bytes) -> dict[str, Any]:
@@ -962,7 +1143,6 @@ def _validate_runtime_parameters(dataset: output_primitives.AthenaBinaryDataset,
 def _binary_dataset(
     root: Path,
     binding: Mapping[str, str],
-    time: float,
     ps_p0: float,
     fields: Sequence[str],
     *,
@@ -978,7 +1158,6 @@ def _binary_dataset(
         dataset = output_primitives.parse_athenak_binary_bytes(payload, source=binding["path"])
     except output_primitives.AnalysisError as error:
         raise PilotAnalysisError(f"malformed Athena bin {binding['path']}: {error}") from error
-    _require(dataset.time == time, f"{binding['path']}: internal snapshot time drifted")
     _validate_runtime_parameters(dataset, ps_p0)
     _require(set(dataset.variable_names) == set(fields), f"{binding['path']}: variable inventory drifted")
     composites = {}
@@ -988,6 +1167,39 @@ def _binary_dataset(
         except output_primitives.AnalysisError as error:
             raise PilotAnalysisError(f"{binding['path']}: invalid composite field {field}: {error}") from error
     return dataset, composites
+
+
+def _snapshot_schedule_report(
+    case_id: str,
+    scheduled_time: float,
+    datasets: Sequence[output_primitives.AthenaBinaryDataset],
+    particles: Mapping[str, Any],
+    approved_snapshot_metadata: Mapping[tuple[str, float], Mapping[str, int | float]],
+) -> dict[str, int | float]:
+    binary_times = {dataset.time for dataset in datasets}
+    _require(len(binary_times) == 1, "snapshot mesh-product times disagree")
+    cycles = {dataset.cycle for dataset in datasets} | {int(particles["cycle"])}
+    _require(len(cycles) == 1, "snapshot product cycles disagree")
+    binary_time = next(iter(binary_times))
+    precise_time = float(particles["internal_time_omega0_inverse"])
+    # MeshBinaryOutput uses a fresh default stream (six significant digits);
+    # ParticleVTKOutput retains max_digits10 for the same committed cycle.
+    _require(
+        binary_time == float(format(precise_time, ".6g")),
+        "snapshot mesh and particle header times disagree",
+    )
+    measured = {
+        "scheduled_time_omega0_inverse": scheduled_time,
+        "observed_time_omega0_inverse": precise_time,
+        "mesh_binary_header_time_omega0_inverse": binary_time,
+        "cycle": next(iter(cycles)),
+    }
+    _strict_equal(
+        measured,
+        approved_snapshot_metadata[(case_id, scheduled_time)],
+        f"{case_id} t={scheduled_time} approved retained snapshot metadata",
+    )
+    return measured
 
 
 def _particle_data(payload: bytes, label: str) -> ParticleVTKData:
@@ -1006,7 +1218,7 @@ def _particle_report(
     time: float,
     *,
     member_reader: Callable[[str], bytes] | None = None,
-) -> dict[str, int]:
+) -> dict[str, int | float]:
     payload = _member_payload(
         root,
         binding,
@@ -1021,9 +1233,9 @@ def _particle_report(
         internal_time = float(match.group(1))
     except ValueError as error:
         raise PilotAnalysisError(f"{binding['path']}: particle VTK time is malformed") from error
-    _require(math.isfinite(internal_time) and internal_time == time,
-             f"{binding['path']}: particle VTK internal time drifted")
-    _require(int(match.group(2)) >= 1 and int(match.group(3)) >= 0,
+    cycle = int(match.group(3))
+    _require(math.isfinite(internal_time), f"{binding['path']}: particle VTK time is not finite")
+    _require(int(match.group(2)) >= 1 and cycle >= 0,
              f"{binding['path']}: particle VTK rank or cycle provenance is invalid")
     data = _particle_data(payload, binding["path"])
     _require(set(data.scalars) == _PVTK_SCALARS, f"{binding['path']}: particle scalar provenance drifted")
@@ -1048,6 +1260,8 @@ def _particle_report(
         _require(not np.any(retained_early),
                  f"{binding['path']}: retained post-removal shock-injected particle has birth_time < 45")
     return {
+        "internal_time_omega0_inverse": internal_time,
+        "cycle": cycle,
         "particle_count": int(count),
         "shock_injected_particle_count": int(np.count_nonzero(data.scalars["cr_source"] == 1)),
         "retained_early_shock_injected_particle_count": int(np.count_nonzero(retained_early)),
@@ -1200,39 +1414,44 @@ def _snapshot_report(
     case_id: str,
     ps_p0: float,
     snapshot: Mapping[str, Any],
+    approved_snapshot_metadata: Mapping[tuple[str, float], Mapping[str, int | float]],
     *,
     member_reader: Callable[[str], bytes] | None = None,
 ) -> dict[str, Any]:
     time = snapshot["time"]
     mhd_dataset, mhd = _binary_dataset(
-        root, snapshot["mhd_w_bcc"], time, ps_p0, _MHD_FIELDS, member_reader=member_reader
+        root, snapshot["mhd_w_bcc"], ps_p0, _MHD_FIELDS, member_reader=member_reader
     )
-    _, bmag_product = _binary_dataset(
+    bmag_dataset, bmag_product = _binary_dataset(
         root,
         snapshot["bmag"],
-        time,
         ps_p0,
         _SCALAR_BIN_FIELDS["bmag"],
         member_reader=member_reader,
     )
-    _binary_dataset(
+    prtcl_jx_dataset, _ = _binary_dataset(
         root,
         snapshot["prtcl_jx"],
-        time,
         ps_p0,
         _SCALAR_BIN_FIELDS["prtcl_jx"],
         member_reader=member_reader,
     )
-    _binary_dataset(
+    j2_dataset, _ = _binary_dataset(
         root,
         snapshot["j2"],
-        time,
         ps_p0,
         _SCALAR_BIN_FIELDS["j2"],
         member_reader=member_reader,
     )
     particles = _particle_report(
         root, snapshot["prtcl_all"], time, member_reader=member_reader
+    )
+    schedule = _snapshot_schedule_report(
+        case_id,
+        time,
+        (mhd_dataset, bmag_dataset, prtcl_jx_dataset, j2_dataset),
+        particles,
+        approved_snapshot_metadata,
     )
     rho = mhd["dens"].values
     pressure = (float(mhd_dataset.input_parameters["mhd"]["gamma"]) - 1.0) * mhd["eint"].values
@@ -1247,13 +1466,15 @@ def _snapshot_report(
         "case_id": case_id,
         "ps_p0": ps_p0,
         "time_omega0_inverse": time,
+        "observed_time_omega0_inverse": schedule["observed_time_omega0_inverse"],
+        "cycle": schedule["cycle"],
         "x1_c_over_omega_pi": x1.tolist(),
         "rho_y_average": np.mean(rho, axis=(0, 1)).tolist(),
         "p_y_average": np.mean(pressure, axis=(0, 1)).tolist(),
         "vx_y_average": np.mean(vx, axis=(0, 1)).tolist(),
         "bmag_y_average": np.mean(bmag, axis=(0, 1)).tolist(),
     }
-    return {"profile": profile, "particles": particles}
+    return {"profile": profile, "particles": particles, "schedule": schedule}
 
 
 def analyze_pressure_pilot_bundle(
@@ -1286,7 +1507,9 @@ def analyze_pressure_pilot_bundle(
         "pressure-pilot bundle is outside the authorized publication root",
     )
     _require(bundle_root.is_dir(), "pressure-pilot bundle root must be a directory")
-    policy = _load_policy()
+    policy, approved_snapshot_metadata, postrun_authorization_payload = (
+        _load_policy_and_snapshot_metadata()
+    )
     manifest_payload = (
         _regular_bytes(bundle_root / MANIFEST_NAME, "pressure-pilot manifest")
         if member_reader is None
@@ -1298,7 +1521,7 @@ def analyze_pressure_pilot_bundle(
     _strict_equal(manifest["active_deck_binding"], policy["active_deck_binding"], "manifest/active deck binding")
     expected_prereg = {
         "path": PREREGISTRATION_PATH.relative_to(REPO_ROOT).as_posix(),
-        "sha256": _sha256_bytes(_regular_bytes(PREREGISTRATION_PATH, "pressure-pilot preregistration")),
+        "sha256": _sha256_bytes(postrun_authorization_payload),
     }
     _strict_equal(manifest["preregistration_binding"], expected_prereg, "manifest/preregistration binding")
     registered_execution_payload = _regular_bytes(
@@ -1333,6 +1556,7 @@ def analyze_pressure_pilot_bundle(
                 case["case_id"],
                 case["ps_p0"],
                 snapshot,
+                approved_snapshot_metadata,
                 member_reader=member_reader,
             )
             for snapshot in case["snapshots"]
@@ -1355,6 +1579,7 @@ def analyze_pressure_pilot_bundle(
             "case_id": case["case_id"],
             "ps_p0": case["ps_p0"],
             "snapshot_count": len(snapshot_reports),
+            "snapshot_schedule": [report["schedule"] for report in snapshot_reports],
             "terminal_particles": snapshot_reports[-1]["particles"],
             "q017_telemetry": stdout["telemetry"],
             "shock_diagnostic_counts": stdout["shock_diagnostic_counts"],

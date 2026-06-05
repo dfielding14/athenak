@@ -153,17 +153,23 @@ def _raw_tree(
     _ps_p0, argv_value = case_verifier._CASE_BY_ID[case_id]
     for index, time in enumerate(case_verifier._TIMES):
         sources = case_verifier._snapshot_source_paths(case_id, index)
+        metadata = pilot_fixture._approved_snapshot_metadata(case_id, index)
+        observed_time = float(metadata["observed_time_omega0_inverse"])
+        cycle = int(metadata["cycle"])
         _put(
             root,
             sources["mhd_w_bcc"],
             pilot_fixture._binary(
-                time, argv_value, pilot_fixture._ATHENAK_MHD_W_BCC_FIELDS
+                observed_time,
+                argv_value,
+                pilot_fixture._ATHENAK_MHD_W_BCC_FIELDS,
+                cycle=cycle,
             ),
         )
-        _put(root, sources["bmag"], pilot_fixture._binary(time, argv_value, ("bmag",)))
-        _put(root, sources["prtcl_jx"], pilot_fixture._binary(time, argv_value, ("prtcl_jx",)))
-        _put(root, sources["j2"], pilot_fixture._binary(time, argv_value, ("j2",)))
-        _put(root, sources["prtcl_all"], pilot_fixture._particle_vtk(time))
+        _put(root, sources["bmag"], pilot_fixture._binary(observed_time, argv_value, ("bmag",), cycle=cycle))
+        _put(root, sources["prtcl_jx"], pilot_fixture._binary(observed_time, argv_value, ("prtcl_jx",), cycle=cycle))
+        _put(root, sources["j2"], pilot_fixture._binary(observed_time, argv_value, ("j2",), cycle=cycle))
+        _put(root, sources["prtcl_all"], pilot_fixture._particle_vtk(observed_time, cycle=cycle))
         _restart(root, case_id, index)
     if extra:
         _put(root, "output/undeclared.txt", b"must fail closure\n")
