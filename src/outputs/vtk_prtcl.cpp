@@ -184,7 +184,7 @@ void ParticleVTKOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   // Write Part 6: scalar particle data
   bool have_written_pointdata_header = false;
 
-  // Write gid of points
+  // Write integer particle fields.
   for (int n=0; n<(pm->pmb_pack->ppart->nidata); ++n) {
     std::stringstream msg;
 
@@ -198,6 +198,18 @@ void ParticleVTKOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
           << "LOOKUP_TABLE default" << std::endl;
     } else if (n == static_cast<int>(PTAG)) {
       msg << std::endl << "SCALARS ptag float" << std::endl
+          << "LOOKUP_TABLE default" << std::endl;
+    } else if (n == static_cast<int>(PLASTMOVE)) {
+      msg << std::endl << "SCALARS last_move float" << std::endl
+          << "LOOKUP_TABLE default" << std::endl;
+    } else if (n == static_cast<int>(PLASTLEVEL)) {
+      msg << std::endl << "SCALARS last_level float" << std::endl
+          << "LOOKUP_TABLE default" << std::endl;
+    } else if (n == static_cast<int>(PSEEDID)) {
+      msg << std::endl << "SCALARS seed_id float" << std::endl
+          << "LOOKUP_TABLE default" << std::endl;
+    } else {
+      msg << std::endl << "SCALARS idata_" << n << " float" << std::endl
           << "LOOKUP_TABLE default" << std::endl;
     }
 
@@ -233,6 +245,48 @@ void ParticleVTKOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     if (nremain > 0) {
       if (partfile.Write_any_type_at(&(data[npout_min]),nremain,myoffset,"float")
             != nremain) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+            << std::endl << "particle data not written correctly to vtk particle file, "
+            << "vtk file is broken." << std::endl;
+        exit(EXIT_FAILURE);
+      }
+    }
+    header_offset += pm->nprtcl_total*datasize;
+  }
+
+  if (pm->pmb_pack->ppart->IsLagrangianMC()) {
+    std::stringstream msg;
+    msg << std::endl << "SCALARS creation_time float" << std::endl
+        << "LOOKUP_TABLE default" << std::endl;
+
+    if (global_variable::my_rank == 0) {
+      partfile.Write_any_type_at(msg.str().c_str(), msg.str().size(), header_offset,
+                                 "byte");
+    }
+    header_offset += msg.str().size();
+
+    for (int p=0; p<npout_thisrank; ++p) {
+      data[p] = static_cast<float>(outpart_rdata(LMC_CREATE_TIME,p));
+    }
+    if (!big_end) {
+      for (int i=0; i<npout_thisrank; ++i) { Swap4Bytes(&data[i]); }
+    }
+
+    std::size_t datasize = sizeof(float);
+    std::size_t myoffset = header_offset +
+      rank_offset[global_variable::my_rank]*datasize;
+    if (partfile.Write_any_type_at_all(&(data[0]), npout_min, myoffset, "float")
+        != npout_min) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+          << std::endl << "particle data not written correctly to vtk particle file, "
+          << "vtk file is broken." << std::endl;
+      exit(EXIT_FAILURE);
+    }
+    myoffset += datasize*npout_min;
+    int nremain = pm->nprtcl_thisrank - npout_min;
+    if (nremain > 0) {
+      if (partfile.Write_any_type_at(&(data[npout_min]), nremain, myoffset, "float")
+          != nremain) {
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
             << std::endl << "particle data not written correctly to vtk particle file, "
             << "vtk file is broken." << std::endl;

@@ -15,13 +15,14 @@
 
 #include "athena.hpp"
 #include "io_wrapper.hpp"
+#include "particles/tracer_fields.hpp"
 
 #define NHISTORY_VARIABLES 20
 #if NHISTORY_VARIABLES > NREDUCTION_VARIABLES
     #error NHISTORY > NREDUCTION in outputs.hpp
 #endif
 
-#define NOUTPUT_CHOICES 153
+#define NOUTPUT_CHOICES 154
 // choices for output variables used in <ouput> blocks in input file
 // TO ADD MORE CHOICES:
 //   - add more strings to array below, change NOUTPUT_CHOICES above appropriately
@@ -97,8 +98,8 @@ static const char *var_choice[NOUTPUT_CHOICES] = {
   "tmunu_Sx", "tmunu_Sy", "tmunu_Sz",
   "tmunu",
 
-  // Particles (151-152)
-  "prtcl_all", "prtcl_d"
+  // Particles (151-153)
+  "prtcl_all", "prtcl_d", "prtcl_thermo_history"
 };
 
 
@@ -365,6 +366,26 @@ class ParticleVTKOutput : public BaseTypeOutput {
   int npout_total;
   HostArray2D<Real> outpart_rdata;
   HostArray2D<int>  outpart_idata;
+};
+
+//----------------------------------------------------------------------------------------
+//! \class ParticleThermoHistoryOutput
+//  \brief append-only binary thermodynamic history for lagrangian_mc particles
+
+class ParticleThermoHistoryOutput : public BaseTypeOutput {
+ public:
+  ParticleThermoHistoryOutput(ParameterInput *pin, Mesh *pm, OutputParameters oparams);
+  void LoadOutputData(Mesh *pm) override;
+  void WriteOutputFile(Mesh *pm, ParameterInput *pin) override;
+ protected:
+  int npout_thisrank;
+  int npout_total;
+  Real tracer_gamma;
+  std::vector<particles::TracerField> tracer_fields;
+  std::vector<std::string> tracer_field_names;
+  HostArray2D<Real> outpart_rdata;
+  HostArray2D<int> outpart_idata;
+  HostArray2D<Real> outfield_data;
 };
 
 //----------------------------------------------------------------------------------------
