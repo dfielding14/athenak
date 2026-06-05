@@ -108,6 +108,19 @@ The final velocity spectrum placed `1.31%` of its energy in the box mode,
 `21.2%` at `k <= 4`, and `81.8%` below the forcing band, indicating an active
 inverse cascade without a box-scale condensate. The third velocity remained zero.
 
+`mach025_512_k16_mpi8_drag0025.athinput` is a controlled comparison that changes
+only the Rayleigh drag rate from `0.25` to `0.025`, leaving `dedt`, the random
+seed, grid, outputs, and `tlim = 10` unchanged. Its estimated friction scale is
+`k_drag ~ 0.0316`, below the box mode, and its linear drag time is `40`. This
+run therefore measures transient box-scale accumulation over 40 initial
+forcing-scale turnover times rather than a new drag-balanced steady state. A
+completed eight-rank run reached a final `v_rms = 0.45581`; over the last time
+unit its mean and standard deviation were `0.44648` and `0.00417`. The final
+velocity spectrum placed `23.6%` of its energy in the box mode, `62.2%` at
+`k <= 4`, and `94.1%` below the forcing band. Thus a tenfold drag reduction at
+fixed `dedt` produces a strong box-scale condensate and does not preserve the
+target Mach number. The third velocity remained zero.
+
 For the isothermal hydro history file,
 `v_rms = sqrt(2 * (1-KE + 2-KE + 3-KE) / mass)`. The `3-KE` column should remain
 zero for these fully 2D runs.
