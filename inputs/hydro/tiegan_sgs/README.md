@@ -111,16 +111,3 @@ inverse cascade without a box-scale condensate. The third velocity remained zero
 For the isothermal hydro history file,
 `v_rms = sqrt(2 * (1-KE + 2-KE + 3-KE) / mass)`. The `3-KE` column should remain
 zero for these fully 2D runs.
-
-## Slice Plots
-
-The production inputs write full-resolution primitive binaries and coarsened SGS
-binaries at matching times. Plot the latest synchronized snapshot with:
-
-```bash
-python inputs/hydro/tiegan_sgs/plot_sgs_slices.py --run-dir RUN_DIRECTORY
-```
-
-This writes one three-panel full-resolution `rho`, `vx`, `vy` figure and one
-six-panel state-plus-SGS figure for every available coarsening factor under
-`RUN_DIRECTORY/plots`.
