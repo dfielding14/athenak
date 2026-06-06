@@ -334,6 +334,44 @@ def test_history_products_reference_residuals_and_deferred_products(tmp_path):
     assert evidence["result"] == "inconclusive"
 
 
+def test_generated_evidence_emits_nested_schema_two_acceptance_contract(tmp_path):
+    """Generated products directly expose the contract and case shape acceptance consumes."""
+
+    evidence, _, paths = retained_evidence(tmp_path)
+    contract = evidence["scientific_acceptance_contract"]
+    assert contract == {
+        "schema_version": 2,
+        "record_type": "stage-i-scientific-acceptance-reviewed-products",
+        "case_id": "R02",
+        "case_name": "fixture_case",
+        "analysis_window": {"time_start": 8.0, "time_end": 10.0},
+        "accepted_bundle_manifest": evidence["authentication"]["bundle_manifest"],
+        "generator": evidence["generator"],
+        "deterministic_replay_verification": (
+            "exact-semantic-replay-from-bound-canonical-case-inputs"
+        ),
+        "stage_i_manifest_sha256": evidence["authentication"]["stage_i_manifest"]["sha256"],
+        "mhd_history": {
+            "path": str(paths["mhd"].resolve()),
+            "size_bytes": paths["mhd"].stat().st_size,
+            "sha256": sha256(paths["mhd"]),
+        },
+        "user_history": {
+            "path": str(paths["user"].resolve()),
+            "size_bytes": paths["user"].stat().st_size,
+            "sha256": sha256(paths["user"]),
+        },
+    }
+    selected = evidence["cases"]["fixture_case"]
+    assert selected["analysis_window"] == contract["analysis_window"]
+    assert selected["lf_counter_increments"] == evidence["lf_counter_increments"]
+    assert selected["snapshot_ensemble"] == evidence["snapshot_ensemble"]
+    assert (
+        selected["scientific_acceptance_convergence"]
+        == evidence["scientific_acceptance_convergence"]
+    )
+
+
 def test_replay_is_byte_identical_and_deterministic(tmp_path):
     """Replay recomputes the record and compares exact serialized bytes."""
 
@@ -343,6 +381,20 @@ def test_replay_is_byte_identical_and_deterministic(tmp_path):
     assert identical is True
     assert replayed == evidence
     assert products.stable_json(products.build_evidence(evidence["request"])) == path.read_bytes()
+
+
+def test_forged_nested_acceptance_contract_cannot_pass_replay(tmp_path):
+    """A self-digested forged schema-2 contract still fails deterministic replay."""
+
+    evidence, _, _ = retained_evidence(tmp_path)
+    forged = deepcopy(evidence)
+    forged.pop("evidence_digest")
+    forged["scientific_acceptance_contract"]["analysis_window"]["time_start"] = 7.0
+    forged = products.seal_evidence(forged)
+    path = tmp_path / "forged-contract.json"
+    products.write_candidate(path, forged)
+    _, identical = products.replay_evidence(path, sha256(path))
+    assert identical is False
 
 
 def test_forged_claimed_output_cannot_pass_replay(tmp_path):

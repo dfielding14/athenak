@@ -49,6 +49,11 @@ BIN_CONVERT_SPEC.loader.exec_module(bin_convert)
 CANONICAL_ROOT = Path("/lustre/orion/ast207/proj-shared/dfielding/CGL")
 SCHEMA_VERSION = 1
 RECORD_TYPE = "stage-i-deterministic-scientific-products"
+ACCEPTANCE_CONTRACT_SCHEMA_VERSION = 2
+ACCEPTANCE_CONTRACT_RECORD_TYPE = "stage-i-scientific-acceptance-reviewed-products"
+DETERMINISTIC_REPLAY_VERIFICATION = (
+    "exact-semantic-replay-from-bound-canonical-case-inputs"
+)
 EVIDENCE_DIGEST_METHOD = "sha256-canonical-json-without-evidence-digest"
 HISTORY_LABEL = re.compile(r"\[(\d+)\]=(\S+)")
 SHA256 = re.compile(r"[0-9a-f]{64}")
@@ -1867,6 +1872,46 @@ def deduplicate_bindings(values: list[dict[str, object]]) -> list[dict[str, obje
     return [by_path[path] for path in sorted(by_path)]
 
 
+def scientific_acceptance_contract(
+    context: BundleContext,
+    generator_binding: dict[str, object],
+    start: float,
+    end: float,
+) -> dict[str, object]:
+    """Return the exact nested replay contract consumed by scientific acceptance."""
+
+    return {
+        "schema_version": ACCEPTANCE_CONTRACT_SCHEMA_VERSION,
+        "record_type": ACCEPTANCE_CONTRACT_RECORD_TYPE,
+        "case_id": context.case_id,
+        "case_name": context.case_name,
+        "analysis_window": {"time_start": start, "time_end": end},
+        "accepted_bundle_manifest": context.bundle_binding,
+        "generator": generator_binding,
+        "deterministic_replay_verification": DETERMINISTIC_REPLAY_VERIFICATION,
+        "stage_i_manifest_sha256": context.stage_manifest_binding["sha256"],
+        "mhd_history": context.mhd_binding,
+        "user_history": context.user_binding,
+    }
+
+
+def scientific_acceptance_case_record(
+    start: float,
+    end: float,
+    increments: dict[str, object],
+    ensemble: dict[str, object],
+    convergence: dict[str, object],
+) -> dict[str, object]:
+    """Return one analyzer-compatible case record from deterministic products."""
+
+    return {
+        "analysis_window": {"time_start": start, "time_end": end},
+        "lf_counter_increments": increments,
+        "snapshot_ensemble": ensemble,
+        "scientific_acceptance_convergence": convergence,
+    }
+
+
 def build_evidence(request: dict[str, object]) -> dict[str, object]:
     """Recompute a complete deterministic scientific-products evidence record."""
 
@@ -1943,6 +1988,14 @@ def build_evidence(request: dict[str, object]) -> dict[str, object]:
             "verified_snapshot_rank_file_count": len(snapshot_bindings),
         },
         "analysis_window": {"time_start": start, "time_end": end},
+        "scientific_acceptance_contract": scientific_acceptance_contract(
+            context, generator_binding, start, end
+        ),
+        "cases": {
+            context.case_name: scientific_acceptance_case_record(
+                start, end, increments, ensemble, convergence
+            )
+        },
         "scientific_acceptance_metrics": metrics,
         "lf_counter_increments": increments,
         "snapshot_ensemble": ensemble,
