@@ -1417,7 +1417,7 @@ def write_f119_seed_and_candidate(
     if "_F117_recost_evidence.json" not in predecessor.name:
         replace_fixture_predecessor(fixture, 117)
     profiles = [
-        profile(fixture, case_id=case_id, nodes=nodes, parent=case_id != "R12")
+        profile(fixture, case_id=case_id, nodes=nodes, parent=case_id == "R03")
         for case_id, nodes in (("R03", 1), ("R04", 4), ("R12", 4), ("R16", 1))
     ]
 
@@ -1444,6 +1444,16 @@ def write_f119_seed_and_candidate(
             "scope": F119_SCOPE,
         }
     )
+    candidate_value["inputs"]["ceiling_publication_audit"] = {
+        "path": fixture["source_authority_audit"].relative_to(
+            fixture["root"]
+        ).as_posix(),
+        "sha256": sha256(fixture["source_authority_audit"]),
+    }
+    candidate_value["inputs"]["stage_i_helper"] = {
+        "revision": fixture["revision"],
+        "sha256": sha256(fixture["helper"]),
+    }
     if candidate_mutate is not None:
         candidate_mutate(candidate_value)
     candidate = seed.with_name(
@@ -3213,6 +3223,14 @@ def test_f119_candidate_renderer_is_deterministic_read_only_and_verifiable(
     value = json.loads(first.stdout)
     assert value["checkpoint"] == "F-119"
     assert value["inputs"]["source_authority"]["checkpoint"] == "F-118"
+    assert value["inputs"]["ceiling_publication_audit"] == {
+        "path": recost_fixture["source_authority_audit"].relative_to(root).as_posix(),
+        "sha256": sha256(recost_fixture["source_authority_audit"]),
+    }
+    assert value["inputs"]["stage_i_helper"] == {
+        "revision": recost_fixture["revision"],
+        "sha256": sha256(recost_fixture["helper"]),
+    }
     assert value["draft_policy"]["required_storage_safety_bytes"] == 1024**4
     assert [
         (profile_value["case_id"], profile_value["nodes"])
@@ -3232,6 +3250,176 @@ def test_f119_candidate_renderer_is_deterministic_read_only_and_verifiable(
     )
     assert verified.returncode == 0, verified.stderr
     assert verified.stdout.strip() == sha256(external)
+
+
+def test_f119_render_verify_install_and_draft_request_end_to_end(
+    recost_fixture, monkeypatch
+):
+    module = load_recost_module()
+    root = recost_fixture["root"]
+    accounting = recost_fixture["accounting"]
+    repository = recost_fixture["repository"]
+    generator = recost_fixture["generator"]
+    queue = recost_fixture["queue"]
+    assert isinstance(root, Path)
+    assert isinstance(accounting, Path)
+    assert isinstance(repository, Path)
+    assert isinstance(generator, Path)
+    assert isinstance(queue, Path)
+    seed, candidate = write_f119_seed_and_candidate(recost_fixture)
+    candidate.unlink()
+    rendered = run_action(
+        recost_fixture,
+        "render-f119-draft-packet",
+        *f119_render_arguments(recost_fixture, seed),
+    )
+    assert rendered.returncode == 0, rendered.stderr
+    external = root.parent / "rendered-f119-end-to-end.json"
+    external.write_text(rendered.stdout)
+    external.chmod(0o644)
+    verified = run_action(
+        recost_fixture,
+        "verify-f119-draft-packet",
+        "--packet",
+        str(external),
+        "--expected-packet-sha256",
+        sha256(external),
+    )
+    assert verified.returncode == 0, verified.stderr
+    installed = run_action(
+        recost_fixture,
+        "install-f119-draft-packet",
+        "--packet",
+        str(external),
+        "--expected-packet-sha256",
+        sha256(external),
+    )
+    assert installed.returncode == 0, installed.stderr
+    real_fstatvfs = module.os.fstatvfs
+
+    def f119_storage_fixture(descriptor):
+        retained = list(real_fstatvfs(descriptor))
+        retained[3] = max(retained[3], 2 * 1024**4 // retained[1])
+        retained[4] = max(retained[4], 2 * 1024**4 // retained[1])
+        return os.statvfs_result(retained)
+
+    monkeypatch.setattr(module.os, "fstatvfs", f119_storage_fixture)
+    args = module.parse_args(
+        [
+            "--root",
+            str(root),
+            "--allow-local-root",
+            "--packet",
+            str(candidate),
+            "--expected-packet-sha256",
+            sha256(candidate),
+            "--expected-generator-sha256",
+            sha256(generator),
+            "--squeue-file",
+            str(queue),
+            "draft-request",
+        ]
+    )
+    with module.stage_i_lock(root) as mutation_lock:
+        module.locked_draft_request(
+            args,
+            root,
+            generator,
+            repository,
+            sha256(generator),
+            mutation_lock,
+        )
+    request = accounting / f"mks24_stage_i_{EPOCH_SLUG}_F119_recost_request.json"
+    reconciliation = (
+        accounting / f"mks24_stage_i_{EPOCH_SLUG}_F119_reconciliation_evidence.json"
+    )
+    storage = accounting / f"mks24_stage_i_{EPOCH_SLUG}_F119_storage_evidence.json"
+    assert request.read_bytes()
+    assert reconciliation.read_bytes()
+    assert storage.read_bytes()
+
+
+@pytest.mark.parametrize(
+    ("action", "serialization"),
+    (
+        ("verify-f119-draft-packet", "compact"),
+        ("install-f119-draft-packet", "compact"),
+        ("verify-f119-draft-packet", "trailing-space"),
+        ("install-f119-draft-packet", "trailing-space"),
+    ),
+)
+def test_f119_verify_and_install_require_byte_exact_stable_json(
+    recost_fixture, action, serialization
+):
+    root = recost_fixture["root"]
+    assert isinstance(root, Path)
+    seed, candidate = write_f119_seed_and_candidate(recost_fixture)
+    candidate.unlink()
+    rendered = run_action(
+        recost_fixture,
+        "render-f119-draft-packet",
+        *f119_render_arguments(recost_fixture, seed),
+    )
+    assert rendered.returncode == 0, rendered.stderr
+    value = json.loads(rendered.stdout)
+    external = root.parent / f"{serialization}-f119-candidate.json"
+    if serialization == "compact":
+        external.write_text(json.dumps(value, sort_keys=True) + "\n")
+    else:
+        external.write_text(rendered.stdout.rstrip("\n") + " \n")
+    external.chmod(0o644)
+    rejected = run_action(
+        recost_fixture,
+        action,
+        "--packet",
+        str(external),
+        "--expected-packet-sha256",
+        sha256(external),
+    )
+    assert_rejected(rejected, "not byte-exact stable JSON")
+    assert not candidate.exists()
+
+
+@pytest.mark.parametrize(
+    "mutation", ("ceiling-publication-audit", "stage-i-helper-revision", "stage-i-helper-sha")
+)
+def test_f119_rejects_obsolete_or_mutated_f118_runtime_bindings(
+    recost_fixture, mutation
+):
+    root = recost_fixture["root"]
+    assert isinstance(root, Path)
+    seed, candidate = write_f119_seed_and_candidate(recost_fixture)
+    candidate.unlink()
+    rendered = run_action(
+        recost_fixture,
+        "render-f119-draft-packet",
+        *f119_render_arguments(recost_fixture, seed),
+    )
+    assert rendered.returncode == 0, rendered.stderr
+    value = json.loads(rendered.stdout)
+    if mutation == "ceiling-publication-audit":
+        value["inputs"]["ceiling_publication_audit"] = {
+            "path": recost_fixture["ceiling_audit"].relative_to(root).as_posix(),
+            "sha256": sha256(recost_fixture["ceiling_audit"]),
+        }
+    elif mutation == "stage-i-helper-revision":
+        value["inputs"]["stage_i_helper"]["revision"] = recost_fixture["f113_revision"]
+    else:
+        value["inputs"]["stage_i_helper"]["sha256"] = recost_fixture[
+            "f113_helper_sha256"
+        ]
+    external = root.parent / f"mutated-{mutation}-f119-candidate.json"
+    write_json(external, value)
+    rejected = run_action(
+        recost_fixture,
+        "verify-f119-draft-packet",
+        "--packet",
+        str(external),
+        "--expected-packet-sha256",
+        sha256(external),
+    )
+    assert_rejected(rejected, "F118-era runtime binding differs")
+    assert not candidate.exists()
 
 
 @pytest.mark.parametrize(
@@ -3335,6 +3523,265 @@ def test_f119_install_authenticates_and_retires_stale_packet(recost_fixture):
     retired = Path(report["authenticated_retired_predecessor"])
     assert retired.read_bytes() == stale_payload
     assert candidate.read_bytes() == external.read_bytes()
+
+
+def test_f119_install_never_retires_active_unexpired_valid_packet(recost_fixture):
+    root = recost_fixture["root"]
+    timestamp = recost_fixture["timestamp"]
+    assert isinstance(root, Path)
+    assert isinstance(timestamp, datetime)
+    seed, candidate = write_f119_seed_and_candidate(recost_fixture)
+    candidate.unlink()
+    first = run_action(
+        recost_fixture,
+        "render-f119-draft-packet",
+        *f119_render_arguments(
+            recost_fixture, seed, expires=timestamp + timedelta(hours=11)
+        ),
+    )
+    second = run_action(
+        recost_fixture,
+        "render-f119-draft-packet",
+        *f119_render_arguments(
+            recost_fixture, seed, expires=timestamp + timedelta(hours=12)
+        ),
+    )
+    assert first.returncode == 0, first.stderr
+    assert second.returncode == 0, second.stderr
+    candidate.write_text(first.stdout)
+    candidate.chmod(0o644)
+    retained = candidate.read_bytes()
+    external = root.parent / "different-active-f119-candidate.json"
+    external.write_text(second.stdout)
+    external.chmod(0o644)
+    rejected = run_action(
+        recost_fixture,
+        "install-f119-draft-packet",
+        "--packet",
+        str(external),
+        "--expected-packet-sha256",
+        sha256(external),
+    )
+    assert_rejected(rejected, "active unexpired valid F119 draft packet cannot be retired")
+    assert candidate.read_bytes() == retained
+    assert not list(candidate.parent.glob(f".{candidate.name}.retired.sha256-*"))
+
+
+@pytest.mark.parametrize(
+    "namespace", ("request-only", "reconciliation-only", "storage-only", "pre-request-pair")
+)
+def test_f119_install_rejects_committed_or_partial_request_namespace(
+    recost_fixture, namespace
+):
+    root = recost_fixture["root"]
+    accounting = recost_fixture["accounting"]
+    assert isinstance(root, Path)
+    assert isinstance(accounting, Path)
+    seed, candidate = write_f119_seed_and_candidate(recost_fixture)
+    candidate.unlink()
+    rendered = run_action(
+        recost_fixture,
+        "render-f119-draft-packet",
+        *f119_render_arguments(recost_fixture, seed),
+    )
+    assert rendered.returncode == 0, rendered.stderr
+    external = root.parent / f"{namespace}-f119-candidate.json"
+    external.write_text(rendered.stdout)
+    external.chmod(0o644)
+    prefix = f"mks24_stage_i_{EPOCH_SLUG}_F119"
+    paths = {
+        "request": accounting / f"{prefix}_recost_request.json",
+        "reconciliation": accounting / f"{prefix}_reconciliation_evidence.json",
+        "storage": accounting / f"{prefix}_storage_evidence.json",
+    }
+    selected = {
+        "request-only": ("request",),
+        "reconciliation-only": ("reconciliation",),
+        "storage-only": ("storage",),
+        "pre-request-pair": ("reconciliation", "storage"),
+    }[namespace]
+    for key in selected:
+        paths[key].write_bytes(f"hostile {key}\n".encode())
+        paths[key].chmod(0o644)
+    snapshots = {key: paths[key].read_bytes() for key in selected}
+    rejected = run_action(
+        recost_fixture,
+        "install-f119-draft-packet",
+        "--packet",
+        str(external),
+        "--expected-packet-sha256",
+        sha256(external),
+    )
+    if namespace == "request-only":
+        assert_rejected(rejected, "request is the last commit marker")
+    else:
+        assert_rejected(rejected, "draft prerequisite namespace is partial")
+    assert not candidate.exists()
+    assert {key: paths[key].read_bytes() for key in selected} == snapshots
+
+
+def test_f119_retirement_post_barrier_rejects_concurrent_request_marker(
+    recost_fixture, monkeypatch
+):
+    module = load_recost_module()
+    root = recost_fixture["root"]
+    repository = recost_fixture["repository"]
+    timestamp = recost_fixture["timestamp"]
+    accounting = recost_fixture["accounting"]
+    assert isinstance(root, Path)
+    assert isinstance(repository, Path)
+    assert isinstance(timestamp, datetime)
+    assert isinstance(accounting, Path)
+    seed, candidate = write_f119_seed_and_candidate(recost_fixture)
+    candidate.unlink()
+    rendered = run_action(
+        recost_fixture,
+        "render-f119-draft-packet",
+        *f119_render_arguments(recost_fixture, seed),
+    )
+    assert rendered.returncode == 0, rendered.stderr
+    stale = json.loads(rendered.stdout)
+    stale["generated_utc"] = (timestamp - timedelta(minutes=4)).isoformat()
+    stale["expires_utc"] = (timestamp - timedelta(seconds=1)).isoformat()
+    write_json(candidate, stale)
+    stale_payload = candidate.read_bytes()
+    request = accounting / f"mks24_stage_i_{EPOCH_SLUG}_F119_recost_request.json"
+    real_move = module.move_bound_name_noreplace
+    raced = False
+
+    def create_request_after_retirement(*args, **kwargs):
+        nonlocal raced
+        moved = real_move(*args, **kwargs)
+        if not raced and args[1] == candidate.name:
+            request.write_bytes(b"concurrent request commit marker\n")
+            request.chmod(0o644)
+            raced = True
+        return moved
+
+    monkeypatch.setattr(module, "move_bound_name_noreplace", create_request_after_retirement)
+    with module.stage_i_lock(root) as mutation_lock:
+        with pytest.raises(ValueError, match="request is the last commit marker"):
+            module.retire_stale_f119_packet(
+                root,
+                repository,
+                candidate,
+                rendered.stdout.encode(),
+                mutation_lock,
+            )
+    assert raced
+    assert request.read_bytes() == b"concurrent request commit marker\n"
+    assert not candidate.exists()
+    retired = list(accounting.glob(f".{candidate.name}.retired.sha256-*"))
+    assert len(retired) == 1
+    assert retired[0].read_bytes() == stale_payload
+
+
+@pytest.mark.parametrize("packet_state", ("absent", "exact"))
+def test_f119_retirement_early_return_post_barrier_rejects_request_race(
+    recost_fixture, monkeypatch, packet_state
+):
+    module = load_recost_module()
+    root = recost_fixture["root"]
+    repository = recost_fixture["repository"]
+    accounting = recost_fixture["accounting"]
+    assert isinstance(root, Path)
+    assert isinstance(repository, Path)
+    assert isinstance(accounting, Path)
+    seed, candidate = write_f119_seed_and_candidate(recost_fixture)
+    candidate.unlink()
+    rendered = run_action(
+        recost_fixture,
+        "render-f119-draft-packet",
+        *f119_render_arguments(recost_fixture, seed),
+    )
+    assert rendered.returncode == 0, rendered.stderr
+    payload = rendered.stdout.encode()
+    if packet_state == "exact":
+        candidate.write_bytes(payload)
+        candidate.chmod(0o644)
+    request = accounting / f"mks24_stage_i_{EPOCH_SLUG}_F119_recost_request.json"
+    real_barrier = module.require_f119_install_namespace_barrier
+    barriers = 0
+
+    def create_request_at_post_barrier(*args, **kwargs):
+        nonlocal barriers
+        barriers += 1
+        if barriers == 2:
+            request.write_bytes(b"concurrent request commit marker\n")
+            request.chmod(0o644)
+        return real_barrier(*args, **kwargs)
+
+    monkeypatch.setattr(
+        module, "require_f119_install_namespace_barrier", create_request_at_post_barrier
+    )
+    with module.stage_i_lock(root) as mutation_lock:
+        with pytest.raises(ValueError, match="request is the last commit marker"):
+            module.retire_stale_f119_packet(
+                root, repository, candidate, payload, mutation_lock
+            )
+    assert barriers == 2
+    assert request.read_bytes() == b"concurrent request commit marker\n"
+    assert candidate.exists() is (packet_state == "exact")
+
+
+def test_f119_install_post_barrier_rejects_concurrent_request_marker(
+    recost_fixture, monkeypatch
+):
+    module = load_recost_module()
+    root = recost_fixture["root"]
+    repository = recost_fixture["repository"]
+    generator = recost_fixture["generator"]
+    queue = recost_fixture["queue"]
+    accounting = recost_fixture["accounting"]
+    assert isinstance(root, Path)
+    assert isinstance(repository, Path)
+    assert isinstance(generator, Path)
+    assert isinstance(queue, Path)
+    assert isinstance(accounting, Path)
+    seed, candidate = write_f119_seed_and_candidate(recost_fixture)
+    candidate.unlink()
+    rendered = run_action(
+        recost_fixture,
+        "render-f119-draft-packet",
+        *f119_render_arguments(recost_fixture, seed),
+    )
+    assert rendered.returncode == 0, rendered.stderr
+    external = root.parent / "concurrent-marker-f119-candidate.json"
+    external.write_text(rendered.stdout)
+    external.chmod(0o644)
+    request = accounting / f"mks24_stage_i_{EPOCH_SLUG}_F119_recost_request.json"
+    real_write = module.write_exact_or_verify
+    raced = False
+
+    def publish_then_create_request(*args, **kwargs):
+        nonlocal raced
+        created = real_write(*args, **kwargs)
+        if not raced:
+            request.write_bytes(b"concurrent request commit marker\n")
+            request.chmod(0o644)
+            raced = True
+        return created
+
+    monkeypatch.setattr(module, "write_exact_or_verify", publish_then_create_request)
+    args = module.argparse.Namespace(
+        action="install-f119-draft-packet",
+        packet=external,
+        expected_packet_sha256=sha256(external),
+        squeue_file=queue,
+    )
+    with module.stage_i_lock(root) as mutation_lock:
+        with pytest.raises(ValueError, match="request is the last commit marker"):
+            module.locked_install_draft_packet(
+                args,
+                root,
+                generator,
+                repository,
+                sha256(generator),
+                mutation_lock,
+            )
+    assert raced
+    assert candidate.read_bytes() == external.read_bytes()
+    assert request.read_bytes() == b"concurrent request commit marker\n"
 
 
 @pytest.mark.parametrize("existing", ("invalid", "request-committed"))
@@ -3493,14 +3940,14 @@ def test_draft_prerequisite_trio_rolls_back_failure_before_second_publish(
         (accounting / "F208_storage.json", b"storage\n", "storage"),
         (accounting / "F208_request.json", b"request\n", "request"),
     )
-    real_link = module.os.link
+    real_rename = module.renameat2_noreplace
 
-    def fail_before_second_publish(source, destination, **kwargs):
+    def fail_before_second_publish(directory, source, destination, label):
         if destination == publications[1][0].name:
             raise RuntimeError("persistent failure before second trio publish")
-        return real_link(source, destination, **kwargs)
+        return real_rename(directory, source, destination, label)
 
-    monkeypatch.setattr(module.os, "link", fail_before_second_publish)
+    monkeypatch.setattr(module, "renameat2_noreplace", fail_before_second_publish)
     with pytest.raises(
         ValueError, match="transaction-owned canonical links were rolled back"
     ):
@@ -3513,7 +3960,7 @@ def test_draft_prerequisite_trio_rolls_back_failure_before_second_publish(
         for path in retained_private
     )
 
-    monkeypatch.setattr(module.os, "link", real_link)
+    monkeypatch.setattr(module, "renameat2_noreplace", real_rename)
     module.publish_draft_prerequisite_trio(publications)
     for path, payload, _ in publications:
         assert path.read_bytes() == payload
@@ -3534,18 +3981,18 @@ def test_draft_prerequisite_trio_preserves_hostile_storage_race_and_recovers(
         (accounting / "F209_request.json", b"request\n", "request"),
     )
     storage = publications[1][0]
-    real_link = module.os.link
+    real_rename = module.renameat2_noreplace
     raced = False
 
-    def race_storage_after_preflight(source, destination, **kwargs):
+    def race_storage_after_preflight(directory, source, destination, label):
         nonlocal raced
         if not raced and destination == storage.name:
             storage.write_bytes(b"hostile storage occupant\n")
             storage.chmod(0o644)
             raced = True
-        return real_link(source, destination, **kwargs)
+        return real_rename(directory, source, destination, label)
 
-    monkeypatch.setattr(module.os, "link", race_storage_after_preflight)
+    monkeypatch.setattr(module, "renameat2_noreplace", race_storage_after_preflight)
     with pytest.raises(
         ValueError, match="transaction-owned canonical links were rolled back"
     ):
@@ -3565,7 +4012,7 @@ def test_draft_prerequisite_trio_preserves_hostile_storage_race_and_recovers(
         for path in retained_private
     )
 
-    monkeypatch.setattr(module.os, "link", real_link)
+    monkeypatch.setattr(module, "renameat2_noreplace", real_rename)
     storage.unlink()
     module.publish_draft_prerequisite_trio(publications)
     for path, payload, _ in publications:
@@ -3575,7 +4022,7 @@ def test_draft_prerequisite_trio_preserves_hostile_storage_race_and_recovers(
     assert publication_private_entries(module, accounting) == []
 
 
-def test_draft_prerequisite_trio_recovers_retained_linked_interruption(
+def test_draft_prerequisite_trio_uses_moves_without_link_or_unlink(
     tmp_path, monkeypatch,
 ):
     module = load_recost_module()
@@ -3586,29 +4033,11 @@ def test_draft_prerequisite_trio_recovers_retained_linked_interruption(
         (accounting / "F210_storage.json", b"storage\n", "storage"),
         (accounting / "F210_request.json", b"request\n", "request"),
     )
-    linked = publications[0]
-    real_unlink = module.os.unlink
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("draft trio publication must not link or unlink")
 
-    def interrupt_before_private_unlink(name, **kwargs):
-        if module.PUBLICATION_PRIVATE_NAME_PATTERN.fullmatch(name):
-            raise RuntimeError("hard interruption before linked private cleanup")
-        return real_unlink(name, **kwargs)
-
-    monkeypatch.setattr(module.os, "unlink", interrupt_before_private_unlink)
-    with pytest.raises(
-        ValueError, match="deterministic public target is occupied.*links 2"
-    ):
-        module.write_exact_or_verify(
-            linked[0], linked[1], mode=0o644, label=linked[2]
-        )
-    assert linked[0].stat().st_nlink == 2
-    retained_private = publication_private_entries(module, accounting)
-    assert len(retained_private) == 1
-    assert retained_private[0].stat().st_nlink == 2
-    assert not publications[1][0].exists()
-    assert not publications[2][0].exists()
-
-    monkeypatch.setattr(module.os, "unlink", real_unlink)
+    monkeypatch.setattr(module.os, "link", forbidden)
+    monkeypatch.setattr(module.os, "unlink", forbidden)
     module.publish_draft_prerequisite_trio(publications)
     for path, payload, _ in publications:
         assert path.read_bytes() == payload
@@ -3617,43 +4046,46 @@ def test_draft_prerequisite_trio_recovers_retained_linked_interruption(
     assert publication_private_entries(module, accounting) == []
 
 
-@pytest.mark.parametrize("state", ("finalize-quarantine", "rollback-quarantine"))
-def test_draft_prerequisite_trio_recovers_retained_quarantine_state(
-    tmp_path, state,
+def test_bound_quarantine_retains_exact_inode_without_raw_deletion(
+    tmp_path, monkeypatch,
 ):
     module = load_recost_module()
-    accounting = tmp_path / "accounting"
-    accounting.mkdir()
-    publications = (
-        (accounting / "F210_reconciliation.json", b"reconciliation\n", "reconciliation"),
-        (accounting / "F210_storage.json", b"storage\n", "storage"),
-        (accounting / "F210_request.json", b"request\n", "request"),
+    parent = tmp_path / "accounting"
+    parent.mkdir()
+    source = parent / "request.json"
+    payload = b"request\n"
+    source.write_bytes(payload)
+    source.chmod(0o644)
+    expected = source.stat()
+
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("quarantine retention must not raw-unlink")
+
+    monkeypatch.setattr(module.os, "unlink", forbidden)
+    directory = os.open(parent, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        with pytest.raises(ValueError, match="unsafe raw deletion refused"):
+            module.unlink_bound_name_via_quarantine(
+                directory,
+                source.name,
+                expected,
+                payload,
+                0o644,
+                "request quarantine",
+                expected_links=1,
+            )
+    finally:
+        os.close(directory)
+    quarantine = parent / f".{source.name}.delete-{expected.st_dev:x}-{expected.st_ino:x}"
+    assert not source.exists()
+    assert quarantine.read_bytes() == payload
+    assert (quarantine.stat().st_dev, quarantine.stat().st_ino) == (
+        expected.st_dev,
+        expected.st_ino,
     )
-    path, payload, label = publications[0]
-    transaction = module.publication_transaction(path, payload, 0o644, label)
-    private = accounting / transaction.private_name(0)
-    private.write_bytes(payload)
-    private.chmod(0o644)
-    os.link(private, path)
-    if state == "finalize-quarantine":
-        quarantine = accounting / module.transaction_private_quarantine_name(
-            transaction, private.name
-        )
-        private.rename(quarantine)
-    else:
-        quarantine = accounting / module.transaction_private_quarantine_name(
-            transaction, path.name
-        )
-        path.rename(quarantine)
-
-    module.publish_draft_prerequisite_trio(publications)
-    for retained_path, retained_payload, _ in publications:
-        assert retained_path.read_bytes() == retained_payload
-        assert retained_path.stat().st_nlink == 1
-    assert publication_private_entries(module, accounting) == []
 
 
-def test_draft_prerequisite_trio_forward_completes_after_quarantine_interruption(
+def test_draft_prerequisite_trio_publishes_request_as_last_commit_marker(
     tmp_path, monkeypatch,
 ):
     module = load_recost_module()
@@ -3664,19 +4096,19 @@ def test_draft_prerequisite_trio_forward_completes_after_quarantine_interruption
         (accounting / "F210_storage.json", b"storage\n", "storage"),
         (accounting / "F210_request.json", b"request\n", "request"),
     )
-    real_unlinkat = module.unlinkat_name
-    injected = False
+    real_rename = module.renameat2_noreplace
+    committed = []
 
-    def interrupt_after_quarantine_move(directory, name, label):
-        nonlocal injected
-        if not injected:
-            injected = True
-            raise RuntimeError("interrupted after descriptor-bound quarantine move")
-        return real_unlinkat(directory, name, label)
+    def record_publication_order(directory, source, destination, label):
+        result = real_rename(directory, source, destination, label)
+        if destination in {path.name for path, _, _ in publications}:
+            committed.append(destination)
+        return result
 
-    monkeypatch.setattr(module, "unlinkat_name", interrupt_after_quarantine_move)
+    monkeypatch.setattr(module, "renameat2_noreplace", record_publication_order)
     module.publish_draft_prerequisite_trio(publications)
-    assert injected
+    assert committed == [path.name for path, _, _ in publications]
+    assert committed[-1] == publications[-1][0].name
     for path, payload, _ in publications:
         assert path.read_bytes() == payload
         assert path.stat().st_nlink == 1
@@ -3747,9 +4179,8 @@ def linked_draft_trio_entry(module, parent: Path):
     return entry, private
 
 
-@pytest.mark.parametrize("operation", ("finalize", "rollback"))
-def test_draft_trio_descriptor_bound_deletion_preserves_hostile_swap(
-    tmp_path, monkeypatch, operation,
+def test_draft_trio_descriptor_bound_rollback_preserves_hostile_swap(
+    tmp_path, monkeypatch,
 ):
     module = load_recost_module()
     parent = tmp_path / "accounting"
@@ -3764,7 +4195,7 @@ def test_draft_trio_descriptor_bound_deletion_preserves_hostile_swap(
 
     def swap_before_bound_move(directory, source, target, label):
         nonlocal raced
-        selected = private.name if operation == "finalize" else entry.path.name
+        selected = entry.path.name
         if not raced and source == selected:
             os.rename(source, displaced.name, src_dir_fd=directory, dst_dir_fd=directory)
             os.rename(hostile.name, source, src_dir_fd=directory, dst_dir_fd=directory)
@@ -3776,22 +4207,59 @@ def test_draft_trio_descriptor_bound_deletion_preserves_hostile_swap(
     try:
         parent_profile = os.fstat(directory)
         with pytest.raises(ValueError):
-            if operation == "finalize":
-                module.finalize_draft_trio_entry(
-                    directory, parent_profile, entry, None
-                )
-            else:
-                module.rollback_draft_trio_entries(
-                    directory, parent_profile, [entry], None
-                )
+            module.rollback_draft_trio_entries(
+                directory, parent_profile, [entry], None
+            )
     finally:
         os.close(directory)
     assert raced
-    selected = private if operation == "finalize" else entry.path
-    assert selected.read_bytes() == b"hostile namespace replacement\n"
+    assert entry.path.read_bytes() == b"hostile namespace replacement\n"
     assert displaced.read_bytes() == entry.payload
-    other = entry.path if operation == "finalize" else private
-    assert other.read_bytes() == entry.payload
+    assert private.read_bytes() == entry.payload
+
+
+def test_quarantine_bound_move_preserves_hostile_swap(tmp_path, monkeypatch):
+    module = load_recost_module()
+    parent = tmp_path / "accounting"
+    parent.mkdir()
+    source = parent / "request.json"
+    payload = b"exact transaction-owned request\n"
+    source.write_bytes(payload)
+    source.chmod(0o644)
+    expected = source.stat()
+    hostile = parent / "hostile"
+    hostile.write_bytes(b"hostile namespace replacement\n")
+    hostile.chmod(0o644)
+    displaced = parent / "displaced-exact-transaction-owned-request"
+    real_rename = module.renameat2_noreplace
+    raced = False
+
+    def swap_before_bound_move(directory, selected, target, label):
+        nonlocal raced
+        if not raced and selected == source.name:
+            os.rename(selected, displaced.name, src_dir_fd=directory, dst_dir_fd=directory)
+            os.rename(hostile.name, selected, src_dir_fd=directory, dst_dir_fd=directory)
+            raced = True
+        return real_rename(directory, selected, target, label)
+
+    monkeypatch.setattr(module, "renameat2_noreplace", swap_before_bound_move)
+    directory = os.open(parent, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        with pytest.raises(ValueError, match="hostile replacement"):
+            module.unlink_bound_name_via_quarantine(
+                directory,
+                source.name,
+                expected,
+                payload,
+                0o644,
+                "request quarantine",
+                expected_links=1,
+            )
+    finally:
+        os.close(directory)
+    assert raced
+    assert source.read_bytes() == b"hostile namespace replacement\n"
+    assert displaced.read_bytes() == b"exact transaction-owned request\n"
 
 
 def test_draft_trio_rejects_ambiguous_exact_private_attempts(tmp_path):
@@ -3819,6 +4287,36 @@ def test_draft_trio_rejects_ambiguous_exact_private_attempts(tmp_path):
             module.reusable_draft_trio_private(directory, entry)
     finally:
         os.close(directory)
+
+
+def test_draft_trio_exact_final_rejects_transaction_private_remnants(tmp_path):
+    module = load_recost_module()
+    parent = tmp_path / "accounting"
+    parent.mkdir()
+    target = parent / "request.json"
+    payload = b"request\n"
+    target.write_bytes(payload)
+    target.chmod(0o644)
+    transaction = module.publication_transaction(target, payload, 0o644, "request")
+    private = parent / transaction.private_name(0)
+    private.write_bytes(payload)
+    private.chmod(0o644)
+    entry = module.DraftTrioPublicationEntry(
+        path=target,
+        payload=payload,
+        mode=0o644,
+        label="request",
+        transaction=transaction,
+        initial_state="single",
+    )
+    directory = os.open(parent, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        with pytest.raises(ValueError, match="ambiguous transaction-private remnants"):
+            module.classify_draft_trio_target(directory, entry)
+    finally:
+        os.close(directory)
+    assert target.read_bytes() == payload
+    assert private.read_bytes() == payload
 
 
 def test_draft_request_requires_exact_checkpoint_packet_namespace(recost_fixture):
@@ -4677,16 +5175,24 @@ def test_generator_accepts_exact_f116_supersession_of_missing_f113_audit(recost_
     )
 
 
-def test_generator_rejects_f113_audit_adoption_while_historical_audit_exists(
+def test_generator_accepts_exact_f118_audit_supersession_while_f113_audit_is_retained(
     recost_fixture,
 ):
+    historical = recost_fixture["ceiling_audit"]
+    assert isinstance(historical, Path)
+    snapshot = historical.read_bytes()
     configure_f113_audit_supersession(
         recost_fixture, retain_historical_audit=True
     )
-    assert_rejected(
-        run_generator(recost_fixture),
-        "F113 publication audit is not the exact retained path",
+    completed = run_generator(recost_fixture)
+    assert completed.returncode == 0, completed.stderr
+    artifact = json.loads(recost_fixture["output"].read_text())
+    supersession = artifact["promoted_f113"]["publication_audit"]["supersession"]
+    assert supersession["status"] == (
+        "exact-retained-F118-current-source-authority-supersession"
     )
+    assert supersession["historical_publication_audit_absent"] is False
+    assert historical.read_bytes() == snapshot
 
 
 def test_generator_rejects_f116_supersession_without_exact_historical_f115(recost_fixture):
@@ -6496,50 +7002,38 @@ def publication_private_entries(module, parent: Path) -> list[Path]:
     )
 
 
-def test_finalized_private_inode_no_replace_hardlink_publication(tmp_path, monkeypatch):
+def test_finalized_private_inode_no_replace_move_publication(tmp_path, monkeypatch):
     module = load_recost_module()
     parent = tmp_path / "parent"
     parent.mkdir()
     target = parent / "managed.json"
     payload = b"managed\n"
-    real_link = module.os.link
-    real_unlink = module.os.unlink
+    real_rename = module.renameat2_noreplace
     events = []
 
-    def forbidden_namespace_move(*_args, **_kwargs):
-        raise AssertionError("publication must not rename or exchange namespace entries")
+    def forbidden_link_or_unlink(*_args, **_kwargs):
+        raise AssertionError("direct-final publication must not link or unlink")
 
-    def tracked_link(source, destination, **kwargs):
-        private = os.stat(source, dir_fd=kwargs["src_dir_fd"], follow_symlinks=False)
+    def tracked_rename(directory, source, destination, label):
+        private = os.stat(source, dir_fd=directory, follow_symlinks=False)
         assert destination == target.name
-        assert kwargs["src_dir_fd"] == kwargs["dst_dir_fd"]
-        assert kwargs["follow_symlinks"] is False
         assert stat.S_IMODE(private.st_mode) == 0o644
         assert private.st_nlink == 1
-        result = real_link(source, destination, **kwargs)
-        public = os.stat(destination, dir_fd=kwargs["dst_dir_fd"], follow_symlinks=False)
+        result = real_rename(directory, source, destination, label)
+        public = os.stat(destination, dir_fd=directory, follow_symlinks=False)
         assert (public.st_dev, public.st_ino) == (private.st_dev, private.st_ino)
-        assert public.st_nlink == 2
-        events.append(("link", source))
+        assert public.st_nlink == 1
+        events.append(("move", source))
         return result
 
-    def tracked_unlink(name, **kwargs):
-        private = os.stat(name, dir_fd=kwargs["dir_fd"], follow_symlinks=False)
-        public = os.stat(target.name, dir_fd=kwargs["dir_fd"], follow_symlinks=False)
-        assert (public.st_dev, public.st_ino) == (private.st_dev, private.st_ino)
-        assert public.st_nlink == 2
-        events.append(("unlink", name))
-        return real_unlink(name, **kwargs)
-
-    monkeypatch.setattr(module.os, "rename", forbidden_namespace_move)
-    monkeypatch.setattr(module.os, "replace", forbidden_namespace_move)
-    monkeypatch.setattr(module.os, "link", tracked_link)
-    monkeypatch.setattr(module.os, "unlink", tracked_unlink)
+    monkeypatch.setattr(module, "renameat2_noreplace", tracked_rename)
+    monkeypatch.setattr(module.os, "link", forbidden_link_or_unlink)
+    monkeypatch.setattr(module.os, "unlink", forbidden_link_or_unlink)
     assert module.write_exact_or_verify(
         target, payload, mode=0o644, label="managed fixture"
     )
 
-    assert [event for event, _name in events] == ["link", "unlink"]
+    assert [event for event, _name in events] == ["move"]
     assert target.read_bytes() == payload
     assert stat.S_IMODE(target.stat().st_mode) == 0o644
     assert target.stat().st_nlink == 1
@@ -6733,18 +7227,18 @@ def test_public_target_race_fails_closed_and_preserves_finalized_private_inode(
     parent.mkdir()
     target = parent / "managed.json"
     payload = b"managed\n"
-    real_link = module.os.link
+    real_rename = module.renameat2_noreplace
     raced = False
 
-    def create_target_before_link(source, destination, **kwargs):
+    def create_target_before_move(directory, source, destination, label):
         nonlocal raced
         if not raced and destination == target.name:
             target.write_bytes(b"raced replacement\n")
             target.chmod(0o644)
             raced = True
-        return real_link(source, destination, **kwargs)
+        return real_rename(directory, source, destination, label)
 
-    monkeypatch.setattr(module.os, "link", create_target_before_link)
+    monkeypatch.setattr(module, "renameat2_noreplace", create_target_before_move)
     with pytest.raises(ValueError, match="deterministic public target is occupied.*no rollback"):
         module.write_exact_or_verify(target, payload, mode=0o644, label="managed fixture")
     assert raced
@@ -6753,7 +7247,7 @@ def test_public_target_race_fails_closed_and_preserves_finalized_private_inode(
     assert len(retained_private) == 1
     assert retained_private[0].read_bytes() == payload
     assert stat.S_IMODE(retained_private[0].stat().st_mode) == 0o644
-    with pytest.raises(ValueError, match="different bytes"):
+    with pytest.raises(ValueError, match="ambiguous transaction-private remnants"):
         module.write_exact_or_verify(target, payload, mode=0o644, label="managed fixture")
     assert target.read_bytes() == b"raced replacement\n"
 
@@ -6973,26 +7467,26 @@ def test_direct_final_lock_loss_before_commit_is_forward_recoverable(tmp_path, m
     assert fsyncs_after_authority_loss == 0
 
 
-def test_linked_transaction_inode_recovers_after_pre_unlink_crash(tmp_path, monkeypatch):
+def test_linked_transaction_inode_is_retained_without_unsafe_unlink(
+    tmp_path, monkeypatch
+):
     module = load_recost_module()
     parent = tmp_path / "parent"
     parent.mkdir()
     target = parent / "managed.json"
     payload = b"managed\n"
-    real_unlink = module.os.unlink
-    injected = False
+    transaction = module.publication_transaction(target, payload, 0o644, "managed fixture")
+    private = parent / transaction.private_name(0)
+    private.write_bytes(payload)
+    private.chmod(0o644)
+    os.link(private, target)
 
-    def fail_before_private_unlink(name, **kwargs):
-        nonlocal injected
-        if not injected and module.PUBLICATION_PRIVATE_NAME_PATTERN.fullmatch(name):
-            injected = True
-            raise RuntimeError("crash before transaction-private unlink")
-        return real_unlink(name, **kwargs)
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("legacy linked state must not raw-unlink")
 
-    monkeypatch.setattr(module.os, "unlink", fail_before_private_unlink)
+    monkeypatch.setattr(module.os, "unlink", forbidden)
     with pytest.raises(ValueError, match="deterministic public target is occupied.*links 2"):
         module.write_exact_or_verify(target, payload, mode=0o644, label="managed fixture")
-    assert injected
     retained_private = publication_private_entries(module, parent)
     assert len(retained_private) == 1
     assert target.stat().st_nlink == 2
@@ -7001,31 +7495,26 @@ def test_linked_transaction_inode_recovers_after_pre_unlink_crash(tmp_path, monk
         retained_private[0].stat().st_ino,
     )
 
-    monkeypatch.setattr(module.os, "unlink", real_unlink)
-    assert module.write_exact_or_verify(
-        target, payload, mode=0o644, label="managed fixture"
-    )
-    assert target.stat().st_nlink == 1
-    assert publication_private_entries(module, parent) == []
 
-
-def test_ambiguous_successful_hardlink_is_classified_and_completed(tmp_path, monkeypatch):
+def test_ambiguous_successful_no_replace_move_is_classified_and_completed(
+    tmp_path, monkeypatch
+):
     module = load_recost_module()
     parent = tmp_path / "parent"
     parent.mkdir()
     target = parent / "managed.json"
-    real_link = module.os.link
+    real_rename = module.renameat2_noreplace
     injected = False
 
-    def link_then_raise(source, destination, **kwargs):
+    def rename_then_raise(directory, source, destination, label):
         nonlocal injected
-        result = real_link(source, destination, **kwargs)
+        result = real_rename(directory, source, destination, label)
         if not injected:
             injected = True
-            raise RuntimeError("reported link failure after success")
+            raise RuntimeError("reported rename failure after success")
         return result
 
-    monkeypatch.setattr(module.os, "link", link_then_raise)
+    monkeypatch.setattr(module, "renameat2_noreplace", rename_then_raise)
     assert module.write_exact_or_verify(
         target, b"managed\n", mode=0o644, label="managed fixture"
     )
@@ -7035,35 +7524,36 @@ def test_ambiguous_successful_hardlink_is_classified_and_completed(tmp_path, mon
     assert publication_private_entries(module, parent) == []
 
 
-def test_post_unlink_failure_leaves_exact_final_commit_marker_retryable(
-    tmp_path, monkeypatch,
-):
+def test_exact_final_rejects_transaction_private_remnants(tmp_path):
     module = load_recost_module()
     parent = tmp_path / "parent"
     parent.mkdir()
     target = parent / "managed.json"
     payload = b"managed\n"
-    real_unlink = module.os.unlink
-    injected = False
+    target.write_bytes(payload)
+    target.chmod(0o644)
+    transaction = module.publication_transaction(target, payload, 0o644, "managed fixture")
+    private = parent / transaction.private_name(0)
+    private.write_bytes(payload)
+    private.chmod(0o644)
+    target_snapshot = target.stat()
+    private_snapshot = private.stat()
 
-    def unlink_then_raise(name, **kwargs):
-        nonlocal injected
-        result = real_unlink(name, **kwargs)
-        if not injected and module.PUBLICATION_PRIVATE_NAME_PATTERN.fullmatch(name):
-            injected = True
-            raise RuntimeError("reported unlink failure after success")
-        return result
-
-    monkeypatch.setattr(module.os, "unlink", unlink_then_raise)
-    assert module.write_exact_or_verify(
-        target, payload, mode=0o644, label="managed fixture"
+    with pytest.raises(ValueError, match="ambiguous transaction-private remnants"):
+        module.write_exact_or_verify(
+            target, payload, mode=0o644, label="managed fixture"
+        )
+    with pytest.raises(ValueError, match="ambiguous transaction-private remnants"):
+        module.preflight_exact_or_absent(
+            target, payload, mode=0o644, label="managed fixture"
+        )
+    assert (target.stat().st_dev, target.stat().st_ino) == (
+        target_snapshot.st_dev,
+        target_snapshot.st_ino,
     )
-    assert injected
-    assert target.read_bytes() == payload
-    assert target.stat().st_nlink == 1
-    monkeypatch.setattr(module.os, "unlink", real_unlink)
-    assert not module.write_exact_or_verify(
-        target, payload, mode=0o644, label="managed fixture"
+    assert (private.stat().st_dev, private.stat().st_ino) == (
+        private_snapshot.st_dev,
+        private_snapshot.st_ino,
     )
 
 
@@ -7119,8 +7609,9 @@ def test_direct_final_post_publication_fsync_failure_is_forward_recoverable(
         return result
 
     monkeypatch.setattr(module.os, "fsync", fsync_then_raise_once)
-    with pytest.raises(ValueError, match="deterministic public target is occupied.*no rollback"):
-        module.write_exact_or_verify(target, payload, mode=0o644, label="managed fixture")
+    assert module.write_exact_or_verify(
+        target, payload, mode=0o644, label="managed fixture"
+    )
     assert injected
     assert target.read_bytes() == payload
     assert stat.S_IMODE(target.stat().st_mode) == 0o644
