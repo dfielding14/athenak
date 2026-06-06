@@ -15,6 +15,7 @@ import pytest
 
 REPOSITORY = Path(__file__).resolve().parents[3]
 UTILITY = REPOSITORY / "scripts/frontier/cgl_lf_stage_i_scientific_acceptance.py"
+BINARY_PARSER = REPOSITORY / "vis/python/bin_convert.py"
 
 
 def load_utility():
@@ -62,13 +63,21 @@ def transitioned_policy_documents(root: Path) -> tuple[Path, Path]:
     generator_sha = sha256(
         REPOSITORY / "scripts/frontier/cgl_lf_stage_i_scientific_products.py"
     )
+    parser_sha = sha256(BINARY_PARSER)
     criteria["source_bindings"]["acceptance_utility"]["sha256"] = utility_sha
     criteria["source_bindings"]["scientific_products_generator"][
         "sha256"
     ] = generator_sha
+    criteria["source_bindings"]["athena_binary_parser"] = {
+        "path": str(acceptance.ATHENA_BINARY_PARSER_RELATIVE_PATH),
+        "sha256": parser_sha,
+    }
     generator = criteria["scientific_products_policy"]["reviewed_generator_binding"]
     generator["sha256"] = generator_sha
-    method_revision = acceptance.expected_scientific_products_method_revision(generator)
+    parser = criteria["source_bindings"]["athena_binary_parser"]
+    method_revision = acceptance.expected_scientific_products_method_revision(
+        generator, parser
+    )
     criteria["scientific_products_policy"]["reviewed_method_revision"] = method_revision
 
     criteria_path = root / "mks24_stage_i_scientific_acceptance_criteria.json"
@@ -82,6 +91,10 @@ def transitioned_policy_documents(root: Path) -> tuple[Path, Path]:
     review["replay_tool_promotion_review"]["scientific_products_generator"][
         "sha256"
     ] = generator_sha
+    review["replay_tool_promotion_review"]["athena_binary_parser"] = deepcopy(parser)
+    review["replay_tool_promotion_review"]["required_checks"] = list(
+        acceptance.REPLAY_TOOL_PROMOTION_REQUIRED_CHECKS
+    )
     bindings = {
         "method_revision": acceptance.scientific_products_method_revision_binding(
             method_revision
@@ -91,6 +104,7 @@ def transitioned_policy_documents(root: Path) -> tuple[Path, Path]:
         "scientific_products_generator": deepcopy(
             criteria["source_bindings"]["scientific_products_generator"]
         ),
+        "athena_binary_parser": deepcopy(parser),
     }
     reviewer_ids = {
         "plasma_physics": "fixture-plasma-method-reviewer",
@@ -325,6 +339,12 @@ def test_preregistered_criteria_bind_final_utility_and_completed_reviews(policy)
     assert policy["criteria"]["scientific_products_policy"]["reviewed_generator_binding"][
         "status"
     ] == "exact_replay_tool_bound"
+    assert policy["verified_sources"]["athena_binary_parser"]["sha256"] == sha256(
+        BINARY_PARSER
+    )
+    assert policy["criteria"]["scientific_products_policy"]["reviewed_method_revision"][
+        "athena_binary_parser"
+    ] == policy["criteria"]["source_bindings"]["athena_binary_parser"]
     assert policy["replay_tools_approved"] is True
     assert policy["replay_tools_review_status"] == "approved"
     assert policy["scientific_products_method_review_status"] == "approved"
@@ -422,14 +442,60 @@ def test_replay_tool_promotion_requires_exact_independent_approval(policy):
         )
 
 
+def test_athena_binary_parser_stale_bindings_fail_closed(policy):
+    """Parser bytes must remain exact across criteria, promotion, and method review."""
+
+    criteria = deepcopy(policy["criteria"])
+    criteria["source_bindings"]["athena_binary_parser"]["sha256"] = "0" * 64
+    with pytest.raises(acceptance.AcceptanceError, match="athena_binary_parser SHA-256 differs"):
+        acceptance.validate_criteria_payload(criteria, policy["criteria_binding"])
+
+    review = deepcopy(policy["review"])
+    review["replay_tool_promotion_review"]["athena_binary_parser"]["sha256"] = "0" * 64
+    with pytest.raises(
+        acceptance.AcceptanceError,
+        match="replay-tool promotion athena_binary_parser binding differs",
+    ):
+        acceptance.validate_replay_tool_promotion_review(
+            review,
+            policy["criteria"],
+            policy["verified_sources"]["acceptance_utility"],
+        )
+
+    review = deepcopy(policy["review"])
+    review["scientific_products_method_review"]["bindings"]["athena_binary_parser"][
+        "sha256"
+    ] = "0" * 64
+    with pytest.raises(acceptance.AcceptanceError, match="method review bindings differ"):
+        acceptance.validate_scientific_products_method_review(
+            review,
+            policy["criteria"],
+            policy["criteria_binding"],
+            policy["verified_sources"]["acceptance_utility"],
+        )
+
+    review = deepcopy(policy["review"])
+    review["scientific_products_method_review"]["approvals"][0]["bindings"][
+        "athena_binary_parser"
+    ]["sha256"] = "0" * 64
+    with pytest.raises(acceptance.AcceptanceError, match="plasma_physics method approval differs"):
+        acceptance.validate_scientific_products_method_review(
+            review,
+            policy["criteria"],
+            policy["criteria_binding"],
+            policy["verified_sources"]["acceptance_utility"],
+        )
+
+
 def test_scientific_method_revision_rejects_missing_changed_or_extra_fields(policy):
     products = policy["criteria"]["scientific_products_policy"]
     generator = products["reviewed_generator_binding"]
+    parser = policy["criteria"]["source_bindings"]["athena_binary_parser"]
 
     missing = deepcopy(products)
     missing.pop("reviewed_method_revision")
     with pytest.raises(acceptance.AcceptanceError, match="must be an object"):
-        acceptance.validate_scientific_products_method_revision(missing, generator)
+        acceptance.validate_scientific_products_method_revision(missing, generator, parser)
     criteria_without_revision = deepcopy(policy["criteria"])
     criteria_without_revision["scientific_products_policy"].pop(
         "reviewed_method_revision"
@@ -444,12 +510,12 @@ def test_scientific_method_revision_rejects_missing_changed_or_extra_fields(poli
         "angle_degrees"
     ] = 20.0
     with pytest.raises(acceptance.AcceptanceError, match="differs from the reviewed contract"):
-        acceptance.validate_scientific_products_method_revision(changed, generator)
+        acceptance.validate_scientific_products_method_revision(changed, generator, parser)
 
     extra = deepcopy(products)
     extra["reviewed_method_revision"]["unreviewed_extension"] = True
     with pytest.raises(acceptance.AcceptanceError, match="keys differ"):
-        acceptance.validate_scientific_products_method_revision(extra, generator)
+        acceptance.validate_scientific_products_method_revision(extra, generator, parser)
 
 
 @pytest.mark.parametrize(
@@ -1185,6 +1251,175 @@ def test_source_archive_catalog_reauthenticates_live_bytes_and_fails_without_f11
     catalog.write_text(f"{'b' * 64}  second.bundle\n")
     with pytest.raises(acceptance.AcceptanceError, match="without a published F118 successor"):
         acceptance.source_archive_catalog(forged)
+
+
+def published_f118_successor_policy(
+    policy: dict[str, object], root: Path
+) -> tuple[dict[str, object], Path]:
+    """Publish a minimal exact F118 successor accepted by the source-catalog boundary."""
+
+    accounting = root / "accounting"
+    archives = root / "source-archives"
+    accounting.mkdir(parents=True)
+    archives.mkdir()
+    final_bundle = archives / "athenak-feature-cgl-through-fixture.bundle"
+    final_bundle.write_bytes(b"fixture complete-history F118 source bundle\n")
+    readme = archives / "README.md"
+    readme.write_text("fixture exact F118 current source\n")
+    catalog = archives / "SHA256SUMS"
+    catalog.write_text(f"{sha256(final_bundle)}  {final_bundle.name}\n")
+
+    predecessor_keys = {
+        "evidence": "reviewed_f116_source_authority_evidence",
+        "provenance_review": "reviewed_f116_source_authority_provenance_review",
+        "plasma_review": "reviewed_f116_source_authority_plasma_review",
+        "publication_audit": "reviewed_f116_source_authority_publication_audit",
+    }
+    f116_digests = {
+        key: policy["verified_sources"][source_key]["sha256"]
+        for key, source_key in predecessor_keys.items()
+    }
+    relative_bundle = final_bundle.relative_to(root).as_posix()
+    final_head = "1" * 40
+    baseline_sha = "f" * 64
+    stem = "mks24_stage_i_E03_forcing_policy_F118_fixture.json"
+    paths = {
+        "evidence": accounting / stem,
+        "provenance_review": accounting / f"{stem}.provenance.json",
+        "plasma_review": accounting / f"{stem}.plasma.json",
+        "publication_audit": accounting / f"{stem}.audit.json",
+    }
+    evidence = {
+        "schema_version": 1,
+        "record_type": "stage-i-current-source-authority-supersession-evidence",
+        "checkpoint": "F-118",
+        "execution_epoch": acceptance.CANONICAL_EXECUTION_EPOCH,
+        "generated_utc": "2026-06-06T00:00:00+00:00",
+        "scope": {},
+        "predecessor_authorities": {
+            "historical_f116": {
+                key: {"sha256": digest} for key, digest in f116_digests.items()
+            }
+        },
+        "implementation": {
+            "current_source_bundle": {
+                "path": relative_bundle,
+                "sha256": sha256(final_bundle),
+                "head": final_head,
+                "verified_revisions": [final_head],
+                "selected_as_current": True,
+                "complete_history": True,
+            }
+        },
+        "source_archive_catalog": {
+            "before": {"sha256sums_sha256": baseline_sha},
+            "after": {
+                "sha256sums_sha256": sha256(catalog),
+                "readme_sha256": sha256(readme),
+                "sole_current_source_bundle": relative_bundle,
+            },
+        },
+        "authorization": acceptance.f118_authorization_boundary(),
+        "validation": {},
+        "publication_requirements": {},
+    }
+    write_json(paths["evidence"], evidence)
+    evidence_sha = sha256(paths["evidence"])
+    verified = {
+        "authorization_broadening": False,
+        "bridge_selected_as_current": False,
+        "predecessor_current_source_bundle_selected_as_current": False,
+        "corrupt_c7_excluded": True,
+        "current_source_selection_only": True,
+        "final_bundle_sha256": sha256(final_bundle),
+        "final_head": final_head,
+        "historical_f115_preserved": True,
+        "historical_f116_preserved": True,
+    }
+    for key, kind, decision, reviewer in (
+        ("provenance_review", "provenance-security", "approved-for-publication", "provenance"),
+        ("plasma_review", "plasma-scientific-continuation", "approved", "plasma"),
+    ):
+        write_json(paths[key], {
+            "schema_version": 1,
+            "record_type": "stage-i-current-source-authority-supersession-independent-review",
+            "checkpoint": "F-118",
+            "execution_epoch": acceptance.CANONICAL_EXECUTION_EPOCH,
+            "review_kind": kind,
+            "decision": decision,
+            "reviewed_candidate": {"sha256": evidence_sha},
+            "published_f118": {
+                "path": str(paths["evidence"]),
+                "sha256": evidence_sha,
+            },
+            "reviewer": {"agent_id": reviewer, "identity": reviewer},
+            "reviewed_utc": "2026-06-06T00:01:00+00:00",
+            "findings": [],
+            "limitations": [],
+            "verified": verified,
+        })
+    write_json(paths["publication_audit"], {
+        "schema_version": 1,
+        "record_type": "stage-i-current-source-authority-supersession-publication-audit",
+        "checkpoint": "F-118",
+        "execution_epoch": acceptance.CANONICAL_EXECUTION_EPOCH,
+        "published_utc": "2026-06-06T00:02:00+00:00",
+        "artifact": {"path": str(paths["evidence"]), "sha256": evidence_sha},
+        "independent_reviews": {
+            "reviews_bind_exact_published_f118_sha256": evidence_sha,
+            "provenance_security": {
+                "path": str(paths["provenance_review"]),
+                "sha256": sha256(paths["provenance_review"]),
+            },
+            "plasma_scientific_continuation": {
+                "path": str(paths["plasma_review"]),
+                "sha256": sha256(paths["plasma_review"]),
+            },
+        },
+        "historical_f116_authority": f116_digests,
+        "source_archive_catalog": {
+            "sha256sums": {"path": str(catalog), "sha256": sha256(catalog)},
+            "readme": {"path": str(readme), "sha256": sha256(readme)},
+            "current_source_bundle": {
+                "path": str(final_bundle),
+                "sha256": sha256(final_bundle),
+                "head": final_head,
+                "selected_as_current": True,
+            },
+            "sole_current_source_bundle": str(final_bundle),
+        },
+        "authority_and_enforcement": acceptance.f118_authorization_boundary(),
+        "publication": (
+            "recoverable-forward-transaction-with-publication-audit-commit-marker-"
+            "under-stage-i-lock"
+        ),
+    })
+    successor = deepcopy(policy)
+    successor["source_catalog_policy"] = deepcopy(policy["source_catalog_policy"])
+    successor["source_catalog_policy"]["baseline_catalog"] = {
+        "path": str(catalog),
+        "sha256": baseline_sha,
+    }
+    successor["source_catalog_policy"]["successor_paths"] = {
+        key: str(path) for key, path in paths.items()
+    }
+    return successor, final_bundle
+
+
+def test_source_archive_catalog_accepts_exact_published_f118_successor(
+    policy, tmp_path, monkeypatch
+):
+    """Acceptance positively authenticates the exact F118 current-source successor."""
+
+    root = tmp_path / "campaign"
+    monkeypatch.setattr(acceptance, "CANONICAL_CAMPAIGN_ROOT", root)
+    successor, final_bundle = published_f118_successor_policy(policy, root)
+    records, authority, bindings = acceptance.current_source_archive_catalog(successor)
+    assert records == {final_bundle.name: sha256(final_bundle)}
+    assert authority["checkpoint"] == "F-118"
+    assert authority["current_source_bundle"]["sha256"] == sha256(final_bundle)
+    assert authority["current_source_bundle"]["path"] == str(final_bundle.resolve())
+    assert len(bindings) == 6
 
 
 def test_sampling_feasibility_change_record_is_preregistered(policy):

@@ -36,16 +36,11 @@ import numpy as np
 
 
 REPOSITORY = Path(__file__).resolve().parents[2]
-BIN_CONVERT_PATH = REPOSITORY / "vis/python/bin_convert.py"
-BIN_CONVERT_SPEC = importlib.util.spec_from_file_location(
-    "_cgl_lf_stage_i_bin_convert", BIN_CONVERT_PATH
+BIN_CONVERT_RELATIVE_PATH = Path("vis/python/bin_convert.py")
+BIN_CONVERT_PATH = REPOSITORY / BIN_CONVERT_RELATIVE_PATH
+BIN_CONVERT_AUTHORITY_SHA256 = (
+    "a4a627f0ec1b69c4a289933904d08560ecd7c9d7550054efbbb2067dcef94e2c"
 )
-if BIN_CONVERT_SPEC is None or BIN_CONVERT_SPEC.loader is None:
-    raise RuntimeError(f"cannot load exact Athena binary parser: {BIN_CONVERT_PATH}")
-bin_convert = importlib.util.module_from_spec(BIN_CONVERT_SPEC)
-BIN_CONVERT_SPEC.loader.exec_module(bin_convert)
-
-
 CANONICAL_ROOT = Path("/lustre/orion/ast207/proj-shared/dfielding/CGL")
 SCHEMA_VERSION = 1
 RECORD_TYPE = "stage-i-deterministic-scientific-products"
@@ -63,6 +58,18 @@ EDDY_ANGLE_DEGREES = 15.0
 EDDY_SAMPLES = 2_000_000
 EDDY_BINS = 24
 EDDY_SEED = 731
+REPLAY_REQUEST_KEYS = frozenset({
+    "authority_mode",
+    "bundle_manifest",
+    "expected_bundle_sha256",
+    "time_start",
+    "time_end",
+    "reference_root",
+    "snapshot_mode",
+    "pdf_bins",
+    "alignment_shells",
+    "max_snapshot_cells",
+})
 REQUIRED_FIELDS = (
     "dens",
     "velx",
@@ -192,6 +199,17 @@ def require_dict(value: object, label: str) -> dict[str, object]:
     if not isinstance(value, dict):
         raise ScientificProductsError(f"{label} must be an object")
     return value
+
+
+def require_exact_keys(
+    value: object, expected: frozenset[str] | set[str], label: str
+) -> dict[str, object]:
+    """Require one object with exactly the reviewed member names."""
+
+    record = require_dict(value, label)
+    if set(record) != set(expected):
+        raise ScientificProductsError(f"{label} keys differ from the reviewed schema")
+    return record
 
 
 def require_list(value: object, label: str) -> list[object]:
@@ -333,6 +351,45 @@ def read_regular_bytes(
     if len(payload) != size or sha256_bytes(payload) != binding["sha256"]:
         raise ScientificProductsError(f"{label} changed between binding and read")
     return payload, binding
+
+
+def verify_athena_binary_parser_authority() -> dict[str, object]:
+    """Require the exact committed Athena binary parser bytes."""
+
+    return regular_file_binding(
+        BIN_CONVERT_PATH,
+        "Athena binary parser",
+        expected_sha256=BIN_CONVERT_AUTHORITY_SHA256,
+    )
+
+
+def load_exact_athena_binary_parser() -> tuple[object, dict[str, object]]:
+    """Execute the Athena parser only from bytes authenticated before use."""
+
+    payload, binding = read_regular_bytes(
+        BIN_CONVERT_PATH,
+        "Athena binary parser",
+        expected_sha256=BIN_CONVERT_AUTHORITY_SHA256,
+    )
+    spec = importlib.util.spec_from_file_location(
+        "_cgl_lf_stage_i_bin_convert", BIN_CONVERT_PATH
+    )
+    if spec is None:
+        raise ScientificProductsError(
+            f"cannot load exact Athena binary parser: {BIN_CONVERT_PATH}"
+        )
+    module = importlib.util.module_from_spec(spec)
+    try:
+        code = compile(payload, str(BIN_CONVERT_PATH), "exec")
+        exec(code, module.__dict__)
+    except Exception as error:
+        raise ScientificProductsError(
+            f"exact Athena binary parser failed to load: {error}"
+        ) from error
+    return module, binding
+
+
+bin_convert, BIN_CONVERT_BINDING = load_exact_athena_binary_parser()
 
 
 def load_json(
@@ -968,6 +1025,7 @@ def read_snapshot_group(
 ) -> tuple[dict[str, np.ndarray], tuple[float, float, float], list[dict[str, object]]]:
     """Authenticate and reconstruct one uniform, non-AMR, 3-D rank set."""
 
+    verify_athena_binary_parser_authority()
     payloads: list[dict[str, object]] = []
     bindings: list[dict[str, object]] = []
     for rank, declared in enumerate(group.rank_files):
@@ -2612,6 +2670,10 @@ def scientific_acceptance_case_record(
 def build_evidence(request: dict[str, object]) -> dict[str, object]:
     """Recompute a complete deterministic scientific-products evidence record."""
 
+    request = require_exact_keys(
+        request, REPLAY_REQUEST_KEYS, "scientific products replay request"
+    )
+    parser_binding = verify_athena_binary_parser_authority()
     start = require_finite(request.get("time_start"), "time_start")
     end = require_finite(request.get("time_end"), "time_end")
     if start >= end:
@@ -2657,7 +2719,8 @@ def build_evidence(request: dict[str, object]) -> dict[str, object]:
         *reference_bindings,
     ])
     generator_binding = regular_file_binding(Path(__file__), "scientific products generator")
-    parser_binding = regular_file_binding(BIN_CONVERT_PATH, "Athena binary parser")
+    if verify_athena_binary_parser_authority() != parser_binding:
+        raise ScientificProductsError("Athena binary parser changed during generation")
     evidence = {
         "schema_version": SCHEMA_VERSION,
         "record_type": RECORD_TYPE,

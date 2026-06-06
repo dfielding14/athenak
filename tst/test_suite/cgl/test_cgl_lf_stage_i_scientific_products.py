@@ -18,6 +18,7 @@ REPOSITORY = Path(__file__).resolve().parents[3]
 UTILITY = REPOSITORY / "scripts/frontier/cgl_lf_stage_i_scientific_products.py"
 ACCEPTANCE_UTILITY = REPOSITORY / "scripts/frontier/cgl_lf_stage_i_scientific_acceptance.py"
 PAPER_ANALYZER = REPOSITORY / "scripts/analyze_cgl_lf_paper.py"
+BINARY_PARSER = REPOSITORY / "vis/python/bin_convert.py"
 
 
 def load_utility(path: Path = UTILITY, name: str = "cgl_lf_stage_i_scientific_products"):
@@ -325,6 +326,35 @@ def test_generator_does_not_import_dirty_analyzer():
     assert "from analyze_cgl_lf_paper" not in source
 
 
+def test_athena_binary_parser_is_authority_bound_before_execution(tmp_path):
+    """A replacement parser is rejected before any of its bytes execute."""
+
+    copied_utility = (
+        tmp_path / "repo/scripts/frontier/cgl_lf_stage_i_scientific_products.py"
+    )
+    copied_parser = tmp_path / "repo/vis/python/bin_convert.py"
+    copied_utility.parent.mkdir(parents=True)
+    copied_parser.parent.mkdir(parents=True)
+    copied_utility.write_bytes(UTILITY.read_bytes())
+    marker = tmp_path / "untrusted-parser-executed"
+    copied_parser.write_text(
+        "from pathlib import Path\n"
+        f"Path({str(marker)!r}).write_text('executed')\n"
+    )
+
+    with pytest.raises(RuntimeError, match="Athena binary parser SHA-256 differs"):
+        load_utility(copied_utility, "cgl_lf_stage_i_scientific_products_replaced_parser")
+    assert marker.exists() is False
+
+
+def test_generated_evidence_binds_exact_athena_binary_parser(tmp_path):
+    """Every generated record binds the exact parser loaded from reviewed bytes."""
+
+    evidence, _, _ = retained_evidence(tmp_path)
+    assert evidence["runtime"]["binary_parser"] == products.BIN_CONVERT_BINDING
+    assert evidence["runtime"]["binary_parser"]["sha256"] == sha256(BINARY_PARSER)
+
+
 def test_history_products_reference_residuals_and_deferred_products(tmp_path):
     """History products are recomputed while unsupported snapshot products fail closed."""
 
@@ -428,6 +458,23 @@ def test_forged_request_cannot_pass_replay(tmp_path):
     path = tmp_path / "forged-request.json"
     products.write_candidate(path, forged)
     with pytest.raises(products.ScientificProductsError, match="whole-case bundle manifest SHA"):
+        products.replay_evidence(path, sha256(path))
+
+
+@pytest.mark.parametrize("mutation", ("missing", "extra"))
+def test_replay_request_rejects_missing_or_extra_fields(tmp_path, mutation):
+    """Replay requests are closed to the exact reviewed key set."""
+
+    evidence, _, _ = retained_evidence(tmp_path)
+    forged = deepcopy(evidence)
+    forged.pop("evidence_digest")
+    if mutation == "missing":
+        forged["request"].pop("snapshot_mode")
+    else:
+        forged["request"]["unreviewed_extension"] = True
+    path = tmp_path / f"forged-{mutation}-request.json"
+    products.write_candidate(path, products.seal_evidence(forged))
+    with pytest.raises(products.ScientificProductsError, match="request keys differ"):
         products.replay_evidence(path, sha256(path))
 
 

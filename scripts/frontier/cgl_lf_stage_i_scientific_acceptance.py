@@ -44,6 +44,7 @@ DEFAULT_CRITERIA_REVIEW = REPOSITORY_ROOT / (
 SCIENTIFIC_PRODUCTS_RELATIVE_PATH = Path(
     "scripts/frontier/cgl_lf_stage_i_scientific_products.py"
 )
+ATHENA_BINARY_PARSER_RELATIVE_PATH = Path("vis/python/bin_convert.py")
 CT_INVENTORY_RELATIVE_PATH = Path(
     "scripts/frontier/cgl_lf_stage_i_ct_inventory.py"
 )
@@ -103,14 +104,22 @@ SCIENTIFIC_METHOD_REVIEW_SCOPES = {
     "scientific_replay_security": [
         (
             "Exact scientific-products method-revision digest and criteria, acceptance-"
-            "utility, and generator bindings."
+            "utility, generator, and Athena binary-parser bindings."
         ),
         (
             "Deterministic replay and fail-closed rejection of missing, changed, extra, or "
-            "unapproved method-review fields."
+            "unapproved method-review fields, replay requests, and runtime source "
+            "dependencies."
         ),
     ],
 }
+REPLAY_TOOL_PROMOTION_REQUIRED_CHECKS = [
+    "The acceptance utility invokes the exact bound scientific-products generator replay verifier and rejects any non-identical replay.",
+    "The scientific-products generator verifies and executes only the exact bound Athena binary parser bytes before any parser import or use.",
+    "The acceptance utility invokes the exact bound CT inventory builder and rejects any inventory not exactly reconstructed from its bound accepted bundle.",
+    "The immutable reviewed F116 source-authority baseline remains valid, and any changed live source catalog requires the exact published F118 successor chain.",
+    "All replay and catalog-selection behavior remains non-authorizing and fails closed.",
+]
 VALID_RESULTS = frozenset(("pass", "fail", "inconclusive", "blocked_out_of_scope"))
 MAX_FINITE_FLOAT = sys.float_info.max
 MAX_JSON_BYTES = 512 * 1024 * 1024
@@ -282,6 +291,7 @@ def require_exact_keys(
 
 def expected_scientific_products_method_revision(
     generator_binding: dict[str, object],
+    parser_binding: dict[str, object],
 ) -> dict[str, object]:
     """Return the exact reviewed contract for newly admitted product methods."""
 
@@ -295,6 +305,10 @@ def expected_scientific_products_method_revision(
         "scientific_products_generator": {
             "path": generator_binding["path"],
             "sha256": generator_binding["sha256"],
+        },
+        "athena_binary_parser": {
+            "path": parser_binding["path"],
+            "sha256": parser_binding["sha256"],
         },
         "methods": {
             "pressure_transfer": {
@@ -604,6 +618,7 @@ def source_binding_records(criteria: dict[str, object]) -> list[tuple[str, objec
     for key in (
         "acceptance_utility",
         "scientific_products_generator",
+        "athena_binary_parser",
         "ct_inventory_builder",
         "stage_i_manifest",
         "reference_archive_manifest",
@@ -763,6 +778,7 @@ def validate_source_catalog_policy(
 def validate_scientific_products_method_revision(
     products: dict[str, object],
     generator_binding: dict[str, object],
+    parser_binding: dict[str, object],
 ) -> dict[str, object]:
     """Validate the immutable declaration for newly admitted product methods."""
 
@@ -774,11 +790,14 @@ def validate_scientific_products_method_revision(
             "status",
             "immutability",
             "scientific_products_generator",
+            "athena_binary_parser",
             "methods",
         },
         "criteria scientific-products method revision",
     )
-    expected = expected_scientific_products_method_revision(generator_binding)
+    expected = expected_scientific_products_method_revision(
+        generator_binding, parser_binding
+    )
     if method_revision != expected:
         raise AcceptanceError(
             "criteria scientific-products method revision differs from the reviewed contract"
@@ -1060,6 +1079,13 @@ def validate_criteria_payload(
     generator = require_dict(
         products.get("reviewed_generator_binding"), "reviewed_generator_binding"
     )
+    parser_binding = require_exact_keys(
+        require_dict(criteria.get("source_bindings"), "source_bindings").get(
+            "athena_binary_parser"
+        ),
+        {"path", "sha256"},
+        "Athena binary parser source binding",
+    )
     expected_generator = {
         "path": str(SCIENTIFIC_PRODUCTS_RELATIVE_PATH),
         "sha256": verified_sources["scientific_products_generator"]["sha256"],
@@ -1069,6 +1095,12 @@ def validate_criteria_payload(
         raise AcceptanceError(
             "criteria reviewed scientific-products generator binding differs"
         )
+    expected_parser_binding = {
+        "path": str(ATHENA_BINARY_PARSER_RELATIVE_PATH),
+        "sha256": verified_sources["athena_binary_parser"]["sha256"],
+    }
+    if parser_binding != expected_parser_binding:
+        raise AcceptanceError("criteria Athena binary parser source binding differs")
     if products.get("contract") != {
         "contract_schema_version": 2,
         "deterministic_replay_verification": (
@@ -1078,7 +1110,9 @@ def validate_criteria_payload(
         "output_schema_version": 1,
     }:
         raise AcceptanceError("criteria scientific-products replay contract differs")
-    method_revision = validate_scientific_products_method_revision(products, generator)
+    method_revision = validate_scientific_products_method_revision(
+        products, generator, parser_binding
+    )
 
     manifest_panels = require_dict(manifest.get("panel_status"), "manifest panel_status")
     configured = require_list(manifest_panels.get("panels"), "manifest panels")
@@ -1213,6 +1247,7 @@ def validate_replay_tool_promotion_review(
             "reviewer",
             "acceptance_utility",
             "scientific_products_generator",
+            "athena_binary_parser",
             "ct_inventory_builder",
             "required_checks",
         },
@@ -1228,6 +1263,10 @@ def validate_replay_tool_promotion_review(
             sources.get("scientific_products_generator"),
             "scientific products generator source binding",
         ),
+        "athena_binary_parser": require_dict(
+            sources.get("athena_binary_parser"),
+            "Athena binary parser source binding",
+        ),
         "ct_inventory_builder": require_dict(
             sources.get("ct_inventory_builder"), "CT inventory builder source binding"
         ),
@@ -1238,12 +1277,7 @@ def validate_replay_tool_promotion_review(
             "sha256": expected["sha256"],
         }:
             raise AcceptanceError(f"replay-tool promotion {key} binding differs")
-    if promotion.get("required_checks") != [
-        "The acceptance utility invokes the exact bound scientific-products generator replay verifier and rejects any non-identical replay.",
-        "The acceptance utility invokes the exact bound CT inventory builder and rejects any inventory not exactly reconstructed from its bound accepted bundle.",
-        "The immutable reviewed F116 source-authority baseline remains valid, and any changed live source catalog requires the exact published F118 successor chain.",
-        "All replay and catalog-selection behavior remains non-authorizing and fails closed.",
-    ]:
+    if promotion.get("required_checks") != REPLAY_TOOL_PROMOTION_REQUIRED_CHECKS:
         raise AcceptanceError("replay-tool promotion required checks differ")
     reviewer = require_exact_keys(
         promotion.get("reviewer"),
@@ -1322,6 +1356,10 @@ def validate_scientific_products_method_review(
         sources.get("scientific_products_generator"),
         "scientific products generator source binding",
     )
+    parser = require_dict(
+        sources.get("athena_binary_parser"),
+        "Athena binary parser source binding",
+    )
     expected_bindings = {
         "method_revision": scientific_products_method_revision_binding(method_revision),
         "criteria": {
@@ -1336,6 +1374,10 @@ def validate_scientific_products_method_review(
             "path": generator["path"],
             "sha256": generator["sha256"],
         },
+        "athena_binary_parser": {
+            "path": parser["path"],
+            "sha256": parser["sha256"],
+        },
     }
     bindings = require_exact_keys(
         method_review.get("bindings"),
@@ -1344,6 +1386,7 @@ def validate_scientific_products_method_review(
             "criteria",
             "acceptance_utility",
             "scientific_products_generator",
+            "athena_binary_parser",
         },
         "scientific-products method review bindings",
     )
@@ -3412,6 +3455,20 @@ def load_exact_replay_tool(
     """Load one exact bound replay tool and revalidate its source bytes."""
 
     binding = require_dict(policy["verified_sources"].get(source_key), f"{label} binding")
+    parser_binding: dict[str, object] | None = None
+    parser_before: dict[str, object] | None = None
+    if source_key == "scientific_products_generator":
+        parser_binding = require_dict(
+            policy["verified_sources"].get("athena_binary_parser"),
+            "Athena binary parser binding",
+        )
+        parser_before = regular_file_binding(
+            Path(str(parser_binding["path"])), "Athena binary parser"
+        )
+        if parser_before != parser_binding:
+            raise AcceptanceError(
+                "Athena binary parser differs from its reviewed exact binding"
+            )
     path = Path(str(binding["path"]))
     before = regular_file_binding(path, label)
     if before != binding:
@@ -3430,6 +3487,11 @@ def load_exact_replay_tool(
     after = regular_file_binding(path, label)
     if after != before:
         raise AcceptanceError(f"{label} changed while it was loaded")
+    if parser_binding is not None and (
+        regular_file_binding(Path(str(parser_binding["path"])), "Athena binary parser")
+        != parser_before
+    ):
+        raise AcceptanceError("Athena binary parser changed while the generator was loaded")
     return module
 
 
