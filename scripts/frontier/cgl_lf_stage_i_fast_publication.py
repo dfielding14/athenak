@@ -47,6 +47,20 @@ ROBUSTNESS_CONTRASTS = (
 HEAT_FLUX_CASES = ("R12", "R02", "R06", "R13")
 LIMITER_CASES = ("R14", "R15", "R03", "R07")
 RESOLUTION_CASES = ("R16", "R02", "R17")
+ACTIVE_ENERGY_CASES = (
+    "R02", "R03", "R04", "R05", "R10", "R11",
+    "R12", "R13", "R14", "R15", "R16", "R17",
+)
+PRIMARY_SCALAR_METRICS = (
+    "kinetic",
+    "magnetic",
+    "abs_dp",
+    "beta",
+    "mirror_occupancy",
+    "firehose_occupancy",
+    "nu_eff",
+)
+FATAL_LF_COUNTERS = ("lf_dfloor", "lf_pfloor", "lf_nonfin", "lf_nonpos")
 TARGET_TIME = 10.0
 TIME_TOLERANCE = 1.0e-10
 HISTORY_LABEL = re.compile(r"\[(\d+)\]=(\S+)")
@@ -1341,6 +1355,13 @@ def normalized_history_series(
                 history["force_prp2"], history["force_prl2"]
             )
         ]
+    elif name == "c_b2":
+        if "b2" not in history or "b4" not in history:
+            return None
+        values = [
+            fourth * vol / max(second * second, 1.0e-300) - 1.0
+            for second, fourth, vol in zip(history["b2"], history["b4"], volume)
+        ]
     elif name in history:
         values = [
             value / max(abs(vol), 1.0e-300)
@@ -1741,10 +1762,14 @@ def r15_science_scope(data: PublicationData, *labels: object) -> str:
     return "standard reviewed-science scope"
 
 
-def r15_strict_failure_disposition(data: PublicationData) -> str:
-    """Return authenticated strict-R15 failure evidence without inventing details."""
+def authenticated_strict_failure_records(
+    data: PublicationData, case_id: str
+) -> list[dict[str, Any]]:
+    """Return authenticated retained strict-failure records for one scoped case."""
 
-    case = data.cases["R15"]
+    if case_id not in {"R14", "R15"}:
+        return []
+    case = data.cases[case_id]
     roots: list[dict[str, Any]] = []
     for record in (case.direct_acceptance, case.acceptance):
         if (
@@ -1756,10 +1781,10 @@ def r15_strict_failure_disposition(data: PublicationData) -> str:
         isinstance(data.science_record, dict)
         and data.science_record.get("_publication_evidence_validated") is True
     ):
-        binding = nested(data.science_record, "provenance.case_acceptance.R15")
+        binding = nested(data.science_record, f"provenance.case_acceptance.{case_id}")
         path = binding_path(binding)
         if path is not None and not verify_file_binding(
-            binding, "R15 science-bound case acceptance"
+            binding, f"{case_id} science-bound case acceptance"
         ):
             try:
                 roots.append(load_json(path))
@@ -1785,7 +1810,7 @@ def r15_strict_failure_disposition(data: PublicationData) -> str:
         if (
             record.get("schema_version") != 1
             or record.get("record_type") != R15_STRICT_FAILURE_RECORD_TYPE
-            or record.get("case_id") != "R15"
+            or record.get("case_id") != case_id
             or record.get("result") != "fail"
             or record.get("strict_admissibility_evidence") is not True
             or as_float(record.get("failure_time")) is None
@@ -1798,22 +1823,30 @@ def r15_strict_failure_disposition(data: PublicationData) -> str:
             )
             or any(
                 verify_file_binding(
-                    provenance.get(name), f"R15 strict-failure {name} provenance"
+                    provenance.get(name),
+                    f"{case_id} strict-failure {name} provenance",
                 )
                 for name in ("manifest", "run_exit_code", "slurm_log")
             )
         ):
             continue
         authenticated.append(record)
-    if not authenticated:
-        return "unavailable/inconclusive"
-    selected = min(
+    return sorted(
         authenticated,
         key=lambda record: (
             float(record["failure_time"]),
             str(record.get("job_id", "")),
         ),
     )
+
+
+def strict_failure_disposition(data: PublicationData, case_id: str) -> str:
+    """Return one compact authenticated strict-failure disposition."""
+
+    authenticated = authenticated_strict_failure_records(data, case_id)
+    if not authenticated:
+        return "unavailable/inconclusive"
+    selected = authenticated[0]
     time = float(selected["failure_time"])
     counters = selected["failure_counters"]
     hard_bound = float(counters["lf_hardbd"])
@@ -1822,6 +1855,12 @@ def r15_strict_failure_disposition(data: PublicationData) -> str:
     if isinstance(job_id, (str, int)):
         details.append(f"job={job_id}")
     return "; ".join(details)
+
+
+def r15_strict_failure_disposition(data: PublicationData) -> str:
+    """Return authenticated strict-R15 failure evidence without inventing details."""
+
+    return strict_failure_disposition(data, "R15")
 
 
 def publication_evidence_state(data: PublicationData) -> str:
@@ -2304,6 +2343,300 @@ def health_rows(data: PublicationData) -> list[dict[str, object]]:
     return rows
 
 
+def authenticated_case_diagnostics(
+    data: PublicationData, case_id: str
+) -> dict[str, Any] | None:
+    """Return current diagnostics only when bound by authenticated reviewed science."""
+
+    if (
+        not isinstance(data.science_record, dict)
+        or data.science_record.get("_publication_evidence_validated") is not True
+    ):
+        return None
+    binding = nested(data.science_record, f"provenance.case_diagnostics.{case_id}")
+    path = data.analysis / "cases" / case_id / "diagnostics.json"
+    if binding_freshness_errors(
+        binding, path, f"{case_id} reviewed-science diagnostics"
+    ):
+        return None
+    try:
+        diagnostics = load_json(path)
+    except (OSError, json.JSONDecodeError, PublicationError):
+        return None
+    data.source_paths.add(path.absolute())
+    return diagnostics
+
+
+def authenticated_direct_acceptance(case: CaseRecord) -> dict[str, Any] | None:
+    """Return one selected direct-fast case record only after provenance validation."""
+
+    record = case.direct_acceptance
+    return (
+        record
+        if isinstance(record, dict)
+        and record.get("_publication_evidence_validated") is True
+        else None
+    )
+
+
+def case_gate(case: CaseRecord, name: str) -> dict[str, Any] | None:
+    """Return one authenticated reviewed per-case gate."""
+
+    evidence = case.acceptance
+    if (
+        not isinstance(evidence, dict)
+        or evidence.get("_publication_evidence_validated") is not True
+    ):
+        return None
+    gates = evidence.get("gates")
+    if not isinstance(gates, list):
+        return None
+    for gate in gates:
+        if isinstance(gate, dict) and gate.get("name") == name:
+            return gate
+    return None
+
+
+def energy_closure_summary(case: CaseRecord) -> dict[str, object]:
+    """Return authenticated active-energy closure evidence without inventing values."""
+
+    if case.case_id not in ACTIVE_ENERGY_CASES:
+        return {
+            "result": "not_applicable",
+            "maximum_increment_normalized_residual": None,
+            "maximum_state_normalized_mismatch": None,
+        }
+    gate = case_gate(case, "active_energy_closure")
+    if gate is None:
+        return {
+            "result": "inconclusive",
+            "maximum_increment_normalized_residual": None,
+            "maximum_state_normalized_mismatch": None,
+        }
+    windows = nested(gate, "observations.windows")
+    values = (
+        [windows[name] for name in ("whole_lineage", "developed")]
+        if isinstance(windows, dict)
+        and all(isinstance(windows.get(name), dict) for name in (
+            "whole_lineage", "developed"
+        ))
+        else []
+    )
+    increment = [
+        value
+        for value in (
+            as_float(record.get("increment_normalized_residual"))
+            for record in values if isinstance(record, dict)
+        )
+        if value is not None
+    ]
+    state = [
+        value
+        for value in (
+            as_float(record.get("state_normalized_mismatch"))
+            for record in values if isinstance(record, dict)
+        )
+        if value is not None
+    ]
+    return {
+        "result": validated_result(gate.get("result")),
+        "maximum_increment_normalized_residual": max(increment) if increment else None,
+        "maximum_state_normalized_mismatch": max(state) if state else None,
+    }
+
+
+def numerical_health_provenance_rows(
+    data: PublicationData,
+) -> list[dict[str, object]]:
+    """Return compact authenticated all-case numerical-health and provenance rows."""
+
+    rows: list[dict[str, object]] = []
+    for case_id in CASE_IDS:
+        case = data.cases[case_id]
+        direct = authenticated_direct_acceptance(case)
+        diagnostics = authenticated_case_diagnostics(data, case_id)
+        health = diagnostics.get("health") if isinstance(diagnostics, dict) else None
+        direct_health = direct.get("health") if isinstance(direct, dict) else None
+        fatal = (
+            direct_health.get("fatal_counter_maxima")
+            if isinstance(direct_health, dict) else None
+        )
+        fatal_values = [
+            value
+            for value in (
+                as_float(raw) for raw in fatal.values()
+            )
+            if value is not None
+        ] if isinstance(fatal, dict) and set(fatal) == set(FATAL_LF_COUNTERS) else []
+        mass = health.get("mass_relative_drift") if isinstance(health, dict) else None
+        mass_values = [
+            value
+            for value in (
+                as_float(raw) for raw in mass.values()
+            )
+            if value is not None
+        ] if isinstance(mass, dict) and set(mass) == {"mhd", "user"} else []
+        energy = energy_closure_summary(case)
+        strict_records = authenticated_strict_failure_records(data, case_id)
+        strict_record = strict_records[0] if strict_records else None
+        direct_scope = direct.get("scope") if isinstance(direct, dict) else None
+        ct_record = ct_case_record(data, case_id)
+        ct_native = (
+            ct_record.get("native_restart_ct")
+            if isinstance(ct_record, dict) else None
+        )
+        direct_complete = (
+            direct_health.get("complete_to_target")
+            if isinstance(direct_health, dict) else None
+        )
+        direct_final = (
+            as_float(direct_health.get("observed_final_time"))
+            if isinstance(direct_health, dict) else None
+        )
+        fatal_status = (
+            "pass" if fatal_values and max(fatal_values) == 0.0
+            else "fail" if fatal_values
+            else "inconclusive"
+        )
+        reporter_provenance = (
+            "authenticated" if diagnostics is not None else "inconclusive"
+        )
+        acceptance_provenance = (
+            "authenticated" if direct is not None else "inconclusive"
+        )
+        science_provenance = (
+            "authenticated"
+            if isinstance(data.science_record, dict)
+            and data.science_record.get("_publication_evidence_validated") is True
+            and case_id in (data.science_record.get("selected_cases") or [])
+            else "inconclusive"
+        )
+        ct_provenance = (
+            "authenticated" if isinstance(ct_record, dict) else "inconclusive"
+        )
+        rows.append({
+            "case_id": case_id,
+            "completion": (
+                "pass" if direct_complete is True
+                else "incomplete" if direct_complete is False
+                else "inconclusive"
+            ),
+            "final_time": direct_final,
+            "fatal_lf_counters": fatal_status,
+            "fatal_counter_maximum": max(fatal_values) if fatal_values else None,
+            "mass_relative_drift_maximum": max(mass_values) if mass_values else None,
+            "mhd_user_mass_relative_mismatch": (
+                health.get("mhd_user_mass_relative_mismatch")
+                if isinstance(health, dict) else None
+            ),
+            "active_energy_closure": energy["result"],
+            "energy_increment_residual_maximum": energy[
+                "maximum_increment_normalized_residual"
+            ],
+            "energy_state_mismatch_maximum": energy[
+                "maximum_state_normalized_mismatch"
+            ],
+            "direct_ct_numerical": ct_case_status(data, case_id),
+            "maximum_normalized_ct_divb": (
+                ct_native.get("maximum_normalized_ct_divb")
+                if isinstance(ct_native, dict) else None
+            ),
+            "claim_scope": (
+                direct_scope.get("classification")
+                if isinstance(direct_scope, dict)
+                else "restricted" if scope_status(case_id) == "restricted"
+                else "standard"
+            ),
+            "acceptance": acceptance_status(data, case),
+            "reviewed_science": science_case_status(data, case_id),
+            "strict_failure": (
+                strict_failure_disposition(data, case_id)
+                if case_id in {"R14", "R15"} else "not_applicable"
+            ),
+            "strict_failure_counters": (
+                strict_record.get("failure_counters")
+                if isinstance(strict_record, dict) else None
+            ),
+            "reporter_diagnostics_provenance": reporter_provenance,
+            "direct_acceptance_provenance": acceptance_provenance,
+            "reviewed_science_provenance": science_provenance,
+            "direct_ct_provenance": ct_provenance,
+            "provenance_summary": (
+                f"reporter={reporter_provenance}; "
+                f"acceptance={acceptance_provenance}; "
+                f"science={science_provenance}; CT={ct_provenance}"
+            ),
+        })
+    return rows
+
+
+def primary_full_window_scalar_rows(
+    data: PublicationData,
+) -> list[dict[str, object]]:
+    """Return compact authenticated primary full-window scalar estimates."""
+
+    rows: list[dict[str, object]] = []
+    for case_id in CASE_IDS:
+        case = data.cases[case_id]
+        direct = authenticated_direct_acceptance(case)
+        statistics = (
+            direct.get("history_statistics") if isinstance(direct, dict) else None
+        )
+        direct_scope = direct.get("scope") if isinstance(direct, dict) else None
+        for metric in PRIMARY_SCALAR_METRICS:
+            record = statistics.get(metric) if isinstance(statistics, dict) else None
+            full = nested(record, "windows.full.statistics")
+            stationarity = record.get("stationarity") if isinstance(record, dict) else None
+            confidence = (
+                full.get("confidence_interval_95") if isinstance(full, dict) else None
+            )
+            available = (
+                isinstance(full, dict)
+                and as_float(full.get("mean")) is not None
+                and as_float(full.get("standard_error")) is not None
+                and as_float(full.get("effective_sample_count")) is not None
+                and isinstance(confidence, list)
+                and len(confidence) == 2
+                and all(as_float(value) is not None for value in confidence)
+            )
+            rows.append({
+                "case_id": case_id,
+                "metric": metric,
+                "history": record.get("history") if isinstance(record, dict) else None,
+                "column": record.get("column") if isinstance(record, dict) else None,
+                "availability": "available" if available else "inconclusive",
+                "mean": full.get("mean") if available else None,
+                "standard_error": (
+                    full.get("standard_error") if available else None
+                ),
+                "ci95_lower": (
+                    confidence[0] if available else None
+                ),
+                "ci95_upper": (
+                    confidence[1] if available else None
+                ),
+                "effective_sample_count": (
+                    full.get("effective_sample_count") if available else None
+                ),
+                "stationarity": (
+                    validated_result(stationarity.get("result"))
+                    if isinstance(stationarity, dict) else "inconclusive"
+                ),
+                "sampling_adequacy": (
+                    record.get("sampling_adequacy")
+                    if isinstance(record, dict) else "inconclusive"
+                ),
+                "acceptance": acceptance_status(data, case),
+                "claim_scope": (
+                    direct_scope.get("classification")
+                    if isinstance(direct_scope, dict)
+                    else "restricted" if scope_status(case_id) == "restricted"
+                    else "standard"
+                ),
+            })
+    return rows
+
+
 def render_health(
     data: PublicationData, plt: Any, colors: Any, patches: Any, path: Path
 ) -> None:
@@ -2445,6 +2778,220 @@ def active_passive_rows(data: PublicationData) -> list[dict[str, object]]:
                 "passive_acceptance": acceptance_status(data, data.cases[passive]),
             })
     return rows
+
+
+def authenticated_science_response_case(
+    data: PublicationData, case_id: str
+) -> bool:
+    """Return whether one case may populate authenticated response figures."""
+
+    case = data.cases[case_id]
+    direct = authenticated_direct_acceptance(case)
+    return (
+        direct is not None
+        and direct.get("result") == "pass"
+        and scientific_response_eligible(data, case)
+        and science_case_status(data, case_id) == "pass"
+    )
+
+
+def finite_curve(
+    record: object, x_name: str, y_name: str
+) -> tuple[list[float], list[float]] | None:
+    """Return one finite, strictly ordered curve from an evidence record."""
+
+    if not isinstance(record, dict):
+        return None
+    x_values = record.get(x_name)
+    y_values = record.get(y_name)
+    if (
+        not isinstance(x_values, list)
+        or not isinstance(y_values, list)
+        or len(x_values) != len(y_values)
+        or len(x_values) < 2
+    ):
+        return None
+    x = [as_float(value) for value in x_values]
+    y = [as_float(value) for value in y_values]
+    if any(value is None for value in (*x, *y)):
+        return None
+    finite_x = [float(value) for value in x if value is not None]
+    finite_y = [float(value) for value in y if value is not None]
+    if any(right <= left for left, right in zip(finite_x, finite_x[1:])):
+        return None
+    return finite_x, finite_y
+
+
+def histogram_curve(record: object) -> tuple[list[float], list[float]] | None:
+    """Return finite histogram centers and nonnegative density."""
+
+    if not isinstance(record, dict):
+        return None
+    edges = record.get("edges")
+    density = record.get("density")
+    if (
+        not isinstance(edges, list)
+        or not isinstance(density, list)
+        or len(edges) != len(density) + 1
+        or len(density) < 2
+    ):
+        return None
+    parsed_edges = [as_float(value) for value in edges]
+    parsed_density = [as_float(value) for value in density]
+    if any(value is None for value in (*parsed_edges, *parsed_density)):
+        return None
+    edge_values = [float(value) for value in parsed_edges if value is not None]
+    density_values = [float(value) for value in parsed_density if value is not None]
+    if (
+        any(right <= left for left, right in zip(edge_values, edge_values[1:]))
+        or any(value < 0.0 for value in density_values)
+    ):
+        return None
+    return (
+        [0.5 * (left + right) for left, right in zip(edge_values, edge_values[1:])],
+        density_values,
+    )
+
+
+def authenticated_snapshot_ensemble(
+    data: PublicationData, case_id: str
+) -> dict[str, Any] | None:
+    """Return one authenticated complete snapshot ensemble."""
+
+    diagnostics = authenticated_case_diagnostics(data, case_id)
+    ensemble = diagnostics.get("snapshot_ensemble") if isinstance(diagnostics, dict) else None
+    if (
+        not isinstance(ensemble, dict)
+        or diagnostics.get("snapshot_analysis_status") != "complete"
+        or not isinstance(ensemble.get("snapshot_count"), int)
+        or ensemble.get("snapshot_count", 0) <= 0
+    ):
+        return None
+    return ensemble
+
+
+def reviewed_pair_effect_rows(
+    data: PublicationData, active: str, passive: str
+) -> list[dict[str, object]]:
+    """Return authenticated standardized active/passive effects for one matched pair."""
+
+    return [
+        row
+        for row in science_contrast_rows(data)
+        if row.get("family") == "active_passive"
+        and row.get("left") == active
+        and row.get("right") == passive
+        and row.get("claim_eligible") is True
+        and row.get("available") is True
+        and as_float(row.get("standardized_effect")) is not None
+    ]
+
+
+def render_causal_mechanism(data: PublicationData, plt: Any, path: Path) -> None:
+    """Render matched C_B2 histories, strain PDFs, and reviewed causal effects."""
+
+    fig, axes = plt.subplots(4, 3, figsize=(11.2, 10.6))
+    for row_index, (active, passive) in enumerate(ACTIVE_PASSIVE_PAIRS):
+        history_axis, strain_axis, effect_axis = axes[row_index]
+        history_count = 0
+        strain_count = 0
+        for case_id, style, label in (
+            (active, "-", f"{active} active"),
+            (passive, "--", f"{passive} passive"),
+        ):
+            if not authenticated_science_response_case(data, case_id):
+                continue
+            history = normalized_history_series(data.cases[case_id], "c_b2")
+            if history is not None:
+                history_axis.plot(
+                    history[0], history[1], style, color=CASE_COLORS[case_id], label=label
+                )
+                history_count += 1
+            ensemble = authenticated_snapshot_ensemble(data, case_id)
+            distribution = (
+                histogram_curve(nested(ensemble, "pdf.bb_grad_velocity"))
+                if isinstance(ensemble, dict) else None
+            )
+            if distribution is not None:
+                strain_axis.plot(
+                    distribution[0], distribution[1], style,
+                    color=CASE_COLORS[case_id], label=label,
+                )
+                strain_count += 1
+        history_axis.axvspan(4.0, 10.0, color="#eeeeee", alpha=0.5, zorder=-10)
+        history_axis.set_xlim(0.0, 10.0)
+        history_axis.set_ylabel(r"$C_{B^2}$")
+        history_axis.grid(True, alpha=0.25)
+        if history_count:
+            history_axis.legend(frameon=False)
+        else:
+            history_axis.text(
+                0.5, 0.5, "inconclusive: authenticated pair history unavailable",
+                transform=history_axis.transAxes, ha="center", va="center",
+                color="#666666",
+            )
+
+        strain_axis.set_ylabel(r"PDF of $\hat{b}\hat{b}:\nabla u$")
+        strain_axis.grid(True, alpha=0.25)
+        if strain_count:
+            strain_axis.legend(frameon=False)
+        else:
+            strain_axis.text(
+                0.5, 0.5, "inconclusive: authenticated strain PDFs unavailable",
+                transform=strain_axis.transAxes, ha="center", va="center",
+                color="#666666",
+            )
+
+        effects = reviewed_pair_effect_rows(data, active, passive)
+        if effects:
+            effect_axis.barh(
+                list(range(len(effects))),
+                [float(row["standardized_effect"]) for row in effects],
+                color=[
+                    STATUS_COLORS["pass"]
+                    if row.get("holm_significant") is True else "#9e9e9e"
+                    for row in effects
+                ],
+                edgecolor="black",
+                linewidth=0.35,
+            )
+            effect_axis.set_yticks(
+                list(range(len(effects))),
+                [
+                    str(row.get("metric")) + (
+                        " *" if row.get("holm_significant") is True else ""
+                    )
+                    for row in effects
+                ],
+            )
+            effect_axis.axvline(0.0, color="black", linewidth=0.8, linestyle=":")
+        else:
+            effect_axis.text(
+                0.5, 0.5, "inconclusive: reviewed effect evidence unavailable",
+                transform=effect_axis.transAxes, ha="center", va="center",
+                color="#666666",
+            )
+        effect_axis.set_xlabel("standardized active-minus-passive effect")
+        effect_axis.grid(True, axis="x", alpha=0.25)
+        history_axis.set_title(f"{active} / {passive}: $C_{{B^2}}(t)$")
+        strain_axis.set_title(f"{active} / {passive}: parallel strain")
+        effect_axis.set_title(f"{active} / {passive}: reviewed effects")
+    for axis in axes[-1, :2]:
+        axis.set_xlabel(r"$t/(L_\perp/v_A)$" if axis is axes[-1, 0] else "strain")
+    fig.suptitle(
+        "Matched active/passive causal-mechanism evidence "
+        "(authenticated complete-case products only)",
+        y=0.997,
+    )
+    fig.text(
+        0.5, 0.006,
+        "Asterisks mark Holm-significant reviewed effects. Missing evidence is "
+        "reported as inconclusive and is never plotted as zero.",
+        ha="center", va="bottom", fontsize=6.8,
+    )
+    fig.tight_layout(rect=(0.0, 0.02, 1.0, 0.985))
+    save_figure(fig, path)
+    plt.close(fig)
 
 
 def robustness_rows(data: PublicationData) -> list[dict[str, object]]:
@@ -2893,6 +3440,217 @@ def render_resolution(data: PublicationData, plt: Any, path: Path) -> None:
     axes[1].set_title("Common-scale convergence evidence")
     axes[1].grid(True, axis="y", alpha=0.25)
     fig.suptitle("R16 / R02 / R17 resolution summary", y=0.995)
+    fig.tight_layout()
+    save_figure(fig, path)
+    plt.close(fig)
+
+
+def resolution_common_range(data: PublicationData) -> tuple[float, float] | None:
+    """Return the authenticated preregistered common k_perp/pi interval."""
+
+    if (
+        not isinstance(data.science_record, dict)
+        or data.science_record.get("_publication_evidence_validated") is not True
+    ):
+        return None
+    values = nested(data.science_record, "resolution.limits.common_k_perp_over_pi")
+    if not isinstance(values, list) or len(values) != 2:
+        return None
+    low, high = as_float(values[0]), as_float(values[1])
+    if low is None or high is None or low <= 0.0 or high <= low:
+        return None
+    return low, high
+
+
+def normalized_resolution_spectrum(
+    data: PublicationData, case_id: str, product: str
+) -> tuple[list[float], list[float]] | None:
+    """Return one authenticated spectrum normalized over the common range."""
+
+    common_range = resolution_common_range(data)
+    ensemble = authenticated_snapshot_ensemble(data, case_id)
+    curve = (
+        finite_curve(nested(ensemble, f"spectra.{product}"), "k", "power_per_dk")
+        if isinstance(ensemble, dict) else None
+    )
+    if common_range is None or curve is None:
+        return None
+    low, high = common_range
+    selected = [
+        (x / math.pi, y)
+        for x, y in zip(*curve)
+        if low - TIME_TOLERANCE <= x / math.pi <= high + TIME_TOLERANCE and y > 0.0
+    ]
+    if len(selected) < 2:
+        return None
+    x_values = [value[0] for value in selected]
+    y_values = [value[1] for value in selected]
+    if x_values[0] > low + TIME_TOLERANCE or x_values[-1] < high - TIME_TOLERANCE:
+        return None
+    integral = sum(
+        0.5 * (left_y + right_y) * (right_x - left_x)
+        for left_x, right_x, left_y, right_y in zip(
+            x_values, x_values[1:], y_values, y_values[1:]
+        )
+    )
+    if not math.isfinite(integral) or integral <= 0.0:
+        return None
+    return x_values, [value / integral for value in y_values]
+
+
+def resolution_alignment_curve(
+    data: PublicationData, case_id: str
+) -> tuple[list[float], list[float]] | None:
+    """Return authenticated peak alignment on the preregistered common range."""
+
+    common_range = resolution_common_range(data)
+    ensemble = authenticated_snapshot_ensemble(data, case_id)
+    alignment = ensemble.get("alignment") if isinstance(ensemble, dict) else None
+    dk = as_float(nested(ensemble, "spectra.velocity.dk"))
+    if common_range is None or not isinstance(alignment, dict) or dk is None or dk <= 0.0:
+        return None
+    peaks: list[tuple[float, float]] = []
+    try:
+        ordered = sorted(alignment.items(), key=lambda item: int(item[0]))
+    except (TypeError, ValueError):
+        return None
+    for shell, record in ordered:
+        curve = histogram_curve(record)
+        if curve is None:
+            return None
+        x = int(shell) * dk / math.pi
+        if common_range[0] - TIME_TOLERANCE <= x <= common_range[1] + TIME_TOLERANCE:
+            maximum = max(range(len(curve[1])), key=lambda index: curve[1][index])
+            peaks.append((x, curve[0][maximum]))
+    if len(peaks) < 2:
+        return None
+    return [value[0] for value in peaks], [value[1] for value in peaks]
+
+
+def render_resolution_curves(data: PublicationData, plt: Any, path: Path) -> None:
+    """Render actual authenticated R16/R02/R17 spectra and alignment criteria."""
+
+    fig, axes = plt.subplots(2, 2, figsize=(10.4, 7.4))
+    common_range = resolution_common_range(data)
+    resolution = (
+        data.science_record.get("resolution")
+        if isinstance(data.science_record, dict) else None
+    )
+    result = (
+        validated_result(resolution.get("result"))
+        if isinstance(resolution, dict) else "inconclusive"
+    )
+    products = (
+        ("velocity", "Velocity spectrum", axes[0, 0]),
+        ("magnetic_fluctuation", "Magnetic-fluctuation spectrum", axes[0, 1]),
+    )
+    for product, title, axis in products:
+        curves = {
+            case_id: normalized_resolution_spectrum(data, case_id, product)
+            for case_id in RESOLUTION_CASES
+            if authenticated_science_response_case(data, case_id)
+        }
+        if len(curves) == len(RESOLUTION_CASES) and all(
+            curve is not None for curve in curves.values()
+        ):
+            for case_id in RESOLUTION_CASES:
+                curve = curves[case_id]
+                assert curve is not None
+                axis.loglog(
+                    curve[0], curve[1], color=CASE_COLORS[case_id], label=case_id
+                )
+            axis.legend(frameon=False)
+        else:
+            axis.text(
+                0.5, 0.5,
+                "inconclusive: all three authenticated common-range curves required",
+                transform=axis.transAxes, ha="center", va="center", color="#666666",
+            )
+        axis.set_xlabel(r"$k_\perp/\pi$")
+        axis.set_ylabel("common-range normalized power")
+        axis.set_title(title)
+        axis.grid(True, which="both", alpha=0.25)
+
+    alignment_axis = axes[1, 0]
+    alignment = {
+        case_id: resolution_alignment_curve(data, case_id)
+        for case_id in RESOLUTION_CASES
+        if authenticated_science_response_case(data, case_id)
+    }
+    if len(alignment) == len(RESOLUTION_CASES) and all(
+        curve is not None for curve in alignment.values()
+    ):
+        for case_id in RESOLUTION_CASES:
+            curve = alignment[case_id]
+            assert curve is not None
+            alignment_axis.plot(
+                curve[0], curve[1], marker="o", markersize=3.0,
+                color=CASE_COLORS[case_id], label=case_id,
+            )
+        alignment_axis.legend(frameon=False)
+    else:
+        alignment_axis.text(
+            0.5, 0.5,
+            "inconclusive: all three authenticated alignment curves required",
+            transform=alignment_axis.transAxes, ha="center", va="center",
+            color="#666666",
+        )
+    alignment_axis.set_xlabel(r"$k_\perp/\pi$")
+    alignment_axis.set_ylabel(r"peak $|\cos\theta|$")
+    alignment_axis.set_title("Peak velocity/magnetic alignment")
+    alignment_axis.grid(True, alpha=0.25)
+
+    criteria_axis = axes[1, 1]
+    criteria_axis.axis("off")
+    observations = (
+        resolution.get("observations") if isinstance(resolution, dict) else None
+    )
+    lines = [
+        f"Reviewed convergence result: {result}",
+        (
+            f"Preregistered common range: {common_range[0]:g} <= k_perp/pi "
+            f"<= {common_range[1]:g}"
+            if common_range is not None else
+            "Preregistered common range: inconclusive/unavailable"
+        ),
+        "",
+    ]
+    if isinstance(observations, list) and observations:
+        for observation in observations:
+            if not isinstance(observation, dict):
+                continue
+            name = observation.get("product", observation.get("metric", "--"))
+            if observation.get("available") is not True:
+                lines.append(f"{name}: inconclusive")
+                continue
+            distance = as_float(observation.get("R02_R17_distance"))
+            limit = as_float(observation.get("R02_R17_limit"))
+            relative = as_float(observation.get("relative_R02_R17_difference"))
+            measured = distance if distance is not None else relative
+            passed = observation.get("passed")
+            decision = (
+                "pass" if passed is True
+                else "fail" if passed is False
+                else "inconclusive"
+            )
+            lines.append(
+                f"{name}: {decision}; "
+                f"R02/R17={text_value(measured)}"
+                + (f"; limit={limit:.4g}" if limit is not None else "")
+                + (
+                    f"; improved={text_value(observation.get('improved'))}"
+                    if "improved" in observation else ""
+                )
+            )
+    else:
+        lines.append("Reviewed preregistered criteria: inconclusive/unavailable")
+    criteria_axis.text(
+        0.02, 0.98, "\n".join(lines), transform=criteria_axis.transAxes,
+        ha="left", va="top", fontsize=7.2,
+    )
+    fig.suptitle(
+        "R16 / R02 / R17 authenticated common-range resolution evidence", y=0.995
+    )
     fig.tight_layout()
     save_figure(fig, path)
     plt.close(fig)
@@ -3473,6 +4231,11 @@ def report_markdown(data: PublicationData, products: list[Path], output: Path) -
         f"- Populated paired developed-window robustness cells: `{paired_contrasts}`.",
         "- Active/passive history curves marked as partial are transient-only and "
         "must not be interpreted as developed-window comparisons.",
+        "- The compact numerical-health/provenance table excludes unsupported retained-"
+        "state floor margins. Missing authenticated mass, energy, CT, or strict-failure "
+        "evidence remains inconclusive.",
+        "- Primary full-window scalar rows reproduce authenticated direct-acceptance "
+        "source-history statistics without additional publication-layer normalization.",
         "- Resolution self-ratios for R02/R02 are suppressed. Non-reference cases "
         f"with developed-window scalars: `{', '.join(nonreference_resolution_cases) or 'none'}`.",
         "- Parameter-scan trends require at least two populated developed-window cases.",
@@ -3512,6 +4275,8 @@ def render_products(data: PublicationData, output: Path) -> list[Path]:
         "resolution": figures / "fig05_resolution_summary.pdf",
         "scope": figures / "fig06_r10_r14_r15_scope.pdf",
         "science_ct": figures / "fig07_reviewed_science_ct_summary.pdf",
+        "causal_mechanism": figures / "fig08_causal_mechanism.pdf",
+        "resolution_curves": figures / "fig09_resolution_curves.pdf",
     }
     render_health(data, plt, colors, patches, figure_paths["health"])
     render_active_passive(data, plt, figure_paths["active_passive"])
@@ -3522,9 +4287,33 @@ def render_products(data: PublicationData, output: Path) -> list[Path]:
     render_science_ct_summary(
         data, plt, colors, patches, figure_paths["science_ct"]
     )
+    render_causal_mechanism(data, plt, figure_paths["causal_mechanism"])
+    render_resolution_curves(data, plt, figure_paths["resolution_curves"])
     products.extend(figure_paths.values())
 
     table_specs = (
+        (
+            "numerical_health_provenance",
+            [
+                "case_id", "completion", "final_time", "fatal_lf_counters",
+                "fatal_counter_maximum", "mass_relative_drift_maximum",
+                "mhd_user_mass_relative_mismatch", "active_energy_closure",
+                "energy_increment_residual_maximum",
+                "direct_ct_numerical", "maximum_normalized_ct_divb",
+                "claim_scope", "strict_failure", "strict_failure_counters",
+                "provenance_summary",
+            ],
+            numerical_health_provenance_rows(data),
+        ),
+        (
+            "primary_full_window_scalars",
+            [
+                "case_id", "metric", "history", "column", "availability", "mean",
+                "standard_error", "ci95_lower", "ci95_upper", "effective_sample_count",
+                "stationarity", "sampling_adequacy", "acceptance", "claim_scope",
+            ],
+            primary_full_window_scalar_rows(data),
+        ),
         (
             "health_completion",
             [
@@ -3676,6 +4465,15 @@ exclude failed, incomplete, and numerically inconclusive cases.
 7. **Reviewed science and direct CT.** Authenticated Holm-corrected comparison
    gates, common-range convergence, admitted MKS24 residual/drift criteria, and
    sampled direct CT numerical health. All are explicitly non-authorizing.
+8. **Causal mechanism.** Matched active/passive magnetic-intermittency
+   \\(C_{{B^2}}\\) histories, parallel-strain PDFs, and reviewed standardized effects.
+   Curves require
+   complete claim-eligible cases; strain PDFs additionally require diagnostics bytes
+   bound by authenticated reviewed science. Missing evidence remains inconclusive.
+9. **Resolution curves.** Actual R16/R02/R17 velocity and magnetic-fluctuation
+   spectra and peak-alignment curves over the preregistered common range, accompanied
+   by the reviewed convergence decisions and limits. All three authenticated curves
+   are required in each panel.
 """
     captions_path = output / "captions.md"
     write_text(captions_path, captions)

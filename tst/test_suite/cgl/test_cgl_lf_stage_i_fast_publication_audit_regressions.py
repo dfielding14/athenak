@@ -238,26 +238,29 @@ def rewrite_ct_record(path: Path, record: dict[str, object]) -> None:
     write_json(path, seal_ct(body))
 
 
-def strict_failure_record(root: Path) -> dict[str, object]:
+def strict_failure_record(
+    root: Path, case_id: str = "R15", *, failure_time: float = 1.275643,
+    hard_bound: int = 2, job_id: str = "4771183",
+) -> dict[str, object]:
     manifest = root / "fast_run.json"
     exit_code = root / "run_exit_code"
     slurm_log = root / "strict.log"
-    write_json(manifest, {"case_id": "R15", "job_id": "4771183"})
+    write_json(manifest, {"case_id": case_id, "job_id": job_id})
     exit_code.write_text("1\n", encoding="utf-8")
     slurm_log.write_text("strict hard-bound failure\n", encoding="utf-8")
     return {
         "schema_version": 1,
         "record_type": "cgl-lf-stage-i-retained-strict-failure-evidence",
-        "case_id": "R15",
-        "job_id": "4771183",
+        "case_id": case_id,
+        "job_id": job_id,
         "result": "fail",
-        "failure_time": 1.275643,
+        "failure_time": failure_time,
         "failure_counters": {
             "lf_dfloor": 0,
             "lf_pfloor": 0,
             "lf_nonfin": 0,
             "lf_nonpos": 0,
-            "lf_hardbd": 2,
+            "lf_hardbd": hard_bound,
         },
         "strict_admissibility_evidence": True,
         "provenance": {
@@ -885,3 +888,265 @@ def test_r15_strict_failure_details_are_never_hardcoded(publication, tmp_path):
     assert publication.r15_strict_failure_disposition(data) == "unavailable/inconclusive"
     assert row["strict_run_disposition"] == "unavailable/inconclusive"
     assert "1.275643" not in publication.report_markdown(data, [], tmp_path)
+
+
+def material_diagnostics(case_id: str) -> dict[str, object]:
+    offset = int(case_id[1:]) / 100.0
+    return {
+        "health": {
+            "result": "clean",
+            "final_time": 10.0,
+            "mass_relative_drift": {"mhd": 2.0e-16, "user": 3.0e-16},
+            "mhd_user_mass_relative_mismatch": 0.0,
+        },
+        "snapshot_analysis_status": "complete",
+        "snapshot_ensemble": {
+            "snapshot_count": 3,
+            "pdf": {
+                "bb_grad_velocity": {
+                    "edges": [-1.0, 0.0, 1.0],
+                    "density": [0.4 + offset, 0.6 - offset],
+                }
+            },
+            "spectra": {
+                "velocity": {
+                    "dk": 3.141592653589793,
+                    "k": [
+                        12.566370614359172,
+                        25.132741228718345,
+                        50.26548245743669,
+                        75.39822368615503,
+                    ],
+                    "power_per_dk": [4.0 + offset, 3.0, 2.0, 1.0],
+                },
+                "magnetic_fluctuation": {
+                    "k": [
+                        12.566370614359172,
+                        25.132741228718345,
+                        50.26548245743669,
+                        75.39822368615503,
+                    ],
+                    "power_per_dk": [3.0 + offset, 2.5, 1.5, 0.8],
+                },
+            },
+            "alignment": {
+                shell: {"edges": [0.0, 0.5, 1.0], "density": [1.0, 2.0]}
+                for shell in ("4", "8", "16", "24")
+            },
+        },
+    }
+
+
+def install_material_case(publication, data, analysis: Path, case_id: str) -> dict:
+    diagnostics = material_diagnostics(case_id)
+    diagnostics_path = analysis / "cases" / case_id / "diagnostics.json"
+    write_json(diagnostics_path, diagnostics)
+    case = data.cases[case_id]
+    case.diagnostics = diagnostics
+    case.lineage = {"status": "complete", "final_time": 10.0}
+    case.user_history = {
+        "time": [0.0, 4.0, 10.0],
+        "volume": [1.0, 1.0, 1.0],
+        "b2": [2.0, 2.0, 2.0],
+        "b4": [4.08, 4.16, 4.2],
+    }
+    case.direct_acceptance = {
+        "_publication_evidence_validated": True,
+        "result": "pass",
+        "health": {
+            "result": "pass",
+            "complete_to_target": True,
+            "observed_final_time": 10.0,
+            "fatal_counter_maxima": {
+                "lf_dfloor": 0,
+                "lf_pfloor": 0,
+                "lf_nonfin": 0,
+                "lf_nonpos": 0,
+            },
+        },
+        "scope": {"classification": "standard_claim_scope"},
+        "history_statistics": {
+            metric: {
+                "history": "user",
+                "column": metric,
+                "sampling_adequacy": "pass",
+                "stationarity": {"result": "pass"},
+                "windows": {
+                    "full": {
+                        "statistics": {
+                            "mean": 1.0 + int(case_id[1:]) / 100.0,
+                            "standard_error": 0.05,
+                            "confidence_interval_95": [0.9, 1.1],
+                            "effective_sample_count": 3.0,
+                        }
+                    }
+                },
+            }
+            for metric in publication.PRIMARY_SCALAR_METRICS
+        },
+    }
+    case.acceptance = {
+        "_publication_evidence_validated": True,
+        "result": "pass",
+        "gates": [{
+            "name": "active_energy_closure",
+            "result": "pass",
+            "observations": {
+                "windows": {
+                    "whole_lineage": {
+                        "increment_normalized_residual": 3.0e-12,
+                        "state_normalized_mismatch": 2.0e-13,
+                    },
+                    "developed": {
+                        "increment_normalized_residual": 4.0e-12,
+                        "state_normalized_mismatch": 3.0e-13,
+                    },
+                }
+            },
+        }],
+    }
+    return binding(diagnostics_path)
+
+
+def install_material_science(publication, data, bindings: dict[str, dict]) -> None:
+    selected = sorted(bindings)
+    data.science_record = {
+        "_publication_evidence_validated": True,
+        "result": "pass",
+        "selected_cases": selected,
+        "case_dispositions": {
+            case_id: {"claim_eligible": True, "acceptance_result": "pass"}
+            for case_id in selected
+        },
+        "families": {
+            "active_passive": {
+                "R02_R06": {
+                    "active": "R02",
+                    "passive": "R06",
+                    "result": "pass",
+                    "claim_eligible": True,
+                    "metrics": [{
+                        "metric": "abs_dp",
+                        "available": True,
+                        "standardized_effect": -1.5,
+                        "holm_significant": True,
+                    }],
+                }
+            }
+        },
+        "resolution": {
+            "result": "pass",
+            "limits": {"common_k_perp_over_pi": [4.0, 24.0]},
+            "observations": [{
+                "kind": "curve",
+                "product": "velocity_spectrum_shape",
+                "available": True,
+                "R02_R17_distance": 0.1,
+                "R02_R17_limit": 0.2,
+                "improved": True,
+                "passed": True,
+            }],
+        },
+        "gates": [],
+        "provenance": {"case_diagnostics": bindings},
+    }
+
+
+def test_material_tables_authenticate_health_energy_and_r14_r15_failures(
+    publication, tmp_path
+):
+    analysis = tmp_path / "analysis"
+    data = empty_data(publication, analysis)
+    bindings = {
+        case_id: install_material_case(publication, data, analysis, case_id)
+        for case_id in ("R02", "R06", "R14", "R15")
+    }
+    install_material_science(publication, data, bindings)
+    for case_id, failure_time, hard_bound, job_id in (
+        ("R14", 0.1326939, 167, "4770854"),
+        ("R15", 1.275643, 2, "4771183"),
+    ):
+        data.cases[case_id].direct_acceptance["scope"] = {
+            "classification": "scoped_nonfatal_hard_bound_variant",
+            "retained_strict_failure_evidence": [
+                strict_failure_record(
+                    tmp_path / f"strict-{case_id}", case_id,
+                    failure_time=failure_time, hard_bound=hard_bound, job_id=job_id,
+                )
+            ],
+        }
+
+    health = {
+        row["case_id"]: row
+        for row in publication.numerical_health_provenance_rows(data)
+    }
+    scalars = publication.primary_full_window_scalar_rows(data)
+
+    assert health["R02"]["completion"] == "pass"
+    assert health["R02"]["mass_relative_drift_maximum"] == pytest.approx(3.0e-16)
+    assert health["R02"]["active_energy_closure"] == "pass"
+    assert health["R02"]["energy_increment_residual_maximum"] == pytest.approx(4.0e-12)
+    assert health["R02"]["reporter_diagnostics_provenance"] == "authenticated"
+    assert health["R06"]["active_energy_closure"] == "not_applicable"
+    assert "hard_bound=167" in health["R14"]["strict_failure"]
+    assert "hard_bound=2" in health["R15"]["strict_failure"]
+    kinetic = next(
+        row for row in scalars if row["case_id"] == "R02" and row["metric"] == "kinetic"
+    )
+    assert kinetic["availability"] == "available"
+    assert kinetic["history"] == "user"
+    assert kinetic["column"] == "kinetic"
+    assert kinetic["standard_error"] == pytest.approx(0.05)
+    assert kinetic["effective_sample_count"] == pytest.approx(3.0)
+    assert kinetic["stationarity"] == "pass"
+
+    diagnostics_path = analysis / "cases/R02/diagnostics.json"
+    diagnostics_path.write_text("{}\n", encoding="utf-8")
+    unauthenticated = {
+        row["case_id"]: row
+        for row in publication.numerical_health_provenance_rows(data)
+    }
+    assert unauthenticated["R02"]["mass_relative_drift_maximum"] is None
+    assert unauthenticated["R02"]["reporter_diagnostics_provenance"] == "inconclusive"
+
+
+def test_material_figures_and_tables_are_integrated(publication, tmp_path):
+    analysis = tmp_path / "analysis"
+    data = empty_data(publication, analysis)
+    bindings = {
+        case_id: install_material_case(publication, data, analysis, case_id)
+        for case_id in ("R02", "R06", "R16", "R17")
+    }
+    install_material_science(publication, data, bindings)
+    output = tmp_path / "publication"
+
+    products = publication.render_products(data, output)
+
+    for relative in (
+        "figures/fig08_causal_mechanism.pdf",
+        "figures/fig09_resolution_curves.pdf",
+        "tables/numerical_health_provenance.csv",
+        "tables/numerical_health_provenance.tex",
+        "tables/primary_full_window_scalars.csv",
+        "tables/primary_full_window_scalars.tex",
+    ):
+        assert output / relative in products
+        assert (output / relative).is_file()
+    assert publication.reviewed_pair_effect_rows(data, "R02", "R06")[0][
+        "standardized_effect"
+    ] == pytest.approx(-1.5)
+    assert publication.normalized_history_series(data.cases["R02"], "c_b2")[1][
+        -1
+    ] == pytest.approx(0.05)
+    assert publication.normalized_resolution_spectrum(data, "R17", "velocity")
+    assert publication.resolution_alignment_curve(data, "R16")
+    health = (output / "tables/numerical_health_provenance.csv").read_text(
+        encoding="utf-8"
+    )
+    scalar = (output / "tables/primary_full_window_scalars.csv").read_text(
+        encoding="utf-8"
+    )
+    assert "floor_margin" not in health
+    assert "mass_relative_drift_maximum" in health
+    assert "strict_failure" in health
+    assert "effective_sample_count" in scalar
