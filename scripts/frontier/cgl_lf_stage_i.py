@@ -142,6 +142,14 @@ SHARED_ROOT_CLEARANCE_SOURCE_AUTHORITY_RELATIVES = (
     F118_PLASMA_REVIEW_RELATIVE,
     F118_PUBLICATION_AUDIT_RELATIVE,
 )
+SHARED_ROOT_CLEARANCE_TRANSACTION_PAYLOADS = {
+    "artifact": "artifact.json",
+    "review": "independent_review.json",
+    "audit": "publication_audit.json",
+    "audit_review": "publication_audit_review.json",
+}
+SHARED_ROOT_CLEARANCE_TRANSACTION_JOURNAL = "journal.json"
+SHARED_ROOT_CLEARANCE_TRANSACTION_STAGING_SUFFIX = ".staging"
 F116_SOURCE_AUTHORITY_TRANSACTION_ID_PATTERN = re.compile(
     r"\d{4}-\d{2}-\d{2}T\d{6}\+0000-[0-9a-f]{32}"
 )
@@ -730,6 +738,10 @@ EXPECTED_RANKS_PER_NODE = 8
 EXPECTED_CPUS_PER_TASK = 7
 SEGMENT_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,28}")
 JOB_ID_PATTERN = re.compile(r"[1-9][0-9]*")
+SQUEUE_JOB_ID_PATTERN = re.compile(
+    r"(?P<base>[1-9][0-9]*)(?:_(?P<task>0|[1-9][0-9]*))?"
+)
+SQUEUE_PARTITION_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*")
 SHA256_PATTERN = re.compile(r"[0-9a-f]{64}")
 GIT_REVISION_PATTERN = re.compile(r"[0-9a-f]{40}")
 R17_RECOST_SEGMENT_PATTERN = re.compile(
@@ -9521,7 +9533,7 @@ def validate_submission_audit(
     }
     if not required.issubset(value) or not frozenset(value).issubset(required | optional):
         raise ValueError("submission journal has invalid submission audit columns")
-    parse_utc_timestamp(value["created_utc"], "submission audit created_utc")
+    created = parse_utc_timestamp(value["created_utc"], "submission audit created_utc")
     if (
         not isinstance(value["offline_local_root"], bool)
         or not isinstance(value["skip_slurm_test"], bool)
@@ -9704,19 +9716,54 @@ def validate_submission_audit(
             raise ValueError(
                 "submission audit shared-root clearance consumption differs"
             )
+        checkpoint_match = re.fullmatch(
+            r"F-([1-9][0-9]*)", str(clearance["checkpoint"])
+        )
+        if checkpoint_match is None:
+            raise ValueError(
+                "submission audit shared-root clearance checkpoint is invalid"
+            )
+        expected_clearance = require_managed_shared_root_clearance(
+            paths,
+            {SHARED_ROOT_STALE_CAMPAIGN_ID},
+            action="submit",
+            case_id=expected_case_id,
+            queue_evidence=initial_queue,
+            now=created,
+            checkpoint_number=int(checkpoint_match.group(1)),
+        )
+        if clearance != expected_clearance:
+            raise ValueError(
+                "submission audit shared-root clearance differs from its exact "
+                "canonical checkpoint"
+            )
     acknowledged = value["acknowledged_shared_root_campaigns"]
     if clearance is not None and acknowledged != [SHARED_ROOT_STALE_CAMPAIGN_ID]:
         raise ValueError(
             "submission audit managed-clearance acknowledgement differs"
         )
-    if (
-        not offline_local_root
-        and clearance is None
-        and shared_root_campaign_conflicts(paths["root"], set())
-    ):
-        raise ValueError(
-            "production submission journal lacks required managed shared-root clearance"
+    if not offline_local_root:
+        allowed_shared_root_manifests = (
+            {
+                paths["root"] / "runs" / SHARED_ROOT_STALE_CAMPAIGN_ID
+                / "manifest/prepared_run.json"
+            }
+            if clearance is not None
+            else set()
         )
+        conflicts = shared_root_campaign_conflicts(
+            paths["root"], allowed_shared_root_manifests
+        )
+        if conflicts:
+            if clearance is None:
+                raise ValueError(
+                    "production submission journal lacks required managed "
+                    "shared-root clearance"
+                )
+            raise ValueError(
+                "production submission journal has unauthorized active shared-root "
+                "campaigns: " + "; ".join(conflicts)
+            )
     if (
         not offline_local_root
         and bool(acknowledged) != (clearance is not None)
@@ -12724,25 +12771,67 @@ def expected_submitted_queue_jobs(
     return expected
 
 
+def parse_authenticated_production_queue_row(
+    line: str, label: str,
+) -> tuple[str, str, str, str, str]:
+    """Authenticate one exact complete-user squeue row."""
+
+    if not isinstance(line, str):
+        raise ValueError(f"{label} row has invalid formatting")
+    try:
+        row = next(csv.reader([line], delimiter="|", strict=True))
+    except (csv.Error, StopIteration) as error:
+        raise ValueError(f"{label} row has invalid formatting") from error
+    if (
+        line.strip() != line
+        or len(row) != 4
+        or line != "|".join(row)
+        or any(not value or value.strip() != value for value in row)
+        or any(
+            any(ord(character) < 0x20 or ord(character) > 0x7e for character in value)
+            for value in row
+        )
+    ):
+        raise ValueError(f"{label} row has invalid formatting")
+    job_id, partition, state, job_name = row
+    match = SQUEUE_JOB_ID_PATTERN.fullmatch(job_id)
+    if match is None:
+        raise ValueError(f"{label} row has invalid job ID")
+    if SQUEUE_PARTITION_PATTERN.fullmatch(partition) is None:
+        raise ValueError(f"{label} row has invalid partition")
+    if state not in NONTERMINAL_STATES:
+        raise ValueError(f"{label} row has invalid state")
+    return job_id, partition, state, job_name, match.group("base")
+
+
 def authenticate_production_queue(
     paths: dict[str, Path],
     reservations: list[dict[str, object]],
     lines: list[str],
 ) -> None:
-    """Authenticate every CGL row while retaining unrelated user jobs."""
+    """Authenticate every queue row while retaining valid unrelated user jobs."""
 
     expected = expected_submitted_queue_jobs(paths, reservations)
     seen = set()
     conflicts = []
     for line in lines:
-        row = next(csv.reader([line], delimiter="|"))
-        if len(row) != 4:
+        try:
+            job_id, partition, _state, job_name, base_job_id = (
+                parse_authenticated_production_queue_row(
+                    line, "production complete-user squeue"
+                )
+            )
+        except ValueError:
             conflicts.append(line)
             continue
-        if any(not value or value.strip() != value for value in row):
+        if base_job_id == SHARED_ROOT_STALE_JOB_ID:
+            raise ValueError(
+                "managed clearance stale job remains present in complete squeue evidence"
+            )
+        if job_id in seen:
             conflicts.append(line)
             continue
-        job_id, partition, state, job_name = row
+        seen.add(job_id)
         if (
             not job_name.startswith(CGL_JOB_NAME_PREFIX)
             and job_id not in expected
@@ -12751,13 +12840,10 @@ def authenticate_production_queue(
         if (
             JOB_ID_PATTERN.fullmatch(job_id) is None
             or partition != PARTITION
-            or state not in NONTERMINAL_STATES
             or expected.get(job_id) != job_name
-            or job_id in seen
         ):
             conflicts.append(line)
             continue
-        seen.add(job_id)
     if conflicts:
         raise ValueError(
             "a queued CGL job or malformed scheduler row lacks an authenticated submitted "
@@ -13158,10 +13244,8 @@ def require_stale_job_absent_from_complete_queue_evidence(
     if not isinstance(rows, list):
         raise ValueError(f"{label} rows are invalid")
     for line in rows:
-        row = next(csv.reader([line], delimiter="|"))
-        if len(row) != 4:
-            raise ValueError(f"{label} row is malformed")
-        if row[0] == SHARED_ROOT_STALE_JOB_ID:
+        _, _, _, _, base_job_id = parse_authenticated_production_queue_row(line, label)
+        if base_job_id == SHARED_ROOT_STALE_JOB_ID:
             raise ValueError(
                 "managed clearance stale job remains present in complete squeue evidence"
             )
@@ -13240,9 +13324,15 @@ def authenticate_managed_shared_root_clearance_chain_commit(
     )
 
 
-def managed_shared_root_clearance_checkpoints(accounting: Path) -> list[int]:
+def managed_shared_root_clearance_checkpoints(
+    accounting: Path, *, before: int | None = None,
+) -> list[int]:
     """Return audit-review-last complete managed-clearance checkpoints."""
 
+    if before is not None:
+        before = require_r17_integer(
+            before, "managed shared-root clearance checkpoint bound", minimum=1
+        )
     entries = set(trusted_directory_entries(
         accounting, "managed shared-root clearance accounting directory"
     ))
@@ -13251,6 +13341,8 @@ def managed_shared_root_clearance_checkpoints(accounting: Path) -> list[int]:
         match = SHARED_ROOT_CLEARANCE_REFRESH_AUDIT_REVIEW_PATTERN.fullmatch(entry)
         if match is not None:
             checkpoint = int(match.group("checkpoint"))
+            if before is not None and checkpoint >= before:
+                continue
             chain = managed_shared_root_clearance_chain_paths(accounting, checkpoint)
             if not all(path.name in entries for path in chain):
                 continue
@@ -13264,6 +13356,7 @@ def managed_shared_root_clearance_checkpoints(accounting: Path) -> list[int]:
 def build_managed_shared_root_clearance_refresh(
     paths: dict[str, Path], checkpoint: int, *,
     now: datetime | None = None,
+    authenticate_existing: bool = False,
 ) -> dict[str, object]:
     """Build a read-only exact-binding candidate for independent review."""
 
@@ -13271,13 +13364,15 @@ def build_managed_shared_root_clearance_refresh(
         checkpoint, "managed shared-root clearance checkpoint", minimum=1
     )
     accounting = paths["root"] / "accounting"
-    existing = managed_shared_root_clearance_checkpoints(accounting)
-    if existing and checkpoint <= max(existing):
+    existing = managed_shared_root_clearance_checkpoints(
+        accounting, before=checkpoint if authenticate_existing else None
+    )
+    if not authenticate_existing and existing and checkpoint <= max(existing):
         raise ValueError(
             "managed shared-root clearance checkpoint must exceed every publication"
         )
     chain_paths = managed_shared_root_clearance_chain_paths(accounting, checkpoint)
-    if any(path.exists() for path in chain_paths):
+    if not authenticate_existing and any(os.path.lexists(path) for path in chain_paths):
         raise ValueError("managed shared-root clearance checkpoint already exists")
 
     source_paths = [
@@ -13288,6 +13383,8 @@ def build_managed_shared_root_clearance_refresh(
         paths["root"] / relative for relative in SHARED_ROOT_CLEARANCE_LEGACY_RELATIVES
     ]
     for prior_checkpoint in existing:
+        if prior_checkpoint >= checkpoint:
+            continue
         prior_paths.extend(
             managed_shared_root_clearance_chain_paths(accounting, prior_checkpoint)
         )
@@ -13372,14 +13469,738 @@ def render_managed_shared_root_clearance_refresh(args: argparse.Namespace) -> in
     return 0
 
 
+def managed_shared_root_clearance_transaction_path(
+    accounting: Path, checkpoint: int,
+) -> Path:
+    """Return the retained recovery transaction for one clearance publication."""
+
+    return accounting / (
+        f"mks24_stage_i_{EXECUTION_EPOCH_SLUG}_F{checkpoint}_"
+        "shared_root_isolation_clearance_refresh.transaction"
+    )
+
+
+def managed_shared_root_clearance_staging_path(
+    accounting: Path, checkpoint: int,
+) -> Path:
+    """Return the deterministic private staging directory for one transaction."""
+
+    transaction = managed_shared_root_clearance_transaction_path(accounting, checkpoint)
+    return Path(f"{transaction}{SHARED_ROOT_CLEARANCE_TRANSACTION_STAGING_SUFFIX}")
+
+
+def managed_shared_root_clearance_expected_digests(
+    value: object, label: str,
+) -> dict[str, str]:
+    """Require the four exact immutable payload digests for one transaction."""
+
+    expected = require_r17_exact_keys(
+        value, set(SHARED_ROOT_CLEARANCE_TRANSACTION_PAYLOADS), label
+    )
+    return {
+        key: require_r17_sha256(expected[key], f"{label} {key} SHA-256")
+        for key in SHARED_ROOT_CLEARANCE_TRANSACTION_PAYLOADS
+    }
+
+
+def authenticate_managed_shared_root_clearance_chain(
+    paths: dict[str, Path],
+    checkpoint: int,
+    read_paths: tuple[Path, Path, Path, Path],
+    *,
+    expected: dict[str, str] | None = None,
+    now: datetime | None = None,
+) -> dict[str, object]:
+    """Authenticate one exact current-binding clearance chain from four files."""
+
+    checkpoint = require_r17_integer(
+        checkpoint, "managed shared-root clearance checkpoint", minimum=1
+    )
+    checkpoint_name = f"F-{checkpoint}"
+    canonical = managed_shared_root_clearance_chain_paths(
+        paths["root"] / "accounting", checkpoint
+    )
+    keys = tuple(SHARED_ROOT_CLEARANCE_TRANSACTION_PAYLOADS)
+    retained = {}
+    digests = {}
+    for key, path in zip(keys, read_paths):
+        retained[key], digests[key] = read_controller_publication_json(
+            path, f"managed shared-root clearance {checkpoint_name} {key}", mode=0o444
+        )
+    if expected is not None and digests != expected:
+        raise ValueError("managed shared-root clearance payload digests differ")
+
+    artifact = retained["artifact"]
+    generated = require_r17_utc(
+        artifact.get("generated_utc"),
+        "managed shared-root clearance generation time",
+    )
+    current_artifact = build_managed_shared_root_clearance_refresh(
+        paths,
+        checkpoint,
+        now=generated,
+        authenticate_existing=True,
+    )
+    if artifact != current_artifact:
+        raise ValueError(
+            "managed shared-root clearance artifact exact current bindings differ"
+        )
+
+    reviewer_id, review_sha, reviewed = require_clearance_review(
+        read_paths[1],
+        checkpoint=checkpoint_name,
+        candidate_path=canonical[0],
+        candidate_sha=digests["artifact"],
+        record_type="stage-i-managed-shared-root-isolation-clearance-review",
+        decision="approved",
+        label="managed shared-root clearance independent review",
+    )
+    if review_sha != digests["review"]:
+        raise ValueError("managed shared-root clearance review digest changed")
+
+    audit = require_r17_exact_keys(
+        retained["audit"],
+        {
+            "schema_version", "record_type", "checkpoint", "execution_epoch",
+            "published_utc", "artifact", "independent_review", "authority",
+        },
+        "managed shared-root clearance publication audit",
+    )
+    authority = {
+        "binding_refresh_only": True,
+        "scope_expanded": False,
+        "bypasses_controller_preflights": False,
+    }
+    if (
+        audit["schema_version"] != 1
+        or audit["record_type"]
+        != "stage-i-managed-shared-root-isolation-clearance-publication-audit"
+        or audit["checkpoint"] != checkpoint_name
+        or audit["execution_epoch"] != EXECUTION_EPOCH
+        or audit["authority"] != authority
+    ):
+        raise ValueError("managed shared-root clearance publication audit differs")
+    require_r17_declared_publication(
+        audit["artifact"],
+        canonical[0],
+        digests["artifact"],
+        "managed shared-root clearance publication audit artifact",
+    )
+    require_r17_declared_publication(
+        audit["independent_review"],
+        canonical[1],
+        digests["review"],
+        "managed shared-root clearance publication audit review",
+    )
+    published = require_r17_utc(
+        audit["published_utc"], "managed shared-root clearance publication time"
+    )
+
+    audit_reviewer_id, audit_review_sha, audit_reviewed = require_clearance_review(
+        read_paths[3],
+        checkpoint=checkpoint_name,
+        candidate_path=canonical[2],
+        candidate_sha=digests["audit"],
+        record_type=(
+            "stage-i-managed-shared-root-isolation-clearance-"
+            "publication-audit-review"
+        ),
+        decision="approved-for-publication",
+        label="managed shared-root clearance publication-audit review",
+    )
+    if audit_review_sha != digests["audit_review"]:
+        raise ValueError("managed shared-root clearance audit-review digest changed")
+    current = datetime.now(timezone.utc) if now is None else now.astimezone(timezone.utc)
+    if (
+        reviewer_id == audit_reviewer_id
+        or not generated < reviewed < published < audit_reviewed
+        or audit_reviewed > current + timedelta(minutes=5)
+    ):
+        raise ValueError("managed shared-root clearance review chain differs")
+    return {
+        "checkpoint": checkpoint_name,
+        "expected": digests,
+        "reviewer_id": reviewer_id,
+        "audit_reviewer_id": audit_reviewer_id,
+    }
+
+
+def managed_shared_root_clearance_public_state(
+    canonical: tuple[Path, Path, Path, Path],
+    expected: dict[str, str],
+) -> tuple[bool, bool, bool, bool]:
+    """Classify only absent or exact immutable canonical publication names."""
+
+    retained = []
+    for key, path in zip(SHARED_ROOT_CLEARANCE_TRANSACTION_PAYLOADS, canonical):
+        temporary = path.parent / metadata_temporary_name(path.name)
+        predecessor = temporary.parent / metadata_predecessor_recovery_name(
+            temporary.name
+        )
+        if os.path.lexists(predecessor):
+            raise ValueError(
+                f"managed shared-root clearance public {key} has an unsafe "
+                "predecessor recovery"
+            )
+        if not os.path.lexists(path):
+            if os.path.lexists(temporary):
+                _, digest = read_controller_publication_json(
+                    temporary,
+                    f"managed shared-root clearance public {key} temporary",
+                    mode=0o444,
+                )
+                if digest != expected[key]:
+                    raise ValueError(
+                        f"managed shared-root clearance public {key} temporary "
+                        "differs from transaction"
+                    )
+            retained.append(False)
+            continue
+        links = 1
+        if os.path.lexists(temporary):
+            public_profile = path.lstat()
+            temporary_profile = temporary.lstat()
+            if (
+                not stat.S_ISREG(public_profile.st_mode)
+                or not stat.S_ISREG(temporary_profile.st_mode)
+                or (public_profile.st_dev, public_profile.st_ino)
+                != (temporary_profile.st_dev, temporary_profile.st_ino)
+                or public_profile.st_nlink != 2
+                or temporary_profile.st_nlink != 2
+            ):
+                raise ValueError(
+                    f"managed shared-root clearance public {key} has an unsafe "
+                    "deterministic recovery alias"
+                )
+            links = 2
+        _, digest = read_controller_publication_json(
+            path,
+            f"managed shared-root clearance public {key}",
+            mode=0o444,
+            links=links,
+        )
+        if digest != expected[key]:
+            raise ValueError(
+                f"managed shared-root clearance public {key} differs from transaction"
+            )
+        retained.append(True)
+    return tuple(retained)  # type: ignore[return-value]
+
+
+def managed_shared_root_clearance_transaction_journal(
+    accounting: Path,
+    checkpoint: int,
+    expected: dict[str, str],
+) -> dict[str, object]:
+    """Build the immutable recovery journal for one exact staged chain."""
+
+    canonical = managed_shared_root_clearance_chain_paths(accounting, checkpoint)
+    return {
+        "schema_version": 1,
+        "record_type": (
+            "stage-i-managed-shared-root-isolation-clearance-publication-transaction"
+        ),
+        "checkpoint": f"F-{checkpoint}",
+        "execution_epoch": EXECUTION_EPOCH,
+        "targets": {
+            key: str(path)
+            for key, path in zip(SHARED_ROOT_CLEARANCE_TRANSACTION_PAYLOADS, canonical)
+        },
+        "payloads": dict(SHARED_ROOT_CLEARANCE_TRANSACTION_PAYLOADS),
+        "expected": expected,
+    }
+
+
+def read_managed_shared_root_clearance_transaction_directory(
+    paths: dict[str, Path],
+    checkpoint: int,
+    transaction: Path,
+    *,
+    expected_audit_review_sha256: str | None = None,
+) -> tuple[Path, tuple[Path, Path, Path, Path], dict[str, str]]:
+    """Authenticate one complete exact final or private clearance transaction."""
+
+    accounting = paths["root"] / "accounting"
+    transaction = transaction.expanduser().absolute()
+    staging = managed_shared_root_clearance_staging_path(
+        accounting, checkpoint
+    ).expanduser().absolute()
+    if transaction != staging:
+        raise ValueError(
+            "managed shared-root clearance private staging path is not canonical"
+        )
+    entries = set(trusted_directory_entries(
+        transaction, "managed shared-root clearance transaction"
+    ))
+    expected_entries = {
+        *SHARED_ROOT_CLEARANCE_TRANSACTION_PAYLOADS.values(),
+        SHARED_ROOT_CLEARANCE_TRANSACTION_JOURNAL,
+    }
+    if entries != expected_entries:
+        raise ValueError(
+            "managed shared-root clearance transaction is incomplete or foreign"
+        )
+    journal, _ = read_controller_publication_json(
+        transaction / SHARED_ROOT_CLEARANCE_TRANSACTION_JOURNAL,
+        "managed shared-root clearance transaction journal",
+        mode=0o444,
+    )
+    journal = require_r17_exact_keys(
+        journal,
+        {
+            "schema_version", "record_type", "checkpoint", "execution_epoch",
+            "targets", "payloads", "expected",
+        },
+        "managed shared-root clearance transaction journal",
+    )
+    canonical = managed_shared_root_clearance_chain_paths(accounting, checkpoint)
+    targets = require_r17_exact_keys(
+        journal["targets"],
+        set(SHARED_ROOT_CLEARANCE_TRANSACTION_PAYLOADS),
+        "managed shared-root clearance transaction targets",
+    )
+    payloads = require_r17_exact_keys(
+        journal["payloads"],
+        set(SHARED_ROOT_CLEARANCE_TRANSACTION_PAYLOADS),
+        "managed shared-root clearance transaction payloads",
+    )
+    expected = managed_shared_root_clearance_expected_digests(
+        journal["expected"], "managed shared-root clearance transaction expected"
+    )
+    if (
+        journal["schema_version"] != 1
+        or journal["record_type"]
+        != "stage-i-managed-shared-root-isolation-clearance-publication-transaction"
+        or journal["checkpoint"] != f"F-{checkpoint}"
+        or journal["execution_epoch"] != EXECUTION_EPOCH
+        or targets
+        != {
+            key: str(path)
+            for key, path in zip(SHARED_ROOT_CLEARANCE_TRANSACTION_PAYLOADS, canonical)
+        }
+        or payloads != SHARED_ROOT_CLEARANCE_TRANSACTION_PAYLOADS
+    ):
+        raise ValueError("managed shared-root clearance transaction identity differs")
+    if expected_audit_review_sha256 is not None and (
+        expected["audit_review"]
+        != require_r17_sha256(
+            expected_audit_review_sha256,
+            "expected managed shared-root clearance audit-review SHA-256",
+        )
+    ):
+        raise ValueError(
+            "managed shared-root clearance transaction audit-review digest differs"
+        )
+    read_paths = tuple(
+        transaction / SHARED_ROOT_CLEARANCE_TRANSACTION_PAYLOADS[key]
+        for key in SHARED_ROOT_CLEARANCE_TRANSACTION_PAYLOADS
+    )
+    authenticate_managed_shared_root_clearance_chain(
+        paths, checkpoint, read_paths, expected=expected
+    )
+    return transaction, read_paths, expected
+
+
+def read_managed_shared_root_clearance_transaction(
+    paths: dict[str, Path],
+    checkpoint: int,
+    *,
+    expected_audit_review_sha256: str | None = None,
+) -> tuple[Path, tuple[Path, Path, Path, Path], dict[str, str]]:
+    """Authenticate one immutable marker bound to complete private staging."""
+
+    accounting = paths["root"] / "accounting"
+    transaction = managed_shared_root_clearance_transaction_path(accounting, checkpoint)
+    staging = managed_shared_root_clearance_staging_path(accounting, checkpoint)
+    marker, _ = read_controller_publication_json(
+        transaction,
+        "managed shared-root clearance transaction installation marker",
+        mode=0o444,
+    )
+    marker = require_r17_exact_keys(
+        marker,
+        {
+            "schema_version", "record_type", "checkpoint", "execution_epoch",
+            "staging", "journal", "expected",
+        },
+        "managed shared-root clearance transaction installation marker",
+    )
+    expected = managed_shared_root_clearance_expected_digests(
+        marker["expected"],
+        "managed shared-root clearance transaction installation expected",
+    )
+    if expected_audit_review_sha256 is not None and (
+        expected["audit_review"]
+        != require_r17_sha256(
+            expected_audit_review_sha256,
+            "expected managed shared-root clearance audit-review SHA-256",
+        )
+    ):
+        raise ValueError(
+            "managed shared-root clearance transaction installation digest differs"
+        )
+    journal = current_clearance_publication_binding(
+        staging / SHARED_ROOT_CLEARANCE_TRANSACTION_JOURNAL,
+        "managed shared-root clearance installed transaction journal",
+    )
+    if (
+        marker["schema_version"] != 1
+        or marker["record_type"]
+        != "stage-i-managed-shared-root-isolation-clearance-transaction-installation"
+        or marker["checkpoint"] != f"F-{checkpoint}"
+        or marker["execution_epoch"] != EXECUTION_EPOCH
+        or marker["staging"]
+        != current_clearance_directory_binding(
+            staging, "managed shared-root clearance installed private staging"
+        )
+        or marker["journal"] != journal
+    ):
+        raise ValueError(
+            "managed shared-root clearance transaction installation marker differs"
+        )
+    retained = read_managed_shared_root_clearance_transaction_directory(
+        paths,
+        checkpoint,
+        staging,
+        expected_audit_review_sha256=expected_audit_review_sha256,
+    )
+    if retained[2] != expected:
+        raise ValueError(
+            "managed shared-root clearance installed private staging differs"
+        )
+    return transaction, retained[1], retained[2]
+
+
+def managed_shared_root_clearance_staging_entries() -> set[str]:
+    """Return the only exact private-staging and recoverable member names."""
+
+    retained = {
+        *SHARED_ROOT_CLEARANCE_TRANSACTION_PAYLOADS.values(),
+        SHARED_ROOT_CLEARANCE_TRANSACTION_JOURNAL,
+    }
+    for name in tuple(retained):
+        temporary = metadata_temporary_name(name)
+        retained.add(temporary)
+        retained.add(metadata_predecessor_recovery_name(temporary))
+    return retained
+
+
+def install_managed_shared_root_clearance_transaction(
+    paths: dict[str, Path],
+    checkpoint: int,
+    *,
+    expected_audit_review_sha256: str,
+) -> tuple[Path, tuple[Path, Path, Path, Path], dict[str, str]]:
+    """Atomically install one immutable marker for complete private staging."""
+
+    accounting = paths["root"] / "accounting"
+    transaction = managed_shared_root_clearance_transaction_path(accounting, checkpoint)
+    staging = managed_shared_root_clearance_staging_path(accounting, checkpoint)
+    _, _, expected = read_managed_shared_root_clearance_transaction_directory(
+        paths,
+        checkpoint,
+        staging,
+        expected_audit_review_sha256=expected_audit_review_sha256,
+    )
+    marker = {
+        "schema_version": 1,
+        "record_type": (
+            "stage-i-managed-shared-root-isolation-clearance-transaction-installation"
+        ),
+        "checkpoint": f"F-{checkpoint}",
+        "execution_epoch": EXECUTION_EPOCH,
+        "staging": current_clearance_directory_binding(
+            staging, "managed shared-root clearance private staging installation"
+        ),
+        "journal": current_clearance_publication_binding(
+            staging / SHARED_ROOT_CLEARANCE_TRANSACTION_JOURNAL,
+            "managed shared-root clearance private staging journal installation",
+        ),
+        "expected": expected,
+    }
+    with tempfile.TemporaryDirectory(
+        prefix="cgl_lf_managed_clearance_installation_"
+    ) as directory:
+        candidate = Path(directory) / "transaction-installation.json"
+        write_json(candidate, marker, mode=0o444)
+        copy_file(candidate, transaction)
+    return read_managed_shared_root_clearance_transaction(
+        paths,
+        checkpoint,
+        expected_audit_review_sha256=expected_audit_review_sha256,
+    )
+
+
+def require_installed_managed_shared_root_clearance_transaction(
+    paths: dict[str, Path],
+    checkpoint: int,
+    *,
+    expected_audit_review_sha256: str,
+) -> tuple[Path, tuple[Path, Path, Path, Path], dict[str, str]]:
+    """Install one exact complete staging transaction or authenticate the final."""
+
+    accounting = paths["root"] / "accounting"
+    transaction = managed_shared_root_clearance_transaction_path(accounting, checkpoint)
+    staging = managed_shared_root_clearance_staging_path(accounting, checkpoint)
+    final_exists = os.path.lexists(transaction)
+    staging_exists = os.path.lexists(staging)
+    if final_exists:
+        try:
+            return read_managed_shared_root_clearance_transaction(
+                paths,
+                checkpoint,
+                expected_audit_review_sha256=expected_audit_review_sha256,
+            )
+        except ValueError:
+            return install_managed_shared_root_clearance_transaction(
+                paths,
+                checkpoint,
+                expected_audit_review_sha256=expected_audit_review_sha256,
+            )
+    if not staging_exists:
+        raise ValueError("managed shared-root clearance transaction is unavailable")
+    read_managed_shared_root_clearance_transaction_directory(
+        paths,
+        checkpoint,
+        staging,
+        expected_audit_review_sha256=expected_audit_review_sha256,
+    )
+    return install_managed_shared_root_clearance_transaction(
+        paths,
+        checkpoint,
+        expected_audit_review_sha256=expected_audit_review_sha256,
+    )
+
+
+def stage_managed_shared_root_clearance_transaction(
+    paths: dict[str, Path],
+    checkpoint: int,
+    candidates: tuple[Path, Path, Path, Path],
+    expected: dict[str, str],
+) -> tuple[Path, tuple[Path, Path, Path, Path], dict[str, str]]:
+    """Resume private staging and atomically install one complete transaction."""
+
+    accounting = paths["root"] / "accounting"
+    transaction = managed_shared_root_clearance_transaction_path(
+        accounting, checkpoint
+    )
+    staging = managed_shared_root_clearance_staging_path(accounting, checkpoint)
+    expected = managed_shared_root_clearance_expected_digests(
+        expected, "managed shared-root clearance staged expected"
+    )
+    if os.path.lexists(transaction):
+        retained = require_installed_managed_shared_root_clearance_transaction(
+            paths,
+            checkpoint,
+            expected_audit_review_sha256=expected["audit_review"],
+        )
+        if retained[2] != expected:
+            raise ValueError(
+                "managed shared-root clearance installed transaction differs from request"
+            )
+        return retained
+    if not os.path.lexists(staging):
+        mkdir_durable(staging)
+    entries = set(trusted_directory_entries(
+        staging, "managed shared-root clearance private staging"
+    ))
+    if not entries.issubset(managed_shared_root_clearance_staging_entries()):
+        raise ValueError(
+            "managed shared-root clearance private staging is incomplete or foreign"
+        )
+    for key, candidate in zip(SHARED_ROOT_CLEARANCE_TRANSACTION_PAYLOADS, candidates):
+        copy_file(candidate, staging / SHARED_ROOT_CLEARANCE_TRANSACTION_PAYLOADS[key])
+    journal = managed_shared_root_clearance_transaction_journal(
+        accounting, checkpoint, expected
+    )
+    with tempfile.TemporaryDirectory(
+        prefix="cgl_lf_managed_clearance_journal_"
+    ) as directory:
+        candidate = Path(directory) / SHARED_ROOT_CLEARANCE_TRANSACTION_JOURNAL
+        write_json(candidate, journal, mode=0o444)
+        copy_file(candidate, staging / SHARED_ROOT_CLEARANCE_TRANSACTION_JOURNAL)
+    retained = read_managed_shared_root_clearance_transaction_directory(
+        paths,
+        checkpoint,
+        staging,
+        expected_audit_review_sha256=expected["audit_review"],
+    )
+    if retained[2] != expected:
+        raise ValueError(
+            "managed shared-root clearance private staging differs from request"
+        )
+    return install_managed_shared_root_clearance_transaction(
+        paths,
+        checkpoint,
+        expected_audit_review_sha256=expected["audit_review"],
+    )
+
+
+def continue_managed_shared_root_clearance_transaction(
+    paths: dict[str, Path],
+    checkpoint: int,
+    *,
+    expected_audit_review_sha256: str,
+) -> dict[str, object]:
+    """Recover one exact prefix forward, publishing the audit-review last."""
+
+    _, payloads, expected = require_installed_managed_shared_root_clearance_transaction(
+        paths,
+        checkpoint,
+        expected_audit_review_sha256=expected_audit_review_sha256,
+    )
+    canonical = managed_shared_root_clearance_chain_paths(
+        paths["root"] / "accounting", checkpoint
+    )
+    state = managed_shared_root_clearance_public_state(canonical, expected)
+    if state[3]:
+        if state != (True, True, True, True):
+            raise ValueError(
+                "managed shared-root clearance audit-review commit marker is not last"
+            )
+        for index, path in enumerate(canonical):
+            temporary = path.parent / metadata_temporary_name(path.name)
+            if os.path.lexists(temporary):
+                _, payloads, _ = read_managed_shared_root_clearance_transaction(
+                    paths,
+                    checkpoint,
+                    expected_audit_review_sha256=expected["audit_review"],
+                )
+                copy_file(payloads[index], path)
+        return authenticate_managed_shared_root_clearance_chain(
+            paths, checkpoint, canonical, expected=expected
+        )
+    if state not in {
+        (False, False, False, False),
+        (True, False, False, False),
+        (True, True, False, False),
+        (True, True, True, False),
+    }:
+        raise ValueError(
+            "managed shared-root clearance public state is not an exact recoverable prefix"
+        )
+
+    for index in range(3):
+        _, payloads, _ = read_managed_shared_root_clearance_transaction(
+            paths,
+            checkpoint,
+            expected_audit_review_sha256=expected["audit_review"],
+        )
+        copy_file(payloads[index], canonical[index])
+    state = managed_shared_root_clearance_public_state(canonical, expected)
+    if state != (True, True, True, False):
+        raise ValueError(
+            "managed shared-root clearance precommit state differs before audit-review"
+        )
+    _, payloads, _ = read_managed_shared_root_clearance_transaction(
+        paths,
+        checkpoint,
+        expected_audit_review_sha256=expected["audit_review"],
+    )
+    copy_file(payloads[3], canonical[3])
+    return authenticate_managed_shared_root_clearance_chain(
+        paths, checkpoint, canonical, expected=expected
+    )
+
+
+def managed_shared_root_clearance_candidate_arguments(
+    args: argparse.Namespace,
+) -> tuple[tuple[Path, Path, Path, Path], dict[str, str]]:
+    """Return exact candidate paths and caller-pinned digests."""
+
+    candidates = tuple(
+        Path(getattr(args, f"{key}_candidate")).expanduser().absolute()
+        for key in SHARED_ROOT_CLEARANCE_TRANSACTION_PAYLOADS
+    )
+    expected = {
+        key: require_r17_sha256(
+            getattr(args, f"expected_{key}_sha256"),
+            f"expected managed shared-root clearance {key} SHA-256",
+        )
+        for key in SHARED_ROOT_CLEARANCE_TRANSACTION_PAYLOADS
+    }
+    return candidates, expected
+
+
+@locked_root_action
+def promote_managed_shared_root_clearance(args: argparse.Namespace) -> int:
+    """Stage and no-clobber publish one exact managed-clearance chain."""
+
+    root = require_root(Path(args.root), args.allow_local_root)
+    paths = layout(root)
+    candidates, expected = managed_shared_root_clearance_candidate_arguments(args)
+    authenticate_managed_shared_root_clearance_chain(
+        paths, args.checkpoint, candidates, expected=expected
+    )
+    canonical = managed_shared_root_clearance_chain_paths(
+        paths["root"] / "accounting", args.checkpoint
+    )
+    if any(managed_shared_root_clearance_public_state(canonical, expected)):
+        raise ValueError(
+            "managed shared-root clearance promotion refuses an existing public target"
+        )
+    stage_managed_shared_root_clearance_transaction(
+        paths, args.checkpoint, candidates, expected
+    )
+    result = continue_managed_shared_root_clearance_transaction(
+        paths,
+        args.checkpoint,
+        expected_audit_review_sha256=expected["audit_review"],
+    )
+    print(json.dumps(result, indent=2, sort_keys=True))
+    return 0
+
+
+@locked_root_action
+def recover_managed_shared_root_clearance(args: argparse.Namespace) -> int:
+    """Recover one complete exact managed-clearance transaction forward."""
+
+    root = require_root(Path(args.root), args.allow_local_root)
+    result = continue_managed_shared_root_clearance_transaction(
+        layout(root),
+        args.checkpoint,
+        expected_audit_review_sha256=args.expected_audit_review_sha256,
+    )
+    print(json.dumps(result, indent=2, sort_keys=True))
+    return 0
+
+
+@locked_root_action
+def verify_managed_shared_root_clearance(args: argparse.Namespace) -> int:
+    """Verify one exact audit-review-committed managed-clearance chain."""
+
+    root = require_root(Path(args.root), args.allow_local_root)
+    paths = layout(root)
+    _, _, expected = read_managed_shared_root_clearance_transaction(
+        paths,
+        args.checkpoint,
+        expected_audit_review_sha256=args.expected_audit_review_sha256,
+    )
+    canonical = managed_shared_root_clearance_chain_paths(
+        paths["root"] / "accounting", args.checkpoint
+    )
+    if managed_shared_root_clearance_public_state(canonical, expected) != (
+        True, True, True, True,
+    ):
+        raise ValueError(
+            "managed shared-root clearance audit-review commit marker is absent"
+        )
+    result = authenticate_managed_shared_root_clearance_chain(
+        paths, args.checkpoint, canonical, expected=expected
+    )
+    print(json.dumps(result, indent=2, sort_keys=True))
+    return 0
+
+
 def require_managed_shared_root_clearance(
     paths: dict[str, Path], requested_campaigns: set[str], *,
     action: str,
     case_id: str,
     queue_evidence: dict[str, object],
     now: datetime | None = None,
+    checkpoint_number: int | None = None,
 ) -> dict[str, object] | None:
-    """Require the latest fully reviewed clearance for a production overlap."""
+    """Require a fully reviewed latest or exact clearance for a production overlap."""
 
     if not requested_campaigns:
         return None
@@ -13394,10 +14215,18 @@ def require_managed_shared_root_clearance(
         raise ValueError("managed shared-root clearance case is not authorized")
     current = datetime.now(timezone.utc) if now is None else now.astimezone(timezone.utc)
     accounting = paths["root"] / "accounting"
-    checkpoints = managed_shared_root_clearance_checkpoints(accounting)
-    if not checkpoints:
-        raise ValueError("managed shared-root clearance is not canonically published")
-    checkpoint_number = max(checkpoints)
+    if checkpoint_number is None:
+        checkpoints = managed_shared_root_clearance_checkpoints(accounting)
+        if not checkpoints:
+            raise ValueError("managed shared-root clearance is not canonically published")
+        checkpoint_number = max(checkpoints)
+    else:
+        checkpoint_number = require_r17_integer(
+            checkpoint_number, "managed shared-root clearance checkpoint", minimum=1
+        )
+        checkpoints = managed_shared_root_clearance_checkpoints(
+            accounting, before=checkpoint_number
+        )
     checkpoint = f"F-{checkpoint_number}"
     artifact_path, review_path, audit_path, audit_review_path = (
         managed_shared_root_clearance_chain_paths(accounting, checkpoint_number)
@@ -17249,6 +18078,33 @@ def parser() -> argparse.ArgumentParser:
         ),
     )
     clearance_refresh.add_argument("--checkpoint", type=int, required=True)
+    clearance_promote = actions.add_parser(
+        "promote-shared-root-clearance-refresh",
+        help=(
+            "Stage and no-clobber publish one exact reviewed shared-root "
+            "clearance chain with the audit-review last."
+        ),
+    )
+    clearance_promote.add_argument("--checkpoint", type=int, required=True)
+    for key in SHARED_ROOT_CLEARANCE_TRANSACTION_PAYLOADS:
+        option = key.replace("_", "-")
+        clearance_promote.add_argument(f"--{option}-candidate", required=True)
+        clearance_promote.add_argument(
+            f"--expected-{option}-sha256", required=True
+        )
+    for action_name, action_help in (
+        (
+            "recover-shared-root-clearance-refresh",
+            "Recover one complete exact interrupted shared-root clearance transaction.",
+        ),
+        (
+            "verify-shared-root-clearance-refresh",
+            "Verify one exact audit-review-committed shared-root clearance chain.",
+        ),
+    ):
+        lifecycle = actions.add_parser(action_name, help=action_help)
+        lifecycle.add_argument("--checkpoint", type=int, required=True)
+        lifecycle.add_argument("--expected-audit-review-sha256", required=True)
     submitted_atomically.add_argument(
         "--sbatch-output-file",
         help="Use retained sbatch --parsable output only for offline validation.",
@@ -17358,6 +18214,12 @@ def main() -> int:
             return submit(args)
         if args.action == "render-shared-root-clearance-refresh":
             return render_managed_shared_root_clearance_refresh(args)
+        if args.action == "promote-shared-root-clearance-refresh":
+            return promote_managed_shared_root_clearance(args)
+        if args.action == "recover-shared-root-clearance-refresh":
+            return recover_managed_shared_root_clearance(args)
+        if args.action == "verify-shared-root-clearance-refresh":
+            return verify_managed_shared_root_clearance(args)
         if args.action == "mark-submitted":
             return mark_submitted(args)
         if args.action == "recover-submit":
