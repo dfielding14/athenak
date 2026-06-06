@@ -35,12 +35,11 @@ statement.}}
 
 \begin{abstract}
 Astrophysical systems containing energetic particles span scales that are
-difficult to resolve with fully kinetic methods.
-\TODO{Add verified primary citations and state the specific scale-separation
-problem addressed by this paper.}
-We describe the \athenak \mhdpic implementation, in which the thermal plasma is
-evolved as magnetohydrodynamic gas and the energetic-particle population is
-advanced kinetically.
+difficult to resolve with fully kinetic methods. MHD-PIC addresses this scale
+separation by evolving the thermal plasma as magnetohydrodynamic gas while
+advancing a selected energetic-particle population kinetically
+\citep{BaiEtAl2015,SunBai2023,MignoneEtAl2018,vanMarleEtAl2018}.
+We describe the \athenak implementation of this approach.
 The active paper-reproduction candidate uses mass-normalized particle momentum,
 a relativistic Boris pusher, triangular-shaped-cloud interpolation and
 deposition, ideal-MHD induction, and opposite-impulse momentum and kinetic-energy
@@ -79,8 +78,20 @@ reproducibility, and measured performance?
 
 \TODO{Write the introduction around the unresolved method problem, not around
 the chronology of implementation.}
-\TODO{Add verified primary citations for MHD-PIC, the Bell instability,
-non-relativistic shock acceleration, AMR, reproducibility, and GPU-portable
+MHD-PIC methods retain kinetic energetic particles while replacing the thermal
+plasma with an MHD fluid \citep{BaiEtAl2015,MignoneEtAl2018,vanMarleEtAl2018,
+SunBai2023}. These implementations establish the relevant numerical lineage,
+but they do not by themselves establish cross-code agreement for \athenak.
+The Bell current-driven instability supplies a stringent coupling test because
+its fastest-growing linear mode is set by the imposed energetic-particle current
+\citep{Bell2004}. Its nonlinear development has been studied with fully kinetic
+and hybrid approaches \citep{RiquelmeSpitkovsky2009,GargateEtAl2010,
+ZacharegkasEtAl2024}; comparison among those studies and \athenak must be
+restricted to dimensionlessly matched regimes and shared observables.
+The parallel-shock target is the Section~5.4 calculation of
+\citet{SunBai2023}, interpreted alongside the MHD-PIC shock setup of
+\citet{BaiEtAl2015}.
+\TODO{Add verified primary citations for AMR, reproducibility, and GPU-portable
 astrophysical codes.}
 \TODO{State the contribution relative to prior Athena/Athena++ MHD-PIC work and
 other independently mapped methods. Do not claim cross-code agreement until
@@ -190,7 +201,9 @@ Open \\
 The intended paper-mode envelope uses non-relativistic ideal MHD for the
 background gas and kinetic energetic particles. The paper-mode induction
 electric field excludes a CR Hall term. Hall-capable behavior belongs to a
-separately named extension and requires separate qualification.
+separately named extension and requires separate qualification. Consequently,
+no-Hall Bell results from this paper mode do not validate Hall-dominated shock
+fronts.
 
 \begin{itemize}
 \item Included candidate: mass-normalized relativistic particle momentum,
@@ -227,19 +240,21 @@ and kinetic energy per unit mass are
 \epsilon_{\rm kin} &= (\gamma-1)\mathbb{C}^2.
 \label{eq:kinetic-energy}
 \end{align}
-Here $\mathbb{C}$ is the configured artificial cosmic-ray light speed.
+Here $\mathbb{C}$ is AthenaK's configured artificial particle light speed,
+following the MHD-PIC modeling choice used by \citet{BaiEtAl2015} and
+\citet{SunBai2023}.
 All explicit paper and extension identities interpret the retained particle
 state slots as $\boldsymbol{w}$; physical velocity is derived from
 Equation~\ref{eq:velocity} for drift, deposition, VTK and tracked-particle
 output, and timestep selection. Initialization may be specified as velocity, in
 which case the initializer converts it to mass-normalized momentum. The parser
 requires every velocity-initialized species to satisfy
-$|\boldsymbol{v}|<\mathbb{C}$. The reduced-speed approximation additionally
-requires the represented particle, gas, Alfv\'en, and signal speeds to remain
-well below $\mathbb{C}$, and every physical campaign must demonstrate that its
-reported observables are insensitive to a preregistered increase in
-$\mathbb{C}$. The parser speed bound is necessary but is not that physical
-sensitivity test.
+$|\boldsymbol{v}|<\mathbb{C}$. This artificial particle-light-speed choice is
+not self-validating: the represented particle, gas, Alfv\'en, and signal speeds
+must remain well below $\mathbb{C}$, and every physical campaign must
+demonstrate that its reported observables are insensitive to a preregistered
+increase in $\mathbb{C}$. The parser speed bound is necessary but is not that
+physical convergence test.
 
 The particle equations advanced in paper mode are
 \begin{align}
@@ -251,8 +266,9 @@ The particle equations advanced in paper mode are
 c\boldsymbol{E} &= -\boldsymbol{u}\times\boldsymbol{B}.
 \label{eq:ideal-electric-field}
 \end{align}
-\TODO{Insert verified primary citations for the reduced-speed MHD-PIC
-formulation and relativistic Boris method.}
+Equations~\ref{eq:particle-position}--\ref{eq:ideal-electric-field} follow the
+MHD-PIC formulation used by \citet{BaiEtAl2015} and \citet{SunBai2023}.
+\TODO{Insert a verified primary citation for the relativistic Boris method.}
 The particle timestep is restricted by both a configured maximum cell crossing
 and a configured maximum Boris gyro angle. These are numerical guards; they do
 not by themselves establish that a selected artificial light speed is
@@ -467,7 +483,8 @@ relativistic Boris update.
 transport in the documented task order.
 \end{enumerate}
 The implementation realizes this sequence with two VL2 stages having
-$\beta_1=1/2$ and $\beta_2=1$. During stage 1, the particle momentum push is a
+$\beta_1=1/2$ and $\beta_2=1$, following the VL2 integration framework of
+\citet{StoneGardiner2009}. During stage 1, the particle momentum push is a
 no-op: charge and current are deposited at $\boldsymbol{x}^n$, synchronized,
 and used by the gas predictor through the normalized
 $\rho_{\rm CR}(c\boldsymbol{E})+(\boldsymbol{J}_{\rm CR}/c)\times\boldsymbol{B}$
@@ -489,11 +506,11 @@ qualified.}
 \subsection{Interpolation, Deposition, and Refinement Interfaces}
 
 The active paper candidate requires second-order TSC interpolation and
-deposition. In each active dimension, the quadratic three-point shape is used
-to interpolate the midpoint MHD velocity and magnetic field and to deposit
-charge, current, and the extensive feedback rates. Charge and current use the
-macro charge $q_{\rm scale}W_pq_s$ and physical velocity; feedback channels use
-Equations~\ref{eq:particle-momentum-rate} and
+deposition \citep{BirdsallLangdon2018}. In each active dimension, the quadratic
+three-point shape is used to interpolate the midpoint MHD velocity and magnetic
+field and to deposit charge, current, and the extensive feedback rates. Charge
+and current use the macro charge $q_{\rm scale}W_pq_s$ and physical velocity;
+feedback channels use Equations~\ref{eq:particle-momentum-rate} and
 \ref{eq:particle-energy-rate}. Deposited extensive rates are divided by the
 recipient-cell volume before entering Equations~\ref{eq:gas-opposite-momentum}
 and \ref{eq:gas-opposite-energy}.
@@ -642,6 +659,17 @@ target Bell or Section~5.4 claims.}
 \subsection{Bell Instability}
 \label{sec:bell}
 
+The original nonresonant, fixed-current Bell analysis supplies the linear
+instability and fastest-growing-mode reference \citep{Bell2004}. Nonlinear
+comparisons use the kinetic and hybrid studies of
+\citet{RiquelmeSpitkovsky2009}, \citet{GargateEtAl2010}, and
+\citet{ZacharegkasEtAl2024}. Such comparisons are bounded to matched
+dimensionless parameters and shared observables, including growth history,
+magnetic-energy evolution, characteristic-scale growth, current evolution, and
+morphology. These references do not provide a universal nonlinear-saturation
+amplitude or numerical acceptance tolerance across fixed-current, MHD-PIC,
+hybrid-PIC, and fully kinetic regimes.
+
 \paragraph{Linear gate.}
 \GATE{The historical Bell linear preparation and proxy evidence are invalid for
 qualification because they omitted $V_{\rm root\,cell}$, held
@@ -669,6 +697,8 @@ design exists, but it grants no execution or claim authority and does not
 support a production result. The bounded reference map further establishes
 that the retained target-paper Bell benchmark is linear and supplies no
 standalone nonlinear-saturation dataset or numerical acceptance tolerance.
+Any accepted AthenaK result remains a no-Hall result and does not validate
+Hall-dominated shock-front evolution.
 \TODO{Complete and review corrected source, deck, and analyzer successors.
 Prohibit physical execution until the deposited-current oracle and corrected
 linear Bell predecessor close.}
@@ -692,9 +722,12 @@ independence, a physics-preferred Bell/DSA baseline, a qualifying launch, or a
 Section~5.4 result. A staged preproduction resource-scaling design exists, but
 its strong-scaling, reduced-transverse, and held-out validation measurements
 remain open. The bounded reference map identifies setup overlap and unresolved
-differences among the selected AthenaK baseline, Bai et al.\ (2015), and Sun
-and Bai Section~5.4, but it converts no approximate plotted or descriptive
-outcome into a numerical acceptance tolerance.
+differences among the selected AthenaK baseline, \citet{BaiEtAl2015}, and
+\citet{SunBai2023} Section~5.4, but it converts no approximate plotted or
+descriptive outcome into a numerical acceptance tolerance. The selected
+$P_0=1$ value is anchored to \citet{BaiEtAl2015}, who specify $P_0=T_0=1$ and
+argue that the pressure choice is unimportant only while $T_0\ll v_0^2$.
+\citet{SunBai2023} Section~5.4 does not state $P_0$.
 
 \paragraph{Explicit result gate.}
 \GATE{\claimid{CLAIM-PAPER-SHOCK-001} remains open. Do not insert shock
@@ -856,7 +889,7 @@ only after the Section~\ref{sec:shock} gate closes.}
 \item Final claim-evidence and reproducibility tables.
 \end{enumerate}
 
-\TODO{Add a verified bibliography only after every citation is checked against
-the cited source.}
+\bibliographystyle{aasjournalv7}
+\bibliography{athenak_mhd_pic_primary_sources}
 
 \end{document}

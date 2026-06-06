@@ -49,6 +49,7 @@ Snapshot date: 2026-06-06. Recheck before every substantive manuscript revision.
 | Q011 storage projection | Approximately `10.553535598859627 TB` planning envelope for 24 baseline attempts | Planning value only; actual sizes, retry capacity, capacity confirmation, and reservation remain open |
 | Q019 nonlinear Bell | The historical source-local foundation and analyzer inherit the invalid volume-blind/artificial-`C` normalization. A separately named corrected volume-aware campaign design now exists, but corrected source/decks/analyzer, pilots, registration, and evidence remain absent | Historical Q019 artifacts remain ineligible; the corrected design grants no execution or claim authority, and no nonlinear Bell production result or result figure is admissible |
 | Q022 nonlinear Bell comparison | Bounded equation/normalization/parameter maps bind the retained references and establish that the target-paper Bell benchmark is linear. No standalone nonlinear-saturation dataset or numeric acceptance tolerance is supplied by that benchmark; extraction, execution bindings, discrepancy closure, and external review remain open | The bounded map may define comparison scope, but no nonlinear agreement, independent-comparison, or scoped-superiority claim is admissible |
+| Primary-source literature map | Bell (2004), Bai et al. (2015), Sun & Bai (2023), Riquelme & Spitkovsky (2009), Gargaté et al. (2010), Zacharegkas et al. (2024), Stone & Gardiner (2009), Birdsall & Langdon, Mignone et al. (2018), and van Marle et al. (2018) are bound in the manuscript bibliography | Supports method lineage and bounded comparison context only; it supplies no AthenaK result, cross-code agreement, universal nonlinear-saturation tolerance, or Hall-dominated validation |
 | Manuscript scaffold | Contains explicit open gates and TODOs | It is architecture, not evidence |
 
 ## Central Result Gate A: Nonlinear Bell Saturation
@@ -87,6 +88,10 @@ nonlinear Bell evolution for the exact tested non-Hall AthenaK regime.
 - The bounded Q022 reference map establishes that the retained target-paper
   Bell benchmark is linear and supplies no standalone nonlinear-saturation
   dataset or numeric nonlinear acceptance tolerance.
+- The mapped nonlinear Bell literature spans fixed-current, fully kinetic, and
+  hybrid regimes. Comparisons are admissible only for matched dimensionless
+  parameters and shared observables; no mapped source supplies a universal
+  saturation amplitude or numerical acceptance tolerance.
 - The production-readiness plan defines the required nonlinear saturation
   qualification contract.
 - Corrected Bell linear and nonlinear campaigns do not yet exist as qualifying
@@ -100,6 +105,8 @@ nonlinear Bell evolution for the exact tested non-Hall AthenaK regime.
 - AthenaK establishes a saturation amplitude, time, mechanism, morphology, or
   energy partition.
 - A non-Hall result applies to Hall-dominated shock-front conditions.
+- A mapped nonlinear study supplies a universal saturation tolerance across
+  fixed-current, MHD-PIC, hybrid-PIC, and fully kinetic regimes.
 - AthenaK agrees with, improves upon, or is competitive with another method or
   code for nonlinear Bell behavior.
 
@@ -162,7 +169,9 @@ prescription.
 ### Current Admissible Evidence
 
 - A human-only immutable receipt selected `problem/ps_p0=1.0` as the
-  provenance-first baseline.
+  provenance-first baseline. Bai et al. (2015) explicitly specify `P0=T0=1`
+  and motivate its irrelevance only while `T0 << v0^2`; Sun & Bai (2023)
+  Section 5.4 does not state `P0`.
 - Pressure pilots and their analysis are engineering calibration only.
 - Source-local preparation, bounded injection/provenance diagnostics, restart
   guards, and future campaign policies may support methods and planned-analysis
@@ -318,7 +327,7 @@ For each inserted object, record:
 | Does every full Q011 attempt fit one compliant `normal` allocation? | Blocks shock execution | Demonstrate by reviewed timing/sizing evidence |
 | What is the final exact release runtime identity and portability scope? | Blocks broad main claim | Resolve from final closed gates |
 | What final archive/data-availability statement is supportable under Orion-only retention? | Blocks release wording | Resolve through Q-026/external review |
-| Which prior-method and comparison citations support the introduction and discussion? | Requires verification | Build and verify bibliography; do not invent citations |
+| Which additional prior-method citations are required for AMR, reproducibility, GPU portability, and the relativistic Boris method? | Requires verification | Extend the verified bibliography without inventing citations |
 
 ## Evidence Acceptance Record Template
 

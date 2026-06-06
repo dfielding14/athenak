@@ -100,6 +100,23 @@ VERIFY]`. Do not claim novelty, superiority, or cross-code agreement before the
 relevant sources, equation maps, comparison data, and reviewer dispositions are
 verified.
 
+The verified primary-source map currently supports these bounded statements:
+
+- Bai et al. (2015), Mignone et al. (2018), van Marle et al. (2018), and Sun &
+  Bai (2023) establish the relevant MHD-PIC numerical lineage; they do not by
+  themselves establish cross-code agreement for AthenaK.
+- Bell (2004) supplies the original fixed-current nonresonant linear reference.
+  Nonlinear comparisons to Riquelme & Spitkovsky (2009), Gargaté et al. (2010),
+  and Zacharegkas et al. (2024) must be restricted to dimensionlessly matched
+  regimes and shared observables. No mapped source supplies a universal
+  nonlinear-saturation amplitude or numerical acceptance tolerance.
+- Stone & Gardiner (2009) and Birdsall & Langdon support the VL2 and TSC method
+  context, respectively; source audit remains necessary to establish AthenaK's
+  exact implementation.
+- AthenaK's configured `C` must be called an artificial particle-light-speed
+  choice requiring campaign-level convergence, not a self-validating or
+  formally rescaled reduced-speed-of-light approximation.
+
 ## Central-Result Gates
 
 ### Gate A: Nonlinear Bell Saturation
@@ -141,6 +158,9 @@ Until Q-019, Q-023, Q-025, Q-026, and Q-028 close with a named reviewer:
   results narrative, or reader-facing figure bundle;
 - no claim may transfer a non-Hall result to Hall-dominated shock-front
   conditions;
+- every nonlinear comparison must bind matched dimensionless parameters and
+  shared observables; no universal saturation tolerance may be inferred from
+  the mapped literature;
 - preparation records, excluded pilots, or plausible-looking saturation may not
   be described as production qualification.
 
@@ -160,7 +180,8 @@ with a named reviewer:
 - no Section 5.4 shock morphology, amplification, spectrum, acceleration-slope,
   AMR-agreement, load-balance, or performance conclusion may appear as a result;
 - the pressure pilots must remain labeled engineering calibration;
-- `problem/ps_p0=1.0` must be described only as the human-selected baseline;
+- `problem/ps_p0=1.0` must be described as the human-selected, Bai et al.
+  (2015)-anchored baseline; Sun & Bai (2023) Section 5.4 does not state `P0`;
 - no claim may imply thermal-pool injection physics or oblique-shock generality.
 
 Required result scope, if the gate closes: the exact paper-mode implementation,
@@ -359,7 +380,8 @@ The following statements may orient methods drafting, subject to source audit:
 - The repository contains bounded analytical, numerical, restart, provenance,
   and selected registered GPU evidence.
 - A human-only production receipt selected `problem/ps_p0=1.0` as the
-  provenance-first Section 5.4 baseline.
+  provenance-first Section 5.4 baseline. The value is anchored to Bai et al.
+  (2015), while Sun & Bai (2023) Section 5.4 does not state `P0`.
 - The current Section 5.4 pressure pilots are engineering calibration only.
 - The historical Bell linear preparation omitted the root-cell-volume factor
   from its current contract, held `PPC * deposit_qscale` fixed across
@@ -377,6 +399,9 @@ The following statements may orient methods drafting, subject to source audit:
   core followed by resource-gated expansion; it does not modify the historical
   eight-seed preregistration or authorize production.
 - Bell nonlinear saturation and the Section 5.4 shock result remain open.
+- Nonlinear Bell comparisons are dimensionlessly bounded; no mapped source
+  supplies a universal nonlinear-saturation tolerance, and no-Hall AthenaK
+  results do not validate Hall-dominated shock fronts.
 - The active production policy currently authorizes no registered science
   slices.
 
