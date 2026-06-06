@@ -93,7 +93,7 @@ Real CglFastSpeed(const Real d, const Real pr, const Real pp, const Real bx,
   Real qsq = b2 + 2.0*pp + (2.0*pr - pp)*bhatx2;
   Real radicand = qsq*qsq + 4.0*pp*pp*(1.0 - bhatx2)*bhatx2
                 - 12.0*pr*pp*bhatx2*(2.0 - bhatx2)
-                + 12.0*pr*pp*bhatx2*bhatx2 - 12.0*bx2*pr;
+                + 12.0*pr*pr*bhatx2*bhatx2 - 12.0*bx2*pr;
   return std::sqrt(0.5*(qsq + std::sqrt(std::abs(radicand)))/d);
 }
 

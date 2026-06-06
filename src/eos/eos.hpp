@@ -95,7 +95,7 @@ struct EOS_Data {
     const Real qsq = b2 + 2.0*pperp + (2.0*ppar - pperp)*bhatx2;
     const Real disc = qsq*qsq + 4.0*pperp*pperp*(1.0 - bhatx2)*bhatx2
                     - 12.0*ppar*pperp*bhatx2*(2.0 - bhatx2)
-                    + 12.0*ppar*pperp*bhatx2*bhatx2 - 12.0*bx2*ppar;
+                    + 12.0*ppar*ppar*bhatx2*bhatx2 - 12.0*bx2*ppar;
     return sqrt(0.5*(qsq + sqrt(fabs(disc)))/d);
   }
 
