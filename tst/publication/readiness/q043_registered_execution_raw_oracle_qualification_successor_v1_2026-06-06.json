@@ -7,19 +7,27 @@
   "repaired_foundation_source_commit": "5668ae65e8f02d9725da60b876221d3c441fdd95",
   "status": "implemented_non_authorizing_integrated_installed_producer_and_admission_installation_and_registered_executions_pending",
   "qualification_effect": "registered_execution_raw_oracle_prerequisite_only_no_launch_no_policy_no_q023_no_q019_no_science_no_publication_authority",
-  "scope": "Integrated non-authorizing installed-control-plane Q043 reconciliation producer and registered-execution admission for the exact 132-case dimension-valid matrix. Installed modules execute only from already verified captured source bytes with captured-byte sibling imports. Trusted trampoline completion publishes paired external immutable receipts and anchors their exact identities and digest in the canonical mirrored ledger before reconciliation; the anchor binds the original run root, exact artifact inventory bytes, every descriptor-pinned artifact, mandatory stdout/stderr, manifest, submission, and job identity. Reconciliation and admission parse exact retained raw bytes, revalidate descriptors, inventory, namespace, and run-root identity after analysis, and require trusted per-rank wrapper and scheduler ExitCode evidence. This record cannot launch, submit, mutate policy, qualify Q043, Q023, or Q019, authorize a scientific claim, or authorize publication.",
+  "scope": "Integrated non-authorizing installed-control-plane Q043 reconciliation producer and registered-execution admission for the exact 132-case dimension-valid matrix. Installed modules execute only from already verified captured source bytes with captured-byte sibling imports. The profile launcher and environment profile execute only from manifest-bound sealed captured bytes. The authoritative scientific parser executes from captured source-local bytes whose digest must equal the exact parser member in the clean-candidate source closure. Trusted trampoline completion anchors the exact expected receipt digest, immutable receipt-directory identities, original run root, inventory, and artifacts in the canonical mirrored ledger before publishing either paired external immutable receipt; recovery requires that pre-publication anchor and never reruns a zero-retry job. Q043 requires an empty or exclusive same-user queue at reservation, dispatch, and scheduler attachment. Reconciliation and admission parse exact retained raw bytes, revalidate descriptors, inventory, namespace, and run-root identity after analysis, and require trusted per-rank wrapper and scheduler ExitCode evidence. This record cannot launch, submit, mutate policy, qualify Q043, Q023, or Q019, authorize a scientific claim, or authorize publication.",
   "source_bindings": {
     "successor": {
       "path": "tst/publication/q043_registered_execution_raw_oracle_qualification_successor_v1.py",
-      "sha256": "13eb0cdcb6685c9ba4f92bf3f1f830064533f5d14997fbcc15a4ae4761ef2144"
+      "sha256": "4507de9d68fc580d8e038aecf54b5c046647e7e9f6ea07149fc4e85ca5548d81"
     },
     "installed_q043_producer": {
       "path": "tst/publication/frontier_control_plane/reconcile_q043_registered_execution.py",
-      "sha256": "e2d9fe866108b81d3afba54115d4d58270e89e6d95a8574b7a399c99161b2ceb"
+      "sha256": "8a753cd03b06f471998a8c7edfbc2b55920bf841011de929d8ff14beab4cac1e"
     },
     "trusted_launch_trampoline": {
       "path": "tst/publication/frontier_control_plane/launch_trampoline.py",
-      "sha256": "af9a8698e2cd0767c00d8f572ff0b45df09ed8b22a775f630a9b1d79118fbb0b"
+      "sha256": "020f1a7e41503a6a10399be644222445d9912d8733adb324d042d01c4d170cb9"
+    },
+    "trusted_profile_launcher": {
+      "path": "tst/publication/frontier_control_plane/launch_with_frontier_profile.sh",
+      "sha256": "8d74c2bd6259dfab51ede5803f17367fcf4cbd382b5a5e9cedecf85d2ebeb665"
+    },
+    "authoritative_scientific_parser": {
+      "path": "tst/publication/analyze_q011_section54_outputs.py",
+      "sha256": "20794ed45b80843b8e75accffc2e9336fcb7da58716fb818e466e193cd346356"
     },
     "control_plane_inventory_registration": {
       "path": "tst/publication/frontier_control_plane/control_plane_common.py",
@@ -35,19 +43,19 @@
     },
     "ledger_exit_code_schema": {
       "path": "tst/publication/frontier_control_plane/ledger.py",
-      "sha256": "2ad08f42af18b6578b71995004c8df3ea295a5d6d813bf43fa5dfac31d0cc18d"
+      "sha256": "545e17f29f4c748b412e62072a4bbcf298bf4c50769e5488e803c2ac7c84d8b9"
     },
     "focused_tests": {
       "path": "tst/publication/test_q043_registered_execution_raw_oracle_qualification_successor_v1.py",
-      "sha256": "bc36263c70650ba7f13ebbfe83874ab92d67f427d24d627e9e2422f9966bc9e5"
+      "sha256": "9c3a6f143f01c913eafef2433a00d24778f707e3a3fac716825f4c9d9a8ddea6"
     },
     "shared_control_plane_tests": {
       "path": "tst/publication/frontier_control_plane/test_control_plane.py",
-      "sha256": "11070b1b7cd3e75e4e34df7cde3064ab3b82a332a5e041df9d02ca12a5372844"
+      "sha256": "b26063ebab6c48eb834a933dd65487faff0305efb1160a53f4058eb0cca92cf5"
     },
     "shared_ledger_tests": {
       "path": "tst/publication/frontier_control_plane/test_ledger.py",
-      "sha256": "4a9c0a0033e95efeff4479c86d05c823a036c7946eff250ee688e99e2e3fcbb0"
+      "sha256": "87d67d24d018ac485ef1d7eb1296cef1900b4915f379edc9573591e092903d42"
     },
     "q043_launch_policy_materializer": {
       "path": "tst/publication/q043_registered_launch_policy_preparation_successor_v1.py",
@@ -55,7 +63,7 @@
     },
     "q043_reservation_gate": {
       "path": "tst/publication/frontier_control_plane/validate_and_reserve_frontier_job.py",
-      "sha256": "5e8f9b113a79bd1f4ec313b4143d505e232994864e3f85910d47c6fbc90d50a7"
+      "sha256": "d5464ca65246440b3e9123d2277eaec89683ec253da2bc005fbeea5fc84d8925"
     },
     "installed_frontier_job_template": {
       "path": "tst/publication/frontier_control_plane/frontier_job.sh",
@@ -73,7 +81,7 @@
     },
     "source_local_raw_oracle": {
       "path": "tst/publication/q043_bell_current_volume_aware_deposited_current_oracle.py",
-      "sha256": "b7a8d226b00a06d6ab658e52888ffd3ae1ba5c69370160811b7770faac6cd273"
+      "sha256": "bd1178980d7bad103750cefc9c99549e66ec38e8a62a93560231e57073828a94"
     },
     "repaired_q043_generator_source": {
       "path": "src/pgen/tests/q043_bell_current_volume_aware.cpp",
@@ -82,9 +90,9 @@
     "foundation_role": "source_local_analysis_dependency_only_not_registered_evidence_not_downstream_qualification"
   },
   "registered_case_contract": {
-    "candidate_rule": "Read and SHA-256 verify the clean-candidate manifest, source archive, executable, and environment profile as stable unaliased regular files under the authorized Orion root; require exact installed-verifier clean-source/build revalidation and retained-byte ELF validation; open the source archive and byte-compare the full Q043 generator, oracle, admission, producer, deck manifest, every matrix deck, every src/particles implementation including particles_pushers.cpp TSC interpolation, and every src/outputs implementation against reviewed source.",
+    "candidate_rule": "Read and SHA-256 verify the clean-candidate manifest, source archive, executable, and environment profile as stable unaliased regular files under the authorized Orion root; require exact installed-verifier clean-source/build revalidation and retained-byte ELF validation; open the source archive and byte-compare the full Q043 generator, oracle, admission, producer, authoritative scientific parser, deck manifest, every matrix deck, every src/particles implementation including particles_pushers.cpp TSC interpolation, and every src/outputs implementation against reviewed source; require the executing captured parser digest to equal the exact parser member in that closure.",
     "deck_rule": "Read the exact checked-in case deck and deck manifest from the reviewed source root, compare deck bytes to the deterministic renderer, require the manifest digest cross-link, and require an immutable launch-deck copy with identical bytes under the registered artifact root.",
-    "execution_rule": "Require runs/<campaign>/<submission-id> topology from the trusted pre-submit manifest, the exact bootstrapped paired installed producer generation and installed trampoline digest, a canonical mirrored-ledger trampoline_completion anchor followed by reconciliation, canonical Project Home per-submission receipt mirrors, trusted scheduler COMPLETED ExitCode=0:0, and exact trusted-manifest command and MPI resources.",
+    "execution_rule": "Require runs/<campaign>/<submission-id> topology from the trusted pre-submit manifest, the exact bootstrapped paired installed producer generation and installed trampoline digest, a canonical mirrored-ledger trampoline_completion anchor created before paired receipt publication and followed by reconciliation, canonical Project Home per-submission receipt mirrors, trusted scheduler COMPLETED ExitCode=0:0, and exact trusted-manifest command and MPI resources.",
     "stdout_terminal_rule": "Require mandatory stdout/stderr identities and digests from the external ledger-anchored trampoline-completion receipt, exact trusted per-rank GPU launch lines, one exact aggregate rank-set line, one exact zero-exit line, cycle-one time/nlim evidence, cycle-limit termination, and scheduler COMPLETED ExitCode=0:0.",
     "raw_inventory_rule": "At Q043 reconciliation, open the trampoline-sealed artifact_inventory.json and every frozen artifact through no-follow retained descriptors, verify the complete frozen tree twice, exclude the trusted mutable analysis directory, derive an immutable SHA-256 raw inventory solely from sealed records, parse only exact retained bytes, and revalidate all descriptors, inventory bytes, namespace, and original run-root identity after analysis.",
     "runtime_metadata_rule": "Validate cycle-zero and cycle-one sequential output bookkeeping and compare all remaining runtime parameters exactly against the repaired hardened frozen-runtime helper, including positive-integer PPC and effective species0 velocity agreement with the nominal CR stream, before recomputing the raw oracle.",
@@ -137,7 +145,7 @@
     "source_local_q043_oracle_modified": true,
     "source_local_q043_generator_modified": false,
     "shared_control_plane_modified": true,
-    "implementation_policy": "narrow_integrated_q043_trust_boundary_hardening_with_external_ledger_anchored_completion_captured_byte_imports_and_exact_retained_raw_analysis"
+    "implementation_policy": "narrow_integrated_q043_trust_boundary_hardening_with_sealed_profile_execution_exact_parser_byte_binding_prepublication_external_ledger_anchored_recoverable_completion_captured_byte_imports_and_exact_retained_raw_analysis"
   },
   "authorization": {
     "launch_authorized": false,
@@ -150,8 +158,8 @@
     "publication_authorized": false
   },
   "verification": {
-    "focused_tests": 28,
-    "direct_controller_path": "passed_complete_materialized_exact_id_config_and_validated_132_slice_policy_to_manifest_reserve_installed_frontier_job_and_reconciler_roles_trusted_rank_trampoline_completion_generic_reconcile_installed_q043_reconcile_and_admission_with_external_clean_candidate_and_scheduler_boundaries_fixture_backed",
+    "focused_tests": 29,
+    "direct_controller_path": "all_132_exact_cases_fixture_backed_through_complete_materialized_exact_id_config_validated_132_slice_policy_manifest_reserve_launch_trampoline_completion_generic_reconcile_installed_q043_reconcile_and_admission_without_synthetic_ledger_or_receipt_records",
     "fresh_repaired_source_runtime_smoke": {
       "status": "passed_source_local_nonqualifying_no_registered_execution",
       "source_commit": "5668ae65e8f02d9725da60b876221d3c441fdd95",
@@ -189,14 +197,17 @@
       "real x2 x1x2 x3 and xyz per-rank raw shard geometry",
       "non-authorizing exact record rebuild",
       "installed-generation swap between verification and import",
+      "installed profile launcher and environment replacement after verification before execution",
+      "authoritative scientific parser import poisoning and candidate-archive parser mismatch",
       "raw replacement between hash parse and exact-byte oracle analysis",
       "whole-run-root replacement against the external completion receipt",
       "paired completion-receipt directory replacement against the canonical mirrored-ledger anchor",
-      "unrelated same-user queued or running job at the Q043 reservation boundary",
-      "completion append retry idempotence and mirrored suffix repair",
+      "unrelated same-user queued or running job at Q043 reservation dispatch and scheduler-attachment boundaries",
+      "crash-safe pre-publication completion-anchor recovery idempotence and mirrored suffix repair without rerunning a zero-retry job",
+      "whole-run-root plus both receipt-directory replacement after a pre-publication-anchor crash",
       "generic Q043 reconciliation without trampoline completion fails closed"
     ],
-    "registered_runtime_execution_status": "controller_path_test_passed_real_registered_matrix_not_run_not_authorized_by_this_successor"
+    "registered_runtime_execution_status": "all_132_fixture_backed_real_controller_paths_passed_real_orion_registered_matrix_not_run_not_authorized_by_this_successor"
   },
   "open_dependencies": [
     "independently_review_and_install_the_exact_paired_control_plane_generation_containing_this_q043_producer_and_admission",

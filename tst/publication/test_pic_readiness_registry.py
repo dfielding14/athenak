@@ -195,6 +195,19 @@ def _git_blob_sha256(commit: str, relative_path: str) -> str:
     return hashlib.sha256(contents).hexdigest()
 
 
+def _git_existing_control_plane_files(commit: str) -> list[str]:
+    """Return current closed-inventory names that actually existed at a commit."""
+    prefix = "tst/publication/frontier_control_plane/"
+    paths = set(
+        subprocess.check_output(
+            ["git", "ls-tree", "-r", "--name-only", commit, "--", prefix],
+            cwd=REPO_ROOT,
+            text=True,
+        ).splitlines()
+    )
+    return [name for name in CONTROL_PLANE_FILES if prefix + name in paths]
+
+
 def _git_archive_sha256(commit: str) -> str:
     contents = subprocess.check_output(
         ["git", "archive", "--format=tar", commit],
@@ -4819,7 +4832,7 @@ class PicReadinessRegistryTests(unittest.TestCase):
                     f"tst/publication/frontier_control_plane/{name}",
                 ),
             }
-            for name in CONTROL_PLANE_FILES
+            for name in _git_existing_control_plane_files(historical_closure_commit)
         ]
         checkpoint_control_plane_version = inventory_digest(
             checkpoint_control_plane_bindings

@@ -20,6 +20,7 @@ import sys
 import tarfile
 import tempfile
 from typing import Callable
+import types
 import unittest
 from unittest.mock import patch
 import uuid
@@ -627,6 +628,9 @@ class Fixture:
                     artifact_dir_fd,
                     artifact_dir,
                     manifest_value,
+                    append_anchor=lambda binding: {
+                        "trampoline_completion": binding
+                    },
                     manifest_path=Path(str(manifest_binding["path"])),
                     manifest_sha256=str(manifest_binding["sha256"]),
                     reservation_id=reservation_id,
@@ -872,7 +876,34 @@ class Q043RegisteredExecutionAdmissionTests(unittest.TestCase):
                     successor.AUTHORIZED_PROJECT_HOME_LEDGER_LEXICAL_ROOT,
                 ) = original_roots
 
-    def test_unmocked_controller_path_produces_admissible_q043_evidence(self) -> None:
+    def test_authoritative_scientific_parser_ignores_ambient_import_poisoning(
+        self,
+    ) -> None:
+        canonical_name = "tst.publication.analyze_q011_section54_outputs"
+        poisoned = types.ModuleType(canonical_name)
+        poisoned.parse_athenak_binary_bytes = lambda *_args, **_kwargs: "poisoned"
+        previous = sys.modules.get(canonical_name)
+        sys.modules[canonical_name] = poisoned
+        try:
+            exact = oracle._load_exact_binary_parser()
+            self.assertIsNot(exact, poisoned)
+            self.assertTrue(callable(exact.parse_athenak_binary_bytes))
+            self.assertIs(successor.binary, oracle.binary)
+            self.assertEqual(
+                exact._Q043_CAPTURED_SOURCE_SHA256,
+                oracle.BINARY_PARSER_SOURCE_SHA256,
+            )
+            self.assertIn(
+                "tst/publication/analyze_q011_section54_outputs.py",
+                successor.required_candidate_source_paths(),
+            )
+        finally:
+            if previous is None:
+                sys.modules.pop(canonical_name, None)
+            else:
+                sys.modules[canonical_name] = previous
+
+    def test_all_132_cases_traverse_real_controller_path_to_admission(self) -> None:
         control_plane_path = str(CONTROL_PLANE_SOURCE)
         sys.path.insert(0, control_plane_path)
         try:
@@ -890,44 +921,23 @@ class Q043RegisteredExecutionAdmissionTests(unittest.TestCase):
         original_bootstrap = getattr(sys, "_pic_control_plane_bootstrapped", None)
         try:
             harness.setUp()
-            case_id = "q043-current-oracle-d1-coarse-ppc1-single-cvr100"
-            case = _case(case_id)
-            deck_path = Path(successor._deck_binding(case, REPO_ROOT)["absolute_path"])
+            cases = oracle.expected_cases()
+            first_case = cases[0]
+            first_case_id = str(first_case["case_id"])
+            deck_path = Path(
+                successor._deck_binding(first_case, REPO_ROOT)["absolute_path"]
+            )
             (harness.sources / "input.athinput").write_bytes(deck_path.read_bytes())
             (harness.sources / "environment.sh").chmod(0o755)
-            contract = {
-                "schema_version": 1,
-                "executor": "trusted_trampoline_athena_argv_v1",
-                "pre_actions": [],
-                "actions": [
-                    {
-                        "action_id": "q043-current-oracle",
-                        "kind": "athena",
-                        "resources": {
-                            "nodes": 1,
-                            "tasks": 1,
-                            "cpus_per_task": 1,
-                            "gpus_per_task": 1,
-                            "gpu_bind": "closest",
-                        },
-                        "arguments": [
-                            {"literal": "-i"},
-                            {"snapshot_role": "input-deck"},
-                            {"literal": "-d"},
-                            {"artifact_directory": "raw"},
-                            {"literal": "time/nlim=1"},
-                        ],
-                        "stdout_artifact": "athena_stdout.txt",
-                        "stderr_artifact": "athena_stderr.txt",
-                    }
-                ],
-                "post_actions": [],
-            }
-            with patch.object(harness, "_launch_contract", return_value=contract):
+            with patch.object(
+                harness,
+                "_launch_contract",
+                return_value=preparation._launch_contract(first_case),
+            ):
                 candidate_path = harness._write_science_config(
                     authorize=False,
                     campaign=successor.REGISTERED_CAMPAIGN,
-                    test_id=case_id,
+                    test_id=first_case_id,
                     registered_science_authorization_id="q043-controller-e2e",
                     input_deck=str(deck_path),
                     evidence_class="q043_registered_execution_test",
@@ -1044,26 +1054,7 @@ class Q043RegisteredExecutionAdmissionTests(unittest.TestCase):
                         baseline_policy=baseline_policy,
                         final_bindings=final_bindings,
                     )
-                    authorization_id = policy["registered_science_slices"][0][
-                        "authorization_id"
-                    ]
-                    config = preparation.materialize_q043_pre_submit_config(
-                        case_id=case_id,
-                        submission_id=harness.submission_id,
-                        final_bindings=final_bindings,
-                        pre_manifest_attestation=harness._sealed_operator_attestation(
-                            str(authorization_id), "pre_manifest"
-                        ),
-                        timeout_margin_artifact=timeout_path,
-                        queue_snapshot=queue_path,
-                        site_policy_checked_utc=harness._utc(now),
-                        now=now,
-                    )
                 self.assertEqual(len(policy["registered_science_slices"]), 132)
-                self.assertEqual(config["test_id"], case_id)
-                self.assertEqual(config["job_script"], str(job_script))
-                self.assertEqual(config["analysis_scripts"], [str(reconciler)])
-                harness.config.write_text(json.dumps(config), encoding="utf-8")
                 harness.policy.write_text(json.dumps(policy), encoding="utf-8")
                 with patch(
                     "promote_active_policy.revalidate_clean_candidate",
@@ -1078,116 +1069,11 @@ class Q043RegisteredExecutionAdmissionTests(unittest.TestCase):
                     },
                 ):
                     harness._promote_policy(patch_clean_candidate_revalidation=False)
-                manifest_path = harness._create_manifest()
-                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-                self.assertEqual(manifest["test_id"], case_id)
-                self.assertEqual(
-                    Path(
-                        next(
-                            record["source_path"]
-                            for record in manifest["snapshot_files"]
-                            if record["role"] == "job-script"
-                        )
-                    ),
-                    job_script,
-                )
-                self.assertEqual(
-                    [
-                        Path(record["source_path"])
-                        for record in manifest["snapshot_files"]
-                        if str(record["role"]).startswith("analysis-script-")
-                    ],
-                    [reconciler],
-                )
-                with (
-                    patch(
-                        "validate_and_reserve_frontier_job.validate_clean_candidate_bundle",
-                        return_value=[],
-                    ),
-                    patch(
-                        "validate_and_reserve_frontier_job._require_scheduler_output_path"
-                    ),
-                ):
-                    reservation = harness._reserve(
-                        manifest_path, patch_clean_candidate_bundle=False
-                    )
-
-            def runner(command: list[str], **kwargs: object) -> None:
-                raw_root = Path(command[command.index("-d") + 1])
-                for cycle in successor.REQUIRED_CYCLES:
-                    for field in successor.REQUIRED_FIELDS:
-                        relative = successor._raw_relative_path(
-                            case, field=field, cycle=cycle, rank=0
-                        )
-                        path = raw_root / relative
-                        path.parent.mkdir(parents=True, exist_ok=True)
-                        path.write_bytes(
-                            _binary_payload(
-                                case, field=field, cycle=cycle, rank=0
-                            )
-                        )
-                kwargs["stdout"].write(
-                    b"PIC trusted GPU launch: rank=0 host=nid000001 "
-                    b"ROCR_VISIBLE_DEVICES=0 "
-                    b"linkage=libamdhip64,libmpi_amd,libmpi_gtl_hsa\n"
-                    b"time=0.0025 cycle=1\n"
-                    b"tlim=1 nlim=1\n"
-                    b"Terminating on cycle limit\n"
-                )
-
-            harness._launch(manifest_path, reservation, runner=runner)
-            with patch(
-                "reconcile_frontier_job._scheduler_result",
-                return_value=("COMPLETED", 30, 1, "0:0"),
-            ):
-                generic_event = reconcile_frontier_job.reconcile(
-                    job_id="12345",
-                    ledger_jsonl=harness.ledger,
-                    ledger_csv=harness.csv,
-                    receipts_jsonl=harness.receipts,
-                    mirror_jsonl=harness.mirror,
-                    control_plane_dir=harness.control_plane_dir,
-                    authorized_pic_root=harness.pic_root,
-                    authorized_project_home_root=harness.project_home_root,
-                )
-            self.assertEqual(generic_event["scheduler_exit_code"], "0:0")
-
             successor.AUTHORIZED_ORION_ROOT = harness.pic_root
             successor.AUTHORIZED_PROJECT_HOME_ROOT = harness.project_home_root
             successor.AUTHORIZED_PROJECT_HOME_LEDGER_LEXICAL_ROOT = (
                 harness.project_home_root
             )
-            with successor._installed_control_plane_modules(
-                harness.control_plane_version,
-                (successor.Q043_PRODUCER_ENTRYPOINT,),
-            ) as (modules, _pair):
-                installed_producer = modules[successor.Q043_PRODUCER_ENTRYPOINT]
-                sys.__dict__.pop("_pic_control_plane_bootstrapped", None)
-                with self.assertRaisesRegex(
-                    ValueError, "requires bootstrapped installed execution"
-                ):
-                    installed_producer.reconcile_q043(
-                        job_id="12345",
-                        ledger_jsonl=harness.ledger,
-                        ledger_csv=harness.csv,
-                        receipts_jsonl=harness.receipts,
-                        mirror_jsonl=harness.mirror,
-                        control_plane_dir=harness.control_plane_dir,
-                        authorized_pic_root=harness.pic_root,
-                        authorized_project_home_root=harness.project_home_root,
-                    )
-                sys._pic_control_plane_bootstrapped = True
-                produced = installed_producer.reconcile_q043(
-                    job_id="12345",
-                    ledger_jsonl=harness.ledger,
-                    ledger_csv=harness.csv,
-                    receipts_jsonl=harness.receipts,
-                    mirror_jsonl=harness.mirror,
-                    control_plane_dir=harness.control_plane_dir,
-                    authorized_pic_root=harness.pic_root,
-                    authorized_project_home_root=harness.project_home_root,
-                )
-
             candidate_manifest = json.loads(candidate_path.read_text(encoding="utf-8"))
             candidate_binding = {
                 "git_commit": candidate_manifest["source"]["git_commit"],
@@ -1203,44 +1089,7 @@ class Q043RegisteredExecutionAdmissionTests(unittest.TestCase):
                 ),
                 "environment_profile": _binding(environment_profile),
             }
-            artifact_dir = Path(json.loads(manifest_path.read_text())["artifact_dir"])
-            inventory = json.loads(
-                (artifact_dir / "artifact_inventory.json").read_text(encoding="utf-8")
-            )
-            inventory_paths = {record["path"] for record in inventory["files"]}
-            self.assertTrue(any(path.startswith("raw/") for path in inventory_paths))
-            self.assertFalse(any(path.startswith("analysis/") for path in inventory_paths))
-            execution = {
-                "artifact_dir": str(artifact_dir),
-                "registered_execution_receipt": _binding(
-                    Path(
-                        produced["evidence"]["registered_execution_receipt"][
-                            "orion_path"
-                        ]
-                    )
-                ),
-                "terminal_receipt": _binding(
-                    Path(produced["evidence"]["terminal_receipt"]["orion_path"])
-                ),
-            }
-            raw_artifacts = []
-            for cycle in successor.REQUIRED_CYCLES:
-                for field in successor.REQUIRED_FIELDS:
-                    relative = successor._raw_relative_path(
-                        case, field=field, cycle=cycle, rank=0
-                    )
-                    binding = _binding(artifact_dir / "raw" / relative)
-                    raw_artifacts.append(
-                        {
-                            "path": relative,
-                            "sha256": binding["sha256"],
-                            "byte_count": binding["byte_count"],
-                            "case_id": case_id,
-                            "field": field,
-                            "cycle": cycle,
-                            "rank": 0,
-                        }
-                    )
+
             def revalidation_fixture(
                 manifest: Path, *, manifest_sha256: str, git_commit: str
             ) -> dict[str, object]:
@@ -1269,38 +1118,240 @@ class Q043RegisteredExecutionAdmissionTests(unittest.TestCase):
                     },
                 }
 
-            with (
-                patch.object(
-                    successor,
-                    "_trusted_clean_candidate_revalidation",
-                    side_effect=revalidation_fixture,
-                ),
-                patch.object(
-                    successor,
-                    "_trusted_mirrored_ledger_state",
-                    REAL_TRUSTED_MIRRORED_LEDGER_STATE,
-                ),
-                patch.object(
-                    successor,
-                    "_trusted_producer_rederivation",
-                    REAL_TRUSTED_PRODUCER_REDERIVATION,
-                ),
-            ):
-                admitted = successor.build_case_admission(
-                    case_id=case_id,
-                    candidate_binding=candidate_binding,
-                    execution_binding=execution,
-                    raw_artifacts=raw_artifacts,
-                )
-            self.assertTrue(
-                admitted["hardened_raw_oracle_result"][
-                    "registered_execution_raw_oracle_check_pass"
-                ]
-            )
-            self.assertFalse(admitted["authorization"]["publication_authorized"])
+            authorizations = {
+                str(item["test_id"]): str(item["authorization_id"])
+                for item in policy["registered_science_slices"]
+            }
+            reserve_globals = harness._reserve.__func__.__globals__["reserve"].__globals__
+            admissions = []
+            with successor._installed_control_plane_modules(
+                harness.control_plane_version,
+                (successor.Q043_PRODUCER_ENTRYPOINT,),
+            ) as (modules, _pair):
+                installed_producer = modules[successor.Q043_PRODUCER_ENTRYPOINT]
+                for index, case in enumerate(cases):
+                    case_id = str(case["case_id"])
+                    harness.submission_id = str(uuid.uuid4())
+                    with (
+                        self.subTest(case_id=case_id),
+                        patch.object(
+                            preparation, "AUTHORIZED_ORION_ROOT", harness.pic_root
+                        ),
+                        patch.object(
+                            preparation,
+                            "CANONICAL_PROJECT_HOME_ROOT",
+                            harness.project_home_root,
+                        ),
+                    ):
+                        config = preparation.materialize_q043_pre_submit_config(
+                            case_id=case_id,
+                            submission_id=harness.submission_id,
+                            final_bindings=final_bindings,
+                            pre_manifest_attestation=harness._sealed_operator_attestation(
+                                authorizations[case_id], "pre_manifest"
+                            ),
+                            timeout_margin_artifact=timeout_path,
+                            queue_snapshot=queue_path,
+                            site_policy_checked_utc=harness._utc(now),
+                            now=now,
+                        )
+                    self.assertEqual(config["test_id"], case_id)
+                    self.assertEqual(config["job_script"], str(job_script))
+                    self.assertEqual(config["analysis_scripts"], [str(reconciler)])
+                    harness.config.write_text(json.dumps(config), encoding="utf-8")
+                    manifest_path = harness._create_manifest()
+                    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                    self.assertEqual(manifest["test_id"], case_id)
+                    with patch.dict(
+                        reserve_globals,
+                        {
+                            "validate_clean_candidate_bundle": (
+                                lambda *_args, **_kwargs: []
+                            ),
+                            "_require_scheduler_output_path": (
+                                lambda *_args, **_kwargs: None
+                            ),
+                        },
+                    ):
+                        reservation = harness._reserve(
+                            manifest_path,
+                            reservation_id=str(uuid.uuid4()),
+                            patch_clean_candidate_bundle=False,
+                        )
+
+                    def runner(command: list[str], **kwargs: object) -> None:
+                        raw_root = Path(command[command.index("-d") + 1])
+                        task_lines = []
+                        for rank in range(int(case["mpi_ranks"])):
+                            task_lines.append(
+                                "PIC trusted GPU launch: "
+                                f"rank={rank} host=nid000001 "
+                                f"ROCR_VISIBLE_DEVICES={rank} "
+                                "linkage=libamdhip64,libmpi_amd,libmpi_gtl_hsa\n"
+                            )
+                            for cycle in successor.REQUIRED_CYCLES:
+                                for field in successor.REQUIRED_FIELDS:
+                                    relative = successor._raw_relative_path(
+                                        case, field=field, cycle=cycle, rank=rank
+                                    )
+                                    path = raw_root / relative
+                                    path.parent.mkdir(parents=True, exist_ok=True)
+                                    path.write_bytes(
+                                        _binary_payload(
+                                            case,
+                                            field=field,
+                                            cycle=cycle,
+                                            rank=rank,
+                                        )
+                                    )
+                        kwargs["stdout"].write(
+                            "".join(task_lines).encode("utf-8")
+                            + b"time=0.0025 cycle=1\n"
+                            b"tlim=1 nlim=1\n"
+                            b"Terminating on cycle limit\n"
+                        )
+
+                    job_id = str(20000 + index)
+                    harness._launch(
+                        manifest_path, reservation, job_id=job_id, runner=runner
+                    )
+                    with patch.object(
+                        reconcile_frontier_job,
+                        "_scheduler_result",
+                        return_value=("COMPLETED", 30, 1, "0:0"),
+                    ):
+                        generic_event = reconcile_frontier_job.reconcile(
+                            job_id=job_id,
+                            ledger_jsonl=harness.ledger,
+                            ledger_csv=harness.csv,
+                            receipts_jsonl=harness.receipts,
+                            mirror_jsonl=harness.mirror,
+                            control_plane_dir=harness.control_plane_dir,
+                            authorized_pic_root=harness.pic_root,
+                            authorized_project_home_root=harness.project_home_root,
+                        )
+                    self.assertEqual(generic_event["scheduler_exit_code"], "0:0")
+                    if index == 0:
+                        sys.__dict__.pop("_pic_control_plane_bootstrapped", None)
+                        with self.assertRaisesRegex(
+                            ValueError, "requires bootstrapped installed execution"
+                        ):
+                            installed_producer.reconcile_q043(
+                                job_id=job_id,
+                                ledger_jsonl=harness.ledger,
+                                ledger_csv=harness.csv,
+                                receipts_jsonl=harness.receipts,
+                                mirror_jsonl=harness.mirror,
+                                control_plane_dir=harness.control_plane_dir,
+                                authorized_pic_root=harness.pic_root,
+                                authorized_project_home_root=harness.project_home_root,
+                            )
+                        sys._pic_control_plane_bootstrapped = True
+                    produced = installed_producer.reconcile_q043(
+                        job_id=job_id,
+                        ledger_jsonl=harness.ledger,
+                        ledger_csv=harness.csv,
+                        receipts_jsonl=harness.receipts,
+                        mirror_jsonl=harness.mirror,
+                        control_plane_dir=harness.control_plane_dir,
+                        authorized_pic_root=harness.pic_root,
+                        authorized_project_home_root=harness.project_home_root,
+                    )
+                    artifact_dir = Path(manifest["artifact_dir"])
+                    inventory = json.loads(
+                        (artifact_dir / "artifact_inventory.json").read_text(
+                            encoding="utf-8"
+                        )
+                    )
+                    inventory_paths = {
+                        record["path"] for record in inventory["files"]
+                    }
+                    self.assertTrue(
+                        any(path.startswith("raw/") for path in inventory_paths)
+                    )
+                    self.assertFalse(
+                        any(path.startswith("analysis/") for path in inventory_paths)
+                    )
+                    execution = {
+                        "artifact_dir": str(artifact_dir),
+                        "registered_execution_receipt": _binding(
+                            Path(
+                                produced["evidence"]["registered_execution_receipt"][
+                                    "orion_path"
+                                ]
+                            )
+                        ),
+                        "terminal_receipt": _binding(
+                            Path(
+                                produced["evidence"]["terminal_receipt"][
+                                    "orion_path"
+                                ]
+                            )
+                        ),
+                    }
+                    raw_artifacts = []
+                    for cycle in successor.REQUIRED_CYCLES:
+                        for field in successor.REQUIRED_FIELDS:
+                            for rank in range(int(case["mpi_ranks"])):
+                                relative = successor._raw_relative_path(
+                                    case, field=field, cycle=cycle, rank=rank
+                                )
+                                binding = _binding(artifact_dir / "raw" / relative)
+                                raw_artifacts.append(
+                                    {
+                                        "path": relative,
+                                        "sha256": binding["sha256"],
+                                        "byte_count": binding["byte_count"],
+                                        "case_id": case_id,
+                                        "field": field,
+                                        "cycle": cycle,
+                                        "rank": rank,
+                                    }
+                                )
+                    with (
+                        patch.object(
+                            successor,
+                            "_trusted_clean_candidate_revalidation",
+                            side_effect=revalidation_fixture,
+                        ),
+                        patch.object(
+                            successor,
+                            "_trusted_mirrored_ledger_state",
+                            REAL_TRUSTED_MIRRORED_LEDGER_STATE,
+                        ),
+                        patch.object(
+                            successor,
+                            "_trusted_producer_rederivation",
+                            REAL_TRUSTED_PRODUCER_REDERIVATION,
+                        ),
+                    ):
+                        admitted = successor.build_case_admission(
+                            case_id=case_id,
+                            candidate_binding=candidate_binding,
+                            execution_binding=execution,
+                            raw_artifacts=raw_artifacts,
+                        )
+                    self.assertTrue(
+                        admitted["hardened_raw_oracle_result"][
+                            "registered_execution_raw_oracle_check_pass"
+                        ]
+                    )
+                    self.assertFalse(
+                        admitted["authorization"]["publication_authorized"]
+                    )
+                    admissions.append(admitted)
             self.assertEqual(
-                Path(execution["terminal_receipt"]["path"]).parent,
-                artifact_dir / "analysis",
+                [item["case_id"] for item in admissions],
+                [str(case["case_id"]) for case in cases],
+            )
+            self.assertEqual(len(admissions), 132)
+            self.assertTrue(
+                all(
+                    value is False
+                    for admission in admissions
+                    for key, value in admission["authorization"].items()
+                    if key.endswith("_authorized")
+                )
             )
         finally:
             if original_bootstrap is None:
@@ -1803,6 +1854,7 @@ class Q043RegisteredExecutionAdmissionTests(unittest.TestCase):
             "src/particles/particles_moments.cpp",
             "src/particles/particles_pushers.cpp",
             "src/outputs/binary.cpp",
+            "tst/publication/analyze_q011_section54_outputs.py",
         ):
             with self.subTest(relative=relative), tempfile.TemporaryDirectory() as temporary:
                 fixture = Fixture(Path(temporary))

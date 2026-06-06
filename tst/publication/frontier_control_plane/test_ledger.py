@@ -151,14 +151,12 @@ class LedgerTests(unittest.TestCase):
                 "orion": {
                     "path": str(self.root / "orion/ledger/completion/submission-1.json"),
                     "parent_identity": {"device": 1, "inode": 2},
-                    "filesystem_identity": {"device": 1, "inode": 3},
                 },
                 "project_home": {
                     "path": str(
                         self.root / "project_home/ledger/completion/submission-1.json"
                     ),
                     "parent_identity": {"device": 4, "inode": 5},
-                    "filesystem_identity": {"device": 4, "inode": 6},
                 },
             },
             "artifact_root_identity": {"device": 7, "inode": 8},

@@ -363,10 +363,6 @@ def _trusted_trampoline_completion(
                     "device": orion_path.parent.stat(follow_symlinks=False).st_dev,
                     "inode": orion_path.parent.stat(follow_symlinks=False).st_ino,
                 },
-                "filesystem_identity": {
-                    "device": orion_identity[0],
-                    "inode": orion_identity[1],
-                },
             },
             "project_home": {
                 "path": str(project_home_path),
@@ -377,10 +373,6 @@ def _trusted_trampoline_completion(
                     "inode": project_home_path.parent.stat(
                         follow_symlinks=False
                     ).st_ino,
-                },
-                "filesystem_identity": {
-                    "device": project_home_identity[0],
-                    "inode": project_home_identity[1],
                 },
             },
         }
@@ -548,18 +540,10 @@ def _trusted_trampoline_completion(
             "orion": {
                 "path": str(orion_path),
                 "parent_identity": receipt_parent_identities["orion"],
-                "filesystem_identity": {
-                    "device": orion_identity[0],
-                    "inode": orion_identity[1],
-                },
             },
             "project_home": {
                 "path": str(project_home_path),
                 "parent_identity": receipt_parent_identities["project_home"],
-                "filesystem_identity": {
-                    "device": project_home_identity[0],
-                    "inode": project_home_identity[1],
-                },
             },
         },
         "artifact_root_identity": root_identity,

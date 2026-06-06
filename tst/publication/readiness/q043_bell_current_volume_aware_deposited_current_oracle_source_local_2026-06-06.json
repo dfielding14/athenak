@@ -97,7 +97,8 @@
     "runtime_parameter_binding": "exact_frozen_deck_parameters_plus_exact_AthenaK_runtime_defaults",
     "time": "positive_after_one_complete_cycle",
     "initial_state": "uniform_zero_perturbation_parallel_stream",
-    "parser": "strict_AthenaK_binary_version_1p1_parser",
+    "parser": "strict_AthenaK_binary_version_1p1_parser_executed_from_stable_captured_source_bytes",
+    "parser_source_binding": "exact_parser_bytes_must_match_the_clean_candidate_source_archive_closure_before_registered_admission",
     "rank_shard_handling": "merge_strict_same_snapshot_rank_shards_before_complete_multidimensional_composite_grid",
     "raw_provenance": "absolute_path_size_and_SHA256_for_every_field_shard",
     "checks": [
@@ -136,7 +137,8 @@
   ],
   "artifact_bindings": {
     "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/deck_manifest.json": "77d6ec862314d308c41490dde1137f6c384d1da24b6b72ad43e357545cff98b0",
-    "tst/publication/q043_bell_current_volume_aware_deposited_current_oracle.py": "b7a8d226b00a06d6ab658e52888ffd3ae1ba5c69370160811b7770faac6cd273",
+    "tst/publication/analyze_q011_section54_outputs.py": "20794ed45b80843b8e75accffc2e9336fcb7da58716fb818e466e193cd346356",
+    "tst/publication/q043_bell_current_volume_aware_deposited_current_oracle.py": "bd1178980d7bad103750cefc9c99549e66ec38e8a62a93560231e57073828a94",
     "tst/publication/test_q043_bell_current_volume_aware_deposited_current_oracle.py": "578245ade8e0d0e94c64c3f8a5ce3ae3b36e11e13c331fa03b5c98602272ed91"
   },
   "open_dependencies": [

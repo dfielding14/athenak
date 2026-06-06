@@ -5,15 +5,68 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import math
+import os
 from pathlib import Path
 import shutil
+import stat
+import sys
+import types
 from typing import Any, Mapping, Sequence
 
 import numpy as np
 
-from tst.publication import analyze_q011_section54_outputs as binary
+
+def _load_exact_binary_parser() -> types.ModuleType:
+    """Execute the exact source-adjacent parser bytes under a private name."""
+    path = Path(__file__).with_name("analyze_q011_section54_outputs.py")
+    descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    try:
+        before = os.fstat(descriptor)
+        chunks = []
+        while True:
+            chunk = os.read(descriptor, 1024 * 1024)
+            if not chunk:
+                break
+            chunks.append(chunk)
+        payload = b"".join(chunks)
+        after = os.fstat(descriptor)
+        current = path.stat(follow_symlinks=False)
+    finally:
+        os.close(descriptor)
+    identity = (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns)
+    if (
+        not stat.S_ISREG(before.st_mode)
+        or path.is_symlink()
+        or before.st_nlink != 1
+        or identity != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns)
+        or identity != (current.st_dev, current.st_ino, current.st_size, current.st_mtime_ns)
+    ):
+        raise RuntimeError("Q043 scientific parser source is not one stable regular file")
+    digest = hashlib.sha256(payload).hexdigest()
+    name = f"_q043_exact_analyze_q011_section54_outputs_{digest}"
+    module = types.ModuleType(name)
+    module.__file__ = str(path)
+    module.__package__ = ""
+    module.__spec__ = importlib.util.spec_from_loader(name, loader=None, origin=str(path))
+    previous = sys.modules.get(name)
+    sys.modules[name] = module
+    try:
+        exec(compile(payload, str(path), "exec", dont_inherit=True), module.__dict__)
+    except BaseException:
+        if previous is None:
+            sys.modules.pop(name, None)
+        else:
+            sys.modules[name] = previous
+        raise
+    module.__dict__["_Q043_CAPTURED_SOURCE_SHA256"] = digest
+    return module
+
+
+binary = _load_exact_binary_parser()
+BINARY_PARSER_SOURCE_SHA256 = str(binary._Q043_CAPTURED_SOURCE_SHA256)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]

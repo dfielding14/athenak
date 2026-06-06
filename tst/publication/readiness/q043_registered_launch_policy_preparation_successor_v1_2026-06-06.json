@@ -5,7 +5,7 @@
   "date": "2026-06-06",
   "status": "complete_non_authorizing_q043_config_and_promotable_policy_preparation_live_launch_blocked",
   "qualification_effect": "source_local_launch_policy_preparation_only_no_launch_no_policy_no_q043_no_q023_no_q019_no_science_no_publication_authority",
-  "scope": "Non-authorizing integrated Q043 launch preparation that deterministically prepares exact launch-contract and policy-slice review candidates for every checked-in Q043 registered-execution raw-oracle case, materializes one complete exact-hyphenated-ID pre-submit config, and builds a complete 132-slice storage-policy successor that must pass the installed full-policy validator. It binds the installed directive-only frontier_job.sh template, installed reconciler, paired installed generation, exact nested deck inventory, trusted-rank wrapper evidence, timeout margin, generic run-root topology, resource/storage/retry ceilings, and the Q043-specific empty same-user queue gate. It does not promote live policy, submit, launch, qualify Q043, authorize a scientific claim, or authorize publication.",
+  "scope": "Non-authorizing integrated Q043 launch preparation that deterministically prepares exact launch-contract and policy-slice review candidates for every checked-in Q043 registered-execution raw-oracle case, materializes one complete exact-hyphenated-ID pre-submit config, and builds a complete 132-slice storage-policy successor that must pass the installed full-policy validator. It binds the installed directive-only frontier_job.sh template, sealed captured profile launcher and environment bytes, pre-publication completion-anchor trampoline, installed reconciler, paired installed generation, exact nested deck inventory, trusted-rank wrapper evidence, timeout margin, generic run-root topology, resource/storage/retry ceilings, and Q043-specific same-user queue gates at reservation, dispatch, and scheduler attachment. It does not promote live policy, submit, launch, qualify Q043, authorize a scientific claim, or authorize publication.",
   "source_bindings": {
     "materializer": {
       "path": "tst/publication/q043_registered_launch_policy_preparation_successor_v1.py",
@@ -33,15 +33,19 @@
     },
     "installed_q043_reconciler": {
       "path": "tst/publication/frontier_control_plane/reconcile_q043_registered_execution.py",
-      "sha256": "e2d9fe866108b81d3afba54115d4d58270e89e6d95a8574b7a399c99161b2ceb"
+      "sha256": "8a753cd03b06f471998a8c7edfbc2b55920bf841011de929d8ff14beab4cac1e"
     },
     "trusted_launch_trampoline": {
       "path": "tst/publication/frontier_control_plane/launch_trampoline.py",
-      "sha256": "af9a8698e2cd0767c00d8f572ff0b45df09ed8b22a775f630a9b1d79118fbb0b"
+      "sha256": "020f1a7e41503a6a10399be644222445d9912d8733adb324d042d01c4d170cb9"
+    },
+    "trusted_profile_launcher": {
+      "path": "tst/publication/frontier_control_plane/launch_with_frontier_profile.sh",
+      "sha256": "8d74c2bd6259dfab51ede5803f17367fcf4cbd382b5a5e9cedecf85d2ebeb665"
     },
     "q043_empty_queue_reservation_gate": {
       "path": "tst/publication/frontier_control_plane/validate_and_reserve_frontier_job.py",
-      "sha256": "5e8f9b113a79bd1f4ec313b4143d505e232994864e3f85910d47c6fbc90d50a7"
+      "sha256": "d5464ca65246440b3e9123d2277eaec89683ec253da2bc005fbeea5fc84d8925"
     },
     "prepared_artifact_inventory_generator": {
       "path": "tst/publication/frontier_control_plane/generate_prepared_pic_artifact_inventory.py",
@@ -51,13 +55,13 @@
       "path": "tst/publication/frontier_control_plane/prepared_pic_artifact_inventory.json",
       "sha256": "34eed0911e12ba53fbb16b731447c976c5a0be5d33fa76c997cc3fb355a93617"
     },
-    "synthetic_controller_to_admission_e2e": {
+    "real_controller_to_admission_e2e": {
       "path": "tst/publication/test_q043_registered_execution_raw_oracle_qualification_successor_v1.py",
-      "sha256": "bc36263c70650ba7f13ebbfe83874ab92d67f427d24d627e9e2422f9966bc9e5"
+      "sha256": "9c3a6f143f01c913eafef2433a00d24778f707e3a3fac716825f4c9d9a8ddea6"
     },
     "shared_control_plane_tests": {
       "path": "tst/publication/frontier_control_plane/test_control_plane.py",
-      "sha256": "11070b1b7cd3e75e4e34df7cde3064ab3b82a332a5e041df9d02ca12a5372844"
+      "sha256": "b26063ebab6c48eb834a933dd65487faff0305efb1160a53f4058eb0cca92cf5"
     }
   },
   "exact_matrix": {
@@ -99,7 +103,7 @@
     "recursively_read_only_after_materialization": true
   },
   "explicit_blockers": [
-    "empty_user_queue_proved_at_fresh_reservation_boundary",
+    "empty_or_exclusive_user_queue_proved_at_fresh_reservation_dispatch_and_scheduler_attachment_boundaries",
     "final_clean_candidate_manifest_source_archive_and_executable_bound",
     "final_paired_installed_control_plane_generation_bound_and_independently_verified",
     "exact_registered_policy_slice_promoted_by_installed_control_plane",

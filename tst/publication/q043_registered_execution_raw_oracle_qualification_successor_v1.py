@@ -19,11 +19,12 @@ import sys
 import tarfile
 from typing import Any, Mapping, Sequence
 
-from tst.publication import analyze_q011_section54_outputs as binary
 from tst.publication import immutable_orion_tree
 from tst.publication import (
     q043_bell_current_volume_aware_deposited_current_oracle as oracle,
 )
+
+binary = oracle.binary
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -159,6 +160,7 @@ REQUIRED_CANDIDATE_SOURCE_PATHS = frozenset(
         "src/outputs/track_prtcl.cpp",
         "src/outputs/vtk_mesh.cpp",
         "src/outputs/vtk_prtcl.cpp",
+        "tst/publication/analyze_q011_section54_outputs.py",
         "tst/publication/q043_bell_current_volume_aware_deposited_current_oracle.py",
         "tst/publication/q043_registered_execution_raw_oracle_qualification_successor_v1.py",
         "tst/publication/frontier_control_plane/reconcile_q043_registered_execution.py",
@@ -1298,12 +1300,23 @@ def _candidate_binding(
         source_root=REPO_ROOT,
         required_paths=required_candidate_source_paths(),
     )
+    parser_bindings = [
+        item
+        for item in archive_closure["members"]
+        if item["path"] == "tst/publication/analyze_q011_section54_outputs.py"
+    ]
+    _require(
+        len(parser_bindings) == 1
+        and parser_bindings[0]["sha256"] == oracle.BINARY_PARSER_SOURCE_SHA256,
+        "authoritative scientific parser bytes differ from candidate source closure",
+    )
     return {
         "git_commit": git_commit,
         "source_bundle_sha256": bundle,
         "clean_candidate_manifest": manifest_binding,
         "source_archive": archive_binding,
         "source_archive_closure": archive_closure,
+        "authoritative_scientific_parser": parser_bindings[0],
         "trusted_clean_candidate_revalidation": trusted_revalidation,
         "executable": executable_binding,
         "executable_elf_validation": executable_elf_validation,
@@ -1544,7 +1557,6 @@ def _trusted_trampoline_completion(
                         "device": fixed_orion.parent.stat(follow_symlinks=False).st_dev,
                         "inode": fixed_orion.parent.stat(follow_symlinks=False).st_ino,
                     },
-                    "filesystem_identity": orion_identity,
                 },
                 "project_home": {
                     "path": str(fixed_project_home),
@@ -1556,7 +1568,6 @@ def _trusted_trampoline_completion(
                             follow_symlinks=False
                         ).st_ino,
                     },
-                    "filesystem_identity": project_identity,
                 },
             },
         ),
@@ -1875,12 +1886,10 @@ def _trusted_trampoline_completion(
             "orion": {
                 "path": str(fixed_orion),
                 "parent_identity": normalized_parent_identities["orion"],
-                "filesystem_identity": orion_identity,
             },
             "project_home": {
                 "path": str(fixed_project_home),
                 "parent_identity": normalized_parent_identities["project_home"],
-                "filesystem_identity": project_identity,
             },
         },
         "artifact_root_identity": {

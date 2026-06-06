@@ -6,16 +6,16 @@ export HOME=/
 export USER="$(/usr/bin/id -un)"
 source /opt/cray/pe/lmod/lmod/init/profile
 unset BASH_ENV ENV
-: "${PIC_CONTROL_PLANE_DIR_FD:?PIC_CONTROL_PLANE_DIR_FD is required}"
+: "${PIC_FRONTIER_PROFILE_FD:?PIC_FRONTIER_PROFILE_FD is required}"
 : "${PIC_RUNTIME_ALLOWLIST_FD:?PIC_RUNTIME_ALLOWLIST_FD is required}"
 : "${PIC_RUNTIME_ALLOWLIST_DIR_FD:?PIC_RUNTIME_ALLOWLIST_DIR_FD is required}"
-case "${PIC_CONTROL_PLANE_DIR_FD}:${PIC_RUNTIME_ALLOWLIST_FD}:${PIC_RUNTIME_ALLOWLIST_DIR_FD}" in
+case "${PIC_FRONTIER_PROFILE_FD}:${PIC_RUNTIME_ALLOWLIST_FD}:${PIC_RUNTIME_ALLOWLIST_DIR_FD}" in
   *[!0-9:]*|:*|*:)
     printf 'PIC runtime bindings must be file descriptors\n' >&2
     exit 1
     ;;
 esac
-if ! source "/proc/self/fd/${PIC_CONTROL_PLANE_DIR_FD}/frontier_pic_environment.sh"; then
+if ! source "/proc/self/fd/${PIC_FRONTIER_PROFILE_FD}"; then
   exit 1
 fi
 record_pic_environment >&"$PIC_RUNTIME_ALLOWLIST_FD"
@@ -36,9 +36,9 @@ os.fchmod(allowlist_fd, 0o400)
 os.fsync(allowlist_fd)
 os.fsync(directory_fd)
 PY
-eval "exec ${PIC_CONTROL_PLANE_DIR_FD}>&-"
+eval "exec ${PIC_FRONTIER_PROFILE_FD}>&-"
 eval "exec ${PIC_RUNTIME_ALLOWLIST_FD}>&-"
 eval "exec ${PIC_RUNTIME_ALLOWLIST_DIR_FD}>&-"
-unset PIC_CONTROL_PLANE_DIR_FD PIC_RUNTIME_ALLOWLIST_FD PIC_RUNTIME_ALLOWLIST_DIR_FD
+unset PIC_FRONTIER_PROFILE_FD PIC_RUNTIME_ALLOWLIST_FD PIC_RUNTIME_ALLOWLIST_DIR_FD
 unset -f module ml clearMT clearLmod xSetTitleLmod 2>/dev/null || true
 exec "$@"

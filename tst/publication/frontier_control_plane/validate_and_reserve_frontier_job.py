@@ -423,6 +423,30 @@ def _queue_output() -> str:
     )
 
 
+def _require_q043_live_queue_exclusive(
+    reservation: dict[str, object], *, submitted_job_id: str | None = None
+) -> None:
+    """Require no unrelated same-user job at Q043 dispatch/attachment time."""
+    if reservation.get("campaign") != "q043_registered_execution_raw_oracle_successor_v1":
+        return
+    lines = [line for line in _queue_output().splitlines() if line]
+    if submitted_job_id is None:
+        if lines:
+            raise ValueError(
+                "Q043 requires an empty same-user Frontier queue at scheduler dispatch"
+            )
+        return
+    unrelated = [
+        line
+        for line in lines
+        if line.split("|", 1)[0] != submitted_job_id
+    ]
+    if unrelated:
+        raise ValueError(
+            "Q043 requires no unrelated same-user Frontier job at scheduler submission"
+        )
+
+
 def _scheduler_job_output(job_id: str) -> str:
     return subprocess.check_output(
         [TRUSTED_SCONTROL, "show", "job", "--oneliner", job_id],
@@ -1656,6 +1680,7 @@ def mark_dispatch_started(
             authorized_pic_root=authorized_pic_root,
             authorized_project_home_root=authorized_project_home_root,
         )
+        _require_q043_live_queue_exclusive(reservation)
         marker_path = _pending_marker_path(authorized_pic_root)
         marker = _matching_pending_marker(marker_path, reservation_id)
         if marker is None or marker.get("state") != "reserved_not_submitted":
@@ -1706,6 +1731,7 @@ def mark_submitted(
         reservation = latest_reservations(records).get(reservation_id)
         if reservation is None or reservation.get("state") != "reserved":
             raise ValueError("Expected a live reserved scheduler submission")
+        _require_q043_live_queue_exclusive(reservation, submitted_job_id=job_id)
         marker = _matching_pending_marker(marker_path, reservation_id)
         if marker is None:
             raise ValueError("Expected a pending scheduler-submission recovery marker")

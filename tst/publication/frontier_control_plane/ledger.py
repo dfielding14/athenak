@@ -604,22 +604,21 @@ def _require_trampoline_completion_binding(value: object) -> None:
     paired = value["paired_receipts"]
     if not isinstance(paired, dict) or set(paired) != {"orion", "project_home"}:
         raise ValueError("Trampoline-completion paired receipt binding is malformed")
-    receipt_identities = []
+    parent_identities = []
     receipt_paths = []
     for root_name in ("orion", "project_home"):
         binding = paired[root_name]
         if (
             not isinstance(binding, dict)
-            or set(binding) != {"path", "parent_identity", "filesystem_identity"}
+            or set(binding) != {"path", "parent_identity"}
             or not isinstance(binding["path"], str)
             or not os.path.isabs(binding["path"])
             or binding["path"] != os.path.abspath(binding["path"])
         ):
             raise ValueError("Trampoline-completion paired receipt binding is invalid")
-        require_identity(binding["parent_identity"])
-        receipt_identities.append(require_identity(binding["filesystem_identity"]))
+        parent_identities.append(require_identity(binding["parent_identity"]))
         receipt_paths.append(binding["path"])
-    if len(set(receipt_paths)) != 2 or len(set(receipt_identities)) != 2:
+    if len(set(receipt_paths)) != 2 or len(set(parent_identities)) != 2:
         raise ValueError("Trampoline-completion paired receipts are not independent")
 
     require_identity(value["artifact_root_identity"])

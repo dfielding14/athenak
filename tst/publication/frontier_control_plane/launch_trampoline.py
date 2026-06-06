@@ -13,6 +13,7 @@ import argparse
 import base64
 from contextlib import contextmanager
 from datetime import datetime, timezone
+import fcntl
 import hashlib
 import json
 import os
@@ -38,6 +39,7 @@ from ledger import repair_mirrored_state_locked, transition_payload
 from ledger import validate_mirrored_state
 from validate_and_reserve_frontier_job import _require_run_artifact_dir
 from validate_and_reserve_frontier_job import executable_reservation_bound_manifest
+from validate_and_reserve_frontier_job import reservation_bound_manifest
 
 
 SRUN = "/usr/bin/srun"
@@ -1251,6 +1253,7 @@ def _publish_trampoline_completion_receipt_at(
     artifact_dir: Path,
     manifest: dict[str, object],
     *,
+    append_anchor: Callable[[dict[str, object]], dict[str, object]],
     manifest_path: Path,
     manifest_sha256: str,
     reservation_id: str,
@@ -1259,7 +1262,7 @@ def _publish_trampoline_completion_receipt_at(
     authorized_pic_root: Path,
     authorized_project_home_root: Path,
 ) -> dict[str, object]:
-    """Publish a paired immutable receipt while the original run tree is pinned."""
+    """Anchor then publish paired exact receipts while the run tree is pinned."""
     trusted_anchor = stable_serialization_anchor(authorized_pic_root)
     require_same_directory(artifact_dir, artifact_dir_fd, root=trusted_anchor)
     root_metadata = os.fstat(artifact_dir_fd)
@@ -1411,6 +1414,40 @@ def _publish_trampoline_completion_receipt_at(
             payload = (
                 json.dumps(receipt, indent=2, sort_keys=True, allow_nan=False) + "\n"
             ).encode("utf-8")
+            receipt_sha256 = hashlib.sha256(payload).hexdigest()
+            ledger_binding = {
+                "schema_version": 1,
+                "record_type": TRAMPOLINE_COMPLETION_LEDGER_RECORD_TYPE,
+                "authority": receipt["authority"],
+                "receipt_sha256": receipt_sha256,
+                "receipt_byte_count": len(payload),
+                "paired_receipts": {
+                    "orion": {
+                        "path": str(orion_path),
+                        "parent_identity": receipt["receipt_parent_identities"]["orion"],
+                    },
+                    "project_home": {
+                        "path": str(project_home_path),
+                        "parent_identity": receipt["receipt_parent_identities"][
+                            "project_home"
+                        ],
+                    },
+                },
+                "artifact_root_identity": receipt["artifact_root_identity"],
+                "artifact_inventory": {
+                    key: receipt["artifact_inventory"][key]
+                    for key in ("sha256", "byte_count", "filesystem_identity")
+                },
+                "artifact_records_sha256": _canonical_sha256(completion_records),
+                "mandatory_stdout_stderr_sha256": _canonical_sha256(
+                    receipt["mandatory_stdout_stderr"]
+                ),
+            }
+            anchored_event = append_anchor(ledger_binding)
+            if anchored_event.get("trampoline_completion") != ledger_binding:
+                raise ValueError(
+                    "Trampoline completion differs from pre-publication ledger anchor"
+                )
             orion_identity = _publish_exact_completion_receipt_at(
                 orion_path, payload, ancestry=orion_ancestry
             )
@@ -1452,49 +1489,13 @@ def _publish_trampoline_completion_receipt_at(
                 expected_size=int(raw["size"]),
             )
         require_same_directory(artifact_dir, artifact_dir_fd, root=trusted_anchor)
-        receipt_sha256 = hashlib.sha256(payload).hexdigest()
-        ledger_binding = {
-            "schema_version": 1,
-            "record_type": TRAMPOLINE_COMPLETION_LEDGER_RECORD_TYPE,
-            "authority": receipt["authority"],
-            "receipt_sha256": receipt_sha256,
-            "receipt_byte_count": len(payload),
-            "paired_receipts": {
-                "orion": {
-                    "path": str(orion_path),
-                    "parent_identity": receipt["receipt_parent_identities"]["orion"],
-                    "filesystem_identity": {
-                        "device": orion_identity[0],
-                        "inode": orion_identity[1],
-                    },
-                },
-                "project_home": {
-                    "path": str(project_home_path),
-                    "parent_identity": receipt["receipt_parent_identities"][
-                        "project_home"
-                    ],
-                    "filesystem_identity": {
-                        "device": project_home_identity[0],
-                        "inode": project_home_identity[1],
-                    },
-                },
-            },
-            "artifact_root_identity": receipt["artifact_root_identity"],
-            "artifact_inventory": {
-                key: receipt["artifact_inventory"][key]
-                for key in ("sha256", "byte_count", "filesystem_identity")
-            },
-            "artifact_records_sha256": _canonical_sha256(completion_records),
-            "mandatory_stdout_stderr_sha256": _canonical_sha256(
-                receipt["mandatory_stdout_stderr"]
-            ),
-        }
         return {
             "orion_path": str(orion_path),
             "project_home_path": str(project_home_path),
             "sha256": receipt_sha256,
             "byte_count": len(payload),
             "ledger_binding": ledger_binding,
+            "anchored_event": anchored_event,
         }
     finally:
         for parent_fd, descriptor, *_ in reversed(retained):
@@ -1513,7 +1514,7 @@ def _append_trampoline_completion_event(
     mirror_jsonl: Path,
     authorized_pic_root: Path,
 ) -> dict[str, object]:
-    """Append or recover exactly one completion event after receipt publication."""
+    """Append or recover the exact completion event before receipt publication."""
     ledger_csv = Path(os.path.abspath(authorized_pic_root)) / "ledger" / "node_hours.csv"
     completion_event = transition_payload(reservation)
     completion_event.update(
@@ -1568,6 +1569,77 @@ def _append_trampoline_completion_event(
             if attempt:
                 raise
     raise AssertionError("unreachable trampoline completion append retry")
+
+
+def recover_published_trampoline_completion(
+    *,
+    manifest_path: Path,
+    manifest_sha256: str,
+    job_script_sha256: str,
+    executable_sha256: str,
+    reservation_id: str,
+    submission_id: str,
+    ledger_jsonl: Path,
+    receipts_jsonl: Path,
+    mirror_jsonl: Path,
+    control_plane_dir: Path = Path(__file__).absolute().parent,
+    authorized_pic_root: Path = AUTHORIZED_PIC_ROOT,
+    authorized_project_home_root: Path = AUTHORIZED_PROJECT_HOME_ROOT,
+) -> dict[str, object]:
+    """Recover a published completion anchor without rerunning a zero-retry job."""
+    manifest, reservation = reservation_bound_manifest(
+        manifest_path,
+        reservation_id,
+        ledger_jsonl=ledger_jsonl,
+        receipts_jsonl=receipts_jsonl,
+        mirror_jsonl=mirror_jsonl,
+        control_plane_dir=control_plane_dir,
+        authorized_pic_root=authorized_pic_root,
+        authorized_project_home_root=authorized_project_home_root,
+    )
+    if (
+        reservation.get("event_type") not in {"trampoline_completion", "reconciliation"}
+        or not isinstance(reservation.get("trampoline_completion"), dict)
+    ):
+        raise ValueError(
+            "Completion recovery requires an existing pre-publication ledger anchor"
+        )
+    job_id = str(reservation.get("job_id", ""))
+    if (
+        re.fullmatch(r"[0-9]+", job_id) is None
+        or reservation.get("manifest_sha256") != manifest_sha256
+        or reservation.get("submission_id") != submission_id
+        or record_for_role(manifest, "job-script").get("sha256") != job_script_sha256
+        or record_for_role(manifest, "executable").get("sha256") != executable_sha256
+    ):
+        raise ValueError("Completion recovery arguments differ from the submitted job")
+    artifact_dir = _require_run_artifact_dir(manifest)
+    trusted_anchor = stable_serialization_anchor(authorized_pic_root)
+
+    def require_existing_anchor(binding: dict[str, object]) -> dict[str, object]:
+        if reservation.get("trampoline_completion") != binding:
+            raise ValueError("Existing trampoline completion differs from retry")
+        return reservation
+
+    with PinnedDirectoryAncestry(artifact_dir, root=trusted_anchor) as ancestry:
+        completion = _publish_trampoline_completion_receipt_at(
+            ancestry.descriptor,
+            artifact_dir,
+            manifest,
+            append_anchor=require_existing_anchor,
+            manifest_path=manifest_path,
+            manifest_sha256=manifest_sha256,
+            reservation_id=reservation_id,
+            submission_id=submission_id,
+            slurm_job_id=job_id,
+            authorized_pic_root=authorized_pic_root,
+            authorized_project_home_root=authorized_project_home_root,
+        )
+        appended = completion["anchored_event"]
+        if appended.get("trampoline_completion") != completion["ledger_binding"]:
+            raise ValueError("Recovered trampoline completion differs from ledger anchor")
+        ancestry.require_same()
+        return appended
 
 
 def _profile_environment() -> dict[str, str]:
@@ -1650,18 +1722,84 @@ def _create_artifact_directory(
         raise
 
 
-def _require_read_only_regular_at(directory_descriptor: int, name: str) -> None:
+_MEMFD_SEALS = (
+    fcntl.F_SEAL_SEAL
+    | fcntl.F_SEAL_SHRINK
+    | fcntl.F_SEAL_GROW
+    | fcntl.F_SEAL_WRITE
+)
+
+
+def _captured_control_plane_member_at(
+    directory_descriptor: int,
+    name: str,
+    manifest: dict[str, object],
+    *,
+    executable: bool,
+) -> int:
+    """Copy one manifest-bound installed member into a sealed anonymous file."""
+    records = manifest.get("control_plane_inventory")
+    if not isinstance(records, list):
+        raise ValueError("Manifest control-plane inventory is malformed")
+    expected = [
+        record
+        for record in records if isinstance(record, dict)
+        and record.get("path") == name
+    ]
+    if (
+        len(expected) != 1
+        or set(expected[0]) != {"path", "sha256"}
+        or re.fullmatch(r"[0-9a-f]{64}", str(expected[0]["sha256"])) is None
+    ):
+        raise ValueError(f"Control-plane inventory lacks one exact member: {name}")
     descriptor = os.open(
         name,
         os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
         dir_fd=directory_descriptor,
     )
     try:
-        metadata = os.fstat(descriptor)
-        if not stat.S_ISREG(metadata.st_mode) or metadata.st_mode & 0o222:
-            raise ValueError(f"Control-plane launcher is not a read-only regular file: {name}")
+        before = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(before.st_mode)
+            or before.st_mode & 0o222
+            or executable and not before.st_mode & 0o111
+        ):
+            raise ValueError(
+                f"Control-plane captured member is not an eligible read-only file: {name}"
+            )
+        chunks = []
+        while True:
+            chunk = os.read(descriptor, 1024 * 1024)
+            if not chunk:
+                break
+            chunks.append(chunk)
+        payload = b"".join(chunks)
+        after = os.fstat(descriptor)
+        if (
+            (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns)
+            != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns)
+            or hashlib.sha256(payload).hexdigest() != expected[0]["sha256"]
+        ):
+            raise ValueError(f"Control-plane captured member changed or drifted: {name}")
     finally:
         os.close(descriptor)
+    captured = os.memfd_create(
+        f"athenak-pic-{name}", flags=os.MFD_CLOEXEC | os.MFD_ALLOW_SEALING
+    )
+    try:
+        view = memoryview(payload)
+        while view:
+            written = os.write(captured, view)
+            if written <= 0:
+                raise OSError("short write while capturing control-plane member")
+            view = view[written:]
+        os.fchmod(captured, 0o555 if executable else 0o444)
+        os.lseek(captured, 0, os.SEEK_SET)
+        fcntl.fcntl(captured, fcntl.F_ADD_SEALS, _MEMFD_SEALS)
+    except BaseException:
+        os.close(captured)
+        raise
+    return captured
 
 
 def _launch_actions(
@@ -1672,7 +1810,8 @@ def _launch_actions(
     input_deck: _PinnedSnapshot,
     athena_timeout_arguments: tuple[str, str],
     profile_launcher: str,
-    control_plane_dir_fd: int,
+    profile_launcher_fd: int,
+    profile_environment_fd: int,
     slurm_job_id: str,
     runner: Callable[..., object],
     manifest_path: Path,
@@ -1758,7 +1897,7 @@ def _launch_actions(
                 )
                 environment["PIC_RUNTIME_ALLOWLIST_FD"] = str(allowlist_fd)
                 environment["PIC_RUNTIME_ALLOWLIST_DIR_FD"] = str(artifact_dir_fd)
-                environment["PIC_CONTROL_PLANE_DIR_FD"] = str(control_plane_dir_fd)
+                environment["PIC_FRONTIER_PROFILE_FD"] = str(profile_environment_fd)
                 with os.fdopen(
                     _open_new_artifact(artifact_dir_fd, artifact_dir, stdout_path), "wb"
                 ) as stdout, os.fdopen(
@@ -1774,7 +1913,8 @@ def _launch_actions(
                             pass_fds=(
                                 allowlist_fd,
                                 artifact_dir_fd,
-                                control_plane_dir_fd,
+                                profile_launcher_fd,
+                                profile_environment_fd,
                             ),
                         )
                         stdout.flush()
@@ -1821,6 +1961,14 @@ def _launch_actions(
             artifact_dir_fd,
             artifact_dir,
             manifest,
+            append_anchor=lambda binding: _append_trampoline_completion_event(
+                reservation,
+                binding,
+                ledger_jsonl=ledger_jsonl,
+                receipts_jsonl=receipts_jsonl,
+                mirror_jsonl=mirror_jsonl,
+                authorized_pic_root=authorized_pic_root,
+            ),
             manifest_path=manifest_path,
             manifest_sha256=manifest_sha256,
             reservation_id=reservation_id,
@@ -1829,14 +1977,7 @@ def _launch_actions(
             authorized_pic_root=authorized_pic_root,
             authorized_project_home_root=authorized_project_home_root,
         )
-        appended = _append_trampoline_completion_event(
-            reservation,
-            completion["ledger_binding"],
-            ledger_jsonl=ledger_jsonl,
-            receipts_jsonl=receipts_jsonl,
-            mirror_jsonl=mirror_jsonl,
-            authorized_pic_root=authorized_pic_root,
-        )
+        appended = completion["anchored_event"]
         if appended.get("trampoline_completion") != completion["ledger_binding"]:
             raise ValueError("Trampoline completion ledger anchor differs after append")
         require_artifact_directory()
@@ -1971,17 +2112,26 @@ def launch(
         control_plane_dir, root=trusted_anchor
     )
     control_plane_dir_fd = control_plane_dir_ancestry.descriptor
+    profile_launcher_fd: int | None = None
+    profile_environment_fd: int | None = None
     try:
         require_same_directory(
             control_plane_dir, control_plane_dir_fd, root=trusted_anchor
         )
         control_plane_dir_ancestry.require_same()
-        _require_read_only_regular_at(
-            control_plane_dir_fd, "launch_with_frontier_profile.sh"
+        profile_launcher_fd = _captured_control_plane_member_at(
+            control_plane_dir_fd,
+            "launch_with_frontier_profile.sh",
+            manifest,
+            executable=True,
         )
-        profile_launcher = (
-            f"/proc/self/fd/{control_plane_dir_fd}/launch_with_frontier_profile.sh"
+        profile_environment_fd = _captured_control_plane_member_at(
+            control_plane_dir_fd,
+            "frontier_pic_environment.sh",
+            manifest,
+            executable=False,
         )
+        profile_launcher = f"/proc/self/fd/{profile_launcher_fd}"
         with _PinnedSnapshot(
             Path(executable_path),
             root=trusted_anchor,
@@ -2000,7 +2150,8 @@ def launch(
                     input_deck=pinned_input_deck,
                     athena_timeout_arguments=athena_timeout_arguments,
                     profile_launcher=profile_launcher,
-                    control_plane_dir_fd=control_plane_dir_fd,
+                    profile_launcher_fd=profile_launcher_fd,
+                    profile_environment_fd=profile_environment_fd,
                     slurm_job_id=slurm_job_id,
                     runner=runner,
                     manifest_path=manifest_path,
@@ -2018,11 +2169,18 @@ def launch(
         )
         control_plane_dir_ancestry.require_same()
     finally:
-        control_plane_dir_ancestry.close()
+        try:
+            if profile_environment_fd is not None:
+                os.close(profile_environment_fd)
+            if profile_launcher_fd is not None:
+                os.close(profile_launcher_fd)
+        finally:
+            control_plane_dir_ancestry.close()
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
+    parser.add_argument("--recover-published-completion", action="store_true")
     parser.add_argument("--manifest", required=True, type=Path)
     parser.add_argument("--manifest-sha256", required=True)
     parser.add_argument("--job-script-sha256", required=True)
@@ -2033,17 +2191,22 @@ def main() -> None:
     parser.add_argument("--receipts-jsonl", required=True, type=Path)
     parser.add_argument("--mirror-jsonl", required=True, type=Path)
     args = parser.parse_args()
-    launch(
-        manifest_path=args.manifest,
-        manifest_sha256=args.manifest_sha256,
-        job_script_sha256=args.job_script_sha256,
-        executable_sha256=args.executable_sha256,
-        reservation_id=args.reservation_id,
-        submission_id=args.submission_id,
-        ledger_jsonl=args.ledger_jsonl,
-        receipts_jsonl=args.receipts_jsonl,
-        mirror_jsonl=args.mirror_jsonl,
-    )
+    arguments = {
+        "manifest_path": args.manifest,
+        "manifest_sha256": args.manifest_sha256,
+        "job_script_sha256": args.job_script_sha256,
+        "executable_sha256": args.executable_sha256,
+        "reservation_id": args.reservation_id,
+        "submission_id": args.submission_id,
+        "ledger_jsonl": args.ledger_jsonl,
+        "receipts_jsonl": args.receipts_jsonl,
+        "mirror_jsonl": args.mirror_jsonl,
+    }
+    if args.recover_published_completion:
+        recovered = recover_published_trampoline_completion(**arguments)
+        print(str(recovered["event_sha256"]))
+    else:
+        launch(**arguments)
 
 
 if __name__ == "__main__":

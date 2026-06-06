@@ -3378,9 +3378,9 @@ class SnapshotTests(unittest.TestCase):
             f"JobId={job_id} JobState=PENDING Account=AST207 "
             f"Comment=pic-reservation={reservation_id}"
         )
-        with patch(
-            "validate_and_reserve_frontier_job._scheduler_job_output",
-            return_value=scheduler,
+        with patch.dict(
+            mark_submitted.__globals__,
+            {"_scheduler_job_output": lambda _job_id: scheduler},
         ):
             self._mark_dispatch_started(reservation_id)
             mark_submitted(
@@ -3422,6 +3422,7 @@ class SnapshotTests(unittest.TestCase):
         manifest_path: Path,
         reservation: dict[str, object],
         *,
+        job_id: str = "12345",
         runner: object = subprocess.run,
         environment_overrides: dict[str, str] | None = None,
         flock_error: OSError | None = None,
@@ -3431,20 +3432,20 @@ class SnapshotTests(unittest.TestCase):
         executable = record_for_role(manifest, "executable")
         reservation_id = str(reservation["reservation_id"])
         scheduler = (
-            f"JobId=12345 JobState=RUNNING Account=AST207 "
+            f"JobId={job_id} JobState=RUNNING Account=AST207 "
             f"Comment=pic-reservation={reservation_id}"
         )
-        self._attach(reservation_id)
+        self._attach(reservation_id, job_id)
         environment = {
             "PIC_MANIFEST_SHA256": str(reservation["manifest_sha256"]),
             "PIC_RESERVATION_ID": reservation_id,
             "PIC_SUBMISSION_ID": self.submission_id,
-            "SLURM_JOB_ID": "12345",
+            "SLURM_JOB_ID": job_id,
         }
         environment.update(environment_overrides or {})
-        with patch(
-            "validate_and_reserve_frontier_job._scheduler_job_output",
-            return_value=scheduler,
+        with patch.dict(
+            launch.__globals__["executable_reservation_bound_manifest"].__globals__,
+            {"_scheduler_job_output": lambda _job_id: scheduler},
         ):
             with patch.dict(
                 os.environ,
@@ -3529,10 +3530,11 @@ class SnapshotTests(unittest.TestCase):
         staging.chmod(0o755)
         for path in staging.iterdir():
             path.chmod(path.stat().st_mode | 0o200)
-        (staging / "terminal_recovery_handoff.py").unlink()
+        for name in ("frontier_job.sh", "terminal_recovery_handoff.py"):
+            (staging / name).unlink()
         names = [
             name for name in CONTROL_PLANE_FILES
-            if name != "terminal_recovery_handoff.py"
+            if name not in {"frontier_job.sh", "terminal_recovery_handoff.py"}
         ]
         records = [{"path": name, "sha256": sha256(staging / name)} for name in names]
         digest = inventory_digest(records)
@@ -6861,6 +6863,152 @@ class SnapshotTests(unittest.TestCase):
                 ).exists()
             )
 
+    def test_trampoline_completion_recovers_after_anchor_before_paired_publication(
+        self,
+    ) -> None:
+        manifest_path = self._create_manifest()
+        reservation = self._reserve(manifest_path)
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        job_script = record_for_role(manifest, "job-script")
+        executable = record_for_role(manifest, "executable")
+        runner_calls = 0
+
+        def runner(_: list[str], **__: object) -> None:
+            nonlocal runner_calls
+            runner_calls += 1
+
+        real_publish = launch_trampoline._publish_exact_completion_receipt_at
+        publish_calls = 0
+
+        def crash_before_second_receipt(*args: object, **kwargs: object) -> tuple[int, int]:
+            nonlocal publish_calls
+            publish_calls += 1
+            if publish_calls == 2:
+                raise RuntimeError("simulated crash after pre-publication anchor")
+            return real_publish(*args, **kwargs)
+
+        with patch(
+            "launch_trampoline._publish_exact_completion_receipt_at",
+            side_effect=crash_before_second_receipt,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "pre-publication anchor"):
+                self._launch(manifest_path, reservation, runner=runner)
+        self.assertEqual(runner_calls, 1)
+        records = ledger.validate_mirrored_state(
+            self.ledger, self.receipts, self.mirror
+        )
+        anchored = [
+            record
+            for record in records
+            if record.get("event_type") == "trampoline_completion"
+        ]
+        self.assertEqual(len(anchored), 1)
+        self.assertFalse(
+            (
+                self.project_home_root
+                / launch_trampoline.TRAMPOLINE_COMPLETION_NAMESPACE
+                / self.submission_id
+                / launch_trampoline.TRAMPOLINE_COMPLETION_NAME
+            ).exists()
+        )
+        arguments = {
+            "manifest_path": manifest_path,
+            "manifest_sha256": str(reservation["manifest_sha256"]),
+            "job_script_sha256": str(job_script["sha256"]),
+            "executable_sha256": str(executable["sha256"]),
+            "reservation_id": str(reservation["reservation_id"]),
+            "submission_id": self.submission_id,
+            "ledger_jsonl": self.ledger,
+            "receipts_jsonl": self.receipts,
+            "mirror_jsonl": self.mirror,
+            "control_plane_dir": self.control_plane_dir,
+            "authorized_pic_root": self.pic_root,
+            "authorized_project_home_root": self.project_home_root,
+        }
+        recovered = launch_trampoline.recover_published_trampoline_completion(
+            **arguments
+        )
+        retried = launch_trampoline.recover_published_trampoline_completion(**arguments)
+        self.assertEqual(retried, recovered)
+        self.assertEqual(runner_calls, 1)
+        records = ledger.validate_mirrored_state(
+            self.ledger, self.receipts, self.mirror
+        )
+        self.assertEqual(
+            [
+                record
+                for record in records
+                if record.get("event_type") == "trampoline_completion"
+            ],
+            [recovered],
+        )
+
+    def test_completion_recovery_rejects_root_and_both_receipt_directory_replacement(
+        self,
+    ) -> None:
+        manifest_path = self._create_manifest()
+        reservation = self._reserve(manifest_path)
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        job_script = record_for_role(manifest, "job-script")
+        executable = record_for_role(manifest, "executable")
+        real_publish = launch_trampoline._publish_exact_completion_receipt_at
+        publish_calls = 0
+
+        def crash_before_second_receipt(*args: object, **kwargs: object) -> tuple[int, int]:
+            nonlocal publish_calls
+            publish_calls += 1
+            if publish_calls == 2:
+                raise RuntimeError("simulated crash after pre-publication anchor")
+            return real_publish(*args, **kwargs)
+
+        with patch(
+            "launch_trampoline._publish_exact_completion_receipt_at",
+            side_effect=crash_before_second_receipt,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "pre-publication anchor"):
+                self._launch(manifest_path, reservation, runner=lambda *_a, **_k: None)
+        records = ledger.validate_mirrored_state(
+            self.ledger, self.receipts, self.mirror
+        )
+        self.assertEqual(records[-1]["event_type"], "trampoline_completion")
+
+        artifact_dir = Path(str(manifest["artifact_dir"]))
+        artifact_backup = artifact_dir.with_name(f"{artifact_dir.name}.original")
+        artifact_dir.rename(artifact_backup)
+        shutil.copytree(artifact_backup, artifact_dir, copy_function=shutil.copy2)
+        malicious_payload = b'{"malicious":"replacement"}\n'
+        for root in (self.pic_root, self.project_home_root):
+            directory = (
+                root
+                / launch_trampoline.TRAMPOLINE_COMPLETION_NAMESPACE
+                / self.submission_id
+            )
+            backup = directory.with_name(f"{directory.name}.original")
+            directory.rename(backup)
+            directory.mkdir(mode=0o700)
+            receipt = directory / launch_trampoline.TRAMPOLINE_COMPLETION_NAME
+            receipt.write_bytes(malicious_payload)
+            receipt.chmod(0o444)
+            directory.chmod(0o500)
+
+        with self.assertRaisesRegex(
+            ValueError, "Existing trampoline completion differs from retry"
+        ):
+            launch_trampoline.recover_published_trampoline_completion(
+                manifest_path=manifest_path,
+                manifest_sha256=str(reservation["manifest_sha256"]),
+                job_script_sha256=str(job_script["sha256"]),
+                executable_sha256=str(executable["sha256"]),
+                reservation_id=str(reservation["reservation_id"]),
+                submission_id=self.submission_id,
+                ledger_jsonl=self.ledger,
+                receipts_jsonl=self.receipts,
+                mirror_jsonl=self.mirror,
+                control_plane_dir=self.control_plane_dir,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+
     def test_q043_trusted_wrapper_evidence_requires_exact_successful_rank_set(self) -> None:
         manifest = {
             "campaign": launch_trampoline.Q043_REGISTERED_CAMPAIGN,
@@ -6925,6 +7073,74 @@ class SnapshotTests(unittest.TestCase):
         ):
             self._reserve(manifest_path)
 
+    def test_q043_dispatch_rejects_queue_appearance_after_reservation(self) -> None:
+        case_id = "q043-current-oracle-d1-coarse-ppc1-single-cvr100"
+        self._write_science_config(
+            authorize=True,
+            campaign=launch_trampoline.Q043_REGISTERED_CAMPAIGN,
+            test_id=case_id,
+            registered_science_authorization_id="q043-dispatch-empty-queue-v1",
+            evidence_class="q043_registered_execution_test",
+            physical_mode="paper_mhd_pic_vl2_tsc",
+            artifact_dir=str(
+                self.pic_root
+                / "runs"
+                / launch_trampoline.Q043_REGISTERED_CAMPAIGN
+                / self.submission_id
+            ),
+        )
+        manifest_path = self._create_manifest()
+        reservation = self._reserve(manifest_path)
+        self._write(
+            "queue.txt",
+            "98765|batch|normal|RUNNING|unrelated-same-user-job|not-a-pic-tag\n",
+        )
+        with self.assertRaisesRegex(ValueError, "empty same-user Frontier queue"):
+            self._mark_dispatch_started(str(reservation["reservation_id"]))
+        marker = json.loads(
+            (self.pic_root / "ledger" / "pending_submission.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(marker["state"], "reserved_not_submitted")
+
+    def test_q043_submission_rejects_unrelated_queue_appearance_after_dispatch(
+        self,
+    ) -> None:
+        case_id = "q043-current-oracle-d1-coarse-ppc1-single-cvr100"
+        self._write_science_config(
+            authorize=True,
+            campaign=launch_trampoline.Q043_REGISTERED_CAMPAIGN,
+            test_id=case_id,
+            registered_science_authorization_id="q043-submit-empty-queue-v1",
+            evidence_class="q043_registered_execution_test",
+            physical_mode="paper_mhd_pic_vl2_tsc",
+            artifact_dir=str(
+                self.pic_root
+                / "runs"
+                / launch_trampoline.Q043_REGISTERED_CAMPAIGN
+                / self.submission_id
+            ),
+        )
+        manifest_path = self._create_manifest()
+        reservation = self._reserve(manifest_path)
+        reservation_id = str(reservation["reservation_id"])
+        self._mark_dispatch_started(reservation_id)
+        self._write(
+            "queue.txt",
+            "12345|batch|normal|PENDING|q043|pic-reservation=current\n"
+            "98765|batch|normal|RUNNING|unrelated-same-user-job|not-a-pic-tag\n",
+        )
+        with self.assertRaisesRegex(ValueError, "no unrelated same-user Frontier job"):
+            mark_submitted(
+                reservation_id=reservation_id,
+                job_id="12345",
+                ledger_jsonl=self.ledger,
+                control_plane_dir=self.control_plane_dir,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+
     def test_trampoline_reverifies_reserved_snapshot_and_binds_executable(self) -> None:
         manifest_path = self._create_manifest()
         reservation = self._reserve(manifest_path)
@@ -6939,7 +7155,7 @@ class SnapshotTests(unittest.TestCase):
         self.assertEqual(len(calls), 1)
         self.assertRegex(
             calls[0][0][0],
-            r"^/proc/self/fd/[0-9]+/launch_with_frontier_profile[.]sh$",
+            r"^/proc/self/fd/[0-9]+$",
         )
         self.assertEqual(calls[0][0][1], "/usr/bin/srun")
         self.assertEqual(calls[0][0][2], "--jobid=12345")
@@ -6964,6 +7180,60 @@ class SnapshotTests(unittest.TestCase):
         )
         self.assertEqual(stat.S_IMODE(artifact_dir.stat().st_mode), 0o555)
         self.assertEqual(stat.S_IMODE((artifact_dir / "analysis").stat().st_mode), 0o700)
+
+    def test_trampoline_executes_captured_profile_bytes_during_replace_restore(
+        self,
+    ) -> None:
+        manifest_path = self._create_manifest()
+        reservation = self._reserve(manifest_path)
+        captured = {
+            name: (self.control_plane_dir / name).read_bytes()
+            for name in (
+                "launch_with_frontier_profile.sh",
+                "frontier_pic_environment.sh",
+            )
+        }
+
+        def runner(command: list[str], **kwargs: object) -> None:
+            launcher_fd = int(command[0].rsplit("/", 1)[1])
+            profile_fd = int(str(kwargs["env"]["PIC_FRONTIER_PROFILE_FD"]))
+            self.assertIn(launcher_fd, kwargs["pass_fds"])
+            self.assertIn(profile_fd, kwargs["pass_fds"])
+            self.control_plane_dir.chmod(0o755)
+            backups = {}
+            try:
+                for name in captured:
+                    path = self.control_plane_dir / name
+                    backup = self.control_plane_dir / f"{name}.captured-backup"
+                    path.rename(backup)
+                    backups[name] = backup
+                    path.write_bytes(b"malicious replacement\n")
+                    path.chmod(0o555 if name.endswith(".sh") else 0o444)
+                self.assertEqual(
+                    Path(command[0]).read_bytes(),
+                    captured["launch_with_frontier_profile.sh"],
+                )
+                self.assertEqual(
+                    Path(f"/proc/self/fd/{profile_fd}").read_bytes(),
+                    captured["frontier_pic_environment.sh"],
+                )
+                result = subprocess.run(
+                    [command[0], "/bin/true"],
+                    env=kwargs["env"],
+                    pass_fds=kwargs["pass_fds"],
+                    capture_output=True,
+                    check=False,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+            finally:
+                for name, backup in backups.items():
+                    path = self.control_plane_dir / name
+                    if path.exists():
+                        path.unlink()
+                    backup.rename(path)
+                self.control_plane_dir.chmod(0o555)
+
+        self._launch(manifest_path, reservation, runner=runner)
 
     def test_trampoline_timeout_translation_rejects_malformed_alias_and_drift(
         self,
@@ -7876,7 +8146,7 @@ class SnapshotTests(unittest.TestCase):
         self.assertEqual(len(commands), 1)
         self.assertRegex(
             commands[0][0],
-            r"^/proc/self/fd/[0-9]+/launch_with_frontier_profile[.]sh$",
+            r"^/proc/self/fd/[0-9]+$",
         )
         self.assertEqual(commands[0][1], "/usr/bin/srun")
         self.assertEqual(commands[0][2], "--jobid=12345")
@@ -7902,10 +8172,12 @@ class SnapshotTests(unittest.TestCase):
         with allowlist.open("wb") as stream:
             descriptor = stream.fileno()
             directory_descriptor = os.open(wrapper_dir, os.O_RDONLY | os.O_DIRECTORY)
-            control_plane_descriptor = os.open(wrapper_dir, os.O_RDONLY | os.O_DIRECTORY)
+            profile_descriptor = os.open(
+                wrapper_dir / "frontier_pic_environment.sh", os.O_RDONLY
+            )
             try:
                 environment = dict(os.environ)
-                environment["PIC_CONTROL_PLANE_DIR_FD"] = str(control_plane_descriptor)
+                environment["PIC_FRONTIER_PROFILE_FD"] = str(profile_descriptor)
                 environment["PIC_RUNTIME_ALLOWLIST_FD"] = str(descriptor)
                 environment["PIC_RUNTIME_ALLOWLIST_DIR_FD"] = str(directory_descriptor)
                 environment["BASH_FUNC_module%%"] = "() {  :\n}"
@@ -7923,12 +8195,12 @@ class SnapshotTests(unittest.TestCase):
                         str(allowlist),
                     ],
                     env=environment,
-                    pass_fds=(descriptor, directory_descriptor, control_plane_descriptor),
+                    pass_fds=(descriptor, directory_descriptor, profile_descriptor),
                     check=False,
                 )
             finally:
                 os.close(directory_descriptor)
-                os.close(control_plane_descriptor)
+                os.close(profile_descriptor)
         self.assertEqual(result.returncode, 0)
         self.assertEqual(allowlist.read_text(encoding="utf-8"), "ALLOWLISTED=1\n")
         self.assertEqual(stat.S_IMODE(allowlist.stat().st_mode), 0o400)
@@ -7959,12 +8231,14 @@ class SnapshotTests(unittest.TestCase):
         allowlist = wrapper_dir / "environment.allowlist.txt"
         with allowlist.open("wb") as stream:
             directory_descriptor = os.open(wrapper_dir, os.O_RDONLY | os.O_DIRECTORY)
-            control_plane_descriptor = os.open(wrapper_dir, os.O_RDONLY | os.O_DIRECTORY)
+            profile_descriptor = os.open(
+                wrapper_dir / "frontier_pic_environment.sh", os.O_RDONLY
+            )
             try:
                 environment = {
                     **os.environ,
                     "HOME": str(home),
-                    "PIC_CONTROL_PLANE_DIR_FD": str(control_plane_descriptor),
+                    "PIC_FRONTIER_PROFILE_FD": str(profile_descriptor),
                     "PIC_RUNTIME_ALLOWLIST_FD": str(stream.fileno()),
                     "PIC_RUNTIME_ALLOWLIST_DIR_FD": str(directory_descriptor),
                 }
@@ -7974,13 +8248,13 @@ class SnapshotTests(unittest.TestCase):
                     pass_fds=(
                         stream.fileno(),
                         directory_descriptor,
-                        control_plane_descriptor,
+                        profile_descriptor,
                     ),
                     check=True,
                 )
             finally:
                 os.close(directory_descriptor)
-                os.close(control_plane_descriptor)
+                os.close(profile_descriptor)
         self.assertFalse(marker.exists())
         self.assertEqual(allowlist.read_text(encoding="utf-8"), "ALLOWLISTED=1\n")
 
@@ -8016,13 +8290,13 @@ class SnapshotTests(unittest.TestCase):
             allowlist = self.root / f"{name}.environment.allowlist.txt"
             descriptor = os.open(allowlist, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
             directory_descriptor = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY)
-            control_plane_descriptor = os.open(
-                control_plane_dir, os.O_RDONLY | os.O_DIRECTORY
+            profile_descriptor = os.open(
+                control_plane_dir / "frontier_pic_environment.sh", os.O_RDONLY
             )
             try:
                 environment = {
                     **base_environment,
-                    "PIC_CONTROL_PLANE_DIR_FD": str(control_plane_descriptor),
+                    "PIC_FRONTIER_PROFILE_FD": str(profile_descriptor),
                     "PIC_RUNTIME_ALLOWLIST_FD": str(descriptor),
                     "PIC_RUNTIME_ALLOWLIST_DIR_FD": str(directory_descriptor),
                 }
@@ -8032,14 +8306,14 @@ class SnapshotTests(unittest.TestCase):
                     pass_fds=(
                         descriptor,
                         directory_descriptor,
-                        control_plane_descriptor,
+                        profile_descriptor,
                     ),
                     check=True,
                 )
             finally:
                 os.close(descriptor)
                 os.close(directory_descriptor)
-                os.close(control_plane_descriptor)
+                os.close(profile_descriptor)
             payload = allowlist.read_bytes()
             _validate_environment_allowlist(payload, require_frontier_values=True)
             payloads.append(payload)
@@ -8105,8 +8379,8 @@ PY
                         'printf "ALLOWLISTED=1\\n" >&"$PIC_RUNTIME_ALLOWLIST_FD"; '
                         'eval "exec ${PIC_RUNTIME_ALLOWLIST_FD}>&-"; '
                         'eval "exec ${PIC_RUNTIME_ALLOWLIST_DIR_FD}>&-"; '
-                        'eval "exec ${PIC_CONTROL_PLANE_DIR_FD}>&-"; '
-                        "unset PIC_CONTROL_PLANE_DIR_FD PIC_RUNTIME_ALLOWLIST_FD "
+                        'eval "exec ${PIC_FRONTIER_PROFILE_FD}>&-"; '
+                        "unset PIC_FRONTIER_PROFILE_FD PIC_RUNTIME_ALLOWLIST_FD "
                         "PIC_RUNTIME_ALLOWLIST_DIR_FD; "
                         "exec /bin/bash -c '! printf \"FORGED_CHILD_WRITE\\\\n\" >&9'"
                     ),
@@ -8145,7 +8419,7 @@ PY
                 "PIC_FRONTIER_PROFILE",
                 "PIC_RUNTIME_ALLOWLIST_FD",
                 "PIC_RUNTIME_ALLOWLIST_DIR_FD",
-                "PIC_CONTROL_PLANE_DIR_FD",
+                "PIC_FRONTIER_PROFILE_FD",
             },
         )
         self.assertEqual(seen_environment["LC_ALL"], "C")
@@ -8595,7 +8869,7 @@ PY
         self.assertEqual(len(commands), 1)
         self.assertRegex(
             commands[0][0],
-            r"^/proc/self/fd/[0-9]+/launch_with_frontier_profile[.]sh$",
+            r"^/proc/self/fd/[0-9]+$",
         )
         self.assertEqual(commands[0][1], "/usr/bin/srun")
         self.assertEqual(commands[0][2], "--jobid=12345")
@@ -8712,7 +8986,7 @@ PY
         self.assertEqual(len(calls), 1)
         self.assertRegex(
             calls[0][0][0],
-            r"^/proc/self/fd/[0-9]+/launch_with_frontier_profile[.]sh$",
+            r"^/proc/self/fd/[0-9]+$",
         )
         self.assertEqual(calls[0][0][1], "/usr/bin/srun")
         self.assertEqual(calls[0][0][2], "--jobid=12345")
@@ -8721,8 +8995,8 @@ PY
         self.assertRegex(
             calls[0][1]["env"]["PIC_RUNTIME_ALLOWLIST_DIR_FD"], r"^[0-9]+$"
         )
-        self.assertRegex(calls[0][1]["env"]["PIC_CONTROL_PLANE_DIR_FD"], r"^[0-9]+$")
-        self.assertEqual(len(calls[0][1]["pass_fds"]), 3)
+        self.assertRegex(calls[0][1]["env"]["PIC_FRONTIER_PROFILE_FD"], r"^[0-9]+$")
+        self.assertEqual(len(calls[0][1]["pass_fds"]), 4)
         self.assertTrue(
             (artifact_dir / "athena-parser.environment.allowlist.txt").is_file()
         )
