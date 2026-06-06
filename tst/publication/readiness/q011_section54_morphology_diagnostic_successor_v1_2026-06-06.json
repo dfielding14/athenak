@@ -1,0 +1,185 @@
+{
+  "artifact_contract": {
+    "artifact_inventory": "artifact_inventory.json binds the byte count and SHA-256 of every derived member, including the common morphology manifest",
+    "common_manifest": "morphology_manifest.json binds the exact raw products, source closure, attempt identity, nominal slot, full observed committed time, and common cycle",
+    "derived_records_do_not_replace_retained_raw_artifacts": true,
+    "members": [
+      "morphology_manifest.json",
+      "profiles/particle_energy_weighted_spatial_profile_t500.json",
+      "profiles/deposited_current_spatial_profile_t500.json",
+      "profiles/magnetic_field_spatial_profile_t500.json",
+      "profiles/refinement_spatial_profile_t500.json",
+      "overlays/refinement_leaf_block_overlay_t500.json",
+      "artifact_inventory.json"
+    ],
+    "serialization": "canonical UTF-8 JSON with sorted keys, two-space indentation, terminal newline, duplicate-key rejection, and non-finite-number rejection"
+  },
+  "authorization": {
+    "claim_closure_authorized": false,
+    "launch_authorized": false,
+    "policy_mutation_authorized": false,
+    "qualifying_output_inspection_authorized": false
+  },
+  "claim_id": "CLAIM-PAPER-SHOCK-001",
+  "date": "2026-06-06",
+  "failure_policy": {
+    "artifact_validation": "fail on missing or additional members, noncanonical JSON, manifest drift, source-product drift, or inventory checksum drift",
+    "decoded_mesh_identity": "fail unless every decoded mesh product source and cycle exactly matches its raw-artifact binding and the production-science matched-grid contract passes",
+    "fixed_profile_grid": "fail unless the finest composite grid exactly and uniformly subdivides the preregistered 12 c/omega_pi comparison grid",
+    "particle_identity": "fail unless exact PVTK scalar/vector inventory, storage layout, product source, nominal slot, full observed committed time, cycle, float32 point representation, retained-domain containment, and positive active CR kinetic energy all pass",
+    "raw_artifact_provenance": "fail on missing or additional products, relabeled product identity, unsafe or duplicated paths, malformed SHA-256, non-t500 nominal slot, observed-time disagreement, or cycle disagreement"
+  },
+  "gate": "Q-011",
+  "historical_artifact_policy": {
+    "historical_decks_modified": false,
+    "historical_preregistrations_modified": false,
+    "historical_reducers_modified": false,
+    "qualification_or_claim_authority_added": false
+  },
+  "nominal_snapshot_contract": {
+    "common_cycle_required": true,
+    "full_observed_committed_time_required": true,
+    "nominal_slot_omega0_inverse": 500.0,
+    "raw_products": [
+      "mhd_w_bcc",
+      "prtcl_rho",
+      "prtcl_jx",
+      "prtcl_jy",
+      "prtcl_jz",
+      "mhd_j2",
+      "prtcl_all"
+    ],
+    "source_physics_contract": "q011_section54_production_science_diagnostic_successor_v1",
+    "shock_front_convention": "unique strongest negative density gradient from the corrected production-science successor; no qualifying-use authority is granted here"
+  },
+  "predecessor_contracts": [
+    {
+      "path": "tst/publication/readiness/q011_section54_production_science_diagnostic_successor_v1_2026-06-06.json",
+      "role": "corrected full-state current particle and shock-physics diagnostic authority",
+      "sha256": "7543a062839a84059ed4c2dc7f8b126966c663c19659fbb3d712e340d331c702"
+    },
+    {
+      "path": "tst/publication/readiness/q011_section54_qualifying_campaign_preregistration_successor_v3_2026-06-06.json",
+      "role": "historical source of the fixed 12 c/omega_pi AMR-versus-fine profile comparison rule and t500 morphology requirements; its positive-gradient shock-front rule remains superseded for future use",
+      "sha256": "1216fc0fcaa78fe423855b9c2ad2039597ef2ed722c46ff8605d184fcedcf1c0"
+    }
+  ],
+  "profile_contract": {
+    "coordinates": [
+      "absolute x1 center",
+      "x1 relative to ideal injection surface",
+      "x1 relative to separately detected shock front"
+    ],
+    "current_profile": {
+      "fields": [
+        "deposited rho_CR/c",
+        "lab-frame deposited J_CR/c components and magnitude",
+        "gas-frame deposited J_CR/c components and magnitude",
+        "MHD current magnitude squared"
+      ],
+      "frame_transform": "(J_CR/c)_gas = (J_CR/c)_lab - (rho_CR/c) * u_gas"
+    },
+    "fixed_cell_size_c_over_omega_pi": 12.0,
+    "grid_matching_rule": "conservatively equal-area restrict from the finest composite to 12 c/omega_pi in x1 and x2, then average across the full transverse domain",
+    "magnetic_profile": {
+      "fields": [
+        "bcc1",
+        "bcc2",
+        "bcc3",
+        "bmag",
+        "bmag/B0",
+        "gas density context"
+      ],
+      "reference_b0": 1.0
+    },
+    "particle_profile": {
+      "population": "cr_source == 1 and birth_time >= 45",
+      "profiles": [
+        "active particle count",
+        "active positive-weight particle count",
+        "active macro weight",
+        "active CR kinetic energy",
+        "active CR kinetic-energy fraction",
+        "energy-weighted probability density per c/omega_pi"
+      ],
+      "weight": "particle macro mass times macro weight times relativistic specific kinetic energy reconstructed from exact decoded float32 PVTK velocity"
+    },
+    "refinement_profile_and_overlay": {
+      "overlay": "exact x1-x2 rectangle for every retained leaf MeshBlock, colored by physical source refinement level",
+      "profile": "full-transverse-area fraction by physical source refinement level on the fixed 12 c/omega_pi x1 grid",
+      "target_composite_level_is_not_reported_as_physical_source_level": true
+    }
+  },
+  "provenance_contract": {
+    "each_profile_binds_common_manifest_sha256": true,
+    "particle_metadata_inventory": {
+      "scalar_fields": [
+        "birth_time",
+        "cr_source",
+        "deltaf_f0",
+        "deltaf_weight",
+        "gid",
+        "macro_weight",
+        "ptag",
+        "species"
+      ],
+      "storage_layout": "single_mpi_io_pvtk_file_with_nranks_header",
+      "vector_fields": [
+        "vel"
+      ]
+    },
+    "raw_binding_fields": [
+      "product",
+      "path",
+      "sha256",
+      "nominal_slot_time",
+      "observed_committed_time",
+      "cycle"
+    ],
+    "source_closure_is_embedded_in_common_manifest": true
+  },
+  "qualification_effect": "source_local_publication_bound_diagnostic_only_no_launch_no_policy_authorization_no_claim_closure",
+  "record_type": "q011_section54_morphology_diagnostic_successor",
+  "runtime_prerequisites": [
+    "Integrate this pure successor into the immutable raw-attempt orchestration so retained raw bytes are checksum-verified before decode and their exact bindings are passed to the reducer.",
+    "Execute and retain production t=500 coarse-uniform, three-level AMR, and fine-uniform Section 5.4 snapshots from the final clean registered candidate.",
+    "Materialize and externally review publication figures from the bound artifact set; this source-local successor itself grants no qualifying-output inspection or claim authority."
+  ],
+  "schema_version": 1,
+  "scope": "Additive fail-closed source-local successor for deterministic publication-bound Section 5.4 morphology profiles at nominal t=500. It produces an energy-weighted active-CR spatial profile, deposited-current lab/gas-frame profiles, magnetic-field and density-context profiles, physical-source-level refinement profiles, and exact leaf-block refinement overlay rectangles. Every derived member binds a common raw/source provenance manifest and a checksummed inventory.",
+  "source_bindings": {
+    "artifact_helper": {
+      "path": "tst/publication/q011_section54_artifacts.py",
+      "sha256": "ab5fc8977b7576e616386651a35bef3efad02bcecac92152956415fac2a38888"
+    },
+    "focused_tests": {
+      "path": "tst/publication/test_q011_section54_morphology_diagnostic_successor_v1.py",
+      "sha256": "e08c10739dffd52b26a7f83b13fc08496908dcd2f335a32f88393024d9ad96bd"
+    },
+    "model": {
+      "path": "tst/publication/q011_section54_model.py",
+      "sha256": "a17863a7b9d4d65b07f00fa8593c276e3d804f61ddea340b16002f9ecf0898a5"
+    },
+    "morphology_successor": {
+      "path": "tst/publication/q011_section54_morphology_diagnostic_successor_v1.py",
+      "sha256": "71cc6e620159f3124fda35327fe04dd4ace0609297d00e035d36b5be62fab314"
+    },
+    "output_parser": {
+      "path": "tst/publication/analyze_q011_section54_outputs.py",
+      "sha256": "20794ed45b80843b8e75accffc2e9336fcb7da58716fb818e466e193cd346356"
+    },
+    "particle_reducer": {
+      "path": "tst/publication/q011_section54_particles.py",
+      "sha256": "a66472379b58320c0709e9658d77f5569fb4ab3f9aa3c1436e872f82ed0a5b16"
+    },
+    "production_science_successor": {
+      "path": "tst/publication/q011_section54_production_science_successor_v1.py",
+      "sha256": "c18b61990b4e95858da983b50b31334861291c50137440c5fde2b370a4f22b73"
+    },
+    "successor_deck": {
+      "path": "inputs/publication/pic_parallel_shock_section54_production_science_successor_v1_vl2_tsc.athinput",
+      "sha256": "0e8589618fb8ffdd6da5d8c4aadba8308ac8ce74ac6d0d512c5f216ef7401d79"
+    }
+  },
+  "successor_id": "q011_section54_morphology_diagnostic_successor_v1"
+}
