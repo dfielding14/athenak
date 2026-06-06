@@ -11,6 +11,7 @@ NX1 = 16
 CFL = 0.3
 ISO_CS = 0.7
 BX = math.sqrt(0.65)
+BY = math.sqrt(0.35)
 PRESSURE_STATES = ((1.0, 0.5), (1.5, 1.0))
 FLOW_FIELDS = ("dens", "velx", "vely", "velz", "bcc1", "bcc2", "bcc3")
 
@@ -23,7 +24,15 @@ def _run(command, cwd=None):
     return result
 
 
-def _input_text(ppar, pperp, nlim):
+def _input_text(
+    ppar,
+    pperp,
+    nlim,
+    passive=True,
+    guide_b2=0.25,
+    guide_b3=-0.15,
+    field_amp=0.2,
+):
     return f"""\
 <job>
 basename = passive_fast_path
@@ -61,7 +70,7 @@ ndiag = 1
 
 <mhd>
 eos = cgl
-passive = true
+passive = {str(passive).lower()}
 iso_sound_speed = {ISO_CS}
 reconstruct = plm
 rsolver = hlle
@@ -81,9 +90,9 @@ vx0 = 0.16
 vy0 = -0.04
 vz0 = 0.02
 guide_b1 = {BX}
-guide_b2 = 0.25
-guide_b3 = -0.15
-field_amp = 0.2
+guide_b2 = {guide_b2}
+guide_b3 = {guide_b3}
+field_amp = {field_amp}
 field_k = 1.0
 refine_levels = 0
 
@@ -141,6 +150,21 @@ def _active_cgl_fast_speed(density, ppar, pperp, bx, by, bz):
         + 4.0 * pperp * pperp * (1.0 - mu2) * mu2
         - 12.0 * ppar * pperp * mu2 * (2.0 - mu2)
         + 12.0 * ppar * ppar * mu2 * mu2
+        - 12.0 * bx2 * ppar
+    )
+    return math.sqrt(0.5 * (qsq + math.sqrt(abs(disc))) / density)
+
+
+def _legacy_active_cgl_fast_speed(density, ppar, pperp, bx, by, bz):
+    bx2 = bx * bx
+    b2 = bx2 + by * by + bz * bz
+    mu2 = bx2 / b2
+    qsq = b2 + 2.0 * pperp + (2.0 * ppar - pperp) * mu2
+    disc = (
+        qsq * qsq
+        + 4.0 * pperp * pperp * (1.0 - mu2) * mu2
+        - 12.0 * ppar * pperp * mu2 * (2.0 - mu2)
+        + 12.0 * ppar * pperp * mu2 * mu2
         - 12.0 * bx2 * ppar
     )
     return math.sqrt(0.5 * (qsq + math.sqrt(abs(disc))) / density)
@@ -264,6 +288,35 @@ def test_passive_cgl_fast_overload_isolated_from_flow_and_timestep(tmp_path):
         not math.isclose(timesteps_a[0], active_dt, rel_tol=0.02)
         for active_dt in active_dts
     )
+
+    active_dir = tmp_path / "active-oblique"
+    active_dir.mkdir()
+    active_input = active_dir / "athinput.active_fast_path"
+    active_input.write_text(_input_text(
+        *PRESSURE_STATES[0],
+        nlim=0,
+        passive=False,
+        guide_b2=BY,
+        guide_b3=0.0,
+        field_amp=0.0,
+    ))
+    active_result = _run([str(executable), "-i", str(active_input)], cwd=active_dir)
+    active_table = _read_final_table(active_dir)
+    active_initial_dt = _diagnostic_timesteps(active_result.stdout)[0]
+    expected_active_dt = _initial_timestep(
+        active_table,
+        lambda density, bx, by, bz: _active_cgl_fast_speed(
+            density, PRESSURE_STATES[0][0], PRESSURE_STATES[0][1], bx, by, bz
+        ),
+    )
+    legacy_active_dt = _initial_timestep(
+        active_table,
+        lambda density, bx, by, bz: _legacy_active_cgl_fast_speed(
+            density, PRESSURE_STATES[0][0], PRESSURE_STATES[0][1], bx, by, bz
+        ),
+    )
+    assert math.isclose(active_initial_dt, expected_active_dt, rel_tol=2.0e-6)
+    assert not math.isclose(active_initial_dt, legacy_active_dt, rel_tol=5.0e-3)
 
     for field in FLOW_FIELDS:
         assert table_a[field] == table_b[field], field
