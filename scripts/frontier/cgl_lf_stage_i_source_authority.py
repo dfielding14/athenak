@@ -255,6 +255,7 @@ RENAME_NOREPLACE = 1
 RENAME_EXCHANGE = 2
 _ACTIVE_MUTATION_LOCK = None
 _ACTIVE_CANONICAL_PUBLIC_NAMESPACE = None
+_ACTIVE_F118_PUBLIC_AUTHORITY_LEASE = None
 _BOUND_DIRECTORY_GUARDS = {}
 
 # Threat model: bound namespace identities/profiles may change immediately
@@ -774,6 +775,154 @@ class CanonicalPublicNamespaceGuard:
                 raise ValueError(f"canonical public namespace path changed: {path}")
 
 
+class F118PublicAuthorityLease:
+    """Retain exact public F118 files through one authority-bearing return."""
+
+    def __init__(self, declarations: list[tuple[Path, str, int, str]]):
+        if not declarations:
+            raise ValueError("F118 public-authority lease declarations are empty")
+        self.members: list[dict[str, object]] = []
+        self.closed = False
+        seen: set[Path] = set()
+        try:
+            for declared_path, declared_digest, mode, label in declarations:
+                path = normalized_absolute(declared_path, label)
+                if path in seen:
+                    raise ValueError(
+                        f"F118 public-authority lease duplicates a path: {path}"
+                    )
+                seen.add(path)
+                digest = require_sha256(
+                    declared_digest, f"{label} public-authority lease SHA-256"
+                )
+                require_no_symlinks(path, label)
+                parent = os.open(
+                    path.parent,
+                    os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                )
+                descriptor = None
+                try:
+                    parent_profile = os.fstat(parent)
+                    require_directory_profile(parent_profile, f"{label} parent")
+                    parent_guard = DirectoryBindingGuard(
+                        parent, parent_profile, f"{label} parent", path=path.parent
+                    )
+                    parent_guard.assert_bound()
+                    descriptor = os.open(
+                        path.name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=parent
+                    )
+                    _, _, profile = read_descriptor(
+                        descriptor, label, expected=digest, mode=mode
+                    )
+                    require_bound_entry_profile(parent, path.name, profile, label)
+                    parent_guard.assert_bound()
+                except BaseException:
+                    if descriptor is not None:
+                        os.close(descriptor)
+                    os.close(parent)
+                    raise
+                self.members.append(
+                    {
+                        "path": path,
+                        "digest": digest,
+                        "mode": mode,
+                        "label": label,
+                        "parent": parent,
+                        "parent_guard": parent_guard,
+                        "descriptor": descriptor,
+                        "profile": profile,
+                    }
+                )
+            self.assert_bound()
+        except BaseException:
+            self.close()
+            raise
+
+    def assert_bound(self) -> None:
+        """Require every retained public name, inode, profile, and byte stream."""
+
+        if self.closed:
+            raise ValueError("F118 public-authority lease is closed")
+        for member in self.members:
+            label = str(member["label"])
+            try:
+                parent_guard = member["parent_guard"]
+                if not isinstance(parent_guard, DirectoryBindingGuard):
+                    raise ValueError("F118 public-authority lease parent guard is invalid")
+                parent_guard.assert_bound()
+                descriptor = int(member["descriptor"])
+                _, _, opened = read_descriptor(
+                    descriptor,
+                    label,
+                    expected=str(member["digest"]),
+                    mode=int(member["mode"]),
+                )
+                expected = member["profile"]
+                if not isinstance(expected, os.stat_result):
+                    raise ValueError("F118 public-authority lease profile is invalid")
+                if (
+                    profile_identity(opened) != profile_identity(expected)
+                    or file_profile_binding(opened) != file_profile_binding(expected)
+                ):
+                    raise ValueError("retained descriptor profile changed")
+                require_bound_entry_profile(
+                    int(member["parent"]),
+                    Path(member["path"]).name,
+                    expected,
+                    label,
+                )
+                parent_guard.assert_bound()
+            except BaseException as error:
+                raise ValueError(
+                    f"{label} changed while F118 public-authority lease is active"
+                ) from error
+
+    def close(self) -> None:
+        """Release every retained F118 public-authority descriptor."""
+
+        if self.closed:
+            return
+        self.closed = True
+        for member in reversed(self.members):
+            os.close(int(member["descriptor"]))
+            os.close(int(member["parent"]))
+
+
+@contextmanager
+def active_f118_public_authority_lease(
+    lease: F118PublicAuthorityLease,
+) -> Iterator[F118PublicAuthorityLease]:
+    """Bind one aggregate F118 lease to mutation boundaries and final return."""
+
+    global _ACTIVE_F118_PUBLIC_AUTHORITY_LEASE
+
+    lease.assert_bound()
+    if _ACTIVE_F118_PUBLIC_AUTHORITY_LEASE is not None:
+        raise ValueError("nested F118 public-authority leases are forbidden")
+    _ACTIVE_F118_PUBLIC_AUTHORITY_LEASE = lease
+    try:
+        yield lease
+        lease.assert_bound()
+    finally:
+        if _ACTIVE_F118_PUBLIC_AUTHORITY_LEASE is not lease:
+            raise ValueError("F118 public-authority lease changed while active")
+        _ACTIVE_F118_PUBLIC_AUTHORITY_LEASE = None
+
+
+@contextmanager
+def f118_public_authority_closure(
+    declarations: list[tuple[Path, str, int, str]],
+) -> Iterator[F118PublicAuthorityLease]:
+    """Acquire, activate, and release one aggregate F118 public closure."""
+
+    lease = F118PublicAuthorityLease(declarations)
+    try:
+        with active_f118_public_authority_lease(lease):
+            yield lease
+    finally:
+        lease.close()
+
+
 def require_bound_directory_descriptor(descriptor: int) -> None:
     """Require a registered directory descriptor to remain pathname-bound."""
 
@@ -787,8 +936,12 @@ def require_active_mutation_lock_bound() -> None:
 
     if _ACTIVE_CANONICAL_PUBLIC_NAMESPACE is not None:
         _ACTIVE_CANONICAL_PUBLIC_NAMESPACE.assert_bound()
+    if _ACTIVE_F118_PUBLIC_AUTHORITY_LEASE is not None:
+        _ACTIVE_F118_PUBLIC_AUTHORITY_LEASE.assert_bound()
     if _ACTIVE_MUTATION_LOCK is not None:
         _ACTIVE_MUTATION_LOCK.assert_bound()
+    if _ACTIVE_F118_PUBLIC_AUTHORITY_LEASE is not None:
+        _ACTIVE_F118_PUBLIC_AUTHORITY_LEASE.assert_bound()
     if _ACTIVE_CANONICAL_PUBLIC_NAMESPACE is not None:
         _ACTIVE_CANONICAL_PUBLIC_NAMESPACE.assert_bound()
 
@@ -6604,6 +6757,75 @@ def validate_transaction_context(root: Path, repository: Path, canonical: bool,
     return context
 
 
+def f118_public_authority_declarations(
+    layout: dict[str, Path],
+    final_target: Path,
+    expected: dict[str, object],
+    catalog_after: dict[str, object],
+    *,
+    include_audit: bool,
+) -> list[tuple[Path, str, int, str]]:
+    """Return the exact aggregate public F118 generation to retain."""
+
+    declarations = [
+        (
+            normalized_absolute(final_target, "F118 final source bundle"),
+            require_sha256(expected.get("bundle"), "F118 final source bundle SHA-256"),
+            0o644,
+            "F118 final source bundle",
+        ),
+        (
+            layout["f118_evidence"],
+            require_sha256(expected.get("evidence"), "F118 evidence SHA-256"),
+            0o444,
+            "F118 evidence",
+        ),
+        (
+            layout["f118_provenance_review"],
+            require_sha256(
+                expected.get("provenance_review"), "F118 provenance review SHA-256"
+            ),
+            0o444,
+            "F118 provenance review",
+        ),
+        (
+            layout["f118_plasma_review"],
+            require_sha256(
+                expected.get("plasma_review"), "F118 plasma review SHA-256"
+            ),
+            0o444,
+            "F118 plasma review",
+        ),
+        (
+            layout["readme"],
+            require_sha256(
+                catalog_after.get("readme_sha256"), "F118 source-archive README SHA-256"
+            ),
+            0o644,
+            "source-archive README",
+        ),
+        (
+            layout["sha256sums"],
+            require_sha256(
+                catalog_after.get("sha256sums_sha256"),
+                "F118 source-archive SHA256SUMS SHA-256",
+            ),
+            0o644,
+            "source-archive SHA256SUMS",
+        ),
+    ]
+    if include_audit:
+        declarations.append(
+            (
+                layout["f118_publication_audit"],
+                require_sha256(expected.get("audit"), "F118 publication audit SHA-256"),
+                0o444,
+                "F118 publication audit",
+            )
+        )
+    return declarations
+
+
 def continue_transaction(args: argparse.Namespace, root: Path, repository: Path,
                          canonical: bool, publisher_sha256: str,
                          layout: dict[str, Path], transaction: Path,
@@ -6675,14 +6897,25 @@ def continue_transaction(args: argparse.Namespace, root: Path, repository: Path,
         cleanup_incomplete_private_publication_slots(target, label)
     for target, label in precommit_targets[:-1]:
         require_private_publication_slots_absent(target, label)
-    # This immutable audit is the sole authority commit marker and is always last.
-    ensure_direct_final_file(
-        payloads["audit"], layout["f118_publication_audit"], str(expected["audit"]),
-        0o444, "F118 publication audit",
+    # Bind the complete precommit public generation through the audit-last
+    # mutation. Any drift leaves the visible audit non-authorizing and fails
+    # closed; recovery never repairs beneath that marker.
+    precommit_declarations = f118_public_authority_declarations(
+        layout,
+        final_target,
+        expected,
+        journal["catalog_after"],
+        include_audit=False,
     )
-    require_private_publication_slots_absent(
-        layout["f118_publication_audit"], "F118 publication audit"
-    )
+    with f118_public_authority_closure(precommit_declarations):
+        # This immutable audit is the sole authority commit marker and is always last.
+        ensure_direct_final_file(
+            payloads["audit"], layout["f118_publication_audit"], str(expected["audit"]),
+            0o444, "F118 publication audit",
+        )
+        require_private_publication_slots_absent(
+            layout["f118_publication_audit"], "F118 publication audit"
+        )
     simulation(args, "after-audit")
     verify_promoted(
         root, repository, canonical, publisher_sha256, layout, str(expected["audit"]),
@@ -6756,6 +6989,34 @@ def promoted_payloads(layout: dict[str, Path], expected_audit_sha256: str
             expected=expected[key], mode=0o444,
         )
     return payloads, expected
+
+
+def promoted_f118_public_authority_lease(
+    layout: dict[str, Path], expected_audit_sha256: str
+) -> F118PublicAuthorityLease:
+    """Acquire the exact seven-member public F118 generation after verification."""
+
+    payloads, expected = promoted_payloads(layout, expected_audit_sha256)
+    evidence = parse_json_payload(payloads["evidence"], "published F118 evidence")
+    implementation = evidence.get("implementation")
+    catalog_after = evidence.get("source_archive_catalog", {}).get("after")
+    if not isinstance(implementation, dict) or not isinstance(catalog_after, dict):
+        raise ValueError("published F118 authority lease binding is missing")
+    final = parse_bundle_declaration(
+        implementation.get("current_source_bundle"),
+        "published F118 current bundle",
+        current=True,
+    )
+    expected["bundle"] = str(final["sha256"])
+    return F118PublicAuthorityLease(
+        f118_public_authority_declarations(
+            layout,
+            layout["root"] / str(final["path"]),
+            expected,
+            catalog_after,
+            include_audit=True,
+        )
+    )
 
 
 def verify_promoted(root: Path, repository: Path, canonical: bool, publisher_sha256: str,
@@ -6846,9 +7107,19 @@ def verify_promoted(root: Path, repository: Path, canonical: bool, publisher_sha
         new_readme=readme,
         new_sums=sums,
     )
+    expected["bundle"] = str(final["sha256"])
+    declarations = f118_public_authority_declarations(
+        layout,
+        root / str(final["path"]),
+        expected,
+        new_catalog,
+        include_audit=True,
+    )
     # Once the exact audit commits F118, transaction contents have no authority
-    # over the published generation.  Validate only their bounded root namespace.
-    classify_non_authoritative_recovery_debris(layout)
+    # over the published generation. Re-establish the complete public closure
+    # before classifying debris and retain it through successful return.
+    with f118_public_authority_closure(declarations):
+        classify_non_authoritative_recovery_debris(layout)
 
 
 def promote(args: argparse.Namespace, root: Path, repository: Path, canonical: bool,
@@ -7025,32 +7296,45 @@ def main(argv: list[str] | None = None) -> int:
         raise ValueError("publisher source path differs from the committed repository path")
     requested_root = normalized_absolute(args.root, "campaign root")
     requested_canonical = requested_root == DEFAULT_ROOT
-    with bound_canonical_public_namespace(requested_root, requested_canonical):
-        root, canonical, layout = validate_root(args)
-        require_canonical_repository(repository, canonical)
-        with stage_i_lock(layout):
-            if args.action == "draft-evidence":
-                result = draft_evidence(
-                    args, root, repository, canonical, publisher_sha256, layout
-                )
-            elif args.action == "draft-audit":
-                result = draft_audit(
-                    args, root, repository, canonical, publisher_sha256, layout
-                )
-            elif args.action == "promote":
-                promote(args, root, repository, canonical, publisher_sha256, layout)
-                result = layout["f118_publication_audit"]
-            elif args.action == "recover":
-                recover(args, root, repository, canonical, publisher_sha256, layout)
-                result = layout["f118_publication_audit"]
-            else:
-                verify_promoted(
-                    root, repository, canonical, publisher_sha256, layout,
-                    args.expected_audit_sha256,
-                )
-                result = layout["f118_publication_audit"]
-    print(result)
-    return 0
+    success_lease = None
+    try:
+        with bound_canonical_public_namespace(requested_root, requested_canonical):
+            root, canonical, layout = validate_root(args)
+            require_canonical_repository(repository, canonical)
+            with stage_i_lock(layout):
+                if args.action == "draft-evidence":
+                    result = draft_evidence(
+                        args, root, repository, canonical, publisher_sha256, layout
+                    )
+                elif args.action == "draft-audit":
+                    result = draft_audit(
+                        args, root, repository, canonical, publisher_sha256, layout
+                    )
+                elif args.action == "promote":
+                    promote(args, root, repository, canonical, publisher_sha256, layout)
+                    result = layout["f118_publication_audit"]
+                elif args.action == "recover":
+                    recover(args, root, repository, canonical, publisher_sha256, layout)
+                    result = layout["f118_publication_audit"]
+                else:
+                    verify_promoted(
+                        root, repository, canonical, publisher_sha256, layout,
+                        args.expected_audit_sha256,
+                    )
+                    result = layout["f118_publication_audit"]
+                if args.action in {"promote", "recover", "verify"}:
+                    success_lease = promoted_f118_public_authority_lease(
+                        layout, args.expected_audit_sha256
+                    )
+        if success_lease is None:
+            print(result)
+            return 0
+        with active_f118_public_authority_lease(success_lease):
+            print(result)
+            return 0
+    finally:
+        if success_lease is not None:
+            success_lease.close()
 
 
 if __name__ == "__main__":

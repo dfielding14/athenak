@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import fcntl
@@ -1052,6 +1053,70 @@ def assert_failed(completed: subprocess.CompletedProcess, match: str) -> None:
     assert match in completed.stderr, completed.stderr
 
 
+def f118_public_member(campaign: Campaign, key: str) -> Path:
+    members = {
+        "bundle": campaign.final_target,
+        "evidence": campaign.root / authority.F118_PATHS["evidence"],
+        "provenance_review": campaign.root / authority.F118_PATHS["provenance_review"],
+        "plasma_review": campaign.root / authority.F118_PATHS["plasma_review"],
+        "readme": campaign.root / "source-archives/README.md",
+        "sha256sums": campaign.root / "source-archives/SHA256SUMS",
+        "audit": campaign.root / authority.F118_PATHS["publication_audit"],
+    }
+    return members[key]
+
+
+def hostile_exchange_public_member(path: Path) -> None:
+    """Exchange one public authority name for an invalid same-profile inode."""
+
+    replacement = path.with_name(f".{path.name}.hostile-exchange")
+    write_bytes(
+        replacement,
+        b"hostile exchanged public authority\n",
+        stat.S_IMODE(path.stat().st_mode),
+    )
+    os.replace(replacement, path)
+
+
+def direct_promote(campaign: Campaign) -> None:
+    args = SimpleNamespace(
+        bundle_candidate=campaign.final_bundle,
+        expected_bundle_sha256=campaign.expected["bundle"],
+        evidence_candidate=campaign.evidence_candidate,
+        expected_evidence_sha256=campaign.expected["evidence"],
+        provenance_review_candidate=campaign.provenance_candidate,
+        expected_provenance_review_sha256=campaign.expected["provenance_review"],
+        plasma_review_candidate=campaign.plasma_candidate,
+        expected_plasma_review_sha256=campaign.expected["plasma_review"],
+        audit_candidate=campaign.audit_candidate,
+        expected_audit_sha256=campaign.expected["audit"],
+        simulate_interruption=None,
+    )
+    layout = authority.root_layout(campaign.root)
+    with authority.stage_i_lock(layout):
+        authority.promote(
+            args,
+            campaign.root,
+            campaign.repository,
+            False,
+            campaign.expected["publisher"],
+            layout,
+        )
+
+
+def direct_verify(campaign: Campaign) -> None:
+    layout = authority.root_layout(campaign.root)
+    with authority.stage_i_lock(layout):
+        authority.verify_promoted(
+            campaign.root,
+            campaign.repository,
+            False,
+            campaign.expected["publisher"],
+            layout,
+            campaign.expected["audit"],
+        )
+
+
 def bind_external_reviews(campaign: Campaign, evidence_path: Path) -> None:
     evidence = json.loads(evidence_path.read_text())
     evidence_sha256 = sha256(evidence_path)
@@ -1088,6 +1153,171 @@ def test_promotes_and_verifies_source_selection_only(campaign: Campaign) -> None
     assert audit["authority_and_enforcement"] == authority.AUTHORIZATION
     assert audit["authority_and_enforcement"]["prepare_authorized"] is False
     assert audit["authority_and_enforcement"]["submit_authorized"] is False
+
+
+def test_normal_promote_recover_verify_lifecycle_returns_success(campaign: Campaign) -> None:
+    assert campaign.promote().returncode == 0
+    assert campaign.recover().returncode == 0
+    assert campaign.verify().returncode == 0
+
+
+@pytest.mark.parametrize(
+    "member",
+    (
+        "bundle",
+        "evidence",
+        "provenance_review",
+        "plasma_review",
+        "readme",
+        "sha256sums",
+    ),
+)
+def test_pre_audit_public_authority_lease_rejects_immediate_target_exchange(
+    campaign: Campaign, monkeypatch: pytest.MonkeyPatch, member: str
+) -> None:
+    real_ensure = authority.ensure_direct_final_file
+    audit_target = f118_public_member(campaign, "audit")
+    mutated = False
+
+    def exchange_immediately_before_audit_publication(
+        payload: bytes, target: Path, expected: str, mode: int, label: str
+    ) -> None:
+        nonlocal mutated
+        if target == audit_target and not mutated:
+            hostile_exchange_public_member(f118_public_member(campaign, member))
+            mutated = True
+        real_ensure(payload, target, expected, mode, label)
+
+    monkeypatch.setattr(
+        authority, "ensure_direct_final_file", exchange_immediately_before_audit_publication
+    )
+    with pytest.raises(ValueError, match="public-authority lease|inode identity changed"):
+        direct_promote(campaign)
+
+    assert mutated
+    assert not audit_target.exists()
+
+
+def test_visible_audit_with_post_publication_drift_is_non_authorizing_and_not_repaired(
+    campaign: Campaign, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    real_ensure = authority.ensure_direct_final_file
+    audit_target = f118_public_member(campaign, "audit")
+    evidence_target = f118_public_member(campaign, "evidence")
+    mutated = False
+
+    def drift_immediately_after_audit_publication(
+        payload: bytes, target: Path, expected: str, mode: int, label: str
+    ) -> None:
+        nonlocal mutated
+        real_ensure(payload, target, expected, mode, label)
+        if target == audit_target and not mutated:
+            hostile_exchange_public_member(evidence_target)
+            mutated = True
+
+    monkeypatch.setattr(
+        authority, "ensure_direct_final_file", drift_immediately_after_audit_publication
+    )
+    with pytest.raises(ValueError, match="public-authority lease|inode identity changed"):
+        direct_promote(campaign)
+
+    assert mutated
+    assert sha256(audit_target) == campaign.expected["audit"]
+    assert authority.publication_audit_committed(
+        authority.root_layout(campaign.root), campaign.expected["audit"]
+    )
+    drifted_sha256 = sha256(evidence_target)
+    assert drifted_sha256 != campaign.expected["evidence"]
+    assert campaign.recover().returncode != 0
+    assert campaign.verify().returncode != 0
+    assert sha256(evidence_target) == drifted_sha256
+
+
+@pytest.mark.parametrize(
+    "member",
+    (
+        "bundle",
+        "evidence",
+        "provenance_review",
+        "plasma_review",
+        "readme",
+        "sha256sums",
+        "audit",
+    ),
+)
+def test_verify_promoted_public_authority_lease_rejects_final_return_tail_exchange(
+    campaign: Campaign, monkeypatch: pytest.MonkeyPatch, member: str
+) -> None:
+    assert campaign.promote().returncode == 0
+    real_classify = authority.classify_non_authoritative_recovery_debris
+    mutated = False
+
+    def mutate_after_final_validation(layout: dict[str, Path]) -> None:
+        nonlocal mutated
+        real_classify(layout)
+        hostile_exchange_public_member(f118_public_member(campaign, member))
+        mutated = True
+
+    monkeypatch.setattr(
+        authority, "classify_non_authoritative_recovery_debris", mutate_after_final_validation
+    )
+    with pytest.raises(ValueError, match="public-authority lease|inode identity changed"):
+        direct_verify(campaign)
+
+    assert mutated
+    assert f118_public_member(campaign, "audit").exists()
+    assert campaign.verify().returncode != 0
+
+
+@pytest.mark.parametrize("action", ("promote", "recover", "verify"))
+def test_cli_lifecycle_final_return_lease_rejects_exchange_after_guards_release(
+    campaign: Campaign,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    action: str,
+) -> None:
+    if action == "recover":
+        assert_failed(campaign.promote("after-catalogs"), "simulated interruption")
+    elif action == "verify":
+        assert campaign.promote().returncode == 0
+
+    command = getattr(campaign, f"{action}_command")()[1:]
+    real_active = authority.active_f118_public_authority_lease
+    mutated = False
+
+    @contextmanager
+    def mutate_at_cli_final_return(lease: authority.F118PublicAuthorityLease):
+        nonlocal mutated
+        if (
+            not mutated
+            and authority._ACTIVE_MUTATION_LOCK is None
+            and authority._ACTIVE_CANONICAL_PUBLIC_NAMESPACE is None
+        ):
+            hostile_exchange_public_member(f118_public_member(campaign, "evidence"))
+            mutated = True
+        with real_active(lease) as retained:
+            yield retained
+
+    monkeypatch.setattr(authority, "active_f118_public_authority_lease", mutate_at_cli_final_return)
+    monkeypatch.setattr(
+        authority,
+        "authenticate_self",
+        lambda _argv: (
+            campaign.publisher,
+            campaign.repository,
+            campaign.expected["publisher"],
+        ),
+    )
+
+    with pytest.raises(ValueError, match="public-authority lease|inode identity changed"):
+        authority.main(command)
+
+    assert mutated
+    assert authority._ACTIVE_MUTATION_LOCK is None
+    assert authority._ACTIVE_CANONICAL_PUBLIC_NAMESPACE is None
+    assert capsys.readouterr().out == ""
+    assert f118_public_member(campaign, "audit").exists()
+    assert campaign.verify().returncode != 0
 
 
 def test_f118_preserves_exact_f116_four_part_authority_and_selected_bundle(
