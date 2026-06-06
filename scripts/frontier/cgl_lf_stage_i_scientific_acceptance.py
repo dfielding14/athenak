@@ -17,6 +17,7 @@ from bisect import bisect_right
 from contextlib import contextmanager
 import csv
 import hashlib
+import importlib.util
 import io
 import json
 import math
@@ -39,6 +40,12 @@ DEFAULT_CRITERIA = REPOSITORY_ROOT / (
 )
 DEFAULT_CRITERIA_REVIEW = REPOSITORY_ROOT / (
     "inputs/cgl_lf_paper/mks24_stage_i_scientific_acceptance_criteria.review.json"
+)
+SCIENTIFIC_PRODUCTS_RELATIVE_PATH = Path(
+    "scripts/frontier/cgl_lf_stage_i_scientific_products.py"
+)
+CT_INVENTORY_RELATIVE_PATH = Path(
+    "scripts/frontier/cgl_lf_stage_i_ct_inventory.py"
 )
 CANONICAL_CAMPAIGN_ROOT = Path("/lustre/orion/ast207/proj-shared/dfielding/CGL")
 CANONICAL_EXECUTION_EPOCH = "E03-forcing-policy"
@@ -218,6 +225,17 @@ def require_list(value: object, label: str) -> list[object]:
     if not isinstance(value, list):
         raise AcceptanceError(f"{label} must be a list")
     return value
+
+
+def require_exact_keys(
+    value: object, expected: set[str], label: str
+) -> dict[str, object]:
+    """Require one object with exactly the reviewed member names."""
+
+    record = require_dict(value, label)
+    if set(record) != expected:
+        raise AcceptanceError(f"{label} keys differ from the reviewed schema")
+    return record
 
 
 def stable_profile(profile: os.stat_result) -> tuple[int, int, int, int, int, int]:
@@ -440,18 +458,161 @@ def source_binding_records(criteria: dict[str, object]) -> list[tuple[str, objec
     records: list[tuple[str, object]] = []
     for key in (
         "acceptance_utility",
+        "scientific_products_generator",
+        "ct_inventory_builder",
         "stage_i_manifest",
         "reference_archive_manifest",
         "verified_reference_archive_manifest",
-        "current_source_authority_evidence",
-        "current_source_authority_provenance_review",
-        "current_source_authority_plasma_review",
-        "current_source_authority_publication_audit",
-        "source_archive_catalog",
+        "reviewed_f116_source_authority_evidence",
+        "reviewed_f116_source_authority_provenance_review",
+        "reviewed_f116_source_authority_plasma_review",
+        "reviewed_f116_source_authority_publication_audit",
         "qualification_approval",
     ):
         records.append((key, sources.get(key)))
     return records
+
+
+def load_verified_source_json(
+    verified_sources: dict[str, object], key: str, label: str
+) -> dict[str, object]:
+    """Load one already-bound JSON source and require unchanged exact bytes."""
+
+    binding = require_dict(verified_sources.get(key), f"{label} binding")
+    value, observed = load_json(Path(str(binding["path"])), label)
+    if observed != binding:
+        raise AcceptanceError(f"{label} changed after source-binding validation")
+    return value
+
+
+def validate_source_catalog_policy(
+    criteria: dict[str, object], verified_sources: dict[str, object]
+) -> dict[str, object]:
+    """Validate the immutable F116 baseline and optional exact F118 successor policy."""
+
+    catalog_policy = require_exact_keys(
+        criteria.get("source_catalog_policy"),
+        {
+            "selection_rule",
+            "baseline_checkpoint",
+            "baseline_catalog",
+            "successor_checkpoint",
+            "successor_paths",
+            "invalid_or_uncommitted_successor",
+        },
+        "source catalog policy",
+    )
+    expected_catalog_path = CANONICAL_CAMPAIGN_ROOT / "source-archives/SHA256SUMS"
+    baseline = require_exact_keys(
+        catalog_policy["baseline_catalog"], {"path", "sha256"}, "F116 baseline catalog"
+    )
+    if (
+        catalog_policy["selection_rule"]
+        != "immutable-reviewed-f116-baseline-or-exact-published-f118-successor"
+        or catalog_policy["baseline_checkpoint"] != "F-116"
+        or catalog_policy["successor_checkpoint"] != "F-118"
+        or catalog_policy["invalid_or_uncommitted_successor"] != "fail_closed"
+        or Path(str(baseline["path"])) != expected_catalog_path
+    ):
+        raise AcceptanceError("source catalog selection policy differs")
+    baseline_sha = require_sha256(baseline["sha256"], "F116 baseline catalog sha256")
+    f118_name = (
+        "mks24_stage_i_E03_forcing_policy_"
+        "F118_current_source_authority_supersession_evidence.json"
+    )
+    expected_successor_paths = {
+        "evidence": str(CANONICAL_CAMPAIGN_ROOT / "accounting" / f118_name),
+        "provenance_review": str(
+            CANONICAL_CAMPAIGN_ROOT
+            / "accounting"
+            / f"{f118_name}.provenance_security_review.json"
+        ),
+        "plasma_review": str(
+            CANONICAL_CAMPAIGN_ROOT
+            / "accounting"
+            / f"{f118_name}.plasma_scientific_review.json"
+        ),
+        "publication_audit": str(
+            CANONICAL_CAMPAIGN_ROOT
+            / "accounting"
+            / f"{f118_name}.publication_audit.json"
+        ),
+    }
+    if require_dict(catalog_policy["successor_paths"], "F118 successor paths") != (
+        expected_successor_paths
+    ):
+        raise AcceptanceError("source catalog F118 successor paths differ")
+
+    evidence = load_verified_source_json(
+        verified_sources,
+        "reviewed_f116_source_authority_evidence",
+        "reviewed F116 source-authority evidence",
+    )
+    audit = load_verified_source_json(
+        verified_sources,
+        "reviewed_f116_source_authority_publication_audit",
+        "reviewed F116 source-authority publication audit",
+    )
+    evidence_binding = require_dict(
+        verified_sources["reviewed_f116_source_authority_evidence"],
+        "reviewed F116 evidence binding",
+    )
+    provenance_binding = require_dict(
+        verified_sources["reviewed_f116_source_authority_provenance_review"],
+        "reviewed F116 provenance-review binding",
+    )
+    plasma_binding = require_dict(
+        verified_sources["reviewed_f116_source_authority_plasma_review"],
+        "reviewed F116 plasma-review binding",
+    )
+    if (
+        evidence.get("schema_version") != 1
+        or evidence.get("record_type")
+        != "stage-i-current-source-authority-supersession-evidence"
+        or evidence.get("checkpoint") != "F-116"
+        or evidence.get("execution_epoch") != CANONICAL_EXECUTION_EPOCH
+    ):
+        raise AcceptanceError("reviewed F116 source-authority evidence identity differs")
+    after = require_dict(
+        require_dict(evidence.get("source_archive_catalog"), "F116 source catalog").get(
+            "after"
+        ),
+        "F116 source catalog after",
+    )
+    audit_catalog = require_dict(
+        audit.get("source_archive_catalog"), "F116 publication-audit source catalog"
+    )
+    audit_reviews = require_dict(
+        audit.get("independent_reviews"), "F116 publication-audit reviews"
+    )
+    if (
+        require_sha256(after.get("sha256sums_sha256"), "F116 catalog after sha256")
+        != baseline_sha
+        or require_dict(audit_catalog.get("sha256sums"), "F116 audit SHA256SUMS").get(
+            "sha256"
+        )
+        != baseline_sha
+        or audit.get("schema_version") != 1
+        or audit.get("record_type")
+        != "stage-i-current-source-authority-supersession-publication-audit"
+        or audit.get("checkpoint") != "F-116"
+        or audit.get("execution_epoch") != CANONICAL_EXECUTION_EPOCH
+        or require_dict(audit.get("artifact"), "F116 audit artifact").get("sha256")
+        != evidence_binding["sha256"]
+        or audit_reviews.get("reviews_bind_exact_published_f116_sha256")
+        != evidence_binding["sha256"]
+        or require_dict(
+            audit_reviews.get("provenance_security"), "F116 audit provenance review"
+        ).get("sha256")
+        != provenance_binding["sha256"]
+        or require_dict(
+            audit_reviews.get("plasma_scientific_continuation"),
+            "F116 audit plasma review",
+        ).get("sha256")
+        != plasma_binding["sha256"]
+    ):
+        raise AcceptanceError("reviewed F116 source-authority baseline differs")
+    return catalog_policy
 
 
 def validate_criteria_payload(
@@ -472,6 +633,7 @@ def validate_criteria_payload(
     verified_sources: dict[str, object] = {}
     for label, record in source_binding_records(criteria):
         verified_sources[label] = verify_declared_binding(record, label)
+    source_catalog_policy = validate_source_catalog_policy(criteria, verified_sources)
 
     manifest_path = Path(
         str(require_dict(criteria["source_bindings"], "source_bindings")[
@@ -722,14 +884,12 @@ def validate_criteria_payload(
     generator = require_dict(
         products.get("reviewed_generator_binding"), "reviewed_generator_binding"
     )
-    if generator != {
-        "path": None,
-        "review_path": None,
-        "review_sha256": None,
-        "review_status": "changes_required",
-        "sha256": None,
-        "status": "unavailable_pending_companion_generator",
-    }:
+    expected_generator = {
+        "path": str(SCIENTIFIC_PRODUCTS_RELATIVE_PATH),
+        "sha256": verified_sources["scientific_products_generator"]["sha256"],
+        "status": "exact_replay_tool_bound",
+    }
+    if generator != expected_generator:
         raise AcceptanceError(
             "criteria reviewed scientific-products generator binding differs"
         )
@@ -786,6 +946,16 @@ def validate_criteria_payload(
         raise AcceptanceError("criteria acceptance utility path differs")
     if verified_sources["acceptance_utility"]["sha256"] != utility.get("sha256"):
         raise AcceptanceError("criteria acceptance utility digest differs")
+    if (
+        require_dict(
+            require_dict(criteria.get("source_bindings"), "source_bindings").get(
+                "scientific_products_generator"
+            ),
+            "scientific products generator source binding",
+        )
+        != {key: generator[key] for key in ("path", "sha256")}
+    ):
+        raise AcceptanceError("criteria scientific-products generator source binding differs")
 
     ct_policy = require_dict(criteria.get("ct_divb_policy"), "ct_divb_policy")
     required_state_times = [
@@ -796,6 +966,28 @@ def validate_criteria_payload(
     ]
     if required_state_times != [9.0, 10.0]:
         raise AcceptanceError("criteria CT required state times must be exactly 9 and 10")
+    ct_builder = require_dict(
+        ct_policy.get("reviewed_inventory_builder_binding"),
+        "reviewed CT inventory builder binding",
+    )
+    expected_ct_builder = {
+        "path": str(CT_INVENTORY_RELATIVE_PATH),
+        "sha256": verified_sources["ct_inventory_builder"]["sha256"],
+        "status": "exact_replay_tool_bound",
+    }
+    if (
+        ct_builder != expected_ct_builder
+        or ct_policy.get("inventory_replay_rule")
+        != "exact-deterministic-reconstruction-from-bound-accepted-bundle-required"
+        or require_dict(
+            require_dict(criteria.get("source_bindings"), "source_bindings").get(
+                "ct_inventory_builder"
+            ),
+            "CT inventory builder source binding",
+        )
+        != {key: ct_builder[key] for key in ("path", "sha256")}
+    ):
+        raise AcceptanceError("criteria CT inventory replay-tool policy differs")
 
     family = require_dict(criteria.get("family_gates"), "family_gates")
     lf_strength = require_dict(family.get("lf_strength"), "lf_strength")
@@ -824,7 +1016,85 @@ def validate_criteria_payload(
         "criteria_binding": criteria_binding,
         "manifest": manifest,
         "verified_sources": verified_sources,
+        "source_catalog_policy": source_catalog_policy,
     }
+
+
+def validate_replay_tool_promotion_review(
+    review: dict[str, object],
+    criteria: dict[str, object],
+    utility_binding: dict[str, object],
+) -> tuple[bool, str]:
+    """Validate the separate exact replay-tool implementation review."""
+
+    promotion = require_exact_keys(
+        review.get("replay_tool_promotion_review"),
+        {
+            "review_status",
+            "decision",
+            "reviewer",
+            "acceptance_utility",
+            "scientific_products_generator",
+            "ct_inventory_builder",
+            "required_checks",
+        },
+        "replay-tool promotion review",
+    )
+    sources = require_dict(criteria.get("source_bindings"), "criteria source bindings")
+    expected_bindings = {
+        "acceptance_utility": {
+            "path": str(UTILITY_RELATIVE_PATH),
+            "sha256": utility_binding["sha256"],
+        },
+        "scientific_products_generator": require_dict(
+            sources.get("scientific_products_generator"),
+            "scientific products generator source binding",
+        ),
+        "ct_inventory_builder": require_dict(
+            sources.get("ct_inventory_builder"), "CT inventory builder source binding"
+        ),
+    }
+    for key, expected in expected_bindings.items():
+        if promotion.get(key) != {
+            "path": expected["path"],
+            "sha256": expected["sha256"],
+        }:
+            raise AcceptanceError(f"replay-tool promotion {key} binding differs")
+    if promotion.get("required_checks") != [
+        "The acceptance utility invokes the exact bound scientific-products generator replay verifier and rejects any non-identical replay.",
+        "The acceptance utility invokes the exact bound CT inventory builder and rejects any inventory not exactly reconstructed from its bound accepted bundle.",
+        "The immutable reviewed F116 source-authority baseline remains valid, and any changed live source catalog requires the exact published F118 successor chain.",
+        "All replay and catalog-selection behavior remains non-authorizing and fails closed.",
+    ]:
+        raise AcceptanceError("replay-tool promotion required checks differ")
+    reviewer = require_exact_keys(
+        promotion.get("reviewer"),
+        {"role", "reviewer_id", "independent_of_implementation"},
+        "replay-tool promotion reviewer",
+    )
+    if reviewer.get("role") != "scientific_replay_security":
+        raise AcceptanceError("replay-tool promotion reviewer role differs")
+    status_value = promotion.get("review_status")
+    if status_value == "pending_independent_review":
+        if (
+            promotion.get("decision") != "pending"
+            or reviewer.get("reviewer_id") != "PENDING_INDEPENDENT_REVIEWER"
+            or reviewer.get("independent_of_implementation") is not None
+        ):
+            raise AcceptanceError("pending replay-tool promotion review is incoherent")
+        return False, status_value
+    if status_value == "approved":
+        reviewer_id = reviewer.get("reviewer_id")
+        if (
+            promotion.get("decision") != "approved"
+            or reviewer.get("independent_of_implementation") is not True
+            or not isinstance(reviewer_id, str)
+            or not reviewer_id
+            or reviewer_id == "PENDING_INDEPENDENT_REVIEWER"
+        ):
+            raise AcceptanceError("approved replay-tool promotion review is incoherent")
+        return True, status_value
+    raise AcceptanceError("replay-tool promotion review status is invalid")
 
 
 def validate_criteria_review(
@@ -844,6 +1114,13 @@ def validate_criteria_review(
         raise AcceptanceError("criteria review identity limitation differs")
     if review.get("non_authorizing_statement") != NON_AUTHORIZING_STATEMENT:
         raise AcceptanceError("criteria review non-authorizing statement differs")
+    if review.get("scientific_review_scope") != (
+        "The retained plasma-physics and statistical-methodology approvals apply only "
+        "to the unchanged scientific thresholds, windows, gates, and prospective t=12 "
+        "rule. Exact replay-tool and source-catalog promotion mechanics require the "
+        "separate replay_tool_promotion_review below."
+    ):
+        raise AcceptanceError("criteria review scientific scope differs")
     declared = require_dict(review.get("criteria"), "criteria review binding")
     if (
         require_sha256(declared.get("sha256"), "criteria review criteria sha256")
@@ -971,11 +1248,16 @@ def validate_criteria_review(
         raise AcceptanceError(
             "criteria review status and remaining requirements are incoherent"
         )
+    replay_tools_approved, replay_tools_review_status = (
+        validate_replay_tool_promotion_review(review, criteria, utility_binding)
+    )
     return {
         "review": review,
         "review_binding": review_binding,
         "approved": approved,
         "review_status": status_value,
+        "replay_tools_approved": replay_tools_approved,
+        "replay_tools_review_status": replay_tools_review_status,
     }
 
 
@@ -2024,18 +2306,9 @@ def load_csv_records(
     }
 
 
-def source_archive_catalog(policy: dict[str, object]) -> dict[str, str]:
-    """Return the exact current published source-archive checksum ledger."""
+def parse_source_archive_catalog(payload: bytes) -> dict[str, str]:
+    """Parse one exact active source-archive checksum ledger."""
 
-    binding = require_dict(
-        policy["verified_sources"].get("source_archive_catalog"),
-        "source archive catalog binding",
-    )
-    payload = read_stable_bytes(Path(str(binding["path"])), "source archive catalog")
-    if sha256_bytes(payload) != binding["sha256"]:
-        raise AcceptanceError(
-            "source archive checksum catalog differs from the verified binding"
-        )
     records: dict[str, str] = {}
     try:
         lines = payload.decode("utf-8").splitlines()
@@ -2048,6 +2321,368 @@ def source_archive_catalog(policy: dict[str, object]) -> dict[str, str]:
         records[match.group(2)] = match.group(1)
     if not records:
         raise AcceptanceError("source archive checksum catalog is empty")
+    return records
+
+
+def f116_source_authority_context(
+    policy: dict[str, object], catalog_binding: dict[str, object]
+) -> tuple[dict[str, object], list[dict[str, object]]]:
+    """Return the immutable reviewed F116 source-authority baseline."""
+
+    sources = policy["verified_sources"]
+    keys = (
+        "reviewed_f116_source_authority_evidence",
+        "reviewed_f116_source_authority_provenance_review",
+        "reviewed_f116_source_authority_plasma_review",
+        "reviewed_f116_source_authority_publication_audit",
+    )
+    authority = {
+        "checkpoint": "F-116",
+        **{key: sources[key] for key in keys},
+        "source_archive_catalog": catalog_binding,
+    }
+    return authority, [sources[key] for key in keys] + [catalog_binding]
+
+
+def f118_authorization_boundary() -> dict[str, bool]:
+    """Return the exact source-selection-only F118 authority boundary."""
+
+    return {
+        "current_source_selection_authorized": True,
+        "direct_sbatch_authorized": False,
+        "historical_manifest_rebinding_authorized": False,
+        "prepare_authorized": False,
+        "scheduler_mutation_authorized": False,
+        "scientific_configuration_change_authorized": False,
+        "source_authority_publication_authorized": True,
+        "stage_i_execution_state_mutation_authorized": False,
+        "submit_authorized": False,
+    }
+
+
+def exact_declared_path_digest(
+    record: object, expected_path: Path, expected_sha256: str, label: str
+) -> None:
+    """Require one declaration to bind an exact canonical path and digest."""
+
+    value = require_dict(record, label)
+    if (
+        resolve_bound_path(value.get("path")).resolve(strict=True)
+        != expected_path.resolve(strict=True)
+        or require_sha256(value.get("sha256"), f"{label} sha256") != expected_sha256
+    ):
+        raise AcceptanceError(f"{label} exact path or digest differs")
+
+
+def authenticate_f118_source_catalog(
+    policy: dict[str, object],
+    live_catalog_binding: dict[str, object],
+    records: dict[str, str],
+) -> tuple[dict[str, object], list[dict[str, object]]]:
+    """Authenticate the exact published F118 successor and its live catalog."""
+
+    successor_paths = {
+        key: Path(str(value))
+        for key, value in require_dict(
+            policy["source_catalog_policy"].get("successor_paths"),
+            "F118 successor paths",
+        ).items()
+    }
+    loaded: dict[str, dict[str, object]] = {}
+    bindings: dict[str, dict[str, object]] = {}
+    for key in ("evidence", "provenance_review", "plasma_review", "publication_audit"):
+        loaded[key], bindings[key] = load_json(
+            successor_paths[key], f"published F118 source-authority {key}"
+        )
+    evidence = require_exact_keys(
+        loaded["evidence"],
+        {
+            "schema_version",
+            "record_type",
+            "checkpoint",
+            "execution_epoch",
+            "generated_utc",
+            "scope",
+            "predecessor_authorities",
+            "implementation",
+            "source_archive_catalog",
+            "authorization",
+            "validation",
+            "publication_requirements",
+        },
+        "published F118 source-authority evidence",
+    )
+    audit = require_exact_keys(
+        loaded["publication_audit"],
+        {
+            "schema_version",
+            "record_type",
+            "checkpoint",
+            "execution_epoch",
+            "published_utc",
+            "artifact",
+            "independent_reviews",
+            "historical_f116_authority",
+            "source_archive_catalog",
+            "authority_and_enforcement",
+            "publication",
+        },
+        "published F118 source-authority audit",
+    )
+    authorization = f118_authorization_boundary()
+    if (
+        evidence["schema_version"] != 1
+        or evidence["record_type"]
+        != "stage-i-current-source-authority-supersession-evidence"
+        or evidence["checkpoint"] != "F-118"
+        or evidence["execution_epoch"] != CANONICAL_EXECUTION_EPOCH
+        or evidence["authorization"] != authorization
+        or audit["schema_version"] != 1
+        or audit["record_type"]
+        != "stage-i-current-source-authority-supersession-publication-audit"
+        or audit["checkpoint"] != "F-118"
+        or audit["execution_epoch"] != CANONICAL_EXECUTION_EPOCH
+        or audit["authority_and_enforcement"] != authorization
+        or audit["publication"]
+        != "recoverable-forward-transaction-with-publication-audit-commit-marker-under-stage-i-lock"
+    ):
+        raise AcceptanceError("published F118 source-authority identity or boundary differs")
+
+    f116_keys = {
+        "evidence": "reviewed_f116_source_authority_evidence",
+        "provenance_review": "reviewed_f116_source_authority_provenance_review",
+        "plasma_review": "reviewed_f116_source_authority_plasma_review",
+        "publication_audit": "reviewed_f116_source_authority_publication_audit",
+    }
+    f116_digests = {
+        key: policy["verified_sources"][source_key]["sha256"]
+        for key, source_key in f116_keys.items()
+    }
+    predecessor = require_exact_keys(
+        require_dict(
+            evidence["predecessor_authorities"], "F118 predecessor authorities"
+        ).get("historical_f116"),
+        set(f116_keys),
+        "F118 historical F116 authority",
+    )
+    for key, source_key in f116_keys.items():
+        if require_dict(predecessor[key], f"F118 predecessor F116 {key}").get(
+            "sha256"
+        ) != policy["verified_sources"][source_key]["sha256"]:
+            raise AcceptanceError("published F118 predecessor F116 digest differs")
+    if audit["historical_f116_authority"] != f116_digests:
+        raise AcceptanceError("published F118 audit F116 predecessor differs")
+
+    source_catalog = require_exact_keys(
+        evidence["source_archive_catalog"], {"before", "after"}, "F118 source catalog"
+    )
+    before = require_dict(source_catalog["before"], "F118 source catalog before")
+    after = require_dict(source_catalog["after"], "F118 source catalog after")
+    baseline_sha = policy["source_catalog_policy"]["baseline_catalog"]["sha256"]
+    if (
+        before.get("sha256sums_sha256") != baseline_sha
+        or after.get("sha256sums_sha256") != live_catalog_binding["sha256"]
+    ):
+        raise AcceptanceError("published F118 source catalog predecessor or successor differs")
+    implementation = require_dict(evidence["implementation"], "F118 implementation")
+    final = require_dict(
+        implementation.get("current_source_bundle"), "F118 current source bundle"
+    )
+    final_path_value = final.get("path")
+    if (
+        not isinstance(final_path_value, str)
+        or Path(final_path_value).is_absolute()
+        or Path(final_path_value).parts[:1] != ("source-archives",)
+        or ".." in Path(final_path_value).parts
+        or final.get("selected_as_current") is not True
+        or final.get("complete_history") is not True
+    ):
+        raise AcceptanceError("published F118 current source-bundle declaration differs")
+    final_sha = require_sha256(final.get("sha256"), "F118 current source bundle sha256")
+    final_head = require_revision(final.get("head"), "F118 current source bundle head")
+    verified_revisions = [
+        require_revision(value, "F118 current source bundle verified revision")
+        for value in require_list(
+            final.get("verified_revisions"), "F118 current source bundle verified revisions"
+        )
+    ]
+    if final_head not in verified_revisions:
+        raise AcceptanceError("published F118 current source bundle omits its head")
+    final_path = CANONICAL_CAMPAIGN_ROOT / final_path_value
+    final_binding = regular_file_binding(final_path, "published F118 current source bundle")
+    if final_binding["sha256"] != final_sha or records.get(final_path.name) != final_sha:
+        raise AcceptanceError("published F118 current source bundle differs from live catalog")
+
+    expected_review_verified = {
+        "authorization_broadening": False,
+        "bridge_selected_as_current": False,
+        "predecessor_current_source_bundle_selected_as_current": False,
+        "corrupt_c7_excluded": True,
+        "current_source_selection_only": True,
+        "final_bundle_sha256": final_sha,
+        "final_head": final_head,
+        "historical_f115_preserved": True,
+        "historical_f116_preserved": True,
+    }
+    reviewer_ids: set[str] = set()
+    for key, kind, decision in (
+        ("provenance_review", "provenance-security", "approved-for-publication"),
+        ("plasma_review", "plasma-scientific-continuation", "approved"),
+    ):
+        review = require_exact_keys(
+            loaded[key],
+            {
+                "schema_version",
+                "record_type",
+                "checkpoint",
+                "execution_epoch",
+                "review_kind",
+                "decision",
+                "reviewed_candidate",
+                "published_f118",
+                "reviewer",
+                "reviewed_utc",
+                "findings",
+                "limitations",
+                "verified",
+            },
+            f"published F118 {key}",
+        )
+        published = require_dict(review["published_f118"], f"published F118 {key} binding")
+        if (
+            review["schema_version"] != 1
+            or review["record_type"]
+            != "stage-i-current-source-authority-supersession-independent-review"
+            or review["checkpoint"] != "F-118"
+            or review["execution_epoch"] != CANONICAL_EXECUTION_EPOCH
+            or review["review_kind"] != kind
+            or review["decision"] != decision
+            or require_dict(review["reviewed_candidate"], "F118 reviewed candidate").get(
+                "sha256"
+            )
+            != bindings["evidence"]["sha256"]
+            or published
+            != {
+                "path": str(successor_paths["evidence"]),
+                "sha256": bindings["evidence"]["sha256"],
+            }
+            or review["verified"] != expected_review_verified
+        ):
+            raise AcceptanceError(f"published F118 {key} identity differs")
+        reviewer = require_exact_keys(
+            review["reviewer"], {"agent_id", "identity"}, f"published F118 {key} reviewer"
+        )
+        reviewer_id = reviewer.get("agent_id")
+        if not isinstance(reviewer_id, str) or not reviewer_id or reviewer_id in reviewer_ids:
+            raise AcceptanceError("published F118 independent reviewer identities differ")
+        reviewer_ids.add(reviewer_id)
+
+    exact_declared_path_digest(
+        audit["artifact"],
+        successor_paths["evidence"],
+        bindings["evidence"]["sha256"],
+        "published F118 audit artifact",
+    )
+    audit_reviews = require_exact_keys(
+        audit["independent_reviews"],
+        {
+            "reviews_bind_exact_published_f118_sha256",
+            "provenance_security",
+            "plasma_scientific_continuation",
+        },
+        "published F118 audit reviews",
+    )
+    if (
+        audit_reviews["reviews_bind_exact_published_f118_sha256"]
+        != bindings["evidence"]["sha256"]
+    ):
+        raise AcceptanceError("published F118 audit review evidence digest differs")
+    exact_declared_path_digest(
+        audit_reviews["provenance_security"],
+        successor_paths["provenance_review"],
+        bindings["provenance_review"]["sha256"],
+        "published F118 audit provenance review",
+    )
+    exact_declared_path_digest(
+        audit_reviews["plasma_scientific_continuation"],
+        successor_paths["plasma_review"],
+        bindings["plasma_review"]["sha256"],
+        "published F118 audit plasma review",
+    )
+    audit_catalog = require_dict(audit["source_archive_catalog"], "F118 audit source catalog")
+    exact_declared_path_digest(
+        audit_catalog.get("sha256sums"),
+        Path(str(live_catalog_binding["path"])),
+        str(live_catalog_binding["sha256"]),
+        "published F118 audit SHA256SUMS",
+    )
+    exact_declared_path_digest(
+        audit_catalog.get("readme"),
+        CANONICAL_CAMPAIGN_ROOT / "source-archives/README.md",
+        require_sha256(after.get("readme_sha256"), "F118 source catalog README sha256"),
+        "published F118 audit README",
+    )
+    audited_final = require_dict(
+        audit_catalog.get("current_source_bundle"), "F118 audit current source bundle"
+    )
+    if (
+        audited_final.get("path") != str(final_path)
+        or audited_final.get("sha256") != final_sha
+        or audited_final.get("head") != final_head
+        or audited_final.get("selected_as_current") is not True
+        or audit_catalog.get("sole_current_source_bundle") != str(final_path)
+        or after.get("sole_current_source_bundle") != final_path_value
+    ):
+        raise AcceptanceError("published F118 audit current source selection differs")
+    authority = {
+        "checkpoint": "F-118",
+        "source_authority_evidence": bindings["evidence"],
+        "source_authority_provenance_review": bindings["provenance_review"],
+        "source_authority_plasma_review": bindings["plasma_review"],
+        "source_authority_publication_audit": bindings["publication_audit"],
+        "source_archive_catalog": live_catalog_binding,
+        "current_source_bundle": final_binding,
+        "reviewed_f116_predecessor": f116_digests,
+    }
+    return authority, [*bindings.values(), live_catalog_binding, final_binding]
+
+
+def current_source_archive_catalog(
+    policy: dict[str, object],
+) -> tuple[dict[str, str], dict[str, object], list[dict[str, object]]]:
+    """Authenticate the live catalog as F116 baseline or exact published F118."""
+
+    catalog_path = Path(
+        str(policy["source_catalog_policy"]["baseline_catalog"]["path"])
+    )
+    payload = read_stable_bytes(catalog_path, "live source archive catalog")
+    catalog_binding = {
+        "path": str(catalog_path.resolve(strict=True)),
+        "size_bytes": len(payload),
+        "sha256": sha256_bytes(payload),
+    }
+    records = parse_source_archive_catalog(payload)
+    baseline_sha = policy["source_catalog_policy"]["baseline_catalog"]["sha256"]
+    audit_path = Path(
+        str(policy["source_catalog_policy"]["successor_paths"]["publication_audit"])
+    )
+    if catalog_binding["sha256"] == baseline_sha and not audit_path.exists():
+        authority, bindings = f116_source_authority_context(policy, catalog_binding)
+        return records, authority, bindings
+    if not audit_path.exists():
+        raise AcceptanceError(
+            "live source archive catalog differs from F116 without a published F118 successor"
+        )
+    authority, bindings = authenticate_f118_source_catalog(
+        policy, catalog_binding, records
+    )
+    return records, authority, bindings
+
+
+def source_archive_catalog(policy: dict[str, object]) -> dict[str, str]:
+    """Return the dynamically authenticated current source-archive ledger."""
+
+    records, _, _ = current_source_archive_catalog(policy)
     return records
 
 
@@ -2096,7 +2731,10 @@ def authenticate_canonical_accounting(
         policy["verified_sources"].get("qualification_approval"),
         "qualification approval binding",
     )
-    archive_catalog = source_archive_catalog(policy)
+    archive_catalog, current_authority, authority_bindings = (
+        current_source_archive_catalog(policy)
+    )
+    retained_bindings.extend(authority_bindings)
     for path, (segment, segment_binding) in zip(segment_paths, segment_records):
         accounting = require_dict(segment.get("accounting"), "canonical segment accounting")
         command = require_dict(segment.get("command"), "canonical segment command")
@@ -2224,17 +2862,7 @@ def authenticate_canonical_accounting(
             "controller_sha256": controller_sha,
             "source_bundle": source_bundle_bindings[source_path],
         })
-    current_authority = {
-        key: policy["verified_sources"][key]
-        for key in (
-            "current_source_authority_evidence",
-            "current_source_authority_provenance_review",
-            "current_source_authority_plasma_review",
-            "current_source_authority_publication_audit",
-            "source_archive_catalog",
-            "qualification_approval",
-        )
-    }
+    current_authority["qualification_approval"] = qualification
     return {
         "campaign_root": str(CANONICAL_CAMPAIGN_ROOT),
         "run_root": str(CANONICAL_RUN_ROOT),
@@ -2440,13 +3068,77 @@ def reviewed_scientific_products_available(policy: dict[str, object]) -> bool:
         products.get("reviewed_generator_binding"), "reviewed generator binding"
     )
     return (
-        generator.get("status") == "reviewed_available"
-        and generator.get("review_status") == "approved"
+        policy.get("replay_tools_approved") is True
+        and generator.get("status") == "exact_replay_tool_bound"
         and isinstance(generator.get("path"), str)
         and isinstance(generator.get("sha256"), str)
-        and isinstance(generator.get("review_path"), str)
-        and isinstance(generator.get("review_sha256"), str)
     )
+
+
+def reviewed_ct_inventory_builder_available(policy: dict[str, object]) -> bool:
+    """Return whether the exact CT inventory builder passed independent review."""
+
+    ct_policy = require_dict(policy["criteria"].get("ct_divb_policy"), "ct_divb_policy")
+    builder = require_dict(
+        ct_policy.get("reviewed_inventory_builder_binding"),
+        "reviewed CT inventory builder binding",
+    )
+    return (
+        policy.get("replay_tools_approved") is True
+        and builder.get("status") == "exact_replay_tool_bound"
+        and isinstance(builder.get("path"), str)
+        and isinstance(builder.get("sha256"), str)
+    )
+
+
+def load_exact_replay_tool(
+    policy: dict[str, object], source_key: str, label: str
+) -> object:
+    """Load one exact bound replay tool and revalidate its source bytes."""
+
+    binding = require_dict(policy["verified_sources"].get(source_key), f"{label} binding")
+    path = Path(str(binding["path"]))
+    before = regular_file_binding(path, label)
+    if before != binding:
+        raise AcceptanceError(f"{label} differs from its reviewed exact binding")
+    name = f"_cgl_lf_acceptance_{source_key}_{binding['sha256'][:16]}_{id(policy)}"
+    spec = importlib.util.spec_from_file_location(name, path)
+    if spec is None or spec.loader is None:
+        raise AcceptanceError(f"{label} cannot be loaded")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    try:
+        spec.loader.exec_module(module)
+    except Exception as error:
+        sys.modules.pop(name, None)
+        raise AcceptanceError(f"{label} failed to load: {error}") from error
+    after = regular_file_binding(path, label)
+    if after != before:
+        raise AcceptanceError(f"{label} changed while it was loaded")
+    return module
+
+
+def replay_scientific_products(
+    policy: dict[str, object],
+    diagnostics: dict[str, object],
+    diagnostics_binding: dict[str, object],
+) -> None:
+    """Require exact-byte deterministic replay of one scientific-products artifact."""
+
+    module = load_exact_replay_tool(
+        policy, "scientific_products_generator", "scientific-products generator"
+    )
+    replay = getattr(module, "replay_evidence", None)
+    if not callable(replay):
+        raise AcceptanceError("scientific-products generator lacks replay_evidence")
+    try:
+        recomputed, identical = replay(
+            Path(str(diagnostics_binding["path"])), str(diagnostics_binding["sha256"])
+        )
+    except Exception as error:
+        raise AcceptanceError(f"scientific-products deterministic replay failed: {error}") from error
+    if identical is not True or recomputed != diagnostics:
+        raise AcceptanceError("scientific-products deterministic replay is not exact")
 
 
 def validate_diagnostics_contract(
@@ -2457,6 +3149,7 @@ def validate_diagnostics_contract(
     bundle: dict[str, object] | None,
     mhd_binding: dict[str, object],
     user_binding: dict[str, object],
+    diagnostics_binding: dict[str, object] | None = None,
 ) -> tuple[dict[str, object] | None, dict[str, object]]:
     """Authenticate one exact-window replayed scientific-products artifact."""
 
@@ -2476,6 +3169,16 @@ def validate_diagnostics_contract(
             "inconclusive",
             reason=f"{window_name} scientific products are unavailable",
         )
+    if diagnostics_binding is None:
+        return None, gate(
+            gate_name,
+            "fail",
+            reason="scientific-products artifact lacks an exact external binding for replay",
+        )
+    try:
+        replay_scientific_products(policy, diagnostics, diagnostics_binding)
+    except AcceptanceError as error:
+        return None, gate(gate_name, "fail", reason=str(error))
     contract = diagnostics.get("scientific_acceptance_contract")
     if not isinstance(contract, dict):
         return None, gate(
@@ -3242,6 +3945,7 @@ def evaluate_case(
             bundle,
             mhd_binding,
             user_binding,
+            diagnostic_bindings_by_window.get(window_name),
         )
         trusted_diagnostics[window_name] = trusted
         diagnostics_gates.append(contract_gate)
@@ -4009,7 +4713,7 @@ def evaluate_campaign(
         reason=(
             "exact reviewed generator and deterministic replay contract are available"
             if products_available
-            else "companion scientific-products generator/review is unavailable or changes-required"
+            else "exact replay tools remain pending independent promotion review"
         ),
         observations=policy["criteria"]["scientific_products_policy"],
     ))
@@ -4854,6 +5558,39 @@ def load_bound_json(binding: object, label: str) -> tuple[dict[str, object], dic
     return value, observed
 
 
+def replay_ct_inventory(
+    policy: dict[str, object],
+    case_id: str,
+    inventory: dict[str, object],
+    bundle_binding: dict[str, object],
+    canonical_bundle: bool,
+) -> None:
+    """Require exact deterministic reconstruction by the reviewed CT builder."""
+
+    if not reviewed_ct_inventory_builder_available(policy):
+        raise AcceptanceError(
+            "the exact CT inventory builder remains pending independent replay review"
+        )
+    module = load_exact_replay_tool(
+        policy, "ct_inventory_builder", "CT inventory builder"
+    )
+    build = getattr(module, "build_ct_inventory", None)
+    if not callable(build):
+        raise AcceptanceError("CT inventory builder lacks build_ct_inventory")
+    try:
+        rebuilt = build(
+            policy,
+            case_id,
+            Path(str(bundle_binding["path"])),
+            str(bundle_binding["sha256"]),
+            "canonical" if canonical_bundle else "offline",
+        )
+    except Exception as error:
+        raise AcceptanceError(f"CT inventory deterministic replay failed: {error}") from error
+    if rebuilt != inventory or stable_json(rebuilt) != stable_json(inventory):
+        raise AcceptanceError("CT inventory differs from exact deterministic replay")
+
+
 def validate_ct_inventory(
     policy: dict[str, object],
     case_id: str,
@@ -5088,6 +5825,7 @@ def validate_ct_inventory(
         })
     if observed_times != required_times or len(set(observed_times)) != len(observed_times):
         raise AcceptanceError("restart CT inventory does not enumerate exact required states")
+    replay_ct_inventory(policy, case_id, inventory, bundle_binding, canonical_bundle)
     canonical_context: dict[str, object] | None = None
     if canonical_bundle:
         ordered_bundle_segments = [
@@ -5463,6 +6201,8 @@ def validate_criteria_evidence(policy: dict[str, object]) -> dict[str, object]:
         "release_authorizing": False,
         "criteria_review_status": policy["review_status"],
         "independent_review_complete": bool(policy["approved"]),
+        "replay_tool_promotion_review_status": policy["replay_tools_review_status"],
+        "replay_tools_approved": bool(policy["replay_tools_approved"]),
         "required_cases": policy["criteria"]["required_cases"],
         "admitted_panel_count": len(policy["criteria"]["comparison_panels"]),
         "provenance": {

@@ -215,11 +215,17 @@
   "ct_divb_policy": {
     "claim_scope": "sampled retained-state normalized CT-divB below the preregistered threshold",
     "historical_limitation": "The frozen E03 executable did not retain a full-time-history max_ndiv diagnostic. This audit cannot establish the maximum between retained restart states.",
+    "inventory_replay_rule": "exact-deterministic-reconstruction-from-bound-accepted-bundle-required",
     "normalized_ct_divb_lt": 1e-12,
     "required_state_times": [
       9,
       10
     ],
+    "reviewed_inventory_builder_binding": {
+      "path": "scripts/frontier/cgl_lf_stage_i_ct_inventory.py",
+      "sha256": "01dc383e88ed40236c839448df276533dfc4e024e7549adbbf29587eda4abade",
+      "status": "exact_replay_tool_bound"
+    },
     "restart_format": "AthenaK native little-endian binary64 rank-local CGL restart, uniform non-AMR three-dimensional mesh, exact accepted-inspection multi-state inventory-bound siblings"
   },
   "extension_policy": {
@@ -462,34 +468,35 @@
       "output_schema_version": 1
     },
     "reviewed_generator_binding": {
-      "path": null,
-      "review_path": null,
-      "review_sha256": null,
-      "review_status": "changes_required",
-      "sha256": null,
-      "status": "unavailable_pending_companion_generator"
+      "path": "scripts/frontier/cgl_lf_stage_i_scientific_products.py",
+      "sha256": "39dab2b3d5b3a0081d4fa77b9af555a5703894f5af52a712b8fa452a56c10672",
+      "status": "exact_replay_tool_bound"
+    }
+  },
+  "source_catalog_policy": {
+    "baseline_catalog": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/source-archives/SHA256SUMS",
+      "sha256": "a4732ea46003dc39d83591beaf93f5fe475dddf054c2eb57f76bda108fa80854"
+    },
+    "baseline_checkpoint": "F-116",
+    "invalid_or_uncommitted_successor": "fail_closed",
+    "selection_rule": "immutable-reviewed-f116-baseline-or-exact-published-f118-successor",
+    "successor_checkpoint": "F-118",
+    "successor_paths": {
+      "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/accounting/mks24_stage_i_E03_forcing_policy_F118_current_source_authority_supersession_evidence.json",
+      "plasma_review": "/lustre/orion/ast207/proj-shared/dfielding/CGL/accounting/mks24_stage_i_E03_forcing_policy_F118_current_source_authority_supersession_evidence.json.plasma_scientific_review.json",
+      "provenance_review": "/lustre/orion/ast207/proj-shared/dfielding/CGL/accounting/mks24_stage_i_E03_forcing_policy_F118_current_source_authority_supersession_evidence.json.provenance_security_review.json",
+      "publication_audit": "/lustre/orion/ast207/proj-shared/dfielding/CGL/accounting/mks24_stage_i_E03_forcing_policy_F118_current_source_authority_supersession_evidence.json.publication_audit.json"
     }
   },
   "source_bindings": {
     "acceptance_utility": {
       "path": "scripts/frontier/cgl_lf_stage_i_scientific_acceptance.py",
-      "sha256": "692d9aeb35b871b8da666732afbe2e60f62f44152c8cc8620bd522684584b8b8"
+      "sha256": "c73bd588e0b0dc0affaba83b539d56fbbfe67fb60bd2861966d26b1497d07ed9"
     },
-    "current_source_authority_evidence": {
-      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/accounting/mks24_stage_i_E03_forcing_policy_F115_source_bundle_recovery_supersession_evidence.json",
-      "sha256": "cb50beb064678a9446ac33801a0023547d06c432d8c59b6bd3fbe34b11cf0391"
-    },
-    "current_source_authority_plasma_review": {
-      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/accounting/mks24_stage_i_E03_forcing_policy_F115_source_bundle_recovery_supersession_evidence.json.plasma_scientific_review.json",
-      "sha256": "a78357ed90e593809b1a82a641d2b40d651b16569ec943fc1781940e569b8440"
-    },
-    "current_source_authority_provenance_review": {
-      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/accounting/mks24_stage_i_E03_forcing_policy_F115_source_bundle_recovery_supersession_evidence.json.provenance_security_review.json",
-      "sha256": "6fcd19f9267f36332742f1f103968098216bd8e6b42fa9821964ab8df704bacd"
-    },
-    "current_source_authority_publication_audit": {
-      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/accounting/mks24_stage_i_E03_forcing_policy_F115_source_bundle_recovery_supersession_evidence.json.publication_audit.json",
-      "sha256": "5923e3872b1d4a84a147bcd1d81fddc20ee79b72bfc410683d083039781f5b1f"
+    "ct_inventory_builder": {
+      "path": "scripts/frontier/cgl_lf_stage_i_ct_inventory.py",
+      "sha256": "01dc383e88ed40236c839448df276533dfc4e024e7549adbbf29587eda4abade"
     },
     "qualification_approval": {
       "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/accounting/mks24_stage_i_E03_forcing_policy_qualification_approval.json",
@@ -499,13 +506,29 @@
       "path": "build-cgl-implementation/cgl_lf_reference/arXiv-2405.02418v2/manifest.json",
       "sha256": "33dcfe81b270c8e26cf3b390c4af2dffa341fa2b9096308092ece2f3b2cb619a"
     },
+    "reviewed_f116_source_authority_evidence": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/accounting/mks24_stage_i_E03_forcing_policy_F116_current_source_authority_supersession_evidence.json",
+      "sha256": "6cdbf9e4d10f1282744c6274aa3ef08afec4c510420296837fdbbdfcefe30a2a"
+    },
+    "reviewed_f116_source_authority_plasma_review": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/accounting/mks24_stage_i_E03_forcing_policy_F116_current_source_authority_supersession_evidence.json.plasma_scientific_review.json",
+      "sha256": "bc4da6897263843f5d233f996539ff047d6ef465b775a9b5cdc8f864de96a6b8"
+    },
+    "reviewed_f116_source_authority_provenance_review": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/accounting/mks24_stage_i_E03_forcing_policy_F116_current_source_authority_supersession_evidence.json.provenance_security_review.json",
+      "sha256": "e9731aab8305505e058c68ae8bb61c9ec5ff4885bde1bee3162719c41ab9bafd"
+    },
+    "reviewed_f116_source_authority_publication_audit": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/accounting/mks24_stage_i_E03_forcing_policy_F116_current_source_authority_supersession_evidence.json.publication_audit.json",
+      "sha256": "3a6168e3039c02656b38ebdfcadffc07a2f151b1a474084307a80a341ba83096"
+    },
+    "scientific_products_generator": {
+      "path": "scripts/frontier/cgl_lf_stage_i_scientific_products.py",
+      "sha256": "39dab2b3d5b3a0081d4fa77b9af555a5703894f5af52a712b8fa452a56c10672"
+    },
     "stage_i_manifest": {
       "path": "inputs/cgl_lf_paper/mks24_stage_i_manifest.json",
       "sha256": "bf31b88b985d1ad4ffe823108dd7c1132bdfa4d5e4a6abde51f66bb7778415c9"
-    },
-    "source_archive_catalog": {
-      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/source-archives/SHA256SUMS",
-      "sha256": "89abcca70d61927a689eb2b62fdaea991257d8d335184059c2792731c13f5e21"
     },
     "verified_reference_archive_manifest": {
       "path": "build-cgl-implementation/cgl_lf_reference/arXiv-2405.02418v2-verified/manifest.json",

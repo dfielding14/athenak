@@ -1,11 +1,11 @@
 {
   "acceptance_utility": {
     "path": "scripts/frontier/cgl_lf_stage_i_scientific_acceptance.py",
-    "sha256": "692d9aeb35b871b8da666732afbe2e60f62f44152c8cc8620bd522684584b8b8"
+    "sha256": "c73bd588e0b0dc0affaba83b539d56fbbfe67fb60bd2861966d26b1497d07ed9"
   },
   "criteria": {
     "path": "inputs/cgl_lf_paper/mks24_stage_i_scientific_acceptance_criteria.json",
-    "sha256": "a26c5d54dca11c1ac13989b68c6ff9309e3b10b887fc07ffd7ef66e44fe335a9"
+    "sha256": "b544d5584b2076b126bc5318449ea033ce7071cb6fe6c3aa0881f2c3c744c954"
   },
   "identity_limitation": "Reviewer identity and process independence are declared evidence, not cryptographically proven.",
   "method_revision": {
@@ -30,6 +30,33 @@
   },
   "non_authorizing_statement": "This candidate is scientific assessment evidence only and does not authorize simulation execution, canonical publication, or Stage I release.",
   "record_type": "stage-i-scientific-acceptance-criteria-review",
+  "replay_tool_promotion_review": {
+    "acceptance_utility": {
+      "path": "scripts/frontier/cgl_lf_stage_i_scientific_acceptance.py",
+      "sha256": "c73bd588e0b0dc0affaba83b539d56fbbfe67fb60bd2861966d26b1497d07ed9"
+    },
+    "ct_inventory_builder": {
+      "path": "scripts/frontier/cgl_lf_stage_i_ct_inventory.py",
+      "sha256": "01dc383e88ed40236c839448df276533dfc4e024e7549adbbf29587eda4abade"
+    },
+    "decision": "pending",
+    "required_checks": [
+      "The acceptance utility invokes the exact bound scientific-products generator replay verifier and rejects any non-identical replay.",
+      "The acceptance utility invokes the exact bound CT inventory builder and rejects any inventory not exactly reconstructed from its bound accepted bundle.",
+      "The immutable reviewed F116 source-authority baseline remains valid, and any changed live source catalog requires the exact published F118 successor chain.",
+      "All replay and catalog-selection behavior remains non-authorizing and fails closed."
+    ],
+    "review_status": "pending_independent_review",
+    "reviewer": {
+      "independent_of_implementation": null,
+      "reviewer_id": "PENDING_INDEPENDENT_REVIEWER",
+      "role": "scientific_replay_security"
+    },
+    "scientific_products_generator": {
+      "path": "scripts/frontier/cgl_lf_stage_i_scientific_products.py",
+      "sha256": "39dab2b3d5b3a0081d4fa77b9af555a5703894f5af52a712b8fa452a56c10672"
+    }
+  },
   "retained_ct_observation": {
     "approval_identity_available": false,
     "case_id": "R02",
@@ -61,5 +88,6 @@
       "role": "statistical_methodology"
     }
   ],
+  "scientific_review_scope": "The retained plasma-physics and statistical-methodology approvals apply only to the unchanged scientific thresholds, windows, gates, and prospective t=12 rule. Exact replay-tool and source-catalog promotion mechanics require the separate replay_tool_promotion_review below.",
   "schema_version": 1
 }

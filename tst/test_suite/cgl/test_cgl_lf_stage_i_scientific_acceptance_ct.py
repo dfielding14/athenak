@@ -241,9 +241,11 @@ def write_restart(
 
 @pytest.fixture
 def policy():
-    return acceptance.load_validated_policy(
+    value = acceptance.load_validated_policy(
         acceptance.DEFAULT_CRITERIA, acceptance.DEFAULT_CRITERIA_REVIEW
     )
+    value["replay_tools_approved"] = True
+    return value
 
 
 def build_inventory(
@@ -387,6 +389,15 @@ def test_offline_multistate_inventory_tests_mechanics_but_is_non_authorizing(
         record["local_meshblocks"]
         for record in evidence["state_audits"][0]["restart_audits"]
     ] == [2, 3]
+
+
+def test_pending_independent_review_blocks_ct_inventory_replay(tmp_path):
+    pending = acceptance.load_validated_policy(
+        acceptance.DEFAULT_CRITERIA, acceptance.DEFAULT_CRITERIA_REVIEW
+    )
+    inventory_path, _ = build_inventory(pending, tmp_path, nmb_total=5, rank_count=2)
+    with pytest.raises(acceptance.AcceptanceError, match="pending independent replay review"):
+        acceptance.validate_ct_inventory(pending, "R02", inventory_path)
 
 
 def test_builder_deterministically_reconstructs_inventory_accepted_by_auditor(

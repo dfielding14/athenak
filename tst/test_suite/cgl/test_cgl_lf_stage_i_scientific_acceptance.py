@@ -251,10 +251,12 @@ def test_preregistered_criteria_bind_final_utility_and_completed_reviews(policy)
     ]["gap_policy"]
     assert policy["criteria"]["scientific_products_policy"]["reviewed_generator_binding"][
         "status"
-    ] == "unavailable_pending_companion_generator"
+    ] == "exact_replay_tool_bound"
+    assert policy["replay_tools_approved"] is False
+    assert policy["replay_tools_review_status"] == "pending_independent_review"
     assert "analyzer_contract" not in policy["criteria"]["source_bindings"]
-    assert policy["verified_sources"]["current_source_authority_evidence"]["sha256"] == (
-        "cb50beb064678a9446ac33801a0023547d06c432d8c59b6bd3fbe34b11cf0391"
+    assert policy["verified_sources"]["reviewed_f116_source_authority_evidence"]["sha256"] == (
+        "6cdbf9e4d10f1282744c6274aa3ef08afec4c510420296837fdbbdfcefe30a2a"
     )
     assert policy["review"]["retained_ct_observation"][
         "approval_identity_available"
@@ -263,6 +265,8 @@ def test_preregistered_criteria_bind_final_utility_and_completed_reviews(policy)
     acceptance.verify_evidence_digest(evidence, "criteria validation")
     assert evidence["valid"] is True
     assert evidence["independent_review_complete"] is True
+    assert evidence["replay_tool_promotion_review_status"] == "pending_independent_review"
+    assert evidence["replay_tools_approved"] is False
 
 
 def test_approved_review_schema_requires_exact_completed_reviews(policy):
@@ -282,6 +286,37 @@ def test_approved_review_schema_rejects_nonminimal_reviewer_record(policy):
     review = deepcopy(policy["review"])
     review["reviews"][0]["review_note"] = "not part of the approved minimal record"
     with pytest.raises(acceptance.AcceptanceError, match="reviewer records are incoherent"):
+        acceptance.validate_criteria_review(
+            review,
+            policy["review_binding"],
+            policy["criteria"],
+            policy["criteria_binding"],
+            policy["verified_sources"]["acceptance_utility"],
+        )
+
+
+def test_replay_tool_promotion_requires_exact_independent_approval(policy):
+    review = deepcopy(policy["review"])
+    promotion = review["replay_tool_promotion_review"]
+    promotion["review_status"] = "approved"
+    promotion["decision"] = "approved"
+    promotion["reviewer"] = {
+        "role": "scientific_replay_security",
+        "reviewer_id": "independent-replay-reviewer",
+        "independent_of_implementation": True,
+    }
+    validated = acceptance.validate_criteria_review(
+        review,
+        policy["review_binding"],
+        policy["criteria"],
+        policy["criteria_binding"],
+        policy["verified_sources"]["acceptance_utility"],
+    )
+    assert validated["approved"] is True
+    assert validated["replay_tools_approved"] is True
+
+    promotion["scientific_products_generator"]["sha256"] = "0" * 64
+    with pytest.raises(acceptance.AcceptanceError, match="generator binding differs"):
         acceptance.validate_criteria_review(
             review,
             policy["review_binding"],
@@ -879,23 +914,27 @@ def test_source_archive_catalog_parser_rejects_malformed_or_duplicate_rows(
 ):
     bad = tmp_path / "SHA256SUMS"
     bad.write_text(f"{'a' * 64}  one.bundle\n{'b' * 64}  one.bundle\n")
-    forged = deepcopy(policy)
-    forged["verified_sources"]["source_archive_catalog"] = (
-        acceptance.regular_file_binding(bad, "bad source catalog")
-    )
     with pytest.raises(acceptance.AcceptanceError, match="catalog is malformed"):
-        acceptance.source_archive_catalog(forged)
+        acceptance.parse_source_archive_catalog(bad.read_bytes())
 
 
-def test_source_archive_catalog_reauthenticates_verified_bytes(policy, tmp_path):
+def test_source_archive_catalog_reauthenticates_live_bytes_and_fails_without_f118(
+    policy, tmp_path
+):
     catalog = tmp_path / "SHA256SUMS"
     catalog.write_text(f"{'a' * 64}  first.bundle\n")
     forged = deepcopy(policy)
-    forged["verified_sources"]["source_archive_catalog"] = (
-        acceptance.regular_file_binding(catalog, "source catalog")
+    forged["source_catalog_policy"] = deepcopy(policy["source_catalog_policy"])
+    forged["source_catalog_policy"]["baseline_catalog"] = {
+        "path": str(catalog),
+        "sha256": sha256(catalog),
+    }
+    forged["source_catalog_policy"]["successor_paths"]["publication_audit"] = str(
+        tmp_path / "absent-F118-audit.json"
     )
+    assert acceptance.source_archive_catalog(forged) == {"first.bundle": "a" * 64}
     catalog.write_text(f"{'b' * 64}  second.bundle\n")
-    with pytest.raises(acceptance.AcceptanceError, match="differs from the verified binding"):
+    with pytest.raises(acceptance.AcceptanceError, match="without a published F118 successor"):
         acceptance.source_archive_catalog(forged)
 
 
@@ -966,6 +1005,77 @@ def test_hand_authored_diagnostics_never_pass_without_reviewed_generator(policy,
     )
     assert trusted is None
     assert result["result"] == "inconclusive"
+
+
+def test_promoted_scientific_products_pass_only_after_exact_replay(
+    policy, tmp_path, monkeypatch
+):
+    promoted = deepcopy(policy)
+    promoted["replay_tools_approved"] = True
+    mhd, user = histories(tmp_path / "history")
+    bundle_path = tmp_path / "bundle.json"
+    write_json(bundle_path, {"binding_only": True})
+    bundle = {"bundle_manifest": acceptance.regular_file_binding(bundle_path, "bundle")}
+    mhd_binding = acceptance.regular_file_binding(mhd, "MHD")
+    user_binding = acceptance.regular_file_binding(user, "user")
+    diagnostics = diagnostics_contract(
+        promoted, "R02", "full", bundle["bundle_manifest"], mhd_binding, user_binding
+    )
+    path = tmp_path / "products.json"
+    write_json(path, diagnostics)
+    binding = acceptance.regular_file_binding(path, "products")
+
+    trusted, result = acceptance.validate_diagnostics_contract(
+        promoted,
+        "R02",
+        "full",
+        diagnostics,
+        bundle,
+        mhd_binding,
+        user_binding,
+        binding,
+    )
+    assert trusted is None
+    assert result["result"] == "fail"
+    assert "deterministic replay failed" in result["reason"]
+
+    class ExactReplay:
+        @staticmethod
+        def replay_evidence(replay_path, expected_sha):
+            assert sha256(replay_path) == expected_sha
+            return json.loads(replay_path.read_text()), True
+
+    monkeypatch.setattr(
+        acceptance, "load_exact_replay_tool", lambda *_args, **_kwargs: ExactReplay()
+    )
+    trusted, result = acceptance.validate_diagnostics_contract(
+        promoted,
+        "R02",
+        "full",
+        diagnostics,
+        bundle,
+        mhd_binding,
+        user_binding,
+        binding,
+    )
+    assert trusted == diagnostics
+    assert result["result"] == "pass"
+
+    forged = deepcopy(diagnostics)
+    forged["cases"][acceptance.case_name(promoted, "R02")]["forged"] = True
+    trusted, result = acceptance.validate_diagnostics_contract(
+        promoted,
+        "R02",
+        "full",
+        forged,
+        bundle,
+        mhd_binding,
+        user_binding,
+        binding,
+    )
+    assert trusted is None
+    assert result["result"] == "fail"
+    assert "not exact" in result["reason"]
 
 
 def panel_comparison(policy, product_id: str, normalized_shift: float) -> dict[str, object]:
