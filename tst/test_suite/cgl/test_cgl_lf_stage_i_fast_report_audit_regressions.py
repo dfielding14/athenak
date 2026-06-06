@@ -160,6 +160,43 @@ def test_override_order_and_repetition_are_exact_lineage_identity(report):
     assert reversed_order != repeated
 
 
+def test_r15_nonfatal_hard_bound_warning_is_case_scoped(report):
+    mhd = {
+        "time": [0.0, 1.0],
+        "mass": [1.0, 1.0],
+        "lf_dfloor": [0.0, 0.0],
+        "lf_pfloor": [0.0, 0.0],
+        "lf_nonfin": [0.0, 0.0],
+        "lf_nonpos": [0.0, 0.0],
+        "lf_hardbd": [0.0, 2.0],
+    }
+    user = {
+        "time": [0.0, 1.0],
+        "mass": [1.0, 1.0],
+        "hard_vol": [0.0, 1.0],
+    }
+
+    health = report.compute_health(
+        {
+            "case_id": "R15",
+            "status": "complete",
+            "warnings": [],
+            "errors": [],
+            "lineage_variants": [report.NONFATAL_HARD_BOUND_VARIANT],
+        },
+        mhd,
+        user,
+        {"limiter_hardwall": "false"},
+    )
+
+    assert health["nonfatal_hard_bound_variant"] is True
+    assert health["numerical_warnings"] == []
+    assert any(
+        "nonfatal R15 diagnostic retained hard-bound events" in warning
+        for warning in health["science_warnings"]
+    )
+
+
 def test_assembly_preserves_ordered_repeated_overrides(
     report, tmp_path, monkeypatch
 ):

@@ -69,6 +69,7 @@ FATAL_FAILURE_COLUMNS = (
     "lf_nonpos",
 )
 NONFATAL_HARD_BOUND_VARIANT = "finite_limiter_hard_bound_diagnostic_nonfatal"
+NONFATAL_HARD_BOUND_CASES = ("R14", "R15")
 MONOTONIC_LF_COUNTERS = (
     "lf_nstage",
     "lf_dfloor",
@@ -990,9 +991,17 @@ def select_fast_lineage(
         target = float(manifest.get("target_time", TARGET_TIME))
         state = fast_candidate_state(terminal)
         variant, overrides = fast_candidate_configuration(terminal)
-        allowed_variant = variant in ("standard", NONFATAL_HARD_BOUND_VARIANT)
+        allowed_variant = (
+            variant == "standard"
+            or (
+                case_id in NONFATAL_HARD_BOUND_CASES
+                and variant == NONFATAL_HARD_BOUND_VARIANT
+            )
+        )
         variant_priority = (
-            2 if case_id == "R14" and variant == NONFATAL_HARD_BOUND_VARIANT
+            2
+            if case_id in NONFATAL_HARD_BOUND_CASES
+            and variant == NONFATAL_HARD_BOUND_VARIANT
             else int(allowed_variant)
         )
         mhd, user = history_paths(Path(terminal["output"]))
@@ -1676,8 +1685,9 @@ def compute_health(
     hard_bound_maximum = strict_maxima["lf_hardbd"]
     if hard_bound_maximum != 0.0:
         if nonfatal_hard_bound:
+            case_id = str(lineage.get("case_id", "finite-limiter"))
             science_warnings.append(
-                "nonfatal R14 diagnostic retained hard-bound events: "
+                f"nonfatal {case_id} diagnostic retained hard-bound events: "
                 f"lf_hardbd={hard_bound_maximum:.6g}"
             )
         else:
