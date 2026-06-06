@@ -15,6 +15,7 @@
 #include "athena.hpp"
 #include "mesh/mesh.hpp"
 #include "eos/eos.hpp"
+#include "eos/cgl_physics.hpp"
 #include "mhd/rsolvers/llf_mhd_singlestate.hpp"
 #include "parameter_input.hpp"
 #include "pgen/pgen.hpp"
@@ -78,6 +79,15 @@ void CheckFlowFlux(const std::string &label, const MHDCons1D &got,
   RequireClose(label + ".field-z", got.bz, expected.bz);
 }
 
+void CheckAdmissible(const std::string &label, const MHDPrim1D &state) {
+  const Real bsqr = kBx*kBx + state.by*state.by + state.bz*state.bz;
+  const Real paniso = state.pp - state.e;
+  Require(label + " above firehose hard bound",
+          !cgl::FirehoseHardBoundViolated(paniso, bsqr));
+  Require(label + " below mirror hard bound",
+          !cgl::MirrorHardBoundViolated(paniso, bsqr));
+}
+
 void CheckPassiveSignalAndFluxPaths(const EOS_Data &passive) {
   Require("CGL EOS enabled", passive.is_cgl);
   Require("passive CGL enabled", passive.passive);
@@ -97,9 +107,13 @@ void CheckPassiveSignalAndFluxPaths(const EOS_Data &passive) {
   const MHDPrim1D right_a =
       MakeState(0.83, -0.17, 0.09, -0.04, 0.7, 0.9, kBy - 0.12, -0.05);
   const MHDPrim1D left_b =
-      MakeState(1.21, 0.23, -0.11, 0.07, 6.0, 0.25, kBy, 0.08);
+      MakeState(1.21, 0.23, -0.11, 0.07, 1.5, 1.0, kBy, 0.08);
   const MHDPrim1D right_b =
-      MakeState(0.83, -0.17, 0.09, -0.04, 0.35, 4.5, kBy - 0.12, -0.05);
+      MakeState(0.83, -0.17, 0.09, -0.04, 1.2, 1.0, kBy - 0.12, -0.05);
+  CheckAdmissible("left state A", left_a);
+  CheckAdmissible("right state A", right_a);
+  CheckAdmissible("left state B", left_b);
+  CheckAdmissible("right state B", right_b);
 
   MHDCons1D ua{}, ub{}, fa{}, fb{};
   Real cfa = 0.0;

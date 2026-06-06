@@ -11,7 +11,7 @@ NX1 = 16
 CFL = 0.3
 ISO_CS = 0.7
 BX = math.sqrt(0.65)
-PRESSURE_STATES = ((1.0, 0.5), (6.0, 0.25))
+PRESSURE_STATES = ((1.0, 0.5), (1.5, 1.0))
 FLOW_FIELDS = ("dens", "velx", "vely", "velz", "bcc1", "bcc2", "bcc3")
 
 
@@ -156,6 +156,13 @@ def _initial_timestep(table, speed):
     return CFL * min(limits)
 
 
+def _assert_hard_bound_admissible(table, ppar, pperp):
+    for bx, by, bz in zip(table["bcc1"], table["bcc2"], table["bcc3"]):
+        b_squared = bx * bx + by * by + bz * bz
+        anisotropy = pperp - ppar
+        assert -1.5 * b_squared < anisotropy < b_squared
+
+
 def test_passive_cgl_fast_overload_isolated_from_flow_and_timestep(tmp_path):
     unit_build_dir = tmp_path / "unit-build"
     _run([
@@ -224,6 +231,8 @@ def test_passive_cgl_fast_overload_isolated_from_flow_and_timestep(tmp_path):
     initial_result = _run([str(executable), "-i", str(initial_input)], cwd=initial_dir)
     initial_table = _read_final_table(initial_dir)
     initial_timesteps = _diagnostic_timesteps(initial_result.stdout)
+    for pressure_state in PRESSURE_STATES:
+        _assert_hard_bound_admissible(initial_table, *pressure_state)
 
     results = []
     for index, (ppar, pperp) in enumerate(PRESSURE_STATES):
