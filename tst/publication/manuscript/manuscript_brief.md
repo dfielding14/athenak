@@ -432,6 +432,19 @@ These statements do not close a scientific claim.
   reconciliation, omitted deposition/output files from the candidate closure,
   and did not validate cycle-zero moments. No Q043 registered evidence is
   admissible until a hardened successor closes those defects.
+- The deterministic Q043 launch/policy preparation successor is planning
+  evidence only. Its 132-case matrix cannot run or qualify until the hardened
+  installed reconciliation/admission path, final clean candidate, live
+  preflight, policy promotion, and empty-user-queue gate all close.
+- Independent review found that the current corrected Q019 candidate cannot
+  support nonlinear-saturation claims: its HR large-box control is an exact
+  tiled replication, its FR 3D kinetic scale is under-resolved, particle noise
+  overwhelms the intended magnetic seed, finite-rigidity early evolution is
+  unvalidated, and the trusted raw-evidence path is incomplete.
+- The Q009 dynamic-AMR/load-balance pilot now has a fail-closed five-case
+  contract, but no materializer, trusted telemetry/admission path, live policy
+  slice, or execution evidence. It does not qualify production AMR or extend
+  uniform-mesh exact-conservation claims.
 - A large inventory of bounded evidence can obscure the central argument unless
   the manuscript preserves evidence hierarchy and scope.
 - The central Bell and shock campaigns may remain blocked by prerequisites,
