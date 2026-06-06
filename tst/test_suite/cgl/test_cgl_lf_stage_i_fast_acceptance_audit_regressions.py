@@ -51,6 +51,15 @@ def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def plain_binding(path: Path) -> dict[str, object]:
+    resolved = path.resolve()
+    return {
+        "path": str(resolved),
+        "size_bytes": resolved.stat().st_size,
+        "sha256": sha256(resolved),
+    }
+
+
 def matrix_cases() -> dict[str, dict[str, object]]:
     manifest = json.loads(MATRIX.read_text(encoding="utf-8"))
     return {str(case["id"]): case for case in manifest["cases"]}
@@ -133,6 +142,8 @@ def lineage_fixture(
     overrides: list[str] | None = None,
 ) -> dict[str, object]:
     mhd, user = history_fixture(root, counters=counters, final_time=final_time)
+    executable = root / "qualified-athena"
+    executable.write_bytes(b"qualified executable fixture\n")
     selected_overrides = overrides or []
     matrix_case = matrix_cases()[case_id]
     input_path = REPOSITORY / str(matrix_case["input"])
@@ -157,7 +168,9 @@ def lineage_fixture(
         "lineage_identities": {
             "input_sha256": [sha256(input_path)],
             "matrix_sha256": [sha256(MATRIX)],
+            "executable_sha256": [sha256(executable)],
         },
+        "test_qualified_executable": plain_binding(executable),
         "histories": {
             "mhd": history_record(mhd),
             "user": history_record(user),
@@ -165,8 +178,11 @@ def lineage_fixture(
     }
 
 
-def policy_fixture(required: list[str] | None = None) -> dict[str, object]:
-    return {
+def policy_fixture(
+    required: list[str] | None = None,
+    lineage: dict[str, object] | None = None,
+) -> dict[str, object]:
+    policy = {
         "criteria_binding": {"path": "criteria.json", "sha256": "c" * 64},
         "review_binding": {"path": "review.json", "sha256": "d" * 64},
         "manifest": json.loads(MATRIX.read_text(encoding="utf-8")),
@@ -204,6 +220,23 @@ def policy_fixture(required: list[str] | None = None) -> dict[str, object]:
             },
         },
     }
+    if lineage is not None:
+        executable = lineage["test_qualified_executable"]
+        approval_path = Path(str(executable["path"])).parent / "qualification.json"
+        write_json(
+            approval_path,
+            {
+                "schema_version": 1,
+                "execution_epoch": "E03-forcing-policy",
+                "approved_executable": executable["path"],
+                "approved_executable_sha256": executable["sha256"],
+                "approved_executable_revision": "fixture-revision",
+            },
+        )
+        policy["verified_sources"]["qualification_approval"] = plain_binding(
+            approval_path
+        )
+    return policy
 
 
 class FakeAcceptanceError(RuntimeError):
@@ -231,6 +264,26 @@ class FakeAcceptance:
     @staticmethod
     def canonical_bundle_path(case_id: str) -> Path:
         return Path(f"/nonexistent/canonical/{case_id}/manifest.json")
+
+    @staticmethod
+    def authenticate_case_bundle(
+        _policy: dict[str, object],
+        case_id: str,
+        bundle_path: Path,
+        _mhd_binding: dict[str, object],
+        _user_binding: dict[str, object],
+    ) -> tuple[dict[str, object], list[dict[str, object]], dict[str, object]]:
+        bundle = {
+            "bundle_manifest": plain_binding(bundle_path),
+            "case_id": case_id,
+            "canonical_campaign_authority_eligible": False,
+        }
+        return bundle, [bundle["bundle_manifest"]], {
+            "name": "accepted_case_bundle_lineage",
+            "result": "pass",
+            "reason": "fixture accepted bundle authenticated",
+            "observations": bundle,
+        }
 
     def load_history(
         self, path: Path, _label: str
@@ -443,6 +496,29 @@ class FakeSnapshotAnalyzer:
     ) -> dict[str, object]:
         return dict(self.ensemble)
 
+    @staticmethod
+    def validate_snapshot_provenance_record(
+        provenance: object, _context: str
+    ) -> dict[str, object]:
+        assert isinstance(provenance, dict)
+        assert provenance["layout"] == "single_file"
+        assert provenance["expected_rank_count"] == 1
+        assert provenance["rank_directory_names"] == []
+        assert provenance["representative_path"] == provenance["files"][0]["path"]
+        return provenance
+
+    @staticmethod
+    def revalidate_snapshot_provenance_record(
+        provenance: dict[str, object], expected_ranks: int, _context: str
+    ) -> None:
+        assert expected_ranks == 1
+        assert provenance["files"] == [
+            {
+                **plain_binding(Path(str(provenance["representative_path"]))),
+                "symlink_target": None,
+            }
+        ]
+
 
 class FakeReport:
     """Replay fixture for direct-fast history and snapshot diagnostics."""
@@ -459,6 +535,114 @@ class FakeReport:
     def window_summaries(self, *_args) -> dict[str, object]:
         return self.windows
 
+    @staticmethod
+    def merge_histories(
+        sources: list[tuple[str, Path]], destination: Path, _label: str
+    ) -> dict[str, object]:
+        assert len(sources) == 1
+        destination.write_bytes(sources[0][1].read_bytes())
+        return {"available": True, "errors": []}
+
+
+def add_authenticated_execution_fixture(
+    fast_acceptance,
+    root: Path,
+    policy: dict[str, object],
+    lineage: dict[str, object],
+) -> None:
+    """Add one exact accepted-bundle or qualified-fast execution lineage."""
+
+    case_id = str(lineage["case_id"])
+    histories = lineage["histories"]
+    source_bindings: dict[str, dict[str, object]] = {}
+    if case_id == "R02":
+        bundle_manifest = root / "accepted-bundle/manifest.json"
+        write_json(bundle_manifest, {"fixture": "accepted R02 bundle"})
+        for kind in ("mhd", "user"):
+            source = bundle_manifest.parent / "history" / f"accepted.{kind}.hst"
+            source.parent.mkdir(parents=True, exist_ok=True)
+            source.write_bytes(Path(str(histories[kind]["path"])).read_bytes())
+            source_bindings[kind] = plain_binding(source)
+            histories[kind]["sources"] = [source_bindings[kind]]
+        lineage["lineage"] = [{
+            "kind": "accepted_r02_bundle",
+            "order": 0,
+            "segment": "R02 accepted bundle",
+            "output": str(bundle_manifest.parent),
+            "manifest": plain_binding(bundle_manifest),
+            "mhd_history": source_bindings["mhd"]["path"],
+            "user_history": source_bindings["user"]["path"],
+        }]
+        return
+
+    executable = lineage["test_qualified_executable"]
+    approval_path = Path(str(executable["path"])).parent / "qualification.json"
+    write_json(
+        approval_path,
+        {
+            "schema_version": 1,
+            "execution_epoch": "E03-forcing-policy",
+            "approved_executable": executable["path"],
+            "approved_executable_sha256": executable["sha256"],
+            "approved_executable_revision": "fixture-revision",
+        },
+    )
+    policy["verified_sources"]["qualification_approval"] = plain_binding(approval_path)
+
+    segment = root / "selected-fast" / case_id / "fast_s000_t0_to_t10"
+    output = segment / "output"
+    output.mkdir(parents=True)
+    for kind in ("mhd", "user"):
+        source = output / f"selected.{kind}.hst"
+        source.write_bytes(Path(str(histories[kind]["path"])).read_bytes())
+        source_bindings[kind] = plain_binding(source)
+        histories[kind]["sources"] = [source_bindings[kind]]
+    variants = lineage.get("lineage_variants", [])
+    variant = variants[0] if variants else None
+    overrides = list(lineage.get("lineage_command_line_overrides", []))
+    manifest_path = segment / "manifest/fast_run.json"
+    write_json(
+        manifest_path,
+        {
+            "schema_version": 1,
+            "case_id": case_id,
+            "case_name": lineage["case_name"],
+            "input": lineage["input"]["path"],
+            "input_sha256": lineage["lineage_identities"]["input_sha256"][0],
+            "matrix_sha256": lineage["lineage_identities"]["matrix_sha256"][0],
+            "executable": executable["path"],
+            "executable_sha256": executable["sha256"],
+            "run_dir": str(segment),
+            "output_dir": str(output),
+            "sequence": 0,
+            "start_time": 0.0,
+            "target_time": 10.0,
+            "restart": None,
+            "restart_sha256": None,
+            "variant": variant,
+            "command_line_overrides": overrides,
+        },
+    )
+    exit_path = segment / "manifest/run_exit_code"
+    exit_path.write_text("0\n", encoding="utf-8")
+    lineage["lineage"] = [{
+        "kind": "fast",
+        "order": 0,
+        "segment": "fast_s000_t0_to_t10",
+        "segment_dir": str(segment),
+        "output": str(output),
+        "observed_final_time": 10.0,
+        "manifest": plain_binding(manifest_path),
+        "input_sha256": lineage["lineage_identities"]["input_sha256"][0],
+        "matrix_sha256": lineage["lineage_identities"]["matrix_sha256"][0],
+        "executable_sha256": executable["sha256"],
+        "variant": variant,
+        "command_line_overrides": overrides,
+        "run_exit_code": 0,
+        "run_exit_code_artifact": plain_binding(exit_path),
+        "mhd_history": source_bindings["mhd"]["path"],
+        "user_history": source_bindings["user"]["path"],
+    }]
 
 def write_complete_diagnostics(
     fast_acceptance,
@@ -471,12 +655,30 @@ def write_complete_diagnostics(
     snapshot_index = case_dir / "snapshots.json"
     snapshot_source = case_dir / "snapshot.athdf"
     snapshot_source.write_bytes(b"snapshot fixture\n")
-    write_json(snapshot_index, {"schema_version": 1, "snapshots": ["fixture"]})
-    source_binding = fast_acceptance.binding(snapshot_source)
+    write_json(
+        snapshot_index,
+        {
+            "schema_version": 1,
+            "snapshots": [{
+                "complete": True,
+                "time": 9.0,
+                "expected_ranks": 1,
+                "representative": str(snapshot_source.resolve()),
+            }],
+        },
+    )
+    source_binding = {
+        **fast_acceptance.binding(snapshot_source),
+        "symlink_target": None,
+    }
     files = [source_binding]
     provenance = {
         "files": files,
+        "layout": "single_file",
         "expected_rank_count": 1,
+        "rank_directory_names": [],
+        "representative_path": str(snapshot_source.resolve()),
+        "snapshot_time": 9.0,
         "aggregate_sha256": hashlib.sha256(
             fast_acceptance.canonical_json_bytes(files)
         ).hexdigest(),
@@ -499,16 +701,23 @@ def write_complete_diagnostics(
             "schema_version": 1,
             "case_id": lineage["case_id"],
             "case_name": lineage["case_name"],
+            "assembly_status": "complete",
             "analysis_status": "complete",
+            "model_choices": lineage["model_choices"],
+            "health": {"result": "clean", "structural_errors": []},
+            "selected_snapshot_count": 1,
             "snapshot_analysis_status": "complete",
+            "analysis_errors": [],
             "windows": windows,
             "snapshots": {
-                "fixture": {
+                str(snapshot_source.resolve()): {
+                    "time": 9.0,
                     "snapshot_provenance": provenance,
                 },
             },
             "snapshot_ensemble": ensemble,
             "compat": {
+                "analysis_window": {"time_start": 8.0, "time_end": 10.0},
                 "snapshot_ensemble": ensemble,
             },
             "provenance": {
@@ -536,6 +745,7 @@ def add_r15_strict_failure_fixture(
 
     segment = root / "runs/strict/R15/fast_s000_t0_to_t10"
     manifest = segment / "manifest/fast_run.json"
+    executable = lineage["test_qualified_executable"]
     write_json(
         manifest,
         {
@@ -544,10 +754,19 @@ def add_r15_strict_failure_fixture(
             "case_id": "R15",
             "case_name": matrix_cases()["R15"]["name"],
             "job_id": "4771183",
+            "run_dir": str(segment.absolute()),
+            "output_dir": str((segment / "output").absolute()),
+            "sequence": 0,
+            "start_time": 0.0,
+            "target_time": 10.0,
+            "slurm_log": str(root.absolute() / "logs/slurm-fast/%x.%j.log"),
             "variant": variant,
             "command_line_overrides": [],
+            "input": lineage["input"]["path"],
+            "executable": executable["path"],
             "input_sha256": lineage["lineage_identities"]["input_sha256"][0],
             "matrix_sha256": lineage["lineage_identities"]["matrix_sha256"][0],
+            "executable_sha256": executable["sha256"],
         },
     )
     (segment / "manifest/run_exit_code").write_text("143\n", encoding="utf-8")
@@ -581,9 +800,16 @@ def summarize(
     complete_diagnostics: bool = False,
     monkeypatch=None,
 ) -> tuple[dict[str, object], dict[str, object] | None]:
-    selected_policy = policy or policy_fixture([case_id])
+    selected_policy = policy or policy_fixture([case_id], lineage)
     case_dir = tmp_path / "report" / "cases" / case_id
     lineage_path = case_dir / "lineage.json"
+    if complete_diagnostics:
+        add_authenticated_execution_fixture(
+            fast_acceptance,
+            tmp_path / "execution-fixture",
+            selected_policy,
+            lineage,
+        )
     write_json(lineage_path, lineage)
     if complete_diagnostics:
         assert monkeypatch is not None
@@ -743,6 +969,74 @@ def test_declared_history_binding_mismatch_is_rejected(fast_acceptance, tmp_path
     assert any("sha256" in error or "binding" in error for error in errors)
 
 
+def test_standard_r15_is_not_admitted_to_campaign_claim_scope(
+    fast_acceptance, tmp_path
+):
+    lineage = lineage_fixture(tmp_path / "lineage", case_id="R15")
+    policy = policy_fixture(["R15"])
+
+    errors = fast_acceptance.lineage_identity_errors(
+        FakeAcceptance(policy),
+        policy,
+        "R15",
+        lineage,
+        {"path": "fixture-lineage.json"},
+    )
+    scope = fast_acceptance.scientific_scope("R15", lineage)
+
+    assert any("exact admitted variant" in error for error in errors)
+    assert scope["classification"] == "r15_variant_not_authenticated"
+    assert scope["campaign_interpretation_eligible"] is False
+
+
+def test_qualified_executable_mismatch_blocks_execution_lineage(
+    fast_acceptance, tmp_path
+):
+    lineage = lineage_fixture(tmp_path / "lineage", case_id="R03")
+    policy = policy_fixture(["R03"], lineage)
+    add_authenticated_execution_fixture(
+        fast_acceptance, tmp_path / "execution-fixture", policy, lineage
+    )
+    manifest_path = Path(str(lineage["lineage"][0]["manifest"]["path"]))
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["executable_sha256"] = "0" * 64
+    write_json(manifest_path, manifest)
+    lineage["lineage"][0]["manifest"] = plain_binding(manifest_path)
+    acceptance = FakeAcceptance(policy)
+    _histories, bindings, errors = fast_acceptance.load_histories(acceptance, lineage)
+    assert not errors
+
+    with pytest.raises(fast_acceptance.FastAcceptanceError, match="manifest differs"):
+        fast_acceptance.direct_fast_execution_lineage_evidence(
+            acceptance, policy, "R03", lineage, bindings
+        )
+
+
+def test_merged_history_must_match_exact_source_replay(fast_acceptance, tmp_path):
+    lineage = lineage_fixture(tmp_path / "lineage", case_id="R03")
+    policy = policy_fixture(["R03"], lineage)
+    add_authenticated_execution_fixture(
+        fast_acceptance, tmp_path / "execution-fixture", policy, lineage
+    )
+    merged = Path(str(lineage["histories"]["user"]["path"]))
+    merged.write_text(merged.read_text(encoding="utf-8") + "# attacker row\n")
+    lineage["histories"]["user"]["binding"] = plain_binding(merged)
+    acceptance = FakeAcceptance(policy)
+    _histories, bindings, errors = fast_acceptance.load_histories(acceptance, lineage)
+    assert not errors
+    report = FakeReport({}, {})
+
+    original = fast_acceptance.load_report_module
+    fast_acceptance.load_report_module = lambda: report
+    try:
+        with pytest.raises(fast_acceptance.FastAcceptanceError, match="exact replay"):
+            fast_acceptance.direct_fast_execution_lineage_evidence(
+                acceptance, policy, "R03", lineage, bindings
+            )
+    finally:
+        fast_acceptance.load_report_module = original
+
+
 def test_failed_complete_cases_are_excluded_from_reviewed_comparisons(
     fast_acceptance, tmp_path
 ):
@@ -805,6 +1099,8 @@ def test_failed_complete_cases_are_excluded_from_reviewed_comparisons(
     limiter_gate = gate_by_name["finite_limiter_ordering:R15_gt_R14"]
     assert "R14" not in reviewed_gate["observations"]["available_cases"]
     assert limiter_gate["result"] == "inconclusive"
+    assert "R14" not in campaign["claim_scope"]["claim_grade_cases"]
+    assert gate_by_name["explicit_claim_scope"]["result"] == "fail"
 
 
 def test_comparison_gates_require_pass_case_comparison_evidence(fast_acceptance):
@@ -848,8 +1144,8 @@ def test_complete_case_statistics_use_authenticated_forcing_tcorr(
 
     summary, comparison = summarize(fast_acceptance, tmp_path, "R02", lineage)
 
-    assert comparison is not None
-    assert comparison["minimum_block_duration"] == pytest.approx(2.0)
+    assert comparison is None
+    assert summary["comparison_evidence"]["result"] == "inconclusive"
     statistics = summary["history_statistics"]["kinetic"]["windows"]["full"][
         "statistics"
     ]
@@ -882,10 +1178,20 @@ def test_complete_direct_fast_science_is_claim_grade_without_canonical_package(
     assert evidence["authority"] == "non-authorizing-direct-fast-scientific-assessment"
     assert evidence["release_authorizing"] is False
     assert evidence["campaign_authority_eligible"] is False
-    assert evidence["evaluation_inputs"]["accepted_bundle_manifest"] is None
+    assert evidence["evaluation_inputs"]["accepted_bundle_manifest"]["sha256"] == sha256(
+        tmp_path / "execution-fixture/accepted-bundle/manifest.json"
+    )
     assert evidence["evaluation_inputs"]["diagnostics"]["direct_fast_complete"][
         "sha256"
     ] == sha256(tmp_path / "report/cases/R02/diagnostics.json")
+    gate_results = {gate["name"]: gate["result"] for gate in evidence["gates"]}
+    assert gate_results["direct_fast_execution_lineage"] == "pass"
+    assert gate_results["direct_fast_complete_diagnostics"] == "pass"
+    assert gate_results["sampled_restart_ct_divb"] == "blocked_out_of_scope"
+    assert gate_results["canonical_comparison_panel_products"] == "blocked_out_of_scope"
+    assert "sampled-restart CT divergence evidence" in evidence[
+        "scientific_kernel_scope"
+    ]["excluded_from_direct_fast_assessment"]
 
 
 def test_direct_fast_claim_grade_uses_reviewed_active_energy_gate(
@@ -926,7 +1232,11 @@ def test_stale_direct_fast_diagnostics_cannot_become_claim_grade(
     fast_acceptance, tmp_path, monkeypatch
 ):
     lineage = lineage_fixture(tmp_path / "lineage", case_id="R02")
+    policy = policy_fixture(["R02"], lineage)
     case_dir = tmp_path / "report/cases/R02"
+    add_authenticated_execution_fixture(
+        fast_acceptance, tmp_path / "execution-fixture", policy, lineage
+    )
     write_json(case_dir / "lineage.json", lineage)
     report = write_complete_diagnostics(fast_acceptance, case_dir, lineage)
     monkeypatch.setattr(fast_acceptance, "load_report_module", lambda: report)
@@ -936,8 +1246,8 @@ def test_stale_direct_fast_diagnostics_cannot_become_claim_grade(
     write_json(diagnostics_path, diagnostics)
 
     summary, comparison = fast_acceptance.summarize_case(
-        FakeAcceptance(policy_fixture(["R02"])),
-        policy_fixture(["R02"]),
+        FakeAcceptance(policy),
+        policy,
         "R02",
         lineage,
         fast_acceptance.binding(case_dir / "lineage.json"),
@@ -948,7 +1258,44 @@ def test_stale_direct_fast_diagnostics_cannot_become_claim_grade(
     assert summary["result"] == "inconclusive"
     assert summary["reviewed_case_evidence"]["binding"] is None
     assert "declared binding differs" in summary["reviewed_case_evidence"]["reason"]
-    assert comparison is not None and comparison["result"] == "pass"
+    assert comparison is None
+
+
+def test_snapshot_index_mismatch_cannot_become_claim_grade(
+    fast_acceptance, tmp_path, monkeypatch
+):
+    lineage = lineage_fixture(tmp_path / "lineage", case_id="R02")
+    policy = policy_fixture(["R02"], lineage)
+    case_dir = tmp_path / "report/cases/R02"
+    add_authenticated_execution_fixture(
+        fast_acceptance, tmp_path / "execution-fixture", policy, lineage
+    )
+    write_json(case_dir / "lineage.json", lineage)
+    report = write_complete_diagnostics(fast_acceptance, case_dir, lineage)
+    monkeypatch.setattr(fast_acceptance, "load_report_module", lambda: report)
+    snapshot_index = case_dir / "snapshots.json"
+    index = json.loads(snapshot_index.read_text(encoding="utf-8"))
+    index["snapshots"][0]["expected_ranks"] = 2
+    write_json(snapshot_index, index)
+    diagnostics_path = case_dir / "diagnostics.json"
+    diagnostics = json.loads(diagnostics_path.read_text(encoding="utf-8"))
+    diagnostics["provenance"]["snapshot_index"] = plain_binding(snapshot_index)
+    write_json(diagnostics_path, diagnostics)
+
+    summary, comparison = fast_acceptance.summarize_case(
+        FakeAcceptance(policy),
+        policy,
+        "R02",
+        lineage,
+        plain_binding(case_dir / "lineage.json"),
+        "fixture",
+        tmp_path / "acceptance/cases/R02",
+    )
+
+    assert summary["result"] == "inconclusive"
+    assert summary["reviewed_case_evidence"]["binding"] is None
+    assert "snapshot provenance differs" in summary["reviewed_case_evidence"]["reason"]
+    assert comparison is None
 
 
 def test_r10_remains_exploratory_with_complete_direct_fast_science(
@@ -971,7 +1318,7 @@ def test_r10_remains_exploratory_with_complete_direct_fast_science(
         ).read_text(encoding="utf-8")
     )
 
-    assert evidence["result"] == "pass"
+    assert evidence["result"] == "inconclusive"
     assert summary["result"] == "inconclusive"
     assert summary["scope"]["classification"] == "exploratory_only"
     assert comparison is None
@@ -1041,6 +1388,37 @@ def test_r15_strict_failure_rejects_nonstandard_variant(
     lineage = lineage_fixture(tmp_path / "lineage", case_id="R15")
     add_r15_strict_failure_fixture(
         tmp_path / "campaign", lineage, variant="attacker_variant"
+    )
+
+    assert fast_acceptance.retained_strict_failure_evidence("R15", lineage) == []
+
+
+def test_r15_strict_failure_rejects_spoofed_executable_identity(
+    fast_acceptance, tmp_path
+):
+    lineage = lineage_fixture(tmp_path / "lineage", case_id="R15")
+    root = tmp_path / "campaign"
+    add_r15_strict_failure_fixture(root, lineage)
+    manifest_path = (
+        root / "runs/strict/R15/fast_s000_t0_to_t10/manifest/fast_run.json"
+    )
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["executable"] = lineage["input"]["path"]
+    write_json(manifest_path, manifest)
+
+    assert fast_acceptance.retained_strict_failure_evidence("R15", lineage) == []
+
+
+def test_r15_strict_failure_rejects_other_fatal_counters(
+    fast_acceptance, tmp_path
+):
+    lineage = lineage_fixture(tmp_path / "lineage", case_id="R15")
+    root = tmp_path / "campaign"
+    add_r15_strict_failure_fixture(root, lineage)
+    log = root / "logs/slurm-fast/cglf_R15_s000.4771183.log"
+    log.write_text(
+        log.read_text(encoding="utf-8").replace("dfloor=0", "dfloor=1"),
+        encoding="utf-8",
     )
 
     assert fast_acceptance.retained_strict_failure_evidence("R15", lineage) == []
@@ -1151,6 +1529,7 @@ def test_symlink_output_cannot_write_inside_fast_report_source(
         inventory,
         {
             "output": str(source),
+            "adapter": fast_acceptance.binding(fast_acceptance.FAST_REPORT_UTILITY),
             "cases": {"R02": lineage},
         },
     )
@@ -1178,6 +1557,65 @@ def test_symlink_output_cannot_write_inside_fast_report_source(
     assert not (source / "nested-acceptance").exists()
 
 
+def test_inventory_reporter_binding_must_match_current_adapter(
+    fast_acceptance,
+):
+    current = fast_acceptance.binding(fast_acceptance.FAST_REPORT_UTILITY)
+
+    assert fast_acceptance.authenticate_inventory_reporter(
+        {"adapter": current}
+    ) == current
+    with pytest.raises(
+        fast_acceptance.FastAcceptanceError,
+        match="inventory reporter adapter declared binding differs",
+    ):
+        fast_acceptance.authenticate_inventory_reporter({
+            "adapter": {**current, "sha256": "0" * 64},
+        })
+
+
+def test_stale_inventory_reporter_fails_before_claim_outputs(
+    fast_acceptance, tmp_path
+):
+    source = tmp_path / "fast-report"
+    source.mkdir()
+    current = fast_acceptance.binding(fast_acceptance.FAST_REPORT_UTILITY)
+    inventory = source / "inventory.json"
+    write_json(inventory, {
+        "output": str(source),
+        "adapter": {**current, "sha256": "0" * 64},
+        "cases": {},
+    })
+    output = tmp_path / "acceptance-output"
+
+    with pytest.raises(SystemExit):
+        fast_acceptance.main([
+            "--inventory",
+            str(inventory),
+            "--output",
+            str(output),
+            "--cases",
+            "R02",
+        ])
+
+    assert not output.exists()
+
+
+def test_case_lineage_must_match_authenticated_inventory_record(
+    fast_acceptance, tmp_path
+):
+    output = tmp_path / "fast-report"
+    lineage = lineage_fixture(tmp_path / "lineage")
+    write_json(output / "cases/R02/lineage.json", {**lineage, "status": "partial"})
+    inventory = {"output": str(output), "cases": {"R02": lineage}}
+
+    with pytest.raises(
+        fast_acceptance.FastAcceptanceError,
+        match="differs from its authenticated inventory record",
+    ):
+        fast_acceptance.case_record("R02", output, inventory)
+
+
 def test_nested_symlink_output_escape_is_rejected_before_writing(
     fast_acceptance, tmp_path, monkeypatch
 ):
@@ -1185,7 +1623,11 @@ def test_nested_symlink_output_escape_is_rejected_before_writing(
     source.mkdir()
     inventory = source / "inventory.json"
     lineage = lineage_fixture(source / "histories")
-    write_json(inventory, {"output": str(source), "cases": {"R02": lineage}})
+    write_json(inventory, {
+        "output": str(source),
+        "adapter": fast_acceptance.binding(fast_acceptance.FAST_REPORT_UTILITY),
+        "cases": {"R02": lineage},
+    })
     escaped = source / "escaped-acceptance"
     escaped.mkdir()
     output = tmp_path / "acceptance-output"

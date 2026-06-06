@@ -56,6 +56,7 @@ HARD_BOUND_COUNTER = "lf_hardbd"
 NONFATAL_HARD_BOUND_VARIANT = "finite_limiter_hard_bound_diagnostic_nonfatal"
 NONFATAL_HARD_BOUND_OVERRIDE = "mhd/cgl_lf_strict_admissibility=false"
 SCOPED_NONFATAL_CASES = ("R14", "R15")
+EXECUTION_EPOCH = "E03-forcing-policy"
 STRICT_FAILURE_PATTERN = re.compile(
     r"CGL Landau-fluid strict admissibility failed.*?"
     r"dfloor=(\d+)\s+pfloor=(\d+)\s+nonfinite=(\d+)\s+"
@@ -245,8 +246,26 @@ def inventory_output_root(inventory_path: Path, inventory: dict[str, object]) ->
 
     output = inventory.get("output")
     if isinstance(output, str):
-        return Path(output).expanduser().resolve(strict=True)
-    return inventory_path.expanduser().resolve(strict=True).parent
+        declared = Path(output).expanduser().resolve(strict=True)
+        expected = inventory_path.expanduser().resolve(strict=True).parent
+        if declared != expected:
+            raise FastAcceptanceError(
+                "inventory output root differs from the inventory artifact directory"
+            )
+        return declared
+    raise FastAcceptanceError("inventory lacks its explicit report output root")
+
+
+def authenticate_inventory_reporter(
+    inventory: dict[str, object],
+) -> dict[str, object]:
+    """Authenticate the exact current reporter that assembled an inventory."""
+
+    return require_same_current_binding(
+        inventory.get("adapter"),
+        binding(FAST_REPORT_UTILITY),
+        "inventory reporter adapter",
+    )
 
 
 def path_contains(parent: Path, child: Path) -> bool:
@@ -305,11 +324,19 @@ def case_record(
 ) -> tuple[dict[str, object] | None, dict[str, object] | None, str]:
     """Load one case lineage, preferring the explicit case artifact."""
 
-    lineage_path = output_root / "cases" / case_id / "lineage.json"
-    if lineage_path.is_file():
-        return load_json(lineage_path), binding(lineage_path), "case_directory"
     cases = inventory.get("cases")
     inline = cases.get(case_id) if isinstance(cases, dict) else None
+    lineage_path = output_root / "cases" / case_id / "lineage.json"
+    if lineage_path.is_file():
+        lineage = load_json(lineage_path)
+        if (
+            not isinstance(inline, dict)
+            or canonical_json_bytes(lineage) != canonical_json_bytes(inline)
+        ):
+            raise FastAcceptanceError(
+                f"{case_id} case lineage differs from its authenticated inventory record"
+            )
+        return lineage, binding(lineage_path), "case_directory"
     if isinstance(inline, dict):
         return inline, None, "inventory_inline"
     return None, None, "missing"
@@ -374,13 +401,18 @@ def retained_strict_failure_evidence(
     records: list[dict[str, object]] = []
     seen: set[Path] = set()
     identities = lineage.get("lineage_identities")
-    expected_identities = {
-        key: {str(value) for value in values}
-        for key in ("input_sha256", "matrix_sha256", "executable_sha256")
-        if isinstance(identities, dict)
-        and isinstance((values := identities.get(key)), list)
-        and values
-    }
+    if not isinstance(identities, dict):
+        return []
+    expected_identities: dict[str, str] = {}
+    for key in ("input_sha256", "matrix_sha256", "executable_sha256"):
+        values = identities.get(key)
+        if (
+            not isinstance(values, list)
+            or len(values) != 1
+            or re.fullmatch(r"[0-9a-f]{64}", str(values[0])) is None
+        ):
+            return []
+        expected_identities[key] = str(values[0])
     for segment in candidate_segment_summaries(lineage):
         if (
             segment.get("variant") not in (None, "standard")
@@ -400,18 +432,41 @@ def retained_strict_failure_evidence(
             exit_binding = binding(exit_path)
             exit_code = int(exit_path.read_text(encoding="utf-8").strip())
             if (
-                manifest.get("case_id") != case_id
+                manifest.get("schema_version") != 1
+                or manifest.get("case_id") != case_id
+                or manifest.get("case_name") != lineage.get("case_name")
                 or manifest.get("variant") not in (None, "standard")
                 or manifest.get("command_line_overrides") not in (None, [])
+                or manifest.get("run_dir") != str(segment_path)
+                or manifest.get("output_dir") != str(segment_path / "output")
+                or manifest.get("sequence") != 0
+                or float(manifest.get("start_time", math.nan)) != 0.0
+                or float(manifest.get("target_time", math.nan)) != 10.0
                 or exit_code == 0
                 or any(
-                    str(manifest.get(key)) not in values
-                    for key, values in expected_identities.items()
+                    str(manifest.get(key)) != value
+                    for key, value in expected_identities.items()
                 )
             ):
                 continue
             job_id = str(manifest.get("job_id") or "")
-            root = Path(str(manifest.get("root") or ""))
+            if not job_id or str(segment.get("job_id") or "") != job_id:
+                continue
+            root = Path(str(manifest.get("root") or "")).resolve(strict=True)
+            if (
+                not path_contains(root, segment_path)
+                or manifest.get("slurm_log")
+                != str(root / "logs/slurm-fast/%x.%j.log")
+            ):
+                continue
+            input_path = Path(str(manifest.get("input") or ""))
+            executable_path = Path(str(manifest.get("executable") or ""))
+            if (
+                binding(input_path)["sha256"] != expected_identities["input_sha256"]
+                or binding(executable_path)["sha256"]
+                != expected_identities["executable_sha256"]
+            ):
+                continue
             logs = sorted((root / "logs/slurm-fast").glob(f"*.{job_id}.log"))
             if len(logs) != 1:
                 continue
@@ -427,7 +482,7 @@ def retained_strict_failure_evidence(
             if not times:
                 continue
             counts = [int(value) for value in failures[-1].groups()]
-            if counts[-1] <= 0:
+            if any(counts[:-1]) or counts[-1] <= 0:
                 continue
             records.append({
                 "schema_version": 1,
@@ -537,6 +592,377 @@ def verify_recursive_bindings(value: object, label: str) -> None:
         _current, errors = current_declared_binding(item, f"{label} binding {index}")
         if errors:
             raise FastAcceptanceError("; ".join(errors))
+
+
+def unique_lineage_identity(lineage: dict[str, object], key: str) -> str:
+    """Return one exact SHA-256 identity from an assembled lineage."""
+
+    identities = lineage.get("lineage_identities")
+    values = identities.get(key) if isinstance(identities, dict) else None
+    if (
+        not isinstance(values, list)
+        or len(values) != 1
+        or re.fullmatch(r"[0-9a-f]{64}", str(values[0])) is None
+    ):
+        raise FastAcceptanceError(f"lineage lacks exactly one valid {key}")
+    return str(values[0])
+
+
+def qualified_executable_evidence(
+    policy: dict[str, object], lineage: dict[str, object]
+) -> dict[str, object]:
+    """Authenticate the exact qualified executable selected by a fast lineage."""
+
+    verified = policy.get("verified_sources")
+    declared = (
+        verified.get("qualification_approval")
+        if isinstance(verified, dict)
+        else None
+    )
+    approval_binding, errors = current_declared_binding(
+        declared, "qualification approval"
+    )
+    if approval_binding is None or errors:
+        raise FastAcceptanceError("; ".join(errors))
+    approval = load_json(Path(str(approval_binding["path"])))
+    executable_sha = unique_lineage_identity(lineage, "executable_sha256")
+    executable_path_value = approval.get("approved_executable")
+    if (
+        approval.get("schema_version") != 1
+        or approval.get("execution_epoch") != EXECUTION_EPOCH
+        or approval.get("approved_executable_sha256") != executable_sha
+        or not isinstance(executable_path_value, str)
+    ):
+        raise FastAcceptanceError(
+            "selected executable identity differs from the qualification approval"
+        )
+    executable_binding = binding(Path(executable_path_value))
+    if executable_binding["sha256"] != executable_sha:
+        raise FastAcceptanceError("qualified executable current bytes differ")
+    return {
+        "qualification_approval": approval_binding,
+        "executable": executable_binding,
+        "approved_executable_revision": approval.get("approved_executable_revision"),
+    }
+
+
+def exact_history_source_bindings(
+    lineage: dict[str, object], kind: str
+) -> list[dict[str, object]]:
+    """Authenticate the ordered source histories declared by one merged history."""
+
+    records = lineage.get("lineage")
+    if not isinstance(records, list) or not records:
+        raise FastAcceptanceError("direct-fast selected execution lineage is unavailable")
+    expected: list[dict[str, object]] = []
+    for index, value in enumerate(records):
+        if not isinstance(value, dict):
+            raise FastAcceptanceError(f"execution-lineage record {index} is malformed")
+        path_value = value.get(f"{kind}_history")
+        output_value = value.get("output")
+        if not isinstance(path_value, str) or not isinstance(output_value, str):
+            raise FastAcceptanceError(
+                f"execution-lineage record {index} lacks {kind} history provenance"
+            )
+        path = Path(path_value).resolve(strict=True)
+        output = Path(output_value).resolve(strict=True)
+        if not path_contains(output, path) or path.suffix != ".hst":
+            raise FastAcceptanceError(
+                f"execution-lineage record {index} {kind} history path differs"
+            )
+        expected.append(binding(path))
+
+    histories = lineage.get("histories")
+    merged = histories.get(kind) if isinstance(histories, dict) else None
+    declared_sources = merged.get("sources") if isinstance(merged, dict) else None
+    if not isinstance(declared_sources, list) or len(declared_sources) != len(expected):
+        raise FastAcceptanceError(f"merged {kind} history source inventory differs")
+    for index, (declared, current) in enumerate(zip(declared_sources, expected)):
+        require_same_current_binding(
+            declared, current, f"merged {kind} history source {index}"
+        )
+    return expected
+
+
+def replay_merged_histories(
+    lineage: dict[str, object],
+    history_bindings: dict[str, dict[str, object]],
+) -> dict[str, dict[str, object]]:
+    """Replay exact direct-fast history merges from their bound source histories."""
+
+    records = lineage.get("lineage")
+    if not isinstance(records, list) or not records:
+        raise FastAcceptanceError("direct-fast selected execution lineage is unavailable")
+    report = load_report_module()
+    merge = getattr(report, "merge_histories", None)
+    if not callable(merge):
+        raise FastAcceptanceError("direct-fast report lacks the history-merge replay kernel")
+    replayed: dict[str, dict[str, object]] = {}
+    with tempfile.TemporaryDirectory(prefix="cgl-lf-fast-acceptance-") as directory:
+        root = Path(directory)
+        for kind, label in (("mhd", "MHD"), ("user", "user")):
+            sources = [
+                (
+                    str(value.get("segment") or index),
+                    Path(str(value[f"{kind}_history"])),
+                )
+                for index, value in enumerate(records)
+                if isinstance(value, dict) and isinstance(value.get(f"{kind}_history"), str)
+            ]
+            result = merge(sources, root / f"replayed.{kind}.hst", label)
+            if (
+                not isinstance(result, dict)
+                or result.get("available") is not True
+                or result.get("errors") not in (None, [])
+            ):
+                raise FastAcceptanceError(f"direct-fast {kind} history merge replay failed")
+            replay_binding = binding(root / f"replayed.{kind}.hst")
+            expected = history_bindings.get(kind)
+            if (
+                not isinstance(expected, dict)
+                or replay_binding["sha256"] != expected.get("sha256")
+                or replay_binding["size_bytes"] != expected.get("size_bytes")
+            ):
+                raise FastAcceptanceError(
+                    f"direct-fast {kind} merged history differs from exact replay"
+                )
+            replayed[kind] = {
+                "sha256": replay_binding["sha256"],
+                "size_bytes": replay_binding["size_bytes"],
+            }
+    return replayed
+
+
+def direct_fast_execution_lineage_evidence(
+    acceptance: object,
+    policy: dict[str, object],
+    case_id: str,
+    lineage: dict[str, object],
+    history_bindings: dict[str, dict[str, object]],
+) -> dict[str, object]:
+    """Authenticate qualified execution manifests and exact merged-history ancestry."""
+
+    records = lineage.get("lineage")
+    if not isinstance(records, list) or not records:
+        raise FastAcceptanceError("selected execution lineage is missing")
+    if case_id == "R02":
+        if len(records) != 1 or not isinstance(records[0], dict) or (
+            records[0].get("kind") != "accepted_r02_bundle"
+        ):
+            raise FastAcceptanceError("R02 lacks its exact accepted whole-case bundle")
+        manifest_binding, errors = current_declared_binding(
+            records[0].get("manifest"), "R02 accepted bundle manifest"
+        )
+        if manifest_binding is None or errors:
+            raise FastAcceptanceError("; ".join(errors))
+        source_bindings = {
+            kind: exact_history_source_bindings(lineage, kind)
+            for kind in ("mhd", "user")
+        }
+        if any(len(values) != 1 for values in source_bindings.values()):
+            raise FastAcceptanceError(
+                "R02 accepted bundle must be the sole source of each merged history"
+            )
+        authenticate = getattr(acceptance, "authenticate_case_bundle", None)
+        if not callable(authenticate):
+            raise FastAcceptanceError("reviewed accepted-bundle kernel is unavailable")
+        bundle, retained, gate = authenticate(
+            policy,
+            case_id,
+            Path(str(manifest_binding["path"])),
+            source_bindings["mhd"][0],
+            source_bindings["user"][0],
+        )
+        if (
+            not isinstance(bundle, dict)
+            or not isinstance(gate, dict)
+            or gate.get("result") != "pass"
+        ):
+            raise FastAcceptanceError("R02 accepted whole-case bundle did not authenticate")
+        return {
+            "kind": "accepted_r02_bundle",
+            "bundle": bundle,
+            "retained_bindings": retained,
+            "gate": gate,
+            "history_sources": source_bindings,
+            "merged_history_replay": replay_merged_histories(
+                lineage, history_bindings
+            ),
+        }
+
+    qualified = qualified_executable_evidence(policy, lineage)
+    expected_name = acceptance.case_name(policy, case_id)
+    expected_input = unique_lineage_identity(lineage, "input_sha256")
+    expected_matrix = unique_lineage_identity(lineage, "matrix_sha256")
+    expected_executable = unique_lineage_identity(lineage, "executable_sha256")
+    verified = policy.get("verified_sources")
+    matrix_declared = (
+        verified.get("stage_i_manifest") if isinstance(verified, dict) else None
+    )
+    matrix_binding, matrix_errors = current_declared_binding(
+        matrix_declared, "reviewed Stage I manifest"
+    )
+    if (
+        matrix_binding is None
+        or matrix_errors
+        or expected_matrix != matrix_binding.get("sha256")
+    ):
+        raise FastAcceptanceError("selected execution matrix identity differs")
+
+    manifest_bindings: list[dict[str, object]] = []
+    fast_variants: set[str] = set()
+    fast_override_sets: set[tuple[str, ...]] = set()
+    fast_sequence = 0
+    previous_output: Path | None = None
+    previous_final = -math.inf
+    for index, value in enumerate(records):
+        if not isinstance(value, dict) or value.get("order") != index:
+            raise FastAcceptanceError(f"execution-lineage record order differs at {index}")
+        if any(
+            str(value.get(key)) != expected
+            for key, expected in (
+                ("input_sha256", expected_input),
+                ("matrix_sha256", expected_matrix),
+                ("executable_sha256", expected_executable),
+            )
+        ):
+            raise FastAcceptanceError(f"execution-lineage record {index} identity differs")
+        manifest_binding, manifest_errors = current_declared_binding(
+            value.get("manifest"), f"execution manifest {index}"
+        )
+        if manifest_binding is None or manifest_errors:
+            raise FastAcceptanceError("; ".join(manifest_errors))
+        manifest = load_json(Path(str(manifest_binding["path"])))
+        segment = Path(str(value.get("segment_dir") or "")).resolve(strict=True)
+        output = Path(str(value.get("output") or "")).resolve(strict=True)
+        if output != segment / "output":
+            raise FastAcceptanceError(f"execution-lineage output path differs at {index}")
+        observed_final = float(value.get("observed_final_time", math.nan))
+        if not math.isfinite(observed_final) or observed_final <= previous_final:
+            raise FastAcceptanceError(
+                f"execution-lineage final times are not strictly increasing at {index}"
+            )
+        previous_final = observed_final
+
+        kind = value.get("kind")
+        if kind == "fast":
+            if Path(str(manifest_binding["path"])) != segment / "manifest/fast_run.json":
+                raise FastAcceptanceError(f"fast manifest path differs at {index}")
+            overrides = manifest.get("command_line_overrides", [])
+            if not isinstance(overrides, list) or not all(
+                isinstance(item, str) for item in overrides
+            ):
+                raise FastAcceptanceError(f"fast overrides are malformed at {index}")
+            variant = str(manifest.get("variant") or "standard")
+            if (
+                manifest.get("schema_version") != 1
+                or manifest.get("case_id") != case_id
+                or manifest.get("case_name") != expected_name
+                or manifest.get("input_sha256") != expected_input
+                or manifest.get("matrix_sha256") != expected_matrix
+                or manifest.get("executable_sha256") != expected_executable
+                or manifest.get("run_dir") != str(segment)
+                or manifest.get("output_dir") != str(output)
+                or manifest.get("sequence") != fast_sequence
+                or value.get("variant") != manifest.get("variant")
+                or value.get("command_line_overrides", []) != overrides
+            ):
+                raise FastAcceptanceError(f"fast execution manifest differs at {index}")
+            if binding(Path(str(manifest.get("input") or "")))["sha256"] != expected_input:
+                raise FastAcceptanceError(f"fast input current bytes differ at {index}")
+            if (
+                Path(str(manifest.get("executable") or "")).resolve(strict=True)
+                != Path(str(qualified["executable"]["path"]))
+            ):
+                raise FastAcceptanceError(f"fast executable path differs at {index}")
+            exit_path = segment / "manifest/run_exit_code"
+            exit_binding, exit_errors = current_declared_binding(
+                value.get("run_exit_code_artifact"),
+                f"fast run exit code {index}",
+            )
+            if (
+                exit_binding is None
+                or exit_errors
+                or Path(str(exit_binding["path"])) != exit_path
+                or int(exit_path.read_text(encoding="utf-8").strip()) != 0
+                or value.get("run_exit_code") != 0
+            ):
+                raise FastAcceptanceError(f"fast execution did not exit successfully at {index}")
+            restart_value = manifest.get("restart")
+            if restart_value:
+                restart = Path(str(restart_value)).resolve(strict=True)
+                if (
+                    previous_output is None
+                    or not path_contains(previous_output, restart)
+                    or binding(restart)["sha256"] != manifest.get("restart_sha256")
+                ):
+                    raise FastAcceptanceError(f"fast restart lineage differs at {index}")
+            elif previous_output is not None:
+                raise FastAcceptanceError(f"fast continuation lacks parent restart at {index}")
+            fast_variants.add(variant)
+            fast_override_sets.add(tuple(overrides))
+            fast_sequence += 1
+        elif kind == "historical_seed_prefix":
+            if Path(str(manifest_binding["path"])) != segment / "manifest/prepared_run.json":
+                raise FastAcceptanceError(f"historical manifest path differs at {index}")
+            run = manifest.get("run")
+            command = manifest.get("command")
+            accounting = manifest.get("accounting")
+            inspection = manifest.get("scientific_inspection")
+            paths = manifest.get("paths")
+            if not all(
+                isinstance(item, dict)
+                for item in (run, command, accounting, inspection, paths)
+            ):
+                raise FastAcceptanceError(f"historical manifest is malformed at {index}")
+            if (
+                manifest.get("execution_epoch") != EXECUTION_EPOCH
+                or run.get("case_id") != case_id
+                or run.get("case_name") != expected_name
+                or command.get("input_sha256") != expected_input
+                or command.get("matrix_sha256") != expected_matrix
+                or command.get("executable_sha256") != expected_executable
+                or command.get("executable") != qualified["executable"]["path"]
+                or accounting.get("case_id") != case_id
+                or accounting.get("case_name") != expected_name
+                or accounting.get("executable_sha256") != expected_executable
+                or accounting.get("state") != "COMPLETED"
+                or accounting.get("exit_code") != "0:0"
+                or accounting.get("result") not in ("accepted", "clean_partial")
+                or inspection.get("case_id") != case_id
+                or not (
+                    inspection.get("accepted") is True
+                    or inspection.get("clean_for_continuation") is True
+                )
+                or paths.get("run_dir") != str(segment)
+                or paths.get("output_dir") != str(output)
+            ):
+                raise FastAcceptanceError(f"historical execution manifest differs at {index}")
+            if binding(Path(str(command.get("input_file") or "")))["sha256"] != expected_input:
+                raise FastAcceptanceError(f"historical input current bytes differ at {index}")
+        else:
+            raise FastAcceptanceError(f"unsupported execution-lineage kind at {index}: {kind}")
+        manifest_bindings.append(manifest_binding)
+        previous_output = output
+
+    selected = selected_variant_metadata(lineage)
+    observed_variants = sorted(value for value in fast_variants if value != "standard")
+    if observed_variants != selected["variants"] or len(fast_override_sets) != 1 or (
+        list(next(iter(fast_override_sets))) != selected["command_line_overrides"]
+    ):
+        raise FastAcceptanceError("selected fast variant metadata differs from manifests")
+    source_bindings = {
+        kind: exact_history_source_bindings(lineage, kind) for kind in ("mhd", "user")
+    }
+    replay = replay_merged_histories(lineage, history_bindings)
+    return {
+        "kind": "qualified_direct_fast_lineage",
+        "qualification": qualified,
+        "stage_i_manifest": matrix_binding,
+        "segment_manifests": manifest_bindings,
+        "history_sources": source_bindings,
+        "merged_history_replay": replay,
+    }
 
 
 def authoritative_matrix_case(
@@ -717,7 +1143,7 @@ def lineage_identity_errors(
         case_id in SCOPED_NONFATAL_CASES
         and selected["variants"] == [NONFATAL_HARD_BOUND_VARIANT]
     )
-    if case_id == "R14" or (case_id == "R15" and selected["variants"]):
+    if case_id in SCOPED_NONFATAL_CASES:
         if not scoped_nonfatal:
             errors.append(
                 f"{case_id} selected variant list is not the exact admitted variant"
@@ -783,7 +1209,7 @@ def scientific_scope(
             "classification": (
                 "scoped_nonfatal_hard_bound_variant"
                 if admitted
-                else "r14_variant_not_authenticated"
+                else f"{case_id.lower()}_variant_not_authenticated"
             ),
             "campaign_interpretation_eligible": admitted,
             "uniform_strict_diagnostics_eligible": False,
@@ -826,6 +1252,24 @@ def scientific_scope(
                 "finite-limiter comparison from the failed strict trajectory",
             ],
             "retained_strict_failure_evidence": strict_failure_evidence,
+            **selected,
+        }
+    if case_id in SCOPED_NONFATAL_CASES:
+        return {
+            "classification": f"{case_id.lower()}_variant_not_authenticated",
+            "campaign_interpretation_eligible": False,
+            "uniform_strict_diagnostics_eligible": False,
+            "hard_bound_is_fatal": True,
+            "reason": (
+                f"{case_id} is outside campaign interpretation without the exact "
+                "nonfatal-hard-bound diagnostic variant and override."
+            ),
+            "allowed_claims": [],
+            "excluded_claims": [
+                "finite-rate limiter comparison",
+                "uniform campaign acceptance",
+            ],
+            "retained_strict_failure_evidence": strict_failure_evidence or [],
             **selected,
         }
     return {
@@ -1104,42 +1548,78 @@ def direct_fast_diagnostics_path(
     return lineage_path.parent / "diagnostics.json"
 
 
-def snapshot_provenance_errors(
-    diagnostics: dict[str, object], case_id: str
-) -> list[str]:
-    """Return authentication errors for retained direct-fast snapshot records."""
+def authenticate_snapshot_records(
+    diagnostics: dict[str, object],
+    snapshot_index: dict[str, object],
+    case_id: str,
+    analyzer: object,
+) -> None:
+    """Authenticate selected snapshot identity, rank sets, and current bytes."""
 
-    errors: list[str] = []
     snapshots = diagnostics.get("snapshots")
-    if not isinstance(snapshots, dict):
-        return [f"{case_id} snapshot records are malformed"]
     ensemble = diagnostics.get("snapshot_ensemble")
-    expected_count = (
-        ensemble.get("snapshot_count") if isinstance(ensemble, dict) else None
+    compat = diagnostics.get("compat")
+    analysis_window = (
+        compat.get("analysis_window") if isinstance(compat, dict) else None
     )
+    indexed = snapshot_index.get("snapshots")
     if (
-        not isinstance(expected_count, int)
-        or isinstance(expected_count, bool)
-        or expected_count <= 0
-        or len(snapshots) != expected_count
+        not isinstance(snapshots, dict)
+        or not isinstance(ensemble, dict)
+        or not isinstance(analysis_window, dict)
+        or not isinstance(indexed, list)
     ):
-        errors.append(f"{case_id} snapshot record count differs from its ensemble")
-    for source, record in sorted(snapshots.items()):
+        raise FastAcceptanceError(f"{case_id} snapshot records are malformed")
+    start = float(analysis_window.get("time_start", math.nan))
+    end = float(analysis_window.get("time_end", math.nan))
+    if not math.isfinite(start) or not math.isfinite(end) or start > end:
+        raise FastAcceptanceError(f"{case_id} snapshot analysis window is malformed")
+    selected = [
+        item
+        for item in indexed
+        if isinstance(item, dict)
+        and item.get("complete") is True
+        and isinstance(item.get("time"), (int, float))
+        and start - TIME_TOLERANCE <= float(item["time"]) <= end + TIME_TOLERANCE
+    ]
+    representatives = [str(item.get("representative") or "") for item in selected]
+    if (
+        not representatives
+        or any(not value for value in representatives)
+        or len(set(representatives)) != len(representatives)
+        or set(snapshots) != set(representatives)
+        or diagnostics.get("selected_snapshot_count") != len(selected)
+        or ensemble.get("snapshot_count") != len(selected)
+    ):
+        raise FastAcceptanceError(
+            f"{case_id} analyzed snapshot selection differs from its bound index"
+        )
+    validate = getattr(analyzer, "validate_snapshot_provenance_record", None)
+    revalidate = getattr(analyzer, "revalidate_snapshot_provenance_record", None)
+    if not callable(validate) or not callable(revalidate):
+        raise FastAcceptanceError("snapshot provenance replay kernels are unavailable")
+    for item in selected:
+        source = str(item["representative"])
+        expected_ranks = item.get("expected_ranks")
+        record = snapshots.get(source)
         provenance = record.get("snapshot_provenance") if isinstance(record, dict) else None
-        files = provenance.get("files") if isinstance(provenance, dict) else None
-        if not isinstance(files, list) or not files:
-            errors.append(f"{case_id} snapshot provenance lacks files: {source}")
-            continue
-        if provenance.get("expected_rank_count") != len(files):
-            errors.append(f"{case_id} snapshot rank count differs: {source}")
-        digest = hashlib.sha256(canonical_json_bytes(files)).hexdigest()
-        if provenance.get("aggregate_sha256") != digest:
-            errors.append(f"{case_id} snapshot aggregate digest differs: {source}")
-        try:
-            verify_recursive_bindings(files, f"{case_id} snapshot {source}")
-        except FastAcceptanceError as error:
-            errors.append(str(error))
-    return errors
+        if not isinstance(expected_ranks, int) or expected_ranks <= 0:
+            raise FastAcceptanceError(f"{case_id} snapshot rank count is malformed: {source}")
+        validated = validate(provenance, f"{case_id} snapshot {source}")
+        if (
+            validated.get("representative_path") != source
+            or validated.get("expected_rank_count") != expected_ranks
+            or not math.isclose(
+                float(validated.get("snapshot_time", math.nan)),
+                float(item["time"]),
+                rel_tol=0.0,
+                abs_tol=TIME_TOLERANCE,
+            )
+        ):
+            raise FastAcceptanceError(
+                f"{case_id} snapshot provenance differs from its bound index: {source}"
+            )
+        revalidate(validated, expected_ranks, f"{case_id} snapshot {source}")
 
 
 def authenticated_complete_diagnostics(
@@ -1163,12 +1643,26 @@ def authenticated_complete_diagnostics(
             diagnostics.get("schema_version") != 1
             or diagnostics.get("case_id") != case_id
             or diagnostics.get("case_name") != expected_name
+            or diagnostics.get("assembly_status") != "complete"
+            or canonical_json_bytes(diagnostics.get("model_choices"))
+            != canonical_json_bytes(lineage.get("model_choices"))
         ):
             raise FastAcceptanceError(f"{case_id} direct-fast diagnostics identity differs")
         if diagnostics.get("analysis_status") != "complete":
             return None, None, "direct-fast history diagnostics are not complete"
         if diagnostics.get("snapshot_analysis_status") != "complete":
             return None, None, "direct-fast snapshot diagnostics are not complete"
+        if diagnostics.get("analysis_errors") not in (None, []):
+            raise FastAcceptanceError(f"{case_id} direct-fast diagnostics retain errors")
+        health = diagnostics.get("health")
+        if (
+            not isinstance(health, dict)
+            or health.get("structural_errors") not in (None, [])
+            or health.get("result") == "structural_error"
+        ):
+            raise FastAcceptanceError(
+                f"{case_id} direct-fast diagnostics retain structural errors"
+            )
 
         provenance = diagnostics.get("provenance")
         if not isinstance(provenance, dict):
@@ -1183,6 +1677,7 @@ def authenticated_complete_diagnostics(
                 f"{case_id} diagnostics merged {kind} history",
             )
         snapshot_index = path.parent / "snapshots.json"
+        snapshot_index_record = load_json(snapshot_index)
         require_same_current_binding(
             provenance.get("snapshot_index"),
             binding(snapshot_index),
@@ -1199,10 +1694,6 @@ def authenticated_complete_diagnostics(
             f"{case_id} diagnostics analyzer",
         )
         verify_recursive_bindings(provenance, f"{case_id} diagnostics provenance")
-
-        snapshot_errors = snapshot_provenance_errors(diagnostics, case_id)
-        if snapshot_errors:
-            raise FastAcceptanceError("; ".join(snapshot_errors))
         ensemble = diagnostics.get("snapshot_ensemble")
         compat = diagnostics.get("compat")
         compat_ensemble = (
@@ -1215,6 +1706,9 @@ def authenticated_complete_diagnostics(
 
         report = load_report_module()
         analyzer = report.load_pure_analyzer()
+        authenticate_snapshot_records(
+            diagnostics, snapshot_index_record, case_id, analyzer
+        )
         recomputed_windows = report.window_summaries(
             analyzer,
             Path(str(history_bindings["user"]["path"])),
@@ -1530,6 +2024,23 @@ def reviewed_complete_case_evidence(
         "user",
     }:
         return None, "authenticated assembled MHD and user histories are unavailable"
+    try:
+        execution = direct_fast_execution_lineage_evidence(
+            acceptance,
+            policy,
+            case_id,
+            lineage,
+            selected_bindings,
+        )
+    except (
+        acceptance.AcceptanceError,
+        FastAcceptanceError,
+        KeyError,
+        OSError,
+        TypeError,
+        ValueError,
+    ) as error:
+        return None, f"{type(error).__name__}: {error}"
     diagnostics, diagnostics_binding, diagnostics_error = (
         authenticated_complete_diagnostics(
             acceptance,
@@ -1576,11 +2087,34 @@ def reviewed_complete_case_evidence(
             },
         ))
         gates.append(acceptance.gate(
+            "direct_fast_execution_lineage",
+            "pass",
+            reason=(
+                "selected execution manifests, qualified executable, source histories, "
+                "and exact merged-history replay authenticated"
+            ),
+            observations=execution,
+        ))
+        scope_eligible = (
+            isinstance(scope, dict)
+            and scope.get("campaign_interpretation_eligible") is True
+        )
+        gates.append(acceptance.gate(
+            "explicit_claim_scope",
+            "pass" if scope_eligible else "inconclusive",
+            reason=(
+                "case is admitted to its explicit direct-fast scientific scope"
+                if scope_eligible
+                else "case is excluded from claim-grade campaign interpretation"
+            ),
+            observations=scope,
+        ))
+        gates.append(acceptance.gate(
             "direct_fast_complete_diagnostics",
             "pass",
             reason=(
-                "complete direct-fast history and snapshot diagnostics authenticated "
-                "and replayed"
+                "complete direct-fast history diagnostics, analyzed snapshot records, "
+                "and current snapshot bytes authenticated and replayed"
             ),
             observations={"diagnostics": diagnostics_binding},
         ))
@@ -1667,6 +2201,26 @@ def reviewed_complete_case_evidence(
             ),
             observations={"products": sorted(convergence_products)},
         ))
+        gates.extend([
+            acceptance.gate(
+                "sampled_restart_ct_divb",
+                "blocked_out_of_scope",
+                reason=(
+                    "direct-fast scoped assessment does not admit sampled-restart "
+                    "CT-divergence evidence"
+                ),
+                observations=None,
+            ),
+            acceptance.gate(
+                "canonical_comparison_panel_products",
+                "blocked_out_of_scope",
+                reason=(
+                    "direct-fast scoped assessment does not admit canonical "
+                    "comparison-panel products"
+                ),
+                observations=None,
+            ),
+        ])
     except (
         acceptance.AcceptanceError,
         FastAcceptanceError,
@@ -1700,7 +2254,12 @@ def reviewed_complete_case_evidence(
         "evaluation_inputs": {
             "mhd_history": selected_bindings["mhd"],
             "user_history": selected_bindings["user"],
-            "accepted_bundle_manifest": None,
+            "accepted_bundle_manifest": (
+                execution.get("bundle", {}).get("bundle_manifest")
+                if execution.get("kind") == "accepted_r02_bundle"
+                and isinstance(execution.get("bundle"), dict)
+                else None
+            ),
             "diagnostics": {"direct_fast_complete": diagnostics_binding},
             "ct_evidence": None,
         },
@@ -1718,12 +2277,26 @@ def reviewed_complete_case_evidence(
                 selected_bindings["mhd"],
                 selected_bindings["user"],
                 diagnostics_binding,
+                execution,
             ],
         },
         "metrics": metrics,
         "analyzer_metrics": analyzer_metrics,
         "convergence_products": convergence_products,
         "panel_products": [],
+        "scientific_kernel_scope": {
+            "integrated": [
+                "reviewed exact-window statistics and stationarity",
+                "reviewed applicable per-case family gates",
+                "reviewed analyzer metrics",
+                "reviewed convergence products",
+            ],
+            "excluded_from_direct_fast_assessment": [
+                "campaign-authorizing accepted-bundle lineage for non-R02 cases",
+                "sampled-restart CT divergence evidence",
+                "canonical comparison-panel products",
+            ],
+        },
         "gates": gates,
     }
     return acceptance.seal_evidence(evidence), None
@@ -1748,51 +2321,9 @@ def comparison_case_evidence(
     tcorr = forcing_tcorr(lineage)
     if tcorr <= 0.0:
         return None, "effective forcing correlation time is unavailable"
-    if reviewed is not None and isinstance(reviewed.get("metrics"), dict):
-        metrics = reviewed["metrics"]
-        adequate = all(
-            isinstance(record, dict)
-            and record.get("sampling_adequacy") == "pass"
-            and isinstance(record.get("stationarity"), dict)
-            and record["stationarity"].get("result") == "pass"
-            for record in metrics.values()
-        )
-        comparison_result = (
-            "pass"
-            if adequate and reviewed.get("result") == "pass"
-            else "fail"
-            if reviewed.get("result") == "fail"
-            else "inconclusive"
-        )
-        return {
-            "schema_version": 1,
-            "record_type": "cgl-lf-stage-i-direct-fast-comparison-evidence",
-            "authority": "non-authorizing-direct-fast-scientific-assessment",
-            "case_id": case_id,
-            "result": comparison_result,
-            "minimum_block_duration": tcorr,
-            "metrics": metrics,
-            "analyzer_metrics": reviewed.get("analyzer_metrics", {}),
-        }, None
-    metrics: dict[str, object] = {}
-    criteria = policy["criteria"]
-    try:
-        for metric, spec in sorted(criteria["case_metrics"].items()):
-            source = str(spec["history"])
-            column = str(spec["column"])
-            history = histories.get(source)
-            if history is None or column not in history:
-                return None, f"{metric}: required history column is unavailable"
-            metrics[str(metric)] = acceptance.metric_statistics(
-                history,
-                history[column],
-                str(metric),
-                policy,
-                kind=str(spec["stationarity_kind"]),
-                minimum_block_duration=tcorr,
-            )
-    except acceptance.AcceptanceError as error:
-        return None, f"{type(error).__name__}: {error}"
+    if reviewed is None or not isinstance(reviewed.get("metrics"), dict):
+        return None, "authenticated reviewed complete-case evidence is unavailable"
+    metrics = reviewed["metrics"]
     adequate = all(
         isinstance(record, dict)
         and record.get("sampling_adequacy") == "pass"
@@ -1805,10 +2336,16 @@ def comparison_case_evidence(
         "record_type": "cgl-lf-stage-i-direct-fast-comparison-evidence",
         "authority": "non-authorizing-direct-fast-scientific-assessment",
         "case_id": case_id,
-        "result": "pass" if adequate else "inconclusive",
+        "result": (
+            "pass"
+            if adequate and reviewed.get("result") == "pass"
+            else "fail"
+            if reviewed.get("result") == "fail"
+            else "inconclusive"
+        ),
         "minimum_block_duration": tcorr,
         "metrics": metrics,
-        "analyzer_metrics": {},
+        "analyzer_metrics": reviewed.get("analyzer_metrics", {}),
     }, None
 
 
@@ -2142,7 +2679,9 @@ def build_campaign_evidence(
     claim_grade_cases = sorted(
         case_id
         for case_id, value in case_summaries.items()
-        if value.get("scope", {}).get("campaign_interpretation_eligible") is True
+        if value.get("result") == "pass"
+        and value.get("scope", {}).get("campaign_interpretation_eligible") is True
+        and comparison_cases.get(case_id, {}).get("result") == "pass"
     )
     exploratory = sorted(
         case_id
@@ -2159,6 +2698,24 @@ def build_campaign_evidence(
         case_id: str(value.get("result"))
         for case_id, value in sorted(case_summaries.items())
     }
+    expected_comparison_cases = sorted(set(required) - {"R10"})
+    scope_errors: list[str] = []
+    for case_id, expected in (
+        ("R10", "exploratory_only"),
+        ("R14", "scoped_nonfatal_hard_bound_variant"),
+        ("R15", "scoped_nonfatal_hard_bound_variant"),
+    ):
+        if case_id not in required:
+            continue
+        value = case_summaries.get(case_id)
+        if not isinstance(value, dict):
+            scope_errors.append(f"{case_id}: scope is unavailable")
+            continue
+        classification = value.get("scope", {}).get("classification")
+        if classification != expected:
+            scope_errors.append(
+                f"{case_id}: expected {expected}, observed {classification}"
+            )
     gates = [
         campaign_gate(
             acceptance,
@@ -2200,7 +2757,7 @@ def build_campaign_evidence(
             "scoped_exact_window_comparison_evidence",
             (
                 "pass"
-                if len(comparison_cases) == len(required) - 1
+                if sorted(comparison_cases) == expected_comparison_cases
                 and all(
                     value.get("result") == "pass"
                     for value in comparison_cases.values()
@@ -2214,7 +2771,7 @@ def build_campaign_evidence(
             {
                 "available_cases": sorted(comparison_cases),
                 "unavailable_cases": sorted(
-                    set(required) - {"R10"} - set(comparison_cases)
+                    set(expected_comparison_cases) - set(comparison_cases)
                 ),
                 "results": {
                     case_id: value.get("result")
@@ -2225,12 +2782,21 @@ def build_campaign_evidence(
         campaign_gate(
             acceptance,
             "explicit_claim_scope",
-            "pass",
-            "R10 exploratory and R14/R15 nonfatal-hard-bound scopes are explicit",
+            "pass" if not scope_errors else (
+                "inconclusive"
+                if any(error.endswith("scope is unavailable") for error in scope_errors)
+                else "fail"
+            ),
+            (
+                "R10 exploratory and R14/R15 nonfatal-hard-bound scopes are explicit"
+                if not scope_errors
+                else "one or more required special-case scopes are unavailable or invalid"
+            ),
             {
                 "claim_grade_cases": claim_grade_cases,
                 "exploratory_cases": exploratory,
                 "scoped_variants": scoped_variants,
+                "errors": scope_errors,
             },
         ),
         *reviewed_pair_gates(acceptance, policy, comparison_cases),
@@ -2563,6 +3129,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         inventory_path = args.inventory.expanduser().absolute().resolve(strict=True)
         inventory = load_json(inventory_path)
+        reporter_binding = authenticate_inventory_reporter(inventory)
         output_root = inventory_output_root(inventory_path, inventory)
         output = (
             args.output.expanduser().absolute()
@@ -2637,6 +3204,7 @@ def main(argv: list[str] | None = None) -> int:
             "record_type": "cgl-lf-stage-i-direct-fast-acceptance-provenance",
             "inputs": {
                 "inventory": binding(inventory_path),
+                "inventory_reporter": reporter_binding,
                 "criteria": policy["criteria_binding"],
                 "criteria_review": policy["review_binding"],
                 "reviewed_acceptance_utility": binding(ACCEPTANCE_UTILITY),
