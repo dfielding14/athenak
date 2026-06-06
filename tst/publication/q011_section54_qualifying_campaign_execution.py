@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import ctypes
 import errno
+import fcntl
 import hashlib
 import json
 import math
@@ -1129,6 +1130,25 @@ def _require_same_directory_at(
     )
 
 
+def _require_same_account_isolated_parent(descriptor: int, *, label: str) -> None:
+    metadata = os.fstat(descriptor)
+    _require(
+        stat.S_ISDIR(metadata.st_mode)
+        and metadata.st_uid == os.geteuid()
+        and not metadata.st_mode & (stat.S_IWGRP | stat.S_IWOTH),
+        f"{label} must be same-account isolated",
+    )
+
+
+def _lock_output_parent(descriptor: int) -> None:
+    try:
+        fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError as error:
+        raise CampaignPlanError(
+            "campaign-plan output-parent transaction lock is unavailable"
+        ) from error
+
+
 def _rename_no_replace_at(
     source_parent_descriptor: int,
     source_name: str,
@@ -1172,15 +1192,77 @@ def _rename_no_replace_at(
     }
     if error_number not in unsupported:
         raise OSError(error_number, os.strerror(error_number), destination_name)
-    raise CampaignPlanError(
-        "campaign-plan publication requires atomic no-replace rename support"
+
+    # Lustre rejects renameat2(RENAME_NOREPLACE). The output-parent lock and
+    # same-account isolation boundary exclude cooperating concurrent publishers.
+    _require_same_account_isolated_parent(
+        source_parent_descriptor, label="campaign-plan staging parent"
+    )
+    _require_same_account_isolated_parent(
+        destination_parent_descriptor, label="campaign-plan output parent"
+    )
+    _lock_output_parent(destination_parent_descriptor)
+    source = os.stat(
+        source_name, dir_fd=source_parent_descriptor, follow_symlinks=False
+    )
+    _require(
+        stat.S_ISDIR(source.st_mode),
+        "campaign-plan staging root is not a directory",
+    )
+    source_identity = source.st_dev, source.st_ino
+    _require_absent_at(
+        destination_parent_descriptor,
+        destination_name,
+        label="deterministic campaign-plan output root",
+    )
+    try:
+        os.rename(
+            source_name,
+            destination_name,
+            src_dir_fd=source_parent_descriptor,
+            dst_dir_fd=destination_parent_descriptor,
+        )
+    except OSError as error:
+        try:
+            _require_absent_at(
+                source_parent_descriptor,
+                source_name,
+                label="campaign-plan staging root after fallback rename",
+            )
+            destination = os.stat(
+                destination_name,
+                dir_fd=destination_parent_descriptor,
+                follow_symlinks=False,
+            )
+            _require(
+                stat.S_ISDIR(destination.st_mode)
+                and (destination.st_dev, destination.st_ino) == source_identity,
+                "campaign-plan fallback rename destination identity drifted",
+            )
+        except (OSError, CampaignPlanError):
+            raise error
+    _require_absent_at(
+        source_parent_descriptor,
+        source_name,
+        label="campaign-plan staging root after fallback rename",
+    )
+    destination = os.stat(
+        destination_name,
+        dir_fd=destination_parent_descriptor,
+        follow_symlinks=False,
+    )
+    _require(
+        stat.S_ISDIR(destination.st_mode)
+        and (destination.st_dev, destination.st_ino) == source_identity,
+        "campaign-plan fallback rename destination identity drifted",
     )
 
 
 def _remove_anchored_tree_at(
     parent_descriptor: int, name: str, descriptor: int, *, label: str
 ) -> None:
-    """Remove one hidden tree without reopening its ancestor path."""
+    """Remove one pinned tree beneath a locked same-account-isolated parent."""
+    _require_same_account_isolated_parent(parent_descriptor, label=label)
     _require_same_directory_at(parent_descriptor, name, descriptor, label=label)
 
     def remove_members(directory_descriptor: int) -> None:
@@ -1335,6 +1417,9 @@ def _cleanup_private_container(
 ) -> None:
     """Best-effort removal of one empty pinned private staging container."""
     try:
+        _require_same_account_isolated_parent(
+            parent_descriptor, label="campaign-plan output parent"
+        )
         _require_same_directory_at(
             parent_descriptor,
             name,
@@ -1456,19 +1541,30 @@ def _reserve_staging_root(
         _require_same_directory(
             parent, parent_descriptor, label="campaign-plan output parent"
         )
+        _require_same_account_isolated_parent(
+            parent_descriptor, label="campaign-plan output parent"
+        )
+        _lock_output_parent(parent_descriptor)
         _require_absent_at(
-            parent_descriptor, destination.name, label="deterministic campaign-plan output root"
+            parent_descriptor,
+            destination.name,
+            label="deterministic campaign-plan output root",
         )
         os.mkdir(private_container.name, mode=0o700, dir_fd=parent_descriptor)
         os.fsync(parent_descriptor)
         private_descriptor = os.open(
             private_container.name, _DIRECTORY_FLAGS, dir_fd=parent_descriptor
         )
+        _require_same_account_isolated_parent(
+            private_descriptor, label="campaign-plan private staging container"
+        )
         os.mkdir(staging.name, mode=0o700, dir_fd=private_descriptor)
         os.fsync(private_descriptor)
         root_descriptor = os.open(
             staging.name, _DIRECTORY_FLAGS, dir_fd=private_descriptor
         )
+        os.fchmod(root_descriptor, 0o700)
+        os.fsync(root_descriptor)
     except OSError as error:
         if root_descriptor >= 0:
             os.close(root_descriptor)
@@ -2458,7 +2554,9 @@ def materialize_qualifying_campaign_plan(
         materialization_receipt_payload = _json_bytes(materialization_receipt)
         write(MATERIALIZATION_RECEIPT_NAME, materialization_receipt_payload)
         os.fsync(root_descriptor)
-        _require_same_directory(root, root_descriptor, label="campaign-plan staging root")
+        _require_same_directory(
+            root, root_descriptor, label="campaign-plan staging root"
+        )
         _validate_staged_inventory(
             root_descriptor,
             expected_members,
@@ -2493,7 +2591,9 @@ def materialize_qualifying_campaign_plan(
             ),
             immutable_orion_tree.INVENTORY_NAME: frozen_inventory_payload,
         }
-        _require_same_directory(root, root_descriptor, label="campaign-plan staging root")
+        _require_same_directory(
+            root, root_descriptor, label="campaign-plan staging root"
+        )
         _validate_staged_inventory(
             root_descriptor,
             frozen_members,
@@ -2525,9 +2625,8 @@ def materialize_qualifying_campaign_plan(
             destination.name,
             label="deterministic campaign-plan output root",
         )
-        # Orion rejects cross-parent rename of a read-only directory. Descendants
-        # remain frozen; make the root owner-write-only and non-traversable for
-        # the rename, then restore its exact frozen mode through the pinned fd.
+        # Orion Lustre rejects renameat2(RENAME_NOREPLACE). The source-local
+        # fallback runs only beneath the retained output-parent transaction lock.
         root_mode = stat.S_IMODE(os.fstat(root_descriptor).st_mode)
         os.fchmod(root_descriptor, stat.S_IWUSR)
         os.fsync(root_descriptor)
@@ -2560,6 +2659,13 @@ def materialize_qualifying_campaign_plan(
             frozen_members,
             label="published campaign-plan output tree",
         )
+        _require_same_directory_at(
+            parent_descriptor,
+            destination.name,
+            root_descriptor,
+            label="published campaign-plan output root",
+        )
+        os.fsync(parent_descriptor)
         os.close(root_descriptor)
         root_descriptor = -1
         _cleanup_private_container(

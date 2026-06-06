@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import copy
 from contextlib import contextmanager, nullcontext
+import fcntl
 import hashlib
 import json
 import os
@@ -1120,7 +1121,7 @@ class Q011Section54QualifyingCampaignExecutionTests(unittest.TestCase):
                 with self.subTest(path=path):
                     self.assertIn(path, [record["path"] for record in closure["sources"]])
 
-    def test_materializes_under_hidden_staging_before_atomic_no_replace_publish(self) -> None:
+    def test_materializes_under_hidden_staging_while_output_parent_is_locked(self) -> None:
         with _fixture() as fixture:
             original_write = execution._write_new_file
             observed_staging: list[Path] = []
@@ -1130,31 +1131,41 @@ class Q011Section54QualifyingCampaignExecutionTests(unittest.TestCase):
             ) -> None:
                 observed_staging.append(root)
                 self.assertTrue(
-                    root.parent.name.startswith(".q011-section54-qualifying-campaign-plan-")
+                    root.parent.name.startswith(
+                        ".q011-section54-qualifying-campaign-plan-"
+                    )
                 )
                 self.assertEqual(root.name, execution._STAGING_ROOT_NAME)
+                self.assertEqual(
+                    (root.stat().st_dev, root.stat().st_ino),
+                    (os.fstat(descriptor).st_dev, os.fstat(descriptor).st_ino),
+                )
+                self.assertEqual(stat.S_IMODE(os.fstat(descriptor).st_mode), 0o700)
                 self.assertFalse(
                     any(
                         path.name.startswith("q011-section54-qualifying-campaign-plan-")
                         for path in fixture["output_parent"].iterdir()
                     )
                 )
+                competing = os.open(fixture["output_parent"], execution._DIRECTORY_FLAGS)
+                try:
+                    with self.assertRaises(BlockingIOError):
+                        fcntl.flock(competing, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                finally:
+                    os.close(competing)
                 original_write(root, descriptor, relative, payload)
 
-            with (
-                patch.object(execution, "_write_new_file", side_effect=inspect_hidden_write),
-                patch.object(
-                    execution,
-                    "_rename_no_replace_at",
-                    wraps=execution._rename_no_replace_at,
-                ) as rename,
+            with patch.object(
+                execution, "_write_new_file", side_effect=inspect_hidden_write
             ):
                 result = _materialize(fixture)
             self.assertTrue(observed_staging)
-            rename.assert_called_once()
             self.assertTrue(Path(result["plan_root"]).is_dir())
+            self.assertFalse(
+                any(path.name.startswith(".") for path in fixture["output_parent"].iterdir())
+            )
 
-    def test_destination_appearing_at_atomic_rename_is_not_overwritten(self) -> None:
+    def test_destination_appearing_at_publish_is_not_overwritten(self) -> None:
         with _fixture() as fixture:
             original_rename = execution._rename_no_replace_at
             competing: list[Path] = []
@@ -1178,7 +1189,10 @@ class Q011Section54QualifyingCampaignExecutionTests(unittest.TestCase):
                     destination_name,
                 )
 
-            with patch.object(execution, "_rename_no_replace_at", side_effect=collide):
+            with (
+                patch.object(execution.ctypes, "CDLL", return_value=object()),
+                patch.object(execution, "_rename_no_replace_at", side_effect=collide),
+            ):
                 with self.assertRaisesRegex(execution.CampaignPlanError, "already exists"):
                     _materialize(fixture)
             self.assertEqual(
@@ -1187,24 +1201,51 @@ class Q011Section54QualifyingCampaignExecutionTests(unittest.TestCase):
             )
             self.assertEqual(list(fixture["output_parent"].iterdir()), competing)
 
-    def test_publication_requires_atomic_no_replace_rename_support(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            parent = Path(directory)
-            (parent / "source").mkdir()
-            descriptor = os.open(parent, execution._DIRECTORY_FLAGS)
+    def test_lustre_fallback_publishes_under_output_parent_lock(self) -> None:
+        with _fixture() as fixture:
+            original_rename = os.rename
+            lock_observed = False
+
+            def inspect_locked_fallback(*args: object, **kwargs: object) -> None:
+                nonlocal lock_observed
+                competing = os.open(fixture["output_parent"], execution._DIRECTORY_FLAGS)
+                try:
+                    with self.assertRaises(BlockingIOError):
+                        fcntl.flock(competing, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    lock_observed = True
+                finally:
+                    os.close(competing)
+                original_rename(*args, **kwargs)
+
+            with (
+                patch.object(execution.ctypes, "CDLL", return_value=object()),
+                patch.object(execution.os, "rename", side_effect=inspect_locked_fallback),
+            ):
+                result = _materialize(fixture)
+            self.assertTrue(lock_observed)
+            self.assertTrue(Path(result["plan_root"]).is_dir())
+            self.assertFalse(
+                any(path.name.startswith(".") for path in fixture["output_parent"].iterdir())
+            )
+
+    def test_rejects_group_writable_or_concurrently_locked_output_parent(self) -> None:
+        with self.subTest("group writable"), _fixture() as fixture:
+            fixture["output_parent"].chmod(0o770)
+            with self.assertRaisesRegex(
+                execution.CampaignPlanError, "same-account isolated"
+            ):
+                _materialize(fixture)
+
+        with self.subTest("transaction lock"), _fixture() as fixture:
+            competing = os.open(fixture["output_parent"], execution._DIRECTORY_FLAGS)
             try:
-                with patch.object(execution.ctypes, "CDLL", return_value=object()):
-                    with self.assertRaisesRegex(
-                        execution.CampaignPlanError,
-                        "requires atomic no-replace rename support",
-                    ):
-                        execution._rename_no_replace_at(
-                            descriptor, "source", descriptor, "destination"
-                        )
-                self.assertTrue((parent / "source").is_dir())
-                self.assertFalse((parent / "destination").exists())
+                fcntl.flock(competing, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                with self.assertRaisesRegex(
+                    execution.CampaignPlanError, "transaction lock is unavailable"
+                ):
+                    _materialize(fixture)
             finally:
-                os.close(descriptor)
+                os.close(competing)
 
     def test_concurrent_injected_staging_member_fails_closed(self) -> None:
         with _fixture() as fixture:
