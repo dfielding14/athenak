@@ -78,6 +78,18 @@ SCIENCE_PROVENANCE_RECORD_TYPE = (
 SCIENCE_AUTHORITY = "non-authorizing-direct-fast-scientific-assessment"
 CT_AUDIT_RECORD_TYPE = "stage-i-direct-fast-ct-audit"
 HYPERBOLICITY_JOB_RECORD_TYPE = "cgl_lf_stage_i_direct_fast_hyperbolicity_job"
+HYPERBOLICITY_FORMULA_IDS = frozenset(
+    ("qualified-legacy", "literature-correct")
+)
+HYPERBOLICITY_FORMULA_FAMILIES = {
+    "qualified-legacy": "legacy_implementation",
+    "literature-correct": "literature_correct",
+}
+# This exact authenticated audit-script identity evaluates the frozen defective
+# implementation formula.  It predates explicit formula_id result provenance.
+KNOWN_LEGACY_HYPERBOLICITY_AUDIT_SCRIPTS = frozenset({
+    "1b1682fece477445867b9d84ef3a1678c7346e099b927817341aa74bc8660e96",
+})
 EVIDENCE_RESULTS = {"pass", "fail", "inconclusive"}
 SCIENCE_CONTRAST_RESULTS = {*EVIDENCE_RESULTS, "available"}
 R15_STRICT_FAILURE_RECORD_TYPE = "cgl-lf-stage-i-retained-strict-failure-evidence"
@@ -94,6 +106,7 @@ ACCEPTANCE_RECORD_TYPES = {
 STATUS_COLORS = {
     "pass": "#3a923a",
     "clean": "#3a923a",
+    "hyperbolic": "#3a923a",
     "warning": "#e6a83a",
     "warnings": "#e6a83a",
     "restricted": "#8c6bb1",
@@ -102,6 +115,8 @@ STATUS_COLORS = {
     "inconclusive": "#9e9e9e",
     "blocked_out_of_scope": "#9e9e9e",
     "fail": "#c43c39",
+    "negative": "#c43c39",
+    "nonfinite": "#c43c39",
     "structural_error": "#c43c39",
     "unknown": "#e6e6e6",
 }
@@ -207,6 +222,16 @@ def text_value(value: object) -> str:
     if isinstance(value, dict):
         return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
     return str(value)
+
+
+def csv_text_value(value: object) -> str:
+    """Format one deterministic, round-trip-safe CSV table cell."""
+
+    if isinstance(value, float):
+        return repr(value) if math.isfinite(value) else "--"
+    if isinstance(value, (list, tuple)):
+        return "; ".join(csv_text_value(item) for item in value)
+    return text_value(value)
 
 
 def sha256_file(path: Path) -> str:
@@ -603,6 +628,11 @@ def hyperbolicity_manifest_errors(
         return errors
     result_provenance = result.get("provenance")
     audit_binding = record.get("audit_script")
+    manifest_formula_id = record.get("formula_id", "qualified-legacy")
+    result_formula_id = (
+        result_provenance.get("formula_id", "qualified-legacy")
+        if isinstance(result_provenance, dict) else None
+    )
     selected_patterns = [
         snapshot.get("audit_input_pattern")
         for snapshot in selected if isinstance(snapshot, dict)
@@ -614,6 +644,8 @@ def hyperbolicity_manifest_errors(
         or result_provenance.get("script_sha256") != audit_binding.get("sha256")
         or result_provenance.get("input_patterns") != selected_patterns
         or result_provenance.get("hash_inputs") is not True
+        or manifest_formula_id not in HYPERBOLICITY_FORMULA_IDS
+        or result_formula_id != manifest_formula_id
     ):
         errors.append(f"{label} result provenance differs from selected coverage")
         return errors
@@ -686,6 +718,7 @@ def hyperbolicity_manifest_errors(
         errors.append(f"{label} result omits selected retained snapshots")
         return errors
     record["_publication_hyperbolicity_result"] = result
+    record["_publication_hyperbolicity_formula_id"] = manifest_formula_id
     record["_publication_hyperbolicity_result_path"] = str(result_path)
     record["_publication_hyperbolicity_result_sha_path"] = str(result_sha_path)
     return errors
@@ -2105,6 +2138,7 @@ def display_status(status: str) -> str:
     labels = {
         "pass": "pass",
         "clean": "clean",
+        "hyperbolic": "hyperbolic",
         "warnings": "warn",
         "warning": "warn",
         "restricted": "restricted",
@@ -2113,6 +2147,8 @@ def display_status(status: str) -> str:
         "inconclusive": "inconclusive",
         "blocked_out_of_scope": "blocked",
         "fail": "fail",
+        "negative": "negative",
+        "nonfinite": "nonfinite",
         "structural_error": "error",
         "unknown": "--",
     }
@@ -2157,7 +2193,9 @@ def write_table(
     )
     writer.writeheader()
     for row in rows:
-        writer.writerow({column: text_value(row.get(column)) for column in columns})
+        writer.writerow({
+            column: csv_text_value(row.get(column)) for column in columns
+        })
     csv_path = directory / f"{name}.csv"
     write_text(csv_path, csv_buffer.getvalue())
 
@@ -2260,13 +2298,13 @@ def status_matrix_figure(
         STATUS_COLORS["unknown"],
     ]
     categories = {
-        "pass": 0, "clean": 0,
+        "pass": 0, "clean": 0, "hyperbolic": 0,
         "warning": 1, "warnings": 1,
         "restricted": 2,
         "configuration": 3,
         "incomplete": 4,
         "inconclusive": 5, "blocked_out_of_scope": 5,
-        "fail": 6, "structural_error": 6,
+        "fail": 6, "structural_error": 6, "negative": 6, "nonfinite": 6,
         "unknown": 7,
     }
     matrix = [
@@ -2887,6 +2925,333 @@ def primary_full_window_scalar_rows(
     return rows
 
 
+def exact_nonnegative_integer(value: object) -> int | None:
+    """Return one exact nonnegative integer without converting it to float."""
+
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value if value >= 0 else None
+    if isinstance(value, float) and math.isfinite(value) and value.is_integer():
+        return int(value) if value >= 0.0 else None
+    return None
+
+
+def snapshot_hyperbolicity_summary(
+    snapshots: object,
+) -> dict[str, object] | None:
+    """Aggregate retained snapshots while preserving physical dispositions."""
+
+    if not isinstance(snapshots, list) or not snapshots:
+        return None
+    evaluated = 0
+    negative = 0
+    nonfinite = 0
+    minimum: float | None = None
+    aggregate_count = 0
+    for snapshot in snapshots:
+        aggregate = snapshot.get("aggregate") if isinstance(snapshot, dict) else None
+        if not isinstance(aggregate, dict):
+            continue
+        evaluated_value = exact_nonnegative_integer(aggregate.get("evaluated"))
+        negative_value = exact_nonnegative_integer(aggregate.get("negative"))
+        nonfinite_value = exact_nonnegative_integer(
+            aggregate.get("nonfinite_discriminant")
+        )
+        minimum_value = as_float(aggregate.get("minimum"))
+        if (
+            evaluated_value is None
+            or negative_value is None
+            or nonfinite_value is None
+            or negative_value > evaluated_value
+            or nonfinite_value > evaluated_value
+        ):
+            continue
+        aggregate_count += 1
+        evaluated += evaluated_value
+        negative += negative_value
+        nonfinite += nonfinite_value
+        if minimum_value is not None and (
+            minimum is None or minimum_value < minimum
+        ):
+            minimum = minimum_value
+    if aggregate_count == 0 or evaluated <= 0:
+        return None
+    disposition = (
+        "nonfinite"
+        if nonfinite > 0
+        else "negative"
+        if negative > 0 or (minimum is not None and minimum < 0.0)
+        else "hyperbolic"
+    )
+    return {
+        "result": disposition,
+        "negative_discriminant_fraction": negative / evaluated,
+        "negative_discriminant_count": negative,
+        "cell_direction_evaluations": evaluated,
+        "minimum_discriminant": minimum,
+        "nonfinite_discriminant_count": nonfinite,
+    }
+
+
+def authenticated_formula_summary(
+    result: object, manifest: object = None
+) -> dict[str, object]:
+    """Return formula identity and executable compatibility from one bound result."""
+
+    provenance = (
+        result.get("provenance") if isinstance(result, dict) else None
+    )
+    provenance = provenance if isinstance(provenance, dict) else {}
+
+    def result_or_provenance(name: str) -> object | None:
+        value = result.get(name) if isinstance(result, dict) else None
+        return value if value is not None else provenance.get(name)
+
+    explicit_formula_id = result_or_provenance("formula_id")
+    formula_id = (
+        explicit_formula_id
+        if isinstance(explicit_formula_id, str) and explicit_formula_id
+        else None
+    )
+    formula_id_provenance = (
+        "authenticated_result" if formula_id is not None else "inconclusive"
+    )
+    manifest_formula_id = (
+        manifest.get("_publication_hyperbolicity_formula_id")
+        if isinstance(manifest, dict) else None
+    )
+    if formula_id is None and manifest_formula_id in HYPERBOLICITY_FORMULA_IDS:
+        formula_id = manifest_formula_id
+        formula_id_provenance = "authenticated_legacy_default_contract"
+    script_sha = provenance.get("script_sha256")
+    if (
+        formula_id is None
+        and isinstance(script_sha, str)
+        and script_sha in KNOWN_LEGACY_HYPERBOLICITY_AUDIT_SCRIPTS
+    ):
+        formula_id = "qualified-legacy"
+        formula_id_provenance = "authenticated_known_legacy_audit_script"
+    formula_family = HYPERBOLICITY_FORMULA_FAMILIES.get(str(formula_id))
+
+    explicit_formula_provenance = result_or_provenance("formula_provenance")
+    if explicit_formula_provenance not in (None, "", [], {}):
+        formula_provenance: object | None = explicit_formula_provenance
+    else:
+        formula_provenance_members = {
+            name: provenance[name]
+            for name in (
+                "formula_reference",
+                "script_path",
+                "script_version",
+                "script_sha256",
+            )
+            if provenance.get(name) is not None
+        }
+        formula_provenance = formula_provenance_members or None
+    formula_provenance_status = (
+        "authenticated" if formula_provenance is not None else "inconclusive"
+    )
+
+    executable_formula_id_value = result_or_provenance("executable_formula_id")
+    executable_formula_id = (
+        executable_formula_id_value
+        if isinstance(executable_formula_id_value, str)
+        and executable_formula_id_value
+        else None
+    )
+    executable_formula_id_provenance = (
+        "authenticated_result"
+        if executable_formula_id is not None else "inconclusive"
+    )
+
+    compatibility_value = result_or_provenance("formula_executable_compatibility")
+    compatibility_reason = result_or_provenance(
+        "formula_executable_compatibility_reason"
+    )
+    compatibility_provenance = "inconclusive"
+    executable_formula_family = HYPERBOLICITY_FORMULA_FAMILIES.get(
+        str(executable_formula_id)
+    )
+    identity_compatibility = (
+        "compatible" if formula_family == executable_formula_family else "incompatible"
+    ) if formula_family is not None and executable_formula_family is not None else None
+    if isinstance(compatibility_value, dict):
+        compatibility_reason = (
+            compatibility_value.get("reason")
+            if compatibility_value.get("reason") is not None
+            else compatibility_reason
+        )
+        compatibility_value = (
+            compatibility_value.get("status")
+            if compatibility_value.get("status") is not None
+            else compatibility_value.get("result")
+        )
+    if isinstance(compatibility_value, bool):
+        compatibility = "compatible" if compatibility_value else "incompatible"
+        compatibility_provenance = "authenticated_result"
+    elif compatibility_value in {"compatible", "incompatible", "inconclusive"}:
+        compatibility = str(compatibility_value)
+        compatibility_provenance = "authenticated_result"
+    elif identity_compatibility is not None:
+        compatibility = identity_compatibility
+        compatibility_provenance = "derived_from_authenticated_formula_ids"
+        compatibility_reason = (
+            "authenticated audit and executable formula identities agree"
+            if compatibility == "compatible"
+            else "authenticated audit and executable formula identities differ"
+        )
+    else:
+        compatibility = "inconclusive"
+    if compatibility == "compatible" and identity_compatibility == "incompatible":
+        compatibility = "incompatible"
+        compatibility_provenance = "authenticated_result_conflicts_with_formula_ids"
+        compatibility_reason = (
+            "authenticated compatibility declaration conflicts with differing audit "
+            "and executable formula identities"
+        )
+    if not isinstance(compatibility_reason, str) or not compatibility_reason:
+        compatibility_reason = (
+            "authenticated formula/executable compatibility is unavailable"
+            if compatibility == "inconclusive"
+            else "authenticated result declares formula/executable compatibility"
+        )
+
+    numerical = snapshot_hyperbolicity_summary(
+        result.get("snapshots") if isinstance(result, dict) else None
+    )
+    numerical_result = (
+        str(numerical["result"]) if isinstance(numerical, dict) else "inconclusive"
+    )
+    return {
+        "formula_id": formula_id,
+        "formula_disposition_family": formula_family,
+        "formula_id_provenance": formula_id_provenance,
+        "formula_provenance": formula_provenance,
+        "formula_provenance_status": formula_provenance_status,
+        "executable_formula_id": executable_formula_id,
+        "executable_formula_id_provenance": executable_formula_id_provenance,
+        "formula_executable_compatibility": compatibility,
+        "formula_executable_compatibility_provenance": compatibility_provenance,
+        "formula_executable_compatibility_reason": compatibility_reason,
+        "legacy_implementation_disposition": (
+            numerical_result
+            if formula_family == "legacy_implementation" else "inconclusive"
+        ),
+        "literature_correct_disposition": (
+            numerical_result
+            if formula_family == "literature_correct" else "inconclusive"
+        ),
+    }
+
+
+def strict_hyperbolic_claim_summary(
+    experiment_scope: str,
+    coverage_result: str,
+    numerical_result: str,
+    formula_id: object = None,
+    formula_provenance_status: str = "inconclusive",
+    formula_executable_compatibility: str = "inconclusive",
+) -> dict[str, object]:
+    """Return literature-correct strict-claim eligibility without hiding its cause."""
+
+    formula_family = HYPERBOLICITY_FORMULA_FAMILIES.get(str(formula_id))
+    if experiment_scope == "passive_delta":
+        return {
+            "status": "not_applicable",
+            "eligible": False,
+            "reason": "passive-delta case has no active CGL signal-speed claim",
+        }
+    if coverage_result != "pass":
+        return {
+            "status": "inconclusive",
+            "eligible": None,
+            "reason": (
+                "authenticated all-retained-snapshot coverage and result are required"
+            ),
+        }
+    if formula_family == "legacy_implementation":
+        return {
+            "status": "inconclusive_legacy_implementation",
+            "eligible": None,
+            "reason": (
+                "legacy-implementation disposition neither supports nor refutes the "
+                "literature-correct strict-hyperbolic claim"
+            ),
+        }
+    if formula_family != "literature_correct":
+        return {
+            "status": "inconclusive_formula_identity",
+            "eligible": None,
+            "reason": (
+                "authenticated literature-correct audit formula identity is required"
+            ),
+        }
+    if formula_provenance_status != "authenticated":
+        return {
+            "status": "inconclusive_formula_provenance",
+            "eligible": None,
+            "reason": "authenticated literature-correct formula provenance is required",
+        }
+    if formula_executable_compatibility == "incompatible":
+        return {
+            "status": "excluded_formula_executable_incompatible",
+            "eligible": False,
+            "reason": (
+                "literature-correct audit formula is incompatible with the audited "
+                "executable or campaign"
+            ),
+        }
+    if formula_executable_compatibility != "compatible":
+        return {
+            "status": "inconclusive_formula_executable_compatibility",
+            "eligible": None,
+            "reason": (
+                "authenticated literature-correct formula/executable compatibility "
+                "is required"
+            ),
+        }
+    if numerical_result == "negative":
+        return {
+            "status": "excluded_negative",
+            "eligible": False,
+            "reason": (
+                "authenticated all-snapshot audit contains negative discriminants"
+            ),
+        }
+    if numerical_result == "nonfinite":
+        return {
+            "status": "excluded_nonfinite",
+            "eligible": False,
+            "reason": (
+                "authenticated all-snapshot audit contains nonfinite discriminants"
+            ),
+        }
+    if numerical_result != "hyperbolic":
+        return {
+            "status": "inconclusive",
+            "eligible": None,
+            "reason": "authenticated physical numerical disposition is unavailable",
+        }
+    if experiment_scope == "restricted":
+        return {
+            "status": "excluded_experiment_scope",
+            "eligible": False,
+            "reason": (
+                "all retained snapshots are hyperbolic, but experiment scope is "
+                "restricted"
+            ),
+        }
+    return {
+        "status": "eligible",
+        "eligible": True,
+        "reason": (
+            "standard-scope case has compatible authenticated literature-correct "
+            "hyperbolic all-snapshot coverage"
+        ),
+    }
+
+
 def authenticated_hyperbolicity_manifest(
     data: PublicationData, case_id: str
 ) -> dict[str, Any] | None:
@@ -2942,6 +3307,9 @@ def hyperbolicity_coverage_rows(data: PublicationData) -> list[dict[str, object]
     rows: list[dict[str, object]] = []
     for case_id in CASE_IDS:
         if case_id not in ACTIVE_ENERGY_CASES:
+            claim = strict_hyperbolic_claim_summary(
+                "passive_delta", "not_applicable", "not_applicable"
+            )
             rows.append({
                 "case_id": case_id,
                 "coverage_result": "not_applicable",
@@ -2949,7 +3317,24 @@ def hyperbolicity_coverage_rows(data: PublicationData) -> list[dict[str, object]
                 "coverage_reason": (
                     "passive-delta case has no active CGL signal-speed audit"
                 ),
-                "claim_scope": "passive_delta",
+                "experiment_scope": "passive_delta",
+                "formula_id": None,
+                "formula_disposition_family": None,
+                "formula_id_provenance": "not_applicable",
+                "formula_provenance": None,
+                "formula_provenance_status": "not_applicable",
+                "executable_formula_id": None,
+                "executable_formula_id_provenance": "not_applicable",
+                "formula_executable_compatibility": "not_applicable",
+                "formula_executable_compatibility_provenance": "not_applicable",
+                "formula_executable_compatibility_reason": (
+                    "passive-delta case has no active CGL signal-speed audit"
+                ),
+                "legacy_implementation_disposition": "not_applicable",
+                "literature_correct_disposition": "not_applicable",
+                "strict_hyperbolic_claim_status": claim["status"],
+                "strict_hyperbolic_claim_eligible": claim["eligible"],
+                "strict_hyperbolic_claim_reason": claim["reason"],
                 "selection_provenance": "not_applicable",
                 "result_provenance": "not_applicable",
             })
@@ -2962,7 +3347,9 @@ def hyperbolicity_coverage_rows(data: PublicationData) -> list[dict[str, object]
             manifest.get("_publication_hyperbolicity_result")
             if isinstance(manifest, dict) else None
         )
+        formula = authenticated_formula_summary(result, manifest)
         snapshots = result.get("snapshots") if isinstance(result, dict) else None
+        numerical = snapshot_hyperbolicity_summary(snapshots)
         snapshot_times = [
             value
             for value in (
@@ -2993,7 +3380,21 @@ def hyperbolicity_coverage_rows(data: PublicationData) -> list[dict[str, object]
             and complete_count > 0
             and complete_count == selected_count == result_count
         )
-        hyper = hyperbolicity_diagnostics(data, case_id)
+        experiment_scope = (
+            "restricted" if scope_status(case_id) == "restricted" else "standard"
+        )
+        numerical_result = (
+            str(numerical["result"])
+            if isinstance(numerical, dict) else "inconclusive"
+        )
+        claim = strict_hyperbolic_claim_summary(
+            experiment_scope,
+            "pass" if coverage_pass else "inconclusive",
+            numerical_result,
+            formula["formula_id"],
+            str(formula["formula_provenance_status"]),
+            str(formula["formula_executable_compatibility"]),
+        )
         coverage_reason = (
             "authenticated all-snapshot result covers every complete retained snapshot"
             if coverage_pass
@@ -3008,9 +3409,7 @@ def hyperbolicity_coverage_rows(data: PublicationData) -> list[dict[str, object]
         rows.append({
             "case_id": case_id,
             "coverage_result": "pass" if coverage_pass else "inconclusive",
-            "numerical_result": (
-                hyper["result"] if isinstance(result, dict) else "inconclusive"
-            ),
+            "numerical_result": numerical_result,
             "snapshot_policy": policy,
             "complete_retained_snapshot_count": complete_count,
             "selected_snapshot_count": selected_count,
@@ -3019,24 +3418,27 @@ def hyperbolicity_coverage_rows(data: PublicationData) -> list[dict[str, object]
             "time_first": min(snapshot_times) if snapshot_times else None,
             "time_last": max(snapshot_times) if snapshot_times else None,
             "negative_discriminant_count": (
-                hyper["negative_discriminant_count"]
-                if isinstance(result, dict) else None
+                numerical["negative_discriminant_count"]
+                if isinstance(numerical, dict) else None
             ),
             "nonfinite_discriminant_count": (
-                hyper.get("nonfinite_discriminant_count")
-                if isinstance(result, dict) else None
+                numerical["nonfinite_discriminant_count"]
+                if isinstance(numerical, dict) else None
             ),
             "cell_direction_evaluations": (
-                hyper["cell_direction_evaluations"]
-                if isinstance(result, dict) else None
+                numerical["cell_direction_evaluations"]
+                if isinstance(numerical, dict) else None
             ),
             "minimum_discriminant": (
-                hyper["minimum_discriminant"] if isinstance(result, dict) else None
+                numerical["minimum_discriminant"]
+                if isinstance(numerical, dict) else None
             ),
             "coverage_reason": coverage_reason,
-            "claim_scope": (
-                "restricted" if scope_status(case_id) == "restricted" else "standard"
-            ),
+            "experiment_scope": experiment_scope,
+            **formula,
+            "strict_hyperbolic_claim_status": claim["status"],
+            "strict_hyperbolic_claim_eligible": claim["eligible"],
+            "strict_hyperbolic_claim_reason": claim["reason"],
             "selection_provenance": (
                 "authenticated" if isinstance(manifest, dict) else "inconclusive"
             ),
@@ -4536,51 +4938,15 @@ def hyperbolicity_diagnostics(
     roots = case_evidence_roots(data, case_id)
     snapshot_records: list[dict[str, object]] = []
     for root in roots:
-        snapshots = root.get("snapshots")
-        if not isinstance(snapshots, list):
-            continue
-        evaluated = 0.0
-        negative = 0.0
-        nonfinite = 0.0
-        minimum: float | None = None
-        for snapshot in snapshots:
-            aggregate = snapshot.get("aggregate") if isinstance(snapshot, dict) else None
-            if not isinstance(aggregate, dict):
-                continue
-            evaluated_value = as_float(aggregate.get("evaluated"))
-            negative_value = as_float(aggregate.get("negative"))
-            nonfinite_value = as_float(aggregate.get("nonfinite_discriminant"))
-            minimum_value = as_float(aggregate.get("minimum"))
-            if evaluated_value is not None:
-                evaluated += evaluated_value
-            if negative_value is not None:
-                negative += negative_value
-            if nonfinite_value is not None:
-                nonfinite += nonfinite_value
-            if minimum_value is not None and (
-                minimum is None or minimum_value < minimum
-            ):
-                minimum = minimum_value
-        if evaluated > 0.0:
-            snapshot_records.append({
-                "result": (
-                    "fail" if negative > 0.0 or nonfinite > 0.0 or (
-                        minimum is not None and minimum < 0.0
-                    ) else "pass"
-                ),
-                "negative_discriminant_fraction": negative / evaluated,
-                "negative_discriminant_count": negative,
-                "cell_direction_evaluations": evaluated,
-                "minimum_discriminant": minimum,
-                "nonfinite_discriminant_count": nonfinite,
-            })
+        summary = snapshot_hyperbolicity_summary(root.get("snapshots"))
+        if summary is not None:
+            snapshot_records.append(summary)
     if snapshot_records:
-        adverse = [
-            record for record in snapshot_records if record["result"] == "fail"
-        ]
+        severity = {"hyperbolic": 0, "negative": 1, "nonfinite": 2}
         return max(
-            adverse or snapshot_records,
+            snapshot_records,
             key=lambda record: (
+                severity.get(str(record["result"]), -1),
                 as_float(record["negative_discriminant_fraction"]) or 0.0,
                 as_float(record["cell_direction_evaluations"]) or 0.0,
             ),
@@ -4592,7 +4958,12 @@ def hyperbolicity_diagnostics(
             "retained_state_hyperbolicity.result",
         ),
     )
-    normalized_status = str(status) if status in {"pass", "fail", "inconclusive"} else None
+    normalized_status = (
+        "hyperbolic" if status == "pass"
+        else str(status)
+        if status in {"hyperbolic", "negative", "nonfinite", "inconclusive"}
+        else None
+    )
     negative_fraction = as_float(first_evidence_value(
         roots,
         (
@@ -4606,7 +4977,7 @@ def hyperbolicity_diagnostics(
             "negative_fraction",
         ),
     ))
-    negative_count = as_float(first_evidence_value(
+    negative_count = exact_nonnegative_integer(first_evidence_value(
         roots,
         (
             "hyperbolicity.negative_discriminant_count",
@@ -4619,7 +4990,7 @@ def hyperbolicity_diagnostics(
             "negative_count",
         ),
     ))
-    evaluation_count = as_float(first_evidence_value(
+    evaluation_count = exact_nonnegative_integer(first_evidence_value(
         roots,
         (
             "hyperbolicity.cell_direction_evaluations",
@@ -4645,7 +5016,7 @@ def hyperbolicity_diagnostics(
             "minimum",
         ),
     ))
-    nonfinite_count = as_float(first_evidence_value(
+    nonfinite_count = exact_nonnegative_integer(first_evidence_value(
         roots,
         (
             "hyperbolicity.nonfinite_discriminant_count",
@@ -4654,17 +5025,24 @@ def hyperbolicity_diagnostics(
             "nonfinite_discriminant_count",
         ),
     ))
-    if normalized_status is None:
-        if (
+    if nonfinite_count is not None and nonfinite_count > 0:
+        normalized_status = "nonfinite"
+    elif (
             (negative_fraction is not None and negative_fraction > 0.0)
             or (negative_count is not None and negative_count > 0.0)
             or (minimum is not None and minimum < 0.0)
-        ):
-            normalized_status = "fail"
-        elif negative_count == 0.0 and evaluation_count is not None and evaluation_count > 0.0:
-            normalized_status = "pass"
-        else:
-            normalized_status = "unknown"
+    ):
+        normalized_status = "negative"
+    elif (
+        normalized_status is None
+        and negative_count == 0
+        and nonfinite_count in {None, 0}
+        and evaluation_count is not None
+        and evaluation_count > 0
+    ):
+        normalized_status = "hyperbolic"
+    elif normalized_status is None:
+        normalized_status = "inconclusive"
     return {
         "result": normalized_status,
         "negative_discriminant_fraction": negative_fraction,
@@ -4863,28 +5241,73 @@ def render_hyperbolicity_coverage(
     statuses: list[list[str]] = []
     labels: list[list[str]] = []
     for row in rows:
-        case_id = str(row["case_id"])
         coverage = str(row["coverage_result"])
-        numerical = str(row["numerical_result"])
-        scope = "restricted" if scope_status(case_id) == "restricted" else "configuration"
+        formula_id = row.get("formula_id")
+        formula_family = row.get("formula_disposition_family")
+        formula_status = (
+            "warning" if formula_family == "legacy_implementation"
+            else "configuration" if formula_family == "literature_correct"
+            else "inconclusive"
+        )
+        legacy = str(row["legacy_implementation_disposition"])
+        literature = str(row["literature_correct_disposition"])
+        experiment_scope = str(row["experiment_scope"])
+        experiment_status = (
+            "restricted" if experiment_scope == "restricted" else "configuration"
+        )
+        claim = str(row["strict_hyperbolic_claim_status"])
+        claim_label = {
+            "eligible": "eligible",
+            "inconclusive_legacy_implementation": "legacy-only",
+            "inconclusive_formula_identity": "formula unknown",
+            "inconclusive_formula_provenance": "formula provenance?",
+            "inconclusive_formula_executable_compatibility": "compatibility?",
+            "excluded_formula_executable_incompatible": "incompatible",
+            "excluded_negative": "negative",
+            "excluded_nonfinite": "nonfinite",
+            "excluded_experiment_scope": "restricted",
+            "not_applicable": "not applicable",
+            "inconclusive": "inconclusive",
+        }.get(claim, claim)
+        claim_status = (
+            "pass" if claim == "eligible"
+            else "fail" if claim in {
+                "excluded_negative",
+                "excluded_nonfinite",
+                "excluded_formula_executable_incompatible",
+            }
+            else "restricted" if claim == "excluded_experiment_scope"
+            else "configuration" if claim == "not_applicable"
+            else "inconclusive"
+        )
         selected = row.get("selected_snapshot_count")
         complete = row.get("complete_retained_snapshot_count")
         audited = row.get("audited_snapshot_count")
-        statuses.append([coverage, numerical, scope])
+        statuses.append([
+            coverage, formula_status, legacy, literature, experiment_status,
+            claim_status,
+        ])
         labels.append([
             (
                 f"{text_value(audited)}/{text_value(complete)} audited"
                 if audited is not None or complete is not None else "inconclusive"
             ),
-            display_status(numerical),
-            "restricted" if scope == "restricted" else "standard",
+            text_value(formula_id),
+            display_status(legacy),
+            display_status(literature),
+            experiment_scope,
+            claim_label,
         ])
         if selected is not None and audited is None:
             labels[-1][0] = f"{text_value(selected)}/{text_value(complete)} selected"
     status_matrix_figure(
         plt, colors, patches,
         [str(row["case_id"]) for row in rows],
-        ["All retained snapshots", "Numerical result", "Claim scope"],
+        [
+            "All retained snapshots", "Audit formula",
+            "Legacy implementation", "Literature correct",
+            "Experiment scope", "Strict-hyperbolic claim",
+        ],
         statuses,
         labels,
         "Authenticated all-snapshot active-CGL hyperbolicity coverage",
@@ -4892,8 +5315,10 @@ def render_hyperbolicity_coverage(
         (
             "Coverage passes only when an authenticated snapshot_policy=all manifest "
             "and completed result cover every complete retained snapshot exactly once. "
-            "A numerically clean latest-snapshot or unbound result remains inconclusive "
-            "for all-snapshot coverage. Passive-delta cases are not applicable."
+            "Physical dispositions are assigned only to the authenticated audit formula. "
+            "Literature-correct strict-claim eligibility additionally requires compatible "
+            "authenticated formula/executable provenance. Experiment scope remains "
+            "separate; passive-delta cases are not applicable."
         ),
     )
 
@@ -5126,7 +5551,11 @@ def report_markdown(data: PublicationData, products: list[Path], output: Path) -
         "source-history statistics without additional publication-layer normalization.",
         "- All-snapshot hyperbolicity coverage passes only for an authenticated "
         "snapshot_policy=all selection with an exactly once completed result. "
-        "Latest-only, missing, or stale results remain inconclusive.",
+        "Physical dispositions remain hyperbolic, negative, or nonfinite and are "
+        "assigned separately to legacy-implementation or literature-correct formula "
+        "evidence. Latest-only, missing, stale, or unidentified-formula results remain "
+        "inconclusive. Static experiment scope, formula/executable compatibility, and "
+        "strict-hyperbolic claim eligibility are reported separately.",
         "- Signed LF applied-stage ledgers remain distinct from sparse retained-"
         "snapshot pressure-work and heat-flux reconstructions; signs are preserved.",
         "- MKS24 panel and lineage disposition tables report authenticated admitted, "
@@ -5225,7 +5654,19 @@ def render_products(data: PublicationData, output: Path) -> list[Path]:
                 "all_complete_retained_snapshots_selected", "time_first", "time_last",
                 "negative_discriminant_count", "nonfinite_discriminant_count",
                 "cell_direction_evaluations", "minimum_discriminant",
-                "coverage_reason", "claim_scope", "selection_provenance",
+                "coverage_reason", "experiment_scope",
+                "formula_id", "formula_disposition_family",
+                "formula_id_provenance", "formula_provenance",
+                "formula_provenance_status", "executable_formula_id",
+                "executable_formula_id_provenance",
+                "formula_executable_compatibility",
+                "formula_executable_compatibility_provenance",
+                "formula_executable_compatibility_reason",
+                "legacy_implementation_disposition",
+                "literature_correct_disposition",
+                "strict_hyperbolic_claim_status",
+                "strict_hyperbolic_claim_eligible",
+                "strict_hyperbolic_claim_reason", "selection_provenance",
                 "result_provenance",
             ],
             hyperbolicity_coverage_rows(data),
@@ -5449,9 +5890,12 @@ exclude failed, incomplete, and numerically inconclusive cases.
    by the reviewed convergence decisions and limits. All three authenticated curves
    are required in each panel.
 10. **All-snapshot hyperbolicity coverage.** Authenticated active-CGL retained-state
-    coverage and numerical disposition. Coverage passes only when every complete
-    retained snapshot is selected and represented exactly once in a completed bound
-    result; latest-only or missing results remain inconclusive.
+    coverage, physical numerical disposition by authenticated formula identity,
+    static experiment scope, formula/executable compatibility, and resulting
+    literature-correct strict-hyperbolic claim eligibility. Coverage passes only when
+    every complete retained snapshot is represented exactly once in a completed bound
+    result. Negative or nonfinite evidence excludes strict-claim support only when the
+    literature-correct audit is authenticated and compatible with the executable.
 """
     captions_path = output / "captions.md"
     write_text(captions_path, captions)

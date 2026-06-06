@@ -509,7 +509,7 @@ def test_real_hyperbolicity_snapshot_aggregate_schema_is_consumed(
     result = publication.hyperbolicity_diagnostics(data, "R10")
 
     assert len(data.audit_records) == 1
-    assert result["result"] == "fail"
+    assert result["result"] == "negative"
     assert result["negative_discriminant_fraction"] == pytest.approx(0.09)
     assert result["negative_discriminant_count"] == 90
     assert result["cell_direction_evaluations"] == 1000
@@ -601,7 +601,7 @@ def test_r14_scope_prioritizes_hard_bound_and_never_invents_variant(
     observed, status = publication.scope_observed_diagnostic(data, "R14")
     rows = {row["case_id"]: row for row in publication.scope_rows(data)}
 
-    assert publication.hyperbolicity_status(data, "R14") == "pass"
+    assert publication.hyperbolicity_status(data, "R14") == "hyperbolic"
     assert observed == "hard-bound=2.77e+11"
     assert status == "warning"
     assert rows["R14"]["observed_diagnostic"] == observed
@@ -1146,8 +1146,29 @@ def install_material_science(publication, data, bindings: dict[str, dict]) -> No
 
 
 def write_all_snapshot_hyperbolicity_evidence(
-    publication, analysis: Path, root: Path, case_id: str = "R02"
+    publication, analysis: Path, root: Path, case_id: str = "R02",
+    aggregates: tuple[dict[str, object], ...] | None = None,
+    formula_id: str | None = "qualified-legacy",
+    formula_provenance: object | None = None,
+    executable_formula_id: str | None = None,
+    formula_executable_compatibility: object | None = None,
 ) -> tuple[Path, Path]:
+    if aggregates is None:
+        aggregates = (
+            {
+                "evaluated": 1000,
+                "negative": 0,
+                "nonfinite_discriminant": 0,
+                "minimum": 0.25,
+            },
+            {
+                "evaluated": 1000,
+                "negative": 0,
+                "nonfinite_discriminant": 0,
+                "minimum": 0.25,
+            },
+        )
+    assert len(aggregates) == 2
     case_dir = analysis / "cases" / case_id
     rank_records = []
     selected = []
@@ -1178,12 +1199,7 @@ def write_all_snapshot_hyperbolicity_evidence(
                     [rank_record], sort_keys=True, separators=(",", ":")
                 ).encode("utf-8")
             ).hexdigest(),
-            "aggregate": {
-                "evaluated": 1000,
-                "negative": 0,
-                "nonfinite_discriminant": 0,
-                "minimum": 0.25,
-            },
+            "aggregate": aggregates[index],
         })
     snapshot_index = case_dir / "snapshots.json"
     write_json(snapshot_index, {
@@ -1204,15 +1220,29 @@ def write_all_snapshot_hyperbolicity_evidence(
     for path in (audit_script, bin_convert, launcher):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(path.name + "\n", encoding="utf-8")
+    provenance = {
+        "script_path": str(audit_script.absolute()),
+        "script_sha256": sha256(audit_script),
+        "bin_convert_path": str(bin_convert.absolute()),
+        "bin_convert_sha256": sha256(bin_convert),
+        "input_patterns": [str(record["audit_input_pattern"]) for record in selected],
+        "hash_inputs": True,
+        "formula_reference": str(audit_script.absolute()),
+    }
+    if formula_id is not None:
+        provenance["formula_id"] = formula_id
+    if formula_provenance is None and formula_id is not None:
+        formula_provenance = {"fixture_formula_id": formula_id}
+    if formula_provenance is not None:
+        provenance["formula_provenance"] = formula_provenance
+    if executable_formula_id is not None:
+        provenance["executable_formula_id"] = executable_formula_id
+    if formula_executable_compatibility is not None:
+        provenance["formula_executable_compatibility"] = (
+            formula_executable_compatibility
+        )
     result = {
-        "provenance": {
-            "script_path": str(audit_script.absolute()),
-            "script_sha256": sha256(audit_script),
-            "bin_convert_path": str(bin_convert.absolute()),
-            "bin_convert_sha256": sha256(bin_convert),
-            "input_patterns": [str(record["audit_input_pattern"]) for record in selected],
-            "hash_inputs": True,
-        },
+        "provenance": provenance,
         "snapshots": result_snapshots,
     }
     attempt = root / case_id / "attempt-000"
@@ -1252,6 +1282,8 @@ def write_all_snapshot_hyperbolicity_evidence(
             "expected_selected_snapshots_sha256": selected_digest,
         },
     }
+    if formula_id is not None:
+        manifest["formula_id"] = formula_id
     manifest_path = attempt / "manifest.json"
     write_json(manifest_path, manifest)
     return manifest_path, Path(str(rank_records[-1]["path"]))
@@ -1357,10 +1389,24 @@ def test_material_figures_and_tables_are_integrated(publication, tmp_path):
     scalar = (output / "tables/primary_full_window_scalars.csv").read_text(
         encoding="utf-8"
     )
+    hyperbolicity_header = (
+        output / "tables/hyperbolicity_all_snapshot_coverage.csv"
+    ).read_text(encoding="utf-8").splitlines()[0].split(",")
     assert "floor_margin" not in health
     assert "mass_relative_drift_maximum" in health
     assert "strict_failure" in health
     assert "effective_sample_count" in scalar
+    assert "experiment_scope" in hyperbolicity_header
+    assert "formula_id" in hyperbolicity_header
+    assert "formula_disposition_family" in hyperbolicity_header
+    assert "formula_provenance" in hyperbolicity_header
+    assert "formula_executable_compatibility" in hyperbolicity_header
+    assert "legacy_implementation_disposition" in hyperbolicity_header
+    assert "literature_correct_disposition" in hyperbolicity_header
+    assert "strict_hyperbolic_claim_status" in hyperbolicity_header
+    assert "strict_hyperbolic_claim_eligible" in hyperbolicity_header
+    assert "strict_hyperbolic_claim_reason" in hyperbolicity_header
+    assert "claim_scope" not in hyperbolicity_header
 
 
 def test_all_snapshot_hyperbolicity_requires_authenticated_exact_coverage(
@@ -1368,7 +1414,22 @@ def test_all_snapshot_hyperbolicity_requires_authenticated_exact_coverage(
 ):
     analysis = tmp_path / "analysis"
     _, rank = write_all_snapshot_hyperbolicity_evidence(
-        publication, analysis, tmp_path / "hyper"
+        publication, analysis, tmp_path / "hyper",
+        formula_id=None,
+        aggregates=(
+            {
+                "evaluated": 870580224,
+                "negative": 0,
+                "nonfinite_discriminant": 0,
+                "minimum": 0.25,
+            },
+            {
+                "evaluated": 870580224,
+                "negative": 739552,
+                "nonfinite_discriminant": 0,
+                "minimum": -16.118885826958632,
+            },
+        ),
     )
 
     data = publication.discover_data(analysis, [tmp_path / "hyper"])
@@ -1378,19 +1439,45 @@ def test_all_snapshot_hyperbolicity_requires_authenticated_exact_coverage(
     }["R02"]
 
     assert row["coverage_result"] == "pass"
-    assert row["numerical_result"] == "pass"
+    assert row["numerical_result"] == "negative"
     assert row["snapshot_policy"] == "all"
     assert row["complete_retained_snapshot_count"] == 2
     assert row["selected_snapshot_count"] == 2
     assert row["audited_snapshot_count"] == 2
-    assert row["cell_direction_evaluations"] == 2000
-    assert row["minimum_discriminant"] == pytest.approx(0.25)
+    assert row["negative_discriminant_count"] == 739552
+    assert row["nonfinite_discriminant_count"] == 0
+    assert row["cell_direction_evaluations"] == 1741160448
+    assert row["minimum_discriminant"] == -16.118885826958632
+    assert row["experiment_scope"] == "standard"
+    assert row["formula_id"] == "qualified-legacy"
+    assert row["formula_disposition_family"] == "legacy_implementation"
+    assert row["formula_id_provenance"] == "authenticated_legacy_default_contract"
+    assert row["formula_provenance_status"] == "authenticated"
+    assert row["executable_formula_id"] is None
+    assert row["formula_executable_compatibility"] == "inconclusive"
+    assert row["legacy_implementation_disposition"] == "negative"
+    assert row["literature_correct_disposition"] == "inconclusive"
+    assert (
+        row["strict_hyperbolic_claim_status"]
+        == "inconclusive_legacy_implementation"
+    )
+    assert row["strict_hyperbolic_claim_eligible"] is None
+    assert "neither supports nor refutes" in row["strict_hyperbolic_claim_reason"]
     assert row["selection_provenance"] == "authenticated"
     assert row["result_provenance"] == "authenticated"
     assert {
         value["case_id"]: value
         for value in publication.hyperbolicity_coverage_rows(data)
     }["R06"]["coverage_result"] == "not_applicable"
+    csv_path, _ = publication.write_table(
+        tmp_path / "tables",
+        "exact_hyperbolicity",
+        ["cell_direction_evaluations", "minimum_discriminant"],
+        [row],
+    )
+    assert csv_path.read_text(encoding="utf-8").splitlines()[1] == (
+        "1741160448,-16.118885826958632"
+    )
 
     rank.write_text("changed after authenticated audit\n", encoding="utf-8")
     stale = {
@@ -1399,8 +1486,202 @@ def test_all_snapshot_hyperbolicity_requires_authenticated_exact_coverage(
     }["R02"]
     assert stale["coverage_result"] == "inconclusive"
     assert stale["numerical_result"] == "inconclusive"
+    assert stale["formula_id"] is None
+    assert stale["legacy_implementation_disposition"] == "inconclusive"
+    assert stale["literature_correct_disposition"] == "inconclusive"
+    assert stale["strict_hyperbolic_claim_status"] == "inconclusive"
+    assert stale["strict_hyperbolic_claim_eligible"] is None
     assert stale["selection_provenance"] == "inconclusive"
     assert stale["result_provenance"] == "inconclusive"
+
+
+def test_hyperbolicity_dispositions_and_claim_status_remain_physical(publication):
+    hyperbolic = publication.snapshot_hyperbolicity_summary([{
+        "aggregate": {
+            "evaluated": 10,
+            "negative": 0,
+            "nonfinite_discriminant": 0,
+            "minimum": 0.125,
+        }
+    }])
+    nonfinite = publication.snapshot_hyperbolicity_summary([{
+        "aggregate": {
+            "evaluated": 10,
+            "negative": 2,
+            "nonfinite_discriminant": 1,
+            "minimum": -4.0,
+        }
+    }])
+
+    assert hyperbolic["result"] == "hyperbolic"
+    assert nonfinite["result"] == "nonfinite"
+    assert publication.strict_hyperbolic_claim_summary(
+        "standard",
+        "pass",
+        "hyperbolic",
+        "literature-correct",
+        "authenticated",
+        "compatible",
+    ) == {
+        "status": "eligible",
+        "eligible": True,
+        "reason": (
+            "standard-scope case has compatible authenticated literature-correct "
+            "hyperbolic all-snapshot coverage"
+        ),
+    }
+    restricted = publication.strict_hyperbolic_claim_summary(
+        "restricted",
+        "pass",
+        "hyperbolic",
+        "literature-correct",
+        "authenticated",
+        "compatible",
+    )
+    assert restricted["status"] == "excluded_experiment_scope"
+    assert restricted["eligible"] is False
+    legacy = publication.strict_hyperbolic_claim_summary(
+        "standard",
+        "pass",
+        "negative",
+        "qualified-legacy",
+        "authenticated",
+        "compatible",
+    )
+    assert legacy["status"] == "inconclusive_legacy_implementation"
+    assert legacy["eligible"] is None
+    incompatible = publication.strict_hyperbolic_claim_summary(
+        "standard",
+        "pass",
+        "hyperbolic",
+        "literature-correct",
+        "authenticated",
+        "incompatible",
+    )
+    assert incompatible["status"] == "excluded_formula_executable_incompatible"
+    assert incompatible["eligible"] is False
+    no_compatibility = publication.strict_hyperbolic_claim_summary(
+        "standard",
+        "pass",
+        "hyperbolic",
+        "literature-correct",
+        "authenticated",
+        "inconclusive",
+    )
+    assert (
+        no_compatibility["status"]
+        == "inconclusive_formula_executable_compatibility"
+    )
+    assert no_compatibility["eligible"] is None
+
+
+def test_formula_identity_routes_dispositions_and_gates_strict_claim(
+    publication, tmp_path
+):
+    analysis = tmp_path / "analysis"
+    write_all_snapshot_hyperbolicity_evidence(
+        publication,
+        analysis,
+        tmp_path / "literature",
+        formula_id="literature-correct",
+        formula_provenance={"reference": "independently-qualified expression"},
+        executable_formula_id="literature-correct",
+    )
+
+    data = publication.discover_data(analysis, [tmp_path / "literature"])
+    row = {
+        value["case_id"]: value
+        for value in publication.hyperbolicity_coverage_rows(data)
+    }["R02"]
+
+    assert row["numerical_result"] == "hyperbolic"
+    assert row["legacy_implementation_disposition"] == "inconclusive"
+    assert row["literature_correct_disposition"] == "hyperbolic"
+    assert row["formula_executable_compatibility"] == "compatible"
+    assert (
+        row["formula_executable_compatibility_provenance"]
+        == "derived_from_authenticated_formula_ids"
+    )
+    assert row["strict_hyperbolic_claim_status"] == "eligible"
+    assert row["strict_hyperbolic_claim_eligible"] is True
+
+    incompatible_analysis = tmp_path / "incompatible-analysis"
+    write_all_snapshot_hyperbolicity_evidence(
+        publication,
+        incompatible_analysis,
+        tmp_path / "incompatible",
+        formula_id="literature-correct",
+        formula_provenance={"reference": "independently-qualified expression"},
+        executable_formula_id="qualified-legacy",
+    )
+    incompatible_data = publication.discover_data(
+        incompatible_analysis, [tmp_path / "incompatible"]
+    )
+    incompatible_row = {
+        value["case_id"]: value
+        for value in publication.hyperbolicity_coverage_rows(incompatible_data)
+    }["R02"]
+    assert incompatible_row["numerical_result"] == "hyperbolic"
+    assert incompatible_row["literature_correct_disposition"] == "hyperbolic"
+    assert incompatible_row["formula_executable_compatibility"] == "incompatible"
+    assert (
+        incompatible_row["strict_hyperbolic_claim_status"]
+        == "excluded_formula_executable_incompatible"
+    )
+    assert incompatible_row["strict_hyperbolic_claim_eligible"] is False
+
+    known_legacy = publication.authenticated_formula_summary({
+        "provenance": {
+            "script_sha256": next(
+                iter(publication.KNOWN_LEGACY_HYPERBOLICITY_AUDIT_SCRIPTS)
+            ),
+            "script_version": "1.0.0",
+            "formula_reference": "qualified/source/src/eos/eos.hpp:95-99",
+        },
+        "snapshots": [{
+            "aggregate": {
+                "evaluated": 10,
+                "negative": 1,
+                "nonfinite_discriminant": 0,
+                "minimum": -1.0,
+            },
+        }],
+    })
+    assert known_legacy["formula_id"] == "qualified-legacy"
+    assert (
+        known_legacy["formula_id_provenance"]
+        == "authenticated_known_legacy_audit_script"
+    )
+    assert known_legacy["legacy_implementation_disposition"] == "negative"
+    assert known_legacy["literature_correct_disposition"] == "inconclusive"
+
+
+def test_formula_id_manifest_result_mismatch_fails_closed(publication, tmp_path):
+    analysis = tmp_path / "analysis"
+    manifest_path, _ = write_all_snapshot_hyperbolicity_evidence(
+        publication, analysis, tmp_path / "hyper"
+    )
+    result_path = manifest_path.parent / "result.json"
+    result = json.loads(result_path.read_text(encoding="utf-8"))
+    result["provenance"]["formula_id"] = "literature-correct"
+    write_json(result_path, result)
+    (manifest_path.parent / "result.sha256").write_text(
+        f"{sha256(result_path)}  result.json\n", encoding="utf-8"
+    )
+
+    data = publication.discover_data(analysis, [tmp_path / "hyper"])
+    row = {
+        value["case_id"]: value
+        for value in publication.hyperbolicity_coverage_rows(data)
+    }["R02"]
+
+    assert row["coverage_result"] == "inconclusive"
+    assert row["formula_id"] is None
+    assert row["strict_hyperbolic_claim_eligible"] is None
+    assert any(
+        "result provenance differs from selected coverage" in warning
+        for warning in data.ingestion_warnings
+    )
 
 
 def test_final_evidence_tables_preserve_semantics_and_fail_closed(
