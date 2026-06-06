@@ -68,6 +68,7 @@ MAX_SEGMENT_SECONDS = 2 * 60 * 60
 SHUTDOWN_MARGIN_SECONDS = 10 * 60
 STAGE_I_BUDGET_NODE_HOURS = Decimal("1400")
 PROJECT_BUDGET_NODE_HOURS = Decimal("4000")
+NODE_HOUR_PROJECTION_METHOD = "observed-stage-i-scoped-node-hour-rate-v2"
 STATE_MAX_AGE = timedelta(minutes=20)
 R17_READINESS_MAX_AGE = timedelta(hours=24)
 FUTURE_SKEW = timedelta(minutes=5)
@@ -100,6 +101,38 @@ R12_FRESH_RERUN_ATHENA_WALLTIME = "01:50:00"
 R12_FRESH_RERUN_POLICY = "stage-i-r12-fresh-rerun-after-inventory-only-partial-v2"
 R12_CONTINUATION_ALIGNMENT = Decimal("0.02")
 STANDARD_CONTINUATION_ALIGNMENT = Decimal("0.25")
+SCOPED_MEASUREMENT_BASIS_KEYS = (
+    "job_id",
+    "case_id",
+    "segment",
+    "actual_node_hours",
+    "observed_cells",
+    "observed_simulation_interval",
+    "normalized_node_hours_per_cell_per_simulation_time",
+)
+SCOPED_CASE_BREAKDOWN_KEYS = (
+    "matrix_full_case_node_hours_reference_only",
+    "authenticated_progress_fraction",
+    "remaining_simulation_time",
+    "projected_cells",
+    "projection_measurement_basis",
+    "observed_rate_projected_remaining_node_hours",
+    "authorized_profile_reserved_node_hours",
+    "projected_remaining_node_hours",
+)
+SCOPED_BUDGET_KEYS = (
+    "method",
+    "measurement_basis",
+    "actual_stage_i_node_hours",
+    "authorized_wave_reserved_node_hours",
+    "actual_plus_authorized_wave_node_hours",
+    "computed_remaining_stage_i_node_hours",
+    "computed_stage_i_total_node_hours",
+    "promoted_stage_i_envelope_node_hours",
+    "project_ceiling_node_hours",
+    "computed_stage_i_margin_node_hours",
+    "case_breakdown",
+)
 REQUEST_REVIEW_IDENTITY_ASSURANCE = "declared-process-independence-non-cryptographic"
 REQUEST_REVIEW_IDENTITY_LIMITATION = (
     "Reviewer identity and process independence are declared evidence, "
@@ -858,6 +891,26 @@ def decimal_value(value: object, label: str) -> Decimal:
     return result
 
 
+def recost_decimal_value(
+    value: object, label: str, *, allow_negative: bool = False
+) -> Decimal:
+    """Require one finite non-exponent decimal string from a recost artifact."""
+
+    if not isinstance(value, str):
+        raise ValueError(f"{label} must be encoded as a decimal string")
+    try:
+        result = Decimal(value)
+    except InvalidOperation as error:
+        raise ValueError(f"{label} must be encoded as a decimal string") from error
+    if (
+        not result.is_finite()
+        or (result < 0 and not allow_negative)
+        or format(result, "f") != value
+    ):
+        raise ValueError(f"{label} is not a valid recost decimal string")
+    return result
+
+
 def decimal_text(value: Decimal) -> str:
     """Return a plain canonical decimal string."""
 
@@ -890,6 +943,19 @@ def parse_segment(segment: str, label: str) -> tuple[int, Decimal, Decimal]:
     if target <= start or target > Decimal("10"):
         raise ValueError(f"{label} has invalid exact interval")
     return int(match.group("index")), start, target
+
+
+def resolution_cell_count(value: object, label: str) -> int:
+    """Parse one exact three-dimensional matrix resolution."""
+
+    retained = require_nonempty_string(value, label)
+    match = re.fullmatch(r"([1-9][0-9]*)x([1-9][0-9]*)x([1-9][0-9]*)", retained)
+    if match is None:
+        raise ValueError(f"{label} must use NxNxN positive-integer dimensions")
+    cells = math.prod(int(item) for item in match.groups())
+    if cells <= 0:
+        raise ValueError(f"{label} cell count is invalid")
+    return cells
 
 
 def walltime_seconds(value: object, label: str) -> int:
@@ -4394,10 +4460,135 @@ def validate_r12_fresh_rerun_transition(
     }
 
 
+def scoped_measurement(
+    info: dict[str, object],
+) -> tuple[Decimal, dict[str, object]] | None:
+    """Reproduce one scoped-v2 normalized measurement from canonical evidence."""
+
+    case_id = str(info["case_id"])
+    segment = str(info["segment"])
+    manifest = info["manifest"]
+    accounting = manifest.get("accounting")
+    inspection = manifest.get("scientific_inspection")
+    if not isinstance(accounting, dict) or not isinstance(inspection, dict):
+        raise ValueError("scoped recost measurement lacks recorded accounting or inspection")
+    job_id = str(manifest.get("job_id"))
+    actual = recost_decimal_value(
+        accounting.get("actual_node_hours"), f"scoped recost job {job_id} actual"
+    )
+    if actual <= 0:
+        return None
+    _, start, _ = parse_segment(segment, f"scoped recost job {job_id} segment")
+    interval = decimal_value(
+        inspection.get("final_time"), f"scoped recost job {job_id} final time"
+    ) - Decimal(str(float(start)))
+    if interval <= 0:
+        raise ValueError(f"scoped recost job {job_id} measured interval is invalid")
+    cells = resolution_cell_count(
+        EXPECTED_CASES[case_id][2], f"scoped recost {case_id} resolution"
+    )
+    normalized_rate = actual / Decimal(cells) / interval
+    return (
+        normalized_rate,
+        {
+            "job_id": job_id,
+            "case_id": case_id,
+            "segment": segment,
+            "actual_node_hours": format(actual, "f"),
+            "observed_cells": cells,
+            "observed_simulation_interval": format(interval, "f"),
+            "normalized_node_hours_per_cell_per_simulation_time": format(
+                normalized_rate, "f"
+            ),
+        },
+    )
+
+
+def expected_scoped_measurement_bases(
+    state: dict[str, object],
+) -> tuple[dict[str, object], dict[str, object]]:
+    """Select the exact global and R12-local scoped-v2 measurement bases."""
+
+    global_measurements: list[tuple[Decimal, dict[str, object]]] = []
+    r12_measurements: list[tuple[Decimal, dict[str, object]]] = []
+    for case_id in ALL_CASES:
+        lineage, _ = state["lineages"][case_id]
+        infos = lineage
+        if case_id == "R12" and not infos:
+            infos = state["historical_inventory"]["R12"]
+        for info in infos:
+            measurement = scoped_measurement(info)
+            if measurement is None:
+                continue
+            if case_id == "R12":
+                r12_measurements.append(measurement)
+            else:
+                global_measurements.append(measurement)
+    if not global_measurements:
+        raise ValueError("scoped recost lacks a positive non-R12 measurement basis")
+    _, global_basis = max(
+        global_measurements, key=lambda item: (item[0], str(item[1]["job_id"]))
+    )
+    _, r12_basis = (
+        max(r12_measurements, key=lambda item: (item[0], str(item[1]["job_id"])))
+        if r12_measurements
+        else (Decimal("0"), global_basis)
+    )
+    return global_basis, r12_basis
+
+
+def is_mandatory_fresh_r12_calibration_wave(
+    state: dict[str, object], profiles: list[dict[str, object]]
+) -> bool:
+    """Return whether this drained wave contains the exact mandatory fresh R12 run."""
+
+    inventory = state["historical_inventory"]["R12"]
+    lineage, active = state["lineages"]["R12"]
+    if len(inventory) != 1 or lineage or active is not None:
+        return False
+    historical = inventory[0]
+    manifest = historical.get("manifest")
+    accounting = manifest.get("accounting") if isinstance(manifest, dict) else None
+    if (
+        not isinstance(manifest, dict)
+        or not isinstance(accounting, dict)
+        or str(manifest.get("job_id")) != R12_HISTORICAL_PARTIAL_JOB_ID
+        or historical.get("segment") != R12_HISTORICAL_PARTIAL_SEGMENT
+        or accounting.get("result") != "clean_partial"
+    ):
+        return False
+    r12_profiles = [profile for profile in profiles if profile.get("case_id") == "R12"]
+    if len(r12_profiles) != 1:
+        return False
+    profile = r12_profiles[0]
+    parent_fields = (
+        profile.get("parent_job_id"),
+        profile.get("parent_result"),
+        profile.get("parent_segment"),
+        profile.get("restart_file"),
+        profile.get("restart_file_sha256"),
+        profile.get("restart_time"),
+    )
+    return (
+        profile.get("segment") == R12_FRESH_RERUN_SEGMENT
+        and profile.get("nodes") == R12_FRESH_RERUN_NODES
+        and profile.get("ranks_per_node") == RANKS_PER_NODE
+        and profile.get("nodes") * profile.get("ranks_per_node") == R12_FRESH_RERUN_RANKS
+        and profile.get("walltime") == R12_FRESH_RERUN_WALLTIME
+        and profile.get("athena_walltime") == R12_FRESH_RERUN_ATHENA_WALLTIME
+        and decimal_value(
+            profile.get("time_tlim_target"), "fresh R12 calibration target"
+        )
+        == R12_FRESH_RERUN_TARGET
+        and all(value is None for value in parent_fields)
+    )
+
+
 def validate_recost_budget(
     recost: dict[str, object],
     state: dict[str, object],
     profiles: list[dict[str, object]],
+    cases: dict[str, dict[str, object]],
 ) -> dict[str, object]:
     """Validate the recost publication as the sole current projection authority."""
 
@@ -4408,36 +4599,153 @@ def validate_recost_budget(
         raise ValueError("recost budget/provenance must be objects")
     if recost_json_sha256(budget) != provenance.get("computed_projection_sha256"):
         raise ValueError("recost projection digest differs")
-    reserved = sum(
-        (
-            Decimal(int(profile["nodes"]) * walltime_seconds(profile["walltime"], "recost profile"))
+    require_exact_keys(budget, SCOPED_BUDGET_KEYS, "scoped-v2 recost budget")
+    if budget.get("method") != NODE_HOUR_PROJECTION_METHOD:
+        raise ValueError("recost node-hour projection method is not scoped-v2")
+
+    reserved_by_case: dict[str, Decimal] = {}
+    for profile in profiles:
+        case_id = str(profile["case_id"])
+        value = (
+            Decimal(
+                int(profile["nodes"])
+                * walltime_seconds(profile["walltime"], "recost profile")
+            )
             / Decimal(3600)
-            for profile in profiles
-        ),
-        Decimal("0"),
-    )
+        )
+        reserved_by_case[case_id] = reserved_by_case.get(case_id, Decimal("0")) + value
+    reserved = sum(reserved_by_case.values(), Decimal("0"))
     actual = state["actual_node_hours"]
+    committed = actual + reserved
+    envelope = STAGE_I_BUDGET_NODE_HOURS
+    project = PROJECT_BUDGET_NODE_HOURS
+    global_basis, r12_basis = expected_scoped_measurement_bases(state)
+    retained_global_basis = budget.get("measurement_basis")
+    if not isinstance(retained_global_basis, dict):
+        raise ValueError("scoped-v2 global measurement basis must be an object")
+    require_exact_keys(
+        retained_global_basis, SCOPED_MEASUREMENT_BASIS_KEYS, "scoped-v2 global measurement basis"
+    )
+    if retained_global_basis != global_basis:
+        raise ValueError("scoped-v2 global measurement basis differs from canonical evidence")
+    breakdown = budget.get("case_breakdown")
+    if not isinstance(breakdown, dict) or set(breakdown) != set(ALL_CASES):
+        raise ValueError("scoped-v2 recost case breakdown differs from the frozen matrix")
+    remaining = Decimal("0")
+    for case_id in ALL_CASES:
+        item = breakdown[case_id]
+        if not isinstance(item, dict):
+            raise ValueError(f"scoped-v2 recost {case_id} breakdown must be an object")
+        require_exact_keys(item, SCOPED_CASE_BREAKDOWN_KEYS, f"scoped-v2 recost {case_id}")
+        expected_basis = r12_basis if case_id == "R12" else global_basis
+        retained_basis = item.get("projection_measurement_basis")
+        if not isinstance(retained_basis, dict):
+            raise ValueError(f"scoped-v2 recost {case_id} measurement basis must be an object")
+        require_exact_keys(
+            retained_basis,
+            SCOPED_MEASUREMENT_BASIS_KEYS,
+            f"scoped-v2 recost {case_id} measurement basis",
+        )
+        if retained_basis != expected_basis:
+            raise ValueError(f"scoped-v2 recost {case_id} measurement basis differs")
+        cells = resolution_cell_count(
+            EXPECTED_CASES[case_id][2], f"scoped-v2 recost {case_id} resolution"
+        )
+        lineage, _ = state["lineages"][case_id]
+        progress = min(
+            Decimal("1"), max(Decimal("0"), lineage_endpoint(lineage) / Decimal("10"))
+        )
+        remaining_time = Decimal("10") * (Decimal("1") - progress)
+        observed_rate = recost_decimal_value(
+            expected_basis["normalized_node_hours_per_cell_per_simulation_time"],
+            f"scoped-v2 recost {case_id} normalized measurement rate",
+        )
+        observed_projection = observed_rate * Decimal(cells) * remaining_time
+        authorized_reserved = reserved_by_case.get(case_id, Decimal("0"))
+        projected_remaining = max(observed_projection, authorized_reserved)
+        if (
+            recost_decimal_value(
+                item.get("matrix_full_case_node_hours_reference_only"),
+                f"scoped-v2 recost {case_id} matrix reference",
+            )
+            != cases[case_id]["_estimated_node_hours"]
+            or recost_decimal_value(
+                item.get("authenticated_progress_fraction"),
+                f"scoped-v2 recost {case_id} progress",
+            )
+            != progress
+            or recost_decimal_value(
+                item.get("remaining_simulation_time"),
+                f"scoped-v2 recost {case_id} remaining time",
+            )
+            != remaining_time
+            or item.get("projected_cells") != str(cells)
+            or recost_decimal_value(
+                item.get("observed_rate_projected_remaining_node_hours"),
+                f"scoped-v2 recost {case_id} observed projection",
+            )
+            != observed_projection
+            or recost_decimal_value(
+                item.get("authorized_profile_reserved_node_hours"),
+                f"scoped-v2 recost {case_id} authorized reservation",
+            )
+            != authorized_reserved
+            or recost_decimal_value(
+                item.get("projected_remaining_node_hours"),
+                f"scoped-v2 recost {case_id} projected remainder",
+            )
+            != projected_remaining
+        ):
+            raise ValueError(f"scoped-v2 recost {case_id} projection arithmetic differs")
+        remaining += projected_remaining
+    total = actual + remaining
+    margin = envelope - total
     if (
-        decimal_value(budget.get("actual_stage_i_node_hours"), "recost actual use") != actual
-        or decimal_value(
+        recost_decimal_value(budget.get("actual_stage_i_node_hours"), "recost actual use")
+        != actual
+        or recost_decimal_value(
             budget.get("authorized_wave_reserved_node_hours"), "recost authorized-wave use"
         )
         != reserved
-        or decimal_value(
+        or recost_decimal_value(
             budget.get("actual_plus_authorized_wave_node_hours"), "recost committed use"
         )
-        != actual + reserved
-        or decimal_value(
+        != committed
+        or recost_decimal_value(
+            budget.get("computed_remaining_stage_i_node_hours"), "recost computed remaining use"
+        )
+        != remaining
+        or recost_decimal_value(
+            budget.get("computed_stage_i_total_node_hours"), "recost computed total use"
+        )
+        != total
+        or recost_decimal_value(
             budget.get("promoted_stage_i_envelope_node_hours"), "recost Stage I envelope"
         )
-        != STAGE_I_BUDGET_NODE_HOURS
-        or decimal_value(
+        != envelope
+        or recost_decimal_value(
             budget.get("project_ceiling_node_hours"), "recost project ceiling"
         )
-        != PROJECT_BUDGET_NODE_HOURS
+        != project
+        or recost_decimal_value(
+            budget.get("computed_stage_i_margin_node_hours"),
+            "recost computed Stage I margin",
+            allow_negative=True,
+        )
+        != margin
     ):
         raise ValueError("recost projection differs from canonical accounting or ceilings")
-    require_projection_within_budget(budget, "promoted recost")
+    if committed > envelope or committed > project:
+        raise ValueError("recost authorized wave exceeds a controller budget ceiling")
+    if total > project:
+        raise ValueError(
+            "promoted recost credible remaining-campaign projection exceeds project ceiling"
+        )
+    if total > envelope and not is_mandatory_fresh_r12_calibration_wave(state, profiles):
+        raise ValueError(
+            "above-envelope scoped-v2 recost is allowed only for the exact mandatory "
+            "fresh R12 calibration wave"
+        )
     if not isinstance(storage, dict):
         raise ValueError("recost storage projection must be an object")
     for key in (
@@ -7090,7 +7398,7 @@ def build_wave_plan(
     )
     profiles, profiles_by_case = validate_recost_profiles(recost, state, static)
     r12_fresh_rerun = validate_r12_fresh_rerun_transition(state, profiles_by_case)
-    budget = validate_recost_budget(recost, state, profiles)
+    budget = validate_recost_budget(recost, state, profiles, cases)
     predecessor_state = {
         case_id: lineage_complete(lineages[case_id][0])
         for case_id in tuple(f"R{index:02d}" for index in range(2, 17))

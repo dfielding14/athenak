@@ -183,6 +183,7 @@ class Campaign:
         self.r17_physics_mutation: str | None = None
         self.recost_reviewer_agent = "fixture-independent-recost-reviewer"
         self.request_reviewer_agent = "fixture-independent-request-reviewer"
+        self.budget_mutator = None
         self.recommended_cases = ["R03", "R04", "R12", "R16"]
         self.r03_next_increment = Decimal("0.25")
         self.recost_path = (
@@ -443,6 +444,7 @@ class Campaign:
         athena_walltime: str = "00:50:00",
         scheduler_state: str = "COMPLETED",
         exit_code: str = "0:0",
+        elapsed_seconds: int = 600,
     ) -> Path:
         """Retain one recorded fixture segment."""
 
@@ -452,7 +454,8 @@ class Campaign:
         )
         _, start, target = planner.parse_segment(segment_id, "fixture recorded segment")
         final = target if final_time is None else Decimal(final_time)
-        elapsed = 600
+        elapsed = elapsed_seconds
+        assert elapsed > 0
         actual = Decimal(nodes * elapsed) / Decimal(3600)
         self.cumulative += actual
         job = str(self.next_job)
@@ -961,6 +964,7 @@ class Campaign:
             final_time="0.1371931229426507",
             result="clean_partial",
             nodes=planner.R12_FRESH_RERUN_NODES,
+            elapsed_seconds=6657,
         )
         self.next_job = max(self.next_job, next_unallocated_job)
         fresh = self.add_recorded(
@@ -1549,6 +1553,115 @@ class Campaign:
                 if historical_f115_profile
                 else self.current_bundle_sha256
             ),
+        }
+
+    def scoped_projection_state(self) -> dict[str, object]:
+        """Return the minimal canonical state needed to build a scoped-v2 fixture."""
+
+        lineages = {case_id: ([], None) for case_id in planner.ALL_CASES}
+        historical_r12 = []
+        for manifest in self.manifests.values():
+            accounting = manifest.get("accounting")
+            if (
+                manifest.get("state") != "recorded"
+                or not isinstance(accounting, dict)
+                or accounting.get("result") not in {"accepted", "clean_partial"}
+            ):
+                continue
+            case_id = manifest["run"]["case_id"]
+            segment_id = manifest["run"]["segment"]
+            index, start, target = planner.parse_segment(segment_id, "fixture scoped segment")
+            info = {
+                "manifest": manifest,
+                "case_id": case_id,
+                "segment": segment_id,
+                "index": index,
+                "start": start,
+                "target": target,
+            }
+            if (
+                case_id == "R12"
+                and segment_id == planner.R12_HISTORICAL_PARTIAL_SEGMENT
+                and manifest["job_id"] == planner.R12_HISTORICAL_PARTIAL_JOB_ID
+            ):
+                historical_r12.append(info)
+            else:
+                lineages[case_id][0].append(info)
+        for lineage, _ in lineages.values():
+            lineage.sort(key=lambda item: item["index"])
+        return {
+            "lineages": lineages,
+            "historical_inventory": {"R12": historical_r12},
+        }
+
+    def scoped_budget(self, profiles: list[dict[str, object]]) -> dict[str, object]:
+        """Build one internally coherent scoped-v2 recost budget fixture."""
+
+        state = self.scoped_projection_state()
+        global_basis, r12_basis = planner.expected_scoped_measurement_bases(state)
+        actual = sum(
+            (Decimal(row["actual_node_hours"]) for row in self.ledger), Decimal("0")
+        )
+        reserved_by_case = {
+            profile["case_id"]: (
+                Decimal(
+                    profile["nodes"]
+                    * planner.walltime_seconds(profile["walltime"], "fixture scoped profile")
+                )
+                / Decimal(3600)
+            )
+            for profile in profiles
+        }
+        reserved = sum(reserved_by_case.values(), Decimal("0"))
+        remaining = Decimal("0")
+        breakdown = {}
+        for case_id in planner.ALL_CASES:
+            lineage, _ = state["lineages"][case_id]
+            progress = min(
+                Decimal("1"),
+                max(Decimal("0"), planner.lineage_endpoint(lineage) / Decimal("10")),
+            )
+            remaining_time = Decimal("10") * (Decimal("1") - progress)
+            cells = planner.resolution_cell_count(
+                planner.EXPECTED_CASES[case_id][2], f"fixture scoped {case_id} resolution"
+            )
+            basis = r12_basis if case_id == "R12" else global_basis
+            rate = Decimal(
+                basis["normalized_node_hours_per_cell_per_simulation_time"]
+            )
+            observed = rate * Decimal(cells) * remaining_time
+            authorized = reserved_by_case.get(case_id, Decimal("0"))
+            projected = max(observed, authorized)
+            remaining += projected
+            breakdown[case_id] = {
+                "matrix_full_case_node_hours_reference_only": format(
+                    self.estimates[case_id], "f"
+                ),
+                "authenticated_progress_fraction": format(progress, "f"),
+                "remaining_simulation_time": format(remaining_time, "f"),
+                "projected_cells": str(cells),
+                "projection_measurement_basis": basis,
+                "observed_rate_projected_remaining_node_hours": format(observed, "f"),
+                "authorized_profile_reserved_node_hours": format(authorized, "f"),
+                "projected_remaining_node_hours": format(projected, "f"),
+            }
+        projected = actual + remaining
+        return {
+            "method": planner.NODE_HOUR_PROJECTION_METHOD,
+            "measurement_basis": global_basis,
+            "actual_stage_i_node_hours": format(actual, "f"),
+            "authorized_wave_reserved_node_hours": format(reserved, "f"),
+            "actual_plus_authorized_wave_node_hours": format(actual + reserved, "f"),
+            "computed_remaining_stage_i_node_hours": format(remaining, "f"),
+            "computed_stage_i_total_node_hours": format(projected, "f"),
+            "promoted_stage_i_envelope_node_hours": format(
+                planner.STAGE_I_BUDGET_NODE_HOURS, "f"
+            ),
+            "project_ceiling_node_hours": format(planner.PROJECT_BUDGET_NODE_HOURS, "f"),
+            "computed_stage_i_margin_node_hours": format(
+                planner.STAGE_I_BUDGET_NODE_HOURS - projected, "f"
+            ),
+            "case_breakdown": breakdown,
         }
 
     def write_strong_r17_readiness(
@@ -2211,33 +2324,9 @@ class Campaign:
         cases = ["R17"] if completed_predecessors else list(self.recommended_cases)
         profiles = [self.next_profile(case_id) for case_id in cases]
         mode = "sole-next-profile" if len(profiles) == 1 else "bounded-wave"
-        actual = sum((Decimal(row["actual_node_hours"]) for row in self.ledger), Decimal("0"))
-        reserved = sum(
-            (
-                Decimal(profile["nodes"] * planner.walltime_seconds(profile["walltime"], "fixture"))
-                / Decimal(3600)
-                for profile in profiles
-            ),
-            Decimal("0"),
-        )
-        projected = max(actual + reserved, actual + Decimal("100"))
-        budget = {
-            "method": "fixture recost projection",
-            "measurement_basis": {"kind": "fixture"},
-            "actual_stage_i_node_hours": planner.decimal_text(actual),
-            "authorized_wave_reserved_node_hours": planner.decimal_text(reserved),
-            "actual_plus_authorized_wave_node_hours": planner.decimal_text(actual + reserved),
-            "computed_remaining_stage_i_node_hours": planner.decimal_text(projected - actual),
-            "computed_stage_i_total_node_hours": planner.decimal_text(projected),
-            "promoted_stage_i_envelope_node_hours": planner.decimal_text(
-                planner.STAGE_I_BUDGET_NODE_HOURS
-            ),
-            "project_ceiling_node_hours": planner.decimal_text(planner.PROJECT_BUDGET_NODE_HOURS),
-            "computed_stage_i_margin_node_hours": planner.decimal_text(
-                planner.STAGE_I_BUDGET_NODE_HOURS - projected
-            ),
-            "case_breakdown": {},
-        }
+        budget = self.scoped_budget(profiles)
+        if self.budget_mutator is not None:
+            self.budget_mutator(budget)
         projection_sha256 = planner.recost_json_sha256(budget)
         lineage_sha256 = self.lineage_digest()
         storage_sha256 = "8" * 64
@@ -2572,6 +2661,7 @@ def campaign(tmp_path, monkeypatch) -> Campaign:
         final_time="0.1371931229426507",
         result="clean_partial",
         nodes=planner.R12_FRESH_RERUN_NODES,
+        elapsed_seconds=6657,
     )
     value.refresh()
     return value
@@ -2584,6 +2674,27 @@ def recost_paths(campaign: Campaign) -> tuple[Path, Path, Path]:
         campaign.recost_path,
         planner.recost_independent_review_path(campaign.recost_path),
         planner.recost_publication_audit_path(campaign.recost_path),
+    )
+
+
+def add_credible_above_envelope_measurements(campaign: Campaign) -> None:
+    """Add the retained R04/R16 measurements that make scoped-v2 exceed 1400."""
+
+    campaign.add_recorded(
+        "R04",
+        segment(0, "0", "0.25"),
+        nodes=4,
+        walltime="02:00:00",
+        athena_walltime="01:50:00",
+        elapsed_seconds=1360,
+    )
+    campaign.add_recorded(
+        "R16",
+        segment(0, "0", "1.5"),
+        nodes=1,
+        walltime="02:00:00",
+        athena_walltime="01:50:00",
+        elapsed_seconds=2631,
     )
 
 
@@ -2675,6 +2786,188 @@ def test_schema2_recost_and_f116_emit_exact_command_free_wave(campaign):
     serialized = json.dumps(plan)
     assert "sbatch " not in serialized
     assert "srun " not in serialized
+
+
+def test_wave_planner_consumes_scoped_v2_global_and_r12_local_bases(campaign):
+    budget = campaign.plan()["observed_state"]["credible_remaining_campaign_projection"]
+    global_basis = budget["measurement_basis"]
+    r12_basis = budget["case_breakdown"]["R12"]["projection_measurement_basis"]
+
+    assert budget["method"] == planner.NODE_HOUR_PROJECTION_METHOD
+    assert global_basis["case_id"] != "R12"
+    assert r12_basis["case_id"] == "R12"
+    assert r12_basis["job_id"] == planner.R12_HISTORICAL_PARTIAL_JOB_ID
+    assert all(
+        budget["case_breakdown"][case_id]["projection_measurement_basis"]
+        == global_basis
+        for case_id in planner.ALL_CASES
+        if case_id != "R12"
+    )
+
+
+def test_wave_planner_scoped_v2_schema_matches_recost_producer(campaign, monkeypatch):
+    recost = load_utility(RECOST_UTILITY, "cgl_lf_stage_i_recost_for_wave_budget_parity")
+    monkeypatch.setattr(
+        recost,
+        "manifest_identity",
+        lambda manifest: (
+            manifest["job_id"],
+            manifest["run"]["case_id"],
+            manifest["run"]["segment"],
+            manifest["accounting"]["result"],
+        ),
+    )
+    monkeypatch.setattr(
+        recost,
+        "final_time",
+        lambda manifest: manifest["scientific_inspection"]["final_time"],
+    )
+    state = campaign.scoped_projection_state()
+    lineages = {
+        case_id: [info["manifest"] for info in state["lineages"][case_id][0]]
+        for case_id in planner.ALL_CASES
+    }
+    if not lineages["R12"]:
+        lineages["R12"] = [
+            info["manifest"] for info in state["historical_inventory"]["R12"]
+        ]
+    matrix = {
+        case_id: {
+            "_cell_count": planner.resolution_cell_count(
+                planner.EXPECTED_CASES[case_id][2], f"fixture parity {case_id} resolution"
+            ),
+            "_estimated_node_hours": campaign.estimates[case_id],
+        }
+        for case_id in planner.ALL_CASES
+    }
+    profiles = [campaign.next_profile(case_id) for case_id in campaign.recommended_cases]
+    reserved = sum(
+        (
+            Decimal(
+                profile["nodes"]
+                * planner.walltime_seconds(profile["walltime"], "fixture parity profile")
+            )
+            / Decimal(3600)
+            for profile in profiles
+        ),
+        Decimal("0"),
+    )
+
+    produced = recost.calculate_budget(
+        campaign.ledger,
+        lineages,
+        matrix,
+        profiles,
+        reserved,
+        planner.STAGE_I_BUDGET_NODE_HOURS,
+        planner.PROJECT_BUDGET_NODE_HOURS,
+    )
+
+    def retain_produced_budget(budget):
+        budget.clear()
+        budget.update(deepcopy(produced))
+
+    campaign.budget_mutator = retain_produced_budget
+    campaign.refresh()
+    assert (
+        campaign.plan()["observed_state"]["credible_remaining_campaign_projection"]
+        == produced
+    )
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        ("legacy_method", "projection method is not scoped-v2"),
+        ("r12_as_global", "global measurement basis differs"),
+        ("global_as_r12", "R12 measurement basis differs"),
+        ("r12_for_non_r12", "R04 measurement basis differs"),
+        ("arithmetic", "R04 projection arithmetic differs"),
+    ],
+)
+def test_wave_planner_rejects_scoped_v2_method_or_basis_confusion(
+    campaign, mutation, message
+):
+    def mutate(budget):
+        global_basis = deepcopy(budget["measurement_basis"])
+        r12_basis = deepcopy(
+            budget["case_breakdown"]["R12"]["projection_measurement_basis"]
+        )
+        if mutation == "legacy_method":
+            budget["method"] = "observed-stage-i-node-hour-rate-v1"
+        elif mutation == "r12_as_global":
+            budget["measurement_basis"] = r12_basis
+        elif mutation == "global_as_r12":
+            budget["case_breakdown"]["R12"]["projection_measurement_basis"] = global_basis
+        elif mutation == "r12_for_non_r12":
+            budget["case_breakdown"]["R04"]["projection_measurement_basis"] = r12_basis
+        else:
+            budget["case_breakdown"]["R04"][
+                "observed_rate_projected_remaining_node_hours"
+            ] = "0"
+
+    campaign.budget_mutator = mutate
+    campaign.refresh()
+    with pytest.raises(ValueError, match=message):
+        campaign.plan()
+
+
+def test_above_envelope_scoped_v2_is_allowed_only_for_mandatory_fresh_r12_wave(
+    campaign,
+):
+    add_credible_above_envelope_measurements(campaign)
+    campaign.refresh()
+    budget = json.loads(campaign.recost_path.read_text())["budget"]
+
+    assert Decimal(budget["computed_stage_i_total_node_hours"]) > Decimal("1400")
+    assert Decimal(budget["actual_plus_authorized_wave_node_hours"]) < Decimal("1400")
+    assert Decimal(budget["computed_stage_i_total_node_hours"]) < Decimal("4000")
+    plan = campaign.plan()
+    assert next(
+        packet for packet in plan["wave"]["packets"] if packet["case_id"] == "R12"
+    )["lineage"]["kind"] == "fresh"
+
+
+def test_successor_wave_fails_closed_until_fresh_recost_envelope_transition(
+    campaign, monkeypatch
+):
+    add_credible_above_envelope_measurements(campaign)
+    campaign.add_recorded(
+        "R12",
+        planner.R12_FRESH_RERUN_SEGMENT,
+        nodes=planner.R12_FRESH_RERUN_NODES,
+        walltime=planner.R12_FRESH_RERUN_WALLTIME,
+        athena_walltime=planner.R12_FRESH_RERUN_ATHENA_WALLTIME,
+        elapsed_seconds=6657,
+    )
+    campaign.refresh()
+    budget = json.loads(campaign.recost_path.read_text())["budget"]
+    assert Decimal(budget["computed_stage_i_total_node_hours"]) > Decimal("1400")
+    with pytest.raises(ValueError, match="exact mandatory fresh R12 calibration wave"):
+        campaign.plan()
+
+    monkeypatch.setattr(planner, "STAGE_I_BUDGET_NODE_HOURS", Decimal("2000"))
+    campaign.refresh()
+    transitioned = campaign.plan()
+    transitioned_budget = transitioned["observed_state"][
+        "credible_remaining_campaign_projection"
+    ]
+    assert Decimal(transitioned_budget["computed_stage_i_total_node_hours"]) < Decimal(
+        transitioned_budget["promoted_stage_i_envelope_node_hours"]
+    )
+    assert next(
+        packet for packet in transitioned["wave"]["packets"] if packet["case_id"] == "R12"
+    )["lineage"]["kind"] == "continuation"
+
+
+def test_fresh_r12_calibration_exception_never_bypasses_project_ceiling(
+    campaign, monkeypatch
+):
+    add_credible_above_envelope_measurements(campaign)
+    monkeypatch.setattr(planner, "PROJECT_BUDGET_NODE_HOURS", Decimal("1500"))
+    campaign.refresh()
+    with pytest.raises(ValueError, match="exceeds project ceiling"):
+        campaign.plan()
 
 
 def test_r03_post_f115_recost_continues_normally_from_accepted_and_clean_partial(campaign):
