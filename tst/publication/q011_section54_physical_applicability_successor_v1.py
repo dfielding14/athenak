@@ -43,9 +43,14 @@ HISTORY_RECORD_TYPE = "q011_section54_physical_applicability_history_v1"
 RUNTIME_RECORD_TYPE = "q011_section54_runtime_time_escape_applicability_v1"
 NORMALIZATION_RECORD_TYPE = "q011_section54_bound_normalization_evidence_v1"
 SOURCE_MANIFEST_RECORD_TYPE = "q011_section54_source_manifest_v1"
+SOURCE_IDENTITY_RECEIPT_RECORD_TYPE = "q011_section54_trusted_source_identity_receipt_v1"
+EXECUTABLE_IDENTITY_RECEIPT_RECORD_TYPE = (
+    "q011_section54_trusted_executable_identity_receipt_v1"
+)
 SNAPSHOT_PROVENANCE_RECORD_TYPE = "q011_section54_snapshot_provenance_manifest_v1"
 CYCLE_TELEMETRY_RECORD_TYPE = "q011_section54_bound_cycle_telemetry_v1"
 SLOPE_CUTOFF_ESCAPE_RECORD_TYPE = "q011_section54_bound_slope_cutoff_escape_evidence_v1"
+ESCAPED_PARTICLE_EVENT_RECORD_TYPE = "q011_section54_bound_escaped_particle_event_v1"
 QUALIFICATION_EFFECT = (
     "source_local_non_authorizing_diagnostic_and_gate_only_no_launch_no_policy_"
     "mutation_no_qualifying_output_inspection_no_claim_closure"
@@ -104,6 +109,8 @@ ESCAPED_KINETIC_ENERGY_FRACTION_MAXIMUM = 1.0e-3
 ESCAPE_LEDGER_RELATIVE_RESIDUAL_MAXIMUM = 1.0e-12
 PS_ESCAPE_ACCOUNTING_SOURCE_COMMIT = "d614e5c84aad3a541dc96af68ef1178dabc66f71"
 TRUSTED_Q011_RUNTIME_SOURCE_COMMIT = PS_ESCAPE_ACCOUNTING_SOURCE_COMMIT
+TRUSTED_IDENTITY_RECEIPT_AUTHORITY = "q011_registered_execution_control_plane_v1"
+PHYSICAL_ESCAPE_SOURCE_REVIEW_STATUS = "independent_acceptance_required"
 PS_ESCAPE_LEDGER_SCHEMA = 1
 PS_CR_LEDGER_SCHEMA = 3
 PAPER_VL2_ESCAPE_AUDITS_PER_CYCLE = 2
@@ -435,8 +442,12 @@ def _read_bound_artifact(
     evidence_root: object, binding_value: object, *, expected_role: str
 ) -> tuple[dict[str, object], bytes]:
     _require(isinstance(evidence_root, Path), "evidence root must be a pathlib.Path")
+    _require(evidence_root.is_absolute(), "evidence root must be an absolute path")
     root = evidence_root.resolve(strict=True)
-    _require(root.is_dir(), "evidence root must be a directory")
+    _require(
+        root == evidence_root and root.is_dir() and not root.is_symlink(),
+        "evidence root must be a canonical non-symlink directory",
+    )
     binding = _exact_keys(
         binding_value, {"role", "path", "sha256", "byte_count"}, f"{expected_role} binding"
     )
@@ -447,15 +458,50 @@ def _read_bound_artifact(
     relative = _safe_relative_path(binding["path"], f"{expected_role} binding path")
     expected_sha = _sha256_text(binding["sha256"], f"{expected_role} binding sha256")
     expected_size = _nonnegative_int(binding["byte_count"], f"{expected_role} byte count")
-    path = root / relative
-    before = path.lstat()
+    parts = PurePosixPath(relative).parts
+    directory_descriptors: list[int] = []
+    descriptor: int | None = None
+    try:
+        directory = os.open(
+            root,
+            os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0),
+        )
+        directory_descriptors.append(directory)
+        for part in parts[:-1]:
+            directory = os.open(
+                part,
+                os.O_RDONLY
+                | getattr(os, "O_DIRECTORY", 0)
+                | getattr(os, "O_NOFOLLOW", 0),
+                dir_fd=directory,
+            )
+            directory_descriptors.append(directory)
+        before = os.stat(parts[-1], dir_fd=directory, follow_symlinks=False)
+        descriptor = os.open(
+            parts[-1],
+            os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
+            dir_fd=directory,
+        )
+        descriptor_before = os.fstat(descriptor)
+        chunks: list[bytes] = []
+        while True:
+            chunk = os.read(descriptor, 1024 * 1024)
+            if not chunk:
+                break
+            chunks.append(chunk)
+        payload = b"".join(chunks)
+        descriptor_after = os.fstat(descriptor)
+        after = os.stat(parts[-1], dir_fd=directory, follow_symlinks=False)
+    except OSError as error:
+        raise PhysicalApplicabilityError(
+            f"{expected_role} artifact path escaped, used a symlink, or is unavailable"
+        ) from error
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+        for directory in reversed(directory_descriptors):
+            os.close(directory)
     _require(stat.S_ISREG(before.st_mode), f"{expected_role} artifact must be regular")
-    _require(not path.is_symlink(), f"{expected_role} artifact must not be a symlink")
-    with path.open("rb") as stream:
-        descriptor_before = os.fstat(stream.fileno())
-        payload = stream.read()
-        descriptor_after = os.fstat(stream.fileno())
-    after = path.lstat()
     identity = lambda status: (
         status.st_dev,
         status.st_ino,
@@ -677,8 +723,10 @@ def _validate_bound_normalization_evidence(
             "runtime_normalization_record",
             "deck",
             "source_manifest",
+            "source_identity_receipt",
             "source_archive",
             "executable",
+            "executable_identity_receipt",
         },
         "bound normalization evidence",
     )
@@ -688,8 +736,10 @@ def _validate_bound_normalization_evidence(
         "runtime_normalization_record",
         "deck",
         "source_manifest",
+        "source_identity_receipt",
         "source_archive",
         "executable",
+        "executable_identity_receipt",
     ):
         bindings[role], payloads[role] = _read_bound_artifact(
             evidence_root, evidence[role], expected_role=role
@@ -708,8 +758,10 @@ def _validate_bound_normalization_evidence(
             "runtime_input_parameters_sha256",
             "deck_sha256",
             "source_manifest_sha256",
+            "source_identity_receipt_sha256",
             "source_archive_sha256",
             "executable_sha256",
+            "executable_identity_receipt_sha256",
         },
         "runtime normalization record",
     )
@@ -753,6 +805,97 @@ def _validate_bound_normalization_evidence(
         == source_commit,
         "bound source manifest commit disagrees with runtime normalization",
     )
+    source_identity_receipt = _exact_keys(
+        _decode_canonical_json(
+            payloads["source_identity_receipt"], "bound source identity receipt"
+        ),
+        {
+            "schema_version",
+            "record_type",
+            "authority",
+            "source_commit",
+            "source_manifest_sha256",
+            "source_archive_sha256",
+            "physical_escape_source_review_status",
+        },
+        "bound source identity receipt",
+    )
+    _require(
+        type(source_identity_receipt["schema_version"]) is int
+        and source_identity_receipt["schema_version"] == SCHEMA_VERSION
+        and source_identity_receipt["record_type"] == SOURCE_IDENTITY_RECEIPT_RECORD_TYPE
+        and source_identity_receipt["authority"] == TRUSTED_IDENTITY_RECEIPT_AUTHORITY
+        and _source_commit(
+            source_identity_receipt["source_commit"], "source identity receipt commit"
+        )
+        == source_commit
+        and source_identity_receipt["physical_escape_source_review_status"]
+        == PHYSICAL_ESCAPE_SOURCE_REVIEW_STATUS,
+        "bound source identity receipt identity or review status drifted",
+    )
+    _require(
+        _sha256_text(
+            source_identity_receipt["source_manifest_sha256"],
+            "source identity receipt manifest digest",
+        )
+        == bindings["source_manifest"]["sha256"]
+        and _sha256_text(
+            source_identity_receipt["source_archive_sha256"],
+            "source identity receipt archive digest",
+        )
+        == bindings["source_archive"]["sha256"],
+        "bound source identity receipt does not bind the source manifest/archive",
+    )
+    executable_identity_receipt = _exact_keys(
+        _decode_canonical_json(
+            payloads["executable_identity_receipt"],
+            "bound executable identity receipt",
+        ),
+        {
+            "schema_version",
+            "record_type",
+            "authority",
+            "source_commit",
+            "source_manifest_sha256",
+            "source_identity_receipt_sha256",
+            "executable_sha256",
+            "build_identity_status",
+        },
+        "bound executable identity receipt",
+    )
+    _require(
+        type(executable_identity_receipt["schema_version"]) is int
+        and executable_identity_receipt["schema_version"] == SCHEMA_VERSION
+        and executable_identity_receipt["record_type"]
+        == EXECUTABLE_IDENTITY_RECEIPT_RECORD_TYPE
+        and executable_identity_receipt["authority"] == TRUSTED_IDENTITY_RECEIPT_AUTHORITY
+        and _source_commit(
+            executable_identity_receipt["source_commit"],
+            "executable identity receipt commit",
+        )
+        == source_commit
+        and executable_identity_receipt["build_identity_status"]
+        == "digest_bound_candidate_only",
+        "bound executable identity receipt identity drifted",
+    )
+    _require(
+        _sha256_text(
+            executable_identity_receipt["source_manifest_sha256"],
+            "executable identity receipt manifest digest",
+        )
+        == bindings["source_manifest"]["sha256"]
+        and _sha256_text(
+            executable_identity_receipt["source_identity_receipt_sha256"],
+            "executable identity receipt source-receipt digest",
+        )
+        == bindings["source_identity_receipt"]["sha256"]
+        and _sha256_text(
+            executable_identity_receipt["executable_sha256"],
+            "executable identity receipt executable digest",
+        )
+        == bindings["executable"]["sha256"],
+        "bound executable identity receipt does not bind source/executable identity",
+    )
     expected_input_sha = hashlib.sha256(
         _canonical_json_bytes(dict(runtime_input_parameters))
     ).hexdigest()
@@ -764,7 +907,14 @@ def _validate_bound_normalization_evidence(
         == expected_input_sha,
         "runtime normalization is not bound to decoded runtime input parameters",
     )
-    for role in ("deck", "source_manifest", "source_archive", "executable"):
+    for role in (
+        "deck",
+        "source_manifest",
+        "source_identity_receipt",
+        "source_archive",
+        "executable",
+        "executable_identity_receipt",
+    ):
         _require(
             _sha256_text(runtime[f"{role}_sha256"], f"runtime {role} digest")
             == bindings[role]["sha256"],
@@ -783,6 +933,8 @@ def _validate_bound_normalization_evidence(
         "normalization": normalization,
         "runtime_input_parameters_sha256": expected_input_sha,
         "source_manifest": dict(source_manifest),
+        "source_identity_receipt": dict(source_identity_receipt),
+        "executable_identity_receipt": dict(executable_identity_receipt),
         "bindings": bindings,
     }
 
@@ -790,18 +942,6 @@ def _validate_bound_normalization_evidence(
 def _validate_snapshot_provenance(
     evidence_root: Path,
     value: object,
-    *,
-    normalization_evidence: Mapping[str, Any],
-    mhd_dataset: object,
-    current_datasets: Mapping[str, object],
-    particle_source: object,
-    points: object,
-    cr_source: object,
-    birth_time: object,
-    velocity: object,
-    macro_weight: object,
-    nominal_slot_time: float,
-    observed_committed_time: float,
 ) -> dict[str, Any]:
     envelope = _exact_keys(value, {"snapshot_manifest"}, "snapshot provenance evidence")
     manifest_binding, manifest_payload = _read_bound_artifact(
@@ -838,45 +978,26 @@ def _validate_snapshot_provenance(
         and _ATTEMPT_ID.fullmatch(manifest["attempt_id"]) is not None,
         "snapshot provenance attempt id drifted",
     )
-    _require(
-        _source_commit(manifest["source_commit"], "snapshot source commit")
-        == normalization_evidence["source_commit"],
-        "snapshot source commit disagrees with normalization evidence",
+    source_commit = _source_commit(manifest["source_commit"], "snapshot source commit")
+    executable_sha256 = _sha256_text(
+        manifest["executable_sha256"], "snapshot executable digest"
     )
-    _require(
-        _sha256_text(manifest["executable_sha256"], "snapshot executable digest")
-        == normalization_evidence["bindings"]["executable"]["sha256"],
-        "snapshot executable disagrees with normalization evidence",
+    normalization_sha256 = _sha256_text(
+        manifest["runtime_normalization_sha256"],
+        "snapshot runtime normalization digest",
     )
-    _require(
-        _sha256_text(
-            manifest["runtime_normalization_sha256"],
-            "snapshot runtime normalization digest",
-        )
-        == normalization_evidence["bindings"]["runtime_normalization_record"]["sha256"],
-        "snapshot runtime normalization digest drifted",
+    nominal_slot_time = _finite_scalar(
+        manifest["nominal_slot_time"], "snapshot provenance nominal time", minimum=0.0
     )
-    _require(
-        _finite_scalar(manifest["nominal_slot_time"], "snapshot provenance nominal time")
-        == nominal_slot_time
-        and _finite_scalar(
-            manifest["observed_committed_time"], "snapshot provenance observed time"
-        )
-        == observed_committed_time,
-        "snapshot provenance times drifted",
+    observed_committed_time = _finite_scalar(
+        manifest["observed_committed_time"],
+        "snapshot provenance observed time",
+        minimum=0.0,
     )
-    _require(
-        type(manifest["cycle"]) is int
-        and manifest["cycle"] == mhd_dataset.cycle,
-        "snapshot provenance cycle drifted",
-    )
+    cycle = _nonnegative_int(manifest["cycle"], "snapshot provenance cycle")
     raw_products = _exact_keys(
         manifest["raw_products"], set(REQUIRED_RAW_PRODUCTS), "snapshot raw products"
     )
-    supplied_datasets = {
-        "mhd_w_bcc": mhd_dataset,
-        **{product: current_datasets[product] for product in science.CURRENT_PRODUCT_FIELDS},
-    }
     validated_products: dict[str, dict[str, object]] = {}
     raw_payloads: dict[str, bytes] = {}
     for product in REQUIRED_RAW_PRODUCTS:
@@ -885,11 +1006,8 @@ def _validate_snapshot_provenance(
         )
         validated_products[product] = binding
     decoded_expected: dict[str, str] = {}
-    for product, supplied in supplied_datasets.items():
-        _require(
-            supplied.source == validated_products[product]["path"],
-            f"{product} decoded source is not bound to raw artifact",
-        )
+    parsed_datasets: dict[str, Any] = {}
+    for product in ("mhd_w_bcc", *science.CURRENT_PRODUCT_FIELDS):
         try:
             parsed = output_primitives.parse_athenak_binary_bytes(
                 raw_payloads[product], source=str(validated_products[product]["path"])
@@ -898,23 +1016,20 @@ def _validate_snapshot_provenance(
             raise PhysicalApplicabilityError(
                 f"{product} bound raw product is not a trusted Athena binary: {error}"
             ) from error
-        parsed_sha = _dataset_sha256(parsed, f"trusted decoded {product}")
         _require(
-            parsed_sha == _dataset_sha256(supplied, f"supplied decoded {product}"),
-            f"{product} supplied decoded dataset disagrees with bound raw bytes",
+            parsed.cycle == cycle and parsed.time == observed_committed_time,
+            f"{product} raw-byte decoded cycle/time disagrees with snapshot manifest",
         )
+        parsed_sha = _dataset_sha256(parsed, f"trusted decoded {product}")
         decoded_expected[product] = parsed_sha
-    _require(
-        particle_source == validated_products["prtcl_all"]["path"],
-        "prtcl_all decoded source is not bound to raw artifact",
-    )
+        parsed_datasets[product] = parsed
     decoded_particle = _decode_particle_vtk_bytes(
         raw_payloads["prtcl_all"], "snapshot bound prtcl_all"
     )
     _require(
         decoded_particle["execution_header"]["observed_committed_time"]
         == observed_committed_time
-        and decoded_particle["execution_header"]["cycle"] == mhd_dataset.cycle,
+        and decoded_particle["execution_header"]["cycle"] == cycle,
         "snapshot bound prtcl_all cycle/time binding drifted",
     )
     decoded_expected["prtcl_all"] = _particle_payload_sha256(
@@ -923,17 +1038,6 @@ def _validate_snapshot_provenance(
         birth_time=decoded_particle["birth_time"],
         velocity=decoded_particle["velocity"],
         macro_weight=decoded_particle["macro_weight"],
-    )
-    _require(
-        decoded_expected["prtcl_all"]
-        == _particle_payload_sha256(
-            points=points,
-            cr_source=cr_source,
-            birth_time=birth_time,
-            velocity=velocity,
-            macro_weight=macro_weight,
-        ),
-        "prtcl_all supplied decoded payload disagrees with bound raw bytes",
     )
     decoded = _exact_keys(
         manifest["decoded_product_sha256"],
@@ -949,14 +1053,16 @@ def _validate_snapshot_provenance(
     return {
         "manifest_binding": manifest_binding,
         "attempt_id": manifest["attempt_id"],
-        "source_commit": manifest["source_commit"],
-        "executable_sha256": manifest["executable_sha256"],
-        "runtime_normalization_sha256": manifest["runtime_normalization_sha256"],
+        "source_commit": source_commit,
+        "executable_sha256": executable_sha256,
+        "runtime_normalization_sha256": normalization_sha256,
         "nominal_slot_time": nominal_slot_time,
         "observed_committed_time": observed_committed_time,
-        "cycle": manifest["cycle"],
+        "cycle": cycle,
         "raw_products": validated_products,
         "decoded_product_sha256": decoded_expected,
+        "_parsed_datasets": parsed_datasets,
+        "_parsed_particles": decoded_particle,
     }
 
 
@@ -1614,53 +1720,46 @@ class ApplicabilitySnapshot:
 
 @_public_contract("Q011 physical-applicability snapshot reduction")
 def reduce_physical_applicability_snapshot(
-    mhd_dataset: object,
-    current_datasets: Mapping[str, object],
     *,
     evidence_root: Path,
     normalization_evidence: object,
     snapshot_provenance: object,
-    particle_source: object,
-    nominal_slot_time: object,
-    observed_committed_time: object,
-    points: object,
-    cr_source: object,
-    birth_time: object,
-    velocity: object,
-    macro_weight: object,
-    target_level: int | None = None,
 ) -> ApplicabilitySnapshot:
     """Reduce one matched snapshot into fail-closed physical-applicability gates."""
-    nominal = _finite_scalar(nominal_slot_time, "nominal slot time", minimum=0.0)
-    observed = _finite_scalar(
-        observed_committed_time, "observed committed time", minimum=0.0
-    )
+    raw_provenance = _validate_snapshot_provenance(evidence_root, snapshot_provenance)
+    parsed_datasets = raw_provenance.pop("_parsed_datasets")
+    parsed_particles = raw_provenance.pop("_parsed_particles")
+    mhd_dataset = parsed_datasets["mhd_w_bcc"]
+    current_datasets = {
+        product: parsed_datasets[product] for product in science.CURRENT_PRODUCT_FIELDS
+    }
+    nominal = raw_provenance["nominal_slot_time"]
+    observed = raw_provenance["observed_committed_time"]
     bound_normalization = _validate_bound_normalization_evidence(
         evidence_root,
         normalization_evidence,
         runtime_input_parameters=mhd_dataset.input_parameters,
     )
     normalized = bound_normalization["normalization"]
-    provenance = _validate_snapshot_provenance(
-        evidence_root,
-        snapshot_provenance,
-        normalization_evidence=bound_normalization,
-        mhd_dataset=mhd_dataset,
-        current_datasets=current_datasets,
-        particle_source=particle_source,
-        points=points,
-        cr_source=cr_source,
-        birth_time=birth_time,
-        velocity=velocity,
-        macro_weight=macro_weight,
-        nominal_slot_time=nominal,
-        observed_committed_time=observed,
+    _require(
+        raw_provenance["source_commit"] == bound_normalization["source_commit"]
+        and raw_provenance["executable_sha256"]
+        == bound_normalization["bindings"]["executable"]["sha256"]
+        and raw_provenance["runtime_normalization_sha256"]
+        == bound_normalization["bindings"]["runtime_normalization_record"]["sha256"],
+        "snapshot raw provenance disagrees with trusted normalization/source/executable identity",
     )
+    provenance = raw_provenance
+    points = parsed_particles["points"]
+    cr_source = parsed_particles["cr_source"]
+    birth_time = parsed_particles["birth_time"]
+    velocity = parsed_particles["velocity"]
+    macro_weight = parsed_particles["macro_weight"]
     state, front_x = _detected_front(
         mhd_dataset,
         nominal_slot_time=nominal,
         observed_committed_time=observed,
-        target_level=target_level,
+        target_level=None,
     )
     currents = science._compose_matched_current_fields(mhd_dataset, state, current_datasets)
     rho_g = state.fields_y_x["dens"]
@@ -1879,6 +1978,10 @@ def reduce_physical_applicability_snapshot(
                 "runtime_input_parameters_sha256"
             ],
             "source_manifest": bound_normalization["source_manifest"],
+            "source_identity_receipt": bound_normalization["source_identity_receipt"],
+            "executable_identity_receipt": bound_normalization[
+                "executable_identity_receipt"
+            ],
             "bindings": bound_normalization["bindings"],
         },
         "snapshot_provenance": provenance,
@@ -1958,6 +2061,8 @@ _CYCLE_TELEMETRY_KEYS = set(_CYCLE_EXTREMA_KEYS) | {
     "attempt_id",
     "source_commit",
     "executable_sha256",
+    "source_identity_receipt_sha256",
+    "executable_identity_receipt_sha256",
     "runtime_normalization_sha256",
     "ps_escape_accounting_source_commit",
     "cycle",
@@ -2062,12 +2167,15 @@ _RUNTIME_KEYS = {
     "attempt_id",
     "source_commit",
     "executable_sha256",
+    "source_identity_receipt_sha256",
+    "executable_identity_receipt_sha256",
     "runtime_normalization_sha256",
     "ps_escape_accounting_source_commit",
     "per_cycle_inventory",
     "ps_escape_checkpoints",
     "claim_escape_accounting",
     "escaped_slope_cutoff_evidence",
+    "escaped_particle_events",
     "particle_exposure",
     "boundary_escape_ledger",
 }
@@ -2077,6 +2185,8 @@ _SLOPE_CUTOFF_ESCAPE_KEYS = {
     "attempt_id",
     "source_commit",
     "executable_sha256",
+    "source_identity_receipt_sha256",
+    "executable_identity_receipt_sha256",
     "runtime_normalization_sha256",
     "ps_escape_accounting_source_commit",
     "complete",
@@ -2089,6 +2199,30 @@ _SLOPE_CUTOFF_ESCAPE_KEYS = {
     "escaped_particle_count_by_bin",
     "escaped_macro_weight_by_bin",
     "escaped_kinetic_energy_by_bin",
+    "active_particle_checkpoint_sha256",
+    "escaped_particle_event_sha256",
+}
+_ESCAPED_PARTICLE_EVENT_KEYS = {
+    "schema_version",
+    "record_type",
+    "attempt_id",
+    "source_commit",
+    "executable_sha256",
+    "source_identity_receipt_sha256",
+    "executable_identity_receipt_sha256",
+    "runtime_normalization_sha256",
+    "ps_escape_accounting_source_commit",
+    "event_index",
+    "cycle",
+    "observed_committed_time",
+    "face",
+    "reason_code",
+    "particle_tag",
+    "macro_weight",
+    "specific_kinetic_energy",
+    "macro_weighted_momentum",
+    "rg_over_Ly",
+    "high_energy_tail_member",
 }
 
 
@@ -2142,6 +2276,8 @@ def _validate_cycle_telemetry_inventory(
     attempt_id: str,
     source_commit: str,
     executable_sha256: str,
+    source_identity_receipt_sha256: str,
+    executable_identity_receipt_sha256: str,
     normalization_sha256: str,
 ) -> tuple[list[dict[str, Any]], dict[str, Any], dict[str, Any]]:
     _require(type(value) is list, "runtime per-cycle inventory must be a list")
@@ -2185,6 +2321,16 @@ def _validate_cycle_telemetry_inventory(
                 f"runtime cycle telemetry {index} executable digest",
             )
             == executable_sha256
+            and _sha256_text(
+                entry["source_identity_receipt_sha256"],
+                f"runtime cycle telemetry {index} source receipt digest",
+            )
+            == source_identity_receipt_sha256
+            and _sha256_text(
+                entry["executable_identity_receipt_sha256"],
+                f"runtime cycle telemetry {index} executable receipt digest",
+            )
+            == executable_identity_receipt_sha256
             and _sha256_text(
                 entry["runtime_normalization_sha256"],
                 f"runtime cycle telemetry {index} normalization digest",
@@ -2256,10 +2402,10 @@ def _validate_cycle_telemetry_inventory(
         )
     first = decoded[0]
     _require(
-        first["previous_committed_time"] < STARTUP_REMOVAL_TIME
-        <= first["start_time"]
+        first["previous_committed_time"] == first["start_time"]
+        and first["start_time"] < STARTUP_REMOVAL_TIME <= first["end_time"]
         and first["previous_committed_cycle"] + 1 == first["cycle"],
-        "runtime first retained cycle is not the first committed cycle starting across t=45",
+        "runtime telemetry must include the first committed interval crossing t=45",
     )
     _require(
         decoded[-1]["end_time"] == EXPECTED_TERMINAL_TIME,
@@ -2292,7 +2438,11 @@ def _validate_cycle_telemetry_inventory(
         "previous_committed_time_before_startup_crossing": first[
             "previous_committed_time"
         ],
-        "post_startup_removal_start_time": first["start_time"],
+        "first_interval_crossing_start_time": first["start_time"],
+        "first_interval_crossing_end_time": first["end_time"],
+        "post_startup_removal_start_time": STARTUP_REMOVAL_TIME,
+        "continuous_coverage_begins_exactly_at_startup_removal_time": True,
+        "continuous_coverage_includes_first_startup_crossing": True,
         "terminal_time": decoded[-1]["end_time"],
         "first_cycle": first["cycle"],
         "last_cycle": decoded[-1]["cycle"],
@@ -2317,6 +2467,235 @@ def _nonnegative_numeric_list(
     ]
 
 
+def _validate_escaped_particle_events(
+    evidence_root: Path,
+    value: object,
+    *,
+    attempt_id: str,
+    source_commit: str,
+    executable_sha256: str,
+    source_identity_receipt_sha256: str,
+    executable_identity_receipt_sha256: str,
+    normalization_sha256: str,
+    inventory: Sequence[Mapping[str, Any]],
+    ps_escape_checkpoints: Sequence[Mapping[str, Any]],
+    accumulated: Mapping[str, Any],
+    extrema: Mapping[str, Any],
+) -> dict[str, Any]:
+    _require(type(value) is list, "escaped particle event inventory must be a list")
+    _require(
+        len(value) == accumulated["particle_count"],
+        "escaped particle event inventory count disagrees with escaped ledger",
+    )
+    endpoints = {int(entry["cycle"]): float(entry["end_time"]) for entry in inventory}
+    decoded: list[dict[str, Any]] = []
+    digests: set[str] = set()
+    paths: set[str] = set()
+    tags: set[int] = set()
+    for index, raw_binding in enumerate(value):
+        binding, payload = _read_bound_artifact(
+            evidence_root, raw_binding, expected_role="escaped_particle_event"
+        )
+        _require(
+            binding["sha256"] not in digests and binding["path"] not in paths,
+            "escaped particle event artifact was reused",
+        )
+        digests.add(str(binding["sha256"]))
+        paths.add(str(binding["path"]))
+        event = _exact_keys(
+            _decode_canonical_json(payload, f"escaped particle event {index}"),
+            _ESCAPED_PARTICLE_EVENT_KEYS,
+            f"escaped particle event {index}",
+        )
+        _require(
+            type(event["schema_version"]) is int
+            and event["schema_version"] == SCHEMA_VERSION
+            and event["record_type"] == ESCAPED_PARTICLE_EVENT_RECORD_TYPE
+            and event["attempt_id"] == attempt_id
+            and _source_commit(
+                event["source_commit"], f"escaped particle event {index} source commit"
+            )
+            == source_commit
+            == TRUSTED_Q011_RUNTIME_SOURCE_COMMIT
+            and _sha256_text(
+                event["executable_sha256"],
+                f"escaped particle event {index} executable digest",
+            )
+            == executable_sha256
+            and _sha256_text(
+                event["source_identity_receipt_sha256"],
+                f"escaped particle event {index} source receipt digest",
+            )
+            == source_identity_receipt_sha256
+            and _sha256_text(
+                event["executable_identity_receipt_sha256"],
+                f"escaped particle event {index} executable receipt digest",
+            )
+            == executable_identity_receipt_sha256
+            and _sha256_text(
+                event["runtime_normalization_sha256"],
+                f"escaped particle event {index} normalization digest",
+            )
+            == normalization_sha256
+            and _source_commit(
+                event["ps_escape_accounting_source_commit"],
+                f"escaped particle event {index} escape implementation commit",
+            )
+            == PS_ESCAPE_ACCOUNTING_SOURCE_COMMIT,
+            f"escaped particle event {index} trusted identity drifted",
+        )
+        _require(
+            _nonnegative_int(event["event_index"], f"escaped particle event {index} index")
+            == index,
+            "escaped particle event indices must be complete and ordered",
+        )
+        cycle = _nonnegative_int(event["cycle"], f"escaped particle event {index} cycle")
+        observed = _finite_scalar(
+            event["observed_committed_time"],
+            f"escaped particle event {index} observed time",
+            minimum=0.0,
+        )
+        _require(
+            cycle in endpoints and endpoints[cycle] == observed,
+            "escaped particle event cycle/time is not an admitted telemetry endpoint",
+        )
+        _require(
+            event["face"] == "outer_x1"
+            and event["reason_code"] == OUTER_X1_ESCAPE_REASON,
+            "escaped particle raw event is not reason-coded outer_x1 escape",
+        )
+        tag = _nonnegative_int(event["particle_tag"], f"escaped particle event {index} tag")
+        _require(tag not in tags, "escaped particle event tag was reused")
+        tags.add(tag)
+        macro_weight = _finite_scalar(
+            event["macro_weight"],
+            f"escaped particle event {index} macro weight",
+            minimum=0.0,
+        )
+        specific_energy = _finite_scalar(
+            event["specific_kinetic_energy"],
+            f"escaped particle event {index} specific kinetic energy",
+            minimum=0.0,
+        )
+        rg_over_ly = _finite_scalar(
+            event["rg_over_Ly"],
+            f"escaped particle event {index} gyroradius",
+            minimum=0.0,
+        )
+        momentum_value = event["macro_weighted_momentum"]
+        _require(
+            type(momentum_value) is list and len(momentum_value) == 3,
+            f"escaped particle event {index} momentum must have three components",
+        )
+        momentum = [
+            _finite_scalar(component, f"escaped particle event {index} momentum {axis}")
+            for axis, component in enumerate(momentum_value)
+        ]
+        decoded.append(
+            {
+                "binding": binding,
+                "event_index": index,
+                "cycle": cycle,
+                "observed_committed_time": observed,
+                "particle_tag": tag,
+                "macro_weight": macro_weight,
+                "specific_kinetic_energy": specific_energy,
+                "kinetic_energy": macro_weight * specific_energy,
+                "macro_weighted_momentum": momentum,
+                "rg_over_Ly": rg_over_ly,
+                "high_energy_tail_member": _strict_bool(
+                    event["high_energy_tail_member"],
+                    f"escaped particle event {index} high-energy-tail membership",
+                ),
+            }
+        )
+    event_weight = sum(event["macro_weight"] for event in decoded)
+    event_energy = sum(event["kinetic_energy"] for event in decoded)
+    event_momentum = [
+        sum(event["macro_weighted_momentum"][axis] for event in decoded)
+        for axis in range(3)
+    ]
+    _require(
+        _closure_residual(
+            accumulated["macro_weight"], event_weight, [event["macro_weight"] for event in decoded]
+        )
+        <= ESCAPE_LEDGER_RELATIVE_RESIDUAL_MAXIMUM
+        and _closure_residual(
+            accumulated["kinetic_energy"],
+            event_energy,
+            [event["kinetic_energy"] for event in decoded],
+        )
+        <= ESCAPE_LEDGER_RELATIVE_RESIDUAL_MAXIMUM
+        and max(
+            _closure_residual(
+                accumulated["momentum"][axis],
+                event_momentum[axis],
+                [event["macro_weighted_momentum"][axis] for event in decoded],
+            )
+            for axis in range(3)
+        )
+        <= ESCAPE_LEDGER_RELATIVE_RESIDUAL_MAXIMUM,
+        "escaped particle raw events do not close to escaped mass, energy, or momentum ledger",
+    )
+    maximum_energy = max(
+        (event["specific_kinetic_energy"] for event in decoded), default=0.0
+    )
+    maximum_rg = max((event["rg_over_Ly"] for event in decoded), default=0.0)
+    high_energy_maximum_rg = max(
+        (
+            event["rg_over_Ly"]
+            for event in decoded
+            if event["high_energy_tail_member"]
+        ),
+        default=0.0,
+    )
+    _require(
+        maximum_energy == extrema["escaped_particle_specific_kinetic_energy_maximum"]
+        and maximum_rg == extrema["escaped_particle_rg_maximum_over_Ly"]
+        and high_energy_maximum_rg
+        == extrema["escaped_high_energy_tail_rg_maximum_over_Ly"],
+        "escaped particle raw-event maxima disagree with all-cycle telemetry",
+    )
+    for checkpoint in ps_escape_checkpoints:
+        cumulative = [event for event in decoded if event["cycle"] <= checkpoint["cycle"]]
+        ledger = checkpoint["ps_escape_ledger"]
+        _require(
+            len(cumulative) == ledger["ps_escaped_injected_cr_count_global"]
+            and _closure_residual(
+                ledger["ps_escaped_injected_cr_mass_global"],
+                sum(event["macro_weight"] for event in cumulative),
+                [event["macro_weight"] for event in cumulative],
+            )
+            <= ESCAPE_LEDGER_RELATIVE_RESIDUAL_MAXIMUM
+            and _closure_residual(
+                ledger["ps_escaped_injected_cr_energy_global"],
+                sum(event["kinetic_energy"] for event in cumulative),
+                [event["kinetic_energy"] for event in cumulative],
+            )
+            <= ESCAPE_LEDGER_RELATIVE_RESIDUAL_MAXIMUM
+            and max(
+                _closure_residual(
+                    ledger[
+                        f"ps_escaped_injected_cr_momentum_x{axis + 1}_global"
+                    ],
+                    sum(event["macro_weighted_momentum"][axis] for event in cumulative),
+                    [event["macro_weighted_momentum"][axis] for event in cumulative],
+                )
+                for axis in range(3)
+            )
+            <= ESCAPE_LEDGER_RELATIVE_RESIDUAL_MAXIMUM,
+            "escaped particle raw events do not reproduce cumulative checkpoint ledgers",
+        )
+    return {
+        "complete": True,
+        "bindings": [event["binding"] for event in decoded],
+        "events": decoded,
+        "event_sha256": [event["binding"]["sha256"] for event in decoded],
+        "raw_event_count": len(decoded),
+        "mass_energy_momentum_closure": True,
+    }
+
+
 def _validate_slope_cutoff_escape_evidence(
     evidence_root: Path,
     value: object,
@@ -2324,9 +2703,14 @@ def _validate_slope_cutoff_escape_evidence(
     attempt_id: str,
     source_commit: str,
     executable_sha256: str,
+    source_identity_receipt_sha256: str,
+    executable_identity_receipt_sha256: str,
     normalization_sha256: str,
     active: Mapping[str, Any],
     escaped: Mapping[str, Any],
+    active_samples: Mapping[str, np.ndarray],
+    escaped_events: Mapping[str, Any],
+    active_particle_checkpoint_sha256: str,
     maximum_specific_energy: float,
 ) -> dict[str, Any]:
     binding, payload = _read_bound_artifact(
@@ -2351,6 +2735,16 @@ def _validate_slope_cutoff_escape_evidence(
         and _sha256_text(record["executable_sha256"], "slope/cutoff executable digest")
         == executable_sha256
         and _sha256_text(
+            record["source_identity_receipt_sha256"],
+            "slope/cutoff source identity receipt digest",
+        )
+        == source_identity_receipt_sha256
+        and _sha256_text(
+            record["executable_identity_receipt_sha256"],
+            "slope/cutoff executable identity receipt digest",
+        )
+        == executable_identity_receipt_sha256
+        and _sha256_text(
             record["runtime_normalization_sha256"], "slope/cutoff normalization digest"
         )
         == normalization_sha256
@@ -2360,6 +2754,20 @@ def _validate_slope_cutoff_escape_evidence(
         )
         == PS_ESCAPE_ACCOUNTING_SOURCE_COMMIT,
         "slope/cutoff trusted source/escape identity drifted",
+    )
+    _require(
+        _sha256_text(
+            record["active_particle_checkpoint_sha256"],
+            "slope/cutoff active particle checkpoint digest",
+        )
+        == active_particle_checkpoint_sha256
+        and type(record["escaped_particle_event_sha256"]) is list
+        and [
+            _sha256_text(digest, f"slope/cutoff escaped event digest {index}")
+            for index, digest in enumerate(record["escaped_particle_event_sha256"])
+        ]
+        == escaped_events["event_sha256"],
+        "slope/cutoff evidence is not bound to terminal PVTK and raw escape events",
     )
     complete = _strict_bool(record["complete"], "slope/cutoff evidence complete")
     array_keys = (
@@ -2431,6 +2839,93 @@ def _validate_slope_cutoff_escape_evidence(
     _require(
         all(len(values) == bin_count for values in arrays.values()),
         "slope/cutoff bin array lengths drifted",
+    )
+    active_specific_energy = _finite_array(
+        active_samples["specific_kinetic_energy"],
+        "bound terminal PVTK active specific energies",
+        ndim=1,
+    )
+    active_macro_weight = _finite_array(
+        active_samples["macro_weight"], "bound terminal PVTK active macro weights", ndim=1
+    )
+    escaped_specific_energy = np.asarray(
+        [event["specific_kinetic_energy"] for event in escaped_events["events"]],
+        dtype=np.float64,
+    )
+    escaped_macro_weight = np.asarray(
+        [event["macro_weight"] for event in escaped_events["events"]], dtype=np.float64
+    )
+
+    def derived_bins(
+        specific_energy: np.ndarray, macro_weight: np.ndarray, label: str
+    ) -> dict[str, list[float | int]]:
+        _require(
+            specific_energy.shape == macro_weight.shape,
+            f"{label} energy/weight sample shapes disagree",
+        )
+        if specific_energy.size == 0:
+            return {
+                "particle_count": [0] * bin_count,
+                "macro_weight": [0.0] * bin_count,
+                "kinetic_energy": [0.0] * bin_count,
+            }
+        _require(
+            np.all(np.isfinite(specific_energy))
+            and np.all(np.isfinite(macro_weight))
+            and np.all(specific_energy >= edges[0])
+            and np.all(specific_energy <= edges[-1])
+            and np.all(macro_weight >= 0.0),
+            f"{label} samples escape the declared finite energy bins",
+        )
+        indices = np.searchsorted(np.asarray(edges), specific_energy, side="right") - 1
+        indices = np.minimum(indices, bin_count - 1)
+        return {
+            "particle_count": np.bincount(indices, minlength=bin_count).astype(int).tolist(),
+            "macro_weight": np.bincount(
+                indices, weights=macro_weight, minlength=bin_count
+            ).tolist(),
+            "kinetic_energy": np.bincount(
+                indices,
+                weights=macro_weight * specific_energy,
+                minlength=bin_count,
+            ).tolist(),
+        }
+
+    raw_derived = {
+        "active": derived_bins(
+            active_specific_energy, active_macro_weight, "bound terminal PVTK active"
+        ),
+        "escaped": derived_bins(
+            escaped_specific_energy, escaped_macro_weight, "bound raw escaped event"
+        ),
+    }
+    _require(
+        arrays["active_particle_count_by_bin"] == raw_derived["active"]["particle_count"]
+        and arrays["escaped_particle_count_by_bin"]
+        == raw_derived["escaped"]["particle_count"],
+        "slope/cutoff particle-count bins were not derived from bound raw particles/events",
+    )
+    for prefix in ("active", "escaped"):
+        for quantity in ("macro_weight", "kinetic_energy"):
+            supplied = arrays[f"{prefix}_{quantity}_by_bin"]
+            derived = raw_derived[prefix][quantity]
+            _require(
+                all(
+                    _closure_residual(
+                        float(expected), float(observed), [float(observed)]
+                    )
+                    <= ESCAPE_LEDGER_RELATIVE_RESIDUAL_MAXIMUM
+                    for expected, observed in zip(supplied, derived)
+                ),
+                f"slope/cutoff {prefix} {quantity} bins were not derived from bound raw particles/events",
+            )
+    _require(
+        all(
+            event["high_energy_tail_member"]
+            is (event["specific_kinetic_energy"] >= threshold)
+            for event in escaped_events["events"]
+        ),
+        "escaped raw-event high-energy-tail membership disagrees with slope/cutoff threshold",
     )
     high_bins = [index for index, lower in enumerate(edges[:-1]) if lower >= threshold]
     _require(
@@ -2512,6 +3007,9 @@ def _validate_slope_cutoff_escape_evidence(
         "unavailable_reason": None,
         "high_energy_tail_threshold": threshold,
         "energy_bin_edges": edges,
+        "active_particle_checkpoint_sha256": active_particle_checkpoint_sha256,
+        "escaped_particle_event_sha256": escaped_events["event_sha256"],
+        "raw_derived_bin_membership_verified": True,
         **arrays,
         "high_energy_bin_indices": high_bins,
         "escaped_fraction_by_bin": bin_fractions,
@@ -2774,6 +3272,12 @@ def _decode_bound_particle_checkpoint(
         ),
         "particle_macro_mass": particle_macro_mass,
         "sealed_count_to_mass_relative_residuals": mass_residuals,
+        "_active_bin_samples": {
+            "specific_kinetic_energy": np.asarray(
+                arrays["specific_kinetic_energy"][active], dtype=np.float64
+            ),
+            "macro_weight": np.full(active_count, particle_macro_mass, dtype=np.float64),
+        },
     }
 
 
@@ -2782,7 +3286,7 @@ def _validate_ps_escape_checkpoints(
     value: object,
     *,
     inventory: Sequence[Mapping[str, Any]],
-) -> dict[str, Any]:
+) -> tuple[dict[str, Any], dict[str, np.ndarray]]:
     _require(type(value) is list, "ps_escape checkpoints must be a list")
     _require(
         len(value) == len(REQUIRED_PS_ESCAPE_CHECKPOINT_NOMINAL_TIMES),
@@ -3017,6 +3521,9 @@ def _validate_ps_escape_checkpoints(
             >= left["escaped_injected_max_rg_over_Ly_global"],
             "ps_escape cumulative escaped-particle maxima are not monotonic",
         )
+    terminal_samples = decoded[-1]["active_particle_inventory"]["_active_bin_samples"]
+    for checkpoint in decoded:
+        checkpoint["active_particle_inventory"].pop("_active_bin_samples")
     return {
         "source_commit": PS_ESCAPE_ACCOUNTING_SOURCE_COMMIT,
         "schema": PS_ESCAPE_LEDGER_SCHEMA,
@@ -3027,7 +3534,7 @@ def _validate_ps_escape_checkpoints(
         "checkpoints": decoded,
         "terminal": decoded[-1],
         "complete_checkpoint_cadence": True,
-    }
+    }, terminal_samples
 
 
 def _validate_runtime_time_escape(
@@ -3068,6 +3575,14 @@ def _validate_runtime_time_escape(
     executable_sha256 = _sha256_text(
         runtime["executable_sha256"], "runtime executable digest"
     )
+    source_identity_receipt_sha256 = _sha256_text(
+        runtime["source_identity_receipt_sha256"],
+        "runtime source identity receipt digest",
+    )
+    executable_identity_receipt_sha256 = _sha256_text(
+        runtime["executable_identity_receipt_sha256"],
+        "runtime executable identity receipt digest",
+    )
     normalization_sha256 = _sha256_text(
         runtime["runtime_normalization_sha256"], "runtime normalization digest"
     )
@@ -3095,9 +3610,11 @@ def _validate_runtime_time_escape(
         attempt_id=runtime["attempt_id"],
         source_commit=source_commit,
         executable_sha256=executable_sha256,
+        source_identity_receipt_sha256=source_identity_receipt_sha256,
+        executable_identity_receipt_sha256=executable_identity_receipt_sha256,
         normalization_sha256=normalization_sha256,
     )
-    ps_escape = _validate_ps_escape_checkpoints(
+    ps_escape, terminal_active_bin_samples = _validate_ps_escape_checkpoints(
         evidence_root, runtime["ps_escape_checkpoints"], inventory=decoded_inventory
     )
 
@@ -3208,6 +3725,20 @@ def _validate_runtime_time_escape(
     )
     active = _decode_state_vector(escape["terminal_active"], "terminal active state")
     startup = _decode_state_vector(escape["startup_removed"], "startup removed state")
+    escaped_particle_events = _validate_escaped_particle_events(
+        evidence_root,
+        runtime["escaped_particle_events"],
+        attempt_id=runtime["attempt_id"],
+        source_commit=source_commit,
+        executable_sha256=executable_sha256,
+        source_identity_receipt_sha256=source_identity_receipt_sha256,
+        executable_identity_receipt_sha256=executable_identity_receipt_sha256,
+        normalization_sha256=normalization_sha256,
+        inventory=decoded_inventory,
+        ps_escape_checkpoints=ps_escape["checkpoints"],
+        accumulated=accumulated,
+        extrema=extrema,
+    )
     injected_count = _nonnegative_int(
         escape["injected_particle_count"], "injected particle count"
     )
@@ -3390,9 +3921,16 @@ def _validate_runtime_time_escape(
         attempt_id=runtime["attempt_id"],
         source_commit=source_commit,
         executable_sha256=executable_sha256,
+        source_identity_receipt_sha256=source_identity_receipt_sha256,
+        executable_identity_receipt_sha256=executable_identity_receipt_sha256,
         normalization_sha256=normalization_sha256,
         active=active,
         escaped=accumulated,
+        active_samples=terminal_active_bin_samples,
+        escaped_events=escaped_particle_events,
+        active_particle_checkpoint_sha256=ps_escape["terminal"][
+            "particle_checkpoint_sha256"
+        ],
         maximum_specific_energy=extrema["maximum_particle_specific_kinetic_energy"],
     )
     escaped_applicability_complete = (
@@ -3446,6 +3984,8 @@ def _validate_runtime_time_escape(
         "attempt_id": runtime["attempt_id"],
         "source_commit": source_commit,
         "executable_sha256": executable_sha256,
+        "source_identity_receipt_sha256": source_identity_receipt_sha256,
+        "executable_identity_receipt_sha256": executable_identity_receipt_sha256,
         "runtime_normalization_sha256": normalization_sha256,
         "cycle_coverage": coverage,
         "per_cycle_inventory": decoded_inventory,
@@ -3454,6 +3994,7 @@ def _validate_runtime_time_escape(
         "claim_escape_accounting": dict(claim_escape_accounting),
         "claim_specific_escape_applicability": claim_specific_escape_applicability,
         "slope_cutoff_escape_evidence": slope_cutoff_escape,
+        "escaped_particle_events": escaped_particle_events,
         "particle_exposure": {**dict(exposure), **exposure_statistics},
         "boundary_escape_ledger": {
             **dict(escape),
@@ -3551,6 +4092,10 @@ def _revalidate_retained_snapshot_artifacts(
         == normalization["runtime_input_parameters_sha256"]
         and revalidated_normalization["source_manifest"]
         == normalization["source_manifest"]
+        and revalidated_normalization["source_identity_receipt"]
+        == normalization["source_identity_receipt"]
+        and revalidated_normalization["executable_identity_receipt"]
+        == normalization["executable_identity_receipt"]
         and revalidated_normalization["bindings"] == normalization["bindings"],
         "retained snapshot normalization/source evidence drifted",
     )
@@ -3590,6 +4135,20 @@ def _revalidate_retained_snapshot_artifacts(
         and manifest["raw_products"] == provenance["raw_products"]
         and manifest["decoded_product_sha256"] == provenance["decoded_product_sha256"],
         "retained snapshot provenance manifest drifted",
+    )
+    recomputed = reduce_physical_applicability_snapshot(
+        evidence_root=root,
+        normalization_evidence=normalization["bindings"],
+        snapshot_provenance={"snapshot_manifest": provenance["manifest_binding"]},
+    )
+    _require(
+        _canonical_json_bytes(dict(recomputed.record))
+        == _canonical_json_bytes(dict(record))
+        and all(
+            np.array_equal(recomputed.cell_maps[name], snapshot.cell_maps[name])
+            for name in CELL_MAP_NAMES
+        ),
+        "retained snapshot derived evidence disagrees with complete raw-byte recomputation",
     )
 
 
@@ -3656,7 +4215,14 @@ def _validate_snapshot(snapshot: object) -> Mapping[str, Any]:
 
     normalization = _exact_keys(
         record["bound_normalization_evidence"],
-        {"source_commit", "runtime_input_parameters_sha256", "source_manifest", "bindings"},
+        {
+            "source_commit",
+            "runtime_input_parameters_sha256",
+            "source_manifest",
+            "source_identity_receipt",
+            "executable_identity_receipt",
+            "bindings",
+        },
         "snapshot bound normalization evidence",
     )
     _source_commit(normalization["source_commit"], "snapshot normalization source commit")
@@ -3670,8 +4236,10 @@ def _validate_snapshot(snapshot: object) -> Mapping[str, Any]:
             "runtime_normalization_record",
             "deck",
             "source_manifest",
+            "source_identity_receipt",
             "source_archive",
             "executable",
+            "executable_identity_receipt",
         },
         "snapshot normalization bindings",
     )
@@ -3702,6 +4270,55 @@ def _validate_snapshot(snapshot: object) -> Mapping[str, Any]:
             source_manifest[f"{role}_sha256"] == normalization_bindings[role]["sha256"],
             f"snapshot source manifest {role} binding drifted",
         )
+    source_identity_receipt = _exact_keys(
+        normalization["source_identity_receipt"],
+        {
+            "schema_version",
+            "record_type",
+            "authority",
+            "source_commit",
+            "source_manifest_sha256",
+            "source_archive_sha256",
+            "physical_escape_source_review_status",
+        },
+        "snapshot source identity receipt",
+    )
+    executable_identity_receipt = _exact_keys(
+        normalization["executable_identity_receipt"],
+        {
+            "schema_version",
+            "record_type",
+            "authority",
+            "source_commit",
+            "source_manifest_sha256",
+            "source_identity_receipt_sha256",
+            "executable_sha256",
+            "build_identity_status",
+        },
+        "snapshot executable identity receipt",
+    )
+    _require(
+        source_identity_receipt["record_type"] == SOURCE_IDENTITY_RECEIPT_RECORD_TYPE
+        and source_identity_receipt["authority"] == TRUSTED_IDENTITY_RECEIPT_AUTHORITY
+        and source_identity_receipt["source_commit"] == normalization["source_commit"]
+        and source_identity_receipt["source_manifest_sha256"]
+        == normalization_bindings["source_manifest"]["sha256"]
+        and source_identity_receipt["source_archive_sha256"]
+        == normalization_bindings["source_archive"]["sha256"]
+        and source_identity_receipt["physical_escape_source_review_status"]
+        == PHYSICAL_ESCAPE_SOURCE_REVIEW_STATUS
+        and executable_identity_receipt["record_type"]
+        == EXECUTABLE_IDENTITY_RECEIPT_RECORD_TYPE
+        and executable_identity_receipt["authority"] == TRUSTED_IDENTITY_RECEIPT_AUTHORITY
+        and executable_identity_receipt["source_commit"] == normalization["source_commit"]
+        and executable_identity_receipt["source_manifest_sha256"]
+        == normalization_bindings["source_manifest"]["sha256"]
+        and executable_identity_receipt["source_identity_receipt_sha256"]
+        == normalization_bindings["source_identity_receipt"]["sha256"]
+        and executable_identity_receipt["executable_sha256"]
+        == normalization_bindings["executable"]["sha256"],
+        "snapshot trusted source/executable receipt bindings drifted",
+    )
 
     provenance = _exact_keys(
         record["snapshot_provenance"],
@@ -4263,15 +4880,28 @@ def reduce_physical_applicability_history(
         and times[-1] <= runtime["cycle_coverage"]["terminal_time"],
         "snapshot applicability history escaped runtime coverage",
     )
+    admitted_endpoints = {
+        (entry["cycle"], entry["end_time"]) for entry in runtime["per_cycle_inventory"]
+    }
     for record in records:
         provenance = record["snapshot_provenance"]
+        normalization_bindings = record["bound_normalization_evidence"]["bindings"]
         _require(
             provenance["attempt_id"] == runtime["attempt_id"]
             and provenance["source_commit"] == runtime["source_commit"]
             and provenance["executable_sha256"] == runtime["executable_sha256"]
             and provenance["runtime_normalization_sha256"]
-            == runtime["runtime_normalization_sha256"],
+            == runtime["runtime_normalization_sha256"]
+            and normalization_bindings["source_identity_receipt"]["sha256"]
+            == runtime["source_identity_receipt_sha256"]
+            and normalization_bindings["executable_identity_receipt"]["sha256"]
+            == runtime["executable_identity_receipt_sha256"],
             "snapshot provenance disagrees with bound runtime evidence",
+        )
+        _require(
+            (provenance["cycle"], provenance["observed_committed_time"])
+            in admitted_endpoints,
+            "snapshot cycle/time pair is not an admitted telemetry endpoint",
         )
     snapshot_extrema = {
         "R_maximum": max(record["gates"]["Q011-APP-R"]["observed_maximum"] for record in records),
@@ -4464,6 +5094,8 @@ __all__ = [
     "ESCAPED_KINETIC_ENERGY_FRACTION_MAXIMUM",
     "ESCAPED_MACRO_WEIGHT_FRACTION_MAXIMUM",
     "ESCAPED_PARTICLE_COUNT_FRACTION_MAXIMUM",
+    "ESCAPED_PARTICLE_EVENT_RECORD_TYPE",
+    "EXECUTABLE_IDENTITY_RECEIPT_RECORD_TYPE",
     "EXPECTED_TERMINAL_TIME",
     "HISTORY_RECORD_TYPE",
     "INNER_X1_ESCAPE_REASON",
@@ -4478,6 +5110,7 @@ __all__ = [
     "PERMANENT_CLAIM_EXCLUSIONS",
     "PS_CR_LEDGER_SCHEMA",
     "PS_ESCAPE_ACCOUNTING_SOURCE_COMMIT",
+    "PHYSICAL_ESCAPE_SOURCE_REVIEW_STATUS",
     "PS_ESCAPE_LEDGER_SCHEMA",
     "PhysicalApplicabilityError",
     "QUALIFICATION_EFFECT",
@@ -4494,6 +5127,7 @@ __all__ = [
     "SNAPSHOT_PROVENANCE_RECORD_TYPE",
     "SLOPE_CUTOFF_BIN_ESCAPE_FRACTION_MAXIMUM",
     "SLOPE_CUTOFF_ESCAPE_RECORD_TYPE",
+    "SOURCE_IDENTITY_RECEIPT_RECORD_TYPE",
     "SLOPE_CUTOFF_TAIL_ESCAPE_FRACTION_MAXIMUM",
     "SOURCE_MANIFEST_RECORD_TYPE",
     "STARTUP_REMOVAL_TIME",
@@ -4501,6 +5135,7 @@ __all__ = [
     "SUCCESSOR_ID",
     "S_DELTA_MINIMUM",
     "TRUSTED_Q011_RUNTIME_SOURCE_COMMIT",
+    "TRUSTED_IDENTITY_RECEIPT_AUTHORITY",
     "reduce_physical_applicability_history",
     "reduce_physical_applicability_snapshot",
 ]

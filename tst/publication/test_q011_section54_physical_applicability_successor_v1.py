@@ -425,6 +425,37 @@ def _snapshot_evidence(
     bindings["source_manifest"] = _write_artifact(
         root, "source_manifest", "bound/source-manifest.json", _canonical(source_manifest)
     )
+    source_identity_receipt = {
+        "schema_version": app.SCHEMA_VERSION,
+        "record_type": app.SOURCE_IDENTITY_RECEIPT_RECORD_TYPE,
+        "authority": app.TRUSTED_IDENTITY_RECEIPT_AUTHORITY,
+        "source_commit": SOURCE_COMMIT,
+        "source_manifest_sha256": bindings["source_manifest"]["sha256"],
+        "source_archive_sha256": bindings["source_archive"]["sha256"],
+        "physical_escape_source_review_status": app.PHYSICAL_ESCAPE_SOURCE_REVIEW_STATUS,
+    }
+    bindings["source_identity_receipt"] = _write_artifact(
+        root,
+        "source_identity_receipt",
+        "bound/source-identity-receipt.json",
+        _canonical(source_identity_receipt),
+    )
+    executable_identity_receipt = {
+        "schema_version": app.SCHEMA_VERSION,
+        "record_type": app.EXECUTABLE_IDENTITY_RECEIPT_RECORD_TYPE,
+        "authority": app.TRUSTED_IDENTITY_RECEIPT_AUTHORITY,
+        "source_commit": SOURCE_COMMIT,
+        "source_manifest_sha256": bindings["source_manifest"]["sha256"],
+        "source_identity_receipt_sha256": bindings["source_identity_receipt"]["sha256"],
+        "executable_sha256": bindings["executable"]["sha256"],
+        "build_identity_status": "digest_bound_candidate_only",
+    }
+    bindings["executable_identity_receipt"] = _write_artifact(
+        root,
+        "executable_identity_receipt",
+        "bound/executable-identity-receipt.json",
+        _canonical(executable_identity_receipt),
+    )
     raw_payloads = {
         "mhd_w_bcc": _athena_binary_payload(mhd),
         **{
@@ -449,8 +480,12 @@ def _snapshot_evidence(
         "runtime_input_parameters_sha256": _sha256_bytes(_canonical(dict(mhd.input_parameters))),
         "deck_sha256": bindings["deck"]["sha256"],
         "source_manifest_sha256": bindings["source_manifest"]["sha256"],
+        "source_identity_receipt_sha256": bindings["source_identity_receipt"]["sha256"],
         "source_archive_sha256": bindings["source_archive"]["sha256"],
         "executable_sha256": bindings["executable"]["sha256"],
+        "executable_identity_receipt_sha256": bindings[
+            "executable_identity_receipt"
+        ]["sha256"],
     }
     runtime_binding = _write_artifact(
         root,
@@ -538,15 +573,9 @@ def _snapshot(
         if tamper_decoded_particle_after_manifest:
             particles["velocity"][0, 0] += 1.0
         return app.reduce_physical_applicability_snapshot(
-            mhd,
-            currents,
             evidence_root=root,
             normalization_evidence=normalization_evidence,
             snapshot_provenance=provenance,
-            particle_source=RAW_PATHS["prtcl_all"],
-            nominal_slot_time=TIME,
-            observed_committed_time=TIME,
-            **particles,
         )
 
 
@@ -596,12 +625,35 @@ def _specific_energy_bounds(velocity: float = 10.0) -> tuple[float, float, float
     return energy(lower_velocity), energy(restored), energy(upper_velocity)
 
 
-def _active_energy(count: int, velocity: float = 10.0) -> float:
-    return count * _specific_energy_bounds(velocity)[1]
+def _checkpoint_velocities(count: int) -> np.ndarray:
+    return np.resize(np.asarray([2.0, 4.0, 6.0, 8.0, 10.0], dtype=np.float32), count)
+
+
+def _active_energy(count: int) -> float:
+    return float(
+        sum(_specific_energy_bounds(float(velocity))[1] for velocity in _checkpoint_velocities(count))
+    )
+
+
+def _active_energy_bins(count: int, edges: list[float]) -> tuple[list[int], list[float], list[float]]:
+    specific = np.asarray(
+        [
+            _specific_energy_bounds(float(velocity))[1]
+            for velocity in _checkpoint_velocities(count)
+        ],
+        dtype=np.float64,
+    )
+    indices = np.searchsorted(np.asarray(edges), specific, side="right") - 1
+    indices = np.minimum(indices, len(edges) - 2)
+    return (
+        np.bincount(indices, minlength=len(edges) - 1).astype(int).tolist(),
+        np.bincount(indices, weights=np.ones(count), minlength=len(edges) - 1).tolist(),
+        np.bincount(indices, weights=specific, minlength=len(edges) - 1).tolist(),
+    )
 
 
 def _particle_checkpoint_vtk(
-    count: int, observed_time: float, cycle: int, *, velocity: float = 10.0
+    count: int, observed_time: float, cycle: int, *, velocity: object | None = None
 ) -> bytes:
     points = np.zeros((count, 3), dtype=">f4")
     points[:, 0] = np.arange(count, dtype=np.float32)
@@ -618,7 +670,11 @@ def _particle_checkpoint_vtk(
         "deltaf_weight": np.zeros(count, dtype=">f4"),
     }
     velocities = np.zeros((count, 3), dtype=">f4")
-    velocities[:, 0] = velocity
+    velocities[:, 0] = (
+        _checkpoint_velocities(count)
+        if velocity is None
+        else np.asarray(velocity, dtype=np.float32)
+    )
     payload = bytearray(
         (
             "# vtk DataFile Version 2.0\n"
@@ -692,6 +748,7 @@ def _ps_escape_ledger(
 
 def _runtime_payload(snapshot: app.ApplicabilitySnapshot) -> dict[str, object]:
     record = snapshot.record
+    identity_bindings = record["bound_normalization_evidence"]["bindings"]
     gates = record["gates"]
     particle = record["particle_gyroradius_containment"]
     exposure = record["particle_R_Lambda_exposure"]["populations"]["all_active"]
@@ -721,10 +778,14 @@ def _runtime_payload(snapshot: app.ApplicabilitySnapshot) -> dict[str, object]:
         "escaped_particle_specific_kinetic_energy_maximum": 0.0,
     }
     inventory = []
-    for index in range(int(app.EXPECTED_TERMINAL_TIME - app.STARTUP_REMOVAL_TIME)):
-        cycle = 1000 + index
-        start = app.STARTUP_REMOVAL_TIME + 0.25 if index == 0 else 45.0 + index
-        end = 46.0 + index
+    for index in range(int(app.EXPECTED_TERMINAL_TIME - app.STARTUP_REMOVAL_TIME) + 1):
+        cycle = 45 + index
+        if index == 0:
+            start = 44.75
+            end = app.STARTUP_REMOVAL_TIME
+        else:
+            start = app.STARTUP_REMOVAL_TIME + index - 1
+            end = app.STARTUP_REMOVAL_TIME + index
         inventory.append(
             {
                 "schema_version": app.SCHEMA_VERSION,
@@ -732,13 +793,19 @@ def _runtime_payload(snapshot: app.ApplicabilitySnapshot) -> dict[str, object]:
                 "attempt_id": record["snapshot_provenance"]["attempt_id"],
                 "source_commit": record["snapshot_provenance"]["source_commit"],
                 "executable_sha256": record["snapshot_provenance"]["executable_sha256"],
+                "source_identity_receipt_sha256": identity_bindings[
+                    "source_identity_receipt"
+                ]["sha256"],
+                "executable_identity_receipt_sha256": identity_bindings[
+                    "executable_identity_receipt"
+                ]["sha256"],
                 "runtime_normalization_sha256": record["snapshot_provenance"][
                     "runtime_normalization_sha256"
                 ],
                 "ps_escape_accounting_source_commit": app.PS_ESCAPE_ACCOUNTING_SOURCE_COMMIT,
                 "cycle": cycle,
                 "previous_committed_cycle": cycle - 1,
-                "previous_committed_time": 44.75 if index == 0 else start,
+                "previous_committed_time": start,
                 "start_time": start,
                 "end_time": end,
                 **metrics,
@@ -774,17 +841,20 @@ def _runtime_payload(snapshot: app.ApplicabilitySnapshot) -> dict[str, object]:
                 "escaped_injected_max_rg_over_Ly_global": 0.0,
             }
         )
-    bin_count = app.MINIMUM_SLOPE_CUTOFF_HIGH_ENERGY_BINS
-    counts = [count // bin_count] * bin_count
-    counts[-1] += count - sum(counts)
-    masses = [float(value) for value in counts]
-    energies = [active_energy / bin_count] * bin_count
+    edges = [0.0, 5.0, 12.0, 25.0, 40.0, 60.0]
+    counts, masses, energies = _active_energy_bins(count, edges)
     slope_cutoff_evidence = {
         "schema_version": app.SCHEMA_VERSION,
         "record_type": app.SLOPE_CUTOFF_ESCAPE_RECORD_TYPE,
         "attempt_id": record["snapshot_provenance"]["attempt_id"],
         "source_commit": record["snapshot_provenance"]["source_commit"],
         "executable_sha256": record["snapshot_provenance"]["executable_sha256"],
+        "source_identity_receipt_sha256": identity_bindings["source_identity_receipt"][
+            "sha256"
+        ],
+        "executable_identity_receipt_sha256": identity_bindings[
+            "executable_identity_receipt"
+        ]["sha256"],
         "runtime_normalization_sha256": record["snapshot_provenance"][
             "runtime_normalization_sha256"
         ],
@@ -792,13 +862,15 @@ def _runtime_payload(snapshot: app.ApplicabilitySnapshot) -> dict[str, object]:
         "complete": True,
         "unavailable_reason": None,
         "high_energy_tail_threshold": 0.0,
-        "energy_bin_edges": [25.0 * index for index in range(bin_count + 1)],
+        "energy_bin_edges": edges,
         "active_particle_count_by_bin": counts,
         "active_macro_weight_by_bin": masses,
         "active_kinetic_energy_by_bin": energies,
-        "escaped_particle_count_by_bin": [0] * bin_count,
-        "escaped_macro_weight_by_bin": [0.0] * bin_count,
-        "escaped_kinetic_energy_by_bin": [0.0] * bin_count,
+        "escaped_particle_count_by_bin": [0] * (len(edges) - 1),
+        "escaped_macro_weight_by_bin": [0.0] * (len(edges) - 1),
+        "escaped_kinetic_energy_by_bin": [0.0] * (len(edges) - 1),
+        "active_particle_checkpoint_sha256": None,
+        "escaped_particle_event_sha256": [],
     }
     return {
         "schema_version": app.SCHEMA_VERSION,
@@ -809,6 +881,12 @@ def _runtime_payload(snapshot: app.ApplicabilitySnapshot) -> dict[str, object]:
         "attempt_id": record["snapshot_provenance"]["attempt_id"],
         "source_commit": record["snapshot_provenance"]["source_commit"],
         "executable_sha256": record["snapshot_provenance"]["executable_sha256"],
+        "source_identity_receipt_sha256": identity_bindings["source_identity_receipt"][
+            "sha256"
+        ],
+        "executable_identity_receipt_sha256": identity_bindings[
+            "executable_identity_receipt"
+        ]["sha256"],
         "runtime_normalization_sha256": record["snapshot_provenance"][
             "runtime_normalization_sha256"
         ],
@@ -817,6 +895,7 @@ def _runtime_payload(snapshot: app.ApplicabilitySnapshot) -> dict[str, object]:
         "ps_escape_checkpoints": checkpoints,
         "claim_escape_accounting": dict(app._CLAIM_ESCAPE_ACCOUNTING),
         "escaped_slope_cutoff_evidence": slope_cutoff_evidence,
+        "escaped_particle_events": [],
         "particle_exposure": {
             "complete": True,
             "method": "every_particle_update_and_pre_destruction_boundary_event",
@@ -878,6 +957,128 @@ def _set_slope_cutoff_unavailable(
         evidence[key] = []
 
 
+def _set_escape_events(
+    payload: dict[str, object],
+    *,
+    count: int,
+    macro_weight: float,
+    kinetic_energy: float,
+    rg_over_ly: float,
+    momentum: list[float] | None = None,
+    high_energy_tail_member: bool = False,
+) -> None:
+    momentum = [0.0, 0.0, 0.0] if momentum is None else momentum
+    terminal = payload["per_cycle_inventory"][-1]
+    event_weight = macro_weight / count
+    specific_energy = kinetic_energy / macro_weight
+    payload["escaped_particle_events"] = [
+        {
+            "schema_version": app.SCHEMA_VERSION,
+            "record_type": app.ESCAPED_PARTICLE_EVENT_RECORD_TYPE,
+            "attempt_id": payload["attempt_id"],
+            "source_commit": payload["source_commit"],
+            "executable_sha256": payload["executable_sha256"],
+            "source_identity_receipt_sha256": payload["source_identity_receipt_sha256"],
+            "executable_identity_receipt_sha256": payload[
+                "executable_identity_receipt_sha256"
+            ],
+            "runtime_normalization_sha256": payload["runtime_normalization_sha256"],
+            "ps_escape_accounting_source_commit": app.PS_ESCAPE_ACCOUNTING_SOURCE_COMMIT,
+            "event_index": index,
+            "cycle": terminal["cycle"],
+            "observed_committed_time": terminal["end_time"],
+            "face": "outer_x1",
+            "reason_code": app.OUTER_X1_ESCAPE_REASON,
+            "particle_tag": 10000 + index,
+            "macro_weight": event_weight,
+            "specific_kinetic_energy": specific_energy,
+            "macro_weighted_momentum": [component / count for component in momentum],
+            "rg_over_Ly": rg_over_ly,
+            "high_energy_tail_member": high_energy_tail_member,
+        }
+        for index in range(count)
+    ]
+
+
+def _configure_single_escape(
+    payload: dict[str, object], *, specific_energy: float = 1.0, rg_over_ly: float = 0.01
+) -> None:
+    ledger = payload["boundary_escape_ledger"]
+    active_energy = _active_energy(999)
+    ledger["nonperiodic_faces"]["outer_x1"] = _face_state(
+        app.OUTER_X1_ESCAPE_REASON, 1, 1.0, specific_energy
+    )
+    ledger["accumulated_escaped"] = _state_vector(1, 1.0, specific_energy)
+    ledger["terminal_active"] = _state_vector(999, 999.0, active_energy)
+    last_entry = payload["per_cycle_inventory"][-1]
+    last_entry["maximum_particle_specific_kinetic_energy"] = max(
+        last_entry["maximum_particle_specific_kinetic_energy"], specific_energy
+    )
+    last_entry["escaped_particle_specific_kinetic_energy_maximum"] = specific_energy
+    last_entry["escaped_particle_rg_maximum_over_Ly"] = rg_over_ly
+    last_entry["escaped_high_energy_tail_rg_maximum_over_Ly"] = rg_over_ly
+    last_entry["particle_rg_maximum_over_Ly"] = max(
+        last_entry["particle_rg_maximum_over_Ly"], rg_over_ly
+    )
+    last_entry["high_energy_tail_rg_maximum_over_Ly"] = max(
+        last_entry["high_energy_tail_rg_maximum_over_Ly"], rg_over_ly
+    )
+    terminal = payload["ps_escape_checkpoints"][-1]
+    terminal["active_injected_cr_count_global"] = 999.0
+    terminal["active_injected_cr_mass_global"] = 999.0
+    terminal["active_injected_cr_kinetic_energy_global"] = active_energy
+    terminal["escaped_injected_max_specific_kinetic_energy_global"] = specific_energy
+    terminal["escaped_injected_max_rg_over_Ly_global"] = rg_over_ly
+    terminal["ps_escape_ledger"] = _ps_escape_ledger(
+        cycle=terminal["cycle"],
+        observed_time=terminal["observed_committed_time"],
+        active_count=999,
+        active_mass=999.0,
+        escaped_count=1,
+        escaped_mass=1.0,
+        escaped_energy=specific_energy,
+    )
+    _set_escape_events(
+        payload,
+        count=1,
+        macro_weight=1.0,
+        kinetic_energy=specific_energy,
+        rg_over_ly=rg_over_ly,
+        high_energy_tail_member=True,
+    )
+    evidence = payload["escaped_slope_cutoff_evidence"]
+    (
+        evidence["active_particle_count_by_bin"],
+        evidence["active_macro_weight_by_bin"],
+        evidence["active_kinetic_energy_by_bin"],
+    ) = _active_energy_bins(999, evidence["energy_bin_edges"])
+    escaped_bin = int(
+        np.searchsorted(evidence["energy_bin_edges"], specific_energy, side="right") - 1
+    )
+    escaped_bin = min(escaped_bin, len(evidence["energy_bin_edges"]) - 2)
+    for key in (
+        "escaped_particle_count_by_bin",
+        "escaped_macro_weight_by_bin",
+        "escaped_kinetic_energy_by_bin",
+    ):
+        evidence[key] = [0] * (len(evidence["energy_bin_edges"]) - 1)
+    evidence["escaped_particle_count_by_bin"][escaped_bin] = 1
+    evidence["escaped_macro_weight_by_bin"][escaped_bin] = 1.0
+    evidence["escaped_kinetic_energy_by_bin"][escaped_bin] = specific_energy
+
+
+def _shift_runtime_cycles(payload: dict[str, object], delta: int) -> None:
+    for entry in payload["per_cycle_inventory"]:
+        entry["cycle"] += delta
+        entry["previous_committed_cycle"] += delta
+    for checkpoint in payload["ps_escape_checkpoints"]:
+        checkpoint["cycle"] += delta
+        checkpoint["previous_committed_cycle"] += delta
+        checkpoint["ps_escape_ledger"]["ps_escape_audit_calls"] = (
+            app.PAPER_VL2_ESCAPE_AUDITS_PER_CYCLE * checkpoint["cycle"]
+        )
+
+
 def _history(
     snapshots: list[app.ApplicabilitySnapshot],
     payload: dict[str, object],
@@ -887,6 +1088,7 @@ def _history(
     particle_payload_overrides: dict[int, bytes] | None = None,
     bind_cycle_telemetry: bool = True,
     bind_slope_cutoff_evidence: bool = True,
+    bind_escape_events: bool = True,
 ) -> dict[str, object]:
     with tempfile.TemporaryDirectory() as temporary:
         root = Path(temporary)
@@ -901,13 +1103,6 @@ def _history(
                 )
                 for index, entry in enumerate(bound_payload["per_cycle_inventory"])
             ]
-        if bind_slope_cutoff_evidence:
-            bound_payload["escaped_slope_cutoff_evidence"] = _write_artifact(
-                root,
-                "slope_cutoff_escape_evidence",
-                "runtime/slope-cutoff-escape.json",
-                _canonical(bound_payload["escaped_slope_cutoff_evidence"]),
-            )
         for index, checkpoint in enumerate(bound_payload.get("ps_escape_checkpoints", [])):
             if checkpoint.get("restart_artifact") is None:
                 restart_ledger = (
@@ -949,6 +1144,31 @@ def _history(
                         )
                     ),
                 )
+        if bind_escape_events:
+            bound_payload["escaped_particle_events"] = [
+                _write_artifact(
+                    root,
+                    "escaped_particle_event",
+                    f"runtime/escape-events/{index:05d}.json",
+                    _canonical(event),
+                )
+                for index, event in enumerate(bound_payload["escaped_particle_events"])
+            ]
+        slope = bound_payload["escaped_slope_cutoff_evidence"]
+        slope["active_particle_checkpoint_sha256"] = bound_payload[
+            "ps_escape_checkpoints"
+        ][-1]["particle_checkpoint_artifact"]["sha256"]
+        if bind_escape_events:
+            slope["escaped_particle_event_sha256"] = [
+                binding["sha256"] for binding in bound_payload["escaped_particle_events"]
+            ]
+        if bind_slope_cutoff_evidence:
+            bound_payload["escaped_slope_cutoff_evidence"] = _write_artifact(
+                root,
+                "slope_cutoff_escape_evidence",
+                "runtime/slope-cutoff-escape.json",
+                _canonical(slope),
+            )
         binding = _write_artifact(
             root,
             "runtime_time_escape_record",
@@ -993,17 +1213,15 @@ class Q011PhysicalApplicabilitySuccessorV1Tests(unittest.TestCase):
             _snapshot(normalization=drifted)
         with self.assertRaisesRegex(app.PhysicalApplicabilityError, "deck artifact .* drifted"):
             _snapshot(tamper_deck_after_binding=True)
-        with self.assertRaisesRegex(
-            app.PhysicalApplicabilityError, "supplied decoded payload disagrees"
-        ):
-            _snapshot(tamper_decoded_particle_after_manifest=True)
+        raw_only = _snapshot(tamper_decoded_particle_after_manifest=True)
+        self.assertEqual(raw_only.record["gates"], self.passing.record["gates"])
         with self.assertRaisesRegex(
             app.PhysicalApplicabilityError, "not a trusted Athena binary"
         ):
             _snapshot(ascii_raw_product="mhd_w_bcc")
         with self.assertRaisesRegex(app.PhysicalApplicabilityError, "unexpected keyword"):
             app.reduce_physical_applicability_snapshot(  # type: ignore[call-arg]
-                None, {}, normalization=dict(app.EXACT_NORMALIZATION)
+                normalization=dict(app.EXACT_NORMALIZATION)
             )
 
     def test_history_rejects_stripped_snapshot_and_missing_full_evidence_sections(self) -> None:
@@ -1098,8 +1316,14 @@ class Q011PhysicalApplicabilitySuccessorV1Tests(unittest.TestCase):
         history = _history([self.passing], _runtime_payload(self.passing))
         self.assertTrue(history["all_physical_applicability_gates_pass"])
         coverage = history["runtime_time_escape_evidence"]["cycle_coverage"]
-        self.assertEqual(coverage["covered_cycle_count"], 1155)
-        self.assertEqual(coverage["post_startup_removal_start_time"], 45.25)
+        self.assertEqual(coverage["covered_cycle_count"], 1156)
+        self.assertEqual(coverage["first_interval_crossing_start_time"], 44.75)
+        self.assertEqual(coverage["first_interval_crossing_end_time"], 45.0)
+        self.assertEqual(coverage["post_startup_removal_start_time"], 45.0)
+        self.assertTrue(
+            coverage["continuous_coverage_begins_exactly_at_startup_removal_time"]
+        )
+        self.assertTrue(coverage["continuous_coverage_includes_first_startup_crossing"])
         self.assertEqual(coverage["previous_committed_time_before_startup_crossing"], 44.75)
         self.assertEqual(coverage["terminal_time"], 1200.0)
         ps_escape = history["runtime_time_escape_evidence"]["ps_escape_accounting"]
@@ -1243,6 +1467,7 @@ class Q011PhysicalApplicabilitySuccessorV1Tests(unittest.TestCase):
         self,
     ) -> None:
         invented = _runtime_payload(self.passing)
+        invented["per_cycle_inventory"] = invented["per_cycle_inventory"][1:]
         self.assertEqual(len(invented["per_cycle_inventory"]), 1155)
         with self.assertRaisesRegex(app.PhysicalApplicabilityError, "binding keys drifted"):
             _history([self.passing], invented, bind_cycle_telemetry=False)
@@ -1253,6 +1478,18 @@ class Q011PhysicalApplicabilitySuccessorV1Tests(unittest.TestCase):
             app.PhysicalApplicabilityError, "trusted source/escape identity drifted"
         ):
             _history([self.passing], arbitrary_source)
+
+        fabricated_receipt = _runtime_payload(self.passing)
+        fabricated_receipt["source_identity_receipt_sha256"] = "9" * 64
+        for entry in fabricated_receipt["per_cycle_inventory"]:
+            entry["source_identity_receipt_sha256"] = "9" * 64
+        fabricated_receipt["escaped_slope_cutoff_evidence"][
+            "source_identity_receipt_sha256"
+        ] = "9" * 64
+        with self.assertRaisesRegex(
+            app.PhysicalApplicabilityError, "snapshot provenance disagrees"
+        ):
+            _history([self.passing], fabricated_receipt)
 
     def test_snapshot_raw_products_must_be_trusted_byte_decodable(self) -> None:
         with self.assertRaisesRegex(
@@ -1273,6 +1510,76 @@ class Q011PhysicalApplicabilitySuccessorV1Tests(unittest.TestCase):
         )
         with self.assertRaisesRegex(app.PhysicalApplicabilityError, "artifact byte count drifted"):
             _history([tampered_after_reduction], _runtime_payload(tampered_after_reduction))
+
+    def test_history_recomputes_every_derived_snapshot_result_from_raw_bytes(self) -> None:
+        attacks: list[app.ApplicabilitySnapshot] = []
+
+        record = copy.deepcopy(dict(self.passing.record))
+        maps = {name: np.array(values, copy=True) for name, values in self.passing.cell_maps.items()}
+        maps["actual_leaf_dx1"][0, 0] += 1.0
+        for values in maps.values():
+            values.setflags(write=False)
+        record["cell_map_contract"]["map_bindings"]["actual_leaf_dx1"]["sha256"] = (
+            app._array_sha256(maps["actual_leaf_dx1"])
+        )
+        attacks.append(app.ApplicabilitySnapshot(record, maps, self.passing.evidence_root))
+
+        record = copy.deepcopy(dict(self.passing.record))
+        record["ion_scale_separation"]["precursor_magnetic_spectrum"][
+            "resolved_restricted_power"
+        ] += 1.0
+        attacks.append(
+            app.ApplicabilitySnapshot(record, self.passing.cell_maps, self.passing.evidence_root)
+        )
+
+        record = copy.deepcopy(dict(self.passing.record))
+        record["particle_R_Lambda_exposure"]["sampling"] = "caller_fabricated_sampling"
+        attacks.append(
+            app.ApplicabilitySnapshot(record, self.passing.cell_maps, self.passing.evidence_root)
+        )
+
+        record = copy.deepcopy(dict(self.passing.record))
+        record["gates"]["Q011-APP-NORM"]["threshold_provenance"] = "caller_fabricated_gate"
+        attacks.append(
+            app.ApplicabilitySnapshot(record, self.passing.cell_maps, self.passing.evidence_root)
+        )
+
+        for forged in attacks:
+            with self.assertRaisesRegex(
+                app.PhysicalApplicabilityError, "complete raw-byte recomputation"
+            ):
+                _history([forged], _runtime_payload(forged))
+
+    def test_intermediate_symlink_path_escape_and_identity_receipts_reject(self) -> None:
+        intermediate = _snapshot()
+        raw = intermediate.evidence_root / "raw"
+        raw.rename(intermediate.evidence_root / "raw-real")
+        raw.symlink_to("raw-real", target_is_directory=True)
+        with self.assertRaisesRegex(app.PhysicalApplicabilityError, "symlink"):
+            _history([intermediate], _runtime_payload(intermediate))
+
+        executable_alias = _snapshot()
+        executable = executable_alias.evidence_root / "bound/athena"
+        executable.rename(executable_alias.evidence_root / "bound/athena-real")
+        executable.symlink_to("athena-real")
+        with self.assertRaisesRegex(app.PhysicalApplicabilityError, "symlink"):
+            _history([executable_alias], _runtime_payload(executable_alias))
+
+        receipt_tamper = _snapshot()
+        receipt = receipt_tamper.evidence_root / "bound/source-identity-receipt.json"
+        receipt.write_bytes(b"caller-fabricated identity receipt\n")
+        with self.assertRaisesRegex(app.PhysicalApplicabilityError, "receipt artifact .* drifted"):
+            _history([receipt_tamper], _runtime_payload(receipt_tamper))
+
+        escaped_path = copy.deepcopy(dict(self.passing.record))
+        escaped_path["snapshot_provenance"]["raw_products"]["mhd_w_bcc"]["path"] = (
+            "../escaped/mhd.bin"
+        )
+        forged = app.ApplicabilitySnapshot(
+            escaped_path, self.passing.cell_maps, self.passing.evidence_root
+        )
+        with self.assertRaisesRegex(app.PhysicalApplicabilityError, "safe canonical relative"):
+            _history([forged], _runtime_payload(forged))
 
     def test_checkpoint_must_be_first_committed_cycle_crossing_nominal_slot(self) -> None:
         payload = _runtime_payload(self.passing)
@@ -1299,20 +1606,42 @@ class Q011PhysicalApplicabilitySuccessorV1Tests(unittest.TestCase):
         ):
             _history([self.passing], payload)
 
-    def test_startup_coverage_requires_first_start_crossing_with_prior_commit_below_45(
+    def test_startup_coverage_requires_first_interval_crossing_and_no_post45_gap(
         self,
     ) -> None:
         passing = _history([self.passing], _runtime_payload(self.passing))
         coverage = passing["runtime_time_escape_evidence"]["cycle_coverage"]
-        self.assertGreater(coverage["post_startup_removal_start_time"], 45.0)
+        self.assertEqual(coverage["post_startup_removal_start_time"], 45.0)
+        self.assertLess(coverage["first_interval_crossing_start_time"], 45.0)
+        self.assertGreaterEqual(coverage["first_interval_crossing_end_time"], 45.0)
         self.assertLess(coverage["previous_committed_time_before_startup_crossing"], 45.0)
 
         bad_previous = _runtime_payload(self.passing)
-        bad_previous["per_cycle_inventory"][0]["previous_committed_time"] = 45.0
+        bad_previous["per_cycle_inventory"][0].update(
+            {"previous_committed_time": 45.0, "start_time": 45.0, "end_time": 45.25}
+        )
         with self.assertRaisesRegex(
-            app.PhysicalApplicabilityError, "first committed cycle starting across t=45"
+            app.PhysicalApplicabilityError, "first committed interval crossing"
         ):
             _history([self.passing], bad_previous)
+
+        omitted_crossing = _runtime_payload(self.passing)
+        omitted_crossing["per_cycle_inventory"].pop(0)
+        with self.assertRaisesRegex(
+            app.PhysicalApplicabilityError, "first committed interval crossing"
+        ):
+            _history([self.passing], omitted_crossing)
+
+        post_45_gap = _runtime_payload(self.passing)
+        post_45_gap["per_cycle_inventory"][1]["start_time"] = 45.25
+        with self.assertRaisesRegex(app.PhysicalApplicabilityError, "time gap"):
+            _history([self.passing], post_45_gap)
+
+    def test_snapshot_cycle_time_pair_must_be_an_admitted_telemetry_endpoint(self) -> None:
+        shifted = _runtime_payload(self.passing)
+        _shift_runtime_cycles(shifted, 2000)
+        with self.assertRaisesRegex(app.PhysicalApplicabilityError, "admitted telemetry endpoint"):
+            _history([self.passing], shifted)
 
     def test_any_inner_x1_escape_rejects_even_with_reason_code(self) -> None:
         payload = _runtime_payload(self.passing)
@@ -1377,18 +1706,28 @@ class Q011PhysicalApplicabilitySuccessorV1Tests(unittest.TestCase):
             escaped_mass=1.0,
             escaped_energy=1.0,
         )
+        _set_escape_events(
+            biased,
+            count=1,
+            macro_weight=1.0,
+            kinetic_energy=1.0,
+            rg_over_ly=0.01,
+            high_energy_tail_member=True,
+        )
         evidence = biased["escaped_slope_cutoff_evidence"]
-        evidence["active_particle_count_by_bin"] = [250, 250, 250, 249]
-        evidence["active_macro_weight_by_bin"] = [250.0, 250.0, 250.0, 249.0]
-        evidence["active_kinetic_energy_by_bin"] = [active_energy / 4.0] * 4
-        evidence["escaped_particle_count_by_bin"] = [0, 0, 0, 1]
-        evidence["escaped_macro_weight_by_bin"] = [0.0, 0.0, 0.0, 1.0]
-        evidence["escaped_kinetic_energy_by_bin"] = [0.0, 0.0, 0.0, 1.0]
+        (
+            evidence["active_particle_count_by_bin"],
+            evidence["active_macro_weight_by_bin"],
+            evidence["active_kinetic_energy_by_bin"],
+        ) = _active_energy_bins(999, evidence["energy_bin_edges"])
+        evidence["escaped_particle_count_by_bin"] = [1, 0, 0, 0, 0]
+        evidence["escaped_macro_weight_by_bin"] = [1.0, 0.0, 0.0, 0.0, 0.0]
+        evidence["escaped_kinetic_energy_by_bin"] = [1.0, 0.0, 0.0, 0.0, 0.0]
         history = _history([self.passing], biased)
         slope = history["runtime_time_escape_evidence"]["slope_cutoff_escape_evidence"]
         self.assertFalse(slope["pass"])
         self.assertGreater(
-            slope["escaped_fraction_by_bin"]["particle_count"][-1],
+            slope["escaped_fraction_by_bin"]["particle_count"][0],
             app.SLOPE_CUTOFF_BIN_ESCAPE_FRACTION_MAXIMUM,
         )
         self.assertFalse(
@@ -1396,6 +1735,41 @@ class Q011PhysicalApplicabilitySuccessorV1Tests(unittest.TestCase):
                 "high_energy_slope_or_cutoff_claim"
             ]["pass"]
         )
+
+    def test_energy_bins_must_be_derived_from_terminal_PVTK_and_raw_escape_events(self) -> None:
+        fabricated_active = _runtime_payload(self.passing)
+        active_bins = fabricated_active["escaped_slope_cutoff_evidence"]
+        active_bins["active_particle_count_by_bin"][0] -= 1
+        active_bins["active_particle_count_by_bin"][1] += 1
+        with self.assertRaisesRegex(
+            app.PhysicalApplicabilityError, "not derived from bound raw particles/events"
+        ):
+            _history([self.passing], fabricated_active)
+
+        fabricated_escape = _runtime_payload(self.passing)
+        _configure_single_escape(fabricated_escape)
+        escaped_bins = fabricated_escape["escaped_slope_cutoff_evidence"]
+        escaped_bins["escaped_particle_count_by_bin"][0] = 0
+        escaped_bins["escaped_particle_count_by_bin"][1] = 1
+        escaped_bins["escaped_macro_weight_by_bin"][0] = 0.0
+        escaped_bins["escaped_macro_weight_by_bin"][1] = 1.0
+        escaped_bins["escaped_kinetic_energy_by_bin"][0] = 0.0
+        escaped_bins["escaped_kinetic_energy_by_bin"][1] = 1.0
+        with self.assertRaisesRegex(
+            app.PhysicalApplicabilityError, "not derived from bound raw particles/events"
+        ):
+            _history([self.passing], fabricated_escape)
+
+        unbound_escape = _runtime_payload(self.passing)
+        _configure_single_escape(unbound_escape)
+        with self.assertRaisesRegex(app.PhysicalApplicabilityError, "binding keys drifted"):
+            _history([self.passing], unbound_escape, bind_escape_events=False)
+
+        wrong_event_endpoint = _runtime_payload(self.passing)
+        _configure_single_escape(wrong_event_endpoint)
+        wrong_event_endpoint["escaped_particle_events"][0]["observed_committed_time"] -= 0.5
+        with self.assertRaisesRegex(app.PhysicalApplicabilityError, "admitted telemetry endpoint"):
+            _history([self.passing], wrong_event_endpoint)
 
     def test_escape_count_weight_energy_limits_and_momentum_residual_are_enforced(self) -> None:
         residual = _runtime_payload(self.passing)
@@ -1438,6 +1812,13 @@ class Q011PhysicalApplicabilitySuccessorV1Tests(unittest.TestCase):
             escaped_mass=1.0,
             escaped_energy=1000.0,
         )
+        _set_escape_events(
+            energetic_escape,
+            count=1,
+            macro_weight=1.0,
+            kinetic_energy=1000.0,
+            rg_over_ly=0.01,
+        )
         _set_slope_cutoff_unavailable(energetic_escape)
         history = _history([self.passing], energetic_escape)
         self.assertFalse(history["gates"]["Q011-APP-RG"]["pass"])
@@ -1469,7 +1850,7 @@ class Q011PhysicalApplicabilitySuccessorV1Tests(unittest.TestCase):
             "escaped_injected_max_rg_over_Ly_global"
         ] = 0.0
         with self.assertRaisesRegex(
-            app.PhysicalApplicabilityError, "positive escaped census lacks"
+            app.PhysicalApplicabilityError, "raw-event maxima disagree"
         ):
             _history([self.passing], missing_gyroradius)
 
@@ -1482,7 +1863,7 @@ class Q011PhysicalApplicabilitySuccessorV1Tests(unittest.TestCase):
         active_energy = _active_energy(998)
         ledger["terminal_active"] = _state_vector(998, 998.0, active_energy)
         last_entry = count_mass_escape["per_cycle_inventory"][-1]
-        last_entry["escaped_particle_specific_kinetic_energy_maximum"] = 1.0
+        last_entry["escaped_particle_specific_kinetic_energy_maximum"] = 0.5
         last_entry["escaped_particle_rg_maximum_over_Ly"] = 0.01
         last_entry["particle_rg_maximum_over_Ly"] = max(
             last_entry["particle_rg_maximum_over_Ly"], 0.01
@@ -1491,7 +1872,7 @@ class Q011PhysicalApplicabilitySuccessorV1Tests(unittest.TestCase):
         terminal["active_injected_cr_count_global"] = 998.0
         terminal["active_injected_cr_mass_global"] = 998.0
         terminal["active_injected_cr_kinetic_energy_global"] = active_energy
-        terminal["escaped_injected_max_specific_kinetic_energy_global"] = 1.0
+        terminal["escaped_injected_max_specific_kinetic_energy_global"] = 0.5
         terminal["escaped_injected_max_rg_over_Ly_global"] = 0.01
         terminal["ps_escape_ledger"] = _ps_escape_ledger(
             cycle=terminal["cycle"],
@@ -1501,6 +1882,13 @@ class Q011PhysicalApplicabilitySuccessorV1Tests(unittest.TestCase):
             escaped_count=2,
             escaped_mass=2.0,
             escaped_energy=1.0,
+        )
+        _set_escape_events(
+            count_mass_escape,
+            count=2,
+            macro_weight=2.0,
+            kinetic_energy=1.0,
+            rg_over_ly=0.01,
         )
         _set_slope_cutoff_unavailable(count_mass_escape)
         history = _history([self.passing], count_mass_escape)

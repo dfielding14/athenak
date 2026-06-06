@@ -1,9 +1,10 @@
 # Q011 Section 5.4 physical-applicability successor v1
 
 Status: **clean repair successor to independently rejected commits
-`4fd567f5a4db0662c765668d9cb56aa63be22a3c` and `72792e172`; additive
-source-local diagnostic/gate only; source base remains rejected; no production
-telemetry or result; no authorization; fresh independent review required**
+`4fd567f5a4db0662c765668d9cb56aa63be22a3c`, `72792e172`, and `ffdc755ce`;
+additive source-local diagnostic/gate only; source base and physical-escape
+source acceptance remain unresolved; no production telemetry or result; no
+authorization; fresh independent review required**
 
 ## Purpose and boundary
 
@@ -83,17 +84,47 @@ The latest independent rejection of `72792e172` is additionally repaired:
 5. high-energy slope/cutoff applicability requires a separately bound complete
    active-plus-escaped binwise/tail reduction whose bins cover the all-cycle
    maximum energy; absent or biased evidence rejects that claim;
-6. runtime coverage starts at the first cycle whose start is at or above
-   `t=45` and whose bound previous committed time is below `t=45`; exact
-   equality of the first start to `t=45` is not required.
+6. that predecessor repair admitted the first cycle whose start was at or
+   above `t=45` and whose previous committed time was below `t=45`. The fresh
+   review below supersedes this with exact continuous coverage from `t=45`.
+
+The fresh independent rejection of `ffdc755ce` is repaired as follows:
+
+1. the public snapshot reducer accepts no decoded mesh, current, particle, map,
+   spectrum, diagnostic, gate, time, cycle, or target-level inputs. It opens
+   digest-bound Athena/PVTK raw bytes, derives the complete snapshot itself,
+   and history independently reruns the complete raw-byte reduction before
+   accepting every retained map, region, spectrum, particle diagnostic, and
+   gate;
+2. active slope/cutoff bin membership is recomputed from the bound terminal
+   checkpoint PVTK. Escaped bin membership is recomputed from separately
+   opened per-particle outer-`x1` raw escape-event artifacts. Raw events must
+   reproduce every cumulative checkpoint ledger and terminal mass, energy,
+   momentum, energy maximum, and gyroradius maximum;
+3. every retained snapshot `(cycle, observed_committed_time)` pair must exactly
+   equal one admitted all-cycle telemetry endpoint;
+4. retained telemetry includes the first committed interval whose start and
+   previous committed time are below `t=45` and whose endpoint is at or above
+   `t=45`; every subsequent start, previous committed time, and prior endpoint
+   must match without any post-45 gap or overlap;
+5. all bound artifacts are opened component-by-component beneath one canonical
+   evidence root with no intermediate or final symlink. Source and executable
+   identity require separately opened trusted-authority identity receipts,
+   cross-bound source manifest/archive/executable digests, and exact receipt
+   digests in runtime, cycle, slope/cutoff, and escape-event records.
+
+These reducer repairs do not accept the physical-escape implementation. The
+candidate remains explicitly conditional on fresh independent acceptance of
+that source before any production physical claim can be considered.
 
 ## Snapshot evidence
 
 Every retained snapshot includes:
 
-- exact canonical normalization/source/deck/executable bindings;
+- exact canonical normalization/source/deck/executable bindings plus trusted
+  source/executable identity receipts;
 - all retained raw-product bindings and decoded-payload digests, reopened and
-  reparsed during history reduction;
+  fully re-reduced during history reduction with no supplied derived evidence;
 - immutable digest-bound maps of `R`, `Lambda`, `d_i`, `S_delta`, actual leaf
   spacings, and gas-frame current magnitude;
 - full-domain and detected-front-centered downstream, precursor, and
@@ -146,8 +177,11 @@ residual-bounded but are not required to be monotonic because physically valid
 cumulative signed momentum may change direction.
 
 The conservative kinetic-energy escape fraction uses the lower bound of active
-energy reconstructed from the terminal float32 PVTK payload. Thus active
-particles cannot disappear from snapshots and make an acceleration claim pass.
+energy reconstructed from the terminal float32 PVTK payload. Active
+slope/cutoff bins are derived from that PVTK, while escaped bins and cumulative
+ledgers are derived from raw per-particle escape events. Thus active or escaped
+particles cannot disappear or be reassigned between bins to make an
+acceleration claim pass.
 Absent, incomplete, forged, unbound, cadence-incomplete, or internally
 inconsistent restart/PVTK/telemetry evidence fails closed.
 
@@ -159,12 +193,12 @@ numeric cutoffs. Every numeric threshold below is explicitly
 
 | Gate | Acceptance |
 | --- | --- |
-| `Q011-APP-NORM` | exact bound normalization, source, executable, raw and decoded snapshot provenance |
+| `Q011-APP-NORM` | exact bound normalization, trusted identity receipts, source, executable, and direct raw-byte snapshot reduction |
 | `Q011-APP-R` | full-domain per-cell `Rmax <= 0.01` |
 | `Q011-APP-LAMBDA` | full-domain per-cell `Lambdamax <= 0.1` |
 | `Q011-APP-DI` | outside shock transition `S_delta,min >= 1`; precursor `lambda_B,char/d_i,max >= 10`; sub-`10d_i` power upper bound `<= 0.05`; `delta B_rms/B0 >= 0.1` |
 | `Q011-APP-RG` | snapshot macro/energy `q999/Ly <= 1/8` and energy fraction above `Ly/4 <= 1e-3`; all-cycle active-plus-escaped global and high-energy-tail `r_g,max/Ly <= 1/8`; claim-specific escaped count, mass, and kinetic-energy fractions each `<= 1e-3` |
-| `Q011-APP-TIME` | separately opened byte-bound contiguous per-cycle telemetry from the first start crossing `t=45` through exact `t=1200`; first-crossing checkpoint cadence; complete active/boundary/escaped exposure; outer-`x1`-only escape; closed count/mass/energy/momentum ledgers |
+| `Q011-APP-TIME` | separately opened byte-bound contiguous per-cycle telemetry including the first interval crossing `t=45` through exact `t=1200` with no post-45 gap; every snapshot and escape event equals an admitted endpoint; first-crossing checkpoint cadence; complete active/boundary/escaped exposure; outer-`x1`-only escape; closed count/mass/energy/momentum ledgers |
 
 ## Claim-specific escape rules
 
@@ -209,11 +243,14 @@ plasma.
 No conforming production runtime artifact exists in this worktree. Tests use
 synthetic adversarial evidence only. Remaining production obligations are:
 
-1. implement and independently review the corresponding C++ separately
+1. independently accept the physical-escape source and its trusted identity
+   receipts; this reducer candidate does not provide that acceptance;
+2. implement and independently review the corresponding C++ separately
    retained per-cycle telemetry, particle-exposure, first-crossing checkpoint,
-   reason-coded outer-`x1` escape, and slope/cutoff binwise-tail reductions;
-2. execute the registered production campaign without changing thresholds
+   raw reason-coded outer-`x1` per-particle escape events, and slope/cutoff
+   binwise-tail reductions;
+3. execute the registered production campaign without changing thresholds
    after observing results;
-3. retain complete bound raw, decoded, map, runtime, restart, PVTK, and escape
+4. retain complete bound raw, decoded, map, runtime, restart, PVTK, and escape
    artifacts;
-4. independently review the resulting physical interpretation and claim scope.
+5. independently review the resulting physical interpretation and claim scope.

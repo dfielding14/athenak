@@ -119,7 +119,7 @@
       "provenance": "AthenaK_selected_conservative_bound_Bai_requires_Lambda_much_less_than_one_for_no_Hall_behavior"
     },
     "Q011-APP-NORM": {
-      "acceptance": "exact_trusted_source_runtime_deck_executable_and_strict_raw_byte_decoded_snapshot_identity",
+      "acceptance": "exact_trusted_receipt_source_runtime_deck_executable_identity_and_complete_direct_raw_byte_snapshot_reduction",
       "provenance": "equation_and_normalization_identity"
     },
     "Q011-APP-R": {
@@ -140,7 +140,7 @@
       "provenance": "AthenaK_selected_conservative_interpretation_of_Sun_and_Bai_several_high_energy_gyroradii"
     },
     "Q011-APP-TIME": {
-      "acceptance": "separately_opened_byte_bound_per_cycle_first_start_crossing_t45_to_exact_t1200_first_crossing_restart_and_prtcl_all_checkpoint_cadence_outer_x1_only_escape_complete_exposure_and_closed_accounting",
+      "acceptance": "separately_opened_byte_bound_per_cycle_first_committed_interval_crossing_t45_to_exact_t1200_no_post45_gap_snapshot_and_escape_event_endpoint_membership_first_crossing_restart_and_prtcl_all_checkpoint_cadence_outer_x1_only_escape_complete_exposure_and_closed_accounting",
       "provenance": "engineering_and_analysis_completeness"
     }
   },
@@ -163,7 +163,8 @@
   "predecessor_review": {
     "rejected_commits": [
       "4fd567f5a4db0662c765668d9cb56aa63be22a3c",
-      "72792e172fab48502d12a108d69d848f339385ad"
+      "72792e172fab48502d12a108d69d848f339385ad",
+      "ffdc755ce97f9844429974df1044f9cdf1a42a88"
     ],
     "repair_findings": [
       "complete_bound_actual_per_cycle_inventory_and_endpoints",
@@ -178,10 +179,16 @@
       "first_committed_cycle_checkpoint_crossing_with_previous_chronology",
       "reason_coded_outer_x1_only_escape",
       "bound_complete_slope_cutoff_binwise_and_tail_bias_evidence",
-      "first_cycle_start_crossing_t45_with_previous_commit_below_t45"
+      "first_cycle_start_crossing_t45_with_previous_commit_below_t45",
+      "complete_snapshot_maps_spectrum_particles_and_gates_recomputed_from_digest_verified_raw_bytes",
+      "active_bins_derived_from_terminal_PVTK_and_escaped_bins_derived_from_raw_escape_events",
+      "every_snapshot_cycle_time_pair_equals_an_admitted_telemetry_endpoint",
+      "continuous_telemetry_includes_first_interval_crossing_t45_without_post45_gap",
+      "intermediate_symlink_and_path_escape_rejected_with_trusted_source_and_executable_identity_receipts"
     ],
-    "status": "all_findings_repaired_in_source_local_successor_fresh_independent_review_required"
+    "status": "all_reducer_findings_repaired_fresh_independent_review_and_physical_escape_source_acceptance_required"
   },
+  "physical_escape_source_review_status": "independent_acceptance_required_candidate_non_authorizing",
   "production_evidence_status": "absent_not_fabricated",
   "qualification_effect": "source_local_non_authorizing_diagnostic_and_gate_only_no_launch_no_policy_mutation_no_qualifying_output_inspection_no_claim_closure",
   "record_type": "q011_section54_physical_applicability_successor",
@@ -191,11 +198,14 @@
       "actual_endpoint_terminal": 1200.0,
       "each_cycle_record_opened_from_separate_immutable_artifact": true,
       "exact_trusted_source_and_escape_implementation_identity_required": true,
+      "every_snapshot_cycle_time_pair_must_equal_admitted_endpoint": true,
+      "first_cycle_end_time_at_or_above": 45.0,
       "first_cycle_previous_committed_time_below": 45.0,
-      "first_cycle_start_at_or_above": 45.0,
+      "first_cycle_start_equals_previous_committed_time": true,
       "inline_or_unbound_cycle_records_non_admitting": true,
       "maximum_cycle_span": 1.0,
       "minimum_contiguous_cycle_entries": 1000,
+      "no_post45_gap_or_overlap_after_first_crossing": true,
       "self_declared_summary_or_one_cycle_pass": false
     },
     "boundary_escape": {
@@ -206,6 +216,8 @@
       "face_to_total_and_source_relative_residual_maximum": 1e-12,
       "inner_x1_escape_allowed": false,
       "outer_x1_reason_code_required": true,
+      "raw_per_particle_escape_event_artifact_required": true,
+      "raw_events_reproduce_every_cumulative_checkpoint_ledger": true,
       "signed_momentum_monotonicity_required": false
     },
     "particle_exposure": "every_active_particle_update_and_pre_destruction_boundary_event_including_escaped_particles",
@@ -214,7 +226,9 @@
       "AthenaK_selected_bin_escape_fraction_maximum": 0.001,
       "AthenaK_selected_tail_escape_fraction_maximum": 0.001,
       "complete_active_plus_escaped_count_mass_energy_bins_required": true,
+      "active_bins_derived_from_bound_terminal_PVTK": true,
       "energy_bins_cover_all_cycle_maximum_specific_energy": true,
+      "escaped_bins_derived_from_bound_raw_escape_events": true,
       "minimum_high_energy_bins": 4
     },
     "record_type": "q011_section54_runtime_time_escape_applicability_v1"
@@ -264,8 +278,9 @@
     "actual_leaf_aware_spectrum": "coarsest_present_level_conservative_restriction_FFT_plus_all_subgrid_residual_as_high_k_upper_bound",
     "decoded_payload_digests_required": true,
     "decoded_payloads_recomputed_from_opened_raw_bytes": true,
+    "derived_maps_spectrum_particle_diagnostics_and_gates_fully_rereduced_from_raw_bytes": true,
     "full_regions_particles_spectrum_and_provenance_required": true,
-    "history_reopens_and_reparses_all_retained_snapshot_and_normalization_artifacts": true,
+    "history_reopens_reparses_and_fully_rereduces_all_retained_snapshot_and_normalization_artifacts": true,
     "immutable_cell_maps_required": [
       "R",
       "Lambda",
@@ -290,18 +305,26 @@
     "rare_cell_waiver_allowed": false,
     "shock_transition_excluded_only_from_S_delta": true
   },
+  "trusted_identity_contract": {
+    "artifact_opening": "canonical_root_component_by_component_openat_no_intermediate_or_final_symlink_no_path_escape",
+    "executable_identity_receipt_required": true,
+    "physical_escape_source_acceptance_provided_by_this_candidate": false,
+    "receipt_authority": "q011_registered_execution_control_plane_v1",
+    "receipt_digests_bound_in_runtime_cycle_slope_and_escape_event_records": true,
+    "source_identity_receipt_required": true
+  },
   "source_bindings": {
     "design": {
       "path": "tst/publication/readiness/q011_section54_physical_applicability_successor_v1_2026-06-06.md",
-      "sha256": "ed1d217fe81d08b25fb045a180fe3d0d5b479c21be6c0ea3a5fafe1712585ceb"
+      "sha256": "100be655ca873253bc1144fc093afbd5178e3093af8ae0cdf5b7beb5d75aaea2"
     },
     "focused_tests": {
       "path": "tst/publication/test_q011_section54_physical_applicability_successor_v1.py",
-      "sha256": "6e5cf15f7a5706d3afdff3764617459f9a517998251deb77a0b7ff5cbb83ca37"
+      "sha256": "3b498fd9e508628c0dc54e4cc43502f72ae3026e8f7c152b3317728772825d32"
     },
     "successor_reducer": {
       "path": "tst/publication/q011_section54_physical_applicability_successor_v1.py",
-      "sha256": "1cf8e6689a0af40277966a9a4a0688cbeae4239318f777d9c7c3e5753eb1d0e4"
+      "sha256": "7f99a5532639d1ccc45afc70b4df45d7fff7c6068b08988158c1b605ff3ee468"
     }
   },
   "successor_id": "q011_section54_physical_applicability_successor_v1",
@@ -312,7 +335,7 @@
     },
     "focused_successor": {
       "failed": 0,
-      "passed": 24
+      "passed": 28
     },
     "non_test_checks": {
       "git_diff_check": "passed",
@@ -327,12 +350,13 @@
     },
     "wider_q011": {
       "failed": 1,
-      "passed": 295,
+      "passed": 338,
       "residual": "pre_existing_q011_production_campaign_contract_successor_v2_deterministic_pipeline_digest_mismatch"
     }
   },
   "unresolved_production_obligations": [
-    "implement_and_independently_review_separately_retained_per_cycle_particle_exposure_first_crossing_checkpoint_reason_coded_outer_x1_escape_and_slope_cutoff_binwise_tail_telemetry_in_separate_Cpp_workstream",
+    "obtain_fresh_independent_acceptance_of_the_physical_escape_source_and_trusted_identity_receipts",
+    "implement_and_independently_review_separately_retained_per_cycle_particle_exposure_first_crossing_checkpoint_raw_reason_coded_outer_x1_particle_escape_events_and_slope_cutoff_binwise_tail_telemetry_in_separate_Cpp_workstream",
     "bind_retained_raw_snapshots_returned_cell_maps_restarts_and_prtcl_all_checkpoints_to_immutable_production_attempt_provenance",
     "execute_registered_production_campaign_without_post_result_threshold_changes",
     "independently_review_physical_interpretation_and_claim_scope"
