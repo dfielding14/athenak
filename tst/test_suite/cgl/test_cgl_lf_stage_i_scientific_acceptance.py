@@ -87,6 +87,10 @@ def transitioned_policy_documents(root: Path) -> tuple[Path, Path]:
         "sha256": sha256(criteria_path),
     }
     review["acceptance_utility"]["sha256"] = utility_sha
+    review["active_energy_policy_revision_review"]["bindings"] = {
+        "criteria": deepcopy(review["criteria"]),
+        "acceptance_utility": deepcopy(review["acceptance_utility"]),
+    }
     review["replay_tool_promotion_review"]["acceptance_utility"]["sha256"] = utility_sha
     review["replay_tool_promotion_review"]["scientific_products_generator"][
         "sha256"
@@ -156,7 +160,8 @@ def fast_policy(policy):
 
 
 def histories(root: Path, *, passive: bool = False) -> tuple[Path, Path]:
-    times = [3.5 + 0.25 * index for index in range(27)]
+    start = 3.5 if passive else 0.0
+    times = [start + 0.25 * index for index in range(round((10.0 - start) / 0.25) + 1)]
     count = len(times)
     mhd = {
         "time": times,
@@ -181,11 +186,24 @@ def histories(root: Path, *, passive: bool = False) -> tuple[Path, Path]:
         "force_prp2": [1.0] * count,
         "force_prl2": [0.0] * count,
     }
+    if not passive:
+        mhd["tot-E"] = [16.0 + 0.32 * time for time in times]
+        user["force_work"] = [0.32 * time for time in times]
     mhd_path = root / "case.mhd.hst"
     user_path = root / "case.user.hst"
     write_history(mhd_path, mhd)
     write_history(user_path, user)
     return mhd_path, user_path
+
+
+def active_energy_histories(
+    total_energy: list[float], forcing_work: list[float]
+) -> tuple[dict[str, list[float]], dict[str, list[float]]]:
+    times = [0.0, 4.0, 10.0]
+    return (
+        {"time": times, "tot-E": total_energy},
+        {"time": times, "force_work": forcing_work},
+    )
 
 
 def build_case_bundle(
@@ -286,6 +304,25 @@ def test_preregistered_criteria_bind_final_utility_and_completed_reviews(policy)
     assert policy["criteria"]["source_bindings"]["acceptance_utility"]["sha256"] == utility_sha
     assert policy["review"]["acceptance_utility"]["sha256"] == utility_sha
     assert policy["review"]["criteria"]["sha256"] == policy["criteria_binding"]["sha256"]
+    active_energy = policy["criteria"]["active_energy_policy"]
+    assert active_energy == acceptance.expected_active_energy_policy()
+    assert active_energy["production_science_gate"][
+        "increment_normalized_residual_lt"
+    ] == 1.0e-8
+    assert active_energy["production_science_gate"][
+        "warning_increment_normalized_residual_gte"
+    ] == 1.0e-9
+    assert active_energy["prior_manuscript_gate_provenance"][
+        "r02_exact_accepted_lineage"
+    ]["whole_lineage"]["manuscript_gate_result"] == "fail"
+    active_review = policy["review"]["active_energy_policy_revision_review"]
+    assert active_review["review_status"] == "approved"
+    assert active_review["independent_reviewer_identity_claimed"] is False
+    assert active_review["threshold_selection_independent_of_r02_disposition"] is True
+    assert active_review["bindings"]["criteria"] == policy["review"]["criteria"]
+    assert active_review["bindings"]["acceptance_utility"] == policy["review"][
+        "acceptance_utility"
+    ]
     assert policy["criteria"]["family_gates"]["lf_strength"]["cases"] == [
         "R12", "R02", "R06", "R13"
     ]
@@ -377,6 +414,10 @@ def test_preregistered_criteria_bind_final_utility_and_completed_reviews(policy)
     assert evidence["replay_tools_approved"] is True
     assert evidence["scientific_products_method_review_status"] == "approved"
     assert evidence["scientific_products_method_review_approved"] is True
+    assert evidence["active_energy_policy_revision_id"] == (
+        acceptance.ACTIVE_ENERGY_POLICY_REVISION_ID
+    )
+    assert evidence["active_energy_policy_revision_review_status"] == "approved"
     assert evidence["scientific_products_method_revision"] == policy[
         "method_revision_binding"
     ]
@@ -1025,7 +1066,20 @@ def test_prospective_extension_artifact_binds_replayed_preserved_t10_evidence(
     fast_policy, tmp_path
 ):
     mhd, user = histories(tmp_path / "history")
-    retained_times = {3.5, 4.0, 4.25, 4.5, 6.0, 6.25, 6.5, 8.0, 8.25, 8.5, 10.0}
+    retained_times = {
+        0.0,
+        3.5,
+        4.0,
+        4.25,
+        4.5,
+        6.0,
+        6.25,
+        6.5,
+        8.0,
+        8.25,
+        8.5,
+        10.0,
+    }
     for path, label in ((mhd, "MHD"), (user, "user")):
         history, _ = acceptance.load_history(path, f"fixture {label} history")
         indices = [
@@ -1169,6 +1223,16 @@ def test_case_authenticates_bundle_and_uses_forcing_tcorr_but_missing_products_n
     ] is False
     assert gates["finite_limiter_semantics"]["result"] == "pass"
     assert gates["active_pressure_work_activity"]["result"] == "pass"
+    assert gates["active_energy_closure"]["result"] == "pass"
+    assert gates["active_energy_closure"]["observations"]["case_resolution"] == (
+        "192x192x384"
+    )
+    assert gates["active_energy_closure"]["observations"]["history_layout"][
+        "total_energy"
+    ]["required_column"] == "tot-E"
+    assert gates["active_energy_closure"]["observations"]["history_layout"][
+        "forcing_work"
+    ]["required_column"] == "force_work"
     assert gates["scientific_products_contract:full"]["result"] == "inconclusive"
     assert gates["stationarity:kinetic"]["result"] == "pass"
     assert evidence["metrics"]["kinetic"]["full"]["method"]["minimum_block_duration"] == 2.0
@@ -1184,6 +1248,94 @@ def test_case_authenticates_bundle_and_uses_forcing_tcorr_but_missing_products_n
     assert evidence["result"] == "inconclusive"
 
 
+def test_active_energy_gate_strict_rejection_and_inclusive_warning_boundaries(
+    fast_policy,
+):
+    mhd, user = active_energy_histories(
+        [16.0, 20.0, 26.0],
+        [0.0, 4.0, 10.0000001],
+    )
+    measured = acceptance.active_energy_closure_gate(
+        fast_policy, "R02", mhd, user
+    )
+    measured_windows = measured["observations"]["windows"]
+    boundary_window = max(
+        measured_windows,
+        key=lambda name: measured_windows[name]["increment_normalized_residual"],
+    )
+    residual = measured_windows[boundary_window]["increment_normalized_residual"]
+
+    boundary_policy = deepcopy(fast_policy)
+    production = boundary_policy["criteria"]["active_energy_policy"][
+        "production_science_gate"
+    ]
+    production["warning_increment_normalized_residual_gte"] = residual
+    production["increment_normalized_residual_lt"] = math.nextafter(residual, math.inf)
+    passing = acceptance.active_energy_closure_gate(
+        boundary_policy, "R02", mhd, user
+    )
+    assert passing["result"] == "pass"
+    assert passing["observations"]["windows"][boundary_window]["warning"] is True
+    assert boundary_window in passing["observations"]["warning_windows"]
+
+    production["increment_normalized_residual_lt"] = residual
+    failing = acceptance.active_energy_closure_gate(
+        boundary_policy, "R02", mhd, user
+    )
+    assert failing["result"] == "fail"
+    assert failing["observations"]["windows"][boundary_window][
+        "production_science_result"
+    ] == "fail"
+
+
+def test_active_energy_gate_requires_both_windows_and_reports_provenance(
+    fast_policy,
+):
+    mhd, user = active_energy_histories(
+        [16.0, 20.0, 26.0],
+        [0.0, 4.0, 10.00000008],
+    )
+    energy_gate = acceptance.active_energy_closure_gate(
+        fast_policy, "R02", mhd, user
+    )
+    windows = energy_gate["observations"]["windows"]
+    assert energy_gate["result"] == "fail"
+    assert windows["whole_lineage"]["production_science_result"] == "pass"
+    assert windows["developed"]["production_science_result"] == "fail"
+    assert windows["developed"]["absolute_mismatch"] > 0.0
+    assert windows["developed"]["state_normalized_mismatch"] > 0.0
+    assert windows["developed"]["manuscript_gate_provenance"]["result"] == "fail"
+    assert windows["whole_lineage"]["time_resolution"]["mhd"] == {
+        "window": [0.0, 10.0],
+        "start_endpoint_sampled_exactly": True,
+        "end_endpoint_sampled_exactly": True,
+        "clipped_sample_count": 3,
+        "clipped_interval_count": 2,
+        "minimum_interval": 4.0,
+        "maximum_interval": 6.0,
+        "mean_interval": 5.0,
+    }
+    assert energy_gate["observations"]["history_layout"]["total_energy"][
+        "column_position_zero_based"
+    ] == 1
+    assert energy_gate["observations"]["prior_manuscript_gate_provenance"][
+        "r02_exact_accepted_lineage"
+    ]["whole_lineage"]["manuscript_gate_result"] == "fail"
+
+
+def test_active_energy_gate_fails_closed_on_missing_required_layout(fast_policy):
+    mhd, user = active_energy_histories(
+        [16.0, 20.0, 26.0],
+        [0.0, 4.0, 10.0],
+    )
+    user.pop("force_work")
+    with pytest.raises(
+        acceptance.AcceptanceError,
+        match="user history lacks required column: force_work",
+    ):
+        acceptance.active_energy_closure_gate(fast_policy, "R02", mhd, user)
+
+
 def test_passive_lf_case_enforces_exact_zero_pressure_work(fast_policy, tmp_path):
     mhd, user = histories(tmp_path / "history", passive=True)
     bundle = build_case_bundle(fast_policy, tmp_path, "R06", mhd, user)
@@ -1193,6 +1345,7 @@ def test_passive_lf_case_enforces_exact_zero_pressure_work(fast_policy, tmp_path
     gates = {item["name"]: item for item in evidence["gates"]}
     assert gates["passive_pressure_work_exact_zero"]["result"] == "pass"
     assert gates["landau_fluid_activity"]["result"] == "pass"
+    assert "active_energy_closure" not in gates
 
 
 def test_bundle_rejects_history_not_selected_by_accepted_case(fast_policy, tmp_path):
@@ -1432,6 +1585,55 @@ def test_sampling_feasibility_change_record_is_preregistered(policy):
     ]
     with pytest.raises(acceptance.AcceptanceError, match="change record differs"):
         acceptance.validate_criteria_payload(forged, policy["criteria_binding"])
+
+
+@pytest.mark.parametrize(
+    ("path", "value"),
+    [
+        (
+            ("production_science_gate", "increment_normalized_residual_lt"),
+            1.0e-7,
+        ),
+        (("required_windows", "whole_lineage"), [1.0, 10.0]),
+        (
+            (
+                "prior_manuscript_gate_provenance",
+                "r02_exact_accepted_lineage",
+                "whole_lineage",
+                "manuscript_gate_result",
+            ),
+            "pass",
+        ),
+    ],
+)
+def test_active_energy_policy_threshold_window_and_provenance_are_exact(
+    policy, path, value
+):
+    forged = deepcopy(policy["criteria"])
+    cursor = forged["active_energy_policy"]
+    for key in path[:-1]:
+        cursor = cursor[key]
+    cursor[path[-1]] = value
+    with pytest.raises(acceptance.AcceptanceError, match="active-energy policy differs"):
+        acceptance.validate_criteria_payload(forged, policy["criteria_binding"])
+
+
+def test_active_energy_review_requires_exact_final_bindings(policy):
+    review = deepcopy(policy["review"])
+    review["active_energy_policy_revision_review"]["bindings"]["criteria"]["sha256"] = (
+        "0" * 64
+    )
+    with pytest.raises(
+        acceptance.AcceptanceError,
+        match="active-energy policy revision review differs",
+    ):
+        acceptance.validate_criteria_review(
+            review,
+            policy["review_binding"],
+            policy["criteria"],
+            policy["criteria_binding"],
+            policy["verified_sources"]["acceptance_utility"],
+        )
 
 
 def diagnostics_contract(
@@ -1834,6 +2036,8 @@ def complete_case(case_id: str) -> dict[str, object]:
         "scientific_products_contract:late",
         "sampled_restart_ct_divb",
     ]
+    if case_id in acceptance.ACTIVE_ENERGY_ACTIVE_CASES:
+        mandatory.append("active_energy_closure")
     return {
         "case_id": case_id,
         "result": "pass",
@@ -1854,6 +2058,20 @@ def complete_case(case_id: str) -> dict[str, object]:
         "convergence_products": {},
         "panel_products": [],
     }
+
+
+def test_active_energy_gate_is_mandatory_only_for_active_complete_cases():
+    active = complete_case("R02")
+    active["campaign_authority_eligible"] = True
+    assert acceptance.case_evidence_is_complete(active) is True
+    active["gates"] = [
+        item for item in active["gates"] if item["name"] != "active_energy_closure"
+    ]
+    assert acceptance.case_evidence_is_complete(active) is False
+
+    passive = complete_case("R06")
+    passive["campaign_authority_eligible"] = True
+    assert acceptance.case_evidence_is_complete(passive) is True
 
 
 def test_campaign_approved_review_passes_but_other_authorities_still_block(

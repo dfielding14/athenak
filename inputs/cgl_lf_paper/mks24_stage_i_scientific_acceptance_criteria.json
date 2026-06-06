@@ -16,6 +16,97 @@
     ],
     "policy": "Only panels already classified blocked_reference or external_model by the exact bound Stage I manifest may be blocked_out_of_scope. Admitted comparison panels may not be dropped after results are visible."
   },
+  "active_energy_policy": {
+    "applicability": {
+      "active_cases": [
+        "R02",
+        "R03",
+        "R04",
+        "R05",
+        "R10",
+        "R11",
+        "R12",
+        "R13",
+        "R14",
+        "R15",
+        "R16",
+        "R17"
+      ],
+      "passive_cases_unchanged": [
+        "R06",
+        "R07",
+        "R08",
+        "R09"
+      ],
+      "passive_scope": "No active-energy closure gate is added to passive R06-R09; their existing passive pressure-work scope is unchanged."
+    },
+    "prior_manuscript_gate_provenance": {
+      "criterion": {
+        "increment_normalized_residual_lte": 1e-12,
+        "status": "preserved_non_authorizing_manuscript_provenance"
+      },
+      "disposition": "The original <=1e-12 manuscript-gate failure is preserved and is not reclassified by the reviewed production-science gate.",
+      "r02_exact_accepted_lineage": {
+        "developed": {
+          "absolute_mismatch": 1.6056489471338864e-11,
+          "delta_forcing_work": 3.8390160480947895,
+          "delta_total_energy": 3.839016048078733,
+          "increment_normalized_residual": 4.182449166709608e-12,
+          "manuscript_gate_result": "fail",
+          "window": [
+            4.0,
+            10.0
+          ]
+        },
+        "whole_lineage": {
+          "absolute_mismatch": 2.0532908706627495e-11,
+          "delta_forcing_work": 6.398470280246185,
+          "delta_total_energy": 6.398470280225652,
+          "increment_normalized_residual": 3.209034004583589e-12,
+          "manuscript_gate_result": "fail",
+          "window": [
+            0.0,
+            10.0
+          ]
+        }
+      }
+    },
+    "production_science_gate": {
+      "absolute_mismatch_reporting": "required_descriptive_evidence",
+      "both_required_windows_must_pass": true,
+      "increment_normalization": "abs(delta_total_energy - delta_forcing_work) / max(abs(delta_total_energy), abs(delta_forcing_work)); exact zero mismatch over an exact zero scale is zero",
+      "increment_normalized_residual_lt": 1e-08,
+      "state_normalized_mismatch": "abs(delta_total_energy - delta_forcing_work) / max(abs(total_energy_start), abs(total_energy_end)); exact zero mismatch over an exact zero scale is zero",
+      "warning_increment_normalized_residual_gte": 1e-09,
+      "window_layout_resolution_reporting": "required"
+    },
+    "required_history_layout": {
+      "forcing_work": {
+        "column": "force_work",
+        "history": "user"
+      },
+      "total_energy": {
+        "column": "tot-E",
+        "history": "mhd"
+      }
+    },
+    "required_windows": {
+      "developed": [
+        4.0,
+        10.0
+      ],
+      "whole_lineage": [
+        0.0,
+        10.0
+      ]
+    },
+    "review_basis": {
+      "numerical_rationale": "Forcing work and total energy are independently accumulated retained history diagnostics across a segmented production lineage; a relative closure tolerance well above roundoff but far below physical energy increments tests implementation-level conservation without treating serialization and accumulation order as plasma physics.",
+      "threshold_basis": "The strict <1e-8 rejection threshold is inherited from the existing Stage I production forcing-work closure criterion and was not selected to erase the known R02 <=1e-12 manuscript-gate failure.",
+      "warning_basis": "The >=1e-9 warning threshold is one decade below rejection and provides escalation without changing pass/fail."
+    },
+    "revision_id": "active-energy-production-science-v1"
+  },
   "analysis_windows": {
     "early": [
       4.0,
@@ -524,7 +615,7 @@
   "source_bindings": {
     "acceptance_utility": {
       "path": "scripts/frontier/cgl_lf_stage_i_scientific_acceptance.py",
-      "sha256": "e3fd1e8d8e5f3bc44e4df1431b8c23ab6db66543dfea8ca9c582b1a327a7110e"
+      "sha256": "66e5ebb2ac26438d315ff39385f738bf509e1ce1b65f298276ad0858633c4255"
     },
     "athena_binary_parser": {
       "path": "vis/python/bin_convert.py",

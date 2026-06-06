@@ -120,6 +120,22 @@ REPLAY_TOOL_PROMOTION_REQUIRED_CHECKS = [
     "The immutable reviewed F116 source-authority baseline remains valid, and any changed live source catalog requires the exact published F118 successor chain.",
     "All replay and catalog-selection behavior remains non-authorizing and fails closed.",
 ]
+ACTIVE_ENERGY_POLICY_REVISION_ID = "active-energy-production-science-v1"
+ACTIVE_ENERGY_ACTIVE_CASES = [
+    "R02",
+    "R03",
+    "R04",
+    "R05",
+    "R10",
+    "R11",
+    "R12",
+    "R13",
+    "R14",
+    "R15",
+    "R16",
+    "R17",
+]
+ACTIVE_ENERGY_PASSIVE_CASES = ["R06", "R07", "R08", "R09"]
 VALID_RESULTS = frozenset(("pass", "fail", "inconclusive", "blocked_out_of_scope"))
 MAX_FINITE_FLOAT = sys.float_info.max
 MAX_JSON_BYTES = 512 * 1024 * 1024
@@ -287,6 +303,93 @@ def require_exact_keys(
     if set(record) != expected:
         raise AcceptanceError(f"{label} keys differ from the reviewed schema")
     return record
+
+
+def expected_active_energy_policy() -> dict[str, object]:
+    """Return the exact reviewed active-energy production-science policy."""
+
+    return {
+        "revision_id": ACTIVE_ENERGY_POLICY_REVISION_ID,
+        "applicability": {
+            "active_cases": ACTIVE_ENERGY_ACTIVE_CASES,
+            "passive_cases_unchanged": ACTIVE_ENERGY_PASSIVE_CASES,
+            "passive_scope": (
+                "No active-energy closure gate is added to passive R06-R09; their "
+                "existing passive pressure-work scope is unchanged."
+            ),
+        },
+        "required_history_layout": {
+            "total_energy": {"history": "mhd", "column": "tot-E"},
+            "forcing_work": {"history": "user", "column": "force_work"},
+        },
+        "required_windows": {
+            "whole_lineage": [0.0, 10.0],
+            "developed": [4.0, 10.0],
+        },
+        "production_science_gate": {
+            "both_required_windows_must_pass": True,
+            "increment_normalized_residual_lt": 1.0e-8,
+            "warning_increment_normalized_residual_gte": 1.0e-9,
+            "increment_normalization": (
+                "abs(delta_total_energy - delta_forcing_work) / "
+                "max(abs(delta_total_energy), abs(delta_forcing_work)); exact zero "
+                "mismatch over an exact zero scale is zero"
+            ),
+            "absolute_mismatch_reporting": "required_descriptive_evidence",
+            "state_normalized_mismatch": (
+                "abs(delta_total_energy - delta_forcing_work) / "
+                "max(abs(total_energy_start), abs(total_energy_end)); exact zero "
+                "mismatch over an exact zero scale is zero"
+            ),
+            "window_layout_resolution_reporting": "required",
+        },
+        "prior_manuscript_gate_provenance": {
+            "criterion": {
+                "increment_normalized_residual_lte": 1.0e-12,
+                "status": "preserved_non_authorizing_manuscript_provenance",
+            },
+            "disposition": (
+                "The original <=1e-12 manuscript-gate failure is preserved and is "
+                "not reclassified by the reviewed production-science gate."
+            ),
+            "r02_exact_accepted_lineage": {
+                "whole_lineage": {
+                    "window": [0.0, 10.0],
+                    "delta_total_energy": 6.398470280225652,
+                    "delta_forcing_work": 6.398470280246185,
+                    "absolute_mismatch": 2.0532908706627495e-11,
+                    "increment_normalized_residual": 3.209034004583589e-12,
+                    "manuscript_gate_result": "fail",
+                },
+                "developed": {
+                    "window": [4.0, 10.0],
+                    "delta_total_energy": 3.839016048078733,
+                    "delta_forcing_work": 3.8390160480947895,
+                    "absolute_mismatch": 1.6056489471338864e-11,
+                    "increment_normalized_residual": 4.182449166709608e-12,
+                    "manuscript_gate_result": "fail",
+                },
+            },
+        },
+        "review_basis": {
+            "threshold_basis": (
+                "The strict <1e-8 rejection threshold is inherited from the existing "
+                "Stage I production forcing-work closure criterion and was not selected "
+                "to erase the known R02 <=1e-12 manuscript-gate failure."
+            ),
+            "warning_basis": (
+                "The >=1e-9 warning threshold is one decade below rejection and "
+                "provides escalation without changing pass/fail."
+            ),
+            "numerical_rationale": (
+                "Forcing work and total energy are independently accumulated retained "
+                "history diagnostics across a segmented production lineage; a relative "
+                "closure tolerance well above roundoff but far below physical energy "
+                "increments tests implementation-level conservation without treating "
+                "serialization and accumulation order as plasma physics."
+            ),
+        },
+    }
 
 
 def expected_scientific_products_method_revision(
@@ -1204,6 +1307,19 @@ def validate_criteria_payload(
     lf_strength = require_dict(family.get("lf_strength"), "lf_strength")
     if lf_strength.get("cases") != ["R12", "R02", "R06", "R13"]:
         raise AcceptanceError("criteria LF-strength cases differ from the preregistration")
+    active_passive = require_dict(family.get("active_passive"), "active_passive")
+    active_energy = require_dict(
+        criteria.get("active_energy_policy"), "active energy policy"
+    )
+    if active_energy != expected_active_energy_policy():
+        raise AcceptanceError("criteria active-energy policy differs from the review")
+    if (
+        active_passive.get("active_cases") != ACTIVE_ENERGY_ACTIVE_CASES
+        or active_passive.get("passive_cases") != ACTIVE_ENERGY_PASSIVE_CASES
+    ):
+        raise AcceptanceError(
+            "criteria active-energy applicability differs from families"
+        )
 
     convergence = require_dict(
         criteria.get("resolution_convergence"), "resolution_convergence"
@@ -1468,10 +1584,14 @@ def validate_criteria_review(
     if review.get("non_authorizing_statement") != NON_AUTHORIZING_STATEMENT:
         raise AcceptanceError("criteria review non-authorizing statement differs")
     if review.get("scientific_review_scope") != (
-        "The retained plasma-physics and statistical-methodology approvals apply only "
-        "to the unchanged scientific thresholds, windows, gates, and prospective t=12 "
-        "rule. Exact replay-tool and source-catalog promotion mechanics require the "
-        "separate replay_tool_promotion_review below."
+        "The retained plasma-physics and statistical-methodology approvals continue to "
+        "cover the unchanged stationarity, family, product, convergence, CT, and "
+        "prospective t=12 policies. The active-energy revision is separately recorded "
+        "as a reviewed production-science reconciliation based on the pre-existing "
+        "production closure threshold; no claim is made that the retained reviewer "
+        "identities separately approved this revision. Exact replay-tool and "
+        "source-catalog promotion mechanics require the separate "
+        "replay_tool_promotion_review below."
     ):
         raise AcceptanceError("criteria review scientific scope differs")
     declared = require_dict(review.get("criteria"), "criteria review binding")
@@ -1554,6 +1674,69 @@ def validate_criteria_review(
         raise AcceptanceError("criteria review status and criteria disposition are incoherent")
     if reviewers != expected_reviewers:
         raise AcceptanceError("criteria review status and reviewer records are incoherent")
+    active_energy_review = require_exact_keys(
+        review.get("active_energy_policy_revision_review"),
+        {
+            "schema_version",
+            "record_type",
+            "review_status",
+            "decision",
+            "independent_reviewer_identity_claimed",
+            "threshold_selection_independent_of_r02_disposition",
+            "scope",
+            "rationale",
+            "bindings",
+        },
+        "active-energy policy revision review",
+    )
+    expected_active_energy_review = {
+        "schema_version": 1,
+        "record_type": "stage-i-active-energy-production-science-policy-review",
+        "review_status": "approved",
+        "decision": "approved_reviewed_production_science_policy",
+        "independent_reviewer_identity_claimed": False,
+        "threshold_selection_independent_of_r02_disposition": True,
+        "scope": [
+            "Active R02-R05 and R10-R17 total-energy versus forcing-work closure only.",
+            (
+                "Exact required windows t=0..10 and t=4..10, strict <1e-8 "
+                "rejection, and >=1e-9 warning."
+            ),
+            "Passive R06-R09 scientific acceptance scope remains unchanged.",
+        ],
+        "rationale": {
+            "threshold_basis": (
+                "The rejection threshold is inherited from the pre-existing Stage I "
+                "production forcing-work closure criterion rather than selected from "
+                "the observed R02 residual."
+            ),
+            "warning_basis": (
+                "A one-decade warning margin identifies drift before rejection without "
+                "altering the production-science disposition."
+            ),
+            "provenance_handling": (
+                "The known R02 <=1e-12 manuscript-gate failure remains exact provenance "
+                "and is not relabeled as a pass."
+            ),
+            "identity_statement": (
+                "This reconciliation records no new independent reviewer identity; it "
+                "binds the explicit reviewed production-science policy and its final "
+                "implementation bytes."
+            ),
+        },
+        "bindings": {
+            "criteria": {
+                "path": declared["path"],
+                "sha256": criteria_binding["sha256"],
+            },
+            "acceptance_utility": {
+                "path": declared_utility["path"],
+                "sha256": utility_binding["sha256"],
+            },
+        },
+    }
+    if active_energy_review != expected_active_energy_review:
+        raise AcceptanceError("active-energy policy revision review differs")
     retained_ct = require_dict(
         review.get("retained_ct_observation"), "criteria review retained CT observation"
     )
@@ -1595,6 +1778,12 @@ def validate_criteria_review(
             "which requires a separate prospective artifact binding the preserved t<=10 "
             "evidence digest and fixed combination rule."
         ),
+        "active_energy_policy": (
+            "Active cases require both exact t=0..10 and t=4..10 increment-normalized "
+            "total-energy versus forcing-work residuals to be <1e-8, warn at >=1e-9, "
+            "and retain the original <=1e-12 manuscript-gate failure as provenance; "
+            "passive scope is unchanged."
+        ),
     }:
         raise AcceptanceError("criteria review method revision differs")
     if review.get("remaining_review_requirements") != expected_requirements:
@@ -1614,6 +1803,10 @@ def validate_criteria_review(
         "review_status": status_value,
         "replay_tools_approved": replay_tools_approved,
         "replay_tools_review_status": replay_tools_review_status,
+        "active_energy_policy_revision_review": active_energy_review,
+        "active_energy_policy_revision_review_status": active_energy_review[
+            "review_status"
+        ],
         **method_review,
     }
 
@@ -2570,6 +2763,243 @@ def history_delta(
         raise AcceptanceError(f"history lacks required column: {column}")
     return interpolate_at(history["time"], history[column], end) - interpolate_at(
         history["time"], history[column], start
+    )
+
+
+def history_layout_record(
+    history: dict[str, list[float]], column: str, source: str
+) -> dict[str, object]:
+    """Report the exact parsed history layout used by one required diagnostic."""
+
+    if column not in history:
+        raise AcceptanceError(f"{source} history lacks required column: {column}")
+    columns = list(history)
+    return {
+        "history": source,
+        "required_column": column,
+        "column_position_zero_based": columns.index(column),
+        "column_count": len(columns),
+        "row_count": len(history["time"]),
+        "time_range": [history["time"][0], history["time"][-1]],
+    }
+
+
+def history_window_resolution(
+    history: dict[str, list[float]], start: float, end: float
+) -> dict[str, object]:
+    """Report exact endpoint coverage and clipped time resolution for one window."""
+
+    clipped_times, _ = clipped_series(history["time"], history["time"], start, end)
+    intervals = [
+        right - left for left, right in zip(clipped_times, clipped_times[1:])
+    ]
+    return {
+        "window": [start, end],
+        "start_endpoint_sampled_exactly": start in history["time"],
+        "end_endpoint_sampled_exactly": end in history["time"],
+        "clipped_sample_count": len(clipped_times),
+        "clipped_interval_count": len(intervals),
+        "minimum_interval": min(intervals),
+        "maximum_interval": max(intervals),
+        "mean_interval": sum(intervals) / len(intervals),
+    }
+
+
+def active_energy_window_assessment(
+    mhd: dict[str, list[float]],
+    user: dict[str, list[float]],
+    window_name: str,
+    window: list[object],
+    policy: dict[str, object],
+) -> dict[str, object]:
+    """Evaluate one exact active-energy closure window."""
+
+    if len(window) != 2:
+        raise AcceptanceError(
+            f"active-energy {window_name} window must have two endpoints"
+        )
+    start, end = (
+        require_finite(value, f"active-energy {window_name} endpoint")
+        for value in window
+    )
+    if start >= end:
+        raise AcceptanceError(f"active-energy {window_name} window is invalid")
+    layout = require_dict(
+        policy.get("required_history_layout"), "active-energy required history layout"
+    )
+    total_energy_layout = require_dict(
+        layout.get("total_energy"), "active-energy total-energy layout"
+    )
+    forcing_work_layout = require_dict(
+        layout.get("forcing_work"), "active-energy forcing-work layout"
+    )
+    energy_column = str(total_energy_layout.get("column"))
+    work_column = str(forcing_work_layout.get("column"))
+    if (
+        total_energy_layout.get("history") != "mhd"
+        or forcing_work_layout.get("history") != "user"
+    ):
+        raise AcceptanceError("active-energy history layout sources differ")
+    if energy_column not in mhd:
+        raise AcceptanceError(f"MHD history lacks required column: {energy_column}")
+    if work_column not in user:
+        raise AcceptanceError(f"user history lacks required column: {work_column}")
+
+    energy_start = interpolate_at(mhd["time"], mhd[energy_column], start)
+    energy_end = interpolate_at(mhd["time"], mhd[energy_column], end)
+    work_start = interpolate_at(user["time"], user[work_column], start)
+    work_end = interpolate_at(user["time"], user[work_column], end)
+    delta_energy = energy_end - energy_start
+    delta_work = work_end - work_start
+    signed_mismatch = delta_energy - delta_work
+    absolute_mismatch = abs(signed_mismatch)
+    increment_normalized = finite_ratio(
+        absolute_mismatch, max(abs(delta_energy), abs(delta_work))
+    )
+    state_normalized = finite_ratio(
+        absolute_mismatch, max(abs(energy_start), abs(energy_end))
+    )
+
+    production = require_dict(
+        policy.get("production_science_gate"),
+        "active-energy production-science gate",
+    )
+    rejection = require_positive(
+        production.get("increment_normalized_residual_lt"),
+        "active-energy rejection threshold",
+    )
+    warning = require_nonnegative(
+        production.get("warning_increment_normalized_residual_gte"),
+        "active-energy warning threshold",
+    )
+    manuscript = require_dict(
+        require_dict(
+            policy.get("prior_manuscript_gate_provenance"),
+            "active-energy manuscript provenance",
+        ).get("criterion"),
+        "active-energy manuscript criterion",
+    )
+    manuscript_limit = require_positive(
+        manuscript.get("increment_normalized_residual_lte"),
+        "active-energy manuscript provenance threshold",
+    )
+    return {
+        "window_name": window_name,
+        "window": [start, end],
+        "total_energy_start": energy_start,
+        "total_energy_end": energy_end,
+        "forcing_work_start": work_start,
+        "forcing_work_end": work_end,
+        "delta_total_energy": delta_energy,
+        "delta_forcing_work": delta_work,
+        "signed_mismatch": signed_mismatch,
+        "absolute_mismatch": absolute_mismatch,
+        "increment_normalized_residual": increment_normalized,
+        "state_normalized_mismatch": state_normalized,
+        "production_science_result": (
+            "pass" if increment_normalized < rejection else "fail"
+        ),
+        "warning": increment_normalized >= warning,
+        "manuscript_gate_provenance": {
+            "increment_normalized_residual_lte": manuscript_limit,
+            "result": "pass" if increment_normalized <= manuscript_limit else "fail",
+            "acceptance_authority": False,
+        },
+        "time_resolution": {
+            "mhd": history_window_resolution(mhd, start, end),
+            "user": history_window_resolution(user, start, end),
+        },
+    }
+
+
+def active_energy_closure_gate(
+    policy: dict[str, object],
+    case_id: str,
+    mhd: dict[str, list[float]],
+    user: dict[str, list[float]],
+) -> dict[str, object]:
+    """Evaluate the mandatory reviewed production-science active-energy gate."""
+
+    active_policy = require_dict(
+        policy["criteria"].get("active_energy_policy"), "active energy policy"
+    )
+    applicability = require_dict(
+        active_policy.get("applicability"), "active-energy applicability"
+    )
+    if case_id not in require_list(
+        applicability.get("active_cases"), "active-energy active cases"
+    ):
+        raise AcceptanceError(f"active-energy gate is not applicable to {case_id}")
+    required_windows = require_dict(
+        active_policy.get("required_windows"), "active-energy required windows"
+    )
+    windows = {
+        name: active_energy_window_assessment(
+            mhd,
+            user,
+            name,
+            require_list(required_windows.get(name), f"active-energy {name} window"),
+            active_policy,
+        )
+        for name in ("whole_lineage", "developed")
+    }
+    passed = all(
+        require_dict(record, "active-energy window").get("production_science_result")
+        == "pass"
+        for record in windows.values()
+    )
+    warned = [
+        name
+        for name, record in windows.items()
+        if require_dict(record, "active-energy window").get("warning") is True
+    ]
+    layout = require_dict(
+        active_policy.get("required_history_layout"), "active-energy history layout"
+    )
+    case = case_manifest_record(policy, case_id)
+    production = require_dict(
+        active_policy.get("production_science_gate"),
+        "active-energy production-science gate",
+    )
+    return gate(
+        "active_energy_closure",
+        "pass" if passed else "fail",
+        reason=(
+            "both active-energy closure windows passed"
+            + (" with warning-level residuals" if warned else "")
+            if passed
+            else "at least one required active-energy closure window failed"
+        ),
+        observations={
+            "policy_revision_id": active_policy.get("revision_id"),
+            "case_resolution": case.get("resolution"),
+            "history_layout": {
+                "total_energy": history_layout_record(
+                    mhd,
+                    str(
+                        require_dict(layout["total_energy"], "total-energy layout")[
+                            "column"
+                        ]
+                    ),
+                    "mhd",
+                ),
+                "forcing_work": history_layout_record(
+                    user,
+                    str(
+                        require_dict(layout["forcing_work"], "forcing-work layout")[
+                            "column"
+                        ]
+                    ),
+                    "user",
+                ),
+            },
+            "windows": windows,
+            "warning_windows": warned,
+            "prior_manuscript_gate_provenance": active_policy.get(
+                "prior_manuscript_gate_provenance"
+            ),
+        },
+        limits=production,
     )
 
 
@@ -4394,6 +4824,21 @@ def evaluate_case(
     early_start, early_end = (float(value) for value in windows["early"])
     late_start, late_end = (float(value) for value in windows["late"])
     family_gates: list[dict[str, object]] = []
+    active_passive = require_dict(family.get("active_passive"), "active_passive")
+    passive_cases = set(
+        str(value)
+        for value in require_list(
+            active_passive.get("passive_cases"), "active_passive passive cases"
+        )
+    )
+    active_cases = set(
+        str(value)
+        for value in require_list(
+            active_passive.get("active_cases"), "active_passive active cases"
+        )
+    )
+    if case_id in active_cases:
+        family_gates.append(active_energy_closure_gate(policy, case_id, mhd, user))
 
     finite = require_dict(family.get("finite_limiter"), "finite_limiter")
     if case_id in finite["cases"]:
@@ -4500,8 +4945,6 @@ def evaluate_case(
             },
         ))
 
-    passive_cases = set(str(value) for value in family["active_passive"]["passive_cases"])
-    active_cases = set(str(value) for value in family["active_passive"]["active_cases"])
     if case_id in passive_cases:
         cp_zero = exact_zero_window(mhd, "lf_cpwrk", full_start, full_end)
         ca_zero = exact_zero_window(mhd, "lf_cawrk", full_start, full_end)
@@ -4515,7 +4958,7 @@ def evaluate_case(
         cp = history_delta(mhd, "lf_cpwrk", full_start, full_end)
         ca = history_delta(mhd, "lf_cawrk", full_start, full_end)
         activity = max(abs(cp), abs(ca))
-        limit = float(family["active_passive"]["activity_absolute_gt"])
+        limit = float(active_passive["activity_absolute_gt"])
         family_gates.append(gate(
             "active_pressure_work_activity",
             "pass" if activity > limit else "fail",
@@ -5036,6 +5479,8 @@ def case_evidence_is_complete(case: dict[str, object]) -> bool:
         "scientific_products_contract:late",
         "sampled_restart_ct_divb",
     }
+    if case.get("case_id") in ACTIVE_ENERGY_ACTIVE_CASES:
+        mandatory.add("active_energy_closure")
     return (
         case.get("campaign_authority_eligible") is True
         and
@@ -6587,6 +7032,12 @@ def validate_criteria_evidence(policy: dict[str, object]) -> dict[str, object]:
             policy["scientific_products_method_review_approved"]
         ),
         "scientific_products_method_revision": policy["method_revision_binding"],
+        "active_energy_policy_revision_id": policy["criteria"][
+            "active_energy_policy"
+        ]["revision_id"],
+        "active_energy_policy_revision_review_status": policy[
+            "active_energy_policy_revision_review_status"
+        ],
         "required_cases": policy["criteria"]["required_cases"],
         "admitted_panel_count": len(policy["criteria"]["comparison_panels"]),
         "provenance": {
