@@ -14,15 +14,19 @@ analysis of the remaining available data.
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ProcessPoolExecutor
 import csv
 from datetime import datetime, timezone
+import gc
 import hashlib
 import importlib.util
 import json
 import math
+import multiprocessing
 import os
 from pathlib import Path
 import re
+import subprocess
 import sys
 import tempfile
 import types
@@ -55,6 +59,28 @@ WRITING_GUIDE = DEFAULT_ROOT / "writing_guide.md"
 TARGET_TIME = 10.0
 TIME_TOLERANCE = 1.0e-12
 RESTART_TIME_TOLERANCE = 5.0e-6
+DEFAULT_SNAPSHOT_WORKERS = 4
+DEFAULT_SNAPSHOT_MEMORY_BUDGET_GIB = 384.0
+SNAPSHOT_PEAK_BYTES_PER_INPUT_BYTE = 24.0
+GIBIBYTE = 1024 ** 3
+ACTIVE_SLURM_STATES = {
+    "CONFIGURING",
+    "COMPLETING",
+    "PENDING",
+    "RUNNING",
+    "SUSPENDED",
+}
+FAILED_SLURM_STATES = {
+    "BOOT_FAIL",
+    "CANCELLED",
+    "DEADLINE",
+    "FAILED",
+    "NODE_FAIL",
+    "OUT_OF_MEMORY",
+    "PREEMPTED",
+    "REVOKED",
+    "TIMEOUT",
+}
 STRICT_FAILURE_COLUMNS = (
     "lf_dfloor",
     "lf_pfloor",
@@ -640,6 +666,68 @@ def fast_manifest_path(segment: Path) -> Path:
     return segment / "manifest/fast_run.json"
 
 
+def normalized_slurm_state(value: str) -> str:
+    """Normalize one Slurm state while preserving its operational meaning."""
+
+    stripped = value.strip()
+    return stripped.split("+", 1)[0].split()[0].upper() if stripped else "UNKNOWN"
+
+
+def slurm_job_evidence(job_id: str) -> dict[str, object]:
+    """Capture current scheduler evidence without making it scientific provenance."""
+
+    try:
+        queued = subprocess.run(
+            ["/usr/bin/squeue", "-h", "-j", job_id, "-o", "%T"],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+    except OSError:
+        queued = subprocess.CompletedProcess([], 1, stdout="", stderr="")
+    queued_state = queued.stdout.strip()
+    if queued_state:
+        return {
+            "job_id": job_id,
+            "source": "squeue",
+            "state": normalized_slurm_state(queued_state.splitlines()[0]),
+            "exit_code": None,
+        }
+    try:
+        accounted = subprocess.run(
+            [
+                "/usr/bin/sacct",
+                "-X",
+                "-n",
+                "-P",
+                "-j",
+                job_id,
+                "-o",
+                "State,ExitCode",
+            ],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+    except OSError:
+        accounted = subprocess.CompletedProcess([], 1, stdout="", stderr="")
+    row = accounted.stdout.strip().splitlines()
+    if row:
+        fields = row[0].split("|")
+        return {
+            "job_id": job_id,
+            "source": "sacct",
+            "state": normalized_slurm_state(fields[0]),
+            "exit_code": fields[1] if len(fields) > 1 and fields[1] else None,
+        }
+    return {
+        "job_id": job_id,
+        "source": "unavailable",
+        "state": "UNKNOWN",
+        "exit_code": None,
+    }
+
+
 def fast_candidate_state(item: dict[str, object]) -> str:
     manifest = item["manifest"]
     assert isinstance(manifest, dict)
@@ -653,10 +741,26 @@ def fast_candidate_state(item: dict[str, object]) -> str:
         return "complete"
     if exit_code == 0:
         return "exited_success_partial"
+    scheduler = item.get("scheduler_evidence")
+    scheduler_state = (
+        str(scheduler.get("state"))
+        if isinstance(scheduler, dict) and scheduler.get("state")
+        else "UNKNOWN"
+    )
+    if scheduler_state in FAILED_SLURM_STATES:
+        return "failed"
+    if scheduler_state in ACTIVE_SLURM_STATES:
+        return "in_progress"
+    if scheduler_state == "COMPLETED":
+        return "completed_without_exit_artifact"
     mhd, user = history_paths(Path(item["output"]))
+    if manifest.get("job_id") is None:
+        if mhd is not None or user is not None:
+            return "unsubmitted_partial"
+        return "prepared"
     if mhd is not None or user is not None:
-        return "active_or_unmarked"
-    return "prepared_or_pending"
+        return "submitted_unmarked"
+    return "submitted_or_pending"
 
 
 def exact_command_line_overrides(manifest: dict[str, object]) -> tuple[str, ...]:
@@ -694,6 +798,7 @@ def fast_candidate_summary(item: dict[str, object]) -> dict[str, object]:
         "command_line_overrides": manifest.get("command_line_overrides", []),
         "claim_scope": manifest.get("claim_scope"),
         "job_id": manifest.get("job_id"),
+        "scheduler_evidence": item.get("scheduler_evidence"),
         "state": fast_candidate_state(item),
         "run_exit_code": segment_exit_code(Path(item["segment"])),
         "observed_final_time": final if math.isfinite(final) else None,
@@ -810,6 +915,7 @@ def fast_candidates(
                 continue
             output = declared_output
             final = peek_history_final(output)
+            job_id = manifest.get("job_id")
             candidates.append({
                 "segment": segment,
                 "manifest_path": manifest_path,
@@ -822,6 +928,10 @@ def fast_candidates(
                     "original" if relative == FAST_RUNS_RELATIVE
                     else "race" if relative == RACE_RUNS_RELATIVE
                     else "relaxed"
+                ),
+                "scheduler_evidence": (
+                    slurm_job_evidence(str(job_id))
+                    if isinstance(job_id, str) and job_id else None
                 ),
                 "restart_link_valid": sequence == 0 and not bool(manifest.get("restart")),
             })
@@ -1020,7 +1130,16 @@ def select_fast_lineage(
             int(all(bool(item.get("restart_link_valid")) for item in lineage)),
             variant_priority,
             int(math.isfinite(final) and final >= target - TIME_TOLERANCE),
-            int(state != "failed"),
+            {
+                "in_progress": 5,
+                "submitted_or_pending": 4,
+                "submitted_unmarked": 3,
+                "exited_success_partial": 2,
+                "completed_without_exit_artifact": 2,
+                "unsubmitted_partial": 1,
+                "prepared": 1,
+                "failed": 0,
+            }.get(state, 0),
             int(synchronized_final),
             final,
             int(terminal["sequence"]),
@@ -1140,6 +1259,7 @@ def fast_segment_record(item: dict[str, object], order: int) -> dict[str, object
         "observed_final_time": final if math.isfinite(final) else None,
         "state": state,
         "job_id": manifest.get("job_id"),
+        "scheduler_evidence": item.get("scheduler_evidence"),
         "run_exit_code": exit_code,
         "fast_analysis": (
             artifact_binding(analysis_path) if analysis_path.is_file() else None
@@ -1287,7 +1407,10 @@ def case_status(lineage: list[dict[str, object]], final_time: float | None) -> s
     ):
         return "complete"
     if terminal.get("state") in (
-        "in_progress", "active_or_unmarked", "prepared_or_pending"
+        "in_progress",
+        "prepared",
+        "submitted_or_pending",
+        "submitted_unmarked",
     ):
         return "in_progress"
     return "partial"
@@ -1628,6 +1751,392 @@ def load_pure_analyzer() -> object:
             sys.modules[dependency_name] = previous
 
 
+def snapshot_worker_plan(
+    requested_workers: int,
+    selected: list[Path],
+    exact_rank_sets: dict[str, list[Path]],
+    memory_budget_gib: float,
+) -> dict[str, object]:
+    """Bound independent snapshot workers by affinity and conservative memory use."""
+
+    if requested_workers < 1:
+        raise ReportError("--snapshot-workers must be positive")
+    if not math.isfinite(memory_budget_gib) or memory_budget_gib <= 0.0:
+        raise ReportError("--snapshot-memory-budget-gib must be positive and finite")
+    if not selected:
+        return {
+            "requested_workers": requested_workers,
+            "workers": 1,
+            "snapshot_count": 0,
+            "available_cpus": 1,
+            "memory_budget_bytes": int(memory_budget_gib * GIBIBYTE),
+            "maximum_snapshot_input_bytes": 0,
+            "estimated_peak_bytes_per_process": 0,
+        }
+    try:
+        available_cpus = len(os.sched_getaffinity(0))
+    except AttributeError:
+        available_cpus = os.cpu_count() or 1
+    maximum_snapshot_input_bytes = max(
+        sum(path.stat().st_size for path in exact_rank_sets[str(snapshot)])
+        for snapshot in selected
+    )
+    estimated_peak_bytes = max(
+        1,
+        int(math.ceil(
+            maximum_snapshot_input_bytes * SNAPSHOT_PEAK_BYTES_PER_INPUT_BYTE
+        )),
+    )
+    memory_budget_bytes = int(memory_budget_gib * GIBIBYTE)
+    # The coordinator performs the common-range pass before workers start. Reserve
+    # one snapshot-sized process so retained allocator pages cannot exhaust a node.
+    memory_limited_workers = max(
+        1, memory_budget_bytes // estimated_peak_bytes - 1
+    )
+    workers = min(
+        requested_workers,
+        len(selected),
+        max(1, available_cpus),
+        memory_limited_workers,
+    )
+    return {
+        "requested_workers": requested_workers,
+        "workers": max(1, workers),
+        "snapshot_count": len(selected),
+        "available_cpus": available_cpus,
+        "memory_budget_bytes": memory_budget_bytes,
+        "maximum_snapshot_input_bytes": maximum_snapshot_input_bytes,
+        "estimated_peak_bytes_per_process": estimated_peak_bytes,
+    }
+
+
+def selected_snapshot_inventory(
+    analyzer: object,
+    paths: list[Path],
+    time_start: float | None,
+    time_end: float | None,
+    expected_ranks_by_path: dict[str, int],
+) -> tuple[list[Path], dict[str, list[Path]]]:
+    """Select snapshots and freeze their exact rank-local sibling sets."""
+
+    candidate_rank_sets = {
+        str(path): analyzer.snapshot_sibling_paths(
+            path, expected_ranks_by_path.get(str(path))
+        )
+        for path in paths
+    }
+    selected = [
+        path
+        for path in paths
+        if analyzer.time_mask(
+            analyzer.np.asarray([analyzer.snapshot_time(path)]),
+            time_start,
+            time_end,
+        )[0]
+    ]
+    if len({str(path) for path in selected}) != len(selected):
+        raise ValueError("selected snapshot paths must be unique")
+    return selected, {
+        str(path): candidate_rank_sets[str(path)] for path in selected
+    }
+
+
+def read_selected_snapshot(
+    analyzer: object, path: Path, exact_rank_set: list[Path]
+) -> tuple[dict[str, object], tuple[float, float, float], float]:
+    """Read one shared or exact rank-local snapshot using analyzer semantics."""
+
+    if path.parent.name == "rank_00000000":
+        return analyzer.read_snapshot(path, exact_rank_set)
+    return analyzer.read_snapshot(path)
+
+
+def snapshot_range_record(
+    analyzer: object, path: Path, exact_rank_set: list[Path]
+) -> dict[str, object]:
+    """Return exact local PDF extrema for one authenticated snapshot."""
+
+    fields, lengths, _ = read_selected_snapshot(analyzer, path, exact_rank_set)
+    extrema: dict[str, list[float]] = {}
+    joint_extrema: dict[str, list[list[float]]] = {}
+    for name, values in analyzer.pdf_fields(fields, lengths).items():
+        finite = values[analyzer.np.isfinite(values)]
+        if finite.size == 0:
+            continue
+        extrema[name] = [
+            float(analyzer.np.min(finite)),
+            float(analyzer.np.max(finite)),
+        ]
+    for name, (x_values, y_values) in analyzer.pressure_density_fields(fields).items():
+        joint_extrema[name] = [
+            [float(analyzer.np.min(values)), float(analyzer.np.max(values))]
+            for values in (x_values, y_values)
+        ]
+    del fields
+    gc.collect()
+    return {"extrema": extrema, "joint_extrema": joint_extrema}
+
+
+def merge_snapshot_range_records(
+    completed: list[tuple[str, dict[str, object]]],
+) -> tuple[
+    dict[str, tuple[float, float]],
+    dict[str, tuple[tuple[float, float], tuple[float, float]]],
+]:
+    """Reduce per-snapshot extrema in submitted snapshot order."""
+
+    extrema: dict[str, list[float]] = {}
+    joint_extrema: dict[str, list[list[float]]] = {}
+    for _path, record in completed:
+        local_extrema = record["extrema"]
+        local_joint_extrema = record["joint_extrema"]
+        assert isinstance(local_extrema, dict)
+        assert isinstance(local_joint_extrema, dict)
+        for name, bounds in local_extrema.items():
+            low, high = float(bounds[0]), float(bounds[1])
+            if name in extrema:
+                extrema[name][0] = min(extrema[name][0], low)
+                extrema[name][1] = max(extrema[name][1], high)
+            else:
+                extrema[name] = [low, high]
+        for name, coordinates in local_joint_extrema.items():
+            if name not in joint_extrema:
+                joint_extrema[name] = [
+                    [float(bounds[0]), float(bounds[1])] for bounds in coordinates
+                ]
+                continue
+            for index, bounds in enumerate(coordinates):
+                joint_extrema[name][index][0] = min(
+                    joint_extrema[name][index][0], float(bounds[0])
+                )
+                joint_extrema[name][index][1] = max(
+                    joint_extrema[name][index][1], float(bounds[1])
+                )
+    ranges: dict[str, tuple[float, float]] = {}
+    for name, (low, high) in extrema.items():
+        if high <= low:
+            delta = max(abs(low), 1.0) * 1.0e-12
+            low -= delta
+            high += delta
+        ranges[name] = (low, high)
+    joint_ranges: dict[
+        str, tuple[tuple[float, float], tuple[float, float]]
+    ] = {}
+    for name, coordinates in joint_extrema.items():
+        padded: list[tuple[float, float]] = []
+        for low, high in coordinates:
+            if high <= low:
+                delta = max(abs(low), 1.0) * 1.0e-12
+                low -= delta
+                high += delta
+            padded.append((low, high))
+        joint_ranges[name] = (padded[0], padded[1])
+    return ranges, joint_ranges
+
+
+def common_snapshot_ranges(
+    analyzer: object,
+    selected: list[Path],
+    exact_rank_sets: dict[str, list[Path]],
+) -> tuple[
+    dict[str, tuple[float, float]],
+    dict[str, tuple[tuple[float, float], tuple[float, float]]],
+]:
+    """Discover shared histogram ranges in original deterministic snapshot order."""
+
+    return merge_snapshot_range_records([
+        (
+            str(path),
+            snapshot_range_record(analyzer, path, exact_rank_sets[str(path)]),
+        )
+        for path in selected
+    ])
+
+
+def configure_snapshot_worker() -> None:
+    """Prevent nested BLAS/OpenMP pools from oversubscribing snapshot processes."""
+
+    for name in (
+        "OMP_NUM_THREADS",
+        "OPENBLAS_NUM_THREADS",
+        "MKL_NUM_THREADS",
+        "NUMEXPR_NUM_THREADS",
+    ):
+        os.environ[name] = "1"
+
+
+def analyze_snapshot_worker(task: dict[str, object]) -> tuple[str, dict[str, object]]:
+    """Analyze one authenticated snapshot in an isolated bounded-memory process."""
+
+    analyzer = load_pure_analyzer()
+    path = Path(str(task["path"]))
+    exact_rank_set = [Path(str(value)) for value in task["exact_rank_set"]]
+    fields, lengths, time = read_selected_snapshot(analyzer, path, exact_rank_set)
+    record = analyzer.analyze_fields(
+        fields,
+        lengths,
+        time,
+        int(task["bins"]),
+        [int(value) for value in task["alignment_shells"]],
+        task["ranges"],
+        task["model_choices"],
+        int(task["eddy_samples"]),
+        int(task["eddy_bins"]),
+        int(task["eddy_seed"]),
+        task["joint_ranges"],
+    )
+    del fields
+    gc.collect()
+    return str(path), record
+
+
+def snapshot_range_worker(task: dict[str, object]) -> tuple[str, dict[str, object]]:
+    """Scan one authenticated snapshot for common-range extrema."""
+
+    analyzer = load_pure_analyzer()
+    path = Path(str(task["path"]))
+    exact_rank_set = [Path(str(value)) for value in task["exact_rank_set"]]
+    return str(path), snapshot_range_record(analyzer, path, exact_rank_set)
+
+
+def run_snapshot_workers(
+    tasks: list[dict[str, object]], workers: int
+) -> list[tuple[str, dict[str, object]]]:
+    """Run one task per child lifetime and preserve submitted task order."""
+
+    context = multiprocessing.get_context("spawn")
+    with ProcessPoolExecutor(
+        max_workers=workers,
+        mp_context=context,
+        initializer=configure_snapshot_worker,
+        max_tasks_per_child=1,
+    ) as executor:
+        return list(executor.map(analyze_snapshot_worker, tasks, chunksize=1))
+
+
+def run_snapshot_range_workers(
+    tasks: list[dict[str, object]], workers: int
+) -> list[tuple[str, dict[str, object]]]:
+    """Run one common-range task per child lifetime in submitted order."""
+
+    context = multiprocessing.get_context("spawn")
+    with ProcessPoolExecutor(
+        max_workers=workers,
+        mp_context=context,
+        initializer=configure_snapshot_worker,
+        max_tasks_per_child=1,
+    ) as executor:
+        return list(executor.map(snapshot_range_worker, tasks, chunksize=1))
+
+
+def analyze_snapshot_paths_bounded(
+    analyzer: object,
+    paths: list[Path],
+    bins: int,
+    alignment_shells: list[int],
+    time_start: float | None,
+    time_end: float | None,
+    model_choices: dict[str, object] | None,
+    eddy_samples: int,
+    eddy_bins: int,
+    eddy_seed: int,
+    expected_ranks_by_path: dict[str, int],
+    requested_workers: int,
+    memory_budget_gib: float,
+    worker_runner=run_snapshot_workers,
+    range_runner=run_snapshot_range_workers,
+) -> tuple[dict[str, dict[str, object]], dict[str, object]]:
+    """Analyze independent snapshots concurrently without changing reductions."""
+
+    selected, exact_rank_sets = selected_snapshot_inventory(
+        analyzer, paths, time_start, time_end, expected_ranks_by_path
+    )
+    plan = snapshot_worker_plan(
+        requested_workers, selected, exact_rank_sets, memory_budget_gib
+    )
+    workers = int(plan["workers"])
+    print(
+        "snapshot analysis plan: "
+        f"snapshots={len(selected)} workers={workers}/{requested_workers} "
+        f"max_input_gib={float(plan['maximum_snapshot_input_bytes']) / GIBIBYTE:.3f} "
+        f"estimated_peak_gib_per_process="
+        f"{float(plan['estimated_peak_bytes_per_process']) / GIBIBYTE:.3f} "
+        f"memory_budget_gib={memory_budget_gib:g}"
+    )
+    if workers == 1:
+        return analyzer.analyze_snapshot_paths(
+            paths,
+            bins,
+            alignment_shells,
+            time_start,
+            time_end,
+            model_choices,
+            eddy_samples,
+            eddy_bins,
+            eddy_seed,
+            expected_ranks_by_path,
+        )
+    snapshot_provenance = {
+        str(path): analyzer.snapshot_digest_provenance(
+            path,
+            expected_ranks_by_path.get(str(path)),
+            exact_rank_sets[str(path)],
+        )
+        for path in selected
+    }
+    range_tasks = [
+        {
+            "path": str(path),
+            "exact_rank_set": [str(value) for value in exact_rank_sets[str(path)]],
+        }
+        for path in selected
+    ]
+    range_completed = range_runner(range_tasks, workers)
+    if [path for path, _record in range_completed] != [
+        str(path) for path in selected
+    ]:
+        raise ValueError("parallel snapshot range scan returned snapshots out of order")
+    ranges, joint_ranges = merge_snapshot_range_records(range_completed)
+    tasks = [
+        {
+            "path": str(path),
+            "exact_rank_set": [str(value) for value in exact_rank_sets[str(path)]],
+            "bins": bins,
+            "alignment_shells": alignment_shells,
+            "ranges": ranges,
+            "model_choices": model_choices,
+            "eddy_samples": eddy_samples,
+            "eddy_bins": eddy_bins,
+            "eddy_seed": eddy_seed,
+            "joint_ranges": joint_ranges,
+        }
+        for path in selected
+    ]
+    completed = worker_runner(tasks, workers)
+    if [path for path, _record in completed] != [str(path) for path in selected]:
+        raise ValueError("parallel snapshot analysis returned snapshots out of order")
+    records: dict[str, dict[str, object]] = {}
+    for path, record in completed:
+        record["snapshot_provenance"] = snapshot_provenance[path]
+        records[path] = record
+    for path in selected:
+        if analyzer.snapshot_digest_provenance(
+            path,
+            expected_ranks_by_path.get(str(path)),
+            exact_rank_sets[str(path)],
+        ) != snapshot_provenance[str(path)]:
+            raise ValueError(f"snapshot changed while being analyzed: {path}")
+    ensemble = analyzer.average_snapshot_records(records)
+    ensemble["time_start"] = time_start
+    ensemble["time_end"] = time_end
+    if "firehose_threshold_occupancy" in ensemble:
+        ensemble["firehose_threshold_occupancy"]["analysis_window"].update({
+            "requested_time_start": time_start,
+            "requested_time_end": time_end,
+        })
+    return records, ensemble
+
+
 def parsed_history_columns(path: Path) -> dict[str, list[float]]:
     record, _ = read_history_source(path)
     labels = list(record["labels"])  # type: ignore[arg-type]
@@ -1915,7 +2424,8 @@ def command_analyze_case(args: argparse.Namespace) -> int:
             else 2_000_000 if case_id in ("R02", "R04") else 0
         )
         try:
-            snapshot_records, snapshot_ensemble = analyzer.analyze_snapshot_paths(
+            snapshot_records, snapshot_ensemble = analyze_snapshot_paths_bounded(
+                analyzer,
                 paths,
                 args.pdf_bins,
                 [int(value) for value in args.alignment_shells.split(",") if value],
@@ -1926,6 +2436,8 @@ def command_analyze_case(args: argparse.Namespace) -> int:
                 args.eddy_bins,
                 args.eddy_seed,
                 expected,
+                args.snapshot_workers,
+                args.snapshot_memory_budget_gib,
             )
             snapshot_status = "complete"
         except Exception as error:
@@ -2976,6 +3488,24 @@ def parser() -> argparse.ArgumentParser:
     analyze.add_argument("--skip-snapshots", action="store_true")
     analyze.add_argument("--snapshot-time-start", type=float, default=8.0)
     analyze.add_argument("--snapshot-time-end", type=float, default=10.0)
+    analyze.add_argument(
+        "--snapshot-workers",
+        type=int,
+        default=DEFAULT_SNAPSHOT_WORKERS,
+        help=(
+            "maximum independent snapshot-analysis processes; bounded by CPU "
+            "affinity and --snapshot-memory-budget-gib"
+        ),
+    )
+    analyze.add_argument(
+        "--snapshot-memory-budget-gib",
+        type=float,
+        default=DEFAULT_SNAPSHOT_MEMORY_BUDGET_GIB,
+        help=(
+            "conservative aggregate memory budget for coordinator and snapshot "
+            "workers"
+        ),
+    )
     analyze.add_argument("--pdf-bins", type=int, default=64)
     analyze.add_argument(
         "--alignment-shells", default="2,4,6,8,12,16,24,32,64,128"

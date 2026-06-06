@@ -9,6 +9,7 @@ from pathlib import Path
 from types import SimpleNamespace
 import sys
 
+import numpy as np
 import pytest
 
 
@@ -61,30 +62,43 @@ def write_fast_segment(
     segment_name: str,
     sequence: object,
     final_time: float,
+    case_id: str = CASE_ID,
     case_name: str = CASE_NAME,
+    source_relative: Path | None = None,
+    start_time: float = 0.0,
     restart: Path | None = None,
     restart_sha256: str | None = None,
+    job_id: str | None = None,
+    run_exit_code: int | None = 0,
+    variant: str | None = "standard",
     overrides: list[str] | None = None,
+    claim_scope: str = "standard",
 ) -> Path:
-    segment = root / report.FAST_RUNS_RELATIVE / CASE_ID / segment_name
+    segment = (
+        root
+        / (source_relative or report.FAST_RUNS_RELATIVE)
+        / case_id
+        / segment_name
+    )
     output = segment / "output"
     write_history(output / "fixture.mhd.hst", final_time)
     write_history(output / "fixture.user.hst", final_time)
     write_json(
         segment / "manifest/fast_run.json",
         {
-            "case_id": CASE_ID,
+            "case_id": case_id,
             "case_name": case_name,
             "sequence": sequence,
             "run_dir": str(segment.absolute()),
             "output_dir": str(output.absolute()),
-            "start_time": 0.0,
+            "start_time": start_time,
             "target_time": report.TARGET_TIME,
             "restart": str(restart.absolute()) if restart is not None else None,
             "restart_sha256": restart_sha256,
-            "variant": "standard",
+            "variant": variant,
             "command_line_overrides": overrides or [],
-            "claim_scope": "standard",
+            "claim_scope": claim_scope,
+            "job_id": job_id,
             "nodes": 1,
             "ranks": 1,
             "ranks_per_node": 1,
@@ -93,8 +107,16 @@ def write_fast_segment(
             "executable_sha256": "e" * 64,
         },
     )
-    (segment / "manifest/run_exit_code").write_text("0\n", encoding="utf-8")
+    if run_exit_code is not None:
+        (segment / "manifest/run_exit_code").write_text(
+            f"{run_exit_code}\n", encoding="utf-8"
+        )
     return segment
+
+
+def write_restart(path: Path, time: float) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(f"<time>\ntime={time:.17g}\n<par_end>\n".encode())
 
 
 @pytest.mark.parametrize("invalid_chain", ["historical_seed", "fast_restart"])
@@ -136,6 +158,133 @@ def test_invalid_restart_chain_cannot_be_selected_complete(
     )
 
     assert not selected or report.fast_candidate_state(selected[-1]) != "complete"
+
+
+def test_running_race_outranks_unsubmitted_partial_continuation(
+    report, tmp_path, monkeypatch
+):
+    parent = write_fast_segment(
+        report,
+        tmp_path,
+        segment_name="fast_s000_t0_to_t10",
+        sequence=0,
+        final_time=4.0,
+    )
+    restart = parent / "output/rst/rank_00000000/fixture.00001.rst"
+    write_restart(restart, 4.0)
+    write_fast_segment(
+        report,
+        tmp_path,
+        segment_name="fast_s001_t4_to_t10",
+        sequence=1,
+        start_time=4.0,
+        final_time=4.7,
+        restart=restart,
+        restart_sha256=sha256(restart),
+        run_exit_code=None,
+    )
+    race = write_fast_segment(
+        report,
+        tmp_path,
+        source_relative=report.RACE_RUNS_RELATIVE,
+        segment_name="fast_s000_t0_to_t10",
+        sequence=0,
+        final_time=1.0,
+        job_id="race-job",
+        run_exit_code=None,
+    )
+    monkeypatch.setattr(
+        report,
+        "slurm_job_evidence",
+        lambda job_id: {
+            "job_id": job_id,
+            "source": "squeue",
+            "state": "RUNNING",
+            "exit_code": None,
+        },
+    )
+
+    selected, unselected, _warnings = report.select_fast_lineage(
+        tmp_path, CASE_ID, CASE_NAME
+    )
+
+    assert Path(selected[-1]["segment"]) == race
+    assert report.fast_candidate_state(selected[-1]) == "in_progress"
+    assert any(
+        record["terminal"]["state"] == "unsubmitted_partial"
+        for record in unselected
+        if isinstance(record.get("terminal"), dict)
+    )
+
+
+def test_r15_variant_selection_retains_and_classifies_strict_failures(
+    report, tmp_path, monkeypatch
+):
+    strict_original = write_fast_segment(
+        report,
+        tmp_path,
+        segment_name="fast_s000_t0_to_t10",
+        sequence=0,
+        final_time=0.2,
+        case_id="R15",
+        job_id="cancelled-strict",
+        run_exit_code=None,
+    )
+    strict_race = write_fast_segment(
+        report,
+        tmp_path,
+        source_relative=report.RACE_RUNS_RELATIVE,
+        segment_name="fast_s000_t0_to_t10",
+        sequence=0,
+        final_time=1.2,
+        case_id="R15",
+        job_id="failed-strict",
+        run_exit_code=143,
+    )
+    variant = write_fast_segment(
+        report,
+        tmp_path,
+        source_relative=report.RELAXED_RUNS_RELATIVE,
+        segment_name="fast_s000_t0_to_t10",
+        sequence=0,
+        final_time=0.0,
+        case_id="R15",
+        job_id="pending-variant",
+        run_exit_code=None,
+        variant=report.NONFATAL_HARD_BOUND_VARIANT,
+        overrides=["mhd/cgl_lf_strict_admissibility=false"],
+        claim_scope="R15 diagnostic variant",
+    )
+    states = {
+        "cancelled-strict": "CANCELLED",
+        "failed-strict": "FAILED",
+        "pending-variant": "PENDING",
+    }
+    monkeypatch.setattr(
+        report,
+        "slurm_job_evidence",
+        lambda job_id: {
+            "job_id": job_id,
+            "source": "squeue" if states[job_id] == "PENDING" else "sacct",
+            "state": states[job_id],
+            "exit_code": None,
+        },
+    )
+
+    selected, unselected, _warnings = report.select_fast_lineage(
+        tmp_path, "R15", CASE_NAME
+    )
+    strict_states = {
+        Path(record["terminal"]["segment"]): record["terminal"]["state"]
+        for record in unselected
+        if isinstance(record.get("terminal"), dict)
+    }
+
+    assert Path(selected[-1]["segment"]) == variant
+    assert Path(strict_original) in strict_states
+    assert Path(strict_race) in strict_states
+    assert strict_states[Path(strict_original)] == "failed"
+    assert strict_states[Path(strict_race)] == "failed"
 
 
 def test_override_order_and_repetition_are_exact_lineage_identity(report):
@@ -403,3 +552,194 @@ def test_release_verification_fails_provenance_and_structural_defects(
     assert result == 1
     assert verification["result"] == "fail"
     assert verification["errors"]
+
+
+def test_snapshot_worker_plan_bounds_count_cpu_and_memory(report, tmp_path, monkeypatch):
+    snapshots = [tmp_path / f"snapshot-{index}.bin" for index in range(5)]
+    for snapshot in snapshots:
+        with snapshot.open("wb") as stream:
+            stream.truncate(1024 ** 3)
+    exact = {str(snapshot): [snapshot] for snapshot in snapshots}
+    monkeypatch.setattr(report.os, "sched_getaffinity", lambda _pid: set(range(3)))
+
+    cpu_limited = report.snapshot_worker_plan(8, snapshots, exact, 384.0)
+    memory_limited = report.snapshot_worker_plan(8, snapshots, exact, 50.0)
+
+    assert cpu_limited["workers"] == 3
+    assert memory_limited["workers"] == 1
+    assert memory_limited["estimated_peak_bytes_per_process"] == 24 * 1024 ** 3
+
+
+class FakeSnapshotAnalyzer:
+    np = np
+
+    def __init__(self, times):
+        self.times = times
+        self.serial_calls = 0
+
+    def snapshot_sibling_paths(self, path, _expected_ranks):
+        return [path]
+
+    def snapshot_time(self, path):
+        return self.times[str(path)]
+
+    def time_mask(self, times, start, end):
+        return (times >= start) & (times <= end)
+
+    def snapshot_digest_provenance(self, path, _expected_ranks, _exact_rank_set):
+        return {"path": str(path), "sha256": sha256(path)}
+
+    def read_snapshot(self, path):
+        time = self.times[str(path)]
+        values = np.asarray([time, time + 1.0])
+        return {"values": values}, (1.0, 1.0, 1.0), time
+
+    def pdf_fields(self, fields, _lengths):
+        return {"value": fields["values"]}
+
+    def pressure_density_fields(self, fields):
+        return {"joint": (fields["values"], 2.0 * fields["values"])}
+
+    def average_snapshot_records(self, records):
+        return {"snapshot_count": len(records), "ordered_paths": list(records)}
+
+    def analyze_snapshot_paths(self, *args):
+        self.serial_calls += 1
+        return {"serial": {}}, {"snapshot_count": 1, "serial": True}
+
+
+def test_parallel_snapshot_orchestration_preserves_order_ranges_and_provenance(
+    report, tmp_path, monkeypatch
+):
+    snapshots = [tmp_path / "first.bin", tmp_path / "second.bin"]
+    for index, snapshot in enumerate(snapshots):
+        snapshot.write_bytes(f"snapshot-{index}".encode())
+    times = {str(snapshots[0]): 8.0, str(snapshots[1]): 9.0}
+    analyzer = FakeSnapshotAnalyzer(times)
+    monkeypatch.setattr(report.os, "sched_getaffinity", lambda _pid: set(range(8)))
+    captured = {}
+
+    def runner(tasks, workers):
+        captured["tasks"] = tasks
+        captured["workers"] = workers
+        return [
+            (task["path"], {"time": times[task["path"]], "worker": workers})
+            for task in tasks
+        ]
+
+    def range_runner(tasks, workers):
+        captured["range_workers"] = workers
+        return [
+            (
+                task["path"],
+                report.snapshot_range_record(
+                    analyzer,
+                    Path(task["path"]),
+                    [Path(value) for value in task["exact_rank_set"]],
+                ),
+            )
+            for task in tasks
+        ]
+
+    records, ensemble = report.analyze_snapshot_paths_bounded(
+        analyzer,
+        snapshots,
+        64,
+        [2, 4],
+        8.0,
+        10.0,
+        {},
+        2_000_000,
+        24,
+        731,
+        {str(path): 1 for path in snapshots},
+        2,
+        384.0,
+        worker_runner=runner,
+        range_runner=range_runner,
+    )
+
+    assert captured["workers"] == 2
+    assert captured["range_workers"] == 2
+    assert captured["tasks"][0]["ranges"] == {"value": (8.0, 10.0)}
+    assert captured["tasks"][0]["joint_ranges"] == {
+        "joint": ((8.0, 10.0), (16.0, 20.0))
+    }
+    assert list(records) == [str(path) for path in snapshots]
+    assert ensemble["ordered_paths"] == [str(path) for path in snapshots]
+    assert records[str(snapshots[0])]["snapshot_provenance"]["sha256"] == sha256(
+        snapshots[0]
+    )
+    assert analyzer.serial_calls == 0
+
+
+def test_single_snapshot_worker_uses_exact_legacy_analyzer_path(
+    report, tmp_path, monkeypatch
+):
+    snapshot = tmp_path / "snapshot.bin"
+    snapshot.write_bytes(b"snapshot")
+    analyzer = FakeSnapshotAnalyzer({str(snapshot): 8.0})
+    monkeypatch.setattr(report.os, "sched_getaffinity", lambda _pid: set(range(8)))
+
+    records, ensemble = report.analyze_snapshot_paths_bounded(
+        analyzer,
+        [snapshot],
+        64,
+        [2],
+        8.0,
+        10.0,
+        {},
+        2_000_000,
+        24,
+        731,
+        {str(snapshot): 1},
+        4,
+        384.0,
+    )
+
+    assert records == {"serial": {}}
+    assert ensemble == {"snapshot_count": 1, "serial": True}
+    assert analyzer.serial_calls == 1
+
+
+def test_parallel_snapshot_orchestration_rejects_out_of_order_results(
+    report, tmp_path, monkeypatch
+):
+    snapshots = [tmp_path / "first.bin", tmp_path / "second.bin"]
+    for snapshot in snapshots:
+        snapshot.write_bytes(snapshot.name.encode())
+    times = {str(snapshots[0]): 8.0, str(snapshots[1]): 9.0}
+    analyzer = FakeSnapshotAnalyzer(times)
+    monkeypatch.setattr(report.os, "sched_getaffinity", lambda _pid: set(range(8)))
+
+    with pytest.raises(ValueError, match="out of order"):
+        report.analyze_snapshot_paths_bounded(
+            analyzer,
+            snapshots,
+            64,
+            [2],
+            8.0,
+            10.0,
+            {},
+            0,
+            24,
+            731,
+            {str(path): 1 for path in snapshots},
+            2,
+            384.0,
+            worker_runner=lambda tasks, _workers: [
+                (task["path"], {"time": times[task["path"]]})
+                for task in reversed(tasks)
+            ],
+            range_runner=lambda tasks, _workers: [
+                (
+                    task["path"],
+                    report.snapshot_range_record(
+                        analyzer,
+                        Path(task["path"]),
+                        [Path(value) for value in task["exact_rank_set"]],
+                    ),
+                )
+                for task in tasks
+            ],
+        )

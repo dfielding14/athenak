@@ -90,6 +90,8 @@ def command_args(
         skip_snapshots=False,
         snapshot_time_start=8.0,
         snapshot_time_end=10.0,
+        snapshot_workers=4,
+        snapshot_memory_budget_gib=384.0,
         pdf_bins=64,
         alignment_shells="2,4,6",
         eddy_samples=eddy_samples,
@@ -116,6 +118,10 @@ def test_launch_binds_inventory_and_declared_analysis_output(
         "analyze-case",
     ]
     assert manifest["command"][5] == "R02"
+    assert "--snapshot-workers" in manifest["report_options"]
+    assert "4" in manifest["report_options"]
+    assert "--snapshot-memory-budget-gib" in manifest["report_options"]
+    assert "384.0" in manifest["report_options"]
     assert manifest["nodes"] == 1
     assert manifest["job_id"] is None
     assert not (root / "runs").exists()
@@ -251,6 +257,28 @@ def test_retry_reuses_prepared_then_preserves_failed_attempt_options(
     assert second_manifest["report_options"] == first_manifest["report_options"]
     assert "--eddy-samples" in second_manifest["report_options"]
     assert "9876" in second_manifest["report_options"]
+
+
+@pytest.mark.parametrize(
+    ("attribute", "value", "message"),
+    [
+        ("snapshot_workers", 0, "snapshot-workers"),
+        ("snapshot_memory_budget_gib", 0.0, "snapshot-memory-budget-gib"),
+        ("snapshot_memory_budget_gib", float("nan"), "snapshot-memory-budget-gib"),
+    ],
+)
+def test_invalid_parallel_snapshot_limits_fail_before_job_writes(
+    fast_analyze, tmp_path, attribute, value, message
+):
+    _root, analysis, _inventory = inventory_fixture(tmp_path)
+    jobs = tmp_path / "jobs"
+    args = command_args(analysis, jobs, cases=["R02"])
+    setattr(args, attribute, value)
+
+    with pytest.raises(fast_analyze.AnalysisLaunchError, match=message):
+        fast_analyze.launch(args)
+
+    assert not jobs.exists()
 
 
 @pytest.mark.parametrize(

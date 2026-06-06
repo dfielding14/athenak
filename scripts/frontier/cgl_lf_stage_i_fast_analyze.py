@@ -12,6 +12,7 @@ import argparse
 from datetime import datetime, timezone
 import hashlib
 import json
+import math
 from pathlib import Path
 import re
 import shlex
@@ -25,6 +26,8 @@ DEFAULT_ACCOUNT = "ast207"
 DEFAULT_PARTITION = "batch"
 DEFAULT_WALLTIME = "02:00:00"
 DEFAULT_CPUS_PER_TASK = 56
+DEFAULT_SNAPSHOT_WORKERS = 4
+DEFAULT_SNAPSHOT_MEMORY_BUDGET_GIB = 384.0
 REPORTER = Path(__file__).resolve().with_name("cgl_lf_stage_i_fast_report.py")
 CASE_ID = re.compile(r"R\d{2}")
 JOB_ID = re.compile(r"[1-9]\d*(?:;[A-Za-z0-9_.-]+)?")
@@ -180,11 +183,25 @@ def eligible_cases(
 
 
 def analysis_arguments(args: argparse.Namespace) -> list[str]:
+    if args.snapshot_workers < 1:
+        raise AnalysisLaunchError("--snapshot-workers must be positive")
+    if (
+        not math.isfinite(args.snapshot_memory_budget_gib)
+        or args.snapshot_memory_budget_gib <= 0.0
+    ):
+        raise AnalysisLaunchError(
+            "--snapshot-memory-budget-gib must be positive and finite"
+        )
     options: list[str] = []
     if args.skip_snapshots:
         options.append("--skip-snapshots")
     options.extend(["--snapshot-time-start", str(args.snapshot_time_start)])
     options.extend(["--snapshot-time-end", str(args.snapshot_time_end)])
+    options.extend(["--snapshot-workers", str(args.snapshot_workers)])
+    options.extend([
+        "--snapshot-memory-budget-gib",
+        str(args.snapshot_memory_budget_gib),
+    ])
     options.extend(["--pdf-bins", str(args.pdf_bins)])
     options.extend(["--alignment-shells", args.alignment_shells])
     if args.eddy_samples is not None:
@@ -512,6 +529,18 @@ def add_analysis_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--skip-snapshots", action="store_true")
     parser.add_argument("--snapshot-time-start", type=float, default=8.0)
     parser.add_argument("--snapshot-time-end", type=float, default=10.0)
+    parser.add_argument(
+        "--snapshot-workers",
+        type=int,
+        default=DEFAULT_SNAPSHOT_WORKERS,
+        help="maximum independent snapshot-analysis processes inside each case job",
+    )
+    parser.add_argument(
+        "--snapshot-memory-budget-gib",
+        type=float,
+        default=DEFAULT_SNAPSHOT_MEMORY_BUDGET_GIB,
+        help="aggregate coordinator-plus-worker memory budget per case job",
+    )
     parser.add_argument("--pdf-bins", type=int, default=64)
     parser.add_argument(
         "--alignment-shells", default="2,4,6,8,12,16,24,32,64,128"
