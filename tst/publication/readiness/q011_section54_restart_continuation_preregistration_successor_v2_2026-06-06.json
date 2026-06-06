@@ -1,0 +1,180 @@
+{
+  "record_type": "q011_section54_restart_continuation_preregistration",
+  "schema_version": 3,
+  "date": "2026-06-06",
+  "gate": "Q-011",
+  "claim_id": "CLAIM-PAPER-SHOCK-001",
+  "qualification_effect": "policy_freeze_only_no_execution_authorization_no_claim_closure",
+  "predecessor_record": "tst/publication/readiness/q011_section54_restart_continuation_preregistration_successor_2026-06-06.json",
+  "predecessor_sha256": "3ad3e05a34e7fedf578bfea3424fa98a62ece52d4cda827d010d9840a715376f",
+  "scope": "Versioned bounded successor for one future Q-011 Section 5.4 restart-continuation carrier. It selects the checkpoint and paired continued outputs by preregistered nominal slots while binding exact canonical observed committed cycle and time metadata, raw schema-7 particle model bytes, the recomputed C++ continuation-control fingerprint, active particle source cohorts, and cancellation-aware schema-2 physical-escape metadata. Payload tolerances remain payload-only. This record contains no result and authorizes no scheduler call.",
+  "schema_contract": {
+    "schema_style": "self_contained_exact_key_policy",
+    "unknown_keys": "reject",
+    "missing_keys": "reject",
+    "numeric_aliases": "reject_boolean_nonfinite_and_numeric_string_aliases",
+    "policy_drift": "requires_versioned_successor_before_execution"
+  },
+  "helper_binding": {
+    "module": "tst/publication/q011_section54_restart.py",
+    "role": "pure_fail_closed_policy_helper_only",
+    "scheduler_calls": "forbidden",
+    "artifact_discovery": "forbidden_callers_supply_retained_bytes_and_values"
+  },
+  "restart_payload_probe": {
+    "pic_restart_magic_hex": "0x5049435253543031",
+    "byte_order": "little",
+    "restart_schema": 7,
+    "metadata_integer_count": 15,
+    "model_integer_count": 31,
+    "model_real_count": 37,
+    "real_bytes": 8,
+    "minimum_meshblock_count": 1,
+    "minimum_real_fields_per_particle": 1,
+    "minimum_integer_fields_per_particle": 4,
+    "minimum_particle_count": 1,
+    "q011_exact_real_fields_per_particle": 26,
+    "q011_exact_integer_fields_per_particle": 4,
+    "q011_state_kind": 1,
+    "q011_physical_mode": 4,
+    "raw_model_policy": "bind_exact_state_kind_physical_mode_light_speed_model_integer_array_and_model_real_array",
+    "active_particle_policy": "derive_and_validate_every_raw_particle_source_tag_species_q_over_m_weight_and_birth_cohort_require_zero_active_initial_particles_after_startup_removal_and_reconcile_injected_removed_and_escape_counts"
+  },
+  "startup_shock_ledger": {
+    "parameter_block": "problem",
+    "ledger_schema": 3,
+    "accepted_boolean_literals": [
+      "0",
+      "1",
+      "false",
+      "true"
+    ],
+    "required_fields": [
+      "ps_cr_ledger_schema",
+      "ps_cr_ledger_complete",
+      "ps_mass_reservoir_global",
+      "ps_injected_cr_count_global",
+      "ps_injected_cr_mass_global",
+      "ps_injected_cr_momentum_x1_global",
+      "ps_injected_cr_momentum_x2_global",
+      "ps_injected_cr_momentum_x3_global",
+      "ps_injected_cr_energy_global",
+      "ps_removed_excluded_early_cohort",
+      "ps_removed_cr_count_global",
+      "ps_removed_cr_mass_global",
+      "ps_removed_cr_momentum_x1_global",
+      "ps_removed_cr_momentum_x2_global",
+      "ps_removed_cr_momentum_x3_global",
+      "ps_removed_cr_energy_global",
+      "ps_tag_seeded",
+      "ps_injection_tag_floor",
+      "ps_next_tag"
+    ],
+    "checkpoint_state_requirements": {
+      "ps_cr_ledger_complete": true,
+      "ps_removed_excluded_early_cohort": true,
+      "ps_tag_seeded": true
+    },
+    "identity_policy": "require_exact_typed_identity_between_uninterrupted_and_continued_comparison_bindings"
+  },
+  "particle_escape_ledger": {
+    "parameter_block": "problem",
+    "ledger_schema": 2,
+    "required_fields": [
+      "ps_escape_ledger_schema",
+      "ps_escape_audit_calls",
+      "ps_escape_ledger_complete",
+      "ps_escape_last_audit_time",
+      "ps_escaped_injected_cr_count_global",
+      "ps_escaped_injected_cr_mass_global",
+      "ps_escaped_injected_cr_momentum_x1_global",
+      "ps_escaped_injected_cr_momentum_x2_global",
+      "ps_escaped_injected_cr_momentum_x3_global",
+      "ps_escaped_injected_cr_energy_global",
+      "ps_escaped_initial_cr_count_global",
+      "ps_escaped_injected_cr_term_count_global",
+      "ps_escaped_injected_cr_abs_mass_global",
+      "ps_escaped_injected_cr_abs_momentum_x1_global",
+      "ps_escaped_injected_cr_abs_momentum_x2_global",
+      "ps_escaped_injected_cr_abs_momentum_x3_global",
+      "ps_escaped_injected_cr_abs_energy_global"
+    ],
+    "comparison_metadata_policy": "retain_per_component_absolute_contribution_sums_and_term_count_for_cancellation_aware_future_generic_vs_reason_coded_escape_crosscheck"
+  },
+  "restart_control_binding": {
+    "fingerprint_schema": "athenak_pic_parallel_shock_restart_controls_v2",
+    "policy": "recompute_the_cpp_fingerprint_from_the_complete_typed_control_set_and_bind_the_controls_in_addition_to_the_digest"
+  },
+  "continuation_contract": {
+    "checkpoint_nominal_slot_omega0_inverse": 500.0,
+    "checkpoint_selection_policy": "select_the_committed_checkpoint_assigned_to_nominal_slot_500_and_bind_its_exact_canonical_observed_committed_cycle_and_time",
+    "retained_output_nominal_slots_after_checkpoint_omega0_inverse": [
+      600.0,
+      700.0,
+      800.0,
+      900.0,
+      1000.0,
+      1100.0,
+      1200.0
+    ],
+    "retained_output_pairing_policy": "pair_uninterrupted_and_continued_outputs_by_nominal_slot_and_require_exact_observed_committed_cycle_and_time_parity_before_payload_comparison",
+    "observed_commit_metadata_contract": {
+      "cycle": "canonical_nonnegative_integer",
+      "time_omega0_inverse": "canonical_nonnegative_finite_float",
+      "sequence": "strictly_increasing_after_checkpoint_and_across_retained_nominal_slots",
+      "parity": "exact_typed_identity_between_uninterrupted_and_continued_paired_outputs"
+    },
+    "comparison_tolerances_max_absolute_difference": {
+      "rho_bin": 1.0e-12,
+      "bmag_bin": 1.0e-12,
+      "prtcl_jx_bin": 1.0e-12,
+      "j2_bin": 1.0e-12,
+      "prtcl_all_pvtk_integer_payload": 0.0,
+      "prtcl_all_pvtk_float_payload": 1.0e-06
+    },
+    "comparison_field_kinds": {
+      "rho_bin": "float",
+      "bmag_bin": "float",
+      "prtcl_jx_bin": "float",
+      "j2_bin": "float",
+      "prtcl_all_pvtk_integer_payload": "integer",
+      "prtcl_all_pvtk_float_payload": "float"
+    },
+    "comparison_value_order": "caller_supplied_deterministically_ordered_flat_values_per_field",
+    "comparison_policy": "require_identical_checkpoint_observed_commit_restart_schema_startup_cohort_ledger_escape_ledger_raw_particle_model_restart_controls_active_particle_cohort_retained_nominal_slots_and_tolerances_then_exact_paired_output_observed_commit_parity_before_payload_field_comparison",
+    "tolerance_boundary": "These are AthenaK deterministic restart-continuation payload-only release screens selected before execution, not manuscript tolerances. They never apply to nominal slots, observed committed cycles or observed committed times."
+  },
+  "execution_policy": {
+    "status": "blocked_until_immutable_execution_record_binds_continuation_execution_fields",
+    "required_before_continuation_execution": [
+      "checkpoint_nominal_slot_omega0_inverse",
+      "checkpoint_observed_committed_cycle",
+      "checkpoint_observed_committed_time_omega0_inverse",
+      "restart_schema",
+      "startup_shock_ledger",
+      "particle_escape_ledger",
+      "raw_particle_model",
+      "restart_control_binding",
+      "active_particle_cohort",
+      "retained_output_nominal_slots_after_checkpoint_omega0_inverse",
+      "comparison_tolerances_max_absolute_difference",
+      "clean_candidate_git_commit",
+      "clean_frontier_executable_sha256",
+      "qualifying_input_deck_sha256",
+      "authorized_orion_campaign_root",
+      "registered_frontier_submission_policy"
+    ],
+    "required_after_execution_before_parity_result": [
+      "paired_output_observed_committed_cycle_and_time"
+    ],
+    "campaign_results_inspected": false,
+    "scheduler_calls_authorized_by_this_record": false,
+    "frontier_execution_authorized_by_this_record": false
+  },
+  "limitations": [
+    "This tranche is a non-executing policy and helper freeze only.",
+    "It does not create a scheduler wrapper or authorize a Frontier submission.",
+    "It does not close Q-011 qualification, independent recompute or external review.",
+    "The runtime still requires one integer MPI event-probe reduction per paper-VL2 stage; the larger 14-real payload reduction is event-only and production performance remains pilot-gated."
+  ]
+}

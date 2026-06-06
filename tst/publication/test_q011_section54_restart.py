@@ -35,7 +35,7 @@ _VALID_LEDGER = {
     "ps_tag_seeded": "1",
     "ps_injection_tag_floor": "10",
     "ps_next_tag": "14",
-    "ps_escape_ledger_schema": "1",
+    "ps_escape_ledger_schema": "2",
     "ps_escape_ledger_complete": "1",
     "ps_escape_audit_calls": "10002",
     "ps_escape_last_audit_time": "500.05",
@@ -46,6 +46,12 @@ _VALID_LEDGER = {
     "ps_escaped_injected_cr_momentum_x3_global": "0.125",
     "ps_escaped_injected_cr_energy_global": "2.0",
     "ps_escaped_initial_cr_count_global": "0.0",
+    "ps_escaped_injected_cr_term_count_global": "1.0",
+    "ps_escaped_injected_cr_abs_mass_global": "1.0",
+    "ps_escaped_injected_cr_abs_momentum_x1_global": "0.5",
+    "ps_escaped_injected_cr_abs_momentum_x2_global": "0.25",
+    "ps_escaped_injected_cr_abs_momentum_x3_global": "0.125",
+    "ps_escaped_injected_cr_abs_energy_global": "2.0",
 }
 _CHECKPOINT_OBSERVED_CYCLE = 5001
 _CHECKPOINT_OBSERVED_TIME = 500.05
@@ -57,6 +63,12 @@ def _restart_payload(
     ledger_overrides: dict[str, str | None] | None = None,
     meshblock_particle_counts: list[int] | None = None,
     duplicate_field: tuple[str, str] | None = None,
+    state_kind: int = 1,
+    physical_mode: int = 4,
+    light_speed: float = 1.0e4,
+    active_particle_source: int = 1,
+    active_particle_tag: int = 10,
+    include_restart_fingerprint: bool = True,
 ) -> bytes:
     ledger = dict(_VALID_LEDGER)
     for field, value in (ledger_overrides or {}).items():
@@ -64,19 +76,127 @@ def _restart_payload(
             del ledger[field]
         else:
             ledger[field] = value
-    ledger_text = "".join(f"{field}={value}\n" for field, value in ledger.items())
+    problem = {
+        "pgen_name": "pic_parallel_shock",
+        "ps_rho0": "1.0",
+        "ps_p0": "1.0",
+        "ps_u0": "30.0",
+        "ps_b0": "1.0",
+        "ps_eta": "1.0e-3",
+        "ps_vinj_over_u0": "3.16227766017",
+        "ps_inject_half_width_cells": "0.5",
+        "ps_inject_t_start": "0.0",
+        "ps_inject_t_stop": "1.0e9",
+        "ps_remove_birth_time_before": "45.0",
+        "ps_shock_speed_model": "ideal_surface",
+        "ps_refine_curv": "1.0",
+        "ps_derefine_curv": "0.1",
+        "ps_rho_floor_frac": "1.0e-6",
+        "ps_p_floor_frac": "1.0e-8",
+        "ps_enable_injection": "true",
+        "ps_enable_gas_subtraction": "true",
+        "ps_enable_curvature_amr": "true",
+        "ps_test_source_transaction_terms_override": "false",
+        "ps_test_source_transaction_terms": "1.0",
+        "ps_inject_species": "0",
+        "ps_inject_seed": "23050101",
+        "ps_enable_frame_tracking": "false",
+        "ps_frame_mode": "velocity",
+        "ps_frame_t_start": "0.0",
+        "ps_frame_t_ramp": "0.0",
+        "ps_frame_vfrac": "1.0",
+        "ps_frame_dv_max": "1.0e99",
+        "ps_frame_apply_to_particles": "true",
+        "ps_frame_apply_to_inflow": "true",
+        "ps_frame_require_uniform": "true",
+        "ps_recenter_x_target": "24000.0",
+        "ps_recenter_x_trigger": "36000.0",
+        "ps_recenter_shift_cells": "2",
+        "ps_recenter_vshock_model": "-1.0",
+        **ledger,
+    }
+    if include_restart_fingerprint:
+        problem["ps_restart_control_fingerprint"] = "v1:0000000000000000"
+    blocks = {
+        "job": {"basename": "q011_restart_fixture"},
+        "mesh": {
+            "nx1": "4000",
+            "x1min": "0.0",
+            "x1max": "48000.0",
+            "nx2": "260",
+            "nx3": "1",
+        },
+        "mhd": {"gamma": "1.6666666666666667"},
+        "particles": {
+            "particle_type": "cosmic_ray",
+            "pusher": "boris_tsc",
+            "nspecies": "1",
+            "deposit_moments": "true",
+            "deposit_order": "2",
+            "deposit_qscale": "1.0",
+            "couple_moments_to_mhd": "true",
+            "couple_j_to_efield_coeff": "1.0",
+            "couple_j_to_efield_representation": "cell_centered",
+            "couple_j_deposition_mode": "cc_convert",
+            "couple_fluid_feedback_order": "mhd_src_terms",
+            "couple_moments_momentum_to_mhd": "true",
+            "couple_moments_energy_to_mhd": "true",
+            "couple_moments_momentum_coeff": "1.0",
+            "couple_moments_energy_coeff": "1.0",
+            "pic_physical_mode": "paper_mhd_pic_vl2_tsc",
+            "pic_background_mode": "coupled",
+            "pic_feedback_mode": "coupled",
+            "pic_interp_scheme": "tsc",
+            "pic_cr_light_speed": repr(light_speed),
+            "pic_cr_initial_state": "momentum",
+            "pic_cr_hall_mode": "off",
+            "pic_wave_damping_mode": "off",
+            "pic_expansion_law": "linear",
+            "pic_expansion_rate_x1": "0.0",
+            "pic_expansion_rate_x2": "0.0",
+            "pic_expansion_rate_x3": "0.0",
+            "pic_ion_neutral_collision_rate": "0.0",
+            "pic_max_cell_cross": "2",
+            "pic_theta_max": "0.3",
+            "pic_deltaf_mode": "off",
+            "pic_deltaf_p0": "1.0",
+            "pic_deltaf_kappa": "1.25",
+            "pic_deltaf_drift_x1": "0.0",
+            "pic_deltaf_drift_x2": "0.0",
+            "pic_deltaf_drift_x3": "0.0",
+            "pic_deltaf_aniso_x1": "1.0",
+            "pic_deltaf_aniso_x2": "1.0",
+            "pic_deltaf_aniso_x3": "1.0",
+            "pic_deltaf_background_rho": "0.0",
+            "pic_deltaf_background_jx": "0.0",
+            "pic_deltaf_background_jy": "0.0",
+            "pic_deltaf_background_jz": "0.0",
+            "pic_no_mhd_bx": "0.0",
+            "pic_no_mhd_by": "0.0",
+            "pic_no_mhd_bz": "0.0",
+            "pic_deltaf_adapt_mode": "off",
+            "pic_deltaf_adapt_interval": "0.0",
+            "pic_load_balance_cost_per_particle": "0.0",
+            "pic_sort_interval": "0",
+            "pic_intermediate_arrays": "auto",
+            "pic_random_seed": "23050101",
+            "pic_enable_2d3v": "true",
+            "pic_expanding_box_mode": "off",
+            "track_displacement": "false",
+        },
+        "species0": {"mass": "1.0", "charge": "1.0"},
+        "problem": problem,
+    }
+    header_text = ""
+    for block, parameters in blocks.items():
+        header_text += f"<{block}>\n"
+        header_text += "".join(f"{field}={value}\n" for field, value in parameters.items())
     if duplicate_field is not None:
-        ledger_text += f"{duplicate_field[0]}={duplicate_field[1]}\n"
-    header = (
-        "<job>\n"
-        "basename=q011_restart_fixture\n"
-        "<problem>\n"
-        + ledger_text
-        + "<par_end>\n"
-    ).encode("ascii")
+        header_text += f"<problem>\n{duplicate_field[0]}={duplicate_field[1]}\n"
+    header = (header_text + "<par_end>\n").encode("ascii")
     meshblock_particle_counts = meshblock_particle_counts or [1]
     meshblock_count = len(meshblock_particle_counts)
-    real_fields = 2
+    real_fields = 26
     integer_fields = 4
     particle_count = 1
     metadata = struct.pack(
@@ -85,26 +205,66 @@ def _restart_payload(
         meshblock_count,
         real_fields,
         integer_fields,
-        *([0] * 11),
+        *([0] * 9),
+        state_kind,
+        physical_mode,
     )
+    species_hash = restart._species_config_hash(blocks, 1, "fixture")
+    model_ints = [0] * 31
+    model_ints[6] = 0
+    model_ints[7] = 6
+    model_ints[8] = 1
+    model_ints[10] = 1
+    model_ints[11] = 2
+    model_ints[12] = 1
+    model_ints[16] = 1
+    model_ints[17] = 1
+    model_ints[21] = 1
+    model_ints[23] = 1
+    model_ints[25] = 2
+    model_ints[27] = 23050101
+    model_ints[28] = species_hash & 0x3FFFFF
+    model_ints[29] = (species_hash >> 22) & 0x3FFFFF
+    model_ints[30] = (species_hash >> 44) & 0xFFFFF
+    model_reals = [0.0] * 37
+    model_reals[3] = 1.0
+    model_reals[4] = 1.25
+    model_reals[8] = 1.0
+    model_reals[9] = 1.0
+    model_reals[10] = 1.0
+    model_reals[20] = 1.0
+    model_reals[21] = 1.0
+    model_reals[22] = 1.0
+    model_reals[23] = 1.0
+    model_reals[24] = 0.3
     model_payload = (
-        struct.pack("<d", 500.0)
-        + bytes(31 * struct.calcsize("<i"))
-        + bytes(37 * struct.calcsize("<d"))
+        struct.pack("<d", light_speed)
+        + struct.pack("<31i", *model_ints)
+        + struct.pack("<37d", *model_reals)
     )
+    particle_reals = [0.0] * real_fields
+    particle_reals[restart._Q011_IPM] = 1.0
+    particle_reals[restart._Q011_IPWT] = 1.0
+    particle_reals[restart._Q011_IPT_BIRTH] = 100.0
     particle_payload = (
         struct.pack("<Q", particle_count)
         + struct.pack(f"<{meshblock_count}i", *meshblock_particle_counts)
-        + struct.pack("<2d", 1.0, 2.0)
-        + struct.pack("<4i", 0, 10, 1, 1)
+        + struct.pack("<26d", *particle_reals)
+        + struct.pack("<4i", 0, active_particle_tag, 0, active_particle_source)
     )
-    return (
+    payload = (
         header
         + struct.pack("<Q", restart.PIC_RESTART_MAGIC)
         + metadata
         + model_payload
         + particle_payload
     )
+    if include_restart_fingerprint:
+        probe = restart.probe_schema7_restart_payload(payload)
+        controls = restart._parallel_shock_restart_controls(blocks, probe, "fixture")
+        fingerprint = restart.parallel_shock_restart_control_fingerprint(controls)
+        payload = payload.replace(b"v1:0000000000000000", fingerprint.encode("ascii"), 1)
+    return payload
 
 
 def _binding(payload: bytes | None = None) -> dict[str, object]:
@@ -125,6 +285,43 @@ def _binding(payload: bytes | None = None) -> dict[str, object]:
         ],
         preregistration=policy,
     )
+
+
+def _mutate_raw_light_speed(payload: bytes, value: float) -> bytes:
+    mutated = bytearray(payload)
+    marker_offset = payload.find(struct.pack("<Q", restart.PIC_RESTART_MAGIC))
+    offset = marker_offset + struct.calcsize("<Q") + struct.calcsize("<15i")
+    struct.pack_into("<d", mutated, offset, value)
+    return bytes(mutated)
+
+
+def _mutate_raw_model_int(payload: bytes, index: int, value: int) -> bytes:
+    mutated = bytearray(payload)
+    marker_offset = payload.find(struct.pack("<Q", restart.PIC_RESTART_MAGIC))
+    offset = (
+        marker_offset
+        + struct.calcsize("<Q")
+        + struct.calcsize("<15i")
+        + struct.calcsize("<d")
+        + index * struct.calcsize("<i")
+    )
+    struct.pack_into("<i", mutated, offset, value)
+    return bytes(mutated)
+
+
+def _mutate_raw_model_real(payload: bytes, index: int, value: float) -> bytes:
+    mutated = bytearray(payload)
+    marker_offset = payload.find(struct.pack("<Q", restart.PIC_RESTART_MAGIC))
+    offset = (
+        marker_offset
+        + struct.calcsize("<Q")
+        + struct.calcsize("<15i")
+        + struct.calcsize("<d")
+        + 31 * struct.calcsize("<i")
+        + index * struct.calcsize("<d")
+    )
+    struct.pack_into("<d", mutated, offset, value)
+    return bytes(mutated)
 
 
 def _observation(binding: dict[str, object]) -> dict[str, object]:
@@ -166,7 +363,7 @@ class Q011Section54RestartPolicyTests(unittest.TestCase):
             ],
             [600.0, 700.0, 800.0, 900.0, 1000.0, 1100.0, 1200.0],
         )
-        self.assertEqual(policy["schema_version"], 2)
+        self.assertEqual(policy["schema_version"], 3)
         self.assertEqual(policy["date"], "2026-06-06")
         self.assertEqual(
             policy["continuation_contract"][
@@ -182,6 +379,16 @@ class Q011Section54RestartPolicyTests(unittest.TestCase):
             "paired_output_observed_committed_cycle_and_time",
             policy["execution_policy"]["required_before_continuation_execution"],
         )
+        for required in (
+            "particle_escape_ledger",
+            "raw_particle_model",
+            "restart_control_binding",
+            "active_particle_cohort",
+        ):
+            self.assertIn(
+                required,
+                policy["execution_policy"]["required_before_continuation_execution"],
+            )
         self.assertEqual(
             policy["execution_policy"][
                 "required_after_execution_before_parity_result"
@@ -207,6 +414,28 @@ class Q011Section54RestartPolicyTests(unittest.TestCase):
         with self.assertRaisesRegex(restart.RestartPolicyError, "scalar type drift"):
             restart.validate_preregistration(alias)
 
+    def test_exact_historical_policy_remains_compatible_but_not_active(self) -> None:
+        path = (
+            Path(restart.__file__).resolve().parent
+            / "readiness"
+            / "q011_section54_restart_continuation_preregistration_successor_"
+            "2026-06-06.json"
+        )
+        historical = restart.decode_preregistration(path.read_text(encoding="utf-8"))
+        restart.validate_preregistration(historical)
+        with self.assertRaisesRegex(
+            restart.RestartPolicyError,
+            "active restart-continuation preregistration",
+        ):
+            restart._validated_preregistration(historical)
+
+        historical["execution_policy"]["scheduler_calls_authorized_by_this_record"] = True
+        with self.assertRaisesRegex(
+            restart.RestartPolicyError,
+            "historical preregistration drifted",
+        ):
+            restart.validate_preregistration(historical)
+
 
 class Q011Section54RestartPayloadTests(unittest.TestCase):
     def test_schema7_payload_probe_and_complete_ledgers_extract(self) -> None:
@@ -222,7 +451,7 @@ class Q011Section54RestartPayloadTests(unittest.TestCase):
         self.assertTrue(ledger["ps_removed_excluded_early_cohort"])
         escape = restart.extract_particle_escape_ledger(payload)
         self.assertEqual(set(escape), set(restart.ESCAPE_LEDGER_FIELDS))
-        self.assertEqual(escape["ps_escape_ledger_schema"], 1)
+        self.assertEqual(escape["ps_escape_ledger_schema"], 2)
         self.assertEqual(escape["ps_escape_audit_calls"], 10002)
         self.assertEqual(escape["ps_escaped_initial_cr_count_global"], 0.0)
 
@@ -289,17 +518,23 @@ class Q011Section54RestartPayloadTests(unittest.TestCase):
 
     def test_extreme_finite_startup_momentum_fails_closed(self) -> None:
         cases = {
-            "extreme momentum": {"ps_injected_cr_momentum_x1_global": "1e308"},
-            "unreliable accumulation count": {
-                "ps_injected_cr_count_global": "3000000000000000.0",
-                "ps_injected_cr_mass_global": "3000000000000000.0",
-            },
+            "extreme momentum": (
+                {"ps_injected_cr_momentum_x1_global": "1e308"},
+                "ps_injected_cr aggregate momentum is not finite",
+            ),
+            "unreliable accumulation count": (
+                {
+                    "ps_injected_cr_count_global": "3000000000000000.0",
+                    "ps_injected_cr_mass_global": "3000000000000000.0",
+                },
+                "ps_injected_cr energy-momentum admissibility bound is invalid",
+            ),
         }
-        for label, overrides in cases.items():
+        for label, (overrides, expected) in cases.items():
             with self.subTest(label=label):
                 with self.assertRaisesRegex(
                     restart.RestartPolicyError,
-                    "ps_injected_cr energy-momentum admissibility bound is invalid",
+                    expected,
                 ):
                     restart.extract_startup_shock_ledger(
                         _restart_payload(ledger_overrides=overrides)
@@ -328,18 +563,28 @@ class Q011Section54RestartPayloadTests(unittest.TestCase):
                 "ps_escaped_initial_cr_count_global": "1.0"
             },
             "escaped mass is inconsistent": {
-                "ps_escaped_injected_cr_mass_global": "0.5"
+                "ps_escaped_injected_cr_mass_global": "0.5",
+                "ps_escaped_injected_cr_abs_mass_global": "0.5",
             },
             "removed plus escaped count exceeds": {
                 "ps_escaped_injected_cr_count_global": "3.0",
                 "ps_escaped_injected_cr_mass_global": "3.0",
+                "ps_escaped_injected_cr_term_count_global": "3.0",
+                "ps_escaped_injected_cr_abs_mass_global": "3.0",
             },
             "empty escape ledger contains accumulated state": {
                 "ps_escaped_injected_cr_count_global": "0.0",
                 "ps_escaped_injected_cr_mass_global": "0.0",
+                "ps_escaped_injected_cr_term_count_global": "0.0",
+                "ps_escaped_injected_cr_abs_mass_global": "0.0",
+                "ps_escaped_injected_cr_abs_momentum_x1_global": "0.0",
+                "ps_escaped_injected_cr_abs_momentum_x2_global": "0.0",
+                "ps_escaped_injected_cr_abs_momentum_x3_global": "0.0",
+                "ps_escaped_injected_cr_abs_energy_global": "0.0",
             },
             "escaped_injected_cr energy is below": {
-                "ps_escaped_injected_cr_momentum_x1_global": "1e9"
+                "ps_escaped_injected_cr_momentum_x1_global": "1e9",
+                "ps_escaped_injected_cr_abs_momentum_x1_global": "1e9",
             },
         }
         for expected, overrides in cases.items():
@@ -362,6 +607,117 @@ class Q011Section54RestartPayloadTests(unittest.TestCase):
             with self.subTest(label=label):
                 with self.assertRaises(restart.RestartPolicyError):
                     _binding(_restart_payload(ledger_overrides=overrides))
+
+    def test_small_u_relativistic_energy_attack_fails_closed(self) -> None:
+        with self.assertRaisesRegex(
+            restart.RestartPolicyError,
+            "escaped_injected_cr energy is below its aggregate momentum lower bound",
+        ):
+            _binding(
+                _restart_payload(
+                    ledger_overrides={
+                        "ps_escaped_injected_cr_momentum_x1_global": "1.0e-4",
+                        "ps_escaped_injected_cr_momentum_x2_global": "0.0",
+                        "ps_escaped_injected_cr_momentum_x3_global": "0.0",
+                        "ps_escaped_injected_cr_energy_global": "0.0",
+                        "ps_escaped_injected_cr_abs_momentum_x1_global": "1.0e-4",
+                        "ps_escaped_injected_cr_abs_momentum_x2_global": "0.0",
+                        "ps_escaped_injected_cr_abs_momentum_x3_global": "0.0",
+                        "ps_escaped_injected_cr_abs_energy_global": "0.0",
+                    }
+                )
+            )
+
+    def test_raw_model_fingerprint_and_active_source_attacks_fail_closed(self) -> None:
+        cases = {
+            "state kind": (
+                _restart_payload(state_kind=0),
+                "Q011 requires momentum state",
+            ),
+            "physical mode": (
+                _restart_payload(physical_mode=0),
+                "Q011 requires paper_mhd_pic_vl2_tsc",
+            ),
+            "missing fingerprint": (
+                _restart_payload(include_restart_fingerprint=False),
+                "ps_restart_control_fingerprint",
+            ),
+            "raw light speed": (
+                _mutate_raw_light_speed(_restart_payload(), 1.0e6),
+                "raw particle light speed",
+            ),
+            "raw pusher model": (
+                _mutate_raw_model_int(_restart_payload(), 7, 0),
+                "PIC model integer 7 drift",
+            ),
+            "raw qscale model": (
+                _mutate_raw_model_real(_restart_payload(), 20, 2.0),
+                "PIC model real 20",
+            ),
+            "active source": (
+                _restart_payload(
+                    active_particle_source=0,
+                    active_particle_tag=9,
+                    ledger_overrides={
+                        "ps_injected_cr_count_global": "3.0",
+                        "ps_injected_cr_mass_global": "3.0",
+                        "ps_next_tag": "13",
+                    },
+                ),
+                "active initial particle remains after startup-cohort removal",
+            ),
+        }
+        for label, (payload, expected) in cases.items():
+            with self.subTest(label=label):
+                with self.assertRaisesRegex(restart.RestartPolicyError, expected):
+                    _binding(payload)
+
+        payload = _restart_payload()
+        mutated_control = payload.replace(b"ps_eta=1.0e-3", b"ps_eta=2.0e-3", 1)
+        with self.assertRaisesRegex(
+            restart.RestartPolicyError, "recomputed restart-control fingerprint"
+        ):
+            _binding(mutated_control)
+
+    def test_escape_comparison_metadata_fails_closed_under_cancellation(self) -> None:
+        cases = {
+            "term count": {"ps_escaped_injected_cr_term_count_global": "2.0"},
+            "absolute momentum": {
+                "ps_escaped_injected_cr_abs_momentum_x1_global": "0.25"
+            },
+        }
+        for label, overrides in cases.items():
+            with self.subTest(label=label):
+                with self.assertRaises(restart.RestartPolicyError):
+                    _binding(_restart_payload(ledger_overrides=overrides))
+
+    def test_escape_comparison_metadata_accepts_resolved_cancellation(self) -> None:
+        ledger = restart.extract_particle_escape_ledger(
+            _restart_payload(
+                ledger_overrides={
+                    "ps_escaped_injected_cr_count_global": "2.0",
+                    "ps_escaped_injected_cr_mass_global": "2.0",
+                    "ps_escaped_injected_cr_momentum_x1_global": "0.0",
+                    "ps_escaped_injected_cr_momentum_x2_global": "0.0",
+                    "ps_escaped_injected_cr_momentum_x3_global": "0.0",
+                    "ps_escaped_injected_cr_energy_global": "4.0",
+                    "ps_escaped_injected_cr_term_count_global": "2.0",
+                    "ps_escaped_injected_cr_abs_mass_global": "2.0",
+                    "ps_escaped_injected_cr_abs_momentum_x1_global": "2.0",
+                    "ps_escaped_injected_cr_abs_momentum_x2_global": "0.0",
+                    "ps_escaped_injected_cr_abs_momentum_x3_global": "0.0",
+                    "ps_escaped_injected_cr_abs_energy_global": "4.0",
+                }
+            )
+        )
+        self.assertEqual(
+            ledger["ps_escaped_injected_cr_momentum_x1_global"],
+            0.0,
+        )
+        self.assertEqual(
+            ledger["ps_escaped_injected_cr_abs_momentum_x1_global"],
+            2.0,
+        )
 
 
 class Q011Section54ContinuationParityTests(unittest.TestCase):
@@ -510,7 +866,7 @@ class Q011Section54ContinuationParityTests(unittest.TestCase):
 
         continued = _observation(binding)
         continued["binding"]["particle_escape_ledger"][
-            "ps_escaped_injected_cr_momentum_x1_global"
+            "ps_escaped_injected_cr_abs_momentum_x1_global"
         ] = 0.75
         with self.assertRaisesRegex(
             restart.RestartPolicyError, "comparison binding identity"

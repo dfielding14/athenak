@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import copy
 from dataclasses import dataclass
+import hashlib
 import json
 import math
 from pathlib import Path
@@ -17,17 +18,19 @@ import re
 import struct
 from typing import Mapping
 
+import numpy as np
+
 
 PREREGISTRATION = (
     Path(__file__).resolve().parent
     / "readiness"
-    / "q011_section54_restart_continuation_preregistration_successor_2026-06-06.json"
+    / "q011_section54_restart_continuation_preregistration_successor_v2_2026-06-06.json"
 )
 
 PIC_RESTART_MAGIC = 0x5049435253543031
 EXPECTED_RESTART_SCHEMA = 7
 EXPECTED_SHOCK_LEDGER_SCHEMA = 3
-EXPECTED_ESCAPE_LEDGER_SCHEMA = 1
+EXPECTED_ESCAPE_LEDGER_SCHEMA = 2
 _PIC_RESTART_MARKER = struct.pack("<Q", PIC_RESTART_MAGIC)
 _PIC_METADATA_FORMAT = "<15i"
 _MODEL_INTEGER_COUNT = 31
@@ -35,8 +38,25 @@ _MODEL_REAL_COUNT = 37
 _REAL_BYTES = 8
 _MAX_LAYOUT_COUNT = 1 << 31
 _MAX_SIGNED_INT = (1 << 31) - 1
-_Q011_PARTICLE_LIGHT_SPEED = 1.0e4
 _BINARY64_EPSILON = 2.220446049250313e-16
+_Q011_STATE_KIND = 1
+_Q011_PHYSICAL_MODE = 4
+_Q011_REAL_FIELDS_PER_PARTICLE = 26
+_Q011_INTEGER_FIELDS_PER_PARTICLE = 4
+_Q011_RESTART_FINGERPRINT_SCHEMA = "athenak_pic_parallel_shock_restart_controls_v2"
+_RESTART_FINGERPRINT_PATTERN = re.compile(r"v1:[0-9a-f]{16}")
+_Q011_IPM = 6
+_Q011_IPWT = 22
+_Q011_IPT_BIRTH = 25
+_Q011_PGID = 0
+_Q011_PTAG = 1
+_Q011_PSP = 2
+_Q011_PCRSOURCE = 3
+_Q011_SOURCE_INITIAL = 0
+_Q011_SOURCE_SHOCK_INJECTED = 1
+_HISTORICAL_PREREGISTRATION_CANONICAL_SHA256 = (
+    "bb514439ac95d541559cccdf8533f56d8cc6bc15f476638d82462803dbe3e3bf"
+)
 
 _INTEGER_LEDGER_FIELDS = (
     "ps_cr_ledger_schema",
@@ -111,6 +131,12 @@ _ESCAPE_REAL_LEDGER_FIELDS = (
     "ps_escaped_injected_cr_momentum_x3_global",
     "ps_escaped_injected_cr_energy_global",
     "ps_escaped_initial_cr_count_global",
+    "ps_escaped_injected_cr_term_count_global",
+    "ps_escaped_injected_cr_abs_mass_global",
+    "ps_escaped_injected_cr_abs_momentum_x1_global",
+    "ps_escaped_injected_cr_abs_momentum_x2_global",
+    "ps_escaped_injected_cr_abs_momentum_x3_global",
+    "ps_escaped_injected_cr_abs_energy_global",
 )
 ESCAPE_LEDGER_FIELDS = (
     *_ESCAPE_INTEGER_LEDGER_FIELDS,
@@ -119,6 +145,53 @@ ESCAPE_LEDGER_FIELDS = (
 )
 _INTEGER_PATTERN = re.compile(r"-?[0-9]+")
 _REAL_PATTERN = re.compile(r"-?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?")
+_RESTART_CONTROL_KINDS = (
+    ("ps_rho0", "real"),
+    ("ps_p0", "real"),
+    ("ps_u0", "real"),
+    ("ps_b0", "real"),
+    ("ps_eta", "real"),
+    ("ps_vinj_over_u0", "real"),
+    ("ps_inject_half_width_cells", "real"),
+    ("ps_inject_t_start", "real"),
+    ("ps_inject_t_stop", "real"),
+    ("ps_remove_birth_time_before", "real"),
+    ("ps_shock_speed_model", "integer"),
+    ("ps_refine_curv", "real"),
+    ("ps_derefine_curv", "real"),
+    ("ps_rho_floor_frac", "real"),
+    ("ps_p_floor_frac", "real"),
+    ("ps_enable_injection", "integer"),
+    ("ps_enable_subtraction", "integer"),
+    ("ps_enable_curvature_amr", "integer"),
+    ("ps_test_source_transaction_terms_override", "integer"),
+    ("ps_test_source_transaction_terms", "real"),
+    ("ps_inject_species", "integer"),
+    ("ps_inject_seed", "integer"),
+    ("ps_particle_mass", "real"),
+    ("ps_particle_charge", "real"),
+    ("ps_particle_q_over_m", "real"),
+    ("ps_particle_macro_mass", "real"),
+    ("ps_particle_momentum_state", "integer"),
+    ("ps_particle_light_speed", "real"),
+    ("ps_enable_frame_tracking", "integer"),
+    ("ps_frame_mode", "integer"),
+    ("ps_frame_t_start", "real"),
+    ("ps_frame_t_ramp", "real"),
+    ("ps_frame_vfrac", "real"),
+    ("ps_frame_dv_max", "real"),
+    ("ps_frame_apply_to_particles", "integer"),
+    ("ps_frame_apply_to_inflow", "integer"),
+    ("ps_frame_require_uniform", "integer"),
+    ("ps_recenter_x_target", "real"),
+    ("ps_recenter_x_trigger", "real"),
+    ("ps_recenter_dx1", "real"),
+    ("ps_recenter_shift_cells", "integer"),
+    ("ps_recenter_vshock_model", "real"),
+    ("ps_shock_speed", "real"),
+    ("ps_xshock0", "real"),
+    ("ps_use_2d3v", "integer"),
+)
 
 _COMPARISON_TOLERANCES = {
     "rho_bin": 1.0e-12,
@@ -148,7 +221,7 @@ _RETAINED_OUTPUT_NOMINAL_SLOTS = [
 
 _EXPECTED_PREREGISTRATION = {
     "record_type": "q011_section54_restart_continuation_preregistration",
-    "schema_version": 2,
+    "schema_version": 3,
     "date": "2026-06-06",
     "gate": "Q-011",
     "claim_id": "CLAIM-PAPER-SHOCK-001",
@@ -157,18 +230,21 @@ _EXPECTED_PREREGISTRATION = {
     ),
     "predecessor_record": (
         "tst/publication/readiness/"
-        "q011_section54_restart_continuation_preregistration_2026-06-01.json"
+        "q011_section54_restart_continuation_preregistration_successor_2026-06-06.json"
     ),
     "predecessor_sha256": (
-        "c3360694dc90d391c5ccf7a0620ae576733e87beea3fa974c69602c82dd866ab"
+        "3ad3e05a34e7fedf578bfea3424fa98a62ece52d4cda827d010d9840a715376f"
     ),
     "scope": (
         "Versioned bounded successor for one future Q-011 Section 5.4 "
         "restart-continuation carrier. It selects the checkpoint and paired "
         "continued outputs by preregistered nominal slots while binding exact "
-        "canonical observed committed cycle and time metadata. Payload "
-        "tolerances remain payload-only. This record contains no result and "
-        "authorizes no scheduler call."
+        "canonical observed committed cycle and time metadata, raw schema-7 "
+        "particle model bytes, the recomputed C++ continuation-control "
+        "fingerprint, active particle source cohorts, and cancellation-aware "
+        "schema-2 physical-escape metadata. Payload tolerances remain "
+        "payload-only. This record contains no result and authorizes no "
+        "scheduler call."
     ),
     "schema_contract": {
         "schema_style": "self_contained_exact_key_policy",
@@ -195,6 +271,19 @@ _EXPECTED_PREREGISTRATION = {
         "minimum_real_fields_per_particle": 1,
         "minimum_integer_fields_per_particle": 4,
         "minimum_particle_count": 1,
+        "q011_exact_real_fields_per_particle": 26,
+        "q011_exact_integer_fields_per_particle": 4,
+        "q011_state_kind": 1,
+        "q011_physical_mode": 4,
+        "raw_model_policy": (
+            "bind_exact_state_kind_physical_mode_light_speed_model_integer_"
+            "array_and_model_real_array"
+        ),
+        "active_particle_policy": (
+            "derive_and_validate_every_raw_particle_source_tag_species_q_over_m_"
+            "weight_and_birth_cohort_require_zero_active_initial_particles_after_"
+            "startup_removal_and_reconcile_injected_removed_and_escape_counts"
+        ),
     },
     "startup_shock_ledger": {
         "parameter_block": "problem",
@@ -209,6 +298,22 @@ _EXPECTED_PREREGISTRATION = {
         "identity_policy": (
             "require_exact_typed_identity_between_uninterrupted_and_continued_"
             "comparison_bindings"
+        ),
+    },
+    "particle_escape_ledger": {
+        "parameter_block": "problem",
+        "ledger_schema": 2,
+        "required_fields": list(ESCAPE_LEDGER_FIELDS),
+        "comparison_metadata_policy": (
+            "retain_per_component_absolute_contribution_sums_and_term_count_for_"
+            "cancellation_aware_future_generic_vs_reason_coded_escape_crosscheck"
+        ),
+    },
+    "restart_control_binding": {
+        "fingerprint_schema": _Q011_RESTART_FINGERPRINT_SCHEMA,
+        "policy": (
+            "recompute_the_cpp_fingerprint_from_the_complete_typed_control_set_"
+            "and_bind_the_controls_in_addition_to_the_digest"
         ),
     },
     "continuation_contract": {
@@ -246,9 +351,10 @@ _EXPECTED_PREREGISTRATION = {
         ),
         "comparison_policy": (
             "require_identical_checkpoint_observed_commit_restart_schema_"
-            "startup_cohort_ledger_retained_nominal_slots_and_tolerances_then_"
-            "exact_paired_output_observed_commit_parity_before_payload_field_"
-            "comparison"
+            "startup_cohort_ledger_escape_ledger_raw_particle_model_restart_"
+            "controls_active_particle_cohort_retained_nominal_slots_and_"
+            "tolerances_then_exact_paired_output_observed_commit_parity_before_"
+            "payload_field_comparison"
         ),
         "tolerance_boundary": (
             "These are AthenaK deterministic restart-continuation payload-only "
@@ -268,6 +374,10 @@ _EXPECTED_PREREGISTRATION = {
             "checkpoint_observed_committed_time_omega0_inverse",
             "restart_schema",
             "startup_shock_ledger",
+            "particle_escape_ledger",
+            "raw_particle_model",
+            "restart_control_binding",
+            "active_particle_cohort",
             "retained_output_nominal_slots_after_checkpoint_omega0_inverse",
             "comparison_tolerances_max_absolute_difference",
             "clean_candidate_git_commit",
@@ -287,6 +397,11 @@ _EXPECTED_PREREGISTRATION = {
         "This tranche is a non-executing policy and helper freeze only.",
         "It does not create a scheduler wrapper or authorize a Frontier submission.",
         "It does not close Q-011 qualification, independent recompute or external review.",
+        (
+            "The runtime still requires one integer MPI event-probe reduction per "
+            "paper-VL2 stage; the larger 14-real payload reduction is event-only "
+            "and production performance remains pilot-gated."
+        ),
     ],
 }
 
@@ -297,8 +412,30 @@ _BINDING_KEYS = {
     "restart_schema",
     "startup_shock_ledger",
     "particle_escape_ledger",
+    "raw_particle_model",
+    "restart_control_binding",
+    "active_particle_cohort",
     "retained_output_nominal_slots_after_checkpoint_omega0_inverse",
     "comparison_tolerances_max_absolute_difference",
+}
+_RAW_PARTICLE_MODEL_KEYS = {
+    "state_kind",
+    "physical_mode",
+    "cr_light_speed",
+    "model_ints",
+    "model_reals",
+}
+_RESTART_CONTROL_BINDING_KEYS = {
+    "fingerprint_schema",
+    "stored_fingerprint",
+    "controls",
+}
+_ACTIVE_PARTICLE_COHORT_KEYS = {
+    "particle_count",
+    "initial_count",
+    "shock_injected_count",
+    "minimum_tag",
+    "maximum_tag",
 }
 _OBSERVATION_KEYS = {"binding", "outputs_after_checkpoint"}
 _OUTPUT_KEYS = {
@@ -321,6 +458,11 @@ class RestartPayloadProbe:
     meshblock_count: int
     real_fields_per_particle: int
     integer_fields_per_particle: int
+    state_kind: int
+    physical_mode: int
+    cr_light_speed: float
+    model_ints: tuple[int, ...]
+    model_reals: tuple[float, ...]
     particle_count: int
     particle_real_offset: int
     particle_integer_offset: int
@@ -399,7 +541,18 @@ def decode_preregistration(payload: str) -> dict[str, object]:
 
 
 def validate_preregistration(preregistration: object) -> None:
-    """Require exact identity with the frozen non-executing preregistration."""
+    """Validate the active successor or an exact protected historical packet."""
+    if type(preregistration) is dict and preregistration.get("schema_version") == 2:
+        try:
+            canonical = (json.dumps(preregistration, indent=2) + "\n").encode("utf-8")
+        except (TypeError, ValueError) as exc:
+            raise RestartPolicyError("historical preregistration is not canonical") from exc
+        _require(
+            hashlib.sha256(canonical).hexdigest()
+            == _HISTORICAL_PREREGISTRATION_CANONICAL_SHA256,
+            "historical preregistration drifted",
+        )
+        return
     _strict_equal(preregistration, _EXPECTED_PREREGISTRATION, "preregistration")
 
 
@@ -420,7 +573,11 @@ def _validated_preregistration(
 ) -> dict[str, object]:
     if preregistration is None:
         return frozen_preregistration()
-    validate_preregistration(preregistration)
+    _strict_equal(
+        preregistration,
+        _EXPECTED_PREREGISTRATION,
+        "active restart-continuation preregistration",
+    )
     return copy.deepcopy(preregistration)
 
 
@@ -446,7 +603,23 @@ def probe_schema7_restart_payload(
     offset = marker_offset + len(_PIC_RESTART_MARKER)
     metadata = _unpack_from(_PIC_METADATA_FORMAT, payload, offset, "PIC metadata", source)
     offset += struct.calcsize(_PIC_METADATA_FORMAT)
-    restart_schema, meshblock_count, real_fields, integer_fields, *_ = metadata
+    (
+        restart_schema,
+        meshblock_count,
+        real_fields,
+        integer_fields,
+        _,
+        _,
+        _,
+        _,
+        _,
+        _,
+        _,
+        _,
+        _,
+        state_kind,
+        physical_mode,
+    ) = metadata
     _require(restart_schema == EXPECTED_RESTART_SCHEMA, f"{source}: restart schema is not 7")
     _require(
         type(meshblock_count) is int and 1 <= meshblock_count < _MAX_LAYOUT_COUNT,
@@ -461,9 +634,32 @@ def probe_schema7_restart_payload(
         f"{source}: invalid particle integer-field count",
     )
 
+    cr_light_speed = _unpack_from("<d", payload, offset, "particle light speed", source)[0]
     offset += _REAL_BYTES
+    model_ints = _unpack_from(
+        f"<{_MODEL_INTEGER_COUNT}i", payload, offset, "PIC model integers", source
+    )
     offset += _MODEL_INTEGER_COUNT * struct.calcsize("<i")
+    model_reals = _unpack_from(
+        f"<{_MODEL_REAL_COUNT}d", payload, offset, "PIC model reals", source
+    )
     offset += _MODEL_REAL_COUNT * _REAL_BYTES
+    _require(state_kind in {0, 1}, f"{source}: invalid particle state kind")
+    _require(0 <= physical_mode <= 4, f"{source}: invalid PIC physical mode")
+    _require(
+        type(cr_light_speed) is float
+        and math.isfinite(cr_light_speed)
+        and cr_light_speed > 0.0,
+        f"{source}: invalid particle light speed",
+    )
+    _require(
+        all(type(value) is int for value in model_ints),
+        f"{source}: invalid PIC model integer metadata",
+    )
+    _require(
+        all(type(value) is float and math.isfinite(value) for value in model_reals),
+        f"{source}: invalid PIC model real metadata",
+    )
     particle_count = _unpack_from("<Q", payload, offset, "particle count", source)[0]
     offset += struct.calcsize("<Q")
     _require(
@@ -498,6 +694,11 @@ def probe_schema7_restart_payload(
         meshblock_count=meshblock_count,
         real_fields_per_particle=real_fields,
         integer_fields_per_particle=integer_fields,
+        state_kind=state_kind,
+        physical_mode=physical_mode,
+        cr_light_speed=cr_light_speed,
+        model_ints=tuple(model_ints),
+        model_reals=tuple(model_reals),
         particle_count=particle_count,
         particle_real_offset=particle_real_offset,
         particle_integer_offset=particle_integer_offset,
@@ -505,7 +706,7 @@ def probe_schema7_restart_payload(
     )
 
 
-def _problem_parameters(payload: bytes, source: str) -> dict[str, str]:
+def _parameter_blocks(payload: bytes, source: str) -> dict[str, dict[str, str]]:
     _require(type(payload) is bytes, f"{source}: restart payload must be bytes")
     parameter_end = payload.find(b"<par_end>")
     _require(parameter_end >= 0, f"{source}: restart header is missing <par_end>")
@@ -514,7 +715,7 @@ def _problem_parameters(payload: bytes, source: str) -> dict[str, str]:
     except UnicodeDecodeError as exc:
         raise RestartPolicyError(f"{source}: restart parameter header is not ASCII") from exc
     active_block: str | None = None
-    parameters: dict[str, str] = {}
+    blocks: dict[str, dict[str, str]] = {}
     for lineno, raw_line in enumerate(text.splitlines(), start=1):
         line = raw_line.split("#", 1)[0].strip()
         if not line:
@@ -525,21 +726,29 @@ def _problem_parameters(payload: bytes, source: str) -> dict[str, str]:
                 f"{source}: malformed parameter block at line {lineno}",
             )
             active_block = line[1:-1]
+            _require(active_block, f"{source}: empty parameter block at line {lineno}")
+            blocks.setdefault(active_block, {})
             continue
-        if active_block != "problem":
-            continue
+        _require(active_block is not None, f"{source}: parameter outside a block at line {lineno}")
         _require(
             line.count("=") == 1,
-            f"{source}: malformed problem parameter at line {lineno}",
+            f"{source}: malformed parameter at line {lineno}",
         )
         key, value = (item.strip() for item in line.split("=", 1))
-        _require(key and value, f"{source}: empty problem parameter at line {lineno}")
+        _require(key, f"{source}: empty parameter name at line {lineno}")
+        parameters = blocks[active_block]
         _require(
             key not in parameters,
-            f"{source}: duplicate problem parameter: {key}",
+            f"{source}: duplicate {active_block} parameter: {key}",
         )
         parameters[key] = value
-    return parameters
+    return blocks
+
+
+def _problem_parameters(payload: bytes, source: str) -> dict[str, str]:
+    blocks = _parameter_blocks(payload, source)
+    _require("problem" in blocks, f"{source}: restart header is missing problem block")
+    return blocks["problem"]
 
 
 def _parse_integer(value: str, label: str) -> int:
@@ -562,8 +771,415 @@ def _parse_real(value: str, label: str) -> float:
     return parsed
 
 
+def _header_parameter(
+    blocks: Mapping[str, Mapping[str, str]], block: str, key: str, source: str
+) -> str:
+    _require(block in blocks, f"{source}: restart header is missing {block} block")
+    _require(key in blocks[block], f"{source}: restart header is missing {block}/{key}")
+    return blocks[block][key]
+
+
+def _header_integer(
+    blocks: Mapping[str, Mapping[str, str]], block: str, key: str, source: str
+) -> int:
+    return _parse_integer(
+        _header_parameter(blocks, block, key, source), f"{source}/{block}/{key}"
+    )
+
+
+def _header_boolean(
+    blocks: Mapping[str, Mapping[str, str]], block: str, key: str, source: str
+) -> bool:
+    return _parse_boolean(
+        _header_parameter(blocks, block, key, source), f"{source}/{block}/{key}"
+    )
+
+
+def _header_real(
+    blocks: Mapping[str, Mapping[str, str]], block: str, key: str, source: str
+) -> float:
+    return _parse_real(
+        _header_parameter(blocks, block, key, source), f"{source}/{block}/{key}"
+    )
+
+
+def _fnv1a64_update(value: int, payload: bytes) -> int:
+    for byte in payload:
+        value ^= byte
+        value = (value * 1099511628211) & 0xFFFFFFFFFFFFFFFF
+    return value
+
+
+def parallel_shock_restart_control_fingerprint(controls: object) -> str:
+    """Recompute the C++ Q011 continuation-control fingerprint."""
+    mapping = _keys(
+        controls,
+        {name for name, _ in _RESTART_CONTROL_KINDS},
+        "parallel-shock restart controls",
+    )
+    value = _fnv1a64_update(
+        14695981039346656037,
+        _Q011_RESTART_FINGERPRINT_SCHEMA.encode("ascii") + b"\0",
+    )
+    for name, kind in _RESTART_CONTROL_KINDS:
+        control = mapping[name]
+        if kind == "integer":
+            _require(
+                type(control) is int,
+                f"parallel-shock restart controls/{name}: expected integer",
+            )
+            encoded = struct.pack("<i", control)
+        else:
+            _require(
+                type(control) is float,
+                f"parallel-shock restart controls/{name}: expected float",
+            )
+            _require(
+                math.isfinite(control),
+                f"parallel-shock restart controls/{name}: expected finite float",
+            )
+            encoded = struct.pack("<d", control)
+        value = _fnv1a64_update(value, name.encode("ascii") + b"\0" + encoded)
+    return f"v1:{value:016x}"
+
+
+def _species_config_hash(
+    blocks: Mapping[str, Mapping[str, str]], nspecies: int, source: str
+) -> int:
+    value = _fnv1a64_update(14695981039346656037, struct.pack("<i", nspecies))
+    for species in range(nspecies):
+        block = f"species{species}"
+        value = _fnv1a64_update(
+            value, struct.pack("<d", _header_real(blocks, block, "mass", source))
+        )
+        value = _fnv1a64_update(
+            value, struct.pack("<d", _header_real(blocks, block, "charge", source))
+        )
+    return value
+
+
+def _validate_raw_particle_model(model: object, label: str) -> dict[str, object]:
+    mapping = _keys(model, _RAW_PARTICLE_MODEL_KEYS, label)
+    _require(mapping["state_kind"] == _Q011_STATE_KIND, f"{label}: Q011 state kind drift")
+    _require(mapping["physical_mode"] == _Q011_PHYSICAL_MODE, f"{label}: Q011 physical mode drift")
+    light_speed = mapping["cr_light_speed"]
+    _require(
+        type(light_speed) is float and math.isfinite(light_speed) and light_speed > 0.0,
+        f"{label}: invalid particle light speed",
+    )
+    model_ints = mapping["model_ints"]
+    model_reals = mapping["model_reals"]
+    _require(
+        type(model_ints) is list
+        and len(model_ints) == _MODEL_INTEGER_COUNT
+        and all(type(value) is int for value in model_ints),
+        f"{label}: invalid PIC model integer binding",
+    )
+    _require(
+        type(model_reals) is list
+        and len(model_reals) == _MODEL_REAL_COUNT
+        and all(type(value) is float and math.isfinite(value) for value in model_reals),
+        f"{label}: invalid PIC model real binding",
+    )
+    return mapping
+
+
+def _raw_q011_particle_model(
+    probe: RestartPayloadProbe,
+    blocks: Mapping[str, Mapping[str, str]],
+    source: str,
+) -> dict[str, object]:
+    _require(
+        probe.real_fields_per_particle == _Q011_REAL_FIELDS_PER_PARTICLE
+        and probe.integer_fields_per_particle == _Q011_INTEGER_FIELDS_PER_PARTICLE,
+        f"{source}: Q011 particle payload layout drift",
+    )
+    _require(probe.state_kind == _Q011_STATE_KIND, f"{source}: Q011 requires momentum state")
+    _require(
+        probe.physical_mode == _Q011_PHYSICAL_MODE,
+        f"{source}: Q011 requires paper_mhd_pic_vl2_tsc physical mode",
+    )
+    _require(
+        _header_parameter(blocks, "particles", "pic_physical_mode", source)
+        == "paper_mhd_pic_vl2_tsc",
+        f"{source}: particles/pic_physical_mode drift",
+    )
+    _require(
+        _header_parameter(blocks, "particles", "pic_cr_initial_state", source)
+        == "momentum",
+        f"{source}: particles/pic_cr_initial_state drift",
+    )
+    _strict_equal(
+        _header_real(blocks, "particles", "pic_cr_light_speed", source),
+        probe.cr_light_speed,
+        f"{source}/raw particle light speed",
+    )
+
+    ints = list(probe.model_ints)
+    reals = list(probe.model_reals)
+    nspecies = _header_integer(blocks, "particles", "nspecies", source)
+    _require(nspecies > 0, f"{source}: invalid particles/nspecies")
+    species_hash = _species_config_hash(blocks, nspecies, source)
+    def exact_particle_choice(key: str, expected: str, encoded: int) -> int:
+        _strict_equal(
+            _header_parameter(blocks, "particles", key, source),
+            expected,
+            f"{source}/particles/{key}",
+        )
+        return encoded
+
+    expected_ints = [
+        exact_particle_choice("pic_deltaf_mode", "off", 0),
+        0,
+        exact_particle_choice("pic_expanding_box_mode", "off", 0),
+        exact_particle_choice("pic_expansion_law", "linear", 0),
+        exact_particle_choice("pic_wave_damping_mode", "off", 0),
+        exact_particle_choice("pic_deltaf_adapt_mode", "off", 0),
+        exact_particle_choice("particle_type", "cosmic_ray", 0),
+        exact_particle_choice("pusher", "boris_tsc", 6),
+        nspecies,
+        int(_header_boolean(blocks, "particles", "track_displacement", source)),
+        int(_header_boolean(blocks, "particles", "deposit_moments", source)),
+        _header_integer(blocks, "particles", "deposit_order", source),
+        int(_header_boolean(blocks, "particles", "couple_moments_to_mhd", source)),
+        exact_particle_choice("couple_j_to_efield_representation", "cell_centered", 0),
+        exact_particle_choice("couple_j_deposition_mode", "cc_convert", 0),
+        exact_particle_choice("couple_fluid_feedback_order", "mhd_src_terms", 0),
+        int(
+            _header_boolean(
+                blocks, "particles", "couple_moments_momentum_to_mhd", source
+            )
+        ),
+        int(
+            _header_boolean(blocks, "particles", "couple_moments_energy_to_mhd", source)
+        ),
+        exact_particle_choice("pic_background_mode", "coupled", 0),
+        exact_particle_choice("pic_feedback_mode", "coupled", 0),
+        exact_particle_choice("pic_cr_hall_mode", "off", 0),
+        exact_particle_choice("pic_cr_initial_state", "momentum", 1),
+        exact_particle_choice("pic_interp_scheme", "tsc", 0),
+        int(_header_boolean(blocks, "particles", "pic_enable_2d3v", source)),
+        exact_particle_choice("pic_intermediate_arrays", "auto", 0),
+        _header_integer(blocks, "particles", "pic_max_cell_cross", source),
+        _header_integer(blocks, "particles", "pic_sort_interval", source),
+        _header_integer(blocks, "particles", "pic_random_seed", source),
+        species_hash & 0x3FFFFF,
+        (species_hash >> 22) & 0x3FFFFF,
+        (species_hash >> 44) & 0xFFFFF,
+    ]
+    for index, expected in enumerate(expected_ints):
+        _require(ints[index] == expected, f"{source}: PIC model integer {index} drift")
+    expected_reals = [
+        _header_real(blocks, "particles", "pic_expansion_rate_x1", source),
+        _header_real(blocks, "particles", "pic_expansion_rate_x2", source),
+        _header_real(blocks, "particles", "pic_expansion_rate_x3", source),
+        _header_real(blocks, "particles", "pic_deltaf_p0", source),
+        _header_real(blocks, "particles", "pic_deltaf_kappa", source),
+        _header_real(blocks, "particles", "pic_deltaf_drift_x1", source),
+        _header_real(blocks, "particles", "pic_deltaf_drift_x2", source),
+        _header_real(blocks, "particles", "pic_deltaf_drift_x3", source),
+        _header_real(blocks, "particles", "pic_deltaf_aniso_x1", source),
+        _header_real(blocks, "particles", "pic_deltaf_aniso_x2", source),
+        _header_real(blocks, "particles", "pic_deltaf_aniso_x3", source),
+        _header_real(blocks, "particles", "pic_deltaf_background_rho", source),
+        _header_real(blocks, "particles", "pic_deltaf_background_jx", source),
+        _header_real(blocks, "particles", "pic_deltaf_background_jy", source),
+        _header_real(blocks, "particles", "pic_deltaf_background_jz", source),
+        _header_real(blocks, "particles", "pic_no_mhd_bx", source),
+        _header_real(blocks, "particles", "pic_no_mhd_by", source),
+        _header_real(blocks, "particles", "pic_no_mhd_bz", source),
+        _header_real(blocks, "particles", "pic_ion_neutral_collision_rate", source),
+        _header_real(blocks, "particles", "pic_deltaf_adapt_interval", source),
+        _header_real(blocks, "particles", "deposit_qscale", source),
+        _header_real(blocks, "particles", "couple_j_to_efield_coeff", source),
+        _header_real(
+            blocks, "particles", "couple_moments_momentum_coeff", source
+        ),
+        _header_real(blocks, "particles", "couple_moments_energy_coeff", source),
+        _header_real(blocks, "particles", "pic_theta_max", source),
+        _header_real(
+            blocks, "particles", "pic_load_balance_cost_per_particle", source
+        ),
+    ]
+    for index, expected in enumerate(expected_reals):
+        _strict_equal(reals[index], expected, f"{source}/PIC model real {index}")
+    return dict(
+        _validate_raw_particle_model(
+            {
+                "state_kind": probe.state_kind,
+                "physical_mode": probe.physical_mode,
+                "cr_light_speed": probe.cr_light_speed,
+                "model_ints": ints,
+                "model_reals": reals,
+            },
+            f"{source}/raw_particle_model",
+        )
+    )
+
+
+def _parallel_shock_restart_controls(
+    blocks: Mapping[str, Mapping[str, str]],
+    probe: RestartPayloadProbe,
+    source: str,
+) -> dict[str, int | float]:
+    _require(
+        _header_parameter(blocks, "problem", "pgen_name", source) == "pic_parallel_shock",
+        f"{source}: problem/pgen_name drift",
+    )
+    problem_real = lambda key: _header_real(blocks, "problem", key, source)
+    problem_int = lambda key: _header_integer(blocks, "problem", key, source)
+    problem_bool = lambda key: int(_header_boolean(blocks, "problem", key, source))
+    shock_model_name = _header_parameter(blocks, "problem", "ps_shock_speed_model", source)
+    _require(
+        shock_model_name in {"finite_mach", "ideal_surface"},
+        f"{source}: shock-speed model drift",
+    )
+    shock_model = 0 if shock_model_name == "finite_mach" else 1
+    frame_mode_name = _header_parameter(blocks, "problem", "ps_frame_mode", source)
+    _require(frame_mode_name in {"velocity", "recenter"}, f"{source}: frame mode drift")
+    frame_mode = 0 if frame_mode_name == "velocity" else 1
+    inject_species = problem_int("ps_inject_species")
+    species_block = f"species{inject_species}"
+    particle_mass = _header_real(blocks, species_block, "mass", source)
+    particle_charge = _header_real(blocks, species_block, "charge", source)
+    deposit_qscale = _header_real(blocks, "particles", "deposit_qscale", source)
+    rho0 = problem_real("ps_rho0")
+    p0 = problem_real("ps_p0")
+    u0 = problem_real("ps_u0")
+    gamma = _header_real(blocks, "mhd", "gamma", source)
+    if shock_model == 1:
+        shock_speed = 0.5 * (gamma - 1.0) * u0
+    else:
+        cs2 = gamma * p0 / rho0
+        ms2 = u0 * u0 / cs2
+        compression = ((gamma + 1.0) * ms2) / ((gamma - 1.0) * ms2 + 2.0)
+        shock_speed = u0 / (compression - 1.0)
+    x1min = _header_real(blocks, "mesh", "x1min", source)
+    x1max = _header_real(blocks, "mesh", "x1max", source)
+    nx1 = _header_integer(blocks, "mesh", "nx1", source)
+    nx2 = _header_integer(blocks, "mesh", "nx2", source)
+    nx3 = _header_integer(blocks, "mesh", "nx3", source)
+    _require(nx1 > 0 and nx2 > 0 and nx3 > 0 and x1max > x1min, f"{source}: mesh controls drift")
+    controls: dict[str, int | float] = {
+        "ps_rho0": rho0,
+        "ps_p0": p0,
+        "ps_u0": u0,
+        "ps_b0": problem_real("ps_b0"),
+        "ps_eta": problem_real("ps_eta"),
+        "ps_vinj_over_u0": problem_real("ps_vinj_over_u0"),
+        "ps_inject_half_width_cells": problem_real("ps_inject_half_width_cells"),
+        "ps_inject_t_start": problem_real("ps_inject_t_start"),
+        "ps_inject_t_stop": problem_real("ps_inject_t_stop"),
+        "ps_remove_birth_time_before": problem_real("ps_remove_birth_time_before"),
+        "ps_shock_speed_model": shock_model,
+        "ps_refine_curv": problem_real("ps_refine_curv"),
+        "ps_derefine_curv": problem_real("ps_derefine_curv"),
+        "ps_rho_floor_frac": problem_real("ps_rho_floor_frac"),
+        "ps_p_floor_frac": problem_real("ps_p_floor_frac"),
+        "ps_enable_injection": problem_bool("ps_enable_injection"),
+        "ps_enable_subtraction": problem_bool("ps_enable_gas_subtraction"),
+        "ps_enable_curvature_amr": problem_bool("ps_enable_curvature_amr"),
+        "ps_test_source_transaction_terms_override": problem_bool(
+            "ps_test_source_transaction_terms_override"
+        ),
+        "ps_test_source_transaction_terms": problem_real(
+            "ps_test_source_transaction_terms"
+        ),
+        "ps_inject_species": inject_species,
+        "ps_inject_seed": problem_int("ps_inject_seed"),
+        "ps_particle_mass": particle_mass,
+        "ps_particle_charge": particle_charge,
+        "ps_particle_q_over_m": particle_charge / particle_mass,
+        "ps_particle_macro_mass": deposit_qscale * particle_mass,
+        "ps_particle_momentum_state": probe.state_kind,
+        "ps_particle_light_speed": probe.cr_light_speed,
+        "ps_enable_frame_tracking": problem_bool("ps_enable_frame_tracking"),
+        "ps_frame_mode": frame_mode,
+        "ps_frame_t_start": problem_real("ps_frame_t_start"),
+        "ps_frame_t_ramp": problem_real("ps_frame_t_ramp"),
+        "ps_frame_vfrac": problem_real("ps_frame_vfrac"),
+        "ps_frame_dv_max": problem_real("ps_frame_dv_max"),
+        "ps_frame_apply_to_particles": problem_bool("ps_frame_apply_to_particles"),
+        "ps_frame_apply_to_inflow": problem_bool("ps_frame_apply_to_inflow"),
+        "ps_frame_require_uniform": problem_bool("ps_frame_require_uniform"),
+        "ps_recenter_x_target": problem_real("ps_recenter_x_target"),
+        "ps_recenter_x_trigger": problem_real("ps_recenter_x_trigger"),
+        "ps_recenter_dx1": (x1max - x1min) / nx1,
+        "ps_recenter_shift_cells": problem_int("ps_recenter_shift_cells"),
+        "ps_recenter_vshock_model": problem_real("ps_recenter_vshock_model"),
+        "ps_shock_speed": shock_speed,
+        "ps_xshock0": x1min,
+        "ps_use_2d3v": int(
+            nx2 > 1
+            and nx3 == 1
+            and _header_boolean(blocks, "particles", "pic_enable_2d3v", source)
+        ),
+    }
+    parallel_shock_restart_control_fingerprint(controls)
+    return controls
+
+
+def _validate_restart_control_binding(binding: object, label: str) -> dict[str, object]:
+    mapping = _keys(binding, _RESTART_CONTROL_BINDING_KEYS, label)
+    _strict_equal(
+        mapping["fingerprint_schema"],
+        _Q011_RESTART_FINGERPRINT_SCHEMA,
+        f"{label}/fingerprint_schema",
+    )
+    stored = mapping["stored_fingerprint"]
+    _require(
+        type(stored) is str and _RESTART_FINGERPRINT_PATTERN.fullmatch(stored) is not None,
+        f"{label}: invalid stored restart-control fingerprint",
+    )
+    _strict_equal(
+        parallel_shock_restart_control_fingerprint(mapping["controls"]),
+        stored,
+        f"{label}/recomputed restart-control fingerprint",
+    )
+    return mapping
+
+
+def _restart_control_binding(
+    blocks: Mapping[str, Mapping[str, str]],
+    probe: RestartPayloadProbe,
+    source: str,
+) -> dict[str, object]:
+    controls = _parallel_shock_restart_controls(blocks, probe, source)
+    stored = _header_parameter(
+        blocks, "problem", "ps_restart_control_fingerprint", source
+    )
+    binding = {
+        "fingerprint_schema": _Q011_RESTART_FINGERPRINT_SCHEMA,
+        "stored_fingerprint": stored,
+        "controls": controls,
+    }
+    return dict(
+        _validate_restart_control_binding(binding, f"{source}/restart_control_binding")
+    )
+
+
+def _summation_tolerance(
+    lhs: float, rhs: float, absolute_contributions: float, accumulated_terms: float
+) -> float:
+    _require(
+        all(
+            math.isfinite(value)
+            for value in (lhs, rhs, absolute_contributions, accumulated_terms)
+        )
+        and absolute_contributions >= 0.0
+        and accumulated_terms >= 0.0,
+        "invalid cancellation-aware summation metadata",
+    )
+    relative_bound = max(accumulated_terms, 1.0) * _BINARY64_EPSILON
+    _require(relative_bound < 0.5, "unreliable cancellation-aware summation metadata")
+    summation_bound = relative_bound / (1.0 - relative_bound)
+    return (8.0 * summation_bound + 64.0 * _BINARY64_EPSILON) * max(
+        abs(lhs), abs(rhs), absolute_contributions, 1.0
+    )
+
+
 def _validate_q011_population_energy(
-    ledger: Mapping[str, object], prefix: str, label: str
+    ledger: Mapping[str, object], prefix: str, label: str, light_speed: float
 ) -> None:
     count = ledger[prefix + "_count_global"]
     mass = ledger[prefix + "_mass_global"]
@@ -582,21 +1198,18 @@ def _validate_q011_population_energy(
         )
         return
     _require(mass > 0.0, f"{label}: nonempty {prefix} population has nonpositive mass")
-    state_norm = math.hypot(*(component / mass for component in momentum))
     _require(
-        math.isfinite(state_norm),
+        type(light_speed) is float and math.isfinite(light_speed) and light_speed > 0.0,
+        f"{label}: invalid particle light speed",
+    )
+    state_components = [component / mass for component in momentum]
+    state_squared = sum(component * component for component in state_components)
+    _require(
+        math.isfinite(state_squared),
         f"{label}: {prefix} aggregate momentum is not finite",
     )
-    specific_lower_bound = (
-        _Q011_PARTICLE_LIGHT_SPEED
-        * state_norm
-        * (
-            state_norm
-            / (
-                math.hypot(_Q011_PARTICLE_LIGHT_SPEED, state_norm)
-                + _Q011_PARTICLE_LIGHT_SPEED
-            )
-        )
+    specific_lower_bound = state_squared / (
+        math.sqrt(1.0 + state_squared / (light_speed * light_speed)) + 1.0
     )
     lower_bound = mass * specific_lower_bound
     relative_bound = max(count, 1.0) * _BINARY64_EPSILON
@@ -614,7 +1227,9 @@ def _validate_q011_population_energy(
     )
 
 
-def _validate_startup_shock_ledger(ledger: object, label: str) -> dict[str, object]:
+def _validate_startup_shock_ledger(
+    ledger: object, label: str, *, light_speed: float
+) -> dict[str, object]:
     ledger_mapping = _keys(ledger, set(STARTUP_SHOCK_LEDGER_FIELDS), label)
     for field in _INTEGER_LEDGER_FIELDS:
         _require(type(ledger_mapping[field]) is int, f"{label}/{field}: expected integer")
@@ -669,7 +1284,7 @@ def _validate_startup_shock_ledger(ledger: object, label: str) -> dict[str, obje
                     ledger_mapping[prefix + suffix] == 0.0,
                     f"{label}: empty {prefix} ledger contains accumulated state",
                 )
-        _validate_q011_population_energy(ledger_mapping, prefix, label)
+        _validate_q011_population_energy(ledger_mapping, prefix, label, light_speed)
     tag_floor = ledger_mapping["ps_injection_tag_floor"]
     injected_count = int(ledger_mapping["ps_injected_cr_count_global"])
     next_tag = ledger_mapping["ps_next_tag"]
@@ -686,6 +1301,7 @@ def extract_startup_shock_ledger(
     payload: bytes, *, source: str = "<restart-bytes>"
 ) -> dict[str, object]:
     """Extract the complete schema-3 startup shock ledger from restart bytes."""
+    probe = probe_schema7_restart_payload(payload, source=source)
     parameters = _problem_parameters(payload, source)
     missing = [field for field in STARTUP_SHOCK_LEDGER_FIELDS if field not in parameters]
     _require(not missing, f"{source}: startup shock ledger is missing entries {missing!r}")
@@ -698,7 +1314,13 @@ def extract_startup_shock_ledger(
             ledger[field] = _parse_boolean(parameters[field], label)
         else:
             ledger[field] = _parse_real(parameters[field], label)
-    return dict(_validate_startup_shock_ledger(ledger, f"{source}/startup_shock_ledger"))
+    return dict(
+        _validate_startup_shock_ledger(
+            ledger,
+            f"{source}/startup_shock_ledger",
+            light_speed=probe.cr_light_speed,
+        )
+    )
 
 
 def _validate_particle_escape_ledger(
@@ -708,6 +1330,7 @@ def _validate_particle_escape_ledger(
     startup_shock_ledger: object | None = None,
     committed_cycle: object | None = None,
     committed_time: object | None = None,
+    light_speed: float,
 ) -> dict[str, object]:
     ledger_mapping = _keys(ledger, set(ESCAPE_LEDGER_FIELDS), label)
     for field in _ESCAPE_INTEGER_LEDGER_FIELDS:
@@ -721,7 +1344,7 @@ def _validate_particle_escape_ledger(
 
     _require(
         ledger_mapping["ps_escape_ledger_schema"] == EXPECTED_ESCAPE_LEDGER_SCHEMA,
-        f"{label}: escape ledger schema is not 1",
+        f"{label}: escape ledger schema is not 2",
     )
     _require(
         ledger_mapping["ps_escape_ledger_complete"],
@@ -737,11 +1360,18 @@ def _validate_particle_escape_ledger(
         "ps_escaped_injected_cr_mass_global",
         "ps_escaped_injected_cr_energy_global",
         "ps_escaped_initial_cr_count_global",
+        "ps_escaped_injected_cr_term_count_global",
+        "ps_escaped_injected_cr_abs_mass_global",
+        "ps_escaped_injected_cr_abs_momentum_x1_global",
+        "ps_escaped_injected_cr_abs_momentum_x2_global",
+        "ps_escaped_injected_cr_abs_momentum_x3_global",
+        "ps_escaped_injected_cr_abs_energy_global",
     ):
         _require(ledger_mapping[field] >= 0.0, f"{label}/{field}: negative ledger value")
     for field in (
         "ps_escaped_injected_cr_count_global",
         "ps_escaped_initial_cr_count_global",
+        "ps_escaped_injected_cr_term_count_global",
     ):
         _require(
             ledger_mapping[field].is_integer(),
@@ -757,14 +1387,64 @@ def _validate_particle_escape_ledger(
             "ps_escaped_injected_cr_momentum_x2_global",
             "ps_escaped_injected_cr_momentum_x3_global",
             "ps_escaped_injected_cr_energy_global",
+            "ps_escaped_injected_cr_term_count_global",
+            "ps_escaped_injected_cr_abs_mass_global",
+            "ps_escaped_injected_cr_abs_momentum_x1_global",
+            "ps_escaped_injected_cr_abs_momentum_x2_global",
+            "ps_escaped_injected_cr_abs_momentum_x3_global",
+            "ps_escaped_injected_cr_abs_energy_global",
         ):
             _require(
                 ledger_mapping[field] == 0.0,
                 f"{label}: empty escape ledger contains accumulated state",
             )
     _validate_q011_population_energy(
-        ledger_mapping, "ps_escaped_injected_cr", label
+        ledger_mapping, "ps_escaped_injected_cr", label, light_speed
     )
+    term_count = ledger_mapping["ps_escaped_injected_cr_term_count_global"]
+    escaped_count = ledger_mapping["ps_escaped_injected_cr_count_global"]
+    _require(
+        term_count == escaped_count,
+        f"{label}: escape comparison term count differs from escaped count",
+    )
+    for net_field, absolute_field in (
+        (
+            "ps_escaped_injected_cr_mass_global",
+            "ps_escaped_injected_cr_abs_mass_global",
+        ),
+        (
+            "ps_escaped_injected_cr_energy_global",
+            "ps_escaped_injected_cr_abs_energy_global",
+        ),
+    ):
+        net = ledger_mapping[net_field]
+        absolute = ledger_mapping[absolute_field]
+        _require(
+            abs(net - absolute)
+            <= _summation_tolerance(net, absolute, absolute, term_count),
+            f"{label}: {absolute_field} is inconsistent with positive contributions",
+        )
+    for net_field, absolute_field in (
+        (
+            "ps_escaped_injected_cr_momentum_x1_global",
+            "ps_escaped_injected_cr_abs_momentum_x1_global",
+        ),
+        (
+            "ps_escaped_injected_cr_momentum_x2_global",
+            "ps_escaped_injected_cr_abs_momentum_x2_global",
+        ),
+        (
+            "ps_escaped_injected_cr_momentum_x3_global",
+            "ps_escaped_injected_cr_abs_momentum_x3_global",
+        ),
+    ):
+        net = ledger_mapping[net_field]
+        absolute = ledger_mapping[absolute_field]
+        _require(
+            abs(net)
+            <= absolute + _summation_tolerance(net, absolute, absolute, term_count),
+            f"{label}: {absolute_field} is below the net escaped momentum",
+        )
     if ledger_mapping["ps_escape_audit_calls"] == 0:
         for field in _ESCAPE_REAL_LEDGER_FIELDS:
             _require(
@@ -774,9 +1454,10 @@ def _validate_particle_escape_ledger(
 
     if startup_shock_ledger is not None:
         startup = _validate_startup_shock_ledger(
-            startup_shock_ledger, f"{label}/startup_shock_ledger"
+            startup_shock_ledger,
+            f"{label}/startup_shock_ledger",
+            light_speed=light_speed,
         )
-        escaped_count = ledger_mapping["ps_escaped_injected_cr_count_global"]
         escaped_mass = ledger_mapping["ps_escaped_injected_cr_mass_global"]
         injected_count = startup["ps_injected_cr_count_global"]
         injected_mass = startup["ps_injected_cr_mass_global"]
@@ -828,7 +1509,8 @@ def _validate_particle_escape_ledger(
 def extract_particle_escape_ledger(
     payload: bytes, *, source: str = "<restart-bytes>"
 ) -> dict[str, object]:
-    """Extract the complete schema-1 Q-011 physical-boundary escape ledger."""
+    """Extract the complete schema-2 Q-011 physical-boundary escape ledger."""
+    probe = probe_schema7_restart_payload(payload, source=source)
     parameters = _problem_parameters(payload, source)
     missing = [field for field in ESCAPE_LEDGER_FIELDS if field not in parameters]
     _require(not missing, f"{source}: particle escape ledger is missing entries {missing!r}")
@@ -841,7 +1523,160 @@ def extract_particle_escape_ledger(
             ledger[field] = _parse_boolean(parameters[field], label)
         else:
             ledger[field] = _parse_real(parameters[field], label)
-    return dict(_validate_particle_escape_ledger(ledger, f"{source}/particle_escape_ledger"))
+    return dict(
+        _validate_particle_escape_ledger(
+            ledger,
+            f"{source}/particle_escape_ledger",
+            light_speed=probe.cr_light_speed,
+        )
+    )
+
+
+def _validate_active_particle_cohort(
+    cohort: object,
+    label: str,
+    *,
+    startup_shock_ledger: object,
+    particle_escape_ledger: object,
+    light_speed: float,
+) -> dict[str, object]:
+    mapping = _keys(cohort, _ACTIVE_PARTICLE_COHORT_KEYS, label)
+    for field in _ACTIVE_PARTICLE_COHORT_KEYS:
+        _require(type(mapping[field]) is int, f"{label}/{field}: expected integer")
+    _require(mapping["particle_count"] > 0, f"{label}: particle cohort is empty")
+    _require(
+        mapping["initial_count"] >= 0 and mapping["shock_injected_count"] >= 0,
+        f"{label}: negative particle-source count",
+    )
+    _require(
+        mapping["initial_count"] + mapping["shock_injected_count"]
+        == mapping["particle_count"],
+        f"{label}: particle-source counts do not cover the active cohort",
+    )
+    _require(
+        mapping["initial_count"] == 0,
+        f"{label}: active initial particle remains after startup-cohort removal",
+    )
+    _require(
+        0 <= mapping["minimum_tag"] <= mapping["maximum_tag"] <= _MAX_SIGNED_INT,
+        f"{label}: invalid active particle tag range",
+    )
+    startup = _validate_startup_shock_ledger(
+        startup_shock_ledger, f"{label}/startup_shock_ledger", light_speed=light_speed
+    )
+    escape = _validate_particle_escape_ledger(
+        particle_escape_ledger,
+        f"{label}/particle_escape_ledger",
+        startup_shock_ledger=startup,
+        light_speed=light_speed,
+    )
+    _require(
+        mapping["shock_injected_count"]
+        + int(startup["ps_removed_cr_count_global"])
+        + int(escape["ps_escaped_injected_cr_count_global"])
+        == int(startup["ps_injected_cr_count_global"]),
+        f"{label}: active plus removed plus escaped injected count is inconsistent",
+    )
+    return mapping
+
+
+def _active_particle_cohort_from_raw(
+    payload: bytes,
+    probe: RestartPayloadProbe,
+    restart_control_binding: Mapping[str, object],
+    startup_shock_ledger: Mapping[str, object],
+    particle_escape_ledger: Mapping[str, object],
+    committed_time: float,
+    source: str,
+) -> dict[str, object]:
+    controls = _validate_restart_control_binding(
+        restart_control_binding, f"{source}/restart_control_binding"
+    )["controls"]
+    real_values = np.frombuffer(
+        payload,
+        dtype="<f8",
+        count=probe.particle_count * probe.real_fields_per_particle,
+        offset=probe.particle_real_offset,
+    ).reshape(probe.particle_count, probe.real_fields_per_particle)
+    integer_values = np.frombuffer(
+        payload,
+        dtype="<i4",
+        count=probe.particle_count * probe.integer_fields_per_particle,
+        offset=probe.particle_integer_offset,
+    ).reshape(probe.particle_count, probe.integer_fields_per_particle)
+    _require(np.all(np.isfinite(real_values)), f"{source}: active particle payload is nonfinite")
+    gids = integer_values[:, _Q011_PGID]
+    tags = integer_values[:, _Q011_PTAG]
+    species = integer_values[:, _Q011_PSP]
+    sources = integer_values[:, _Q011_PCRSOURCE]
+    nspecies = probe.model_ints[8]
+    _require(np.all(gids >= 0), f"{source}: active particle gid is negative")
+    _require(np.all(tags >= 0), f"{source}: active particle tag is negative")
+    _require(
+        np.unique(tags).size == probe.particle_count,
+        f"{source}: active particle tags are not unique",
+    )
+    _require(
+        np.all((species >= 0) & (species < nspecies)),
+        f"{source}: active particle species is out of range",
+    )
+    _require(
+        np.all(
+            (sources == _Q011_SOURCE_INITIAL)
+            | (sources == _Q011_SOURCE_SHOCK_INJECTED)
+        ),
+        f"{source}: active particle source is invalid",
+    )
+    initial = sources == _Q011_SOURCE_INITIAL
+    injected = sources == _Q011_SOURCE_SHOCK_INJECTED
+    tag_floor = int(startup_shock_ledger["ps_injection_tag_floor"])
+    next_tag = int(startup_shock_ledger["ps_next_tag"])
+    _require(
+        np.all(tags[initial] < tag_floor),
+        f"{source}: active initial particle overlaps the injected tag range",
+    )
+    _require(
+        np.all((tags[injected] >= tag_floor) & (tags[injected] < next_tag)),
+        f"{source}: active injected particle tag is outside the injected tag range",
+    )
+    _require(
+        np.all(species[injected] == controls["ps_inject_species"]),
+        f"{source}: active injected particle species drift",
+    )
+    _require(
+        np.all(real_values[injected, _Q011_IPM] == controls["ps_particle_q_over_m"]),
+        f"{source}: active injected particle q/m drift",
+    )
+    _require(
+        np.all(real_values[injected, _Q011_IPWT] == 1.0),
+        f"{source}: active injected particle macro-weight drift",
+    )
+    births = real_values[injected, _Q011_IPT_BIRTH]
+    _require(
+        np.all(
+            (births >= controls["ps_inject_t_start"])
+            & (births <= controls["ps_inject_t_stop"])
+            & (births <= committed_time)
+            & (births >= controls["ps_remove_birth_time_before"])
+        ),
+        f"{source}: active injected particle birth-time cohort is inconsistent",
+    )
+    cohort = {
+        "particle_count": int(probe.particle_count),
+        "initial_count": int(np.count_nonzero(initial)),
+        "shock_injected_count": int(np.count_nonzero(injected)),
+        "minimum_tag": int(np.min(tags)),
+        "maximum_tag": int(np.max(tags)),
+    }
+    return dict(
+        _validate_active_particle_cohort(
+            cohort,
+            f"{source}/active_particle_cohort",
+            startup_shock_ledger=startup_shock_ledger,
+            particle_escape_ledger=particle_escape_ledger,
+            light_speed=probe.cr_light_speed,
+        )
+    )
 
 
 def validate_checkpoint_binding(
@@ -871,9 +1706,22 @@ def validate_checkpoint_binding(
         policy["restart_payload_probe"]["restart_schema"],
         "checkpoint binding/restart_schema",
     )
+    raw_model = _validate_raw_particle_model(
+        binding_mapping["raw_particle_model"], "checkpoint binding/raw_particle_model"
+    )
+    restart_controls = _validate_restart_control_binding(
+        binding_mapping["restart_control_binding"],
+        "checkpoint binding/restart_control_binding",
+    )
+    _strict_equal(
+        restart_controls["controls"]["ps_particle_light_speed"],
+        raw_model["cr_light_speed"],
+        "checkpoint binding/particle light-speed parity",
+    )
     _validate_startup_shock_ledger(
         binding_mapping["startup_shock_ledger"],
         "checkpoint binding/startup_shock_ledger",
+        light_speed=raw_model["cr_light_speed"],
     )
     _validate_particle_escape_ledger(
         binding_mapping["particle_escape_ledger"],
@@ -883,6 +1731,14 @@ def validate_checkpoint_binding(
         committed_time=binding_mapping[
             "checkpoint_observed_committed_time_omega0_inverse"
         ],
+        light_speed=raw_model["cr_light_speed"],
+    )
+    _validate_active_particle_cohort(
+        binding_mapping["active_particle_cohort"],
+        "checkpoint binding/active_particle_cohort",
+        startup_shock_ledger=binding_mapping["startup_shock_ledger"],
+        particle_escape_ledger=binding_mapping["particle_escape_ledger"],
+        light_speed=raw_model["cr_light_speed"],
     )
     _strict_equal(
         binding_mapping["retained_output_nominal_slots_after_checkpoint_omega0_inverse"],
@@ -910,8 +1766,24 @@ def bind_checkpoint_for_continuation(
     """Probe retained bytes and build a validated pre-execution checkpoint binding."""
     policy = _validated_preregistration(preregistration)
     probe = probe_schema7_restart_payload(restart_payload, source=source)
+    blocks = _parameter_blocks(restart_payload, source)
+    raw_model = _raw_q011_particle_model(probe, blocks, source)
+    restart_controls = _restart_control_binding(blocks, probe, source)
     ledger = extract_startup_shock_ledger(restart_payload, source=source)
     escape_ledger = extract_particle_escape_ledger(restart_payload, source=source)
+    committed_time = _canonical_observed_time(
+        checkpoint_observed_committed_time_omega0_inverse,
+        "checkpoint observed committed time",
+    )
+    active_cohort = _active_particle_cohort_from_raw(
+        restart_payload,
+        probe,
+        restart_controls,
+        ledger,
+        escape_ledger,
+        committed_time,
+        source,
+    )
     binding = {
         "checkpoint_nominal_slot_omega0_inverse": checkpoint_nominal_slot_omega0_inverse,
         "checkpoint_observed_committed_cycle": checkpoint_observed_committed_cycle,
@@ -921,6 +1793,9 @@ def bind_checkpoint_for_continuation(
         "restart_schema": probe.restart_schema,
         "startup_shock_ledger": ledger,
         "particle_escape_ledger": escape_ledger,
+        "raw_particle_model": raw_model,
+        "restart_control_binding": restart_controls,
+        "active_particle_cohort": active_cohort,
         "retained_output_nominal_slots_after_checkpoint_omega0_inverse": (
             retained_output_nominal_slots_after_checkpoint_omega0_inverse
         ),

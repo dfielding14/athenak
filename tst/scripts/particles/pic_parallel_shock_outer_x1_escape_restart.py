@@ -27,6 +27,12 @@ _ESCAPE_FLOAT_FIELDS = [
     "ps_escaped_injected_cr_momentum_x3_global",
     "ps_escaped_injected_cr_energy_global",
     "ps_escaped_initial_cr_count_global",
+    "ps_escaped_injected_cr_term_count_global",
+    "ps_escaped_injected_cr_abs_mass_global",
+    "ps_escaped_injected_cr_abs_momentum_x1_global",
+    "ps_escaped_injected_cr_abs_momentum_x2_global",
+    "ps_escaped_injected_cr_abs_momentum_x3_global",
+    "ps_escaped_injected_cr_abs_energy_global",
 ]
 _STARTUP_FLOAT_FIELDS = [
     "ps_removed_cr_count_global",
@@ -46,6 +52,9 @@ _TELEMETRY_PATTERN = re.compile(
     r" population_audit_calls=(?P<population>[0-9]+)"
     r" destruction_audit_calls=(?P<destruction>[0-9]+)"
     r" population_audit_policy=(?P<policy>[a-z_]+)"
+    r" event_probe_allreduces=(?P<event_probe>[0-9]+)"
+    r" full_payload_allreduces=(?P<full_payload>[0-9]+)"
+    r" mpi_escape_collective_policy=(?P<collective_policy>[a-z0-9_]+)"
     r" production_pilot_required=(?P<pilot>[01])"
 )
 _RESULTS = {}
@@ -208,6 +217,9 @@ def _escape_telemetry(output):
         "population_audit_calls": int(values["population"]),
         "destruction_audit_calls": int(values["destruction"]),
         "population_audit_policy": values["policy"],
+        "event_probe_allreduces": int(values["event_probe"]),
+        "full_payload_allreduces": int(values["full_payload"]),
+        "mpi_escape_collective_policy": values["collective_policy"],
         "production_pilot_required": values["pilot"] == "1",
     }
 
@@ -343,7 +355,7 @@ def _validate_metadata(metadata):
     injected = metadata["ps_injected_cr_count_global"]
     removed = metadata["ps_removed_cr_count_global"]
     return {
-        "schema_is_one": metadata["ps_escape_ledger_schema"] == 1,
+        "schema_is_two": metadata["ps_escape_ledger_schema"] == 2,
         "ledger_complete": metadata["ps_escape_ledger_complete"],
         "finite": finite,
         "audit_calls_positive": metadata["ps_escape_audit_calls"] > 0,
@@ -373,6 +385,27 @@ def _validate_metadata(metadata):
         ),
         "initial_escape_is_zero": (
             metadata["ps_escaped_initial_cr_count_global"] == 0.0
+        ),
+        "comparison_term_count_matches_escape_count": (
+            metadata["ps_escaped_injected_cr_term_count_global"] == escaped
+        ),
+        "comparison_abs_mass_matches_mass": math.isclose(
+            metadata["ps_escaped_injected_cr_abs_mass_global"],
+            metadata["ps_escaped_injected_cr_mass_global"],
+            rel_tol=2.0e-14,
+            abs_tol=2.0e-14,
+        ),
+        "comparison_abs_energy_matches_energy": math.isclose(
+            metadata["ps_escaped_injected_cr_abs_energy_global"],
+            metadata["ps_escaped_injected_cr_energy_global"],
+            rel_tol=2.0e-14,
+            abs_tol=2.0e-14,
+        ),
+        "comparison_abs_momentum_bounds_net": all(
+            abs(metadata["ps_escaped_injected_cr_momentum_x" + axis + "_global"])
+            <= metadata["ps_escaped_injected_cr_abs_momentum_x" + axis + "_global"]
+            + 2.0e-12
+            for axis in ("1", "2", "3")
         ),
     }
 
@@ -445,6 +478,16 @@ def _summary():
             == segment["ps_escape_audit_calls"]
             and _RESULTS["continued_telemetry"]["destruction_audit_calls"]
             == continued["ps_escape_audit_calls"]
+        ),
+        "mpi_collective_payload_is_event_gated": (
+            _RESULTS["segment_telemetry"]["full_payload_allreduces"]
+            <= _RESULTS["segment_telemetry"]["event_probe_allreduces"]
+            and _RESULTS["continued_telemetry"]["full_payload_allreduces"]
+            <= _RESULTS["continued_telemetry"]["event_probe_allreduces"]
+            and _RESULTS["segment_telemetry"]["mpi_escape_collective_policy"]
+            == "one_int_event_probe_per_stage_plus_event_only_14real_payload"
+            and _RESULTS["continued_telemetry"]["mpi_escape_collective_policy"]
+            == "one_int_event_probe_per_stage_plus_event_only_14real_payload"
         ),
         "production_performance_pilot_gate": {
             "status": "required_non_authorizing",
@@ -540,6 +583,21 @@ def run(**kwargs):
         ),
         "impossible_escape_momentum_energy": (
             ["problem/ps_escaped_injected_cr_momentum_x1_global=1e9"],
+            numeric_error,
+        ),
+        "small_u_zero_energy_escape": (
+            [
+                "problem/ps_escaped_injected_cr_momentum_x1_global="
+                + repr(_RESULTS["segment"]["ps_escaped_injected_cr_mass_global"] * 1.0e-4),
+                "problem/ps_escaped_injected_cr_momentum_x2_global=0",
+                "problem/ps_escaped_injected_cr_momentum_x3_global=0",
+                "problem/ps_escaped_injected_cr_energy_global=0",
+                "problem/ps_escaped_injected_cr_abs_momentum_x1_global="
+                + repr(_RESULTS["segment"]["ps_escaped_injected_cr_mass_global"] * 1.0e-4),
+                "problem/ps_escaped_injected_cr_abs_momentum_x2_global=0",
+                "problem/ps_escaped_injected_cr_abs_momentum_x3_global=0",
+                "problem/ps_escaped_injected_cr_abs_energy_global=0",
+            ],
             numeric_error,
         ),
     }
@@ -652,6 +710,7 @@ def analyze():
             "nearby_incorrect_audit_time",
             "nonfinite_momentum",
             "nonzero_initial_count",
+            "small_u_zero_energy_escape",
             "stale_audit_time",
             "wrong_positive_audit_calls",
             "zero_audit_calls",
@@ -668,6 +727,7 @@ def analyze():
         and summary["continuation_population_audits_bounded"]
         and summary["telemetry_policy_is_checkpoint_restart_run_end"]
         and summary["telemetry_destruction_audits_match_ledgers"]
+        and summary["mpi_collective_payload_is_event_gated"]
         and summary["production_performance_pilot_gate"]["runtime_marks_gate_required"]
         and (
             not summary["mpi2"]["requested"]

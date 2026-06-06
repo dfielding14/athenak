@@ -111,8 +111,8 @@ KOKKOS_INLINE_FUNCTION
 Real CRKineticEnergy(const bool momentum_state, const Real light_speed,
                     const Real sx, const Real sy, const Real sz) {
   if (momentum_state) {
-    return (CRLorentzFactor(sx, sy, sz, light_speed) - 1.0)*
-           light_speed*light_speed;
+    const Real state_squared = sx*sx + sy*sy + sz*sz;
+    return state_squared/(CRLorentzFactor(sx, sy, sz, light_speed) + 1.0);
   }
   return 0.5*(sx*sx + sy*sy + sz*sz);
 }
