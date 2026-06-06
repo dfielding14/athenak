@@ -10,6 +10,26 @@
 
 #include "athena.hpp"
 
+// Reasons recorded before particle migration compacts the particle arrays.
+enum class ParticleDestructionReason {
+  none = 0,
+  physical_boundary = 1,
+  invalid_parent_gid = 2,
+  excessive_cell_crossing = 3,
+  invalid_neighbor = 4,
+  invalid_send_target = 5
+};
+
+enum ParticlePhysicalBoundaryMask {
+  particle_boundary_none = 0,
+  particle_boundary_inner_x1 = 1 << 0,
+  particle_boundary_outer_x1 = 1 << 1,
+  particle_boundary_inner_x2 = 1 << 2,
+  particle_boundary_outer_x2 = 1 << 3,
+  particle_boundary_inner_x3 = 1 << 4,
+  particle_boundary_outer_x3 = 1 << 5
+};
+
 //----------------------------------------------------------------------------------------
 //! \struct ParticleLocationData
 //! \brief data describing location of data for particles communicated with MPI
@@ -18,6 +38,8 @@ struct ParticleLocationData {
   int prtcl_indx;   // index in particle array
   int dest_gid;     // GID of target MeshBlock
   int dest_rank;    // rank of target MeshBlock
+  int destruction_reason;  // ParticleDestructionReason; none for ordinary sends
+  int physical_boundary_mask;  // ParticlePhysicalBoundaryMask bits for physical escape
 };
 
 // Custom operators to sort ParticleLocationData array by dest_rank or prtcl_indx

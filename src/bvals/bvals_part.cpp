@@ -41,6 +41,9 @@ void UpdateGID(int &newgid, NeighborBlock nghbr, int myrank, int *pcounter,
     slist.d_view(index).prtcl_indx = p;
     slist.d_view(index).dest_gid   = nghbr.gid;
     slist.d_view(index).dest_rank  = nghbr.rank;
+    slist.d_view(index).destruction_reason =
+        static_cast<int>(ParticleDestructionReason::none);
+    slist.d_view(index).physical_boundary_mask = particle_boundary_none;
   }
 #endif
   return;
@@ -54,12 +57,16 @@ void UpdateGID(int &newgid, NeighborBlock nghbr, int myrank, int *pcounter,
 //! This opeartion should also be performed for single process runs
 
 KOKKOS_INLINE_FUNCTION
-void MarkForDestruction(int *pcounter, DualArray1D<ParticleLocationData> dlist, int p) {
+void MarkForDestruction(int *pcounter, DualArray1D<ParticleLocationData> dlist, int p,
+                        const ParticleDestructionReason reason,
+                        const int physical_boundary_mask) {
     int index = Kokkos::atomic_fetch_add(pcounter,1);
     dlist.d_view(index).prtcl_indx = p;
     // These particles don't actually get sent, thus following information is not needed
     dlist.d_view(index).dest_gid   = 0;
     dlist.d_view(index).dest_rank  = 0;
+    dlist.d_view(index).destruction_reason = static_cast<int>(reason);
+    dlist.d_view(index).physical_boundary_mask = physical_boundary_mask;
   return;
 }
 
@@ -110,7 +117,9 @@ bool UpdateOrDestroy(int &newgid, const NeighborViewType &nghbr, const int m,
                      DualArray1D<ParticleLocationData> sendlist_, int *destroy_counter,
                      DualArray1D<ParticleLocationData> destroylist_, const int p) {
   if (!HasValidNeighbor(nghbr, m, indx, nranks)) {
-    MarkForDestruction(destroy_counter, destroylist_, p);
+    MarkForDestruction(destroy_counter, destroylist_, p,
+                       ParticleDestructionReason::invalid_neighbor,
+                       particle_boundary_none);
     return false;
   }
   UpdateGID(newgid, nghbr(m, indx), myrank, send_counter, sendlist_, p);
@@ -156,7 +165,9 @@ TaskStatus ParticlesBoundaryValues::SetNewPrtclGID() {
   par_for("part_update",DevExeSpace(),0,(npart-1), KOKKOS_LAMBDA(const int p) {
     int m = pi(PGID,p) - gids;
     if (m < 0 || m >= nmb_thispack) {
-      MarkForDestruction(&atom_d_count(), pdestroyl, p);
+      MarkForDestruction(&atom_d_count(), pdestroyl, p,
+                         ParticleDestructionReason::invalid_parent_gid,
+                         particle_boundary_none);
       return;
     }
     int mylevel = mblev.d_view(m);
@@ -175,7 +186,9 @@ TaskStatus ParticlesBoundaryValues::SetNewPrtclGID() {
     int iz = ParticleMeshBlockOffset(x3, mbsize.d_view(m).x3min, lz);
 
     if (ix < -1 || ix > 1 || iy < -1 || iy > 1 || iz < -1 || iz > 1) {
-      MarkForDestruction(&atom_d_count(), pdestroyl, p);
+      MarkForDestruction(&atom_d_count(), pdestroyl, p,
+                         ParticleDestructionReason::excessive_cell_crossing,
+                         particle_boundary_none);
       return;
     }
 
@@ -237,25 +250,40 @@ TaskStatus ParticlesBoundaryValues::SetNewPrtclGID() {
       const BoundaryFlag ix3_bc = mb_bcs.d_view(m,BoundaryFace::inner_x3);
       const BoundaryFlag ox3_bc = mb_bcs.d_view(m,BoundaryFace::outer_x3);
 
-      bool check_boundary =
-        (ix < 0 && ix1_bc != BoundaryFlag::block &&
-         !IsPeriodicParticleBoundary(ix1_bc))
-        || (ix > 0 && ox1_bc != BoundaryFlag::block &&
-            !IsPeriodicParticleBoundary(ox1_bc))
-        || (iy < 0 && ix2_bc != BoundaryFlag::block &&
-            !IsPeriodicParticleBoundary(ix2_bc))
-        || (iy > 0 && ox2_bc != BoundaryFlag::block &&
-            !IsPeriodicParticleBoundary(ox2_bc))
-        || (iz < 0 && ix3_bc != BoundaryFlag::block &&
-            !IsPeriodicParticleBoundary(ix3_bc))
-        || (iz > 0 && ox3_bc != BoundaryFlag::block &&
-            !IsPeriodicParticleBoundary(ox3_bc));
+      int physical_boundary_mask = particle_boundary_none;
+      if (ix < 0 && ix1_bc != BoundaryFlag::block &&
+          !IsPeriodicParticleBoundary(ix1_bc)) {
+        physical_boundary_mask |= particle_boundary_inner_x1;
+      }
+      if (ix > 0 && ox1_bc != BoundaryFlag::block &&
+          !IsPeriodicParticleBoundary(ox1_bc)) {
+        physical_boundary_mask |= particle_boundary_outer_x1;
+      }
+      if (iy < 0 && ix2_bc != BoundaryFlag::block &&
+          !IsPeriodicParticleBoundary(ix2_bc)) {
+        physical_boundary_mask |= particle_boundary_inner_x2;
+      }
+      if (iy > 0 && ox2_bc != BoundaryFlag::block &&
+          !IsPeriodicParticleBoundary(ox2_bc)) {
+        physical_boundary_mask |= particle_boundary_outer_x2;
+      }
+      if (iz < 0 && ix3_bc != BoundaryFlag::block &&
+          !IsPeriodicParticleBoundary(ix3_bc)) {
+        physical_boundary_mask |= particle_boundary_inner_x3;
+      }
+      if (iz > 0 && ox3_bc != BoundaryFlag::block &&
+          !IsPeriodicParticleBoundary(ox3_bc)) {
+        physical_boundary_mask |= particle_boundary_outer_x3;
+      }
+      bool check_boundary = (physical_boundary_mask != particle_boundary_none);
       // Add particle to destruction list
       // At the time of sending the particles that need to be destroyed
       // are treated like those that have been sent
       // without actually being sent (i.e. they're remove from arrays)
       if (check_boundary) {
-        MarkForDestruction(&atom_d_count(), pdestroyl, p);
+        MarkForDestruction(&atom_d_count(), pdestroyl, p,
+                           ParticleDestructionReason::physical_boundary,
+                           physical_boundary_mask);
       } else {
         bool keep_particle = true;
         if (iz == 0) {
@@ -496,6 +524,10 @@ TaskStatus ParticlesBoundaryValues::CountSendsAndRecvs() {
       destroylist.h_view(old_ndestroy + n).prtcl_indx = invalid_prtcl_indcs[n];
       destroylist.h_view(old_ndestroy + n).dest_gid = 0;
       destroylist.h_view(old_ndestroy + n).dest_rank = 0;
+      destroylist.h_view(old_ndestroy + n).destruction_reason =
+          static_cast<int>(ParticleDestructionReason::invalid_send_target);
+      destroylist.h_view(old_ndestroy + n).physical_boundary_mask =
+          particle_boundary_none;
     }
     destroylist.template modify<HostMemSpace>();
     destroylist.template sync<DevExeSpace>();

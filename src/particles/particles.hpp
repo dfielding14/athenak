@@ -98,6 +98,9 @@ struct ParticlesTaskIDs {
 
 namespace particles {
 
+class Particles;
+using ParticleDestructionObserverFnPtr = void (*)(Particles*, Mesh*, int);
+
 KOKKOS_INLINE_FUNCTION
 Real CRLorentzFactor(const Real ux, const Real uy, const Real uz,
                      const Real light_speed) {
@@ -311,6 +314,7 @@ class Particles {
   MeshBoundaryValuesCC *pbval_mom = nullptr;
   MeshBoundaryValuesFC *pbval_jedge = nullptr;
   PaperSmoothMomentRecordTransport *paper_smooth_mom_transport = nullptr;
+  ParticleDestructionObserverFnPtr particle_destruction_observer = nullptr;
 
   // container to hold names of TaskIDs
   ParticlesTaskIDs id;

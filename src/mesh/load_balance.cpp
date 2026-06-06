@@ -1654,6 +1654,9 @@ void MeshRefinement::CreateParticleLists() {
       sendlist_d(index).prtcl_indx = p;
       sendlist_d(index).dest_gid   = new_gid;
       sendlist_d(index).dest_rank  = dest_rank;
+      sendlist_d(index).destruction_reason =
+          static_cast<int>(ParticleDestructionReason::none);
+      sendlist_d(index).physical_boundary_mask = particle_boundary_none;
     }
   });
 

@@ -1,0 +1,143 @@
+# Bounded local regression for physical outer-x1 shock-particle escape accounting.
+# This is an engineering fixture, not production or qualification evidence.
+
+<comment>
+problem   = pic_parallel_shock outer-x1 escape and restart regression
+
+<job>
+basename  = pic_parallel_shock_outer_x1_escape_restart
+
+<mesh>
+nghost    = 2
+nx1       = 8
+x1min     = 0.0
+x1max     = 8.0
+ix1_bc    = reflect
+ox1_bc    = inflow
+
+nx2       = 8
+x2min     = 0.0
+x2max     = 8.0
+ix2_bc    = periodic
+ox2_bc    = periodic
+
+nx3       = 1
+x3min     = 0.0
+x3max     = 1.0
+ix3_bc    = periodic
+ox3_bc    = periodic
+
+<meshblock>
+nx1       = 8
+nx2       = 8
+nx3       = 1
+
+<mesh_refinement>
+refinement           = none
+num_levels           = 1
+ncycle_check         = 1
+refinement_interval  = 1
+max_nmb_per_rank     = 8
+
+<time>
+evolution  = dynamic
+integrator = rk2
+cfl_number = 0.3
+nlim       = 100
+tlim       = 10.0
+ndiag      = 20
+
+<mhd>
+eos         = ideal
+reconstruct = plm
+rsolver     = llf
+gamma       = 1.66666666667
+
+<coord>
+special_rel = false
+general_rel = false
+
+<particles>
+particle_type                      = cosmic_ray
+ppc                                = 0.0
+pusher                             = boris_tsc
+pic_enable_2d3v                    = true
+nspecies                           = 1
+cr_distribution                    = random
+deposit_moments                    = true
+deposit_order                      = 2
+deposit_qscale                     = 1.0e-3
+couple_moments_to_mhd              = true
+couple_j_to_efield_coeff           = 1.0
+couple_j_to_efield_representation  = cell_centered
+couple_j_deposition_mode           = cc_convert
+couple_fluid_feedback_order        = mhd_src_terms
+couple_moments_momentum_to_mhd     = true
+couple_moments_energy_to_mhd       = true
+couple_moments_momentum_coeff      = 1.0
+couple_moments_energy_coeff        = 1.0
+cr_vx0                             = 0.0
+cr_vy0                             = 0.0
+cr_vz0                             = 0.0
+pic_physical_mode                  = paper_mhd_pic_vl2_tsc
+pic_background_mode                = coupled
+pic_feedback_mode                  = coupled
+pic_interp_scheme                  = tsc
+pic_cr_light_speed                 = 10000.0
+pic_cr_initial_state               = momentum
+pic_cr_hall_mode                   = off
+pic_wave_damping_mode              = off
+pic_ion_neutral_collision_rate     = 0.0
+pic_max_cell_cross                 = 2
+pic_theta_max                      = 0.3
+pic_deltaf_mode                    = off
+pic_deltaf_adapt_mode              = off
+pic_deltaf_adapt_interval          = 0.0
+pic_load_balance_cost_per_particle = 0.0
+pic_sort_interval                  = 0
+pic_intermediate_arrays            = auto
+pic_random_seed                    = 54012
+pic_expanding_box_mode             = off
+
+<species0>
+mass   = 1.0
+charge = 1.0
+
+<problem>
+pgen_name                     = pic_parallel_shock
+ps_rho0                       = 1.0
+ps_p0                         = 10.0
+ps_u0                         = 3.0
+ps_b0                         = 1.0
+ps_eta                        = 5.0e-2
+ps_vinj_over_u0               = 3.16227766017
+ps_inject_half_width_cells    = 0.5
+ps_shock_speed_model          = ideal_surface
+ps_inject_t_start             = 0.0
+ps_inject_t_stop              = 10.0
+ps_remove_birth_time_before   = -1.0
+ps_enable_injection           = true
+ps_enable_gas_subtraction     = false
+ps_enable_curvature_amr       = false
+ps_rho_floor_frac             = 1.0e-6
+ps_p_floor_frac               = 1.0e-8
+ps_inject_species             = 0
+ps_inject_seed                = 54012
+ps_seed_noise_amp             = 0.0
+ps_seed_noise_seed            = 54012
+ps_enable_frame_tracking      = false
+ps_frame_mode                 = recenter
+ps_frame_diag_dcycle          = 20
+ps_feedback_diag_dcycle       = 0
+ps_frame_apply_to_particles   = true
+ps_frame_require_uniform      = true
+ps_recenter_x_target          = 2.0
+ps_recenter_x_trigger         = 6.0
+ps_recenter_shift_cells       = 1
+ps_recenter_vshock_model      = -1.0
+
+<output1>
+file_type             = rst
+id                    = rst
+dcycle                = 100
+single_file_per_rank  = false

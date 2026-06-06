@@ -483,6 +483,9 @@ TaskStatus Particles::SendCnt(Driver *pdrive, int stage) {
   Q017Fence();
   Kokkos::Timer q017_timer;
   TaskStatus tstat = pbval_part->CountSendsAndRecvs();
+  if (tstat == TaskStatus::complete && particle_destruction_observer != nullptr) {
+    particle_destruction_observer(this, pmy_pack->pmesh, stage);
+  }
   ObserveQ017OwnedKokkosViewAllocationBytes();
   Q017Fence();
   AccumulateQ017Timer(Q017ParticleTimer::migration, q017_timer.seconds());
