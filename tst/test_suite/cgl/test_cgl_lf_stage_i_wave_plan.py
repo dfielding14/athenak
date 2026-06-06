@@ -1408,6 +1408,232 @@ class Campaign:
             },
         }
 
+    def publish_f118_current_source_authority(
+        self, f116_binding: dict[str, object]
+    ) -> dict[str, object]:
+        """Publish F118 as current while retaining exact F116 predecessor bytes."""
+
+        f116_evidence = json.loads(planner.f116_current_source_authority_path().read_text())
+        implementation = f116_evidence["implementation"]
+        bridge = implementation["intermediate_36140_bundle"]
+        final = implementation["current_source_bundle"]
+        predecessor = dict(final)
+        predecessor.pop("candidate_path")
+        predecessor["selected_as_current"] = False
+        predecessor["role"] = "retained-non-current-predecessor"
+        readme = planner.expected_path("source-archives/README.md")
+        sums = planner.expected_path("source-archives/SHA256SUMS")
+        before = {
+            "readme_sha256": sha256(readme),
+            "sha256sums_sha256": sha256(sums),
+            "bridge_listed_exactly_once": True,
+            "predecessor_current_source_bundle_listed_exactly_once": True,
+            "final_bundle_listed": False,
+            "corrupt_c7_listed": False,
+            "historical_f115_preserved": True,
+        }
+        after = {
+            "readme_sha256": sha256(readme),
+            "sha256sums_sha256": sha256(sums),
+            "bridge_listed_exactly_once": True,
+            "predecessor_current_source_bundle_listed_exactly_once": True,
+            "final_bundle_listed_exactly_once": True,
+            "corrupt_c7_listed": False,
+            "historical_f115_preserved": True,
+            "historical_f116_preserved": True,
+            "all_prior_checksum_entries_preserved": True,
+            "sole_current_source_bundle": final["path"],
+        }
+        authority_path = planner.f118_current_source_authority_path()
+        evidence = {
+            "schema_version": 1,
+            "record_type": "stage-i-current-source-authority-supersession-evidence",
+            "checkpoint": "F-118",
+            "execution_epoch": planner.EXECUTION_EPOCH,
+            "generated_utc": utc_text(),
+            "scope": {
+                "relationship": "current-source-selection-only-supersession",
+                "summary": "Select the exact committed F118 source without execution authority.",
+                "preserves": planner.F118_SCOPE_PRESERVES,
+                "does_not_authorize": planner.F118_SCOPE_DOES_NOT_AUTHORIZE,
+            },
+            "predecessor_authorities": {
+                "historical_f116": {
+                    key: f116_binding[key]
+                    for key in (
+                        "evidence", "provenance_review", "plasma_review",
+                        "publication_audit",
+                    )
+                }
+            },
+            "implementation": {
+                "publisher": implementation["publisher"],
+                "committed_tools": implementation["committed_tools"],
+                "intermediate_36140_bundle": bridge,
+                "predecessor_current_source_bundle": predecessor,
+                "current_source_bundle": final,
+            },
+            "source_archive_catalog": {"before": before, "after": after},
+            "authorization": planner.F118_AUTHORIZATION,
+            "validation": planner.F118_VALIDATION_CLAIMS,
+            "publication_requirements": planner.F118_PUBLICATION_REQUIREMENTS,
+        }
+        write_json(authority_path, evidence)
+        authority_path.chmod(0o444)
+        verified = {
+            "authorization_broadening": False,
+            "bridge_selected_as_current": False,
+            "predecessor_current_source_bundle_selected_as_current": False,
+            "corrupt_c7_excluded": True,
+            "current_source_selection_only": True,
+            "final_bundle_sha256": final["sha256"],
+            "final_head": final["head"],
+            "historical_f115_preserved": True,
+            "historical_f116_preserved": True,
+        }
+        review_specs = (
+            (
+                planner.f118_provenance_security_review_path(),
+                "provenance-security",
+                "approved-for-publication",
+                "fixture-f118-provenance-reviewer",
+            ),
+            (
+                planner.f118_plasma_scientific_review_path(),
+                "plasma-scientific-continuation",
+                "approved",
+                "fixture-f118-plasma-reviewer",
+            ),
+        )
+        for path, kind, decision, agent_id in review_specs:
+            write_json(
+                path,
+                {
+                    "schema_version": 1,
+                    "record_type": (
+                        "stage-i-current-source-authority-supersession-independent-review"
+                    ),
+                    "checkpoint": "F-118",
+                    "execution_epoch": planner.EXECUTION_EPOCH,
+                    "review_kind": kind,
+                    "decision": decision,
+                    "reviewed_candidate": {
+                        "path": f"/tmp/{authority_path.name}.candidate",
+                        "sha256": sha256(authority_path),
+                    },
+                    "published_f118": {
+                        "path": str(authority_path),
+                        "sha256": sha256(authority_path),
+                    },
+                    "reviewer": {
+                        "agent_id": agent_id,
+                        "identity": f"fixture independent {kind} reviewer",
+                    },
+                    "reviewed_utc": utc_text(),
+                    "findings": ["Exact F118 source-only authority verified."],
+                    "limitations": ["No prepare, submit, scheduler, or scientific authority."],
+                    "verified": verified,
+                },
+            )
+            path.chmod(0o444)
+        f116_digests = {
+            "evidence_sha256": f116_binding["evidence"]["sha256"],
+            "provenance_review_sha256": f116_binding["provenance_review"]["sha256"],
+            "plasma_review_sha256": f116_binding["plasma_review"]["sha256"],
+            "publication_audit_sha256": f116_binding["publication_audit"]["sha256"],
+        }
+        audit_path = planner.f118_publication_audit_path()
+        write_json(
+            audit_path,
+            {
+                "schema_version": 1,
+                "record_type": (
+                    "stage-i-current-source-authority-supersession-publication-audit"
+                ),
+                "checkpoint": "F-118",
+                "execution_epoch": planner.EXECUTION_EPOCH,
+                "published_utc": utc_text(),
+                "artifact": {
+                    "path": str(authority_path), "sha256": sha256(authority_path),
+                    "mode": "0444", "links": 1,
+                },
+                "independent_reviews": {
+                    "reviews_bind_exact_published_f118_sha256": sha256(authority_path),
+                    "provenance_security": {
+                        "path": str(planner.f118_provenance_security_review_path()),
+                        "sha256": sha256(planner.f118_provenance_security_review_path()),
+                        "mode": "0444", "links": 1,
+                    },
+                    "plasma_scientific_continuation": {
+                        "path": str(planner.f118_plasma_scientific_review_path()),
+                        "sha256": sha256(planner.f118_plasma_scientific_review_path()),
+                        "mode": "0444", "links": 1,
+                    },
+                },
+                "historical_f116_authority": f116_digests,
+                "source_archive_catalog": {
+                    "readme": {
+                        "path": str(readme), "sha256": sha256(readme),
+                        "mode": "0644", "links": 1,
+                    },
+                    "sha256sums": {
+                        "path": str(sums), "sha256": sha256(sums),
+                        "mode": "0644", "links": 1,
+                    },
+                    "bridge_bundle": {
+                        "path": str(planner.expected_path(bridge["path"])),
+                        "sha256": bridge["sha256"], "mode": "0644", "links": 1,
+                        "head": bridge["head"], "role": "retained-non-current-bridge",
+                        "selected_as_current": False,
+                    },
+                    "predecessor_current_source_bundle": {
+                        "path": str(self.current_bundle), "sha256": final["sha256"],
+                        "mode": "0644", "links": 1, "head": final["head"],
+                        "role": "retained-non-current-predecessor",
+                        "selected_as_current": False,
+                    },
+                    "current_source_bundle": {
+                        "path": str(self.current_bundle), "sha256": final["sha256"],
+                        "mode": "0644", "links": 1, "head": final["head"],
+                        "selected_as_current": True,
+                    },
+                    "corrupt_c7_absent_from_active_checksum_ledger": True,
+                    "sole_current_source_bundle": str(self.current_bundle),
+                },
+                "authority_and_enforcement": planner.F118_AUTHORIZATION,
+                "publication": planner.F118_PUBLICATION_METHOD,
+            },
+        )
+        audit_path.chmod(0o444)
+        return {
+            "checkpoint": "F-118",
+            "evidence": {
+                "path": authority_path.relative_to(self.root).as_posix(),
+                "sha256": sha256(authority_path),
+            },
+            "provenance_review": {
+                "path": planner.f118_provenance_security_review_path().relative_to(
+                    self.root
+                ).as_posix(),
+                "sha256": sha256(planner.f118_provenance_security_review_path()),
+            },
+            "plasma_review": {
+                "path": planner.f118_plasma_scientific_review_path().relative_to(
+                    self.root
+                ).as_posix(),
+                "sha256": sha256(planner.f118_plasma_scientific_review_path()),
+            },
+            "publication_audit": {
+                "path": audit_path.relative_to(self.root).as_posix(),
+                "sha256": sha256(audit_path),
+            },
+            "final_source_bundle": {
+                "path": final["path"],
+                "sha256": final["sha256"],
+                "verified_revisions": final["verified_revisions"],
+            },
+        }
+
     def lineage_digest(self) -> str:
         """Return the recost-compatible digest of fixture scientific lineages."""
 
@@ -2287,6 +2513,9 @@ class Campaign:
         reservations_evidence = file_evidence(planner.reservations_path())
         qualification_evidence = file_evidence(planner.qualification_path())
         f116_source_authority = self.publish_f116_current_source_authority()
+        current_source_authority = self.publish_f118_current_source_authority(
+            f116_source_authority
+        )
         active = [
             item for item in self.reservations if item["state"] in {"prepared", "submitted"}
         ]
@@ -2335,7 +2564,7 @@ class Campaign:
             projection_sha256,
             storage_sha256,
             profiles[0],
-            f116_source_authority,
+            current_source_authority,
         )
         manifest_bindings = [
             {"path": path.relative_to(self.root).as_posix(), "sha256": sha256(path)}
@@ -2475,7 +2704,7 @@ class Campaign:
                 "matrix_revision": self.controller_revision,
                 "source_bundle_sha256": self.current_bundle_sha256,
                 "source_bundle_verified_revisions": self.current_bundle_revisions,
-                "source_authority": f116_source_authority,
+                "source_authority": current_source_authority,
                 "qualification_approval_sha256": qualification_evidence["sha256"],
                 "storage_evidence_sha256": storage_sha256,
                 "reconciliation_sha256": "a" * 64,
@@ -2698,39 +2927,39 @@ def add_credible_above_envelope_measurements(campaign: Campaign) -> None:
     )
 
 
-def f116_binding(campaign: Campaign) -> dict[str, object]:
-    """Return the exact F116 binding retained by the promoted recost."""
+def current_source_binding(campaign: Campaign) -> dict[str, object]:
+    """Return the exact F118 binding retained by the promoted recost."""
 
     recost = json.loads(campaign.recost_path.read_text())
     return recost["provenance"]["source_authority"]
 
 
-def republish_changed_f116_review_chain(campaign: Campaign) -> dict[str, object]:
-    """Rebind F116 reviews/audit after an intentional semantic mutation."""
+def republish_changed_f118_review_chain(campaign: Campaign) -> dict[str, object]:
+    """Rebind F118 reviews/audit after an intentional semantic mutation."""
 
-    authority_path = planner.f116_current_source_authority_path()
+    authority_path = planner.f118_current_source_authority_path()
     authority_sha = sha256(authority_path)
     review_paths = (
-        planner.f116_provenance_security_review_path(),
-        planner.f116_plasma_scientific_review_path(),
+        planner.f118_provenance_security_review_path(),
+        planner.f118_plasma_scientific_review_path(),
     )
     for path in review_paths:
         review = json.loads(path.read_text())
         review["reviewed_candidate"]["sha256"] = authority_sha
-        review["published_f116"]["sha256"] = authority_sha
+        review["published_f118"]["sha256"] = authority_sha
         write_json(path, review)
         path.chmod(0o444)
-    audit_path = planner.f116_publication_audit_path()
+    audit_path = planner.f118_publication_audit_path()
     audit = json.loads(audit_path.read_text())
     audit["artifact"]["sha256"] = authority_sha
-    audit["independent_reviews"]["reviews_bind_exact_published_f116_sha256"] = authority_sha
+    audit["independent_reviews"]["reviews_bind_exact_published_f118_sha256"] = authority_sha
     audit["independent_reviews"]["provenance_security"]["sha256"] = sha256(review_paths[0])
     audit["independent_reviews"]["plasma_scientific_continuation"]["sha256"] = sha256(
         review_paths[1]
     )
     write_json(audit_path, audit)
     audit_path.chmod(0o444)
-    binding = f116_binding(campaign)
+    binding = current_source_binding(campaign)
     binding["evidence"]["sha256"] = authority_sha
     binding["provenance_review"]["sha256"] = sha256(review_paths[0])
     binding["plasma_review"]["sha256"] = sha256(review_paths[1])
@@ -2769,11 +2998,11 @@ def test_schema2_recost_and_f116_emit_exact_command_free_wave(campaign):
     f116 = plan["wave"]["packets"][1]["production_provenance"][
         "current_source_authority"
     ]
-    assert f116 == f116_binding(campaign)
+    assert f116 == current_source_binding(campaign)
     assert f116["final_source_bundle"]["sha256"] == campaign.current_bundle_sha256
     assert plan["wave"]["packets"][1]["production_provenance"][
         "current_source_authority_evidence"
-    ]["artifact"]["path"] == str(planner.f116_current_source_authority_path())
+    ]["artifact"]["path"] == str(planner.f118_current_source_authority_path())
     assert plan["wave"]["packets"][0]["production_provenance"]["source_bundle"][
         "path"
     ] == str(planner.f115_source_bundle_path())
@@ -2992,7 +3221,7 @@ def test_r03_post_f115_recost_continues_normally_from_accepted_and_clean_partial
     assert packet["authorization_state"] == "planning_only_reviewed_recost_profile_non_authorizing"
     assert packet["authorization_evidence"] is None
     assert packet["production_provenance"]["source_bundle"]["path"] == str(campaign.current_bundle)
-    assert packet["production_provenance"]["current_source_authority"] == f116_binding(campaign)
+    assert packet["production_provenance"]["current_source_authority"] == current_source_binding(campaign)
 
     r03_s03 = campaign.add_recorded(
         "R03",
@@ -3013,8 +3242,8 @@ def test_r03_post_f115_recost_continues_normally_from_accepted_and_clean_partial
     assert packet["authorization_evidence"] is None
 
 
-def test_f116_branch_tip_is_accepted_and_profile_self_assertion_is_rejected(campaign):
-    validation = planner.validate_f116_current_source_authority(f116_binding(campaign))
+def test_f118_branch_tip_is_accepted_and_profile_self_assertion_is_rejected(campaign):
+    validation = planner.validate_f118_current_source_authority(current_source_binding(campaign))
     assert validation["source_bundle"]["independent_validation"]["advertised_heads"] == [
         {
             "revision": campaign.controller_revision,
@@ -3022,7 +3251,7 @@ def test_f116_branch_tip_is_accepted_and_profile_self_assertion_is_rejected(camp
         }
     ]
     with pytest.raises(ValueError, match="keys differ"):
-        planner.validate_f116_current_source_authority(
+        planner.validate_f118_current_source_authority(
             {
                 "evidence_sha256": planner.R03_F115_SHA256,
                 "publication_audit_sha256": planner.R03_F115_PUBLICATION_AUDIT_SHA256,
@@ -3032,26 +3261,26 @@ def test_f116_branch_tip_is_accepted_and_profile_self_assertion_is_rejected(camp
                 "plasma_review_sha256": planner.R03_F115_PLASMA_SCIENTIFIC_REVIEW_SHA256,
             }
         )
-    authority_path = planner.f116_current_source_authority_path()
+    authority_path = planner.f118_current_source_authority_path()
     authority = json.loads(authority_path.read_text())
     authority["authorization"]["prepare_authorized"] = True
     write_json(authority_path, authority)
     authority_path.chmod(0o444)
-    rebound = republish_changed_f116_review_chain(campaign)
+    rebound = republish_changed_f118_review_chain(campaign)
     with pytest.raises(ValueError, match="source-selection-only scope, or authority differs"):
-        planner.validate_f116_current_source_authority(rebound)
+        planner.validate_f118_current_source_authority(rebound)
 
 
-def test_f116_requires_distinct_independent_reviews(campaign):
-    provenance = json.loads(planner.f116_provenance_security_review_path().read_text())
-    plasma_path = planner.f116_plasma_scientific_review_path()
+def test_f118_requires_distinct_independent_reviews(campaign):
+    provenance = json.loads(planner.f118_provenance_security_review_path().read_text())
+    plasma_path = planner.f118_plasma_scientific_review_path()
     plasma = json.loads(plasma_path.read_text())
     plasma["reviewer"] = provenance["reviewer"]
     write_json(plasma_path, plasma)
     plasma_path.chmod(0o444)
-    rebound = republish_changed_f116_review_chain(campaign)
+    rebound = republish_changed_f118_review_chain(campaign)
     with pytest.raises(ValueError, match="distinct reviewers"):
-        planner.validate_f116_current_source_authority(rebound)
+        planner.validate_f118_current_source_authority(rebound)
 
 
 def test_independent_review_is_declared_process_separation_not_crypto_identity(campaign):
@@ -3075,7 +3304,7 @@ def test_independent_review_is_declared_process_separation_not_crypto_identity(c
     assert request_reviewer["identity_assurance_limitation"] == (
         planner.REQUEST_REVIEW_IDENTITY_LIMITATION
     )
-    f116 = planner.validate_f116_current_source_authority(f116_binding(campaign))
+    f116 = planner.validate_f118_current_source_authority(current_source_binding(campaign))
     assurances = (
         plan["evidence"]["recost_authority"]["independent_review_assurance"],
         plan["evidence"]["recost_authority"]["request_review_chain"][
@@ -3108,15 +3337,15 @@ def test_independent_review_is_declared_process_separation_not_crypto_identity(c
         campaign.plan()
 
 
-def test_f116_reviews_cannot_predate_supersession_evidence(campaign):
-    review_path = planner.f116_provenance_security_review_path()
+def test_f118_reviews_cannot_predate_supersession_evidence(campaign):
+    review_path = planner.f118_provenance_security_review_path()
     review = json.loads(review_path.read_text())
     review["reviewed_utc"] = utc_text(NOW - timedelta(seconds=1))
     write_json(review_path, review)
     review_path.chmod(0o444)
-    rebound = republish_changed_f116_review_chain(campaign)
+    rebound = republish_changed_f118_review_chain(campaign)
     with pytest.raises(ValueError, match="identity, independence, or verification differs"):
-        planner.validate_f116_current_source_authority(rebound)
+        planner.validate_f118_current_source_authority(rebound)
 
 
 @pytest.mark.parametrize(

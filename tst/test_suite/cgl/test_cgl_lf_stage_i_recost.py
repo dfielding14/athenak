@@ -30,6 +30,7 @@ EPOCH_SLUG = "E03_forcing_policy"
 F113_NAME = "mks24_stage_i_E03_forcing_policy_F113_controller_transition_evidence.json"
 F115_NAME = "mks24_stage_i_E03_forcing_policy_F115_source_bundle_recovery_supersession_evidence.json"
 F116_NAME = "mks24_stage_i_E03_forcing_policy_F116_current_source_authority_supersession_evidence.json"
+F118_NAME = "mks24_stage_i_E03_forcing_policy_F118_current_source_authority_supersession_evidence.json"
 QUALIFICATION_NAME = "mks24_stage_i_E03_forcing_policy_qualification_approval.json"
 R17_READINESS_NAME = "mks24_stage_i_E03_forcing_policy_R17_readiness_evidence.json"
 AUTHORIZED_REVIEWER = (
@@ -763,8 +764,59 @@ def refresh_storage(
     write_json(storage, value)
 
 
+def refresh_f118_historical_f116_binding(fixture: dict[str, object]) -> None:
+    """Refresh the F118 wrapper after an intentional historical F116 mutation."""
+
+    authority = fixture["source_authority"]
+    provenance = fixture["source_authority_provenance_review"]
+    plasma = fixture["source_authority_plasma_review"]
+    authority_audit = fixture["source_authority_audit"]
+    historical = fixture["f116_source_authority"]
+    historical_provenance = fixture["f116_source_authority_provenance_review"]
+    historical_plasma = fixture["f116_source_authority_plasma_review"]
+    historical_audit = fixture["f116_source_authority_audit"]
+    assert all(isinstance(item, Path) for item in (authority, provenance, plasma, authority_audit))
+    assert all(
+        isinstance(item, Path)
+        for item in (historical, historical_provenance, historical_plasma, historical_audit)
+    )
+    authority_value = json.loads(authority.read_text())
+    historical_bindings = authority_value["predecessor_authorities"]["historical_f116"]
+    for key, path in (
+        ("evidence", historical),
+        ("publication_audit", historical_audit),
+        ("provenance_review", historical_provenance),
+        ("plasma_review", historical_plasma),
+    ):
+        historical_bindings[key]["sha256"] = sha256(path)
+    write_immutable_json(authority, authority_value)
+    for review_path in (provenance, plasma):
+        review_value = json.loads(review_path.read_text())
+        review_value["reviewed_candidate"]["sha256"] = sha256(authority)
+        review_value["published_f118"]["sha256"] = sha256(authority)
+        write_immutable_json(review_path, review_value)
+    authority_audit_value = json.loads(authority_audit.read_text())
+    authority_audit_value["artifact"]["sha256"] = sha256(authority)
+    authority_audit_value["independent_reviews"][
+        "reviews_bind_exact_published_f118_sha256"
+    ] = sha256(authority)
+    authority_audit_value["independent_reviews"]["provenance_security"]["sha256"] = sha256(
+        provenance
+    )
+    authority_audit_value["independent_reviews"]["plasma_scientific_continuation"][
+        "sha256"
+    ] = sha256(plasma)
+    authority_audit_value["historical_f116_authority"] = {
+        "evidence_sha256": sha256(historical),
+        "publication_audit_sha256": sha256(historical_audit),
+        "provenance_review_sha256": sha256(historical_provenance),
+        "plasma_review_sha256": sha256(historical_plasma),
+    }
+    write_immutable_json(authority_audit, authority_audit_value)
+
+
 def refresh_ceiling(fixture: dict[str, object]) -> None:
-    """Refresh the exact F113 publication binding."""
+    """Refresh the exact F113 publication binding through F115/F116/F118."""
 
     ceiling = fixture["ceiling"]
     audit = fixture["ceiling_audit"]
@@ -773,12 +825,6 @@ def refresh_ceiling(fixture: dict[str, object]) -> None:
     value = json.loads(audit.read_text())
     value["artifact"]["sha256"] = sha256(ceiling)
     write_json(audit, value)
-    authority = fixture["source_authority"]
-    provenance = fixture["source_authority_provenance_review"]
-    plasma = fixture["source_authority_plasma_review"]
-    authority_audit = fixture["source_authority_audit"]
-    assert all(isinstance(item, Path) for item in (authority, provenance, plasma, authority_audit))
-    authority_value = json.loads(authority.read_text())
     historical = fixture["historical_source_authority"]
     historical_provenance = fixture["historical_source_authority_provenance_review"]
     historical_plasma = fixture["historical_source_authority_plasma_review"]
@@ -806,6 +852,13 @@ def refresh_ceiling(fixture: dict[str, object]) -> None:
         "sha256"
     ] = sha256(historical_plasma)
     write_immutable_json(historical_audit, historical_audit_value)
+
+    authority = fixture["f116_source_authority"]
+    provenance = fixture["f116_source_authority_provenance_review"]
+    plasma = fixture["f116_source_authority_plasma_review"]
+    authority_audit = fixture["f116_source_authority_audit"]
+    assert all(isinstance(item, Path) for item in (authority, provenance, plasma, authority_audit))
+    authority_value = json.loads(authority.read_text())
     historical_bindings = authority_value["predecessor_authorities"]["historical_f115"]
     for key, path in (
         ("evidence", historical),
@@ -838,6 +891,7 @@ def refresh_ceiling(fixture: dict[str, object]) -> None:
         "plasma_review_sha256": sha256(historical_plasma),
     }
     write_immutable_json(authority_audit, authority_audit_value)
+    refresh_f118_historical_f116_binding(fixture)
     refresh_request(fixture)
 
 
@@ -1589,14 +1643,20 @@ def recost_fixture(tmp_path):
     source_bundle = source_archives / "athenak-fixture.bundle"
     git(repository, "bundle", "create", str(source_bundle), "--all")
     source_bundle.chmod(0o644)
+    f116_source_bundle = source_archives / "athenak-historical-f116.bundle"
+    f116_source_bundle.write_bytes(source_bundle.read_bytes())
+    f116_source_bundle.chmod(0o644)
     historical_source_bundle = source_archives / "athenak-historical-f115.bundle"
     historical_source_bundle.write_bytes(b"retained historical F115 source bundle\n")
     historical_source_bundle.chmod(0o644)
     source_archive_readme = source_archives / "README.md"
-    source_archive_readme.write_text("Fixture F116 current source catalog.\n")
+    source_archive_readme.write_text("Fixture F118 current source catalog.\n")
     source_archive_readme.chmod(0o644)
     source_archive_sums = source_archives / "SHA256SUMS"
-    source_archive_sums.write_text(f"{sha256(source_bundle)}  {source_bundle.name}\n")
+    source_archive_sums.write_text(
+        f"{sha256(f116_source_bundle)}  {f116_source_bundle.name}\n"
+        f"{sha256(source_bundle)}  {source_bundle.name}\n"
+    )
     source_archive_sums.chmod(0o644)
     executable = root / "build/frontier-fixture/src/athena"
     executable.parent.mkdir(parents=True)
@@ -1625,6 +1685,7 @@ def recost_fixture(tmp_path):
         "executable": executable,
         "build_manifest": build_manifest,
         "source_bundle": source_bundle,
+        "f116_source_bundle": f116_source_bundle,
         "historical_source_bundle": historical_source_bundle,
         "transaction_store": transaction_store,
         "recost_transaction_store": recost_transaction_store,
@@ -1879,15 +1940,15 @@ def recost_fixture(tmp_path):
         },
     }
     current_bundle = {
-        "candidate_path": str(source_bundle),
-        "path": source_bundle.relative_to(root).as_posix(),
-        "sha256": sha256(source_bundle),
+        "candidate_path": str(f116_source_bundle),
+        "path": f116_source_bundle.relative_to(root).as_posix(),
+        "sha256": sha256(f116_source_bundle),
         "complete_history": True,
         "head": revision,
         "advertised_tip": {"revision": revision, "name": "HEAD"},
         "verified_revisions": [f113_revision, revision],
         "selected_as_current": True,
-        "subject": "Fixture current F116 source authority",
+        "subject": "Fixture historical F116 source authority",
     }
     bridge_bundle = {
         "path": historical_source_bundle.relative_to(root).as_posix(),
@@ -1939,7 +2000,7 @@ def recost_fixture(tmp_path):
         "bridge_selected_as_current": False,
         "corrupt_c7_excluded": True,
         "current_source_selection_only": True,
-        "final_bundle_sha256": sha256(source_bundle),
+        "final_bundle_sha256": sha256(f116_source_bundle),
         "final_head": revision,
         "historical_f115_preserved": True,
     }
@@ -2039,6 +2100,217 @@ def recost_fixture(tmp_path):
                     "links": 1,
                     "head": f113_revision,
                     "role": "retained-non-current-bridge",
+                    "selected_as_current": False,
+                },
+                "current_source_bundle": {
+                    "path": str(f116_source_bundle),
+                    "sha256": sha256(f116_source_bundle),
+                    "mode": "0644",
+                    "links": 1,
+                    "head": revision,
+                    "selected_as_current": True,
+                },
+                "corrupt_c7_absent_from_active_checksum_ledger": True,
+                "sole_current_source_bundle": str(f116_source_bundle),
+            },
+            "authority_and_enforcement": F116_AUTHORIZATION,
+            "publication": (
+                "recoverable-forward-transaction-with-publication-audit-commit-marker-"
+                "under-stage-i-lock"
+            ),
+        },
+    )
+    f116_source_authority = source_authority
+    f116_source_authority_provenance_review = source_authority_provenance_review
+    f116_source_authority_plasma_review = source_authority_plasma_review
+    f116_source_authority_audit = source_authority_audit
+    f116_bindings = {
+        "evidence": {
+            "path": source_authority.relative_to(root).as_posix(),
+            "sha256": sha256(source_authority),
+        },
+        "publication_audit": {
+            "path": source_authority_audit.relative_to(root).as_posix(),
+            "sha256": sha256(source_authority_audit),
+        },
+        "provenance_review": {
+            "path": source_authority_provenance_review.relative_to(root).as_posix(),
+            "sha256": sha256(source_authority_provenance_review),
+        },
+        "plasma_review": {
+            "path": source_authority_plasma_review.relative_to(root).as_posix(),
+            "sha256": sha256(source_authority_plasma_review),
+        },
+    }
+    f116_digests = {
+        "evidence_sha256": sha256(source_authority),
+        "publication_audit_sha256": sha256(source_authority_audit),
+        "provenance_review_sha256": sha256(source_authority_provenance_review),
+        "plasma_review_sha256": sha256(source_authority_plasma_review),
+    }
+    f118_predecessor_bundle = dict(current_bundle)
+    f118_predecessor_bundle.pop("candidate_path")
+    f118_predecessor_bundle["selected_as_current"] = False
+    f118_predecessor_bundle["role"] = "retained-non-current-predecessor"
+    f118_current_bundle = {
+        "candidate_path": str(source_bundle),
+        "path": source_bundle.relative_to(root).as_posix(),
+        "sha256": sha256(source_bundle),
+        "complete_history": True,
+        "head": revision,
+        "advertised_tip": {"revision": revision, "name": "HEAD"},
+        "verified_revisions": [f113_revision, revision],
+        "selected_as_current": True,
+        "subject": "Fixture current F118 source authority",
+    }
+    source_authority = accounting / F118_NAME
+    write_immutable_json(
+        source_authority,
+        {
+            "schema_version": 1,
+            "record_type": "stage-i-current-source-authority-supersession-evidence",
+            "checkpoint": "F-118",
+            "execution_epoch": EPOCH,
+            "generated_utc": (timestamp - timedelta(minutes=6)).isoformat(),
+            "scope": {
+                "relationship": "current-source-selection-only-supersession",
+                "summary": "Select exact F118 fixture source without execution authority.",
+                "preserves": ["Immutable F116 and all scientific controls."],
+                "does_not_authorize": [
+                    "prepare",
+                    "submit",
+                    "direct sbatch",
+                    "scheduler mutation",
+                ],
+            },
+            "predecessor_authorities": {"historical_f116": f116_bindings},
+            "implementation": {
+                "publisher": {"fixture": True},
+                "committed_tools": f116_committed_tools(repository, revision),
+                "intermediate_36140_bundle": bridge_bundle,
+                "predecessor_current_source_bundle": f118_predecessor_bundle,
+                "current_source_bundle": f118_current_bundle,
+            },
+            "source_archive_catalog": {
+                "before": {"fixture": "F116"},
+                "after": {"fixture": "F118"},
+            },
+            "authorization": F116_AUTHORIZATION,
+            "validation": {"fixture": "passed"},
+            "publication_requirements": {"fixture": "reviewed publication"},
+        },
+    )
+    f118_verified = {
+        "authorization_broadening": False,
+        "bridge_selected_as_current": False,
+        "predecessor_current_source_bundle_selected_as_current": False,
+        "corrupt_c7_excluded": True,
+        "current_source_selection_only": True,
+        "final_bundle_sha256": sha256(source_bundle),
+        "final_head": revision,
+        "historical_f115_preserved": True,
+        "historical_f116_preserved": True,
+    }
+    source_authority_provenance_review = accounting / f"{F118_NAME}.provenance_security_review.json"
+    source_authority_plasma_review = accounting / f"{F118_NAME}.plasma_scientific_review.json"
+    for path, kind, decision, agent in (
+        (
+            source_authority_provenance_review,
+            "provenance-security",
+            "approved-for-publication",
+            "fixture-f118-provenance-reviewer",
+        ),
+        (
+            source_authority_plasma_review,
+            "plasma-scientific-continuation",
+            "approved",
+            "fixture-f118-plasma-reviewer",
+        ),
+    ):
+        write_immutable_json(
+            path,
+            {
+                "schema_version": 1,
+                "record_type": "stage-i-current-source-authority-supersession-independent-review",
+                "checkpoint": "F-118",
+                "execution_epoch": EPOCH,
+                "review_kind": kind,
+                "decision": decision,
+                "reviewed_candidate": {
+                    "path": str(source_authority.with_suffix(".json.candidate")),
+                    "sha256": sha256(source_authority),
+                },
+                "published_f118": {
+                    "path": str(source_authority),
+                    "sha256": sha256(source_authority),
+                },
+                "reviewer": {"agent_id": agent, "identity": f"fixture {kind} reviewer"},
+                "reviewed_utc": (timestamp - timedelta(minutes=5)).isoformat(),
+                "findings": ["Exact current F118 source-only authority verified."],
+                "limitations": ["No prepare, submit, scheduler, or science authority."],
+                "verified": f118_verified,
+            },
+        )
+    source_authority_audit = accounting / f"{F118_NAME}.publication_audit.json"
+    write_immutable_json(
+        source_authority_audit,
+        {
+            "schema_version": 1,
+            "record_type": "stage-i-current-source-authority-supersession-publication-audit",
+            "checkpoint": "F-118",
+            "execution_epoch": EPOCH,
+            "published_utc": (timestamp - timedelta(minutes=4)).isoformat(),
+            "artifact": {
+                "path": str(source_authority),
+                "sha256": sha256(source_authority),
+                "mode": "0444",
+                "links": 1,
+            },
+            "independent_reviews": {
+                "reviews_bind_exact_published_f118_sha256": sha256(source_authority),
+                "provenance_security": {
+                    "path": str(source_authority_provenance_review),
+                    "sha256": sha256(source_authority_provenance_review),
+                    "mode": "0444",
+                    "links": 1,
+                },
+                "plasma_scientific_continuation": {
+                    "path": str(source_authority_plasma_review),
+                    "sha256": sha256(source_authority_plasma_review),
+                    "mode": "0444",
+                    "links": 1,
+                },
+            },
+            "historical_f116_authority": f116_digests,
+            "source_archive_catalog": {
+                "readme": {
+                    "path": str(source_archive_readme),
+                    "sha256": sha256(source_archive_readme),
+                    "mode": "0644",
+                    "links": 1,
+                },
+                "sha256sums": {
+                    "path": str(source_archive_sums),
+                    "sha256": sha256(source_archive_sums),
+                    "mode": "0644",
+                    "links": 1,
+                },
+                "bridge_bundle": {
+                    "path": str(historical_source_bundle),
+                    "sha256": sha256(historical_source_bundle),
+                    "mode": "0644",
+                    "links": 1,
+                    "head": f113_revision,
+                    "role": "retained-non-current-bridge",
+                    "selected_as_current": False,
+                },
+                "predecessor_current_source_bundle": {
+                    "path": str(f116_source_bundle),
+                    "sha256": sha256(f116_source_bundle),
+                    "mode": "0644",
+                    "links": 1,
+                    "head": revision,
+                    "role": "retained-non-current-predecessor",
                     "selected_as_current": False,
                 },
                 "current_source_bundle": {
@@ -2160,6 +2432,12 @@ def recost_fixture(tmp_path):
             "source_authority_audit": source_authority_audit,
             "source_authority_provenance_review": source_authority_provenance_review,
             "source_authority_plasma_review": source_authority_plasma_review,
+            "f116_source_authority": f116_source_authority,
+            "f116_source_authority_audit": f116_source_authority_audit,
+            "f116_source_authority_provenance_review": (
+                f116_source_authority_provenance_review
+            ),
+            "f116_source_authority_plasma_review": f116_source_authority_plasma_review,
             "historical_source_authority": historical_source_authority,
             "historical_source_authority_audit": historical_source_authority_audit,
             "historical_source_authority_provenance_review": historical_provenance_review,
@@ -2238,7 +2516,7 @@ def recost_fixture(tmp_path):
                     "sha256": sha256(ceiling_audit),
                 },
                 "source_authority": {
-                    "checkpoint": "F-116",
+                    "checkpoint": "F-118",
                     "evidence": {
                         "path": str(source_authority.relative_to(root)),
                         "sha256": sha256(source_authority),
@@ -2414,7 +2692,7 @@ def test_draft_request_action_generates_authenticated_prerequisites_without_self
     assert value["record_type"] == "stage-i-recost-recommendation-request"
     assert len(value["inputs"]["manifests"]) == 1
     assert len(value["inputs"]["scheduler_evidence"]) == 1
-    assert value["inputs"]["source_authority"]["checkpoint"] == "F-116"
+    assert value["inputs"]["source_authority"]["checkpoint"] == "F-118"
     assert value["inputs"]["matrix"]["path"] == "inputs/cgl_lf_paper/mks24_stage_i_manifest.json"
     assert value["inputs"]["stage_i_helper"]["revision"] == recost_fixture["revision"]
     assert value["inputs"]["qualification_approval"]["path"] == (
@@ -2762,6 +3040,41 @@ def test_f119_managed_install_and_draft_preserve_published_f117(recost_fixture):
             sha256(wrong),
         ),
         "restricted to exact F-119",
+    )
+
+
+@pytest.mark.parametrize("mutation", ("source-authority", "predecessor"))
+def test_f119_draft_request_preflights_authority_before_publishing_prerequisites(
+    recost_fixture, mutation
+):
+    def mutate(packet):
+        if mutation == "source-authority":
+            packet["inputs"]["source_authority"]["evidence"]["sha256"] = "0" * 64
+        else:
+            packet["inputs"]["predecessor_recost"]["sha256"] = "0" * 64
+
+    packet = write_draft_packet(
+        recost_fixture, checkpoint_number=119, mutate=mutate
+    )
+    rejected = run_action(
+        recost_fixture,
+        "draft-request",
+        "--packet",
+        str(packet),
+        "--expected-packet-sha256",
+        sha256(packet),
+    )
+    assert rejected.returncode == 1
+    accounting = recost_fixture["accounting"]
+    assert isinstance(accounting, Path)
+    prefix = f"mks24_stage_i_{EPOCH_SLUG}_F119"
+    assert not any(
+        path.exists()
+        for path in (
+            accounting / f"{prefix}_recost_request.json",
+            accounting / f"{prefix}_reconciliation_evidence.json",
+            accounting / f"{prefix}_storage_evidence.json",
+        )
     )
 
 
@@ -3199,13 +3512,13 @@ def test_request_review_identity_is_declared_noncryptographic_only(
     assert_rejected(run_generator(recost_fixture), message)
 
 
-def test_generator_requires_f116_current_source_and_build_qualification_chains(
+def test_generator_requires_f118_current_source_and_build_qualification_chains(
     recost_fixture,
 ):
     authority = recost_fixture["source_authority"]
     assert isinstance(authority, Path)
     authority.chmod(0o644)
-    assert_rejected(run_generator(recost_fixture), "F116 evidence mode is 0644, expected 0444")
+    assert_rejected(run_generator(recost_fixture), "F118 evidence mode is 0644, expected 0444")
 
     authority.chmod(0o444)
     qualification = recost_fixture["qualification"]
@@ -3217,7 +3530,7 @@ def test_generator_requires_f116_current_source_and_build_qualification_chains(
     assert_rejected(run_generator(recost_fixture), "qualification approval build binding differs")
 
 
-def test_generator_rejects_legacy_expanded_f116_source_authority_binding(
+def test_generator_rejects_legacy_expanded_source_authority_binding(
     recost_fixture,
 ):
     request = recost_fixture["request"]
@@ -3240,11 +3553,11 @@ def test_generator_rejects_legacy_expanded_f116_source_authority_binding(
     write_immutable_json(review, review_value)
     assert_rejected(
         run_generator(recost_fixture),
-        "F116 current source authority bindings schema differs",
+        "F118 current source authority bindings schema differs",
     )
 
 
-def test_generator_rejects_legacy_f116_publisher_schema(recost_fixture):
+def test_generator_rejects_legacy_source_authority_publisher_schema(recost_fixture):
     authority = recost_fixture["source_authority"]
     assert isinstance(authority, Path)
     value = json.loads(authority.read_text())
@@ -3254,7 +3567,7 @@ def test_generator_rejects_legacy_f116_publisher_schema(recost_fixture):
     }
     write_immutable_json(authority, value)
     refresh_request(recost_fixture)
-    assert_rejected(run_generator(recost_fixture), "F116 evidence schema differs")
+    assert_rejected(run_generator(recost_fixture), "F118 evidence schema differs")
 
 
 @pytest.mark.parametrize(
@@ -3266,7 +3579,7 @@ def test_generator_rejects_legacy_f116_publisher_schema(recost_fixture):
         ("digest", "historical revision bytes differ"),
     ),
 )
-def test_f116_consumer_requires_exact_seven_committed_tools(
+def test_f118_consumer_requires_exact_seven_committed_tools(
     recost_fixture, mutation, message,
 ):
     module = load_recost_module()
@@ -3275,7 +3588,7 @@ def test_f116_consumer_requires_exact_seven_committed_tools(
     assert isinstance(repository, Path)
     assert isinstance(revision, str)
     tools = f116_committed_tools(repository, revision)
-    assert module.authenticate_f116_committed_tools(tools, repository, revision) == tools
+    assert module.authenticate_f118_committed_tools(tools, repository, revision) == tools
     invalid = deepcopy(tools)
     if mutation == "missing":
         invalid.pop()
@@ -3286,10 +3599,10 @@ def test_f116_consumer_requires_exact_seven_committed_tools(
     else:
         invalid[0]["sha256"] = "0" * 64
     with pytest.raises(ValueError, match=message):
-        module.authenticate_f116_committed_tools(invalid, repository, revision)
+        module.authenticate_f118_committed_tools(invalid, repository, revision)
 
 
-def test_generator_rejects_f116_six_part_binding_to_historical_f115_bundle(
+def test_generator_rejects_f118_six_part_binding_to_historical_f115_bundle(
     recost_fixture,
 ):
     request = recost_fixture["request"]
@@ -3311,7 +3624,7 @@ def test_generator_rejects_f116_six_part_binding_to_historical_f115_bundle(
     write_immutable_json(review, review_value)
     assert_rejected(
         run_generator(recost_fixture),
-        "F116 six-part binding does not select the current source bundle",
+        "F118 six-part binding does not select the current source bundle",
     )
 
 
@@ -3528,7 +3841,7 @@ def test_generator_accepts_exact_f116_supersession_of_missing_f113_audit(recost_
     assert completed.returncode == 0, completed.stderr
     artifact = json.loads(recost_fixture["output"].read_text())
     assert artifact["promoted_f113"]["publication_audit"]["supersession"]["status"] == (
-        "controlled-exact-transitive-F115-F116-supersession"
+        "controlled-exact-transitive-F115-F116-F118-supersession"
     )
 
 
@@ -3545,15 +3858,16 @@ def test_generator_rejects_f113_audit_adoption_while_historical_audit_exists(
 
 
 def test_generator_rejects_f116_supersession_without_exact_historical_f115(recost_fixture):
-    audit = recost_fixture["source_authority_audit"]
+    audit = recost_fixture["f116_source_authority_audit"]
     assert isinstance(audit, Path)
     audit_value = json.loads(audit.read_text())
     audit_value["historical_f115_authority"]["evidence_sha256"] = "0" * 64
     write_immutable_json(audit, audit_value)
+    refresh_f118_historical_f116_binding(recost_fixture)
     refresh_request(recost_fixture)
     assert_rejected(
         run_generator(recost_fixture),
-        "F116 publication audit identity or authority differs",
+        "historical F116 publication audit identity differs",
     )
 
 
@@ -6784,6 +7098,158 @@ if __name__ == "__main__":
     assert report["root"] == str(root)
 
 
+def write_failed_f117_attempt(module, root: Path) -> dict[str, Path]:
+    """Write one internally bound failed F117 draft state and pin its digests."""
+
+    accounting = root / "accounting"
+    accounting.mkdir(parents=True, exist_ok=True)
+    paths = {
+        key: root / relative
+        for key, relative in module.F117_FAILED_ATTEMPT_RELATIVES.items()
+    }
+    generated = (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat()
+    reconciliation = {
+        "execution_epoch": EPOCH,
+        "root": str(root),
+        "consistent": True,
+        "counts": {
+            "transactions": 0,
+            "reservations": 0,
+            "active_reservations": 0,
+            "ledger_rows": 0,
+            "manifests": 0,
+        },
+        "issues": [],
+    }
+    storage = {
+        "schema_version": 1,
+        "record_type": "stage-i-storage-evidence",
+        "execution_epoch": EPOCH,
+        "root": str(root),
+        "measured_utc": generated,
+        "available_bytes": 3,
+        "retained_stage_i_bytes": 0,
+        "required_safety_bytes": 1,
+        "projected_authorized_wave_growth_bytes": 2,
+        "projection_method": STORAGE_PROJECTION_METHOD,
+        "profile_projections_sha256": "a" * 64,
+    }
+    write_json(paths["reconciliation"], reconciliation)
+    write_json(paths["storage"], storage)
+    legacy = {
+        "path": f"accounting/{module.LEGACY_F114_RECOST_NAME}",
+        "sha256": module.LEGACY_F114_RECOST_SHA256,
+    }
+    legacy_audit = {
+        "path": f"accounting/{module.LEGACY_F114_RECOST_NAME}.publication_audit.json",
+        "sha256": module.LEGACY_F114_PUBLICATION_AUDIT_SHA256,
+    }
+    inputs = {
+        "reconciliation": None,
+        "ledger": None,
+        "reservations": None,
+        "manifests": None,
+        "scheduler_evidence": None,
+        "storage_evidence": None,
+        "source_bundle": {"fixture": True},
+        "matrix": {"fixture": True},
+        "stage_i_helper": {"fixture": True},
+        "ceiling_evidence": {"fixture": True},
+        "ceiling_publication_audit": {"fixture": True},
+        "source_authority": {"checkpoint": "F-116"},
+        "qualification_approval": {"fixture": True},
+        "predecessor_recost": legacy,
+        "predecessor_recost_independent_review": None,
+        "predecessor_recost_publication_audit": legacy_audit,
+        "r17_readiness_evidence": None,
+        "r17_readiness_independent_review": None,
+        "r17_readiness_publication_audit": None,
+    }
+    packet = {
+        "schema_version": 1,
+        "record_type": "stage-i-recost-request-draft-packet",
+        "checkpoint": "F-117",
+        "artifact_name": "mks24_stage_i_E03_forcing_policy_F117_recost_evidence.json",
+        "execution_epoch": EPOCH,
+        "generated_utc": generated,
+        "expires_utc": (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat(),
+        "requested_by": "fixture failed F117 author",
+        "scope": "Exact failed F117 draft state.",
+        "barrier": {"recorded_segments": []},
+        "inputs": inputs,
+        "recommendations": {"mode": "bounded-wave", "max_wave_nodes": 1, "profiles": []},
+        "draft_policy": {
+            "independent_review_created": False,
+            "self_approved": False,
+            "scheduler_mutation_authorized": False,
+            "canonical_mutation_authorized": False,
+            "required_storage_safety_bytes": 1,
+        },
+    }
+    write_json(paths["packet"], packet)
+    request = deepcopy(packet)
+    request.pop("draft_policy")
+    request["schema_version"] = 2
+    request["record_type"] = "stage-i-recost-recommendation-request"
+    request["inputs"].update(
+        {
+            "reconciliation": {
+                "path": module.F117_FAILED_ATTEMPT_RELATIVES["reconciliation"].as_posix(),
+                "sha256": sha256(paths["reconciliation"]),
+            },
+            "ledger": {"fixture": True},
+            "reservations": {"fixture": True},
+            "manifests": [],
+            "scheduler_evidence": [],
+            "storage_evidence": {
+                "path": module.F117_FAILED_ATTEMPT_RELATIVES["storage"].as_posix(),
+                "sha256": sha256(paths["storage"]),
+            },
+        }
+    )
+    write_json(paths["request"], request)
+    module.F117_FAILED_ATTEMPT_SHA256 = {
+        key: sha256(path) for key, path in paths.items()
+    }
+    return paths
+
+
+def legacy_f114_arguments(module, root: Path, monkeypatch):
+    """Return one exact local legacy F114 predecessor argument tuple."""
+
+    accounting = root / "accounting"
+    accounting.mkdir(parents=True, exist_ok=True)
+    artifact = accounting / module.LEGACY_F114_RECOST_NAME
+    generated = datetime.now(timezone.utc) - timedelta(minutes=10)
+    published = generated + timedelta(minutes=1)
+    current = generated + timedelta(minutes=5)
+    recost = {
+        "schema_version": 1,
+        "record_type": "stage-i-clean-partial-recost-checkpoint",
+        "execution_epoch": EPOCH,
+        "checkpoint": "F-114",
+        "generated_utc": generated.isoformat(),
+    }
+    write_json(artifact, recost)
+    audit = artifact.with_name(f"{artifact.name}.publication_audit.json")
+    audit_value = {
+        "schema_version": 1,
+        "record_type": "observed-publication",
+        "execution_epoch": EPOCH,
+        "published_utc": published.isoformat(),
+        "artifact": {
+            "path": str(artifact),
+            "sha256": sha256(artifact),
+            "mode": "0644",
+            "links": 1,
+        },
+    }
+    write_json(audit, audit_value)
+    monkeypatch.setattr(module, "LEGACY_F114_RECOST_SHA256", sha256(artifact))
+    monkeypatch.setattr(module, "LEGACY_F114_PUBLICATION_AUDIT_SHA256", sha256(audit))
+    return artifact, recost, audit, audit_value, current
+
+
 def test_legacy_f114_bootstrap_is_exact_and_consumable_once(monkeypatch, tmp_path):
     module = load_recost_module()
     root = tmp_path / "root"
@@ -6902,5 +7368,190 @@ def test_legacy_f114_bootstrap_is_exact_and_consumable_once(monkeypatch, tmp_pat
             current,
             "mks24_stage_i_E03_forcing_policy_F117_recost_evidence.json",
             "F-117",
+            module.InputTracker(),
+        )
+
+
+def test_f119_exactly_supersedes_authenticated_failed_f117_attempt(monkeypatch, tmp_path):
+    module = load_recost_module()
+    root = tmp_path / "root"
+    artifact, recost, audit, audit_value, current = legacy_f114_arguments(
+        module, root, monkeypatch
+    )
+    paths = write_failed_f117_attempt(module, root)
+
+    parsed = module.parse_predecessor_recost(
+        root,
+        artifact,
+        sha256(artifact),
+        recost,
+        None,
+        None,
+        None,
+        audit,
+        sha256(audit),
+        audit_value,
+        current,
+        "mks24_stage_i_E03_forcing_policy_F119_recost_evidence.json",
+        "F-119",
+        module.InputTracker(),
+    )
+
+    assert parsed["bootstrap"] == (
+        "exact-retained-legacy-F114-after-authenticated-F117-failed-attempt"
+    )
+    assert parsed["superseded_failed_attempt"] == {
+        "checkpoint": "F-117",
+        **{
+            key: {
+                "path": module.F117_FAILED_ATTEMPT_RELATIVES[key].as_posix(),
+                "sha256": sha256(path),
+            }
+            for key, path in paths.items()
+        },
+        "status": "authenticated-unpromoted-failed-attempt",
+    }
+
+
+@pytest.mark.parametrize("operation", ("missing", "mutated"))
+@pytest.mark.parametrize("failed_key", ("packet", "request", "reconciliation", "storage"))
+def test_f119_legacy_supersession_rejects_failed_f117_drift(
+    monkeypatch, tmp_path, failed_key, operation
+):
+    module = load_recost_module()
+    root = tmp_path / "root"
+    artifact, recost, audit, audit_value, current = legacy_f114_arguments(
+        module, root, monkeypatch
+    )
+    paths = write_failed_f117_attempt(module, root)
+    if operation == "missing":
+        paths[failed_key].unlink()
+    else:
+        paths[failed_key].write_bytes(paths[failed_key].read_bytes() + b"\n")
+        paths[failed_key].chmod(0o644)
+
+    with pytest.raises((OSError, ValueError)):
+        module.parse_predecessor_recost(
+            root,
+            artifact,
+            sha256(artifact),
+            recost,
+            None,
+            None,
+            None,
+            audit,
+            sha256(audit),
+            audit_value,
+            current,
+            "mks24_stage_i_E03_forcing_policy_F119_recost_evidence.json",
+            "F-119",
+            module.InputTracker(),
+        )
+
+
+@pytest.mark.parametrize("relative_index", range(5))
+def test_f119_legacy_supersession_rejects_any_f117_promotion_namespace(
+    monkeypatch, tmp_path, relative_index
+):
+    module = load_recost_module()
+    root = tmp_path / "root"
+    artifact, recost, audit, audit_value, current = legacy_f114_arguments(
+        module, root, monkeypatch
+    )
+    write_failed_f117_attempt(module, root)
+    promoted = root / module.F117_FORBIDDEN_PROMOTION_RELATIVES[relative_index]
+    write_json(promoted, {"forbidden": True})
+
+    with pytest.raises(ValueError, match="requires no F117 artifact"):
+        module.parse_predecessor_recost(
+            root,
+            artifact,
+            sha256(artifact),
+            recost,
+            None,
+            None,
+            None,
+            audit,
+            sha256(audit),
+            audit_value,
+            current,
+            "mks24_stage_i_E03_forcing_policy_F119_recost_evidence.json",
+            "F-119",
+            module.InputTracker(),
+        )
+
+
+@pytest.mark.parametrize("checkpoint_number", (116, 118, 120, 200))
+def test_failed_f117_legacy_supersession_is_f119_only(
+    monkeypatch, tmp_path, checkpoint_number
+):
+    module = load_recost_module()
+    root = tmp_path / "root"
+    artifact, recost, audit, audit_value, current = legacy_f114_arguments(
+        module, root, monkeypatch
+    )
+    write_failed_f117_attempt(module, root)
+
+    with pytest.raises(ValueError, match="authenticated failed-F117 supersession by F-119"):
+        module.parse_predecessor_recost(
+            root,
+            artifact,
+            sha256(artifact),
+            recost,
+            None,
+            None,
+            None,
+            audit,
+            sha256(audit),
+            audit_value,
+            current,
+            f"mks24_stage_i_E03_forcing_policy_F{checkpoint_number}_recost_evidence.json",
+            f"F-{checkpoint_number}",
+            module.InputTracker(),
+        )
+
+
+def test_f119_legacy_supersession_rejects_any_schema2_predecessor(
+    monkeypatch, tmp_path
+):
+    module = load_recost_module()
+    root = tmp_path / "root"
+    artifact, recost, audit, audit_value, current = legacy_f114_arguments(
+        module, root, monkeypatch
+    )
+    write_failed_f117_attempt(module, root)
+    schema2 = root / "accounting/mks24_stage_i_E03_forcing_policy_F118_recost_evidence.json"
+    write_immutable_json(schema2, {"schema_version": 2})
+    schema2_audit = schema2.with_name(f"{schema2.name}.publication_audit.json")
+    write_immutable_json(
+        schema2_audit,
+        {
+            "record_type": "stage-i-recost-recommendation-publication-audit",
+            "execution_epoch": EPOCH,
+            "published_utc": current.isoformat(),
+            "artifact": {
+                "path": str(schema2),
+                "sha256": sha256(schema2),
+                "mode": "0444",
+                "links": 1,
+            },
+        },
+    )
+
+    with pytest.raises(ValueError, match="already consumed by schema-2 publication"):
+        module.parse_predecessor_recost(
+            root,
+            artifact,
+            sha256(artifact),
+            recost,
+            None,
+            None,
+            None,
+            audit,
+            sha256(audit),
+            audit_value,
+            current + timedelta(minutes=1),
+            "mks24_stage_i_E03_forcing_policy_F119_recost_evidence.json",
+            "F-119",
             module.InputTracker(),
         )

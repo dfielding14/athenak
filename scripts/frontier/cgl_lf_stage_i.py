@@ -87,6 +87,25 @@ F116_PLASMA_REVIEW_RELATIVE = Path(
 F116_PUBLICATION_AUDIT_RELATIVE = Path(
     f"{F116_CURRENT_SOURCE_AUTHORITY_RELATIVE}.publication_audit.json"
 )
+F116_CANONICAL_SHA256 = {
+    "evidence": "6cdbf9e4d10f1282744c6274aa3ef08afec4c510420296837fdbbdfcefe30a2a",
+    "provenance_review": "e9731aab8305505e058c68ae8bb61c9ec5ff4885bde1bee3162719c41ab9bafd",
+    "plasma_review": "bc4da6897263843f5d233f996539ff047d6ef465b775a9b5cdc8f864de96a6b8",
+    "publication_audit": "3a6168e3039c02656b38ebdfcadffc07a2f151b1a474084307a80a341ba83096",
+}
+F118_CURRENT_SOURCE_AUTHORITY_RELATIVE = Path(
+    "accounting/"
+    "mks24_stage_i_E03_forcing_policy_F118_current_source_authority_supersession_evidence.json"
+)
+F118_PROVENANCE_REVIEW_RELATIVE = Path(
+    f"{F118_CURRENT_SOURCE_AUTHORITY_RELATIVE}.provenance_security_review.json"
+)
+F118_PLASMA_REVIEW_RELATIVE = Path(
+    f"{F118_CURRENT_SOURCE_AUTHORITY_RELATIVE}.plasma_scientific_review.json"
+)
+F118_PUBLICATION_AUDIT_RELATIVE = Path(
+    f"{F118_CURRENT_SOURCE_AUTHORITY_RELATIVE}.publication_audit.json"
+)
 F116_SOURCE_AUTHORITY_TRANSACTION_ID_PATTERN = re.compile(
     r"\d{4}-\d{2}-\d{2}T\d{6}\+0000-[0-9a-f]{32}"
 )
@@ -214,6 +233,26 @@ F116_VALIDATION_CLAIMS = {
     "committed_tool_bytes": "passed",
     "corrupt_c7_exclusion_preserved": True,
 }
+F118_PRESERVES = [
+    "The immutable F-116 evidence, reviews, publication audit, selected source bundle, and nested F-115 historical authority.",
+    "The qualified executable, frozen source revision, inputs, matrix, restart lineages, targets, resources, qualification, and Stage I budget policy.",
+    "Every prior active source-archive checksum-ledger entry and the corrupt-C7 incident-evidence exclusion.",
+]
+F118_DOES_NOT_AUTHORIZE = F116_DOES_NOT_AUTHORIZE
+F118_AUTHORIZATION = F116_AUTHORIZATION
+F118_PUBLICATION_REQUIREMENTS = F116_PUBLICATION_REQUIREMENTS
+F118_VALIDATION_CLAIMS = {
+    "historical_f116_chain": "passed",
+    "historical_f115_chain": "passed",
+    "bridge_bundle_complete_history": "passed",
+    "predecessor_current_source_bundle_complete_history": "passed",
+    "final_bundle_complete_history": "passed",
+    "final_bundle_single_head_tip": "passed",
+    "final_bundle_required_revisions": "passed",
+    "committed_tool_bytes": "passed",
+    "corrupt_c7_exclusion_preserved": True,
+}
+F118_REQUIRED_TOOLS = F116_REQUIRED_TOOLS
 R17_RECOST_PUBLICATION_AUDIT_PATTERN = re.compile(
     r"mks24_stage_i_E03_forcing_policy_F([0-9]+)_recost_evidence"
     r"\.json\.publication_audit\.json"
@@ -5237,19 +5276,19 @@ def validate_f116_source_archive_checksum_ledger(
     return ledger
 
 
-def require_authenticated_f116_source_authority_staging(
+def require_authenticated_f118_source_authority_staging(
     source_transactions: Path,
 ) -> None:
     """Classify post-commit source-authority containers as non-authoritative debris.
 
-    The immutable public F116 authority is authenticated before this function
+    The immutable public F118 authority is authenticated before this function
     runs.  Retained transaction contents therefore have no authority and are
     never opened or interpreted here; only the transaction-root and its
     direct-child container profiles remain security boundaries.
     """
 
     source_transactions = source_transactions.absolute()
-    label = "F116 source-authority recovery-debris root"
+    label = "F118 source-authority recovery-debris root"
     require_owner_symlink_free_path(source_transactions.parent, label)
     try:
         source_transactions.lstat()
@@ -5382,7 +5421,7 @@ def require_authenticated_f116_source_authority_staging(
                 transaction_name,
                 transaction_descriptor,
                 transaction_profile,
-                "non-authoritative F116 source-authority transaction debris",
+                "non-authoritative F118 source-authority transaction debris",
             )
         for forensic_name, forensic_profile in retained_forensics:
             try:
@@ -5430,7 +5469,7 @@ def require_current_source_authority_for_prepare(
     offline_local_root: bool,
     now: datetime | None = None,
 ) -> dict[str, object] | None:
-    """Authenticate fixed F116 authority and the selected final-HEAD bundle."""
+    """Authenticate fixed F118 authority and immutable F116/F115 history."""
 
     if offline_local_root:
         return None
@@ -5463,13 +5502,13 @@ def require_current_source_authority_for_prepare(
         },
     }
     fixed_paths = {
-        "evidence": root / F116_CURRENT_SOURCE_AUTHORITY_RELATIVE,
-        "provenance_review": root / F116_PROVENANCE_REVIEW_RELATIVE,
-        "plasma_review": root / F116_PLASMA_REVIEW_RELATIVE,
-        "publication_audit": root / F116_PUBLICATION_AUDIT_RELATIVE,
+        "evidence": root / F118_CURRENT_SOURCE_AUTHORITY_RELATIVE,
+        "provenance_review": root / F118_PROVENANCE_REVIEW_RELATIVE,
+        "plasma_review": root / F118_PLASMA_REVIEW_RELATIVE,
+        "publication_audit": root / F118_PUBLICATION_AUDIT_RELATIVE,
     }
     loaded: dict[str, tuple[dict[str, object], str]] = {
-        key: read_f116_authority_json(path, f"F116 {key}", mode=0o444)
+        key: read_f116_authority_json(path, f"F118 {key}", mode=0o444)
         for key, path in fixed_paths.items()
     }
     evidence, evidence_sha = loaded["evidence"]
@@ -5481,43 +5520,142 @@ def require_current_source_authority_for_prepare(
             "source_archive_catalog", "authorization", "validation",
             "publication_requirements",
         },
-        "F116 current-source authority",
+        "F118 current-source authority",
     )
-    generated = require_r17_utc(evidence["generated_utc"], "F116 generation time")
+    generated = require_r17_utc(evidence["generated_utc"], "F118 generation time")
     scope = require_r17_exact_keys(
         evidence["scope"],
         {"relationship", "summary", "preserves", "does_not_authorize"},
-        "F116 scope",
+        "F118 scope",
     )
     predecessors = require_r17_exact_keys(
-        evidence["predecessor_authorities"], {"historical_f115"},
-        "F116 predecessor authorities",
+        evidence["predecessor_authorities"], {"historical_f116"},
+        "F118 predecessor authorities",
     )
     implementation = require_r17_exact_keys(
         evidence["implementation"],
         {
             "publisher", "committed_tools", "intermediate_36140_bundle",
+            "predecessor_current_source_bundle",
             "current_source_bundle",
         },
-        "F116 implementation",
+        "F118 implementation",
     )
     if (
         evidence["schema_version"] != 1
         or evidence["record_type"]
         != "stage-i-current-source-authority-supersession-evidence"
-        or evidence["checkpoint"] != "F-116"
+        or evidence["checkpoint"] != "F-118"
         or evidence["execution_epoch"] != EXECUTION_EPOCH
         or scope["relationship"] != "current-source-selection-only-supersession"
-        or not require_r17_nonempty_string(scope["summary"], "F116 scope summary")
-        or scope["preserves"] != F116_PRESERVES
-        or scope["does_not_authorize"] != F116_DOES_NOT_AUTHORIZE
-        or predecessors["historical_f115"] != f115_bindings
-        or evidence["authorization"] != F116_AUTHORIZATION
-        or evidence["validation"] != F116_VALIDATION_CLAIMS
-        or evidence["publication_requirements"] != F116_PUBLICATION_REQUIREMENTS
+        or not require_r17_nonempty_string(scope["summary"], "F118 scope summary")
+        or scope["preserves"] != F118_PRESERVES
+        or scope["does_not_authorize"] != F118_DOES_NOT_AUTHORIZE
+        or evidence["authorization"] != F118_AUTHORIZATION
+        or evidence["validation"] != F118_VALIDATION_CLAIMS
+        or evidence["publication_requirements"] != F118_PUBLICATION_REQUIREMENTS
         or generated > now + R17_AUTHORIZATION_FUTURE_SKEW
     ):
-        raise ValueError("F116 identity, historical F115 scope, or authority differs")
+        raise ValueError("F118 identity, historical F116 scope, or authority differs")
+
+    historical_bindings = require_r17_exact_keys(
+        predecessors["historical_f116"],
+        {"evidence", "publication_audit", "provenance_review", "plasma_review"},
+        "F118 historical F116 bindings",
+    )
+    historical_paths = {
+        "evidence": root / F116_CURRENT_SOURCE_AUTHORITY_RELATIVE,
+        "publication_audit": root / F116_PUBLICATION_AUDIT_RELATIVE,
+        "provenance_review": root / F116_PROVENANCE_REVIEW_RELATIVE,
+        "plasma_review": root / F116_PLASMA_REVIEW_RELATIVE,
+    }
+    historical_loaded: dict[str, tuple[dict[str, object], str]] = {}
+    for key, path in historical_paths.items():
+        binding = require_r17_exact_keys(
+            historical_bindings[key], {"path", "sha256"}, f"historical F116 {key}"
+        )
+        digest = require_r17_sha256(binding["sha256"], f"historical F116 {key}")
+        if (
+            binding["path"] != path.relative_to(root).as_posix()
+            or (root == DEFAULT_ROOT and digest != F116_CANONICAL_SHA256[key])
+        ):
+            raise ValueError(f"historical F116 {key} binding differs")
+        historical_loaded[key] = read_f116_authority_json(
+            path, f"historical F116 {key}", mode=0o444
+        )
+        if historical_loaded[key][1] != digest:
+            raise ValueError(f"historical F116 {key} digest differs")
+    historical_evidence, historical_evidence_sha = historical_loaded["evidence"]
+    historical_evidence = require_r17_exact_keys(
+        historical_evidence,
+        {
+            "schema_version", "record_type", "checkpoint", "execution_epoch",
+            "generated_utc", "scope", "predecessor_authorities", "implementation",
+            "source_archive_catalog", "authorization", "validation",
+            "publication_requirements",
+        },
+        "historical F116 evidence",
+    )
+    historical_predecessors = require_r17_exact_keys(
+        historical_evidence["predecessor_authorities"],
+        {"historical_f115"},
+        "historical F116 predecessor authorities",
+    )
+    historical_implementation = require_r17_exact_keys(
+        historical_evidence["implementation"],
+        {
+            "publisher", "committed_tools", "intermediate_36140_bundle",
+            "current_source_bundle",
+        },
+        "historical F116 implementation",
+    )
+    historical_current = require_r17_exact_keys(
+        historical_implementation["current_source_bundle"],
+        {
+            "candidate_path", "path", "sha256", "complete_history", "head",
+            "advertised_tip", "verified_revisions", "selected_as_current", "subject",
+        },
+        "historical F116 current source bundle",
+    )
+    if (
+        historical_evidence["schema_version"] != 1
+        or historical_evidence["record_type"]
+        != "stage-i-current-source-authority-supersession-evidence"
+        or historical_evidence["checkpoint"] != "F-116"
+        or historical_evidence["execution_epoch"] != EXECUTION_EPOCH
+        or historical_predecessors["historical_f115"] != f115_bindings
+        or historical_evidence["authorization"] != F116_AUTHORIZATION
+        or historical_current["complete_history"] is not True
+        or historical_current["selected_as_current"] is not True
+    ):
+        raise ValueError("historical F116 evidence or nested F115 binding differs")
+    historical_audit = require_r17_exact_keys(
+        historical_loaded["publication_audit"][0],
+        {
+            "schema_version", "record_type", "checkpoint", "execution_epoch",
+            "published_utc", "artifact", "independent_reviews",
+            "historical_f115_authority", "source_archive_catalog",
+            "authority_and_enforcement", "publication",
+        },
+        "historical F116 publication audit",
+    )
+    if (
+        historical_audit["checkpoint"] != "F-116"
+        or historical_audit["historical_f115_authority"] != f115_digests
+        or historical_audit["authority_and_enforcement"] != F116_AUTHORIZATION
+    ):
+        raise ValueError("historical F116 publication audit differs")
+    historical_artifact = require_r17_exact_keys(
+        historical_audit["artifact"], {"path", "sha256", "mode", "links"},
+        "historical F116 audit artifact",
+    )
+    if historical_artifact != {
+        "path": str(historical_paths["evidence"]),
+        "sha256": historical_evidence_sha,
+        "mode": "0444",
+        "links": 1,
+    }:
+        raise ValueError("historical F116 audit artifact binding differs")
 
     def bundle_declaration(value: object, label: str, *,
                            current: bool) -> dict[str, object]:
@@ -5585,14 +5723,28 @@ def require_current_source_authority_for_prepare(
 
     bridge = bundle_declaration(
         implementation["intermediate_36140_bundle"],
-        "F116 retained bridge bundle",
+        "F118 retained bridge bundle",
         current=False,
     )
     final = bundle_declaration(
         implementation["current_source_bundle"],
-        "F116 current source bundle",
+        "F118 current source bundle",
         current=True,
     )
+    predecessor_bundle = require_r17_exact_keys(
+        implementation["predecessor_current_source_bundle"],
+        {
+            "path", "sha256", "complete_history", "head", "advertised_tip",
+            "verified_revisions", "selected_as_current", "role", "subject",
+        },
+        "F118 predecessor current source bundle",
+    )
+    expected_predecessor = dict(historical_current)
+    expected_predecessor.pop("candidate_path")
+    expected_predecessor["selected_as_current"] = False
+    expected_predecessor["role"] = "retained-non-current-predecessor"
+    if predecessor_bundle != expected_predecessor:
+        raise ValueError("F118 predecessor current bundle differs from immutable F116")
     promoted_revision = str(final["head"])
     final_revisions = list(final["revisions"])
     selected_revisions = (
@@ -5621,39 +5773,39 @@ def require_current_source_authority_for_prepare(
             for revision in final_revisions
         )
     ):
-        raise ValueError("F116 bridge or final source history differs")
+        raise ValueError("F118 bridge or final source history differs")
 
     tools_value = implementation["committed_tools"]
-    if not isinstance(tools_value, list) or len(tools_value) != len(F116_REQUIRED_TOOLS):
-        raise ValueError("F116 committed-tool vector differs")
+    if not isinstance(tools_value, list) or len(tools_value) != len(F118_REQUIRED_TOOLS):
+        raise ValueError("F118 committed-tool vector differs")
     tools: dict[str, dict[str, object]] = {}
     for retained, (relative, expected_mode) in zip(
-        tools_value, sorted(F116_REQUIRED_TOOLS.items())
+        tools_value, sorted(F118_REQUIRED_TOOLS.items())
     ):
         tool = require_r17_exact_keys(
             retained, {"path", "revision", "sha256", "mode"},
-            f"F116 committed tool {relative}",
+            f"F118 committed tool {relative}",
         )
-        digest = require_r17_sha256(tool["sha256"], f"F116 committed tool {relative}")
+        digest = require_r17_sha256(tool["sha256"], f"F118 committed tool {relative}")
         if (
             tool["path"] != relative
             or tool["revision"] != promoted_revision
             or tool["mode"] != expected_mode
             or source_authority_committed_sha256(
-                promoted_revision, relative, f"F116 committed tool {relative}"
+                promoted_revision, relative, f"F118 committed tool {relative}"
             ) != digest
             or source_authority_committed_mode(
-                promoted_revision, relative, f"F116 committed tool {relative}"
+                promoted_revision, relative, f"F118 committed tool {relative}"
             ) != expected_mode
         ):
-            raise ValueError(f"F116 committed tool differs: {relative}")
+            raise ValueError(f"F118 committed tool differs: {relative}")
         tools[relative] = tool
     publisher = require_r17_exact_keys(
         implementation["publisher"], {"path", "revision", "sha256", "mode"},
-        "F116 publisher",
+        "F118 publisher",
     )
     if publisher != tools["scripts/frontier/cgl_lf_stage_i_source_authority.py"]:
-        raise ValueError("F116 publisher binding differs from committed-tool vector")
+        raise ValueError("F118 publisher binding differs from committed-tool vector")
     helper = tools[PRODUCTION_UTILITY_RELATIVE.as_posix()]
     matrix_relative = Path("inputs/cgl_lf_paper/mks24_stage_i_manifest.json")
     if (
@@ -5665,10 +5817,10 @@ def require_current_source_authority_for_prepare(
         or source_authority_committed_sha256(
             input_revision,
             matrix_relative.as_posix(),
-            "F116 frozen scientific Stage I matrix",
+            "F118 frozen scientific Stage I matrix",
         ) != sha256(matrix_path)
     ):
-        raise ValueError("F116 tooling authority or frozen scientific source differs")
+        raise ValueError("F118 tooling authority or frozen scientific source differs")
 
     bundle_relative = Path(str(final["relative"]))
     bundle_path = root / bundle_relative
@@ -5686,7 +5838,7 @@ def require_current_source_authority_for_prepare(
         )
         or any(revision not in final_revisions for revision in selected_revisions)
     ):
-        raise ValueError("F116 selected final source bundle differs")
+        raise ValueError("F118 selected final source bundle differs")
     verified_bundle = source_bundle_provenance(
         str(bundle_path), final_revisions, root, False
     )
@@ -5701,16 +5853,18 @@ def require_current_source_authority_for_prepare(
             root / Path(str(bridge["relative"])), str(bridge["sha256"])
         ) != (F116_BRIDGE_REVISION, "refs/heads/feature/cgl-landau-fluid")
     ):
-        raise ValueError("F116 source bundle bytes or advertised tips differ")
+        raise ValueError("F118 source bundle bytes or advertised tips differ")
 
     verified = {
         "authorization_broadening": False,
         "bridge_selected_as_current": False,
+        "predecessor_current_source_bundle_selected_as_current": False,
         "corrupt_c7_excluded": True,
         "current_source_selection_only": True,
         "final_bundle_sha256": bundle_sha,
         "final_head": promoted_revision,
         "historical_f115_preserved": True,
+        "historical_f116_preserved": True,
     }
     reviewers = set()
     candidate_paths = set()
@@ -5718,11 +5872,11 @@ def require_current_source_authority_for_prepare(
     for key, kind, decision, label in (
         (
             "provenance_review", "provenance-security", "approved-for-publication",
-            "F116 provenance/security review",
+            "F118 provenance/security review",
         ),
         (
             "plasma_review", "plasma-scientific-continuation", "approved",
-            "F116 plasma/scientific review",
+            "F118 plasma/scientific review",
         ),
     ):
         review, _ = loaded[key]
@@ -5730,7 +5884,7 @@ def require_current_source_authority_for_prepare(
             review,
             {
                 "schema_version", "record_type", "checkpoint", "execution_epoch",
-                "review_kind", "decision", "reviewed_candidate", "published_f116",
+                "review_kind", "decision", "reviewed_candidate", "published_f118",
                 "reviewer", "reviewed_utc", "findings", "limitations", "verified",
             },
             label,
@@ -5759,7 +5913,7 @@ def require_current_source_authority_for_prepare(
             review["schema_version"] != 1
             or review["record_type"]
             != "stage-i-current-source-authority-supersession-independent-review"
-            or review["checkpoint"] != "F-116"
+            or review["checkpoint"] != "F-118"
             or review["execution_epoch"] != EXECUTION_EPOCH
             or review["review_kind"] != kind
             or review["decision"] != decision
@@ -5767,7 +5921,7 @@ def require_current_source_authority_for_prepare(
             or ".." in candidate_path.parts
             or str(candidate_path) != candidate_text
             or reviewed_candidate["sha256"] != evidence_sha
-            or review["published_f116"]
+            or review["published_f118"]
             != {"path": str(fixed_paths["evidence"]), "sha256": evidence_sha}
             or review["verified"] != verified
             or not isinstance(review["findings"], list)
@@ -5782,13 +5936,13 @@ def require_current_source_authority_for_prepare(
             raise ValueError(f"{label} identity, independence, or verification differs")
         if reviewer_id in reviewers:
             raise ValueError(
-                "F116 independent reviews must declare distinct reviewers as processes"
+                "F118 independent reviews must declare distinct reviewers as processes"
             )
         reviewers.add(reviewer_id)
         candidate_paths.add(candidate_text)
         reviewed_times.append(reviewed)
     if len(candidate_paths) != 1:
-        raise ValueError("F116 independent reviews must bind one exact candidate path")
+        raise ValueError("F118 independent reviews must bind one exact candidate path")
 
     def declared(value: object, path: Path, digest: str, mode: str,
                  label: str) -> None:
@@ -5809,94 +5963,109 @@ def require_current_source_authority_for_prepare(
         {
             "schema_version", "record_type", "checkpoint", "execution_epoch",
             "published_utc", "artifact", "independent_reviews",
-            "historical_f115_authority", "source_archive_catalog",
+            "historical_f116_authority", "source_archive_catalog",
             "authority_and_enforcement", "publication",
         },
-        "F116 publication audit",
+        "F118 publication audit",
     )
     audit_reviews = require_r17_exact_keys(
         audit["independent_reviews"],
         {
-            "reviews_bind_exact_published_f116_sha256",
+            "reviews_bind_exact_published_f118_sha256",
             "provenance_security", "plasma_scientific_continuation",
         },
-        "F116 publication audit independent reviews",
+        "F118 publication audit independent reviews",
     )
     declared(
         audit["artifact"], fixed_paths["evidence"], evidence_sha, "0444",
-        "F116 publication audit artifact",
+        "F118 publication audit artifact",
     )
     declared(
         audit_reviews["provenance_security"],
         fixed_paths["provenance_review"], loaded["provenance_review"][1], "0444",
-        "F116 publication audit provenance review",
+        "F118 publication audit provenance review",
     )
     declared(
         audit_reviews["plasma_scientific_continuation"],
         fixed_paths["plasma_review"], loaded["plasma_review"][1], "0444",
-        "F116 publication audit plasma review",
+        "F118 publication audit plasma review",
     )
-    published = require_r17_utc(audit["published_utc"], "F116 publication time")
+    published = require_r17_utc(audit["published_utc"], "F118 publication time")
     if (
         audit["schema_version"] != 1
         or audit["record_type"]
         != "stage-i-current-source-authority-supersession-publication-audit"
-        or audit["checkpoint"] != "F-116"
+        or audit["checkpoint"] != "F-118"
         or audit["execution_epoch"] != EXECUTION_EPOCH
-        or audit_reviews["reviews_bind_exact_published_f116_sha256"] != evidence_sha
-        or audit["historical_f115_authority"] != f115_digests
-        or audit["authority_and_enforcement"] != F116_AUTHORIZATION
+        or audit_reviews["reviews_bind_exact_published_f118_sha256"] != evidence_sha
+        or audit["historical_f116_authority"]
+        != {
+            "evidence_sha256": historical_evidence_sha,
+            "publication_audit_sha256": historical_loaded["publication_audit"][1],
+            "provenance_review_sha256": historical_loaded["provenance_review"][1],
+            "plasma_review_sha256": historical_loaded["plasma_review"][1],
+        }
+        or audit["authority_and_enforcement"] != F118_AUTHORIZATION
         or audit["publication"]
         != "recoverable-forward-transaction-with-publication-audit-commit-marker-under-stage-i-lock"
         or published < max(reviewed_times)
         or published > now + R17_AUTHORIZATION_FUTURE_SKEW
     ):
-        raise ValueError("F116 publication audit identity, chronology, or authority differs")
+        raise ValueError("F118 publication audit identity, chronology, or authority differs")
 
     source_catalog = require_r17_exact_keys(
         evidence["source_archive_catalog"], {"before", "after"},
-        "F116 source-archive catalog evidence",
+        "F118 source-archive catalog evidence",
     )
     before = require_r17_exact_keys(
         source_catalog["before"],
         {
-            "readme_sha256", "sha256sums_sha256", "bridge_listed",
-            "final_bundle_listed", "corrupt_c7_listed",
+            "readme_sha256", "sha256sums_sha256", "bridge_listed_exactly_once",
+            "predecessor_current_source_bundle_listed_exactly_once",
+            "final_bundle_listed", "corrupt_c7_listed", "historical_f115_preserved",
         },
-        "F116 predecessor source-archive catalog",
+        "F118 predecessor source-archive catalog",
     )
     after = require_r17_exact_keys(
         source_catalog["after"],
         {
             "readme_sha256", "sha256sums_sha256", "bridge_listed_exactly_once",
+            "predecessor_current_source_bundle_listed_exactly_once",
             "final_bundle_listed_exactly_once", "corrupt_c7_listed",
-            "historical_f115_preserved", "sole_current_source_bundle",
+            "historical_f115_preserved", "historical_f116_preserved",
+            "all_prior_checksum_entries_preserved", "sole_current_source_bundle",
         },
-        "F116 published source-archive catalog",
+        "F118 published source-archive catalog",
     )
     for key in ("readme_sha256", "sha256sums_sha256"):
         require_r17_sha256(before[key], f"F116 predecessor catalog {key}")
         require_r17_sha256(after[key], f"F116 published catalog {key}")
     if (
-        before["bridge_listed"] is not False
+        before["bridge_listed_exactly_once"] is not True
+        or before["predecessor_current_source_bundle_listed_exactly_once"] is not True
         or before["final_bundle_listed"] is not False
         or before["corrupt_c7_listed"] is not False
+        or before["historical_f115_preserved"] is not True
         or after["bridge_listed_exactly_once"] is not True
+        or after["predecessor_current_source_bundle_listed_exactly_once"] is not True
         or after["final_bundle_listed_exactly_once"] is not True
         or after["corrupt_c7_listed"] is not False
         or after["historical_f115_preserved"] is not True
+        or after["historical_f116_preserved"] is not True
+        or after["all_prior_checksum_entries_preserved"] is not True
         or after["sole_current_source_bundle"] != bundle_relative.as_posix()
     ):
-        raise ValueError("F116 source-archive catalog claims differ")
+        raise ValueError("F118 source-archive catalog claims differ")
 
     audit_catalog = require_r17_exact_keys(
         audit["source_archive_catalog"],
         {
-            "readme", "sha256sums", "bridge_bundle", "current_source_bundle",
+            "readme", "sha256sums", "bridge_bundle",
+            "predecessor_current_source_bundle", "current_source_bundle",
             "corrupt_c7_absent_from_active_checksum_ledger",
             "sole_current_source_bundle",
         },
-        "F116 publication audit source-archive catalog",
+        "F118 publication audit source-archive catalog",
     )
     readme_path = root / "source-archives/README.md"
     sums_path = root / "source-archives/SHA256SUMS"
@@ -5933,15 +6102,27 @@ def require_current_source_authority_for_prepare(
         "head": promoted_revision,
         "selected_as_current": True,
     }
+    predecessor_relative = Path(str(predecessor_bundle["path"]))
+    expected_predecessor_audit = {
+        "path": str(root / predecessor_relative),
+        "sha256": predecessor_bundle["sha256"],
+        "mode": "0644",
+        "links": 1,
+        "head": predecessor_bundle["head"],
+        "role": "retained-non-current-predecessor",
+        "selected_as_current": False,
+    }
     if (
         readme_sha != after["readme_sha256"]
         or sums_sha != after["sha256sums_sha256"]
         or audit_catalog["bridge_bundle"] != expected_bridge_audit
+        or audit_catalog["predecessor_current_source_bundle"]
+        != expected_predecessor_audit
         or audit_catalog["current_source_bundle"] != expected_final_audit
         or audit_catalog["corrupt_c7_absent_from_active_checksum_ledger"] is not True
         or audit_catalog["sole_current_source_bundle"] != str(bundle_path)
     ):
-        raise ValueError("F116 publication audit source-archive catalog differs")
+        raise ValueError("F118 publication audit source-archive catalog differs")
     try:
         ledger_lines = sums_payload.decode("utf-8").splitlines()
     except UnicodeDecodeError as error:
@@ -5949,32 +6130,33 @@ def require_current_source_authority_for_prepare(
     ledger = validate_f116_source_archive_checksum_ledger(root, ledger_lines)
     if (
         ledger.get(F116_BRIDGE_NAME) != F116_BRIDGE_SHA256
+        or ledger.get(predecessor_relative.name) != predecessor_bundle["sha256"]
         or ledger.get(bundle_relative.name) != bundle_sha
         or ledger.get(R03_F115_SOURCE_BUNDLE_RELATIVE.name)
         != R03_F115_SOURCE_BUNDLE_SHA256
         or F116_CORRUPT_C7_NAME in ledger
     ):
-        raise ValueError("F116 source-archive checksum ledger authority differs")
-    require_authenticated_f116_source_authority_staging(
+        raise ValueError("F118 source-archive checksum ledger authority differs")
+    require_authenticated_f118_source_authority_staging(
         root / "accounting"
-        / f"mks24_stage_i_{EXECUTION_EPOCH_SLUG}_source_authority_transactions",
+        / f"mks24_stage_i_{EXECUTION_EPOCH_SLUG}_F118_source_authority_transactions",
     )
     return {
-        "checkpoint": "F-116",
+        "checkpoint": "F-118",
         "evidence": {
-            "path": F116_CURRENT_SOURCE_AUTHORITY_RELATIVE.as_posix(),
+            "path": F118_CURRENT_SOURCE_AUTHORITY_RELATIVE.as_posix(),
             "sha256": evidence_sha,
         },
         "provenance_review": {
-            "path": F116_PROVENANCE_REVIEW_RELATIVE.as_posix(),
+            "path": F118_PROVENANCE_REVIEW_RELATIVE.as_posix(),
             "sha256": loaded["provenance_review"][1],
         },
         "plasma_review": {
-            "path": F116_PLASMA_REVIEW_RELATIVE.as_posix(),
+            "path": F118_PLASMA_REVIEW_RELATIVE.as_posix(),
             "sha256": loaded["plasma_review"][1],
         },
         "publication_audit": {
-            "path": F116_PUBLICATION_AUDIT_RELATIVE.as_posix(),
+            "path": F118_PUBLICATION_AUDIT_RELATIVE.as_posix(),
             "sha256": audit_sha,
         },
         "final_source_bundle": {
@@ -6116,7 +6298,7 @@ def require_clean_r17_predecessor_state(
     if not source_authority_transactions_authenticated:
         transaction_roots.append(
             paths["accounting"]
-            / f"mks24_stage_i_{EXECUTION_EPOCH_SLUG}_source_authority_transactions"
+            / f"mks24_stage_i_{EXECUTION_EPOCH_SLUG}_F118_source_authority_transactions"
         )
     for path in transaction_roots:
         require_empty_transaction_directory(path, "R17 preparation transaction store")
@@ -8369,27 +8551,27 @@ def require_r17_readiness_for_prepare(
     if bundle_provenance is None or qualification_approval is None:
         raise ValueError("R17 preparation requires retained source and qualification provenance")
     if current_source_authority is None:
-        raise ValueError("R17 preparation requires authenticated F116 source authority")
+        raise ValueError("R17 preparation requires authenticated F118 source authority")
     current_source_authority = require_r17_exact_keys(
         current_source_authority,
         {
             "checkpoint", "evidence", "provenance_review", "plasma_review",
             "publication_audit", "final_source_bundle",
         },
-        "authenticated F116 current-source authority",
+        "authenticated F118 current-source authority",
     )
     authority_bundle = require_r17_exact_keys(
         current_source_authority["final_source_bundle"],
         {"path", "sha256", "verified_revisions"},
-        "authenticated F116 final source bundle",
+        "authenticated F118 final source bundle",
     )
     authority_bundle_relative_text = require_r17_nonempty_string(
-        authority_bundle["path"], "authenticated F116 final source bundle path"
+        authority_bundle["path"], "authenticated F118 final source bundle path"
     )
     authority_bundle_relative = Path(authority_bundle_relative_text)
     authority_revisions = authority_bundle["verified_revisions"]
     if (
-        current_source_authority["checkpoint"] != "F-116"
+        current_source_authority["checkpoint"] != "F-118"
         or authority_bundle_relative.is_absolute()
         or ".." in authority_bundle_relative.parts
         or authority_bundle_relative.as_posix() != authority_bundle_relative_text
@@ -8520,7 +8702,7 @@ def require_r17_readiness_for_prepare(
         or recost_revisions != authority_revisions
         or any(revision not in recost_revisions for revision in required_revisions)
     ):
-        raise ValueError("latest promoted recost F116 source authority or bundle differs")
+        raise ValueError("latest promoted recost F118 source authority or bundle differs")
     current_rows = read_ledger(paths)
     ledger = recost["ledger"]
     recost_reservations = recost["reservations"]
@@ -12344,7 +12526,7 @@ def reauthenticate_submission_authority(
     reservation: dict[str, object],
     offline_local_root: bool,
 ) -> None:
-    """Reauthenticate F116 and exact R17 launch evidence before scheduler access."""
+    """Reauthenticate F118 and exact R17 launch evidence before scheduler access."""
 
     if offline_local_root:
         return
@@ -12360,7 +12542,7 @@ def reauthenticate_submission_authority(
     bundle = command.get("source_bundle")
     utility = command.get("production_utility")
     if not isinstance(bundle, dict) or not isinstance(utility, dict):
-        raise ValueError("canonical prepared manifest lacks F116 provenance")
+        raise ValueError("canonical prepared manifest lacks F118 provenance")
     matrix_path = Path(str(command.get("matrix_file", ""))).expanduser().resolve()
     current_source_authority = require_current_source_authority_for_prepare(
         paths,
@@ -12374,7 +12556,7 @@ def reauthenticate_submission_authority(
         current_source_authority is None
         or command.get("current_source_authority") != current_source_authority
     ):
-        raise ValueError("prepared manifest F116 current-source authority is stale")
+        raise ValueError("prepared manifest F118 current-source authority is stale")
 
     source_dir = Path(str(command.get("source_dir", ""))).expanduser().resolve()
     source_input = Path(

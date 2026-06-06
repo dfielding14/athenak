@@ -58,6 +58,19 @@ F116_RELATIVE = Path(
 F116_PUBLICATION_AUDIT_RELATIVE = Path(f"{F116_RELATIVE}.publication_audit.json")
 F116_PROVENANCE_REVIEW_RELATIVE = Path(f"{F116_RELATIVE}.provenance_security_review.json")
 F116_PLASMA_REVIEW_RELATIVE = Path(f"{F116_RELATIVE}.plasma_scientific_review.json")
+F116_CANONICAL_SHA256 = {
+    "evidence": "6cdbf9e4d10f1282744c6274aa3ef08afec4c510420296837fdbbdfcefe30a2a",
+    "provenance_review": "e9731aab8305505e058c68ae8bb61c9ec5ff4885bde1bee3162719c41ab9bafd",
+    "plasma_review": "bc4da6897263843f5d233f996539ff047d6ef465b775a9b5cdc8f864de96a6b8",
+    "publication_audit": "3a6168e3039c02656b38ebdfcadffc07a2f151b1a474084307a80a341ba83096",
+}
+F118_RELATIVE = Path(
+    "accounting/"
+    "mks24_stage_i_E03_forcing_policy_F118_current_source_authority_supersession_evidence.json"
+)
+F118_PUBLICATION_AUDIT_RELATIVE = Path(f"{F118_RELATIVE}.publication_audit.json")
+F118_PROVENANCE_REVIEW_RELATIVE = Path(f"{F118_RELATIVE}.provenance_security_review.json")
+F118_PLASMA_REVIEW_RELATIVE = Path(f"{F118_RELATIVE}.plasma_scientific_review.json")
 SHA256_PATTERN = re.compile(r"[0-9a-f]{64}")
 REVISION_PATTERN = re.compile(r"[0-9a-f]{40}")
 EXIT_CODE_PATTERN = re.compile(r"[0-9]+:[0-9]+")
@@ -84,6 +97,8 @@ F116_REQUIRED_TOOLS = {
     "scripts/frontier/cgl_lf_stage_i_wave_plan.py": "0644",
 }
 F116_PUBLISHER_RELATIVE = "scripts/frontier/cgl_lf_stage_i_source_authority.py"
+F118_REQUIRED_TOOLS = F116_REQUIRED_TOOLS
+F118_PUBLISHER_RELATIVE = F116_PUBLISHER_RELATIVE
 INDEPENDENT_REVIEW_NON_CRYPTOGRAPHIC_LIMITATION = (
     "Reviewer roles, agent identifiers, and process separation are retained "
     "declarations; exact artifact digests authenticate reviewed bytes but do not "
@@ -3666,10 +3681,10 @@ def require_v2_input_binding(value: object, label: str) -> dict[str, str]:
     }
 
 
-def validate_f116_source_authority_binding(
+def validate_f118_source_authority_binding(
     value: object, root: Path, args: argparse.Namespace
 ) -> dict[str, object]:
-    """Require the finalized F116 binding and exact committed seven-tool vector."""
+    """Require the finalized F118 binding and exact committed seven-tool vector."""
 
     retained = require_exact_keys(
         value,
@@ -3681,29 +3696,29 @@ def validate_f116_source_authority_binding(
             "publication_audit",
             "final_source_bundle",
         },
-        "schema-2 F116 source authority binding",
+        "schema-2 F118 source authority binding",
     )
-    if retained["checkpoint"] != "F-116":
-        raise ValueError("schema-2 current source authority binding is not F-116")
+    if retained["checkpoint"] != "F-118":
+        raise ValueError("schema-2 current source authority binding is not F-118")
     paths = {
-        "evidence": F116_RELATIVE,
-        "provenance_review": F116_PROVENANCE_REVIEW_RELATIVE,
-        "plasma_review": F116_PLASMA_REVIEW_RELATIVE,
-        "publication_audit": F116_PUBLICATION_AUDIT_RELATIVE,
+        "evidence": F118_RELATIVE,
+        "provenance_review": F118_PROVENANCE_REVIEW_RELATIVE,
+        "plasma_review": F118_PLASMA_REVIEW_RELATIVE,
+        "publication_audit": F118_PUBLICATION_AUDIT_RELATIVE,
     }
-    normalized: dict[str, object] = {"checkpoint": "F-116"}
+    normalized: dict[str, object] = {"checkpoint": "F-118"}
     evidence_payload = b""
     for key, expected_path in paths.items():
         binding = require_v2_input_binding(
-            retained[key], f"schema-2 F116 {key} binding"
+            retained[key], f"schema-2 F118 {key} binding"
         )
         if binding["path"] != expected_path.as_posix():
-            raise ValueError(f"schema-2 F116 {key} path differs")
+            raise ValueError(f"schema-2 F118 {key} path differs")
         _, payload = read_confined_file_sha256(
             root,
             binding["path"],
             binding["sha256"],
-            f"schema-2 F116 {key}",
+            f"schema-2 F118 {key}",
             expected_mode=0o444,
         )
         if key == "evidence":
@@ -3712,17 +3727,17 @@ def validate_f116_source_authority_binding(
     final = require_exact_keys(
         retained["final_source_bundle"],
         {"path", "sha256", "verified_revisions"},
-        "schema-2 F116 final source bundle binding",
+        "schema-2 F118 final source bundle binding",
     )
     final_binding = {
         "path": safe_relative_path(
             require_nonempty_string(
-                final["path"], "schema-2 F116 final source bundle path"
+                final["path"], "schema-2 F118 final source bundle path"
             ),
-            "schema-2 F116 final source bundle path",
+            "schema-2 F118 final source bundle path",
         ).as_posix(),
         "sha256": require_sha256(
-            final["sha256"], "schema-2 F116 final source bundle SHA-256"
+            final["sha256"], "schema-2 F118 final source bundle SHA-256"
         ),
         "verified_revisions": final["verified_revisions"],
     }
@@ -3731,23 +3746,23 @@ def validate_f116_source_authority_binding(
         "sha256": args.expected_source_bundle_sha256,
         "verified_revisions": args.expected_source_bundle_verified_revisions_json,
     }:
-        raise ValueError("schema-2 F116 final source bundle binding differs")
-    validate_f116_committed_tools(evidence_payload, final_binding)
+        raise ValueError("schema-2 F118 final source bundle binding differs")
+    validate_f118_committed_tools(evidence_payload, final_binding, root)
     normalized["final_source_bundle"] = final_binding
     return normalized
 
 
-def validate_f116_committed_tools(
-    payload: bytes, final_binding: dict[str, object]
+def validate_f118_committed_tools(
+    payload: bytes, final_binding: dict[str, object], root: Path
 ) -> None:
-    """Validate exact ordered F116 committed tools against retained Git bytes."""
+    """Validate F118 current tools and its immutable exact F116 predecessor."""
 
     try:
         evidence = json.loads(payload)
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise ValueError("schema-2 F116 evidence is not valid JSON") from error
+        raise ValueError("schema-2 F118 evidence is not valid JSON") from error
     if (json.dumps(evidence, indent=2, sort_keys=True) + "\n").encode() != payload:
-        raise ValueError("schema-2 F116 evidence must be stable canonical JSON")
+        raise ValueError("schema-2 F118 evidence must be stable canonical JSON")
     retained = require_exact_keys(
         evidence,
         {
@@ -3764,25 +3779,31 @@ def validate_f116_committed_tools(
             "validation",
             "publication_requirements",
         },
-        "schema-2 F116 evidence",
+        "schema-2 F118 evidence",
     )
     if (
         retained["schema_version"] != 1
         or retained["record_type"]
         != "stage-i-current-source-authority-supersession-evidence"
-        or retained["checkpoint"] != "F-116"
+        or retained["checkpoint"] != "F-118"
         or retained["execution_epoch"] != EXECUTION_EPOCH
     ):
-        raise ValueError("schema-2 F116 evidence identity differs")
+        raise ValueError("schema-2 F118 evidence identity differs")
+    predecessors = require_exact_keys(
+        retained["predecessor_authorities"],
+        {"historical_f116"},
+        "schema-2 F118 predecessor authorities",
+    )
     implementation = require_exact_keys(
         retained["implementation"],
         {
             "publisher",
             "committed_tools",
             "intermediate_36140_bundle",
+            "predecessor_current_source_bundle",
             "current_source_bundle",
         },
-        "schema-2 F116 implementation",
+        "schema-2 F118 implementation",
     )
     current = require_exact_keys(
         implementation["current_source_bundle"],
@@ -3797,47 +3818,153 @@ def validate_f116_committed_tools(
             "candidate_path",
             "subject",
         },
-        "schema-2 F116 current source bundle",
+        "schema-2 F118 current source bundle",
     )
-    head = require_nonempty_string(current["head"], "schema-2 F116 final HEAD")
+    head = require_nonempty_string(current["head"], "schema-2 F118 final HEAD")
     if REVISION_PATTERN.fullmatch(head) is None:
-        raise ValueError("schema-2 F116 final HEAD is invalid")
+        raise ValueError("schema-2 F118 final HEAD is invalid")
     if {
         "path": current["path"],
         "sha256": current["sha256"],
         "verified_revisions": current["verified_revisions"],
     } != final_binding:
-        raise ValueError("schema-2 F116 evidence final source bundle differs")
+        raise ValueError("schema-2 F118 evidence final source bundle differs")
+
+    historical_bindings = require_exact_keys(
+        predecessors["historical_f116"],
+        {"evidence", "publication_audit", "provenance_review", "plasma_review"},
+        "schema-2 F118 historical F116 bindings",
+    )
+    historical_payload = b""
+    for key, expected_path in {
+        "evidence": F116_RELATIVE,
+        "publication_audit": F116_PUBLICATION_AUDIT_RELATIVE,
+        "provenance_review": F116_PROVENANCE_REVIEW_RELATIVE,
+        "plasma_review": F116_PLASMA_REVIEW_RELATIVE,
+    }.items():
+        binding = require_v2_input_binding(
+            historical_bindings[key], f"schema-2 historical F116 {key}"
+        )
+        if binding["path"] != expected_path.as_posix():
+            raise ValueError(f"schema-2 historical F116 {key} path differs")
+        if root == DEFAULT_ROOT and binding["sha256"] != F116_CANONICAL_SHA256[key]:
+            raise ValueError(f"schema-2 historical F116 {key} canonical digest differs")
+        _, retained_payload = read_confined_file_sha256(
+            root,
+            binding["path"],
+            binding["sha256"],
+            f"schema-2 historical F116 {key}",
+            expected_mode=0o444,
+        )
+        if key == "evidence":
+            historical_payload = retained_payload
+    try:
+        historical = json.loads(historical_payload)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ValueError("schema-2 historical F116 evidence is not valid JSON") from error
+    historical = require_exact_keys(
+        historical,
+        {
+            "schema_version",
+            "record_type",
+            "checkpoint",
+            "execution_epoch",
+            "generated_utc",
+            "scope",
+            "predecessor_authorities",
+            "implementation",
+            "source_archive_catalog",
+            "authorization",
+            "validation",
+            "publication_requirements",
+        },
+        "schema-2 historical F116 evidence",
+    )
+    if (
+        historical["schema_version"] != 1
+        or historical["record_type"]
+        != "stage-i-current-source-authority-supersession-evidence"
+        or historical["checkpoint"] != "F-116"
+        or historical["execution_epoch"] != EXECUTION_EPOCH
+    ):
+        raise ValueError("schema-2 historical F116 evidence identity differs")
+    historical_implementation = require_exact_keys(
+        historical["implementation"],
+        {
+            "publisher",
+            "committed_tools",
+            "intermediate_36140_bundle",
+            "current_source_bundle",
+        },
+        "schema-2 historical F116 implementation",
+    )
+    historical_current = require_exact_keys(
+        historical_implementation["current_source_bundle"],
+        {
+            "path",
+            "sha256",
+            "complete_history",
+            "head",
+            "advertised_tip",
+            "verified_revisions",
+            "selected_as_current",
+            "candidate_path",
+            "subject",
+        },
+        "schema-2 historical F116 current source bundle",
+    )
+    predecessor = require_exact_keys(
+        implementation["predecessor_current_source_bundle"],
+        {
+            "path",
+            "sha256",
+            "complete_history",
+            "head",
+            "advertised_tip",
+            "verified_revisions",
+            "selected_as_current",
+            "role",
+            "subject",
+        },
+        "schema-2 F118 predecessor current source bundle",
+    )
+    expected_predecessor = dict(historical_current)
+    expected_predecessor.pop("candidate_path")
+    expected_predecessor["selected_as_current"] = False
+    expected_predecessor["role"] = "retained-non-current-predecessor"
+    if predecessor != expected_predecessor:
+        raise ValueError("schema-2 F118 predecessor does not exactly preserve F116")
+
     tools = implementation["committed_tools"]
-    expected_paths = sorted(F116_REQUIRED_TOOLS)
+    expected_paths = sorted(F118_REQUIRED_TOOLS)
     if not isinstance(tools, list) or len(tools) != len(expected_paths):
-        raise ValueError("schema-2 F116 committed_tools must contain exactly seven tools")
+        raise ValueError("schema-2 F118 committed_tools must contain exactly seven tools")
     repository = repository_root(initial_source_path())
     normalized = []
     for index, expected_path in enumerate(expected_paths):
         tool = require_exact_keys(
             tools[index],
             {"path", "revision", "sha256", "mode"},
-            f"schema-2 F116 committed tool {index}",
+            f"schema-2 F118 committed tool {index}",
         )
-        expected_mode = F116_REQUIRED_TOOLS[expected_path]
+        expected_mode = F118_REQUIRED_TOOLS[expected_path]
         if (
             tool["path"] != expected_path
             or tool["revision"] != head
             or tool["mode"] != expected_mode
         ):
             raise ValueError(
-                f"schema-2 F116 committed tool {index} path, revision, or mode differs"
+                f"schema-2 F118 committed tool {index} path, revision, or mode differs"
             )
         digest = require_sha256(
-            tool["sha256"], f"schema-2 F116 committed tool {index} SHA-256"
+            tool["sha256"], f"schema-2 F118 committed tool {index} SHA-256"
         )
         require_committed_revision_bytes(
             repository,
             Path(expected_path),
             head,
             digest,
-            f"schema-2 F116 committed tool {index}",
+            f"schema-2 F118 committed tool {index}",
         )
         tree = git_run(
             repository,
@@ -3849,7 +3976,7 @@ def validate_f116_committed_tools(
             tree_fields = tree.stdout.decode("ascii").strip().split()
         except UnicodeDecodeError as error:
             raise ValueError(
-                f"schema-2 F116 committed tool {index} tree mode is not ASCII"
+                f"schema-2 F118 committed tool {index} tree mode is not ASCII"
             ) from error
         if (
             tree.returncode
@@ -3858,7 +3985,7 @@ def validate_f116_committed_tools(
             or tree_fields[1] != "blob"
             or tree_fields[3] != expected_path
         ):
-            raise ValueError(f"schema-2 F116 committed tool {index} Git mode differs")
+            raise ValueError(f"schema-2 F118 committed tool {index} Git mode differs")
         normalized.append(
             {
                 "path": expected_path,
@@ -3870,11 +3997,11 @@ def validate_f116_committed_tools(
     publisher = require_exact_keys(
         implementation["publisher"],
         {"path", "revision", "sha256", "mode"},
-        "schema-2 F116 publisher",
+        "schema-2 F118 publisher",
     )
-    publisher_tool = normalized[expected_paths.index(F116_PUBLISHER_RELATIVE)]
+    publisher_tool = normalized[expected_paths.index(F118_PUBLISHER_RELATIVE)]
     if publisher != publisher_tool:
-        raise ValueError("schema-2 F116 publisher differs from committed_tools")
+        raise ValueError("schema-2 F118 publisher differs from committed_tools")
 
 
 def require_v2_repository_binding(value: object, label: str) -> dict[str, str]:
@@ -4233,11 +4360,11 @@ def schema2_publication_context(value: dict[str, object], path: Path,
     request_inputs = request["inputs"]
     if not isinstance(request_inputs, dict):
         raise ValueError("schema-2 request inputs must be an object")
-    source_authority = validate_f116_source_authority_binding(
+    source_authority = validate_f118_source_authority_binding(
         request_inputs.get("source_authority"), root, args
     )
     if provenance["source_authority"] != source_authority:
-        raise ValueError("schema-2 artifact F116 source authority binding differs")
+        raise ValueError("schema-2 artifact F118 source authority binding differs")
     for key, expected in (
         ("request_sha256", args.expected_request_sha256),
         ("generator_sha256", args.expected_generator_sha256),

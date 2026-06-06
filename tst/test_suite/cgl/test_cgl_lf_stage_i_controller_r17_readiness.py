@@ -403,7 +403,7 @@ def source_authority_binding(
     )
     verified_revisions = verified_revisions or ["b" * 40, revision]
     return {
-        "checkpoint": "F-116",
+        "checkpoint": "F-118",
         "evidence": {"path": "accounting/f116.json", "sha256": "1" * 64},
         "provenance_review": {
             "path": "accounting/f116.provenance.json",
@@ -811,6 +811,189 @@ def make_f116_source_authority(module, paths: dict[str, Path], tmp_path: Path,
             ),
         },
     )
+    f116_bindings = {
+        "evidence": {
+            "path": module.F116_CURRENT_SOURCE_AUTHORITY_RELATIVE.as_posix(),
+            "sha256": sha256(evidence_path),
+        },
+        "provenance_review": {
+            "path": module.F116_PROVENANCE_REVIEW_RELATIVE.as_posix(),
+            "sha256": sha256(review_paths["provenance_review"]),
+        },
+        "plasma_review": {
+            "path": module.F116_PLASMA_REVIEW_RELATIVE.as_posix(),
+            "sha256": sha256(review_paths["plasma_review"]),
+        },
+        "publication_audit": {
+            "path": module.F116_PUBLICATION_AUDIT_RELATIVE.as_posix(),
+            "sha256": sha256(audit_path),
+        },
+    }
+    f116_digests = {
+        "evidence_sha256": sha256(evidence_path),
+        "provenance_review_sha256": sha256(review_paths["provenance_review"]),
+        "plasma_review_sha256": sha256(review_paths["plasma_review"]),
+        "publication_audit_sha256": sha256(audit_path),
+    }
+    current_bundle = evidence["implementation"]["current_source_bundle"]
+    bridge_bundle = evidence["implementation"]["intermediate_36140_bundle"]
+    predecessor_bundle = dict(current_bundle)
+    predecessor_bundle.pop("candidate_path")
+    predecessor_bundle["selected_as_current"] = False
+    predecessor_bundle["role"] = "retained-non-current-predecessor"
+    f118_before = {
+        "readme_sha256": sha256(readme),
+        "sha256sums_sha256": sha256(sums),
+        "bridge_listed_exactly_once": True,
+        "predecessor_current_source_bundle_listed_exactly_once": True,
+        "final_bundle_listed": False,
+        "corrupt_c7_listed": False,
+        "historical_f115_preserved": True,
+    }
+    f118_after = {
+        "readme_sha256": sha256(readme),
+        "sha256sums_sha256": sha256(sums),
+        "bridge_listed_exactly_once": True,
+        "predecessor_current_source_bundle_listed_exactly_once": True,
+        "final_bundle_listed_exactly_once": True,
+        "corrupt_c7_listed": False,
+        "historical_f115_preserved": True,
+        "historical_f116_preserved": True,
+        "all_prior_checksum_entries_preserved": True,
+        "sole_current_source_bundle": bundle_relative.as_posix(),
+    }
+    evidence_path = root / module.F118_CURRENT_SOURCE_AUTHORITY_RELATIVE
+    evidence = {
+        "schema_version": 1,
+        "record_type": "stage-i-current-source-authority-supersession-evidence",
+        "checkpoint": "F-118",
+        "execution_epoch": EPOCH,
+        "generated_utc": (now - timedelta(minutes=1)).isoformat(),
+        "scope": {
+            "relationship": "current-source-selection-only-supersession",
+            "summary": "Select the exact committed F118 tooling source.",
+            "preserves": module.F118_PRESERVES,
+            "does_not_authorize": module.F118_DOES_NOT_AUTHORIZE,
+        },
+        "predecessor_authorities": {"historical_f116": f116_bindings},
+        "implementation": {
+            "publisher": next(
+                item for item in committed_tools
+                if item["path"] == "scripts/frontier/cgl_lf_stage_i_source_authority.py"
+            ),
+            "committed_tools": committed_tools,
+            "intermediate_36140_bundle": bridge_bundle,
+            "predecessor_current_source_bundle": predecessor_bundle,
+            "current_source_bundle": current_bundle,
+        },
+        "source_archive_catalog": {"before": f118_before, "after": f118_after},
+        "authorization": module.F118_AUTHORIZATION,
+        "validation": module.F118_VALIDATION_CLAIMS,
+        "publication_requirements": module.F118_PUBLICATION_REQUIREMENTS,
+    }
+    write_json(evidence_path, evidence)
+    f118_verified = {
+        "authorization_broadening": False,
+        "bridge_selected_as_current": False,
+        "predecessor_current_source_bundle_selected_as_current": False,
+        "corrupt_c7_excluded": True,
+        "current_source_selection_only": True,
+        "final_bundle_sha256": bundle_sha,
+        "final_head": revision,
+        "historical_f115_preserved": True,
+        "historical_f116_preserved": True,
+    }
+    review_paths = {
+        "provenance_review": root / module.F118_PROVENANCE_REVIEW_RELATIVE,
+        "plasma_review": root / module.F118_PLASMA_REVIEW_RELATIVE,
+    }
+    for key, kind, decision, agent in (
+        (
+            "provenance_review", "provenance-security", "approved-for-publication",
+            "fixture-f118-provenance-reviewer",
+        ),
+        (
+            "plasma_review", "plasma-scientific-continuation", "approved",
+            "fixture-f118-plasma-reviewer",
+        ),
+    ):
+        write_json(
+            review_paths[key],
+            {
+                "schema_version": 1,
+                "record_type": (
+                    "stage-i-current-source-authority-supersession-independent-review"
+                ),
+                "checkpoint": "F-118",
+                "execution_epoch": EPOCH,
+                "review_kind": kind,
+                "decision": decision,
+                "reviewed_candidate": {
+                    "path": str(tmp_path / "f118.evidence.candidate"),
+                    "sha256": sha256(evidence_path),
+                },
+                "published_f118": {
+                    "path": str(evidence_path),
+                    "sha256": sha256(evidence_path),
+                },
+                "reviewer": {"agent_id": agent, "identity": f"fixture {agent}"},
+                "reviewed_utc": now.isoformat(),
+                "findings": ["Exact F118 source selection and F116 history verified."],
+                "limitations": ["No prepare or submit authority."],
+                "verified": f118_verified,
+            },
+        )
+    audit_path = root / module.F118_PUBLICATION_AUDIT_RELATIVE
+    write_json(
+        audit_path,
+        {
+            "schema_version": 1,
+            "record_type": "stage-i-current-source-authority-supersession-publication-audit",
+            "checkpoint": "F-118",
+            "execution_epoch": EPOCH,
+            "published_utc": now.isoformat(),
+            "artifact": declared(evidence_path),
+            "independent_reviews": {
+                "reviews_bind_exact_published_f118_sha256": sha256(evidence_path),
+                "provenance_security": declared(review_paths["provenance_review"]),
+                "plasma_scientific_continuation": declared(review_paths["plasma_review"]),
+            },
+            "historical_f116_authority": f116_digests,
+            "source_archive_catalog": {
+                "readme": {
+                    "path": str(readme), "sha256": sha256(readme),
+                    "mode": "0644", "links": 1,
+                },
+                "sha256sums": {
+                    "path": str(sums), "sha256": sha256(sums),
+                    "mode": "0644", "links": 1,
+                },
+                "bridge_bundle": {
+                    "path": str(bridge), "sha256": sha256(bridge),
+                    "mode": "0644", "links": 1, "head": bridge_revision,
+                    "role": "retained-non-current-bridge", "selected_as_current": False,
+                },
+                "predecessor_current_source_bundle": {
+                    "path": str(bundle), "sha256": bundle_sha,
+                    "mode": "0644", "links": 1, "head": revision,
+                    "role": "retained-non-current-predecessor",
+                    "selected_as_current": False,
+                },
+                "current_source_bundle": {
+                    "path": str(bundle), "sha256": bundle_sha,
+                    "mode": "0644", "links": 1, "head": revision,
+                    "selected_as_current": True,
+                },
+                "corrupt_c7_absent_from_active_checksum_ledger": True,
+                "sole_current_source_bundle": str(bundle),
+            },
+            "authority_and_enforcement": module.F118_AUTHORIZATION,
+            "publication": (
+                "recoverable-forward-transaction-with-publication-audit-commit-marker-"
+                "under-stage-i-lock"
+            ),
+        },
+    )
     monkeypatch.setattr(
         module,
         "source_authority_committed_sha256",
@@ -843,21 +1026,21 @@ def make_f116_source_authority(module, paths: dict[str, Path], tmp_path: Path,
         },
     )
     binding = {
-        "checkpoint": "F-116",
+        "checkpoint": "F-118",
         "evidence": {
-            "path": module.F116_CURRENT_SOURCE_AUTHORITY_RELATIVE.as_posix(),
+            "path": module.F118_CURRENT_SOURCE_AUTHORITY_RELATIVE.as_posix(),
             "sha256": sha256(evidence_path),
         },
         "provenance_review": {
-            "path": module.F116_PROVENANCE_REVIEW_RELATIVE.as_posix(),
+            "path": module.F118_PROVENANCE_REVIEW_RELATIVE.as_posix(),
             "sha256": sha256(review_paths["provenance_review"]),
         },
         "plasma_review": {
-            "path": module.F116_PLASMA_REVIEW_RELATIVE.as_posix(),
+            "path": module.F118_PLASMA_REVIEW_RELATIVE.as_posix(),
             "sha256": sha256(review_paths["plasma_review"]),
         },
         "publication_audit": {
-            "path": module.F116_PUBLICATION_AUDIT_RELATIVE.as_posix(),
+            "path": module.F118_PUBLICATION_AUDIT_RELATIVE.as_posix(),
             "sha256": sha256(audit_path),
         },
         "final_source_bundle": {
@@ -893,9 +1076,9 @@ def make_f116_source_authority(module, paths: dict[str, Path], tmp_path: Path,
     }
 
 
-def make_retained_f116_staging(module, paths: dict[str, Path],
+def make_retained_f118_staging(module, paths: dict[str, Path],
                                fixture: dict[str, object]) -> Path:
-    """Create one complete retained publisher staging bound to public F116."""
+    """Create one complete retained publisher staging bound to public F118."""
 
     root = paths["root"]
     evidence = json.loads(fixture["evidence"].read_text())
@@ -903,7 +1086,7 @@ def make_retained_f116_staging(module, paths: dict[str, Path],
     transaction_id = "2026-06-05T120000+0000-" + "a" * 32
     staging = (
         paths["accounting"]
-        / f"mks24_stage_i_{EPOCH_SLUG}_source_authority_transactions"
+        / f"mks24_stage_i_{EPOCH_SLUG}_F118_source_authority_transactions"
         / f"{transaction_id}.staging"
     )
     staging.mkdir(parents=True)
@@ -912,10 +1095,10 @@ def make_retained_f116_staging(module, paths: dict[str, Path],
         "bundle": fixture["bundle"].read_bytes(),
         "evidence": fixture["evidence"].read_bytes(),
         "provenance_review": (
-            root / module.F116_PROVENANCE_REVIEW_RELATIVE
+            root / module.F118_PROVENANCE_REVIEW_RELATIVE
         ).read_bytes(),
         "plasma_review": (
-            root / module.F116_PLASMA_REVIEW_RELATIVE
+            root / module.F118_PLASMA_REVIEW_RELATIVE
         ).read_bytes(),
         "audit": fixture["audit"].read_bytes(),
         "readme_before": fixture["readme_before_payload"],
@@ -943,7 +1126,7 @@ def make_retained_f116_staging(module, paths: dict[str, Path],
         "record_type": "stage-i-current-source-authority-publication-transaction",
         "transaction_id": transaction_id,
         "execution_epoch": EPOCH,
-        "checkpoint": "F-116",
+        "checkpoint": "F-118",
         "state": "staged",
         "created_utc": evidence["generated_utc"],
         "publisher": {
@@ -961,10 +1144,10 @@ def make_retained_f116_staging(module, paths: dict[str, Path],
         "payloads": bindings,
         "targets": {
             "bundle": final["path"],
-            "evidence": module.F116_CURRENT_SOURCE_AUTHORITY_RELATIVE.as_posix(),
-            "provenance_review": module.F116_PROVENANCE_REVIEW_RELATIVE.as_posix(),
-            "plasma_review": module.F116_PLASMA_REVIEW_RELATIVE.as_posix(),
-            "publication_audit": module.F116_PUBLICATION_AUDIT_RELATIVE.as_posix(),
+            "evidence": module.F118_CURRENT_SOURCE_AUTHORITY_RELATIVE.as_posix(),
+            "provenance_review": module.F118_PROVENANCE_REVIEW_RELATIVE.as_posix(),
+            "plasma_review": module.F118_PLASMA_REVIEW_RELATIVE.as_posix(),
+            "publication_audit": module.F118_PUBLICATION_AUDIT_RELATIVE.as_posix(),
             "readme": "source-archives/README.md",
             "sha256sums": "source-archives/SHA256SUMS",
         },
@@ -1505,7 +1688,7 @@ def test_f116_current_authority_accepts_canonical_retained_staging_after_public_
     module = load_controller()
     paths = paths_for(module, tmp_path / "root")
     fixture = make_f116_source_authority(module, paths, tmp_path, monkeypatch)
-    staging = make_retained_f116_staging(module, paths, fixture)
+    staging = make_retained_f118_staging(module, paths, fixture)
     staging.parent.chmod(0o2755)
     staging.chmod(0o2700)
 
@@ -1528,7 +1711,7 @@ def test_f116_current_authority_accepts_stale_complete_old_staging_debris(
     module = load_controller()
     paths = paths_for(module, tmp_path / "root")
     fixture = make_f116_source_authority(module, paths, tmp_path, monkeypatch)
-    staging = make_retained_f116_staging(module, paths, fixture)
+    staging = make_retained_f118_staging(module, paths, fixture)
     staging.parent.chmod(0o2755)
     staging.chmod(0o2700)
     stale = staging / "evidence.json"
@@ -1559,7 +1742,7 @@ def test_f116_current_authority_accepts_incomplete_staging_debris(
     fixture = make_f116_source_authority(module, paths, tmp_path, monkeypatch)
     transactions = (
         paths["accounting"]
-        / f"mks24_stage_i_{EPOCH_SLUG}_source_authority_transactions"
+        / f"mks24_stage_i_{EPOCH_SLUG}_F118_source_authority_transactions"
     )
     staging = transactions / f"2026-06-05T120000+0000-{'b' * 32}.staging"
     staging.mkdir(parents=True)
@@ -1626,7 +1809,7 @@ def test_f116_source_authority_debris_classifier_acceptance_is_cross_tool_exact(
     source_authority.classify_non_authoritative_recovery_debris(
         {"transactions": transactions}
     )
-    controller.require_authenticated_f116_source_authority_staging(transactions)
+    controller.require_authenticated_f118_source_authority_staging(transactions)
 
     assert single.stat().st_mode & 0o777 == 0o000
     assert paired_first.stat().st_nlink == paired_second.stat().st_nlink == 2
@@ -1691,7 +1874,7 @@ def test_f116_source_authority_debris_classifier_rejection_is_cross_tool_exact(
             {"transactions": transactions}
         )
     with pytest.raises(ValueError):
-        controller.require_authenticated_f116_source_authority_staging(transactions)
+        controller.require_authenticated_f118_source_authority_staging(transactions)
 
 
 def test_live_canonical_f116_source_authority_debris_classification_is_cross_tool_exact():
@@ -1700,7 +1883,7 @@ def test_live_canonical_f116_source_authority_debris_classification_is_cross_too
     transactions = (
         controller.DEFAULT_ROOT
         / "accounting"
-        / f"mks24_stage_i_{EPOCH_SLUG}_source_authority_transactions"
+        / f"mks24_stage_i_{EPOCH_SLUG}_F118_source_authority_transactions"
     )
     if not transactions.is_dir():
         pytest.skip(f"live canonical F116 transaction root is unavailable: {transactions}")
@@ -1708,7 +1891,7 @@ def test_live_canonical_f116_source_authority_debris_classification_is_cross_too
     source_authority.classify_non_authoritative_recovery_debris(
         {"transactions": transactions}
     )
-    controller.require_authenticated_f116_source_authority_staging(transactions)
+    controller.require_authenticated_f118_source_authority_staging(transactions)
 
 
 @pytest.mark.parametrize("hostile_kind", ("regular-file", "symlink"))
@@ -1720,7 +1903,7 @@ def test_f116_current_authority_rejects_hostile_staging_container_entry(
     fixture = make_f116_source_authority(module, paths, tmp_path, monkeypatch)
     transactions = (
         paths["accounting"]
-        / f"mks24_stage_i_{EPOCH_SLUG}_source_authority_transactions"
+        / f"mks24_stage_i_{EPOCH_SLUG}_F118_source_authority_transactions"
     )
     transactions.mkdir(parents=True)
     transactions.chmod(0o2755)
@@ -1749,11 +1932,11 @@ def test_f116_retained_staging_is_not_consulted_before_public_auth(
     module = load_controller()
     paths = paths_for(module, tmp_path / "root")
     fixture = make_f116_source_authority(module, paths, tmp_path, monkeypatch)
-    make_retained_f116_staging(module, paths, fixture)
+    make_retained_f118_staging(module, paths, fixture)
     (paths["root"] / module.F116_PUBLICATION_AUDIT_RELATIVE).unlink()
     monkeypatch.setattr(
         module,
-        "require_authenticated_f116_source_authority_staging",
+        "require_authenticated_f118_source_authority_staging",
         lambda *_args, **_kwargs: pytest.fail(
             "retained staging was consulted before public F116 authenticated"
         ),
@@ -1829,11 +2012,14 @@ def test_f116_current_source_authority_fails_closed_on_drift(
         evidence["authorization"]["prepare_authorized"] = True
         write_json(evidence_path, evidence)
     elif mutation == "historical-f115-scope":
-        evidence = json.loads(evidence_path.read_text())
+        historical_evidence_path = (
+            paths["root"] / module.F116_CURRENT_SOURCE_AUTHORITY_RELATIVE
+        )
+        evidence = json.loads(historical_evidence_path.read_text())
         evidence["predecessor_authorities"]["historical_f115"]["evidence"][
             "sha256"
         ] = "f" * 64
-        write_json(evidence_path, evidence)
+        write_json(historical_evidence_path, evidence)
     elif mutation == "historical-manifest":
         fixture["historical_manifest"].chmod(0o644)
         fixture["historical_manifest"].write_text(
@@ -1901,7 +2087,7 @@ def test_f116_current_source_authority_fails_closed_on_drift(
     elif mutation in {"pending-source-transaction", "retired-source-transaction"}:
         transaction = (
             paths["accounting"]
-            / f"mks24_stage_i_{EPOCH_SLUG}_source_authority_transactions"
+            / f"mks24_stage_i_{EPOCH_SLUG}_F118_source_authority_transactions"
             / ("pending.retired" if mutation == "retired-source-transaction" else "pending")
         )
         transaction.mkdir(parents=True)
@@ -3189,7 +3375,7 @@ def test_clean_r17_predecessor_state_rejects_unauthenticated_source_transaction_
     paths = paths_for(module, tmp_path / "root")
     transaction = (
         paths["accounting"]
-        / f"mks24_stage_i_{EPOCH_SLUG}_source_authority_transactions"
+        / f"mks24_stage_i_{EPOCH_SLUG}_F118_source_authority_transactions"
         / "retained.staging"
     )
     transaction.mkdir(parents=True)
@@ -3340,7 +3526,7 @@ def test_submission_reauthentication_binds_f116_and_fresh_r17_chain(
         )
     manifest["command"]["r17_readiness_evidence_chain"] = readiness
     manifest["command"]["current_source_authority"] = {"stale": True}
-    with pytest.raises(ValueError, match="F116 current-source authority is stale"):
+    with pytest.raises(ValueError, match="F118 current-source authority is stale"):
         module.reauthenticate_submission_authority(
             paths, manifest_path, manifest, [predecessor, reservation], reservation, False
         )
@@ -3417,7 +3603,7 @@ def test_non_r17_submission_reauthenticates_exact_f116_authority(
     )
     assert calls[0]["input_revision"] == module.QUALIFIED_SOURCE_REVISION
     manifest["command"]["current_source_authority"] = {"stale": True}
-    with pytest.raises(ValueError, match="F116 current-source authority is stale"):
+    with pytest.raises(ValueError, match="F118 current-source authority is stale"):
         module.reauthenticate_submission_authority(
             paths, manifest_path, manifest, [reservation], reservation, False
         )

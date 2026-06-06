@@ -1063,8 +1063,8 @@ def schema2_review_probe(tmp_path: Path, reviewed_utc: str):
     return load_checkpoint_module(), root, artifact_name, args
 
 
-def f116_committed_tools_probe(tmp_path: Path, monkeypatch):
-    """Create one exact seven-tool Git commitment for F116 consumer tests."""
+def f118_committed_tools_probe(tmp_path: Path, monkeypatch):
+    """Create exact F118 tools plus an immutable four-part F116 predecessor."""
 
     module = load_checkpoint_module()
     repository = tmp_path / "repository"
@@ -1107,7 +1107,7 @@ def f116_committed_tools_probe(tmp_path: Path, monkeypatch):
         }
         for relative in sorted(module.F116_REQUIRED_TOOLS)
     ]
-    current = {
+    historical_current = {
         "path": "source-archives/final.bundle",
         "sha256": "f" * 64,
         "complete_history": True,
@@ -1116,9 +1116,12 @@ def f116_committed_tools_probe(tmp_path: Path, monkeypatch):
         "verified_revisions": [head],
         "selected_as_current": True,
         "candidate_path": str(tmp_path / "final.bundle"),
-        "subject": "Commit exact F116 tools",
+        "subject": "Commit exact historical F116 tools",
     }
-    evidence = {
+    root = tmp_path / "root"
+    accounting = root / "accounting"
+    accounting.mkdir(parents=True)
+    historical_evidence = {
         "schema_version": 1,
         "record_type": "stage-i-current-source-authority-supersession-evidence",
         "checkpoint": "F-116",
@@ -1132,6 +1135,50 @@ def f116_committed_tools_probe(tmp_path: Path, monkeypatch):
             ),
             "committed_tools": tools,
             "intermediate_36140_bundle": {},
+            "current_source_bundle": historical_current,
+        },
+        "source_archive_catalog": {},
+        "authorization": {},
+        "validation": {},
+        "publication_requirements": {},
+    }
+    historical_bindings = {}
+    for key, relative in {
+        "evidence": module.F116_RELATIVE,
+        "publication_audit": module.F116_PUBLICATION_AUDIT_RELATIVE,
+        "provenance_review": module.F116_PROVENANCE_REVIEW_RELATIVE,
+        "plasma_review": module.F116_PLASMA_REVIEW_RELATIVE,
+    }.items():
+        path = root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        value = historical_evidence if key == "evidence" else {"historical": key}
+        path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n")
+        path.chmod(0o444)
+        historical_bindings[key] = {
+            "path": relative.as_posix(),
+            "sha256": sha256(path),
+        }
+    predecessor = dict(historical_current)
+    predecessor.pop("candidate_path")
+    predecessor["selected_as_current"] = False
+    predecessor["role"] = "retained-non-current-predecessor"
+    current = dict(historical_current)
+    current["subject"] = "Commit exact F118 tools"
+    evidence = {
+        "schema_version": 1,
+        "record_type": "stage-i-current-source-authority-supersession-evidence",
+        "checkpoint": "F-118",
+        "execution_epoch": EPOCH,
+        "generated_utc": datetime.now(timezone.utc).isoformat(),
+        "scope": {},
+        "predecessor_authorities": {"historical_f116": historical_bindings},
+        "implementation": {
+            "publisher": next(
+                item for item in tools if item["path"] == module.F116_PUBLISHER_RELATIVE
+            ),
+            "committed_tools": tools,
+            "intermediate_36140_bundle": {},
+            "predecessor_current_source_bundle": predecessor,
             "current_source_bundle": current,
         },
         "source_archive_catalog": {},
@@ -1149,7 +1196,7 @@ def f116_committed_tools_probe(tmp_path: Path, monkeypatch):
         "initial_source_path",
         lambda: repository / "scripts/frontier/cgl_lf_stage_i_checkpoint.py",
     )
-    return module, evidence, final_binding
+    return module, root, evidence, final_binding
 
 
 def test_checkpoint_rejects_schema2_review_predating_artifact_before_publication(
@@ -1234,14 +1281,16 @@ def test_checkpoint_declared_independence_disclaims_cryptographic_identity(tmp_p
     )
 
 
-def test_checkpoint_accepts_exact_f116_committed_tools(tmp_path, monkeypatch):
-    module, evidence, final_binding = f116_committed_tools_probe(tmp_path, monkeypatch)
-    module.validate_f116_committed_tools(
-        (json.dumps(evidence, indent=2, sort_keys=True) + "\n").encode(), final_binding
+def test_checkpoint_accepts_exact_f118_committed_tools(tmp_path, monkeypatch):
+    module, root, evidence, final_binding = f118_committed_tools_probe(tmp_path, monkeypatch)
+    module.validate_f118_committed_tools(
+        (json.dumps(evidence, indent=2, sort_keys=True) + "\n").encode(),
+        final_binding,
+        root,
     )
 
 
-def test_checkpoint_f116_required_tools_match_source_authority_contract():
+def test_checkpoint_f118_required_tools_match_source_authority_contract():
     checkpoint = load_checkpoint_module()
     source = REPOSITORY / "scripts/frontier/cgl_lf_stage_i_source_authority.py"
     spec = importlib.util.spec_from_file_location(
@@ -1250,14 +1299,14 @@ def test_checkpoint_f116_required_tools_match_source_authority_contract():
     assert spec is not None and spec.loader is not None
     authority = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(authority)
-    assert checkpoint.F116_REQUIRED_TOOLS == authority.REQUIRED_TOOLS
+    assert checkpoint.F118_REQUIRED_TOOLS == authority.REQUIRED_TOOLS
 
 
 @pytest.mark.parametrize("mutation", ["missing", "duplicate", "wrong-mode", "wrong-sha"])
-def test_checkpoint_rejects_malformed_f116_committed_tools(
+def test_checkpoint_rejects_malformed_f118_committed_tools(
     tmp_path, monkeypatch, mutation
 ):
-    module, evidence, final_binding = f116_committed_tools_probe(tmp_path, monkeypatch)
+    module, root, evidence, final_binding = f118_committed_tools_probe(tmp_path, monkeypatch)
     tools = evidence["implementation"]["committed_tools"]
     if mutation == "missing":
         tools.pop()
@@ -1268,10 +1317,11 @@ def test_checkpoint_rejects_malformed_f116_committed_tools(
     else:
         tools[0]["sha256"] = "0" * 64
 
-    with pytest.raises(ValueError, match="schema-2 F116 committed"):
-        module.validate_f116_committed_tools(
+    with pytest.raises(ValueError, match="schema-2 F118 committed"):
+        module.validate_f118_committed_tools(
             (json.dumps(evidence, indent=2, sort_keys=True) + "\n").encode(),
             final_binding,
+            root,
         )
 
 
@@ -5158,6 +5208,9 @@ def test_checkpoint_git_execution_is_descriptor_bound(monkeypatch):
         return subprocess.CompletedProcess(command, 0, stdout=b"")
 
     monkeypatch.setattr(module.subprocess, "run", fake_run)
+    # This probe validates descriptor-bound execution, independent of whether
+    # the suite itself runs from a linked Git worktree.
+    monkeypatch.setattr(module, "entry_exists", lambda _path: False)
     module.git_run(REPOSITORY, ["diff", "--quiet", "--", CHECKPOINT.name])
 
     assert len(calls) == 1
@@ -5402,8 +5455,8 @@ def test_checkpoint_current_recost_generator_end_to_end(tmp_path, monkeypatch):
     recost_test = load_current_recost_test_module()
     original_write_immutable_json = recost_test.write_immutable_json
 
-    def write_exact_f116_publisher(path, value):
-        if path.name == recost_test.F116_NAME:
+    def write_exact_source_authority_publisher(path, value):
+        if path.name in {recost_test.F116_NAME, recost_test.F118_NAME}:
             value = json.loads(json.dumps(value))
             tools = value["implementation"]["committed_tools"]
             value["implementation"]["publisher"] = next(
@@ -5414,7 +5467,7 @@ def test_checkpoint_current_recost_generator_end_to_end(tmp_path, monkeypatch):
         original_write_immutable_json(path, value)
 
     monkeypatch.setattr(
-        recost_test, "write_immutable_json", write_exact_f116_publisher
+        recost_test, "write_immutable_json", write_exact_source_authority_publisher
     )
     generated = recost_test.recost_fixture.__wrapped__(tmp_path)
     repository = generated["repository"]
@@ -5576,7 +5629,7 @@ def test_checkpoint_current_recost_generator_end_to_end(tmp_path, monkeypatch):
     staged.chmod(0o444)
     fixture["artifact_sha256"] = sha256(staged)
     rejected = run_checkpoint(fixture, "verify-staged-recost")
-    assert_rejected(rejected, "schema-2 artifact F116 source authority binding differs")
+    assert_rejected(rejected, "schema-2 artifact F118 source authority binding differs")
     staged.chmod(0o644)
     staged.write_bytes(retained)
     staged.chmod(0o444)
