@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import copy
+import math
 from pathlib import Path
 import struct
 import unittest
@@ -271,6 +272,39 @@ class Q011Section54RestartPayloadTests(unittest.TestCase):
         ):
             restart.extract_startup_shock_ledger(payload)
 
+    def test_physically_impossible_startup_momentum_energy_fails_closed(self) -> None:
+        cases = {
+            "ps_injected_cr": {"ps_injected_cr_momentum_x1_global": "1e9"},
+            "ps_removed_cr": {"ps_removed_cr_momentum_x1_global": "1e9"},
+        }
+        for prefix, overrides in cases.items():
+            with self.subTest(prefix=prefix):
+                with self.assertRaisesRegex(
+                    restart.RestartPolicyError,
+                    prefix + " energy is below its aggregate momentum lower bound",
+                ):
+                    restart.extract_startup_shock_ledger(
+                        _restart_payload(ledger_overrides=overrides)
+                    )
+
+    def test_extreme_finite_startup_momentum_fails_closed(self) -> None:
+        cases = {
+            "extreme momentum": {"ps_injected_cr_momentum_x1_global": "1e308"},
+            "unreliable accumulation count": {
+                "ps_injected_cr_count_global": "3000000000000000.0",
+                "ps_injected_cr_mass_global": "3000000000000000.0",
+            },
+        }
+        for label, overrides in cases.items():
+            with self.subTest(label=label):
+                with self.assertRaisesRegex(
+                    restart.RestartPolicyError,
+                    "ps_injected_cr energy-momentum admissibility bound is invalid",
+                ):
+                    restart.extract_startup_shock_ledger(
+                        _restart_payload(ledger_overrides=overrides)
+                    )
+
     def test_missing_duplicate_and_invalid_escape_ledgers_fail_closed(self) -> None:
         with self.assertRaisesRegex(
             restart.RestartPolicyError,
@@ -304,6 +338,9 @@ class Q011Section54RestartPayloadTests(unittest.TestCase):
                 "ps_escaped_injected_cr_count_global": "0.0",
                 "ps_escaped_injected_cr_mass_global": "0.0",
             },
+            "escaped_injected_cr energy is below": {
+                "ps_escaped_injected_cr_momentum_x1_global": "1e9"
+            },
         }
         for expected, overrides in cases.items():
             with self.subTest(expected=expected):
@@ -315,6 +352,11 @@ class Q011Section54RestartPayloadTests(unittest.TestCase):
             "wrong_calls": {"ps_escape_audit_calls": "10001"},
             "zero_calls": {"ps_escape_audit_calls": "0"},
             "stale_time": {"ps_escape_last_audit_time": "500.0"},
+            "one_ulp_time": {
+                "ps_escape_last_audit_time": repr(
+                    math.nextafter(_CHECKPOINT_OBSERVED_TIME, math.inf)
+                )
+            },
         }
         for label, overrides in cases.items():
             with self.subTest(label=label):

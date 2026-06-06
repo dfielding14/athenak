@@ -253,7 +253,7 @@ def _run_expect_reject(label, basename, nlim, restart_path, extra, expected):
     )
     if code == 0 or expected not in output:
         raise RuntimeError(
-            "Escape-ledger corruption was not rejected: " + label + "\n" + output
+            "Q011 restart corruption was not rejected: " + label + "\n" + output
         )
 
 
@@ -409,6 +409,9 @@ def _summary():
             >= segment["ps_escaped_injected_cr_count_global"]
         ),
         "corrupt_ledgers_rejected": _RESULTS["corrupt_ledgers_rejected"],
+        "particle_energy_controls_bound_on_restart": _RESULTS[
+            "particle_energy_controls_bound_on_restart"
+        ],
         "duplicate_ledgers_rejected_by_runtime_and_parser": _RESULTS[
             "duplicate_ledgers_rejected_by_runtime_and_parser"
         ],
@@ -501,6 +504,17 @@ def run(**kwargs):
             ["problem/ps_escape_last_audit_time=0"],
             chronology_error,
         ),
+        "nearby_incorrect_audit_time": (
+            [
+                "problem/ps_escape_last_audit_time="
+                + repr(
+                    math.nextafter(
+                        _RESULTS["segment"]["ps_escape_last_audit_time"], math.inf
+                    )
+                )
+            ],
+            chronology_error,
+        ),
         "future_audit_time": (
             ["problem/ps_escape_last_audit_time=1e99"],
             numeric_error,
@@ -516,6 +530,18 @@ def run(**kwargs):
             ],
             numeric_error,
         ),
+        "impossible_injected_momentum_energy": (
+            ["problem/ps_injected_cr_momentum_x1_global=1e9"],
+            numeric_error,
+        ),
+        "impossible_removed_momentum_energy": (
+            ["problem/ps_removed_cr_momentum_x1_global=1e9"],
+            numeric_error,
+        ),
+        "impossible_escape_momentum_energy": (
+            ["problem/ps_escaped_injected_cr_momentum_x1_global=1e9"],
+            numeric_error,
+        ),
     }
     for label, (extra, expected) in corruptions.items():
         _run_expect_reject(
@@ -527,6 +553,16 @@ def run(**kwargs):
             expected,
         )
     _RESULTS["corrupt_ledgers_rejected"] = sorted(corruptions)
+
+    _run_expect_reject(
+        "changed particle light speed",
+        continued_basename + "_changed_particle_light_speed",
+        101,
+        segment_restart,
+        ["particles/pic_cr_light_speed=9999"],
+        "Particle restart physical-model metadata mismatch.",
+    )
+    _RESULTS["particle_energy_controls_bound_on_restart"] = True
 
     duplicate_results = []
     duplicate_cases = {
@@ -608,14 +644,19 @@ def analyze():
         == [
             "empty_escape_with_accumulated_state",
             "future_audit_time",
+            "impossible_escape_momentum_energy",
+            "impossible_injected_momentum_energy",
+            "impossible_removed_momentum_energy",
             "incomplete",
             "inconsistent_mass",
+            "nearby_incorrect_audit_time",
             "nonfinite_momentum",
             "nonzero_initial_count",
             "stale_audit_time",
             "wrong_positive_audit_calls",
             "zero_audit_calls",
         ]
+        and summary["particle_energy_controls_bound_on_restart"]
         and summary["duplicate_ledgers_rejected_by_runtime_and_parser"]
         == ["duplicate_cr_ledger", "duplicate_escape_ledger"]
         and summary["initial_particle_escape_rejected"]

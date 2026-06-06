@@ -129,6 +129,8 @@ Real ps_particle_mass = 1.0;
 Real ps_particle_charge = 1.0;
 Real ps_particle_q_over_m = 1.0;
 Real ps_particle_macro_mass = 1.0;
+bool ps_particle_momentum_state = false;
+Real ps_particle_light_speed = 1.0;
 Real ps_mass_reservoir_global = 0.0;
 int ps_injection_transaction_cycle = std::numeric_limits<int>::min();
 std::vector<GasDelta> ps_injection_transaction_gas_deltas;
@@ -194,7 +196,7 @@ void HashParallelShockRestartControl(std::uint64_t &hash, const char *name,
 std::string ParallelShockRestartControlFingerprint() {
   constexpr std::uint64_t fnv_offset_basis = 14695981039346656037ULL;
   std::uint64_t hash = fnv_offset_basis;
-  constexpr char schema[] = "athenak_pic_parallel_shock_restart_controls_v1";
+  constexpr char schema[] = "athenak_pic_parallel_shock_restart_controls_v2";
   HashParallelShockRestartBytes(hash, schema, sizeof(schema));
 
   // Diagnostics cadence and initial-only seed noise do not alter continuation.
@@ -235,6 +237,10 @@ std::string ParallelShockRestartControlFingerprint() {
                                   ps_particle_q_over_m);
   HashParallelShockRestartControl(hash, "ps_particle_macro_mass",
                                   ps_particle_macro_mass);
+  HashParallelShockRestartControl(hash, "ps_particle_momentum_state",
+                                  static_cast<int>(ps_particle_momentum_state));
+  HashParallelShockRestartControl(hash, "ps_particle_light_speed",
+                                  ps_particle_light_speed);
 
   HashParallelShockRestartControl(hash, "ps_enable_frame_tracking",
                                   static_cast<int>(ps_enable_frame_tracking));
@@ -624,6 +630,37 @@ bool ParallelShockLedgerValueExceeds(const Real lhs, const Real rhs) {
   return lhs > rhs + ParallelShockLedgerTolerance(lhs, rhs);
 }
 
+bool ParallelShockAggregateKineticEnergyIsAdmissible(
+    const Real count, const Real mass, const Real momentum_x1,
+    const Real momentum_x2, const Real momentum_x3, const Real energy) {
+  if (!std::isfinite(count) || !std::isfinite(mass) ||
+      !std::isfinite(momentum_x1) || !std::isfinite(momentum_x2) ||
+      !std::isfinite(momentum_x3) || !std::isfinite(energy) ||
+      count < 0.0 || mass < 0.0 || energy < 0.0 ||
+      !std::isfinite(ps_particle_light_speed) || ps_particle_light_speed <= 0.0) {
+    return false;
+  }
+  if (count == 0.0) {
+    return mass == 0.0 && momentum_x1 == 0.0 && momentum_x2 == 0.0 &&
+        momentum_x3 == 0.0 && energy == 0.0;
+  }
+  if (mass <= 0.0) return false;
+  const Real relative_bound =
+      std::max(count, static_cast<Real>(1.0))*std::numeric_limits<Real>::epsilon();
+  if (!std::isfinite(relative_bound) || relative_bound >= 0.5) return false;
+  const Real state_x1 = momentum_x1/mass;
+  const Real state_x2 = momentum_x2/mass;
+  const Real state_x3 = momentum_x3/mass;
+  // Convexity makes the shared aggregate state the minimum-energy population
+  // with this total mass and momentum; velocity dispersion can only add energy.
+  const Real lower_bound = mass*particles::CRKineticEnergy(
+      ps_particle_momentum_state, ps_particle_light_speed,
+      state_x1, state_x2, state_x3);
+  return std::isfinite(lower_bound) &&
+      lower_bound <= energy +
+          ParallelShockLedgerTolerance(lower_bound, energy, count);
+}
+
 void RejectDuplicateParallelShockRestartLedgers(ParameterInput *pin,
                                                 const bool restart) {
   if (!restart || pin == nullptr) return;
@@ -686,9 +723,8 @@ bool PaperVL2EscapeStageChronologyIsValid(const particles::Particles *ppart,
   const Real expected_audit_time =
       (stage == 1) ? pm->time + 0.5*pm->dt : pm->time + pm->dt;
   return ps_escape_audit_calls == expected_calls_before_stage &&
-      ParallelShockLedgerValuesAgree(ps_escape_last_audit_time,
-                                      expected_last_time) &&
-      ParallelShockLedgerValuesAgree(audit_time, expected_audit_time);
+      ps_escape_last_audit_time == expected_last_time &&
+      audit_time == expected_audit_time;
 }
 
 void ValidatePaperVL2CommittedEscapeChronology(const particles::Particles *ppart,
@@ -706,8 +742,7 @@ void ValidatePaperVL2CommittedEscapeChronology(const particles::Particles *ppart
     const int expected_calls = 2*committed_cycle;
     const Real expected_last_time = (expected_calls == 0) ? 0.0 : committed_time;
     if (ps_escape_audit_calls != expected_calls ||
-        !ParallelShockLedgerValuesAgree(ps_escape_last_audit_time,
-                                        expected_last_time)) {
+        ps_escape_last_audit_time != expected_last_time) {
       invalid_local = 1;
     }
   }
@@ -844,6 +879,20 @@ void ValidateParallelShockRuntimeLedger(const char *context, const Real current_
                                       expected_removed_mass) ||
       !ParallelShockLedgerValuesAgree(ps_escaped_injected_cr_mass_global,
                                       expected_escaped_mass) ||
+      !ParallelShockAggregateKineticEnergyIsAdmissible(
+          ps_injected_cr_count_global, ps_injected_cr_mass_global,
+          ps_injected_cr_momentum_x1_global, ps_injected_cr_momentum_x2_global,
+          ps_injected_cr_momentum_x3_global, ps_injected_cr_energy_global) ||
+      !ParallelShockAggregateKineticEnergyIsAdmissible(
+          ps_removed_cr_count_global, ps_removed_cr_mass_global,
+          ps_removed_cr_momentum_x1_global, ps_removed_cr_momentum_x2_global,
+          ps_removed_cr_momentum_x3_global, ps_removed_cr_energy_global) ||
+      !ParallelShockAggregateKineticEnergyIsAdmissible(
+          ps_escaped_injected_cr_count_global, ps_escaped_injected_cr_mass_global,
+          ps_escaped_injected_cr_momentum_x1_global,
+          ps_escaped_injected_cr_momentum_x2_global,
+          ps_escaped_injected_cr_momentum_x3_global,
+          ps_escaped_injected_cr_energy_global) ||
       ps_removed_cr_count_global + ps_escaped_injected_cr_count_global >
           ps_injected_cr_count_global ||
       ParallelShockLedgerValueExceeds(
@@ -2886,6 +2935,15 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
   if (!std::isfinite(ps_particle_macro_mass) || ps_particle_macro_mass <= 0.0) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl << "Computed injected macro-mass must be > 0." << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+  ps_particle_momentum_state = pmbp->ppart->UsesRelativisticCRState();
+  ps_particle_light_speed = pmbp->ppart->pic_cr_light_speed;
+  if (!std::isfinite(ps_particle_light_speed) || ps_particle_light_speed <= 0.0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock particle light speed must be finite and positive."
+              << std::endl;
     restart_utils::AbortOnFatalError();
   }
 

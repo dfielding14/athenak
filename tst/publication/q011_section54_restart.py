@@ -35,6 +35,8 @@ _MODEL_REAL_COUNT = 37
 _REAL_BYTES = 8
 _MAX_LAYOUT_COUNT = 1 << 31
 _MAX_SIGNED_INT = (1 << 31) - 1
+_Q011_PARTICLE_LIGHT_SPEED = 1.0e4
+_BINARY64_EPSILON = 2.220446049250313e-16
 
 _INTEGER_LEDGER_FIELDS = (
     "ps_cr_ledger_schema",
@@ -560,6 +562,58 @@ def _parse_real(value: str, label: str) -> float:
     return parsed
 
 
+def _validate_q011_population_energy(
+    ledger: Mapping[str, object], prefix: str, label: str
+) -> None:
+    count = ledger[prefix + "_count_global"]
+    mass = ledger[prefix + "_mass_global"]
+    momentum = [
+        ledger[prefix + "_momentum_x1_global"],
+        ledger[prefix + "_momentum_x2_global"],
+        ledger[prefix + "_momentum_x3_global"],
+    ]
+    energy = ledger[prefix + "_energy_global"]
+    if count == 0.0:
+        _require(
+            mass == 0.0
+            and all(component == 0.0 for component in momentum)
+            and energy == 0.0,
+            f"{label}: empty {prefix} population contains accumulated state",
+        )
+        return
+    _require(mass > 0.0, f"{label}: nonempty {prefix} population has nonpositive mass")
+    state_norm = math.hypot(*(component / mass for component in momentum))
+    _require(
+        math.isfinite(state_norm),
+        f"{label}: {prefix} aggregate momentum is not finite",
+    )
+    specific_lower_bound = (
+        _Q011_PARTICLE_LIGHT_SPEED
+        * state_norm
+        * (
+            state_norm
+            / (
+                math.hypot(_Q011_PARTICLE_LIGHT_SPEED, state_norm)
+                + _Q011_PARTICLE_LIGHT_SPEED
+            )
+        )
+    )
+    lower_bound = mass * specific_lower_bound
+    relative_bound = max(count, 1.0) * _BINARY64_EPSILON
+    _require(
+        math.isfinite(lower_bound) and relative_bound < 0.5,
+        f"{label}: {prefix} energy-momentum admissibility bound is invalid",
+    )
+    summation_bound = relative_bound / (1.0 - relative_bound)
+    tolerance = (8.0 * summation_bound + 64.0 * _BINARY64_EPSILON) * max(
+        abs(energy), abs(lower_bound), abs(mass), 1.0
+    )
+    _require(
+        energy + tolerance >= lower_bound,
+        f"{label}: {prefix} energy is below its aggregate momentum lower bound",
+    )
+
+
 def _validate_startup_shock_ledger(ledger: object, label: str) -> dict[str, object]:
     ledger_mapping = _keys(ledger, set(STARTUP_SHOCK_LEDGER_FIELDS), label)
     for field in _INTEGER_LEDGER_FIELDS:
@@ -615,6 +669,7 @@ def _validate_startup_shock_ledger(ledger: object, label: str) -> dict[str, obje
                     ledger_mapping[prefix + suffix] == 0.0,
                     f"{label}: empty {prefix} ledger contains accumulated state",
                 )
+        _validate_q011_population_energy(ledger_mapping, prefix, label)
     tag_floor = ledger_mapping["ps_injection_tag_floor"]
     injected_count = int(ledger_mapping["ps_injected_cr_count_global"])
     next_tag = ledger_mapping["ps_next_tag"]
@@ -707,6 +762,9 @@ def _validate_particle_escape_ledger(
                 ledger_mapping[field] == 0.0,
                 f"{label}: empty escape ledger contains accumulated state",
             )
+    _validate_q011_population_energy(
+        ledger_mapping, "ps_escaped_injected_cr", label
+    )
     if ledger_mapping["ps_escape_audit_calls"] == 0:
         for field in _ESCAPE_REAL_LEDGER_FIELDS:
             _require(
