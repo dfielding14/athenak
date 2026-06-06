@@ -1,0 +1,144 @@
+{
+  "record_type": "q043_registered_execution_raw_oracle_qualification_successor_readiness",
+  "schema_version": 1,
+  "successor_id": "q043_registered_execution_raw_oracle_qualification_successor_v1",
+  "date": "2026-06-06",
+  "campaign_id": "Q043-BELL-DEPOSITED-J-OVER-C-VOLUME-AWARE",
+  "repaired_foundation_source_commit": "5668ae65e8f02d9725da60b876221d3c441fdd95",
+  "status": "implemented_non_authorizing_registered_admission_exact_132_case_contract_registered_executions_pending",
+  "qualification_effect": "registered_execution_raw_oracle_prerequisite_only_no_launch_no_policy_no_q023_no_q019_no_science_no_publication_authority",
+  "scope": "Additive filesystem-backed registered-execution admission and raw-oracle qualification successor for the exact 132-case dimension-valid Q043 matrix. It verifies exact checked-in deck bytes, clean-candidate source archive and executable bindings, immutable launch and reconciled execution records, authorized Orion paths, exact srun/MPI/decomposition evidence with one MeshBlock per rank, terminal success, every cycle-zero and cycle-one field/rank artifact, strict hardened frozen runtime metadata, raw bytes, and source-local oracle recomputation. It cannot launch, mutate policy, qualify Q043, Q023, or Q019, authorize a scientific claim, or authorize publication.",
+  "source_bindings": {
+    "successor": {
+      "path": "tst/publication/q043_registered_execution_raw_oracle_qualification_successor_v1.py",
+      "sha256": "8d901a65b58577dd3348b0569a43011f092721c0ee23c6270e27f80a31cbe370"
+    },
+    "focused_tests": {
+      "path": "tst/publication/test_q043_registered_execution_raw_oracle_qualification_successor_v1.py",
+      "sha256": "e0eac86b2818b04314c0eb71e1e3c162c80a852563eaf6ecde09e64af61024c6"
+    }
+  },
+  "foundation_bindings": {
+    "checked_in_deck_manifest": {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/deck_manifest.json",
+      "sha256": "77d6ec862314d308c41490dde1137f6c384d1da24b6b72ad43e357545cff98b0"
+    },
+    "source_local_raw_oracle": {
+      "path": "tst/publication/q043_bell_current_volume_aware_deposited_current_oracle.py",
+      "sha256": "f0a8db7fb47798d4bdc9ec742cef09e5ae0c69ff3ccb2f25d065602b23a26bed"
+    },
+    "repaired_q043_generator_source": {
+      "path": "src/pgen/tests/q043_bell_current_volume_aware.cpp",
+      "sha256": "dd44fff4fe39bf1640dad6019ded29ce7d434b50a0c9831a8749383c6241f3e3"
+    },
+    "foundation_role": "source_local_analysis_dependency_only_not_registered_evidence_not_downstream_qualification"
+  },
+  "registered_case_contract": {
+    "candidate_rule": "Read and SHA-256 verify the clean-candidate manifest, source archive, executable, and environment profile as stable unaliased regular files under the authorized Orion root; require clean-source and build cross-links; open the source archive and byte-compare the full Q043 generator, oracle, admission, deck-manifest, and all matrix-deck closure against reviewed source.",
+    "deck_rule": "Read the exact checked-in case deck and deck manifest from the reviewed source root, compare deck bytes to the deterministic renderer, require the manifest digest cross-link, and require an immutable launch-deck copy with identical bytes under the registered artifact root.",
+    "execution_rule": "Require the exact authorized Orion run namespace, exact launch contract, immutable reconciled registered-execution receipt, exact srun command, exact MPI world/rank evidence, the exact dimension-valid decomposition with one MeshBlock per rank, unique scheduler identities, and COMPLETED 0:0 termination.",
+    "stdout_terminal_rule": "Require unique registered rank evidence, cycle-one and nlim-one evidence, cycle-limit termination, zero exit and signal, and an exact cross-linked terminal receipt.",
+    "raw_inventory_rule": "Require exactly one cycle-zero and one cycle-one artifact for every required field and MPI rank, canonical AthenaK output paths, stable unaliased regular files, byte counts, SHA-256 digests, and no path, inode, or execution-identity reuse.",
+    "runtime_metadata_rule": "Validate cycle-zero and cycle-one sequential output bookkeeping and compare all remaining runtime parameters exactly against the repaired hardened frozen-runtime helper, including positive-integer PPC and effective species0 velocity agreement with the nominal CR stream, before recomputing the raw oracle.",
+    "raw_oracle_rule": "Recompute the source-local raw oracle from admitted cycle-one bytes; require exact case and matrix result schemas, exact provenance agreement, and launch_authorized=false, scientific_claim_authorized=false, publication_authorized=false, passed=false; record that source-local or synthetic analyzer success is insufficient."
+  },
+  "source_local_insufficiency": {
+    "explicit": true,
+    "source_local_or_synthetic_raw_analysis_sufficient": false,
+    "source_local_oracle_result_accepted_as_registered_evidence": false,
+    "source_local_foundation_role": "analysis_dependency_only_not_registered_execution_evidence",
+    "complete_registered_matrix_required": true,
+    "exact_132_case_dimension_valid_matrix_required": true,
+    "registered_raw_execution_required_for_every_exact_matrix_case": true,
+    "downstream_q023_or_q019_qualification_effect": "none_without_exact_registered_matrix_successor_record"
+  },
+  "mpi_coverage": {
+    "multidirectional_required": true,
+    "exact_case_count": 132,
+    "one_meshblock_per_rank_required": true,
+    "required_decompositions_by_dimension": {
+      "1": [
+        "single",
+        "split_x1"
+      ],
+      "2": [
+        "single",
+        "split_x1",
+        "split_x2",
+        "split_x1x2"
+      ],
+      "3": [
+        "single",
+        "split_x1",
+        "split_x2",
+        "split_x3",
+        "split_xyz"
+      ]
+    },
+    "required_partition_axes": [
+      "x1",
+      "x2",
+      "x3"
+    ],
+    "multi_axis_partition_required": true,
+    "current_source_local_foundation_status": "exact_132_case_dimension_valid_source_local_matrix_ready_nonqualifying",
+    "qualification_behavior": "fail_closed_until_raw_registered_execution_admission_covers_every_exact_Q043_case_and_dimension_valid_decomposition"
+  },
+  "historical_immutability": {
+    "historical_q023_or_q029_files_modified": false,
+    "source_local_q043_oracle_modified": false,
+    "source_local_q043_generator_modified": false,
+    "shared_control_plane_modified": false,
+    "implementation_policy": "additive_disjoint_q043_successor_files_only"
+  },
+  "authorization": {
+    "launch_authorized": false,
+    "scheduler_submission_authorized": false,
+    "policy_mutation_authorized": false,
+    "q043_qualification_authorized": false,
+    "q023_qualification_authorized": false,
+    "q019_qualification_authorized": false,
+    "scientific_claim_authorized": false,
+    "publication_authorized": false
+  },
+  "verification": {
+    "focused_tests": 12,
+    "fresh_repaired_source_runtime_smoke": {
+      "status": "passed_source_local_nonqualifying_no_registered_execution",
+      "source_commit": "5668ae65e8f02d9725da60b876221d3c441fdd95",
+      "case_id": "q043-current-oracle-d1-coarse-ppc1-single-cvr100",
+      "deck_sha256": "949cf7962afbaebe500bc6c02211a8fdce0638e7e7a71973ed7cbcd34d584dc9",
+      "executable_sha256": "fa1deeaffc3887c352882651526b87109ff0af40cdd11dec99ce34f0b59aaf61",
+      "cycle_zero_artifact_count": 4,
+      "cycle_one_artifact_count": 4,
+      "terminal_evidence": "cycle_limit_cycle_1_nlim_1",
+      "source_local_oracle_check_pass": true,
+      "strict_source_local_result_schema_check_pass": true,
+      "passed": false,
+      "launch_authorized": false,
+      "scientific_claim_authorized": false,
+      "publication_authorized": false,
+      "qualification_effect": "none_source_local_smoke_only_not_registered_execution_evidence"
+    },
+    "adversarial_coverage": [
+      "case relabeling and source-local result substitution",
+      "split case without exact MPI execution evidence",
+      "missing duplicate and hardlinked raw outputs",
+      "wrong clean candidate source archive executable and deck",
+      "failed scheduler state and bad terminal stdout",
+      "path escape and symlink substitution",
+      "common-mode runtime metadata drift",
+      "positive-integer PPC and exact 132-case matrix drift",
+      "strict analyzer-result schema and publication-authority drift",
+      "incomplete or x1-only matrix",
+      "real x2 x1x2 x3 and xyz per-rank raw shard geometry",
+      "non-authorizing exact record rebuild"
+    ],
+    "registered_runtime_execution_status": "not_run_not_authorized_by_this_successor"
+  },
+  "open_dependencies": [
+    "freeze_one_clean_candidate_containing_the_hardened_foundation_and_this_successor",
+    "register_execute_and_reconcile_all_132_exact_Q043_matrix_cases_on_Orion",
+    "build_and_independently_review_the_complete_registered_matrix_record_before_any_Q023_or_Q019_qualification"
+  ]
+}
