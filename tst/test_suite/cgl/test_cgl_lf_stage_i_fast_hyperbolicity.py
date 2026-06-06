@@ -234,9 +234,10 @@ def command_args(
     cases: list[str] | None = None,
     exploratory: bool = False,
     include_partial: bool = True,
+    snapshot_policy: str | None = None,
 ) -> SimpleNamespace:
     inventory = Path(str(campaign["analysis"])) / "inventory.json"
-    return SimpleNamespace(
+    args = SimpleNamespace(
         analysis=inventory,
         inventory_sha256=sha256(inventory),
         jobs_dir=jobs,
@@ -251,6 +252,9 @@ def command_args(
         python=Path(sys.executable),
         submit=False,
     )
+    if snapshot_policy is not None:
+        args.snapshot_policy = snapshot_policy
+    return args
 
 
 def test_launch_authenticates_and_binds_final_retained_state(
@@ -269,6 +273,13 @@ def test_launch_authenticates_and_binds_final_retained_state(
     assert manifest["matrix"]["sha256"] == sha256(Path(str(campaign["matrix"])))
     assert manifest["case_lineage"]["path"].endswith("/cases/R03/lineage.json")
     assert manifest["snapshot_index"]["path"].endswith("/cases/R03/snapshots.json")
+    assert manifest["snapshot_policy"] == "latest"
+    assert manifest["snapshot_coverage"]["selected_snapshot_count"] == 1
+    assert manifest["snapshot_coverage"]["snapshot_index_complete_count"] == 1
+    assert manifest["snapshot_coverage"]["all_complete_retained_snapshots_selected"] is (
+        False
+    )
+    assert len(manifest["selected_snapshots"]) == 1
     assert manifest["selected_snapshot"]["time"] == 0.5
     assert manifest["selected_snapshot"]["expected_ranks"] == 2
     assert manifest["selected_snapshot"]["rank_inventory_sha256"] == (
@@ -278,6 +289,10 @@ def test_launch_authenticates_and_binds_final_retained_state(
         Path(str(campaign["audit"])).resolve()
     )
     assert manifest["command"][-3:] == ["--format", "json", "--hash-inputs"]
+    assert len(manifest["command"]) == 6
+    assert "rank_[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]" in (
+        manifest["command"][2]
+    )
     assert Path(manifest["result"]["path"]).is_relative_to(jobs)
     assert not Path(manifest["result"]["path"]).is_relative_to(
         Path(str(campaign["root"])) / "runs"
@@ -398,23 +413,27 @@ def test_retry_reuses_prepared_then_retries_failed_and_stale_state(
 
 
 def valid_result(launcher, manifest: dict[str, object]) -> dict[str, object]:
-    selected = manifest["selected_snapshot"]
-    rank_files = [
-        {
-            **record,
-            "rank_id": index,
-            "sha256": f"{index + 1:064x}",
-        }
-        for index, record in enumerate(selected["rank_files"])
-    ]
-    return {
-        "provenance": {
-            "script_path": manifest["audit_script"]["path"],
-            "script_sha256": manifest["audit_script"]["sha256"],
-            "input_patterns": [record["path"] for record in selected["rank_files"]],
-            "hash_inputs": True,
-        },
-        "snapshots": [
+    selected_snapshots = manifest.get(
+        "selected_snapshots", [manifest["selected_snapshot"]]
+    )
+    input_patterns = []
+    snapshots = []
+    for snapshot_number, selected in enumerate(selected_snapshots):
+        input_patterns.append(
+            selected.get(
+                "audit_input_pattern",
+                [record["path"] for record in selected["rank_files"]],
+            )
+        )
+        rank_files = [
+            {
+                **record,
+                "rank_id": index,
+                "sha256": f"{snapshot_number * 100 + index + 1:064x}",
+            }
+            for index, record in enumerate(selected["rank_files"])
+        ]
+        snapshots.append(
             {
                 "time": selected["time"],
                 "active_cgl_signal_speed": True,
@@ -426,8 +445,152 @@ def valid_result(launcher, manifest: dict[str, object]) -> dict[str, object]:
                     "nonfinite_discriminant": 0,
                 },
             }
-        ],
+        )
+    flattened_patterns = [
+        item
+        for value in input_patterns
+        for item in (value if isinstance(value, list) else [value])
+    ]
+    return {
+        "provenance": {
+            "script_path": manifest["audit_script"]["path"],
+            "script_sha256": manifest["audit_script"]["sha256"],
+            "input_patterns": flattened_patterns,
+            "hash_inputs": True,
+        },
+        "snapshots": snapshots,
     }
+
+
+def test_all_snapshot_policy_binds_every_complete_snapshot_in_one_case_job(
+    launcher, campaign, tmp_path
+):
+    add_snapshot(campaign, "R03", 1.0)
+    inventory = refresh_inventory(campaign)
+    jobs = tmp_path / "all-jobs"
+    args = command_args(
+        campaign, jobs, cases=["R03"], snapshot_policy="all"
+    )
+    args.inventory_sha256 = sha256(inventory)
+
+    assert launcher.launch(args) == 0
+
+    attempts = launcher.attempt_directories(jobs.resolve(), "R03")
+    assert len(attempts) == 1
+    manifest = json.loads(
+        (attempts[0] / "manifest.json").read_text(encoding="utf-8")
+    )
+    assert manifest["snapshot_policy"] == "all"
+    assert manifest["snapshot_coverage"] == {
+        "all_complete_retained_snapshots_selected": True,
+        "selected_snapshot_count": 2,
+        "selected_snapshot_positions": [0, 2],
+        "selected_snapshot_times": [0.5, 1.0],
+        "selected_snapshots_sha256": launcher.canonical_sha256(
+            manifest["selected_snapshots"]
+        ),
+        "snapshot_index_complete_count": 2,
+        "snapshot_policy": "all",
+    }
+    assert manifest["selected_snapshot"] == manifest["selected_snapshots"][-1]
+    assert manifest["result"]["expected_snapshot_count"] == 2
+    assert manifest["result"]["required_coverage"] == (
+        "exactly_once_per_selected_snapshot"
+    )
+    assert manifest["command"][2:4] == [
+        snapshot["audit_input_pattern"] for snapshot in manifest["selected_snapshots"]
+    ]
+    assert manifest["command"][-3:] == ["--format", "json", "--hash-inputs"]
+
+
+def test_all_snapshot_result_requires_exactly_once_authenticated_coverage(
+    launcher, campaign, tmp_path
+):
+    add_snapshot(campaign, "R03", 1.0)
+    inventory = refresh_inventory(campaign)
+    jobs = tmp_path / "all-result-jobs"
+    args = command_args(
+        campaign, jobs, cases=["R03"], snapshot_policy="all"
+    )
+    args.inventory_sha256 = sha256(inventory)
+    launcher.launch(args)
+    attempt = jobs / "R03/attempt-000"
+    manifest = json.loads((attempt / "manifest.json").read_text(encoding="utf-8"))
+    result = valid_result(launcher, manifest)
+    result["snapshots"].reverse()
+    write_json(attempt / "result.json", result)
+    (attempt / "result.sha256").write_text(
+        f"{sha256(attempt / 'result.json')}  result.json\n",
+        encoding="utf-8",
+    )
+    (attempt / "exit_code.txt").write_text("0\n", encoding="utf-8")
+
+    assert launcher.attempt_state(attempt, manifest) == "COMPLETED"
+    assert launcher.audit_disposition(attempt, manifest) == "HYPERBOLIC"
+
+    tampered = json.loads(json.dumps(manifest))
+    tampered["command"][2] += ".unexpected"
+    assert launcher.attempt_state(attempt, tampered) == "INVALID_RESULT"
+    tampered = json.loads(json.dumps(manifest))
+    tampered["selected_snapshot"]["time"] = -1.0
+    assert launcher.attempt_state(attempt, tampered) == "INVALID_RESULT"
+
+    result["snapshots"][-1]["aggregate"]["negative"] = 1
+    write_json(attempt / "result.json", result)
+    (attempt / "result.sha256").write_text(
+        f"{sha256(attempt / 'result.json')}  result.json\n",
+        encoding="utf-8",
+    )
+    assert launcher.attempt_state(attempt, manifest) == "COMPLETED"
+    assert launcher.audit_disposition(attempt, manifest) == "NEGATIVE"
+
+    result["snapshots"] = result["snapshots"][:1]
+    write_json(attempt / "result.json", result)
+    (attempt / "result.sha256").write_text(
+        f"{sha256(attempt / 'result.json')}  result.json\n",
+        encoding="utf-8",
+    )
+    assert launcher.attempt_state(attempt, manifest) == "INVALID_RESULT"
+
+
+def test_retry_treats_policy_switch_and_retained_index_growth_as_stale(
+    launcher, campaign, tmp_path
+):
+    jobs = tmp_path / "policy-retry-jobs"
+    latest = command_args(campaign, jobs, cases=["R03"])
+    launcher.launch(latest)
+
+    all_snapshots = command_args(
+        campaign, jobs, cases=["R03"], snapshot_policy="all"
+    )
+    launcher.retry(all_snapshots)
+    switched = jobs / "R03/attempt-001"
+    switched_manifest = json.loads(
+        (switched / "manifest.json").read_text(encoding="utf-8")
+    )
+    assert switched_manifest["snapshot_policy"] == "all"
+    assert switched_manifest["retry_of"].endswith("R03/attempt-000")
+
+    add_snapshot(campaign, "R03", 1.0)
+    inventory = refresh_inventory(campaign)
+    all_snapshots.inventory_sha256 = sha256(inventory)
+    launcher.retry(all_snapshots)
+    grown = jobs / "R03/attempt-002"
+    grown_manifest = json.loads((grown / "manifest.json").read_text(encoding="utf-8"))
+    assert grown_manifest["snapshot_coverage"]["selected_snapshot_count"] == 2
+    assert grown_manifest["retry_of"] == str(switched.resolve())
+
+    add_snapshot(campaign, "R03", 1.25, complete=False)
+    inventory = refresh_inventory(campaign)
+    all_snapshots.inventory_sha256 = sha256(inventory)
+    launcher.retry(all_snapshots)
+    rebound = jobs / "R03/attempt-003"
+    rebound_manifest = json.loads(
+        (rebound / "manifest.json").read_text(encoding="utf-8")
+    )
+    assert rebound_manifest["snapshot_coverage"]["selected_snapshot_count"] == 2
+    assert rebound_manifest["retry_of"] == str(grown.resolve())
+    assert rebound_manifest["selection_sha256"] != grown_manifest["selection_sha256"]
 
 
 def test_completed_result_is_provenance_checked_and_status_reports_it(

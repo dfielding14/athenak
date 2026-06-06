@@ -1,22 +1,25 @@
 #!/usr/bin/env python3
-"""Launch independent final-retained-state CGL hyperbolicity audits.
+"""Launch independent retained-state CGL hyperbolicity audits.
 
 This is a lean Slurm launcher, not a campaign controller.  It authenticates an
-externally SHA-bound direct-fast assembled inventory, selects the latest
-complete retained snapshot for active CGL cases, and prepares or submits one
+externally SHA-bound direct-fast assembled inventory, selects the latest or all
+complete retained snapshots for active CGL cases, and prepares or submits one
 one-node audit job per case.  R10 is admitted only when it is both explicitly
 selected and marked exploratory.  Target-complete cases are the default;
 ``--include-partial`` explicitly admits current retained states.
 
 Each attempt and its result live outside simulation roots.  Explicit ``retry``
 creates a new attempt for failed audits or when a partial campaign has advanced
-to a different retained state.
+to a different retained state.  ``--snapshot-policy all`` is the claim-grade
+mode for proving every complete snapshot retained by the bound inventory was
+audited.
 """
 
 from __future__ import annotations
 
 import argparse
 from datetime import datetime, timezone
+import glob
 import hashlib
 import json
 import math
@@ -54,6 +57,7 @@ FAILED_STATES = {
     "REVOKED",
     "TIMEOUT",
 }
+SNAPSHOT_POLICIES = {"all", "latest"}
 
 
 class HyperbolicityLaunchError(RuntimeError):
@@ -350,9 +354,116 @@ def rank_file_record(path: Path, expected_size: int, label: str) -> dict[str, ob
     }
 
 
-def authenticate_latest_snapshot(
-    context: dict[str, object], case_id: str, case: dict[str, object]
+def snapshot_input_pattern(representative: Path) -> str:
+    """Return one compact pattern that selects every canonical rank sibling."""
+
+    rank_directory = representative.parent
+    if RANK_DIRECTORY.fullmatch(rank_directory.name) is None:
+        raise HyperbolicityLaunchError(
+            f"snapshot representative has noncanonical rank directory: {representative}"
+        )
+    rank_pattern = "rank_" + "[0-9]" * 8
+    return (
+        f"{glob.escape(str(rank_directory.parent))}/{rank_pattern}/"
+        f"{glob.escape(representative.name)}"
+    )
+
+
+def authenticate_snapshot_group(
+    context: dict[str, object],
+    case_id: str,
+    selected: dict[str, object],
+    position: int,
+    output_roots: list[Path],
 ) -> dict[str, object]:
+    expected_ranks = require_int(
+        selected.get("expected_ranks"),
+        f"{case_id} selected snapshot {position} ranks",
+        1,
+    )
+    members = require_list(
+        selected.get("rank_files"),
+        f"{case_id} selected snapshot {position} rank files",
+    )
+    if len(members) != expected_ranks:
+        raise HyperbolicityLaunchError(
+            f"{case_id} selected snapshot {position} rank count differs"
+        )
+    rank_inventory: list[dict[str, object]] = []
+    rank_ids: list[int] = []
+    for rank_position, value in enumerate(members):
+        member = require_dict(
+            value, f"{case_id} selected snapshot {position} rank {rank_position}"
+        )
+        declared_path = Path(
+            require_text(
+                member.get("path"),
+                f"{case_id} selected snapshot {position} rank path",
+            )
+        )
+        record = rank_file_record(
+            declared_path,
+            require_int(
+                member.get("size_bytes"),
+                f"{case_id} selected snapshot {position} rank size",
+                1,
+            ),
+            f"{case_id} selected snapshot {position} rank {rank_position}",
+        )
+        resolved = Path(str(record["path"]))
+        match = RANK_DIRECTORY.fullmatch(resolved.parent.name)
+        if match is None:
+            raise HyperbolicityLaunchError(
+                f"{case_id} selected snapshot {position} rank path is noncanonical"
+            )
+        rank_ids.append(int(match.group(1)))
+        if not any(
+            is_lexically_relative_to(declared_path, output) for output in output_roots
+        ) or not is_relative_to(resolved, Path(str(context["simulation_root"]))):
+            raise HyperbolicityLaunchError(
+                f"{case_id} selected snapshot {position} escapes selected lineage outputs"
+            )
+        rank_inventory.append(record)
+    if rank_ids != list(range(expected_ranks)):
+        raise HyperbolicityLaunchError(
+            f"{case_id} selected snapshot {position} rank inventory is not contiguous"
+        )
+    if len({record["path"] for record in rank_inventory}) != expected_ranks:
+        raise HyperbolicityLaunchError(
+            f"{case_id} selected snapshot {position} rank inventory contains duplicates"
+        )
+    representative = Path(
+        require_text(
+            selected.get("representative"),
+            f"{case_id} selected snapshot {position} representative",
+        )
+    ).resolve()
+    if representative != Path(str(rank_inventory[0]["path"])):
+        raise HyperbolicityLaunchError(
+            f"{case_id} selected snapshot {position} representative is not rank zero"
+        )
+    return {
+        "index_position": position,
+        "time": require_finite(
+            selected.get("time"), f"{case_id} selected snapshot {position} time"
+        ),
+        "lineage_order": selected.get("lineage_order"),
+        "representative": str(representative),
+        "audit_input_pattern": snapshot_input_pattern(representative),
+        "expected_ranks": expected_ranks,
+        "rank_files": rank_inventory,
+        "rank_inventory_sha256": canonical_sha256(rank_inventory),
+    }
+
+
+def authenticate_snapshots(
+    context: dict[str, object],
+    case_id: str,
+    case: dict[str, object],
+    snapshot_policy: str,
+) -> dict[str, object]:
+    if snapshot_policy not in SNAPSHOT_POLICIES:
+        raise HyperbolicityLaunchError(f"unsupported snapshot policy: {snapshot_policy}")
     analysis = Path(str(context["analysis"]))
     case_dir = analysis / "cases" / case_id
     lineage_path = case_dir / "lineage.json"
@@ -415,7 +526,7 @@ def authenticate_latest_snapshot(
     if snapshot_record.get("snapshot_count") != len(snapshots):
         raise HyperbolicityLaunchError(f"{case_id} assembled snapshot count differs")
 
-    complete: list[dict[str, object]] = []
+    complete: list[tuple[int, dict[str, object]]] = []
     times: list[float] = []
     for position, value in enumerate(snapshots):
         group = require_dict(value, f"{case_id} snapshot {position}")
@@ -426,7 +537,7 @@ def authenticate_latest_snapshot(
                 f"{case_id} snapshot {position} complete flag is malformed"
             )
         if flag:
-            complete.append(group)
+            complete.append((position, group))
     if any(right <= left for left, right in zip(times, times[1:])):
         raise HyperbolicityLaunchError(
             f"{case_id} snapshot times are not strictly increasing"
@@ -441,76 +552,40 @@ def authenticate_latest_snapshot(
     if not complete:
         raise HyperbolicityLaunchError(f"{case_id} has no complete retained snapshot")
 
-    selected = complete[-1]
-    expected_ranks = require_int(
-        selected.get("expected_ranks"), f"{case_id} selected snapshot ranks", 1
-    )
-    members = require_list(
-        selected.get("rank_files"), f"{case_id} selected snapshot rank files"
-    )
-    if len(members) != expected_ranks:
-        raise HyperbolicityLaunchError(
-            f"{case_id} selected snapshot rank count differs"
-        )
-    rank_inventory: list[dict[str, object]] = []
-    rank_ids: list[int] = []
-    for position, value in enumerate(members):
-        member = require_dict(value, f"{case_id} selected snapshot rank {position}")
-        declared_path = Path(
-            require_text(member.get("path"), f"{case_id} snapshot rank path")
-        )
-        record = rank_file_record(
-            declared_path,
-            require_int(member.get("size_bytes"), f"{case_id} snapshot rank size", 1),
-            f"{case_id} selected snapshot rank {position}",
-        )
-        resolved = Path(str(record["path"]))
-        match = RANK_DIRECTORY.fullmatch(resolved.parent.name)
-        if match is None:
-            raise HyperbolicityLaunchError(
-                f"{case_id} selected snapshot rank path is noncanonical"
-            )
-        rank_ids.append(int(match.group(1)))
-        if not any(
-            is_lexically_relative_to(declared_path, output) for output in output_roots
-        ) or not is_relative_to(resolved, Path(str(context["simulation_root"]))):
-            raise HyperbolicityLaunchError(
-                f"{case_id} selected snapshot escapes selected lineage outputs"
-            )
-        rank_inventory.append(record)
-    if rank_ids != list(range(expected_ranks)):
-        raise HyperbolicityLaunchError(
-            f"{case_id} selected snapshot rank inventory is not contiguous"
-        )
-    if len({record["path"] for record in rank_inventory}) != expected_ranks:
-        raise HyperbolicityLaunchError(
-            f"{case_id} selected snapshot rank inventory contains duplicates"
-        )
-    representative = Path(
-        require_text(
-            selected.get("representative"), f"{case_id} snapshot representative"
-        )
-    ).resolve()
-    if representative != Path(str(rank_inventory[0]["path"])):
-        raise HyperbolicityLaunchError(
-            f"{case_id} selected snapshot representative is not rank zero"
-        )
-
     model = require_dict(lineage.get("model_choices"), f"{case_id} model choices")
     passive = require_text(
         model.get("passive_delta"), f"{case_id} passive_delta"
     ).lower()
     if passive not in {"true", "false"}:
         raise HyperbolicityLaunchError(f"{case_id} passive_delta is not boolean")
-    snapshot = {
-        "time": require_finite(
-            selected.get("time"), f"{case_id} selected snapshot time"
+    selected_groups = complete[-1:] if snapshot_policy == "latest" else complete
+    selected_snapshots = [
+        authenticate_snapshot_group(context, case_id, group, position, output_roots)
+        for position, group in selected_groups
+    ]
+    selected_rank_paths = [
+        str(rank_file["path"])
+        for snapshot in selected_snapshots
+        for rank_file in require_list(snapshot["rank_files"], "selected rank files")
+    ]
+    if len(selected_rank_paths) != len(set(selected_rank_paths)):
+        raise HyperbolicityLaunchError(
+            f"{case_id} selected snapshots contain duplicate rank files"
+        )
+    coverage = {
+        "snapshot_policy": snapshot_policy,
+        "snapshot_index_complete_count": len(complete),
+        "selected_snapshot_count": len(selected_snapshots),
+        "selected_snapshot_positions": [
+            snapshot["index_position"] for snapshot in selected_snapshots
+        ],
+        "selected_snapshot_times": [
+            snapshot["time"] for snapshot in selected_snapshots
+        ],
+        "selected_snapshots_sha256": canonical_sha256(selected_snapshots),
+        "all_complete_retained_snapshots_selected": (
+            snapshot_policy == "all" and len(selected_snapshots) == len(complete)
         ),
-        "lineage_order": selected.get("lineage_order"),
-        "representative": str(representative),
-        "expected_ranks": expected_ranks,
-        "rank_files": rank_inventory,
-        "rank_inventory_sha256": canonical_sha256(rank_inventory),
     }
     selection_identity = {
         "case_id": case_id,
@@ -518,7 +593,9 @@ def authenticate_latest_snapshot(
         "matrix_sha256": context["matrix"]["sha256"],
         "input_sha256": input_binding["sha256"],
         "passive_delta": passive,
-        "snapshot": snapshot,
+        "snapshot_index_sha256": snapshot_binding["sha256"],
+        "snapshot_coverage": coverage,
+        "selected_snapshots": selected_snapshots,
         "audit_script_sha256": context["audit"]["sha256"],
     }
     return {
@@ -530,9 +607,21 @@ def authenticate_latest_snapshot(
         "lineage": lineage_binding,
         "segment_manifests": manifests,
         "snapshot_index": snapshot_binding,
-        "snapshot": snapshot,
+        "passive_delta": passive,
+        "snapshot_policy": snapshot_policy,
+        "snapshot_coverage": coverage,
+        "snapshots": selected_snapshots,
+        "snapshot": selected_snapshots[-1],
         "selection_sha256": canonical_sha256(selection_identity),
     }
+
+
+def authenticate_latest_snapshot(
+    context: dict[str, object], case_id: str, case: dict[str, object]
+) -> dict[str, object]:
+    """Preserve the original latest-snapshot programmatic interface."""
+
+    return authenticate_snapshots(context, case_id, case, "latest")
 
 
 def eligible_selections(
@@ -540,6 +629,7 @@ def eligible_selections(
     selectors: Iterable[str],
     exploratory: bool,
     include_partial: bool,
+    snapshot_policy: str = "latest",
 ) -> list[dict[str, object]]:
     cases = require_dict(context["cases"], "assembled cases")
     selector_list = list(selectors)
@@ -556,7 +646,9 @@ def eligible_selections(
             print(f"skip {case_id}: assembled status is {case.get('status')}")
             continue
         try:
-            selection = authenticate_latest_snapshot(context, case_id, case)
+            selection = authenticate_snapshots(
+                context, case_id, case, snapshot_policy
+            )
         except HyperbolicityLaunchError as error:
             if "has no complete retained snapshot" in str(error):
                 print(f"skip {case_id}: {error}")
@@ -669,11 +761,13 @@ def prepare_attempt(
     log_dir.mkdir(parents=True, exist_ok=True)
     result_path = attempt_dir / "result.json"
     result_sha = attempt_dir / "result.sha256"
-    snapshot = require_dict(selection["snapshot"], "selected snapshot")
-    rank_files = require_list(snapshot["rank_files"], "selected rank inventory")
-    rank_paths = [
-        require_text(require_dict(value, "selected rank file").get("path"), "rank path")
-        for value in rank_files
+    snapshots = [
+        require_dict(value, "selected snapshot")
+        for value in require_list(selection["snapshots"], "selected snapshots")
+    ]
+    input_patterns = [
+        require_text(snapshot.get("audit_input_pattern"), "audit input pattern")
+        for snapshot in snapshots
     ]
     audit_path = require_text(
         require_dict(context["audit"], "audit binding").get("path"), "audit path"
@@ -681,7 +775,7 @@ def prepare_attempt(
     command = [
         str(python.expanduser().absolute()),
         audit_path,
-        *rank_paths,
+        *input_patterns,
         "--format",
         "json",
         "--hash-inputs",
@@ -702,7 +796,11 @@ def prepare_attempt(
         "case_lineage": selection["lineage"],
         "segment_manifests": selection["segment_manifests"],
         "snapshot_index": selection["snapshot_index"],
-        "selected_snapshot": snapshot,
+        "passive_delta": selection["passive_delta"],
+        "snapshot_policy": selection["snapshot_policy"],
+        "snapshot_coverage": selection["snapshot_coverage"],
+        "selected_snapshots": snapshots,
+        "selected_snapshot": snapshots[-1],
         "selection_sha256": selection["selection_sha256"],
         "audit_script": context["audit"],
         "launcher": artifact_binding(Path(__file__)),
@@ -711,6 +809,9 @@ def prepare_attempt(
         "result": {
             "path": str(result_path),
             "sha256_path": str(result_sha),
+            "required_coverage": "exactly_once_per_selected_snapshot",
+            "expected_snapshot_count": len(snapshots),
+            "expected_selected_snapshots_sha256": canonical_sha256(snapshots),
         },
         "account": account,
         "partition": partition,
@@ -755,6 +856,124 @@ def normalized_state(value: str) -> str:
     return value.strip().split("+", 1)[0].split()[0].upper() if value.strip() else ""
 
 
+def manifest_snapshot_policy(manifest: dict[str, object]) -> str:
+    policy = manifest.get("snapshot_policy", "latest")
+    if not isinstance(policy, str) or policy not in SNAPSHOT_POLICIES:
+        raise HyperbolicityLaunchError("attempt snapshot policy is invalid")
+    return policy
+
+
+def manifest_selected_snapshots(
+    manifest: dict[str, object],
+) -> list[dict[str, object]]:
+    value = manifest.get("selected_snapshots")
+    if value is None:
+        return [
+            require_dict(manifest.get("selected_snapshot"), "selected snapshot")
+        ]
+    snapshots = [
+        require_dict(item, "selected snapshot")
+        for item in require_list(value, "selected snapshots")
+    ]
+    if not snapshots:
+        raise HyperbolicityLaunchError("attempt selected snapshot list is empty")
+    return snapshots
+
+
+def manifest_input_patterns(
+    manifest: dict[str, object], snapshots: list[dict[str, object]]
+) -> list[str]:
+    patterns: list[str] = []
+    for snapshot in snapshots:
+        pattern = snapshot.get("audit_input_pattern")
+        if pattern is not None:
+            patterns.append(require_text(pattern, "audit input pattern"))
+            continue
+        patterns.extend(
+            require_text(
+                require_dict(value, "selected rank file").get("path"), "rank path"
+            )
+            for value in require_list(snapshot.get("rank_files"), "selected rank files")
+        )
+    if len(patterns) != len(set(patterns)):
+        raise HyperbolicityLaunchError("attempt audit input patterns contain duplicates")
+    return patterns
+
+
+def validate_manifest_coverage(
+    manifest: dict[str, object], snapshots: list[dict[str, object]]
+) -> None:
+    policy = manifest_snapshot_policy(manifest)
+    coverage_value = manifest.get("snapshot_coverage")
+    if coverage_value is None:
+        if policy != "latest" or len(snapshots) != 1:
+            raise HyperbolicityLaunchError("attempt snapshot coverage is missing")
+        return
+    coverage = require_dict(coverage_value, "snapshot coverage")
+    expected_positions = [snapshot.get("index_position") for snapshot in snapshots]
+    expected_times = [
+        require_finite(snapshot.get("time"), "selected snapshot time")
+        for snapshot in snapshots
+    ]
+    expected_digest = canonical_sha256(snapshots)
+    complete_count = require_int(
+        coverage.get("snapshot_index_complete_count"),
+        "snapshot-index complete count",
+        1,
+    )
+    if (
+        coverage.get("snapshot_policy") != policy
+        or coverage.get("selected_snapshot_count") != len(snapshots)
+        or coverage.get("selected_snapshot_positions") != expected_positions
+        or coverage.get("selected_snapshot_times") != expected_times
+        or coverage.get("selected_snapshots_sha256") != expected_digest
+    ):
+        raise HyperbolicityLaunchError("attempt snapshot coverage differs")
+    all_selected = coverage.get("all_complete_retained_snapshots_selected")
+    if not isinstance(all_selected, bool):
+        raise HyperbolicityLaunchError("attempt all-snapshot coverage flag is malformed")
+    if policy == "all" and (
+        not all_selected or complete_count != len(snapshots)
+    ):
+        raise HyperbolicityLaunchError(
+            "attempt does not select every complete retained snapshot"
+        )
+    if policy == "latest" and len(snapshots) != 1:
+        raise HyperbolicityLaunchError(
+            "latest snapshot policy does not select exactly one snapshot"
+        )
+    if require_dict(
+        manifest.get("selected_snapshot"), "latest selected snapshot"
+    ) != snapshots[-1]:
+        raise HyperbolicityLaunchError("attempt latest-snapshot alias differs")
+    result = require_dict(manifest.get("result"), "attempt result")
+    if (
+        result.get("required_coverage") != "exactly_once_per_selected_snapshot"
+        or result.get("expected_snapshot_count") != len(snapshots)
+        or result.get("expected_selected_snapshots_sha256") != expected_digest
+    ):
+        raise HyperbolicityLaunchError("attempt result coverage requirement differs")
+    selection_identity = {
+        "case_id": manifest.get("case_id"),
+        "case_name": manifest.get("case_name"),
+        "matrix_sha256": require_dict(manifest.get("matrix"), "matrix").get("sha256"),
+        "input_sha256": require_dict(manifest.get("case_input"), "case input").get(
+            "sha256"
+        ),
+        "passive_delta": manifest.get("passive_delta"),
+        "snapshot_index_sha256": require_dict(
+            manifest.get("snapshot_index"), "snapshot index"
+        ).get("sha256"),
+        "snapshot_coverage": coverage,
+        "selected_snapshots": snapshots,
+        "audit_script_sha256": require_dict(
+            manifest.get("audit_script"), "audit script"
+        ).get("sha256"),
+    }
+    if manifest.get("selection_sha256") != canonical_sha256(selection_identity):
+        raise HyperbolicityLaunchError("attempt selection digest differs")
+
+
 def validate_result(attempt_dir: Path, manifest: dict[str, object]) -> str | None:
     result_record = require_dict(manifest.get("result"), "attempt result")
     result_path = Path(require_text(result_record.get("path"), "result path"))
@@ -781,63 +1000,96 @@ def validate_result(attempt_dir: Path, manifest: dict[str, object]) -> str | Non
         result, _ = load_bound_json(result_path, "hyperbolicity result", expected_sha)
         provenance = require_dict(result.get("provenance"), "result provenance")
         audit = require_dict(manifest.get("audit_script"), "audit script binding")
-        snapshot = require_dict(manifest.get("selected_snapshot"), "selected snapshot")
-        rank_files = [
-            require_dict(value, "selected rank file")
-            for value in require_list(snapshot.get("rank_files"), "selected rank files")
+        selected_snapshots = manifest_selected_snapshots(manifest)
+        validate_manifest_coverage(manifest, selected_snapshots)
+        expected_patterns = manifest_input_patterns(manifest, selected_snapshots)
+        command = [
+            require_text(value, "audit command argument")
+            for value in require_list(manifest.get("command"), "audit command")
         ]
-        expected_paths = [str(value["path"]) for value in rank_files]
+        expected_command = [
+            require_text(manifest.get("python"), "attempt Python"),
+            require_text(audit.get("path"), "audit script path"),
+            *expected_patterns,
+            "--format",
+            "json",
+            "--hash-inputs",
+        ]
+        if command != expected_command:
+            return "attempt command differs from selected retained coverage"
         if (
             provenance.get("script_path") != audit.get("path")
             or provenance.get("script_sha256") != audit.get("sha256")
-            or provenance.get("input_patterns") != expected_paths
+            or provenance.get("input_patterns") != expected_patterns
             or provenance.get("hash_inputs") is not True
         ):
             return "result provenance differs from attempt manifest"
         snapshots = require_list(result.get("snapshots"), "result snapshots")
-        if len(snapshots) != 1:
-            return "result does not contain exactly one retained snapshot"
-        observed = require_dict(snapshots[0], "result retained snapshot")
-        if observed.get("active_cgl_signal_speed") is not True:
-            return "audited snapshot is not active CGL signal-speed state"
-        if not math.isclose(
-            require_finite(observed.get("time"), "result snapshot time"),
-            require_finite(snapshot.get("time"), "selected snapshot time"),
-            rel_tol=0.0,
-            abs_tol=1.0e-12,
-        ):
-            return "result snapshot time differs"
-        observed_files = [
-            require_dict(value, "result rank file")
-            for value in require_list(observed.get("rank_files"), "result rank files")
-        ]
-        expected_profiles = [
-            {
-                "path": value["path"],
-                "size_bytes": value["size_bytes"],
-                "mtime_ns": value["mtime_ns"],
-            }
-            for value in rank_files
-        ]
-        observed_profiles = [
-            {
-                "path": value.get("path"),
-                "size_bytes": value.get("size_bytes"),
-                "mtime_ns": value.get("mtime_ns"),
-            }
-            for value in observed_files
-        ]
-        if observed_profiles != expected_profiles:
-            return "result rank inventory differs from selected retained state"
-        if any(
-            SHA256.fullmatch(str(value.get("sha256"))) is None
-            for value in observed_files
-        ):
-            return "result rank inventory lacks content SHA-256"
-        if observed.get("input_inventory_sha256") != canonical_sha256(observed_files):
-            return "result rank inventory digest differs"
-        if observed.get("ranks_contiguous_from_zero") is not True:
-            return "result rank inventory is not contiguous"
+        if len(snapshots) != len(selected_snapshots):
+            return "result snapshot count differs from selected retained coverage"
+        expected_by_profile: dict[str, dict[str, object]] = {}
+        for snapshot in selected_snapshots:
+            rank_files = [
+                require_dict(value, "selected rank file")
+                for value in require_list(
+                    snapshot.get("rank_files"), "selected rank files"
+                )
+            ]
+            if snapshot.get("rank_inventory_sha256") != canonical_sha256(rank_files):
+                return "selected snapshot rank inventory digest differs"
+            profiles = [
+                {
+                    "path": value["path"],
+                    "size_bytes": value["size_bytes"],
+                    "mtime_ns": value["mtime_ns"],
+                }
+                for value in rank_files
+            ]
+            key = canonical_sha256(profiles)
+            if key in expected_by_profile:
+                return "selected snapshot coverage contains duplicate rank inventories"
+            expected_by_profile[key] = snapshot
+        for value in snapshots:
+            observed = require_dict(value, "result retained snapshot")
+            if observed.get("active_cgl_signal_speed") is not True:
+                return "audited snapshot is not active CGL signal-speed state"
+            observed_files = [
+                require_dict(item, "result rank file")
+                for item in require_list(observed.get("rank_files"), "result rank files")
+            ]
+            observed_profiles = [
+                {
+                    "path": item.get("path"),
+                    "size_bytes": item.get("size_bytes"),
+                    "mtime_ns": item.get("mtime_ns"),
+                }
+                for item in observed_files
+            ]
+            selected = expected_by_profile.pop(
+                canonical_sha256(observed_profiles), None
+            )
+            if selected is None:
+                return "result rank inventory differs from selected retained coverage"
+            if not math.isclose(
+                require_finite(observed.get("time"), "result snapshot time"),
+                require_finite(selected.get("time"), "selected snapshot time"),
+                rel_tol=0.0,
+                abs_tol=1.0e-12,
+            ):
+                return "result snapshot time differs"
+            if any(
+                SHA256.fullmatch(str(item.get("sha256"))) is None
+                for item in observed_files
+            ):
+                return "result rank inventory lacks content SHA-256"
+            if observed.get("input_inventory_sha256") != canonical_sha256(
+                observed_files
+            ):
+                return "result rank inventory digest differs"
+            if observed.get("ranks_contiguous_from_zero") is not True:
+                return "result rank inventory is not contiguous"
+        if expected_by_profile:
+            return "result omits selected retained snapshots"
     except (HyperbolicityLaunchError, OSError, ValueError) as error:
         return str(error)
     return None
@@ -848,16 +1100,20 @@ def audit_disposition(attempt_dir: Path, manifest: dict[str, object]) -> str:
         return "-"
     result_record = require_dict(manifest["result"], "result")
     result, _ = load_bound_json(Path(str(result_record["path"])), "result")
-    snapshot = require_dict(
-        require_list(result["snapshots"], "snapshots")[0], "snapshot"
-    )
-    aggregate = require_dict(snapshot.get("aggregate"), "aggregate")
-    if require_int(
-        aggregate.get("nonfinite_discriminant"), "nonfinite discriminants"
-    ) > 0:
-        return "NONFINITE"
-    if require_int(aggregate.get("negative"), "negative discriminants") > 0:
-        return "NEGATIVE"
+    snapshots = [
+        require_dict(value, "snapshot")
+        for value in require_list(result["snapshots"], "snapshots")
+    ]
+    for snapshot in snapshots:
+        aggregate = require_dict(snapshot.get("aggregate"), "aggregate")
+        if require_int(
+            aggregate.get("nonfinite_discriminant"), "nonfinite discriminants"
+        ) > 0:
+            return "NONFINITE"
+    for snapshot in snapshots:
+        aggregate = require_dict(snapshot.get("aggregate"), "aggregate")
+        if require_int(aggregate.get("negative"), "negative discriminants") > 0:
+            return "NEGATIVE"
     return "HYPERBOLIC"
 
 
@@ -899,30 +1155,38 @@ def attempt_state(attempt_dir: Path, manifest: dict[str, object]) -> str:
     return "INVALID_EXIT_RECORD" if state == "COMPLETED" else state
 
 
-def current_selections(context: dict[str, object]) -> dict[str, dict[str, object]]:
+def current_selections(
+    context: dict[str, object], snapshot_policies: Iterable[str] = ("latest",)
+) -> dict[tuple[str, str], dict[str, object]]:
     cases = require_dict(context["cases"], "assembled cases")
-    result: dict[str, dict[str, object]] = {}
+    policies = list(dict.fromkeys(snapshot_policies))
+    if any(policy not in SNAPSHOT_POLICIES for policy in policies):
+        raise HyperbolicityLaunchError("current selection snapshot policy is invalid")
+    result: dict[tuple[str, str], dict[str, object]] = {}
     for case_id, value in cases.items():
         if CASE_ID.fullmatch(case_id) is None or not isinstance(value, dict):
             continue
         if value.get("status") in {"not_started", "assembly_error"}:
             continue
-        try:
-            result[case_id] = authenticate_latest_snapshot(context, case_id, value)
-        except HyperbolicityLaunchError as error:
-            if "has no complete retained snapshot" not in str(error):
-                raise
+        for policy in policies:
+            try:
+                result[(case_id, policy)] = authenticate_snapshots(
+                    context, case_id, value, policy
+                )
+            except HyperbolicityLaunchError as error:
+                if "has no complete retained snapshot" not in str(error):
+                    raise
     return result
 
 
 def state_with_staleness(
     attempt_dir: Path,
     manifest: dict[str, object],
-    current: dict[str, dict[str, object]],
+    current: dict[tuple[str, str], dict[str, object]],
 ) -> str:
     state = attempt_state(attempt_dir, manifest)
     case_id = str(manifest.get("case_id"))
-    selection = current.get(case_id)
+    selection = current.get((case_id, manifest_snapshot_policy(manifest)))
     if selection is None:
         return f"STALE_{state}"
     if manifest.get("selection_sha256") != selection.get("selection_sha256"):
@@ -933,7 +1197,7 @@ def state_with_staleness(
 def print_attempt(
     case_id: str,
     attempt_dir: Path,
-    current: dict[str, dict[str, object]],
+    current: dict[tuple[str, str], dict[str, object]],
 ) -> str:
     manifest, _ = load_bound_json(attempt_dir / "manifest.json", "attempt manifest")
     state = state_with_staleness(attempt_dir, manifest, current)
@@ -942,10 +1206,22 @@ def print_attempt(
         if state == "COMPLETED"
         else "-"
     )
-    selected = require_dict(manifest.get("selected_snapshot"), "selected snapshot")
+    snapshots = manifest_selected_snapshots(manifest)
+    coverage = manifest.get("snapshot_coverage")
+    complete_count = (
+        require_dict(coverage, "snapshot coverage").get(
+            "snapshot_index_complete_count"
+        )
+        if coverage is not None
+        else 1
+    )
+    retained = (
+        f"{snapshots[0].get('time')}..{snapshots[-1].get('time')}"
+        f" ({len(snapshots)}/{complete_count};{manifest_snapshot_policy(manifest)})"
+    )
     print(
         f"{case_id}\t{attempt_dir.name}\t{manifest.get('job_id') or '-'}\t"
-        f"{state}\t{selected.get('time')}\t{disposition}\t"
+        f"{state}\t{retained}\t{disposition}\t"
         f"{manifest.get('slurm_log')}"
     )
     return state
@@ -956,7 +1232,11 @@ def launch(args: argparse.Namespace) -> int:
         args.analysis, args.inventory_sha256, args.jobs_dir, args.audit_script
     )
     selections = eligible_selections(
-        context, args.cases, args.exploratory, args.include_partial
+        context,
+        args.cases,
+        args.exploratory,
+        args.include_partial,
+        getattr(args, "snapshot_policy", "latest"),
     )
     jobs = Path(str(context["jobs"]))
     for selection in selections:
@@ -987,11 +1267,20 @@ def status(args: argparse.Namespace) -> int:
     jobs = Path(str(context["jobs"]))
     cases = require_dict(context["cases"], "assembled cases")
     selected = expand_case_tokens(args.cases, cases)
-    current = current_selections(context)
-    print("CASE\tATTEMPT\tJOB_ID\tSTATE\tRETAINED_T\tAUDIT\tLOG")
+    visible_attempts: dict[str, list[Path]] = {}
+    policies: list[str] = []
     for case_id in selected:
         attempts = attempt_directories(jobs, case_id)
-        attempts = attempts if args.all_attempts else attempts[-1:]
+        visible_attempts[case_id] = attempts if args.all_attempts else attempts[-1:]
+        for attempt in visible_attempts[case_id]:
+            manifest, _ = load_bound_json(
+                attempt / "manifest.json", "attempt manifest"
+            )
+            policies.append(manifest_snapshot_policy(manifest))
+    current = current_selections(context, policies)
+    print("CASE\tATTEMPT\tJOB_ID\tSTATE\tRETAINED_COVERAGE\tAUDIT\tLOG")
+    for case_id in selected:
+        attempts = visible_attempts[case_id]
         if not attempts:
             print(f"{case_id}\t-\t-\tNOT_PREPARED\t-\t-\t-")
         for attempt in attempts:
@@ -1014,9 +1303,16 @@ def retry(args: argparse.Namespace) -> int:
         args.analysis, args.inventory_sha256, args.jobs_dir, args.audit_script
     )
     selections = eligible_selections(
-        context, args.cases, args.exploratory, args.include_partial
+        context,
+        args.cases,
+        args.exploratory,
+        args.include_partial,
+        getattr(args, "snapshot_policy", "latest"),
     )
-    current = {str(value["case_id"]): value for value in selections}
+    current = {
+        (str(value["case_id"]), str(value["snapshot_policy"])): value
+        for value in selections
+    }
     jobs = Path(str(context["jobs"]))
     for selection in selections:
         case_id = str(selection["case_id"])
@@ -1080,6 +1376,15 @@ def add_selection_options(parser: argparse.ArgumentParser) -> None:
         action="store_true",
         help="admit latest complete retained states from in-progress/partial cases",
     )
+    parser.add_argument(
+        "--snapshot-policy",
+        choices=("latest", "all"),
+        default="latest",
+        help=(
+            "audit only the latest complete snapshot (default) or every complete "
+            "snapshot retained by the bound inventory"
+        ),
+    )
 
 
 def add_slurm_options(parser: argparse.ArgumentParser) -> None:
@@ -1121,7 +1426,7 @@ def parser() -> argparse.ArgumentParser:
     subcommands = command.add_subparsers(dest="command", required=True)
 
     launch_command = subcommands.add_parser(
-        "launch", help="prepare or submit one latest-state audit per eligible case"
+        "launch", help="prepare or submit one retained-state audit per eligible case"
     )
     add_selection_options(launch_command)
     add_slurm_options(launch_command)
