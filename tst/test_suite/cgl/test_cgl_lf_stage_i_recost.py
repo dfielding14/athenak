@@ -63,6 +63,47 @@ F116_AUTHORIZATION = {
     "scientific_configuration_change_authorized": False,
     "historical_manifest_rebinding_authorized": False,
 }
+F118_SCOPE_PRESERVES = [
+    "The immutable F-116 evidence, reviews, publication audit, selected source bundle, and nested F-115 historical authority.",
+    "The qualified executable, frozen source revision, inputs, matrix, restart lineages, targets, resources, qualification, and Stage I budget policy.",
+    "Every prior active source-archive checksum-ledger entry and the corrupt-C7 incident-evidence exclusion.",
+]
+F118_SCOPE_DOES_NOT_AUTHORIZE = [
+    "prepare",
+    "submit",
+    "direct sbatch",
+    "scheduler mutation",
+    "Stage I execution-state mutation",
+    "scientific configuration change",
+    "historical manifest rebinding",
+]
+F118_VALIDATION_CLAIMS = {
+    "historical_f116_chain": "passed",
+    "historical_f115_chain": "passed",
+    "bridge_bundle_complete_history": "passed",
+    "predecessor_current_source_bundle_complete_history": "passed",
+    "final_bundle_complete_history": "passed",
+    "final_bundle_single_head_tip": "passed",
+    "final_bundle_required_revisions": "passed",
+    "committed_tool_bytes": "passed",
+    "corrupt_c7_exclusion_preserved": True,
+}
+F118_PUBLICATION_REQUIREMENTS = {
+    "published_evidence_mode": "0444",
+    "published_review_mode": "0444",
+    "published_audit_mode": "0444",
+    "published_links": 1,
+    "publication_audit_is_authority_commit_marker": True,
+    "recovery_required_after_interruption": True,
+}
+F118_PUBLICATION_METHOD = (
+    "recoverable-forward-transaction-with-publication-audit-commit-marker-under-stage-i-lock"
+)
+INDEPENDENT_REVIEW_NON_CRYPTOGRAPHIC_LIMITATION = (
+    "Reviewer roles, agent identifiers, and process separation are retained "
+    "declarations; exact artifact digests authenticate reviewed bytes but do not "
+    "cryptographically authenticate a human or agent identity."
+)
 POLICIES = {
     **{case_id: "U+A+H" for case_id in (
         "R02", "R03", "R04", "R05", "R10", "R11", "R12", "R13", "R16", "R17"
@@ -2175,13 +2216,8 @@ def recost_fixture(tmp_path):
             "scope": {
                 "relationship": "current-source-selection-only-supersession",
                 "summary": "Select exact F118 fixture source without execution authority.",
-                "preserves": ["Immutable F116 and all scientific controls."],
-                "does_not_authorize": [
-                    "prepare",
-                    "submit",
-                    "direct sbatch",
-                    "scheduler mutation",
-                ],
+                "preserves": F118_SCOPE_PRESERVES,
+                "does_not_authorize": F118_SCOPE_DOES_NOT_AUTHORIZE,
             },
             "predecessor_authorities": {"historical_f116": f116_bindings},
             "implementation": {
@@ -2196,8 +2232,8 @@ def recost_fixture(tmp_path):
                 "after": {"fixture": "F118"},
             },
             "authorization": F116_AUTHORIZATION,
-            "validation": {"fixture": "passed"},
-            "publication_requirements": {"fixture": "reviewed publication"},
+            "validation": F118_VALIDATION_CLAIMS,
+            "publication_requirements": F118_PUBLICATION_REQUIREMENTS,
         },
     )
     f118_verified = {
@@ -2247,7 +2283,10 @@ def recost_fixture(tmp_path):
                 "reviewer": {"agent_id": agent, "identity": f"fixture {kind} reviewer"},
                 "reviewed_utc": (timestamp - timedelta(minutes=5)).isoformat(),
                 "findings": ["Exact current F118 source-only authority verified."],
-                "limitations": ["No prepare, submit, scheduler, or science authority."],
+                "limitations": [
+                    "No prepare, submit, scheduler, or science authority.",
+                    INDEPENDENT_REVIEW_NON_CRYPTOGRAPHIC_LIMITATION,
+                ],
                 "verified": f118_verified,
             },
         )
@@ -2325,10 +2364,7 @@ def recost_fixture(tmp_path):
                 "sole_current_source_bundle": str(source_bundle),
             },
             "authority_and_enforcement": F116_AUTHORIZATION,
-            "publication": (
-                "recoverable-forward-transaction-with-publication-audit-commit-marker-"
-                "under-stage-i-lock"
-            ),
+            "publication": F118_PUBLICATION_METHOD,
         },
     )
     predecessor = accounting / "mks24_stage_i_E03_forcing_policy_F199_recost_evidence.json"
@@ -3078,6 +3114,70 @@ def test_f119_draft_request_preflights_authority_before_publishing_prerequisites
     )
 
 
+def test_draft_request_validates_qualification_before_publishing_prerequisites(
+    recost_fixture,
+):
+    packet = write_draft_packet(
+        recost_fixture,
+        checkpoint_number=206,
+        mutate=lambda value: value["inputs"]["qualification_approval"].update(
+            {"sha256": "0" * 64}
+        ),
+    )
+    rejected = run_action(
+        recost_fixture,
+        "draft-request",
+        "--packet",
+        str(packet),
+        "--expected-packet-sha256",
+        sha256(packet),
+    )
+    assert_rejected(rejected, "qualification approval checksum differs")
+    accounting = recost_fixture["accounting"]
+    assert isinstance(accounting, Path)
+    prefix = f"mks24_stage_i_{EPOCH_SLUG}_F206"
+    assert not any(
+        path.exists()
+        for path in (
+            accounting / f"{prefix}_recost_request.json",
+            accounting / f"{prefix}_reconciliation_evidence.json",
+            accounting / f"{prefix}_storage_evidence.json",
+        )
+    )
+
+
+def test_draft_request_preflights_all_targets_before_first_publication(
+    recost_fixture,
+):
+    packet = write_draft_packet(recost_fixture, checkpoint_number=207)
+    accounting = recost_fixture["accounting"]
+    assert isinstance(accounting, Path)
+    prefix = f"mks24_stage_i_{EPOCH_SLUG}_F207"
+    request = accounting / f"{prefix}_recost_request.json"
+    reconciliation = accounting / f"{prefix}_reconciliation_evidence.json"
+    storage = accounting / f"{prefix}_storage_evidence.json"
+    request.write_bytes(b"unrelated retained request namespace\n")
+    request.chmod(0o644)
+    retained = request.stat()
+
+    rejected = run_action(
+        recost_fixture,
+        "draft-request",
+        "--packet",
+        str(packet),
+        "--expected-packet-sha256",
+        sha256(packet),
+    )
+    assert_rejected(rejected, "exists with different bytes; refusing to clobber")
+    assert request.read_bytes() == b"unrelated retained request namespace\n"
+    assert (request.stat().st_dev, request.stat().st_ino) == (
+        retained.st_dev,
+        retained.st_ino,
+    )
+    assert not reconciliation.exists()
+    assert not storage.exists()
+
+
 def test_draft_request_requires_exact_checkpoint_packet_namespace(recost_fixture):
     packet = write_draft_packet(recost_fixture, checkpoint_number=205)
     displaced = packet.with_name("reviewed-draft-packet.json")
@@ -3528,6 +3628,79 @@ def test_generator_requires_f118_current_source_and_build_qualification_chains(
     write_json(qualification, value)
     refresh_request(recost_fixture)
     assert_rejected(run_generator(recost_fixture), "qualification approval build binding differs")
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    (
+        ("scope-preserves", "F118 scope differs or broadens authority"),
+        ("scope-does-not-authorize", "F118 scope differs or broadens authority"),
+        ("authorization", "F118 current source authority identity differs"),
+        ("validation", "F118 current source authority identity differs"),
+        ("publication-requirements", "F118 current source authority identity differs"),
+        ("review-decision", "F118 provenance_review identity differs"),
+        ("review-candidate", "do not bind one exact candidate"),
+        ("review-verified", "F118 provenance_review identity differs"),
+        ("review-limitation", "lacks the non-cryptographic reviewer identity limitation"),
+        ("review-future", "F118 provenance_review review chronology differs"),
+        ("audit-publication", "F118 publication audit identity or authority differs"),
+        ("audit-bridge", "F118 source-archive catalog authority differs"),
+        ("audit-future", "F118 publication audit identity or authority differs"),
+    ),
+)
+def test_generator_requires_exact_f118_contract_review_and_audit_semantics(
+    recost_fixture, mutation, message,
+):
+    authority = recost_fixture["source_authority"]
+    provenance = recost_fixture["source_authority_provenance_review"]
+    audit = recost_fixture["source_authority_audit"]
+    assert all(isinstance(path, Path) for path in (authority, provenance, audit))
+    if mutation.startswith("scope-") or mutation in {
+        "authorization",
+        "validation",
+        "publication-requirements",
+    }:
+        value = json.loads(authority.read_text())
+        if mutation == "scope-preserves":
+            value["scope"]["preserves"][0] = "Mutated preservation claim."
+        elif mutation == "scope-does-not-authorize":
+            value["scope"]["does_not_authorize"].pop()
+        elif mutation == "authorization":
+            value["authorization"]["prepare_authorized"] = True
+        elif mutation == "validation":
+            value["validation"]["historical_f116_chain"] = "failed"
+        else:
+            value["publication_requirements"]["published_audit_mode"] = "0644"
+        write_immutable_json(authority, value)
+    elif mutation.startswith("review-"):
+        value = json.loads(provenance.read_text())
+        if mutation == "review-decision":
+            value["decision"] = "approved"
+        elif mutation == "review-candidate":
+            value["reviewed_candidate"]["path"] += ".different"
+        elif mutation == "review-verified":
+            value["verified"]["current_source_selection_only"] = False
+        elif mutation == "review-limitation":
+            value["limitations"].remove(INDEPENDENT_REVIEW_NON_CRYPTOGRAPHIC_LIMITATION)
+        else:
+            value["reviewed_utc"] = (
+                datetime.now(timezone.utc) + timedelta(minutes=10)
+            ).isoformat()
+        write_immutable_json(provenance, value)
+    else:
+        value = json.loads(audit.read_text())
+        if mutation == "audit-publication":
+            value["publication"] = "mutated-publication-method"
+        elif mutation == "audit-bridge":
+            value["source_archive_catalog"]["bridge_bundle"]["sha256"] = "0" * 64
+        else:
+            value["published_utc"] = (
+                datetime.now(timezone.utc) + timedelta(minutes=10)
+            ).isoformat()
+        write_immutable_json(audit, value)
+    refresh_f118_historical_f116_binding(recost_fixture)
+    refresh_request(recost_fixture)
+    assert_rejected(run_generator(recost_fixture), message)
 
 
 def test_generator_rejects_legacy_expanded_source_authority_binding(

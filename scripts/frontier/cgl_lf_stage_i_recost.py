@@ -100,6 +100,47 @@ F116_REQUIRED_COMMITTED_TOOLS = {
 }
 F118_AUTHORIZATION = F116_AUTHORIZATION
 F118_REQUIRED_COMMITTED_TOOLS = F116_REQUIRED_COMMITTED_TOOLS
+F118_SCOPE_PRESERVES = [
+    "The immutable F-116 evidence, reviews, publication audit, selected source bundle, and nested F-115 historical authority.",
+    "The qualified executable, frozen source revision, inputs, matrix, restart lineages, targets, resources, qualification, and Stage I budget policy.",
+    "Every prior active source-archive checksum-ledger entry and the corrupt-C7 incident-evidence exclusion.",
+]
+F118_SCOPE_DOES_NOT_AUTHORIZE = [
+    "prepare",
+    "submit",
+    "direct sbatch",
+    "scheduler mutation",
+    "Stage I execution-state mutation",
+    "scientific configuration change",
+    "historical manifest rebinding",
+]
+F118_VALIDATION_CLAIMS = {
+    "historical_f116_chain": "passed",
+    "historical_f115_chain": "passed",
+    "bridge_bundle_complete_history": "passed",
+    "predecessor_current_source_bundle_complete_history": "passed",
+    "final_bundle_complete_history": "passed",
+    "final_bundle_single_head_tip": "passed",
+    "final_bundle_required_revisions": "passed",
+    "committed_tool_bytes": "passed",
+    "corrupt_c7_exclusion_preserved": True,
+}
+F118_PUBLICATION_REQUIREMENTS = {
+    "published_evidence_mode": "0444",
+    "published_review_mode": "0444",
+    "published_audit_mode": "0444",
+    "published_links": 1,
+    "publication_audit_is_authority_commit_marker": True,
+    "recovery_required_after_interruption": True,
+}
+F118_PUBLICATION_METHOD = (
+    "recoverable-forward-transaction-with-publication-audit-commit-marker-under-stage-i-lock"
+)
+INDEPENDENT_REVIEW_NON_CRYPTOGRAPHIC_LIMITATION = (
+    "Reviewer roles, agent identifiers, and process separation are retained "
+    "declarations; exact artifact digests authenticate reviewed bytes but do not "
+    "cryptographically authenticate a human or agent identity."
+)
 QUALIFICATION_APPROVAL_RELATIVE = Path(
     "accounting/mks24_stage_i_E03_forcing_policy_qualification_approval.json"
 )
@@ -1406,13 +1447,33 @@ class DirectoryMeasurement:
 class InputTracker:
     """Authenticate inputs and recheck every retained byte before publication."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        payload_overrides: dict[Path, tuple[bytes, int]] | None = None,
+    ) -> None:
         self._inputs: dict[Path, TrackedInput] = {}
         self._directory_measurements: dict[Path, DirectoryMeasurement] = {}
+        self._payload_overrides: dict[Path, tuple[bytes, int]] = {}
+        self._consumed_payload_overrides: set[Path] = set()
+        for path, (payload, mode) in (payload_overrides or {}).items():
+            if not path.is_absolute():
+                raise ValueError("retained payload override path must be absolute")
+            if path in self._payload_overrides:
+                raise ValueError("retained payload override path is duplicated")
+            self._payload_overrides[path] = bytes(payload), mode
 
     def read(self, path: Path, expected_sha256: object, label: str, *,
              expected_mode: int | None = None) -> bytes:
         expected = require_sha256(expected_sha256, f"{label} SHA-256")
+        if path in self._payload_overrides:
+            payload, mode = self._payload_overrides[path]
+            require_no_symlink_components(path, label, include_leaf=False)
+            if expected_mode != mode:
+                raise ValueError(f"{label} retained payload override mode differs")
+            if sha256_bytes(payload) != expected:
+                raise ValueError(f"{label} retained payload override checksum differs")
+            self._consumed_payload_overrides.add(path)
+            return payload
         require_no_symlink_components(path, label)
         with absolute_descriptor(path, label, flags=os.O_RDONLY) as descriptor:
             require_regular_profile(
@@ -1516,6 +1577,12 @@ class InputTracker:
                     f"{measurement.label} has conflicting retained measurement"
                 )
             self._directory_measurements[measurement.path] = measurement
+
+    def require_all_payload_overrides_consumed(self) -> None:
+        """Require every in-memory retained candidate to participate in validation."""
+
+        if self._consumed_payload_overrides != set(self._payload_overrides):
+            raise ValueError("retained payload overrides were not all consumed")
 
 
 @dataclass(frozen=True)
@@ -2059,7 +2126,11 @@ def parse_current_source_authority(
         != "stage-i-current-source-authority-supersession-evidence"
         or retained_evidence["checkpoint"] != "F-118"
         or retained_evidence["execution_epoch"] != EXECUTION_EPOCH
+        or generated > datetime.now(timezone.utc) + timedelta(minutes=5)
         or retained_evidence["authorization"] != F118_AUTHORIZATION
+        or retained_evidence["validation"] != F118_VALIDATION_CLAIMS
+        or retained_evidence["publication_requirements"]
+        != F118_PUBLICATION_REQUIREMENTS
     ):
         raise ValueError("F118 current source authority identity differs")
     scope = require_exact_keys(
@@ -2070,12 +2141,8 @@ def parse_current_source_authority(
     if (
         scope["relationship"] != "current-source-selection-only-supersession"
         or not require_nonempty_string(scope["summary"], "F118 scope summary")
-        or not isinstance(scope["preserves"], list)
-        or not isinstance(scope["does_not_authorize"], list)
-        or any(
-            item not in scope["does_not_authorize"]
-            for item in ("prepare", "submit", "direct sbatch", "scheduler mutation")
-        )
+        or scope["preserves"] != F118_SCOPE_PRESERVES
+        or scope["does_not_authorize"] != F118_SCOPE_DOES_NOT_AUTHORIZE
     ):
         raise ValueError("F118 scope differs or broadens authority")
     predecessors = require_exact_keys(
@@ -2187,6 +2254,7 @@ def parse_current_source_authority(
         "historical_f116_preserved": True,
     }
     reviewers: set[str] = set()
+    candidate_paths: set[str] = set()
     reviewed_times: list[datetime] = []
     for key, review_kind, decision in (
         ("provenance_review", "provenance-security", "approved-for-publication"),
@@ -2217,7 +2285,9 @@ def parse_current_source_authority(
             {"path", "sha256"},
             f"F118 {key} reviewed candidate",
         )
-        require_nonempty_string(candidate["path"], f"F118 {key} reviewed candidate path")
+        candidate_path = require_nonempty_string(
+            candidate["path"], f"F118 {key} reviewed candidate path"
+        )
         reviewer = require_exact_keys(
             retained_review["reviewer"], {"agent_id", "identity"}, f"F118 {key} reviewer"
         )
@@ -2240,6 +2310,7 @@ def parse_current_source_authority(
         if agent_id in reviewers:
             raise ValueError("F118 independent reviews do not have distinct reviewers")
         reviewers.add(agent_id)
+        candidate_paths.add(candidate_path)
         for field in ("findings", "limitations"):
             if (
                 not isinstance(retained_review[field], list)
@@ -2247,10 +2318,22 @@ def parse_current_source_authority(
                 or any(not isinstance(item, str) or not item for item in retained_review[field])
             ):
                 raise ValueError(f"F118 {key} {field} differ")
+        if (
+            INDEPENDENT_REVIEW_NON_CRYPTOGRAPHIC_LIMITATION
+            not in retained_review["limitations"]
+        ):
+            raise ValueError(
+                f"F118 {key} lacks the non-cryptographic reviewer identity limitation"
+            )
         reviewed = parse_utc_timestamp(retained_review["reviewed_utc"], f"F118 {key} review")
-        if reviewed < generated:
-            raise ValueError(f"F118 {key} review predates evidence")
+        if (
+            reviewed < generated
+            or reviewed > datetime.now(timezone.utc) + timedelta(minutes=5)
+        ):
+            raise ValueError(f"F118 {key} review chronology differs")
         reviewed_times.append(reviewed)
+    if len(candidate_paths) != 1:
+        raise ValueError("F118 independent reviews do not bind one exact candidate")
 
     audit, audit_sha256 = loaded["publication_audit"]
     retained_audit = require_exact_keys(
@@ -2285,10 +2368,10 @@ def parse_current_source_authority(
             "provenance_review_sha256": historical_f116["provenance_review_sha256"],
             "plasma_review_sha256": historical_f116["plasma_review_sha256"],
         }
-        or retained_audit["publication"]
-        != "recoverable-forward-transaction-with-publication-audit-commit-marker-under-stage-i-lock"
+        or retained_audit["publication"] != F118_PUBLICATION_METHOD
         or published < generated
         or any(published < reviewed for reviewed in reviewed_times)
+        or published > datetime.now(timezone.utc) + timedelta(minutes=5)
     ):
         raise ValueError("F118 publication audit identity or authority differs")
     require_declared_binding(
@@ -2358,11 +2441,15 @@ def parse_current_source_authority(
         {"path", "sha256", "mode", "links", "head", "role", "selected_as_current"},
         "F118 published bridge bundle",
     )
-    if (
-        published_bridge["selected_as_current"] is not False
-        or published_bridge["role"] != "retained-non-current-bridge"
-        or catalog["corrupt_c7_absent_from_active_checksum_ledger"] is not True
-    ):
+    if published_bridge != {
+        "path": str(root / Path(str(bridge["path"]))),
+        "sha256": bridge["sha256"],
+        "mode": "0644",
+        "links": 1,
+        "head": bridge["head"],
+        "role": "retained-non-current-bridge",
+        "selected_as_current": False,
+    } or catalog["corrupt_c7_absent_from_active_checksum_ledger"] is not True:
         raise ValueError("F118 source-archive catalog authority differs")
     published_predecessor = require_exact_keys(
         catalog["predecessor_current_source_bundle"],
@@ -8439,10 +8526,15 @@ def build_payload(
     *,
     stage_i_lock_held: bool = False,
     require_independent_request_review: bool = True,
+    retained_payload_overrides: dict[Path, tuple[bytes, int]] | None = None,
 ) -> BuildResult:
     """Authenticate all request inputs and build deterministic output bytes."""
 
-    tracker = InputTracker()
+    if retained_payload_overrides is not None and (
+        require_independent_request_review or not stage_i_lock_held
+    ):
+        raise ValueError("retained payload overrides are restricted to locked request drafting")
+    tracker = InputTracker(retained_payload_overrides)
     assert args.request is not None
     assert args.expected_request_sha256 is not None
     assert args.output is not None
@@ -8502,6 +8594,16 @@ def build_payload(
         raise ValueError("recost request has expired")
     inputs = request["inputs"]
     assert isinstance(inputs, dict)
+    if retained_payload_overrides is not None:
+        expected_override_paths = {request_path}
+        for key, label in (
+            ("reconciliation", "reconciliation evidence"),
+            ("storage_evidence", "storage evidence"),
+        ):
+            relative, _ = input_binding(inputs[key], f"{label} binding")
+            expected_override_paths.add(root_path(root, relative.as_posix(), label))
+        if set(retained_payload_overrides) != expected_override_paths:
+            raise ValueError("draft retained payload override namespace differs")
 
     generator_revision = require_committed_file(
         repository,
@@ -9025,6 +9127,7 @@ def build_payload(
         "reconcile": reconcile,
         "provenance": provenance,
     }
+    tracker.require_all_payload_overrides_consumed()
     return BuildResult(
         payload=(json.dumps(data, indent=2, sort_keys=True) + "\n").encode(),
         tracker=tracker,
@@ -9743,6 +9846,80 @@ def raise_direct_final_failure(
     ) from error
 
 
+def preflight_exact_or_absent(
+    path: Path,
+    payload: bytes,
+    *,
+    mode: int,
+    label: str,
+    mutation_lock: MutationLock | None = None,
+) -> None:
+    """Require a publication target to be absent or exact without mutating it."""
+
+    if mode not in DIRECT_FINAL_ALLOWED_MODES:
+        raise ValueError(f"{label} final mode {mode:04o} is not a managed publication mode")
+    transaction = publication_transaction(path, payload, mode, label)
+    authenticate_mutation_lock(mutation_lock)
+    require_no_symlink_components(path, label, include_leaf=False)
+    with absolute_descriptor(
+        path.parent,
+        f"{label} parent",
+        flags=os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC,
+    ) as directory:
+        parent_profile = os.fstat(directory)
+        require_directory_profile(parent_profile, f"{label} parent")
+        require_parent_path_bound(path.parent, directory, parent_profile, label)
+        try:
+            observed = os.stat(path.name, dir_fd=directory, follow_symlinks=False)
+        except FileNotFoundError:
+            require_parent_path_bound(path.parent, directory, parent_profile, label)
+            authenticate_mutation_lock(mutation_lock)
+            return
+
+        if stat.S_IMODE(observed.st_mode) == mode and observed.st_nlink == 2:
+            bound_target = read_bound_exact_file(
+                directory,
+                path.name,
+                payload,
+                mode,
+                label,
+                expected_identity=observed,
+                expected_links=2,
+            )
+            matches = []
+            for private_name in transaction_private_names(directory, transaction):
+                private = os.stat(private_name, dir_fd=directory, follow_symlinks=False)
+                if same_inode(private, bound_target):
+                    matches.append((private_name, private))
+            if len(matches) != 1:
+                raise ValueError(
+                    f"{label} linked target lacks one exact transaction-private binding"
+                )
+            private_name, private = matches[0]
+            bound_private = read_bound_exact_file(
+                directory,
+                private_name,
+                payload,
+                mode,
+                f"{label} transaction-private link",
+                expected_identity=private,
+                expected_links=2,
+            )
+            if not same_inode(bound_target, bound_private):
+                raise ValueError(f"{label} linked target transaction binding differs")
+        else:
+            read_bound_exact_file(
+                directory,
+                path.name,
+                payload,
+                mode,
+                label,
+                expected_identity=observed,
+            )
+        require_parent_path_bound(path.parent, directory, parent_profile, label)
+        authenticate_mutation_lock(mutation_lock)
+
+
 def write_exact_or_verify(
     path: Path,
     payload: bytes,
@@ -10382,19 +10559,6 @@ def locked_draft_request(
     request_payload = stable_json_bytes(request)
     parse_request(request_payload)
 
-    tracker.reauthenticate_all()
-    for path, payload, label in (
-        (paths["reconciliation"], reconcile_payload, "draft reconciliation evidence"),
-        (paths["storage"], storage_payload, "draft storage evidence"),
-        (paths["request"], request_payload, "schema-2 recost request draft"),
-    ):
-        write_exact_or_verify(
-            path,
-            payload,
-            mode=0o644,
-            label=label,
-            mutation_lock=mutation_lock,
-        )
     build_args = argparse.Namespace(**vars(args))
     build_args.request = paths["request"]
     build_args.expected_request_sha256 = sha256_bytes(request_payload)
@@ -10407,6 +10571,11 @@ def locked_draft_request(
         generator_sha256,
         stage_i_lock_held=True,
         require_independent_request_review=False,
+        retained_payload_overrides={
+            paths["reconciliation"]: (reconcile_payload, 0o644),
+            paths["storage"]: (storage_payload, 0o644),
+            paths["request"]: (request_payload, 0o644),
+        },
     )
     require_empty_transaction_stores(root)
     require_drained_queue(args, root)
@@ -10424,6 +10593,27 @@ def locked_draft_request(
         build.storage_required_safety_bytes,
         build.projected_storage_bytes,
     )
+    publications = (
+        (paths["reconciliation"], reconcile_payload, "draft reconciliation evidence"),
+        (paths["storage"], storage_payload, "draft storage evidence"),
+        (paths["request"], request_payload, "schema-2 recost request draft"),
+    )
+    for path, payload, label in publications:
+        preflight_exact_or_absent(
+            path,
+            payload,
+            mode=0o644,
+            label=label,
+            mutation_lock=mutation_lock,
+        )
+    for path, payload, label in publications:
+        write_exact_or_verify(
+            path,
+            payload,
+            mode=0o644,
+            label=label,
+            mutation_lock=mutation_lock,
+        )
     generation_command = [
         sys.executable,
         str(source_path),
