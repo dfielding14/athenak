@@ -53,11 +53,74 @@ def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def transitioned_policy_documents(root: Path) -> tuple[Path, Path]:
+    """Build temporary exact bindings for the not-yet-published method transition."""
+
+    criteria = json.loads(acceptance.DEFAULT_CRITERIA.read_text())
+    review = json.loads(acceptance.DEFAULT_CRITERIA_REVIEW.read_text())
+    utility_sha = sha256(UTILITY)
+    criteria["source_bindings"]["acceptance_utility"]["sha256"] = utility_sha
+    generator = criteria["scientific_products_policy"]["reviewed_generator_binding"]
+    method_revision = acceptance.expected_scientific_products_method_revision(generator)
+    criteria["scientific_products_policy"]["reviewed_method_revision"] = method_revision
+
+    criteria_path = root / "mks24_stage_i_scientific_acceptance_criteria.json"
+    write_json(criteria_path, criteria)
+    review["criteria"] = {
+        "path": str(criteria_path.resolve()),
+        "sha256": sha256(criteria_path),
+    }
+    review["acceptance_utility"]["sha256"] = utility_sha
+    review["replay_tool_promotion_review"]["acceptance_utility"]["sha256"] = utility_sha
+    bindings = {
+        "method_revision": acceptance.scientific_products_method_revision_binding(
+            method_revision
+        ),
+        "criteria": deepcopy(review["criteria"]),
+        "acceptance_utility": deepcopy(review["acceptance_utility"]),
+        "scientific_products_generator": deepcopy(
+            criteria["source_bindings"]["scientific_products_generator"]
+        ),
+    }
+    reviewer_ids = {
+        "plasma_physics": "fixture-plasma-method-reviewer",
+        "statistical_methodology": "fixture-statistical-method-reviewer",
+        "scientific_replay_security": review["replay_tool_promotion_review"]["reviewer"][
+            "reviewer_id"
+        ],
+    }
+    review["scientific_products_method_review"] = {
+        "schema_version": 1,
+        "record_type": "stage-i-scientific-products-method-review",
+        "review_status": "approved",
+        "decision": "approved",
+        "required_review_roles": list(
+            acceptance.SCIENTIFIC_METHOD_REVIEW_REQUIRED_ROLES
+        ),
+        "bindings": deepcopy(bindings),
+        "approvals": [
+            {
+                "role": role,
+                "reviewer_id": reviewer_ids[role],
+                "decision": "approved",
+                "independent_of_implementation": True,
+                "scope": deepcopy(acceptance.SCIENTIFIC_METHOD_REVIEW_SCOPES[role]),
+                "bindings": deepcopy(bindings),
+            }
+            for role in acceptance.SCIENTIFIC_METHOD_REVIEW_REQUIRED_ROLES
+        ],
+    }
+    review_path = root / "mks24_stage_i_scientific_acceptance_criteria.review.json"
+    write_json(review_path, review)
+    return criteria_path, review_path
+
+
 @pytest.fixture(scope="module")
-def policy():
-    return acceptance.load_validated_policy(
-        acceptance.DEFAULT_CRITERIA, acceptance.DEFAULT_CRITERIA_REVIEW
+def policy(tmp_path_factory):
+    criteria, review = transitioned_policy_documents(
+        tmp_path_factory.mktemp("scientific-method-review")
     )
+    return acceptance.load_validated_policy(criteria, review)
 
 
 @pytest.fixture
@@ -254,6 +317,14 @@ def test_preregistered_criteria_bind_final_utility_and_completed_reviews(policy)
     ] == "exact_replay_tool_bound"
     assert policy["replay_tools_approved"] is True
     assert policy["replay_tools_review_status"] == "approved"
+    assert policy["scientific_products_method_review_status"] == "approved"
+    assert policy["scientific_products_method_review_approved"] is True
+    assert policy["method_revision_binding"] == (
+        acceptance.scientific_products_method_revision_binding(
+            policy["criteria"]["scientific_products_policy"]["reviewed_method_revision"]
+        )
+    )
+    assert acceptance.reviewed_scientific_products_available(policy) is True
     assert policy["review"]["replay_tool_promotion_review"]["reviewer"] == {
         "role": "scientific_replay_security",
         "reviewer_id": "019e9ba3-4e89-7b52-92ef-dd9df89f1aab",
@@ -272,6 +343,11 @@ def test_preregistered_criteria_bind_final_utility_and_completed_reviews(policy)
     assert evidence["independent_review_complete"] is True
     assert evidence["replay_tool_promotion_review_status"] == "approved"
     assert evidence["replay_tools_approved"] is True
+    assert evidence["scientific_products_method_review_status"] == "approved"
+    assert evidence["scientific_products_method_review_approved"] is True
+    assert evidence["scientific_products_method_revision"] == policy[
+        "method_revision_binding"
+    ]
     assert evidence["release_authorizing"] is False
     assert evidence["authority"] == "non-authorizing-policy-validation"
 
@@ -312,6 +388,9 @@ def test_replay_tool_promotion_requires_exact_independent_approval(policy):
         "reviewer_id": "independent-replay-reviewer",
         "independent_of_implementation": True,
     }
+    review["scientific_products_method_review"]["approvals"][-1]["reviewer_id"] = (
+        "independent-replay-reviewer"
+    )
     validated = acceptance.validate_criteria_review(
         review,
         policy["review_binding"],
@@ -331,6 +410,159 @@ def test_replay_tool_promotion_requires_exact_independent_approval(policy):
             policy["criteria_binding"],
             policy["verified_sources"]["acceptance_utility"],
         )
+
+
+def test_scientific_method_revision_rejects_missing_changed_or_extra_fields(policy):
+    products = policy["criteria"]["scientific_products_policy"]
+    generator = products["reviewed_generator_binding"]
+
+    missing = deepcopy(products)
+    missing.pop("reviewed_method_revision")
+    with pytest.raises(acceptance.AcceptanceError, match="must be an object"):
+        acceptance.validate_scientific_products_method_revision(missing, generator)
+    criteria_without_revision = deepcopy(policy["criteria"])
+    criteria_without_revision["scientific_products_policy"].pop(
+        "reviewed_method_revision"
+    )
+    with pytest.raises(acceptance.AcceptanceError, match="must be an object"):
+        acceptance.validate_criteria_payload(
+            criteria_without_revision, policy["criteria_binding"]
+        )
+
+    changed = deepcopy(products)
+    changed["reviewed_method_revision"]["methods"]["local_field_eddy_anisotropy"][
+        "angle_degrees"
+    ] = 20.0
+    with pytest.raises(acceptance.AcceptanceError, match="differs from the reviewed contract"):
+        acceptance.validate_scientific_products_method_revision(changed, generator)
+
+    extra = deepcopy(products)
+    extra["reviewed_method_revision"]["unreviewed_extension"] = True
+    with pytest.raises(acceptance.AcceptanceError, match="keys differ"):
+        acceptance.validate_scientific_products_method_revision(extra, generator)
+
+
+@pytest.mark.parametrize(
+    ("role_index", "role"),
+    list(enumerate(acceptance.SCIENTIFIC_METHOD_REVIEW_REQUIRED_ROLES)),
+)
+def test_scientific_method_review_requires_each_exact_scoped_approval(
+    policy, role_index, role
+):
+    review = deepcopy(policy["review"])
+    review["scientific_products_method_review"]["approvals"][role_index]["scope"][0] += (
+        " Unreviewed."
+    )
+    with pytest.raises(
+        acceptance.AcceptanceError,
+        match=rf"scientific-products {role} method approval differs",
+    ):
+        acceptance.validate_scientific_products_method_review(
+            review,
+            policy["criteria"],
+            policy["criteria_binding"],
+            policy["verified_sources"]["acceptance_utility"],
+        )
+
+
+def test_scientific_method_review_requires_exact_shared_and_per_approval_bindings(policy):
+    review = deepcopy(policy["review"])
+    review.pop("scientific_products_method_review")
+    with pytest.raises(acceptance.AcceptanceError, match="must be an object"):
+        acceptance.validate_criteria_review(
+            review,
+            policy["review_binding"],
+            policy["criteria"],
+            policy["criteria_binding"],
+            policy["verified_sources"]["acceptance_utility"],
+        )
+
+    review = deepcopy(policy["review"])
+    review["scientific_products_method_review"]["unreviewed_extension"] = True
+    with pytest.raises(acceptance.AcceptanceError, match="keys differ"):
+        acceptance.validate_scientific_products_method_review(
+            review,
+            policy["criteria"],
+            policy["criteria_binding"],
+            policy["verified_sources"]["acceptance_utility"],
+        )
+
+    review = deepcopy(policy["review"])
+    method_review = review["scientific_products_method_review"]
+    method_review["bindings"]["scientific_products_generator"]["sha256"] = "0" * 64
+    with pytest.raises(acceptance.AcceptanceError, match="method review bindings differ"):
+        acceptance.validate_scientific_products_method_review(
+            review,
+            policy["criteria"],
+            policy["criteria_binding"],
+            policy["verified_sources"]["acceptance_utility"],
+        )
+
+    review = deepcopy(policy["review"])
+    review["scientific_products_method_review"]["approvals"][0]["bindings"][
+        "method_revision"
+    ]["sha256"] = "0" * 64
+    with pytest.raises(
+        acceptance.AcceptanceError,
+        match="plasma_physics method approval differs",
+    ):
+        acceptance.validate_scientific_products_method_review(
+            review,
+            policy["criteria"],
+            policy["criteria_binding"],
+            policy["verified_sources"]["acceptance_utility"],
+        )
+
+
+def test_scientific_method_review_requires_distinct_independent_security_bound_reviewers(
+    policy,
+):
+    review = deepcopy(policy["review"])
+    approvals = review["scientific_products_method_review"]["approvals"]
+    approvals[1]["reviewer_id"] = approvals[0]["reviewer_id"]
+    with pytest.raises(acceptance.AcceptanceError, match="require distinct reviewers"):
+        acceptance.validate_scientific_products_method_review(
+            review,
+            policy["criteria"],
+            policy["criteria_binding"],
+            policy["verified_sources"]["acceptance_utility"],
+        )
+
+    review = deepcopy(policy["review"])
+    review["scientific_products_method_review"]["approvals"][0][
+        "independent_of_implementation"
+    ] = False
+    with pytest.raises(
+        acceptance.AcceptanceError,
+        match="plasma_physics method approval differs",
+    ):
+        acceptance.validate_scientific_products_method_review(
+            review,
+            policy["criteria"],
+            policy["criteria_binding"],
+            policy["verified_sources"]["acceptance_utility"],
+        )
+
+    review = deepcopy(policy["review"])
+    review["scientific_products_method_review"]["approvals"][-1][
+        "reviewer_id"
+    ] = "different-replay-security-reviewer"
+    with pytest.raises(
+        acceptance.AcceptanceError,
+        match="replay-security method approval reviewer differs",
+    ):
+        acceptance.validate_scientific_products_method_review(
+            review,
+            policy["criteria"],
+            policy["criteria_binding"],
+            policy["verified_sources"]["acceptance_utility"],
+        )
+
+
+def test_scientific_products_fail_closed_without_approved_method_review(policy):
+    unreviewed = deepcopy(policy)
+    unreviewed["scientific_products_method_review_approved"] = False
+    assert acceptance.reviewed_scientific_products_available(unreviewed) is False
 
 
 @pytest.mark.parametrize(

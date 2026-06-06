@@ -69,6 +69,48 @@ IDENTITY_LIMITATION = (
     "Reviewer identity and process independence are declared evidence, not "
     "cryptographically proven."
 )
+SCIENTIFIC_METHOD_REVISION_ID = (
+    "pressure-transfer-and-local-field-eddy-anisotropy-v1"
+)
+SCIENTIFIC_METHOD_REVISION_DIGEST_METHOD = "sha256-canonical-json-v1"
+SCIENTIFIC_METHOD_REVIEW_REQUIRED_ROLES = [
+    "plasma_physics",
+    "statistical_methodology",
+    "scientific_replay_security",
+]
+SCIENTIFIC_METHOD_REVIEW_SCOPES = {
+    "plasma_physics": [
+        (
+            "Pressure-transfer physical definition, Delta-p sign, perpendicular-shell "
+            "partition, normalization, temporal aggregation, and passive-case diagnostic "
+            "semantics."
+        ),
+        (
+            "Local-field eddy-anisotropy physical definition, local-field conditioning, "
+            "perpendicular-vector projection, and equal-power scale inversion."
+        ),
+    ],
+    "statistical_methodology": [
+        (
+            "Pressure-transfer per-snapshot normalization and temporal aggregation."
+        ),
+        (
+            "Local-field eddy-anisotropy deterministic sampling controls, separation "
+            "binning, sample-count weighting, equal-power inversion, and statistical "
+            "sufficiency."
+        ),
+    ],
+    "scientific_replay_security": [
+        (
+            "Exact scientific-products method-revision digest and criteria, acceptance-"
+            "utility, and generator bindings."
+        ),
+        (
+            "Deterministic replay and fail-closed rejection of missing, changed, extra, or "
+            "unapproved method-review fields."
+        ),
+    ],
+}
 VALID_RESULTS = frozenset(("pass", "fail", "inconclusive", "blocked_out_of_scope"))
 MAX_FINITE_FLOAT = sys.float_info.max
 MAX_JSON_BYTES = 512 * 1024 * 1024
@@ -236,6 +278,109 @@ def require_exact_keys(
     if set(record) != expected:
         raise AcceptanceError(f"{label} keys differ from the reviewed schema")
     return record
+
+
+def expected_scientific_products_method_revision(
+    generator_binding: dict[str, object],
+) -> dict[str, object]:
+    """Return the exact reviewed contract for newly admitted product methods."""
+
+    return {
+        "schema_version": 1,
+        "revision_id": SCIENTIFIC_METHOD_REVISION_ID,
+        "status": "exact_method_contract_declared",
+        "immutability": (
+            "canonical-json-sha256-bound-by-scoped-independent-reviews"
+        ),
+        "scientific_products_generator": {
+            "path": generator_binding["path"],
+            "sha256": generator_binding["sha256"],
+        },
+        "methods": {
+            "pressure_transfer": {
+                "admitted_products": [
+                    "pressure_transfer.transfer",
+                    "pressure_transfer.transfer_normalized_by_total",
+                ],
+                "definition": (
+                    "integral <sqrt(rho) u>_k dot [(B/sqrt(rho)) dot grad "
+                    "((Delta p/B^2) B)] over each perpendicular Fourier shell"
+                ),
+                "delta_p_definition": "Delta p = p_perp - p_parallel",
+                "spatial_discretization": (
+                    "second-order centered periodic real-space gradients and a full "
+                    "three-dimensional FFT Parseval cross-spectrum"
+                ),
+                "perpendicular_shell_partition": (
+                    "floor(k_perp/dk + 1e-12), with dk = 2 pi / L_parallel"
+                ),
+                "normalization": (
+                    "per-snapshot T_total = E_K (2 pi u_rms / L_perp), with "
+                    "E_K = integral[0.5 rho |u|^2] dV, "
+                    "u_rms = sqrt(<|u|^2>), and L_perp = sqrt(Lx Ly)"
+                ),
+                "temporal_aggregation": (
+                    "arithmetic mean of per-snapshot shell transfer and per-snapshot "
+                    "normalized transfer"
+                ),
+                "passive_case_semantics": (
+                    "pressure-anisotropy transfer remains a diagnostic comparison when "
+                    "anisotropic pressure work is not applied to the flow"
+                ),
+            },
+            "local_field_eddy_anisotropy": {
+                "admitted_products": [
+                    "eddy_anisotropy.velocity_perp",
+                    "eddy_anisotropy.magnetic_perp",
+                ],
+                "definition": (
+                    "solve S2(phi; ell_perp) = S2(phi; ell_parallel), where "
+                    "S2 = <|phi(x+ell) - 2 phi(x) + phi(x-ell)|^2>"
+                ),
+                "local_field_conditioning": (
+                    "three-point local mean magnetic field; separation vectors within "
+                    "15 degrees of parallel or perpendicular"
+                ),
+                "perpendicular_vector_projection": (
+                    "velocity and magnetic vectors projected perpendicular to the "
+                    "three-point local magnetic field before the second-order increment"
+                ),
+                "separation_sampling": (
+                    "deterministic NumPy PCG64 random lattice separations logarithmically "
+                    "balanced over normalized separation bins"
+                ),
+                "equal_power_inversion": (
+                    "log-log interpolation on the strictly increasing parallel "
+                    "structure-function branch at common perpendicular "
+                    "structure-function power"
+                ),
+                "ensemble_aggregation": (
+                    "sample-count-weighted parallel and perpendicular structure functions "
+                    "followed by equal-power scale inversion"
+                ),
+                "normalization": (
+                    "ell_perp and ell_parallel divided by L_perp = sqrt(Lx Ly)"
+                ),
+                "angle_degrees": 15.0,
+                "samples_per_snapshot": 2_000_000,
+                "bins": 24,
+                "seed": 731,
+                "bit_generator": "numpy.random.PCG64",
+            },
+        },
+    }
+
+
+def scientific_products_method_revision_binding(
+    method_revision: dict[str, object],
+) -> dict[str, object]:
+    """Return the exact canonical-JSON binding for one method declaration."""
+
+    return {
+        "revision_id": SCIENTIFIC_METHOD_REVISION_ID,
+        "digest_method": SCIENTIFIC_METHOD_REVISION_DIGEST_METHOD,
+        "sha256": sha256_bytes(canonical_json(method_revision)),
+    }
 
 
 def stable_profile(profile: os.stat_result) -> tuple[int, int, int, int, int, int]:
@@ -615,6 +760,37 @@ def validate_source_catalog_policy(
     return catalog_policy
 
 
+def validate_scientific_products_method_revision(
+    products: dict[str, object],
+    generator_binding: dict[str, object],
+) -> dict[str, object]:
+    """Validate the immutable declaration for newly admitted product methods."""
+
+    method_revision = require_exact_keys(
+        products.get("reviewed_method_revision"),
+        {
+            "schema_version",
+            "revision_id",
+            "status",
+            "immutability",
+            "scientific_products_generator",
+            "methods",
+        },
+        "criteria scientific-products method revision",
+    )
+    expected = expected_scientific_products_method_revision(generator_binding)
+    if method_revision != expected:
+        raise AcceptanceError(
+            "criteria scientific-products method revision differs from the reviewed contract"
+        )
+    return {
+        "method_revision": method_revision,
+        "method_revision_binding": scientific_products_method_revision_binding(
+            method_revision
+        ),
+    }
+
+
 def validate_criteria_payload(
     criteria: dict[str, object],
     criteria_binding: dict[str, object],
@@ -902,6 +1078,7 @@ def validate_criteria_payload(
         "output_schema_version": 1,
     }:
         raise AcceptanceError("criteria scientific-products replay contract differs")
+    method_revision = validate_scientific_products_method_revision(products, generator)
 
     manifest_panels = require_dict(manifest.get("panel_status"), "manifest panel_status")
     configured = require_list(manifest_panels.get("panels"), "manifest panels")
@@ -1017,6 +1194,7 @@ def validate_criteria_payload(
         "manifest": manifest,
         "verified_sources": verified_sources,
         "source_catalog_policy": source_catalog_policy,
+        **method_revision,
     }
 
 
@@ -1095,6 +1273,138 @@ def validate_replay_tool_promotion_review(
             raise AcceptanceError("approved replay-tool promotion review is incoherent")
         return True, status_value
     raise AcceptanceError("replay-tool promotion review status is invalid")
+
+
+def validate_scientific_products_method_review(
+    review: dict[str, object],
+    criteria: dict[str, object],
+    criteria_binding: dict[str, object],
+    utility_binding: dict[str, object],
+) -> dict[str, object]:
+    """Require exact scoped approvals of the newly admitted product methods."""
+
+    method_review = require_exact_keys(
+        review.get("scientific_products_method_review"),
+        {
+            "schema_version",
+            "record_type",
+            "review_status",
+            "decision",
+            "required_review_roles",
+            "bindings",
+            "approvals",
+        },
+        "scientific-products method review",
+    )
+    if (
+        method_review.get("schema_version") != 1
+        or method_review.get("record_type")
+        != "stage-i-scientific-products-method-review"
+        or method_review.get("review_status") != "approved"
+        or method_review.get("decision") != "approved"
+    ):
+        raise AcceptanceError("scientific-products method review is not approved")
+    if method_review.get("required_review_roles") != SCIENTIFIC_METHOD_REVIEW_REQUIRED_ROLES:
+        raise AcceptanceError("scientific-products method review required roles differ")
+
+    products = require_dict(
+        criteria.get("scientific_products_policy"), "scientific products policy"
+    )
+    method_revision = require_dict(
+        products.get("reviewed_method_revision"), "scientific-products method revision"
+    )
+    declared_criteria = require_dict(review.get("criteria"), "criteria review binding")
+    declared_utility = require_dict(
+        review.get("acceptance_utility"), "criteria review acceptance utility"
+    )
+    sources = require_dict(criteria.get("source_bindings"), "criteria source bindings")
+    generator = require_dict(
+        sources.get("scientific_products_generator"),
+        "scientific products generator source binding",
+    )
+    expected_bindings = {
+        "method_revision": scientific_products_method_revision_binding(method_revision),
+        "criteria": {
+            "path": declared_criteria["path"],
+            "sha256": criteria_binding["sha256"],
+        },
+        "acceptance_utility": {
+            "path": declared_utility["path"],
+            "sha256": utility_binding["sha256"],
+        },
+        "scientific_products_generator": {
+            "path": generator["path"],
+            "sha256": generator["sha256"],
+        },
+    }
+    bindings = require_exact_keys(
+        method_review.get("bindings"),
+        {
+            "method_revision",
+            "criteria",
+            "acceptance_utility",
+            "scientific_products_generator",
+        },
+        "scientific-products method review bindings",
+    )
+    if bindings != expected_bindings:
+        raise AcceptanceError("scientific-products method review bindings differ")
+
+    approvals = require_list(
+        method_review.get("approvals"), "scientific-products method review approvals"
+    )
+    if len(approvals) != len(SCIENTIFIC_METHOD_REVIEW_REQUIRED_ROLES):
+        raise AcceptanceError("scientific-products method review approvals differ")
+    reviewer_ids: list[str] = []
+    for approval_value, role in zip(approvals, SCIENTIFIC_METHOD_REVIEW_REQUIRED_ROLES):
+        approval = require_exact_keys(
+            approval_value,
+            {
+                "role",
+                "reviewer_id",
+                "decision",
+                "independent_of_implementation",
+                "scope",
+                "bindings",
+            },
+            f"scientific-products {role} method approval",
+        )
+        reviewer_id = approval.get("reviewer_id")
+        if (
+            approval.get("role") != role
+            or approval.get("decision") != "approved"
+            or approval.get("independent_of_implementation") is not True
+            or not isinstance(reviewer_id, str)
+            or not reviewer_id
+            or reviewer_id == "PENDING_INDEPENDENT_REVIEWER"
+            or approval.get("scope") != SCIENTIFIC_METHOD_REVIEW_SCOPES[role]
+            or approval.get("bindings") != expected_bindings
+        ):
+            raise AcceptanceError(
+                f"scientific-products {role} method approval differs"
+            )
+        reviewer_ids.append(reviewer_id)
+    if len(set(reviewer_ids)) != len(reviewer_ids):
+        raise AcceptanceError(
+            "scientific-products method approvals require distinct reviewers"
+        )
+
+    replay_reviewer = require_dict(
+        require_dict(
+            review.get("replay_tool_promotion_review"),
+            "replay-tool promotion review",
+        ).get("reviewer"),
+        "replay-tool promotion reviewer",
+    )
+    if reviewer_ids[-1] != replay_reviewer.get("reviewer_id"):
+        raise AcceptanceError(
+            "scientific-products replay-security method approval reviewer differs"
+        )
+    return {
+        "scientific_products_method_review": method_review,
+        "scientific_products_method_review_status": "approved",
+        "scientific_products_method_review_approved": True,
+    }
 
 
 def validate_criteria_review(
@@ -1251,6 +1561,9 @@ def validate_criteria_review(
     replay_tools_approved, replay_tools_review_status = (
         validate_replay_tool_promotion_review(review, criteria, utility_binding)
     )
+    method_review = validate_scientific_products_method_review(
+        review, criteria, criteria_binding, utility_binding
+    )
     return {
         "review": review,
         "review_binding": review_binding,
@@ -1258,6 +1571,7 @@ def validate_criteria_review(
         "review_status": status_value,
         "replay_tools_approved": replay_tools_approved,
         "replay_tools_review_status": replay_tools_review_status,
+        **method_review,
     }
 
 
@@ -3069,6 +3383,7 @@ def reviewed_scientific_products_available(policy: dict[str, object]) -> bool:
     )
     return (
         policy.get("replay_tools_approved") is True
+        and policy.get("scientific_products_method_review_approved") is True
         and generator.get("status") == "exact_replay_tool_bound"
         and isinstance(generator.get("path"), str)
         and isinstance(generator.get("sha256"), str)
@@ -6203,6 +6518,13 @@ def validate_criteria_evidence(policy: dict[str, object]) -> dict[str, object]:
         "independent_review_complete": bool(policy["approved"]),
         "replay_tool_promotion_review_status": policy["replay_tools_review_status"],
         "replay_tools_approved": bool(policy["replay_tools_approved"]),
+        "scientific_products_method_review_status": policy[
+            "scientific_products_method_review_status"
+        ],
+        "scientific_products_method_review_approved": bool(
+            policy["scientific_products_method_review_approved"]
+        ),
+        "scientific_products_method_revision": policy["method_revision_binding"],
         "required_cases": policy["criteria"]["required_cases"],
         "admitted_panel_count": len(policy["criteria"]["comparison_panels"]),
         "provenance": {
