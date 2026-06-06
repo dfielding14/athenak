@@ -11,7 +11,9 @@ from __future__ import annotations
 
 import argparse
 from contextlib import contextmanager
+from copy import deepcopy
 import csv
+import ctypes
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation, ROUND_CEILING, ROUND_HALF_EVEN
@@ -196,6 +198,39 @@ F117_FORBIDDEN_PROMOTION_RELATIVES = (
         "mks24_stage_i_E03_forcing_policy_F117_recost_request.json.independent_review.json"
     ),
 )
+F119_CHECKPOINT = "F-119"
+F119_ARTIFACT_NAME = (
+    "mks24_stage_i_E03_forcing_policy_F119_recost_evidence.json"
+)
+F119_PACKET_RELATIVE = Path(
+    "accounting/mks24_stage_i_E03_forcing_policy_F119_recost_draft_packet.json"
+)
+F119_REQUEST_RELATIVE = Path(
+    "accounting/mks24_stage_i_E03_forcing_policy_F119_recost_request.json"
+)
+F119_REQUESTED_BY = "Codex deterministic F119 draft packet renderer"
+F119_SCOPE = (
+    "Non-authorizing F119 recost request draft superseding the exact authenticated "
+    "failed F117 attempt under current F118 source authority."
+)
+F119_REQUIRED_STORAGE_SAFETY_BYTES = 1024**4
+F119_PROFILE_CASE_NODES = (
+    ("R03", 1),
+    ("R04", 4),
+    ("R12", 4),
+    ("R16", 1),
+)
+F119_LIVE_INPUT_KEYS = frozenset(
+    {
+        "reconciliation",
+        "ledger",
+        "reservations",
+        "manifests",
+        "scheduler_evidence",
+        "storage_evidence",
+    }
+)
+RENAME_NOREPLACE = 1
 AUTHORIZED_CASE_IDS = frozenset(f"R{number:02d}" for number in range(2, 18))
 R17_CASE_ID = "R17"
 R17_PREDECESSOR_CASE_IDS = tuple(f"R{number:02d}" for number in range(2, 17))
@@ -2239,6 +2274,13 @@ def parse_current_source_authority(
     )
     if advertised_tip != {"revision": current_head, "name": "HEAD"}:
         raise ValueError("F118 current source bundle advertised tip is not exact HEAD")
+    require_valid_git_bundle(
+        repository,
+        source_bundle_path,
+        source_bundle_sha256,
+        source_bundle_revisions,
+        expected_advertised_tip=(current_head, "HEAD"),
+    )
     bridge = require_exact_keys(
         implementation["intermediate_36140_bundle"],
         {
@@ -2259,6 +2301,44 @@ def parse_current_source_authority(
         or bridge["role"] != "retained-non-current-bridge"
     ):
         raise ValueError("F118 bridge bundle authority differs")
+    bridge_relative = require_relative_path(bridge["path"], "F118 bridge bundle path")
+    bridge_path = root_path(root, bridge_relative.as_posix(), "F118 bridge bundle")
+    bridge_sha256 = require_sha256(bridge["sha256"], "F118 bridge bundle SHA-256")
+    bridge_head = require_revision(bridge["head"], "F118 bridge bundle head")
+    bridge_tip = require_exact_keys(
+        bridge["advertised_tip"], {"revision", "name"}, "F118 bridge advertised tip"
+    )
+    bridge_revisions = bridge["verified_revisions"]
+    if (
+        bridge_path.parent != root / "source-archives"
+        or not isinstance(bridge_revisions, list)
+        or not bridge_revisions
+        or len(set(bridge_revisions)) != len(bridge_revisions)
+        or any(
+            require_revision(revision, "F118 bridge verified revision") != revision
+            for revision in bridge_revisions
+        )
+        or bridge_head not in bridge_revisions
+        or bridge_tip
+        != {
+            "revision": bridge_head,
+            "name": "refs/heads/feature/cgl-landau-fluid",
+        }
+    ):
+        raise ValueError("F118 bridge bundle exact selection differs")
+    tracker.authenticate(
+        bridge_path, bridge_sha256, "F118 bridge bundle", expected_mode=0o644
+    )
+    require_valid_git_bundle(
+        repository,
+        bridge_path,
+        bridge_sha256,
+        bridge_revisions,
+        expected_advertised_tip=(
+            bridge_head,
+            "refs/heads/feature/cgl-landau-fluid",
+        ),
+    )
     predecessor_bundle = require_exact_keys(
         implementation["predecessor_current_source_bundle"],
         {
@@ -2280,6 +2360,45 @@ def parse_current_source_authority(
     expected_predecessor["role"] = "retained-non-current-predecessor"
     if predecessor_bundle != expected_predecessor:
         raise ValueError("F118 predecessor current bundle differs from immutable F116")
+    predecessor_relative = require_relative_path(
+        predecessor_bundle["path"], "F118 predecessor source bundle path"
+    )
+    predecessor_path = root_path(
+        root, predecessor_relative.as_posix(), "F118 predecessor source bundle"
+    )
+    predecessor_sha256 = require_sha256(
+        predecessor_bundle["sha256"], "F118 predecessor source bundle SHA-256"
+    )
+    predecessor_head = require_revision(
+        predecessor_bundle["head"], "F118 predecessor source bundle head"
+    )
+    predecessor_revisions = predecessor_bundle["verified_revisions"]
+    predecessor_tip = require_exact_keys(
+        predecessor_bundle["advertised_tip"],
+        {"revision", "name"},
+        "F118 predecessor source bundle advertised tip",
+    )
+    if (
+        predecessor_path.parent != root / "source-archives"
+        or not isinstance(predecessor_revisions, list)
+        or not predecessor_revisions
+        or predecessor_head not in predecessor_revisions
+        or predecessor_tip != {"revision": predecessor_head, "name": "HEAD"}
+    ):
+        raise ValueError("F118 predecessor source bundle exact selection differs")
+    tracker.authenticate(
+        predecessor_path,
+        predecessor_sha256,
+        "F118 predecessor source bundle",
+        expected_mode=0o644,
+    )
+    require_valid_git_bundle(
+        repository,
+        predecessor_path,
+        predecessor_sha256,
+        predecessor_revisions,
+        expected_advertised_tip=(predecessor_head, "HEAD"),
+    )
     evidence_catalog = require_exact_keys(
         retained_evidence["source_archive_catalog"],
         {"before", "after"},
@@ -2811,6 +2930,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "generate",
             "install-f117-draft-packet",
             "install-f119-draft-packet",
+            "render-f119-draft-packet",
+            "verify-f119-draft-packet",
             "draft-request",
             "install-request-review",
             "retain-generator",
@@ -2824,6 +2945,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--output", type=Path)
     parser.add_argument("--packet", type=Path)
     parser.add_argument("--expected-packet-sha256", type=sha256_arg)
+    parser.add_argument("--generated-utc")
+    parser.add_argument("--expires-utc")
+    parser.add_argument("--f117-seed-packet", type=Path)
+    parser.add_argument("--expected-f117-seed-packet-sha256", type=sha256_arg)
+    parser.add_argument("--f118-source-bundle", type=Path)
+    parser.add_argument("--expected-f118-source-bundle-sha256", type=sha256_arg)
+    parser.add_argument("--expected-f118-evidence-sha256", type=sha256_arg)
+    parser.add_argument("--expected-f118-publication-audit-sha256", type=sha256_arg)
+    parser.add_argument("--expected-f118-provenance-review-sha256", type=sha256_arg)
+    parser.add_argument("--expected-f118-plasma-review-sha256", type=sha256_arg)
     parser.add_argument("--expected-generator-sha256", type=sha256_arg, required=True)
     parser.add_argument(
         "--squeue-file",
@@ -2847,9 +2978,21 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                 args.expected_packet_sha256,
                 args.review,
                 args.expected_review_sha256,
+                args.generated_utc,
+                args.expires_utc,
+                args.f117_seed_packet,
+                args.expected_f117_seed_packet_sha256,
+                args.f118_source_bundle,
+                args.expected_f118_source_bundle_sha256,
+                args.expected_f118_evidence_sha256,
+                args.expected_f118_publication_audit_sha256,
+                args.expected_f118_provenance_review_sha256,
+                args.expected_f118_plasma_review_sha256,
             )
         ):
-            parser.error("generate forbids draft-packet and review-install arguments")
+            parser.error(
+                "generate forbids draft-packet, review-install, and F119 render arguments"
+            )
     elif args.action in MANAGED_DRAFT_PACKET_ACTIONS or args.action == "draft-request":
         if args.packet is None or args.expected_packet_sha256 is None:
             parser.error(
@@ -2863,6 +3006,79 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             or args.output is not None
         ):
             parser.error(f"{args.action} forbids request/review/output arguments")
+        if any(
+            value is not None
+            for value in (
+                args.generated_utc,
+                args.expires_utc,
+                args.f117_seed_packet,
+                args.expected_f117_seed_packet_sha256,
+                args.f118_source_bundle,
+                args.expected_f118_source_bundle_sha256,
+                args.expected_f118_evidence_sha256,
+                args.expected_f118_publication_audit_sha256,
+                args.expected_f118_provenance_review_sha256,
+                args.expected_f118_plasma_review_sha256,
+            )
+        ):
+            parser.error(f"{args.action} forbids F119 render arguments")
+    elif args.action == "render-f119-draft-packet":
+        required = (
+            args.generated_utc,
+            args.expires_utc,
+            args.f117_seed_packet,
+            args.expected_f117_seed_packet_sha256,
+            args.f118_source_bundle,
+            args.expected_f118_source_bundle_sha256,
+            args.expected_f118_evidence_sha256,
+            args.expected_f118_publication_audit_sha256,
+            args.expected_f118_provenance_review_sha256,
+            args.expected_f118_plasma_review_sha256,
+        )
+        if any(value is None for value in required):
+            parser.error(
+                "render-f119-draft-packet requires exact F117/F118 pins and lifetime"
+            )
+        if any(
+            value is not None
+            for value in (
+                args.packet,
+                args.expected_packet_sha256,
+                args.request,
+                args.expected_request_sha256,
+                args.review,
+                args.expected_review_sha256,
+                args.output,
+            )
+        ):
+            parser.error("render-f119-draft-packet forbids packet/request/review/output")
+    elif args.action == "verify-f119-draft-packet":
+        if args.packet is None or args.expected_packet_sha256 is None:
+            parser.error(
+                "verify-f119-draft-packet requires --packet and "
+                "--expected-packet-sha256"
+            )
+        if any(
+            value is not None
+            for value in (
+                args.generated_utc,
+                args.expires_utc,
+                args.f117_seed_packet,
+                args.expected_f117_seed_packet_sha256,
+                args.f118_source_bundle,
+                args.expected_f118_source_bundle_sha256,
+                args.expected_f118_evidence_sha256,
+                args.expected_f118_publication_audit_sha256,
+                args.expected_f118_provenance_review_sha256,
+                args.expected_f118_plasma_review_sha256,
+                args.request,
+                args.expected_request_sha256,
+                args.review,
+                args.expected_review_sha256,
+                args.output,
+            )
+        ):
+            parser.error("verify-f119-draft-packet forbids render/request/review/output")
     elif args.action == "install-request-review":
         if any(
             value is None
@@ -2881,8 +3097,20 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             args.output is not None
             or args.packet is not None
             or args.expected_packet_sha256 is not None
+            or args.generated_utc is not None
+            or args.expires_utc is not None
+            or args.f117_seed_packet is not None
+            or args.expected_f117_seed_packet_sha256 is not None
+            or args.f118_source_bundle is not None
+            or args.expected_f118_source_bundle_sha256 is not None
+            or args.expected_f118_evidence_sha256 is not None
+            or args.expected_f118_publication_audit_sha256 is not None
+            or args.expected_f118_provenance_review_sha256 is not None
+            or args.expected_f118_plasma_review_sha256 is not None
         ):
-            parser.error("install-request-review forbids output and packet arguments")
+            parser.error(
+                "install-request-review forbids output, packet, and F119 render arguments"
+            )
     elif any(
         value is not None
         for value in (
@@ -2893,6 +3121,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             args.output,
             args.packet,
             args.expected_packet_sha256,
+            args.generated_utc,
+            args.expires_utc,
+            args.f117_seed_packet,
+            args.expected_f117_seed_packet_sha256,
+            args.f118_source_bundle,
+            args.expected_f118_source_bundle_sha256,
+            args.expected_f118_evidence_sha256,
+            args.expected_f118_publication_audit_sha256,
+            args.expected_f118_provenance_review_sha256,
+            args.expected_f118_plasma_review_sha256,
         )
     ):
         parser.error("retain-generator forbids request, output, and packet arguments")
@@ -8382,6 +8620,8 @@ def require_valid_git_bundle(
     path: Path,
     expected_sha256: str,
     revisions: list[str],
+    *,
+    expected_advertised_tip: tuple[str, str] | None = None,
 ) -> None:
     """Require one descriptor-bound complete bundle covering requested revisions."""
 
@@ -8409,16 +8649,21 @@ def require_valid_git_bundle(
             raise ValueError("source bundle header version is invalid")
         if any(line.startswith("-") for line in lines[1:]):
             raise ValueError("source bundle must be self-contained without prerequisites")
-        advertised = []
+        advertised: list[tuple[str, str]] = []
         for line in lines[1:]:
             if line.startswith("@"):
                 continue
             match = re.fullmatch(r"([0-9a-f]{40}) (.+)", line)
             if match is None:
                 raise ValueError("source bundle advertised reference is malformed")
-            advertised.append(match.group(1))
+            advertised.append((match.group(1), match.group(2)))
         if not advertised:
             raise ValueError("source bundle advertises no retained revision")
+        if (
+            expected_advertised_tip is not None
+            and advertised != [expected_advertised_tip]
+        ):
+            raise ValueError("source bundle advertised tip differs from exact selection")
         if git_descriptor_run(
             repository,
             descriptor,
@@ -8433,7 +8678,11 @@ def require_valid_git_bundle(
         try:
             with tempfile.TemporaryDirectory(prefix="cgl-lf-recost-bundle-") as directory:
                 isolated = Path(directory) / "repository.git"
-                if git_run(repository, ["init", "--bare", str(isolated)]).returncode:
+                if git_run(
+                    repository,
+                    ["init", "--bare", str(isolated)],
+                    capture_output=True,
+                ).returncode:
                     raise ValueError("cannot initialize isolated source-bundle verification")
                 if git_descriptor_run(
                     isolated,
@@ -8444,7 +8693,13 @@ def require_valid_git_bundle(
                     raise ValueError("source bundle cannot be reconstructed in isolation")
                 if git_run(
                     isolated,
-                    ["fsck", "--full", "--strict", "--no-reflogs", *advertised],
+                    [
+                        "fsck",
+                        "--full",
+                        "--strict",
+                        "--no-reflogs",
+                        *(revision for revision, _ in advertised),
+                    ],
                     capture_output=True,
                 ).returncode:
                     raise ValueError("source bundle advertised history is incomplete")
@@ -8460,7 +8715,7 @@ def require_valid_git_bundle(
                             isolated, ["merge-base", "--is-ancestor", revision, head]
                         ).returncode
                         == 0
-                        for head in advertised
+                        for head, _ in advertised
                     ):
                         raise ValueError(
                             f"source bundle does not cover requested revision: {revision}"
@@ -9839,6 +10094,142 @@ def transaction_private_names(
     return sorted(retained)
 
 
+def transaction_private_quarantine_name(
+    transaction: PublicationTransaction, current_name: str
+) -> str:
+    """Return an alternate reserved private slot for a bound deletion move."""
+
+    retained = (
+        transaction.private_name(PUBLICATION_PRIVATE_ATTEMPT_LIMIT - 1),
+        transaction.private_name(PUBLICATION_PRIVATE_ATTEMPT_LIMIT - 2),
+    )
+    return retained[1] if current_name == retained[0] else retained[0]
+
+
+def renameat2_noreplace(directory: int, source: str, target: str, label: str) -> None:
+    """Perform one descriptor-relative no-replace namespace move."""
+
+    try:
+        operation = ctypes.CDLL(None, use_errno=True).renameat2
+    except AttributeError as error:
+        raise ValueError(f"{label} requires descriptor-relative renameat2") from error
+    operation.argtypes = (
+        ctypes.c_int,
+        ctypes.c_char_p,
+        ctypes.c_int,
+        ctypes.c_char_p,
+        ctypes.c_uint,
+    )
+    operation.restype = ctypes.c_int
+    if operation(
+        directory,
+        os.fsencode(source),
+        directory,
+        os.fsencode(target),
+        RENAME_NOREPLACE,
+    ):
+        retained_errno = ctypes.get_errno()
+        raise OSError(
+            retained_errno, os.strerror(retained_errno), f"{source} -> {target}"
+        )
+
+
+def move_bound_name_noreplace(
+    directory: int,
+    source: str,
+    target: str,
+    expected: os.stat_result,
+    label: str,
+) -> os.stat_result:
+    """Move one exact inode without replacing or losing a raced namespace entry."""
+
+    observed = os.stat(source, dir_fd=directory, follow_symlinks=False)
+    if not same_inode(observed, expected):
+        raise ValueError(f"{label} source inode changed before namespace move")
+    try:
+        renameat2_noreplace(directory, source, target, label)
+    except BaseException as error:
+        os.fsync(directory)
+        try:
+            moved = os.stat(target, dir_fd=directory, follow_symlinks=False)
+        except FileNotFoundError:
+            raise error
+        if not same_inode(moved, expected):
+            raise error
+    os.fsync(directory)
+    moved = os.stat(target, dir_fd=directory, follow_symlinks=False)
+    if not same_inode(moved, expected):
+        try:
+            renameat2_noreplace(directory, target, source, f"{label} hostile restoration")
+        except BaseException as restore_error:
+            raise ValueError(
+                f"{label} moved a hostile replacement; it is preserved at {target}"
+            ) from restore_error
+        os.fsync(directory)
+        raise ValueError(f"{label} moved a hostile replacement; it was restored")
+    try:
+        os.stat(source, dir_fd=directory, follow_symlinks=False)
+    except FileNotFoundError:
+        return moved
+    raise ValueError(f"{label} source name survived descriptor-bound namespace move")
+
+
+def unlinkat_name(directory: int, name: str, label: str) -> None:
+    """Unlink one descriptor-relative name without pathname traversal."""
+
+    try:
+        operation = ctypes.CDLL(None, use_errno=True).unlinkat
+    except AttributeError as error:
+        raise ValueError(f"{label} requires descriptor-relative unlinkat") from error
+    operation.argtypes = (ctypes.c_int, ctypes.c_char_p, ctypes.c_int)
+    operation.restype = ctypes.c_int
+    if operation(directory, os.fsencode(name), 0):
+        retained_errno = ctypes.get_errno()
+        raise OSError(retained_errno, os.strerror(retained_errno), name)
+
+
+def unlink_bound_name_via_quarantine(
+    directory: int,
+    name: str,
+    expected: os.stat_result,
+    payload: bytes,
+    mode: int,
+    label: str,
+    *,
+    expected_links: int,
+    quarantine_name: str | None = None,
+) -> None:
+    """Delete one exact inode only after a descriptor-bound quarantine move."""
+
+    quarantine = quarantine_name or (
+        f".{name}.delete-{expected.st_dev:x}-{expected.st_ino:x}"
+    )
+    try:
+        retained = os.stat(quarantine, dir_fd=directory, follow_symlinks=False)
+    except FileNotFoundError:
+        retained = move_bound_name_noreplace(
+            directory, name, quarantine, expected, label
+        )
+    if not same_inode(retained, expected):
+        raise ValueError(f"{label} quarantine is occupied by a hostile inode")
+    read_bound_exact_file(
+        directory,
+        quarantine,
+        payload,
+        mode,
+        f"{label} quarantine",
+        expected_identity=expected,
+        expected_links=expected_links,
+    )
+    unlinkat_name(directory, quarantine, label)
+    os.fsync(directory)
+    try:
+        os.stat(quarantine, dir_fd=directory, follow_symlinks=False)
+    except FileNotFoundError:
+        return
+    raise ValueError(f"{label} exact quarantined inode survived deletion")
+
+
 def recover_linked_publication(
     directory: int,
     path: Path,
@@ -9862,22 +10253,23 @@ def recover_linked_publication(
     )
     if expected_identity is not None and not same_inode(target, expected_identity):
         raise ValueError(f"{label} public target inode differs from the linked private inode")
-    matches = []
-    for private_name in transaction_private_names(directory, transaction):
-        private = os.stat(private_name, dir_fd=directory, follow_symlinks=False)
-        if same_inode(private, target):
-            require_publication_link_profile(
-                private,
-                f"{label} transaction-private link",
-                expected_mode=mode,
-                expected_links=2,
-            )
-            matches.append((private_name, private))
-    if len(matches) != 1:
+    private_names = transaction_private_names(directory, transaction)
+    if len(private_names) != 1:
         raise ValueError(
-            f"{label} linked public target lacks one exact transaction-private inode binding"
+            f"{label} linked public target has ambiguous transaction-private attempts"
         )
-    private_name, private = matches[0]
+    private_name = private_names[0]
+    private = os.stat(private_name, dir_fd=directory, follow_symlinks=False)
+    if not same_inode(private, target):
+        raise ValueError(
+            f"{label} linked public target lacks its exact transaction-private inode"
+        )
+    require_publication_link_profile(
+        private,
+        f"{label} transaction-private link",
+        expected_mode=mode,
+        expected_links=2,
+    )
     bound_target = read_bound_exact_file(
         directory,
         path.name,
@@ -10043,16 +10435,17 @@ def preflight_exact_or_absent(
                 expected_identity=observed,
                 expected_links=2,
             )
-            matches = []
-            for private_name in transaction_private_names(directory, transaction):
-                private = os.stat(private_name, dir_fd=directory, follow_symlinks=False)
-                if same_inode(private, bound_target):
-                    matches.append((private_name, private))
-            if len(matches) != 1:
+            private_names = transaction_private_names(directory, transaction)
+            if len(private_names) != 1:
                 raise ValueError(
-                    f"{label} linked target lacks one exact transaction-private binding"
+                    f"{label} linked target has ambiguous transaction-private attempts"
                 )
-            private_name, private = matches[0]
+            private_name = private_names[0]
+            private = os.stat(private_name, dir_fd=directory, follow_symlinks=False)
+            if not same_inode(private, bound_target):
+                raise ValueError(
+                    f"{label} linked target lacks its exact transaction-private binding"
+                )
             bound_private = read_bound_exact_file(
                 directory,
                 private_name,
@@ -10122,25 +10515,27 @@ def classify_draft_trio_target(
             expected_identity=observed,
             expected_links=2,
         )
-        matches = []
-        for private_name in transaction_private_names(directory, entry.transaction):
-            private = os.stat(private_name, dir_fd=directory, follow_symlinks=False)
-            if same_inode(private, retained):
-                read_bound_exact_file(
-                    directory,
-                    private_name,
-                    entry.payload,
-                    entry.mode,
-                    f"{entry.label} transaction-private link",
-                    expected_identity=private,
-                    expected_links=2,
-                )
-                matches.append(private_name)
-        if len(matches) != 1:
+        private_names = transaction_private_names(directory, entry.transaction)
+        if len(private_names) != 1:
             raise ValueError(
-                f"{entry.label} linked target lacks one exact transaction-private binding"
+                f"{entry.label} linked target has ambiguous transaction-private attempts"
             )
-        return "linked", matches[0], retained
+        private_name = private_names[0]
+        private = os.stat(private_name, dir_fd=directory, follow_symlinks=False)
+        if not same_inode(private, retained):
+            raise ValueError(
+                f"{entry.label} linked target lacks its exact transaction-private binding"
+            )
+        read_bound_exact_file(
+            directory,
+            private_name,
+            entry.payload,
+            entry.mode,
+            f"{entry.label} transaction-private link",
+            expected_identity=private,
+            expected_links=2,
+        )
+        return "linked", private_name, retained
     read_bound_exact_file(
         directory,
         entry.path.name,
@@ -10158,19 +10553,81 @@ def reusable_draft_trio_private(
 ) -> tuple[str, os.stat_result] | None:
     """Return one exact finalized private recovery inode, preserving all others."""
 
-    for private_name in transaction_private_names(directory, entry.transaction):
-        try:
-            retained = read_bound_exact_file(
-                directory,
-                private_name,
-                entry.payload,
-                entry.mode,
-                f"{entry.label} transaction-private recovery",
-            )
-        except (OSError, ValueError):
-            continue
-        return private_name, retained
-    return None
+    private_names = transaction_private_names(directory, entry.transaction)
+    if not private_names:
+        return None
+    if len(private_names) != 1:
+        raise ValueError(
+            f"{entry.label} has ambiguous retained transaction-private attempts"
+        )
+    private_name = private_names[0]
+    retained = read_bound_exact_file(
+        directory,
+        private_name,
+        entry.payload,
+        entry.mode,
+        f"{entry.label} transaction-private recovery",
+    )
+    return private_name, retained
+
+
+def recover_draft_trio_rollback_quarantine(
+    directory: int,
+    parent_profile: os.stat_result,
+    entry: DraftTrioPublicationEntry,
+    mutation_lock: MutationLock | None,
+) -> None:
+    """Restore one exact linked canonical name from a reserved rollback slot."""
+
+    try:
+        os.stat(entry.path.name, dir_fd=directory, follow_symlinks=False)
+    except FileNotFoundError:
+        pass
+    else:
+        return
+    private_names = transaction_private_names(directory, entry.transaction)
+    reserved = {
+        entry.transaction.private_name(PUBLICATION_PRIVATE_ATTEMPT_LIMIT - 1),
+        entry.transaction.private_name(PUBLICATION_PRIVATE_ATTEMPT_LIMIT - 2),
+    }
+    if len(private_names) != 2 or not reserved.intersection(private_names):
+        return
+    profiles = [
+        read_bound_exact_file(
+            directory,
+            private_name,
+            entry.payload,
+            entry.mode,
+            f"{entry.label} rollback-quarantine recovery",
+            expected_links=2,
+        )
+        for private_name in private_names
+    ]
+    if not same_inode(profiles[0], profiles[1]):
+        raise ValueError(
+            f"{entry.label} rollback-quarantine private attempts are ambiguous"
+        )
+    quarantine = next(name for name in private_names if name in reserved)
+    require_parent_path_bound(entry.path.parent, directory, parent_profile, entry.label)
+    authenticate_mutation_lock(mutation_lock)
+    moved = move_bound_name_noreplace(
+        directory,
+        quarantine,
+        entry.path.name,
+        profiles[private_names.index(quarantine)],
+        f"{entry.label} rollback-quarantine recovery",
+    )
+    read_bound_exact_file(
+        directory,
+        entry.path.name,
+        entry.payload,
+        entry.mode,
+        f"{entry.label} recovered rollback quarantine",
+        expected_identity=moved,
+        expected_links=2,
+    )
+    require_parent_path_bound(entry.path.parent, directory, parent_profile, entry.label)
+    authenticate_mutation_lock(mutation_lock)
 
 
 def durably_authenticate_draft_trio_state(
@@ -10206,6 +10663,9 @@ def install_draft_trio_entry(
 ) -> None:
     """Install or authenticate one staged trio member without finalizing its link."""
 
+    recover_draft_trio_rollback_quarantine(
+        directory, parent_profile, entry, mutation_lock
+    )
     state, private_name, target = classify_draft_trio_target(directory, entry)
     if state == "single":
         if (
@@ -10230,9 +10690,14 @@ def install_draft_trio_entry(
             )
         return
     if state == "linked":
+        valid_private_names = {
+            entry.private_name,
+            entry.transaction.private_name(PUBLICATION_PRIVATE_ATTEMPT_LIMIT - 1),
+            entry.transaction.private_name(PUBLICATION_PRIVATE_ATTEMPT_LIMIT - 2),
+        }
         if (
-            entry.private_name is None
-            or private_name != entry.private_name
+            private_name is None
+            or private_name not in valid_private_names
             or entry.private_identity is None
             or target is None
             or not same_inode(target, entry.private_identity)
@@ -10240,6 +10705,8 @@ def install_draft_trio_entry(
             raise ValueError(
                 f"{entry.label} linked target differs from staged trio inode"
             )
+        entry.private_name = private_name
+        entry.private_identity = target
         entry.installed_identity = target
         entry.installed_identity = durably_authenticate_draft_trio_state(
             directory,
@@ -10324,18 +10791,36 @@ def finalize_draft_trio_entry(
                 target,
             )
         return
+    valid_private_names = {
+        entry.private_name,
+        entry.transaction.private_name(PUBLICATION_PRIVATE_ATTEMPT_LIMIT - 1),
+        entry.transaction.private_name(PUBLICATION_PRIVATE_ATTEMPT_LIMIT - 2),
+    }
     if (
         state != "linked"
         or private_name is None
         or target is None
-        or entry.private_name != private_name
+        or private_name not in valid_private_names
     ):
         raise ValueError(f"{entry.label} cannot finalize from its retained trio state")
+    entry.private_name = private_name
+    entry.private_identity = target
     entry.installed_identity = target
     require_parent_path_bound(entry.path.parent, directory, parent_profile, entry.label)
     authenticate_mutation_lock(mutation_lock)
     try:
-        os.unlink(private_name, dir_fd=directory)
+        unlink_bound_name_via_quarantine(
+            directory,
+            private_name,
+            target,
+            entry.payload,
+            entry.mode,
+            f"{entry.label} transaction-private finalization",
+            expected_links=2,
+            quarantine_name=transaction_private_quarantine_name(
+                entry.transaction, private_name
+            ),
+        )
     except BaseException as error:
         state, _, retained = classify_draft_trio_target(directory, entry)
         if (
@@ -10389,7 +10874,18 @@ def rollback_draft_trio_entries(
             entry.path.parent, directory, parent_profile, entry.label
         )
         authenticate_mutation_lock(mutation_lock)
-        os.unlink(entry.path.name, dir_fd=directory)
+        unlink_bound_name_via_quarantine(
+            directory,
+            entry.path.name,
+            observed,
+            entry.payload,
+            entry.mode,
+            f"{entry.label} transaction-owned rollback",
+            expected_links=expected_links,
+            quarantine_name=transaction_private_quarantine_name(
+                entry.transaction, entry.path.name
+            ),
+        )
         require_parent_path_bound(
             entry.path.parent, directory, parent_profile, entry.label
         )
@@ -10443,6 +10939,9 @@ def publish_draft_prerequisite_trio(
             parent, directory, parent_profile, "draft prerequisite trio"
         )
         for entry in entries:
+            recover_draft_trio_rollback_quarantine(
+                directory, parent_profile, entry, mutation_lock
+            )
             state, private_name, target = classify_draft_trio_target(directory, entry)
             entry.initial_state = state
             if state == "single":
@@ -10590,28 +11089,82 @@ def write_exact_or_verify(
             return False
 
         mutation_guard()
+        private_names = transaction_private_names(directory, transaction)
+        if len(private_names) > 1:
+            raise ValueError(f"{label} has ambiguous retained private attempts")
+        private_finalized = False
         try:
-            private_name, descriptor, private_profile = create_private_attempt(
-                directory, transaction, label, mutation_guard
-            )
+            if private_names:
+                private_name = private_names[0]
+                descriptor = os.open(
+                    private_name,
+                    os.O_RDWR | os.O_NOFOLLOW | os.O_CLOEXEC,
+                    dir_fd=directory,
+                )
+                private_profile = os.fstat(descriptor)
+                retained_mode = stat.S_IMODE(private_profile.st_mode)
+                if retained_mode == mode:
+                    read_bound_exact_file(
+                        directory,
+                        private_name,
+                        payload,
+                        mode,
+                        f"{label} retained private recovery",
+                        expected_identity=private_profile,
+                    )
+                    private_finalized = True
+                elif retained_mode != PUBLICATION_PRIVATE_MODE:
+                    raise ValueError(
+                        f"{label} retained private attempt mode is unmanaged"
+                    )
+                else:
+                    require_bound_private_attempt(
+                        directory,
+                        private_name,
+                        descriptor,
+                        private_profile,
+                        f"{label} retained private recovery",
+                    )
+                    os.lseek(descriptor, 0, os.SEEK_SET)
+                    retained_prefix = os.read(descriptor, len(payload) + 1)
+                    if (
+                        len(retained_prefix) > len(payload)
+                        or not payload.startswith(retained_prefix)
+                    ):
+                        raise ValueError(
+                            f"{label} retained private attempt is not a "
+                            "recoverable prefix"
+                        )
+                    os.lseek(descriptor, 0, os.SEEK_SET)
+            else:
+                private_name, descriptor, private_profile = create_private_attempt(
+                    directory, transaction, label, mutation_guard
+                )
         except BaseException as error:
+            try:
+                os.close(descriptor)
+            except (NameError, OSError):
+                pass
             raise_direct_final_failure(
                 directory, path, parent_profile, label, error, mutation_lock
             )
 
         try:
-            finalized_profile = finalize_private_attempt(
-                directory,
-                path,
-                parent_profile,
-                private_name,
-                descriptor,
-                private_profile,
-                payload,
-                mode,
-                label,
-                mutation_lock,
-            )
+            if private_finalized:
+                finalized_profile = private_profile
+            else:
+                finalized_profile = finalize_private_attempt(
+                    directory,
+                    path,
+                    parent_profile,
+                    private_name,
+                    descriptor,
+                    private_profile,
+                    payload,
+                    mode,
+                    label,
+                    mutation_lock,
+                )
             mutation_guard()
             finalized_profile = authenticate_private_attempt(
                 path,
@@ -10735,6 +11288,7 @@ def parse_draft_packet(payload: bytes) -> dict[str, object]:
     request = {key: value for key, value in packet.items() if key != "draft_policy"}
     request["record_type"] = "stage-i-recost-recommendation-request"
     request["schema_version"] = 2
+    parse_request(stable_json_bytes(request))
     inputs = request.get("inputs")
     if not isinstance(inputs, dict):
         raise ValueError("recost request draft inputs must be an object")
@@ -10843,6 +11397,393 @@ def preflight_draft_authority_and_predecessor(
     )
 
 
+def f119_seed_packet(
+    root: Path,
+    tracker: InputTracker,
+    *,
+    source: Path | None = None,
+    expected_sha256: str | None = None,
+) -> dict[str, object]:
+    """Authenticate the exact immutable F117 packet used as the F119 seed."""
+
+    path = root / F117_FAILED_ATTEMPT_RELATIVES["packet"]
+    if source is not None and source.absolute() != path:
+        raise ValueError("F119 structural seed is not the canonical F117 packet")
+    if expected_sha256 is None:
+        if root == DEFAULT_ROOT:
+            expected_sha256 = F117_FAILED_ATTEMPT_SHA256["packet"]
+        else:
+            _, expected_sha256 = tracker.discover(
+                path, "F119 structural F117 seed", expected_mode=0o644
+            )
+    elif root == DEFAULT_ROOT and expected_sha256 != F117_FAILED_ATTEMPT_SHA256["packet"]:
+        raise ValueError("canonical F119 structural seed digest differs")
+    seed = parse_draft_packet(
+        tracker.read(
+            path,
+            expected_sha256,
+            "F119 structural F117 seed",
+            expected_mode=0o644,
+        )
+    )
+    paths = draft_output_paths(root, seed["checkpoint"], seed["artifact_name"])
+    if (
+        seed["checkpoint"] != "F-117"
+        or paths["packet"] != path
+        or seed["recommendations"]
+        != {
+            "mode": "bounded-wave",
+            "max_wave_nodes": 10,
+            "profiles": seed["recommendations"]["profiles"],
+        }
+    ):
+        raise ValueError("F119 structural F117 seed identity or wave differs")
+    profiles = seed["recommendations"]["profiles"]
+    if (
+        not isinstance(profiles, list)
+        or len(profiles) != len(F119_PROFILE_CASE_NODES)
+        or any(not isinstance(profile, dict) for profile in profiles)
+        or tuple((profile["case_id"], profile["nodes"]) for profile in profiles)
+        != F119_PROFILE_CASE_NODES
+    ):
+        raise ValueError("F119 structural F117 seed lacks the exact four-profile wave")
+    return seed
+
+
+def require_f119_lifetime(
+    packet: dict[str, object], *, allow_inactive: bool
+) -> tuple[datetime, datetime]:
+    """Require one bounded F119 lifetime, optionally accepting stale retirement."""
+
+    generated = parse_utc_timestamp(packet["generated_utc"], "F119 generation timestamp")
+    expires = parse_utc_timestamp(packet["expires_utc"], "F119 expiry timestamp")
+    now = datetime.now(timezone.utc)
+    if (
+        generated > now + timedelta(minutes=5)
+        or expires <= generated
+        or expires - generated > AUTHORIZATION_MAX_LIFETIME
+        or (
+            not allow_inactive
+            and (now - generated > STORAGE_EVIDENCE_MAX_AGE or now > expires)
+        )
+    ):
+        raise ValueError("F119 draft packet lifetime is invalid")
+    return generated, expires
+
+
+def validate_f119_draft_packet(
+    root: Path,
+    repository: Path,
+    packet: dict[str, object],
+    tracker: InputTracker,
+    *,
+    allow_inactive: bool = False,
+    seed: dict[str, object] | None = None,
+) -> None:
+    """Authenticate the exact F119 packet semantics shared by all workflows."""
+
+    retained_seed = seed if seed is not None else f119_seed_packet(root, tracker)
+    require_f119_lifetime(packet, allow_inactive=allow_inactive)
+    paths = draft_output_paths(root, packet["checkpoint"], packet["artifact_name"])
+    if (
+        packet["checkpoint"] != F119_CHECKPOINT
+        or packet["artifact_name"] != F119_ARTIFACT_NAME
+        or paths["packet"] != root / F119_PACKET_RELATIVE
+        or packet["requested_by"] != F119_REQUESTED_BY
+        or packet["scope"] != F119_SCOPE
+        or packet["barrier"] != retained_seed["barrier"]
+        or packet["draft_policy"]
+        != {
+            "independent_review_created": False,
+            "self_approved": False,
+            "scheduler_mutation_authorized": False,
+            "canonical_mutation_authorized": False,
+            "required_storage_safety_bytes": F119_REQUIRED_STORAGE_SAFETY_BYTES,
+        }
+    ):
+        raise ValueError("F119 draft packet identity, barrier, or policy differs")
+    inputs = packet["inputs"]
+    seed_inputs = retained_seed["inputs"]
+    assert isinstance(inputs, dict)
+    assert isinstance(seed_inputs, dict)
+    if any(inputs[key] is not None for key in F119_LIVE_INPUT_KEYS):
+        raise ValueError("F119 draft packet contains live prerequisite bindings")
+    preserved = set(inputs) - {
+        *F119_LIVE_INPUT_KEYS,
+        "source_bundle",
+        "source_authority",
+    }
+    if preserved != set(seed_inputs) - {
+        *F119_LIVE_INPUT_KEYS,
+        "source_bundle",
+        "source_authority",
+    } or any(inputs[key] != seed_inputs[key] for key in preserved):
+        raise ValueError("F119 draft packet differs from its exact F117 structural seed")
+    authority = require_exact_keys(
+        inputs["source_authority"],
+        {
+            "checkpoint",
+            "evidence",
+            "provenance_review",
+            "plasma_review",
+            "publication_audit",
+            "final_source_bundle",
+        },
+        "F119 F118 source authority",
+    )
+    if authority["checkpoint"] != "F-118" or authority["final_source_bundle"] != inputs[
+        "source_bundle"
+    ]:
+        raise ValueError("F119 draft packet does not bind exact F118 source authority")
+    bundle_relative, bundle_sha256, _ = source_bundle_binding(
+        inputs["source_bundle"], "F119 source bundle"
+    )
+    bundle_path = root_path(root, bundle_relative.as_posix(), "F119 source bundle")
+    seed_profiles = retained_seed["recommendations"]["profiles"]
+    assert isinstance(seed_profiles, list)
+    expected_profiles = deepcopy(seed_profiles)
+    for profile in expected_profiles:
+        profile["source_bundle"] = str(bundle_path)
+        profile["source_bundle_sha256"] = bundle_sha256
+    if packet["recommendations"] != {
+        "mode": "bounded-wave",
+        "max_wave_nodes": 10,
+        "profiles": expected_profiles,
+    }:
+        raise ValueError(
+            "F119 draft packet recommendation differs from exact four-profile wave"
+        )
+    preflight_draft_authority_and_predecessor(root, repository, packet, tracker)
+
+
+def f119_render_authority_binding(
+    args: argparse.Namespace,
+    root: Path,
+    tracker: InputTracker,
+) -> tuple[dict[str, object], dict[str, object]]:
+    """Build caller-pinned exact F118 authority and final-source bindings."""
+
+    assert args.f118_source_bundle is not None
+    assert args.expected_f118_source_bundle_sha256 is not None
+    paths = {
+        "evidence": (F118_RELATIVE, args.expected_f118_evidence_sha256),
+        "publication_audit": (
+            F118_PUBLICATION_AUDIT_RELATIVE,
+            args.expected_f118_publication_audit_sha256,
+        ),
+        "provenance_review": (
+            F118_PROVENANCE_REVIEW_RELATIVE,
+            args.expected_f118_provenance_review_sha256,
+        ),
+        "plasma_review": (
+            F118_PLASMA_REVIEW_RELATIVE,
+            args.expected_f118_plasma_review_sha256,
+        ),
+    }
+    evidence = parse_json(
+        tracker.read(
+            root / F118_RELATIVE,
+            args.expected_f118_evidence_sha256,
+            "caller-pinned F118 evidence",
+            expected_mode=0o444,
+        ),
+        "caller-pinned F118 evidence",
+    )
+    if not isinstance(evidence, dict):
+        raise ValueError("caller-pinned F118 evidence must be an object")
+    implementation = evidence.get("implementation")
+    if not isinstance(implementation, dict):
+        raise ValueError("caller-pinned F118 evidence lacks implementation")
+    current = implementation.get("current_source_bundle")
+    if not isinstance(current, dict):
+        raise ValueError("caller-pinned F118 evidence lacks current source bundle")
+    revisions = current.get("verified_revisions")
+    if not isinstance(revisions, list):
+        raise ValueError("caller-pinned F118 current source revisions differ")
+    bundle_path = args.f118_source_bundle.absolute()
+    if bundle_path.parent != root / "source-archives":
+        raise ValueError("caller-pinned F118 source bundle is not under source-archives")
+    bundle = {
+        "path": bundle_path.relative_to(root).as_posix(),
+        "sha256": args.expected_f118_source_bundle_sha256,
+        "verified_revisions": revisions,
+    }
+    authority = {
+        "checkpoint": "F-118",
+        **{
+            key: {"path": relative.as_posix(), "sha256": digest}
+            for key, (relative, digest) in paths.items()
+        },
+        "final_source_bundle": deepcopy(bundle),
+    }
+    return authority, bundle
+
+
+def locked_render_f119_draft_packet(
+    args: argparse.Namespace,
+    root: Path,
+    source_path: Path,
+    repository: Path,
+    generator_sha256: str,
+    *,
+    verify_only: bool,
+) -> None:
+    """Render or verify one deterministic read-only F119 packet candidate."""
+
+    require_committed_file(
+        repository,
+        source_path,
+        generator_sha256,
+        "Stage I recost generator",
+        expected_mode=0o755,
+    )
+    tracker = InputTracker()
+    if verify_only:
+        assert args.packet is not None
+        assert args.expected_packet_sha256 is not None
+        packet = parse_draft_packet(
+            tracker.read(
+                args.packet.absolute(),
+                args.expected_packet_sha256,
+                "F119 packet verification candidate",
+                expected_mode=0o644,
+            )
+        )
+        validate_f119_draft_packet(root, repository, packet, tracker)
+        tracker.reauthenticate_all()
+        print(args.expected_packet_sha256)
+        return
+
+    assert args.f117_seed_packet is not None
+    assert args.expected_f117_seed_packet_sha256 is not None
+    seed = f119_seed_packet(
+        root,
+        tracker,
+        source=args.f117_seed_packet,
+        expected_sha256=args.expected_f117_seed_packet_sha256,
+    )
+    authority, bundle = f119_render_authority_binding(args, root, tracker)
+    packet = deepcopy(seed)
+    packet.update(
+        {
+            "checkpoint": F119_CHECKPOINT,
+            "artifact_name": F119_ARTIFACT_NAME,
+            "generated_utc": args.generated_utc,
+            "expires_utc": args.expires_utc,
+            "requested_by": F119_REQUESTED_BY,
+            "scope": F119_SCOPE,
+        }
+    )
+    inputs = packet["inputs"]
+    assert isinstance(inputs, dict)
+    inputs["source_authority"] = authority
+    inputs["source_bundle"] = bundle
+    bundle_path = root / str(bundle["path"])
+    profiles = packet["recommendations"]["profiles"]
+    assert isinstance(profiles, list)
+    for profile in profiles:
+        profile["source_bundle"] = str(bundle_path)
+        profile["source_bundle_sha256"] = bundle["sha256"]
+    packet["draft_policy"]["required_storage_safety_bytes"] = (
+        F119_REQUIRED_STORAGE_SAFETY_BYTES
+    )
+    validate_f119_draft_packet(root, repository, packet, tracker, seed=seed)
+    tracker.reauthenticate_all()
+    sys.stdout.buffer.write(stable_json_bytes(packet))
+
+
+def retire_stale_f119_packet(
+    root: Path,
+    repository: Path,
+    target: Path,
+    candidate_payload: bytes,
+    mutation_lock: MutationLock | None,
+) -> Path | None:
+    """Retire one authenticated stale F119 packet before no-clobber replacement."""
+
+    try:
+        with absolute_descriptor(
+            target, "canonical F119 draft packet", flags=os.O_RDONLY
+        ) as source:
+            profile = os.fstat(source)
+            require_regular_profile(
+                profile, "canonical F119 draft packet", expected_mode=0o644
+            )
+            chunks = []
+            while True:
+                block = os.read(source, 1024 * 1024)
+                if not block:
+                    break
+                chunks.append(block)
+    except FileNotFoundError:
+        return None
+    payload = b"".join(chunks)
+    if payload == candidate_payload:
+        return None
+    if os.path.lexists(root / F119_REQUEST_RELATIVE):
+        raise ValueError(
+            "F119 request is the last commit marker; refusing draft-packet supersession"
+        )
+    tracker = InputTracker()
+    validate_f119_draft_packet(
+        root,
+        repository,
+        parse_draft_packet(payload),
+        tracker,
+        allow_inactive=True,
+    )
+    tracker.reauthenticate_all()
+    digest = sha256_bytes(payload)
+    retired = target.with_name(f".{target.name}.retired.sha256-{digest}")
+    prefix = f".{target.name}.retired.sha256-"
+    with absolute_descriptor(
+        target.parent,
+        "F119 packet retirement parent",
+        flags=os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC,
+    ) as directory:
+        parent_profile = os.fstat(directory)
+        require_directory_profile(parent_profile, "F119 packet retirement parent")
+        unexpected = sorted(
+            entry.name
+            for entry in os.scandir(directory)
+            if entry.name.startswith(prefix) and entry.name != retired.name
+        )
+        if unexpected:
+            raise ValueError("F119 packet retirement namespace is ambiguous")
+        retained = read_bound_exact_file(
+            directory,
+            target.name,
+            payload,
+            0o644,
+            "canonical stale F119 draft packet",
+            expected_identity=profile,
+        )
+        require_parent_path_bound(
+            target.parent, directory, parent_profile, "F119 packet retirement"
+        )
+        authenticate_mutation_lock(mutation_lock)
+        moved = move_bound_name_noreplace(
+            directory,
+            target.name,
+            retired.name,
+            retained,
+            "F119 stale packet retirement",
+        )
+        read_bound_exact_file(
+            directory,
+            retired.name,
+            payload,
+            0o644,
+            "retired stale F119 draft packet",
+            expected_identity=moved,
+        )
+        require_parent_path_bound(
+            target.parent, directory, parent_profile, "F119 packet retirement"
+        )
+        authenticate_mutation_lock(mutation_lock)
+    return retired
+
+
 def locked_install_draft_packet(
     args: argparse.Namespace,
     root: Path,
@@ -10889,7 +11830,15 @@ def locked_install_draft_packet(
         raise ValueError(
             f"managed draft-packet installation is restricted to exact {expected_checkpoint}"
         )
+    if expected_checkpoint == F119_CHECKPOINT:
+        validate_f119_draft_packet(root, repository, packet, tracker)
+        tracker.reauthenticate_all()
     target = paths["packet"]
+    retired = None
+    if expected_checkpoint == F119_CHECKPOINT:
+        retired = retire_stale_f119_packet(
+            root, repository, target, packet_payload, mutation_lock
+        )
     created = write_exact_or_verify(
         target,
         packet_payload,
@@ -10927,6 +11876,9 @@ def locked_install_draft_packet(
                 "created": created,
                 "no_clobber": True,
                 "exact_existing_copy_verified": not created,
+                "authenticated_retired_predecessor": (
+                    str(retired) if retired is not None else None
+                ),
                 "next_action": next_action,
             },
             indent=2,
@@ -10999,7 +11951,10 @@ def locked_draft_request(
     inputs = request["inputs"]
     assert isinstance(inputs, dict)
 
-    preflight_draft_authority_and_predecessor(root, repository, packet, tracker)
+    if packet["checkpoint"] == F119_CHECKPOINT:
+        validate_f119_draft_packet(root, repository, packet, tracker)
+    else:
+        preflight_draft_authority_and_predecessor(root, repository, packet, tracker)
 
     helper_binding = require_exact_keys(
         inputs["stage_i_helper"], {"revision", "sha256"}, "Stage I helper binding"
@@ -11629,6 +12584,18 @@ def main(argv: list[str] | None = None) -> int:
                 repository,
                 generator_sha256,
                 mutation_lock,
+            )
+        elif args.action in {
+            "render-f119-draft-packet",
+            "verify-f119-draft-packet",
+        }:
+            locked_render_f119_draft_packet(
+                args,
+                root,
+                source_path,
+                repository,
+                generator_sha256,
+                verify_only=args.action == "verify-f119-draft-packet",
             )
         elif args.action in MANAGED_DRAFT_PACKET_ACTIONS:
             locked_install_draft_packet(

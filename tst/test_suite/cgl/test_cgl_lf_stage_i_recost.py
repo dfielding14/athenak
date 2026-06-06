@@ -99,6 +99,11 @@ F118_PUBLICATION_REQUIREMENTS = {
 F118_PUBLICATION_METHOD = (
     "recoverable-forward-transaction-with-publication-audit-commit-marker-under-stage-i-lock"
 )
+F119_REQUESTED_BY = "Codex deterministic F119 draft packet renderer"
+F119_SCOPE = (
+    "Non-authorizing F119 recost request draft superseding the exact authenticated "
+    "failed F117 attempt under current F118 source authority."
+)
 INDEPENDENT_REVIEW_NON_CRYPTOGRAPHIC_LIMITATION = (
     "Reviewer roles, agent identifiers, and process separation are retained "
     "declarations; exact artifact digests authenticate reviewed bytes but do not "
@@ -1399,6 +1404,91 @@ def write_draft_packet(
     return packet
 
 
+def write_f119_seed_and_candidate(
+    fixture: dict[str, object],
+    *,
+    seed_mutate=None,
+    candidate_mutate=None,
+) -> tuple[Path, Path]:
+    """Write one exact four-profile F117 seed and derived F119 candidate."""
+
+    predecessor = fixture["predecessor"]
+    assert isinstance(predecessor, Path)
+    if "_F117_recost_evidence.json" not in predecessor.name:
+        replace_fixture_predecessor(fixture, 117)
+    profiles = [
+        profile(fixture, case_id=case_id, nodes=nodes, parent=case_id != "R12")
+        for case_id, nodes in (("R03", 1), ("R04", 4), ("R12", 4), ("R16", 1))
+    ]
+
+    def mutate_seed(packet):
+        bind_fixture_predecessor(fixture, packet)
+        packet["recommendations"] = {
+            "mode": "bounded-wave",
+            "max_wave_nodes": 10,
+            "profiles": profiles,
+        }
+        packet["draft_policy"]["required_storage_safety_bytes"] = 1024**4
+        if seed_mutate is not None:
+            seed_mutate(packet)
+
+    seed = write_draft_packet(fixture, checkpoint_number=117, mutate=mutate_seed)
+    candidate_value = json.loads(seed.read_text())
+    candidate_value.update(
+        {
+            "checkpoint": "F-119",
+            "artifact_name": (
+                "mks24_stage_i_E03_forcing_policy_F119_recost_evidence.json"
+            ),
+            "requested_by": F119_REQUESTED_BY,
+            "scope": F119_SCOPE,
+        }
+    )
+    if candidate_mutate is not None:
+        candidate_mutate(candidate_value)
+    candidate = seed.with_name(
+        "mks24_stage_i_E03_forcing_policy_F119_recost_draft_packet.json"
+    )
+    write_json(candidate, candidate_value)
+    return seed, candidate
+
+
+def f119_render_arguments(
+    fixture: dict[str, object],
+    seed: Path,
+    *,
+    generated: datetime | None = None,
+    expires: datetime | None = None,
+) -> tuple[str, ...]:
+    """Return the exact caller-pinned deterministic F119 renderer arguments."""
+
+    timestamp = generated or fixture["timestamp"]
+    assert isinstance(timestamp, datetime)
+    expiry = expires or timestamp + timedelta(hours=12)
+    return (
+        "--generated-utc",
+        timestamp.isoformat(),
+        "--expires-utc",
+        expiry.isoformat(),
+        "--f117-seed-packet",
+        str(seed),
+        "--expected-f117-seed-packet-sha256",
+        sha256(seed),
+        "--f118-source-bundle",
+        str(fixture["source_bundle"]),
+        "--expected-f118-source-bundle-sha256",
+        sha256(fixture["source_bundle"]),
+        "--expected-f118-evidence-sha256",
+        sha256(fixture["source_authority"]),
+        "--expected-f118-publication-audit-sha256",
+        sha256(fixture["source_authority_audit"]),
+        "--expected-f118-provenance-review-sha256",
+        sha256(fixture["source_authority_provenance_review"]),
+        "--expected-f118-plasma-review-sha256",
+        sha256(fixture["source_authority_plasma_review"]),
+    )
+
+
 def replace_fixture_predecessor(
     fixture: dict[str, object], checkpoint_number: int
 ) -> tuple[Path, Path, Path]:
@@ -1682,13 +1772,25 @@ def recost_fixture(tmp_path):
     lock.chmod(0o644)
 
     source_bundle = source_archives / "athenak-fixture.bundle"
-    git(repository, "bundle", "create", str(source_bundle), "--all")
+    git(repository, "bundle", "create", str(source_bundle), "HEAD")
     source_bundle.chmod(0o644)
     f116_source_bundle = source_archives / "athenak-historical-f116.bundle"
     f116_source_bundle.write_bytes(source_bundle.read_bytes())
     f116_source_bundle.chmod(0o644)
     historical_source_bundle = source_archives / "athenak-historical-f115.bundle"
-    historical_source_bundle.write_bytes(b"retained historical F115 source bundle\n")
+    git(
+        repository,
+        "update-ref",
+        "refs/heads/feature/cgl-landau-fluid",
+        f113_revision,
+    )
+    git(
+        repository,
+        "bundle",
+        "create",
+        str(historical_source_bundle),
+        "refs/heads/feature/cgl-landau-fluid",
+    )
     historical_source_bundle.chmod(0o644)
     source_archive_readme = source_archives / "README.md"
     source_archive_readme.write_text(
@@ -2001,7 +2103,10 @@ def recost_fixture(tmp_path):
         "sha256": sha256(historical_source_bundle),
         "complete_history": True,
         "head": f113_revision,
-        "advertised_tip": {"revision": f113_revision, "name": "HEAD"},
+        "advertised_tip": {
+            "revision": f113_revision,
+            "name": "refs/heads/feature/cgl-landau-fluid",
+        },
         "verified_revisions": [f113_revision],
         "selected_as_current": False,
         "role": "retained-non-current-bridge",
@@ -3034,21 +3139,13 @@ def test_install_f117_draft_packet_is_managed_no_clobber_or_exact_verify(
     )
 
 
-def test_f119_managed_install_and_draft_preserve_published_f117(recost_fixture):
+def test_f119_managed_install_preserves_published_f117(recost_fixture):
     root = recost_fixture["root"]
-    accounting = recost_fixture["accounting"]
     assert isinstance(root, Path)
-    assert isinstance(accounting, Path)
     f117_publications = replace_fixture_predecessor(recost_fixture, 117)
-    f117_packet = write_draft_packet(
+    f117_packet, f119_packet = write_f119_seed_and_candidate(
         recost_fixture,
-        checkpoint_number=117,
-        mutate=lambda packet: bind_fixture_predecessor(recost_fixture, packet),
-    )
-    f119_packet = write_draft_packet(
-        recost_fixture,
-        checkpoint_number=119,
-        mutate=lambda packet: bind_fixture_predecessor(recost_fixture, packet),
+        seed_mutate=lambda packet: bind_fixture_predecessor(recost_fixture, packet),
     )
     external_f119 = root.parent / "externally-reviewed-f119-draft-packet.json"
     f119_packet.replace(external_f119)
@@ -3077,27 +3174,6 @@ def test_f119_managed_install_and_draft_preserve_published_f117(recost_fixture):
     assert Path(install_report["path"]) == f119_packet
     assert install_report["next_action"][-1] == "draft-request"
 
-    drafted = run_action(
-        recost_fixture,
-        "draft-request",
-        "--packet",
-        str(f119_packet),
-        "--expected-packet-sha256",
-        sha256(f119_packet),
-    )
-    assert drafted.returncode == 0, drafted.stderr
-    draft_report = action_report(drafted)
-    prefix = f"mks24_stage_i_{EPOCH_SLUG}_F119"
-    expected_paths = {
-        accounting / f"{prefix}_recost_request.json",
-        accounting / f"{prefix}_reconciliation_evidence.json",
-        accounting / f"{prefix}_storage_evidence.json",
-    }
-    assert {
-        Path(draft_report["request"]["path"]),
-        Path(draft_report["reconciliation"]["path"]),
-        Path(draft_report["storage"]["path"]),
-    } == expected_paths
     for path, snapshot in f117_snapshot.items():
         assert (
             path.read_bytes(),
@@ -3118,6 +3194,193 @@ def test_f119_managed_install_and_draft_preserve_published_f117(recost_fixture):
         ),
         "restricted to exact F-119",
     )
+
+
+def test_f119_candidate_renderer_is_deterministic_read_only_and_verifiable(
+    recost_fixture,
+):
+    root = recost_fixture["root"]
+    assert isinstance(root, Path)
+    seed, candidate = write_f119_seed_and_candidate(recost_fixture)
+    candidate.unlink()
+    arguments = f119_render_arguments(recost_fixture, seed)
+    first = run_action(recost_fixture, "render-f119-draft-packet", *arguments)
+    second = run_action(recost_fixture, "render-f119-draft-packet", *arguments)
+    assert first.returncode == 0, first.stderr
+    assert second.returncode == 0, second.stderr
+    assert first.stdout == second.stdout
+    assert not candidate.exists()
+    value = json.loads(first.stdout)
+    assert value["checkpoint"] == "F-119"
+    assert value["inputs"]["source_authority"]["checkpoint"] == "F-118"
+    assert value["draft_policy"]["required_storage_safety_bytes"] == 1024**4
+    assert [
+        (profile_value["case_id"], profile_value["nodes"])
+        for profile_value in value["recommendations"]["profiles"]
+    ] == [("R03", 1), ("R04", 4), ("R12", 4), ("R16", 1)]
+
+    external = root.parent / "rendered-f119-candidate.json"
+    external.write_text(first.stdout)
+    external.chmod(0o644)
+    verified = run_action(
+        recost_fixture,
+        "verify-f119-draft-packet",
+        "--packet",
+        str(external),
+        "--expected-packet-sha256",
+        sha256(external),
+    )
+    assert verified.returncode == 0, verified.stderr
+    assert verified.stdout.strip() == sha256(external)
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    (
+        "missing-input",
+        "extra-input",
+        "empty-profiles",
+        "wrong-profiles",
+        "f116-authority",
+        "wrong-identity",
+        "wrong-predecessor",
+        "wrong-reserve",
+        "expired",
+    ),
+)
+def test_f119_install_rejects_semantic_mutations_before_canonical_write(
+    recost_fixture, mutation,
+):
+    root = recost_fixture["root"]
+    assert isinstance(root, Path)
+    seed, candidate = write_f119_seed_and_candidate(recost_fixture)
+    candidate.unlink()
+    rendered = run_action(
+        recost_fixture,
+        "render-f119-draft-packet",
+        *f119_render_arguments(recost_fixture, seed),
+    )
+    assert rendered.returncode == 0, rendered.stderr
+    value = json.loads(rendered.stdout)
+    if mutation == "missing-input":
+        value["inputs"].pop("matrix")
+    elif mutation == "extra-input":
+        value["inputs"]["unexpected"] = None
+    elif mutation == "empty-profiles":
+        value["recommendations"]["profiles"] = []
+    elif mutation == "wrong-profiles":
+        value["recommendations"]["profiles"][0]["nodes"] = 2
+    elif mutation == "f116-authority":
+        value["inputs"]["source_authority"]["checkpoint"] = "F-116"
+    elif mutation == "wrong-identity":
+        value["checkpoint"] = "F-120"
+    elif mutation == "wrong-predecessor":
+        value["inputs"]["predecessor_recost"]["sha256"] = "0" * 64
+    elif mutation == "wrong-reserve":
+        value["draft_policy"]["required_storage_safety_bytes"] = 1024
+    else:
+        value["generated_utc"] = (
+            datetime.now(timezone.utc) - timedelta(hours=2)
+        ).isoformat()
+        value["expires_utc"] = (
+            datetime.now(timezone.utc) - timedelta(hours=1)
+        ).isoformat()
+    external = root.parent / f"mutated-{mutation}-f119-candidate.json"
+    write_json(external, value)
+    rejected = run_action(
+        recost_fixture,
+        "install-f119-draft-packet",
+        "--packet",
+        str(external),
+        "--expected-packet-sha256",
+        sha256(external),
+    )
+    assert rejected.returncode == 1
+    assert not candidate.exists()
+    assert not list(candidate.parent.glob(f".{candidate.name}.retired.sha256-*"))
+
+
+def test_f119_install_authenticates_and_retires_stale_packet(recost_fixture):
+    root = recost_fixture["root"]
+    timestamp = recost_fixture["timestamp"]
+    assert isinstance(root, Path)
+    assert isinstance(timestamp, datetime)
+    seed, candidate = write_f119_seed_and_candidate(recost_fixture)
+    candidate.unlink()
+    rendered = run_action(
+        recost_fixture,
+        "render-f119-draft-packet",
+        *f119_render_arguments(recost_fixture, seed),
+    )
+    assert rendered.returncode == 0, rendered.stderr
+    stale = json.loads(rendered.stdout)
+    stale["generated_utc"] = (timestamp - timedelta(minutes=4)).isoformat()
+    stale["expires_utc"] = (timestamp - timedelta(seconds=1)).isoformat()
+    write_json(candidate, stale)
+    stale_payload = candidate.read_bytes()
+    external = root.parent / "active-f119-candidate.json"
+    external.write_text(rendered.stdout)
+    external.chmod(0o644)
+
+    installed = run_action(
+        recost_fixture,
+        "install-f119-draft-packet",
+        "--packet",
+        str(external),
+        "--expected-packet-sha256",
+        sha256(external),
+    )
+    assert installed.returncode == 0, installed.stderr
+    report = action_report(installed)
+    retired = Path(report["authenticated_retired_predecessor"])
+    assert retired.read_bytes() == stale_payload
+    assert candidate.read_bytes() == external.read_bytes()
+
+
+@pytest.mark.parametrize("existing", ("invalid", "request-committed"))
+def test_f119_install_preserves_unsupersedable_canonical_state(
+    recost_fixture, existing,
+):
+    root = recost_fixture["root"]
+    assert isinstance(root, Path)
+    seed, candidate = write_f119_seed_and_candidate(recost_fixture)
+    candidate.unlink()
+    rendered = run_action(
+        recost_fixture,
+        "render-f119-draft-packet",
+        *f119_render_arguments(recost_fixture, seed),
+    )
+    assert rendered.returncode == 0, rendered.stderr
+    if existing == "invalid":
+        candidate.write_bytes(b"invalid canonical F119 packet\n")
+    else:
+        stale = json.loads(rendered.stdout)
+        stale["generated_utc"] = (
+            datetime.now(timezone.utc) - timedelta(minutes=4)
+        ).isoformat()
+        stale["expires_utc"] = (
+            datetime.now(timezone.utc) - timedelta(seconds=1)
+        ).isoformat()
+        write_json(candidate, stale)
+        request = candidate.with_name(
+            "mks24_stage_i_E03_forcing_policy_F119_recost_request.json"
+        )
+        request.write_bytes(b"last commit marker\n")
+    candidate.chmod(0o644)
+    retained = candidate.read_bytes()
+    external = root.parent / f"{existing}-replacement-f119.json"
+    external.write_text(rendered.stdout)
+    external.chmod(0o644)
+    rejected = run_action(
+        recost_fixture,
+        "install-f119-draft-packet",
+        "--packet",
+        str(external),
+        "--expected-packet-sha256",
+        sha256(external),
+    )
+    assert rejected.returncode == 1
+    assert candidate.read_bytes() == retained
 
 
 @pytest.mark.parametrize("mutation", ("source-authority", "predecessor"))
@@ -3354,6 +3617,72 @@ def test_draft_prerequisite_trio_recovers_retained_linked_interruption(
     assert publication_private_entries(module, accounting) == []
 
 
+@pytest.mark.parametrize("state", ("finalize-quarantine", "rollback-quarantine"))
+def test_draft_prerequisite_trio_recovers_retained_quarantine_state(
+    tmp_path, state,
+):
+    module = load_recost_module()
+    accounting = tmp_path / "accounting"
+    accounting.mkdir()
+    publications = (
+        (accounting / "F210_reconciliation.json", b"reconciliation\n", "reconciliation"),
+        (accounting / "F210_storage.json", b"storage\n", "storage"),
+        (accounting / "F210_request.json", b"request\n", "request"),
+    )
+    path, payload, label = publications[0]
+    transaction = module.publication_transaction(path, payload, 0o644, label)
+    private = accounting / transaction.private_name(0)
+    private.write_bytes(payload)
+    private.chmod(0o644)
+    os.link(private, path)
+    if state == "finalize-quarantine":
+        quarantine = accounting / module.transaction_private_quarantine_name(
+            transaction, private.name
+        )
+        private.rename(quarantine)
+    else:
+        quarantine = accounting / module.transaction_private_quarantine_name(
+            transaction, path.name
+        )
+        path.rename(quarantine)
+
+    module.publish_draft_prerequisite_trio(publications)
+    for retained_path, retained_payload, _ in publications:
+        assert retained_path.read_bytes() == retained_payload
+        assert retained_path.stat().st_nlink == 1
+    assert publication_private_entries(module, accounting) == []
+
+
+def test_draft_prerequisite_trio_forward_completes_after_quarantine_interruption(
+    tmp_path, monkeypatch,
+):
+    module = load_recost_module()
+    accounting = tmp_path / "accounting"
+    accounting.mkdir()
+    publications = (
+        (accounting / "F210_reconciliation.json", b"reconciliation\n", "reconciliation"),
+        (accounting / "F210_storage.json", b"storage\n", "storage"),
+        (accounting / "F210_request.json", b"request\n", "request"),
+    )
+    real_unlinkat = module.unlinkat_name
+    injected = False
+
+    def interrupt_after_quarantine_move(directory, name, label):
+        nonlocal injected
+        if not injected:
+            injected = True
+            raise RuntimeError("interrupted after descriptor-bound quarantine move")
+        return real_unlinkat(directory, name, label)
+
+    monkeypatch.setattr(module, "unlinkat_name", interrupt_after_quarantine_move)
+    module.publish_draft_prerequisite_trio(publications)
+    assert injected
+    for path, payload, _ in publications:
+        assert path.read_bytes() == payload
+        assert path.stat().st_nlink == 1
+    assert publication_private_entries(module, accounting) == []
+
+
 def test_draft_prerequisite_trio_reauthenticates_interrupted_final_durability(
     tmp_path, monkeypatch,
 ):
@@ -3391,6 +3720,105 @@ def test_draft_prerequisite_trio_reauthenticates_interrupted_final_durability(
         assert stat.S_IMODE(path.stat().st_mode) == 0o644
         assert path.stat().st_nlink == 1
     assert publication_private_entries(module, accounting) == []
+
+
+def linked_draft_trio_entry(module, parent: Path):
+    """Return one exact linked draft-trio entry for direct lifecycle probes."""
+
+    target = parent / "request.json"
+    payload = b"exact transaction-owned request\n"
+    transaction = module.publication_transaction(target, payload, 0o644, "request")
+    private = parent / transaction.private_name(0)
+    private.write_bytes(payload)
+    private.chmod(0o644)
+    os.link(private, target)
+    identity = target.stat()
+    entry = module.DraftTrioPublicationEntry(
+        path=target,
+        payload=payload,
+        mode=0o644,
+        label="request",
+        transaction=transaction,
+        initial_state="linked",
+        private_name=private.name,
+        private_identity=identity,
+        installed_identity=identity,
+    )
+    return entry, private
+
+
+@pytest.mark.parametrize("operation", ("finalize", "rollback"))
+def test_draft_trio_descriptor_bound_deletion_preserves_hostile_swap(
+    tmp_path, monkeypatch, operation,
+):
+    module = load_recost_module()
+    parent = tmp_path / "accounting"
+    parent.mkdir()
+    entry, private = linked_draft_trio_entry(module, parent)
+    hostile = parent / "hostile"
+    hostile.write_bytes(b"hostile namespace replacement\n")
+    hostile.chmod(0o644)
+    displaced = parent / "displaced-exact-transaction-owned-link"
+    real_rename = module.renameat2_noreplace
+    raced = False
+
+    def swap_before_bound_move(directory, source, target, label):
+        nonlocal raced
+        selected = private.name if operation == "finalize" else entry.path.name
+        if not raced and source == selected:
+            os.rename(source, displaced.name, src_dir_fd=directory, dst_dir_fd=directory)
+            os.rename(hostile.name, source, src_dir_fd=directory, dst_dir_fd=directory)
+            raced = True
+        return real_rename(directory, source, target, label)
+
+    monkeypatch.setattr(module, "renameat2_noreplace", swap_before_bound_move)
+    directory = os.open(parent, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        parent_profile = os.fstat(directory)
+        with pytest.raises(ValueError):
+            if operation == "finalize":
+                module.finalize_draft_trio_entry(
+                    directory, parent_profile, entry, None
+                )
+            else:
+                module.rollback_draft_trio_entries(
+                    directory, parent_profile, [entry], None
+                )
+    finally:
+        os.close(directory)
+    assert raced
+    selected = private if operation == "finalize" else entry.path
+    assert selected.read_bytes() == b"hostile namespace replacement\n"
+    assert displaced.read_bytes() == entry.payload
+    other = entry.path if operation == "finalize" else private
+    assert other.read_bytes() == entry.payload
+
+
+def test_draft_trio_rejects_ambiguous_exact_private_attempts(tmp_path):
+    module = load_recost_module()
+    parent = tmp_path / "accounting"
+    parent.mkdir()
+    target = parent / "request.json"
+    payload = b"request\n"
+    transaction = module.publication_transaction(target, payload, 0o644, "request")
+    entry = module.DraftTrioPublicationEntry(
+        path=target,
+        payload=payload,
+        mode=0o644,
+        label="request",
+        transaction=transaction,
+        initial_state="absent",
+    )
+    for attempt in (0, 1):
+        private = parent / transaction.private_name(attempt)
+        private.write_bytes(payload)
+        private.chmod(0o644)
+    directory = os.open(parent, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        with pytest.raises(ValueError, match="ambiguous retained"):
+            module.reusable_draft_trio_private(directory, entry)
+    finally:
+        os.close(directory)
 
 
 def test_draft_request_requires_exact_checkpoint_packet_namespace(recost_fixture):
@@ -4622,6 +5050,63 @@ def test_source_bundle_rejects_prerequisite_only_history(recost_fixture):
     bundle.chmod(0o644)
     with pytest.raises(ValueError, match="self-contained without prerequisites"):
         module.require_valid_git_bundle(repository, bundle, sha256(bundle), [head])
+
+
+def test_source_bundle_requires_exact_advertised_head_selection(recost_fixture):
+    module = load_recost_module()
+    repository = recost_fixture["repository"]
+    bundle = recost_fixture["source_bundle"]
+    revision = recost_fixture["revision"]
+    assert isinstance(repository, Path)
+    assert isinstance(bundle, Path)
+    assert isinstance(revision, str)
+    module.require_valid_git_bundle(
+        repository,
+        bundle,
+        sha256(bundle),
+        [revision],
+        expected_advertised_tip=(revision, "HEAD"),
+    )
+
+    master_only = bundle.with_name("master-only.bundle")
+    git(repository, "bundle", "create", str(master_only), "refs/heads/master")
+    master_only.chmod(0o644)
+    with pytest.raises(ValueError, match="advertised tip differs"):
+        module.require_valid_git_bundle(
+            repository,
+            master_only,
+            sha256(master_only),
+            [revision],
+            expected_advertised_tip=(revision, "HEAD"),
+        )
+
+    git(repository, "commit", "--allow-empty", "-q", "-m", "unreviewed descendant")
+    descendant = git(repository, "rev-parse", "HEAD")
+    descendant_bundle = bundle.with_name("unreviewed-descendant.bundle")
+    git(repository, "bundle", "create", str(descendant_bundle), "HEAD")
+    descendant_bundle.chmod(0o644)
+    with pytest.raises(ValueError, match="advertised tip differs"):
+        module.require_valid_git_bundle(
+            repository,
+            descendant_bundle,
+            sha256(descendant_bundle),
+            [revision],
+            expected_advertised_tip=(revision, "HEAD"),
+        )
+    assert descendant != revision
+
+
+@pytest.mark.parametrize(
+    "fixture_key", ("historical_source_bundle", "f116_source_bundle")
+)
+def test_f118_bridge_and_predecessor_bundles_bind_exact_live_bytes(
+    recost_fixture, fixture_key,
+):
+    bundle = recost_fixture[fixture_key]
+    assert isinstance(bundle, Path)
+    bundle.write_bytes(bundle.read_bytes() + b"\nmutated live bundle bytes\n")
+    bundle.chmod(0o644)
+    assert_rejected(run_generator(recost_fixture), "checksum differs")
 
 
 def test_generator_rejects_replayed_terminal_rank_inventory(recost_fixture):
@@ -6178,7 +6663,7 @@ def test_occupied_public_target_is_never_mutated(
     assert target.stat().st_nlink == retained.st_nlink
 
 
-def test_occupied_transaction_private_name_is_preserved_and_skipped(tmp_path):
+def test_occupied_transaction_private_name_is_preserved_and_rejected(tmp_path):
     module = load_recost_module()
     parent = tmp_path / "parent"
     parent.mkdir()
@@ -6190,15 +6675,16 @@ def test_occupied_transaction_private_name_is_preserved_and_skipped(tmp_path):
     collision.chmod(0o600)
     retained = collision.stat()
 
-    assert module.write_exact_or_verify(
-        target, payload, mode=0o644, label="managed fixture"
-    )
+    with pytest.raises(ValueError, match="deterministic public target is absent"):
+        module.write_exact_or_verify(
+            target, payload, mode=0o644, label="managed fixture"
+        )
     assert collision.read_bytes() == b"unrelated private collision\n"
     assert (collision.stat().st_dev, collision.stat().st_ino) == (
         retained.st_dev,
         retained.st_ino,
     )
-    assert target.read_bytes() == payload
+    assert not target.exists()
     assert publication_private_entries(module, parent) == [collision]
 
 
@@ -6317,7 +6803,8 @@ def test_post_private_create_exception_preserves_unknown_attempt_and_retry_recov
     )
     assert target.read_bytes() == b"managed\n"
     assert stat.S_IMODE(target.stat().st_mode) == 0o644
-    assert (retained_private[0].stat().st_dev, retained_private[0].stat().st_ino) == (
+    assert not retained_private[0].exists()
+    assert (target.stat().st_dev, target.stat().st_ino) == (
         retained.st_dev,
         retained.st_ino,
     )
@@ -6356,7 +6843,8 @@ def test_direct_final_partial_write_failure_is_forward_recoverable(tmp_path, mon
     )
     assert target.read_bytes() == payload
     assert stat.S_IMODE(target.stat().st_mode) == 0o644
-    assert (retained_private[0].stat().st_dev, retained_private[0].stat().st_ino) == (
+    assert not retained_private[0].exists()
+    assert (target.stat().st_dev, target.stat().st_ino) == (
         retained.st_dev,
         retained.st_ino,
     )
@@ -6399,7 +6887,6 @@ def test_private_finalize_crash_points_leave_public_absent_and_retry(
     assert not target.exists()
     retained_private = publication_private_entries(module, parent)
     assert len(retained_private) == 1
-    retained_bytes = retained_private[0].read_bytes()
     retained = retained_private[0].stat()
 
     monkeypatch.setattr(module.os, "fsync", real_fsync)
@@ -6408,8 +6895,8 @@ def test_private_finalize_crash_points_leave_public_absent_and_retry(
         target, payload, mode=0o644, label="managed fixture"
     )
     assert target.read_bytes() == payload
-    assert retained_private[0].read_bytes() == retained_bytes
-    assert (retained_private[0].stat().st_dev, retained_private[0].stat().st_ino) == (
+    assert not retained_private[0].exists()
+    assert (target.stat().st_dev, target.stat().st_ino) == (
         retained.st_dev,
         retained.st_ino,
     )
@@ -6478,7 +6965,8 @@ def test_direct_final_lock_loss_before_commit_is_forward_recoverable(tmp_path, m
     assert replaced
     assert target.read_bytes() == payload
     assert stat.S_IMODE(target.stat().st_mode) == 0o644
-    assert (retained_private[0].stat().st_dev, retained_private[0].stat().st_ino) == (
+    assert not retained_private[0].exists()
+    assert (target.stat().st_dev, target.stat().st_ino) == (
         retained.st_dev,
         retained.st_ino,
     )
