@@ -4344,19 +4344,85 @@ def validate_historical_f115_authority(
         expected_advertised_tip=(head, "HEAD"),
         label="schema-2 historical F115 source bundle",
     )
+    commit = require_git_revision(
+        implementation.get("commit"), "schema-2 historical F115 implementation commit"
+    )
+    subject = require_nonempty_string(
+        implementation.get("subject"), "schema-2 historical F115 implementation subject"
+    )
+    if (
+        commit != head
+        or subject
+        != git_revision_subject(repository, head, "schema-2 historical F115 source")
+    ):
+        raise ValueError("schema-2 historical F115 implementation subject differs")
+
+    authorization = require_exact_keys(
+        evidence.get("authorization"),
+        {
+            "sole_next_segment_profile",
+            "supersedes_f114_profile_only_where_explicitly_listed",
+        },
+        "schema-2 historical F115 authorization",
+    )
+    sole = authorization["sole_next_segment_profile"]
+    if not isinstance(sole, dict) or not sole:
+        raise ValueError("schema-2 historical F115 sole-next profile is missing")
+    supersession = require_exact_keys(
+        authorization["supersedes_f114_profile_only_where_explicitly_listed"],
+        {"segment", "source_bundle", "source_bundle_sha256"},
+        "schema-2 historical F115 supersession",
+    )
+    segment = require_exact_keys(
+        supersession["segment"],
+        {"from", "reason", "to"},
+        "schema-2 historical F115 segment supersession",
+    )
+    source_bundle = require_exact_keys(
+        supersession["source_bundle"],
+        {"from", "to"},
+        "schema-2 historical F115 source-bundle supersession",
+    )
+    source_digest = require_exact_keys(
+        supersession["source_bundle_sha256"],
+        {"from", "to"},
+        "schema-2 historical F115 source-bundle digest supersession",
+    )
+    expected_bundle_path = str(root / relative.as_posix())
+    if (
+        require_nonempty_string(segment["from"], "schema-2 historical F115 prior segment")
+        == require_nonempty_string(segment["to"], "schema-2 historical F115 next segment")
+        or segment["reason"]
+        != "s01 is an immutable cancelled no-start manifest and directory"
+        or require_nonempty_string(
+            source_bundle["from"], "schema-2 historical F115 prior source bundle"
+        )
+        == require_nonempty_string(
+            source_bundle["to"], "schema-2 historical F115 next source bundle"
+        )
+        or source_bundle["to"] != expected_bundle_path
+        or require_sha256(
+            source_digest["from"], "schema-2 historical F115 prior source-bundle SHA-256"
+        )
+        == require_sha256(
+            source_digest["to"], "schema-2 historical F115 next source-bundle SHA-256"
+        )
+        or source_digest["to"] != bundle_digest
+        or sole.get("segment") != segment["to"]
+        or sole.get("source_bundle") != expected_bundle_path
+        or sole.get("source_bundle_sha256") != bundle_digest
+    ):
+        raise ValueError("schema-2 historical F115 authorization broadens or rebinds authority")
 
     audit = loaded["publication_audit"][0]
-    authority = audit.get("authority_and_enforcement")
     if (
         audit.get("schema_version") != 1
         or audit.get("record_type")
         != "stage-i-source-bundle-recovery-supersession-publication-audit"
         or audit.get("checkpoint") != "F-115"
         or audit.get("execution_epoch") != EXECUTION_EPOCH
-        or not isinstance(authority, dict)
-        or authority.get("direct_sbatch_authorized") is not False
     ):
-        raise ValueError("schema-2 historical F115 publication audit authority differs")
+        raise ValueError("schema-2 historical F115 publication audit identity differs")
     exact_publication_binding(
         audit.get("artifact"),
         evidence_path,
@@ -4364,6 +4430,44 @@ def validate_historical_f115_authority(
         "schema-2 historical F115 audit artifact",
         mode="0444",
     )
+    authority = require_exact_keys(
+        audit.get("authority_and_enforcement"),
+        {
+            "authorization_kind",
+            "direct_sbatch_authorized",
+            "enforcement_chain",
+            "f115_authority",
+            "reuse_cancelled_job_or_s01_authorized",
+            "shared_root_acknowledgement_authorized_by_f115",
+            "shared_root_acknowledgement_requires_separate_exact_isolation_review_after_prepare",
+            "sole_next_segment_profile",
+        },
+        "schema-2 historical F115 publication audit authority",
+    )
+    exact_publication_binding(
+        authority["f115_authority"],
+        evidence_path,
+        evidence_digest,
+        "schema-2 historical F115 audit authority artifact",
+        mode="0444",
+    )
+    enforcement = authority["enforcement_chain"]
+    if (
+        authority["authorization_kind"]
+        != "procedural-pre-prepare-sole-profile-authority"
+        or authority["direct_sbatch_authorized"] is not False
+        or authority["reuse_cancelled_job_or_s01_authorized"] is not False
+        or authority["shared_root_acknowledgement_authorized_by_f115"] is not False
+        or authority[
+            "shared_root_acknowledgement_requires_separate_exact_isolation_review_after_prepare"
+        ]
+        is not True
+        or authority["sole_next_segment_profile"] != sole
+        or not isinstance(enforcement, list)
+        or not enforcement
+        or any(not isinstance(item, str) or not item for item in enforcement)
+    ):
+        raise ValueError("schema-2 historical F115 publication audit over-authorizes")
     reviews = require_exact_keys(
         audit.get("independent_reviews"),
         {
@@ -4424,6 +4528,7 @@ def validate_historical_f115_authority(
             "path": relative.as_posix(),
             "sha256": bundle_digest,
             "head": head,
+            "subject": subject,
             "verified_revisions": normalized_revisions,
         },
     }
@@ -4599,6 +4704,7 @@ def validate_historical_f116_authority(
         "historical_f115_preserved": True,
     }
     reviewed_times = []
+    reviewed_candidate = None
     agents = set()
     for key, kind, decision in (
         ("provenance_review", "provenance-security", "approved-for-publication"),
@@ -4629,9 +4735,15 @@ def validate_historical_f116_authority(
             {"path", "sha256"},
             f"schema-2 historical F116 {key} candidate",
         )
-        require_normalized_absolute_path(
+        candidate_path = require_normalized_absolute_path(
             candidate["path"], f"schema-2 historical F116 {key} candidate path"
         )
+        candidate_digest = require_sha256(
+            candidate["sha256"], f"schema-2 historical F116 {key} candidate SHA-256"
+        )
+        candidate_identity = (str(candidate_path), candidate_digest)
+        if reviewed_candidate is None:
+            reviewed_candidate = candidate_identity
         reviewer = require_exact_keys(
             review["reviewer"],
             {"agent_id", "identity"},
@@ -4651,7 +4763,8 @@ def validate_historical_f116_authority(
             or review["execution_epoch"] != EXECUTION_EPOCH
             or review["review_kind"] != kind
             or review["decision"] != decision
-            or candidate["sha256"] != evidence_digest
+            or candidate_identity != reviewed_candidate
+            or candidate_digest != evidence_digest
             or review["published_f116"]
             != {"path": str(evidence_path), "sha256": evidence_digest}
             or review["verified"] != expected_verified
@@ -4894,6 +5007,7 @@ def validate_f118_catalog_transition(
     current: dict[str, object],
     bridge: dict[str, object],
     predecessor: dict[str, object],
+    historical_f115: dict[str, object],
     before: dict[str, object],
     after: dict[str, object],
 ) -> None:
@@ -4926,12 +5040,23 @@ def validate_f118_catalog_transition(
     bridge_name = Path(str(bridge["path"])).name
     predecessor_name = Path(str(predecessor["path"])).name
     current_name = Path(str(current["path"])).name
+    f115_name = Path(str(historical_f115["path"])).name
+    f115_digest = str(historical_f115["sha256"])
+    f115_head = str(historical_f115["head"])
+    f115_subject = str(historical_f115["subject"])
     if (
         bridge_name.encode() not in old_readme
         or predecessor_name.encode() not in old_readme
         or current_name.encode() in old_readme
     ):
         raise ValueError("schema-2 F118 predecessor README entries differ")
+    if any(
+        old_readme.count(f"`{value}`".encode()) != 1
+        for value in (f115_name, f115_head, f115_subject, f115_digest)
+    ):
+        raise ValueError(
+            "schema-2 F118 predecessor README does not preserve the exact F115 archive entry"
+        )
 
     entries = parse_source_archive_sha256sums(sums, "schema-2 F118 live SHA256SUMS")
     expected_final = (str(current["sha256"]), current_name)
@@ -4948,7 +5073,9 @@ def validate_f118_catalog_transition(
     )
     old_names = [name for _, name in old_entries]
     if (
-        old_names.count(bridge_name) != 1
+        old_entries.count((f115_digest, f115_name)) != 1
+        or old_names.count(f115_name) != 1
+        or old_names.count(bridge_name) != 1
         or old_names.count(predecessor_name) != 1
         or current_name in old_names
     ):
@@ -5166,7 +5293,15 @@ def validate_complete_f118_source_authority(
         or after["sole_current_source_bundle"] != current["path"]
     ):
         raise ValueError("schema-2 F118 catalog predecessor authority differs")
-    validate_f118_catalog_transition(root, current, bridge, predecessor, before, after)
+    validate_f118_catalog_transition(
+        root,
+        current,
+        bridge,
+        predecessor,
+        historical["historical_f115"]["bundle"],
+        before,
+        after,
+    )
 
     verified = {
         "authorization_broadening": False,

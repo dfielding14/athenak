@@ -1079,12 +1079,179 @@ def schema2_review_probe(tmp_path: Path, reviewed_utc: str):
     return load_checkpoint_module(), root, artifact_name, args
 
 
+def strengthen_f115_f116_source_authority_fixture(campaign, source_test) -> None:
+    """Give the shared source-authority fixture the full checkpoint contract."""
+
+    authority = source_test.authority
+    root = campaign.root
+    f115_paths = {key: root / relative for key, relative in authority.F115_PATHS.items()}
+    f115_subject = source_test.git(
+        campaign.repository, "show", "-s", "--format=%s", campaign.f115_head
+    ).stdout.strip()
+    f115_bundle_digest = sha256(campaign.f115_bundle)
+    sole = {
+        "segment": "s02_fixture",
+        "source_bundle": str(campaign.f115_bundle),
+        "source_bundle_sha256": f115_bundle_digest,
+    }
+    f115_evidence = json.loads(f115_paths["evidence"].read_text())
+    f115_evidence["implementation"]["commit"] = campaign.f115_head
+    f115_evidence["implementation"]["subject"] = f115_subject
+    f115_evidence["authorization"] = {
+        "sole_next_segment_profile": sole,
+        "supersedes_f114_profile_only_where_explicitly_listed": {
+            "segment": {
+                "from": "s01_fixture",
+                "reason": "s01 is an immutable cancelled no-start manifest and directory",
+                "to": sole["segment"],
+            },
+            "source_bundle": {
+                "from": str(root / "source-archives/retained-cancelled-source.bundle"),
+                "to": str(campaign.f115_bundle),
+            },
+            "source_bundle_sha256": {
+                "from": "1" * 64,
+                "to": f115_bundle_digest,
+            },
+        },
+    }
+    write_json(f115_paths["evidence"], f115_evidence)
+    f115_paths["evidence"].chmod(0o444)
+    f115_evidence_digest = sha256(f115_paths["evidence"])
+
+    f115_review_digests = {}
+    for key in ("provenance_review", "plasma_review"):
+        review = json.loads(f115_paths[key].read_text())
+        review["published_f115"]["sha256"] = f115_evidence_digest
+        write_json(f115_paths[key], review)
+        f115_paths[key].chmod(0o444)
+        f115_review_digests[key] = sha256(f115_paths[key])
+
+    f115_audit = json.loads(f115_paths["publication_audit"].read_text())
+    f115_audit["artifact"]["sha256"] = f115_evidence_digest
+    f115_audit["independent_reviews"]["reviews_bind_exact_published_f115_sha256"] = (
+        f115_evidence_digest
+    )
+    f115_audit["independent_reviews"]["provenance_security"]["sha256"] = (
+        f115_review_digests["provenance_review"]
+    )
+    f115_audit["independent_reviews"]["plasma_scientific_continuation"]["sha256"] = (
+        f115_review_digests["plasma_review"]
+    )
+    f115_audit["authority_and_enforcement"] = {
+        "authorization_kind": "procedural-pre-prepare-sole-profile-authority",
+        "direct_sbatch_authorized": False,
+        "enforcement_chain": ["Fixture permits only the exact sole-next profile."],
+        "f115_authority": source_test.published_binding(
+            f115_paths["evidence"], f115_evidence_digest, "0444"
+        ),
+        "reuse_cancelled_job_or_s01_authorized": False,
+        "shared_root_acknowledgement_authorized_by_f115": False,
+        "shared_root_acknowledgement_requires_separate_exact_isolation_review_after_prepare": (
+            True
+        ),
+        "sole_next_segment_profile": sole,
+    }
+    write_json(f115_paths["publication_audit"], f115_audit)
+    f115_paths["publication_audit"].chmod(0o444)
+    f115_audit_digest = sha256(f115_paths["publication_audit"])
+    campaign.f115_digests = {
+        "evidence_sha256": f115_evidence_digest,
+        "publication_audit_sha256": f115_audit_digest,
+        "provenance_review_sha256": f115_review_digests["provenance_review"],
+        "plasma_review_sha256": f115_review_digests["plasma_review"],
+    }
+    campaign.f115_bindings = {
+        key: {
+            "path": authority.F115_PATHS[key].as_posix(),
+            "sha256": (
+                f115_evidence_digest
+                if key == "evidence"
+                else f115_audit_digest
+                if key == "publication_audit"
+                else f115_review_digests[key]
+            ),
+        }
+        for key in authority.F115_PATHS
+    }
+
+    readme_path = root / "source-archives/README.md"
+    marker = b"## AthenaK\n\n"
+    f115_block = (
+        f"`{campaign.f115_bundle.name}` records complete history through commit "
+        f"`{campaign.f115_head}` (`{f115_subject}`). Its SHA-256 is "
+        f"`{f115_bundle_digest}`.\n\n"
+    ).encode()
+    readme = readme_path.read_bytes()
+    assert marker in readme and campaign.f115_bundle.name.encode() not in readme
+    readme_path.chmod(0o644)
+    readme_path.write_bytes(readme.replace(marker, marker + f115_block, 1))
+
+    f116_paths = {key: root / relative for key, relative in authority.F116_PATHS.items()}
+    f116_evidence = json.loads(f116_paths["evidence"].read_text())
+    f116_evidence["predecessor_authorities"]["historical_f115"] = campaign.f115_bindings
+    f116_evidence["source_archive_catalog"]["after"]["readme_sha256"] = sha256(readme_path)
+    write_json(f116_paths["evidence"], f116_evidence)
+    f116_paths["evidence"].chmod(0o444)
+    f116_evidence_digest = sha256(f116_paths["evidence"])
+    common_candidate = str(root.parent / "exact-f116-evidence.candidate")
+    f116_review_digests = {}
+    for key in ("provenance_review", "plasma_review"):
+        review = json.loads(f116_paths[key].read_text())
+        review["reviewed_candidate"] = {
+            "path": common_candidate,
+            "sha256": f116_evidence_digest,
+        }
+        review["published_f116"]["sha256"] = f116_evidence_digest
+        write_json(f116_paths[key], review)
+        f116_paths[key].chmod(0o444)
+        f116_review_digests[key] = sha256(f116_paths[key])
+
+    f116_audit = json.loads(f116_paths["publication_audit"].read_text())
+    f116_audit["artifact"]["sha256"] = f116_evidence_digest
+    f116_audit["historical_f115_authority"] = campaign.f115_digests
+    f116_audit["source_archive_catalog"]["readme"]["sha256"] = sha256(readme_path)
+    f116_audit["independent_reviews"]["reviews_bind_exact_published_f116_sha256"] = (
+        f116_evidence_digest
+    )
+    f116_audit["independent_reviews"]["provenance_security"]["sha256"] = (
+        f116_review_digests["provenance_review"]
+    )
+    f116_audit["independent_reviews"]["plasma_scientific_continuation"]["sha256"] = (
+        f116_review_digests["plasma_review"]
+    )
+    write_json(f116_paths["publication_audit"], f116_audit)
+    f116_paths["publication_audit"].chmod(0o444)
+    f116_audit_digest = sha256(f116_paths["publication_audit"])
+    campaign.f116_digests = {
+        "evidence_sha256": f116_evidence_digest,
+        "publication_audit_sha256": f116_audit_digest,
+        "provenance_review_sha256": f116_review_digests["provenance_review"],
+        "plasma_review_sha256": f116_review_digests["plasma_review"],
+    }
+    campaign.f116_bindings = {
+        key: {
+            "path": authority.F116_PATHS[key].as_posix(),
+            "sha256": (
+                f116_evidence_digest
+                if key == "evidence"
+                else f116_audit_digest
+                if key == "publication_audit"
+                else f116_review_digests[key]
+            ),
+        }
+        for key in authority.F116_PATHS
+    }
+    campaign.refresh_candidates()
+
+
 def f118_committed_tools_probe(tmp_path: Path, monkeypatch):
     """Publish the authoritative fixture's exact F115/F116/F118 chain."""
 
     module = load_checkpoint_module()
     source_test = load_source_authority_test_module()
     campaign = source_test.Campaign.create(tmp_path)
+    strengthen_f115_f116_source_authority_fixture(campaign, source_test)
     evidence = json.loads(campaign.evidence_candidate.read_text())
     implementation = evidence["implementation"]
     bridge = implementation["intermediate_36140_bundle"]
@@ -1580,6 +1747,53 @@ def mutate_f118_probe_record(root: Path, binding: dict[str, object], key: str, m
     binding[key]["sha256"] = sha256(path)
 
 
+def rebind_historical_f116_chain(
+    module,
+    root: Path,
+    evidence: dict[str, object],
+) -> None:
+    """Self-rebind F116 reviews/audit and the outer F118 predecessor declaration."""
+
+    paths = {
+        "evidence": root / module.F116_RELATIVE,
+        "publication_audit": root / module.F116_PUBLICATION_AUDIT_RELATIVE,
+        "provenance_review": root / module.F116_PROVENANCE_REVIEW_RELATIVE,
+        "plasma_review": root / module.F116_PLASMA_REVIEW_RELATIVE,
+    }
+    evidence_digest = sha256(paths["evidence"])
+    review_digests = {}
+    for key in ("provenance_review", "plasma_review"):
+        review = json.loads(paths[key].read_text())
+        review["reviewed_candidate"]["sha256"] = evidence_digest
+        review["published_f116"]["sha256"] = evidence_digest
+        write_json(paths[key], review)
+        paths[key].chmod(0o444)
+        review_digests[key] = sha256(paths[key])
+
+    f116 = json.loads(paths["evidence"].read_text())
+    f115_bindings = f116["predecessor_authorities"]["historical_f115"]
+    audit = json.loads(paths["publication_audit"].read_text())
+    audit["artifact"]["sha256"] = evidence_digest
+    audit["historical_f115_authority"] = {
+        f"{key}_sha256": binding["sha256"] for key, binding in f115_bindings.items()
+    }
+    audit["independent_reviews"]["reviews_bind_exact_published_f116_sha256"] = (
+        evidence_digest
+    )
+    audit["independent_reviews"]["provenance_security"]["sha256"] = review_digests[
+        "provenance_review"
+    ]
+    audit["independent_reviews"]["plasma_scientific_continuation"]["sha256"] = (
+        review_digests["plasma_review"]
+    )
+    write_json(paths["publication_audit"], audit)
+    paths["publication_audit"].chmod(0o444)
+
+    outer = evidence["predecessor_authorities"]["historical_f116"]
+    for key, path in paths.items():
+        outer[key]["sha256"] = sha256(path)
+
+
 def mutate_historical_f116_record(
     module,
     root: Path,
@@ -1587,7 +1801,7 @@ def mutate_historical_f116_record(
     key: str,
     mutate,
 ) -> None:
-    """Mutate and self-rebind one hostile historical F116 record."""
+    """Mutate and fully self-rebind one hostile historical F116 record."""
 
     relative = {
         "evidence": module.F116_RELATIVE,
@@ -1600,7 +1814,7 @@ def mutate_historical_f116_record(
     mutate(value)
     write_json(path, value)
     path.chmod(0o444)
-    evidence["predecessor_authorities"]["historical_f116"][key]["sha256"] = sha256(path)
+    rebind_historical_f116_chain(module, root, evidence)
 
 
 def mutate_historical_f115_record(
@@ -1610,27 +1824,55 @@ def mutate_historical_f115_record(
     key: str,
     mutate,
 ) -> None:
-    """Mutate nested F115 and self-rebind it through the retained F116 evidence."""
+    """Mutate nested F115 and fully self-rebind it through F116 and F118."""
 
-    relative = {
+    relatives = {
         "evidence": module.F115_RELATIVE,
         "publication_audit": module.F115_PUBLICATION_AUDIT_RELATIVE,
         "provenance_review": module.F115_PROVENANCE_REVIEW_RELATIVE,
         "plasma_review": module.F115_PLASMA_REVIEW_RELATIVE,
-    }[key]
-    path = root / relative
+    }
+    paths = {name: root / relative for name, relative in relatives.items()}
+    path = paths[key]
     value = json.loads(path.read_text())
     mutate(value)
     write_json(path, value)
     path.chmod(0o444)
+
+    f115_evidence_digest = sha256(paths["evidence"])
+    review_digests = {}
+    for review_key in ("provenance_review", "plasma_review"):
+        review = json.loads(paths[review_key].read_text())
+        review["published_f115"]["sha256"] = f115_evidence_digest
+        write_json(paths[review_key], review)
+        paths[review_key].chmod(0o444)
+        review_digests[review_key] = sha256(paths[review_key])
+    audit = json.loads(paths["publication_audit"].read_text())
+    audit["artifact"]["sha256"] = f115_evidence_digest
+    audit["independent_reviews"]["reviews_bind_exact_published_f115_sha256"] = (
+        f115_evidence_digest
+    )
+    audit["independent_reviews"]["provenance_security"]["sha256"] = review_digests[
+        "provenance_review"
+    ]
+    audit["independent_reviews"]["plasma_scientific_continuation"]["sha256"] = (
+        review_digests["plasma_review"]
+    )
+    audit["authority_and_enforcement"]["f115_authority"]["sha256"] = (
+        f115_evidence_digest
+    )
+    write_json(paths["publication_audit"], audit)
+    paths["publication_audit"].chmod(0o444)
+
     f116_path = root / module.F116_RELATIVE
     f116 = json.loads(f116_path.read_text())
-    f116["predecessor_authorities"]["historical_f115"][key]["sha256"] = sha256(path)
+    for record_key, record_path in paths.items():
+        f116["predecessor_authorities"]["historical_f115"][record_key]["sha256"] = sha256(
+            record_path
+        )
     write_json(f116_path, f116)
     f116_path.chmod(0o444)
-    evidence["predecessor_authorities"]["historical_f116"]["evidence"]["sha256"] = (
-        sha256(f116_path)
-    )
+    rebind_historical_f116_chain(module, root, evidence)
 
 
 def rebind_f118_probe_chain(root: Path, binding: dict[str, object]) -> None:
@@ -1682,6 +1924,41 @@ def rebind_f118_live_catalog(root: Path, binding: dict[str, object]) -> None:
     write_json(audit_path, audit)
     audit_path.chmod(0o444)
     rebind_f118_probe_chain(root, binding)
+
+
+def validate_rebound_f118_catalog_transition(module, root: Path, evidence: dict[str, object]):
+    """Validate adversarial live catalog bytes with self-consistent transition digests."""
+
+    implementation = evidence["implementation"]
+    current = implementation["current_source_bundle"]
+    bridge = implementation["intermediate_36140_bundle"]
+    predecessor = implementation["predecessor_current_source_bundle"]
+    readme = (root / "source-archives/README.md").read_bytes()
+    sums = (root / "source-archives/SHA256SUMS").read_bytes()
+    marker = b"## AthenaK\n\n"
+    block = module.f118_catalog_readme_block(current)
+    old_readme = readme.replace(marker + block, marker, 1)
+    final_line = f"{current['sha256']}  {Path(current['path']).name}\n".encode()
+    assert sums.endswith(final_line)
+    old_sums = sums[: -len(final_line)]
+    before = dict(evidence["source_archive_catalog"]["before"])
+    after = dict(evidence["source_archive_catalog"]["after"])
+    before["readme_sha256"] = hashlib.sha256(old_readme).hexdigest()
+    before["sha256sums_sha256"] = hashlib.sha256(old_sums).hexdigest()
+    after["readme_sha256"] = hashlib.sha256(readme).hexdigest()
+    after["sha256sums_sha256"] = hashlib.sha256(sums).hexdigest()
+    f115_evidence = json.loads((root / module.F115_RELATIVE).read_text())
+    historical_f115 = dict(f115_evidence["implementation"]["source_bundle"])
+    historical_f115["subject"] = f115_evidence["implementation"]["subject"]
+    return module.validate_f118_catalog_transition(
+        root,
+        current,
+        bridge,
+        predecessor,
+        historical_f115,
+        before,
+        after,
+    )
 
 
 def install_exact_source_authority_chain_for_recost_fixture(
@@ -1852,7 +2129,8 @@ def install_exact_source_authority_chain_for_recost_fixture(
         subject_override=None,
         expected={},
     )
-    campaign.refresh_candidates()
+    strengthen_f115_f116_source_authority_fixture(campaign, source_test)
+    f116_bindings = campaign.f116_bindings
     source_test.write_bytes(campaign.final_target, final_bundle.read_bytes(), 0o644)
     old_readme = (archives / "README.md").read_bytes()
     old_sums = (archives / "SHA256SUMS").read_bytes()
@@ -2287,6 +2565,27 @@ def test_checkpoint_rejects_forged_historical_f116_provenance_review(
         )
 
 
+def test_checkpoint_rejects_distinct_historical_f116_review_candidates(
+    tmp_path, monkeypatch
+):
+    module, root, evidence, final_binding = f118_committed_tools_probe(tmp_path, monkeypatch)
+    mutate_historical_f116_record(
+        module,
+        root,
+        evidence,
+        "plasma_review",
+        lambda value: value["reviewed_candidate"].__setitem__(
+            "path", str(tmp_path / "different-f116-evidence.candidate")
+        ),
+    )
+    with pytest.raises(ValueError, match="historical F116 plasma_review identity or review"):
+        module.validate_f118_committed_tools(
+            (json.dumps(evidence, indent=2, sort_keys=True) + "\n").encode(),
+            final_binding,
+            root,
+        )
+
+
 def test_checkpoint_rejects_forged_historical_f116_publication_audit(
     tmp_path, monkeypatch
 ):
@@ -2346,6 +2645,44 @@ def test_checkpoint_rejects_forged_historical_f116_subject(tmp_path, monkeypatch
         )
 
 
+def test_checkpoint_rejects_forged_nested_f115_subject(tmp_path, monkeypatch):
+    module, root, evidence, final_binding = f118_committed_tools_probe(tmp_path, monkeypatch)
+    mutate_historical_f115_record(
+        module,
+        root,
+        evidence,
+        "evidence",
+        lambda value: value["implementation"].__setitem__(
+            "subject", "forged nested F115 subject"
+        ),
+    )
+    with pytest.raises(ValueError, match="historical F115 implementation subject differs"):
+        module.validate_f118_committed_tools(
+            (json.dumps(evidence, indent=2, sort_keys=True) + "\n").encode(),
+            final_binding,
+            root,
+        )
+
+
+def test_checkpoint_rejects_rebound_nested_f115_authorized_source(tmp_path, monkeypatch):
+    module, root, evidence, final_binding = f118_committed_tools_probe(tmp_path, monkeypatch)
+    mutate_historical_f115_record(
+        module,
+        root,
+        evidence,
+        "evidence",
+        lambda value: value["authorization"]["sole_next_segment_profile"].__setitem__(
+            "source_bundle", str(tmp_path / "rebound-source.bundle")
+        ),
+    )
+    with pytest.raises(ValueError, match="historical F115 authorization broadens or rebinds"):
+        module.validate_f118_committed_tools(
+            (json.dumps(evidence, indent=2, sort_keys=True) + "\n").encode(),
+            final_binding,
+            root,
+        )
+
+
 def test_checkpoint_rejects_forged_nested_f115_authority(tmp_path, monkeypatch):
     module, root, evidence, final_binding = f118_committed_tools_probe(tmp_path, monkeypatch)
     mutate_historical_f115_record(
@@ -2357,7 +2694,28 @@ def test_checkpoint_rejects_forged_nested_f115_authority(tmp_path, monkeypatch):
             "direct_sbatch_authorized", True
         ),
     )
-    with pytest.raises(ValueError, match="historical F115 publication audit authority differs"):
+    with pytest.raises(ValueError, match="historical F115 publication audit over-authorizes"):
+        module.validate_f118_committed_tools(
+            (json.dumps(evidence, indent=2, sort_keys=True) + "\n").encode(),
+            final_binding,
+            root,
+        )
+
+
+def test_checkpoint_rejects_nested_f115_cancelled_job_reuse_authority(
+    tmp_path, monkeypatch
+):
+    module, root, evidence, final_binding = f118_committed_tools_probe(tmp_path, monkeypatch)
+    mutate_historical_f115_record(
+        module,
+        root,
+        evidence,
+        "publication_audit",
+        lambda value: value["authority_and_enforcement"].__setitem__(
+            "reuse_cancelled_job_or_s01_authorized", True
+        ),
+    )
+    with pytest.raises(ValueError, match="historical F115 publication audit over-authorizes"):
         module.validate_f118_committed_tools(
             (json.dumps(evidence, indent=2, sort_keys=True) + "\n").encode(),
             final_binding,
@@ -2615,6 +2973,34 @@ def test_checkpoint_rejects_non_append_only_f118_live_sha256sums(
     rebind_f118_live_catalog(root, binding)
     with pytest.raises(ValueError, match="does not derive from F116 catalog_after"):
         module.validate_f118_source_authority_binding(binding, root, args)
+
+
+def test_checkpoint_rejects_rebound_historical_f115_readme_entry(tmp_path, monkeypatch):
+    module, root, evidence, _ = f118_committed_tools_probe(tmp_path, monkeypatch)
+    f115 = json.loads((root / module.F115_RELATIVE).read_text())
+    digest = f115["implementation"]["source_bundle"]["sha256"]
+    readme = root / "source-archives/README.md"
+    payload = readme.read_bytes()
+    exact = f"`{digest}`".encode()
+    assert payload.count(exact) == 1
+    readme.write_bytes(payload.replace(exact, f"`{'0' * 64}`".encode(), 1))
+    with pytest.raises(ValueError, match="does not preserve the exact F115 archive entry"):
+        validate_rebound_f118_catalog_transition(module, root, evidence)
+
+
+def test_checkpoint_rejects_rebound_historical_f115_checksum_entry(
+    tmp_path, monkeypatch
+):
+    module, root, evidence, _ = f118_committed_tools_probe(tmp_path, monkeypatch)
+    f115 = json.loads((root / module.F115_RELATIVE).read_text())
+    bundle = f115["implementation"]["source_bundle"]
+    sums = root / "source-archives/SHA256SUMS"
+    payload = sums.read_bytes()
+    exact = f"{bundle['sha256']}  {Path(bundle['path']).name}\n".encode()
+    assert payload.count(exact) == 1
+    sums.write_bytes(payload.replace(exact, f"{'0' * 64}  {Path(bundle['path']).name}\n".encode()))
+    with pytest.raises(ValueError, match="predecessor checksum entries differ"):
+        validate_rebound_f118_catalog_transition(module, root, evidence)
 
 
 def test_checkpoint_accepts_exact_f119_failed_f117_predecessor(tmp_path, monkeypatch):
