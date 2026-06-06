@@ -1,0 +1,302 @@
+{
+  "record_type": "q011_section54_production_science_diagnostic_successor",
+  "schema_version": 1,
+  "successor_id": "q011_section54_production_science_diagnostic_successor_v1",
+  "date": "2026-06-06",
+  "gate": "Q-011",
+  "claim_id": "CLAIM-PAPER-SHOCK-001",
+  "qualification_effect": "source_local_diagnostic_contract_only_no_launch_no_policy_authorization_no_claim_closure",
+  "scope": "Versioned additive source-local diagnostic successor for a future Section 5.4 production campaign. It preserves the selected p0=1 physical baseline; emits full mhd_w_bcc state, deposited CR charge and all three current components, explicitly labeled MHD current squared, particles, history, and restart products; and freezes pure reducers for matched-grid lab/gas-frame CR current, preregistered ideal-surface-relative magnetic amplification, supplemental detected-front diagnostics, delegated downstream spectra, particle acceleration, instantaneous wall-frame energy partitions, shock kinematics, and full primitive-state profiles. It authorizes no execution or qualifying-output inspection.",
+  "predecessor_contract": {
+    "path": "tst/publication/readiness/q011_section54_qualifying_campaign_preregistration_successor_v3_2026-06-06.json",
+    "sha256": "1216fc0fcaa78fe423855b9c2ad2039597ef2ed722c46ff8605d184fcedcf1c0",
+    "preservation": "historical predecessor remains immutable and authoritative only for its historical four-scalar output contract"
+  },
+  "authorization": {
+    "launch_authorized": false,
+    "policy_mutation_authorized": false,
+    "claim_closure_authorized": false,
+    "qualifying_output_inspection_authorized": false
+  },
+  "source_bindings": {
+    "successor_deck": {
+      "path": "inputs/publication/pic_parallel_shock_section54_production_science_successor_v1_vl2_tsc.athinput",
+      "sha256": "0e8589618fb8ffdd6da5d8c4aadba8308ac8ce74ac6d0d512c5f216ef7401d79"
+    },
+    "successor_reducer": {
+      "path": "tst/publication/q011_section54_production_science_successor_v1.py",
+      "sha256": "c18b61990b4e95858da983b50b31334861291c50137440c5fde2b370a4f22b73"
+    },
+    "particle_spectrum_reducer": {
+      "path": "tst/publication/q011_section54_particles.py",
+      "sha256": "a66472379b58320c0709e9658d77f5569fb4ab3f9aa3c1436e872f82ed0a5b16"
+    },
+    "deposited_current_semantics": {
+      "path": "tst/publication/readiness/q043_bell_current_normalization_supersession_2026-06-06.json",
+      "sha256": "f972d4d960ebbc80f9de2a15bd8b2335bb3ea059aa747303fa0cff1a1298cdef"
+    },
+    "focused_tests": {
+      "path": "tst/publication/test_q011_section54_production_science_successor_v1.py",
+      "sha256": "41d0c9d3e8a7efcdd3050b7f4ada13ff2e8f37f985f4dd6cab7cbbd0672e2a5e"
+    }
+  },
+  "output_contract": {
+    "mesh_cadence_omega0_inverse": 100.0,
+    "particle_cadence_omega0_inverse": 100.0,
+    "restart_cadence_omega0_inverse": 100.0,
+    "mhd_history_cadence_omega0_inverse": 10.0,
+    "raw_products": [
+      "mhd_w_bcc",
+      "prtcl_rho",
+      "prtcl_jx",
+      "prtcl_jy",
+      "prtcl_jz",
+      "mhd_j2",
+      "prtcl_all",
+      "mhd_history",
+      "restart"
+    ],
+    "deposited_cr_moment_products": [
+      "prtcl_rho",
+      "prtcl_jx",
+      "prtcl_jy",
+      "prtcl_jz"
+    ],
+    "mhd_j2_interpretation": "MHD current magnitude squared |curl B|^2; not particle current squared",
+    "mhd_w_bcc_required_fields": [
+      "dens",
+      "velx",
+      "vely",
+      "velz",
+      "eint",
+      "bcc1",
+      "bcc2",
+      "bcc3"
+    ],
+    "full_state_interpretation": {
+      "gas_primitive_state": [
+        "dens",
+        "velx",
+        "vely",
+        "velz",
+        "eint"
+      ],
+      "cell_centered_vector_magnetic_field": [
+        "bcc1",
+        "bcc2",
+        "bcc3"
+      ],
+      "derived_from_full_state": [
+        "pressure=(gamma-1)*eint",
+        "bmag=sqrt(bcc1^2+bcc2^2+bcc3^2)"
+      ]
+    }
+  },
+  "diagnostic_contract": {
+    "matched_snapshot": {
+      "first_eligible_nominal_slot_omega0_inverse": 200.0,
+      "raw_t0_t100_disposition": "retained_for_initial_state_conservation_and_admission_checks_but_not_full_matched_shock_window_reduction",
+      "reason": "the preregistered plus-or-minus-1200 c/omega_pi shock windows are first contained by the physical domain at the t=200 output cadence"
+    },
+    "particle_acceleration": {
+      "population": "cr_source==1 and birth_time>=45 with positive macro_weight for maxima",
+      "maximum_observables": [
+        "maximum_chi",
+        "maximum_specific_kinetic_energy"
+      ],
+      "robust_context": [
+        "macro_weighted_chi_q990",
+        "macro_weighted_chi_q999"
+      ],
+      "tail_quantile_minimum_positive_weight_particle_count_per_snapshot": 1000,
+      "float32_pvtk_velocity_uncertainty": {
+        "input_contract": "velocity components must be exactly decoded float32 values",
+        "component_interval": "closed round-to-nearest interval bounded by midpoints to adjacent float32 values",
+        "propagation": "monotonic speed-squared bounds to momentum-squared, chi, and relativistic specific kinetic energy",
+        "bounded_observables": [
+          "maximum_chi",
+          "maximum_specific_kinetic_energy",
+          "macro_weighted_chi_q990_q999",
+          "macro_weighted_specific_kinetic_energy_q990_q999"
+        ],
+        "failure_policy": "fail_if_input_is_not_exactly_float32_decoded_or_any_interval_does_not_contain_its_nominal_value"
+      },
+      "rate_estimators": [
+        "successive_snapshot_two_point_secant_rates",
+        "all_supplied_snapshot_linear_fit_with_minimum_three_snapshots"
+      ],
+      "linear_fit_minimum_snapshot_count": 3,
+      "acceptance_thresholds": "none_in_this_successor"
+    },
+    "downstream_spectrum": {
+      "authoritative_reducer": "tst/publication/q011_section54_particles.py::reduce_particle_snapshot",
+      "nominal_slots_omega0_inverse": [
+        500.0,
+        1200.0
+      ],
+      "downstream_classifier": "x1 < x_ideal(t); detected-front substitution forbidden",
+      "late_slope_nominal_slot_omega0_inverse": 1200.0,
+      "late_slope_fit_window_chi": [
+        20.0,
+        160.0
+      ],
+      "minimum_admitted_particle_count_per_spectrum": 1000,
+      "minimum_positive_fit_bins": 8,
+      "failure_policy": "fail_closed"
+    },
+    "energy_partition": {
+      "interpretation": "instantaneous wall-frame partition diagnostics only; not conserved-energy closure",
+      "components": [
+        "gas_kinetic_energy",
+        "gas_internal_energy",
+        "magnetic_energy",
+        "active_shock_injected_cr_kinetic_energy"
+      ],
+      "scopes": [
+        "full_domain",
+        "detected_front_plus_or_minus_1200_c_over_omega_pi"
+      ],
+      "particle_macro_mass": 0.0009,
+      "particle_specific_energy": "relativistic_kinetic_energy_from_pvtk_physical_velocity_and_C_10000",
+      "excluded_closure_terms": [
+        "boundary_fluxes",
+        "particle_injection",
+        "particle_removal",
+        "gas_subtraction",
+        "face_centered_magnetic_energy",
+        "conserved_total_energy_history"
+      ],
+      "separate_conserved_energy_closure_successor_required": true,
+      "acceptance_thresholds": "none_in_this_successor"
+    },
+    "shock_front": {
+      "detector": "unique_strongest_density_gradient_near_ideal_surface",
+      "gradient_sign": "negative",
+      "orientation_rationale": "The reflecting wall is at lower x1, downstream is x1 below the outward-moving front, and downstream density exceeds upstream density.",
+      "predecessor_preregistration_gradient_sign": "positive",
+      "preregistration_supersession_required": true,
+      "qualifying_use_authorized_by_this_successor": false,
+      "search_offsets_from_ideal_surface_c_over_omega_pi": [
+        -1200.0,
+        1200.0
+      ],
+      "maximum_absolute_offset_from_ideal_surface_c_over_omega_pi": 600.0,
+      "speed_estimators": [
+        "successive_detected_front_secants",
+        "all_supplied_snapshot_linear_fit"
+      ],
+      "compression_windows_from_detected_front_c_over_omega_pi": {
+        "downstream": [
+          -1200.0,
+          -120.0
+        ],
+        "upstream": [
+          120.0,
+          1200.0
+        ]
+      },
+      "compression_observable": "downstream_area_weighted_density_over_upstream_area_weighted_density"
+    },
+    "upstream_magnetic_amplification": {
+      "qualifying_metric": {
+        "window_reference": "ideal_surface",
+        "window_offsets_c_over_omega_pi": [
+          120.0,
+          1200.0
+        ],
+        "nominal_slot_omega0_inverse": 500.0,
+        "acceptance_range": [
+          1.2,
+          3.5
+        ],
+        "detected_front_substitution": "forbidden"
+      },
+      "supplemental_metric": {
+        "window_reference": "detected_front",
+        "window_offsets_c_over_omega_pi": [
+          120.0,
+          1200.0
+        ],
+        "qualification_effect": "none"
+      },
+      "reference_b0": 1.0,
+      "observables": [
+        "area_weighted_mean_abs_b_over_b0",
+        "area_weighted_rms_abs_b_over_b0",
+        "local_max_abs_b_over_b0",
+        "area_weighted_q50_q90_q99_abs_b_over_b0",
+        "area_fraction_abs_b_over_b0_ge_2_3_4"
+      ],
+      "acceptance_thresholds": "preregistered area-weighted mean gate 1.2 to 3.5 only for the ideal-surface-relative nominal-t500 metric"
+    },
+    "cr_current": {
+      "required_matched_grid_products": [
+        "mhd_w_bcc",
+        "prtcl_rho",
+        "prtcl_jx",
+        "prtcl_jy",
+        "prtcl_jz",
+        "mhd_j2"
+      ],
+      "lab_frame_components": [
+        "prtcl_jx",
+        "prtcl_jy",
+        "prtcl_jz"
+      ],
+      "raw_prtcl_rho_representation": "deposited rho_CR/c",
+      "raw_prtcl_j_representation": "deposited J_CR/c; J_CR labels are code-normalized shorthand and physical-current conversion is external",
+      "gas_frame_formula": "(J_CR/c)_gas = (J_CR/c)_lab - (rho_CR/c) * u_gas",
+      "gas_velocity_source": "matched mhd_w_bcc velx/vely/velz",
+      "matched_raw_metadata_comparison": "exact_after_validating_and_removing_only_AthenaK_sequential_output_file_number_and_last_time_state",
+      "regions": [
+        "full_domain",
+        "qualifying_ideal_surface_relative_upstream",
+        "supplemental_detected_front_relative_upstream"
+      ],
+      "observables": [
+        "y_area_weighted_component_and_magnitude_profiles",
+        "area_weighted_mean_vector",
+        "area_weighted_mean_and_rms_magnitude",
+        "local_maximum_magnitude",
+        "area_weighted_magnitude_q50_q90_q99",
+        "prtcl_rho_statistics",
+        "mhd_current_squared_statistics"
+      ],
+      "failure_policy": "fail_on_missing_nonfinite_time_cycle_metadata_or_composite_grid_mismatch"
+    },
+    "full_state_profiles": {
+      "profile": "y_area_weighted_mean_on_finest_level_composite",
+      "raw_fields": [
+        "dens",
+        "velx",
+        "vely",
+        "velz",
+        "eint",
+        "bcc1",
+        "bcc2",
+        "bcc3"
+      ],
+      "derived_fields": [
+        "pressure",
+        "bmag"
+      ],
+      "retain_source_level_cell_counts": true
+    }
+  },
+  "historical_artifact_policy": {
+    "historical_decks_modified": false,
+    "historical_preregistrations_modified": false,
+    "historical_reducers_modified": false,
+    "successor_requires_new_manifest_admission_and_qualification_contracts_before_any_qualifying_run": true
+  },
+  "remaining_blockers": [
+    "add a uniquely versioned attempt-manifest and admission successor that accepts mhd_w_bcc and mhd_history without changing historical manifests",
+    "add raw PVTK, mhd_w_bcc, deposited-current, and mhd_j2 artifact orchestration that invokes these pure reducers",
+    "add an mhd_history parser and cross-check cell-centered mhd_w_bcc energy integrals against AthenaK face-centered magnetic and conserved total-energy histories",
+    "add a separate conserved-energy closure successor covering boundary fluxes, particle injection/removal, and gas subtraction",
+    "preregister campaign-level acceptance thresholds only after excluded resource and science pilots",
+    "close current-source Frontier MPI HIP AMR migration deposition load-balance and restart evidence",
+    "measure full-geometry storage IO restart size and late-time particle growth",
+    "tune pic_load_balance_cost_per_particle before production"
+  ]
+}
