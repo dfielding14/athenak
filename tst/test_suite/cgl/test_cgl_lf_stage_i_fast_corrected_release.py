@@ -457,6 +457,34 @@ def test_existing_marker_refuses_before_any_validation(gate, tmp_path, monkeypat
     assert snapshot_files(tmp_path) == before
 
 
+def test_marker_must_be_exact_workflow_path(gate, tmp_path, monkeypatch):
+    fixture = fixture_tree(gate, tmp_path)
+    install_dependencies(gate, monkeypatch, fixture)
+    fixture["args"].marker = tmp_path / "external-manuscript-ready.json"
+
+    with pytest.raises(gate.ManuscriptReadyError, match="exact workflow marker"):
+        gate.build_marker(fixture["args"])
+
+
+def test_interrupted_atomic_publish_leaves_no_canonical_marker(
+    gate, tmp_path, monkeypatch
+):
+    fixture = fixture_tree(gate, tmp_path)
+    install_dependencies(gate, monkeypatch, fixture)
+    marker = fixture["args"].marker
+    monkeypatch.setattr(
+        gate.os,
+        "link",
+        lambda *_args: (_ for _ in ()).throw(OSError("injected publish failure")),
+    )
+
+    with pytest.raises(OSError, match="injected publish failure"):
+        gate.run_marker(fixture["args"])
+
+    assert not marker.exists()
+    assert list(marker.parent.glob(f".{marker.name}.*.tmp")) == []
+
+
 def test_completion_publication_must_equal_exact_workflow_publication(
     gate, tmp_path, monkeypatch
 ):

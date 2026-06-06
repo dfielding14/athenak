@@ -18,6 +18,7 @@ import os
 from pathlib import Path
 import stat
 import sys
+import tempfile
 from typing import Iterable
 
 
@@ -335,15 +336,27 @@ def write_new_marker(path: Path, value: object) -> None:
     parent = canonical_directory(path.parent, "manuscript-ready marker parent")
     if path.parent.resolve(strict=True) != parent:
         raise ManuscriptReadyError("manuscript-ready marker parent differs")
+    staged: Path | None = None
     try:
-        with path.open("xb") as stream:
+        with tempfile.NamedTemporaryFile(
+            mode="wb",
+            dir=parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as stream:
+            staged = Path(stream.name)
             stream.write(stable_json(value))
             stream.flush()
             os.fsync(stream.fileno())
+        os.link(staged, path)
     except FileExistsError as error:
         raise ManuscriptReadyError(
             f"manuscript-ready marker appeared concurrently: {path}"
         ) from error
+    finally:
+        if staged is not None:
+            staged.unlink(missing_ok=True)
 
 
 def validate_corrected_context(
@@ -830,6 +843,11 @@ def validate_marker_layout(
     science: dict[str, object],
 ) -> Path:
     path = marker_path(args.marker)
+    expected = Path(str(downstream["root"])).resolve(strict=True) / RECORD_NAME
+    if path != expected:
+        raise ManuscriptReadyError(
+            f"manuscript-ready marker must be exact workflow marker: {expected}"
+        )
     for root, label in (
         (Path(str(context["inventory_output"])), "composite report"),
         (Path(str(science["acceptance_root"])), "acceptance"),
@@ -852,12 +870,13 @@ def build_marker(args: argparse.Namespace) -> dict[str, object]:
     downstream = validate_downstream_completion(context, args.workflow_root)
     publication = validate_publication(context, downstream, science)
     manuscript = validate_manuscript_products(context)
-    validate_marker_layout(args, context, downstream, science)
+    marker = validate_marker_layout(args, context, downstream, science)
     return {
         "schema": SCHEMA,
         "schema_version": SCHEMA_VERSION,
         "record_type": RECORD_TYPE,
         "status": "manuscript_ready",
+        "marker_path": str(marker),
         "campaign_kind": "corrected-composite",
         "reviewed_science_result": science["record"]["result"],
         "ct_numerical_result": downstream["ct_record"]["result"],
