@@ -610,6 +610,99 @@ def test_accepted_r02_bundle_reports_numerical_ct_under_authority_blocker(
     assert f"**R02 authority-chain blocker:** {blocker}" in adapter.render_markdown(observed)
 
 
+def test_f118_audit_predecessor_digest_schema_is_normalized_exactly(
+    adapter, tmp_path, monkeypatch
+):
+    acceptance, _, _, _, _ = adapter.load_native_ct_authority()
+    audit_path = tmp_path / "F118.publication_audit.json"
+    canonical = {
+        "evidence": "a" * 64,
+        "provenance_review": "b" * 64,
+        "plasma_review": "c" * 64,
+        "publication_audit": "d" * 64,
+    }
+    published = {f"{key}_sha256": value for key, value in canonical.items()}
+    write_json(audit_path, {"historical_f116_authority": published})
+    policy = {
+        "source_catalog_policy": {
+            "successor_paths": {"publication_audit": str(audit_path)}
+        }
+    }
+    original_load_json = acceptance.load_json
+
+    def current_source_archive_catalog(_policy):
+        audit, audit_binding = acceptance.load_json(
+            audit_path, "published F118 source-authority publication_audit"
+        )
+        assert audit["historical_f116_authority"] == canonical
+        return {}, {"checkpoint": "F-118"}, [audit_binding]
+
+    monkeypatch.setattr(
+        acceptance, "current_source_archive_catalog", current_source_archive_catalog
+    )
+    observed = adapter.r02_authority_chain_record(acceptance, policy)
+
+    assert observed["status"] == "authenticated_non_authorizing"
+    assert observed["authority"]["checkpoint"] == "F-118"
+    assert observed["bindings"] == [binding(audit_path)]
+    assert acceptance.load_json is original_load_json
+    assert json.loads(audit_path.read_text(encoding="utf-8"))[
+        "historical_f116_authority"
+    ] == published
+
+
+@pytest.mark.parametrize(
+    "historical",
+    [
+        {
+            "evidence_sha256": "a" * 64,
+            "provenance_review_sha256": "b" * 64,
+            "plasma_review_sha256": "c" * 64,
+        },
+        {
+            "evidence_sha256": "a" * 64,
+            "provenance_review_sha256": "b" * 64,
+            "plasma_review_sha256": "c" * 64,
+            "publication_audit_sha256": "d" * 64,
+            "unexpected_sha256": "e" * 64,
+        },
+        {
+            "evidence_sha256": "not-a-digest",
+            "provenance_review_sha256": "b" * 64,
+            "plasma_review_sha256": "c" * 64,
+            "publication_audit_sha256": "d" * 64,
+        },
+    ],
+)
+def test_f118_audit_predecessor_digest_normalization_fails_closed(
+    adapter, tmp_path, monkeypatch, historical
+):
+    acceptance, _, _, _, _ = adapter.load_native_ct_authority()
+    audit_path = tmp_path / "F118.publication_audit.json"
+    write_json(audit_path, {"historical_f116_authority": historical})
+    policy = {
+        "source_catalog_policy": {
+            "successor_paths": {"publication_audit": str(audit_path)}
+        }
+    }
+    original_load_json = acceptance.load_json
+
+    def current_source_archive_catalog(_policy):
+        acceptance.load_json(
+            audit_path, "published F118 source-authority publication_audit"
+        )
+        raise AssertionError("malformed F118 predecessor digest schema was accepted")
+
+    monkeypatch.setattr(
+        acceptance, "current_source_archive_catalog", current_source_archive_catalog
+    )
+    observed = adapter.r02_authority_chain_record(acceptance, policy)
+
+    assert observed["status"] == "blocked"
+    assert "published F118" in observed["blocker"]
+    assert acceptance.load_json is original_load_json
+
+
 def test_accepted_r02_declared_restart_bytes_fail_closed(adapter, tmp_path, monkeypatch):
     inventory, restarts = build_accepted_r02_campaign(tmp_path)
     acceptance, _, _, _, _ = adapter.load_native_ct_authority()

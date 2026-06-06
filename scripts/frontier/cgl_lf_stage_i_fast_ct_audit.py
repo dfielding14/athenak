@@ -76,6 +76,12 @@ ACCEPTED_R02_RESTART_INDEX = (
     "segment manifests; their scientific inspections declare the exact retained "
     "t=9,t=10 rank-local native restart groups."
 )
+F118_F116_AUDIT_DIGEST_KEYS = {
+    "evidence_sha256": "evidence",
+    "provenance_review_sha256": "provenance_review",
+    "plasma_review_sha256": "plasma_review",
+    "publication_audit_sha256": "publication_audit",
+}
 
 
 class FastCtAuditError(RuntimeError):
@@ -141,6 +147,20 @@ def require_sha256(value: object, label: str) -> str:
     if not isinstance(value, str) or SHA256.fullmatch(value) is None:
         raise FastCtAuditError(f"{label} must be a lowercase SHA-256")
     return value
+
+
+def normalize_f118_f116_audit_digests(value: object) -> dict[str, str]:
+    """Normalize the exact published F118 audit vocabulary to F116 digest keys."""
+
+    record = require_dict(value, "published F118 audit historical F116 authority")
+    if set(record) != set(F118_F116_AUDIT_DIGEST_KEYS):
+        raise FastCtAuditError(
+            "published F118 audit historical F116 authority digest schema differs"
+        )
+    return {
+        canonical_key: require_sha256(record[published_key], f"published F118 {published_key}")
+        for published_key, canonical_key in F118_F116_AUDIT_DIGEST_KEYS.items()
+    }
 
 
 def canonical_json(value: object) -> bytes:
@@ -484,13 +504,60 @@ def authenticate_direct_fast_segment(
     }
 
 
+def current_source_archive_catalog_with_f118_normalization(
+    acceptance: object, policy: dict[str, object]
+) -> tuple[dict[str, str], dict[str, object], list[dict[str, object]]]:
+    """Bridge exact F118 digest names to the imported F116-keyed comparison.
+
+    The original publication-audit bytes remain bound by ``load_json``; only the
+    parsed view supplied to the existing authority checker is normalized.
+    """
+
+    source_catalog_policy = require_dict(
+        policy.get("source_catalog_policy"), "native CT source catalog policy"
+    )
+    successor_paths = require_dict(
+        source_catalog_policy.get("successor_paths"), "native CT F118 successor paths"
+    )
+    f118_audit_path = Path(
+        require_text(
+            successor_paths.get("publication_audit"),
+            "native CT F118 publication audit path",
+        )
+    ).resolve(strict=False)
+    original_load_json = acceptance.load_json
+
+    def load_json_with_normalized_predecessor(
+        path: Path, label: str
+    ) -> tuple[dict[str, object], dict[str, object]]:
+        value, binding = original_load_json(path, label)
+        if (
+            label == "published F118 source-authority publication_audit"
+            and Path(path).resolve(strict=False) == f118_audit_path
+        ):
+            normalized = dict(value)
+            normalized["historical_f116_authority"] = normalize_f118_f116_audit_digests(
+                value.get("historical_f116_authority")
+            )
+            return normalized, binding
+        return value, binding
+
+    acceptance.load_json = load_json_with_normalized_predecessor
+    try:
+        return acceptance.current_source_archive_catalog(policy)
+    finally:
+        acceptance.load_json = original_load_json
+
+
 def r02_authority_chain_record(
     acceptance: object, policy: dict[str, object]
 ) -> dict[str, object]:
     """Record the reviewed source-authority result without making it numerical gate."""
 
     try:
-        _, authority, bindings = acceptance.current_source_archive_catalog(policy)
+        _, authority, bindings = current_source_archive_catalog_with_f118_normalization(
+            acceptance, policy
+        )
     except Exception as error:
         return {
             "status": "blocked",
