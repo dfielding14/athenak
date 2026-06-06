@@ -1,0 +1,259 @@
+{
+  "record_type": "q022_central_reference_mapping_successor_readiness",
+  "schema_version": 1,
+  "successor_id": "q022_central_reference_mapping_successor_v1",
+  "date": "2026-06-06",
+  "gate": "Q-022",
+  "source_commit": "516646ca86380949557092550324e32472ee8a6a",
+  "scope": "Additive source-local reference mapping for only the corrected nonlinear Bell and Bai et al. (2015)/Sun and Bai Section 5.4 shock comparisons. It binds exact locally retained PDFs and exact AthenaK readiness/deck contracts, preserves historical Q022 artifacts, freezes no numeric comparison tolerance, and grants no claim or execution authority.",
+  "central_comparisons": [
+    "XCMP-CORRECTED-NONLINEAR-BELL-TARGET-PAPER",
+    "XCMP-BAI-SUN-SECTION54-SHOCK"
+  ],
+  "reference_ids": [
+    "bai_2015_arxiv_1412.1087",
+    "sun_bai_2023_arxiv_2304.10568v1"
+  ],
+  "authority": {
+    "launch_authorized": false,
+    "execution_authorized": false,
+    "qualification_authorized": false,
+    "qualifying_output_inspection_authorized": false,
+    "claim_closure_authorized": false,
+    "publication_authorized": false,
+    "policy_mutation_authorized": false
+  },
+  "reference_pdf_bindings": [
+    {
+      "reference_id": "bai_2015_arxiv_1412.1087",
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/reference_artifacts/q022_external_preprints_2026-05-30/arxiv_1412.1087.pdf",
+      "sha256": "d9daeaa1c072aff617d8850797f570080d0b597a67eb60592689b24cf4e8cf1b",
+      "page_count": 24
+    },
+    {
+      "reference_id": "sun_bai_2023_arxiv_2304.10568v1",
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/reference_artifacts/sun_bai_2023_arxiv_v1_render_2026-05-30/mnras_template.pdf",
+      "sha256": "86e1f53ee335685a833b65b000e105d72c83c9bcea3a7b4a0ccaaa4deabaf3d6",
+      "page_count": 20
+    }
+  ],
+  "successor_artifacts": [
+    {
+      "path": "tst/publication/readiness/q022_xcmp_corrected_nonlinear_bell_reference_map_successor_v1_2026-06-06.json",
+      "sha256": "136794db15810262a20be420462f10205bd91910a5739870e8a6d34c022eb1b5",
+      "role": "corrected_nonlinear_Bell_equation_normalization_unit_overlap_exclusion_map"
+    },
+    {
+      "path": "tst/publication/readiness/q022_xcmp_bai_sun_section54_shock_reference_map_successor_v1_2026-06-06.json",
+      "sha256": "14988d6066dee8d86182e01d3d3d8deac00f4b0e95d228094563009d13646f27",
+      "role": "Bai_Sun_Section_5_4_shock_equation_normalization_unit_overlap_exclusion_map"
+    },
+    {
+      "path": "tst/publication/readiness/q022_central_reference_discrepancy_open_input_ledger_successor_v1_2026-06-06.json",
+      "sha256": "8166fbc0bcd6248197b39c8c11764ec759fd7c65a3c8f496bfbd0b5034dbaa0a",
+      "role": "central_comparison_discrepancy_and_open_input_ledger"
+    },
+    {
+      "path": "tst/publication/q022_central_reference_mapping_successor_v1.py",
+      "sha256": "7c8a9eee81fa9e5d7d7d6e672cd569b4d08346799a89417ba1ae8a511fa0380a",
+      "role": "fail_closed_successor_validator"
+    },
+    {
+      "path": "tst/publication/test_q022_central_reference_mapping_successor_v1.py",
+      "sha256": "737c206ca1e34b1c978e6b3429b6bfcb525b7cb3e0c66fe4cd42e2dc7382dffd",
+      "role": "focused_adversarial_tests"
+    },
+    {
+      "path": "tst/publication/readiness/q022_central_reference_mapping_successor_v1_2026-06-06.md",
+      "sha256": "e4d51d610d27f072f48446d625b9833a7ed18b1e06439dda81b1d1df5e66bd0a",
+      "role": "human_readable_bounded_mapping_note"
+    }
+  ],
+  "historical_q022_bindings": [
+    {
+      "path": "tst/publication/readiness/q022_athenak_paper_mhd_pic_equation_profile_2026-05-30.json",
+      "sha256": "1f1047eb740ca292718819e3e9a683e846034f335acffbe29e405c4a18572b7c",
+      "preservation": "byte_preserved_historical_Q022_artifact"
+    },
+    {
+      "path": "tst/publication/readiness/q022_dataset_provenance_manifest_2026-05-30.json",
+      "sha256": "925ab235f4ed5141468a8643e999d37e9d1a075c528df1987b577e2deb90bc27",
+      "preservation": "byte_preserved_historical_Q022_artifact"
+    },
+    {
+      "path": "tst/publication/readiness/q022_external_reference_private_ingest_2026-05-30.json",
+      "sha256": "78287ea54d8350445cfad62e72f6efc2845f720580d070d075897d889ae3a214",
+      "preservation": "byte_preserved_historical_Q022_artifact"
+    },
+    {
+      "path": "tst/publication/readiness/q022_independent_comparison_preregistration_2026-05-30.json",
+      "sha256": "3016c688eb3eb9f31341e61119aebbec254291437341968574775cae84627f87",
+      "preservation": "byte_preserved_historical_Q022_artifact"
+    },
+    {
+      "path": "tst/publication/readiness/q022_sun_bai_repository_reference_manifest_2026-05-30.json",
+      "sha256": "8c12406ea64376f76d1b7b04ef4631f6a49f94d5dd07818bd8f114722255997a",
+      "preservation": "byte_preserved_historical_Q022_artifact"
+    },
+    {
+      "path": "tst/publication/readiness/q022_xcmp_amrvac_shock_equation_map_2026-05-30.json",
+      "sha256": "34089e4e5db3caece241fe04a73a9c328ff07db21618fae16425266194dd7898",
+      "preservation": "byte_preserved_historical_Q022_artifact"
+    },
+    {
+      "path": "tst/publication/readiness/q022_xcmp_amrvac_shock_tolerance_table_2026-05-30.json",
+      "sha256": "1e58f759cd9f6557d4532ff4c4a9c2bfe4546392bbe318c8e43cbfbc0b595856",
+      "preservation": "byte_preserved_historical_Q022_artifact"
+    },
+    {
+      "path": "tst/publication/readiness/q022_xcmp_athena_bai_bell_shock_equation_map_2026-05-30.json",
+      "sha256": "63f55450891e8d0e09bd3e4b73a0d99b8280fffca117871563958d7831ec2cdb",
+      "preservation": "byte_preserved_historical_Q022_artifact"
+    },
+    {
+      "path": "tst/publication/readiness/q022_xcmp_athena_bai_bell_shock_tolerance_table_2026-05-30.json",
+      "sha256": "0e6fe01d0ad045fcd6fc02e03cbd7009379afff98d00e479c7d6b36599c0e865",
+      "preservation": "byte_preserved_historical_Q022_artifact"
+    },
+    {
+      "path": "tst/publication/readiness/q022_xcmp_bai2019_crsi_equation_map_2026-05-30.json",
+      "sha256": "e1a9e0c43d245ba166c008ffb60737df0f56dc20b8fba48191acd30d9abc174d",
+      "preservation": "byte_preserved_historical_Q022_artifact"
+    },
+    {
+      "path": "tst/publication/readiness/q022_xcmp_bai2019_crsi_tolerance_table_2026-05-30.json",
+      "sha256": "f91ab27fb5d6b972ab2e28551259fa68d0b687e87234fdf5e519034da0ac3ff8",
+      "preservation": "byte_preserved_historical_Q022_artifact"
+    },
+    {
+      "path": "tst/publication/readiness/q022_xcmp_bell_nonlinear_independent_equation_map_2026-05-30.json",
+      "sha256": "d3ee93d4eedc16328f2a5f70de1e0f37abdeb3534f768941a964c455d446d9f4",
+      "preservation": "byte_preserved_historical_Q022_artifact"
+    },
+    {
+      "path": "tst/publication/readiness/q022_xcmp_bell_nonlinear_independent_tolerance_table_2026-05-30.json",
+      "sha256": "1a66c9198f4d4c66bb892c4543d3ea8897a9040a0659ac162100866be13bbe76",
+      "preservation": "byte_preserved_historical_Q022_artifact"
+    },
+    {
+      "path": "tst/publication/readiness/q022_xcmp_entity_micro_equation_map_2026-05-30.json",
+      "sha256": "1401d6a23c65e6f05026f684ac0aef1d6f924eeabe6a171883e0251211c2c0d3",
+      "preservation": "byte_preserved_historical_Q022_artifact"
+    },
+    {
+      "path": "tst/publication/readiness/q022_xcmp_entity_micro_tolerance_table_2026-05-30.json",
+      "sha256": "e8749da7034bd99abe8d4a49edfeb204475300d5d2100750d8dc26c95c4ede36",
+      "preservation": "byte_preserved_historical_Q022_artifact"
+    },
+    {
+      "path": "tst/publication/readiness/q022_xcmp_ext_crpai_transport_equation_map_2026-05-30.json",
+      "sha256": "584cbee640b15e1e67a18d5652012e3280bfcbd4bf81e9a6a9bca873b114c786",
+      "preservation": "byte_preserved_historical_Q022_artifact"
+    },
+    {
+      "path": "tst/publication/readiness/q022_xcmp_ext_crpai_transport_tolerance_table_2026-05-30.json",
+      "sha256": "de47d2b7f6d75f21b92aaf0806596b8e444992ef1ae568d50366d62ee730dd81",
+      "preservation": "byte_preserved_historical_Q022_artifact"
+    },
+    {
+      "path": "tst/publication/readiness/q022_xcmp_ext_crsi_in_damping_equation_map_2026-05-30.json",
+      "sha256": "87ed9f5fac74cf9ce7be567a1e57cfecae6e2b3374e1bc4e4ed74d2bbe3c8c9b",
+      "preservation": "byte_preserved_historical_Q022_artifact"
+    },
+    {
+      "path": "tst/publication/readiness/q022_xcmp_ext_crsi_in_damping_tolerance_table_2026-05-30.json",
+      "sha256": "3ac72c052fc465bd54c92750a96e3ee6ee1d39a79eec2f9c52eda3eb5cc5dfd7",
+      "preservation": "byte_preserved_historical_Q022_artifact"
+    },
+    {
+      "path": "tst/publication/readiness/q022_xcmp_ext_hall_bell_equation_map_2026-05-30.json",
+      "sha256": "2591e03abfab6f5fab90a89478679d5829413ce4afb0ccdb1e415a00347e33b4",
+      "preservation": "byte_preserved_historical_Q022_artifact"
+    },
+    {
+      "path": "tst/publication/readiness/q022_xcmp_ext_hall_bell_tolerance_table_2026-05-30.json",
+      "sha256": "a4b24515513495b3e428dfebcb3e5711fc54017594328e9902d58619eb21b7c4",
+      "preservation": "byte_preserved_historical_Q022_artifact"
+    },
+    {
+      "path": "tst/publication/readiness/q022_xcmp_gizmo_rsol_decision_equation_map_2026-05-30.json",
+      "sha256": "ea5acb92e2a215bfcffde3d9043f8328be8fab69870041d7a80f8a90eb67eeca",
+      "preservation": "byte_preserved_historical_Q022_artifact"
+    },
+    {
+      "path": "tst/publication/readiness/q022_xcmp_gizmo_rsol_decision_tolerance_table_2026-05-30.json",
+      "sha256": "9624f9c8ad5a0398d793ced4705febcb0afb549e660d16a17c5e4354c6536779",
+      "preservation": "byte_preserved_historical_Q022_artifact"
+    },
+    {
+      "path": "tst/publication/readiness/q022_xcmp_pluto_coupling_equation_map_2026-05-30.json",
+      "sha256": "4ca0584e8fb62dcff1d50bdcec4b0488a1253ea343642b3e7383f8a30ad760ab",
+      "preservation": "byte_preserved_historical_Q022_artifact"
+    },
+    {
+      "path": "tst/publication/readiness/q022_xcmp_pluto_coupling_tolerance_table_2026-05-30.json",
+      "sha256": "356fc0285962acc48959b8cc28463d199fedd4a5d7e9d99333e906d89955fd0a",
+      "preservation": "byte_preserved_historical_Q022_artifact"
+    },
+    {
+      "path": "tst/publication/readiness/schemas/q022_dataset_provenance_manifest.schema.json",
+      "sha256": "ba35262a895a967e6b8316a81ebb0ee753f020ce8ea94a7af3641fff6a9adeb6",
+      "preservation": "byte_preserved_historical_Q022_artifact"
+    },
+    {
+      "path": "tst/publication/readiness/schemas/q022_equation_normalization_map.schema.json",
+      "sha256": "f595dabba98683f1c1b9f5e89b4add71e8f704c7f9a7b4a25e94aeba7aac9250",
+      "preservation": "byte_preserved_historical_Q022_artifact"
+    },
+    {
+      "path": "tst/publication/readiness/schemas/q022_tolerance_table.schema.json",
+      "sha256": "fe109c2aa53e7b79f51a46d3381b83a94687b8146a82dbccb3773d81a7c61399",
+      "preservation": "byte_preserved_historical_Q022_artifact"
+    }
+  ],
+  "athenak_contract_bindings": [
+    {
+      "path": "tst/publication/readiness/q043_bell_current_normalization_supersession_2026-06-06.json",
+      "sha256": "f972d4d960ebbc80f9de2a15bd8b2335bb3ea059aa747303fa0cff1a1298cdef",
+      "role": "authoritative_current_normalization_supersession"
+    },
+    {
+      "path": "tst/publication/readiness/q019_nonlinear_bell_volume_aware_campaign_successor_design_2026-06-06.json",
+      "sha256": "7ae7a8d8c3d896e3abf31961a4e3bb7d6fdbda5113d5eec29019849e832e331f",
+      "role": "corrected_nonlinear_Bell_campaign_contract"
+    },
+    {
+      "path": "tst/publication/readiness/q011_section54_production_science_diagnostic_successor_v1_2026-06-06.json",
+      "sha256": "7543a062839a84059ed4c2dc7f8b126966c663c19659fbb3d712e340d331c702",
+      "role": "Section_5_4_production_science_diagnostic_contract"
+    },
+    {
+      "path": "inputs/publication/pic_parallel_shock_section54_production_science_successor_v1_vl2_tsc.athinput",
+      "sha256": "0e8589618fb8ffdd6da5d8c4aadba8308ac8ce74ac6d0d512c5f216ef7401d79",
+      "role": "Section_5_4_selected_p0_1p0_production_science_deck"
+    },
+    {
+      "path": "tst/publication/readiness/q011_section54_pressure_selection_publication_candidate_successor_2026-06-05.json",
+      "sha256": "2fa12fe58e31f4d508cf3d7d5db65afd27a89588c751dc2c47481ac382454e98",
+      "role": "selected_p0_1p0_Bai_anchored_pressure_rationale"
+    }
+  ],
+  "findings": [
+    "Sun and Bai Section 5.2 Equation (27) maps to AthenaK only when raw prtcl_j is treated as J_CR/c and the corrected volume-aware target is J_CR/c=2*B0*k0; artificial C must not multiply the target.",
+    "The retained target-paper Bell benchmark is linear and supplies no standalone nonlinear saturation dataset or numeric nonlinear tolerance.",
+    "The Q011 deck exactly overlaps the stated Sun-and-Bai Section 5.4 domain, AMR ladder, Mach number, gamma, eta, injection momentum, artificial C, ideal-surface injection, gas subtraction, and early-particle removal values.",
+    "Sun and Bai Section 5.4 does not explicitly state P0; selected p0=1 is explicitly anchored to Bai et al. (2015).",
+    "Bai et al. dynamic shock tracking, fiducial eta=2e-3 setup, larger domain, and CR-Hall scope are bounded discrepancies rather than exact Q011 matches."
+  ],
+  "numeric_comparison_tolerances_frozen": false,
+  "qualifying_output_inspection_authorized": false,
+  "remaining_extraction_needs": [
+    "A separately provenance-bound nonlinear Bell saturation dataset is required for a direct nonlinear saturation reproduction claim; otherwise the claim must remain limited to a target-paper-normalized AthenaK nonlinear study.",
+    "Extract any required shock figure measurements only under the authorized Orion Q022 extracted-dataset root with source locator, method, uncertainty, checksum, redistribution basis, and review.",
+    "Freeze reference-specific or independently justified numeric comparison tolerances before inspecting qualifying AthenaK output.",
+    "Bind exact corrected Q019 execution contracts after excluded pilots and close the Q043-then-Q023 predecessor chain.",
+    "Obtain external scientific reviewer disposition."
+  ],
+  "qualification_effect": "source_local_reference_mapping_successor_only_no_execution_no_claim_authority",
+  "status": "central_reference_mapping_successor_complete_open_extraction_tolerances_execution_bindings_and_external_review_fail_closed"
+}

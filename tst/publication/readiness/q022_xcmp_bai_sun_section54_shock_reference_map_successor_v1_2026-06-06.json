@@ -1,0 +1,258 @@
+{
+  "schema_version": 2,
+  "record_type": "q022_reference_specific_equation_normalization_map_successor",
+  "successor_id": "q022_bai_sun_section54_shock_reference_map_successor_v1",
+  "date": "2026-06-06",
+  "gate": "Q-022",
+  "map_status": "bounded_map_recorded_external_review_open",
+  "comparison_id": "XCMP-BAI-SUN-SECTION54-SHOCK",
+  "dataset_provenance_id": "Q022-DATASET-XCMP-BAI-SUN-SECTION54-SHOCK",
+  "reference_ids": [
+    "bai_2015_arxiv_1412.1087",
+    "sun_bai_2023_arxiv_2304.10568v1"
+  ],
+  "athenak_physical_mode": "Q011_Section_5_4_parallel_shock_p0_1p0_no_Hall_production_science_successor",
+  "scope": "Reference-specific map for the selected AthenaK Q011 p0=1 shock baseline against Bai et al. (2015) and Sun and Bai Section 5.4 only. Exact textual setup values are mapped; approximate plotted or descriptive outcomes are not converted into numeric acceptance tolerances.",
+  "authority": {
+    "launch_authorized": false,
+    "execution_authorized": false,
+    "qualification_authorized": false,
+    "claim_closure_authorized": false,
+    "publication_authorized": false,
+    "policy_mutation_authorized": false
+  },
+  "reference_artifacts": [
+    {
+      "reference_id": "bai_2015_arxiv_1412.1087",
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/reference_artifacts/q022_external_preprints_2026-05-30/arxiv_1412.1087.pdf",
+      "sha256": "d9daeaa1c072aff617d8850797f570080d0b597a67eb60592689b24cf4e8cf1b",
+      "page_count": 24,
+      "artifact_role": "authoritative_locally_retained_arXiv_PDF"
+    },
+    {
+      "reference_id": "sun_bai_2023_arxiv_2304.10568v1",
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/reference_artifacts/sun_bai_2023_arxiv_v1_render_2026-05-30/mnras_template.pdf",
+      "sha256": "86e1f53ee335685a833b65b000e105d72c83c9bcea3a7b4a0ccaaa4deabaf3d6",
+      "page_count": 20,
+      "artifact_role": "authoritative_locally_retained_rendered_PDF"
+    }
+  ],
+  "matched_equations": [
+    "Bai et al. Section 5 Equation (34) gives the strong-shock downstream-frame jump-condition normalization and v_sh=v0/(r-1), with r=4 for gamma=5/3.",
+    "Sun and Bai Section 5.4 uses the ideal shock surface x=u_sh_prime*t with u_sh_prime=(Gamma-1)u0/2, equal to u0/3 for Gamma=5/3.",
+    "Sun and Bai Section 5.4 defines c/omega_pi=(q/(m*c))^-1/sqrt(rho0)=U_A0/Omega0 and Omega0=B0*q/(m*c).",
+    "Sun and Bai Section 2.2 Equations (3)-(6) provide the no-Hall ideal-MHD-PIC carrier and CR feedback equations used by the AthenaK Q011 baseline."
+  ],
+  "provenance_entries": [
+    {
+      "entry_id": "SHOCK-BAI-34-JUMP",
+      "reference_id": "bai_2015_arxiv_1412.1087",
+      "physical_pdf_page": 8,
+      "printed_page": 8,
+      "section": "5. Particle acceleration in collisionless shocks: simulation setup",
+      "equation": "34",
+      "mapping_class": "exact_symbolic_normalization",
+      "reference_statement": "For a strong downstream-frame shock, rho1=r*rho0, P1=r*rho0*v0^2/(r-1), Bx1=Bx0, and v_sh=v0/(r-1), with r=4 for gamma=5/3.",
+      "athenak_mapping": "The Q011 ideal-surface speed is 10 U_A0 for u0=30 U_A0 and gamma=5/3.",
+      "numeric_tolerance_supplied_by_reference": false
+    },
+    {
+      "entry_id": "SHOCK-BAI-UNITS-PRESSURE",
+      "reference_id": "bai_2015_arxiv_1412.1087",
+      "physical_pdf_page": 8,
+      "printed_page": 8,
+      "section": "5. Particle acceleration in collisionless shocks: simulation setup",
+      "equation": "not_numbered",
+      "mapping_class": "exact_textual_parameter",
+      "reference_statement": "rho0=B0=q/(m*c)=1, T0=P0=1, v0=30, and the thermal choice is stated to be irrelevant while T0 is much smaller than v0^2.",
+      "athenak_mapping": "The selected Q011 baseline uses ps_rho0=1, ps_b0=1, species mass=charge=1, ps_p0=1, and ps_u0=30.",
+      "numeric_tolerance_supplied_by_reference": false
+    },
+    {
+      "entry_id": "SHOCK-BAI-TABLE1",
+      "reference_id": "bai_2015_arxiv_1412.1087",
+      "physical_pdf_page": 8,
+      "printed_page": 8,
+      "section": "Table 1 and Section 5 setup",
+      "equation": "not_numbered",
+      "mapping_class": "reference_specific_parameter_context",
+      "reference_statement": "The listed high-Mach parallel-shock runs use M_A=30, domains 1.2e5 by 3000 c/omega_pi, standard resolution 12 c/omega_pi per cell, eta values 1e-3 to 4e-3, and C=1e4 for non-relativistic runs.",
+      "athenak_mapping": "Q011 selects eta=1e-3, C=1e4, and a smaller Sun-and-Bai Section 5.4 domain; it is not an exact Bai et al. domain reproduction.",
+      "numeric_tolerance_supplied_by_reference": false
+    },
+    {
+      "entry_id": "SHOCK-SUN-SETUP",
+      "reference_id": "sun_bai_2023_arxiv_2304.10568v1",
+      "physical_pdf_page": 11,
+      "printed_page": 11,
+      "section": "5.4 Non-relativistic shock acceleration",
+      "equation": "not_numbered",
+      "mapping_class": "exact_textual_setup",
+      "reference_statement": "A uniform super-Alfvenic flow strikes a reflecting left wall; B0 and the flow are parallel; particles are injected evenly and continuously at the ideal shock surface.",
+      "athenak_mapping": "Q011 uses reflecting/inflow x1 boundaries, periodic x2, parallel B0 and flow, and ideal-surface injection.",
+      "numeric_tolerance_supplied_by_reference": false
+    },
+    {
+      "entry_id": "SHOCK-SUN-INJECTION",
+      "reference_id": "sun_bai_2023_arxiv_2304.10568v1",
+      "physical_pdf_page": 11,
+      "printed_page": 11,
+      "section": "5.4 Non-relativistic shock acceleration",
+      "equation": "not_numbered",
+      "mapping_class": "exact_textual_parameter",
+      "reference_statement": "Injected protons are monoenergetic and isotropic relative to the ideal shock surface with p/m=sqrt(10)*u0; their injected mass is eta times swept mass and their mass, momentum, and energy are subtracted from the gas.",
+      "athenak_mapping": "Q011 uses ps_vinj_over_u0=sqrt(10), ps_eta=1e-3, ideal-surface injection, and gas subtraction.",
+      "numeric_tolerance_supplied_by_reference": false
+    },
+    {
+      "entry_id": "SHOCK-SUN-DOMAIN-UNITS",
+      "reference_id": "sun_bai_2023_arxiv_2304.10568v1",
+      "physical_pdf_page": 11,
+      "printed_page": 11,
+      "section": "5.4 Non-relativistic shock acceleration",
+      "equation": "not_numbered",
+      "mapping_class": "exact_textual_parameter",
+      "reference_statement": "The box is 48000 by 3120 c/omega_pi; M_A=30, Gamma=5/3, eta=1e-3, and C=1e4 U_A0; particles injected before 45 Omega0^-1 are removed.",
+      "athenak_mapping": "The Q011 production-science deck exactly carries these stated values.",
+      "numeric_tolerance_supplied_by_reference": false
+    },
+    {
+      "entry_id": "SHOCK-SUN-AMR",
+      "reference_id": "sun_bai_2023_arxiv_2304.10568v1",
+      "physical_pdf_page": 11,
+      "printed_page": 11,
+      "section": "5.4 Non-relativistic shock acceleration",
+      "equation": "not_numbered",
+      "mapping_class": "exact_textual_numerical_setup",
+      "reference_statement": "The fiducial AMR run has three total levels with cell sizes 12, 6, and 3 c/omega_pi, 20 by 20-cell MeshBlocks, curvature refine threshold 1.0, derefine threshold 0.1, and approximately 40 downstream ppc at the finest level and 640 at the coarsest.",
+      "athenak_mapping": "The Q011 deck and macro-mass derivation carry the same stated AMR ladder, MeshBlock size, thresholds, and downstream particle-count targets.",
+      "numeric_tolerance_supplied_by_reference": false
+    },
+    {
+      "entry_id": "SHOCK-SUN-DIAGNOSTIC-TIMES",
+      "reference_id": "sun_bai_2023_arxiv_2304.10568v1",
+      "physical_pdf_page": 12,
+      "printed_page": 12,
+      "section": "5.4 Non-relativistic shock acceleration, Figure 9 discussion",
+      "equation": "not_numbered",
+      "mapping_class": "exact_textual_observation_locator_without_tolerance",
+      "reference_statement": "The downstream spectra are shown at 500 and 1200 Omega0^-1 and the later spectrum is described as approaching f(epsilon) proportional to epsilon^-3/2.",
+      "athenak_mapping": "Q011 retains snapshots at these nominal times and a downstream-spectrum reducer, but no numeric agreement tolerance is supplied by this map.",
+      "numeric_tolerance_supplied_by_reference": false
+    }
+  ],
+  "intentional_mismatches": [
+    "Sun and Bai Section 5.4 does not explicitly state upstream P0; Q011 p0=1 is selected from the cited Bai et al. setup and must not be described as an explicit Sun-and-Bai parameter.",
+    "Sun and Bai injects at an ideal shock surface; Bai et al. dynamically identifies the shock and uses a more involved injection and compensation treatment.",
+    "Q011 eta=1e-3 matches Sun and Bai and Bai run R1, but it does not match Bai's fiducial R2 eta=2e-3.",
+    "Q011 uses the Sun-and-Bai 48000 by 3120 c/omega_pi domain rather than Bai et al.'s 1.2e5 by 3000 c/omega_pi standard domain.",
+    "Q011 is no-Hall, matching the Sun-and-Bai carrier scope but not reproducing Bai et al.'s CR-Hall-modified formulation.",
+    "AthenaK solver, reconstruction, AMR implementation, load balancing, random realization, and output reducers are not claimed identical to Athena or Athena++."
+  ],
+  "unit_map": {
+    "density": "rho0=1",
+    "magnetic_field": "B0=1",
+    "alfven_speed": "U_A0=B0/sqrt(rho0)=1_in_the_reference_4pi_equals_1_units",
+    "gyrofrequency": "Omega0=B0*q/(m*c)=1_for_unit_species_charge_to_mass",
+    "length": "c/omega_pi=U_A0/Omega0=(q/(m*c))^-1/sqrt(rho0)",
+    "time": "Omega0^-1",
+    "velocity": "U_A0",
+    "pressure": "P0=rho0*T0; selected_Q011_P0=1_is_explicit_in_Bai_2015_but_not_explicit_in_Sun_Bai_Section_5_4",
+    "particle_momentum": "p_over_m_normalized_by_u0_for_injection_and_by_the_reference_spectrum_coordinate_for_analysis",
+    "deposited_current": "AthenaK_prtcl_j_is_J_CR_over_c_not_physical_J_CR"
+  },
+  "normalization_map": {
+    "shock_surface": "x_ideal(t)=((Gamma-1)*u0/2)*t=10*t_for_Gamma=5/3_and_u0=30",
+    "strong_shock_speed": "v_sh=u0/(r-1)=10_for_r=4",
+    "injection_momentum": "p_inj/m=sqrt(10)*u0",
+    "injected_mass": "eta_times_mass_swept_by_the_ideal_shock_surface",
+    "gas_subtraction": "subtract_injected_particle_mass_momentum_and_energy_from_local_thermal_gas",
+    "selected_pressure": "P0=T0=1_from_Bai_2015_not_explicitly_from_Sun_Bai_Section_5_4",
+    "particle_light_speed": "C=1e4*U_A0",
+    "active_particle_population": "remove_particles_injected_before_45*Omega0^-1",
+    "deposited_current_frame_map": "(J_CR/c)_gas=(J_CR/c)_lab-(rho_CR/c)*u_gas"
+  },
+  "parameter_overlap": {
+    "exact_Sun_Bai_Section_5_4_overlap": {
+      "geometry": "2D_parallel_reflecting_wall_shock",
+      "domain_c_over_omega_pi": [
+        48000,
+        3120
+      ],
+      "root_cell_size_c_over_omega_pi": 12,
+      "amr_cell_sizes_c_over_omega_pi": [
+        12,
+        6,
+        3
+      ],
+      "meshblock_cells": [
+        20,
+        20
+      ],
+      "rho0": 1,
+      "B0": 1,
+      "u0_over_U_A0": 30,
+      "M_A": 30,
+      "Gamma": "5/3",
+      "eta": "1e-3",
+      "p_inj_over_m_u0": "sqrt(10)",
+      "C_over_U_A0": "1e4",
+      "remove_birth_time_before_Omega0_inverse": 45,
+      "nominal_spectrum_times_Omega0_inverse": [
+        500,
+        1200
+      ],
+      "ideal_surface_injection": true,
+      "gas_subtraction": true
+    },
+    "exact_Bai_2015_overlap": {
+      "rho0": 1,
+      "B0": 1,
+      "q_over_m_c": 1,
+      "P0": 1,
+      "T0": 1,
+      "u0_over_v_A0": 30,
+      "M_A": 30,
+      "Gamma": "5/3",
+      "selected_eta_matches_run": "R1_eta_1e-3",
+      "standard_resolution_c_over_omega_pi_per_cell": 12,
+      "C_over_v_A0": "1e4"
+    },
+    "not_explicit_in_Sun_Bai_Section_5_4": {
+      "P0": 1,
+      "T0": 1
+    },
+    "athenak_contract": {
+      "deck": "inputs/publication/pic_parallel_shock_section54_production_science_successor_v1_vl2_tsc.athinput",
+      "diagnostic_readiness": "tst/publication/readiness/q011_section54_production_science_diagnostic_successor_v1_2026-06-06.json",
+      "selected_pressure_case": "ps_p0_1p00"
+    }
+  },
+  "excluded_regimes": [
+    "oblique shocks",
+    "relativistic shocks or the Bai reduced-C trans-relativistic run",
+    "self-consistent thermal-ion injection microphysics",
+    "Bai et al. dynamically tracked shock injection as an exact match",
+    "CR-Hall-modified shock evolution",
+    "exact numerical-algorithm identity across Athena, Athena++, and AthenaK",
+    "numeric agreement claims based on approximate text or undigitized figures",
+    "using the existing Q011 engineering acceptance range as a Q022 reference-derived tolerance"
+  ],
+  "comparison_tolerances": [],
+  "tolerance_policy": "No numeric shock comparison tolerance is supplied by this successor. Approximate textual descriptions and undigitized Figures 8-9 are retained as qualitative context only. Freeze extracted-data provenance and tolerances before inspecting qualifying AthenaK comparison output.",
+  "source_records": [
+    "tst/publication/readiness/q022_xcmp_athena_bai_bell_shock_equation_map_2026-05-30.json",
+    "tst/publication/readiness/q011_section54_pressure_selection_publication_candidate_successor_2026-06-05.json",
+    "tst/publication/readiness/q011_section54_production_science_diagnostic_successor_v1_2026-06-06.json",
+    "inputs/publication/pic_parallel_shock_section54_production_science_successor_v1_vl2_tsc.athinput"
+  ],
+  "blocked_inputs": [
+    "Sun and Bai Section 5.4 does not explicitly state P0; the selected p0=1 baseline is bound to Bai et al. and must remain labeled as such.",
+    "No authorized figure extraction with uncertainty exists for Figures 8-9 or Bai et al. shock figures.",
+    "No reference-derived numeric comparison tolerance has been frozen.",
+    "Exact cross-code numerical-algorithm equivalence is not established.",
+    "External scientific reviewer disposition remains pending."
+  ],
+  "reviewer_disposition": "pending external review",
+  "qualification_effect": "source_local_reference_mapping_only_no_execution_no_claim_authority"
+}

@@ -1,0 +1,138 @@
+{
+  "record_type": "q022_central_reference_discrepancy_open_input_ledger_successor",
+  "schema_version": 1,
+  "successor_id": "q022_central_reference_discrepancy_open_input_ledger_successor_v1",
+  "date": "2026-06-06",
+  "gate": "Q-022",
+  "scope": "Fail-closed discrepancy and open-input ledger for only the corrected nonlinear Bell and Bai et al. (2015)/Sun and Bai Section 5.4 shock comparisons.",
+  "authority": {
+    "launch_authorized": false,
+    "execution_authorized": false,
+    "qualification_authorized": false,
+    "claim_closure_authorized": false,
+    "publication_authorized": false,
+    "policy_mutation_authorized": false
+  },
+  "entries": [
+    {
+      "id": "Q022-CENTRAL-BELL-OPEN-STANDALONE-NONLINEAR-DATASET",
+      "comparison_id": "XCMP-CORRECTED-NONLINEAR-BELL-TARGET-PAPER",
+      "kind": "open_input",
+      "status": "open_fail_closed",
+      "finding": "The retained target-paper Bell benchmark is linear and provides no standalone nonlinear-saturation dataset.",
+      "required_resolution": "Provide a separately provenance-bound nonlinear reference dataset or limit the claim to a target-paper-normalized nonlinear AthenaK study without direct saturation reproduction.",
+      "blocks": [
+        "target_paper_standalone_nonlinear_saturation_reproduction_claim",
+        "numeric_nonlinear_saturation_agreement_claim"
+      ]
+    },
+    {
+      "id": "Q022-CENTRAL-BELL-OPEN-EXACT-Q019-EXECUTION-CONTRACT",
+      "comparison_id": "XCMP-CORRECTED-NONLINEAR-BELL-TARGET-PAPER",
+      "kind": "open_input",
+      "status": "open_fail_closed",
+      "finding": "The corrected Q019 design freezes the normalization and branch boundaries but not exact nonlinear production decks or branch-specific values.",
+      "required_resolution": "Bind the passed Q043 raw cycle-one oracle, corrected Q023 predecessor, exact Q019 decks, excluded-pilot results, branch parameters, seeds, and preregistration.",
+      "blocks": [
+        "corrected_nonlinear_Bell_execution",
+        "corrected_nonlinear_Bell_qualification"
+      ]
+    },
+    {
+      "id": "Q022-CENTRAL-BELL-DISCREPANCY-HALL-SCOPE",
+      "comparison_id": "XCMP-CORRECTED-NONLINEAR-BELL-TARGET-PAPER",
+      "kind": "intentional_discrepancy",
+      "status": "bounded",
+      "finding": "AthenaK corrected Q019 is no-Hall; Bai et al. derives and applies a CR-Hall-modified formulation.",
+      "required_resolution": "Keep Hall-modified growth, saturation, and shock-front claims excluded from this comparison.",
+      "blocks": [
+        "Hall_modified_Bell_reproduction_claim"
+      ]
+    },
+    {
+      "id": "Q022-CENTRAL-BELL-OPEN-COMPARISON-TOLERANCES",
+      "comparison_id": "XCMP-CORRECTED-NONLINEAR-BELL-TARGET-PAPER",
+      "kind": "open_input",
+      "status": "open_fail_closed",
+      "finding": "Neither retained target-reference PDF supplies a standalone nonlinear Bell comparison tolerance.",
+      "required_resolution": "Freeze reference-derived or independently justified tolerances before inspecting qualifying nonlinear output.",
+      "blocks": [
+        "numeric_nonlinear_Bell_agreement_claim"
+      ]
+    },
+    {
+      "id": "Q022-CENTRAL-SHOCK-OPEN-SUN-P0",
+      "comparison_id": "XCMP-BAI-SUN-SECTION54-SHOCK",
+      "kind": "open_input_with_selected_bounded_baseline",
+      "status": "bounded_not_resolved_as_Sun_parameter",
+      "finding": "Sun and Bai Section 5.4 does not explicitly state P0; Q011 p0=1 is selected because Bai et al. explicitly uses P0=T0=1.",
+      "required_resolution": "Continue labeling p0=1 as a Bai-et-al.-anchored selected baseline, not an explicit Sun-and-Bai Section 5.4 value.",
+      "blocks": [
+        "claim_that_Sun_and_Bai_explicitly_specifies_P0_equals_1"
+      ]
+    },
+    {
+      "id": "Q022-CENTRAL-SHOCK-DISCREPANCY-IDEAL-VS-DYNAMIC-SURFACE",
+      "comparison_id": "XCMP-BAI-SUN-SECTION54-SHOCK",
+      "kind": "intentional_discrepancy",
+      "status": "bounded",
+      "finding": "Sun and Bai and Q011 inject at an ideal shock surface, while Bai et al. dynamically identifies the shock and uses a more involved injection and compensation treatment.",
+      "required_resolution": "Compare Q011 directly to the Sun-and-Bai ideal-surface setup and treat Bai et al. as a related predecessor rather than exact injection-algorithm reproduction.",
+      "blocks": [
+        "exact_Bai_2015_injection_algorithm_reproduction_claim"
+      ]
+    },
+    {
+      "id": "Q022-CENTRAL-SHOCK-DISCREPANCY-ETA-DOMAIN-HALL",
+      "comparison_id": "XCMP-BAI-SUN-SECTION54-SHOCK",
+      "kind": "intentional_discrepancy",
+      "status": "bounded",
+      "finding": "Q011 matches Sun and Bai eta=1e-3 and domain 48000 by 3120, while Bai's fiducial R2 uses eta=2e-3 and a 1.2e5 by 3000 domain; Q011 is no-Hall.",
+      "required_resolution": "Keep Bai comparisons parameter-specific and do not label Q011 as an exact Bai R2 or Hall-shock reproduction.",
+      "blocks": [
+        "exact_Bai_R2_reproduction_claim",
+        "Bai_Hall_shock_reproduction_claim"
+      ]
+    },
+    {
+      "id": "Q022-CENTRAL-SHOCK-OPEN-FIGURE-EXTRACTION",
+      "comparison_id": "XCMP-BAI-SUN-SECTION54-SHOCK",
+      "kind": "open_input",
+      "status": "open_fail_closed",
+      "finding": "No authorized machine-readable extraction with uncertainty exists for the shock figures or their approximate plotted outcomes.",
+      "required_resolution": "Extract only under the authorized Orion Q022 dataset root with source locator, method, uncertainty, checksum, redistribution basis, and review.",
+      "blocks": [
+        "numeric_shock_morphology_agreement_claim",
+        "numeric_shock_amplification_agreement_claim",
+        "numeric_spectrum_agreement_claim"
+      ]
+    },
+    {
+      "id": "Q022-CENTRAL-SHOCK-OPEN-COMPARISON-TOLERANCES",
+      "comparison_id": "XCMP-BAI-SUN-SECTION54-SHOCK",
+      "kind": "open_input",
+      "status": "open_fail_closed",
+      "finding": "No reference-derived numeric shock comparison tolerance is frozen. Existing Q011 engineering gates are not Q022 reference tolerances.",
+      "required_resolution": "Freeze reference-specific tolerances before inspecting qualifying AthenaK comparison output.",
+      "blocks": [
+        "numeric_cross_code_shock_agreement_claim"
+      ]
+    },
+    {
+      "id": "Q022-CENTRAL-CROSSCUT-OPEN-EXTERNAL-REVIEW",
+      "comparison_id": "BOTH_CENTRAL_COMPARISONS",
+      "kind": "open_input",
+      "status": "open_fail_closed",
+      "finding": "External scientific reviewer disposition is pending.",
+      "required_resolution": "Obtain a disposition that explicitly reviews equations, units, normalization, overlap, exclusions, discrepancies, and any future extracted data and tolerances.",
+      "blocks": [
+        "Q022_comparison_qualification",
+        "cross_code_publication_claim_closure"
+      ]
+    }
+  ],
+  "numeric_tolerances_frozen": false,
+  "qualifying_output_inspection_authorized": false,
+  "qualification_effect": "source_local_discrepancy_ledger_only_no_execution_no_claim_authority",
+  "status": "central_reference_maps_bounded_open_inputs_fail_closed"
+}

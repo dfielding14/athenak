@@ -1,0 +1,176 @@
+{
+  "schema_version": 2,
+  "record_type": "q022_reference_specific_equation_normalization_map_successor",
+  "successor_id": "q022_corrected_nonlinear_bell_reference_map_successor_v1",
+  "date": "2026-06-06",
+  "gate": "Q-022",
+  "map_status": "bounded_map_recorded_external_review_open",
+  "comparison_id": "XCMP-CORRECTED-NONLINEAR-BELL-TARGET-PAPER",
+  "dataset_provenance_id": "Q022-DATASET-XCMP-CORRECTED-NONLINEAR-BELL-TARGET-PAPER",
+  "reference_ids": [
+    "sun_bai_2023_arxiv_2304.10568v1",
+    "bai_2015_arxiv_1412.1087"
+  ],
+  "athenak_physical_mode": "corrected_volume_aware_J_CR_over_c_no_Hall_nonlinear_Bell_successor",
+  "scope": "Reference-specific map for the corrected AthenaK nonlinear Bell campaign against only the Bell normalization and analytic benchmark retained in Sun and Bai (2023) and Bai et al. (2015). The retained target-paper Bell benchmark is linear; no standalone nonlinear-saturation dataset or numerical acceptance tolerance is inferred from it.",
+  "authority": {
+    "launch_authorized": false,
+    "execution_authorized": false,
+    "qualification_authorized": false,
+    "claim_closure_authorized": false,
+    "publication_authorized": false,
+    "policy_mutation_authorized": false
+  },
+  "reference_artifacts": [
+    {
+      "reference_id": "sun_bai_2023_arxiv_2304.10568v1",
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/reference_artifacts/sun_bai_2023_arxiv_v1_render_2026-05-30/mnras_template.pdf",
+      "sha256": "86e1f53ee335685a833b65b000e105d72c83c9bcea3a7b4a0ccaaa4deabaf3d6",
+      "page_count": 20,
+      "artifact_role": "authoritative_locally_retained_rendered_PDF"
+    },
+    {
+      "reference_id": "bai_2015_arxiv_1412.1087",
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/reference_artifacts/q022_external_preprints_2026-05-30/arxiv_1412.1087.pdf",
+      "sha256": "d9daeaa1c072aff617d8850797f570080d0b597a67eb60592689b24cf4e8cf1b",
+      "page_count": 24,
+      "artifact_role": "authoritative_locally_retained_arXiv_PDF"
+    }
+  ],
+  "matched_equations": [
+    "Sun and Bai Section 5.2 Equation (27) supplies the Bell dispersion relation and defines k0=j_CR/(2*B_g*c); AthenaK raw prtcl_j is J_CR/c, so the target deposited current is 2*B0*k0.",
+    "Sun and Bai Section 5.2 states that the most unstable wavenumber is k=k0 and that the unstable mode is right-polarized.",
+    "Sun and Bai Section 2.2 Equations (3)-(6) use ideal-MHD induction and conservative CR-to-gas momentum and energy source terms, matching the corrected AthenaK no-Hall paper-MHD-PIC carrier scope.",
+    "Bai et al. Section 4 Equations (29)-(31) reduce to the no-Hall Bell relation when the CR-Hall contribution is removed and f=1."
+  ],
+  "provenance_entries": [
+    {
+      "entry_id": "BELL-SUN-27-K0",
+      "reference_id": "sun_bai_2023_arxiv_2304.10568v1",
+      "physical_pdf_page": 9,
+      "printed_page": 9,
+      "section": "5.2 The Bell instability",
+      "equation": "27",
+      "mapping_class": "exact_symbolic_normalization",
+      "reference_statement": "k0=j_CR/(2*B_g*c), epsilon=U_A/v_CR, with the most unstable wavenumber k=k0.",
+      "athenak_mapping": "raw prtcl_j is J_CR/c; therefore volume_average(prtcl_j_parallel)=2*B0*k0.",
+      "numeric_tolerance_supplied_by_reference": false
+    },
+    {
+      "entry_id": "BELL-SUN-28-POLARIZATION",
+      "reference_id": "sun_bai_2023_arxiv_2304.10568v1",
+      "physical_pdf_page": 9,
+      "printed_page": 9,
+      "section": "5.2 The Bell instability",
+      "equation": "28",
+      "mapping_class": "linear_eigenmode_and_polarization_context",
+      "reference_statement": "The initialized most-unstable eigenmode is right-polarized and relates transverse gas velocity and magnetic perturbations.",
+      "athenak_mapping": "The corrected Q023 linear predecessor must establish phase and right-handed polarization before Q019 nonlinear execution.",
+      "numeric_tolerance_supplied_by_reference": false
+    },
+    {
+      "entry_id": "BELL-SUN-MHD-PIC-CARRIER",
+      "reference_id": "sun_bai_2023_arxiv_2304.10568v1",
+      "physical_pdf_page": 3,
+      "printed_page": 3,
+      "section": "2.2 Equations of gas dynamics",
+      "equation": "3-6",
+      "mapping_class": "carrier_equation_scope",
+      "reference_statement": "The gas follows ideal MHD with CR momentum and energy feedback and cE=-u cross B.",
+      "athenak_mapping": "Q019 corrected branches use the no-Hall ideal-MHD carrier with full CR momentum and energy feedback.",
+      "numeric_tolerance_supplied_by_reference": false
+    },
+    {
+      "entry_id": "BELL-BAI-29-31-NOHALL-LIMIT",
+      "reference_id": "bai_2015_arxiv_1412.1087",
+      "physical_pdf_page": 7,
+      "printed_page": 7,
+      "section": "4. Linear analysis of the Bell instability",
+      "equation": "29-31",
+      "mapping_class": "bounded_analytic_limit",
+      "reference_statement": "The Hall-modified dispersion defines k0=J_CR/(2*B0), f=1+(Lambda/2)^2, and reduces to the standard fixed-current Bell relation when the CR-Hall term is absent.",
+      "athenak_mapping": "The corrected Q019 target-paper comparison is restricted to the no-Hall limit; Hall-modified growth and saturation are excluded.",
+      "numeric_tolerance_supplied_by_reference": false
+    },
+    {
+      "entry_id": "BELL-BAI-NONLINEAR-CONTEXT",
+      "reference_id": "bai_2015_arxiv_1412.1087",
+      "physical_pdf_page": 6,
+      "printed_page": 6,
+      "section": "4. Linear analysis of the Bell instability",
+      "equation": "not_numbered",
+      "mapping_class": "qualitative_context_only",
+      "reference_statement": "The text motivates strongly nonlinear upstream evolution and magnetic amplification in shock precursors.",
+      "athenak_mapping": "This motivates nonlinear continuation but does not supply a standalone periodic-box saturation target or tolerance.",
+      "numeric_tolerance_supplied_by_reference": false
+    }
+  ],
+  "intentional_mismatches": [
+    "The corrected AthenaK Q019 comparison is no-Hall; Hall-modified growth and saturation in Bai et al. are not matched.",
+    "The high-rigidity AthenaK branch advances CR particles and may be labeled fixed-current-like only after its current and momentum invariance gates pass; it is not an exactly locked external-current experiment.",
+    "The finite-rigidity AthenaK branch is a separately named self-consistent periodic-box analogue and is not identified with the target-paper linear Bell benchmark.",
+    "The target-paper Bell benchmark is linear and supplies no standalone nonlinear saturation history, saturation amplitude, morphology dataset, or nonlinear parameter grid."
+  ],
+  "unit_map": {
+    "reference_current_symbol": "Sun_and_Bai_j_CR_is_physical_current_density_and_appears_as_j_CR_over_c_in_k0",
+    "athenak_raw_current": "prtcl_j_is_deposited_J_CR_over_c",
+    "magnetic_units": "Sun_and_Bai_use_4pi_equals_1_code_units; AthenaK_corrected_contract_uses_the_same_B0_in_J_CR_over_c_equals_2_B0_k0",
+    "time_unit": "linear_reference_uses_inverse_k0_U_A; exact_nonlinear_Q019_time_normalization_remains_to_be_frozen_after_excluded_pilots",
+    "length_unit": "linear_reference_uses_2pi_over_k0; exact_nonlinear_Q019_domain_and_dominant_scale_normalization_remain_to_be_frozen_after_excluded_pilots",
+    "particle_charge_to_mass": "reference_Omega=q*B_g/(m*c); AthenaK_species_charge_and_mass_must_be_bound_explicitly"
+  },
+  "normalization_map": {
+    "sun_bai_reference_k0": "k0=j_CR/(2*B_g*c)",
+    "athenak_raw_prtcl_j": "prtcl_j=J_CR/c",
+    "athenak_corrected_general_closure": "PPC*deposit_qscale*species_charge*v_CR/V_root_cell=J_CR/c=2*B0*k0",
+    "athenak_deposit_qscale": "deposit_qscale=2*B0*k0*V_root_cell/(PPC*species_charge*v_CR)",
+    "root_cell_volume": "V_root_cell=product_d((xmax_d-xmin_d)/nx_d)_over_all_three_root_mesh_axes",
+    "artificial_C_multiplier_allowed": false,
+    "legacy_volume_blind_or_C_multiplied_normalization_allowed": false,
+    "required_output_level_oracle": "Q043-BELL-DEPOSITED-J-OVER-C-VOLUME-AWARE_raw_cycle_one",
+    "linear_predecessor": "Q023-PAPER-BELL-LINEAR-JOVERC_after_passed_Q043_oracle"
+  },
+  "parameter_overlap": {
+    "exact_overlap_available_now": [
+      "B0_parallel_J_CR",
+      "ideal_MHD_no_Hall_carrier",
+      "full_CR_momentum_and_energy_feedback",
+      "raw_deposited_J_CR_over_c_normalization",
+      "most_unstable_linear_scale_k0",
+      "right_handed_linear_polarization"
+    ],
+    "target_paper_linear_setup_only": {
+      "geometry": "periodic_1D_2D_3D_linear_Bell_benchmark",
+      "particles_per_cell": 2,
+      "reference_units": "rho=B_g=U_A=2pi/k0=1",
+      "Omega_over_k0_U_A": "1e-6",
+      "artificial_C_over_v_CR": 1000
+    },
+    "athenak_nonlinear_exact_values_status": "not_frozen_pending_excluded_pilots_and_branch_specific_preregistration",
+    "standalone_nonlinear_reference_dataset_available": false
+  },
+  "excluded_regimes": [
+    "CR-Hall-modified Bell growth or saturation",
+    "kinetic-background-ion demagnetization",
+    "exact locked external-current experiments",
+    "driven-boundary nonlinear experiments",
+    "claims that a target-paper linear Bell benchmark supplies a standalone nonlinear saturation target",
+    "legacy AthenaK volume-blind or artificial-C-multiplied Bell normalization",
+    "numeric nonlinear agreement claims before reference data extraction and preregistered tolerances"
+  ],
+  "comparison_tolerances": [],
+  "tolerance_policy": "No numeric Bell comparison tolerance is supplied by this successor. Freeze reference-derived or independently justified tolerances before inspecting qualifying AthenaK nonlinear output.",
+  "source_records": [
+    "tst/publication/readiness/q022_xcmp_athena_bai_bell_shock_equation_map_2026-05-30.json",
+    "tst/publication/readiness/q043_bell_current_normalization_supersession_2026-06-06.json",
+    "tst/publication/readiness/q019_nonlinear_bell_volume_aware_campaign_successor_design_2026-06-06.json"
+  ],
+  "blocked_inputs": [
+    "No standalone nonlinear Bell dataset or nonlinear acceptance tolerance is available from the two retained target-reference PDFs.",
+    "The exact corrected nonlinear Q019 decks, branch-specific parameters, excluded-pilot results, and execution preregistration remain open.",
+    "The exact passed Q043 raw cycle-one oracle receipt and corrected Q023 linear-predecessor evidence must be bound before nonlinear execution.",
+    "External scientific reviewer disposition remains pending."
+  ],
+  "reviewer_disposition": "pending external review",
+  "qualification_effect": "source_local_reference_mapping_only_no_execution_no_claim_authority"
+}
