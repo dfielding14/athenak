@@ -1,0 +1,453 @@
+{
+  "record_type": "q019_nonlinear_bell_saturation_campaign_design",
+  "schema_version": 1,
+  "date": "2026-06-06",
+  "gate": "Q-019",
+  "campaign_id": "Q019-HR-FIXED-CURRENT-LIKE-NOHALL",
+  "claim_id": "CLAIM-PROD-BELL-NONLINEAR-NOHALL-001",
+  "status": "design_frozen_execution_and_qualification_blocked",
+  "qualification_effect": "none_design_only",
+  "scope": "Scientifically qualifying nonlinear Bell saturation campaign design following the existing Q-023 nonlinear fixed-current-like source-local foundation. This record does not authorize execution, bind a clean candidate, inspect qualifying output, freeze literature-comparison tolerances, or close a scientific claim.",
+  "foundation_predecessor": {
+    "deck": "inputs/tests/pic_q023_prod_bell_nonlinear_foundation_vl2_tsc.athinput",
+    "readiness_record": "tst/publication/readiness/q023_prod_bell_nonlinear_source_local_foundation_2026-06-06.json",
+    "preserved_contract": [
+      "paper_mhd_pic_vl2_tsc_no_hall_full_feedback",
+      "q023_normalization_and_p0_1",
+      "right_polarized_carrier_amplitude_1e-4",
+      "ppc_times_deposit_qscale_equals_2e9",
+      "native_cell_size",
+      "tau_equals_k0_UA_t"
+    ],
+    "qualifying_changes": [
+      "enlarge_2d_baseline_from_8_to_16_carrier_wavelengths",
+      "add_deterministic_seeded_divergence_free_symmetry_breaking_perturbation",
+      "request_particle_diagnostics",
+      "replace_source_local_single_run_heuristics_with_fail_closed_ensemble_and_convergence_gates"
+    ],
+    "source_local_tau_14_22_window_role": "pilot_prior_only_not_inherited_science_acceptance_window"
+  },
+  "recommended_first_campaign": {
+    "campaign_branch": "Q019-HR-FIXED-CURRENT-LIKE-NOHALL",
+    "scientific_scope": "bounded_high_rigidity_no_hall_ideal_mhd_carrier_nonlinear_bell_evolution_and_mechanism_classification",
+    "runtime": "paper_mhd_pic_vl2_tsc",
+    "recommended_interpretation": "approximately_fixed_current_plasma_acceleration_branch_only_if_current_invariance_gate_passes",
+    "prohibited_interpretations_without_separate_gate": [
+      "exact_locked_current_reproduction",
+      "cr_deflection_saturation",
+      "anisotropic_pressure_saturation",
+      "direct_zacharegkas_driven_boundary_reproduction",
+      "kinetic_background_ion_demagnetization",
+      "hall_dominated_bell",
+      "broad_beta_generality"
+    ]
+  },
+  "primary_literature": [
+    {
+      "reference_id": "sun_bai_2023_arxiv_2304.10568",
+      "locator": "https://arxiv.org/abs/2304.10568",
+      "campaign_role": "Q-023 Section 5.2 normalization, eigenmode, and linear predecessor"
+    },
+    {
+      "reference_id": "riquelme_spitkovsky_2009",
+      "locator": "https://doi.org/10.1088/0004-637X/694/1/626",
+      "arxiv": "https://arxiv.org/abs/0810.4565",
+      "campaign_role": "fixed-current locked-CR plasma-acceleration saturation and high-rigidity mechanism discriminants",
+      "distinction": "locked CR velocities remove CR backreaction; plasma acceleration reduces current in the plasma frame; CR deflection is a separate earlier-saturation route"
+    },
+    {
+      "reference_id": "gargate_et_al_2010",
+      "locator": "https://doi.org/10.1088/2041-8205/711/2/L127",
+      "arxiv": "https://arxiv.org/abs/1002.1701",
+      "campaign_role": "self-consistent hybrid nonlinear evolution, gas energization, current evolution, and CR isotropization",
+      "distinction": "saturation is associated with loss of scale separation and kinetic background-plasma demagnetization while current is maintained, not a universal anisotropic-pressure law"
+    },
+    {
+      "reference_id": "zacharegkas_et_al_2024",
+      "locator": "https://doi.org/10.3847/1538-4357/ad3960",
+      "arxiv": "https://arxiv.org/abs/2210.08072",
+      "campaign_role": "driven self-consistent anisotropic momentum-flux saturation scaling",
+      "distinction": "driven CR boundaries and finite-rigidity distributions are not supplied by the current Q-023 source-local foundation"
+    }
+  ],
+  "athenak_support_map": {
+    "supported": [
+      "relativistic_cr_momentum_state",
+      "boris_tsc_particle_push",
+      "ideal_mhd_induction_no_cr_hall_term",
+      "conservative_particle_to_mhd_momentum_and_energy_feedback",
+      "periodic_1d_carrier_2d3v_and_3d_geometries",
+      "deterministic_particle_loading_and_seedable_new_problem_generator",
+      "mhd_history_raw_mhd_fields_particle_moments_particle_pvtk_and_restart_outputs"
+    ],
+    "missing_or_new_work_required": [
+      "exact_locked_cr_current_mode",
+      "q019_nonlinear_seeded_problem_generator",
+      "hot_drifting_isotropic_shell_distribution_generator",
+      "cr_specific_driven_inflow_outflow_with_periodic_mhd",
+      "cr_pressure_tensor_and_cr_energy_history",
+      "nonlinear_bell_production_analyzer",
+      "independent_recompute",
+      "reviewed_saturation_window",
+      "resource_model"
+    ],
+    "unsupported_physics": [
+      "kinetic_background_ions",
+      "kinetic_background_electrons",
+      "ion_inertial_scale",
+      "wice_physics",
+      "background_ion_demagnetization",
+      "electron_scale_competing_modes",
+      "qualified_hall_bell"
+    ]
+  },
+  "dimensionless_parameters_required": [
+    "epsilon=U_A/v_CR",
+    "M_A_CR=v_CR/U_A",
+    "gamma0=k0*U_A*sqrt(1-epsilon^2)",
+    "gamma0_over_Omega0",
+    "lambda0=2*pi/k0",
+    "k0_r_g0=k0*(p_CR/m)/Omega0",
+    "C_over_v_CR",
+    "beta_code=P_gas/(B0^2/2)",
+    "J_CR_over_2_B0_C_k0",
+    "rho_CR_over_rho0",
+    "CR_energy_over_initial_magnetic_pressure",
+    "initial_CR_momentum_flux_tensor_over_initial_magnetic_pressure",
+    "r_g_of_B_over_lambda_d",
+    "L_over_lambda0",
+    "dx_over_lambda0",
+    "ppc",
+    "dt_gamma0"
+  ],
+  "recommended_baseline": {
+    "dimension": "2D3V",
+    "normalization": {
+      "rho": 1.0,
+      "B0": 1.0,
+      "U_A": 1.0,
+      "lambda0": 1.0,
+      "k0": 6.283185307179586,
+      "epsilon": 0.4,
+      "v_CR": 2.5,
+      "Omega0": 6.283185307179586e-06,
+      "C_over_v_CR": 1000.0,
+      "C": 2500.0,
+      "gas_pressure": 1.0,
+      "gamma_adiabatic": 1.6666666666666667,
+      "initial_q023_eigenmode_amplitude": 0.0001,
+      "derived_k0_r_g0_approx": 2500001.25,
+      "interpretation": "high_rigidity_fixed_current_like_design_value_not_literature_tolerance"
+    },
+    "physics_controls": {
+      "pic_cr_hall_mode": "off",
+      "pic_wave_damping_mode": "off",
+      "pic_deltaf_mode": "off",
+      "pusher": "boris_tsc",
+      "deposit_order": 2,
+      "feedback": "coupled_conservative_momentum_and_energy",
+      "induction": "ideal_mhd_only"
+    },
+    "box": {
+      "q023_domain_scale": 16,
+      "nx": [
+        1024,
+        512,
+        1
+      ],
+      "extent": [
+        "16*sqrt(5)",
+        "16*sqrt(1.25)",
+        1.0
+      ],
+      "meshblock_nx": [
+        64,
+        64,
+        1
+      ]
+    },
+    "particles": {
+      "ppc": 16,
+      "deposit_qscale": 125000000.0,
+      "required_all_rows_current_product": "ppc_times_deposit_qscale_equals_2e9",
+      "current_invariance": "same_q023_current_as_nonlinear_foundation_ppc_16_deposit_qscale_1p25e8"
+    },
+    "qualifying_seeds": [
+      23050101,
+      23050102,
+      23050103,
+      23050104,
+      23050105,
+      23050106,
+      23050107,
+      23050108
+    ],
+    "pilot_seeds": [
+      23050091,
+      23050092
+    ],
+    "source_perturbation": {
+      "kind": "new_deterministic_seeded_divergence_free_symmetry_breaking_perturbation",
+      "exact_spectrum_and_relative_energy": "open_freeze_after_excluded_pilots_before_qualifying_output"
+    },
+    "time": {
+      "normalized_time_definition": "tau_equals_k0_UA_t",
+      "provisional_pilot_tau_end": 30.0,
+      "source_local_tau_14_22_window_role": "pilot_prior_only_not_inherited_science_acceptance_window",
+      "exact_production_terminal_time": "open_freeze_after_excluded_pilots_before_qualifying_output",
+      "saturation_window": "open_freeze_after_excluded_pilots_before_qualifying_output"
+    }
+  },
+  "qualifying_matrix": {
+    "sampling_policy": {
+      "seed_profile": "Q023-SEEDS-FIXED-8",
+      "pair_same_seed_across_rows": true,
+      "central_estimator": "median_across_qualifying_seeds",
+      "required_secondary_summaries": [
+        "per_seed_values",
+        "arithmetic_mean",
+        "sample_standard_deviation"
+      ],
+      "interval": "bca_bootstrap_95_percent_inherited_q023",
+      "multiplicity": "holm_family_wise_error_rate_inherited_q023"
+    },
+    "core_2d3v_rows": [
+      {
+        "id": "F2D",
+        "box_scale": 16.0,
+        "resolution_scale": 1.0,
+        "ppc": 16,
+        "timestep_scale": 1.0,
+        "role": "recommended_fiducial"
+      },
+      {
+        "id": "B2D",
+        "box_scale": 32.0,
+        "resolution_scale": 1.0,
+        "ppc": 16,
+        "timestep_scale": 1.0,
+        "role": "box_size_gate"
+      },
+      {
+        "id": "R2D-L",
+        "box_scale": 16.0,
+        "resolution_scale": 0.5,
+        "ppc": 16,
+        "timestep_scale": 1.0,
+        "role": "low_resolution_trend"
+      },
+      {
+        "id": "R2D-H",
+        "box_scale": 16.0,
+        "resolution_scale": 2.0,
+        "ppc": 16,
+        "timestep_scale": 1.0,
+        "role": "high_resolution_gate"
+      },
+      {
+        "id": "P2D-L",
+        "box_scale": 16.0,
+        "resolution_scale": 1.0,
+        "ppc": 8,
+        "timestep_scale": 1.0,
+        "role": "low_ppc_trend"
+      },
+      {
+        "id": "P2D-H",
+        "box_scale": 16.0,
+        "resolution_scale": 1.0,
+        "ppc": 32,
+        "timestep_scale": 1.0,
+        "role": "high_ppc_gate"
+      },
+      {
+        "id": "T2D-L",
+        "box_scale": 16.0,
+        "resolution_scale": 1.0,
+        "ppc": 16,
+        "timestep_scale": 0.5,
+        "role": "smaller_timestep_gate"
+      },
+      {
+        "id": "T2D-H",
+        "box_scale": 16.0,
+        "resolution_scale": 1.0,
+        "ppc": 16,
+        "timestep_scale": 2.0,
+        "role": "larger_timestep_trend_fail_closed_stability_check"
+      }
+    ],
+    "core_2d3v_attempts_before_replacements": 64,
+    "dimensionality_rows": [
+      {
+        "id": "F1D",
+        "geometry": "q023_thin_2d3v_carrier",
+        "box_scale": 16.0,
+        "resolution_scale": 1.0,
+        "ppc": 16,
+        "seed_count": 8,
+        "role": "one_dimensional_control_only"
+      },
+      {
+        "id": "M2D",
+        "geometry": "2D3V",
+        "box_scale": 4.0,
+        "resolution_scale": 1.0,
+        "ppc": 2,
+        "seed_count": 8,
+        "role": "matched_control_for_3d"
+      },
+      {
+        "id": "F3D",
+        "geometry": "3D",
+        "box_scale": 4.0,
+        "resolution_scale": 1.0,
+        "nx": [
+          512,
+          256,
+          128
+        ],
+        "ppc": 2,
+        "seed_count": 8,
+        "role": "dimensionality_and_morphology_confirmation_3d_saturation_only_if_independent_box_and_convergence_gates_pass"
+      }
+    ]
+  },
+  "finite_rigidity_self_consistent_branch": {
+    "status": "viable_after_new_source_and_q022_mapping_not_part_of_recommended_first_campaign",
+    "boundary_condition_scope": "undriven_periodic_box_analogue_only_without_new_driven_cr_boundary",
+    "exact_parameter_grid": "open_no_numeric_literature_tolerances_or_reference_values_invented",
+    "required_new_source_features": [
+      "finite_rigidity_distribution",
+      "reviewed_initial_cr_momentum_flux_tensor",
+      "cold_beam_or_hot_drifting_distribution_identity",
+      "momentum_preserving_raw_diagnostic"
+    ],
+    "required_discriminants": [
+      "cr_current_reduction",
+      "cr_transverse_momentum_and_isotropization",
+      "gas_acceleration_and_heating",
+      "magnetic_power_migration_toward_cr_gyroradius",
+      "saturated_transverse_magnetic_pressure_vs_initial_cr_momentum_flux"
+    ]
+  },
+  "required_diagnostics": {
+    "primary_time_series": [
+      "sqrt_mean_Bperp2_over_B0",
+      "transverse_magnetic_pressure",
+      "component_resolved_magnetic_energy",
+      "gas_momentum_kinetic_thermal_magnetic_and_total_energy",
+      "cr_lab_frame_current_vector",
+      "cr_bulk_velocity_relative_to_gas",
+      "cr_kinetic_energy_momentum_vector_and_full_momentum_flux_tensor",
+      "gas_plus_cr_conservative_momentum_and_energy_residuals",
+      "dominant_magnetic_wavelength_and_shell_integrated_spectrum"
+    ],
+    "spectral_and_morphology": [
+      "right_left_polarization_in_inherited_linear_interval",
+      "k_peak_integral_scale_and_fundamental_shell_power",
+      "density_and_magnetic_pressure_pdfs",
+      "density_magnetic_pressure_correlation",
+      "quantified_filament_and_cavity_metrics",
+      "per_seed_morphology_at_preregistered_times"
+    ],
+    "raw_evidence": [
+      "mhd_history",
+      "mhd_w_bcc",
+      "prtcl_rho_jx_jy_jz_and_feedback_channels",
+      "sparse_prtcl_all_pvtk",
+      "restart_bracketing_nonlinear_and_saturation_windows",
+      "stdout_runtime_identity_and_terminal_proof",
+      "q017_telemetry",
+      "scheduler_accounting",
+      "artifact_inventories_and_hashes"
+    ]
+  },
+  "mechanism_discriminants": {
+    "fixed_current_like_plasma_acceleration": [
+      "lab_frame_cr_parallel_current_invariant_within_preregistered_numerical_tolerance",
+      "cr_momentum_tensor_nearly_unchanged",
+      "gas_parallel_velocity_rises",
+      "relative_cr_gas_drift_falls",
+      "amplified_alfven_speed_approaches_relative_drift",
+      "r_g_of_B_over_lambda_d_remains_well_above_unity"
+    ],
+    "cr_deflection_or_anisotropic_pressure": [
+      "lab_frame_cr_parallel_current_decreases_materially",
+      "cr_transverse_momentum_and_pressure_grow",
+      "cr_anisotropy_decreases",
+      "r_g_of_B_over_lambda_d_approaches_unity",
+      "saturated_transverse_magnetic_pressure_is_tested_against_initial_cr_momentum_flux_after_q022_mapping"
+    ],
+    "numeric_literature_tolerances": "all_open_pending_q022_reference_extraction_equation_map_parameter_overlap_and_external_review"
+  },
+  "fail_closed_acceptance": [
+    "exact_candidate_executable_deck_analyzer_policy_seed_inventory_and_observed_time_bindings",
+    "q023_linear_growth_signed_phase_and_polarization_predecessor_closed",
+    "initial_q023_normalization_and_dimensionless_parameters_exact",
+    "no_nonfinite_corrupt_undeclared_safety_or_terminal_time_failure",
+    "gas_plus_cr_momentum_and_energy_conservation_passes_predeclared_numerical_tolerances",
+    "saturation_only_in_fixed_preregistered_window",
+    "no_accepted_saturation_if_dominant_wavelength_reaches_fundamental_box_shell",
+    "box_doubling_high_resolution_high_ppc_and_small_timestep_gates_pass",
+    "finite_completed_outliers_retained",
+    "fixed_eight_seed_statistics_and_multiplicity_reported",
+    "independent_primary_table_recompute_passes",
+    "fixed_current_label_only_if_current_invariance_gate_passes",
+    "cr_deflection_or_pressure_label_only_if_separate_finite_rigidity_and_q022_gates_pass",
+    "3d_saturation_label_only_if_f3d_independently_passes_box_and_convergence_gates"
+  ],
+  "resource_plan": {
+    "project_maximum_node_hours": 10000.0,
+    "validated_consumed_node_hours_at_design_time": 1.3019444444444446,
+    "validated_reserved_node_hours_at_design_time": 0.0,
+    "protected_q019_hard_ceiling_node_hours": 1500.0,
+    "classification": "planning_ceiling_not_scientific_tolerance",
+    "stages": [
+      {
+        "stage": 0,
+        "work": "source_local_generator_analyzer_tests_and_q023_predecessor_closure",
+        "node_hour_ceiling": 0.0,
+        "production_allocation": false
+      },
+      {
+        "stage": 1,
+        "work": "excluded_window_resource_and_strong_scaling_pilots",
+        "node_hour_ceiling": 250.0
+      },
+      {
+        "stage": 2,
+        "work": "64_run_paired_2d3v_qualifying_matrix",
+        "node_hour_ceiling": 400.0
+      },
+      {
+        "stage": 3,
+        "work": "1d_matched_2d_and_3d_dimensionality_matrix",
+        "node_hour_ceiling": 600.0
+      },
+      {
+        "stage": 4,
+        "work": "restart_registered_replacements_independent_recompute_and_failure_reserve",
+        "node_hour_ceiling": 250.0
+      }
+    ],
+    "authorization_equation": "C_consumed + C_reserved + C_Q019_remaining + C_Q011_authorized + R_other_required <= 10000",
+    "overrun_rule": "stop_and_create_reviewed_versioned_redesign_before_any_qualifying_output_no_silent_seed_or_sensitivity_reduction"
+  },
+  "open_mappings_blocking_execution": [
+    "exact_q019_seeded_perturbation_spectrum_and_energy",
+    "exact_production_terminal_time_saturation_window_output_cadence_and_numerical_thresholds",
+    "exact_athenak_macro_mass_rho_cr_energy_current_and_momentum_flux_map_to_each_reference_while_q019_requires_ppc_times_deposit_qscale_2e9",
+    "exact_code_unit_magnetic_pressure_and_beta_map_for_each_reference",
+    "exact_finite_rigidity_distribution_k0_r_g0_cr_momentum_flux_and_beta_grid",
+    "all_literature_derived_numeric_tolerances_and_extracted_reference_values",
+    "clean_candidate_executable_deck_analyzer_policy_orion_resource_and_retention_bindings"
+  ],
+  "next_implementation": [
+    "create_new_q019_problem_generator_reusing_q023_basis_and_eigenmode_math_and_preserving_the_tracked_nonlinear_foundation_contract_without_mutating_historical_q023_files",
+    "extend_the_source_local_nonlinear_analyzer_into_a_q019_qualifying_analyzer_and_independent_recompute_contract",
+    "implement_exact_deck_validator_for_baseline_and_matrix",
+    "run_only_excluded_pilots_to_freeze_windows_thresholds_outputs_and_resource_model",
+    "materialize_versioned_qualifying_preregistration_before_qualifying_output"
+  ]
+}
