@@ -1,0 +1,165 @@
+{
+  "record_type": "q011_section54_production_campaign_contract_successor_v2_readiness",
+  "schema_version": 2,
+  "date": "2026-06-06",
+  "gate": "Q-011",
+  "claim_id": "CLAIM-PAPER-SHOCK-001",
+  "status": "source_local_contract_complete_execution_and_science_blocked",
+  "qualification_effect": "contract_repair_only_no_launch_no_policy_no_qualifying_output_inspection_no_science_no_claim_closure",
+  "scope": "Additive production-campaign contract successor that binds the nine-output Section 5.4 production-science deck through planner, exact-deck resource pilots, registered-launch review, execution handoff, admission, and analyzer stages. It expands the runtime-critical PIC, source-term, EOS, MHD, AMR, load-balancing, problem-generator, output, and analysis source closure; supersedes the future-campaign shock-front sign rule with the strongest negative density gradient; and freezes fail-closed DSA, Bell, scaling, and I/O gates with explicit threshold provenance. It modifies no historical artifact and grants no authority.",
+  "source_bindings": {
+    "central_contract": {
+      "path": "tst/publication/q011_section54_production_campaign_contract_successor_v2.py",
+      "sha256": "3ef95f7056928f71424ffb1048304bed55faddc594808ca4456ddcd549c57a0b"
+    },
+    "planner": {
+      "path": "tst/publication/q011_section54_production_campaign_planner_successor_v2.py",
+      "sha256": "bfcbda3a161e1e0cc6800bc432f46146fa74395304888cf6aadf1517f92470b9"
+    },
+    "resource_pilot_materializer": {
+      "path": "tst/publication/q011_resource_scaling_preproduction_pilot_materializer_successor_v2.py",
+      "sha256": "9e6712d0e61d474d44e80e26e4c64f931622f6431f76eaebf0da4fc976573432"
+    },
+    "registered_launch_materializer": {
+      "path": "tst/publication/q011_section54_registered_launch_materializer_successor_v2.py",
+      "sha256": "28545b67c43d7ea610fea9709e674558425e51e5c1bf9696e11f2e05fb7af856"
+    },
+    "campaign_execution": {
+      "path": "tst/publication/q011_section54_qualifying_campaign_execution_successor_v2.py",
+      "sha256": "aac318a422757c234d6a1cd98ac6cb869c461919db1d0e0b6e40b2736181f612"
+    },
+    "admission": {
+      "path": "tst/publication/q011_section54_production_science_admission_orchestration_successor_v2.py",
+      "sha256": "2e255b5fe335d109ea4673fffbc7cb160b6e9545321cd9e69dfa3d9a9713d50d"
+    },
+    "analyzer": {
+      "path": "tst/publication/q011_section54_production_science_analyzer_successor_v2.py",
+      "sha256": "128855413fd245c1a48a0b51d5182b7ac39031cc4b432fa3fa4b34edaa0ef1be"
+    },
+    "focused_adversarial_tests": {
+      "path": "tst/publication/test_q011_section54_production_campaign_contract_successor_v2.py",
+      "sha256": "230a89bdc9b367010307ddadd85ae4e063650f60ae3f2cb8025231761fb8cb4c"
+    },
+    "negative_gradient_preregistration": {
+      "path": "tst/publication/readiness/q011_section54_qualifying_campaign_preregistration_successor_v4_2026-06-06.json",
+      "sha256": "ebe0af57d0659d51d663145e53507081cda0e889bc335e0564656db6ee41b7bd"
+    },
+    "production_deck": {
+      "path": "inputs/publication/pic_parallel_shock_section54_production_science_successor_v1_vl2_tsc.athinput",
+      "sha256": "0e8589618fb8ffdd6da5d8c4aadba8308ac8ce74ac6d0d512c5f216ef7401d79"
+    }
+  },
+  "deterministic_contract_bindings": {
+    "pipeline_contract_sha256": "06ed6e6bb6553355057579eb9abaafb8313c1922fde6830d1b36a0e3983968b5",
+    "runtime_source_closure_sha256": "59096f5cbe6c59622d01ad9bf87c13d4d74720c54a4ffb860447ca70d7464abc",
+    "source_local_gate_records_sha256": "124d68b0a3f2bf8157c8591f427fb85842a414fcbe500985b55bfc3430152d4b"
+  },
+  "end_to_end_contract": {
+    "stage_order": [
+      "planner",
+      "resource_pilot_materializer",
+      "registered_launch_materializer",
+      "campaign_execution",
+      "admission",
+      "analyzer"
+    ],
+    "predecessor_rule": "Every stage consumes, validates, and hashes its predecessor record before emitting its own source-local fail-closed record.",
+    "production_deck_rule": "Every stage binds the exact nine-output successor deck and launch path; the six-output historical deck is rejected.",
+    "core_campaign_matrix": "three paired qualifying seeds across coarse-uniform, three-level AMR, and fine-uniform variants for nine attempts",
+    "expansion_rule": "complete paired triads only after exact-deck scaling and I/O pilots pass without inspecting qualifying physical outputs"
+  },
+  "runtime_source_closure": {
+    "coverage": [
+      "particle push deposition tasks and boundaries",
+      "source-term implementation and timestep constraints",
+      "top-level EOS dispatch and ideal-MHD EOS",
+      "MHD stages driver and task scheduler",
+      "AMR refinement migration and load balancing",
+      "shock problem generator and nine-output path",
+      "campaign and analysis contracts"
+    ],
+    "admission_binding": "The v2 source-local admission record includes the complete exact runtime source closure and fails closed on any member drift."
+  },
+  "physical_preregistration": {
+    "shock_front_detector": "unique_strongest_negative_density_gradient",
+    "predecessor_positive_gradient_rule": "superseded for the future successor campaign only",
+    "historical_preregistrations_modified": false,
+    "source_local_gate_ids": [
+      "nonrelativistic_accelerated_tail_validity",
+      "emax_acceleration_history",
+      "acceleration_efficiency",
+      "compression_and_jump_conditions",
+      "bell_scale_power_current_field_correlation_and_precursor_morphology",
+      "ideal_vs_detected_shock_sensitivity",
+      "exact_successor_deck_scaling_and_io_pilots"
+    ],
+    "gate_state": "all blocked pending registered runtime evidence; no measurements inspected and no passes recorded"
+  },
+  "threshold_provenance": {
+    "allowed_source_categories": [
+      "analysis-quality",
+      "conservative applicability",
+      "engineering closure",
+      "literature comparison",
+      "physical-limit"
+    ],
+    "numeric_threshold_rule": "Every numeric science or admission criterion carries one allowed source category and an explicit rationale.",
+    "literature_boundary": "Literature-comparison values identify published observables or sampling epochs only unless a primary source explicitly supplies a numerical tolerance. AthenaK-selected release screens are explicitly labeled as such."
+  },
+  "resource_pilot_contract": {
+    "source": "exact nine-output successor deck",
+    "compute_scaling": "three full-geometry 512-cycle output-suppressed decks with explicit node ladders",
+    "io_scaling": "three reduced-transverse full-time decks retaining the exact nine-output cadence",
+    "engineering_seeds_disjoint_from_qualifying_seeds": true,
+    "maximum_consumed_node_hours": {
+      "value": 500.0,
+      "source_category": "engineering closure",
+      "rationale": "The cap is the preregistered Q011 engineering-pilot budget inside the project-wide node-hour ceiling and has no scientific literature origin."
+    },
+    "execution_authorized": false
+  },
+  "historical_immutability": {
+    "historical_decks_modified": false,
+    "historical_preregistrations_modified": false,
+    "historical_planner_materializers_modified": false,
+    "historical_launch_materializers_modified": false,
+    "historical_admission_or_analyzer_sources_modified": false,
+    "pascal_exact_conservation_worktree_modified": false,
+    "verification": "The central contract hash-verifies sixteen protected historical artifacts and tests before building the pipeline."
+  },
+  "verification": {
+    "focused_adversarial_tests": "16 tests passed",
+    "adjacent_q011_regression_tests": "106 tests passed",
+    "python_compile": "passed",
+    "git_diff_check": "passed",
+    "adversarial_coverage": [
+      "six-output or mutated deck substitution",
+      "stage lineage and deck-path tampering",
+      "runtime source-closure member removal",
+      "positive-gradient rule reintroduction",
+      "resource-pilot manifest and deck-byte tampering",
+      "registered-launch authorization injection",
+      "forged execution receipt injection",
+      "premature attempt admission",
+      "science-gate pass and output-inspection injection",
+      "non-finite JSON"
+    ],
+    "registered_runtime_execution": "not_run_not_authorized_by_this_successor"
+  },
+  "remaining_risks": [
+    "Exact combined MHD plus CR conservation is not yet integrated and qualified for dynamic AMR and load balancing.",
+    "Registered Frontier MPI HIP evidence for dynamic AMR migration, load balancing, restart, reflection, and escape remains absent.",
+    "The production deck still sets particle load-balance cost per particle to zero; the exact-deck resource pilot must select and validate a production value.",
+    "The scaling and I/O pilots are materialized but not executed, so node counts, memory margin, walltime, output cost, and the production campaign budget remain unclosed.",
+    "All DSA and Bell gate records are source-local preregistrations only. No registered production raw artifacts have been admitted or scientifically evaluated.",
+    "AthenaK-selected numerical release thresholds are not literature-derived universal tolerances."
+  ],
+  "authorization": {
+    "launch_authorized": false,
+    "scheduler_submission_authorized": false,
+    "live_policy_mutation_authorized": false,
+    "qualifying_output_inspection_authorized": false,
+    "scientific_acceptance_authorized": false,
+    "claim_closure_authorized": false
+  }
+}

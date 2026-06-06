@@ -1,0 +1,111 @@
+{
+  "record_type": "q011_section54_qualifying_campaign_preregistration_successor_v4",
+  "schema_version": 2,
+  "date": "2026-06-06",
+  "gate": "Q-011",
+  "claim_id": "CLAIM-PAPER-SHOCK-001",
+  "predecessor_record": "tst/publication/readiness/q011_section54_qualifying_campaign_preregistration_successor_v3_2026-06-06.json",
+  "qualification_effect": "source_local_policy_freeze_only_no_execution_no_output_inspection_no_science_no_claim_closure",
+  "production_deck": "inputs/publication/pic_parallel_shock_section54_production_science_successor_v1_vl2_tsc.athinput",
+  "production_deck_role": "single_nine_output_deck_bound_through_every_successor_stage",
+  "threshold_provenance_policy": {
+    "allowed_source_categories": [
+      "analysis-quality",
+      "conservative applicability",
+      "engineering closure",
+      "literature comparison",
+      "physical-limit"
+    ],
+    "numeric_threshold_rule": "Every numeric science or admission criterion must carry one allowed source category and an explicit rationale.",
+    "literature_boundary": "Literature-comparison values identify published observables or sampling epochs only unless a primary source explicitly supplies a numerical tolerance. No AthenaK-selected release threshold may be described as literature derived."
+  },
+  "selected_pressure": {
+    "case_id": "ps_p0_1p00",
+    "problem_ps_p0": 1.0
+  },
+  "campaign_matrix": {
+    "variants": [
+      "coarse_uniform_dx12",
+      "three_level_amr_root_dx12_finest_dx3",
+      "fine_uniform_dx3"
+    ],
+    "qualifying_seeds": [
+      23050101,
+      23050102,
+      23050103
+    ],
+    "attempt_count": 9,
+    "paired_seed_rule": "same seed across the complete coarse-AMR-fine triad",
+    "expansion_rule": "complete paired triads only after exact successor-deck scaling and I/O pilots pass without inspecting qualifying physical outputs"
+  },
+  "shock_front": {
+    "source_field": "rho",
+    "profile": "y_area_weighted_mean",
+    "detector": "unique_strongest_negative_density_gradient",
+    "orientation_rationale": "The reflecting wall and denser downstream state are at lower x1, so density falls across the outward-moving shock as x1 increases.",
+    "search_window_relative_to_ideal_surface_c_over_omega_pi": {
+      "values": [
+        -1200.0,
+        1200.0
+      ],
+      "source_category": "conservative applicability",
+      "rationale": "The fixed symmetric window is an AthenaK-selected applicability bound wide enough to admit shock corrugation while excluding distant structures; it is not a literature-derived tolerance."
+    },
+    "maximum_absolute_offset_from_ideal_surface_c_over_omega_pi": {
+      "value": 600.0,
+      "source_category": "conservative applicability",
+      "rationale": "The maximum offset is an AthenaK-selected fail-closed applicability screen chosen before output inspection; no cited source supplies this tolerance."
+    },
+    "ambiguous_or_nonnegative_result": "fail_closed",
+    "predecessor_positive_gradient_rule": "superseded_for_future_successor_campaign_only",
+    "historical_records_modified": false
+  },
+  "source_local_gate_ids": [
+    "nonrelativistic_accelerated_tail_validity",
+    "emax_acceleration_history",
+    "acceleration_efficiency",
+    "compression_and_jump_conditions",
+    "bell_scale_power_current_field_correlation_and_precursor_morphology",
+    "ideal_vs_detected_shock_sensitivity",
+    "exact_successor_deck_scaling_and_io_pilots"
+  ],
+  "gate_policy": {
+    "missing_nonfinite_or_ambiguous_measurement": "fail_closed",
+    "source_local_record_pass_value": false,
+    "source_local_measurements_inspected": false,
+    "post_inspection_threshold_tuning": "forbidden_requires_new_versioned_preregistration_and_new_dataset",
+    "literature_boundary": "Sun and Bai Section 5.4 supplies comparison observables but not universal numerical acceptance tolerances"
+  },
+  "resource_pilot_policy": {
+    "compute_scaling": "derive full-geometry short-step output-suppressed decks only from the exact nine-output successor deck",
+    "io_scaling": "derive reduced-transverse full-time decks retaining the exact nine-output successor cadence",
+    "engineering_seeds": [
+      24060601,
+      24060602,
+      24060603,
+      24060604
+    ],
+    "engineering_seeds_disjoint_from_qualifying_seeds": true,
+    "maximum_consumed_node_hours": {
+      "value": 500.0,
+      "source_category": "engineering closure",
+      "rationale": "The cap is the preregistered Q011 engineering-pilot budget inside the project-wide 10000 node-hour ceiling and has no scientific literature origin."
+    },
+    "physical_output_scientific_inspection": "forbidden"
+  },
+  "known_blockers": [
+    "exact combined MHD plus CR conservation is not integrated for dynamic AMR and load balancing",
+    "registered MPI HIP dynamic AMR migration restart and load-balance evidence is absent",
+    "particle load-balance cost per particle remains zero pending resource-pilot selection",
+    "exact nine-output successor-deck scaling and I/O pilots are not executed",
+    "registered production attempts and admitted raw artifacts are absent"
+  ],
+  "authorization": {
+    "launch_authorized": false,
+    "scheduler_submission_authorized": false,
+    "live_policy_mutation_authorized": false,
+    "qualifying_output_inspection_authorized": false,
+    "scientific_acceptance_authorized": false,
+    "claim_closure_authorized": false
+  }
+}
