@@ -566,8 +566,43 @@ def test_snapshot_worker_plan_bounds_count_cpu_and_memory(report, tmp_path, monk
     memory_limited = report.snapshot_worker_plan(8, snapshots, exact, 50.0)
 
     assert cpu_limited["workers"] == 3
-    assert memory_limited["workers"] == 1
+    assert memory_limited["workers"] == 2
     assert memory_limited["estimated_peak_bytes_per_process"] == 24 * 1024 ** 3
+
+
+def test_snapshot_worker_plan_rejects_budget_below_one_worker(
+    report, tmp_path, monkeypatch
+):
+    snapshot = tmp_path / "snapshot.bin"
+    with snapshot.open("wb") as stream:
+        stream.truncate(1024 ** 3)
+    monkeypatch.setattr(report.os, "sched_getaffinity", lambda _pid: set(range(8)))
+
+    with pytest.raises(report.ReportError, match="cannot fit one estimated"):
+        report.snapshot_worker_plan(8, [snapshot], {str(snapshot): [snapshot]}, 23.0)
+
+
+def test_pinned_analyzer_loads_exact_bytes_and_rejects_source_change(report, tmp_path):
+    analyzer_path = tmp_path / "analyzer.py"
+    analyzer_path.write_text("VALUE = 'pinned'\n", encoding="utf-8")
+    pin = report.pin_pure_analyzer(analyzer_path)
+
+    analyzer_path.write_text("VALUE = 'mutated'\n", encoding="utf-8")
+    analyzer = report.load_pure_analyzer(pin)
+
+    assert analyzer.VALUE == "pinned"
+    assert getattr(analyzer, report.ANALYZER_DIGEST_ATTRIBUTE) == pin["sha256"]
+    with pytest.raises(report.ReportError, match="changed after it was pinned"):
+        report.verify_pure_analyzer_pin(pin)
+
+
+def test_snapshot_worker_rejects_analyzer_payload_digest_mismatch(report):
+    with pytest.raises(report.ReportError, match="payload digest mismatch"):
+        report.analyzer_pin_from_task({
+            "analyzer_path": "/unused/analyzer.py",
+            "analyzer_source": b"VALUE = 1\n",
+            "analyzer_sha256": "0" * 64,
+        })
 
 
 class FakeSnapshotAnalyzer:
@@ -576,6 +611,7 @@ class FakeSnapshotAnalyzer:
     def __init__(self, times):
         self.times = times
         self.serial_calls = 0
+        self.serial_arguments = None
 
     def snapshot_sibling_paths(self, path, _expected_ranks):
         return [path]
@@ -603,8 +639,30 @@ class FakeSnapshotAnalyzer:
     def average_snapshot_records(self, records):
         return {"snapshot_count": len(records), "ordered_paths": list(records)}
 
-    def analyze_snapshot_paths(self, *args):
+    def analyze_snapshot_paths(
+        self,
+        paths,
+        bins,
+        alignment_shells,
+        time_start,
+        time_end,
+        model_choices,
+        eddy_samples,
+        eddy_bins,
+        eddy_seed,
+    ):
         self.serial_calls += 1
+        self.serial_arguments = (
+            paths,
+            bins,
+            alignment_shells,
+            time_start,
+            time_end,
+            model_choices,
+            eddy_samples,
+            eddy_bins,
+            eddy_seed,
+        )
         return {"serial": {}}, {"snapshot_count": 1, "serial": True}
 
 
@@ -628,6 +686,7 @@ def test_parallel_snapshot_orchestration_preserves_order_ranges_and_provenance(
         ]
 
     def range_runner(tasks, workers):
+        captured["range_tasks"] = tasks
         captured["range_workers"] = workers
         return [
             (
@@ -661,6 +720,13 @@ def test_parallel_snapshot_orchestration_preserves_order_ranges_and_provenance(
 
     assert captured["workers"] == 2
     assert captured["range_workers"] == 2
+    worker_pins = {
+        (task["analyzer_sha256"], task["analyzer_source"])
+        for task in captured["tasks"] + captured["range_tasks"]
+    }
+    assert len(worker_pins) == 1
+    digest, source = worker_pins.pop()
+    assert digest == hashlib.sha256(source).hexdigest()
     assert captured["tasks"][0]["ranges"] == {"value": (8.0, 10.0)}
     assert captured["tasks"][0]["joint_ranges"] == {
         "joint": ((8.0, 10.0), (16.0, 20.0))
@@ -700,6 +766,59 @@ def test_single_snapshot_worker_uses_exact_legacy_analyzer_path(
     assert records == {"serial": {}}
     assert ensemble == {"snapshot_count": 1, "serial": True}
     assert analyzer.serial_calls == 1
+    assert len(analyzer.serial_arguments) == 9
+
+
+def test_parallel_snapshot_orchestration_rejects_analyzer_source_change(
+    report, tmp_path, monkeypatch
+):
+    snapshots = [tmp_path / "first.bin", tmp_path / "second.bin"]
+    for snapshot in snapshots:
+        snapshot.write_bytes(snapshot.name.encode())
+    times = {str(snapshots[0]): 8.0, str(snapshots[1]): 9.0}
+    analyzer = FakeSnapshotAnalyzer(times)
+    analyzer_path = tmp_path / "analyzer.py"
+    analyzer_path.write_text("VALUE = 'pinned'\n", encoding="utf-8")
+    analyzer_pin = report.pin_pure_analyzer(analyzer_path)
+    monkeypatch.setattr(report.os, "sched_getaffinity", lambda _pid: set(range(8)))
+
+    def range_runner(tasks, _workers):
+        records = [
+            (
+                task["path"],
+                report.snapshot_range_record(
+                    analyzer,
+                    Path(task["path"]),
+                    [Path(value) for value in task["exact_rank_set"]],
+                ),
+            )
+            for task in tasks
+        ]
+        analyzer_path.write_text("VALUE = 'mutated'\n", encoding="utf-8")
+        return records
+
+    with pytest.raises(report.ReportError, match="changed after it was pinned"):
+        report.analyze_snapshot_paths_bounded(
+            analyzer,
+            snapshots,
+            64,
+            [2],
+            8.0,
+            10.0,
+            {},
+            0,
+            24,
+            731,
+            {str(path): 1 for path in snapshots},
+            2,
+            384.0,
+            worker_runner=lambda tasks, _workers: [
+                (task["path"], {"time": times[task["path"]]})
+                for task in tasks
+            ],
+            range_runner=range_runner,
+            analyzer_pin=analyzer_pin,
+        )
 
 
 def test_parallel_snapshot_orchestration_rejects_out_of_order_results(

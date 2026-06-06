@@ -34,6 +34,8 @@ from typing import Iterable
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+ANALYZER_PATH = REPO_ROOT / "scripts/analyze_cgl_lf_paper.py"
+ANALYZER_DIGEST_ATTRIBUTE = "__cgl_lf_fast_report_analyzer_sha256__"
 DEFAULT_ROOT = Path("/lustre/orion/ast207/proj-shared/dfielding/CGL")
 DEFAULT_FROZEN_SOURCE = Path(
     "/autofs/nccs-svm1_home2/dfielding/athenak-cgl-e03-9e075422"
@@ -1724,13 +1726,72 @@ def command_assemble(args: argparse.Namespace) -> int:
     return 0
 
 
-def load_pure_analyzer() -> object:
-    """Load paper-analysis kernels while replacing its validation import with a stub."""
+def pin_pure_analyzer(path: Path = ANALYZER_PATH) -> dict[str, object]:
+    """Read and bind one stable analyzer payload for an entire report operation."""
 
-    path = REPO_ROOT / "scripts/analyze_cgl_lf_paper.py"
-    module_name = "_cgl_lf_fast_report_analyzer"
+    source, binding = read_stable_bytes(path)
+    if not binding["stable_read"]:
+        raise ReportError(f"analyzer changed while being pinned: {path}")
+    return {
+        "path": str(path.absolute()),
+        "source": source,
+        "sha256": binding["sha256"],
+        "binding": {
+            key: binding[key] for key in ("path", "size_bytes", "mtime_ns", "sha256")
+        },
+    }
+
+
+def verify_pure_analyzer_pin(pin: dict[str, object]) -> dict[str, object]:
+    """Fail closed unless the analyzer source still matches its pinned bytes."""
+
+    path = Path(str(pin.get("path", "")))
+    source = pin.get("source")
+    expected = pin.get("sha256")
+    if not isinstance(source, bytes) or not isinstance(expected, str):
+        raise ReportError("analyzer pin is malformed")
+    if sha256_bytes(source) != expected:
+        raise ReportError("analyzer pin payload does not match its declared digest")
+    current, binding = read_stable_bytes(path)
+    if not binding["stable_read"] or current != source:
+        raise ReportError(f"analyzer changed after it was pinned: {path}")
+    return binding
+
+
+def analyzer_pin_from_task(task: dict[str, object]) -> dict[str, object]:
+    """Recover and validate the exact analyzer payload supplied to one worker."""
+
+    pin = {
+        "path": task.get("analyzer_path"),
+        "source": task.get("analyzer_source"),
+        "sha256": task.get("analyzer_sha256"),
+    }
+    source = pin["source"]
+    expected = pin["sha256"]
+    if not isinstance(source, bytes) or not isinstance(expected, str):
+        raise ReportError("snapshot worker lacks a valid analyzer pin")
+    if sha256_bytes(source) != expected:
+        raise ReportError("snapshot worker analyzer payload digest mismatch")
+    return pin
+
+
+def load_pure_analyzer(pin: dict[str, object] | None = None) -> object:
+    """Load pinned paper-analysis kernels while stubbing their validation import."""
+
+    pin = pin_pure_analyzer() if pin is None else pin
+    path = Path(str(pin.get("path", "")))
+    source = pin.get("source")
+    digest = pin.get("sha256")
+    if not isinstance(source, bytes) or not isinstance(digest, str):
+        raise ReportError("analyzer pin is malformed")
+    if sha256_bytes(source) != digest:
+        raise ReportError("analyzer pin payload does not match its declared digest")
+    module_name = f"_cgl_lf_fast_report_analyzer_{digest}"
     if module_name in sys.modules:
-        return sys.modules[module_name]
+        module = sys.modules[module_name]
+        if getattr(module, ANALYZER_DIGEST_ATTRIBUTE, None) != digest:
+            raise ReportError("cached analyzer module does not match its pinned digest")
+        return module
     dependency_name = "cgl_lf_stage_i_validate_segment"
     previous = sys.modules.get(dependency_name)
     stub = types.ModuleType(dependency_name)
@@ -1742,8 +1803,12 @@ def load_pure_analyzer() -> object:
             raise ReportError(f"cannot load analyzer: {path}")
         module = importlib.util.module_from_spec(spec)
         sys.modules[module_name] = module
-        spec.loader.exec_module(module)
+        exec(compile(source, str(path), "exec"), module.__dict__)
+        setattr(module, ANALYZER_DIGEST_ATTRIBUTE, digest)
         return module
+    except Exception:
+        sys.modules.pop(module_name, None)
+        raise
     finally:
         if previous is None:
             sys.modules.pop(dependency_name, None)
@@ -1788,11 +1853,13 @@ def snapshot_worker_plan(
         )),
     )
     memory_budget_bytes = int(memory_budget_gib * GIBIBYTE)
-    # The coordinator performs the common-range pass before workers start. Reserve
-    # one snapshot-sized process so retained allocator pages cannot exhaust a node.
-    memory_limited_workers = max(
-        1, memory_budget_bytes // estimated_peak_bytes - 1
-    )
+    memory_limited_workers = memory_budget_bytes // estimated_peak_bytes
+    if memory_limited_workers < 1:
+        raise ReportError(
+            "--snapshot-memory-budget-gib cannot fit one estimated snapshot worker: "
+            f"budget_bytes={memory_budget_bytes}, "
+            f"estimated_peak_bytes_per_process={estimated_peak_bytes}"
+        )
     workers = min(
         requested_workers,
         len(selected),
@@ -1801,7 +1868,7 @@ def snapshot_worker_plan(
     )
     return {
         "requested_workers": requested_workers,
-        "workers": max(1, workers),
+        "workers": workers,
         "snapshot_count": len(selected),
         "available_cpus": available_cpus,
         "memory_budget_bytes": memory_budget_bytes,
@@ -1968,7 +2035,7 @@ def configure_snapshot_worker() -> None:
 def analyze_snapshot_worker(task: dict[str, object]) -> tuple[str, dict[str, object]]:
     """Analyze one authenticated snapshot in an isolated bounded-memory process."""
 
-    analyzer = load_pure_analyzer()
+    analyzer = load_pure_analyzer(analyzer_pin_from_task(task))
     path = Path(str(task["path"]))
     exact_rank_set = [Path(str(value)) for value in task["exact_rank_set"]]
     fields, lengths, time = read_selected_snapshot(analyzer, path, exact_rank_set)
@@ -1993,7 +2060,7 @@ def analyze_snapshot_worker(task: dict[str, object]) -> tuple[str, dict[str, obj
 def snapshot_range_worker(task: dict[str, object]) -> tuple[str, dict[str, object]]:
     """Scan one authenticated snapshot for common-range extrema."""
 
-    analyzer = load_pure_analyzer()
+    analyzer = load_pure_analyzer(analyzer_pin_from_task(task))
     path = Path(str(task["path"]))
     exact_rank_set = [Path(str(value)) for value in task["exact_rank_set"]]
     return str(path), snapshot_range_record(analyzer, path, exact_rank_set)
@@ -2045,9 +2112,15 @@ def analyze_snapshot_paths_bounded(
     memory_budget_gib: float,
     worker_runner=run_snapshot_workers,
     range_runner=run_snapshot_range_workers,
+    analyzer_pin: dict[str, object] | None = None,
 ) -> tuple[dict[str, dict[str, object]], dict[str, object]]:
     """Analyze independent snapshots concurrently without changing reductions."""
 
+    analyzer_pin = pin_pure_analyzer() if analyzer_pin is None else analyzer_pin
+    verify_pure_analyzer_pin(analyzer_pin)
+    loaded_digest = getattr(analyzer, ANALYZER_DIGEST_ATTRIBUTE, None)
+    if isinstance(analyzer, types.ModuleType) and loaded_digest != analyzer_pin["sha256"]:
+        raise ReportError("loaded analyzer does not match the pinned analyzer payload")
     selected, exact_rank_sets = selected_snapshot_inventory(
         analyzer, paths, time_start, time_end, expected_ranks_by_path
     )
@@ -2064,7 +2137,7 @@ def analyze_snapshot_paths_bounded(
         f"memory_budget_gib={memory_budget_gib:g}"
     )
     if workers == 1:
-        return analyzer.analyze_snapshot_paths(
+        result = analyzer.analyze_snapshot_paths(
             paths,
             bins,
             alignment_shells,
@@ -2074,8 +2147,14 @@ def analyze_snapshot_paths_bounded(
             eddy_samples,
             eddy_bins,
             eddy_seed,
-            expected_ranks_by_path,
         )
+        verify_pure_analyzer_pin(analyzer_pin)
+        return result
+    worker_analyzer_pin = {
+        "analyzer_path": analyzer_pin["path"],
+        "analyzer_source": analyzer_pin["source"],
+        "analyzer_sha256": analyzer_pin["sha256"],
+    }
     snapshot_provenance = {
         str(path): analyzer.snapshot_digest_provenance(
             path,
@@ -2086,6 +2165,7 @@ def analyze_snapshot_paths_bounded(
     }
     range_tasks = [
         {
+            **worker_analyzer_pin,
             "path": str(path),
             "exact_rank_set": [str(value) for value in exact_rank_sets[str(path)]],
         }
@@ -2099,6 +2179,7 @@ def analyze_snapshot_paths_bounded(
     ranges, joint_ranges = merge_snapshot_range_records(range_completed)
     tasks = [
         {
+            **worker_analyzer_pin,
             "path": str(path),
             "exact_rank_set": [str(value) for value in exact_rank_sets[str(path)]],
             "bins": bins,
@@ -2126,6 +2207,7 @@ def analyze_snapshot_paths_bounded(
             exact_rank_sets[str(path)],
         ) != snapshot_provenance[str(path)]:
             raise ValueError(f"snapshot changed while being analyzed: {path}")
+    verify_pure_analyzer_pin(analyzer_pin)
     ensemble = analyzer.average_snapshot_records(records)
     ensemble["time_start"] = time_start
     ensemble["time_end"] = time_end
@@ -2393,7 +2475,8 @@ def command_analyze_case(args: argparse.Namespace) -> int:
     health = compute_health(lineage, mhd, user, model)
     warnings: list[str] = []
     errors: list[str] = []
-    analyzer = load_pure_analyzer()
+    analyzer_pin = pin_pure_analyzer()
+    analyzer = load_pure_analyzer(analyzer_pin)
     try:
         windows = window_summaries(analyzer, user_path, mhd_path, model)
     except Exception as error:
@@ -2438,6 +2521,7 @@ def command_analyze_case(args: argparse.Namespace) -> int:
                 expected,
                 args.snapshot_workers,
                 args.snapshot_memory_budget_gib,
+                analyzer_pin=analyzer_pin,
             )
             snapshot_status = "complete"
         except Exception as error:
@@ -2476,6 +2560,7 @@ def command_analyze_case(args: argparse.Namespace) -> int:
             health["numerical_warnings"].append(
                 f"forcing-energy closure relative residual is {residual:.6g}"
             )
+    verify_pure_analyzer_pin(analyzer_pin)
     health["result"] = (
         "structural_error" if health["structural_errors"]
         else "warnings" if (
@@ -2510,7 +2595,7 @@ def command_analyze_case(args: argparse.Namespace) -> int:
             "snapshot_index": artifact_binding(case_dir / "snapshots.json"),
             "merged_mhd_history": artifact_binding(mhd_path),
             "merged_user_history": artifact_binding(user_path),
-            "analyzer": artifact_binding(REPO_ROOT / "scripts/analyze_cgl_lf_paper.py"),
+            "analyzer": analyzer_pin["binding"],
             "adapter": artifact_binding(Path(__file__)),
         },
         "compat": {
