@@ -136,6 +136,7 @@ F118_PUBLICATION_REQUIREMENTS = {
 F118_PUBLICATION_METHOD = (
     "recoverable-forward-transaction-with-publication-audit-commit-marker-under-stage-i-lock"
 )
+F118_CORRUPT_C7_NAME = "athenak-feature-cgl-through-c7e4fa30e.bundle"
 INDEPENDENT_REVIEW_NON_CRYPTOGRAPHIC_LIMITATION = (
     "Reviewer roles, agent identifiers, and process separation are retained "
     "declarations; exact artifact digests authenticate reviewed bytes but do not "
@@ -2001,6 +2002,34 @@ def parse_historical_f116_source_authority(
     ):
         raise ValueError("historical F116 current source bundle identity differs")
     require_sha256(current["sha256"], "historical F116 current source bundle SHA-256")
+    catalogs = require_exact_keys(
+        retained_evidence["source_archive_catalog"],
+        {"before", "after"},
+        "historical F116 source-archive catalog",
+    )
+    catalog_after = require_exact_keys(
+        catalogs["after"],
+        {
+            "readme_sha256",
+            "sha256sums_sha256",
+            "bridge_listed_exactly_once",
+            "final_bundle_listed_exactly_once",
+            "corrupt_c7_listed",
+            "historical_f115_preserved",
+            "sole_current_source_bundle",
+        },
+        "historical F116 source-archive catalog after",
+    )
+    for key in ("readme_sha256", "sha256sums_sha256"):
+        require_sha256(catalog_after[key], f"historical F116 catalog after {key}")
+    if (
+        catalog_after["bridge_listed_exactly_once"] is not True
+        or catalog_after["final_bundle_listed_exactly_once"] is not True
+        or catalog_after["corrupt_c7_listed"] is not False
+        or catalog_after["historical_f115_preserved"] is not True
+        or catalog_after["sole_current_source_bundle"] != current["path"]
+    ):
+        raise ValueError("historical F116 source-archive catalog after semantics differ")
 
     audit, audit_sha256 = loaded["publication_audit"]
     if (
@@ -2041,6 +2070,7 @@ def parse_historical_f116_source_authority(
         "plasma_review_sha256": loaded["plasma_review"][1],
         "historical_f115": historical_f115,
         "current_source_bundle": dict(current),
+        "catalog_after": dict(catalog_after),
     }
 
 
@@ -2193,13 +2223,22 @@ def parse_current_source_authority(
         or current_head not in source_bundle_revisions
     ):
         raise ValueError("F118 current source authority bundle binding differs")
-    authenticate_f118_committed_tools(
+    committed_tools = authenticate_f118_committed_tools(
         implementation["committed_tools"], repository, current_head
     )
+    expected_publisher = next(
+        item
+        for item in committed_tools
+        if item["path"] == "scripts/frontier/cgl_lf_stage_i_source_authority.py"
+    )
+    if implementation["publisher"] != expected_publisher:
+        raise ValueError("F118 publisher binding differs from committed tools")
     require_nonempty_string(current_bundle["subject"], "F118 current source bundle subject")
-    require_exact_keys(
+    advertised_tip = require_exact_keys(
         current_bundle["advertised_tip"], {"revision", "name"}, "F118 advertised tip"
     )
+    if advertised_tip != {"revision": current_head, "name": "HEAD"}:
+        raise ValueError("F118 current source bundle advertised tip is not exact HEAD")
     bridge = require_exact_keys(
         implementation["intermediate_36140_bundle"],
         {
@@ -2241,6 +2280,68 @@ def parse_current_source_authority(
     expected_predecessor["role"] = "retained-non-current-predecessor"
     if predecessor_bundle != expected_predecessor:
         raise ValueError("F118 predecessor current bundle differs from immutable F116")
+    evidence_catalog = require_exact_keys(
+        retained_evidence["source_archive_catalog"],
+        {"before", "after"},
+        "F118 evidence source-archive catalog",
+    )
+    before_catalog = require_exact_keys(
+        evidence_catalog["before"],
+        {
+            "readme_sha256",
+            "sha256sums_sha256",
+            "bridge_listed_exactly_once",
+            "predecessor_current_source_bundle_listed_exactly_once",
+            "final_bundle_listed",
+            "corrupt_c7_listed",
+            "historical_f115_preserved",
+        },
+        "F118 evidence source-archive catalog before",
+    )
+    after_catalog = require_exact_keys(
+        evidence_catalog["after"],
+        {
+            "readme_sha256",
+            "sha256sums_sha256",
+            "bridge_listed_exactly_once",
+            "predecessor_current_source_bundle_listed_exactly_once",
+            "final_bundle_listed_exactly_once",
+            "corrupt_c7_listed",
+            "historical_f115_preserved",
+            "historical_f116_preserved",
+            "all_prior_checksum_entries_preserved",
+            "sole_current_source_bundle",
+        },
+        "F118 evidence source-archive catalog after",
+    )
+    for retained_catalog, label in (
+        (before_catalog, "before"),
+        (after_catalog, "after"),
+    ):
+        for key in ("readme_sha256", "sha256sums_sha256"):
+            require_sha256(retained_catalog[key], f"F118 evidence catalog {label} {key}")
+    historical_catalog = historical_f116["catalog_after"]
+    assert isinstance(historical_catalog, dict)
+    predecessor_listed_key = "predecessor_current_source_bundle_listed_exactly_once"
+    if (
+        before_catalog["readme_sha256"] != historical_catalog["readme_sha256"]
+        or before_catalog["sha256sums_sha256"] != historical_catalog["sha256sums_sha256"]
+        or before_catalog["bridge_listed_exactly_once"] is not True
+        or before_catalog[predecessor_listed_key] is not True
+        or before_catalog["final_bundle_listed"] is not False
+        or before_catalog["corrupt_c7_listed"] is not False
+        or before_catalog["historical_f115_preserved"] is not True
+        or after_catalog["bridge_listed_exactly_once"] is not True
+        or after_catalog[predecessor_listed_key] is not True
+        or after_catalog["final_bundle_listed_exactly_once"] is not True
+        or after_catalog["corrupt_c7_listed"] is not False
+        or after_catalog["historical_f115_preserved"] is not True
+        or after_catalog["historical_f116_preserved"] is not True
+        or after_catalog["all_prior_checksum_entries_preserved"] is not True
+        or after_catalog["sole_current_source_bundle"]
+        != source_bundle_path.relative_to(root).as_posix()
+    ):
+        raise ValueError("F118 evidence source-archive catalog semantics differ")
 
     verified = {
         "authorization_broadening": False,
@@ -2413,15 +2514,71 @@ def parse_current_source_authority(
         },
         "F118 publication source-archive catalog",
     )
+    catalog_payloads: dict[str, bytes] = {}
     for key, relative in (
         ("readme", Path("source-archives/README.md")),
         ("sha256sums", Path("source-archives/SHA256SUMS")),
     ):
         binding = declared_file_binding(catalog[key], f"F118 catalog {key}")
         path = root / relative
-        if binding["path"] != str(path) or binding["mode"] != "0644" or binding["links"] != 1:
+        if (
+            binding["path"] != str(path)
+            or binding["mode"] != "0644"
+            or binding["links"] != 1
+            or binding["sha256"] != after_catalog[f"{key}_sha256"]
+        ):
             raise ValueError(f"F118 catalog {key} binding differs")
-        tracker.authenticate(path, binding["sha256"], f"F118 catalog {key}", expected_mode=0o644)
+        catalog_payloads[key] = tracker.read(
+            path, binding["sha256"], f"F118 catalog {key}", expected_mode=0o644
+        )
+    try:
+        readme_text = catalog_payloads["readme"].decode("utf-8")
+        checksum_lines = catalog_payloads["sha256sums"].decode("utf-8").splitlines()
+    except UnicodeDecodeError as error:
+        raise ValueError("F118 source-archive catalog is not UTF-8") from error
+    checksum_entries: list[tuple[str, str]] = []
+    checksum_names: set[str] = set()
+    for line in checksum_lines:
+        match = re.fullmatch(r"([0-9a-f]{64})  ([A-Za-z0-9_.-]+)", line)
+        if match is None or match.group(2) in checksum_names:
+            raise ValueError("F118 source-archive checksum ledger differs")
+        checksum_entries.append((match.group(1), match.group(2)))
+        checksum_names.add(match.group(2))
+    if not checksum_entries:
+        raise ValueError("F118 source-archive checksum ledger is empty")
+    for digest, name in checksum_entries:
+        archive_path = root / "source-archives" / name
+        with absolute_descriptor(
+            archive_path,
+            f"F118 source-archive checksum-ledger entry {name}",
+            flags=os.O_RDONLY,
+        ) as descriptor:
+            require_regular_profile(
+                os.fstat(descriptor),
+                f"F118 source-archive checksum-ledger entry {name}",
+                expected_mode=0o644,
+            )
+        tracker.authenticate(
+            archive_path,
+            digest,
+            f"F118 source-archive checksum-ledger entry {name}",
+            expected_mode=0o644,
+        )
+    required_catalog_names = (
+        Path(str(bridge["path"])).name,
+        Path(str(predecessor_bundle["path"])).name,
+        source_bundle_path.name,
+    )
+    if (
+        any(
+            sum(name == retained for _, retained in checksum_entries) != 1
+            for name in required_catalog_names
+        )
+        or F118_CORRUPT_C7_NAME in checksum_names
+        or any(name not in readme_text for name in required_catalog_names)
+        or F118_CORRUPT_C7_NAME in readme_text
+    ):
+        raise ValueError("F118 live source-archive catalog semantics differ")
     published_current = require_exact_keys(
         catalog["current_source_bundle"],
         {"path", "sha256", "mode", "links", "head", "selected_as_current"},
@@ -8665,7 +8822,7 @@ def build_payload(
     require_directory(source_archives, "source archive directory")
     if bundle_path.parent != source_archives:
         raise ValueError("source bundle must be a direct child of source-archives")
-    tracker.authenticate(bundle_path, bundle_sha256, "source bundle")
+    tracker.authenticate(bundle_path, bundle_sha256, "source bundle", expected_mode=0o644)
     require_valid_git_bundle(repository, bundle_path, bundle_sha256, bundle_revisions)
     for revision, label in (
         (generator_revision, "Stage I recost generator"),
@@ -9920,6 +10077,453 @@ def preflight_exact_or_absent(
         authenticate_mutation_lock(mutation_lock)
 
 
+@dataclass
+class DraftTrioPublicationEntry:
+    """One exact member of a recoverable draft-prerequisite publication trio."""
+
+    path: Path
+    payload: bytes
+    mode: int
+    label: str
+    transaction: PublicationTransaction
+    initial_state: str
+    private_name: str | None = None
+    private_identity: os.stat_result | None = None
+    installed_identity: os.stat_result | None = None
+
+
+def classify_draft_trio_target(
+    directory: int,
+    entry: DraftTrioPublicationEntry,
+) -> tuple[str, str | None, os.stat_result | None]:
+    """Classify one draft target as absent, exact-final, or recoverably linked."""
+
+    try:
+        observed = os.stat(entry.path.name, dir_fd=directory, follow_symlinks=False)
+    except FileNotFoundError:
+        return "absent", None, None
+    if stat.S_IMODE(observed.st_mode) == entry.mode and observed.st_nlink == 1:
+        retained = read_bound_exact_file(
+            directory,
+            entry.path.name,
+            entry.payload,
+            entry.mode,
+            entry.label,
+            expected_identity=observed,
+        )
+        return "single", None, retained
+    if stat.S_IMODE(observed.st_mode) == entry.mode and observed.st_nlink == 2:
+        retained = read_bound_exact_file(
+            directory,
+            entry.path.name,
+            entry.payload,
+            entry.mode,
+            entry.label,
+            expected_identity=observed,
+            expected_links=2,
+        )
+        matches = []
+        for private_name in transaction_private_names(directory, entry.transaction):
+            private = os.stat(private_name, dir_fd=directory, follow_symlinks=False)
+            if same_inode(private, retained):
+                read_bound_exact_file(
+                    directory,
+                    private_name,
+                    entry.payload,
+                    entry.mode,
+                    f"{entry.label} transaction-private link",
+                    expected_identity=private,
+                    expected_links=2,
+                )
+                matches.append(private_name)
+        if len(matches) != 1:
+            raise ValueError(
+                f"{entry.label} linked target lacks one exact transaction-private binding"
+            )
+        return "linked", matches[0], retained
+    read_bound_exact_file(
+        directory,
+        entry.path.name,
+        entry.payload,
+        entry.mode,
+        entry.label,
+        expected_identity=observed,
+    )
+    raise AssertionError("unreachable draft trio target classification")
+
+
+def reusable_draft_trio_private(
+    directory: int,
+    entry: DraftTrioPublicationEntry,
+) -> tuple[str, os.stat_result] | None:
+    """Return one exact finalized private recovery inode, preserving all others."""
+
+    for private_name in transaction_private_names(directory, entry.transaction):
+        try:
+            retained = read_bound_exact_file(
+                directory,
+                private_name,
+                entry.payload,
+                entry.mode,
+                f"{entry.label} transaction-private recovery",
+            )
+        except (OSError, ValueError):
+            continue
+        return private_name, retained
+    return None
+
+
+def durably_authenticate_draft_trio_state(
+    directory: int,
+    parent_profile: os.stat_result,
+    entry: DraftTrioPublicationEntry,
+    mutation_lock: MutationLock | None,
+    expected_state: str,
+    expected_identity: os.stat_result,
+) -> os.stat_result:
+    """Fsync and reauthenticate one exact transaction-owned canonical state."""
+
+    require_parent_path_bound(entry.path.parent, directory, parent_profile, entry.label)
+    authenticate_mutation_lock(mutation_lock)
+    os.fsync(directory)
+    state, _, retained = classify_draft_trio_target(directory, entry)
+    if (
+        state != expected_state
+        or retained is None
+        or not same_inode(retained, expected_identity)
+    ):
+        raise ValueError(f"{entry.label} trio state did not become durably exact")
+    require_parent_path_bound(entry.path.parent, directory, parent_profile, entry.label)
+    authenticate_mutation_lock(mutation_lock)
+    return retained
+
+
+def install_draft_trio_entry(
+    directory: int,
+    parent_profile: os.stat_result,
+    entry: DraftTrioPublicationEntry,
+    mutation_lock: MutationLock | None,
+) -> None:
+    """Install or authenticate one staged trio member without finalizing its link."""
+
+    state, private_name, target = classify_draft_trio_target(directory, entry)
+    if state == "single":
+        if (
+            entry.initial_state != "single"
+            and (
+                entry.installed_identity is None
+                or target is None
+                or not same_inode(target, entry.installed_identity)
+            )
+        ):
+            raise ValueError(f"{entry.label} target was occupied after trio preflight")
+        entry.installed_identity = target
+        if entry.initial_state != "single":
+            assert target is not None
+            entry.installed_identity = durably_authenticate_draft_trio_state(
+                directory,
+                parent_profile,
+                entry,
+                mutation_lock,
+                "single",
+                target,
+            )
+        return
+    if state == "linked":
+        if (
+            entry.private_name is None
+            or private_name != entry.private_name
+            or entry.private_identity is None
+            or target is None
+            or not same_inode(target, entry.private_identity)
+        ):
+            raise ValueError(
+                f"{entry.label} linked target differs from staged trio inode"
+            )
+        entry.installed_identity = target
+        entry.installed_identity = durably_authenticate_draft_trio_state(
+            directory,
+            parent_profile,
+            entry,
+            mutation_lock,
+            "linked",
+            target,
+        )
+        return
+    assert state == "absent"
+    if entry.private_name is None or entry.private_identity is None:
+        raise ValueError(f"{entry.label} lacks a staged trio private inode")
+    private = read_bound_exact_file(
+        directory,
+        entry.private_name,
+        entry.payload,
+        entry.mode,
+        f"{entry.label} staged trio private inode",
+        expected_identity=entry.private_identity,
+    )
+    require_parent_path_bound(entry.path.parent, directory, parent_profile, entry.label)
+    authenticate_mutation_lock(mutation_lock)
+    try:
+        os.link(
+            entry.private_name,
+            entry.path.name,
+            src_dir_fd=directory,
+            dst_dir_fd=directory,
+            follow_symlinks=False,
+        )
+    except BaseException as error:
+        try:
+            state, linked_private, target = classify_draft_trio_target(directory, entry)
+        except BaseException:
+            raise error
+        if (
+            state != "linked"
+            or linked_private != entry.private_name
+            or target is None
+            or not same_inode(target, private)
+        ):
+            raise error
+    entry.installed_identity = private
+    entry.installed_identity = durably_authenticate_draft_trio_state(
+        directory,
+        parent_profile,
+        entry,
+        mutation_lock,
+        "linked",
+        private,
+    )
+
+
+def finalize_draft_trio_entry(
+    directory: int,
+    parent_profile: os.stat_result,
+    entry: DraftTrioPublicationEntry,
+    mutation_lock: MutationLock | None,
+) -> None:
+    """Convert one fully installed trio member to its single-link final profile."""
+
+    state, private_name, target = classify_draft_trio_target(directory, entry)
+    if state == "single":
+        if (
+            entry.installed_identity is not None
+            and target is not None
+            and not same_inode(target, entry.installed_identity)
+        ):
+            raise ValueError(
+                f"{entry.label} final inode differs from installed trio member"
+            )
+        entry.installed_identity = target
+        if entry.initial_state != "single":
+            assert target is not None
+            entry.installed_identity = durably_authenticate_draft_trio_state(
+                directory,
+                parent_profile,
+                entry,
+                mutation_lock,
+                "single",
+                target,
+            )
+        return
+    if (
+        state != "linked"
+        or private_name is None
+        or target is None
+        or entry.private_name != private_name
+    ):
+        raise ValueError(f"{entry.label} cannot finalize from its retained trio state")
+    entry.installed_identity = target
+    require_parent_path_bound(entry.path.parent, directory, parent_profile, entry.label)
+    authenticate_mutation_lock(mutation_lock)
+    try:
+        os.unlink(private_name, dir_fd=directory)
+    except BaseException as error:
+        state, _, retained = classify_draft_trio_target(directory, entry)
+        if (
+            state != "single"
+            or retained is None
+            or not same_inode(retained, target)
+        ):
+            raise error
+    entry.installed_identity = durably_authenticate_draft_trio_state(
+        directory,
+        parent_profile,
+        entry,
+        mutation_lock,
+        "single",
+        target,
+    )
+
+
+def rollback_draft_trio_entries(
+    directory: int,
+    parent_profile: os.stat_result,
+    entries: list[DraftTrioPublicationEntry],
+    mutation_lock: MutationLock | None,
+) -> None:
+    """Remove only exact transaction-owned canonical links before trio commit."""
+
+    for entry in reversed(entries):
+        if entry.initial_state == "single" or entry.installed_identity is None:
+            continue
+        try:
+            observed = os.stat(entry.path.name, dir_fd=directory, follow_symlinks=False)
+        except FileNotFoundError:
+            continue
+        if not same_inode(observed, entry.installed_identity):
+            continue
+        expected_links = observed.st_nlink
+        if expected_links not in {1, 2}:
+            raise ValueError(
+                f"{entry.label} transaction-owned target link profile differs"
+            )
+        read_bound_exact_file(
+            directory,
+            entry.path.name,
+            entry.payload,
+            entry.mode,
+            entry.label,
+            expected_identity=observed,
+            expected_links=expected_links,
+        )
+        require_parent_path_bound(
+            entry.path.parent, directory, parent_profile, entry.label
+        )
+        authenticate_mutation_lock(mutation_lock)
+        os.unlink(entry.path.name, dir_fd=directory)
+        require_parent_path_bound(
+            entry.path.parent, directory, parent_profile, entry.label
+        )
+        authenticate_mutation_lock(mutation_lock)
+        os.fsync(directory)
+        try:
+            os.stat(entry.path.name, dir_fd=directory, follow_symlinks=False)
+        except FileNotFoundError:
+            continue
+        raise ValueError(
+            f"{entry.label} transaction-owned canonical link survived rollback"
+        )
+
+
+def publish_draft_prerequisite_trio(
+    publications: tuple[tuple[Path, bytes, str], ...],
+    *,
+    mutation_lock: MutationLock | None = None,
+) -> None:
+    """Publish three draft prerequisites or retain no transaction-owned partial."""
+
+    if len(publications) != 3:
+        raise ValueError("draft prerequisite publication requires exactly three members")
+    paths = [path for path, _, _ in publications]
+    if len(set(paths)) != 3 or len({path.parent for path in paths}) != 1:
+        raise ValueError(
+            "draft prerequisite trio must have distinct targets in one directory"
+        )
+    parent = paths[0].parent
+    entries = [
+        DraftTrioPublicationEntry(
+            path=path,
+            payload=payload,
+            mode=0o644,
+            label=label,
+            transaction=publication_transaction(path, payload, 0o644, label),
+            initial_state="unclassified",
+        )
+        for path, payload, label in publications
+    ]
+    authenticate_mutation_lock(mutation_lock)
+    require_no_symlink_components(parent, "draft prerequisite trio")
+    with absolute_descriptor(
+        parent,
+        "draft prerequisite trio parent",
+        flags=os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC,
+    ) as directory:
+        parent_profile = os.fstat(directory)
+        require_directory_profile(parent_profile, "draft prerequisite trio parent")
+        require_parent_path_bound(
+            parent, directory, parent_profile, "draft prerequisite trio"
+        )
+        for entry in entries:
+            state, private_name, target = classify_draft_trio_target(directory, entry)
+            entry.initial_state = state
+            if state == "single":
+                entry.installed_identity = target
+            elif state == "linked":
+                assert private_name is not None and target is not None
+                entry.private_name = private_name
+                entry.private_identity = target
+                entry.installed_identity = target
+        for entry in entries:
+            if entry.initial_state != "absent":
+                continue
+            reusable = reusable_draft_trio_private(directory, entry)
+            if reusable is not None:
+                entry.private_name, entry.private_identity = reusable
+                continue
+            private_name, descriptor, private_profile = create_private_attempt(
+                directory,
+                entry.transaction,
+                entry.label,
+                lambda: (
+                    require_parent_path_bound(
+                        parent, directory, parent_profile, entry.label
+                    ),
+                    authenticate_mutation_lock(mutation_lock),
+                ),
+            )
+            try:
+                finalized = finalize_private_attempt(
+                    directory,
+                    entry.path,
+                    parent_profile,
+                    private_name,
+                    descriptor,
+                    private_profile,
+                    entry.payload,
+                    entry.mode,
+                    entry.label,
+                    mutation_lock,
+                )
+            finally:
+                os.close(descriptor)
+            entry.private_name = private_name
+            entry.private_identity = finalized
+        require_parent_path_bound(
+            parent, directory, parent_profile, "draft prerequisite trio"
+        )
+        authenticate_mutation_lock(mutation_lock)
+        os.fsync(directory)
+
+        def forward_complete() -> None:
+            for entry in entries:
+                install_draft_trio_entry(directory, parent_profile, entry, mutation_lock)
+            for entry in entries:
+                finalize_draft_trio_entry(directory, parent_profile, entry, mutation_lock)
+            for entry in entries:
+                state, _, retained = classify_draft_trio_target(directory, entry)
+                if state != "single" or retained is None:
+                    raise ValueError(f"{entry.label} is not an exact final trio member")
+
+        try:
+            forward_complete()
+        except BaseException:
+            try:
+                forward_complete()
+            except BaseException as forward_error:
+                try:
+                    rollback_draft_trio_entries(
+                        directory, parent_profile, entries, mutation_lock
+                    )
+                except BaseException as rollback_error:
+                    raise ValueError(
+                        "draft prerequisite trio failed and exact pre-commit rollback "
+                        "could not be authenticated"
+                    ) from rollback_error
+                raise ValueError(
+                    "draft prerequisite trio failed before atomic completion; "
+                    "transaction-owned canonical links were rolled back"
+                ) from forward_error
+
+
 def write_exact_or_verify(
     path: Path,
     payload: bytes,
@@ -10598,22 +11202,7 @@ def locked_draft_request(
         (paths["storage"], storage_payload, "draft storage evidence"),
         (paths["request"], request_payload, "schema-2 recost request draft"),
     )
-    for path, payload, label in publications:
-        preflight_exact_or_absent(
-            path,
-            payload,
-            mode=0o644,
-            label=label,
-            mutation_lock=mutation_lock,
-        )
-    for path, payload, label in publications:
-        write_exact_or_verify(
-            path,
-            payload,
-            mode=0o644,
-            label=label,
-            mutation_lock=mutation_lock,
-        )
+    publish_draft_prerequisite_trio(publications, mutation_lock=mutation_lock)
     generation_command = [
         sys.executable,
         str(source_path),

@@ -1691,10 +1691,15 @@ def recost_fixture(tmp_path):
     historical_source_bundle.write_bytes(b"retained historical F115 source bundle\n")
     historical_source_bundle.chmod(0o644)
     source_archive_readme = source_archives / "README.md"
-    source_archive_readme.write_text("Fixture F118 current source catalog.\n")
+    source_archive_readme.write_text(
+        "Fixture F118 current source catalog retaining "
+        f"{historical_source_bundle.name}, {f116_source_bundle.name}, and "
+        f"{source_bundle.name}.\n"
+    )
     source_archive_readme.chmod(0o644)
     source_archive_sums = source_archives / "SHA256SUMS"
     source_archive_sums.write_text(
+        f"{sha256(historical_source_bundle)}  {historical_source_bundle.name}\n"
         f"{sha256(f116_source_bundle)}  {f116_source_bundle.name}\n"
         f"{sha256(source_bundle)}  {source_bundle.name}\n"
     )
@@ -2001,6 +2006,15 @@ def recost_fixture(tmp_path):
         "selected_as_current": False,
         "role": "retained-non-current-bridge",
     }
+    f116_catalog_after = {
+        "readme_sha256": "1" * 64,
+        "sha256sums_sha256": "2" * 64,
+        "bridge_listed_exactly_once": True,
+        "final_bundle_listed_exactly_once": True,
+        "corrupt_c7_listed": False,
+        "historical_f115_preserved": True,
+        "sole_current_source_bundle": current_bundle["path"],
+    }
     write_immutable_json(
         source_authority,
         {
@@ -2029,7 +2043,7 @@ def recost_fixture(tmp_path):
             },
             "source_archive_catalog": {
                 "before": {"fixture": "before"},
-                "after": {"fixture": "after"},
+                "after": f116_catalog_after,
             },
             "authorization": F116_AUTHORIZATION,
             "validation": {"fixture": "passed"},
@@ -2204,6 +2218,12 @@ def recost_fixture(tmp_path):
         "selected_as_current": True,
         "subject": "Fixture current F118 source authority",
     }
+    f118_committed_tools = f116_committed_tools(repository, revision)
+    f118_publisher = next(
+        item
+        for item in f118_committed_tools
+        if item["path"] == "scripts/frontier/cgl_lf_stage_i_source_authority.py"
+    )
     source_authority = accounting / F118_NAME
     write_immutable_json(
         source_authority,
@@ -2221,15 +2241,36 @@ def recost_fixture(tmp_path):
             },
             "predecessor_authorities": {"historical_f116": f116_bindings},
             "implementation": {
-                "publisher": {"fixture": True},
-                "committed_tools": f116_committed_tools(repository, revision),
+                "publisher": f118_publisher,
+                "committed_tools": f118_committed_tools,
                 "intermediate_36140_bundle": bridge_bundle,
                 "predecessor_current_source_bundle": f118_predecessor_bundle,
                 "current_source_bundle": f118_current_bundle,
             },
             "source_archive_catalog": {
-                "before": {"fixture": "F116"},
-                "after": {"fixture": "F118"},
+                "before": {
+                    "readme_sha256": f116_catalog_after["readme_sha256"],
+                    "sha256sums_sha256": f116_catalog_after["sha256sums_sha256"],
+                    "bridge_listed_exactly_once": True,
+                    "predecessor_current_source_bundle_listed_exactly_once": True,
+                    "final_bundle_listed": False,
+                    "corrupt_c7_listed": False,
+                    "historical_f115_preserved": True,
+                },
+                "after": {
+                    "readme_sha256": sha256(source_archive_readme),
+                    "sha256sums_sha256": sha256(source_archive_sums),
+                    "bridge_listed_exactly_once": True,
+                    "predecessor_current_source_bundle_listed_exactly_once": True,
+                    "final_bundle_listed_exactly_once": True,
+                    "corrupt_c7_listed": False,
+                    "historical_f115_preserved": True,
+                    "historical_f116_preserved": True,
+                    "all_prior_checksum_entries_preserved": True,
+                    "sole_current_source_bundle": source_bundle.relative_to(
+                        root
+                    ).as_posix(),
+                },
             },
             "authorization": F116_AUTHORIZATION,
             "validation": F118_VALIDATION_CLAIMS,
@@ -3178,6 +3219,180 @@ def test_draft_request_preflights_all_targets_before_first_publication(
     assert not storage.exists()
 
 
+def test_draft_prerequisite_trio_rolls_back_failure_before_second_publish(
+    tmp_path, monkeypatch,
+):
+    module = load_recost_module()
+    accounting = tmp_path / "accounting"
+    accounting.mkdir()
+    publications = (
+        (accounting / "F208_reconciliation.json", b"reconciliation\n", "reconciliation"),
+        (accounting / "F208_storage.json", b"storage\n", "storage"),
+        (accounting / "F208_request.json", b"request\n", "request"),
+    )
+    real_link = module.os.link
+
+    def fail_before_second_publish(source, destination, **kwargs):
+        if destination == publications[1][0].name:
+            raise RuntimeError("persistent failure before second trio publish")
+        return real_link(source, destination, **kwargs)
+
+    monkeypatch.setattr(module.os, "link", fail_before_second_publish)
+    with pytest.raises(
+        ValueError, match="transaction-owned canonical links were rolled back"
+    ):
+        module.publish_draft_prerequisite_trio(publications)
+    assert not any(path.exists() for path, _, _ in publications)
+    retained_private = publication_private_entries(module, accounting)
+    assert len(retained_private) == 3
+    assert all(
+        stat.S_IMODE(path.stat().st_mode) == 0o644 and path.stat().st_nlink == 1
+        for path in retained_private
+    )
+
+    monkeypatch.setattr(module.os, "link", real_link)
+    module.publish_draft_prerequisite_trio(publications)
+    for path, payload, _ in publications:
+        assert path.read_bytes() == payload
+        assert stat.S_IMODE(path.stat().st_mode) == 0o644
+        assert path.stat().st_nlink == 1
+    assert publication_private_entries(module, accounting) == []
+
+
+def test_draft_prerequisite_trio_preserves_hostile_storage_race_and_recovers(
+    tmp_path, monkeypatch,
+):
+    module = load_recost_module()
+    accounting = tmp_path / "accounting"
+    accounting.mkdir()
+    publications = (
+        (accounting / "F209_reconciliation.json", b"reconciliation\n", "reconciliation"),
+        (accounting / "F209_storage.json", b"storage\n", "storage"),
+        (accounting / "F209_request.json", b"request\n", "request"),
+    )
+    storage = publications[1][0]
+    real_link = module.os.link
+    raced = False
+
+    def race_storage_after_preflight(source, destination, **kwargs):
+        nonlocal raced
+        if not raced and destination == storage.name:
+            storage.write_bytes(b"hostile storage occupant\n")
+            storage.chmod(0o644)
+            raced = True
+        return real_link(source, destination, **kwargs)
+
+    monkeypatch.setattr(module.os, "link", race_storage_after_preflight)
+    with pytest.raises(
+        ValueError, match="transaction-owned canonical links were rolled back"
+    ):
+        module.publish_draft_prerequisite_trio(publications)
+    assert raced
+    assert storage.read_bytes() == b"hostile storage occupant\n"
+    assert not publications[0][0].exists()
+    assert not publications[2][0].exists()
+    assert all(
+        not path.exists() or path.read_bytes() != payload
+        for path, payload, _ in publications
+    )
+    retained_private = publication_private_entries(module, accounting)
+    assert len(retained_private) == 3
+    assert all(
+        stat.S_IMODE(path.stat().st_mode) == 0o644 and path.stat().st_nlink == 1
+        for path in retained_private
+    )
+
+    monkeypatch.setattr(module.os, "link", real_link)
+    storage.unlink()
+    module.publish_draft_prerequisite_trio(publications)
+    for path, payload, _ in publications:
+        assert path.read_bytes() == payload
+        assert stat.S_IMODE(path.stat().st_mode) == 0o644
+        assert path.stat().st_nlink == 1
+    assert publication_private_entries(module, accounting) == []
+
+
+def test_draft_prerequisite_trio_recovers_retained_linked_interruption(
+    tmp_path, monkeypatch,
+):
+    module = load_recost_module()
+    accounting = tmp_path / "accounting"
+    accounting.mkdir()
+    publications = (
+        (accounting / "F210_reconciliation.json", b"reconciliation\n", "reconciliation"),
+        (accounting / "F210_storage.json", b"storage\n", "storage"),
+        (accounting / "F210_request.json", b"request\n", "request"),
+    )
+    linked = publications[0]
+    real_unlink = module.os.unlink
+
+    def interrupt_before_private_unlink(name, **kwargs):
+        if module.PUBLICATION_PRIVATE_NAME_PATTERN.fullmatch(name):
+            raise RuntimeError("hard interruption before linked private cleanup")
+        return real_unlink(name, **kwargs)
+
+    monkeypatch.setattr(module.os, "unlink", interrupt_before_private_unlink)
+    with pytest.raises(
+        ValueError, match="deterministic public target is occupied.*links 2"
+    ):
+        module.write_exact_or_verify(
+            linked[0], linked[1], mode=0o644, label=linked[2]
+        )
+    assert linked[0].stat().st_nlink == 2
+    retained_private = publication_private_entries(module, accounting)
+    assert len(retained_private) == 1
+    assert retained_private[0].stat().st_nlink == 2
+    assert not publications[1][0].exists()
+    assert not publications[2][0].exists()
+
+    monkeypatch.setattr(module.os, "unlink", real_unlink)
+    module.publish_draft_prerequisite_trio(publications)
+    for path, payload, _ in publications:
+        assert path.read_bytes() == payload
+        assert stat.S_IMODE(path.stat().st_mode) == 0o644
+        assert path.stat().st_nlink == 1
+    assert publication_private_entries(module, accounting) == []
+
+
+def test_draft_prerequisite_trio_reauthenticates_interrupted_final_durability(
+    tmp_path, monkeypatch,
+):
+    module = load_recost_module()
+    accounting = tmp_path / "accounting"
+    accounting.mkdir()
+    publications = (
+        (accounting / "F211_reconciliation.json", b"reconciliation\n", "reconciliation"),
+        (accounting / "F211_storage.json", b"storage\n", "storage"),
+        (accounting / "F211_request.json", b"request\n", "request"),
+    )
+    real_authenticate = module.durably_authenticate_draft_trio_state
+    request_single_attempts = 0
+
+    def interrupt_first_request_single_authentication(*args, **kwargs):
+        nonlocal request_single_attempts
+        entry = args[2]
+        expected_state = args[4]
+        if entry.label == "request" and expected_state == "single":
+            request_single_attempts += 1
+            if request_single_attempts == 1:
+                raise RuntimeError("interrupted before final request durability barrier")
+        return real_authenticate(*args, **kwargs)
+
+    monkeypatch.setattr(
+        module,
+        "durably_authenticate_draft_trio_state",
+        interrupt_first_request_single_authentication,
+    )
+    module.publish_draft_prerequisite_trio(publications)
+
+    assert request_single_attempts >= 2
+    for path, payload, _ in publications:
+        assert path.read_bytes() == payload
+        assert stat.S_IMODE(path.stat().st_mode) == 0o644
+        assert path.stat().st_nlink == 1
+    assert publication_private_entries(module, accounting) == []
+
+
 def test_draft_request_requires_exact_checkpoint_packet_namespace(recost_fixture):
     packet = write_draft_packet(recost_fixture, checkpoint_number=205)
     displaced = packet.with_name("reviewed-draft-packet.json")
@@ -3638,6 +3853,9 @@ def test_generator_requires_f118_current_source_and_build_qualification_chains(
         ("authorization", "F118 current source authority identity differs"),
         ("validation", "F118 current source authority identity differs"),
         ("publication-requirements", "F118 current source authority identity differs"),
+        ("publisher", "F118 publisher binding differs from committed tools"),
+        ("current-advertised-tip", "advertised tip is not exact HEAD"),
+        ("source-archive-catalog", "source-archive catalog semantics differ"),
         ("review-decision", "F118 provenance_review identity differs"),
         ("review-candidate", "do not bind one exact candidate"),
         ("review-verified", "F118 provenance_review identity differs"),
@@ -3659,6 +3877,9 @@ def test_generator_requires_exact_f118_contract_review_and_audit_semantics(
         "authorization",
         "validation",
         "publication-requirements",
+        "publisher",
+        "current-advertised-tip",
+        "source-archive-catalog",
     }:
         value = json.loads(authority.read_text())
         if mutation == "scope-preserves":
@@ -3669,8 +3890,18 @@ def test_generator_requires_exact_f118_contract_review_and_audit_semantics(
             value["authorization"]["prepare_authorized"] = True
         elif mutation == "validation":
             value["validation"]["historical_f116_chain"] = "failed"
-        else:
+        elif mutation == "publication-requirements":
             value["publication_requirements"]["published_audit_mode"] = "0644"
+        elif mutation == "publisher":
+            value["implementation"]["publisher"]["sha256"] = "0" * 64
+        elif mutation == "current-advertised-tip":
+            value["implementation"]["current_source_bundle"]["advertised_tip"][
+                "name"
+            ] = "refs/heads/feature/cgl-landau-fluid"
+        else:
+            value["source_archive_catalog"]["after"][
+                "all_prior_checksum_entries_preserved"
+            ] = False
         write_immutable_json(authority, value)
     elif mutation.startswith("review-"):
         value = json.loads(provenance.read_text())
