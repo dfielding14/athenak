@@ -58,19 +58,20 @@ CONTROL_PLANE_PRESSURE_REVIEW_PACKET_VERIFIER_SOURCE = (
 )
 QUALIFYING_PREREGISTRATION = (
     READINESS_ROOT
-    / "q011_section54_qualifying_campaign_preregistration_successor_v2_2026-06-01.json"
+    / "q011_section54_qualifying_campaign_preregistration_successor_v3_2026-06-06.json"
 )
 RESTART_PREREGISTRATION = (
-    READINESS_ROOT / "q011_section54_restart_continuation_preregistration_2026-06-01.json"
+    READINESS_ROOT
+    / "q011_section54_restart_continuation_preregistration_successor_2026-06-06.json"
 )
 PAPER_DECK = (
     REPO_ROOT / "inputs/publication/pic_parallel_shock_section54_paper_vl2_tsc.athinput"
 )
 QUALIFYING_PREREGISTRATION_SHA256 = (
-    "6fd9ebbc247b6cace69f0ff61553cf198241577b457410d57d26afcbf27cdc35"
+    "1216fc0fcaa78fe423855b9c2ad2039597ef2ed722c46ff8605d184fcedcf1c0"
 )
 RESTART_PREREGISTRATION_SHA256 = (
-    "c3360694dc90d391c5ccf7a0620ae576733e87beea3fa974c69602c82dd866ab"
+    "3ad3e05a34e7fedf578bfea3424fa98a62ece52d4cda827d010d9840a715376f"
 )
 PAPER_DECK_SHA256 = "0b1cbd62d54027ec81a5f4f5c88d5ee56b86b8cc0cb018c3fbebfb37a11be7b1"
 CAMPAIGN_ID = "Q011-SECTION54-QUALIFYING-CAMPAIGN"
@@ -935,7 +936,7 @@ def _restart_launch_contract(
     artifact_root: Path,
 ) -> dict[str, object]:
     continuation = restart_preregistration["continuation_contract"]
-    checkpoint = continuation["checkpoint_time_omega0_inverse"]
+    checkpoint = continuation["checkpoint_nominal_slot_omega0_inverse"]
     return {
         "record_type": LAUNCH_CONTRACT_RECORD_TYPE,
         "schema_version": 1,
@@ -952,10 +953,12 @@ def _restart_launch_contract(
         "environment_profile": candidate["environment_profile"],
         "paper_deck": paper_deck_binding,
         "authorized_orion_attempt_root": str(artifact_root),
-        "checkpoint_time_omega0_inverse": checkpoint,
+        "checkpoint_nominal_slot_omega0_inverse": checkpoint,
+        "checkpoint_observed_commit_binding_required": True,
         "checkpoint_input": (
-            f"retain_from_{source_attempt['attempt_id']}_at_t{int(checkpoint)}_"
-            "then_bind_exact_checksum_before_any_separately_authorized_continuation"
+            f"retain_from_{source_attempt['attempt_id']}_at_nominal_slot_t{int(checkpoint)}_"
+            "then_bind_exact_observed_cycle_time_and_checksum_before_any_separately_"
+            "authorized_continuation"
         ),
         "argv_template": [
             "-r",
@@ -964,8 +967,9 @@ def _restart_launch_contract(
             str(artifact_root / "raw"),
         ],
         "required_separate_boundary": (
-            "materialize_a_checkpoint_checksum_bound_registered_restart_successor_"
-            "then_review_and_promote_policy_before_using_the_installed_control_plane_wrapper"
+            "materialize_an_observed_cycle_time_and_checkpoint_checksum_bound_"
+            "registered_restart_successor_then_review_and_promote_policy_before_"
+            "using_the_installed_control_plane_wrapper"
         ),
     }
 
@@ -2441,12 +2445,20 @@ def materialize_qualifying_campaign_plan(
             "selected_problem_ps_p0": selected_ps_p0,
             "authorized_orion_attempt_root": str(restart_artifact_root),
             "restart_preregistration": source_bindings["restart_preregistration"],
-            "checkpoint_time_omega0_inverse": restart_policy["continuation_contract"][
-                "checkpoint_time_omega0_inverse"
-            ],
-            "retained_output_schedule_after_checkpoint_omega0_inverse": restart_policy[
+            "checkpoint_nominal_slot_omega0_inverse": restart_policy[
                 "continuation_contract"
-            ]["retained_output_schedule_after_checkpoint_omega0_inverse"],
+            ][
+                "checkpoint_nominal_slot_omega0_inverse"
+            ],
+            "checkpoint_observed_commit_binding_required": True,
+            "retained_output_nominal_slots_after_checkpoint_omega0_inverse": (
+                restart_policy["continuation_contract"][
+                    "retained_output_nominal_slots_after_checkpoint_omega0_inverse"
+                ]
+            ),
+            "retained_output_pairing_policy": restart_policy["continuation_contract"][
+                "retained_output_pairing_policy"
+            ],
             "comparison_tolerances_max_absolute_difference": restart_policy[
                 "continuation_contract"
             ]["comparison_tolerances_max_absolute_difference"],

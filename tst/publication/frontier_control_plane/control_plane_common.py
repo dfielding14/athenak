@@ -205,11 +205,11 @@ Q011_SECTION54_ARCHIVE_SOURCE_PATHS = {
     ),
     "qualifying_preregistration": (
         "tst/publication/readiness/"
-        "q011_section54_qualifying_campaign_preregistration_successor_v2_2026-06-01.json"
+        "q011_section54_qualifying_campaign_preregistration_successor_v3_2026-06-06.json"
     ),
     "restart_preregistration": (
         "tst/publication/readiness/"
-        "q011_section54_restart_continuation_preregistration_2026-06-01.json"
+        "q011_section54_restart_continuation_preregistration_successor_2026-06-06.json"
     ),
     "paper_deck": "inputs/publication/pic_parallel_shock_section54_paper_vl2_tsc.athinput",
 }
@@ -3358,7 +3358,7 @@ def _planner_expected_restart_contract(
     attempt_root: Path,
 ) -> dict[str, object]:
     continuation = restart_preregistration["continuation_contract"]
-    checkpoint = continuation["checkpoint_time_omega0_inverse"]
+    checkpoint = continuation["checkpoint_nominal_slot_omega0_inverse"]
     return {
         "record_type": "q011_section54_launch_prohibited_handoff_contract",
         "schema_version": 1,
@@ -3375,10 +3375,12 @@ def _planner_expected_restart_contract(
         "environment_profile": candidate["environment_profile"],
         "paper_deck": paper_deck_binding,
         "authorized_orion_attempt_root": str(attempt_root),
-        "checkpoint_time_omega0_inverse": checkpoint,
+        "checkpoint_nominal_slot_omega0_inverse": checkpoint,
+        "checkpoint_observed_commit_binding_required": True,
         "checkpoint_input": (
-            f"retain_from_{source_attempt['attempt_id']}_at_t{int(checkpoint)}_"
-            "then_bind_exact_checksum_before_any_separately_authorized_continuation"
+            f"retain_from_{source_attempt['attempt_id']}_at_nominal_slot_t{int(checkpoint)}_"
+            "then_bind_exact_observed_cycle_time_and_checksum_before_any_separately_"
+            "authorized_continuation"
         ),
         "argv_template": [
             "-r",
@@ -3387,8 +3389,9 @@ def _planner_expected_restart_contract(
             str(attempt_root / "raw"),
         ],
         "required_separate_boundary": (
-            "materialize_a_checkpoint_checksum_bound_registered_restart_successor_"
-            "then_review_and_promote_policy_before_using_the_installed_control_plane_wrapper"
+            "materialize_an_observed_cycle_time_and_checkpoint_checksum_bound_"
+            "registered_restart_successor_then_review_and_promote_policy_before_"
+            "using_the_installed_control_plane_wrapper"
         ),
     }
 
@@ -3415,11 +3418,15 @@ def _planner_expected_restart_carrier(
         "selected_problem_ps_p0": source_attempt["selected_problem_ps_p0"],
         "authorized_orion_attempt_root": str(attempt_root),
         "restart_preregistration": restart_preregistration_binding,
-        "checkpoint_time_omega0_inverse": continuation[
-            "checkpoint_time_omega0_inverse"
+        "checkpoint_nominal_slot_omega0_inverse": continuation[
+            "checkpoint_nominal_slot_omega0_inverse"
         ],
-        "retained_output_schedule_after_checkpoint_omega0_inverse": continuation[
-            "retained_output_schedule_after_checkpoint_omega0_inverse"
+        "checkpoint_observed_commit_binding_required": True,
+        "retained_output_nominal_slots_after_checkpoint_omega0_inverse": continuation[
+            "retained_output_nominal_slots_after_checkpoint_omega0_inverse"
+        ],
+        "retained_output_pairing_policy": continuation[
+            "retained_output_pairing_policy"
         ],
         "comparison_tolerances_max_absolute_difference": continuation[
             "comparison_tolerances_max_absolute_difference"

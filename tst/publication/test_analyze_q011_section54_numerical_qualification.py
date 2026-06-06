@@ -90,19 +90,23 @@ def _tail_spectrum() -> dict[str, object]:
     return particles.weighted_spectrum_record(chi, macro_weight)
 
 
-def _particle_reductions() -> dict[str, object]:
+def _particle_reductions(*, observed_t500: float = 500.0) -> dict[str, object]:
     early = particles.weighted_spectrum_record([2.0], [1.0])
     late = _tail_spectrum()
     return {
         "t500": {
             "schema_version": particles.SCHEMA_VERSION,
             "record_type": "q011_section54_particle_snapshot_reduction",
-            "snapshot_time_omega0_inverse": 500.0,
+            "nominal_slot_time": 500.0,
+            "observed_committed_time": observed_t500,
+            "snapshot_time_omega0_inverse": observed_t500,
             "weighted_spectrum": early,
         },
         "t1200": {
             "schema_version": particles.SCHEMA_VERSION,
             "record_type": "q011_section54_particle_snapshot_reduction",
+            "nominal_slot_time": 1200.0,
+            "observed_committed_time": 1200.0,
             "snapshot_time_omega0_inverse": 1200.0,
             "weighted_spectrum": late,
             "late_slope": particles.late_slope_record(late["f_chi"]),
@@ -110,14 +114,18 @@ def _particle_reductions() -> dict[str, object]:
     }
 
 
-def _spatial_reduction(*, passes: bool = True) -> dict[str, object]:
+def _spatial_reduction(
+    *, passes: bool = True, observed_t500: float = 500.0
+) -> dict[str, object]:
     mean = 2.0 if passes else 1.0
     return {
         "schema_version": 1,
         "record_type": "q011_section54_t500_spatial_reduction",
-        "time_omega0_inverse": 500.0,
+        "nominal_slot_time": 500.0,
+        "observed_committed_time": observed_t500,
         "upstream_b_amplification": {
-            "time_omega0_inverse": 500.0,
+            "nominal_slot_time": 500.0,
+            "observed_committed_time": observed_t500,
             "x_ideal_c_over_omega_pi": 0.0,
             "upstream_window_c_over_omega_pi": [120.0, 1200.0],
             "selected_cell_count": 1,
@@ -131,15 +139,20 @@ def _spatial_reduction(*, passes: bool = True) -> dict[str, object]:
     }
 
 
-def _paired_spatial_inputs(*, center_offset: float = 0.0) -> dict[str, object]:
+def _paired_spatial_inputs(
+    *, center_offset: float = 0.0, observed_t500: float = 500.0
+) -> dict[str, object]:
     centers = [-4.5 + center_offset, -1.5 + center_offset, 1.5 + center_offset, 4.5 + center_offset]
     profile = {
-        "time_omega0_inverse": 500.0,
+        "nominal_slot_time": 500.0,
+        "observed_committed_time": observed_t500,
         "x1_centers_c_over_omega_pi": centers,
         "values_x": [1.0, 2.0, 3.0, 4.0],
         "column_areas": [3.0, 3.0, 3.0, 3.0],
     }
     return {
+        "nominal_slot_time": 500.0,
+        "observed_committed_time": observed_t500,
         "detected_front": {"x_front_c_over_omega_pi": 12.0},
         "upstream_b_amplification": {"amplification_over_b0": 2.0},
         "y_area_weighted_profiles": {
@@ -174,7 +187,8 @@ def _admission(identity: dict[str, object], inventory_sha256: str) -> dict[str, 
 
 def _source_checkpoint_lineage(identity: dict[str, object]) -> dict[str, object]:
     return {
-        "snapshot_time_omega0_inverse": 500.0,
+        "nominal_slot_time": 500.0,
+        "observed_committed_time": 500.0,
         "retained_attempt_id": identity["attempt_id"],
         "restart_manifest_path": "rst/q011.00500.rst.manifest",
         "restart_member_path": "rst/q011.00500.rst",
@@ -383,7 +397,9 @@ def _restart_source(prefix: str, *, branch_role: str) -> dict[str, object]:
         "structured_artifact_inventory_sha256": _sha256("a"),
         "outputs_after_checkpoint": [
             {
-                "time_omega0_inverse": time,
+                "nominal_slot_omega0_inverse": time,
+                "observed_committed_cycle": 5000 + int(time),
+                "observed_committed_time_omega0_inverse": time + 0.05,
                 "members": {
                     "rho_bin": member(f"{time:.1f}.rho.bin"),
                     "bmag_bin": member(f"{time:.1f}.bmag.bin"),
@@ -661,9 +677,15 @@ def _planner_restart_fixture(
         "selected_problem_ps_p0": 0.1,
         "authorized_orion_attempt_root": str(artifact_root),
         "restart_preregistration": source_bindings["restart_preregistration"],
-        "checkpoint_time_omega0_inverse": continuation["checkpoint_time_omega0_inverse"],
-        "retained_output_schedule_after_checkpoint_omega0_inverse": continuation[
-            "retained_output_schedule_after_checkpoint_omega0_inverse"
+        "checkpoint_nominal_slot_omega0_inverse": continuation[
+            "checkpoint_nominal_slot_omega0_inverse"
+        ],
+        "checkpoint_observed_commit_binding_required": True,
+        "retained_output_nominal_slots_after_checkpoint_omega0_inverse": continuation[
+            "retained_output_nominal_slots_after_checkpoint_omega0_inverse"
+        ],
+        "retained_output_pairing_policy": continuation[
+            "retained_output_pairing_policy"
         ],
         "comparison_tolerances_max_absolute_difference": continuation[
             "comparison_tolerances_max_absolute_difference"
@@ -786,8 +808,10 @@ def _pending() -> dict[str, object]:
 def _parity_result() -> dict[str, object]:
     return {
         "result": "pass_deterministic_continuation_parity",
-        "checkpoint_time_omega0_inverse": 500.0,
-        "retained_output_schedule_after_checkpoint_omega0_inverse": [
+        "checkpoint_nominal_slot_omega0_inverse": 500.0,
+        "checkpoint_observed_committed_cycle": 5500,
+        "checkpoint_observed_committed_time_omega0_inverse": 500.0,
+        "retained_output_nominal_slots_after_checkpoint_omega0_inverse": [
             600.0,
             700.0,
             800.0,
@@ -796,6 +820,7 @@ def _parity_result() -> dict[str, object]:
             1100.0,
             1200.0,
         ],
+        "paired_output_observed_commits": [],
         "maximum_absolute_difference_by_field": {"rho_bin": 0.0},
     }
 
@@ -822,6 +847,114 @@ def _qualify(
 
 
 class Q011Section54NumericalQualificationTests(unittest.TestCase):
+    def test_raw_reducers_use_observed_committed_time_not_nominal_slot(self) -> None:
+        observed_t500 = 500.05
+
+        def product(path: str, nominal: float, observed: float) -> dict[str, object]:
+            return {
+                "path": path,
+                "nominal_slot_time": nominal,
+                "observed_committed_time": observed,
+            }
+
+        retained = {
+            "500.0": {
+                "prtcl_all": product("t500.prtcl.vtk", 500.0, observed_t500),
+                **{
+                    quantity: product(
+                        f"t500.{quantity}.bin", 500.0, observed_t500
+                    )
+                    for quantity in qualifier.spatial.REQUIRED_MESH_QUANTITIES
+                },
+            },
+            "1200.0": {
+                "prtcl_all": product("t1200.prtcl.vtk", 1200.0, 1200.0),
+            },
+        }
+        admitted = {
+            "run_identity": _identity(
+                0, qualifier.GRID_VARIANTS[0], qualifier.QUALIFYING_SEEDS[0]
+            ),
+            "immutable_tree": {"inventory_sha256": _sha256("1")},
+            "retained_snapshot_products": retained,
+            "snapshot_payloads": {
+                "500.0": {
+                    "nominal_slot_time": 500.0,
+                    "observed_committed_time": observed_t500,
+                },
+                "1200.0": {
+                    "nominal_slot_time": 1200.0,
+                    "observed_committed_time": 1200.0,
+                },
+            },
+        }
+        snapshot = mock.Mock()
+        member = mock.Mock()
+        member.read_bytes.return_value = b"retained"
+        snapshot.member_path.return_value = member
+        decoded = mock.Mock(
+            points=np.zeros((1, 3)),
+            scalars={
+                "cr_source": np.ones(1, dtype=np.int64),
+                "birth_time": np.full(1, 45.0),
+                "macro_weight": np.ones(1),
+            },
+            vectors={"vel": np.zeros((1, 3))},
+        )
+
+        def particle_record(**kwargs: object) -> dict[str, object]:
+            return {"snapshot_time_omega0_inverse": kwargs["snapshot_time"]}
+
+        with mock.patch.object(
+            qualifier.admission, "read_particle_vtk", return_value=decoded
+        ), mock.patch.object(
+            qualifier.admission,
+            "_parse_pvtk_execution_header",
+            side_effect=({"time": observed_t500}, {"time": 1200.0}),
+        ), mock.patch.object(
+            qualifier.admission.output_primitives,
+            "parse_athenak_binary_bytes",
+            return_value=mock.sentinel.dataset,
+        ), mock.patch.object(
+            qualifier.particles,
+            "reduce_particle_snapshot",
+            side_effect=particle_record,
+        ) as particle_reducer, mock.patch.object(
+            qualifier.particles, "ideal_surface_x1", return_value=123.0
+        ) as ideal_surface, mock.patch.object(
+            qualifier.spatial,
+            "reduce_t500_spatial_snapshot",
+            return_value={"observed_committed_time": observed_t500},
+        ) as spatial_reducer, mock.patch.object(
+            qualifier,
+            "_retained_source_checkpoint_lineage",
+            return_value={"trusted": "lineage"},
+        ):
+            result = qualifier._reduce_retained_attempt(
+                {"admission": admitted}, snapshot
+            )
+
+        self.assertEqual(
+            [call.kwargs["snapshot_time"] for call in particle_reducer.call_args_list],
+            [observed_t500, 1200.0],
+        )
+        self.assertEqual(
+            result["particle_reductions"]["t500"]["nominal_slot_time"], 500.0
+        )
+        self.assertEqual(
+            result["particle_reductions"]["t500"]["observed_committed_time"],
+            observed_t500,
+        )
+        ideal_surface.assert_called_once_with(observed_t500)
+        self.assertEqual(
+            spatial_reducer.call_args.kwargs,
+            {
+                "nominal_slot_time": 500.0,
+                "observed_committed_time": observed_t500,
+                "x_ideal_c_over_omega_pi": 123.0,
+            },
+        )
+
     def test_trusted_pair_recompute_uses_bound_reducer_products(self) -> None:
         amr = {
             "spatial_reduction": _paired_spatial_inputs(),
@@ -837,6 +970,23 @@ class Q011Section54NumericalQualificationTests(unittest.TestCase):
             all(record["maximum_absolute_difference"] == 0.0 for record in residuals)
         )
 
+        fine = {
+            "spatial_reduction": _paired_spatial_inputs(observed_t500=500.1),
+            "particle_reductions": _particle_reductions(observed_t500=500.1),
+        }
+        qualifier._recompute_pair_residuals(amr, fine)
+
+        fine = {
+            "spatial_reduction": _paired_spatial_inputs(observed_t500=500.125),
+            "particle_reductions": _particle_reductions(observed_t500=500.125),
+        }
+        with self.assertRaisesRegex(
+            qualifier.NumericalQualificationError,
+            "observed-time separation exceeds 0.1",
+        ):
+            qualifier._recompute_pair_residuals(amr, fine)
+
+        fine = copy.deepcopy(amr)
         fine["spatial_reduction"] = _paired_spatial_inputs(center_offset=0.5)
         with self.assertRaisesRegex(
             qualifier.NumericalQualificationError,
@@ -857,11 +1007,15 @@ class Q011Section54NumericalQualificationTests(unittest.TestCase):
         policy = qualifier.restart.load_preregistration()
         contract = policy["continuation_contract"]
         binding = {
-            "checkpoint_time_omega0_inverse": contract["checkpoint_time_omega0_inverse"],
+            "checkpoint_nominal_slot_omega0_inverse": contract[
+                "checkpoint_nominal_slot_omega0_inverse"
+            ],
+            "checkpoint_observed_committed_cycle": 5500,
+            "checkpoint_observed_committed_time_omega0_inverse": 500.0,
             "restart_schema": 7,
             "startup_shock_ledger": {},
-            "retained_output_schedule_after_checkpoint_omega0_inverse": contract[
-                "retained_output_schedule_after_checkpoint_omega0_inverse"
+            "retained_output_nominal_slots_after_checkpoint_omega0_inverse": contract[
+                "retained_output_nominal_slots_after_checkpoint_omega0_inverse"
             ],
             "comparison_tolerances_max_absolute_difference": contract[
                 "comparison_tolerances_max_absolute_difference"
@@ -872,11 +1026,11 @@ class Q011Section54NumericalQualificationTests(unittest.TestCase):
         tree.__exit__.return_value = None
         with mock.patch.object(
             qualifier.restart, "bind_checkpoint_for_continuation", return_value=binding
-        ), mock.patch.object(
+        ) as checkpoint_binder, mock.patch.object(
             qualifier, "_restart_mesh_values", return_value=[1.0]
-        ), mock.patch.object(
+        ) as mesh_values, mock.patch.object(
             qualifier, "_restart_particle_values", return_value=([1], [2.0])
-        ), mock.patch.object(
+        ) as particle_values, mock.patch.object(
             qualifier, "_RegisteredRunStructuredArtifactTree", return_value=tree
         ), mock.patch.object(
             qualifier.structured_artifacts, "require_inventory_sha256"
@@ -891,6 +1045,11 @@ class Q011Section54NumericalQualificationTests(unittest.TestCase):
                 source,
                 payloads,
                 checkpoint_payload=b"checkpoint",
+                checkpoint_commit={
+                    "cycle": 5500,
+                    "nominal_slot_time": 500.0,
+                    "observed_committed_time": 500.0,
+                },
                 execution_receipt={
                     "raw_output_root": source["raw_output_root"],
                     "artifact_dir": "/authority/uninterrupted",
@@ -900,8 +1059,33 @@ class Q011Section54NumericalQualificationTests(unittest.TestCase):
             )
         self.assertEqual(observation["binding"], binding)
         self.assertEqual(len(observation["outputs_after_checkpoint"]), 7)
+        first_source = source["outputs_after_checkpoint"][0]
+        first_output = observation["outputs_after_checkpoint"][0]
         self.assertEqual(
-            set(observation["outputs_after_checkpoint"][0]["fields"]),
+            first_output["nominal_slot_omega0_inverse"],
+            first_source["nominal_slot_omega0_inverse"],
+        )
+        self.assertEqual(
+            first_output["observed_committed_time_omega0_inverse"],
+            first_source["observed_committed_time_omega0_inverse"],
+        )
+        checkpoint_binder.assert_called_once()
+        self.assertEqual(
+            checkpoint_binder.call_args.kwargs[
+                "checkpoint_observed_committed_time_omega0_inverse"
+            ],
+            500.0,
+        )
+        self.assertEqual(
+            mesh_values.call_args_list[0].kwargs["observed_committed_time"],
+            first_source["observed_committed_time_omega0_inverse"],
+        )
+        self.assertEqual(
+            particle_values.call_args_list[0].kwargs["observed_committed_time"],
+            first_source["observed_committed_time_omega0_inverse"],
+        )
+        self.assertEqual(
+            set(first_output["fields"]),
             {
                 "rho_bin",
                 "bmag_bin",
@@ -925,8 +1109,8 @@ class Q011Section54NumericalQualificationTests(unittest.TestCase):
             qualifier.restart,
             "bind_checkpoint_for_continuation",
             return_value={
-                "retained_output_schedule_after_checkpoint_omega0_inverse": [
-                    output["time_omega0_inverse"]
+                "retained_output_nominal_slots_after_checkpoint_omega0_inverse": [
+                    output["nominal_slot_omega0_inverse"]
                     for output in source["outputs_after_checkpoint"]
                 ]
             },
@@ -948,6 +1132,11 @@ class Q011Section54NumericalQualificationTests(unittest.TestCase):
                 source,
                 payloads,
                 checkpoint_payload=b"checkpoint",
+                checkpoint_commit={
+                    "cycle": 5500,
+                    "nominal_slot_time": 500.0,
+                    "observed_committed_time": 500.0,
+                },
                 execution_receipt={
                     "raw_output_root": source["raw_output_root"],
                     "artifact_dir": "/authority/continued",
@@ -1055,6 +1244,20 @@ class Q011Section54NumericalQualificationTests(unittest.TestCase):
         pairs[0]["fine_uniform_attempt_sha256"] = pairs[1]["fine_uniform_attempt_sha256"]
         with self.assertRaisesRegex(qualifier.NumericalQualificationError, "matched seed"):
             _qualify(attempts, pairs=pairs)
+
+    def test_paired_t500_observed_time_separation_fails_closed(self) -> None:
+        attempts = _attempts()
+        fine_index = 2 * len(qualifier.QUALIFYING_SEEDS)
+        fine = attempts[fine_index]["attempt"]
+        fine["particle_reductions"] = _particle_reductions(observed_t500=500.125)
+        fine["spatial_reduction"] = _spatial_reduction(observed_t500=500.125)
+        fine["source_checkpoint_lineage"]["observed_committed_time"] = 500.125
+        attempts[fine_index] = qualifier._bind_unit_only_canonical_attempt(fine)
+        with self.assertRaisesRegex(
+            qualifier.NumericalQualificationError,
+            "observed-time separation exceeds 0.1",
+        ):
+            _qualify(attempts)
 
     def test_attempt_and_pair_numerical_failures_aggregate_without_claim_closure(self) -> None:
         attempts = _attempts()

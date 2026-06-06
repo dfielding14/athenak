@@ -57,6 +57,27 @@ def _finite_real(value: object, label: str) -> float:
     return result
 
 
+def _snapshot_times(
+    nominal_slot_time: object,
+    observed_committed_time: object,
+    *,
+    label: str,
+) -> tuple[float, float]:
+    nominal = _finite_real(nominal_slot_time, f"{label} nominal slot time")
+    observed = _finite_real(
+        observed_committed_time, f"{label} observed committed time"
+    )
+    _require(
+        nominal >= 0.0 and observed >= 0.0,
+        f"{label} times must be non-negative",
+    )
+    return nominal, observed
+
+
+def _mesh_time_projection(observed_committed_time: float) -> float:
+    return float(format(observed_committed_time, ".6g"))
+
+
 def _readonly_finite_array(values: object, label: str) -> np.ndarray:
     try:
         array = np.asarray(values, dtype=np.float64)
@@ -116,7 +137,8 @@ class CartesianXYRaster:
 
     quantity: str
     source_field: str
-    time_omega0_inverse: float
+    nominal_slot_time: float
+    observed_committed_time: float
     x1_faces_c_over_omega_pi: np.ndarray
     x2_faces_c_over_omega_pi: np.ndarray
     collapsed_x3_faces: np.ndarray
@@ -130,7 +152,11 @@ class CartesianXYRaster:
             self.source_field == expected_field,
             f"{self.quantity}: source field must be {expected_field!r}",
         )
-        time = _finite_real(self.time_omega0_inverse, "raster time")
+        nominal, observed = _snapshot_times(
+            self.nominal_slot_time,
+            self.observed_committed_time,
+            label="raster",
+        )
         x1_faces = _readonly_faces(
             self.x1_faces_c_over_omega_pi, "raster x1 faces"
         )
@@ -158,7 +184,8 @@ class CartesianXYRaster:
             np.all(levels <= self.target_level),
             "raster source level exceeds target level",
         )
-        object.__setattr__(self, "time_omega0_inverse", time)
+        object.__setattr__(self, "nominal_slot_time", nominal)
+        object.__setattr__(self, "observed_committed_time", observed)
         object.__setattr__(self, "x1_faces_c_over_omega_pi", x1_faces)
         object.__setattr__(self, "x2_faces_c_over_omega_pi", x2_faces)
         object.__setattr__(self, "collapsed_x3_faces", x3_faces)
@@ -172,7 +199,8 @@ class YAreaWeightedProfile:
 
     quantity: str
     source_field: str
-    time_omega0_inverse: float
+    nominal_slot_time: float
+    observed_committed_time: float
     x1_centers_c_over_omega_pi: np.ndarray
     values_x: np.ndarray
     column_areas: np.ndarray
@@ -183,7 +211,11 @@ class YAreaWeightedProfile:
             self.source_field == expected_field,
             f"{self.quantity}: profile source field must be {expected_field!r}",
         )
-        time = _finite_real(self.time_omega0_inverse, "profile time")
+        nominal, observed = _snapshot_times(
+            self.nominal_slot_time,
+            self.observed_committed_time,
+            label="profile",
+        )
         x1 = _readonly_finite_array(
             self.x1_centers_c_over_omega_pi, "profile x1 centers"
         )
@@ -199,7 +231,8 @@ class YAreaWeightedProfile:
         )
         _require(np.all(np.diff(x1) > 0.0), "profile x1 centers must increase")
         _require(np.all(areas > 0.0), "profile column areas must be positive")
-        object.__setattr__(self, "time_omega0_inverse", time)
+        object.__setattr__(self, "nominal_slot_time", nominal)
+        object.__setattr__(self, "observed_committed_time", observed)
         object.__setattr__(self, "x1_centers_c_over_omega_pi", x1)
         object.__setattr__(self, "values_x", values)
         object.__setattr__(self, "column_areas", areas)
@@ -209,6 +242,8 @@ class YAreaWeightedProfile:
 class DetectedFrontRecord:
     """A unique strongest positive density gradient near the ideal surface."""
 
+    nominal_slot_time: float
+    observed_committed_time: float
     x_ideal_c_over_omega_pi: float
     search_window_c_over_omega_pi: tuple[float, float]
     front_index: int
@@ -218,6 +253,11 @@ class DetectedFrontRecord:
     max_absolute_offset_c_over_omega_pi: float
 
     def __post_init__(self) -> None:
+        nominal, observed = _snapshot_times(
+            self.nominal_slot_time,
+            self.observed_committed_time,
+            label="detected front",
+        )
         x_ideal = _finite_real(self.x_ideal_c_over_omega_pi, "ideal shock position")
         window = _finite_window(
             self.search_window_c_over_omega_pi, "shock search window"
@@ -253,6 +293,8 @@ class DetectedFrontRecord:
             "maximum detected front offset differs from the fixed bound",
         )
         _require(abs(offset) <= max_offset, "detected shock front exceeds its offset bound")
+        object.__setattr__(self, "nominal_slot_time", nominal)
+        object.__setattr__(self, "observed_committed_time", observed)
         object.__setattr__(self, "x_ideal_c_over_omega_pi", x_ideal)
         object.__setattr__(self, "search_window_c_over_omega_pi", window)
         object.__setattr__(self, "x_front_c_over_omega_pi", x_front)
@@ -265,7 +307,8 @@ class DetectedFrontRecord:
 class UpstreamBAmplificationRecord:
     """Area-weighted upstream magnetic amplification and its fixed t=500 gate."""
 
-    time_omega0_inverse: float
+    nominal_slot_time: float
+    observed_committed_time: float
     x_ideal_c_over_omega_pi: float
     upstream_window_c_over_omega_pi: tuple[float, float]
     selected_cell_count: int
@@ -277,10 +320,14 @@ class UpstreamBAmplificationRecord:
     passes_gate: bool
 
     def __post_init__(self) -> None:
-        time = _finite_real(self.time_omega0_inverse, "amplification time")
+        nominal, observed = _snapshot_times(
+            self.nominal_slot_time,
+            self.observed_committed_time,
+            label="amplification",
+        )
         _require(
-            time == T500_OMEGA0_INVERSE,
-            "upstream magnetic-amplification gate is defined only at t=500",
+            nominal == T500_OMEGA0_INVERSE,
+            "upstream magnetic-amplification gate is defined only for nominal t=500",
         )
         x_ideal = _finite_real(self.x_ideal_c_over_omega_pi, "ideal shock position")
         window = _finite_window(
@@ -318,7 +365,8 @@ class UpstreamBAmplificationRecord:
         expected_pass = gate[0] <= amplification <= gate[1]
         _require(type(self.passes_gate) is bool, "upstream B0 gate result must be boolean")
         _require(self.passes_gate == expected_pass, "upstream B0 gate result is inconsistent")
-        object.__setattr__(self, "time_omega0_inverse", time)
+        object.__setattr__(self, "nominal_slot_time", nominal)
+        object.__setattr__(self, "observed_committed_time", observed)
         object.__setattr__(self, "x_ideal_c_over_omega_pi", x_ideal)
         object.__setattr__(self, "upstream_window_c_over_omega_pi", window)
         object.__setattr__(self, "selected_area", selected_area)
@@ -332,6 +380,8 @@ def compose_xy_quantity(
     dataset: output_primitives.AthenaBinaryDataset,
     quantity: object,
     *,
+    nominal_slot_time: object | None = None,
+    observed_committed_time: object | None = None,
     target_level: int | None = None,
 ) -> CartesianXYRaster:
     """Compose one exact scalar mesh product and collapse its singleton x3 axis."""
@@ -352,6 +402,23 @@ def compose_xy_quantity(
         dataset.root_grid_shape[2] == 1 and dataset.meshblock_shape[2] == 1,
         f"{quantity}: x3 must contain exactly one cell",
     )
+    if nominal_slot_time is None and observed_committed_time is None:
+        nominal_slot_time = dataset.time
+        observed_committed_time = dataset.time
+    else:
+        _require(
+            nominal_slot_time is not None and observed_committed_time is not None,
+            f"{quantity}: nominal and observed snapshot times must be supplied together",
+        )
+    nominal, observed = _snapshot_times(
+        nominal_slot_time,
+        observed_committed_time,
+        label=f"{quantity} snapshot",
+    )
+    _require(
+        dataset.time == _mesh_time_projection(observed),
+        f"{quantity}: embedded mesh time differs from observed committed time projection",
+    )
     composite = output_primitives.compose_leaf_field(
         dataset, field, target_level=target_level
     )
@@ -364,7 +431,8 @@ def compose_xy_quantity(
     return CartesianXYRaster(
         quantity=quantity,
         source_field=field,
-        time_omega0_inverse=dataset.time,
+        nominal_slot_time=nominal,
+        observed_committed_time=observed,
         x1_faces_c_over_omega_pi=composite.x1_faces,
         x2_faces_c_over_omega_pi=composite.x2_faces,
         collapsed_x3_faces=composite.x3_faces,
@@ -377,6 +445,8 @@ def compose_xy_quantity(
 def compose_xy_snapshot(
     datasets: Mapping[str, output_primitives.AthenaBinaryDataset],
     *,
+    nominal_slot_time: object | None = None,
+    observed_committed_time: object | None = None,
     target_level: int | None = None,
 ) -> dict[str, CartesianXYRaster]:
     """Compose the exact four retained scalar products onto one Cartesian grid."""
@@ -387,7 +457,11 @@ def compose_xy_snapshot(
     )
     rasters = {
         quantity: compose_xy_quantity(
-            datasets[quantity], quantity, target_level=target_level
+            datasets[quantity],
+            quantity,
+            nominal_slot_time=nominal_slot_time,
+            observed_committed_time=observed_committed_time,
+            target_level=target_level,
         )
         for quantity in REQUIRED_MESH_QUANTITIES
     }
@@ -395,7 +469,8 @@ def compose_xy_snapshot(
     for quantity in REQUIRED_MESH_QUANTITIES[1:]:
         raster = rasters[quantity]
         _require(
-            raster.time_omega0_inverse == reference.time_omega0_inverse,
+            raster.nominal_slot_time == reference.nominal_slot_time
+            and raster.observed_committed_time == reference.observed_committed_time,
             "snapshot mesh-product times disagree",
         )
         _require(
@@ -441,7 +516,8 @@ def y_area_weighted_profile(raster: CartesianXYRaster) -> YAreaWeightedProfile:
     return YAreaWeightedProfile(
         quantity=raster.quantity,
         source_field=raster.source_field,
-        time_omega0_inverse=raster.time_omega0_inverse,
+        nominal_slot_time=raster.nominal_slot_time,
+        observed_committed_time=raster.observed_committed_time,
         x1_centers_c_over_omega_pi=x1_cell_centers(raster),
         values_x=profile,
         column_areas=column_areas,
@@ -502,6 +578,8 @@ def detect_positive_gradient_front(
         "detected shock front exceeds the maximum absolute offset from x_ideal",
     )
     return DetectedFrontRecord(
+        nominal_slot_time=rho_profile.nominal_slot_time,
+        observed_committed_time=rho_profile.observed_committed_time,
         x_ideal_c_over_omega_pi=x_ideal,
         search_window_c_over_omega_pi=window,
         front_index=front.index,
@@ -524,8 +602,8 @@ def reduce_upstream_b_amplification_at_t500(
         "upstream amplification requires the bmag -> bmag raster",
     )
     _require(
-        bmag_raster.time_omega0_inverse == T500_OMEGA0_INVERSE,
-        "upstream magnetic-amplification gate is defined only at t=500",
+        bmag_raster.nominal_slot_time == T500_OMEGA0_INVERSE,
+        "upstream magnetic-amplification gate is defined only for nominal t=500",
     )
     x_ideal = _finite_real(x_ideal_c_over_omega_pi, "ideal shock position")
     window = upstream_b_window(x_ideal)
@@ -538,7 +616,8 @@ def reduce_upstream_b_amplification_at_t500(
     )
     lower, upper = UPSTREAM_B0_GATE
     return UpstreamBAmplificationRecord(
-        time_omega0_inverse=bmag_raster.time_omega0_inverse,
+        nominal_slot_time=bmag_raster.nominal_slot_time,
+        observed_committed_time=bmag_raster.observed_committed_time,
         x_ideal_c_over_omega_pi=x_ideal,
         upstream_window_c_over_omega_pi=window,
         selected_cell_count=estimate.selected_cell_count,
@@ -560,7 +639,8 @@ def morphology_raster_record(raster: CartesianXYRaster) -> dict[str, Any]:
         "record_type": "q011_section54_morphology_raster",
         "quantity": raster.quantity,
         "source_field": raster.source_field,
-        "time_omega0_inverse": raster.time_omega0_inverse,
+        "nominal_slot_time": raster.nominal_slot_time,
+        "observed_committed_time": raster.observed_committed_time,
         "cartesian_axes": ["x2", "x1"],
         "shape_y_x": list(raster.values_y_x.shape),
         "x1_faces_c_over_omega_pi": raster.x1_faces_c_over_omega_pi.tolist(),
@@ -588,7 +668,8 @@ def y_area_weighted_profile_record(profile: YAreaWeightedProfile) -> dict[str, A
     return {
         "quantity": profile.quantity,
         "source_field": profile.source_field,
-        "time_omega0_inverse": profile.time_omega0_inverse,
+        "nominal_slot_time": profile.nominal_slot_time,
+        "observed_committed_time": profile.observed_committed_time,
         "x1_centers_c_over_omega_pi": profile.x1_centers_c_over_omega_pi.tolist(),
         "values_x": profile.values_x.tolist(),
         "column_areas": profile.column_areas.tolist(),
@@ -599,6 +680,8 @@ def detected_front_record(front: DetectedFrontRecord) -> dict[str, Any]:
     """Return a deterministic JSON-ready detected-front record."""
     _require(isinstance(front, DetectedFrontRecord), "expected a DetectedFrontRecord")
     return {
+        "nominal_slot_time": front.nominal_slot_time,
+        "observed_committed_time": front.observed_committed_time,
         "x_ideal_c_over_omega_pi": front.x_ideal_c_over_omega_pi,
         "search_window_c_over_omega_pi": list(front.search_window_c_over_omega_pi),
         "detector": "unique_strongest_positive_density_gradient",
@@ -623,7 +706,8 @@ def upstream_b_amplification_record(
         "expected an UpstreamBAmplificationRecord",
     )
     return {
-        "time_omega0_inverse": amplification.time_omega0_inverse,
+        "nominal_slot_time": amplification.nominal_slot_time,
+        "observed_committed_time": amplification.observed_committed_time,
         "x_ideal_c_over_omega_pi": amplification.x_ideal_c_over_omega_pi,
         "upstream_window_c_over_omega_pi": list(
             amplification.upstream_window_c_over_omega_pi
@@ -641,14 +725,26 @@ def upstream_b_amplification_record(
 def reduce_t500_spatial_snapshot(
     datasets: Mapping[str, output_primitives.AthenaBinaryDataset],
     *,
+    nominal_slot_time: object,
+    observed_committed_time: object,
     x_ideal_c_over_omega_pi: object,
     target_level: int | None = None,
 ) -> dict[str, Any]:
     """Reduce one exact t=500 four-product spatial snapshot to archive records."""
-    rasters = compose_xy_snapshot(datasets, target_level=target_level)
+    nominal, observed = _snapshot_times(
+        nominal_slot_time,
+        observed_committed_time,
+        label="bounded spatial snapshot",
+    )
+    rasters = compose_xy_snapshot(
+        datasets,
+        nominal_slot_time=nominal,
+        observed_committed_time=observed,
+        target_level=target_level,
+    )
     _require(
-        rasters["rho"].time_omega0_inverse == T500_OMEGA0_INVERSE,
-        "bounded spatial snapshot reducer is defined only at t=500",
+        rasters["rho"].nominal_slot_time == T500_OMEGA0_INVERSE,
+        "bounded spatial snapshot reducer is defined only for nominal t=500",
     )
     profiles = {
         quantity: y_area_weighted_profile(raster)
@@ -663,7 +759,8 @@ def reduce_t500_spatial_snapshot(
     return {
         "schema_version": 1,
         "record_type": "q011_section54_t500_spatial_reduction",
-        "time_omega0_inverse": T500_OMEGA0_INVERSE,
+        "nominal_slot_time": nominal,
+        "observed_committed_time": observed,
         "x_ideal_c_over_omega_pi": _finite_real(
             x_ideal_c_over_omega_pi, "ideal shock position"
         ),

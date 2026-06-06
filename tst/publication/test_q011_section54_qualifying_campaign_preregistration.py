@@ -18,7 +18,7 @@ except ModuleNotFoundError:
 POLICY = (
     Path(__file__).resolve().parent
     / "readiness"
-    / "q011_section54_qualifying_campaign_preregistration_successor_v2_2026-06-01.json"
+    / "q011_section54_qualifying_campaign_preregistration_successor_v3_2026-06-06.json"
 )
 
 
@@ -115,7 +115,7 @@ def _validate_policy(policy: object) -> None:
         {
             "record_type": "q011_section54_qualifying_campaign_preregistration",
             "schema_version": 1,
-            "date": "2026-06-01",
+            "date": "2026-06-06",
             "gate": "Q-011",
             "claim_id": "CLAIM-PAPER-SHOCK-001",
             "qualification_effect": (
@@ -123,6 +123,14 @@ def _validate_policy(policy: object) -> None:
             ),
         },
         "policy/identity",
+    )
+    _strict_equal(
+        root["predecessor_record"],
+        (
+            "tst/publication/readiness/"
+            "q011_section54_qualifying_campaign_preregistration_successor_v2_2026-06-01.json"
+        ),
+        "policy/predecessor_record",
     )
     _require(type(root["scope"]) is str and root["scope"], "policy/scope: expected text")
     _strict_equal(
@@ -243,8 +251,46 @@ def _validate_policy(policy: object) -> None:
         criteria["snapshot_selection"],
         {
             "time_unit": "omega0_inverse",
-            "required_times": [500.0, 1200.0],
-            "absolute_match_tolerance": 1.0e-06,
+            "required_nominal_slots": [500.0, 1200.0],
+            "manifest_time_fields": {
+                "nominal_slot_time": "exact preregistered cadence label",
+                "observed_committed_time": (
+                    "canonical full-precision committed simulation time shared by "
+                    "one output cycle"
+                ),
+            },
+            "canonical_observed_time_source": "prtcl_all_pvtk_max_digits10_header",
+            "mesh_time_projection": (
+                "exact six-significant-decimal-digit projection of canonical "
+                "observed committed time"
+            ),
+            "nominal_slot_assignment": {
+                "due_comparison_precision": "ieee754_binary32",
+                "initial_slot_rule": (
+                    "nominal slot 0 requires exact observed committed time 0"
+                ),
+                "interior_slot_rule": (
+                    "float32(observed_committed_time) >= float32(nominal_slot_time) "
+                    "and float32(observed_committed_time) < "
+                    "float32(next_nominal_slot_time)"
+                ),
+                "terminal_slot_rule": (
+                    "nominal slot 1200 requires exact observed committed time 1200"
+                ),
+                "maximum_selected_t500_lateness_omega0_inverse": 0.1,
+            },
+            "common_cycle_policy": (
+                "all required mesh, particle and restart products in one nominal "
+                "slot bind one exact canonical observed committed time and one "
+                "common cycle"
+            ),
+            "terminal_completion": {
+                "terminal_nominal_slot_omega0_inverse": 1200.0,
+                "required_exact_observed_committed_time_omega0_inverse": 1200.0,
+                "stdout_termination_reason": "Terminating on time limit",
+                "stdout_time_and_tlim_must_equal_terminal_slot": True,
+                "early_finalization_policy": "fail_endpoint",
+            },
             "missing_or_ambiguous_snapshot": "fail_endpoint",
         },
         "criteria/snapshot_selection",
@@ -639,8 +685,8 @@ class Q011Section54QualifyingCampaignPreregistrationTests(unittest.TestCase):
             with self.subTest(alias=alias):
                 drift = _load_policy()
                 drift["athenak_selected_release_criteria"]["snapshot_selection"][
-                    "absolute_match_tolerance"
-                ] = alias
+                    "nominal_slot_assignment"
+                ]["maximum_selected_t500_lateness_omega0_inverse"] = alias
                 with self.assertRaises(PolicyError):
                     _validate_policy(drift)
 
@@ -650,7 +696,7 @@ class Q011Section54QualifyingCampaignPreregistrationTests(unittest.TestCase):
     def test_snapshot_classifier_filter_and_energy_variable_drift_fail_closed(self) -> None:
         mutations = [
             (
-                ("snapshot_selection", "required_times"),
+                ("snapshot_selection", "required_nominal_slots"),
                 [500.0],
             ),
             (

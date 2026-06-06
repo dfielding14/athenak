@@ -16,6 +16,7 @@ import os
 from pathlib import Path, PurePosixPath
 import re
 import stat
+import struct
 from typing import Any, Mapping, Sequence
 import uuid
 
@@ -40,12 +41,14 @@ _DIRECTORY_FLAGS = os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0)
 _MESH_NAME = re.compile(r"(?:[^/]+/)*[^/]+\.(rho|bmag|prtcl_jx|j2)\.[^/]+\.bin")
 _PARTICLE_NAME = re.compile(r"(?:[^/]+/)*[^/]+\.prtcl_all\.[^/]+\.part\.vtk")
 _RESTART_NAME = re.compile(r"rst/(?:rank_[0-9]{8}/)?[^/]+\.rst")
-_RESTART_MANIFEST_NAME = re.compile(r"rst/[^/]+\.rst\.manifest")
-_RESTART_CYCLE = re.compile(rb"(?:^|\n)cycle=([0-9]+)(?:\n|$)")
-_RESTART_TIME = re.compile(
-    rb"(?:^|\n)time=([-+]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)"
-    rb"(?:[eE][-+]?[0-9]+)?)(?:\n|$)"
+_RESTART_COMPLETE_NAME = re.compile(
+    r"rst/(?:rank_[0-9]{8}/)?[^/]+\.rst\.complete"
 )
+_RESTART_MANIFEST_NAME = re.compile(r"rst/[^/]+\.rst\.manifest")
+_RESTART_MANIFEST_COMPLETE_NAME = re.compile(r"rst/[^/]+\.rst\.manifest\.complete")
+_RESTART_CYCLE = re.compile(rb"(?:^|\n)cycle=([0-9]+)(?:\n|$)")
+_NOMINAL_CADENCE_SLOTS = tuple(float(value) for value in range(0, 1300, 100))
+_MESH_KINDS = frozenset(("rho", "bmag", "prtcl_jx", "j2"))
 _BINDING_PAYLOADS = {
     "clean_candidate_manifest": "bindings/clean_candidate_manifest.json",
     "deck": "bindings/pic_parallel_shock_section54_paper_vl2_tsc.athinput",
@@ -319,35 +322,82 @@ def _read_raw_member(root_fd: int, entry: Any) -> bytes:
 
 
 def _product(
-    kind: str, relative: str, payload: bytes, time: float | None
+    kind: str,
+    relative: str,
+    payload: bytes,
+    nominal_slot_time: float | None,
+    observed_committed_time: float | None,
 ) -> dict[str, Any]:
     return {
         "kind": kind,
         "path": relative,
         "sha256": _sha256_bytes(payload),
-        "snapshot_time": time,
+        "nominal_slot_time": nominal_slot_time,
+        "observed_committed_time": observed_committed_time,
     }
 
 
-def _restart_time(
-    payload: bytes, cycle_times: Mapping[int, float], *, label: str
-) -> float:
+def _float32(value: float, *, label: str) -> float:
+    try:
+        projected = struct.unpack("=f", struct.pack("=f", value))[0]
+    except (OverflowError, struct.error) as error:
+        raise AttemptManifestMaterializationError(
+            f"{label} cannot be represented as AthenaK float32 scheduler time"
+        ) from error
+    _require(math.isfinite(projected), f"{label} has non-finite float32 projection")
+    return projected
+
+
+def _nominal_cadence_slot(observed_time: float, *, label: str) -> float:
+    _require(math.isfinite(observed_time), f"{label} is non-finite")
+    if observed_time == _NOMINAL_CADENCE_SLOTS[0]:
+        return _NOMINAL_CADENCE_SLOTS[0]
+    if observed_time == _NOMINAL_CADENCE_SLOTS[-1]:
+        return _NOMINAL_CADENCE_SLOTS[-1]
+    observed_32 = _float32(observed_time, label=label)
+    matches = [
+        nominal
+        for nominal, next_nominal in zip(
+            _NOMINAL_CADENCE_SLOTS[1:-1], _NOMINAL_CADENCE_SLOTS[2:]
+        )
+        if observed_32 >= _float32(nominal, label=f"nominal cadence {nominal}")
+        and observed_32 < _float32(next_nominal, label=f"nominal cadence {next_nominal}")
+    ]
+    _require(
+        len(matches) == 1,
+        f"{label} does not identify exactly one AthenaK nominal cadence slot",
+    )
+    return matches[0]
+
+
+def _athenak_binary_time_projection(observed_time: float) -> float:
+    return float(format(observed_time, ".6g"))
+
+
+def _restart_cycle(
+    payload: bytes, cycle_bindings: Mapping[int, Mapping[str, float]], *, label: str
+) -> int:
     header = payload.partition(b"<par_end>\n")[0]
-    time_match = _RESTART_TIME.search(header)
-    if time_match is not None:
-        try:
-            value = float(time_match.group(1))
-        except ValueError as error:
-            raise AttemptManifestMaterializationError(
-                f"{label} embeds an invalid restart time"
-            ) from error
-        _require(math.isfinite(value), f"{label} embeds a non-finite restart time")
-        return value
     cycle_match = _RESTART_CYCLE.search(header)
     _require(cycle_match is not None, f"{label} lacks a correlatable restart cycle")
     cycle = int(cycle_match.group(1))
-    _require(cycle in cycle_times, f"{label} restart cycle has no matching mesh snapshot")
-    return cycle_times[cycle]
+    _require(
+        cycle in cycle_bindings,
+        f"{label} restart cycle has no canonical particle snapshot",
+    )
+    return cycle
+
+
+def _is_supported_product_path(relative: str) -> bool:
+    return (
+        relative == "stdout.txt"
+        or _MESH_NAME.fullmatch(relative) is not None
+        or _PARTICLE_NAME.fullmatch(relative) is not None
+        or _RESTART_NAME.fullmatch(relative) is not None
+        or _RESTART_COMPLETE_NAME.fullmatch(relative) is not None
+        or _RESTART_MANIFEST_NAME.fullmatch(relative) is not None
+        or _RESTART_MANIFEST_COMPLETE_NAME.fullmatch(relative) is not None
+    )
 
 
 def _classify_products(root_fd: int, snapshot: Any) -> list[dict[str, Any]]:
@@ -370,9 +420,63 @@ def _classify_products(root_fd: int, snapshot: Any) -> list[dict[str, Any]]:
         relative: _read_raw_member(root_fd, entry)
         for relative, entry in entries.items()
     }
+    unknown = sorted(
+        relative for relative in payloads if not _is_supported_product_path(relative)
+    )
+    _require(
+        not unknown,
+        f"completed raw output tree contains unsupported files: {unknown}",
+    )
     products: dict[str, dict[str, Any]] = {}
-    cycle_times: dict[int, float] = {}
-    restart_times: dict[str, float] = {}
+    cycle_bindings: dict[int, dict[str, float]] = {}
+    slot_cycles: dict[float, int] = {}
+    mesh_kinds_by_cycle: dict[int, set[str]] = {}
+    restart_cycles: dict[str, int] = {}
+    restart_paths_by_cycle: dict[int, set[str]] = {}
+    restart_complete_paths: set[str] = set()
+    restart_manifest_cycles: dict[str, int] = {}
+    restart_manifest_paths_by_cycle: dict[int, set[str]] = {}
+    restart_manifest_members: dict[str, set[str]] = {}
+    restart_manifest_complete_paths: set[str] = set()
+
+    for relative, payload in sorted(payloads.items()):
+        if _PARTICLE_NAME.fullmatch(relative) is None:
+            continue
+        try:
+            header = campaign._parse_pvtk_execution_header(payload, relative)
+        except campaign.QualificationError as error:
+            raise AttemptManifestMaterializationError(str(error)) from error
+        cycle = header["cycle"]
+        observed_time = header["time"]
+        _require(cycle not in cycle_bindings, f"duplicate particle output cycle {cycle}")
+        nominal_slot = _nominal_cadence_slot(
+            observed_time, label=f"{relative} observed committed time"
+        )
+        _require(
+            nominal_slot not in slot_cycles,
+            f"duplicate nominal cadence slot {nominal_slot:.1f}",
+        )
+        cycle_bindings[cycle] = {
+            "nominal_slot_time": nominal_slot,
+            "observed_committed_time": observed_time,
+        }
+        slot_cycles[nominal_slot] = cycle
+        products[relative] = _product(
+            "prtcl_all", relative, payload, nominal_slot, observed_time
+        )
+
+    missing_slots = sorted(set(_NOMINAL_CADENCE_SLOTS) - set(slot_cycles))
+    _require(
+        not missing_slots,
+        f"completed raw output tree is missing nominal cadence slots: {missing_slots}",
+    )
+    ordered_slots = [
+        cycle_bindings[cycle]["nominal_slot_time"] for cycle in sorted(cycle_bindings)
+    ]
+    _require(
+        ordered_slots == list(_NOMINAL_CADENCE_SLOTS),
+        "particle output cycles do not increase in nominal cadence order",
+    )
 
     for relative, payload in sorted(payloads.items()):
         match = _MESH_NAME.fullmatch(relative)
@@ -387,45 +491,69 @@ def _classify_products(root_fd: int, snapshot: Any) -> list[dict[str, Any]]:
             raise AttemptManifestMaterializationError(
                 f"{relative} is not a valid Athena binary output: {error}"
             ) from error
-        existing = cycle_times.setdefault(dataset.cycle, dataset.time)
         _require(
-            existing == dataset.time,
-            f"mesh outputs disagree on cycle {dataset.cycle}",
+            dataset.cycle in cycle_bindings,
+            f"{relative} mesh cycle has no canonical particle snapshot",
         )
-        products[relative] = _product(kind, relative, payload, dataset.time)
+        binding = cycle_bindings[dataset.cycle]
+        expected_time = _athenak_binary_time_projection(
+            binding["observed_committed_time"]
+        )
+        _require(
+            dataset.time == expected_time,
+            f"{relative} mesh time differs from the canonical particle time "
+            "six-significant-digit projection",
+        )
+        kinds = mesh_kinds_by_cycle.setdefault(dataset.cycle, set())
+        _require(
+            kind not in kinds,
+            f"duplicate {kind} mesh output on cycle {dataset.cycle}",
+        )
+        kinds.add(kind)
+        products[relative] = _product(
+            kind,
+            relative,
+            payload,
+            binding["nominal_slot_time"],
+            binding["observed_committed_time"],
+        )
 
-    for relative, payload in sorted(payloads.items()):
-        if _PARTICLE_NAME.fullmatch(relative) is None:
-            continue
-        try:
-            header = campaign._parse_pvtk_execution_header(payload, relative)
-        except campaign.QualificationError as error:
-            raise AttemptManifestMaterializationError(str(error)) from error
-        existing = cycle_times.setdefault(header["cycle"], header["time"])
+    for cycle in sorted(cycle_bindings):
         _require(
-            existing == header["time"],
-            f"particle output disagrees on cycle {header['cycle']}",
+            mesh_kinds_by_cycle.get(cycle, set()) == _MESH_KINDS,
+            f"cycle {cycle} does not contain exactly one of every required mesh product",
         )
-        products[relative] = _product("prtcl_all", relative, payload, header["time"])
 
     for relative, payload in sorted(payloads.items()):
         if _RESTART_NAME.fullmatch(relative) is None:
             continue
-        restart_times[relative] = _restart_time(payload, cycle_times, label=relative)
+        cycle = _restart_cycle(payload, cycle_bindings, label=relative)
+        restart_cycles[relative] = cycle
+        restart_paths_by_cycle.setdefault(cycle, set()).add(relative)
+        binding = cycle_bindings[cycle]
         products[relative] = _product(
-            "restart", relative, payload, restart_times[relative]
+            "restart",
+            relative,
+            payload,
+            binding["nominal_slot_time"],
+            binding["observed_committed_time"],
         )
 
     for relative, payload in sorted(payloads.items()):
-        if not relative.endswith(".rst.complete"):
+        if _RESTART_COMPLETE_NAME.fullmatch(relative) is None:
             continue
         restart_path = relative.removesuffix(".complete")
-        _require(restart_path in restart_times, f"{relative} lacks its restart payload")
+        _require(restart_path in restart_cycles, f"{relative} lacks its restart payload")
+        restart_complete_paths.add(restart_path)
+        binding = cycle_bindings[restart_cycles[restart_path]]
         products[relative] = _product(
-            "restart_complete", relative, payload, restart_times[restart_path]
+            "restart_complete",
+            relative,
+            payload,
+            binding["nominal_slot_time"],
+            binding["observed_committed_time"],
         )
 
-    manifest_times: dict[str, float] = {}
     for relative, payload in sorted(payloads.items()):
         if _RESTART_MANIFEST_NAME.fullmatch(relative) is None:
             continue
@@ -433,36 +561,72 @@ def _classify_products(root_fd: int, snapshot: Any) -> list[dict[str, Any]]:
             members = campaign._parse_restart_manifest(payload, relative)
         except campaign.QualificationError as error:
             raise AttemptManifestMaterializationError(str(error)) from error
-        times = {restart_times.get(member["path"]) for member in members}
+        member_paths = {member["path"] for member in members}
+        cycles = {restart_cycles.get(member_path) for member_path in member_paths}
         _require(
-            None not in times and len(times) == 1,
+            None not in cycles and len(cycles) == 1,
             f"{relative} restart members do not identify one snapshot",
         )
-        time = next(iter(times))
-        _require(type(time) is float, f"{relative} restart time is invalid")
-        manifest_times[relative] = time
-        products[relative] = _product("restart_manifest", relative, payload, time)
+        cycle = next(iter(cycles))
+        _require(type(cycle) is int, f"{relative} restart cycle is invalid")
+        restart_manifest_cycles[relative] = cycle
+        restart_manifest_paths_by_cycle.setdefault(cycle, set()).add(relative)
+        restart_manifest_members[relative] = member_paths
+        binding = cycle_bindings[cycle]
+        products[relative] = _product(
+            "restart_manifest",
+            relative,
+            payload,
+            binding["nominal_slot_time"],
+            binding["observed_committed_time"],
+        )
 
     for relative, payload in sorted(payloads.items()):
-        if not relative.endswith(".rst.manifest.complete"):
+        if _RESTART_MANIFEST_COMPLETE_NAME.fullmatch(relative) is None:
             continue
         manifest_path = relative.removesuffix(".complete")
         _require(
-            manifest_path in manifest_times,
+            manifest_path in restart_manifest_cycles,
             f"{relative} lacks its restart manifest",
         )
+        restart_manifest_complete_paths.add(manifest_path)
+        binding = cycle_bindings[restart_manifest_cycles[manifest_path]]
         products[relative] = _product(
-            "restart_manifest_complete", relative, payload, manifest_times[manifest_path]
+            "restart_manifest_complete",
+            relative,
+            payload,
+            binding["nominal_slot_time"],
+            binding["observed_committed_time"],
+        )
+
+    _require(
+        restart_complete_paths == set(restart_cycles),
+        "restart payload completion-marker inventory is incomplete",
+    )
+    _require(
+        restart_manifest_complete_paths == set(restart_manifest_cycles),
+        "restart manifest completion-marker inventory is incomplete",
+    )
+    for cycle in sorted(cycle_bindings):
+        manifests = restart_manifest_paths_by_cycle.get(cycle, set())
+        _require(
+            len(manifests) == 1,
+            f"cycle {cycle} does not contain exactly one restart manifest",
+        )
+        manifest_path = next(iter(manifests))
+        _require(
+            restart_manifest_members[manifest_path]
+            == restart_paths_by_cycle.get(cycle, set()),
+            f"cycle {cycle} restart manifest does not bind every restart payload",
         )
 
     _require("stdout.txt" in payloads, "completed raw output tree lacks stdout.txt")
     products["stdout.txt"] = _product(
-        "stdout", "stdout.txt", payloads["stdout.txt"], None
+        "stdout", "stdout.txt", payloads["stdout.txt"], None, None
     )
-    unknown = sorted(set(payloads) - set(products))
     _require(
-        not unknown,
-        f"completed raw output tree contains unsupported files: {unknown}",
+        set(payloads) == set(products),
+        "completed raw output product census is incomplete",
     )
     return [products[path] for path in sorted(products)]
 

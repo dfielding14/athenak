@@ -83,18 +83,18 @@ ANALYZER_PATH = Path(__file__).resolve()
 PREREGISTRATION_PATH = (
     REPO_ROOT
     / "tst/publication/readiness/"
-    "q011_section54_qualifying_campaign_preregistration_successor_v2_2026-06-01.json"
+    "q011_section54_qualifying_campaign_preregistration_successor_v3_2026-06-06.json"
 )
 RESTART_PREREGISTRATION_PATH = (
     REPO_ROOT
     / "tst/publication/readiness/"
-    "q011_section54_restart_continuation_preregistration_2026-06-01.json"
+    "q011_section54_restart_continuation_preregistration_successor_2026-06-06.json"
 )
 EXPECTED_PREREGISTRATION_SHA256 = (
-    "6fd9ebbc247b6cace69f0ff61553cf198241577b457410d57d26afcbf27cdc35"
+    "1216fc0fcaa78fe423855b9c2ad2039597ef2ed722c46ff8605d184fcedcf1c0"
 )
 EXPECTED_RESTART_PREREGISTRATION_SHA256 = (
-    "c3360694dc90d391c5ccf7a0620ae576733e87beea3fa974c69602c82dd866ab"
+    "3ad3e05a34e7fedf578bfea3424fa98a62ece52d4cda827d010d9840a715376f"
 )
 ORION_BULK_ROOT = Path("/lustre/orion/ast207/proj-shared/dfielding/PIC")
 ACTIVE_DECK_SOURCE_PATH = (
@@ -301,6 +301,12 @@ _RESTART_MARKER_PATTERN = re.compile(
 _Q017_TELEMETRY_PATTERN = re.compile(
     r"^q017\.telemetry\.([A-Za-z0-9_.]+)=([^\s]+)$", re.MULTILINE
 )
+_TERMINAL_STATE_PATTERN = re.compile(
+    r"^time=([^\s]+) cycle=(0|[1-9][0-9]*)$", re.MULTILINE
+)
+_TERMINAL_LIMIT_PATTERN = re.compile(
+    r"^tlim=([^\s]+) nlim=([^\s]+)$", re.MULTILINE
+)
 _Q017_REQUIRED_NAMES = frozenset(
     {
         "schema_version",
@@ -413,8 +419,46 @@ _EXPECTED_POLICY_PROJECTION = {
     },
     "snapshot_selection": {
         "time_unit": "omega0_inverse",
-        "required_times": [500.0, 1200.0],
-        "absolute_match_tolerance": 1.0e-06,
+        "required_nominal_slots": [500.0, 1200.0],
+        "manifest_time_fields": {
+            "nominal_slot_time": "exact preregistered cadence label",
+            "observed_committed_time": (
+                "canonical full-precision committed simulation time shared by "
+                "one output cycle"
+            ),
+        },
+        "canonical_observed_time_source": "prtcl_all_pvtk_max_digits10_header",
+        "mesh_time_projection": (
+            "exact six-significant-decimal-digit projection of canonical "
+            "observed committed time"
+        ),
+        "nominal_slot_assignment": {
+            "due_comparison_precision": "ieee754_binary32",
+            "initial_slot_rule": (
+                "nominal slot 0 requires exact observed committed time 0"
+            ),
+            "interior_slot_rule": (
+                "float32(observed_committed_time) >= float32(nominal_slot_time) "
+                "and float32(observed_committed_time) < "
+                "float32(next_nominal_slot_time)"
+            ),
+            "terminal_slot_rule": (
+                "nominal slot 1200 requires exact observed committed time 1200"
+            ),
+            "maximum_selected_t500_lateness_omega0_inverse": 0.1,
+        },
+        "common_cycle_policy": (
+            "all required mesh, particle and restart products in one nominal "
+            "slot bind one exact canonical observed committed time and one "
+            "common cycle"
+        ),
+        "terminal_completion": {
+            "terminal_nominal_slot_omega0_inverse": 1200.0,
+            "required_exact_observed_committed_time_omega0_inverse": 1200.0,
+            "stdout_termination_reason": "Terminating on time limit",
+            "stdout_time_and_tlim_must_equal_terminal_slot": True,
+            "early_finalization_policy": "fail_endpoint",
+        },
         "missing_or_ambiguous_snapshot": "fail_endpoint",
     },
     "raw_bin_ids": ["rho", "bmag", "prtcl_jx", "j2"],
@@ -909,27 +953,49 @@ def _validate_manifest_schema(manifest: object, root: Path) -> dict[str, Any]:
 
 def _validate_product(value: object, index: int) -> dict[str, Any]:
     label = f"campaign manifest/products[{index}]"
-    product = _object(value, {"kind", "path", "sha256", "snapshot_time"}, label)
+    product = _object(
+        value,
+        {
+            "kind",
+            "path",
+            "sha256",
+            "nominal_slot_time",
+            "observed_committed_time",
+        },
+        label,
+    )
     kind = _text(product["kind"], f"{label}/kind")
     _require(
         kind in _ALL_PRODUCT_KINDS,
         "unknown_product",
         f"{label}: unknown kind {kind!r}",
     )
-    snapshot_time = product["snapshot_time"]
+    nominal_slot_time = product["nominal_slot_time"]
+    observed_committed_time = product["observed_committed_time"]
     if kind in _SNAPSHOT_PRODUCT_KINDS:
-        snapshot_time = _finite_float(snapshot_time, f"{label}/snapshot_time")
+        nominal_slot_time = _finite_float(
+            nominal_slot_time, f"{label}/nominal_slot_time"
+        )
+        observed_committed_time = _finite_float(
+            observed_committed_time, f"{label}/observed_committed_time"
+        )
+        _require(
+            nominal_slot_time >= 0.0 and observed_committed_time >= 0.0,
+            "schema_type_error",
+            f"{label}: snapshot times must be nonnegative",
+        )
     else:
         _require(
-            snapshot_time is None,
+            nominal_slot_time is None and observed_committed_time is None,
             "schema_type_error",
-            f"{label}/snapshot_time: run-level products require null",
+            f"{label}: run-level products require null nominal and observed times",
         )
     return {
         "kind": kind,
         "path": _relative_path(product["path"], f"{label}/path"),
         "sha256": _sha256(product["sha256"], f"{label}/sha256"),
-        "snapshot_time": snapshot_time,
+        "nominal_slot_time": nominal_slot_time,
+        "observed_committed_time": observed_committed_time,
     }
 
 
@@ -1949,12 +2015,20 @@ def _validate_materialized_planner_graph(
         "selected_problem_ps_p0": selected_ps_p0,
         "authorized_orion_attempt_root": str(restart_artifact_root),
         "restart_preregistration": source_bindings["restart_preregistration"],
-        "checkpoint_time_omega0_inverse": restart_policy["continuation_contract"][
-            "checkpoint_time_omega0_inverse"
-        ],
-        "retained_output_schedule_after_checkpoint_omega0_inverse": restart_policy[
+        "checkpoint_nominal_slot_omega0_inverse": restart_policy[
             "continuation_contract"
-        ]["retained_output_schedule_after_checkpoint_omega0_inverse"],
+        ][
+            "checkpoint_nominal_slot_omega0_inverse"
+        ],
+        "checkpoint_observed_commit_binding_required": True,
+        "retained_output_nominal_slots_after_checkpoint_omega0_inverse": (
+            restart_policy["continuation_contract"][
+                "retained_output_nominal_slots_after_checkpoint_omega0_inverse"
+            ]
+        ),
+        "retained_output_pairing_policy": restart_policy["continuation_contract"][
+            "retained_output_pairing_policy"
+        ],
         "comparison_tolerances_max_absolute_difference": restart_policy[
             "continuation_contract"
         ]["comparison_tolerances_max_absolute_difference"],
@@ -2988,23 +3062,73 @@ def _required_retained_times(policy: Mapping[str, Any]) -> list[float]:
     return policy["artifact_retention_policy"]["required_output_times_omega0_inverse"]
 
 
-def _snapshot_tolerance(policy: Mapping[str, Any]) -> float:
-    snapshot_policy = policy["athenak_selected_release_criteria"]["snapshot_selection"]
-    return snapshot_policy["absolute_match_tolerance"]
+def _snapshot_policy(policy: Mapping[str, Any]) -> Mapping[str, Any]:
+    return policy["athenak_selected_release_criteria"]["snapshot_selection"]
 
 
-def _required_time_key(snapshot_time: float, policy: Mapping[str, Any]) -> str:
+def _float32(value: float) -> float:
+    return float(np.float32(value))
+
+
+def _mesh_time_projection(observed_committed_time: float) -> float:
+    return float(format(observed_committed_time, ".6g"))
+
+
+def _required_time_key(nominal_slot_time: float, policy: Mapping[str, Any]) -> str:
     matches = [
         required_time
         for required_time in _required_retained_times(policy)
-        if abs(snapshot_time - required_time) <= _snapshot_tolerance(policy)
+        if nominal_slot_time == required_time
     ]
     _require(
         len(matches) == 1,
         "snapshot_cadence_drift",
-        f"snapshot time {snapshot_time!r} does not identify exactly one retained cadence time",
+        (
+            f"nominal slot {nominal_slot_time!r} does not identify exactly one "
+            "retained cadence time"
+        ),
     )
     return f"{matches[0]:.1f}"
+
+
+def _validate_observed_time_for_slot(
+    nominal_slot_time: float,
+    observed_committed_time: float,
+    policy: Mapping[str, Any],
+) -> None:
+    retained = _required_retained_times(policy)
+    index = retained.index(nominal_slot_time)
+    terminal = retained[-1]
+    if index == 0:
+        valid = observed_committed_time == nominal_slot_time
+    elif nominal_slot_time == terminal:
+        valid = observed_committed_time == terminal
+    else:
+        next_slot = retained[index + 1]
+        valid = (
+            _float32(observed_committed_time) >= _float32(nominal_slot_time)
+            and _float32(observed_committed_time) < _float32(next_slot)
+        )
+    _require(
+        valid,
+        "snapshot_cadence_drift",
+        (
+            f"observed committed time {observed_committed_time!r} is invalid for "
+            f"nominal slot {nominal_slot_time!r}"
+        ),
+    )
+    if nominal_slot_time == 500.0:
+        maximum_lateness = _snapshot_policy(policy)["nominal_slot_assignment"][
+            "maximum_selected_t500_lateness_omega0_inverse"
+        ]
+        _require(
+            observed_committed_time <= nominal_slot_time + maximum_lateness,
+            "snapshot_cadence_drift",
+            (
+                f"selected t500 observed lateness exceeds {maximum_lateness!r}: "
+                f"{observed_committed_time - nominal_slot_time!r}"
+            ),
+        )
 
 
 def _select_retained_snapshot_products(
@@ -3013,7 +3137,10 @@ def _select_retained_snapshot_products(
     retained: dict[str, dict[str, dict[str, Any]]] = {}
     raw_products = [product for product in products if product["kind"] in _ENDPOINT_PRODUCT_KINDS]
     for product in raw_products:
-        _required_time_key(product["snapshot_time"], policy)
+        _required_time_key(product["nominal_slot_time"], policy)
+        _validate_observed_time_for_slot(
+            product["nominal_slot_time"], product["observed_committed_time"], policy
+        )
     for required_time in _required_retained_times(policy):
         snapshot: dict[str, dict[str, Any]] = {}
         for kind in _ENDPOINT_PRODUCT_KINDS:
@@ -3021,8 +3148,7 @@ def _select_retained_snapshot_products(
                 product
                 for product in raw_products
                 if product["kind"] == kind
-                and abs(product["snapshot_time"] - required_time)
-                <= _snapshot_tolerance(policy)
+                and product["nominal_slot_time"] == required_time
             ]
             _require(
                 len(matches) == 1,
@@ -3030,6 +3156,14 @@ def _select_retained_snapshot_products(
                 f"{kind} snapshot at t={required_time:.1f} has {len(matches)} matches",
             )
             snapshot[kind] = dict(matches[0])
+        observed_times = {
+            product["observed_committed_time"] for product in snapshot.values()
+        }
+        _require(
+            len(observed_times) == 1,
+            "snapshot_metadata_drift",
+            f"nominal slot t={required_time:.1f} binds multiple observed committed times",
+        )
         retained[f"{required_time:.1f}"] = snapshot
     return retained
 
@@ -3040,7 +3174,7 @@ def _select_products(
 ) -> dict[str, dict[str, dict[str, Any]]]:
     snapshot_policy = policy["athenak_selected_release_criteria"]["snapshot_selection"]
     selected: dict[str, dict[str, dict[str, Any]]] = {}
-    for required_time in snapshot_policy["required_times"]:
+    for required_time in snapshot_policy["required_nominal_slots"]:
         key = f"{required_time:.1f}"
         _require(key in retained, "missing_endpoint", f"missing endpoint snapshot t={key}")
         selected[key] = {kind: dict(product) for kind, product in retained[key].items()}
@@ -3186,7 +3320,10 @@ def _validate_restart_publications(
         product for product in products if product["kind"] in _RESTART_PRODUCT_KINDS
     ]
     for product in restart_products:
-        _required_time_key(product["snapshot_time"], policy)
+        _required_time_key(product["nominal_slot_time"], policy)
+        _validate_observed_time_for_slot(
+            product["nominal_slot_time"], product["observed_committed_time"], policy
+        )
     actual = {(product["kind"], product["path"]) for product in restart_products}
     expected: set[tuple[str, str]] = set()
     report: dict[str, dict[str, Any]] = {}
@@ -3196,7 +3333,7 @@ def _validate_restart_publications(
             product
             for product in restart_products
             if product["kind"] == "restart_manifest"
-            and abs(product["snapshot_time"] - required_time) <= _snapshot_tolerance(policy)
+            and product["nominal_slot_time"] == required_time
         ]
         _require(
             len(manifest_matches) == 1,
@@ -3218,7 +3355,7 @@ def _validate_restart_publications(
             for product in restart_products
             if product["kind"] == "restart_manifest_complete"
             and product["path"] == manifest_marker_path
-            and abs(product["snapshot_time"] - required_time) <= _snapshot_tolerance(policy)
+            and product["nominal_slot_time"] == required_time
         ]
         _require(
             len(marker_matches) == 1,
@@ -3240,16 +3377,14 @@ def _validate_restart_publications(
                 for product in restart_products
                 if product["kind"] == "restart"
                 and product["path"] == member_path
-                and abs(product["snapshot_time"] - required_time)
-                <= _snapshot_tolerance(policy)
+                and product["nominal_slot_time"] == required_time
             ]
             marker_matches = [
                 product
                 for product in restart_products
                 if product["kind"] == "restart_complete"
                 and product["path"] == marker_path
-                and abs(product["snapshot_time"] - required_time)
-                <= _snapshot_tolerance(policy)
+                and product["nominal_slot_time"] == required_time
             ]
             _require(
                 len(payload_matches) == 1 and len(marker_matches) == 1,
@@ -3271,10 +3406,25 @@ def _validate_restart_publications(
                 "invalid_restart_manifest",
                 f"{manifest_path}: member digest drifted for {member_path}",
             )
+        slot_products = [
+            product
+            for product in restart_products
+            if product["nominal_slot_time"] == required_time
+        ]
+        observed_times = {
+            product["observed_committed_time"] for product in slot_products
+        }
+        _require(
+            len(observed_times) == 1,
+            "snapshot_metadata_drift",
+            f"restart products at nominal slot t={key} bind multiple observed times",
+        )
         report[key] = {
             "manifest_path": manifest_path,
             "layout": layout,
             "member_count": len(members),
+            "nominal_slot_time": required_time,
+            "observed_committed_time": next(iter(observed_times)),
         }
     _require(
         actual == expected,
@@ -3402,9 +3552,13 @@ def _validate_snapshot_payloads(
     policy: Mapping[str, Any],
 ) -> dict[str, dict[str, Any]]:
     report = {}
-    tolerance = _snapshot_tolerance(policy)
     for time, products in retained.items():
-        expected_time = float(time)
+        nominal_slot_time = float(time)
+        observed_committed_time = products["prtcl_all"]["observed_committed_time"]
+        _validate_observed_time_for_slot(
+            nominal_slot_time, observed_committed_time, policy
+        )
+        expected_mesh_time = _mesh_time_projection(observed_committed_time)
         cycles: dict[str, int] = {}
         mesh_report = {}
         for kind in ("rho", "bmag", "prtcl_jx", "j2"):
@@ -3417,10 +3571,15 @@ def _validate_snapshot_payloads(
             except ValueError as error:
                 _fail("invalid_mesh_bin", f"{kind} snapshot at t={time}: {error}")
             _require(
-                abs(dataset.time - expected_time) <= tolerance
-                and abs(dataset.time - product["snapshot_time"]) <= tolerance,
+                dataset.time == expected_mesh_time
+                and product["nominal_slot_time"] == nominal_slot_time
+                and product["observed_committed_time"] == observed_committed_time,
                 "snapshot_metadata_drift",
-                f"{kind} snapshot at t={time}: embedded time is {dataset.time!r}",
+                (
+                    f"{kind} snapshot at nominal t={time}: embedded time "
+                    f"{dataset.time!r} does not equal the six-significant-digit "
+                    f"projection {expected_mesh_time!r}"
+                ),
             )
             _require(
                 dataset.variable_names == _EXPECTED_BIN_FIELDS[kind],
@@ -3444,10 +3603,14 @@ def _validate_snapshot_payloads(
         )
         header = particle_report["execution_header"]
         _require(
-            abs(header["time"] - expected_time) <= tolerance
-            and abs(header["time"] - particle["snapshot_time"]) <= tolerance,
+            header["time"] == observed_committed_time
+            and particle["nominal_slot_time"] == nominal_slot_time,
             "snapshot_metadata_drift",
-            f"prtcl_all snapshot at t={time}: embedded time is {header['time']!r}",
+            (
+                f"prtcl_all snapshot at nominal t={time}: embedded time "
+                f"{header['time']!r} differs from canonical observed committed "
+                f"time {observed_committed_time!r}"
+            ),
         )
         cycles["prtcl_all"] = header["cycle"]
         _require(
@@ -3457,6 +3620,8 @@ def _validate_snapshot_payloads(
         )
         report[time] = {
             "cycle": next(iter(cycles.values())),
+            "nominal_slot_time": nominal_slot_time,
+            "observed_committed_time": observed_committed_time,
             "mesh_bins": mesh_report,
             "particles": particle_report,
         }
@@ -3464,7 +3629,7 @@ def _validate_snapshot_payloads(
 
 
 def _validate_stdout_telemetry(
-    payload: bytes, run_identity: Mapping[str, Any]
+    payload: bytes, run_identity: Mapping[str, Any], policy: Mapping[str, Any]
 ) -> dict[str, Any]:
     try:
         text = payload.decode("utf-8")
@@ -3514,6 +3679,39 @@ def _validate_stdout_telemetry(
         "runtime_identity_mismatch",
         "stdout PIC runtime identity differs from the retained run identity",
     )
+    terminal_policy = _snapshot_policy(policy)["terminal_completion"]
+    termination_lines = [
+        line for line in text.splitlines() if line.startswith("Terminating on ")
+    ]
+    _require(
+        termination_lines == [terminal_policy["stdout_termination_reason"]],
+        "terminal_completion_drift",
+        "stdout does not prove unique time-limit termination",
+    )
+    state_matches = list(_TERMINAL_STATE_PATTERN.finditer(text))
+    limit_matches = list(_TERMINAL_LIMIT_PATTERN.finditer(text))
+    _require(
+        len(state_matches) == 1 and len(limit_matches) == 1,
+        "terminal_completion_drift",
+        "stdout terminal time or time-limit record is missing or ambiguous",
+    )
+    try:
+        terminal_time = float(state_matches[0].group(1))
+        terminal_cycle = int(state_matches[0].group(2))
+        terminal_tlim = float(limit_matches[0].group(1))
+    except ValueError:
+        _fail("terminal_completion_drift", "stdout terminal state is non-numeric")
+    required_terminal = terminal_policy[
+        "required_exact_observed_committed_time_omega0_inverse"
+    ]
+    _require(
+        math.isfinite(terminal_time)
+        and math.isfinite(terminal_tlim)
+        and terminal_time == required_terminal
+        and terminal_tlim == required_terminal,
+        "terminal_completion_drift",
+        "stdout terminal time and tlim do not equal the preregistered terminal slot",
+    )
     return {
         "schema_version": telemetry["schema_version"],
         "mpi_ranks": telemetry["mpi.ranks"],
@@ -3523,6 +3721,12 @@ def _validate_stdout_telemetry(
             "state": runtime_identity.state,
             "light_speed": runtime_identity.light_speed,
             "restart_schema": runtime_identity.restart_schema,
+        },
+        "terminal_completion": {
+            "termination_reason": termination_lines[0],
+            "time_omega0_inverse": terminal_time,
+            "cycle": terminal_cycle,
+            "tlim_omega0_inverse": terminal_tlim,
         },
     }
 
@@ -3651,7 +3855,15 @@ def _complete_campaign_admission(
     stdout_telemetry = _validate_stdout_telemetry(
         _member_payload(snapshot, stdout_product, "stdout product"),
         parsed["run_identity"],
+        policy,
     )
+    for time, restart_publication in restart_publications.items():
+        _require(
+            restart_publication["observed_committed_time"]
+            == snapshot_payloads[time]["observed_committed_time"],
+            "snapshot_metadata_drift",
+            f"restart and endpoint products at nominal slot t={time} bind different observed times",
+        )
     particle_endpoints = {
         time: snapshot_payloads[time]["particles"] for time in endpoint_products
     }

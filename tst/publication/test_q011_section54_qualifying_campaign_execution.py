@@ -1040,9 +1040,14 @@ class Q011Section54QualifyingCampaignExecutionTests(unittest.TestCase):
             carrier = _json(root / plan["restart_continuation_carrier"]["path"])
             self.assertEqual(carrier["variant"], "three_level_amr_root_dx12_finest_dx3")
             self.assertEqual(carrier["qualifying_seed"], execution.QUALIFYING_SEEDS[0])
-            self.assertEqual(carrier["checkpoint_time_omega0_inverse"], 500.0)
             self.assertEqual(
-                carrier["retained_output_schedule_after_checkpoint_omega0_inverse"],
+                carrier["checkpoint_nominal_slot_omega0_inverse"], 500.0
+            )
+            self.assertTrue(carrier["checkpoint_observed_commit_binding_required"])
+            self.assertEqual(
+                carrier[
+                    "retained_output_nominal_slots_after_checkpoint_omega0_inverse"
+                ],
                 [600.0, 700.0, 800.0, 900.0, 1000.0, 1100.0, 1200.0],
             )
             for path in [root, *root.rglob("*")]:

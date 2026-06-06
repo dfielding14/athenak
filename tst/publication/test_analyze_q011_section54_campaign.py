@@ -77,7 +77,7 @@ def _mesh_bin(kind: str, time: float, cycle: int) -> bytes:
     header = (
         b"Athena binary output version=1.1\n"
         b"  size of preheader=5\n"
-        + f"  time={time:.1f}\n".encode("ascii")
+        + f"  time={format(time, '.15g')}\n".encode("ascii")
         + f"  cycle={cycle}\n".encode("ascii")
         + b"  size of location=8\n"
         + b"  size of variable=4\n"
@@ -178,6 +178,13 @@ def _stdout_telemetry(
     for name in sorted(campaign._Q017_REQUIRED_NAMES - omit):
         value = 2.0 if name == "schema_version" else 1.0
         lines.append(f"q017.telemetry.{name}={value}")
+    lines.extend(
+        (
+            "Terminating on time limit",
+            "time=1200 cycle=120",
+            "tlim=1200 nlim=-1",
+        )
+    )
     return ("\n".join(lines) + "\n").encode("ascii")
 
 
@@ -348,12 +355,20 @@ def _planner_materialization_receipt(
         "selected_problem_ps_p0": selected_pressure,
         "authorized_orion_attempt_root": str(restart_artifact_root),
         "restart_preregistration": source_bindings["restart_preregistration"],
-        "checkpoint_time_omega0_inverse": restart_policy["continuation_contract"][
-            "checkpoint_time_omega0_inverse"
-        ],
-        "retained_output_schedule_after_checkpoint_omega0_inverse": restart_policy[
+        "checkpoint_nominal_slot_omega0_inverse": restart_policy[
             "continuation_contract"
-        ]["retained_output_schedule_after_checkpoint_omega0_inverse"],
+        ][
+            "checkpoint_nominal_slot_omega0_inverse"
+        ],
+        "checkpoint_observed_commit_binding_required": True,
+        "retained_output_nominal_slots_after_checkpoint_omega0_inverse": (
+            restart_policy["continuation_contract"][
+                "retained_output_nominal_slots_after_checkpoint_omega0_inverse"
+            ]
+        ),
+        "retained_output_pairing_policy": restart_policy["continuation_contract"][
+            "retained_output_pairing_policy"
+        ],
         "comparison_tolerances_max_absolute_difference": restart_policy[
             "continuation_contract"
         ]["comparison_tolerances_max_absolute_difference"],
@@ -628,7 +643,8 @@ def _product(
         "kind": kind,
         "path": binding["path"],
         "sha256": binding["sha256"],
-        "snapshot_time": snapshot_time,
+        "nominal_slot_time": snapshot_time,
+        "observed_committed_time": snapshot_time,
     }
 
 
@@ -1195,7 +1211,7 @@ def _find_product(manifest: dict[str, Any], kind: str, time: float | None) -> di
     return next(
         product
         for product in manifest["products"]
-        if product["kind"] == kind and product["snapshot_time"] == time
+        if product["kind"] == kind and product["nominal_slot_time"] == time
     )
 
 
@@ -1336,6 +1352,40 @@ def _rewrite_restart_payload(
     ).encode("utf-8")
     _rewrite_product(root, restart_manifest, publication_payload)
     _rewrite_product(root, manifest_marker, _restart_marker(publication_payload))
+
+
+def _rewrite_slot_observed_time(
+    root: Path,
+    manifest: dict[str, Any],
+    nominal_slot_time: float,
+    observed_committed_time: float,
+) -> None:
+    slot_products = [
+        product
+        for product in manifest["products"]
+        if product["nominal_slot_time"] == nominal_slot_time
+    ]
+    for product in slot_products:
+        product["observed_committed_time"] = observed_committed_time
+        if product["kind"] in ("rho", "bmag", "prtcl_jx", "j2"):
+            _rewrite_product(
+                root,
+                product,
+                _mesh_bin(
+                    product["kind"],
+                    campaign._mesh_time_projection(observed_committed_time),
+                    int(nominal_slot_time // 100),
+                ),
+            )
+        elif product["kind"] == "prtcl_all":
+            _rewrite_product(
+                root,
+                product,
+                _particle_vtk(
+                    observed_committed_time,
+                    int(nominal_slot_time // 100),
+                ),
+            )
 
 
 @contextmanager
@@ -1834,6 +1884,71 @@ class Q011Section54CampaignAdmissionTests(unittest.TestCase):
             admission["stdout_telemetry"]["pic_runtime_identity"]["state"],
             "momentum_p_over_m",
         )
+
+    def test_observed_committed_time_overshoot_is_admitted_by_nominal_slot(self) -> None:
+        observed = 500.053496123
+
+        def mutate(root: Path, manifest: dict[str, Any]) -> None:
+            _rewrite_slot_observed_time(root, manifest, 500.0, observed)
+
+        with _frozen_fixture(mutate) as fixture:
+            result = _qualify(*fixture)
+        self.assertTrue(result["admitted_for_follow_on_numerical_qualification"])
+        payload = result["admission"]["snapshot_payloads"]["500.0"]
+        self.assertEqual(payload["nominal_slot_time"], 500.0)
+        self.assertEqual(payload["observed_committed_time"], observed)
+        self.assertEqual(payload["mesh_bins"]["rho"]["time"], 500.053)
+
+    def test_float32_due_cell_early_observed_time_is_admitted(self) -> None:
+        observed = 499.99999
+
+        def mutate(root: Path, manifest: dict[str, Any]) -> None:
+            _rewrite_slot_observed_time(root, manifest, 500.0, observed)
+
+        with _frozen_fixture(mutate) as fixture:
+            result = _qualify(*fixture)
+        self.assertTrue(result["admitted_for_follow_on_numerical_qualification"])
+        self.assertEqual(
+            result["admission"]["snapshot_payloads"]["500.0"][
+                "observed_committed_time"
+            ],
+            observed,
+        )
+
+    def test_selected_t500_lateness_cap_is_fail_closed(self) -> None:
+        for observed, admitted in ((500.1, True), (500.100001, False)):
+            with self.subTest(observed=observed):
+                def mutate(
+                    root: Path,
+                    manifest: dict[str, Any],
+                    *,
+                    observed: float = observed,
+                ) -> None:
+                    _rewrite_slot_observed_time(root, manifest, 500.0, observed)
+
+                with _frozen_fixture(mutate) as fixture:
+                    result = _qualify(*fixture)
+                self.assertEqual(
+                    result["admitted_for_follow_on_numerical_qualification"],
+                    admitted,
+                )
+                if not admitted:
+                    self.assert_rejected(result, "snapshot_cadence_drift")
+
+    def test_early_finalization_is_rejected(self) -> None:
+        def mutate(root: Path, manifest: dict[str, Any]) -> None:
+            stdout = _find_product(manifest, "stdout", None)
+            _rewrite_product(
+                root,
+                stdout,
+                _stdout_telemetry().replace(
+                    b"Terminating on time limit\ntime=1200 cycle=120\ntlim=1200 nlim=-1\n",
+                    b"Terminating on wall clock limit\ntime=1199 cycle=120\ntlim=1200 nlim=-1\n",
+                ),
+            )
+
+        with _frozen_fixture(mutate) as fixture:
+            self.assert_rejected(_qualify(*fixture), "terminal_completion_drift")
 
     def test_ledger_snapshot_stays_pinned_during_raw_tree_validation(self) -> None:
         with _frozen_fixture() as fixture:
@@ -2338,7 +2453,7 @@ class Q011Section54CampaignAdmissionTests(unittest.TestCase):
     def test_pvtk_manifest_time_must_directly_match_embedded_time(self) -> None:
         def mutate(root: Path, manifest: dict[str, Any]) -> None:
             product = _find_product(manifest, "prtcl_all", 500.0)
-            product["snapshot_time"] = 500.00000075
+            product["observed_committed_time"] = 500.00000075
             _rewrite_product(root, product, _particle_vtk(499.99999925, 5))
 
         with _frozen_fixture(mutate) as fixture:

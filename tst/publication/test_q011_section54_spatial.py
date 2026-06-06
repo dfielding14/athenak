@@ -59,19 +59,23 @@ def _raster(
     quantity: str,
     values: object,
     *,
-    time: float = 500.0,
+    nominal_slot_time: float = 500.0,
+    observed_committed_time: float | None = None,
     x1_faces: object = (0.0, 1.0, 2.0),
     x2_faces: object = (0.0, 1.0, 2.0),
     source_levels: object | None = None,
     target_level: int = 0,
 ) -> spatial.CartesianXYRaster:
     array = np.asarray(values, dtype=np.float64)
+    if observed_committed_time is None:
+        observed_committed_time = nominal_slot_time
     if source_levels is None:
         source_levels = np.zeros_like(array, dtype=np.int64)
     return spatial.CartesianXYRaster(
         quantity=quantity,
         source_field=spatial.mesh_field_name(quantity),
-        time_omega0_inverse=time,
+        nominal_slot_time=nominal_slot_time,
+        observed_committed_time=observed_committed_time,
         x1_faces_c_over_omega_pi=np.asarray(x1_faces, dtype=np.float64),
         x2_faces_c_over_omega_pi=np.asarray(x2_faces, dtype=np.float64),
         collapsed_x3_faces=np.array([0.0, 1.0]),
@@ -89,20 +93,25 @@ def _profile(
     return spatial.YAreaWeightedProfile(
         quantity="rho",
         source_field="dens",
-        time_omega0_inverse=500.0,
+        nominal_slot_time=500.0,
+        observed_committed_time=500.0,
         x1_centers_c_over_omega_pi=np.asarray(x1, dtype=np.float64),
         values_x=array,
         column_areas=np.ones_like(array),
     )
 
 
-def _snapshot_datasets() -> dict[str, output_primitives.AthenaBinaryDataset]:
+def _snapshot_datasets(
+    *, embedded_time: float = 500.0
+) -> dict[str, output_primitives.AthenaBinaryDataset]:
     rho_x = np.array([1.0, 1.0, 2.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0])
     return {
-        "rho": _dataset("dens", np.tile(rho_x, (1, 2, 1))),
-        "bmag": _dataset("bmag", np.full((1, 2, 10), 2.0)),
-        "prtcl_jx": _dataset("prtcl_jx", np.full((1, 2, 10), -0.25)),
-        "j2": _dataset("j2", np.full((1, 2, 10), 0.125)),
+        "rho": _dataset("dens", np.tile(rho_x, (1, 2, 1)), time=embedded_time),
+        "bmag": _dataset("bmag", np.full((1, 2, 10), 2.0), time=embedded_time),
+        "prtcl_jx": _dataset(
+            "prtcl_jx", np.full((1, 2, 10), -0.25), time=embedded_time
+        ),
+        "j2": _dataset("j2", np.full((1, 2, 10), 0.125), time=embedded_time),
     }
 
 
@@ -216,9 +225,9 @@ class Q011Section54SpatialTests(unittest.TestCase):
                 low, x_ideal_c_over_omega_pi=0.0
             ).passes_gate
         )
-        with self.assertRaisesRegex(spatial.AnalysisError, "only at t=500"):
+        with self.assertRaisesRegex(spatial.AnalysisError, "only for nominal t=500"):
             spatial.reduce_upstream_b_amplification_at_t500(
-                replace(raster, time_omega0_inverse=400.0),
+                replace(raster, nominal_slot_time=400.0),
                 x_ideal_c_over_omega_pi=0.0,
             )
 
@@ -246,7 +255,10 @@ class Q011Section54SpatialTests(unittest.TestCase):
 
     def test_t500_snapshot_reducer_emits_profiles_front_gate_and_rasters(self) -> None:
         record = spatial.reduce_t500_spatial_snapshot(
-            _snapshot_datasets(), x_ideal_c_over_omega_pi=500.0
+            _snapshot_datasets(),
+            nominal_slot_time=500.0,
+            observed_committed_time=500.0,
+            x_ideal_c_over_omega_pi=500.0,
         )
         self.assertEqual(record["record_type"], "q011_section54_t500_spatial_reduction")
         self.assertEqual(record["detected_front"]["x_front_c_over_omega_pi"], 500.0)
@@ -258,6 +270,34 @@ class Q011Section54SpatialTests(unittest.TestCase):
         self.assertEqual(
             tuple(record["morphology_rasters"]), spatial.REQUIRED_MESH_QUANTITIES
         )
+
+    def test_t500_snapshot_reducer_preserves_full_observed_committed_time(self) -> None:
+        observed = 500.053496123
+        record = spatial.reduce_t500_spatial_snapshot(
+            _snapshot_datasets(embedded_time=500.053),
+            nominal_slot_time=500.0,
+            observed_committed_time=observed,
+            x_ideal_c_over_omega_pi=500.0,
+        )
+        self.assertEqual(record["nominal_slot_time"], 500.0)
+        self.assertEqual(record["observed_committed_time"], observed)
+        self.assertEqual(
+            record["upstream_b_amplification"]["observed_committed_time"],
+            observed,
+        )
+        self.assertEqual(
+            record["y_area_weighted_profiles"]["rho"]["nominal_slot_time"],
+            500.0,
+        )
+        with self.assertRaisesRegex(
+            spatial.AnalysisError, "embedded mesh time differs"
+        ):
+            spatial.reduce_t500_spatial_snapshot(
+                _snapshot_datasets(embedded_time=observed),
+                nominal_slot_time=500.0,
+                observed_committed_time=observed,
+                x_ideal_c_over_omega_pi=500.0,
+            )
 
     def test_malformed_shapes_and_nonfinite_values_fail_closed(self) -> None:
         with self.assertRaisesRegex(spatial.AnalysisError, "shape disagrees"):
@@ -275,6 +315,8 @@ class Q011Section54SpatialTests(unittest.TestCase):
             spatial.compose_xy_quantity(malformed_metadata, "rho")
         with self.assertRaisesRegex(spatial.AnalysisError, "must be finite"):
             spatial.DetectedFrontRecord(
+                nominal_slot_time=500.0,
+                observed_committed_time=500.0,
                 x_ideal_c_over_omega_pi=500.0,
                 search_window_c_over_omega_pi=(-700.0, 1700.0),
                 front_index=1,

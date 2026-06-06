@@ -168,6 +168,7 @@ PAIRED_RESIDUAL_THRESHOLDS = (
     ("normalized_downstream_chi_f_chi_at_t500", None, 0.2, 0.3),
     ("normalized_downstream_chi_f_chi_at_t1200", None, 0.2, 0.3),
 )
+MAX_PAIRED_T500_OBSERVED_TIME_SEPARATION_OMEGA0_INVERSE = 0.1
 _SHA256 = re.compile(r"[0-9a-f]{64}")
 _GIT_COMMIT = re.compile(r"[0-9a-f]{40}")
 _ATTEMPT_ID = re.compile(r"[a-z0-9][a-z0-9._-]{0,127}")
@@ -311,6 +312,78 @@ def _finite_float(value: object, *, label: str, minimum: float = 0.0) -> float:
         f"{label}: expected finite float >= {minimum}",
     )
     return value
+
+
+def _snapshot_time_identity(
+    value: object,
+    *,
+    expected_nominal_slot_time: float,
+    label: str,
+) -> dict[str, float]:
+    record = _required_object(
+        value,
+        {"nominal_slot_time", "observed_committed_time"},
+        label=label,
+    )
+    nominal = _finite_float(
+        record["nominal_slot_time"], label=f"{label}/nominal_slot_time"
+    )
+    observed = _finite_float(
+        record["observed_committed_time"],
+        label=f"{label}/observed_committed_time",
+    )
+    _require(
+        nominal == expected_nominal_slot_time,
+        f"{label}: nominal slot time drifted",
+    )
+    return {
+        "nominal_slot_time": nominal,
+        "observed_committed_time": observed,
+    }
+
+
+def _admitted_snapshot_time(
+    admitted: Mapping[str, object], slot_key: str
+) -> dict[str, float]:
+    nominal = float(slot_key)
+    retained = admitted["retained_snapshot_products"]
+    payloads = admitted["snapshot_payloads"]
+    _require(
+        type(retained) is dict,
+        "admitted retained snapshot products are unavailable",
+    )
+    _require(
+        type(payloads) is dict,
+        "admitted snapshot payload reports are unavailable",
+    )
+    _require(
+        slot_key in retained and slot_key in payloads,
+        f"admitted nominal slot {slot_key} is unavailable",
+    )
+    identity = _snapshot_time_identity(
+        payloads[slot_key],
+        expected_nominal_slot_time=nominal,
+        label=f"admitted snapshot payloads/{slot_key}",
+    )
+    products = retained[slot_key]
+    _require(
+        type(products) is dict and bool(products),
+        f"admitted nominal slot {slot_key} products are unavailable",
+    )
+    for kind, product in products.items():
+        product_identity = _snapshot_time_identity(
+            product,
+            expected_nominal_slot_time=nominal,
+            label=f"admitted retained snapshot products/{slot_key}/{kind}",
+        )
+        _require(
+            product_identity == identity,
+            (
+                f"admitted retained snapshot products/{slot_key}: "
+                "observed committed times disagree"
+            ),
+        )
+    return identity
 
 
 def _canonical_sha256(value: object) -> str:
@@ -601,13 +674,29 @@ def _retained_source_checkpoint_lineage(
     _require(type(publications) is dict, "admitted restart publications are unavailable")
     publication = _object(
         publications["500.0"],
-        {"manifest_path", "layout", "member_count"},
+        {
+            "manifest_path",
+            "layout",
+            "member_count",
+            "nominal_slot_time",
+            "observed_committed_time",
+        },
         label="admitted restart publication t=500",
     )
+    snapshot_time = _admitted_snapshot_time(admitted, "500.0")
     _require(
         publication["layout"] == "shared_mpi_io"
         and publication["member_count"] == 1,
         "admitted t=500 restart publication is not one shared-MPI checkpoint",
+    )
+    _require(
+        _snapshot_time_identity(
+            publication,
+            expected_nominal_slot_time=500.0,
+            label="admitted restart publication t=500",
+        )
+        == snapshot_time,
+        "admitted t=500 restart publication time differs from retained snapshot",
     )
     manifest_path = _relative_path(
         publication["manifest_path"],
@@ -654,7 +743,7 @@ def _retained_source_checkpoint_lineage(
         "admitted baseline attempt root is not absolute",
     )
     return {
-        "snapshot_time_omega0_inverse": 500.0,
+        **snapshot_time,
         "retained_attempt_id": admitted["run_identity"]["attempt_id"],
         "restart_manifest_path": manifest_path,
         "restart_member_path": member_path,
@@ -673,20 +762,32 @@ def _reduce_retained_attempt(
     _require(type(retained) is dict, "admitted retained snapshot products are unavailable")
     particle_reductions = {}
     try:
+        snapshot_times = {
+            time: _admitted_snapshot_time(admitted, time)
+            for time in ("500.0", "1200.0")
+        }
         for time, evaluate_late_slope in (("500.0", False), ("1200.0", True)):
             product = retained[time]["prtcl_all"]
-            decoded = admission.read_particle_vtk(snapshot.member_path(product["path"]))
-            particle_reductions[f"t{time.removesuffix('.0')}"] = (
-                particles.reduce_particle_snapshot(
-                    snapshot_time=float(time),
-                    points=decoded.points,
-                    cr_source=decoded.scalars["cr_source"],
-                    birth_time=decoded.scalars["birth_time"],
-                    velocity=decoded.vectors["vel"],
-                    macro_weight=decoded.scalars["macro_weight"],
-                    evaluate_late_slope=evaluate_late_slope,
-                )
+            member_path = snapshot.member_path(product["path"])
+            payload = member_path.read_bytes()
+            decoded = admission.read_particle_vtk(member_path)
+            header = admission._parse_pvtk_execution_header(payload, product["path"])
+            identity = snapshot_times[time]
+            _require(
+                header["time"] == identity["observed_committed_time"],
+                f"retained particle snapshot at nominal t={time}: embedded time drifted",
             )
+            reduction = particles.reduce_particle_snapshot(
+                snapshot_time=identity["observed_committed_time"],
+                points=decoded.points,
+                cr_source=decoded.scalars["cr_source"],
+                birth_time=decoded.scalars["birth_time"],
+                velocity=decoded.vectors["vel"],
+                macro_weight=decoded.scalars["macro_weight"],
+                evaluate_late_slope=evaluate_late_slope,
+            )
+            reduction.update(identity)
+            particle_reductions[f"t{time.removesuffix('.0')}"] = reduction
         datasets = {}
         for quantity in spatial.REQUIRED_MESH_QUANTITIES:
             product = retained["500.0"][quantity]
@@ -694,9 +795,14 @@ def _reduce_retained_attempt(
                 snapshot.member_path(product["path"]).read_bytes(),
                 source=product["path"],
             )
+        t500 = snapshot_times["500.0"]
         spatial_reduction = spatial.reduce_t500_spatial_snapshot(
             datasets,
-            x_ideal_c_over_omega_pi=particles.ideal_surface_x1(500.0),
+            nominal_slot_time=t500["nominal_slot_time"],
+            observed_committed_time=t500["observed_committed_time"],
+            x_ideal_c_over_omega_pi=particles.ideal_surface_x1(
+                t500["observed_committed_time"]
+            ),
         )
     except (KeyError, OSError, ValueError) as error:
         raise NumericalQualificationError(
@@ -783,15 +889,100 @@ def _finite_array(value: object, *, label: str, ndim: int = 1) -> np.ndarray:
     return result
 
 
+def _attempt_snapshot_times(
+    attempt: Mapping[str, object], *, label: str
+) -> dict[str, dict[str, float]]:
+    reductions = _required_object(
+        attempt["particle_reductions"],
+        {"t500", "t1200"},
+        label=f"{label}/particle_reductions",
+    )
+    times = {
+        "t500": _snapshot_time_identity(
+            reductions["t500"],
+            expected_nominal_slot_time=500.0,
+            label=f"{label}/particle_reductions/t500",
+        ),
+        "t1200": _snapshot_time_identity(
+            reductions["t1200"],
+            expected_nominal_slot_time=1200.0,
+            label=f"{label}/particle_reductions/t1200",
+        ),
+    }
+    for time, identity in times.items():
+        record = reductions[time]
+        _require(
+            record["snapshot_time_omega0_inverse"]
+            == identity["observed_committed_time"],
+            (
+                f"{label}/particle_reductions/{time}: physical snapshot time "
+                "differs from observed committed time"
+            ),
+        )
+    spatial_time = _snapshot_time_identity(
+        attempt["spatial_reduction"],
+        expected_nominal_slot_time=500.0,
+        label=f"{label}/spatial_reduction",
+    )
+    _require(
+        spatial_time == times["t500"],
+        f"{label}: t500 particle and spatial snapshot times disagree",
+    )
+    return times
+
+
+def _require_paired_t500_observed_time_separation(
+    amr_time: Mapping[str, float],
+    fine_time: Mapping[str, float],
+    *,
+    label: str,
+) -> None:
+    observed_times = (
+        amr_time["observed_committed_time"],
+        fine_time["observed_committed_time"],
+    )
+    _require(
+        max(observed_times)
+        <= min(observed_times)
+        + MAX_PAIRED_T500_OBSERVED_TIME_SEPARATION_OMEGA0_INVERSE,
+        f"{label}: selected t500 observed-time separation exceeds 0.1 omega0^-1",
+    )
+
+
+def _require_paired_snapshot_times(
+    amr_attempt: Mapping[str, object],
+    fine_attempt: Mapping[str, object],
+) -> tuple[dict[str, dict[str, float]], dict[str, dict[str, float]]]:
+    amr_times = _attempt_snapshot_times(amr_attempt, label="AMR")
+    fine_times = _attempt_snapshot_times(fine_attempt, label="fine_uniform")
+    for time in ("t500", "t1200"):
+        _require(
+            amr_times[time]["nominal_slot_time"]
+            == fine_times[time]["nominal_slot_time"],
+            f"paired AMR/fine {time} nominal slots disagree",
+        )
+    _require_paired_t500_observed_time_separation(
+        amr_times["t500"],
+        fine_times["t500"],
+        label="paired AMR/fine",
+    )
+    return amr_times, fine_times
+
+
 def _dx12_profile(
-    value: object, *, quantity: str, label: str
+    value: object,
+    *,
+    quantity: str,
+    expected_snapshot_time: Mapping[str, float],
+    label: str,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     record = _required_object(
         value,
         {
             "quantity",
             "source_field",
-            "time_omega0_inverse",
+            "nominal_slot_time",
+            "observed_committed_time",
             "x1_centers_c_over_omega_pi",
             "values_x",
             "column_areas",
@@ -800,9 +991,17 @@ def _dx12_profile(
     )
     _require(
         record["quantity"] == quantity
-        and record["source_field"] == spatial.MESH_QUANTITY_FIELDS[quantity]
-        and record["time_omega0_inverse"] == spatial.T500_OMEGA0_INVERSE,
+        and record["source_field"] == spatial.MESH_QUANTITY_FIELDS[quantity],
         f"{label}: profile identity drifted",
+    )
+    _require(
+        _snapshot_time_identity(
+            record,
+            expected_nominal_slot_time=spatial.T500_OMEGA0_INVERSE,
+            label=label,
+        )
+        == expected_snapshot_time,
+        f"{label}: profile snapshot time drifted",
     )
     centers = _finite_array(record["x1_centers_c_over_omega_pi"], label=f"{label}/x1")
     profile = _finite_array(record["values_x"], label=f"{label}/values")
@@ -882,6 +1081,7 @@ def _recompute_pair_residuals(
     fine_attempt: Mapping[str, object],
 ) -> list[dict[str, object]]:
     try:
+        amr_times, fine_times = _require_paired_snapshot_times(amr_attempt, fine_attempt)
         amr_spatial = amr_attempt["spatial_reduction"]
         fine_spatial = fine_attempt["spatial_reduction"]
         amr_front = amr_spatial["detected_front"]["x_front_c_over_omega_pi"]
@@ -907,11 +1107,13 @@ def _recompute_pair_residuals(
             amr_centers, amr_profile, amr_areas = _dx12_profile(
                 amr_spatial["y_area_weighted_profiles"][quantity],
                 quantity=quantity,
+                expected_snapshot_time=amr_times["t500"],
                 label=f"AMR/{observable}",
             )
             fine_centers, fine_profile, fine_areas = _dx12_profile(
                 fine_spatial["y_area_weighted_profiles"][quantity],
                 quantity=quantity,
+                expected_snapshot_time=fine_times["t500"],
                 label=f"fine_uniform/{observable}",
             )
             _require(
@@ -964,6 +1166,7 @@ def bind_retained_pair_result(
         and amr["identity"]["seed"] == fine["identity"]["seed"],
         "retained pair attempts are not one matched AMR/fine seed",
     )
+    _require_paired_snapshot_times(amr_payload, fine_payload)
     manifest, value, _ = _load_retained_recompute_record(
         bundle_root,
         expected_inventory_sha256,
@@ -1290,11 +1493,15 @@ def _validate_planned_restart_carrier(
         "selected_problem_ps_p0": selected_case["problem_ps_p0"],
         "authorized_orion_attempt_root": str(restart_artifact_root),
         "restart_preregistration": restart_preregistration,
-        "checkpoint_time_omega0_inverse": continuation[
-            "checkpoint_time_omega0_inverse"
+        "checkpoint_nominal_slot_omega0_inverse": continuation[
+            "checkpoint_nominal_slot_omega0_inverse"
         ],
-        "retained_output_schedule_after_checkpoint_omega0_inverse": continuation[
-            "retained_output_schedule_after_checkpoint_omega0_inverse"
+        "checkpoint_observed_commit_binding_required": True,
+        "retained_output_nominal_slots_after_checkpoint_omega0_inverse": continuation[
+            "retained_output_nominal_slots_after_checkpoint_omega0_inverse"
+        ],
+        "retained_output_pairing_policy": continuation[
+            "retained_output_pairing_policy"
         ],
         "comparison_tolerances_max_absolute_difference": continuation[
             "comparison_tolerances_max_absolute_difference"
@@ -1630,6 +1837,38 @@ def _validate_authoritative_restart_execution_receipt(
         return receipt
 
 
+def _restart_output_descriptor(value: object, *, label: str) -> dict[str, object]:
+    item = _object(
+        value,
+        {
+            "nominal_slot_omega0_inverse",
+            "observed_committed_cycle",
+            "observed_committed_time_omega0_inverse",
+            "members",
+        },
+        label=label,
+    )
+    nominal = _finite_float(
+        item["nominal_slot_omega0_inverse"],
+        label=f"{label}/nominal_slot_omega0_inverse",
+    )
+    observed = _finite_float(
+        item["observed_committed_time_omega0_inverse"],
+        label=f"{label}/observed_committed_time_omega0_inverse",
+    )
+    cycle = item["observed_committed_cycle"]
+    _require(
+        type(cycle) is int and cycle >= 0,
+        f"{label}/observed_committed_cycle: expected non-negative integer",
+    )
+    return {
+        "nominal_slot_omega0_inverse": nominal,
+        "observed_committed_cycle": cycle,
+        "observed_committed_time_omega0_inverse": observed,
+        "members": item["members"],
+    }
+
+
 def _restart_branch_member_paths(value: object, *, label: str) -> set[str]:
     branch = _object(
         value,
@@ -1661,7 +1900,7 @@ def _restart_branch_member_paths(value: object, *, label: str) -> set[str]:
     authority_paths = set()
     for index, output in enumerate(outputs):
         output_label = f"{label}/outputs_after_checkpoint[{index}]"
-        item = _object(output, {"time_omega0_inverse", "members"}, label=output_label)
+        item = _restart_output_descriptor(output, label=output_label)
         members = _object(
             item["members"],
             {*_RESTART_MESH_MEMBERS, _RESTART_PARTICLE_MEMBER},
@@ -1733,13 +1972,22 @@ def _structured_restart_member(
     return authoritative_payload
 
 
-def _restart_mesh_values(payload: bytes, *, field: str, time: float, label: str) -> list[float]:
+def _restart_mesh_values(
+    payload: bytes,
+    *,
+    field: str,
+    observed_committed_time: float,
+    label: str,
+) -> list[float]:
     try:
         dataset = admission.output_primitives.parse_athenak_binary_bytes(payload, source=label)
     except ValueError as error:
         raise NumericalQualificationError(f"{label}: retained mesh decode failed: {error}") from error
     _require(dataset.variable_names == (field,), f"{label}: retained mesh field inventory drifted")
-    _require(dataset.time == time, f"{label}: retained mesh time drifted")
+    _require(
+        dataset.time == float(format(observed_committed_time, ".6g")),
+        f"{label}: retained mesh observed committed time projection drifted",
+    )
     ordered = sorted(
         dataset.blocks,
         key=lambda block: (block.level, block.logical_location, block.index_bounds),
@@ -1767,7 +2015,7 @@ def _restart_mesh_values(payload: bytes, *, field: str, time: float, label: str)
 
 
 def _restart_particle_values(
-    payload: bytes, *, time: float, label: str
+    payload: bytes, *, observed_committed_time: float, label: str
 ) -> tuple[list[int], list[float]]:
     descriptor = os.memfd_create("q011-section54-retained-pvtk", flags=os.MFD_CLOEXEC)
     try:
@@ -1792,7 +2040,10 @@ def _restart_particle_values(
         header = admission._parse_pvtk_execution_header(payload, label)
     except ValueError as error:
         raise NumericalQualificationError(f"{label}: retained particle header decode failed") from error
-    _require(header["time"] == time, f"{label}: retained particle time drifted")
+    _require(
+        header["time"] == observed_committed_time,
+        f"{label}: retained particle observed committed time drifted",
+    )
     integer_values = [
         header["nranks"],
         header["cycle"],
@@ -1822,6 +2073,7 @@ def _extract_retained_restart_observation(
     payloads: Mapping[str, bytes],
     *,
     checkpoint_payload: bytes,
+    checkpoint_commit: Mapping[str, object] | None,
     execution_receipt: Mapping[str, object],
     artifact_root_descriptor: int,
     label: str,
@@ -1841,11 +2093,33 @@ def _extract_retained_restart_observation(
     try:
         policy = restart.load_preregistration()
         contract = policy["continuation_contract"]
+        _require(
+            checkpoint_commit is not None,
+            f"{label}: observed-time restart schema requires checkpoint commit metadata",
+        )
+        checkpoint_time = _snapshot_time_identity(
+            checkpoint_commit,
+            expected_nominal_slot_time=contract[
+                "checkpoint_nominal_slot_omega0_inverse"
+            ],
+            label=f"{label}/checkpoint_commit",
+        )
+        checkpoint_cycle = checkpoint_commit["cycle"]
+        _require(
+            type(checkpoint_cycle) is int and checkpoint_cycle >= 0,
+            f"{label}/checkpoint_commit/cycle: expected non-negative integer",
+        )
         binding = restart.bind_checkpoint_for_continuation(
             checkpoint_payload,
-            checkpoint_time_omega0_inverse=contract["checkpoint_time_omega0_inverse"],
-            retained_output_schedule_after_checkpoint_omega0_inverse=contract[
-                "retained_output_schedule_after_checkpoint_omega0_inverse"
+            checkpoint_nominal_slot_omega0_inverse=checkpoint_time[
+                "nominal_slot_time"
+            ],
+            checkpoint_observed_committed_cycle=checkpoint_cycle,
+            checkpoint_observed_committed_time_omega0_inverse=checkpoint_time[
+                "observed_committed_time"
+            ],
+            retained_output_nominal_slots_after_checkpoint_omega0_inverse=contract[
+                "retained_output_nominal_slots_after_checkpoint_omega0_inverse"
             ],
             comparison_tolerances_max_absolute_difference=contract[
                 "comparison_tolerances_max_absolute_difference"
@@ -1853,11 +2127,19 @@ def _extract_retained_restart_observation(
             preregistration=policy,
             source="source_checkpoint_member",
         )
+        schedule = binding[
+            "retained_output_nominal_slots_after_checkpoint_omega0_inverse"
+        ]
     except restart.RestartPolicyError as error:
         raise NumericalQualificationError(f"{label}: retained checkpoint binding failed") from error
-    descriptors = _list(source["outputs_after_checkpoint"], label=f"{label}/outputs_after_checkpoint")
-    schedule = binding["retained_output_schedule_after_checkpoint_omega0_inverse"]
-    _require(len(descriptors) == len(schedule), f"{label}: retained output schedule length drifted")
+    descriptors = _list(
+        source["outputs_after_checkpoint"],
+        label=f"{label}/outputs_after_checkpoint",
+    )
+    _require(
+        len(descriptors) == len(schedule),
+        f"{label}: retained output schedule length drifted",
+    )
     raw_output_root = _text(source["raw_output_root"], label=f"{label}/raw_output_root")
     _require(
         raw_output_root == execution_receipt["raw_output_root"],
@@ -1868,7 +2150,9 @@ def _extract_retained_restart_observation(
         label=f"{label}/structured_artifact_inventory_sha256",
     )
     outputs = []
-    artifact_dir = Path(_text(execution_receipt["artifact_dir"], label=f"{label}/artifact_dir"))
+    artifact_dir = Path(
+        _text(execution_receipt["artifact_dir"], label=f"{label}/artifact_dir")
+    )
     try:
         with _RegisteredRunStructuredArtifactTree(
             artifact_dir, inherited_root_fd=artifact_root_descriptor
@@ -1877,13 +2161,12 @@ def _extract_retained_restart_observation(
             inventory = structured_artifacts.load_inventory(tree)
             for index, (descriptor, expected_time) in enumerate(zip(descriptors, schedule)):
                 output_label = f"{label}/outputs_after_checkpoint[{index}]"
-                item = _object(
-                    descriptor, {"time_omega0_inverse", "members"}, label=output_label
-                )
+                item = _restart_output_descriptor(descriptor, label=output_label)
                 _require(
-                    item["time_omega0_inverse"] == expected_time,
-                    f"{output_label}: time drifted",
+                    item["nominal_slot_omega0_inverse"] == expected_time,
+                    f"{output_label}: nominal slot time drifted",
                 )
+                observed_time = item["observed_committed_time_omega0_inverse"]
                 members = _object(
                     item["members"],
                     {*_RESTART_MESH_MEMBERS, _RESTART_PARTICLE_MEMBER},
@@ -1899,7 +2182,7 @@ def _extract_retained_restart_observation(
                             label=f"{output_label}/members/{name}",
                         ),
                         field=field,
-                        time=expected_time,
+                        observed_committed_time=observed_time,
                         label=f"{output_label}/{name}",
                     )
                     for name, field in _RESTART_MESH_MEMBERS.items()
@@ -1912,12 +2195,19 @@ def _extract_retained_restart_observation(
                         members[_RESTART_PARTICLE_MEMBER],
                         label=f"{output_label}/members/{_RESTART_PARTICLE_MEMBER}",
                     ),
-                    time=expected_time,
+                    observed_committed_time=observed_time,
                     label=f"{output_label}/{_RESTART_PARTICLE_MEMBER}",
                 )
                 fields["prtcl_all_pvtk_integer_payload"] = integers
                 fields["prtcl_all_pvtk_float_payload"] = floats
-                outputs.append({"time_omega0_inverse": expected_time, "fields": fields})
+                outputs.append(
+                    {
+                        "nominal_slot_omega0_inverse": expected_time,
+                        "observed_committed_cycle": item["observed_committed_cycle"],
+                        "observed_committed_time_omega0_inverse": observed_time,
+                        "fields": fields,
+                    }
+                )
             tree.require_tree_closure()
     except ValueError as error:
         if isinstance(error, NumericalQualificationError):
@@ -2017,6 +2307,14 @@ def bind_retained_restart_parity(
     branches = {}
     receipts = {}
     observations = {}
+    checkpoint_commit = None
+    source_admission_result = source_attempt_payload.get("admission_result")
+    if type(source_admission_result) is dict:
+        source_admission = source_admission_result.get("admission")
+        if type(source_admission) is dict:
+            snapshot_payloads = source_admission.get("snapshot_payloads")
+            if type(snapshot_payloads) is dict:
+                checkpoint_commit = snapshot_payloads.get("500.0")
     for role, key in (
         ("uninterrupted_baseline", "uninterrupted"),
         ("checkpoint_restart_continuation", "continued"),
@@ -2073,6 +2371,7 @@ def bind_retained_restart_parity(
                 branches[key],
                 payloads,
                 checkpoint_payload=checkpoint_payload,
+                checkpoint_commit=checkpoint_commit,
                 execution_receipt=receipt,
                 artifact_root_descriptor=artifact_root_descriptor,
                 label=key,
@@ -2257,11 +2556,22 @@ def _validate_overflow_gate(spectrum: object, *, label: str) -> bool:
 
 
 def _validate_particle_reduction(
-    value: object, *, expected_time: float, require_late_slope: bool, label: str
-) -> list[bool]:
+    value: object,
+    *,
+    expected_nominal_slot_time: float,
+    require_late_slope: bool,
+    label: str,
+) -> tuple[list[bool], dict[str, float]]:
     record = _required_object(
         value,
-        {"schema_version", "record_type", "snapshot_time_omega0_inverse", "weighted_spectrum"},
+        {
+            "schema_version",
+            "record_type",
+            "nominal_slot_time",
+            "observed_committed_time",
+            "snapshot_time_omega0_inverse",
+            "weighted_spectrum",
+        },
         label=label,
     )
     _require(
@@ -2272,13 +2582,25 @@ def _validate_particle_reduction(
         record["record_type"] == "q011_section54_particle_snapshot_reduction",
         f"{label}: record type drifted",
     )
-    _require(record["snapshot_time_omega0_inverse"] == expected_time, f"{label}: time drifted")
+    identity = _snapshot_time_identity(
+        record,
+        expected_nominal_slot_time=expected_nominal_slot_time,
+        label=label,
+    )
+    _require(
+        record["snapshot_time_omega0_inverse"] == identity["observed_committed_time"],
+        f"{label}: physical snapshot time differs from observed committed time",
+    )
     try:
         particles.canonical_record_bytes(record)
     except particles.ParticleReducerError as error:
         raise NumericalQualificationError(f"{label}: particle record is invalid") from error
     gates = [_validate_overflow_gate(record["weighted_spectrum"], label=f"{label}/weighted_spectrum")]
     if require_late_slope:
+        _require(
+            identity["observed_committed_time"] == particles.LATE_SLOPE_SNAPSHOT_TIME,
+            f"{label}: late slope observed committed time drifted",
+        )
         _require("late_slope" in record, f"{label}: late slope record is missing")
         try:
             recomputed = particles.late_slope_record(record["weighted_spectrum"]["f_chi"])
@@ -2288,13 +2610,21 @@ def _validate_particle_reduction(
         gates.append(recomputed["slope_gate_passed"])
     else:
         _require("late_slope" not in record, f"{label}: unexpected early late-slope record")
-    return gates
+    return gates, identity
 
 
-def _validate_spatial_reduction(value: object, *, label: str) -> bool:
+def _validate_spatial_reduction(
+    value: object, *, label: str
+) -> tuple[bool, dict[str, float]]:
     record = _required_object(
         value,
-        {"schema_version", "record_type", "time_omega0_inverse", "upstream_b_amplification"},
+        {
+            "schema_version",
+            "record_type",
+            "nominal_slot_time",
+            "observed_committed_time",
+            "upstream_b_amplification",
+        },
         label=label,
     )
     _require(
@@ -2305,11 +2635,16 @@ def _validate_spatial_reduction(value: object, *, label: str) -> bool:
         record["record_type"] == "q011_section54_t500_spatial_reduction",
         f"{label}: record type drifted",
     )
-    _require(record["time_omega0_inverse"] == spatial.T500_OMEGA0_INVERSE, f"{label}: time drifted")
+    identity = _snapshot_time_identity(
+        record,
+        expected_nominal_slot_time=spatial.T500_OMEGA0_INVERSE,
+        label=label,
+    )
     amplification = _object(
         record["upstream_b_amplification"],
         {
-            "time_omega0_inverse",
+            "nominal_slot_time",
+            "observed_committed_time",
             "x_ideal_c_over_omega_pi",
             "upstream_window_c_over_omega_pi",
             "selected_cell_count",
@@ -2324,7 +2659,8 @@ def _validate_spatial_reduction(value: object, *, label: str) -> bool:
     )
     try:
         parsed = spatial.UpstreamBAmplificationRecord(
-            time_omega0_inverse=amplification["time_omega0_inverse"],
+            nominal_slot_time=amplification["nominal_slot_time"],
+            observed_committed_time=amplification["observed_committed_time"],
             x_ideal_c_over_omega_pi=amplification["x_ideal_c_over_omega_pi"],
             upstream_window_c_over_omega_pi=tuple(amplification["upstream_window_c_over_omega_pi"]),
             selected_cell_count=amplification["selected_cell_count"],
@@ -2339,7 +2675,15 @@ def _validate_spatial_reduction(value: object, *, label: str) -> bool:
     except (TypeError, spatial.AnalysisError) as error:
         raise NumericalQualificationError(f"{label}: spatial amplification is invalid") from error
     _require(amplification == normalized, f"{label}: spatial amplification record drifted")
-    return parsed.passes_gate
+    _require(
+        {
+            "nominal_slot_time": parsed.nominal_slot_time,
+            "observed_committed_time": parsed.observed_committed_time,
+        }
+        == identity,
+        f"{label}: spatial amplification snapshot time drifted",
+    )
+    return parsed.passes_gate, identity
 
 
 def _validate_source_checkpoint_lineage(
@@ -2351,13 +2695,19 @@ def _validate_source_checkpoint_lineage(
     lineage = _object(
         value,
         {
-            "snapshot_time_omega0_inverse",
+            "nominal_slot_time",
+            "observed_committed_time",
             "retained_attempt_id",
             "restart_manifest_path",
             "restart_member_path",
             "retained_restart_member_absolute_path",
             "restart_member_sha256",
         },
+        label=label,
+    )
+    identity_record = _snapshot_time_identity(
+        lineage,
+        expected_nominal_slot_time=500.0,
         label=label,
     )
     manifest_path = _relative_path(
@@ -2373,8 +2723,7 @@ def _validate_source_checkpoint_lineage(
         )
     )
     _require(
-        lineage["snapshot_time_omega0_inverse"] == 500.0
-        and lineage["retained_attempt_id"] == identity["attempt_id"]
+        lineage["retained_attempt_id"] == identity["attempt_id"]
         and manifest_path.endswith(".rst.manifest")
         and member_path.endswith(".rst")
         and absolute.is_absolute()
@@ -2382,7 +2731,9 @@ def _validate_source_checkpoint_lineage(
         f"{label}: admitted t=500 restart lineage drifted",
     )
     _sha256(lineage["restart_member_sha256"], label=f"{label}/restart_member_sha256")
-    return copy.deepcopy(lineage)
+    result = copy.deepcopy(lineage)
+    result.update(identity_record)
+    return result
 
 
 def _validate_attempt_wrapper(value: object, *, index: int) -> dict[str, object]:
@@ -2428,23 +2779,41 @@ def _validate_attempt_wrapper(value: object, *, index: int) -> dict[str, object]
     reductions = _object(
         attempt["particle_reductions"], {"t500", "t1200"}, label=f"{label}/particle_reductions"
     )
-    gates = _validate_particle_reduction(
-        reductions["t500"], expected_time=500.0, require_late_slope=False, label=f"{label}/t500"
+    gates, t500_time = _validate_particle_reduction(
+        reductions["t500"],
+        expected_nominal_slot_time=500.0,
+        require_late_slope=False,
+        label=f"{label}/t500",
     )
-    gates.extend(
-        _validate_particle_reduction(
-            reductions["t1200"],
-            expected_time=particles.LATE_SLOPE_SNAPSHOT_TIME,
-            require_late_slope=True,
-            label=f"{label}/t1200",
-        )
+    late_gates, t1200_time = _validate_particle_reduction(
+        reductions["t1200"],
+        expected_nominal_slot_time=particles.LATE_SLOPE_SNAPSHOT_TIME,
+        require_late_slope=True,
+        label=f"{label}/t1200",
     )
-    gates.append(_validate_spatial_reduction(attempt["spatial_reduction"], label=f"{label}/spatial"))
+    gates.extend(late_gates)
+    spatial_gate, spatial_time = _validate_spatial_reduction(
+        attempt["spatial_reduction"], label=f"{label}/spatial"
+    )
+    _require(
+        t500_time == spatial_time,
+        f"{label}: t500 particle and spatial snapshot times disagree",
+    )
+    _require(
+        {
+            "nominal_slot_time": checkpoint_lineage["nominal_slot_time"],
+            "observed_committed_time": checkpoint_lineage["observed_committed_time"],
+        }
+        == t500_time,
+        f"{label}: source checkpoint and selected t500 snapshot times disagree",
+    )
+    gates.append(spatial_gate)
     return {
         "attempt_sha256": expected_sha256,
         "identity": identity,
         "raw_inventory_sha256": inventory,
         "source_checkpoint_lineage": checkpoint_lineage,
+        "snapshot_times": {"t500": t500_time, "t1200": t1200_time},
         "gates_passed": all(gates),
     }
 
@@ -2559,6 +2928,19 @@ def _validate_pairs(
             (by_sha256[fine_sha256]["identity"]["variant"], by_sha256[fine_sha256]["identity"]["seed"])
             == (FINE_VARIANT, seed),
             f"{label}: fine-uniform attempt is not the matched seed",
+        )
+        amr_times = by_sha256[amr_sha256]["snapshot_times"]
+        fine_times = by_sha256[fine_sha256]["snapshot_times"]
+        for time in ("t500", "t1200"):
+            _require(
+                amr_times[time]["nominal_slot_time"]
+                == fine_times[time]["nominal_slot_time"],
+                f"{label}: paired {time} nominal slots disagree",
+            )
+        _require_paired_t500_observed_time_separation(
+            amr_times["t500"],
+            fine_times["t500"],
+            label=label,
         )
         if retained:
             _require(

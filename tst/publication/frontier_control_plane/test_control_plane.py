@@ -2836,7 +2836,7 @@ class SnapshotTests(unittest.TestCase):
         def mutate(files: dict[str, bytes]) -> None:
             path = "restart_continuation/amr_restart_continuation_carrier.json"
             carrier = json.loads(files[path])
-            carrier["checkpoint_time_omega0_inverse"] = 501.0
+            carrier["checkpoint_nominal_slot_omega0_inverse"] = 501.0
             carrier_payload = self._planner_json_payload(carrier)
             files[path] = carrier_payload
             plan = json.loads(files["campaign_plan.json"])

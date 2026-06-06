@@ -6,6 +6,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 import hashlib
 import json
+import os
 from pathlib import Path
 import shutil
 import tempfile
@@ -59,6 +60,42 @@ def _write_completed_raw_outputs(root: Path) -> None:
     raw_fixtures._product(
         root, "stdout", "stdout.txt", raw_fixtures._stdout_telemetry(), None
     )
+
+
+def _mesh_bin_with_header_time(kind: str, time: float, cycle: int) -> bytes:
+    payload = raw_fixtures._mesh_bin(kind, 0.0, cycle)
+    start = payload.index(b"  time=")
+    end = payload.index(b"\n", start)
+    return payload[:start] + f"  time={time}".encode("ascii") + payload[end:]
+
+
+def _rewrite_snapshot_times(
+    root: Path,
+    *,
+    nominal_slot: float,
+    observed_time: float,
+    cycle: int,
+    mesh_time: float | None = None,
+) -> None:
+    suffix = f"{int(nominal_slot):05d}"
+    serialized_mesh_time = (
+        float(format(observed_time, ".6g")) if mesh_time is None else mesh_time
+    )
+    for kind in ("rho", "bmag", "prtcl_jx", "j2"):
+        (root / f"bin/q011.{kind}.{suffix}.bin").write_bytes(
+            _mesh_bin_with_header_time(kind, serialized_mesh_time, cycle)
+        )
+    (root / f"pvtk/q011.prtcl_all.{suffix}.part.vtk").write_bytes(
+        raw_fixtures._particle_vtk(observed_time, cycle)
+    )
+
+
+def _classify_raw_outputs(root: Path) -> list[dict[str, object]]:
+    descriptor = os.open(root, bridge._DIRECTORY_FLAGS)
+    try:
+        return bridge._classify_products(descriptor, bridge._raw_snapshot(descriptor))
+    finally:
+        os.close(descriptor)
 
 
 def _write_registered_execution_receipt(
@@ -304,6 +341,24 @@ class Q011Section54AttemptManifestMaterializerTests(unittest.TestCase):
             self.assertIn(
                 "registered_execution_receipt", manifest["artifact_bindings"]
             )
+            self.assertTrue(
+                all(
+                    set(product)
+                    == {
+                        "kind",
+                        "path",
+                        "sha256",
+                        "nominal_slot_time",
+                        "observed_committed_time",
+                    }
+                    for product in manifest["products"]
+                )
+            )
+            stdout = next(
+                product for product in manifest["products"] if product["kind"] == "stdout"
+            )
+            self.assertIsNone(stdout["nominal_slot_time"])
+            self.assertIsNone(stdout["observed_committed_time"])
             self.assertFalse(prepared["attempt_root"].exists())
             self.assertEqual(
                 _json(prepared["registered_execution_receipt"])["artifact_dir"],
@@ -611,6 +666,154 @@ class Q011Section54AttemptManifestMaterializerTests(unittest.TestCase):
             finally:
                 if descriptor:
                     __import__("os").close(descriptor)
+
+    def test_observed_committed_time_ordinary_overshoot_is_canonical(self) -> None:
+        observed_time = 500.053496025736649
+        self.assertEqual(bridge._athenak_binary_time_projection(observed_time), 500.053)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write_completed_raw_outputs(root)
+            _rewrite_snapshot_times(
+                root,
+                nominal_slot=500.0,
+                observed_time=observed_time,
+                cycle=5,
+                mesh_time=500.053,
+            )
+
+            products = _classify_raw_outputs(root)
+
+        slot_products = [
+            product for product in products if product["nominal_slot_time"] == 500.0
+        ]
+        self.assertEqual(len(slot_products), 9)
+        self.assertEqual(
+            {product["kind"] for product in slot_products},
+            {
+                "rho",
+                "bmag",
+                "prtcl_jx",
+                "j2",
+                "prtcl_all",
+                "restart",
+                "restart_complete",
+                "restart_manifest",
+                "restart_manifest_complete",
+            },
+        )
+        self.assertTrue(
+            all(
+                product["observed_committed_time"] == observed_time
+                for product in slot_products
+            )
+        )
+        self.assertTrue(
+            all(
+                set(product)
+                == {
+                    "kind",
+                    "path",
+                    "sha256",
+                    "nominal_slot_time",
+                    "observed_committed_time",
+                }
+                for product in products
+            )
+        )
+        stdout = next(product for product in products if product["kind"] == "stdout")
+        self.assertIsNone(stdout["nominal_slot_time"])
+        self.assertIsNone(stdout["observed_committed_time"])
+
+    def test_mesh_six_significant_digit_projection_mismatch_is_rejected(self) -> None:
+        observed_time = 500.053496025736649
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write_completed_raw_outputs(root)
+            _rewrite_snapshot_times(
+                root,
+                nominal_slot=500.0,
+                observed_time=observed_time,
+                cycle=5,
+            )
+            (root / "bin/q011.bmag.00500.bin").write_bytes(
+                _mesh_bin_with_header_time("bmag", 500.0534, 5)
+            )
+
+            with self.assertRaisesRegex(
+                bridge.AttemptManifestMaterializationError,
+                "six-significant-digit projection",
+            ):
+                _classify_raw_outputs(root)
+
+    def test_mesh_cycle_without_canonical_pvtk_cycle_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write_completed_raw_outputs(root)
+            (root / "bin/q011.bmag.00500.bin").write_bytes(
+                _mesh_bin_with_header_time("bmag", 500.0, 99)
+            )
+
+            with self.assertRaisesRegex(
+                bridge.AttemptManifestMaterializationError,
+                "mesh cycle has no canonical particle snapshot",
+            ):
+                _classify_raw_outputs(root)
+
+    def test_duplicate_canonical_pvtk_cycle_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write_completed_raw_outputs(root)
+            (root / "pvtk/q011.prtcl_all.00500.part.vtk").write_bytes(
+                raw_fixtures._particle_vtk(500.0, 6)
+            )
+
+            with self.assertRaisesRegex(
+                bridge.AttemptManifestMaterializationError,
+                "duplicate particle output cycle 6",
+            ):
+                _classify_raw_outputs(root)
+
+    def test_next_slot_crossing_and_missing_slot_fail_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write_completed_raw_outputs(root)
+            _rewrite_snapshot_times(
+                root,
+                nominal_slot=500.0,
+                observed_time=600.01,
+                cycle=5,
+            )
+            with self.assertRaisesRegex(
+                bridge.AttemptManifestMaterializationError,
+                "duplicate nominal cadence slot 600.0",
+            ):
+                _classify_raw_outputs(root)
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write_completed_raw_outputs(root)
+            _rewrite_snapshot_times(
+                root,
+                nominal_slot=500.0,
+                observed_time=599.99999,
+                cycle=5,
+            )
+            self.assertEqual(bridge._float32(599.99999, label="test time"), 600.0)
+            with self.assertRaisesRegex(
+                bridge.AttemptManifestMaterializationError,
+                "duplicate nominal cadence slot 600.0",
+            ):
+                _classify_raw_outputs(root)
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write_completed_raw_outputs(root)
+            (root / "pvtk/q011.prtcl_all.00500.part.vtk").unlink()
+            with self.assertRaisesRegex(
+                bridge.AttemptManifestMaterializationError,
+                "missing nominal cadence slots: \\[500.0\\]",
+            ):
+                _classify_raw_outputs(root)
 
     def test_stable_bound_source_payload_rejects_checksum_drift(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
