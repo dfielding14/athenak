@@ -108,9 +108,20 @@ F118_PUBLICATION_AUDIT_RELATIVE = Path(
 )
 SHARED_ROOT_STALE_CAMPAIGN_ID = "beta25-accel05-gamma10001-purecgl-256"
 SHARED_ROOT_STALE_JOB_ID = "4743106"
+SHARED_ROOT_STALE_JOB_NAME = "b25_a05_g10001_pcgl_s00"
 SHARED_ROOT_CLEARANCE_REFRESH_AUDIT_PATTERN = re.compile(
     rf"mks24_stage_i_{EXECUTION_EPOCH_SLUG}_F(?P<checkpoint>[0-9]+)_"
     r"shared_root_isolation_clearance_refresh\.json\.publication_audit\.json"
+)
+SHARED_ROOT_CLEARANCE_REFRESH_AUDIT_REVIEW_PATTERN = re.compile(
+    rf"mks24_stage_i_{EXECUTION_EPOCH_SLUG}_F(?P<checkpoint>[0-9]+)_"
+    r"shared_root_isolation_clearance_refresh\.json\.publication_audit\.json"
+    r"\.independent_review\.json"
+)
+SHARED_ROOT_CLEARANCE_SUPERSESSION_RELATIVE = Path(
+    "accounting/"
+    f"mks24_stage_i_{EXECUTION_EPOCH_SLUG}_"
+    "standing_shared_root_isolation_clearance_supersession.json"
 )
 SHARED_ROOT_CLEARANCE_LEGACY_RELATIVES = tuple(
     Path("accounting") / name
@@ -9392,6 +9403,7 @@ def validate_submission_audit(paths: dict[str, Path], value: object) -> None:
                 "checkpoint", "artifact", "independent_review",
                 "publication_audit", "publication_audit_review",
                 "source_authority_publications", "supersedes",
+                "retained_terminal_sacct", "live_queue_absence", "consumption",
             },
             "submission audit shared-root clearance",
         )
@@ -9441,6 +9453,82 @@ def validate_submission_audit(paths: dict[str, Path], value: object) -> None:
                     raise ValueError(
                         f"submission audit shared-root clearance {key} profile differs"
                     )
+        terminal_sacct = require_r17_exact_keys(
+            clearance["retained_terminal_sacct"],
+            {
+                "source_publication", "json_path", "sacct_sha256", "job_id",
+                "job_name", "state", "exit_code", "completed_utc",
+            },
+            "submission audit shared-root clearance retained sacct",
+        )
+        source_publication = require_r17_exact_keys(
+            terminal_sacct["source_publication"],
+            {"path", "sha256", "mode", "links"},
+            "submission audit shared-root clearance retained sacct publication",
+        )
+        if (
+            source_publication["path"]
+            != str(paths["root"] / SHARED_ROOT_CLEARANCE_SUPERSESSION_RELATIVE)
+            or source_publication["mode"] != "0444"
+            or source_publication["links"] != 1
+            or terminal_sacct["json_path"] != "stale_campaign.scheduler.sacct"
+            or terminal_sacct["job_id"] != SHARED_ROOT_STALE_JOB_ID
+            or terminal_sacct["job_name"] != SHARED_ROOT_STALE_JOB_NAME
+            or terminal_sacct["state"] != "COMPLETED"
+            or terminal_sacct["exit_code"] != "0:0"
+        ):
+            raise ValueError(
+                "submission audit shared-root clearance retained sacct differs"
+            )
+        require_r17_sha256(
+            source_publication["sha256"],
+            "submission audit shared-root clearance retained publication SHA-256",
+        )
+        require_r17_sha256(
+            terminal_sacct["sacct_sha256"],
+            "submission audit shared-root clearance retained sacct SHA-256",
+        )
+        require_r17_scheduler_utc(
+            terminal_sacct["completed_utc"],
+            "submission audit shared-root clearance retained completion time",
+        )
+        live_absence = require_r17_exact_keys(
+            clearance["live_queue_absence"],
+            {"job_id", "absent", "checked_utc", "rows_sha256"},
+            "submission audit shared-root clearance live queue absence",
+        )
+        initial_queue = value.get("initial_queue_authentication")
+        if (
+            not isinstance(initial_queue, dict)
+            or live_absence["job_id"] != SHARED_ROOT_STALE_JOB_ID
+            or live_absence["absent"] is not True
+            or live_absence["checked_utc"] != initial_queue.get("checked_utc")
+            or live_absence["rows_sha256"] != initial_queue.get("rows_sha256")
+        ):
+            raise ValueError(
+                "submission audit shared-root clearance live queue absence differs"
+            )
+        validate_queue_authentication_evidence(
+            initial_queue, "submission audit shared-root clearance complete queue"
+        )
+        consumption = require_r17_exact_keys(
+            clearance["consumption"],
+            {"action", "case_id", "authorized_stale_manifest"},
+            "submission audit shared-root clearance consumption",
+        )
+        if (
+            consumption["action"] not in {"check-submit", "submit"}
+            or consumption["case_id"]
+            not in {f"R{number:02d}" for number in range(3, 18)}
+            or consumption["authorized_stale_manifest"]
+            != str(
+                paths["root"] / "runs" / SHARED_ROOT_STALE_CAMPAIGN_ID
+                / "manifest/prepared_run.json"
+            )
+        ):
+            raise ValueError(
+                "submission audit shared-root clearance consumption differs"
+            )
     acknowledged = value["acknowledged_shared_root_campaigns"]
     if (
         not offline_local_root
@@ -12763,16 +12851,202 @@ def current_clearance_directory_binding(path: Path,
     }
 
 
-def managed_shared_root_clearance_checkpoints(accounting: Path) -> list[int]:
-    """Return all canonically published managed-clearance checkpoint numbers."""
+def retained_stale_terminal_sacct_binding(
+    paths: dict[str, Path],
+) -> dict[str, object]:
+    """Authenticate the immutable terminal sacct evidence for the stale job."""
 
-    checkpoints = []
-    for entry in trusted_directory_entries(
-        accounting, "managed shared-root clearance accounting directory"
+    source = paths["root"] / SHARED_ROOT_CLEARANCE_SUPERSESSION_RELATIVE
+    publication, digest = read_controller_publication_json(
+        source, "managed shared-root clearance retained scheduler evidence",
+        mode=0o444,
+    )
+    stale = publication.get("stale_campaign")
+    if not isinstance(stale, dict):
+        raise ValueError(
+            "managed shared-root clearance retained scheduler evidence is absent"
+        )
+    scheduler = require_r17_exact_keys(
+        stale.get("scheduler"),
+        {"observed_utc", "sacct", "squeue", "terminal_completed_0_0_absent"},
+        "managed shared-root clearance retained scheduler evidence",
+    )
+    sacct = require_r17_exact_keys(
+        scheduler["sacct"], {"argv", "returncode", "stderr", "stdout"},
+        "managed shared-root clearance retained sacct evidence",
+    )
+    expected_argv = [
+        str(SACCT), "-X", "-n", "-P", "-j", SHARED_ROOT_STALE_JOB_ID,
+        "-o", "JobIDRaw,JobName,State,Elapsed,NNodes,ExitCode,Submit,Start,End",
+    ]
+    if (
+        stale.get("campaign_id") != SHARED_ROOT_STALE_CAMPAIGN_ID
+        or stale.get("job_id") != SHARED_ROOT_STALE_JOB_ID
+        or stale.get("retained_state") != "running"
+        or scheduler["terminal_completed_0_0_absent"] is not True
+        or sacct["argv"] != expected_argv
+        or sacct["returncode"] != 0
+        or sacct["stderr"] != ""
+        or not isinstance(sacct["stdout"], str)
     ):
-        match = SHARED_ROOT_CLEARANCE_REFRESH_AUDIT_PATTERN.fullmatch(entry)
+        raise ValueError("managed shared-root clearance retained sacct evidence differs")
+    rows = [
+        row for row in csv.reader(sacct["stdout"].splitlines(), delimiter="|")
+        if row
+    ]
+    if len(rows) != 1 or len(rows[0]) != 9:
+        raise ValueError(
+            "managed shared-root clearance retained sacct evidence must contain "
+            "one exact top-level row"
+        )
+    row = rows[0]
+    observed = require_r17_utc(
+        scheduler["observed_utc"],
+        "managed shared-root clearance retained scheduler observation",
+    )
+    submitted = require_r17_scheduler_utc(
+        row[6], "managed shared-root clearance retained sacct submit time"
+    )
+    started = require_r17_scheduler_utc(
+        row[7], "managed shared-root clearance retained sacct start time"
+    )
+    completed = require_r17_scheduler_utc(
+        row[8], "managed shared-root clearance retained sacct completion time"
+    )
+    try:
+        elapsed = parse_walltime(row[3])
+        nodes = int(row[4])
+    except ValueError as error:
+        raise ValueError(
+            "managed shared-root clearance retained sacct allocation differs"
+        ) from error
+    if (
+        row[0] != SHARED_ROOT_STALE_JOB_ID
+        or row[1] != SHARED_ROOT_STALE_JOB_NAME
+        or row[2] != "COMPLETED"
+        or row[5] != "0:0"
+        or elapsed <= 0
+        or nodes <= 0
+        or not submitted <= started <= completed <= observed
+    ):
+        raise ValueError("managed shared-root clearance retained sacct evidence differs")
+    return {
+        "source_publication": {
+            "path": str(source),
+            "sha256": digest,
+            "mode": "0444",
+            "links": 1,
+        },
+        "json_path": "stale_campaign.scheduler.sacct",
+        "sacct_sha256": stable_json_sha256(sacct),
+        "job_id": SHARED_ROOT_STALE_JOB_ID,
+        "job_name": SHARED_ROOT_STALE_JOB_NAME,
+        "state": "COMPLETED",
+        "exit_code": "0:0",
+        "completed_utc": row[8],
+    }
+
+
+def require_stale_job_absent_from_complete_queue(
+    value: object, *, now: datetime,
+) -> dict[str, object]:
+    """Require the stale job ID absent from a fresh complete-user squeue snapshot."""
+
+    validate_queue_authentication_evidence(value, "managed clearance live squeue")
+    if not isinstance(value, dict):
+        raise ValueError("managed clearance live squeue evidence is invalid")
+    checked = parse_utc_timestamp(
+        value["checked_utc"], "managed clearance live squeue checked_utc"
+    )
+    if (
+        checked > now + timedelta(minutes=5)
+        or now - checked > timedelta(minutes=5)
+    ):
+        raise ValueError("managed clearance live squeue evidence is not fresh")
+    rows = value["rows"]
+    if not isinstance(rows, list):
+        raise ValueError("managed clearance live squeue rows are invalid")
+    for line in rows:
+        row = next(csv.reader([line], delimiter="|"))
+        if len(row) != 4:
+            raise ValueError("managed clearance live squeue row is malformed")
+        if row[0] == SHARED_ROOT_STALE_JOB_ID:
+            raise ValueError(
+                "managed clearance stale job remains present in complete squeue evidence"
+            )
+    return {
+        "job_id": SHARED_ROOT_STALE_JOB_ID,
+        "absent": True,
+        "checked_utc": value["checked_utc"],
+        "rows_sha256": value["rows_sha256"],
+    }
+
+
+def authenticate_managed_shared_root_clearance_chain_commit(
+    accounting: Path, checkpoint: int,
+) -> None:
+    """Authenticate one complete audit-review-last publication commit."""
+
+    artifact_path, review_path, audit_path, audit_review_path = (
+        managed_shared_root_clearance_chain_paths(accounting, checkpoint)
+    )
+    artifact, artifact_sha = read_controller_publication_json(
+        artifact_path, f"managed shared-root clearance F-{checkpoint} artifact",
+        mode=0o444,
+    )
+    review, review_sha = read_controller_publication_json(
+        review_path, f"managed shared-root clearance F-{checkpoint} review",
+        mode=0o444,
+    )
+    audit, audit_sha = read_controller_publication_json(
+        audit_path, f"managed shared-root clearance F-{checkpoint} audit",
+        mode=0o444,
+    )
+    audit_review, _ = read_controller_publication_json(
+        audit_review_path,
+        f"managed shared-root clearance F-{checkpoint} audit review",
+        mode=0o444,
+    )
+    if not all(isinstance(value, dict) for value in (
+        artifact, review, audit, audit_review,
+    )):
+        raise ValueError("managed shared-root clearance committed chain differs")
+    require_r17_declared_publication(
+        review.get("candidate"), artifact_path, artifact_sha,
+        f"managed shared-root clearance F-{checkpoint} review candidate",
+    )
+    require_r17_declared_publication(
+        audit.get("artifact"), artifact_path, artifact_sha,
+        f"managed shared-root clearance F-{checkpoint} audit artifact",
+    )
+    require_r17_declared_publication(
+        audit.get("independent_review"), review_path, review_sha,
+        f"managed shared-root clearance F-{checkpoint} audit review",
+    )
+    require_r17_declared_publication(
+        audit_review.get("candidate"), audit_path, audit_sha,
+        f"managed shared-root clearance F-{checkpoint} audit-review candidate",
+    )
+
+
+def managed_shared_root_clearance_checkpoints(accounting: Path) -> list[int]:
+    """Return audit-review-last complete managed-clearance checkpoints."""
+
+    entries = set(trusted_directory_entries(
+        accounting, "managed shared-root clearance accounting directory"
+    ))
+    checkpoints = []
+    for entry in sorted(entries):
+        match = SHARED_ROOT_CLEARANCE_REFRESH_AUDIT_REVIEW_PATTERN.fullmatch(entry)
         if match is not None:
-            checkpoints.append(int(match.group("checkpoint")))
+            checkpoint = int(match.group("checkpoint"))
+            chain = managed_shared_root_clearance_chain_paths(accounting, checkpoint)
+            if not all(path.name in entries for path in chain):
+                continue
+            authenticate_managed_shared_root_clearance_chain_commit(
+                accounting, checkpoint
+            )
+            checkpoints.append(checkpoint)
     return sorted(set(checkpoints))
 
 
@@ -12863,6 +13137,7 @@ def build_managed_shared_root_clearance_refresh(
                 "managed shared-root clearance stale manifest",
                 mode=0o644,
             ),
+            "terminal_sacct": retained_stale_terminal_sacct_binding(paths),
         },
         "isolation": {
             "stage_i_namespace": stage_binding,
@@ -12888,6 +13163,9 @@ def render_managed_shared_root_clearance_refresh(args: argparse.Namespace) -> in
 
 def require_managed_shared_root_clearance(
     paths: dict[str, Path], requested_campaigns: set[str], *,
+    action: str,
+    case_id: str,
+    queue_evidence: dict[str, object],
     now: datetime | None = None,
 ) -> dict[str, object] | None:
     """Require the latest fully reviewed clearance for a production overlap."""
@@ -12898,6 +13176,12 @@ def require_managed_shared_root_clearance(
         raise ValueError(
             "managed shared-root clearance authorizes exactly the retained campaign"
         )
+    if action not in {"check-submit", "submit"}:
+        raise ValueError("managed shared-root clearance action is not authorized")
+    authorized_cases = {f"R{number:02d}" for number in range(3, 18)}
+    if case_id not in authorized_cases:
+        raise ValueError("managed shared-root clearance case is not authorized")
+    current = datetime.now(timezone.utc) if now is None else now.astimezone(timezone.utc)
     accounting = paths["root"] / "accounting"
     checkpoints = managed_shared_root_clearance_checkpoints(accounting)
     if not checkpoints:
@@ -12965,7 +13249,7 @@ def require_managed_shared_root_clearance(
 
     stale = require_r17_exact_keys(
         artifact["stale_campaign"],
-        {"campaign_id", "job_id", "retained_state", "manifest"},
+        {"campaign_id", "job_id", "retained_state", "manifest", "terminal_sacct"},
         "managed shared-root clearance stale campaign",
     )
     stale_manifest = (
@@ -12988,6 +13272,9 @@ def require_managed_shared_root_clearance(
         or retained_stale.get("state") != "running"
     ):
         raise ValueError("managed shared-root clearance stale campaign differs")
+    terminal_sacct = retained_stale_terminal_sacct_binding(paths)
+    if stale["terminal_sacct"] != terminal_sacct:
+        raise ValueError("managed shared-root clearance retained sacct binding differs")
 
     isolation = require_r17_exact_keys(
         artifact["isolation"],
@@ -13069,13 +13356,15 @@ def require_managed_shared_root_clearance(
         decision="approved-for-publication",
         label="managed shared-root clearance publication-audit review",
     )
-    current = datetime.now(timezone.utc) if now is None else now.astimezone(timezone.utc)
     if (
         reviewer_id == audit_reviewer_id
-        or not generated <= reviewed <= published <= audit_reviewed
+        or not generated < reviewed < published < audit_reviewed
         or audit_reviewed > current + timedelta(minutes=5)
     ):
         raise ValueError("managed shared-root clearance review chain differs")
+    live_queue_absence = require_stale_job_absent_from_complete_queue(
+        queue_evidence, now=current
+    )
     return {
         "checkpoint": checkpoint,
         "artifact": {
@@ -13096,11 +13385,18 @@ def require_managed_shared_root_clearance(
         },
         "source_authority_publications": source_authority,
         "supersedes": supersedes,
+        "retained_terminal_sacct": terminal_sacct,
+        "live_queue_absence": live_queue_absence,
+        "consumption": {
+            "action": action,
+            "case_id": case_id,
+            "authorized_stale_manifest": str(stale_manifest),
+        },
     }
 
 
 def shared_root_campaign_conflicts(root: Path,
-                                   allowed: set[str]) -> list[str]:
+                                   allowed_manifests: set[Path]) -> list[str]:
     """Return top-level CGL campaigns requiring an explicit overlap review."""
 
     conflicts = []
@@ -13114,7 +13410,7 @@ def shared_root_campaign_conflicts(root: Path,
         campaign_id = str(
             manifest.get("campaign_id", manifest_path.parents[1].name)
         )
-        if campaign_id not in allowed:
+        if manifest_path not in allowed_manifests:
             conflicts.append(f"{campaign_id}|{state}|{manifest_path}")
     return conflicts
 
@@ -13382,11 +13678,30 @@ def submission_preflight(args: argparse.Namespace, manifest_path: Path,
     )
     requested_campaigns = set(getattr(args, "allow_shared_root_campaign", []))
     shared_root_clearance = None
+    allowed_shared_root_manifests: set[Path] = set()
     if not offline_local_root and requested_campaigns:
+        run = manifest.get("run")
+        if not isinstance(run, dict):
+            raise ValueError("managed shared-root clearance requires manifest case")
         shared_root_clearance = require_managed_shared_root_clearance(
-            paths, requested_campaigns
+            paths,
+            requested_campaigns,
+            action=str(getattr(args, "action", "")),
+            case_id=str(run.get("case_id", "")),
+            queue_evidence=initial_queue_authentication,
         )
-    conflicts = shared_root_campaign_conflicts(root, requested_campaigns)
+        allowed_shared_root_manifests.add(Path(
+            str(shared_root_clearance["consumption"]["authorized_stale_manifest"])
+        ))
+    elif (
+        offline_local_root
+        and requested_campaigns == {SHARED_ROOT_STALE_CAMPAIGN_ID}
+    ):
+        allowed_shared_root_manifests.add(
+            root / "runs" / SHARED_ROOT_STALE_CAMPAIGN_ID
+            / "manifest/prepared_run.json"
+        )
+    conflicts = shared_root_campaign_conflicts(root, allowed_shared_root_manifests)
     if conflicts:
         raise ValueError(
             "shared-root campaign records require explicit review; pass "
