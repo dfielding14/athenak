@@ -7,7 +7,7 @@
 - **Article subtype and formal limits:** `[AUTHOR DECISION / VERIFY AGAINST CURRENT APJ REQUIREMENTS]`.
 - **Current manuscript source:** `tst/publication/manuscript/athenak_mhd_pic_apj_methods_scaffold.tex`.
 - **Authoritative source baseline for this revision:** `PIC` commit
-  `1d72534619da277fdd6838cabdab0d465d0a8867`.
+  `9db61e545adc4c6c7558bac1e6288b510849fd87`.
 - **Companion operational tracker:** `tst/publication/manuscript/claim_evidence_ledger.md`.
 - **Status:** Source-audited methods draft with visible result gates and a
   narrowed target-paper scope. It does not authorize result wording, certify
@@ -116,8 +116,9 @@ The verified primary-source map currently supports these bounded statements:
   regimes and shared observables. No mapped source supplies a universal
   nonlinear-saturation amplitude or numerical acceptance tolerance.
 - Stone & Gardiner (2009) and Birdsall & Langdon support the VL2 and TSC method
-  context, respectively; source audit remains necessary to establish AthenaK's
-  exact implementation.
+  context, respectively. Sun & Bai (2023) explicitly name the Boris pusher in
+  the retained local source. Source audit remains necessary to establish
+  AthenaK's exact implementation.
 - AthenaK's configured `C` must be called an artificial particle-light-speed
   choice requiring campaign-level convergence, not a self-validating or
   formally rescaled reduced-speed-of-light approximation.
@@ -130,8 +131,9 @@ The verified primary-source map currently supports these bounded statements:
 
 The general AthenaK deposited-current moment includes particle statistical and
 delta-f weights, physical-density scaling, the selected shape, configured
-species charge, and recipient-cell volume. For the non-expanding, full-f,
-uniform Q043 Bell carrier it reduces to
+species charge, and division by recipient-cell volume when converting
+macro-particle contributions to deposited current density. For the
+non-expanding, full-f, uniform Q043 Bell carrier it reduces to
 `deposited J_CR/c = PPC * deposit_qscale * species_charge * v_CR /
 V_root_cell = 2 B_g k_0`, where `V_root_cell` is determined from the global
 root-mesh extents and counts. Replacing `species_charge` by `q/(mc)` is valid
@@ -429,16 +431,24 @@ The following statements may orient methods drafting, subject to source audit:
   latest independently reviewed Q043 hardening successor remains inadmissible
   because run-root substitution, installed-generation replacement before
   import, and hash-versus-analysis reopen gaps can cross its trust boundary.
-- The active `paper_smooth` AMR policy follows receiver-resolution deposition
-  and is not individually conservative at mixed refinement levels. A separate
-  source-local `conservative_partition` candidate demonstrates bounded serial
-  partition of unity but remains unsuitable for production integration because
-  its current design performs scale-unsafe global tag audits and serial
-  per-particle host work and lacks multi-rank, dynamic-AMR, restart, HIP, and
-  performance evidence.
-- A reviewed Q011 fixed-uniform exact-accounting repair narrows the source
-  envelope appropriately, but its runtime-evidence verifier is self-attested
-  and cannot close execution provenance.
+- The active `paper_smooth` AMR policy is designed for receiver-resolution
+  deposition and is not individually conservative at mixed refinement levels.
+  Its integrated stage-local receiver identity uses source rank, stage-local
+  source index, destination MeshBlock GID, and periodic image rather than
+  persistent particle tag, avoiding conflation of distinct particles that share
+  a tag. This source repair does not close multi-rank, dynamic-AMR, restart, HIP,
+  or interface qualification. A separate source-local `conservative_partition`
+  candidate demonstrates bounded serial partition of unity but remains
+  unsuitable for production integration because its current design performs
+  scale-unsafe global tag audits and serial per-particle host work and lacks
+  multi-rank, dynamic-AMR, restart, HIP, and performance evidence.
+- Independent review accepted the clean Q011 numerical-only successor's ledger
+  signs and staging but blocked the successor as-is. Its pure reducer accepts
+  malformed or incomplete logical topology, transitive reducer dependencies are
+  unbound, the ledger-disabled path introduces an unconditional new 3D
+  restriction, and readiness overstates 2D3V enforcement. A repair successor is
+  in progress; the blocked successor cannot close numerical evidence or
+  execution provenance.
 - A Q011 preproduction resource-scaling plan recommends a three-seed paired
   core followed by resource-gated expansion; it does not modify the historical
   eight-seed preregistration or authorize production.
@@ -490,22 +500,34 @@ These statements do not close a scientific claim.
   the integrated primary, unexecuted, unfrozen for registered production, and
   blocked on Q043/Q023 prerequisites, thresholds, resources, and trusted
   evidence.
-- The Q009 dynamic-AMR/load-balance pilot now has a fail-closed five-case
-  contract, but no materializer, trusted telemetry/admission path, live policy
-  slice, or execution evidence. It does not qualify production AMR or extend
-  uniform-mesh exact-conservation claims.
+- The Q009 dynamic-AMR/load-balance pilot has a fail-closed five-case contract.
+  An unsafe execution-preparation predecessor was rejected because forged prior
+  receipts, whole-run-root replacement, weaker-than-frozen telemetry, missing
+  pairwise acceptance, and ambiguous checkpoint binding could cross its trust
+  boundary. Independent review also blocked the replacement preparation-only
+  successor as-is: fabricated or nonexistent final bindings can become
+  installed-schema-compatible launch candidates, `control_plane_common` can be
+  module-poisoned while repository bytes are claimed, and output-root escape or
+  symlink traversal is permitted. A repair successor is in progress. No trusted
+  telemetry/admission path, live policy slice, or execution evidence exists, so
+  the pilot does not qualify production AMR or extend uniform-mesh
+  exact-conservation claims.
 - Independent review blocked integration of the Q009
   `conservative_partition` candidate: its deposition-stage global PTAG audit
   is unsafe at production scale, normalization performs serial host
   allocation and scans per particle, PTAG uniqueness is an unnecessary
   incompletely established precondition, and MPI-facing behavior is untested.
-  The stage-local identity repair for default `paper_smooth` may be split and
-  reviewed separately.
-- Independent review accepted the narrow numerical logic of a Q011
-  fixed-uniform exact-accounting repair but rejected its runtime-evidence
-  verifier as self-attestation. The repair cannot be described as complete
-  evidence closure unless numerical source changes are split from or paired
-  with trusted execution provenance.
+  The reviewed stage-local identity repair for default `paper_smooth` is now
+  integrated at the authoritative source baseline; it does not make
+  `conservative_partition` production viable or qualify dynamic AMR.
+- Independent review accepted the clean Q011 numerical-only successor's ledger
+  signs and staging but blocked the successor as-is because its pure reducer
+  accepts malformed or incomplete logical topology, transitive reducer
+  dependencies are unbound, the ledger-disabled path introduces an
+  unconditional new 3D restriction, and readiness overstates 2D3V enforcement.
+  A repair successor is in progress. Neither the blocked successor nor its
+  predecessor is complete evidence closure without trusted execution
+  provenance.
 - A large inventory of bounded evidence can obscure the central argument unless
   the manuscript preserves evidence hierarchy and scope.
 - The central Bell and shock campaigns may remain blocked by prerequisites,

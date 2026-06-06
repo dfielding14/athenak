@@ -25,8 +25,8 @@
 
 \begin{document}
 
-\title{AthenaK MHD-PIC: Numerical Method, Corrected Bell Qualification,
-and a Parallel-Shock Demonstration}
+\title{AthenaK MHD-PIC: Numerical Method and Qualification Requirements for
+Bell and Parallel-Shock Calculations}
 
 \author{AthenaK Collaboration}
 \affiliation{\AUTHOR{Insert verified author list, affiliations, and contribution
@@ -46,12 +46,13 @@ it with a relativistic Boris pusher, uses triangular-shaped-cloud
 interpolation and deposition, retains ideal-MHD induction, and returns the
 opposite particle momentum and kinetic-energy changes to an ideal-MHD gas on
 the bounded uniform-mesh path. A source audit exposes two boundaries that
-control interpretation. First, the Bell driving current is the deposited
-$J_{\rm CR}/c$ and therefore depends on recipient-cell volume; historical Bell
-preparation that omitted this volume and multiplied the closure by the
-artificial particle light speed represents a different physical problem.
-Second, receiver-resolution deposition at a refinement interface trades exact
-individual-particle conservation for a smooth profile, so uniform-mesh
+control interpretation. First, the discrete conversion from macro-particle
+current contributions to deposited current density $J_{\rm CR}/c$ requires
+division by recipient-cell volume; historical Bell preparation that omitted
+this conversion and multiplied the closure by the artificial particle light
+speed represents a different physical problem. Second, receiver-resolution
+deposition at a refinement interface trades exact individual-particle
+conservation for a profile designed to remain locally smooth, so uniform-mesh
 conservation cannot be transferred to adaptive meshes. We consequently define
 a verification hierarchy that separates operator-level checks, distributed
 execution and restart tests, registered physical campaigns, and
@@ -301,9 +302,10 @@ c\boldsymbol{E} &= -\boldsymbol{u}\times\boldsymbol{B}.
 Equations~\ref{eq:particle-position}--\ref{eq:ideal-electric-field} follow the
 MHD-PIC formulation used by \citet{BaiEtAl2015} and \citet{SunBai2023}.
 AthenaK advances Equation~\ref{eq:particle-momentum} with the relativistic
-Boris rotation described in the standard particle-in-cell treatment of
-\citet{BirdsallLangdon2018}. For fields interpolated at the midpoint particle
-position, define
+Boris rotation, matching the pusher named by \citet{SunBai2023}.
+\citet{BirdsallLangdon2018} provides broader particle-in-cell context and is
+cited below for TSC deposition. For fields interpolated at the midpoint
+particle position, define
 \begin{align}
 \alpha &\equiv \frac{q}{mc}\frac{\Delta t}{2}, &
 \boldsymbol{w}^{-} &=
@@ -601,7 +603,8 @@ On multilevel meshes, \runtime selects the separately named
 records to leaf blocks. This choice follows the requirement that each
 cross-interface contribution be evaluated at the receiving-cell resolution;
 the weight sum associated with one particle may therefore differ from unity
-near a refinement interface while the deposited profile remains smooth.
+near a refinement interface while the deposited profile is designed to remain
+locally smooth.
 \GATE{Do not claim paper-faithful AMR deposition until the receiver-resolution
 TSC interface oracle and required AMR/MPI/HIP lifetime matrices close
 \qgate{Q-009}.}
@@ -645,10 +648,13 @@ weight, exclusion, and overflow semantics. Restart publication and qualifying
 continuations additionally require exact source/deck/executable bindings,
 completion markers, and retained raw-artifact inventories.
 The persistent tracking tag is useful provenance, but generic particle
-generation and restart do not by themselves prove global tag uniqueness.
-Receiver transport must therefore avoid using the tag as the sole identity of
-a stage-local particle contribution unless a separately qualified lifecycle
-contract establishes that uniqueness.
+generation and restart do not by themselves prove global tag uniqueness. The
+integrated receiver transport therefore deduplicates records by source rank,
+stage-local source index, destination MeshBlock GID, and periodic image rather
+than using the tag as the sole identity of a stage-local particle contribution.
+This source-level identity repair avoids conflating distinct particles that
+share a tracking tag; it does not close the broader MPI, AMR-lifetime, restart,
+or HIP qualification gates.
 \GATE{Separate bounded serial/two-rank evidence from broad MPI, AMR, HIP, and
 Frontier-filesystem qualification.}
 
@@ -689,6 +695,10 @@ outputs.
 \item Production claims additionally require nonlinear behavior, resilience,
 performance, usability, limitations, and named external review.
 \end{enumerate}
+
+The source-audited statements in this revision are bound to
+\path{PIC@9db61e545adc4c6c7558bac1e6288b510849fd87}. Unintegrated successors
+may narrow claims or identify blockers but cannot support a positive result.
 
 \begin{table*}[htbp]
 \centering
@@ -833,10 +843,15 @@ particle channel alone. Uniform-mesh full-$f$ tests can therefore isolate the
 opposite-impulse cancellation and the absence of a direct CR-current
 contribution to paper-mode induction. Open boundaries, reflection, injection,
 removal, and floors require additional external-state terms; adaptive
-interfaces additionally change the particle shape sum. A reviewed
-source-local shock-accounting repair narrows the exact-accounting envelope to
-a fixed uniform mesh, but its proposed runtime-evidence verifier remains
-self-attested and cannot close the evidence gate.
+interfaces additionally change the particle shape sum. Independent review
+accepted the clean numerical-only successor's ledger signs and staging but
+blocked the successor as-is: its pure reducer accepts malformed or incomplete
+logical topology, its transitive reducer dependencies are unbound, its
+ledger-disabled path introduces an unconditional new three-dimensional
+restriction, and its readiness record overstates two-dimensional,
+three-velocity-component enforcement. A repair successor is in progress.
+The blocked successor does not close numerical evidence or the broader
+evidence gate.
 \TODO{Insert the final conservation and coefficient-invariance results.}
 \VERIFY{Distinguish the ideal-MHD energy-feedback path from exact-isothermal
 momentum-only carriers.}
@@ -847,18 +862,25 @@ Serial refine/derefine and restart stresses provide useful lifetime guards for
 particle state and reconstructed mesh ownership. A preregistered five-case
 dynamic-AMR engineering pilot further defines the required multi-rank HIP,
 migration, load-balance, restart-through-cutoff, and held-out full-geometry
-telemetry. It remains unexecuted and carries no scientific-AMR authority. The
+telemetry. An unsafe execution-preparation predecessor was rejected because it
+could not establish trusted receipts, telemetry, or run-root provenance.
+Independent review also blocked the replacement preparation-only successor
+as-is: fabricated or nonexistent final bindings can become
+installed-schema-compatible launch candidates, \texttt{control\_plane\_common}
+can be module-poisoned while repository bytes are claimed, and output-root
+escape or symlink traversal is permitted. A repair successor is in progress.
+The pilot remains unexecuted and carries no scientific-AMR authority. The
 separate conservative receiver candidate also remains open for the correctness
-and performance reasons described in Section~\ref{sec:numerics}. Thus neither
-the lifetime guards nor the candidate policy extends uniform-mesh exact
-conservation to the Section~5.4 AMR run.
+and performance reasons described in
+Section~\ref{sec:numerics}. Thus neither the lifetime guards nor the candidate
+policy extends uniform-mesh exact conservation to the Section~5.4 AMR run.
 \TODO{Report uniform, SMR, and true-AMR results with separately identified
 physical convergence, decomposition consistency, interface behavior, and
 restart continuity.}
 \GATE{Do not promote short-horizon carriers or engineering proxies into the
 target Bell or Section~5.4 claims.}
 
-\section{Corrected Bell Qualification}
+\section{Bell Verification Framework and Open Qualification Gates}
 \label{sec:physical-benchmarks}
 
 \subsection{Bell Instability}
@@ -929,10 +951,10 @@ comparison with an explicit discrepancy ledger.}
 \TODO{State that any accepted result is non-Hall and must not be transferred to
 Hall-dominated shock-front conditions.}
 
-\section{Section 5.4 Parallel-Shock Demonstration}
+\section{Section 5.4 Parallel-Shock Qualification Plan}
 \label{sec:shock}
 
-\subsection{Configured Production Candidate}
+\subsection{Configured Candidate and Open Execution Gate}
 \label{sec:shock-setup}
 
 The Section~5.4 candidate is a two-dimensional, three-velocity-component
@@ -951,11 +973,13 @@ u_0=30,\qquad
 The configured upstream Alfv\'enic Mach number is therefore $M_A=30$. The
 three-level AMR candidate has cell sizes
 $\Delta x=12,6,$ and $3\;c/\omega_{\rm pi}$, uses $20\times20$-cell
-MeshBlocks, and applies density-curvature refinement and derefinement
-thresholds of 1 and 0.1. Coarse-uniform and fine-uniform members retain the
-same physical domain and are paired with the AMR member by random seed. These
-are exact properties of the configured candidate matrix, not evidence that
-the matrix has executed successfully or that AMR agrees with the fine run.
+MeshBlocks, and evaluates both density and pressure curvature. A MeshBlock is
+marked for refinement when either maximum curvature exceeds 1 and for
+derefinement only when both maxima are below 0.1. Coarse-uniform and
+fine-uniform members retain the same physical domain and are paired with the
+AMR member by random seed. These are exact properties of the configured
+candidate matrix, not evidence that the matrix has executed successfully or
+that AMR agrees with the fine run.
 
 \subsection{Ideal-Surface Injection and Source Accounting}
 \label{sec:shock-injection}
@@ -1012,7 +1036,7 @@ argue that the pressure choice is unimportant only while $T_0\ll v_0^2$.
 \citet{SunBai2023} Section~5.4 does not state $P_0$.
 
 The shock's adaptive-mesh interpretation remains a separate open question.
-The active \texttt{paper\_smooth} policy follows the intended
+The active \texttt{paper\_smooth} policy is designed to follow the intended
 receiver-resolution profile but is not individually conservative at
 fine/coarse interfaces. The reviewed \texttt{conservative\_partition}
 candidate proves a bounded serial partition-of-unity construction, yet it is
@@ -1095,7 +1119,7 @@ problem. The corrected direct-current oracle, corrected linear predecessor,
 and a physics-first nonlinear sensitivity matrix are necessary in that order.
 
 The AMR interface presents a different tradeoff. Evaluating TSC at receiver
-resolution preserves the intended local smoothness but sacrifices exact
+resolution targets the intended local smoothness but sacrifices exact
 per-particle partition of unity at mixed levels. Renormalizing the support can
 restore extensive conservation while changing the deposited profile and
 introducing additional communication and computation. Neither choice is
@@ -1212,8 +1236,9 @@ result-bearing conclusion after final claim and provenance review.}
 
 \begin{table*}[htbp]
 \centering
-\caption{Authoritative source inventory for drafting. These files constrain
-manuscript claims but are not automatically reader-facing evidence.}
+\caption{Source inventory for drafting. These files constrain manuscript
+claims but are not automatically reader-facing evidence or current
+implementation authority.}
 \label{tab:evidence-inventory}
 \small
 \begin{tabular}{p{0.38\textwidth} p{0.30\textwidth} p{0.20\textwidth}}
@@ -1230,8 +1255,9 @@ No open claim may be written as a result \\
 Runtime identities, equations, stage ordering, and extension boundaries &
 Verify every equation against source before release \\
 \path{docs/source/engineering/pic_amr_lifetime_and_interface_policy.md} &
-AMR lifetime and refinement-interface evidence boundary &
-Do not imply full AMR qualification \\
+Historical AMR intent and refinement-interface qualification boundary &
+Stale for the integrated \texttt{paper\_smooth} implementation; verify against
+current source and do not imply full AMR qualification \\
 \path{docs/source/engineering/pic_q016_particle_provenance_spectra.md} &
 Particle provenance and bounded spectrum semantics &
 Do not imply a qualifying shock campaign \\
