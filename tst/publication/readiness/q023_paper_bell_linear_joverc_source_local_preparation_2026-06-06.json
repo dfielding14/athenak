@@ -1,0 +1,262 @@
+{
+  "record_type": "q023_paper_bell_linear_joverc_source_local_predecessor",
+  "schema_version": 1,
+  "date": "2026-06-06",
+  "gate": "Q-023-JOVERC",
+  "campaign_id": "Q023-PAPER-BELL-LINEAR-JOVERC",
+  "supersedes_campaign_id": "Q023-PAPER-BELL-LINEAR",
+  "status": "mandatory_successor_q043_source_deck_raw_oracle_sequence_bound_registered_admission_hardening_pending_materialized_execution_blocked",
+  "qualification_effect": "none_non_authorizing_predecessor_preparation_only",
+  "dependency_contract": {
+    "foundational_current_campaign_id": "Q043-BELL-CURRENT-VOLUME-AWARE",
+    "foundational_raw_oracle_id": "Q043-BELL-DEPOSITED-J-OVER-C-VOLUME-AWARE",
+    "foundational_generator_name": "q043_bell_current_volume_aware",
+    "foundational_binding_status": "source_deck_raw_oracle_sequence_bound_registered_admission_hardening_pending",
+    "foundational_current_lineage_commit": "883e4679ae797392f25f86e46b952feef753e6aa",
+    "foundational_current_source_sha256": "dd44fff4fe39bf1640dad6019ded29ce7d434b50a0c9831a8749383c6241f3e3",
+    "foundational_raw_oracle_analyzer_sha256": "f0a8db7fb47798d4bdc9ec742cef09e5ae0c69ff3ccb2f25d065602b23a26bed",
+    "foundational_raw_oracle_deck_manifest_sha256": "77d6ec862314d308c41490dde1137f6c384d1da24b6b72ad43e357545cff98b0",
+    "foundational_supersession_sha256": "2f83afc03e83038db168fed7d40bdc85bc7bca1eccbba52d18ede0d319dce342",
+    "foundational_registered_admission_binding_status": "pending_hardened_successor_digest_and_schema",
+    "hash_rebinding_condition": "bind_only_after_final_hardened_q043_registered_admission_successor_digest_and_schema_are_published",
+    "stale_95a27328e_hash_binding_permitted": false,
+    "provisional_q043_registered_admission_hash_binding_permitted": false,
+    "registered_execution_admission_digest_bound": false,
+    "registered_execution_admission_schema_bound": false,
+    "required_foundational_case_count": 132,
+    "registered_raw_oracle_pass_required": true,
+    "complete_132_case_foundational_raw_oracle_matrix_pass_required": true,
+    "registered_execution_admission_required_before_materialized_q023_evidence": true,
+    "registered_execution_admission_required_before_linear_qualification": true,
+    "registered_execution_admission_path_and_sha256_required_under_authorized_artifact_root": true,
+    "registered_execution_admission_publication_authorized_must_be_false": true,
+    "registered_execution_admission_schema_bound_by_this_record": false,
+    "complete_registered_execution_matrix_record_bound_by_this_record": false,
+    "complete_foundational_raw_oracle_matrix_bound_by_this_record": false,
+    "dependency_effect": "non_authorizing_downstream_predecessor_dependency_only",
+    "q043_authority_inherited": false
+  },
+  "authority": {
+    "launch_authorized": false,
+    "qualification_eligible": false,
+    "scientific_claim_authorized": false,
+    "publication_authorized": false,
+    "frontier_authorized": false,
+    "registered_q043_foundation_bound": false,
+    "clean_q023_candidate_bound": false,
+    "registered_q023_execution_bound": false,
+    "materialized_q023_trace_matrix_complete": false,
+    "independent_recompute_complete": false,
+    "external_review_complete": false,
+    "complete_authoritative_q043_foundation_claimed": false
+  },
+  "source_contract": {
+    "pgen_name": "q023_paper_bell_linear_joverc",
+    "parameter_block": "q023_paper_bell_linear_joverc",
+    "source_mode": "corrected_linear_eigenmode",
+    "shared_seed_carrier": "q023_paper_bell_linear.hpp",
+    "historical_q023_source_modified": false,
+    "fresh_and_restart_registration_bound": true,
+    "general_species_charge_contract": "species_charge/species_mass=omega/b_g",
+    "bound_species_mass": 2.0,
+    "bound_species_charge": 1.2566370614359172e-05,
+    "actual_particle_initialization_velocity_source": "explicit_species0_vx0_vy0_vz0",
+    "global_particles_cr_velocity_contract": "particles_cr_vx0_cr_vy0_cr_vz0_must_match_species0_actual_initialization_velocity_componentwise",
+    "actual_species_velocity_used_for_epsilon_light_speed_and_deposited_current_closure": true,
+    "zero_or_different_species_velocity_override_rejected": true,
+    "positive_integral_ppc_required": true,
+    "fractional_ppc_rejected_because_particle_count_is_discrete": true,
+    "uniform_current_oracle_mode_present": false,
+    "q043_registered_raw_oracle_dependency_declared_by_source_strings": true,
+    "q043_registered_admission_binding_fail_closed_until_hardened_successor_lands": true,
+    "all_coupling_coefficients_required_equal_one": true,
+    "required_coupling_coefficients": [
+      "couple_j_to_efield_coeff",
+      "couple_moments_momentum_coeff",
+      "couple_moments_energy_coeff"
+    ]
+  },
+  "normalization_contract": {
+    "current_normalization": "deposited_j_over_c_equals_2_b_g_k0",
+    "formula": "PPC*deposit_qscale*species_charge*species0_actual_v_CR/V_root_cell=2*B_g*k0",
+    "deposit_qscale_derivation": "2*B_g*k0*V_root_cell/(PPC*species_charge*species0_actual_v_CR)",
+    "root_cell_volume": "product_of_global_root_mesh_extent_divided_by_global_root_mesh_count_for_each_axis",
+    "artificial_light_speed_in_formula": false,
+    "species_mass_in_deposited_current_formula": false,
+    "meshblock_decomposition_in_formula": false,
+    "fixed_qscale_across_dimensions_or_resolutions": false
+  },
+  "matrix_contract": {
+    "deck_case_count": 55,
+    "trace_record_count": 55,
+    "every_epsilon_dimension_resolution_decomposition_row_has_an_exact_checked_in_deck": true,
+    "every_deck_explicitly_binds_species0_vx0_vy0_vz0_equal_to_particles_cr_vx0_cr_vy0_cr_vz0": true,
+    "materialized_execution_requires_mpi_rank_count_equal_product_of_decomposition_splits": true,
+    "materialized_execution_requires_rank_to_meshblock_topology_evidence": true,
+    "dimensions": [
+      1,
+      2,
+      3
+    ],
+    "epsilon_values": [
+      0.1,
+      0.2,
+      0.4,
+      0.6,
+      0.8
+    ],
+    "resolutions": [
+      "coarse",
+      "fine"
+    ],
+    "reference_decomposition": "reference_x1",
+    "decompositions_by_dimension": {
+      "1": {
+        "reference_x1": [
+          2,
+          1,
+          1
+        ]
+      },
+      "2": {
+        "reference_x1": [
+          2,
+          1,
+          1
+        ],
+        "split_x2": [
+          1,
+          2,
+          1
+        ],
+        "split_x1x2": [
+          2,
+          2,
+          1
+        ]
+      },
+      "3": {
+        "reference_x1": [
+          2,
+          1,
+          1
+        ],
+        "split_x2": [
+          1,
+          2,
+          1
+        ],
+        "split_x3": [
+          1,
+          1,
+          2
+        ],
+        "split_xyz": [
+          2,
+          2,
+          2
+        ]
+      }
+    },
+    "checked_in_deck_root": "inputs/tests/q023_paper_bell_linear_joverc_predecessor",
+    "checked_in_deck_manifest": "inputs/tests/q023_paper_bell_linear_joverc_predecessor/deck_manifest.json",
+    "linear_runtime_tlim": 1.75,
+    "linear_output_dt": 0.02,
+    "runtime_horizon_reason": "covers_the_fixed_theory_growth_window_through_epsilon_0p8_with_more_than_eight_snapshots",
+    "launch_authorized": false
+  },
+  "gates": {
+    "growth_required": true,
+    "growth_window": "1_le_gamma_theory_times_normalized_time_le_5",
+    "signed_phase_frequency_required_without_absolute_value": true,
+    "signed_phase_frequency_contract": "omega_over_k0_ua_equals_minus_epsilon_for_source_u_over_B_equals_minus_epsilon_minus_i_gamma_and_exp_minus_i_k_x_extraction",
+    "right_polarization_required": true,
+    "right_polarization_minimum_required_over_entire_growth_fit_window": true,
+    "minimum_growth_fit_r2": 0.995,
+    "minimum_phase_fit_r2": 0.995,
+    "magnetic_velocity_and_paper_literal_growth_fit_quality_required": true,
+    "magnetic_velocity_and_paper_literal_phase_fit_quality_required": true,
+    "fluid_velocity_growth_phase_and_polarization_cross_check_required": true,
+    "paper_literal_delta_u_y_phase_and_abs_delta_u_growth_required": true,
+    "resolution_convergence_required": true,
+    "fine_resolution_not_worse_than_coarse_required": true,
+    "multidirectional_decomposition_required": true,
+    "x2_or_x3_split_required_where_axis_exists": true,
+    "multi_axis_split_required_where_multiple_axes_exist": true,
+    "strict_provenance_required": true,
+    "provenance_contract": "exact_checked_in_deck_and_source_digests_clean_candidate_source_and_executable_parsed_registered_execution_receipt_authorized_artifact_root_exact_ordered_raw_mhd_w_bcc_inventory_strict_binary_parse_raw_runtime_deck_compatibility_trace_rederived_from_exact_raw_outputs_actual_mpi_rank_topology_plus_final_hardened_q043_registered_admission_binding_after_it_lands_and_non_authorizing_semantics",
+    "arbitrary_trace_plus_unrelated_raw_files_rejected": true,
+    "materialized_evidence_requires_registered_q043_admission": true,
+    "linear_qualification_prerequisites_require_passed_registered_q043_raw_oracle": true,
+    "synthetic_fixture_cannot_satisfy_registered_q043_or_linear_qualification_prerequisites": true,
+    "all_successful_gate_reports_remain_non_authorizing": true
+  },
+  "source_local_verification": {
+    "exact_deck_renderer_and_manifest_replay": "pass",
+    "source_to_all_decks_literal_compatibility": "pass",
+    "positive_integral_ppc_host_contract": "pass",
+    "general_nonunit_species_mass_charge_host_contract": "pass",
+    "synthetic_growth_signed_negative_phase_polarization_contract": "pass",
+    "adversarial_growth_and_phase_fit_quality_contract": "pass",
+    "adversarial_fit_window_polarization_contract": "pass",
+    "synthetic_resolution_convergence_contract": "pass",
+    "synthetic_multidirectional_decomposition_contract": "pass",
+    "synthetic_and_materialized_provenance_contract": "pass",
+    "q043_dependency_fail_closed_contract": "pass",
+    "stale_q043_95a27328e_foundational_hash_binding_removed": "pass",
+    "q043_source_deck_raw_oracle_sequence_checkpoint_binding": "pass_commit_883e4679ae797392f25f86e46b952feef753e6aa",
+    "final_q043_supersession_digest_binding": "pass",
+    "final_q043_registered_admission_readiness_and_successor_schema_binding": "not_bound_provisional_hash_forbidden",
+    "registered_q043_admission_semantics_and_digest_adversarial_test": "pass_fail_closed",
+    "explicit_species_velocity_deck_and_source_contract": "pass",
+    "species_velocity_zero_and_different_override_analyzer_rejection": "pass",
+    "all_coupling_coefficient_drift_analyzer_rejection": "pass",
+    "materialized_trace_exact_raw_rederivation_adversarial_test": "pass",
+    "registered_execution_receipt_and_actual_mpi_topology_adversarial_test": "pass",
+    "actual_host_serial_cycle_zero_source_deck_initialization": "pass_non_authorizing_smoke_only",
+    "actual_host_serial_fractional_ppc_runtime_rejection": "pass",
+    "actual_host_serial_zero_species_velocity_override_runtime_rejection": "pass",
+    "actual_host_serial_different_species_velocity_override_runtime_rejection": "pass",
+    "full_debug_serial_athenak_build": "pass",
+    "materialized_runtime_evidence": "pending",
+    "qualification_effect": "none"
+  },
+  "historical_campaign_disposition": {
+    "campaign_id": "Q023-PAPER-BELL-LINEAR",
+    "normalization": "omits_root_cell_volume_and_multiplies_by_artificial_C_invalid",
+    "qualification_eligible": false,
+    "disposition": "historical_chronology_only_not_physical_or_qualifying_evidence",
+    "preservation": "historical_source_decks_analyzers_and_readiness_records_remain_byte_preserved"
+  },
+  "artifact_bindings": {
+    "inputs/tests/q023_paper_bell_linear_joverc_predecessor/deck_manifest.json": "0b0cc2ac0b9de2b7d129d08617b9233cb08e6bc214cb5ff9a27a510a63a69a51",
+    "src/CMakeLists.txt": "0863f7bebe5211024e8b204d60aa3a07196fc50397eb29f98c2f8e313390ec52",
+    "src/pgen/AGENTS.md": "53cfb2c033f7b8ee50eb72af280ab546623a43bb61bf6e3a155b46035608d453",
+    "src/pgen/pgen.cpp": "97c436fb7f6040b691a1541e7d9beab8437d8de893b239f7d684215217415e5e",
+    "src/pgen/pgen.hpp": "80721a4bdcae07d8942fbede14389200773f41439027f689271e94d77d0c36c9",
+    "src/pgen/tests/q023_paper_bell_linear.cpp": "66a1bb952ca8b9d91d17896c1ebb94b18fa276be24767a99f635466cbe8638eb",
+    "src/pgen/tests/q023_paper_bell_linear.hpp": "afa7b8243b1d402faa9592137050d0e6870a06ce25f61e17d010af3fc5a080e6",
+    "src/pgen/tests/q023_paper_bell_linear_joverc.cpp": "50e4de1ef64230dfc6592f92a566cfa7a3dc499f130348fa2e99c96362d57658",
+    "tst/publication/analyze_q023_paper_bell_linear.py": "f128958a9eee9be53b106aed0fb8cc0efa9d05efae6811c3b7046d11f8ac7ce6",
+    "tst/publication/analyze_q023_paper_bell_linear_joverc.py": "1162ea7090ff508f469370aa4295e548f9dd9e3d94cc1f931d9e5a8bb143a2ea",
+    "tst/publication/q023_paper_bell_linear_joverc_host_harness.cpp": "534339f2771bd58e0a46e7917a93ad620e042b41e70be4ddd89b53b123ca2103",
+    "tst/publication/test_analyze_q023_paper_bell_linear_joverc.py": "e407cdac8997e7bd5efff7b15a8806bf4079a1fc3465f85b62056783d6d9e047"
+  },
+  "explicitly_not_claimed": [
+    "completed_authoritative_Q043_foundation",
+    "complete_Q043_registered_execution_matrix_record_bound",
+    "final_Q043_registered_admission_digest_or_schema_bound",
+    "Q023_launch_authority",
+    "Q023_Section_5p2_qualification",
+    "materialized_Q023_growth_or_convergence_evidence",
+    "scientific_claim_authority",
+    "publication_authority",
+    "nonlinear_Bell_saturation"
+  ],
+  "open_dependencies": [
+    "Obtain and bind the final hardened Q043 registered-admission successor digest and schema; provisional admission artifacts at the 883e4679a checkpoint are deliberately not frozen.",
+    "Freeze a clean candidate containing this Q023 predecessor source and exact deck matrix.",
+    "Execute the complete 55-record Q023 trace matrix from registered executions under an authorized artifact root.",
+    "Run independent recompute and external scientific review before any Section 5.2 claim."
+  ]
+}

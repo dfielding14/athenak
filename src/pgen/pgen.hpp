@@ -79,6 +79,7 @@ class ProblemGenerator {
   void Q007PaperCRSILinearPreparation(ParameterInput *pin, const bool restart);
   void Q007PaperCRPAILinearPreparation(ParameterInput *pin, const bool restart);
   void Q023PaperBellLinear(ParameterInput *pin, const bool restart);
+  void Q023PaperBellLinearJOverC(ParameterInput *pin, const bool restart);
   void Q043BellCurrentVolumeAware(ParameterInput *pin, const bool restart);
   void Q029HallBellLinear(ParameterInput *pin, const bool restart);
   void Q032ReducedStaticNeutralLocal(ParameterInput *pin, const bool restart);

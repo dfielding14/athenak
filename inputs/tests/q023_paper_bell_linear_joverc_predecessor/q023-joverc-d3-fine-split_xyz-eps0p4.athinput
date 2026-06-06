@@ -1,0 +1,193 @@
+# Corrected Q023 Bell linear predecessor preparation only.
+# Q043 registered raw-current foundation is required before execution.
+# This deck grants no launch, qualification, science, or publication authority.
+
+<comment>
+problem = Q023-PAPER-BELL-LINEAR-JOVERC d3-fine-split_xyz-eps0p4
+
+<job>
+basename = q023_joverc_d3_fine_split_xyz_eps0p4
+
+<mesh>
+nghost = 2
+nx1 = 128
+x1min = 0
+x1max = 4.5825756949558398
+ix1_bc = periodic
+ox1_bc = periodic
+
+nx2 = 64
+x2min = 0
+x2max = 2.2912878474779199
+ix2_bc = periodic
+ox2_bc = periodic
+
+nx3 = 32
+x3min = 0
+x3max = 1.14564392373896
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 64
+nx2 = 32
+nx3 = 16
+
+<time>
+evolution = dynamic
+integrator = rk2
+cfl_number = 0.1
+nlim = 2000000
+tlim = 1.75
+ndiag = 1
+
+<mhd>
+eos = ideal
+reconstruct = plm
+rsolver = llf
+gamma = 1.66666666667
+
+<particles>
+particle_type = cosmic_ray
+ppc = 1.0
+pusher = boris_tsc
+nspecies = 1
+cr_distribution = center
+deposit_moments = true
+deposit_order = 2
+deposit_qscale = 18.355195921721009
+couple_moments_to_mhd = true
+couple_j_to_efield_coeff = 1.0
+couple_j_to_efield_representation = cell_centered
+couple_j_deposition_mode = cc_convert
+couple_moments_momentum_to_mhd = true
+couple_moments_energy_to_mhd = true
+couple_fluid_feedback_order = mhd_src_terms
+couple_moments_momentum_coeff = 1.0
+couple_moments_energy_coeff = 1.0
+cr_vx0 = 0.54554472558998102
+cr_vy0 = 1.091089451179962
+cr_vz0 = 2.1821789023599241
+pic_physical_mode = paper_mhd_pic_vl2_tsc
+pic_background_mode = coupled
+pic_feedback_mode = coupled
+pic_interp_scheme = tsc
+pic_enable_2d3v = true
+pic_cr_light_speed = 2500
+pic_cr_initial_state = velocity
+pic_cr_hall_mode = off
+pic_wave_damping_mode = off
+pic_max_cell_cross = 1
+pic_theta_max = 0.3
+pic_deltaf_mode = off
+pic_load_balance_cost_per_particle = 0.0
+pic_sort_interval = 0
+pic_intermediate_arrays = auto
+pic_expanding_box_mode = off
+
+<species0>
+mass = 2
+charge = 1.2566370614359172e-05
+vx0 = 0.54554472558998102
+vy0 = 1.091089451179962
+vz0 = 2.1821789023599241
+
+<problem>
+pgen_name = q023_paper_bell_linear_joverc
+
+<q023_paper_bell_linear_joverc>
+campaign_id = Q023-PAPER-BELL-LINEAR-JOVERC
+supersedes_campaign_id = Q023-PAPER-BELL-LINEAR
+foundational_current_campaign_id = Q043-BELL-CURRENT-VOLUME-AWARE
+foundational_raw_oracle_id = Q043-BELL-DEPOSITED-J-OVER-C-VOLUME-AWARE
+foundational_binding_status = source_deck_raw_oracle_sequence_bound_registered_admission_hardening_pending
+foundational_current_lineage_commit = 883e4679ae797392f25f86e46b952feef753e6aa
+foundational_current_source_sha256 = dd44fff4fe39bf1640dad6019ded29ce7d434b50a0c9831a8749383c6241f3e3
+foundational_raw_oracle_analyzer_sha256 = f0a8db7fb47798d4bdc9ec742cef09e5ae0c69ff3ccb2f25d065602b23a26bed
+foundational_raw_oracle_deck_manifest_sha256 = 77d6ec862314d308c41490dde1137f6c384d1da24b6b72ad43e357545cff98b0
+foundational_supersession_sha256 = 2f83afc03e83038db168fed7d40bdc85bc7bca1eccbba52d18ede0d319dce342
+foundational_registered_admission_binding_status = pending_hardened_successor_digest_and_schema
+foundational_registered_admission_binding_permitted = false_until_hardened_successor_lands
+foundational_raw_oracle_case_count = 132
+foundational_raw_oracle_registered_pass = required_before_linear_qualification
+foundational_registered_execution_admission = required_before_any_q023_execution_or_qualification
+dependency_effect = non_authorizing_downstream_predecessor_dependency_only
+deck_role = non_authorizing_q023_joverc_linear_predecessor
+current_normalization = deposited_j_over_c_equals_2_b_g_k0
+deposition_measure = ppc_times_deposit_qscale_times_species_charge_times_species0_actual_v_cr_over_root_cell_volume
+particle_velocity_semantics = species0_vx0_vy0_vz0_are_actual_and_must_match_particles_cr_velocity
+root_cell_volume = global_root_mesh_extents_over_global_root_mesh_counts
+deposit_qscale_semantics = root_cell_macro_charge_volume_aware
+fixed_qscale = forbidden_across_dimensions_and_resolutions
+decomposition_contract = dimension_appropriate_multidirectional_matrix_required
+raw_output_layout = shared_mpi_io
+epsilon_grid = 0.1,0.2,0.4,0.6,0.8
+timestep = open_clean_candidate_timestep_freeze
+source_mode = corrected_linear_eigenmode
+q_over_mc_representation = species_charge_over_species_mass_equals_omega_over_b_g
+initial_eigenmode = section52_right_polarized_eigenmode
+qualification_effect = none_non_authorizing_predecessor_preparation_only
+dimension = 3
+resolution_id = fine
+decomposition_id = split_xyz
+prepared_meshblock_splits = 2,2,2
+epsilon_default = 0.40000000000000002
+epsilon = 0.40000000000000002
+rho = 1.0
+pressure = 1.0
+amplitude = 1.0e-6
+b_g = 1.0
+u_a = 1.0
+wavelength = 1.0
+k0 = 6.2831853071795862
+omega = 6.2831853071795858e-06
+c_over_v_cr = 1000.0
+supersession_effect = historical_c_multiplied_normalization_invalid_for_qualification
+launch_authorized = false
+qualification_eligible = false
+
+<output1>
+file_type = bin
+variable = mhd_w_bcc
+id = mhd_w_bcc
+dt = 0.02
+ghost_zones = false
+single_file_per_rank = false
+
+<output2>
+file_type = bin
+variable = prtcl_rho
+id = prtcl_rho
+dt = 0.02
+ghost_zones = false
+single_file_per_rank = false
+
+<output3>
+file_type = bin
+variable = prtcl_jx
+id = prtcl_jx
+dt = 0.02
+ghost_zones = false
+single_file_per_rank = false
+
+<output4>
+file_type = bin
+variable = prtcl_jy
+id = prtcl_jy
+dt = 0.02
+ghost_zones = false
+single_file_per_rank = false
+
+<output5>
+file_type = bin
+variable = prtcl_jz
+id = prtcl_jz
+dt = 0.02
+ghost_zones = false
+single_file_per_rank = false
+
+<output6>
+file_type = rst
+id = rst
+dt = 1.75
+single_file_per_rank = false

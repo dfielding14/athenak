@@ -1741,6 +1741,8 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm) :
     Q007PaperCRPAILinearPreparation(pin, false);
   } else if (pgen_fun_name.compare("q023_paper_bell_linear") == 0) {
     Q023PaperBellLinear(pin, false);
+  } else if (pgen_fun_name.compare("q023_paper_bell_linear_joverc") == 0) {
+    Q023PaperBellLinearJOverC(pin, false);
   } else if (pgen_fun_name.compare("q043_bell_current_volume_aware") == 0) {
     Q043BellCurrentVolumeAware(pin, false);
   } else if (pgen_fun_name.compare("q029_hall_bell_linear") == 0) {
@@ -2421,6 +2423,8 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
     Q007PaperCRPAILinearPreparation(pin, true);
   } else if (pgen_fun_name.compare("q023_paper_bell_linear") == 0) {
     Q023PaperBellLinear(pin, true);
+  } else if (pgen_fun_name.compare("q023_paper_bell_linear_joverc") == 0) {
+    Q023PaperBellLinearJOverC(pin, true);
   } else if (pgen_fun_name.compare("q043_bell_current_volume_aware") == 0) {
     Q043BellCurrentVolumeAware(pin, true);
   } else if (pgen_fun_name.compare("q029_hall_bell_linear") == 0) {

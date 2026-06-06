@@ -52,6 +52,9 @@ These are the only problems selectable with `problem/pgen_name` when
   (`ProblemGenerator::Q006PaperMultispeciesOscillation`)
 - `q023_paper_bell_linear` -> `tests/q023_paper_bell_linear.cpp`
   (`ProblemGenerator::Q023PaperBellLinear`)
+- `q023_paper_bell_linear_joverc` ->
+  `tests/q023_paper_bell_linear_joverc.cpp`
+  (`ProblemGenerator::Q023PaperBellLinearJOverC`)
 - `q043_bell_current_volume_aware` ->
   `tests/q043_bell_current_volume_aware.cpp`
   (`ProblemGenerator::Q043BellCurrentVolumeAware`)
