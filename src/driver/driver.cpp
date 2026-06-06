@@ -366,6 +366,9 @@ void Driver::ExecuteTaskList(Mesh *pm, std::string tl, int stage) {
 
 void Driver::PublishOutput(BaseTypeOutput *out, Mesh *pm, ParameterInput *pin) {
   Kokkos::Timer q017_timer;
+  if (IsRestartOutput(out) && pm->pgen->pgen_checkpoint_func != nullptr) {
+    (pm->pgen->pgen_checkpoint_func)(pin, pm);
+  }
   out->LoadOutputData(pm);
   out->WriteOutputFile(pm, pin);
   q017_output_time_ += q017_timer.seconds();

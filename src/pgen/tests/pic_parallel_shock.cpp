@@ -161,6 +161,7 @@ Real ps_escaped_injected_cr_momentum_x2_global = 0.0;
 Real ps_escaped_injected_cr_momentum_x3_global = 0.0;
 Real ps_escaped_injected_cr_energy_global = 0.0;
 Real ps_escaped_initial_cr_count_global = 0.0;
+std::int64_t ps_particle_population_audit_calls = 0;
 bool ps_cr_ledger_complete = true;
 bool ps_tag_seeded = false;
 bool ps_tag_progression_validated = false;
@@ -623,6 +624,111 @@ bool ParallelShockLedgerValueExceeds(const Real lhs, const Real rhs) {
   return lhs > rhs + ParallelShockLedgerTolerance(lhs, rhs);
 }
 
+void RejectDuplicateParallelShockRestartLedgers(ParameterInput *pin,
+                                                const bool restart) {
+  if (!restart || pin == nullptr) return;
+  constexpr std::array<const char *, 19> cr_ledger_fields = {
+    "ps_cr_ledger_schema", "ps_cr_ledger_complete", "ps_mass_reservoir_global",
+    "ps_injected_cr_count_global", "ps_injected_cr_mass_global",
+    "ps_injected_cr_momentum_x1_global", "ps_injected_cr_momentum_x2_global",
+    "ps_injected_cr_momentum_x3_global", "ps_injected_cr_energy_global",
+    "ps_removed_excluded_early_cohort", "ps_removed_cr_count_global",
+    "ps_removed_cr_mass_global", "ps_removed_cr_momentum_x1_global",
+    "ps_removed_cr_momentum_x2_global", "ps_removed_cr_momentum_x3_global",
+    "ps_removed_cr_energy_global", "ps_tag_seeded", "ps_injection_tag_floor",
+    "ps_next_tag"
+  };
+  constexpr std::array<const char *, 11> escape_ledger_fields = {
+    "ps_escape_ledger_schema", "ps_escape_ledger_complete",
+    "ps_escape_audit_calls", "ps_escape_last_audit_time",
+    "ps_escaped_injected_cr_count_global", "ps_escaped_injected_cr_mass_global",
+    "ps_escaped_injected_cr_momentum_x1_global",
+    "ps_escaped_injected_cr_momentum_x2_global",
+    "ps_escaped_injected_cr_momentum_x3_global",
+    "ps_escaped_injected_cr_energy_global", "ps_escaped_initial_cr_count_global"
+  };
+  int duplicate_local = 0;
+  for (const char *field : cr_ledger_fields) {
+    duplicate_local +=
+        pin->ParameterWasDuplicatedInLoadedInput("problem", field) ? 1 : 0;
+  }
+  for (const char *field : escape_ledger_fields) {
+    duplicate_local +=
+        pin->ParameterWasDuplicatedInLoadedInput("problem", field) ? 1 : 0;
+  }
+#if MPI_PARALLEL_ENABLED
+  int duplicate_global = 0;
+  MPI_Allreduce(&duplicate_local, &duplicate_global, 1, MPI_INT, MPI_SUM,
+                MPI_COMM_WORLD);
+#else
+  const int duplicate_global = duplicate_local;
+#endif
+  if (duplicate_global != 0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock restart contains duplicate CR or escape "
+              << "ledger metadata." << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+}
+
+bool PaperVL2EscapeStageChronologyIsValid(const particles::Particles *ppart,
+                                          const Mesh *pm, const int stage,
+                                          const Real audit_time) {
+  if (!ppart->UsesPaperVL2Coupling()) return true;
+  if (stage != 1 && stage != 2) return false;
+  if (pm->ncycle < 0 ||
+      pm->ncycle > (std::numeric_limits<int>::max() - stage + 1)/2) {
+    return false;
+  }
+  const int expected_calls_before_stage = 2*pm->ncycle + stage - 1;
+  const Real expected_last_time = (stage == 1) ? pm->time : pm->time + 0.5*pm->dt;
+  const Real expected_audit_time =
+      (stage == 1) ? pm->time + 0.5*pm->dt : pm->time + pm->dt;
+  return ps_escape_audit_calls == expected_calls_before_stage &&
+      ParallelShockLedgerValuesAgree(ps_escape_last_audit_time,
+                                      expected_last_time) &&
+      ParallelShockLedgerValuesAgree(audit_time, expected_audit_time);
+}
+
+void ValidatePaperVL2CommittedEscapeChronology(const particles::Particles *ppart,
+                                               const int committed_cycle,
+                                               const Real committed_time,
+                                               const char *context,
+                                               const bool collective = true) {
+  if (ppart == nullptr || !ppart->UsesPaperVL2Coupling()) return;
+  int invalid_local = 0;
+  if (committed_cycle < 0 ||
+      committed_cycle > std::numeric_limits<int>::max()/2 ||
+      !std::isfinite(committed_time) || committed_time < 0.0) {
+    invalid_local = 1;
+  } else {
+    const int expected_calls = 2*committed_cycle;
+    const Real expected_last_time = (expected_calls == 0) ? 0.0 : committed_time;
+    if (ps_escape_audit_calls != expected_calls ||
+        !ParallelShockLedgerValuesAgree(ps_escape_last_audit_time,
+                                        expected_last_time)) {
+      invalid_local = 1;
+    }
+  }
+#if MPI_PARALLEL_ENABLED
+  int invalid_global = invalid_local;
+  if (collective) {
+    MPI_Allreduce(&invalid_local, &invalid_global, 1, MPI_INT, MPI_SUM,
+                  MPI_COMM_WORLD);
+  }
+#else
+  const int invalid_global = invalid_local;
+#endif
+  if (invalid_global != 0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock " << context
+              << " paper-VL2 escape-audit chronology is invalid." << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+}
+
 void ValidateParallelShockRuntimeLedger(const char *context, const Real current_time) {
   const auto invalid_nonnegative_ledger = [](const Real value) {
     return !std::isfinite(value) || value < 0.0;
@@ -682,6 +788,24 @@ void ValidateParallelShockRuntimeLedger(const char *context, const Real current_
       ps_escape_last_audit_time >
           current_time + ParallelShockLedgerTolerance(ps_escape_last_audit_time,
                                                        current_time);
+  const bool invalid_empty_injected_ledger =
+      ps_injected_cr_count_global == 0.0 &&
+      (ps_injected_cr_momentum_x1_global != 0.0 ||
+       ps_injected_cr_momentum_x2_global != 0.0 ||
+       ps_injected_cr_momentum_x3_global != 0.0 ||
+       ps_injected_cr_energy_global != 0.0);
+  const bool invalid_empty_removed_ledger =
+      ps_removed_cr_count_global == 0.0 &&
+      (ps_removed_cr_momentum_x1_global != 0.0 ||
+       ps_removed_cr_momentum_x2_global != 0.0 ||
+       ps_removed_cr_momentum_x3_global != 0.0 ||
+       ps_removed_cr_energy_global != 0.0);
+  const bool invalid_empty_escape_ledger =
+      ps_escaped_injected_cr_count_global == 0.0 &&
+      (ps_escaped_injected_cr_momentum_x1_global != 0.0 ||
+       ps_escaped_injected_cr_momentum_x2_global != 0.0 ||
+       ps_escaped_injected_cr_momentum_x3_global != 0.0 ||
+       ps_escaped_injected_cr_energy_global != 0.0);
   if (!std::isfinite(ps_particle_macro_mass) || ps_particle_macro_mass <= 0.0 ||
       !std::isfinite(ps_mass_reservoir_global) ||
       ps_mass_reservoir_global < 0.0 ||
@@ -706,7 +830,10 @@ void ValidateParallelShockRuntimeLedger(const char *context, const Real current_
       !std::isfinite(ps_escaped_injected_cr_momentum_x3_global) ||
       invalid_nonnegative_ledger(ps_escaped_injected_cr_energy_global) ||
       invalid_count_ledger(ps_escaped_initial_cr_count_global) ||
+      ps_escaped_initial_cr_count_global != 0.0 ||
       invalid_escape_before_audit || invalid_escape_audit_time ||
+      invalid_empty_injected_ledger || invalid_empty_removed_ledger ||
+      invalid_empty_escape_ledger ||
       invalid_tag_window ||
       !std::isfinite(expected_injected_mass) ||
       !std::isfinite(expected_removed_mass) ||
@@ -827,6 +954,9 @@ void ObserveParallelShockParticleDestruction(particles::Particles *ppart, Mesh *
           ps_escape_last_audit_time) {
     local[7] += 1.0;
   }
+  if (!PaperVL2EscapeStageChronologyIsValid(ppart, pm, stage, audit_time)) {
+    local[7] += 1.0;
+  }
 
   const int npart = ppart->nprtcl_thispack;
   const int ndestroy = ppart->pbval_part->nprtcl_destroy;
@@ -884,7 +1014,7 @@ void ObserveParallelShockParticleDestruction(particles::Particles *ppart, Mesh *
           }
           const int source = pi(PCRSOURCE, p);
           if (source == static_cast<int>(CRParticleSource::initial)) {
-            initial_count += 1.0;
+            invalid += 1.0;
             return;
           }
           if (source != static_cast<int>(CRParticleSource::shock_injected) ||
@@ -972,6 +1102,15 @@ void ValidateParallelShockParticlePopulation(Mesh *pm) {
   if (pm == nullptr || pm->pmb_pack == nullptr || pm->pmb_pack->ppart == nullptr) {
     return;
   }
+  if (ps_particle_population_audit_calls ==
+      std::numeric_limits<std::int64_t>::max()) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock particle-population audit counter overflow."
+              << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+  ++ps_particle_population_audit_calls;
   auto *ppart = pm->pmb_pack->ppart;
   auto &pi = ppart->prtcl_idata;
   auto &pr = ppart->prtcl_rdata;
@@ -2384,9 +2523,38 @@ void MaybePrintFeedbackDiagnostics(Mesh *pm) {
 }
 
 void CompleteParallelShockCycle(Mesh *pm) {
-  ValidateParallelShockParticlePopulation(pm);
+  auto *ppart = (pm != nullptr && pm->pmb_pack != nullptr) ?
+      pm->pmb_pack->ppart : nullptr;
+  ValidatePaperVL2CommittedEscapeChronology(ppart, pm->ncycle + 1,
+                                            pm->time + pm->dt,
+                                            "cycle completion", false);
   StoreRuntimeStateForRestart(pm->time + pm->dt);
   MaybePrintFeedbackDiagnostics(pm);
+}
+
+void ParallelShockCheckpoint(ParameterInput *pin, Mesh *pm) {
+  (void)pin;
+  if (pm == nullptr || pm->pmb_pack == nullptr) return;
+  ValidatePaperVL2CommittedEscapeChronology(pm->pmb_pack->ppart, pm->ncycle,
+                                            pm->time, "checkpoint");
+  ValidateParallelShockParticlePopulation(pm);
+  StoreRuntimeStateForRestart(pm->time);
+}
+
+void ParallelShockFinalize(ParameterInput *pin, Mesh *pm) {
+  (void)pin;
+  if (pm == nullptr || pm->pmb_pack == nullptr) return;
+  ValidatePaperVL2CommittedEscapeChronology(pm->pmb_pack->ppart, pm->ncycle,
+                                            pm->time, "run end");
+  ValidateParallelShockParticlePopulation(pm);
+  StoreRuntimeStateForRestart(pm->time);
+  if (global_variable::my_rank == 0) {
+    std::cout << "pic_parallel_shock escape_accounting_telemetry:"
+              << " population_audit_calls=" << ps_particle_population_audit_calls
+              << " destruction_audit_calls=" << ps_escape_audit_calls
+              << " population_audit_policy=checkpoint_restart_run_end"
+              << " production_pilot_required=1" << std::endl;
+  }
 }
 
 void ParallelShockWorkInLoop(Mesh *pm) {
@@ -2482,6 +2650,7 @@ void ParallelShockWorkBeforeLoop(Mesh *pm) {
 
 void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart) {
   ps_pin = pin;
+  ps_particle_population_audit_calls = 0;
   MeshBlockPack *pmbp = pmy_mesh_->pmb_pack;
   if (pmbp->pmhd == nullptr) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -2736,6 +2905,7 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
   ps_recenter_dx1 = pmy_mesh_->mesh_size.dx1;
   ps_use_2d3v = (pmy_mesh_->two_d && pmbp->ppart->pic_enable_2d3v);
   ValidateAndStoreParallelShockRestartControls(pin, restart);
+  RejectDuplicateParallelShockRestartLedgers(pin, restart);
   const bool has_ledger_schema =
       restart && pin->DoesParameterExist("problem", "ps_cr_ledger_schema");
   if (has_ledger_schema) {
@@ -2897,6 +3067,9 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
   }
   ValidateParallelShockRuntimeLedger(restart ? "restart" : "runtime",
                                      pmy_mesh_->time);
+  ValidatePaperVL2CommittedEscapeChronology(pmbp->ppart, pmy_mesh_->ncycle,
+                                            pmy_mesh_->time,
+                                            restart ? "restart" : "initial state");
   if (restart && pmbp->ppart != nullptr) {
     SeedNextTag(pmbp->ppart, pmy_mesh_->time);
     ValidateParallelShockParticlePopulation(pmy_mesh_);
@@ -2983,6 +3156,8 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
   user_work_before_loop_func = ParallelShockWorkBeforeLoop;
   user_work_in_loop = true;
   user_work_in_loop_func = ParallelShockWorkInLoop;
+  pgen_checkpoint_func = ParallelShockCheckpoint;
+  pgen_final_func = ParallelShockFinalize;
   pmbp->ppart->particle_destruction_observer =
       ObserveParallelShockParticleDestruction;
 

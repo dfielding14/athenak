@@ -27,6 +27,7 @@ PREREGISTRATION = (
 PIC_RESTART_MAGIC = 0x5049435253543031
 EXPECTED_RESTART_SCHEMA = 7
 EXPECTED_SHOCK_LEDGER_SCHEMA = 3
+EXPECTED_ESCAPE_LEDGER_SCHEMA = 1
 _PIC_RESTART_MARKER = struct.pack("<Q", PIC_RESTART_MAGIC)
 _PIC_METADATA_FORMAT = "<15i"
 _MODEL_INTEGER_COUNT = 31
@@ -93,6 +94,26 @@ _NONNEGATIVE_REAL_LEDGER_FIELDS = (
 _COUNT_LEDGER_FIELDS = (
     "ps_injected_cr_count_global",
     "ps_removed_cr_count_global",
+)
+_ESCAPE_INTEGER_LEDGER_FIELDS = (
+    "ps_escape_ledger_schema",
+    "ps_escape_audit_calls",
+)
+_ESCAPE_BOOLEAN_LEDGER_FIELDS = ("ps_escape_ledger_complete",)
+_ESCAPE_REAL_LEDGER_FIELDS = (
+    "ps_escape_last_audit_time",
+    "ps_escaped_injected_cr_count_global",
+    "ps_escaped_injected_cr_mass_global",
+    "ps_escaped_injected_cr_momentum_x1_global",
+    "ps_escaped_injected_cr_momentum_x2_global",
+    "ps_escaped_injected_cr_momentum_x3_global",
+    "ps_escaped_injected_cr_energy_global",
+    "ps_escaped_initial_cr_count_global",
+)
+ESCAPE_LEDGER_FIELDS = (
+    *_ESCAPE_INTEGER_LEDGER_FIELDS,
+    *_ESCAPE_BOOLEAN_LEDGER_FIELDS,
+    *_ESCAPE_REAL_LEDGER_FIELDS,
 )
 _INTEGER_PATTERN = re.compile(r"-?[0-9]+")
 _REAL_PATTERN = re.compile(r"-?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?")
@@ -273,6 +294,7 @@ _BINDING_KEYS = {
     "checkpoint_observed_committed_time_omega0_inverse",
     "restart_schema",
     "startup_shock_ledger",
+    "particle_escape_ledger",
     "retained_output_nominal_slots_after_checkpoint_omega0_inverse",
     "comparison_tolerances_max_absolute_difference",
 }
@@ -581,6 +603,18 @@ def _validate_startup_shock_ledger(ledger: object, label: str) -> dict[str, obje
         >= ledger_mapping["ps_removed_cr_energy_global"],
         f"{label}: removed energy exceeds injected energy",
     )
+    for prefix in ("ps_injected_cr", "ps_removed_cr"):
+        if ledger_mapping[prefix + "_count_global"] == 0.0:
+            for suffix in (
+                "_momentum_x1_global",
+                "_momentum_x2_global",
+                "_momentum_x3_global",
+                "_energy_global",
+            ):
+                _require(
+                    ledger_mapping[prefix + suffix] == 0.0,
+                    f"{label}: empty {prefix} ledger contains accumulated state",
+                )
     tag_floor = ledger_mapping["ps_injection_tag_floor"]
     injected_count = int(ledger_mapping["ps_injected_cr_count_global"])
     next_tag = ledger_mapping["ps_next_tag"]
@@ -610,6 +644,146 @@ def extract_startup_shock_ledger(
         else:
             ledger[field] = _parse_real(parameters[field], label)
     return dict(_validate_startup_shock_ledger(ledger, f"{source}/startup_shock_ledger"))
+
+
+def _validate_particle_escape_ledger(
+    ledger: object,
+    label: str,
+    *,
+    startup_shock_ledger: object | None = None,
+    committed_cycle: object | None = None,
+    committed_time: object | None = None,
+) -> dict[str, object]:
+    ledger_mapping = _keys(ledger, set(ESCAPE_LEDGER_FIELDS), label)
+    for field in _ESCAPE_INTEGER_LEDGER_FIELDS:
+        _require(type(ledger_mapping[field]) is int, f"{label}/{field}: expected integer")
+    for field in _ESCAPE_BOOLEAN_LEDGER_FIELDS:
+        _require(type(ledger_mapping[field]) is bool, f"{label}/{field}: expected boolean")
+    for field in _ESCAPE_REAL_LEDGER_FIELDS:
+        value = ledger_mapping[field]
+        _require(type(value) is float, f"{label}/{field}: expected float")
+        _require(math.isfinite(value), f"{label}/{field}: expected finite float")
+
+    _require(
+        ledger_mapping["ps_escape_ledger_schema"] == EXPECTED_ESCAPE_LEDGER_SCHEMA,
+        f"{label}: escape ledger schema is not 1",
+    )
+    _require(
+        ledger_mapping["ps_escape_ledger_complete"],
+        f"{label}: escape ledger is incomplete",
+    )
+    _require(
+        ledger_mapping["ps_escape_audit_calls"] >= 0,
+        f"{label}: negative escape-audit call count",
+    )
+    for field in (
+        "ps_escape_last_audit_time",
+        "ps_escaped_injected_cr_count_global",
+        "ps_escaped_injected_cr_mass_global",
+        "ps_escaped_injected_cr_energy_global",
+        "ps_escaped_initial_cr_count_global",
+    ):
+        _require(ledger_mapping[field] >= 0.0, f"{label}/{field}: negative ledger value")
+    for field in (
+        "ps_escaped_injected_cr_count_global",
+        "ps_escaped_initial_cr_count_global",
+    ):
+        _require(
+            ledger_mapping[field].is_integer(),
+            f"{label}/{field}: non-integral particle count",
+        )
+    _require(
+        ledger_mapping["ps_escaped_initial_cr_count_global"] == 0.0,
+        f"{label}: initial-particle physical escape is unaccounted",
+    )
+    if ledger_mapping["ps_escaped_injected_cr_count_global"] == 0.0:
+        for field in (
+            "ps_escaped_injected_cr_momentum_x1_global",
+            "ps_escaped_injected_cr_momentum_x2_global",
+            "ps_escaped_injected_cr_momentum_x3_global",
+            "ps_escaped_injected_cr_energy_global",
+        ):
+            _require(
+                ledger_mapping[field] == 0.0,
+                f"{label}: empty escape ledger contains accumulated state",
+            )
+    if ledger_mapping["ps_escape_audit_calls"] == 0:
+        for field in _ESCAPE_REAL_LEDGER_FIELDS:
+            _require(
+                ledger_mapping[field] == 0.0,
+                f"{label}: zero-call escape ledger contains accumulated state",
+            )
+
+    if startup_shock_ledger is not None:
+        startup = _validate_startup_shock_ledger(
+            startup_shock_ledger, f"{label}/startup_shock_ledger"
+        )
+        escaped_count = ledger_mapping["ps_escaped_injected_cr_count_global"]
+        escaped_mass = ledger_mapping["ps_escaped_injected_cr_mass_global"]
+        injected_count = startup["ps_injected_cr_count_global"]
+        injected_mass = startup["ps_injected_cr_mass_global"]
+        removed_count = startup["ps_removed_cr_count_global"]
+        removed_mass = startup["ps_removed_cr_mass_global"]
+        _require(
+            escaped_count + removed_count <= injected_count,
+            f"{label}: removed plus escaped count exceeds injected count",
+        )
+        _require(
+            escaped_mass + removed_mass <= injected_mass,
+            f"{label}: removed plus escaped mass exceeds injected mass",
+        )
+        if injected_count == 0.0:
+            _require(
+                escaped_count == 0.0 and escaped_mass == 0.0,
+                f"{label}: escaped population exists without injected population",
+            )
+        else:
+            expected_escaped_mass = escaped_count * injected_mass / injected_count
+            _require(
+                math.isclose(
+                    escaped_mass,
+                    expected_escaped_mass,
+                    rel_tol=1.0e-12,
+                    abs_tol=1.0e-12,
+                ),
+                f"{label}: escaped mass is inconsistent with injected macro-mass",
+            )
+
+    if committed_cycle is not None or committed_time is not None:
+        cycle = _canonical_observed_cycle(committed_cycle, f"{label}/committed_cycle")
+        time = _canonical_observed_time(committed_time, f"{label}/committed_time")
+        expected_calls = 2 * cycle
+        _require(
+            expected_calls <= _MAX_SIGNED_INT
+            and ledger_mapping["ps_escape_audit_calls"] == expected_calls,
+            f"{label}: paper-VL2 escape-audit call chronology is inconsistent",
+        )
+        expected_last_time = 0.0 if expected_calls == 0 else time
+        _strict_equal(
+            ledger_mapping["ps_escape_last_audit_time"],
+            expected_last_time,
+            f"{label}/paper-VL2 last escape-audit time",
+        )
+    return ledger_mapping
+
+
+def extract_particle_escape_ledger(
+    payload: bytes, *, source: str = "<restart-bytes>"
+) -> dict[str, object]:
+    """Extract the complete schema-1 Q-011 physical-boundary escape ledger."""
+    parameters = _problem_parameters(payload, source)
+    missing = [field for field in ESCAPE_LEDGER_FIELDS if field not in parameters]
+    _require(not missing, f"{source}: particle escape ledger is missing entries {missing!r}")
+    ledger: dict[str, object] = {}
+    for field in ESCAPE_LEDGER_FIELDS:
+        label = f"{source}/{field}"
+        if field in _ESCAPE_INTEGER_LEDGER_FIELDS:
+            ledger[field] = _parse_integer(parameters[field], label)
+        elif field in _ESCAPE_BOOLEAN_LEDGER_FIELDS:
+            ledger[field] = _parse_boolean(parameters[field], label)
+        else:
+            ledger[field] = _parse_real(parameters[field], label)
+    return dict(_validate_particle_escape_ledger(ledger, f"{source}/particle_escape_ledger"))
 
 
 def validate_checkpoint_binding(
@@ -643,6 +817,15 @@ def validate_checkpoint_binding(
         binding_mapping["startup_shock_ledger"],
         "checkpoint binding/startup_shock_ledger",
     )
+    _validate_particle_escape_ledger(
+        binding_mapping["particle_escape_ledger"],
+        "checkpoint binding/particle_escape_ledger",
+        startup_shock_ledger=binding_mapping["startup_shock_ledger"],
+        committed_cycle=binding_mapping["checkpoint_observed_committed_cycle"],
+        committed_time=binding_mapping[
+            "checkpoint_observed_committed_time_omega0_inverse"
+        ],
+    )
     _strict_equal(
         binding_mapping["retained_output_nominal_slots_after_checkpoint_omega0_inverse"],
         contract["retained_output_nominal_slots_after_checkpoint_omega0_inverse"],
@@ -670,6 +853,7 @@ def bind_checkpoint_for_continuation(
     policy = _validated_preregistration(preregistration)
     probe = probe_schema7_restart_payload(restart_payload, source=source)
     ledger = extract_startup_shock_ledger(restart_payload, source=source)
+    escape_ledger = extract_particle_escape_ledger(restart_payload, source=source)
     binding = {
         "checkpoint_nominal_slot_omega0_inverse": checkpoint_nominal_slot_omega0_inverse,
         "checkpoint_observed_committed_cycle": checkpoint_observed_committed_cycle,
@@ -678,6 +862,7 @@ def bind_checkpoint_for_continuation(
         ),
         "restart_schema": probe.restart_schema,
         "startup_shock_ledger": ledger,
+        "particle_escape_ledger": escape_ledger,
         "retained_output_nominal_slots_after_checkpoint_omega0_inverse": (
             retained_output_nominal_slots_after_checkpoint_omega0_inverse
         ),

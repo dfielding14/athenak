@@ -1,5 +1,6 @@
 # Bounded local regression for physical outer-x1 shock-particle escape accounting.
-# This is an engineering fixture, not production or qualification evidence.
+# This is engineering evidence only. Production Q-011 requires ppc=0 and a
+# separate scale pilot over Q017 migration plus checkpoint timing telemetry.
 
 <comment>
 problem   = pic_parallel_shock outer-x1 escape and restart regression
@@ -115,7 +116,7 @@ ps_inject_half_width_cells    = 0.5
 ps_shock_speed_model          = ideal_surface
 ps_inject_t_start             = 0.0
 ps_inject_t_stop              = 10.0
-ps_remove_birth_time_before   = -1.0
+ps_remove_birth_time_before   = 0.05
 ps_enable_injection           = true
 ps_enable_gas_subtraction     = false
 ps_enable_curvature_amr       = false

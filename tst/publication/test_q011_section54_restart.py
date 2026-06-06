@@ -34,6 +34,17 @@ _VALID_LEDGER = {
     "ps_tag_seeded": "1",
     "ps_injection_tag_floor": "10",
     "ps_next_tag": "14",
+    "ps_escape_ledger_schema": "1",
+    "ps_escape_ledger_complete": "1",
+    "ps_escape_audit_calls": "10002",
+    "ps_escape_last_audit_time": "500.05",
+    "ps_escaped_injected_cr_count_global": "1.0",
+    "ps_escaped_injected_cr_mass_global": "1.0",
+    "ps_escaped_injected_cr_momentum_x1_global": "0.5",
+    "ps_escaped_injected_cr_momentum_x2_global": "-0.25",
+    "ps_escaped_injected_cr_momentum_x3_global": "0.125",
+    "ps_escaped_injected_cr_energy_global": "2.0",
+    "ps_escaped_initial_cr_count_global": "0.0",
 }
 _CHECKPOINT_OBSERVED_CYCLE = 5001
 _CHECKPOINT_OBSERVED_TIME = 500.05
@@ -44,6 +55,7 @@ def _restart_payload(
     restart_schema: int = 7,
     ledger_overrides: dict[str, str | None] | None = None,
     meshblock_particle_counts: list[int] | None = None,
+    duplicate_field: tuple[str, str] | None = None,
 ) -> bytes:
     ledger = dict(_VALID_LEDGER)
     for field, value in (ledger_overrides or {}).items():
@@ -51,11 +63,14 @@ def _restart_payload(
             del ledger[field]
         else:
             ledger[field] = value
+    ledger_text = "".join(f"{field}={value}\n" for field, value in ledger.items())
+    if duplicate_field is not None:
+        ledger_text += f"{duplicate_field[0]}={duplicate_field[1]}\n"
     header = (
         "<job>\n"
         "basename=q011_restart_fixture\n"
         "<problem>\n"
-        + "".join(f"{field}={value}\n" for field, value in ledger.items())
+        + ledger_text
         + "<par_end>\n"
     ).encode("ascii")
     meshblock_particle_counts = meshblock_particle_counts or [1]
@@ -193,7 +208,7 @@ class Q011Section54RestartPolicyTests(unittest.TestCase):
 
 
 class Q011Section54RestartPayloadTests(unittest.TestCase):
-    def test_schema7_payload_probe_and_complete_startup_ledger_extract(self) -> None:
+    def test_schema7_payload_probe_and_complete_ledgers_extract(self) -> None:
         payload = _restart_payload()
         probe = restart.probe_schema7_restart_payload(payload)
         self.assertEqual(probe.restart_schema, 7)
@@ -204,6 +219,11 @@ class Q011Section54RestartPayloadTests(unittest.TestCase):
         self.assertEqual(ledger["ps_cr_ledger_schema"], 3)
         self.assertEqual(ledger["ps_injected_cr_count_global"], 4.0)
         self.assertTrue(ledger["ps_removed_excluded_early_cohort"])
+        escape = restart.extract_particle_escape_ledger(payload)
+        self.assertEqual(set(escape), set(restart.ESCAPE_LEDGER_FIELDS))
+        self.assertEqual(escape["ps_escape_ledger_schema"], 1)
+        self.assertEqual(escape["ps_escape_audit_calls"], 10002)
+        self.assertEqual(escape["ps_escaped_initial_cr_count_global"], 0.0)
 
     def test_malformed_restart_schemas_fail_closed(self) -> None:
         for schema in (6, 8):
@@ -250,6 +270,56 @@ class Q011Section54RestartPayloadTests(unittest.TestCase):
             restart.RestartPolicyError, "invalid next-tag progression"
         ):
             restart.extract_startup_shock_ledger(payload)
+
+    def test_missing_duplicate_and_invalid_escape_ledgers_fail_closed(self) -> None:
+        with self.assertRaisesRegex(
+            restart.RestartPolicyError,
+            "particle escape ledger is missing entries.*ps_escape_audit_calls",
+        ):
+            restart.extract_particle_escape_ledger(
+                _restart_payload(ledger_overrides={"ps_escape_audit_calls": None})
+            )
+
+        with self.assertRaisesRegex(
+            restart.RestartPolicyError, "duplicate problem parameter"
+        ):
+            restart.extract_particle_escape_ledger(
+                _restart_payload(
+                    duplicate_field=("ps_escape_ledger_complete", "0")
+                )
+            )
+
+        cases = {
+            "initial-particle physical escape is unaccounted": {
+                "ps_escaped_initial_cr_count_global": "1.0"
+            },
+            "escaped mass is inconsistent": {
+                "ps_escaped_injected_cr_mass_global": "0.5"
+            },
+            "removed plus escaped count exceeds": {
+                "ps_escaped_injected_cr_count_global": "3.0",
+                "ps_escaped_injected_cr_mass_global": "3.0",
+            },
+            "empty escape ledger contains accumulated state": {
+                "ps_escaped_injected_cr_count_global": "0.0",
+                "ps_escaped_injected_cr_mass_global": "0.0",
+            },
+        }
+        for expected, overrides in cases.items():
+            with self.subTest(expected=expected):
+                with self.assertRaisesRegex(restart.RestartPolicyError, expected):
+                    _binding(_restart_payload(ledger_overrides=overrides))
+
+    def test_escape_chronology_is_bound_to_checkpoint_commit(self) -> None:
+        cases = {
+            "wrong_calls": {"ps_escape_audit_calls": "10001"},
+            "zero_calls": {"ps_escape_audit_calls": "0"},
+            "stale_time": {"ps_escape_last_audit_time": "500.0"},
+        }
+        for label, overrides in cases.items():
+            with self.subTest(label=label):
+                with self.assertRaises(restart.RestartPolicyError):
+                    _binding(_restart_payload(ledger_overrides=overrides))
 
 
 class Q011Section54ContinuationParityTests(unittest.TestCase):
@@ -389,6 +459,17 @@ class Q011Section54ContinuationParityTests(unittest.TestCase):
         continued["binding"]["startup_shock_ledger"][
             "ps_injected_cr_momentum_x1_global"
         ] = 2.5
+        with self.assertRaisesRegex(
+            restart.RestartPolicyError, "comparison binding identity"
+        ):
+            restart.compare_deterministic_continuation_parity(
+                uninterrupted, continued
+            )
+
+        continued = _observation(binding)
+        continued["binding"]["particle_escape_ledger"][
+            "ps_escaped_injected_cr_momentum_x1_global"
+        ] = 0.75
         with self.assertRaisesRegex(
             restart.RestartPolicyError, "comparison binding identity"
         ):

@@ -13,9 +13,11 @@
 
 #include <cstddef>  // std::size_t
 #include <ostream>  // ostream
+#include <set>
 #include <string>   // string
 #include <cstdlib>
 #include <list>
+#include <utility>
 
 #include "athena.hpp"
 #include "outputs/io_wrapper.hpp"
@@ -80,6 +82,7 @@ class ParameterInput {
   void ParameterDump(std::ostream& os);
   bool DoesBlockExist(std::string name);
   bool DoesParameterExist(std::string block, std::string name);
+  bool ParameterWasDuplicatedInLoadedInput(std::string block, std::string name);
   int  GetInteger(std::string block, std::string name);
   int  GetOrAddInteger(std::string block, std::string name, int value);
   int  SetInteger(std::string block, std::string name, int value);
@@ -95,6 +98,7 @@ class ParameterInput {
 
  private:
   std::string last_filename;  // last input file opened, to prevent duplicate reads
+  std::set<std::pair<std::string, std::string>> duplicated_loaded_parameters_;
 
   InputBlock* FindOrAddBlock(std::string name);
   InputBlock* GetPtrToBlock(std::string name);

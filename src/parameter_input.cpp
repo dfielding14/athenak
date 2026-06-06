@@ -163,6 +163,9 @@ void ParameterInput::LoadFromStream(std::istream &is) {
     }
     // parse line and add name/value/comment strings (if found) to current block name
     ParseLine(line, param_name, param_value, param_comment);
+    if (pib->GetPtrToLine(param_name) != nullptr) {
+      duplicated_loaded_parameters_.insert({pib->block_name, param_name});
+    }
     AddParameter(pib, param_name, param_value, param_comment);
   }
   return;
@@ -383,6 +386,15 @@ bool ParameterInput::DoesParameterExist(std::string block, std::string name) {
   if (pb == nullptr) return 0;
   pl = pb->GetPtrToLine(name);
   return (pl == nullptr ? false : true);
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn bool ParameterInput::ParameterWasDuplicatedInLoadedInput()
+//  \brief report whether stream/file loading encountered a repeated block/parameter pair
+
+bool ParameterInput::ParameterWasDuplicatedInLoadedInput(std::string block,
+                                                         std::string name) {
+  return duplicated_loaded_parameters_.count({block, name}) != 0;
 }
 
 //----------------------------------------------------------------------------------------
