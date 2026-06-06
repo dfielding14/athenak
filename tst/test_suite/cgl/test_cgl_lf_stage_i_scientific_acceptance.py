@@ -59,8 +59,15 @@ def transitioned_policy_documents(root: Path) -> tuple[Path, Path]:
     criteria = json.loads(acceptance.DEFAULT_CRITERIA.read_text())
     review = json.loads(acceptance.DEFAULT_CRITERIA_REVIEW.read_text())
     utility_sha = sha256(UTILITY)
+    generator_sha = sha256(
+        REPOSITORY / "scripts/frontier/cgl_lf_stage_i_scientific_products.py"
+    )
     criteria["source_bindings"]["acceptance_utility"]["sha256"] = utility_sha
+    criteria["source_bindings"]["scientific_products_generator"][
+        "sha256"
+    ] = generator_sha
     generator = criteria["scientific_products_policy"]["reviewed_generator_binding"]
+    generator["sha256"] = generator_sha
     method_revision = acceptance.expected_scientific_products_method_revision(generator)
     criteria["scientific_products_policy"]["reviewed_method_revision"] = method_revision
 
@@ -72,6 +79,9 @@ def transitioned_policy_documents(root: Path) -> tuple[Path, Path]:
     }
     review["acceptance_utility"]["sha256"] = utility_sha
     review["replay_tool_promotion_review"]["acceptance_utility"]["sha256"] = utility_sha
+    review["replay_tool_promotion_review"]["scientific_products_generator"][
+        "sha256"
+    ] = generator_sha
     bindings = {
         "method_revision": acceptance.scientific_products_method_revision_binding(
             method_revision
