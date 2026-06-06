@@ -3380,6 +3380,115 @@ def test_f119_verify_and_install_require_byte_exact_stable_json(
     assert not candidate.exists()
 
 
+@pytest.mark.parametrize("serialization", ("compact", "trailing-space"))
+def test_draft_request_requires_byte_exact_stable_json_before_mutation(
+    recost_fixture, serialization,
+):
+    packet = write_draft_packet(recost_fixture, checkpoint_number=205)
+    value = json.loads(packet.read_text())
+    if serialization == "compact":
+        packet.write_text(json.dumps(value, sort_keys=True) + "\n")
+    else:
+        packet.write_text(packet.read_text().rstrip("\n") + " \n")
+    packet.chmod(0o644)
+
+    rejected = run_action(
+        recost_fixture,
+        "draft-request",
+        "--packet",
+        str(packet),
+        "--expected-packet-sha256",
+        sha256(packet),
+    )
+    assert_rejected(rejected, "not byte-exact stable JSON")
+    paths = load_recost_module().draft_output_paths(
+        recost_fixture["root"], "F-205", value["artifact_name"]
+    )
+    assert not paths["reconciliation"].exists()
+    assert not paths["storage"].exists()
+    assert not paths["request"].exists()
+
+
+@pytest.mark.parametrize(
+    "action",
+    (
+        "render-f119-draft-packet",
+        "verify-f119-draft-packet",
+        "install-f119-draft-packet",
+        "draft-request",
+    ),
+)
+def test_f119_workflows_reject_post_f118_generator_commit(recost_fixture, action):
+    root = recost_fixture["root"]
+    repository = recost_fixture["repository"]
+    generator = recost_fixture["generator"]
+    assert isinstance(root, Path)
+    assert isinstance(repository, Path)
+    assert isinstance(generator, Path)
+    seed, candidate = write_f119_seed_and_candidate(recost_fixture)
+    candidate.unlink()
+    rendered = run_action(
+        recost_fixture,
+        "render-f119-draft-packet",
+        *f119_render_arguments(recost_fixture, seed),
+    )
+    assert rendered.returncode == 0, rendered.stderr
+    external = root.parent / f"pre-drift-{action}.json"
+    external.write_text(rendered.stdout)
+    external.chmod(0o644)
+    if action == "draft-request":
+        installed = run_action(
+            recost_fixture,
+            "install-f119-draft-packet",
+            "--packet",
+            str(external),
+            "--expected-packet-sha256",
+            sha256(external),
+        )
+        assert installed.returncode == 0, installed.stderr
+
+    generator.write_bytes(generator.read_bytes() + b"\n# post-F118 generator commit\n")
+    generator.chmod(0o755)
+    git(repository, "add", str(generator.relative_to(repository)))
+    git(
+        repository,
+        "-c",
+        "user.name=CGL fixture",
+        "-c",
+        "user.email=cgl-fixture@example.invalid",
+        "commit",
+        "-q",
+        "-m",
+        "Post-F118 generator drift",
+    )
+
+    if action == "render-f119-draft-packet":
+        rejected = run_action(
+            recost_fixture, action, *f119_render_arguments(recost_fixture, seed)
+        )
+    else:
+        source = candidate if action == "draft-request" else external
+        rejected = run_action(
+            recost_fixture,
+            action,
+            "--packet",
+            str(source),
+            "--expected-packet-sha256",
+            sha256(source),
+        )
+    assert_rejected(
+        rejected, "live repository HEAD differs from the exact F118-selected authority"
+    )
+    if action == "draft-request":
+        prefix = f"mks24_stage_i_{EPOCH_SLUG}_F119"
+        accounting = recost_fixture["accounting"]
+        assert not (
+            accounting / f"{prefix}_reconciliation_evidence.json"
+        ).exists()
+        assert not (accounting / f"{prefix}_storage_evidence.json").exists()
+        assert not (accounting / f"{prefix}_recost_request.json").exists()
+
+
 @pytest.mark.parametrize(
     "mutation", ("ceiling-publication-audit", "stage-i-helper-revision", "stage-i-helper-sha")
 )
@@ -3620,6 +3729,63 @@ def test_f119_install_rejects_committed_or_partial_request_namespace(
     assert {key: paths[key].read_bytes() for key in selected} == snapshots
 
 
+@pytest.mark.parametrize(
+    "orphan_name",
+    (
+        f"mks24_stage_i_{EPOCH_SLUG}_F119_recost_request.json.independent_review.json",
+        "mks24_stage_i_E03_forcing_policy_F119_recost_evidence.json",
+        "mks24_stage_i_E03_forcing_policy_F119_recost_evidence.json.staged",
+        "mks24_stage_i_E03_forcing_policy_F119_recost_evidence.json.independent_review.json",
+        "mks24_stage_i_E03_forcing_policy_F119_recost_evidence.json.publication_audit.json",
+        f"mks24_stage_i_{EPOCH_SLUG}_F119_hostile_marker",
+    ),
+)
+def test_f119_install_barrier_rejects_every_orphan_namespace_marker(
+    recost_fixture, orphan_name,
+):
+    module = load_recost_module()
+    root = recost_fixture["root"]
+    accounting = recost_fixture["accounting"]
+    assert isinstance(root, Path)
+    assert isinstance(accounting, Path)
+    seed, candidate = write_f119_seed_and_candidate(recost_fixture)
+    candidate.unlink()
+    rendered = run_action(
+        recost_fixture,
+        "render-f119-draft-packet",
+        *f119_render_arguments(recost_fixture, seed),
+    )
+    assert rendered.returncode == 0, rendered.stderr
+    external = root.parent / f"orphan-{hashlib.sha256(orphan_name.encode()).hexdigest()}.json"
+    external.write_text(rendered.stdout)
+    external.chmod(0o644)
+    orphan = accounting / orphan_name
+    orphan.write_bytes(b"hostile orphan F119 marker\n")
+    orphan.chmod(0o644)
+    retained = orphan.stat()
+
+    with module.stage_i_lock(root) as mutation_lock:
+        with pytest.raises(ValueError, match="orphan marker"):
+            module.require_f119_install_namespace_barrier(
+                root, mutation_lock, "direct complete-namespace probe"
+            )
+    rejected = run_action(
+        recost_fixture,
+        "install-f119-draft-packet",
+        "--packet",
+        str(external),
+        "--expected-packet-sha256",
+        sha256(external),
+    )
+    assert rejected.returncode == 1
+    assert not candidate.exists()
+    assert orphan.read_bytes() == b"hostile orphan F119 marker\n"
+    assert (orphan.stat().st_dev, orphan.stat().st_ino) == (
+        retained.st_dev,
+        retained.st_ino,
+    )
+
+
 def test_f119_retirement_post_barrier_rejects_concurrent_request_marker(
     recost_fixture, monkeypatch
 ):
@@ -3670,10 +3836,8 @@ def test_f119_retirement_post_barrier_rejects_concurrent_request_marker(
             )
     assert raced
     assert request.read_bytes() == b"concurrent request commit marker\n"
-    assert not candidate.exists()
-    retired = list(accounting.glob(f".{candidate.name}.retired.sha256-*"))
-    assert len(retired) == 1
-    assert retired[0].read_bytes() == stale_payload
+    assert candidate.read_bytes() == stale_payload
+    assert not list(accounting.glob(f".{candidate.name}.retired.sha256-*"))
 
 
 @pytest.mark.parametrize("packet_state", ("absent", "exact"))
@@ -3780,8 +3944,79 @@ def test_f119_install_post_barrier_rejects_concurrent_request_marker(
                 mutation_lock,
             )
     assert raced
-    assert candidate.read_bytes() == external.read_bytes()
+    assert not candidate.exists()
+    retained_private = publication_private_entries(module, accounting)
+    assert len(retained_private) == 1
+    assert retained_private[0].read_bytes() == external.read_bytes()
     assert request.read_bytes() == b"concurrent request commit marker\n"
+
+
+def test_f119_install_action_immediate_barrier_rolls_packet_back_on_orphan_race(
+    recost_fixture, monkeypatch,
+):
+    module = load_recost_module()
+    root = recost_fixture["root"]
+    repository = recost_fixture["repository"]
+    generator = recost_fixture["generator"]
+    queue = recost_fixture["queue"]
+    accounting = recost_fixture["accounting"]
+    assert isinstance(root, Path)
+    assert isinstance(repository, Path)
+    assert isinstance(generator, Path)
+    assert isinstance(queue, Path)
+    assert isinstance(accounting, Path)
+    seed, candidate = write_f119_seed_and_candidate(recost_fixture)
+    candidate.unlink()
+    rendered = run_action(
+        recost_fixture,
+        "render-f119-draft-packet",
+        *f119_render_arguments(recost_fixture, seed),
+    )
+    assert rendered.returncode == 0, rendered.stderr
+    external = root.parent / "action-immediate-race-f119-candidate.json"
+    external.write_text(rendered.stdout)
+    external.chmod(0o644)
+    orphan = accounting / f"mks24_stage_i_{EPOCH_SLUG}_F119_tail_marker"
+    real_barrier = module.require_f119_install_namespace_barrier
+    raced = False
+
+    def create_orphan_after_packet_move(root_arg, mutation_lock, label):
+        nonlocal raced
+        if (
+            not raced
+            and label == "F119 action-immediate publication barrier"
+            and candidate.exists()
+        ):
+            orphan.write_bytes(b"hostile action-immediate marker\n")
+            orphan.chmod(0o644)
+            raced = True
+        return real_barrier(root_arg, mutation_lock, label)
+
+    monkeypatch.setattr(
+        module, "require_f119_install_namespace_barrier", create_orphan_after_packet_move
+    )
+    args = module.argparse.Namespace(
+        action="install-f119-draft-packet",
+        packet=external,
+        expected_packet_sha256=sha256(external),
+        squeue_file=queue,
+    )
+    with module.stage_i_lock(root) as mutation_lock:
+        with pytest.raises(ValueError, match="direct-final publication failed"):
+            module.locked_install_draft_packet(
+                args,
+                root,
+                generator,
+                repository,
+                sha256(generator),
+                mutation_lock,
+            )
+    assert raced
+    assert not candidate.exists()
+    retained_private = publication_private_entries(module, accounting)
+    assert len(retained_private) == 1
+    assert retained_private[0].read_bytes() == external.read_bytes()
+    assert orphan.read_bytes() == b"hostile action-immediate marker\n"
 
 
 @pytest.mark.parametrize("existing", ("invalid", "request-committed"))
@@ -3927,6 +4162,210 @@ def test_draft_request_preflights_all_targets_before_first_publication(
     )
     assert not reconciliation.exists()
     assert not storage.exists()
+
+
+@pytest.mark.parametrize(
+    "present_indices",
+    ((2,), (1,), (0, 2), (1, 2)),
+)
+def test_draft_prerequisite_trio_rejects_non_prefix_canonical_state_without_mutation(
+    tmp_path, present_indices,
+):
+    module = load_recost_module()
+    accounting = tmp_path / "accounting"
+    accounting.mkdir()
+    publications = (
+        (accounting / "F208_reconciliation.json", b"reconciliation\n", "reconciliation"),
+        (accounting / "F208_storage.json", b"storage\n", "storage"),
+        (accounting / "F208_request.json", b"request\n", "request"),
+    )
+    snapshots = {}
+    for index in present_indices:
+        path, payload, _ = publications[index]
+        path.write_bytes(payload)
+        path.chmod(0o644)
+        snapshots[path] = path.stat()
+
+    with pytest.raises(ValueError, match="not an exact request-last prefix state"):
+        module.publish_draft_prerequisite_trio(publications)
+
+    for index, (path, payload, _) in enumerate(publications):
+        if index in present_indices:
+            assert path.read_bytes() == payload
+            assert (path.stat().st_dev, path.stat().st_ino) == (
+                snapshots[path].st_dev,
+                snapshots[path].st_ino,
+            )
+        else:
+            assert not path.exists()
+    assert publication_private_entries(module, accounting) == []
+
+
+def test_draft_prerequisite_trio_rejects_request_not_last_without_mutation(tmp_path):
+    module = load_recost_module()
+    accounting = tmp_path / "accounting"
+    accounting.mkdir()
+    publications = (
+        (accounting / "F208_request.json", b"request\n", "request"),
+        (accounting / "F208_reconciliation.json", b"reconciliation\n", "reconciliation"),
+        (accounting / "F208_storage.json", b"storage\n", "storage"),
+    )
+
+    with pytest.raises(ValueError, match="with request last"):
+        module.publish_draft_prerequisite_trio(publications)
+
+    assert not any(path.exists() for path, _, _ in publications)
+    assert publication_private_entries(module, accounting) == []
+
+
+def test_draft_prerequisite_request_commit_race_never_rolls_back_prerequisites(
+    tmp_path, monkeypatch,
+):
+    module = load_recost_module()
+    accounting = tmp_path / "accounting"
+    accounting.mkdir()
+    publications = (
+        (accounting / "F208_reconciliation.json", b"reconciliation\n", "reconciliation"),
+        (accounting / "F208_storage.json", b"storage\n", "storage"),
+        (accounting / "F208_request.json", b"request\n", "request"),
+    )
+    request = publications[-1][0]
+    real_rename = module.renameat2_noreplace
+    raced = False
+
+    def race_request_commit(directory, source, destination, label):
+        nonlocal raced
+        if not raced and destination == request.name:
+            request.write_bytes(b"hostile request commit marker\n")
+            request.chmod(0o644)
+            raced = True
+        return real_rename(directory, source, destination, label)
+
+    monkeypatch.setattr(module, "renameat2_noreplace", race_request_commit)
+    with pytest.raises(ValueError):
+        module.publish_draft_prerequisite_trio(publications)
+
+    assert raced
+    assert publications[0][0].read_bytes() == publications[0][1]
+    assert publications[1][0].read_bytes() == publications[1][1]
+    assert request.read_bytes() == b"hostile request commit marker\n"
+
+
+def test_draft_prerequisite_request_race_during_rollback_restores_prefix(
+    tmp_path, monkeypatch,
+):
+    module = load_recost_module()
+    accounting = tmp_path / "accounting"
+    accounting.mkdir()
+    publications = (
+        (accounting / "F208_reconciliation.json", b"reconciliation\n", "reconciliation"),
+        (accounting / "F208_storage.json", b"storage\n", "storage"),
+        (accounting / "F208_request.json", b"request\n", "request"),
+    )
+    storage = publications[1][0]
+    request = publications[2][0]
+    real_rename = module.renameat2_noreplace
+    raced = False
+
+    def fail_request_then_race_rollback(directory, source, destination, label):
+        nonlocal raced
+        if destination == request.name:
+            raise RuntimeError("persistent request publication failure")
+        moved = real_rename(directory, source, destination, label)
+        if not raced and source == storage.name:
+            request.write_bytes(b"hostile rollback-tail request marker\n")
+            request.chmod(0o644)
+            raced = True
+        return moved
+
+    monkeypatch.setattr(
+        module, "renameat2_noreplace", fail_request_then_race_rollback
+    )
+    with pytest.raises(ValueError):
+        module.publish_draft_prerequisite_trio(publications)
+
+    assert raced
+    assert publications[0][0].read_bytes() == publications[0][1]
+    assert publications[1][0].read_bytes() == publications[1][1]
+    assert request.read_bytes() == b"hostile rollback-tail request marker\n"
+
+
+def test_f119_draft_namespace_orphan_rejects_before_trio_mutation(tmp_path):
+    module = load_recost_module()
+    root = tmp_path / "root"
+    accounting = root / "accounting"
+    accounting.mkdir(parents=True)
+    paths = module.draft_output_paths(
+        root, module.F119_CHECKPOINT, module.F119_ARTIFACT_NAME
+    )
+    publications = (
+        (paths["reconciliation"], b"reconciliation\n", "reconciliation"),
+        (paths["storage"], b"storage\n", "storage"),
+        (paths["request"], b"request\n", "request"),
+    )
+    orphan = paths["request"].with_name(
+        f"{paths['request'].name}.independent_review.json"
+    )
+    orphan.write_bytes(b"hostile orphan review\n")
+    orphan.chmod(0o644)
+    barrier = lambda: module.require_f119_draft_namespace_barrier(
+        root, None, "F119 direct draft publication probe"
+    )
+
+    with pytest.raises(ValueError, match="orphan marker"):
+        module.publish_draft_prerequisite_trio(
+            publications, publication_barrier=barrier
+        )
+
+    assert not any(path.exists() for path, _, _ in publications)
+    assert publication_private_entries(module, accounting) == []
+    assert orphan.read_bytes() == b"hostile orphan review\n"
+
+
+def test_f119_draft_request_tail_orphan_retracts_owned_trio(tmp_path, monkeypatch):
+    module = load_recost_module()
+    root = tmp_path / "root"
+    accounting = root / "accounting"
+    accounting.mkdir(parents=True)
+    paths = module.draft_output_paths(
+        root, module.F119_CHECKPOINT, module.F119_ARTIFACT_NAME
+    )
+    publications = (
+        (paths["reconciliation"], b"reconciliation\n", "reconciliation"),
+        (paths["storage"], b"storage\n", "storage"),
+        (paths["request"], b"request\n", "request"),
+    )
+    orphan = accounting / f"mks24_stage_i_{EPOCH_SLUG}_F119_tail_review.json"
+    barrier = lambda: module.require_f119_draft_namespace_barrier(
+        root, None, "F119 direct draft publication probe"
+    )
+    real_move = module.move_bound_name_noreplace
+    raced = False
+
+    def create_orphan_after_request_move(
+        directory, source, destination, expected, label
+    ):
+        nonlocal raced
+        moved = real_move(directory, source, destination, expected, label)
+        if not raced and destination == paths["request"].name:
+            orphan.write_bytes(b"hostile request-tail orphan\n")
+            orphan.chmod(0o644)
+            raced = True
+        return moved
+
+    monkeypatch.setattr(
+        module, "move_bound_name_noreplace", create_orphan_after_request_move
+    )
+    with pytest.raises(ValueError, match="transaction-owned canonical links were rolled back"):
+        module.publish_draft_prerequisite_trio(
+            publications, publication_barrier=barrier
+        )
+
+    assert raced
+    assert not any(path.exists() for path, _, _ in publications)
+    assert orphan.read_bytes() == b"hostile request-tail orphan\n"
+    retained_private = publication_private_entries(module, accounting)
+    assert len(retained_private) == 3
 
 
 def test_draft_prerequisite_trio_rolls_back_failure_before_second_publish(
@@ -7038,6 +7477,108 @@ def test_finalized_private_inode_no_replace_move_publication(tmp_path, monkeypat
     assert stat.S_IMODE(target.stat().st_mode) == 0o644
     assert target.stat().st_nlink == 1
     assert list(parent.iterdir()) == [target]
+
+
+def test_immutable_finalized_private_attempt_retries_without_writable_open(
+    tmp_path, monkeypatch,
+):
+    module = load_recost_module()
+    parent = tmp_path / "parent"
+    parent.mkdir()
+    target = parent / "managed.json"
+    payload = b"immutable managed payload\n"
+    transaction = module.publication_transaction(target, payload, 0o444, "managed fixture")
+    private = parent / transaction.private_name(0)
+    private.write_bytes(payload)
+    private.chmod(0o444)
+    retained = private.stat()
+    real_open = module.os.open
+
+    def reject_writable_private_open(path, flags, *args, **kwargs):
+        if path == private.name:
+            assert not flags & os.O_RDWR
+            assert not flags & os.O_WRONLY
+        return real_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(module.os, "open", reject_writable_private_open)
+    assert module.write_exact_or_verify(
+        target, payload, mode=0o444, label="managed fixture"
+    )
+    assert target.read_bytes() == payload
+    assert stat.S_IMODE(target.stat().st_mode) == 0o444
+    assert (target.stat().st_dev, target.stat().st_ino) == (
+        retained.st_dev,
+        retained.st_ino,
+    )
+    assert not private.exists()
+
+
+def test_direct_final_rejects_private_remnant_created_after_target_move(
+    tmp_path, monkeypatch,
+):
+    module = load_recost_module()
+    parent = tmp_path / "parent"
+    parent.mkdir()
+    target = parent / "managed.json"
+    payload = b"managed\n"
+    transaction = module.publication_transaction(target, payload, 0o644, "managed fixture")
+    hostile = parent / transaction.private_name(1)
+    real_move = module.move_bound_name_noreplace
+    injected = False
+
+    def move_then_create_private_remnant(
+        directory, source, destination, expected, label
+    ):
+        nonlocal injected
+        moved = real_move(directory, source, destination, expected, label)
+        if not injected and destination == target.name:
+            hostile.write_bytes(b"hostile private remnant\n")
+            hostile.chmod(0o600)
+            injected = True
+        return moved
+
+    monkeypatch.setattr(
+        module, "move_bound_name_noreplace", move_then_create_private_remnant
+    )
+    with pytest.raises(ValueError, match="direct-final publication failed"):
+        module.write_exact_or_verify(
+            target, payload, mode=0o644, label="managed fixture"
+        )
+    assert injected
+    assert target.read_bytes() == payload
+    assert hostile.read_bytes() == b"hostile private remnant\n"
+
+
+def test_direct_final_rejects_private_remnant_created_at_final_closure(
+    tmp_path,
+):
+    module = load_recost_module()
+    parent = tmp_path / "parent"
+    parent.mkdir()
+    target = parent / "managed.json"
+    payload = b"managed\n"
+    transaction = module.publication_transaction(target, payload, 0o644, "managed fixture")
+    hostile = parent / transaction.private_name(1)
+    barriers = 0
+
+    def create_private_at_final_barrier():
+        nonlocal barriers
+        barriers += 1
+        if barriers == 3:
+            hostile.write_bytes(b"hostile final-closure remnant\n")
+            hostile.chmod(0o600)
+
+    with pytest.raises(ValueError, match="transaction-private remnants"):
+        module.write_exact_or_verify(
+            target,
+            payload,
+            mode=0o644,
+            label="managed fixture",
+            publication_barrier=create_private_at_final_barrier,
+        )
+    assert barriers == 3
+    assert target.read_bytes() == payload
+    assert hostile.read_bytes() == b"hostile final-closure remnant\n"
 
 
 def test_publication_transaction_binds_target_payload_mode_producer_and_revision(

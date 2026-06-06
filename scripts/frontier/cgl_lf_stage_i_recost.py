@@ -10108,6 +10108,19 @@ def transaction_private_names(
     return sorted(retained)
 
 
+def require_no_transaction_private_remnants(
+    directory: int,
+    transaction: PublicationTransaction,
+    label: str,
+) -> None:
+    """Reject every transaction-private name at a successful final boundary."""
+
+    if transaction_private_names(directory, transaction):
+        raise ValueError(
+            f"{label} exact final target has ambiguous transaction-private remnants"
+        )
+
+
 def vacant_transaction_private_name(
     directory: int,
     transaction: PublicationTransaction,
@@ -10789,15 +10802,41 @@ def rollback_draft_trio_entries(
 ) -> None:
     """Remove only exact transaction-owned canonical links before trio commit."""
 
-    for entry in reversed(entries):
+    request = entries[-1]
+
+    def request_is_present() -> bool:
+        try:
+            os.stat(request.path.name, dir_fd=directory, follow_symlinks=False)
+        except FileNotFoundError:
+            return False
+        return True
+
+    def require_request_absent_or_restore_prefix() -> None:
+        if not request_is_present():
+            return
+        for prerequisite in entries[:-1]:
+            install_draft_trio_entry(
+                directory, parent_profile, prerequisite, mutation_lock
+            )
+            finalize_draft_trio_entry(
+                directory, parent_profile, prerequisite, mutation_lock
+            )
+        os.fsync(directory)
+        raise ValueError(
+            "draft request commit marker appeared during rollback; "
+            "the exact prerequisite prefix was restored"
+        )
+
+    def rollback_owned_entry(entry: DraftTrioPublicationEntry) -> None:
         if entry.initial_state == "single" or entry.installed_identity is None:
-            continue
+            return
         try:
             observed = os.stat(entry.path.name, dir_fd=directory, follow_symlinks=False)
         except FileNotFoundError:
-            continue
+            entry.installed_identity = None
+            return
         if not same_inode(observed, entry.installed_identity):
-            continue
+            return
         expected_links = observed.st_nlink
         if expected_links not in {1, 2}:
             raise ValueError(
@@ -10848,16 +10887,27 @@ def rollback_draft_trio_entries(
         try:
             os.stat(entry.path.name, dir_fd=directory, follow_symlinks=False)
         except FileNotFoundError:
-            continue
+            return
         raise ValueError(
             f"{entry.label} transaction-owned canonical link survived rollback"
         )
+
+    rollback_owned_entry(request)
+    require_request_absent_or_restore_prefix()
+    for entry in reversed(entries[:-1]):
+        if entry.initial_state == "single" or entry.installed_identity is None:
+            continue
+        require_request_absent_or_restore_prefix()
+        rollback_owned_entry(entry)
+        require_request_absent_or_restore_prefix()
+    require_request_absent_or_restore_prefix()
 
 
 def publish_draft_prerequisite_trio(
     publications: tuple[tuple[Path, bytes, str], ...],
     *,
     mutation_lock: MutationLock | None = None,
+    publication_barrier: Callable[[], None] | None = None,
 ) -> None:
     """Publish three draft prerequisites or retain no transaction-owned partial."""
 
@@ -10867,6 +10917,12 @@ def publish_draft_prerequisite_trio(
     if len(set(paths)) != 3 or len({path.parent for path in paths}) != 1:
         raise ValueError(
             "draft prerequisite trio must have distinct targets in one directory"
+        )
+    required_order = ("reconciliation", "storage", "request")
+    if any(marker not in path.name for marker, path in zip(required_order, paths)):
+        raise ValueError(
+            "draft prerequisite trio must order reconciliation, storage, and request "
+            "with request last"
         )
     parent = paths[0].parent
     entries = [
@@ -10881,6 +10937,8 @@ def publish_draft_prerequisite_trio(
         for path, payload, label in publications
     ]
     authenticate_mutation_lock(mutation_lock)
+    if publication_barrier is not None:
+        publication_barrier()
     require_no_symlink_components(parent, "draft prerequisite trio")
     with absolute_descriptor(
         parent,
@@ -10905,6 +10963,18 @@ def publish_draft_prerequisite_trio(
                 entry.private_name = private_name
                 entry.private_identity = target
                 entry.installed_identity = target
+        initial_states = [entry.initial_state for entry in entries]
+        exact_prefix_states = [
+            ["absent", "absent", "absent"],
+            ["single", "absent", "absent"],
+            ["single", "single", "absent"],
+            ["single", "single", "single"],
+        ]
+        if initial_states not in exact_prefix_states:
+            raise ValueError(
+                "draft prerequisite canonical namespace is not an exact request-last "
+                "prefix state"
+            )
         for entry in entries:
             if entry.initial_state != "absent":
                 continue
@@ -10948,13 +11018,21 @@ def publish_draft_prerequisite_trio(
 
         def forward_complete() -> None:
             for entry in entries:
+                if publication_barrier is not None:
+                    publication_barrier()
                 install_draft_trio_entry(directory, parent_profile, entry, mutation_lock)
+                if publication_barrier is not None:
+                    publication_barrier()
             for entry in entries:
                 finalize_draft_trio_entry(directory, parent_profile, entry, mutation_lock)
+                if publication_barrier is not None:
+                    publication_barrier()
             for entry in entries:
                 state, _, retained = classify_draft_trio_target(directory, entry)
                 if state != "single" or retained is None:
                     raise ValueError(f"{entry.label} is not an exact final trio member")
+            if publication_barrier is not None:
+                publication_barrier()
 
         try:
             forward_complete()
@@ -10977,6 +11055,66 @@ def publish_draft_prerequisite_trio(
                 ) from forward_error
 
 
+def retain_exact_publication_for_retry(
+    path: Path,
+    payload: bytes,
+    *,
+    mode: int,
+    label: str,
+    mutation_lock: MutationLock | None = None,
+    expected_identity: os.stat_result | None = None,
+) -> Path:
+    """Move one exact final publication back to its private retry namespace."""
+
+    transaction = publication_transaction(path, payload, mode, label)
+    require_no_symlink_components(path, label, include_leaf=False)
+    with absolute_descriptor(
+        path.parent,
+        f"{label} parent",
+        flags=os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC,
+    ) as directory:
+        parent_profile = os.fstat(directory)
+        require_directory_profile(parent_profile, f"{label} parent")
+        require_parent_path_bound(path.parent, directory, parent_profile, label)
+        authenticate_mutation_lock(mutation_lock)
+        require_no_transaction_private_remnants(directory, transaction, label)
+        observed = os.stat(path.name, dir_fd=directory, follow_symlinks=False)
+        retained = read_bound_exact_file(
+            directory,
+            path.name,
+            payload,
+            mode,
+            label,
+            expected_identity=expected_identity or observed,
+        )
+        recovery_name = vacant_transaction_private_name(directory, transaction)
+        require_parent_path_bound(path.parent, directory, parent_profile, label)
+        authenticate_mutation_lock(mutation_lock)
+        moved = move_bound_name_noreplace(
+            directory,
+            path.name,
+            recovery_name,
+            retained,
+            f"{label} retry retention",
+        )
+        read_bound_exact_file(
+            directory,
+            recovery_name,
+            payload,
+            mode,
+            f"{label} retained retry",
+            expected_identity=moved,
+        )
+        require_parent_path_bound(path.parent, directory, parent_profile, label)
+        authenticate_mutation_lock(mutation_lock)
+        os.fsync(directory)
+        try:
+            os.stat(path.name, dir_fd=directory, follow_symlinks=False)
+        except FileNotFoundError:
+            return path.with_name(recovery_name)
+        raise ValueError(f"{label} canonical target survived retry retention")
+
+
 def write_exact_or_verify(
     path: Path,
     payload: bytes,
@@ -10984,6 +11122,7 @@ def write_exact_or_verify(
     mode: int,
     label: str,
     mutation_lock: MutationLock | None = None,
+    publication_barrier: Callable[[], None] | None = None,
 ) -> bool:
     """Publish one finalized private inode no-replace, or exact-verify the target."""
 
@@ -11010,6 +11149,8 @@ def write_exact_or_verify(
         except FileNotFoundError:
             observed = None
         if observed is not None:
+            if publication_barrier is not None:
+                publication_barrier()
             if (
                 stat.S_IMODE(observed.st_mode) == mode
                 and observed.st_nlink == 2
@@ -11031,12 +11172,7 @@ def write_exact_or_verify(
                         directory, path, parent_profile, label, error, mutation_lock
                     )
                 return True
-            private_names = transaction_private_names(directory, transaction)
-            if private_names:
-                raise ValueError(
-                    f"{label} exact final target has ambiguous "
-                    "transaction-private remnants"
-                )
+            require_no_transaction_private_remnants(directory, transaction, label)
             durably_verify_direct_final(
                 directory,
                 path.name,
@@ -11046,6 +11182,11 @@ def write_exact_or_verify(
                 mutation_guard=mutation_guard,
             )
             mutation_guard()
+            require_no_transaction_private_remnants(directory, transaction, label)
+            if publication_barrier is not None:
+                publication_barrier()
+            mutation_guard()
+            require_no_transaction_private_remnants(directory, transaction, label)
             return False
 
         mutation_guard()
@@ -11056,13 +11197,17 @@ def write_exact_or_verify(
         try:
             if private_names:
                 private_name = private_names[0]
+                named_profile = os.stat(
+                    private_name, dir_fd=directory, follow_symlinks=False
+                )
+                retained_mode = stat.S_IMODE(named_profile.st_mode)
+                open_flags = os.O_RDONLY if retained_mode == mode else os.O_RDWR
                 descriptor = os.open(
                     private_name,
-                    os.O_RDWR | os.O_NOFOLLOW | os.O_CLOEXEC,
+                    open_flags | os.O_NOFOLLOW | os.O_CLOEXEC,
                     dir_fd=directory,
                 )
                 private_profile = os.fstat(descriptor)
-                retained_mode = stat.S_IMODE(private_profile.st_mode)
                 if retained_mode == mode:
                     read_bound_exact_file(
                         directory,
@@ -11138,6 +11283,8 @@ def write_exact_or_verify(
                 expected_profile=finalized_profile,
                 expected_mode=mode,
             )
+            if publication_barrier is not None:
+                publication_barrier()
             try:
                 published = move_bound_name_noreplace(
                     directory,
@@ -11168,6 +11315,21 @@ def write_exact_or_verify(
                 expected_identity=published,
                 mutation_guard=mutation_guard,
             )
+            require_no_transaction_private_remnants(directory, transaction, label)
+            if publication_barrier is not None:
+                try:
+                    publication_barrier()
+                except BaseException:
+                    retain_exact_publication_for_retry(
+                        path,
+                        payload,
+                        mode=mode,
+                        label=label,
+                        mutation_lock=mutation_lock,
+                        expected_identity=published,
+                    )
+                    raise
+            require_no_transaction_private_remnants(directory, transaction, label)
         except BaseException as error:
             try:
                 os.close(descriptor)
@@ -11184,6 +11346,21 @@ def write_exact_or_verify(
             )
 
         mutation_guard()
+        require_no_transaction_private_remnants(directory, transaction, label)
+        if publication_barrier is not None:
+            try:
+                publication_barrier()
+            except BaseException:
+                retain_exact_publication_for_retry(
+                    path,
+                    payload,
+                    mode=mode,
+                    label=label,
+                    mutation_lock=mutation_lock,
+                )
+                raise
+        mutation_guard()
+        require_no_transaction_private_remnants(directory, transaction, label)
     return True
 
 
@@ -11518,6 +11695,20 @@ def f119_f118_runtime_bindings(
     tools = authenticate_f118_committed_tools(
         implementation["committed_tools"], repository, current_head
     )
+    for tool in tools:
+        relative = PurePosixPath(str(tool["path"]))
+        live_head = require_committed_file(
+            repository,
+            repository / relative,
+            str(tool["sha256"]),
+            f"live F118-selected tool {relative.as_posix()}",
+            revision=current_head,
+            expected_mode=int(str(tool["mode"]), 8),
+        )
+        if live_head != current_head:
+            raise ValueError(
+                "live repository HEAD differs from the exact F118-selected authority"
+            )
     helper = next(
         item for item in tools if item["path"] == STAGE_I_RELATIVE.as_posix()
     )
@@ -11794,27 +11985,165 @@ def require_f119_install_namespace_barrier(
     ) as directory:
         parent_profile = os.fstat(directory)
         require_directory_profile(parent_profile, f"{label} accounting namespace")
-        present = {}
-        for key in ("reconciliation", "storage", "request"):
-            try:
-                os.stat(paths[key].name, dir_fd=directory, follow_symlinks=False)
-            except FileNotFoundError:
-                present[key] = False
-            else:
-                present[key] = True
+        namespace_prefix = (
+            f"mks24_stage_i_{EXECUTION_EPOCH_SLUG}_F119_"
+        )
+        unexpected = sorted(
+            entry.name
+            for entry in os.scandir(directory)
+            if entry.name.startswith(namespace_prefix)
+            and entry.name != paths["packet"].name
+        )
         require_parent_path_bound(
             accounting, directory, parent_profile, f"{label} accounting namespace"
         )
         authenticate_mutation_lock(mutation_lock)
-    if present["request"]:
+    if unexpected:
+        if paths["request"].name in unexpected:
+            raise ValueError(
+                f"{label}: F119 request is the last commit marker; "
+                "refusing draft-packet installation or supersession"
+            )
+        if any(
+            paths[key].name in unexpected for key in ("reconciliation", "storage")
+        ):
+            raise ValueError(f"{label}: F119 draft prerequisite namespace is partial")
         raise ValueError(
-            f"{label}: F119 request is the last commit marker; "
-            "refusing draft-packet installation or supersession"
+            f"{label}: exact F119 pre-request namespace contains an orphan marker: "
+            f"{unexpected}"
         )
-    if present["reconciliation"] or present["storage"]:
-        raise ValueError(f"{label}: F119 draft prerequisite namespace is partial")
     authenticate_mutation_lock(mutation_lock)
     return paths
+
+
+def require_f119_draft_namespace_barrier(
+    root: Path,
+    mutation_lock: MutationLock | None,
+    label: str,
+) -> dict[str, Path]:
+    """Allow only the exact F119 packet and request-last prerequisite prefix."""
+
+    authenticate_mutation_lock(mutation_lock)
+    paths = draft_output_paths(root, F119_CHECKPOINT, F119_ARTIFACT_NAME)
+    accounting = root / "accounting"
+    allowed = {
+        paths[key].name
+        for key in ("packet", "reconciliation", "storage", "request")
+    }
+    require_no_symlink_components(accounting, f"{label} accounting namespace")
+    with absolute_descriptor(
+        accounting,
+        f"{label} accounting namespace",
+        flags=os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC,
+    ) as directory:
+        parent_profile = os.fstat(directory)
+        require_directory_profile(parent_profile, f"{label} accounting namespace")
+        namespace_prefix = f"mks24_stage_i_{EXECUTION_EPOCH_SLUG}_F119_"
+        unexpected = sorted(
+            entry.name
+            for entry in os.scandir(directory)
+            if entry.name.startswith(namespace_prefix) and entry.name not in allowed
+        )
+        require_parent_path_bound(
+            accounting, directory, parent_profile, f"{label} accounting namespace"
+        )
+        authenticate_mutation_lock(mutation_lock)
+    if unexpected:
+        raise ValueError(
+            f"{label}: exact F119 draft namespace contains an orphan marker: "
+            f"{unexpected}"
+        )
+    authenticate_mutation_lock(mutation_lock)
+    return paths
+
+
+def restore_retired_f119_packet(
+    target: Path,
+    retired: Path,
+    payload: bytes,
+    expected_identity: os.stat_result,
+    mutation_lock: MutationLock | None,
+) -> None:
+    """Restore one exact retired F119 packet after a failed namespace barrier."""
+
+    with absolute_descriptor(
+        target.parent,
+        "F119 packet restoration parent",
+        flags=os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC,
+    ) as directory:
+        parent_profile = os.fstat(directory)
+        require_directory_profile(parent_profile, "F119 packet restoration parent")
+        try:
+            target_profile = os.stat(
+                target.name, dir_fd=directory, follow_symlinks=False
+            )
+        except FileNotFoundError:
+            target_profile = None
+        if target_profile is not None:
+            read_bound_exact_file(
+                directory,
+                target.name,
+                payload,
+                0o644,
+                "restored F119 draft packet",
+                expected_identity=expected_identity,
+            )
+            return
+        retained = read_bound_exact_file(
+            directory,
+            retired.name,
+            payload,
+            0o644,
+            "retired F119 draft packet restoration source",
+            expected_identity=expected_identity,
+        )
+        require_parent_path_bound(
+            target.parent, directory, parent_profile, "F119 packet restoration"
+        )
+        authenticate_mutation_lock(mutation_lock)
+        restored = move_bound_name_noreplace(
+            directory,
+            retired.name,
+            target.name,
+            retained,
+            "F119 packet restoration",
+        )
+        read_bound_exact_file(
+            directory,
+            target.name,
+            payload,
+            0o644,
+            "restored F119 draft packet",
+            expected_identity=restored,
+        )
+        require_parent_path_bound(
+            target.parent, directory, parent_profile, "F119 packet restoration"
+        )
+        authenticate_mutation_lock(mutation_lock)
+        os.fsync(directory)
+
+
+def restore_retired_f119_path(
+    target: Path,
+    retired: Path,
+    mutation_lock: MutationLock | None,
+) -> None:
+    """Read and restore one exact retained stale F119 packet."""
+
+    with absolute_descriptor(
+        retired, "retired F119 draft packet", flags=os.O_RDONLY
+    ) as descriptor:
+        profile = os.fstat(descriptor)
+        require_regular_profile(profile, "retired F119 draft packet", expected_mode=0o644)
+        chunks = []
+        while True:
+            block = os.read(descriptor, 1024 * 1024)
+            if not block:
+                break
+            chunks.append(block)
+    restore_retired_f119_packet(
+        target, retired, b"".join(chunks), profile, mutation_lock
+    )
 
 
 def retire_stale_f119_packet(
@@ -11902,6 +12231,9 @@ def retire_stale_f119_packet(
             target.parent, directory, parent_profile, "F119 packet retirement"
         )
         authenticate_mutation_lock(mutation_lock)
+        require_f119_install_namespace_barrier(
+            root, mutation_lock, "F119 action-immediate pre-retirement barrier"
+        )
         moved = move_bound_name_noreplace(
             directory,
             target.name,
@@ -11921,9 +12253,22 @@ def retire_stale_f119_packet(
             target.parent, directory, parent_profile, "F119 packet retirement"
         )
         authenticate_mutation_lock(mutation_lock)
-    require_f119_install_namespace_barrier(
-        root, mutation_lock, "F119 post-retirement barrier"
-    )
+        try:
+            require_f119_install_namespace_barrier(
+                root, mutation_lock, "F119 action-immediate post-retirement barrier"
+            )
+        except BaseException:
+            restore_retired_f119_packet(
+                target, retired, payload, moved, mutation_lock
+            )
+            raise
+    try:
+        require_f119_install_namespace_barrier(
+            root, mutation_lock, "F119 post-retirement barrier"
+        )
+    except BaseException:
+        restore_retired_f119_packet(target, retired, payload, moved, mutation_lock)
+        raise
     return retired
 
 
@@ -11990,24 +12335,61 @@ def locked_install_draft_packet(
         retired = retire_stale_f119_packet(
             root, repository, target, packet_payload, mutation_lock
         )
-        require_f119_install_namespace_barrier(
-            root, mutation_lock, "F119 pre-publication barrier"
+        try:
+            require_f119_install_namespace_barrier(
+                root, mutation_lock, "F119 pre-publication barrier"
+            )
+        except BaseException:
+            if retired is not None:
+                restore_retired_f119_path(target, retired, mutation_lock)
+            raise
+    publication_label = f"managed {expected_checkpoint} recost request draft packet"
+    try:
+        created = write_exact_or_verify(
+            target,
+            packet_payload,
+            mode=0o644,
+            label=publication_label,
+            mutation_lock=mutation_lock,
+            publication_barrier=(
+                (
+                    lambda: require_f119_install_namespace_barrier(
+                        root, mutation_lock, "F119 action-immediate publication barrier"
+                    )
+                )
+                if expected_checkpoint == F119_CHECKPOINT
+                else None
+            ),
         )
-    created = write_exact_or_verify(
-        target,
-        packet_payload,
-        mode=0o644,
-        label=f"managed {expected_checkpoint} recost request draft packet",
-        mutation_lock=mutation_lock,
-    )
-    if expected_checkpoint == F119_CHECKPOINT:
-        require_f119_install_namespace_barrier(
-            root, mutation_lock, "F119 post-publication barrier"
-        )
-    require_empty_transaction_stores(root)
-    require_drained_queue(args, root)
-    tracker.reauthenticate_all()
-    authenticate_mutation_lock(mutation_lock)
+    except BaseException:
+        if retired is not None:
+            restore_retired_f119_path(target, retired, mutation_lock)
+        raise
+    try:
+        if expected_checkpoint == F119_CHECKPOINT:
+            require_f119_install_namespace_barrier(
+                root, mutation_lock, "F119 post-publication barrier"
+            )
+        require_empty_transaction_stores(root)
+        require_drained_queue(args, root)
+        tracker.reauthenticate_all()
+        authenticate_mutation_lock(mutation_lock)
+        if expected_checkpoint == F119_CHECKPOINT:
+            require_f119_install_namespace_barrier(
+                root, mutation_lock, "F119 final install return barrier"
+            )
+    except BaseException:
+        if expected_checkpoint == F119_CHECKPOINT and created:
+            retain_exact_publication_for_retry(
+                target,
+                packet_payload,
+                mode=0o644,
+                label=publication_label,
+                mutation_lock=mutation_lock,
+            )
+        if retired is not None:
+            restore_retired_f119_path(target, retired, mutation_lock)
+        raise
     next_action = [
         str(source_path),
         "--root",
@@ -12070,13 +12452,15 @@ def locked_draft_request(
     packet_path = args.packet.absolute()
     if packet_path.parent != root / "accounting":
         raise ValueError("recost request draft packet must be a direct child of accounting")
-    packet = parse_draft_packet(
-        tracker.read(
-            packet_path,
-            args.expected_packet_sha256,
-            "recost request draft packet",
-            expected_mode=0o644,
-        )
+    packet_payload = tracker.read(
+        packet_path,
+        args.expected_packet_sha256,
+        "recost request draft packet",
+        expected_mode=0o644,
+    )
+    packet = parse_draft_packet(packet_payload)
+    require_canonical_draft_packet_bytes(
+        packet_payload, packet, "recost request draft packet"
     )
     paths = draft_output_paths(root, packet["checkpoint"], packet["artifact_name"])
     if packet_path != paths["packet"]:
@@ -12109,8 +12493,14 @@ def locked_draft_request(
     inputs = request["inputs"]
     assert isinstance(inputs, dict)
 
+    f119_publication_barrier: Callable[[], None] | None = None
     if packet["checkpoint"] == F119_CHECKPOINT:
+        f119_publication_barrier = lambda: require_f119_draft_namespace_barrier(
+            root, mutation_lock, "F119 draft-request publication barrier"
+        )
+        f119_publication_barrier()
         validate_f119_draft_packet(root, repository, packet, tracker)
+        f119_publication_barrier()
     else:
         preflight_draft_authority_and_predecessor(root, repository, packet, tracker)
 
@@ -12310,12 +12700,18 @@ def locked_draft_request(
         build.storage_required_safety_bytes,
         build.projected_storage_bytes,
     )
+    if f119_publication_barrier is not None:
+        f119_publication_barrier()
     publications = (
         (paths["reconciliation"], reconcile_payload, "draft reconciliation evidence"),
         (paths["storage"], storage_payload, "draft storage evidence"),
         (paths["request"], request_payload, "schema-2 recost request draft"),
     )
-    publish_draft_prerequisite_trio(publications, mutation_lock=mutation_lock)
+    publish_draft_prerequisite_trio(
+        publications,
+        mutation_lock=mutation_lock,
+        publication_barrier=f119_publication_barrier,
+    )
     generation_command = [
         sys.executable,
         str(source_path),
