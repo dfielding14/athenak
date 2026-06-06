@@ -9653,6 +9653,16 @@ def validate_submission_audit(paths: dict[str, Path], value: object) -> None:
         validate_queue_authentication_evidence(
             initial_queue, "submission audit shared-root clearance complete queue"
         )
+        require_stale_job_absent_from_complete_queue_evidence(
+            initial_queue,
+            "submission audit shared-root clearance initial complete queue",
+        )
+        final_queue = value.get("final_queue_authentication")
+        if final_queue is not None:
+            require_stale_job_absent_from_complete_queue_evidence(
+                final_queue,
+                "submission audit shared-root clearance final complete queue",
+            )
         consumption = require_r17_exact_keys(
             clearance["consumption"],
             {"action", "case_id", "authorized_stale_manifest"},
@@ -13089,12 +13099,35 @@ def retained_stale_terminal_sacct_binding(
     }
 
 
+def require_stale_job_absent_from_complete_queue_evidence(
+    value: object, label: str,
+) -> None:
+    """Require the stale job ID absent from authenticated complete-user rows."""
+
+    validate_queue_authentication_evidence(value, label)
+    if not isinstance(value, dict):
+        raise ValueError(f"{label} is invalid")
+    rows = value["rows"]
+    if not isinstance(rows, list):
+        raise ValueError(f"{label} rows are invalid")
+    for line in rows:
+        row = next(csv.reader([line], delimiter="|"))
+        if len(row) != 4:
+            raise ValueError(f"{label} row is malformed")
+        if row[0] == SHARED_ROOT_STALE_JOB_ID:
+            raise ValueError(
+                "managed clearance stale job remains present in complete squeue evidence"
+            )
+
+
 def require_stale_job_absent_from_complete_queue(
     value: object, *, now: datetime,
 ) -> dict[str, object]:
     """Require the stale job ID absent from a fresh complete-user squeue snapshot."""
 
-    validate_queue_authentication_evidence(value, "managed clearance live squeue")
+    require_stale_job_absent_from_complete_queue_evidence(
+        value, "managed clearance live squeue"
+    )
     if not isinstance(value, dict):
         raise ValueError("managed clearance live squeue evidence is invalid")
     checked = parse_utc_timestamp(
@@ -13105,17 +13138,6 @@ def require_stale_job_absent_from_complete_queue(
         or now - checked > timedelta(minutes=5)
     ):
         raise ValueError("managed clearance live squeue evidence is not fresh")
-    rows = value["rows"]
-    if not isinstance(rows, list):
-        raise ValueError("managed clearance live squeue rows are invalid")
-    for line in rows:
-        row = next(csv.reader([line], delimiter="|"))
-        if len(row) != 4:
-            raise ValueError("managed clearance live squeue row is malformed")
-        if row[0] == SHARED_ROOT_STALE_JOB_ID:
-            raise ValueError(
-                "managed clearance stale job remains present in complete squeue evidence"
-            )
     return {
         "job_id": SHARED_ROOT_STALE_JOB_ID,
         "absent": True,
@@ -14140,6 +14162,11 @@ def submit(args: argparse.Namespace) -> int:
         audit["final_queue_authentication"] = authenticated_production_queue_evidence(
             args, paths, read_reservations(paths), offline_local_root
         )
+        if audit.get("shared_root_isolation_clearance") is not None:
+            require_stale_job_absent_from_complete_queue(
+                audit["final_queue_authentication"],
+                now=datetime.now(timezone.utc),
+            )
         reauthenticate_open_batch_script(script, audit["batch_script"])
         transaction_path = write_submit_pending_transaction(
             paths, manifest_path, audit

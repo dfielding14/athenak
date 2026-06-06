@@ -492,6 +492,33 @@ def test_managed_shared_root_clearance_requires_live_absence_for_non_cgl_name(
         authenticate_managed_clearance(module, fixture, queue_evidence=queue)
 
 
+def test_managed_shared_root_clearance_submission_audit_rejects_stale_final_queue(
+    tmp_path, monkeypatch
+):
+    module = load_controller()
+    fixture = managed_clearance_fixture(module, tmp_path, monkeypatch)
+    clearance = authenticate_managed_clearance(module, fixture)
+    rows = ["4743106|batch|RUNNING|unrelated_non_cgl_job"]
+    final_queue = {
+        "checked_utc": fixture["queue_evidence"]["checked_utc"],
+        "rows": rows,
+        "rows_sha256": module.stable_json_sha256(rows),
+    }
+    audit = {
+        "created_utc": fixture["now"].isoformat(),
+        "offline_local_root": True,
+        "skip_slurm_test": False,
+        "slurm_test_only": "offline local-root fixture",
+        "acknowledged_shared_root_campaigns": [module.SHARED_ROOT_STALE_CAMPAIGN_ID],
+        "legacy_mark_submitted": True,
+        "initial_queue_authentication": fixture["queue_evidence"],
+        "final_queue_authentication": final_queue,
+        "shared_root_isolation_clearance": clearance,
+    }
+    with pytest.raises(ValueError, match="remains present in complete squeue"):
+        module.validate_submission_audit(fixture["paths"], audit)
+
+
 @pytest.mark.parametrize(
     ("overrides", "match"),
     (
@@ -4342,6 +4369,52 @@ def test_check_submit_and_submit_share_submission_preflight(
     selected = module.check_submit if action == "check-submit" else module.submit.__wrapped__
     with pytest.raises(RuntimeError, match="shared submission preflight reached"):
         selected(args)
+
+
+def test_submit_rejects_managed_clearance_stale_job_reappearing_in_final_queue(
+    tmp_path, monkeypatch
+):
+    module = load_controller()
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text("{}\n")
+    root = tmp_path / "root"
+    rows = ["4743106|batch|RUNNING|unrelated_non_cgl_job"]
+    final_queue = {
+        "checked_utc": module.utc_now(),
+        "rows": rows,
+        "rows_sha256": module.stable_json_sha256(rows),
+    }
+    monkeypatch.setattr(module, "read_manifest", lambda _path: {"project_root": str(root)})
+    monkeypatch.setattr(module, "require_root", lambda *_args: root)
+    monkeypatch.setattr(module, "is_offline_local_root", lambda *_args: False)
+    monkeypatch.setattr(
+        module,
+        "submission_preflight",
+        lambda *_args, **_kwargs: (
+            {},
+            {},
+            {"shared_root_isolation_clearance": {}},
+        ),
+    )
+    monkeypatch.setattr(module, "read_reservations", lambda _paths: [])
+    monkeypatch.setattr(
+        module, "authenticated_production_queue_evidence",
+        lambda *_args: final_queue,
+    )
+    monkeypatch.setattr(module, "close_authenticated_batch_script", lambda _script: None)
+
+    def unexpected(*_args, **_kwargs):
+        pytest.fail("submission crossed the final managed-clearance queue barrier")
+
+    monkeypatch.setattr(module, "write_submit_pending_transaction", unexpected)
+    monkeypatch.setattr(module.subprocess, "run", unexpected)
+    args = SimpleNamespace(
+        manifest=str(manifest_path),
+        allow_local_root=False,
+        sbatch_output_file=None,
+    )
+    with pytest.raises(ValueError, match="remains present in complete squeue"):
+        module.submit.__wrapped__(args)
 
 
 def test_check_submit_prints_authenticated_isolated_python(
