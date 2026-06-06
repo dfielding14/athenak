@@ -226,6 +226,26 @@ def git(repository: Path, *arguments: str) -> str:
     return completed.stdout.strip()
 
 
+def commit_unrelated_head_drift(repository: Path, name: str) -> None:
+    """Advance fixture HEAD with one unrelated committed path."""
+
+    marker = repository / name
+    marker.write_text("concurrent unrelated HEAD drift\n")
+    marker.chmod(0o644)
+    git(repository, "add", str(marker.relative_to(repository)))
+    git(
+        repository,
+        "-c",
+        "user.name=CGL fixture",
+        "-c",
+        "user.email=cgl-fixture@example.invalid",
+        "commit",
+        "-q",
+        "-m",
+        "Concurrent unrelated HEAD drift",
+    )
+
+
 def f116_committed_tools(repository: Path, revision: str) -> list[dict[str, object]]:
     """Return the exact source-authority seven-tool fixture contract."""
 
@@ -1657,6 +1677,17 @@ def assert_rejected(result: subprocess.CompletedProcess, pattern: str) -> None:
     assert pattern in result.stderr
 
 
+def exception_chain_text(error: BaseException) -> str:
+    """Return every explicit exception-chain message for hostile probes."""
+
+    messages = []
+    retained: BaseException | None = error
+    while retained is not None:
+        messages.append(str(retained))
+        retained = retained.__cause__
+    return "\n".join(messages)
+
+
 def action_report(result: subprocess.CompletedProcess) -> dict[str, object]:
     """Parse the final JSON action report after retained Git query output."""
 
@@ -1673,6 +1704,62 @@ def load_recost_module():
     sys.modules[name] = module
     spec.loader.exec_module(module)
     return module
+
+
+def direct_f119_draft_barrier(module, root: Path, publications):
+    """Return one exact request-last prefix closure for direct trio probes."""
+
+    expectations = tuple(
+        module.F119NamespaceFile(path, payload, 0o644, label)
+        for path, payload, label in publications
+    )
+    variants = tuple(tuple(expectations[:count]) for count in range(4))
+    return lambda: module.require_f119_draft_namespace_barrier(
+        root,
+        None,
+        "F119 direct draft publication probe",
+        variants=variants,
+    )
+
+
+def direct_f119_draft_state_barrier(module, root: Path, publications):
+    """Return one exact prefix closure that authenticates in-flight privates."""
+
+    expectations = tuple(
+        module.F119NamespaceFile(path, payload, 0o644, label)
+        for path, payload, label in publications
+    )
+    variants = tuple(tuple(expectations[:count]) for count in range(4))
+
+    def close(private_state):
+        private_expectations = tuple(
+            module.F119NamespaceFile(path, payload, mode, label, identity)
+            for path, payload, mode, label, identity in private_state
+        )
+        module.require_f119_draft_namespace_barrier(
+            root,
+            None,
+            "F119 direct draft in-flight publication probe",
+            variants=tuple(
+                variant + private_expectations for variant in variants
+            ),
+        )
+
+    return close
+
+
+def provide_f119_storage_headroom(module, monkeypatch) -> None:
+    """Retain deterministic sufficient storage for direct F119 draft probes."""
+
+    real_fstatvfs = module.os.fstatvfs
+
+    def f119_storage_fixture(descriptor):
+        retained = list(real_fstatvfs(descriptor))
+        retained[3] = max(retained[3], 2 * 1024**4 // retained[1])
+        retained[4] = max(retained[4], 2 * 1024**4 // retained[1])
+        return os.statvfs_result(retained)
+
+    monkeypatch.setattr(module.os, "fstatvfs", f119_storage_fixture)
 
 
 @pytest.fixture
@@ -3339,6 +3426,268 @@ def test_f119_render_verify_install_and_draft_request_end_to_end(
     assert storage.read_bytes()
 
 
+def test_f119_draft_final_closure_rejects_publication_private_tail(
+    recost_fixture, monkeypatch,
+):
+    module = load_recost_module()
+    root = recost_fixture["root"]
+    accounting = recost_fixture["accounting"]
+    repository = recost_fixture["repository"]
+    generator = recost_fixture["generator"]
+    queue = recost_fixture["queue"]
+    assert all(
+        isinstance(path, Path)
+        for path in (root, accounting, repository, generator, queue)
+    )
+    seed, candidate = write_f119_seed_and_candidate(recost_fixture)
+    candidate.unlink()
+    rendered = run_action(
+        recost_fixture,
+        "render-f119-draft-packet",
+        *f119_render_arguments(recost_fixture, seed),
+    )
+    assert rendered.returncode == 0, rendered.stderr
+    external = root.parent / "draft-private-tail-f119-candidate.json"
+    external.write_text(rendered.stdout)
+    external.chmod(0o644)
+    installed = run_action(
+        recost_fixture,
+        "install-f119-draft-packet",
+        "--packet",
+        str(external),
+        "--expected-packet-sha256",
+        sha256(external),
+    )
+    assert installed.returncode == 0, installed.stderr
+    provide_f119_storage_headroom(module, monkeypatch)
+    real_publish = module.publish_draft_prerequisite_trio
+    hostile = None
+
+    def publish_then_insert_private(publications, **kwargs):
+        nonlocal hostile
+        result = real_publish(publications, **kwargs)
+        path, payload, label = publications[-1]
+        transaction = module.publication_transaction(path, payload, 0o644, label)
+        hostile = path.parent / transaction.private_name(17)
+        hostile.write_bytes(b"hostile post-trio private remnant\n")
+        hostile.chmod(0o600)
+        return result
+
+    monkeypatch.setattr(
+        module, "publish_draft_prerequisite_trio", publish_then_insert_private
+    )
+    args = module.parse_args(
+        [
+            "--root",
+            str(root),
+            "--allow-local-root",
+            "--packet",
+            str(candidate),
+            "--expected-packet-sha256",
+            sha256(candidate),
+            "--expected-generator-sha256",
+            sha256(generator),
+            "--squeue-file",
+            str(queue),
+            "draft-request",
+        ]
+    )
+    with module.stage_i_lock(root) as mutation_lock:
+        with pytest.raises(ValueError) as failure:
+            module.locked_draft_request(
+                args,
+                root,
+                generator,
+                repository,
+                sha256(generator),
+                mutation_lock,
+            )
+
+    assert "managed publication-private remnant" in exception_chain_text(failure.value)
+    assert hostile is not None
+    assert hostile.read_bytes() == b"hostile post-trio private remnant\n"
+    prefix = f"mks24_stage_i_{EPOCH_SLUG}_F119"
+    assert (accounting / f"{prefix}_reconciliation_evidence.json").exists()
+    assert (accounting / f"{prefix}_storage_evidence.json").exists()
+    assert (accounting / f"{prefix}_recost_request.json").exists()
+
+
+@pytest.mark.parametrize("mutation", ("head", "tool"))
+def test_f119_draft_rebinds_live_source_immediately_before_publication(
+    recost_fixture, monkeypatch, mutation,
+):
+    module = load_recost_module()
+    root = recost_fixture["root"]
+    accounting = recost_fixture["accounting"]
+    repository = recost_fixture["repository"]
+    generator = recost_fixture["generator"]
+    queue = recost_fixture["queue"]
+    assert all(
+        isinstance(path, Path)
+        for path in (root, accounting, repository, generator, queue)
+    )
+    seed, candidate = write_f119_seed_and_candidate(recost_fixture)
+    candidate.unlink()
+    rendered = run_action(
+        recost_fixture,
+        "render-f119-draft-packet",
+        *f119_render_arguments(recost_fixture, seed),
+    )
+    assert rendered.returncode == 0, rendered.stderr
+    external = root.parent / f"draft-{mutation}-drift-f119-candidate.json"
+    external.write_text(rendered.stdout)
+    external.chmod(0o644)
+    installed = run_action(
+        recost_fixture,
+        "install-f119-draft-packet",
+        "--packet",
+        str(external),
+        "--expected-packet-sha256",
+        sha256(external),
+    )
+    assert installed.returncode == 0, installed.stderr
+    provide_f119_storage_headroom(module, monkeypatch)
+    real_publish = module.publish_draft_prerequisite_trio
+    drifted = False
+
+    def drift_then_publish(*args, **kwargs):
+        nonlocal drifted
+        if not drifted:
+            if mutation == "head":
+                commit_unrelated_head_drift(
+                    repository, "draft-publication-head-drift.txt"
+                )
+            else:
+                generator.write_bytes(
+                    generator.read_bytes() + b"\n# draft publication tool drift\n"
+                )
+            drifted = True
+        return real_publish(*args, **kwargs)
+
+    monkeypatch.setattr(module, "publish_draft_prerequisite_trio", drift_then_publish)
+    args = module.parse_args(
+        [
+            "--root",
+            str(root),
+            "--allow-local-root",
+            "--packet",
+            str(candidate),
+            "--expected-packet-sha256",
+            sha256(candidate),
+            "--expected-generator-sha256",
+            sha256(generator),
+            "--squeue-file",
+            str(queue),
+            "draft-request",
+        ]
+    )
+    with module.stage_i_lock(root) as mutation_lock:
+        with pytest.raises(ValueError) as failure:
+            module.locked_draft_request(
+                args,
+                root,
+                generator,
+                repository,
+                sha256(generator),
+                mutation_lock,
+            )
+
+    assert drifted
+    expected = (
+        "live repository HEAD differs from the exact F118-selected authority"
+        if mutation == "head"
+        else "live F118-selected tools are not committed and clean"
+    )
+    assert expected in exception_chain_text(failure.value)
+    prefix = f"mks24_stage_i_{EPOCH_SLUG}_F119"
+    assert not (accounting / f"{prefix}_reconciliation_evidence.json").exists()
+    assert not (accounting / f"{prefix}_storage_evidence.json").exists()
+    assert not (accounting / f"{prefix}_recost_request.json").exists()
+
+
+def test_f119_draft_final_closure_rejects_renamed_required_prerequisite(
+    recost_fixture, monkeypatch,
+):
+    module = load_recost_module()
+    root = recost_fixture["root"]
+    accounting = recost_fixture["accounting"]
+    repository = recost_fixture["repository"]
+    generator = recost_fixture["generator"]
+    queue = recost_fixture["queue"]
+    assert all(
+        isinstance(path, Path)
+        for path in (root, accounting, repository, generator, queue)
+    )
+    seed, candidate = write_f119_seed_and_candidate(recost_fixture)
+    candidate.unlink()
+    rendered = run_action(
+        recost_fixture,
+        "render-f119-draft-packet",
+        *f119_render_arguments(recost_fixture, seed),
+    )
+    assert rendered.returncode == 0, rendered.stderr
+    external = root.parent / "draft-renamed-prerequisite-f119-candidate.json"
+    external.write_text(rendered.stdout)
+    external.chmod(0o644)
+    installed = run_action(
+        recost_fixture,
+        "install-f119-draft-packet",
+        "--packet",
+        str(external),
+        "--expected-packet-sha256",
+        sha256(external),
+    )
+    assert installed.returncode == 0, installed.stderr
+    provide_f119_storage_headroom(module, monkeypatch)
+    paths = module.draft_output_paths(
+        root, module.F119_CHECKPOINT, module.F119_ARTIFACT_NAME
+    )
+    displaced = accounting / "unprefixed-displaced-f119-storage"
+    real_publish = module.publish_draft_prerequisite_trio
+    raced = False
+
+    def publish_then_rename_storage(*args, **kwargs):
+        nonlocal raced
+        result = real_publish(*args, **kwargs)
+        paths["storage"].rename(displaced)
+        raced = True
+        return result
+
+    monkeypatch.setattr(module, "publish_draft_prerequisite_trio", publish_then_rename_storage)
+    args = module.parse_args(
+        [
+            "--root",
+            str(root),
+            "--allow-local-root",
+            "--packet",
+            str(candidate),
+            "--expected-packet-sha256",
+            sha256(candidate),
+            "--expected-generator-sha256",
+            sha256(generator),
+            "--squeue-file",
+            str(queue),
+            "draft-request",
+        ]
+    )
+    with module.stage_i_lock(root) as mutation_lock:
+        with pytest.raises(ValueError, match="required prefix"):
+            module.locked_draft_request(
+                args,
+                root,
+                generator,
+                repository,
+                sha256(generator),
+                mutation_lock,
+            )
+
+    assert raced
+    assert not paths["storage"].exists()
+    assert displaced.read_bytes()
+    assert paths["reconciliation"].exists()
+    assert paths["request"].exists()
+
+
 @pytest.mark.parametrize(
     ("action", "serialization"),
     (
@@ -3730,6 +4079,192 @@ def test_f119_install_rejects_committed_or_partial_request_namespace(
 
 
 @pytest.mark.parametrize(
+    ("state", "aliased_key"),
+    (("install", "packet"), ("draft-final", "request")),
+)
+def test_f119_namespace_closure_rejects_unprefixed_hardlink_alias(
+    tmp_path, state, aliased_key
+):
+    module = load_recost_module()
+    root = tmp_path / "root"
+    accounting = root / "accounting"
+    accounting.mkdir(parents=True)
+    paths = module.draft_output_paths(
+        root, module.F119_CHECKPOINT, module.F119_ARTIFACT_NAME
+    )
+    ordered_keys = (
+        ("packet",)
+        if state == "install"
+        else ("packet", "reconciliation", "storage", "request")
+    )
+    expectations = []
+    for key in ordered_keys:
+        payload = f"exact {key}\n".encode()
+        paths[key].write_bytes(payload)
+        paths[key].chmod(0o644)
+        expectations.append(
+            module.F119NamespaceFile(paths[key], payload, 0o644, f"exact {key}")
+        )
+    alias = accounting / f"unprefixed-{aliased_key}-alias"
+    os.link(paths[aliased_key], alias)
+
+    with pytest.raises(ValueError, match="must have exactly 1 links"):
+        module.require_f119_namespace_variants(
+            root,
+            None,
+            f"F119 {state} unprefixed-alias closure",
+            (tuple(expectations),),
+        )
+
+    assert alias.stat().st_nlink == 2
+    assert (alias.stat().st_dev, alias.stat().st_ino) == (
+        paths[aliased_key].stat().st_dev,
+        paths[aliased_key].stat().st_ino,
+    )
+
+
+@pytest.mark.parametrize(
+    "selected_keys",
+    ((), ("packet",), ("retired",), ("packet", "retired")),
+)
+def test_f119_install_namespace_closure_accepts_each_exact_variant(
+    tmp_path, selected_keys
+):
+    module = load_recost_module()
+    root = tmp_path / "root"
+    accounting = root / "accounting"
+    accounting.mkdir(parents=True)
+    packet = module.draft_output_paths(
+        root, module.F119_CHECKPOINT, module.F119_ARTIFACT_NAME
+    )["packet"]
+    retired = packet.with_name(f".{packet.name}.retired.sha256-{'0' * 64}")
+    expectations = {
+        "packet": module.F119NamespaceFile(
+            packet, b"exact packet\n", 0o644, "exact F119 packet"
+        ),
+        "retired": module.F119NamespaceFile(
+            retired, b"exact retired packet\n", 0o644, "exact retired F119 packet"
+        ),
+    }
+    variants = (
+        (),
+        (expectations["packet"],),
+        (expectations["retired"],),
+        (expectations["packet"], expectations["retired"]),
+    )
+    for key in selected_keys:
+        expected = expectations[key]
+        expected.path.write_bytes(expected.payload)
+        expected.path.chmod(expected.mode)
+
+    selected = module.require_f119_install_namespace_barrier(
+        root,
+        None,
+        "F119 exact install variant probe",
+        variants=variants,
+    )
+
+    assert tuple(expected.path.name for expected in selected) == tuple(
+        expectations[key].path.name for key in selected_keys
+    )
+
+
+@pytest.mark.parametrize("prefix_count", range(1, 5))
+def test_f119_draft_namespace_closure_accepts_each_exact_request_last_variant(
+    tmp_path, prefix_count
+):
+    module = load_recost_module()
+    root = tmp_path / "root"
+    accounting = root / "accounting"
+    accounting.mkdir(parents=True)
+    paths = module.draft_output_paths(
+        root, module.F119_CHECKPOINT, module.F119_ARTIFACT_NAME
+    )
+    keys = ("packet", "reconciliation", "storage", "request")
+    expectations = tuple(
+        module.F119NamespaceFile(
+            paths[key], f"exact {key}\n".encode(), 0o644, f"exact F119 {key}"
+        )
+        for key in keys
+    )
+    variants = tuple(expectations[:count] for count in range(1, 5))
+    for expected in expectations[:prefix_count]:
+        expected.path.write_bytes(expected.payload)
+        expected.path.chmod(expected.mode)
+
+    selected = module.require_f119_draft_namespace_barrier(
+        root,
+        None,
+        "F119 exact draft variant probe",
+        variants=variants,
+    )
+
+    assert tuple(expected.path.name for expected in selected) == tuple(
+        expected.path.name for expected in expectations[:prefix_count]
+    )
+
+
+def test_f119_namespace_closure_reauthenticates_required_file_after_authority(
+    tmp_path,
+):
+    module = load_recost_module()
+    root = tmp_path / "root"
+    accounting = root / "accounting"
+    accounting.mkdir(parents=True)
+    packet = module.draft_output_paths(
+        root, module.F119_CHECKPOINT, module.F119_ARTIFACT_NAME
+    )["packet"]
+    payload = b"exact packet\n"
+    packet.write_bytes(payload)
+    packet.chmod(0o644)
+    expected = module.F119NamespaceFile(packet, payload, 0o644, "exact F119 packet")
+
+    def mutate_required_file_in_place():
+        packet.write_bytes(b"hostile bytes\n")
+
+    with pytest.raises(ValueError, match="different bytes"):
+        module.require_f119_namespace_variants(
+            root,
+            None,
+            "F119 required-file tail probe",
+            ((expected,),),
+            authority_barrier=mutate_required_file_in_place,
+        )
+
+    assert packet.read_bytes() == b"hostile bytes\n"
+
+
+def test_f119_namespace_closure_rejects_unprefixed_directory_tail(tmp_path):
+    module = load_recost_module()
+    root = tmp_path / "root"
+    accounting = root / "accounting"
+    accounting.mkdir(parents=True)
+    packet = module.draft_output_paths(
+        root, module.F119_CHECKPOINT, module.F119_ARTIFACT_NAME
+    )["packet"]
+    payload = b"exact packet\n"
+    packet.write_bytes(payload)
+    packet.chmod(0o644)
+    expected = module.F119NamespaceFile(packet, payload, 0o644, "exact F119 packet")
+    hostile = accounting / "unprefixed-directory-tail"
+
+    def mutate_unprefixed_directory_tail():
+        hostile.write_bytes(b"hostile unprefixed directory tail\n")
+        hostile.chmod(0o644)
+
+    with pytest.raises(ValueError, match="directory listing changed"):
+        module.require_f119_namespace_variants(
+            root,
+            None,
+            "F119 directory tail probe",
+            ((expected,),),
+            authority_barrier=mutate_unprefixed_directory_tail,
+        )
+
+    assert hostile.read_bytes() == b"hostile unprefixed directory tail\n"
+
+
+@pytest.mark.parametrize(
     "orphan_name",
     (
         f"mks24_stage_i_{EPOCH_SLUG}_F119_recost_request.json.independent_review.json",
@@ -3840,6 +4375,63 @@ def test_f119_retirement_post_barrier_rejects_concurrent_request_marker(
     assert not list(accounting.glob(f".{candidate.name}.retired.sha256-*"))
 
 
+def test_f119_retirement_post_closure_rejects_displaced_retired_path(
+    recost_fixture, monkeypatch,
+):
+    module = load_recost_module()
+    root = recost_fixture["root"]
+    repository = recost_fixture["repository"]
+    timestamp = recost_fixture["timestamp"]
+    accounting = recost_fixture["accounting"]
+    assert isinstance(root, Path)
+    assert isinstance(repository, Path)
+    assert isinstance(timestamp, datetime)
+    assert isinstance(accounting, Path)
+    seed, candidate = write_f119_seed_and_candidate(recost_fixture)
+    candidate.unlink()
+    rendered = run_action(
+        recost_fixture,
+        "render-f119-draft-packet",
+        *f119_render_arguments(recost_fixture, seed),
+    )
+    assert rendered.returncode == 0, rendered.stderr
+    stale = json.loads(rendered.stdout)
+    stale["generated_utc"] = (timestamp - timedelta(minutes=4)).isoformat()
+    stale["expires_utc"] = (timestamp - timedelta(seconds=1)).isoformat()
+    write_json(candidate, stale)
+    stale_payload = candidate.read_bytes()
+    displaced = accounting / "unprefixed-displaced-retired-f119-packet"
+    real_barrier = module.require_f119_install_namespace_barrier
+    raced = False
+
+    def displace_retired_before_post_closure(root_arg, mutation_lock, label, **kwargs):
+        nonlocal raced
+        if not raced and label == "F119 action-immediate post-retirement barrier":
+            retired = next(accounting.glob(f".{candidate.name}.retired.sha256-*"))
+            retired.rename(displaced)
+            raced = True
+        return real_barrier(root_arg, mutation_lock, label, **kwargs)
+
+    monkeypatch.setattr(
+        module,
+        "require_f119_install_namespace_barrier",
+        displace_retired_before_post_closure,
+    )
+    with module.stage_i_lock(root) as mutation_lock:
+        with pytest.raises((ValueError, OSError)):
+            module.retire_stale_f119_packet(
+                root,
+                repository,
+                candidate,
+                rendered.stdout.encode(),
+                mutation_lock,
+            )
+
+    assert raced
+    assert not candidate.exists()
+    assert displaced.read_bytes() == stale_payload
+
+
 @pytest.mark.parametrize("packet_state", ("absent", "exact"))
 def test_f119_retirement_early_return_post_barrier_rejects_request_race(
     recost_fixture, monkeypatch, packet_state
@@ -3870,7 +4462,7 @@ def test_f119_retirement_early_return_post_barrier_rejects_request_race(
     def create_request_at_post_barrier(*args, **kwargs):
         nonlocal barriers
         barriers += 1
-        if barriers == 2:
+        if barriers == 1:
             request.write_bytes(b"concurrent request commit marker\n")
             request.chmod(0o644)
         return real_barrier(*args, **kwargs)
@@ -3883,7 +4475,7 @@ def test_f119_retirement_early_return_post_barrier_rejects_request_race(
             module.retire_stale_f119_packet(
                 root, repository, candidate, payload, mutation_lock
             )
-    assert barriers == 2
+    assert barriers == 1
     assert request.read_bytes() == b"concurrent request commit marker\n"
     assert candidate.exists() is (packet_state == "exact")
 
@@ -3980,7 +4572,7 @@ def test_f119_install_action_immediate_barrier_rolls_packet_back_on_orphan_race(
     real_barrier = module.require_f119_install_namespace_barrier
     raced = False
 
-    def create_orphan_after_packet_move(root_arg, mutation_lock, label):
+    def create_orphan_after_packet_move(root_arg, mutation_lock, label, **kwargs):
         nonlocal raced
         if (
             not raced
@@ -3990,7 +4582,7 @@ def test_f119_install_action_immediate_barrier_rolls_packet_back_on_orphan_race(
             orphan.write_bytes(b"hostile action-immediate marker\n")
             orphan.chmod(0o644)
             raced = True
-        return real_barrier(root_arg, mutation_lock, label)
+        return real_barrier(root_arg, mutation_lock, label, **kwargs)
 
     monkeypatch.setattr(
         module, "require_f119_install_namespace_barrier", create_orphan_after_packet_move
@@ -4017,6 +4609,187 @@ def test_f119_install_action_immediate_barrier_rolls_packet_back_on_orphan_race(
     assert len(retained_private) == 1
     assert retained_private[0].read_bytes() == external.read_bytes()
     assert orphan.read_bytes() == b"hostile action-immediate marker\n"
+
+
+def test_f119_install_final_closure_rejects_publication_private_tail(
+    recost_fixture, monkeypatch,
+):
+    module = load_recost_module()
+    root = recost_fixture["root"]
+    repository = recost_fixture["repository"]
+    generator = recost_fixture["generator"]
+    queue = recost_fixture["queue"]
+    assert all(isinstance(path, Path) for path in (root, repository, generator, queue))
+    seed, candidate = write_f119_seed_and_candidate(recost_fixture)
+    candidate.unlink()
+    rendered = run_action(
+        recost_fixture,
+        "render-f119-draft-packet",
+        *f119_render_arguments(recost_fixture, seed),
+    )
+    assert rendered.returncode == 0, rendered.stderr
+    external = root.parent / "private-tail-f119-candidate.json"
+    external.write_text(rendered.stdout)
+    external.chmod(0o644)
+    real_write = module.write_exact_or_verify
+    hostile = None
+
+    def publish_then_insert_private(*args, **kwargs):
+        nonlocal hostile
+        created = real_write(*args, **kwargs)
+        transaction = module.publication_transaction(
+            args[0], args[1], kwargs["mode"], kwargs["label"]
+        )
+        hostile = args[0].parent / transaction.private_name(17)
+        hostile.write_bytes(b"hostile post-publication private remnant\n")
+        hostile.chmod(0o600)
+        return created
+
+    monkeypatch.setattr(module, "write_exact_or_verify", publish_then_insert_private)
+    args = module.argparse.Namespace(
+        action="install-f119-draft-packet",
+        packet=external,
+        expected_packet_sha256=sha256(external),
+        squeue_file=queue,
+    )
+    with module.stage_i_lock(root) as mutation_lock:
+        with pytest.raises(ValueError) as failure:
+            module.locked_install_draft_packet(
+                args,
+                root,
+                generator,
+                repository,
+                sha256(generator),
+                mutation_lock,
+            )
+
+    assert "transaction-private remnants" in exception_chain_text(failure.value)
+    assert hostile is not None
+    assert hostile.read_bytes() == b"hostile post-publication private remnant\n"
+    assert candidate.read_bytes() == external.read_bytes()
+
+
+@pytest.mark.parametrize("mutation", ("head", "tool"))
+def test_f119_install_rebinds_live_source_immediately_before_publication(
+    recost_fixture, monkeypatch, mutation,
+):
+    module = load_recost_module()
+    root = recost_fixture["root"]
+    repository = recost_fixture["repository"]
+    generator = recost_fixture["generator"]
+    queue = recost_fixture["queue"]
+    assert all(isinstance(path, Path) for path in (root, repository, generator, queue))
+    seed, candidate = write_f119_seed_and_candidate(recost_fixture)
+    candidate.unlink()
+    rendered = run_action(
+        recost_fixture,
+        "render-f119-draft-packet",
+        *f119_render_arguments(recost_fixture, seed),
+    )
+    assert rendered.returncode == 0, rendered.stderr
+    external = root.parent / f"install-{mutation}-drift-f119-candidate.json"
+    external.write_text(rendered.stdout)
+    external.chmod(0o644)
+    real_write = module.write_exact_or_verify
+    drifted = False
+
+    def drift_then_publish(*args, **kwargs):
+        nonlocal drifted
+        if not drifted:
+            if mutation == "head":
+                commit_unrelated_head_drift(
+                    repository, "install-publication-head-drift.txt"
+                )
+            else:
+                generator.write_bytes(
+                    generator.read_bytes() + b"\n# install publication tool drift\n"
+                )
+            drifted = True
+        return real_write(*args, **kwargs)
+
+    monkeypatch.setattr(module, "write_exact_or_verify", drift_then_publish)
+    args = module.argparse.Namespace(
+        action="install-f119-draft-packet",
+        packet=external,
+        expected_packet_sha256=sha256(external),
+        squeue_file=queue,
+    )
+    with module.stage_i_lock(root) as mutation_lock:
+        with pytest.raises(ValueError) as failure:
+            module.locked_install_draft_packet(
+                args,
+                root,
+                generator,
+                repository,
+                sha256(generator),
+                mutation_lock,
+            )
+
+    assert drifted
+    expected = (
+        "live repository HEAD differs from the exact F118-selected authority"
+        if mutation == "head"
+        else "live F118-selected tools are not committed and clean"
+    )
+    assert expected in exception_chain_text(failure.value)
+    assert not candidate.exists()
+
+
+def test_f119_install_final_closure_rejects_renamed_required_packet(
+    recost_fixture, monkeypatch,
+):
+    module = load_recost_module()
+    root = recost_fixture["root"]
+    repository = recost_fixture["repository"]
+    generator = recost_fixture["generator"]
+    queue = recost_fixture["queue"]
+    assert all(isinstance(path, Path) for path in (root, repository, generator, queue))
+    seed, candidate = write_f119_seed_and_candidate(recost_fixture)
+    candidate.unlink()
+    rendered = run_action(
+        recost_fixture,
+        "render-f119-draft-packet",
+        *f119_render_arguments(recost_fixture, seed),
+    )
+    assert rendered.returncode == 0, rendered.stderr
+    external = root.parent / "renamed-final-f119-candidate.json"
+    external.write_text(rendered.stdout)
+    external.chmod(0o644)
+    displaced = candidate.parent / "unprefixed-displaced-f119-packet"
+    real_barrier = module.require_f119_install_namespace_barrier
+    raced = False
+
+    def rename_packet_before_final_closure(root_arg, mutation_lock, label, **kwargs):
+        nonlocal raced
+        if not raced and label == "F119 final install return barrier":
+            candidate.rename(displaced)
+            raced = True
+        return real_barrier(root_arg, mutation_lock, label, **kwargs)
+
+    monkeypatch.setattr(
+        module, "require_f119_install_namespace_barrier",
+        rename_packet_before_final_closure,
+    )
+    args = module.argparse.Namespace(
+        action="install-f119-draft-packet",
+        packet=external,
+        expected_packet_sha256=sha256(external),
+        squeue_file=queue,
+    )
+    with module.stage_i_lock(root) as mutation_lock:
+        with pytest.raises((ValueError, OSError)):
+            module.locked_install_draft_packet(
+                args,
+                root,
+                generator,
+                repository,
+                sha256(generator),
+                mutation_lock,
+            )
+
+    assert raced
+    assert not candidate.exists()
+    assert displaced.read_bytes() == external.read_bytes()
 
 
 @pytest.mark.parametrize("existing", ("invalid", "request-committed"))
@@ -4308,13 +5081,14 @@ def test_f119_draft_namespace_orphan_rejects_before_trio_mutation(tmp_path):
     )
     orphan.write_bytes(b"hostile orphan review\n")
     orphan.chmod(0o644)
-    barrier = lambda: module.require_f119_draft_namespace_barrier(
-        root, None, "F119 direct draft publication probe"
-    )
+    barrier = direct_f119_draft_barrier(module, root, publications)
+    state_barrier = direct_f119_draft_state_barrier(module, root, publications)
 
     with pytest.raises(ValueError, match="orphan marker"):
         module.publish_draft_prerequisite_trio(
-            publications, publication_barrier=barrier
+            publications,
+            publication_barrier=barrier,
+            publication_state_barrier=state_barrier,
         )
 
     assert not any(path.exists() for path, _, _ in publications)
@@ -4336,9 +5110,8 @@ def test_f119_draft_request_tail_orphan_retracts_owned_trio(tmp_path, monkeypatc
         (paths["request"], b"request\n", "request"),
     )
     orphan = accounting / f"mks24_stage_i_{EPOCH_SLUG}_F119_tail_review.json"
-    barrier = lambda: module.require_f119_draft_namespace_barrier(
-        root, None, "F119 direct draft publication probe"
-    )
+    barrier = direct_f119_draft_barrier(module, root, publications)
+    state_barrier = direct_f119_draft_state_barrier(module, root, publications)
     real_move = module.move_bound_name_noreplace
     raced = False
 
@@ -4358,7 +5131,9 @@ def test_f119_draft_request_tail_orphan_retracts_owned_trio(tmp_path, monkeypatc
     )
     with pytest.raises(ValueError, match="transaction-owned canonical links were rolled back"):
         module.publish_draft_prerequisite_trio(
-            publications, publication_barrier=barrier
+            publications,
+            publication_barrier=barrier,
+            publication_state_barrier=state_barrier,
         )
 
     assert raced
@@ -4756,6 +5531,54 @@ def test_draft_trio_exact_final_rejects_transaction_private_remnants(tmp_path):
         os.close(directory)
     assert target.read_bytes() == payload
     assert private.read_bytes() == payload
+
+
+def test_draft_trio_exact_final_rejects_private_remnant_at_namespace_closure(
+    tmp_path, monkeypatch,
+):
+    module = load_recost_module()
+    parent = tmp_path / "accounting"
+    parent.mkdir()
+    target = parent / "request.json"
+    payload = b"request\n"
+    target.write_bytes(payload)
+    target.chmod(0o644)
+    transaction = module.publication_transaction(target, payload, 0o644, "request")
+    hostile = parent / transaction.private_name(0)
+    entry = module.DraftTrioPublicationEntry(
+        path=target,
+        payload=payload,
+        mode=0o644,
+        label="request",
+        transaction=transaction,
+        initial_state="single",
+    )
+    real_closure = module.require_directory_namespace_unchanged
+    injected = False
+
+    def inject_private_at_namespace_closure(directory, expected, label):
+        nonlocal injected
+        if label == "request private namespace" and not injected:
+            hostile.write_bytes(b"hostile final-return private remnant\n")
+            hostile.chmod(0o600)
+            injected = True
+        return real_closure(directory, expected, label)
+
+    monkeypatch.setattr(
+        module,
+        "require_directory_namespace_unchanged",
+        inject_private_at_namespace_closure,
+    )
+    directory = os.open(parent, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        with pytest.raises(ValueError, match="changed during namespace closure"):
+            module.classify_draft_trio_target(directory, entry)
+    finally:
+        os.close(directory)
+
+    assert injected
+    assert target.read_bytes() == payload
+    assert hostile.read_bytes() == b"hostile final-return private remnant\n"
 
 
 def test_draft_request_requires_exact_checkpoint_packet_namespace(recost_fixture):
@@ -7550,7 +8373,7 @@ def test_direct_final_rejects_private_remnant_created_after_target_move(
 
 
 def test_direct_final_rejects_private_remnant_created_at_final_closure(
-    tmp_path,
+    tmp_path, monkeypatch,
 ):
     module = load_recost_module()
     parent = tmp_path / "parent"
@@ -7559,24 +8382,29 @@ def test_direct_final_rejects_private_remnant_created_at_final_closure(
     payload = b"managed\n"
     transaction = module.publication_transaction(target, payload, 0o644, "managed fixture")
     hostile = parent / transaction.private_name(1)
-    barriers = 0
+    real_closure = module.require_directory_namespace_unchanged
+    closures = 0
 
-    def create_private_at_final_barrier():
-        nonlocal barriers
-        barriers += 1
-        if barriers == 3:
+    def create_private_at_final_fstat(directory, expected, label):
+        nonlocal closures
+        if label == "managed fixture private namespace":
+            closures += 1
+        if closures == 4 and not hostile.exists():
             hostile.write_bytes(b"hostile final-closure remnant\n")
             hostile.chmod(0o600)
+        return real_closure(directory, expected, label)
 
-    with pytest.raises(ValueError, match="transaction-private remnants"):
+    monkeypatch.setattr(
+        module, "require_directory_namespace_unchanged", create_private_at_final_fstat
+    )
+    with pytest.raises(ValueError, match="changed during namespace closure"):
         module.write_exact_or_verify(
             target,
             payload,
             mode=0o644,
             label="managed fixture",
-            publication_barrier=create_private_at_final_barrier,
         )
-    assert barriers == 3
+    assert closures == 4
     assert target.read_bytes() == payload
     assert hostile.read_bytes() == b"hostile final-closure remnant\n"
 

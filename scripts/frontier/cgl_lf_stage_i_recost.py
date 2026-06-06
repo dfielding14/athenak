@@ -9613,6 +9613,45 @@ def directory_security_binding(profile: os.stat_result) -> tuple[int, int, int, 
     )
 
 
+def directory_namespace_binding(profile: os.stat_result) -> tuple[int, ...]:
+    """Return the mutation-relevant namespace profile of one open directory."""
+
+    return (
+        stat.S_IFMT(profile.st_mode),
+        stat.S_IMODE(profile.st_mode),
+        profile.st_uid,
+        profile.st_gid,
+        profile.st_nlink,
+        profile.st_size,
+        profile.st_mtime_ns,
+        profile.st_ctime_ns,
+    )
+
+
+def require_directory_namespace_unchanged(
+    directory: int,
+    expected: os.stat_result,
+    label: str,
+) -> os.stat_result:
+    """Close one finite namespace read at its final descriptor observation.
+
+    This detects mutations before or during the final descriptor read.  A
+    same-UID raw syscall issued after that observation is outside the
+    process-enforced boundary; cooperating Stage I writers are excluded by
+    the authenticated mutation lock.
+    """
+
+    observed = os.fstat(directory)
+    require_directory_profile(observed, label)
+    if (
+        not same_inode(observed, expected)
+        or directory_namespace_binding(observed)
+        != directory_namespace_binding(expected)
+    ):
+        raise ValueError(f"{label} changed during namespace closure")
+    return observed
+
+
 def require_parent_path_bound(
     path: Path,
     directory: int,
@@ -10108,6 +10147,22 @@ def transaction_private_names(
     return sorted(retained)
 
 
+def closed_transaction_private_names(
+    directory: int,
+    transaction: PublicationTransaction,
+    label: str,
+) -> list[str]:
+    """Return one transaction's private names under an exact namespace closure."""
+
+    before = os.fstat(directory)
+    require_directory_profile(before, f"{label} private namespace")
+    retained = transaction_private_names(directory, transaction)
+    require_directory_namespace_unchanged(
+        directory, before, f"{label} private namespace"
+    )
+    return retained
+
+
 def require_no_transaction_private_remnants(
     directory: int,
     transaction: PublicationTransaction,
@@ -10115,7 +10170,8 @@ def require_no_transaction_private_remnants(
 ) -> None:
     """Reject every transaction-private name at a successful final boundary."""
 
-    if transaction_private_names(directory, transaction):
+    retained = closed_transaction_private_names(directory, transaction, label)
+    if retained:
         raise ValueError(
             f"{label} exact final target has ambiguous transaction-private remnants"
         )
@@ -10286,7 +10342,7 @@ def recover_linked_publication(
     )
     if expected_identity is not None and not same_inode(target, expected_identity):
         raise ValueError(f"{label} public target inode differs from the linked private inode")
-    private_names = transaction_private_names(directory, transaction)
+    private_names = closed_transaction_private_names(directory, transaction, label)
     if len(private_names) != 1:
         raise ValueError(
             f"{label} linked public target has ambiguous transaction-private attempts"
@@ -10422,7 +10478,9 @@ def preflight_exact_or_absent(
                 expected_identity=observed,
                 expected_links=2,
             )
-            private_names = transaction_private_names(directory, transaction)
+            private_names = closed_transaction_private_names(
+                directory, transaction, label
+            )
             if len(private_names) != 1:
                 raise ValueError(
                     f"{label} linked target has ambiguous transaction-private attempts"
@@ -10453,7 +10511,9 @@ def preflight_exact_or_absent(
                 label,
                 expected_identity=observed,
             )
-            private_names = transaction_private_names(directory, transaction)
+            private_names = closed_transaction_private_names(
+                directory, transaction, label
+            )
             if private_names:
                 raise ValueError(
                     f"{label} exact final target has ambiguous transaction-private remnants"
@@ -10496,11 +10556,9 @@ def classify_draft_trio_target(
             entry.label,
             expected_identity=observed,
         )
-        if transaction_private_names(directory, entry.transaction):
-            raise ValueError(
-                f"{entry.label} exact final target has ambiguous "
-                "transaction-private remnants"
-            )
+        require_no_transaction_private_remnants(
+            directory, entry.transaction, entry.label
+        )
         return "single", None, retained
     if stat.S_IMODE(observed.st_mode) == entry.mode and observed.st_nlink == 2:
         retained = read_bound_exact_file(
@@ -10512,7 +10570,9 @@ def classify_draft_trio_target(
             expected_identity=observed,
             expected_links=2,
         )
-        private_names = transaction_private_names(directory, entry.transaction)
+        private_names = closed_transaction_private_names(
+            directory, entry.transaction, entry.label
+        )
         if len(private_names) != 1:
             raise ValueError(
                 f"{entry.label} linked target has ambiguous transaction-private attempts"
@@ -10550,7 +10610,9 @@ def reusable_draft_trio_private(
 ) -> tuple[str, os.stat_result] | None:
     """Return one exact finalized private recovery inode, preserving all others."""
 
-    private_names = transaction_private_names(directory, entry.transaction)
+    private_names = closed_transaction_private_names(
+        directory, entry.transaction, entry.label
+    )
     if not private_names:
         return None
     if len(private_names) != 1:
@@ -10573,8 +10635,15 @@ def recover_draft_trio_rollback_quarantine(
     parent_profile: os.stat_result,
     entry: DraftTrioPublicationEntry,
     mutation_lock: MutationLock | None,
+    mutation_authority: Callable[[], None] | None = None,
 ) -> None:
-    """Restore one exact linked canonical name from a reserved rollback slot."""
+    """Restore one exact linked canonical name from a reserved rollback slot.
+
+    This is a recovery-only mutation while the canonical namespace is
+    intentionally partial.  The immediate authority callback authenticates
+    the source boundary; the caller must close the exact namespace before any
+    successful action return.
+    """
 
     try:
         os.stat(entry.path.name, dir_fd=directory, follow_symlinks=False)
@@ -10582,7 +10651,9 @@ def recover_draft_trio_rollback_quarantine(
         pass
     else:
         return
-    private_names = transaction_private_names(directory, entry.transaction)
+    private_names = closed_transaction_private_names(
+        directory, entry.transaction, entry.label
+    )
     reserved = {
         entry.transaction.private_name(PUBLICATION_PRIVATE_ATTEMPT_LIMIT - 1),
         entry.transaction.private_name(PUBLICATION_PRIVATE_ATTEMPT_LIMIT - 2),
@@ -10607,6 +10678,8 @@ def recover_draft_trio_rollback_quarantine(
     quarantine = next(name for name in private_names if name in reserved)
     require_parent_path_bound(entry.path.parent, directory, parent_profile, entry.label)
     authenticate_mutation_lock(mutation_lock)
+    if mutation_authority is not None:
+        mutation_authority()
     moved = move_bound_name_noreplace(
         directory,
         quarantine,
@@ -10657,11 +10730,18 @@ def install_draft_trio_entry(
     parent_profile: os.stat_result,
     entry: DraftTrioPublicationEntry,
     mutation_lock: MutationLock | None,
+    *,
+    publication_barrier: Callable[[], None] | None = None,
+    mutation_authority: Callable[[], None] | None = None,
 ) -> None:
     """Install or authenticate one staged trio member without finalizing its link."""
 
     recover_draft_trio_rollback_quarantine(
-        directory, parent_profile, entry, mutation_lock
+        directory,
+        parent_profile,
+        entry,
+        mutation_lock,
+        mutation_authority,
     )
     state, private_name, target = classify_draft_trio_target(directory, entry)
     if state == "single":
@@ -10727,6 +10807,10 @@ def install_draft_trio_entry(
     )
     require_parent_path_bound(entry.path.parent, directory, parent_profile, entry.label)
     authenticate_mutation_lock(mutation_lock)
+    if publication_barrier is not None:
+        publication_barrier()
+    elif mutation_authority is not None:
+        mutation_authority()
     try:
         moved = move_bound_name_noreplace(
             directory,
@@ -10799,8 +10883,14 @@ def rollback_draft_trio_entries(
     parent_profile: os.stat_result,
     entries: list[DraftTrioPublicationEntry],
     mutation_lock: MutationLock | None,
+    mutation_authority: Callable[[], None] | None = None,
 ) -> None:
-    """Remove only exact transaction-owned canonical links before trio commit."""
+    """Remove only exact transaction-owned canonical links before trio commit.
+
+    Rollback is a recovery-only authority boundary.  It cannot authenticate a
+    normal request-last namespace while deliberately retracting that
+    namespace, and every caller raises after the rollback attempt.
+    """
 
     request = entries[-1]
 
@@ -10816,7 +10906,11 @@ def rollback_draft_trio_entries(
             return
         for prerequisite in entries[:-1]:
             install_draft_trio_entry(
-                directory, parent_profile, prerequisite, mutation_lock
+                directory,
+                parent_profile,
+                prerequisite,
+                mutation_lock,
+                mutation_authority=mutation_authority,
             )
             finalize_draft_trio_entry(
                 directory, parent_profile, prerequisite, mutation_lock
@@ -10860,6 +10954,8 @@ def rollback_draft_trio_entries(
             entry.transaction,
             preferred=entry.private_name,
         )
+        if mutation_authority is not None:
+            mutation_authority()
         moved = move_bound_name_noreplace(
             directory,
             entry.path.name,
@@ -10908,6 +11004,11 @@ def publish_draft_prerequisite_trio(
     *,
     mutation_lock: MutationLock | None = None,
     publication_barrier: Callable[[], None] | None = None,
+    publication_state_barrier: Callable[
+        [tuple[tuple[Path, bytes, int, str, os.stat_result], ...]], None
+    ]
+    | None = None,
+    mutation_authority: Callable[[], None] | None = None,
 ) -> None:
     """Publish three draft prerequisites or retain no transaction-owned partial."""
 
@@ -10952,7 +11053,11 @@ def publish_draft_prerequisite_trio(
         )
         for entry in entries:
             recover_draft_trio_rollback_quarantine(
-                directory, parent_profile, entry, mutation_lock
+                directory,
+                parent_profile,
+                entry,
+                mutation_lock,
+                mutation_authority,
             )
             state, private_name, target = classify_draft_trio_target(directory, entry)
             entry.initial_state = state
@@ -11016,23 +11121,64 @@ def publish_draft_prerequisite_trio(
         authenticate_mutation_lock(mutation_lock)
         os.fsync(directory)
 
+        def private_publication_state(
+        ) -> tuple[tuple[Path, bytes, int, str, os.stat_result], ...]:
+            """Return every exact in-flight private inode owned by this trio."""
+
+            retained = []
+            for entry in entries:
+                if entry.private_name is None or entry.private_identity is None:
+                    continue
+                try:
+                    profile = read_bound_exact_file(
+                        directory,
+                        entry.private_name,
+                        entry.payload,
+                        entry.mode,
+                        f"{entry.label} in-flight private publication",
+                        expected_identity=entry.private_identity,
+                    )
+                except FileNotFoundError:
+                    continue
+                retained.append(
+                    (
+                        entry.path.with_name(entry.private_name),
+                        entry.payload,
+                        entry.mode,
+                        f"{entry.label} in-flight private publication",
+                        profile,
+                    )
+                )
+            return tuple(retained)
+
+        def close_publication_state() -> None:
+            if publication_state_barrier is not None:
+                publication_state_barrier(private_publication_state())
+            elif publication_barrier is not None:
+                publication_barrier()
+            elif mutation_authority is not None:
+                mutation_authority()
+
         def forward_complete() -> None:
             for entry in entries:
-                if publication_barrier is not None:
-                    publication_barrier()
-                install_draft_trio_entry(directory, parent_profile, entry, mutation_lock)
-                if publication_barrier is not None:
-                    publication_barrier()
+                close_publication_state()
+                install_draft_trio_entry(
+                    directory,
+                    parent_profile,
+                    entry,
+                    mutation_lock,
+                    publication_barrier=close_publication_state,
+                    mutation_authority=mutation_authority,
+                )
+                close_publication_state()
             for entry in entries:
                 finalize_draft_trio_entry(directory, parent_profile, entry, mutation_lock)
-                if publication_barrier is not None:
-                    publication_barrier()
+                close_publication_state()
             for entry in entries:
                 state, _, retained = classify_draft_trio_target(directory, entry)
                 if state != "single" or retained is None:
                     raise ValueError(f"{entry.label} is not an exact final trio member")
-            if publication_barrier is not None:
-                publication_barrier()
+            close_publication_state()
 
         try:
             forward_complete()
@@ -11042,7 +11188,11 @@ def publish_draft_prerequisite_trio(
             except BaseException as forward_error:
                 try:
                     rollback_draft_trio_entries(
-                        directory, parent_profile, entries, mutation_lock
+                        directory,
+                        parent_profile,
+                        entries,
+                        mutation_lock,
+                        mutation_authority,
                     )
                 except BaseException as rollback_error:
                     raise ValueError(
@@ -11063,8 +11213,13 @@ def retain_exact_publication_for_retry(
     label: str,
     mutation_lock: MutationLock | None = None,
     expected_identity: os.stat_result | None = None,
+    mutation_authority: Callable[[], None] | None = None,
 ) -> Path:
-    """Move one exact final publication back to its private retry namespace."""
+    """Move one exact final publication back to its private retry namespace.
+
+    Retry retention is a recovery-only authority boundary invoked while
+    unwinding a failed action closure; callers do not return action success.
+    """
 
     transaction = publication_transaction(path, payload, mode, label)
     require_no_symlink_components(path, label, include_leaf=False)
@@ -11090,6 +11245,8 @@ def retain_exact_publication_for_retry(
         recovery_name = vacant_transaction_private_name(directory, transaction)
         require_parent_path_bound(path.parent, directory, parent_profile, label)
         authenticate_mutation_lock(mutation_lock)
+        if mutation_authority is not None:
+            mutation_authority()
         moved = move_bound_name_noreplace(
             directory,
             path.name,
@@ -11123,6 +11280,11 @@ def write_exact_or_verify(
     label: str,
     mutation_lock: MutationLock | None = None,
     publication_barrier: Callable[[], None] | None = None,
+    publication_state_barrier: Callable[
+        [tuple[tuple[Path, bytes, int, str, os.stat_result], ...]], None
+    ]
+    | None = None,
+    mutation_authority: Callable[[], None] | None = None,
 ) -> bool:
     """Publish one finalized private inode no-replace, or exact-verify the target."""
 
@@ -11190,7 +11352,7 @@ def write_exact_or_verify(
             return False
 
         mutation_guard()
-        private_names = transaction_private_names(directory, transaction)
+        private_names = closed_transaction_private_names(directory, transaction, label)
         if len(private_names) > 1:
             raise ValueError(f"{label} has ambiguous retained private attempts")
         private_finalized = False
@@ -11283,8 +11445,22 @@ def write_exact_or_verify(
                 expected_profile=finalized_profile,
                 expected_mode=mode,
             )
-            if publication_barrier is not None:
+            if publication_state_barrier is not None:
+                publication_state_barrier(
+                    (
+                        (
+                            path.with_name(private_name),
+                            payload,
+                            mode,
+                            f"{label} in-flight private publication",
+                            finalized_profile,
+                        ),
+                    )
+                )
+            elif publication_barrier is not None:
                 publication_barrier()
+            elif mutation_authority is not None:
+                mutation_authority()
             try:
                 published = move_bound_name_noreplace(
                     directory,
@@ -11327,6 +11503,7 @@ def write_exact_or_verify(
                         label=label,
                         mutation_lock=mutation_lock,
                         expected_identity=published,
+                        mutation_authority=mutation_authority,
                     )
                     raise
             require_no_transaction_private_remnants(directory, transaction, label)
@@ -11357,6 +11534,7 @@ def write_exact_or_verify(
                     mode=mode,
                     label=label,
                     mutation_lock=mutation_lock,
+                    mutation_authority=mutation_authority,
                 )
                 raise
         mutation_guard()
@@ -11728,6 +11906,158 @@ def f119_f118_runtime_bindings(
     }
 
 
+@dataclass(frozen=True)
+class F119LiveSourceAuthority:
+    """Retain the exact F118-selected live HEAD and seven-tool contract."""
+
+    head: str
+    tools: tuple[tuple[str, str, int], ...]
+
+    def authenticate(self, repository: Path, label: str) -> None:
+        """Rebind live HEAD, clean selected paths, modes, and bytes."""
+
+        relatives = [relative for relative, _, _ in self.tools]
+
+        def require_head() -> None:
+            observed = git_run(
+                repository, ["rev-parse", "HEAD"], capture_output=True
+            )
+            if observed.returncode or observed.stdout.decode().strip() != self.head:
+                raise ValueError(
+                    "live repository HEAD differs from the exact F118-selected authority"
+                )
+
+        def require_clean_selected_paths() -> None:
+            for arguments in (
+                ["diff", "--quiet", "--", *relatives],
+                ["diff", "--cached", "--quiet", "--", *relatives],
+            ):
+                if git_run(repository, arguments).returncode:
+                    raise ValueError(
+                        f"{label} live F118-selected tools are not committed and clean"
+                    )
+
+        require_head()
+        require_clean_selected_paths()
+        for relative, digest, mode in self.tools:
+            path = repository / relative
+            with absolute_descriptor(
+                path, f"{label} live F118-selected tool {relative}", flags=os.O_RDONLY
+            ) as descriptor:
+                require_regular_profile(
+                    os.fstat(descriptor),
+                    f"{label} live F118-selected tool {relative}",
+                    expected_mode=mode,
+                )
+                if sha256_descriptor(descriptor) != digest:
+                    raise ValueError(
+                        f"{label} live F118-selected tool {relative} checksum differs"
+                    )
+        require_clean_selected_paths()
+        require_head()
+
+
+def f119_live_source_authority(
+    root: Path,
+    repository: Path,
+    source_authority: object,
+) -> F119LiveSourceAuthority:
+    """Authenticate and retain the compact live F118 source closure."""
+
+    authority = require_exact_keys(
+        source_authority,
+        {
+            "checkpoint",
+            "evidence",
+            "provenance_review",
+            "plasma_review",
+            "publication_audit",
+            "final_source_bundle",
+        },
+        "F119 action F118 source authority",
+    )
+    if authority["checkpoint"] != "F-118":
+        raise ValueError("F119 action source authority is not exact F118")
+    evidence_relative, evidence_sha256 = input_binding(
+        authority["evidence"], "F119 action F118 evidence binding"
+    )
+    evidence_path = root_path(
+        root, evidence_relative.as_posix(), "F119 action F118 evidence"
+    )
+    if evidence_path != root / F118_RELATIVE:
+        raise ValueError("F119 action F118 evidence is not the exact retained path")
+    tracker = InputTracker()
+    evidence = parse_json(
+        tracker.read(
+            evidence_path,
+            evidence_sha256,
+            "F119 action F118 evidence",
+            expected_mode=0o444,
+        ),
+        "F119 action F118 evidence",
+    )
+    retained = require_exact_keys(
+        evidence,
+        {
+            "schema_version",
+            "record_type",
+            "checkpoint",
+            "execution_epoch",
+            "generated_utc",
+            "scope",
+            "predecessor_authorities",
+            "implementation",
+            "source_archive_catalog",
+            "authorization",
+            "validation",
+            "publication_requirements",
+        },
+        "F119 action F118 evidence",
+    )
+    implementation = require_exact_keys(
+        retained["implementation"],
+        {
+            "publisher",
+            "committed_tools",
+            "intermediate_36140_bundle",
+            "predecessor_current_source_bundle",
+            "current_source_bundle",
+        },
+        "F119 action F118 implementation",
+    )
+    current = require_exact_keys(
+        implementation["current_source_bundle"],
+        {
+            "candidate_path",
+            "path",
+            "sha256",
+            "complete_history",
+            "head",
+            "advertised_tip",
+            "verified_revisions",
+            "selected_as_current",
+            "subject",
+        },
+        "F119 action F118 current source bundle",
+    )
+    head = require_revision(current["head"], "F119 action F118 current source head")
+    tools = authenticate_f118_committed_tools(
+        implementation["committed_tools"], repository, head
+    )
+    tracker.reauthenticate_all()
+    retained_tools = tuple(
+        (
+            str(tool["path"]),
+            require_sha256(tool["sha256"], "F119 action selected-tool SHA-256"),
+            int(str(tool["mode"]), 8),
+        )
+        for tool in tools
+    )
+    authority_closure = F119LiveSourceAuthority(head=head, tools=retained_tools)
+    authority_closure.authenticate(repository, "F119 action initialization")
+    return authority_closure
+
+
 def validate_f119_draft_packet(
     root: Path,
     repository: Path,
@@ -11967,94 +12297,286 @@ def locked_render_f119_draft_packet(
     sys.stdout.buffer.write(stable_json_bytes(packet))
 
 
-def require_f119_install_namespace_barrier(
+@dataclass
+class F119NamespaceFile:
+    """One exact required direct-child F119 namespace binding."""
+
+    path: Path
+    payload: bytes
+    mode: int
+    label: str
+    identity: os.stat_result | None = None
+
+
+def require_f119_namespace_variants(
     root: Path,
     mutation_lock: MutationLock | None,
     label: str,
-) -> dict[str, Path]:
-    """Reject every committed or partial F119 request namespace under the lock."""
+    variants: tuple[tuple[F119NamespaceFile, ...], ...],
+    *,
+    authority_barrier: Callable[[], None] | None = None,
+) -> tuple[F119NamespaceFile, ...]:
+    """Close one complete exact F119 namespace variant and live authority."""
+
+    if not variants:
+        raise ValueError(f"{label}: F119 namespace closure requires an expected variant")
+    accounting = root / "accounting"
+    paths = draft_output_paths(root, F119_CHECKPOINT, F119_ARTIFACT_NAME)
+    namespace_prefix = f"mks24_stage_i_{EXECUTION_EPOCH_SLUG}_F119_"
+    retirement_prefix = f".{paths['packet'].name}.retired.sha256-"
+    normalized_variants: list[tuple[F119NamespaceFile, ...]] = []
+    for variant in variants:
+        names = [expected.path.name for expected in variant]
+        if (
+            len(set(names)) != len(names)
+            or any(expected.path.parent != accounting for expected in variant)
+        ):
+            raise ValueError(f"{label}: F119 namespace expectation is not direct and unique")
+        normalized_variants.append(tuple(variant))
 
     authenticate_mutation_lock(mutation_lock)
-    paths = draft_output_paths(root, F119_CHECKPOINT, F119_ARTIFACT_NAME)
-    accounting = root / "accounting"
     require_no_symlink_components(accounting, f"{label} accounting namespace")
     with absolute_descriptor(
         accounting,
         f"{label} accounting namespace",
         flags=os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC,
     ) as directory:
-        parent_profile = os.fstat(directory)
-        require_directory_profile(parent_profile, f"{label} accounting namespace")
-        namespace_prefix = (
-            f"mks24_stage_i_{EXECUTION_EPOCH_SLUG}_F119_"
+        before = os.fstat(directory)
+        require_directory_profile(before, f"{label} accounting namespace")
+        names = tuple(sorted(entry.name for entry in os.scandir(directory)))
+        present = tuple(
+            name
+            for name in names
+            if (
+                name.startswith(namespace_prefix)
+                or name.startswith(retirement_prefix)
+                or PUBLICATION_PRIVATE_NAME_PATTERN.fullmatch(name) is not None
+            )
         )
-        unexpected = sorted(
-            entry.name
-            for entry in os.scandir(directory)
-            if entry.name.startswith(namespace_prefix)
-            and entry.name != paths["packet"].name
-        )
+        matching = [
+            variant
+            for variant in normalized_variants
+            if tuple(sorted(expected.path.name for expected in variant)) == present
+        ]
+        if len(matching) != 1:
+            raise ValueError(
+                f"{label}: complete expected F119 namespace differs; observed {present}"
+            )
+        selected = matching[0]
+        retained_profiles: list[tuple[F119NamespaceFile, os.stat_result]] = []
+        for expected in selected:
+            retained_profiles.append(
+                (
+                    expected,
+                    read_bound_exact_file(
+                        directory,
+                        expected.path.name,
+                        expected.payload,
+                        expected.mode,
+                        expected.label,
+                        expected_identity=expected.identity,
+                    ),
+                )
+            )
         require_parent_path_bound(
-            accounting, directory, parent_profile, f"{label} accounting namespace"
+            accounting, directory, before, f"{label} accounting namespace"
         )
         authenticate_mutation_lock(mutation_lock)
-    if unexpected:
-        if paths["request"].name in unexpected:
+        if authority_barrier is not None:
+            authority_barrier()
+        closing_names = tuple(sorted(entry.name for entry in os.scandir(directory)))
+        if closing_names != names:
+            raise ValueError(f"{label}: accounting directory listing changed")
+        closing_profiles: list[tuple[F119NamespaceFile, os.stat_result]] = []
+        for expected, profile in retained_profiles:
+            closing = read_bound_exact_file(
+                directory,
+                expected.path.name,
+                expected.payload,
+                expected.mode,
+                expected.label,
+                expected_identity=profile,
+            )
+            if file_security_content_binding(closing) != file_security_content_binding(
+                profile
+            ):
+                raise ValueError(f"{expected.label} changed during F119 closure")
+            closing_profiles.append((expected, closing))
+        require_parent_path_bound(
+            accounting, directory, before, f"{label} accounting namespace"
+        )
+        authenticate_mutation_lock(mutation_lock)
+        require_directory_namespace_unchanged(
+            directory, before, f"{label} accounting namespace"
+        )
+    for expected, profile in closing_profiles:
+        if expected.identity is None:
+            expected.identity = profile
+    return selected
+
+
+def require_f119_install_namespace_barrier(
+    root: Path,
+    mutation_lock: MutationLock | None,
+    label: str,
+    *,
+    variants: tuple[tuple[F119NamespaceFile, ...], ...] = ((),),
+    authority_barrier: Callable[[], None] | None = None,
+) -> tuple[F119NamespaceFile, ...]:
+    """Require one complete exact install/retirement F119 namespace state."""
+
+    try:
+        return require_f119_namespace_variants(
+            root,
+            mutation_lock,
+            label,
+            variants,
+            authority_barrier=authority_barrier,
+        )
+    except ValueError as error:
+        paths = draft_output_paths(root, F119_CHECKPOINT, F119_ARTIFACT_NAME)
+        if os.path.lexists(paths["request"]):
             raise ValueError(
                 f"{label}: F119 request is the last commit marker; "
                 "refusing draft-packet installation or supersession"
-            )
-        if any(
-            paths[key].name in unexpected for key in ("reconciliation", "storage")
-        ):
-            raise ValueError(f"{label}: F119 draft prerequisite namespace is partial")
+            ) from error
+        if os.path.lexists(paths["reconciliation"]) or os.path.lexists(paths["storage"]):
+            raise ValueError(f"{label}: F119 draft prerequisite namespace is partial") from error
         raise ValueError(
-            f"{label}: exact F119 pre-request namespace contains an orphan marker: "
-            f"{unexpected}"
-        )
-    authenticate_mutation_lock(mutation_lock)
-    return paths
+            f"{label}: exact F119 pre-request namespace contains an orphan marker, "
+            "managed publication-private remnant, or differs from the complete "
+            "required state"
+        ) from error
 
 
 def require_f119_draft_namespace_barrier(
     root: Path,
     mutation_lock: MutationLock | None,
     label: str,
-) -> dict[str, Path]:
-    """Allow only the exact F119 packet and request-last prerequisite prefix."""
+    *,
+    variants: tuple[tuple[F119NamespaceFile, ...], ...] = ((),),
+    authority_barrier: Callable[[], None] | None = None,
+) -> tuple[F119NamespaceFile, ...]:
+    """Require one complete exact request-last F119 draft namespace state."""
 
-    authenticate_mutation_lock(mutation_lock)
-    paths = draft_output_paths(root, F119_CHECKPOINT, F119_ARTIFACT_NAME)
-    accounting = root / "accounting"
-    allowed = {
-        paths[key].name
-        for key in ("packet", "reconciliation", "storage", "request")
-    }
-    require_no_symlink_components(accounting, f"{label} accounting namespace")
-    with absolute_descriptor(
-        accounting,
-        f"{label} accounting namespace",
-        flags=os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC,
-    ) as directory:
-        parent_profile = os.fstat(directory)
-        require_directory_profile(parent_profile, f"{label} accounting namespace")
-        namespace_prefix = f"mks24_stage_i_{EXECUTION_EPOCH_SLUG}_F119_"
-        unexpected = sorted(
-            entry.name
-            for entry in os.scandir(directory)
-            if entry.name.startswith(namespace_prefix) and entry.name not in allowed
+    try:
+        return require_f119_namespace_variants(
+            root,
+            mutation_lock,
+            label,
+            variants,
+            authority_barrier=authority_barrier,
         )
-        require_parent_path_bound(
-            accounting, directory, parent_profile, f"{label} accounting namespace"
-        )
-        authenticate_mutation_lock(mutation_lock)
-    if unexpected:
+    except ValueError as error:
         raise ValueError(
-            f"{label}: exact F119 draft namespace contains an orphan marker: "
-            f"{unexpected}"
+            f"{label}: exact F119 request-last namespace contains an orphan marker, "
+            "managed publication-private remnant, or differs from the required prefix"
+        ) from error
+
+
+@dataclass(frozen=True)
+class F119ActionClosure:
+    """Bind every F119 canonical action to exact namespace and live F118 source."""
+
+    root: Path
+    repository: Path
+    mutation_lock: MutationLock | None
+    live_source: F119LiveSourceAuthority
+
+    def authenticate_authority(self) -> None:
+        """Rebind the live F118-selected HEAD/tools immediately before mutation."""
+
+        authenticate_mutation_lock(self.mutation_lock)
+        self.live_source.authenticate(self.repository, "F119 action closure")
+        authenticate_mutation_lock(self.mutation_lock)
+
+    def close_install(
+        self,
+        label: str,
+        *variants: tuple[F119NamespaceFile, ...],
+    ) -> tuple[F119NamespaceFile, ...]:
+        """Close one exact install/retirement state plus live source authority."""
+
+        return require_f119_install_namespace_barrier(
+            self.root,
+            self.mutation_lock,
+            label,
+            variants=tuple(variants),
+            authority_barrier=self.authenticate_authority,
         )
-    authenticate_mutation_lock(mutation_lock)
-    return paths
+
+    def close_draft(
+        self,
+        label: str,
+        *variants: tuple[F119NamespaceFile, ...],
+    ) -> tuple[F119NamespaceFile, ...]:
+        """Close one exact request-last state plus live source authority."""
+
+        return require_f119_draft_namespace_barrier(
+            self.root,
+            self.mutation_lock,
+            label,
+            variants=tuple(variants),
+            authority_barrier=self.authenticate_authority,
+        )
+
+    def close_install_publication_state(
+        self,
+        label: str,
+        private_state: tuple[tuple[Path, bytes, int, str, os.stat_result], ...],
+        *variants: tuple[F119NamespaceFile, ...],
+    ) -> tuple[F119NamespaceFile, ...]:
+        """Close one install state plus exact authenticated in-flight privates."""
+
+        private_expectations = tuple(
+            F119NamespaceFile(path, payload, mode, item_label, identity)
+            for path, payload, mode, item_label, identity in private_state
+        )
+        return self.close_install(
+            label, *(variant + private_expectations for variant in variants)
+        )
+
+    def close_draft_publication_state(
+        self,
+        label: str,
+        private_state: tuple[tuple[Path, bytes, int, str, os.stat_result], ...],
+        *variants: tuple[F119NamespaceFile, ...],
+    ) -> tuple[F119NamespaceFile, ...]:
+        """Close one draft state plus exact authenticated in-flight privates."""
+
+        private_expectations = tuple(
+            F119NamespaceFile(path, payload, mode, item_label, identity)
+            for path, payload, mode, item_label, identity in private_state
+        )
+        return self.close_draft(
+            label, *(variant + private_expectations for variant in variants)
+        )
+
+
+def f119_action_closure(
+    root: Path,
+    repository: Path,
+    packet: dict[str, object],
+    mutation_lock: MutationLock | None,
+) -> F119ActionClosure:
+    """Construct one exact action-immediate F119 namespace/source closure."""
+
+    inputs = packet["inputs"]
+    assert isinstance(inputs, dict)
+    live_source = f119_live_source_authority(
+        root, repository, inputs["source_authority"]
+    )
+    helper = require_exact_keys(
+        inputs["stage_i_helper"], {"revision", "sha256"}, "F119 action Stage I helper"
+    )
+    selected_helper = next(
+        item
+        for item in live_source.tools
+        if item[0] == STAGE_I_RELATIVE.as_posix()
+    )
+    if helper != {"revision": live_source.head, "sha256": selected_helper[1]}:
+        raise ValueError("F119 action live source binding differs from the packet")
+    return F119ActionClosure(root, repository, mutation_lock, live_source)
 
 
 def restore_retired_f119_packet(
@@ -12063,8 +12585,14 @@ def restore_retired_f119_packet(
     payload: bytes,
     expected_identity: os.stat_result,
     mutation_lock: MutationLock | None,
+    mutation_authority: Callable[[], None] | None = None,
 ) -> None:
-    """Restore one exact retired F119 packet after a failed namespace barrier."""
+    """Restore one exact retired F119 packet after a failed namespace barrier.
+
+    Restoration is a recovery-only authority boundary.  It runs while the
+    failed action's namespace is noncanonical, and every caller re-raises
+    instead of returning action success.
+    """
 
     with absolute_descriptor(
         target.parent,
@@ -12101,6 +12629,8 @@ def restore_retired_f119_packet(
             target.parent, directory, parent_profile, "F119 packet restoration"
         )
         authenticate_mutation_lock(mutation_lock)
+        if mutation_authority is not None:
+            mutation_authority()
         restored = move_bound_name_noreplace(
             directory,
             retired.name,
@@ -12127,6 +12657,7 @@ def restore_retired_f119_path(
     target: Path,
     retired: Path,
     mutation_lock: MutationLock | None,
+    mutation_authority: Callable[[], None] | None = None,
 ) -> None:
     """Read and restore one exact retained stale F119 packet."""
 
@@ -12142,7 +12673,12 @@ def restore_retired_f119_path(
                 break
             chunks.append(block)
     restore_retired_f119_packet(
-        target, retired, b"".join(chunks), profile, mutation_lock
+        target,
+        retired,
+        b"".join(chunks),
+        profile,
+        mutation_lock,
+        mutation_authority,
     )
 
 
@@ -12152,11 +12688,21 @@ def retire_stale_f119_packet(
     target: Path,
     candidate_payload: bytes,
     mutation_lock: MutationLock | None,
-) -> Path | None:
+    action_closure: F119ActionClosure | None = None,
+) -> F119NamespaceFile | None:
     """Retire one authenticated stale F119 packet before no-clobber replacement."""
 
-    require_f119_install_namespace_barrier(
-        root, mutation_lock, "F119 pre-retirement barrier"
+    def close_install(
+        label: str, *variants: tuple[F119NamespaceFile, ...]
+    ) -> tuple[F119NamespaceFile, ...]:
+        if action_closure is not None:
+            return action_closure.close_install(label, *variants)
+        return require_f119_install_namespace_barrier(
+            root, mutation_lock, label, variants=tuple(variants)
+        )
+
+    mutation_authority = (
+        action_closure.authenticate_authority if action_closure is not None else None
     )
     try:
         with absolute_descriptor(
@@ -12173,14 +12719,19 @@ def retire_stale_f119_packet(
                     break
                 chunks.append(block)
     except FileNotFoundError:
-        require_f119_install_namespace_barrier(
-            root, mutation_lock, "F119 absent-packet post-retirement barrier"
-        )
+        close_install("F119 absent-packet post-retirement barrier", ())
         return None
     payload = b"".join(chunks)
+    packet_expectation = F119NamespaceFile(
+        target,
+        payload,
+        0o644,
+        "canonical F119 draft packet",
+        profile,
+    )
     if payload == candidate_payload:
-        require_f119_install_namespace_barrier(
-            root, mutation_lock, "F119 exact-packet post-retirement barrier"
+        close_install(
+            "F119 exact-packet post-retirement barrier", (packet_expectation,)
         )
         return None
     tracker = InputTracker()
@@ -12204,7 +12755,13 @@ def retire_stale_f119_packet(
         raise ValueError("active unexpired valid F119 draft packet cannot be retired")
     digest = sha256_bytes(payload)
     retired = target.with_name(f".{target.name}.retired.sha256-{digest}")
-    prefix = f".{target.name}.retired.sha256-"
+    retired_expectation = F119NamespaceFile(
+        retired,
+        payload,
+        0o644,
+        "retired stale F119 draft packet",
+        profile,
+    )
     with absolute_descriptor(
         target.parent,
         "F119 packet retirement parent",
@@ -12212,13 +12769,6 @@ def retire_stale_f119_packet(
     ) as directory:
         parent_profile = os.fstat(directory)
         require_directory_profile(parent_profile, "F119 packet retirement parent")
-        unexpected = sorted(
-            entry.name
-            for entry in os.scandir(directory)
-            if entry.name.startswith(prefix) and entry.name != retired.name
-        )
-        if unexpected:
-            raise ValueError("F119 packet retirement namespace is ambiguous")
         retained = read_bound_exact_file(
             directory,
             target.name,
@@ -12231,8 +12781,9 @@ def retire_stale_f119_packet(
             target.parent, directory, parent_profile, "F119 packet retirement"
         )
         authenticate_mutation_lock(mutation_lock)
-        require_f119_install_namespace_barrier(
-            root, mutation_lock, "F119 action-immediate pre-retirement barrier"
+        close_install(
+            "F119 action-immediate pre-retirement barrier",
+            (packet_expectation,),
         )
         moved = move_bound_name_noreplace(
             directory,
@@ -12249,27 +12800,42 @@ def retire_stale_f119_packet(
             "retired stale F119 draft packet",
             expected_identity=moved,
         )
+        retired_expectation.identity = moved
         require_parent_path_bound(
             target.parent, directory, parent_profile, "F119 packet retirement"
         )
         authenticate_mutation_lock(mutation_lock)
         try:
-            require_f119_install_namespace_barrier(
-                root, mutation_lock, "F119 action-immediate post-retirement barrier"
+            close_install(
+                "F119 action-immediate post-retirement barrier",
+                (retired_expectation,),
             )
         except BaseException:
             restore_retired_f119_packet(
-                target, retired, payload, moved, mutation_lock
+                target,
+                retired,
+                payload,
+                moved,
+                mutation_lock,
+                mutation_authority,
             )
             raise
     try:
-        require_f119_install_namespace_barrier(
-            root, mutation_lock, "F119 post-retirement barrier"
+        close_install(
+            "F119 post-retirement barrier",
+            (retired_expectation,),
         )
     except BaseException:
-        restore_retired_f119_packet(target, retired, payload, moved, mutation_lock)
+        restore_retired_f119_packet(
+            target,
+            retired,
+            payload,
+            moved,
+            mutation_lock,
+            mutation_authority,
+        )
         raise
-    return retired
+    return retired_expectation
 
 
 def locked_install_draft_packet(
@@ -12326,24 +12892,78 @@ def locked_install_draft_packet(
         )
         validate_f119_draft_packet(root, repository, packet, tracker)
         tracker.reauthenticate_all()
-        require_f119_install_namespace_barrier(
-            root, mutation_lock, "F119 pre-install barrier"
+        action_closure = f119_action_closure(
+            root, repository, packet, mutation_lock
         )
+    else:
+        action_closure = None
     target = paths["packet"]
+    packet_expectation = F119NamespaceFile(
+        target,
+        packet_payload,
+        0o644,
+        "managed F119 recost request draft packet",
+    )
     retired = None
     if expected_checkpoint == F119_CHECKPOINT:
         retired = retire_stale_f119_packet(
-            root, repository, target, packet_payload, mutation_lock
+            root,
+            repository,
+            target,
+            packet_payload,
+            mutation_lock,
+            action_closure,
         )
         try:
-            require_f119_install_namespace_barrier(
-                root, mutation_lock, "F119 pre-publication barrier"
+            assert action_closure is not None
+            action_closure.close_install(
+                "F119 pre-publication barrier",
+                (() if retired is None else (retired,)),
+                (
+                    (packet_expectation,)
+                    if retired is None
+                    else (packet_expectation, retired)
+                ),
             )
         except BaseException:
             if retired is not None:
-                restore_retired_f119_path(target, retired, mutation_lock)
+                restore_retired_f119_path(
+                    target,
+                    retired.path,
+                    mutation_lock,
+                    action_closure.authenticate_authority,
+                )
             raise
     publication_label = f"managed {expected_checkpoint} recost request draft packet"
+    f119_pre_or_post_publication_barrier: Callable[[], None] | None = None
+    f119_publication_state_barrier: (
+        Callable[
+            [tuple[tuple[Path, bytes, int, str, os.stat_result], ...]], None
+        ]
+        | None
+    ) = None
+    if action_closure is not None:
+        f119_pre_or_post_publication_barrier = lambda: action_closure.close_install(
+            "F119 action-immediate publication barrier",
+            (() if retired is None else (retired,)),
+            (
+                (packet_expectation,)
+                if retired is None
+                else (packet_expectation, retired)
+            ),
+        )
+        f119_publication_state_barrier = (
+            lambda private_state: action_closure.close_install_publication_state(
+                "F119 action-immediate in-flight publication barrier",
+                private_state,
+                (() if retired is None else (retired,)),
+                (
+                    (packet_expectation,)
+                    if retired is None
+                    else (packet_expectation, retired)
+                ),
+            )
+        )
     try:
         created = write_exact_or_verify(
             target,
@@ -12351,44 +12971,68 @@ def locked_install_draft_packet(
             mode=0o644,
             label=publication_label,
             mutation_lock=mutation_lock,
-            publication_barrier=(
-                (
-                    lambda: require_f119_install_namespace_barrier(
-                        root, mutation_lock, "F119 action-immediate publication barrier"
-                    )
-                )
-                if expected_checkpoint == F119_CHECKPOINT
+            publication_barrier=f119_pre_or_post_publication_barrier,
+            publication_state_barrier=f119_publication_state_barrier,
+            mutation_authority=(
+                action_closure.authenticate_authority
+                if action_closure is not None
                 else None
             ),
         )
     except BaseException:
         if retired is not None:
-            restore_retired_f119_path(target, retired, mutation_lock)
+            assert action_closure is not None
+            restore_retired_f119_path(
+                target,
+                retired.path,
+                mutation_lock,
+                action_closure.authenticate_authority,
+            )
         raise
     try:
         if expected_checkpoint == F119_CHECKPOINT:
-            require_f119_install_namespace_barrier(
-                root, mutation_lock, "F119 post-publication barrier"
+            assert action_closure is not None
+            action_closure.close_install(
+                "F119 post-publication barrier",
+                (
+                    (packet_expectation,)
+                    if retired is None
+                    else (packet_expectation, retired)
+                ),
             )
         require_empty_transaction_stores(root)
         require_drained_queue(args, root)
         tracker.reauthenticate_all()
         authenticate_mutation_lock(mutation_lock)
         if expected_checkpoint == F119_CHECKPOINT:
-            require_f119_install_namespace_barrier(
-                root, mutation_lock, "F119 final install return barrier"
+            assert action_closure is not None
+            action_closure.close_install(
+                "F119 final install return barrier",
+                (
+                    (packet_expectation,)
+                    if retired is None
+                    else (packet_expectation, retired)
+                ),
             )
     except BaseException:
         if expected_checkpoint == F119_CHECKPOINT and created:
+            assert action_closure is not None
             retain_exact_publication_for_retry(
                 target,
                 packet_payload,
                 mode=0o644,
                 label=publication_label,
                 mutation_lock=mutation_lock,
+                mutation_authority=action_closure.authenticate_authority,
             )
         if retired is not None:
-            restore_retired_f119_path(target, retired, mutation_lock)
+            assert action_closure is not None
+            restore_retired_f119_path(
+                target,
+                retired.path,
+                mutation_lock,
+                action_closure.authenticate_authority,
+            )
         raise
     next_action = [
         str(source_path),
@@ -12417,7 +13061,7 @@ def locked_install_draft_packet(
                 "no_clobber": True,
                 "exact_existing_copy_verified": not created,
                 "authenticated_retired_predecessor": (
-                    str(retired) if retired is not None else None
+                    str(retired.path) if retired is not None else None
                 ),
                 "next_action": next_action,
             },
@@ -12494,13 +13138,28 @@ def locked_draft_request(
     assert isinstance(inputs, dict)
 
     f119_publication_barrier: Callable[[], None] | None = None
+    f119_publication_state_barrier: (
+        Callable[
+            [tuple[tuple[Path, bytes, int, str, os.stat_result], ...]], None
+        ]
+        | None
+    ) = None
+    action_closure: F119ActionClosure | None = None
+    packet_expectation: F119NamespaceFile | None = None
     if packet["checkpoint"] == F119_CHECKPOINT:
-        f119_publication_barrier = lambda: require_f119_draft_namespace_barrier(
-            root, mutation_lock, "F119 draft-request publication barrier"
-        )
-        f119_publication_barrier()
         validate_f119_draft_packet(root, repository, packet, tracker)
-        f119_publication_barrier()
+        action_closure = f119_action_closure(
+            root, repository, packet, mutation_lock
+        )
+        packet_expectation = F119NamespaceFile(
+            packet_path,
+            packet_payload,
+            0o644,
+            "canonical F119 recost request draft packet",
+        )
+        action_closure.close_draft(
+            "F119 draft-request initial closure", (packet_expectation,)
+        )
     else:
         preflight_draft_authority_and_predecessor(root, repository, packet, tracker)
 
@@ -12665,6 +13324,48 @@ def locked_draft_request(
     )
     request_payload = stable_json_bytes(request)
     parse_request(request_payload)
+    reconciliation_expectation = F119NamespaceFile(
+        paths["reconciliation"],
+        reconcile_payload,
+        0o644,
+        "draft reconciliation evidence",
+    )
+    storage_expectation = F119NamespaceFile(
+        paths["storage"],
+        storage_payload,
+        0o644,
+        "draft storage evidence",
+    )
+    request_expectation = F119NamespaceFile(
+        paths["request"],
+        request_payload,
+        0o644,
+        "schema-2 recost request draft",
+    )
+    f119_draft_variants: tuple[tuple[F119NamespaceFile, ...], ...] = ()
+    if action_closure is not None:
+        assert packet_expectation is not None
+        f119_draft_variants = (
+            (packet_expectation,),
+            (packet_expectation, reconciliation_expectation),
+            (packet_expectation, reconciliation_expectation, storage_expectation),
+            (
+                packet_expectation,
+                reconciliation_expectation,
+                storage_expectation,
+                request_expectation,
+            ),
+        )
+        f119_publication_barrier = lambda: action_closure.close_draft(
+            "F119 draft-request publication barrier", *f119_draft_variants
+        )
+        f119_publication_state_barrier = (
+            lambda private_state: action_closure.close_draft_publication_state(
+                "F119 draft-request in-flight publication barrier",
+                private_state,
+                *f119_draft_variants,
+            )
+        )
 
     build_args = argparse.Namespace(**vars(args))
     build_args.request = paths["request"]
@@ -12711,7 +13412,18 @@ def locked_draft_request(
         publications,
         mutation_lock=mutation_lock,
         publication_barrier=f119_publication_barrier,
+        publication_state_barrier=f119_publication_state_barrier,
+        mutation_authority=(
+            action_closure.authenticate_authority
+            if action_closure is not None
+            else None
+        ),
     )
+    if action_closure is not None:
+        action_closure.close_draft(
+            "F119 final draft-request return closure",
+            f119_draft_variants[-1],
+        )
     generation_command = [
         sys.executable,
         str(source_path),
