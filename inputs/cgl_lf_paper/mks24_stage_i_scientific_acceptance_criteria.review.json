@@ -1,11 +1,11 @@
 {
   "acceptance_utility": {
     "path": "scripts/frontier/cgl_lf_stage_i_scientific_acceptance.py",
-    "sha256": "c73bd588e0b0dc0affaba83b539d56fbbfe67fb60bd2861966d26b1497d07ed9"
+    "sha256": "e3fd1e8d8e5f3bc44e4df1431b8c23ab6db66543dfea8ca9c582b1a327a7110e"
   },
   "criteria": {
     "path": "inputs/cgl_lf_paper/mks24_stage_i_scientific_acceptance_criteria.json",
-    "sha256": "b544d5584b2076b126bc5318449ea033ce7071cb6fe6c3aa0881f2c3c744c954"
+    "sha256": "f26c13d0758fac65317d58020e434e857780a58bbf538e0923578c73cb65d12c"
   },
   "identity_limitation": "Reviewer identity and process independence are declared evidence, not cryptographically proven.",
   "method_revision": {
@@ -30,10 +30,15 @@
   },
   "non_authorizing_statement": "This candidate is scientific assessment evidence only and does not authorize simulation execution, canonical publication, or Stage I release.",
   "record_type": "stage-i-scientific-acceptance-criteria-review",
+  "remaining_review_requirements": [],
   "replay_tool_promotion_review": {
     "acceptance_utility": {
       "path": "scripts/frontier/cgl_lf_stage_i_scientific_acceptance.py",
-      "sha256": "c73bd588e0b0dc0affaba83b539d56fbbfe67fb60bd2861966d26b1497d07ed9"
+      "sha256": "e3fd1e8d8e5f3bc44e4df1431b8c23ab6db66543dfea8ca9c582b1a327a7110e"
+    },
+    "athena_binary_parser": {
+      "path": "vis/python/bin_convert.py",
+      "sha256": "a4a627f0ec1b69c4a289933904d08560ecd7c9d7550054efbbb2067dcef94e2c"
     },
     "ct_inventory_builder": {
       "path": "scripts/frontier/cgl_lf_stage_i_ct_inventory.py",
@@ -42,6 +47,7 @@
     "decision": "approved",
     "required_checks": [
       "The acceptance utility invokes the exact bound scientific-products generator replay verifier and rejects any non-identical replay.",
+      "The scientific-products generator verifies and executes only the exact bound Athena binary parser bytes before any parser import or use.",
       "The acceptance utility invokes the exact bound CT inventory builder and rejects any inventory not exactly reconstructed from its bound accepted bundle.",
       "The immutable reviewed F116 source-authority baseline remains valid, and any changed live source catalog requires the exact published F118 successor chain.",
       "All replay and catalog-selection behavior remains non-authorizing and fails closed."
@@ -49,14 +55,18 @@
     "review_status": "approved",
     "reviewer": {
       "independent_of_implementation": true,
-      "reviewer_id": "019e9ba3-4e89-7b52-92ef-dd9df89f1aab",
+      "reviewer_id": "codex-independent-scientific-replay-security-74cb129d5-20260606",
       "role": "scientific_replay_security"
     },
     "scientific_products_generator": {
       "path": "scripts/frontier/cgl_lf_stage_i_scientific_products.py",
-      "sha256": "39dab2b3d5b3a0081d4fa77b9af555a5703894f5af52a712b8fa452a56c10672"
+      "sha256": "86fb64bff055dc1c00bfed5e16536824ac72567c76acf8a6fb88c1884cbc41ef"
     }
   },
+  "required_review_roles": [
+    "plasma_physics",
+    "statistical_methodology"
+  ],
   "retained_ct_observation": {
     "approval_identity_available": false,
     "case_id": "R02",
@@ -68,11 +78,6 @@
     "state_time": 10.0,
     "status": "retained_observation_not_criteria_approval"
   },
-  "required_review_roles": [
-    "plasma_physics",
-    "statistical_methodology"
-  ],
-  "remaining_review_requirements": [],
   "review_status": "approved",
   "reviews": [
     {
@@ -88,6 +93,141 @@
       "role": "statistical_methodology"
     }
   ],
-  "scientific_review_scope": "The retained plasma-physics and statistical-methodology approvals apply only to the unchanged scientific thresholds, windows, gates, and prospective t=12 rule. Exact replay-tool and source-catalog promotion mechanics require the separate replay_tool_promotion_review below.",
-  "schema_version": 1
+  "schema_version": 1,
+  "scientific_products_method_review": {
+    "approvals": [
+      {
+        "bindings": {
+          "acceptance_utility": {
+            "path": "scripts/frontier/cgl_lf_stage_i_scientific_acceptance.py",
+            "sha256": "e3fd1e8d8e5f3bc44e4df1431b8c23ab6db66543dfea8ca9c582b1a327a7110e"
+          },
+          "athena_binary_parser": {
+            "path": "vis/python/bin_convert.py",
+            "sha256": "a4a627f0ec1b69c4a289933904d08560ecd7c9d7550054efbbb2067dcef94e2c"
+          },
+          "criteria": {
+            "path": "inputs/cgl_lf_paper/mks24_stage_i_scientific_acceptance_criteria.json",
+            "sha256": "f26c13d0758fac65317d58020e434e857780a58bbf538e0923578c73cb65d12c"
+          },
+          "method_revision": {
+            "digest_method": "sha256-canonical-json-v1",
+            "revision_id": "pressure-transfer-and-local-field-eddy-anisotropy-v1",
+            "sha256": "ffa45e8cb394e4d189bbf96178735e02cf37b58061326291c744c2ac5a33fc34"
+          },
+          "scientific_products_generator": {
+            "path": "scripts/frontier/cgl_lf_stage_i_scientific_products.py",
+            "sha256": "86fb64bff055dc1c00bfed5e16536824ac72567c76acf8a6fb88c1884cbc41ef"
+          }
+        },
+        "decision": "approved",
+        "independent_of_implementation": true,
+        "reviewer_id": "019e9c5d-8598-7cb3-857a-87e95edd6201",
+        "role": "plasma_physics",
+        "scope": [
+          "Pressure-transfer physical definition, Delta-p sign, perpendicular-shell partition, normalization, temporal aggregation, and passive-case diagnostic semantics.",
+          "Local-field eddy-anisotropy physical definition, local-field conditioning, perpendicular-vector projection, and equal-power scale inversion."
+        ]
+      },
+      {
+        "bindings": {
+          "acceptance_utility": {
+            "path": "scripts/frontier/cgl_lf_stage_i_scientific_acceptance.py",
+            "sha256": "e3fd1e8d8e5f3bc44e4df1431b8c23ab6db66543dfea8ca9c582b1a327a7110e"
+          },
+          "athena_binary_parser": {
+            "path": "vis/python/bin_convert.py",
+            "sha256": "a4a627f0ec1b69c4a289933904d08560ecd7c9d7550054efbbb2067dcef94e2c"
+          },
+          "criteria": {
+            "path": "inputs/cgl_lf_paper/mks24_stage_i_scientific_acceptance_criteria.json",
+            "sha256": "f26c13d0758fac65317d58020e434e857780a58bbf538e0923578c73cb65d12c"
+          },
+          "method_revision": {
+            "digest_method": "sha256-canonical-json-v1",
+            "revision_id": "pressure-transfer-and-local-field-eddy-anisotropy-v1",
+            "sha256": "ffa45e8cb394e4d189bbf96178735e02cf37b58061326291c744c2ac5a33fc34"
+          },
+          "scientific_products_generator": {
+            "path": "scripts/frontier/cgl_lf_stage_i_scientific_products.py",
+            "sha256": "86fb64bff055dc1c00bfed5e16536824ac72567c76acf8a6fb88c1884cbc41ef"
+          }
+        },
+        "decision": "approved",
+        "independent_of_implementation": true,
+        "reviewer_id": "codex-statistical-methodology-310b645b3-20260606",
+        "role": "statistical_methodology",
+        "scope": [
+          "Pressure-transfer per-snapshot normalization and temporal aggregation.",
+          "Local-field eddy-anisotropy deterministic sampling controls, separation binning, sample-count weighting, equal-power inversion, and statistical sufficiency."
+        ]
+      },
+      {
+        "bindings": {
+          "acceptance_utility": {
+            "path": "scripts/frontier/cgl_lf_stage_i_scientific_acceptance.py",
+            "sha256": "e3fd1e8d8e5f3bc44e4df1431b8c23ab6db66543dfea8ca9c582b1a327a7110e"
+          },
+          "athena_binary_parser": {
+            "path": "vis/python/bin_convert.py",
+            "sha256": "a4a627f0ec1b69c4a289933904d08560ecd7c9d7550054efbbb2067dcef94e2c"
+          },
+          "criteria": {
+            "path": "inputs/cgl_lf_paper/mks24_stage_i_scientific_acceptance_criteria.json",
+            "sha256": "f26c13d0758fac65317d58020e434e857780a58bbf538e0923578c73cb65d12c"
+          },
+          "method_revision": {
+            "digest_method": "sha256-canonical-json-v1",
+            "revision_id": "pressure-transfer-and-local-field-eddy-anisotropy-v1",
+            "sha256": "ffa45e8cb394e4d189bbf96178735e02cf37b58061326291c744c2ac5a33fc34"
+          },
+          "scientific_products_generator": {
+            "path": "scripts/frontier/cgl_lf_stage_i_scientific_products.py",
+            "sha256": "86fb64bff055dc1c00bfed5e16536824ac72567c76acf8a6fb88c1884cbc41ef"
+          }
+        },
+        "decision": "approved",
+        "independent_of_implementation": true,
+        "reviewer_id": "codex-independent-scientific-replay-security-74cb129d5-20260606",
+        "role": "scientific_replay_security",
+        "scope": [
+          "Exact scientific-products method-revision digest and criteria, acceptance-utility, generator, and Athena binary-parser bindings.",
+          "Deterministic replay and fail-closed rejection of missing, changed, extra, or unapproved method-review fields, replay requests, and runtime source dependencies."
+        ]
+      }
+    ],
+    "bindings": {
+      "acceptance_utility": {
+        "path": "scripts/frontier/cgl_lf_stage_i_scientific_acceptance.py",
+        "sha256": "e3fd1e8d8e5f3bc44e4df1431b8c23ab6db66543dfea8ca9c582b1a327a7110e"
+      },
+      "athena_binary_parser": {
+        "path": "vis/python/bin_convert.py",
+        "sha256": "a4a627f0ec1b69c4a289933904d08560ecd7c9d7550054efbbb2067dcef94e2c"
+      },
+      "criteria": {
+        "path": "inputs/cgl_lf_paper/mks24_stage_i_scientific_acceptance_criteria.json",
+        "sha256": "f26c13d0758fac65317d58020e434e857780a58bbf538e0923578c73cb65d12c"
+      },
+      "method_revision": {
+        "digest_method": "sha256-canonical-json-v1",
+        "revision_id": "pressure-transfer-and-local-field-eddy-anisotropy-v1",
+        "sha256": "ffa45e8cb394e4d189bbf96178735e02cf37b58061326291c744c2ac5a33fc34"
+      },
+      "scientific_products_generator": {
+        "path": "scripts/frontier/cgl_lf_stage_i_scientific_products.py",
+        "sha256": "86fb64bff055dc1c00bfed5e16536824ac72567c76acf8a6fb88c1884cbc41ef"
+      }
+    },
+    "decision": "approved",
+    "record_type": "stage-i-scientific-products-method-review",
+    "required_review_roles": [
+      "plasma_physics",
+      "statistical_methodology",
+      "scientific_replay_security"
+    ],
+    "review_status": "approved",
+    "schema_version": 1
+  },
+  "scientific_review_scope": "The retained plasma-physics and statistical-methodology approvals apply only to the unchanged scientific thresholds, windows, gates, and prospective t=12 rule. Exact replay-tool and source-catalog promotion mechanics require the separate replay_tool_promotion_review below."
 }

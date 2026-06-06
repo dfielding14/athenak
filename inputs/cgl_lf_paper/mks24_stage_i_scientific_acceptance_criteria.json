@@ -221,12 +221,12 @@
       9,
       10
     ],
+    "restart_format": "AthenaK native little-endian binary64 rank-local CGL restart, uniform non-AMR three-dimensional mesh, exact accepted-inspection multi-state inventory-bound siblings",
     "reviewed_inventory_builder_binding": {
       "path": "scripts/frontier/cgl_lf_stage_i_ct_inventory.py",
       "sha256": "01dc383e88ed40236c839448df276533dfc4e024e7549adbbf29587eda4abade",
       "status": "exact_replay_tool_bound"
-    },
-    "restart_format": "AthenaK native little-endian binary64 rank-local CGL restart, uniform non-AMR three-dimensional mesh, exact accepted-inspection multi-state inventory-bound siblings"
+    }
   },
   "extension_policy": {
     "current_policy_authorizes_extension": false,
@@ -267,16 +267,6 @@
         ]
       },
       "authorization": "requires a separately approved non-retrospective criteria artifact and unchanged production authorization",
-      "maximum_extensions": 1,
-      "minimum_effective_samples": {
-        "comparison": 2.0,
-        "full": 3.0
-      },
-      "minimum_independent_time_blocks": {
-        "comparison": 2.0,
-        "full": 3.0
-      },
-      "nominated_endpoint": 12.0,
       "fixed_combination_rule": {
         "all_other_t10_results": "unchanged",
         "eligible_t10_case_result": "inconclusive",
@@ -288,6 +278,16 @@
         "preserved_t10_evidence": "exact digest remains immutable and separately reportable",
         "replaceable_result": "only nominated sampling-inconclusive stationarity gates"
       },
+      "maximum_extensions": 1,
+      "minimum_effective_samples": {
+        "comparison": 2.0,
+        "full": 3.0
+      },
+      "minimum_independent_time_blocks": {
+        "comparison": 2.0,
+        "full": 3.0
+      },
+      "nominated_endpoint": 12.0,
       "required_prospective_artifact": {
         "approval_timing": "independently approved before extension execution and before t>10 outcomes exist",
         "record_type": "stage-i-scientific-stationarity-extension-prospective-artifact",
@@ -410,6 +410,7 @@
     }
   },
   "non_authorizing_statement": "This candidate is scientific assessment evidence only and does not authorize simulation execution, canonical publication, or Stage I release.",
+  "record_type": "stage-i-scientific-acceptance-criteria",
   "required_cases": [
     "R02",
     "R03",
@@ -469,30 +470,65 @@
     },
     "reviewed_generator_binding": {
       "path": "scripts/frontier/cgl_lf_stage_i_scientific_products.py",
-      "sha256": "39dab2b3d5b3a0081d4fa77b9af555a5703894f5af52a712b8fa452a56c10672",
+      "sha256": "86fb64bff055dc1c00bfed5e16536824ac72567c76acf8a6fb88c1884cbc41ef",
       "status": "exact_replay_tool_bound"
-    }
-  },
-  "source_catalog_policy": {
-    "baseline_catalog": {
-      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/source-archives/SHA256SUMS",
-      "sha256": "a4732ea46003dc39d83591beaf93f5fe475dddf054c2eb57f76bda108fa80854"
     },
-    "baseline_checkpoint": "F-116",
-    "invalid_or_uncommitted_successor": "fail_closed",
-    "selection_rule": "immutable-reviewed-f116-baseline-or-exact-published-f118-successor",
-    "successor_checkpoint": "F-118",
-    "successor_paths": {
-      "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/accounting/mks24_stage_i_E03_forcing_policy_F118_current_source_authority_supersession_evidence.json",
-      "plasma_review": "/lustre/orion/ast207/proj-shared/dfielding/CGL/accounting/mks24_stage_i_E03_forcing_policy_F118_current_source_authority_supersession_evidence.json.plasma_scientific_review.json",
-      "provenance_review": "/lustre/orion/ast207/proj-shared/dfielding/CGL/accounting/mks24_stage_i_E03_forcing_policy_F118_current_source_authority_supersession_evidence.json.provenance_security_review.json",
-      "publication_audit": "/lustre/orion/ast207/proj-shared/dfielding/CGL/accounting/mks24_stage_i_E03_forcing_policy_F118_current_source_authority_supersession_evidence.json.publication_audit.json"
+    "reviewed_method_revision": {
+      "athena_binary_parser": {
+        "path": "vis/python/bin_convert.py",
+        "sha256": "a4a627f0ec1b69c4a289933904d08560ecd7c9d7550054efbbb2067dcef94e2c"
+      },
+      "immutability": "canonical-json-sha256-bound-by-scoped-independent-reviews",
+      "methods": {
+        "local_field_eddy_anisotropy": {
+          "admitted_products": [
+            "eddy_anisotropy.velocity_perp",
+            "eddy_anisotropy.magnetic_perp"
+          ],
+          "angle_degrees": 15.0,
+          "bins": 24,
+          "bit_generator": "numpy.random.PCG64",
+          "definition": "solve S2(phi; ell_perp) = S2(phi; ell_parallel), where S2 = <|phi(x+ell) - 2 phi(x) + phi(x-ell)|^2>",
+          "ensemble_aggregation": "sample-count-weighted parallel and perpendicular structure functions followed by equal-power scale inversion",
+          "equal_power_inversion": "log-log interpolation on the strictly increasing parallel structure-function branch at common perpendicular structure-function power",
+          "local_field_conditioning": "three-point local mean magnetic field; separation vectors within 15 degrees of parallel or perpendicular",
+          "normalization": "ell_perp and ell_parallel divided by L_perp = sqrt(Lx Ly)",
+          "perpendicular_vector_projection": "velocity and magnetic vectors projected perpendicular to the three-point local magnetic field before the second-order increment",
+          "samples_per_snapshot": 2000000,
+          "seed": 731,
+          "separation_sampling": "deterministic NumPy PCG64 random lattice separations logarithmically balanced over normalized separation bins"
+        },
+        "pressure_transfer": {
+          "admitted_products": [
+            "pressure_transfer.transfer",
+            "pressure_transfer.transfer_normalized_by_total"
+          ],
+          "definition": "integral <sqrt(rho) u>_k dot [(B/sqrt(rho)) dot grad ((Delta p/B^2) B)] over each perpendicular Fourier shell",
+          "delta_p_definition": "Delta p = p_perp - p_parallel",
+          "normalization": "per-snapshot T_total = E_K (2 pi u_rms / L_perp), with E_K = integral[0.5 rho |u|^2] dV, u_rms = sqrt(<|u|^2>), and L_perp = sqrt(Lx Ly)",
+          "passive_case_semantics": "pressure-anisotropy transfer remains a diagnostic comparison when anisotropic pressure work is not applied to the flow",
+          "perpendicular_shell_partition": "floor(k_perp/dk + 1e-12), with dk = 2 pi / L_parallel",
+          "spatial_discretization": "second-order centered periodic real-space gradients and a full three-dimensional FFT Parseval cross-spectrum",
+          "temporal_aggregation": "arithmetic mean of per-snapshot shell transfer and per-snapshot normalized transfer"
+        }
+      },
+      "revision_id": "pressure-transfer-and-local-field-eddy-anisotropy-v1",
+      "schema_version": 1,
+      "scientific_products_generator": {
+        "path": "scripts/frontier/cgl_lf_stage_i_scientific_products.py",
+        "sha256": "86fb64bff055dc1c00bfed5e16536824ac72567c76acf8a6fb88c1884cbc41ef"
+      },
+      "status": "exact_method_contract_declared"
     }
   },
   "source_bindings": {
     "acceptance_utility": {
       "path": "scripts/frontier/cgl_lf_stage_i_scientific_acceptance.py",
-      "sha256": "c73bd588e0b0dc0affaba83b539d56fbbfe67fb60bd2861966d26b1497d07ed9"
+      "sha256": "e3fd1e8d8e5f3bc44e4df1431b8c23ab6db66543dfea8ca9c582b1a327a7110e"
+    },
+    "athena_binary_parser": {
+      "path": "vis/python/bin_convert.py",
+      "sha256": "a4a627f0ec1b69c4a289933904d08560ecd7c9d7550054efbbb2067dcef94e2c"
     },
     "ct_inventory_builder": {
       "path": "scripts/frontier/cgl_lf_stage_i_ct_inventory.py",
@@ -524,7 +560,7 @@
     },
     "scientific_products_generator": {
       "path": "scripts/frontier/cgl_lf_stage_i_scientific_products.py",
-      "sha256": "39dab2b3d5b3a0081d4fa77b9af555a5703894f5af52a712b8fa452a56c10672"
+      "sha256": "86fb64bff055dc1c00bfed5e16536824ac72567c76acf8a6fb88c1884cbc41ef"
     },
     "stage_i_manifest": {
       "path": "inputs/cgl_lf_paper/mks24_stage_i_manifest.json",
@@ -533,6 +569,22 @@
     "verified_reference_archive_manifest": {
       "path": "build-cgl-implementation/cgl_lf_reference/arXiv-2405.02418v2-verified/manifest.json",
       "sha256": "087837deeb79d0110ea97bdb522b48a79f835732deecf14cd41318f272d9e8d2"
+    }
+  },
+  "source_catalog_policy": {
+    "baseline_catalog": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/source-archives/SHA256SUMS",
+      "sha256": "a4732ea46003dc39d83591beaf93f5fe475dddf054c2eb57f76bda108fa80854"
+    },
+    "baseline_checkpoint": "F-116",
+    "invalid_or_uncommitted_successor": "fail_closed",
+    "selection_rule": "immutable-reviewed-f116-baseline-or-exact-published-f118-successor",
+    "successor_checkpoint": "F-118",
+    "successor_paths": {
+      "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/accounting/mks24_stage_i_E03_forcing_policy_F118_current_source_authority_supersession_evidence.json",
+      "plasma_review": "/lustre/orion/ast207/proj-shared/dfielding/CGL/accounting/mks24_stage_i_E03_forcing_policy_F118_current_source_authority_supersession_evidence.json.plasma_scientific_review.json",
+      "provenance_review": "/lustre/orion/ast207/proj-shared/dfielding/CGL/accounting/mks24_stage_i_E03_forcing_policy_F118_current_source_authority_supersession_evidence.json.provenance_security_review.json",
+      "publication_audit": "/lustre/orion/ast207/proj-shared/dfielding/CGL/accounting/mks24_stage_i_E03_forcing_policy_F118_current_source_authority_supersession_evidence.json.publication_audit.json"
     }
   },
   "statistics_policy": {
@@ -562,6 +614,5 @@
     "time_average": "endpoint-clipped-trapezoidal",
     "uncertainty": "deterministic-time-moving-block-bootstrap",
     "uncertainty_block_duration": "maximum of estimated integrated autocorrelation duration, retained cadence, and authenticated forcing_tcorr"
-  },
-  "record_type": "stage-i-scientific-acceptance-criteria"
+  }
 }
