@@ -44,21 +44,24 @@ def _case(case_id: str) -> dict[str, object]:
 def _block_payload(
     case: dict[str, object],
     field: str,
-    logical_x1: int,
+    logical_location: tuple[int, int, int],
     *,
     values: np.ndarray,
 ) -> bytes:
     nx1, nx2, nx3 = (int(value) for value in case["meshblock_nx"])
     bounds = tuple(tuple(float(value) for value in item) for item in case["bounds"])
-    root_blocks_x1 = int(case["global_nx"][0]) // nx1
-    x1_width = (bounds[0][1] - bounds[0][0]) / root_blocks_x1
-    geometry = (
-        bounds[0][0] + logical_x1 * x1_width,
-        bounds[0][0] + (logical_x1 + 1) * x1_width,
-        bounds[1][0],
-        bounds[1][1],
-        bounds[2][0],
-        bounds[2][1],
+    meshblock_grid = tuple(int(value) for value in case["meshblock_grid"])
+    geometry = tuple(
+        bound
+        for axis, (lower, upper) in enumerate(bounds)
+        for bound in (
+            lower
+            + logical_location[axis] * (upper - lower) / meshblock_grid[axis],
+            lower
+            + (logical_location[axis] + 1)
+            * (upper - lower)
+            / meshblock_grid[axis],
+        )
     )
     expected_shape = (nx3, nx2, nx1)
     if values.shape != expected_shape:
@@ -70,9 +73,7 @@ def _block_payload(
         nx2 - 1,
         0,
         nx3 - 1,
-        logical_x1,
-        0,
-        0,
+        *logical_location,
         0,
     )
     return (
@@ -87,34 +88,18 @@ def _runtime_parameter_header(
     overrides: dict[tuple[str, str], str] | None = None,
 ) -> str:
     overrides = overrides or {}
-    pending = dict(overrides)
-    rendered = []
-    block: str | None = None
-    for line in oracle.render_oracle_deck(case).splitlines():
-        if line.startswith("<") and line.endswith(">"):
-            if block is not None:
-                for (candidate, key), value in list(pending.items()):
-                    if candidate == block:
-                        rendered.append(f"{key} = {value}")
-                        del pending[(candidate, key)]
-            block = line[1:-1]
-            rendered.append(line)
-            continue
-        if block is not None and "=" in line:
-            key = line.split("=", 1)[0].strip()
-            override = pending.pop((block, key), None)
-            if override is not None:
-                rendered.append(f"{key} = {override}")
-                continue
-        rendered.append(line)
-    if block is not None:
-        for (candidate, key), value in list(pending.items()):
-            if candidate == block:
-                rendered.append(f"{key} = {value}")
-                del pending[(candidate, key)]
-    if pending:
-        raise AssertionError(f"unknown runtime parameter override(s): {sorted(pending)}")
-    return "\n".join(rendered)
+    parameters = oracle.expected_runtime_parameters(case)
+    for (block, key), value in overrides.items():
+        if block not in parameters:
+            raise AssertionError(f"unknown runtime parameter block: {block}")
+        if key not in parameters[block] and key not in oracle.RUNTIME_OUTPUT_BOOKKEEPING_KEYS:
+            raise AssertionError(f"unknown runtime parameter override: {block}/{key}")
+        parameters[block][key] = value
+    return "\n".join(
+        line
+        for block, values in parameters.items()
+        for line in (f"<{block}>", *(f"{key} = {value}" for key, value in values.items()))
+    )
 
 
 def _binary_payload(
@@ -147,6 +132,17 @@ def _field_value(case: dict[str, object], field: str) -> float:
     return oracle.EXPECTED_J_OVER_C * basis[oracle.FIELDS.index(field) - 1]
 
 
+def _real_cycle_one_output_bookkeeping(field: str) -> dict[tuple[str, str], str]:
+    field_index = oracle.FIELDS.index(field) + 1
+    bookkeeping: dict[tuple[str, str], str] = {}
+    for output_index in range(1, len(oracle.FIELDS) + 1):
+        bookkeeping[(f"output{output_index}", "file_number")] = str(
+            1 if output_index <= field_index else 2
+        )
+        bookkeeping[(f"output{output_index}", "last_time")] = "0"
+    return bookkeeping
+
+
 def _write_raw_case(
     root: Path,
     case: dict[str, object],
@@ -159,8 +155,23 @@ def _write_raw_case(
     paths: dict[str, tuple[Path, ...]] = {}
     shard_count = int(case["mpi_ranks"])
     shape = tuple(reversed(tuple(int(value) for value in case["meshblock_nx"])))
+    blocks_x1, blocks_x2, blocks_x3 = (
+        int(value) for value in case["meshblock_grid"]
+    )
+    logical_locations = tuple(
+        (
+            shard % blocks_x1,
+            (shard // blocks_x1) % blocks_x2,
+            shard // (blocks_x1 * blocks_x2),
+        )
+        for shard in range(blocks_x1 * blocks_x2 * blocks_x3)
+    )
+    if len(logical_locations) != shard_count:
+        raise AssertionError("one-MeshBlock-per-rank fixture contract drifted")
     for field in oracle.FIELDS:
         field_paths = []
+        runtime_overrides = _real_cycle_one_output_bookkeeping(field)
+        runtime_overrides.update(parameter_overrides.get(field, {}))
         for shard in range(shard_count):
             values = np.full(shape, _field_value(case, field), dtype=np.float64)
             mutation = mutations.get((field, shard))
@@ -170,8 +181,8 @@ def _write_raw_case(
             payload = _binary_payload(
                 case,
                 field,
-                [_block_payload(case, field, shard, values=values)],
-                parameter_overrides=parameter_overrides.get(field),
+                [_block_payload(case, field, logical_locations[shard], values=values)],
+                parameter_overrides=runtime_overrides,
             )
             path = root / str(case["case_id"]) / field / f"rank{shard}.bin"
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -216,11 +227,14 @@ class Q043BellCurrentVolumeAwareDepositedCurrentOracleTests(unittest.TestCase):
 
     def test_exact_deck_matrix_derives_qscale_from_root_volume_and_ppc(self) -> None:
         cases = oracle.expected_cases()
-        self.assertEqual(len(cases), 72)
+        self.assertEqual(len(cases), 132)
         self.assertEqual({case["dimension"] for case in cases}, {1, 2, 3})
         self.assertEqual({case["resolution"] for case in cases}, {"coarse", "fine"})
         self.assertEqual({case["ppc"] for case in cases}, {1, 4})
-        self.assertEqual({case["decomposition"] for case in cases}, {"single", "split"})
+        self.assertEqual(
+            {case["decomposition"] for case in cases},
+            {"single", "split_x1", "split_x2", "split_x1x2", "split_x3", "split_xyz"},
+        )
         self.assertEqual(
             {case["artificial_c_over_v_cr"] for case in cases},
             {100, 1000, 10000},
@@ -245,9 +259,28 @@ class Q043BellCurrentVolumeAwareDepositedCurrentOracleTests(unittest.TestCase):
                 oracle.configured_volume_mean_j_over_c(case),
                 oracle.EXPECTED_J_OVER_C,
             )
-        for pair in grouped.values():
-            self.assertEqual(len(pair), 6)
+        for (dimension, _, _), pair in grouped.items():
+            self.assertEqual(
+                len(pair),
+                len(oracle.DECOMPOSITIONS_BY_DIMENSION[dimension])
+                * len(oracle.ARTIFICIAL_C_OVER_V_CR_VALUES),
+            )
             self.assertEqual({item["deposit_qscale"] for item in pair}, {pair[0]["deposit_qscale"]})
+        for case in cases:
+            self.assertEqual(
+                int(case["mpi_ranks"]),
+                math.prod(int(value) for value in case["meshblock_grid"]),
+            )
+            self.assertEqual(
+                tuple(int(value) for value in case["meshblock_nx"]),
+                tuple(
+                    int(count) // int(blocks)
+                    for count, blocks in zip(case["global_nx"], case["meshblock_grid"])
+                ),
+            )
+            self.assertTrue(
+                all(int(count) == 1 or int(count) >= 4 for count in case["meshblock_nx"])
+            )
 
     def test_artificial_c_and_species_mass_are_absent_from_deposited_current_formula(
         self,
@@ -352,10 +385,11 @@ class Q043BellCurrentVolumeAwareDepositedCurrentOracleTests(unittest.TestCase):
                 oracle.EXPECTED_J_OVER_C,
             )
 
-    def test_raw_single_and_split_cases_bind_provenance_and_pass_oracle(self) -> None:
+    def test_raw_single_and_multiaxis_cases_bind_provenance_and_pass_oracle(self) -> None:
         selected = (
             _case("q043-current-oracle-d1-coarse-ppc1-single-cvr100"),
-            _case("q043-current-oracle-d3-fine-ppc4-split-cvr10000"),
+            _case("q043-current-oracle-d2-coarse-ppc1-split_x2-cvr1000"),
+            _case("q043-current-oracle-d3-fine-ppc4-split_xyz-cvr10000"),
         )
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -390,11 +424,11 @@ class Q043BellCurrentVolumeAwareDepositedCurrentOracleTests(unittest.TestCase):
             report = oracle.analyze_raw_matrix(raw)
         self.assertTrue(report["source_local_oracle_check_pass"])
         self.assertFalse(report["passed"])
-        self.assertEqual(report["case_count"], 72)
+        self.assertEqual(report["case_count"], 132)
         self.assertEqual(report["dimensions_verified"], [1, 2, 3])
         self.assertEqual(report["resolutions_verified"], ["coarse", "fine"])
         self.assertEqual(report["ppc_verified"], [1, 4])
-        self.assertEqual(report["decompositions_verified"], ["single", "split"])
+        self.assertEqual(report["decompositions_verified"], list(oracle.DECOMPOSITIONS))
         self.assertEqual(report["artificial_c_over_v_cr_verified"], [100, 1000, 10000])
         self.assertEqual(report["required_output_cycle"], 1)
         self.assertEqual(report["output_dcycle"], 2)
@@ -409,39 +443,86 @@ class Q043BellCurrentVolumeAwareDepositedCurrentOracleTests(unittest.TestCase):
         with self.assertRaisesRegex(oracle.ContractError, "output contract drifted"):
             oracle.validate_rendered_deck(case, deck)
 
-    def test_real_runtime_output_bookkeeping_is_normalized_but_other_drift_fails(
+    def test_real_runtime_output_bookkeeping_is_validated_and_normalized(
         self,
     ) -> None:
         case = _case("q043-current-oracle-d1-coarse-ppc1-single-cvr1000")
-        bookkeeping = {}
-        for field_index, field in enumerate(oracle.FIELDS):
-            bookkeeping[field] = {
-                (f"output{output_index}", "file_number"): str(
-                    1 + int(output_index <= field_index + 1)
-                )
-                for output_index in range(1, len(oracle.FIELDS) + 1)
-            }
-            bookkeeping[field].update(
-                {
-                    (f"output{output_index}", "last_time"): str(field_index)
-                    for output_index in range(1, len(oracle.FIELDS) + 1)
-                }
-            )
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            paths = _write_raw_case(root / "bookkeeping", case, parameter_overrides=bookkeeping)
+            paths = _write_raw_case(root / "bookkeeping", case)
             report = oracle.analyze_raw_case(str(case["case_id"]), paths)
             self.assertTrue(report["source_local_oracle_check_pass"])
             self.assertEqual(
                 report["cross_field_runtime_metadata"],
-                "strict_after_normalizing_only_numbered_output_file_number_and_last_time",
+                oracle.RUNTIME_METADATA_CONTRACT,
             )
 
-            drift = copy.deepcopy(bookkeeping)
+            drift: dict[str, dict[tuple[str, str], str]] = {"prtcl_jz": {}}
             drift["prtcl_jz"][("output4", "ghost_zones")] = "true"
             paths = _write_raw_case(root / "drift", case, parameter_overrides=drift)
-            with self.assertRaisesRegex(oracle.ContractError, "raw field metadata disagrees"):
+            with self.assertRaisesRegex(oracle.ContractError, "immutable contract drifted"):
                 oracle.analyze_raw_case(str(case["case_id"]), paths)
+
+    def test_runtime_output_bookkeeping_rejects_malformed_or_impossible_states(
+        self,
+    ) -> None:
+        case = _case("q043-current-oracle-d1-coarse-ppc1-single-cvr1000")
+        failures = (
+            (
+                "malformed",
+                {"prtcl_jx": {("output1", "file_number"): "not-an-integer"}},
+                "file_number must be an integer",
+            ),
+            (
+                "noncanonical",
+                {"prtcl_jx": {("output1", "file_number"): "01"}},
+                "canonical non-negative integer",
+            ),
+            (
+                "impossible-progression",
+                {"prtcl_jx": {("output3", "file_number"): "1"}},
+                "sequential publication contract",
+            ),
+            (
+                "invalid-last-time",
+                {"prtcl_jx": {("output1", "last_time"): "0.0025"}},
+                "cycle-cadence publication contract",
+            ),
+            (
+                "common-mode-physics-drift",
+                {
+                    field: {("mhd", "gamma"): "9.0"}
+                    for field in oracle.FIELDS
+                },
+                "authoritative deck and frozen default contract",
+            ),
+            (
+                "common-mode-authority-drift",
+                {
+                    field: {
+                        ("q043_bell_current_volume_aware", "launch_authorized"): "true"
+                    }
+                    for field in oracle.FIELDS
+                },
+                "authoritative deck and frozen default contract",
+            ),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for label, overrides, message in failures:
+                with self.subTest(label=label):
+                    paths = _write_raw_case(
+                        root / label, case, parameter_overrides=overrides
+                    )
+                    with self.assertRaisesRegex(oracle.ContractError, message):
+                        oracle.analyze_raw_case(str(case["case_id"]), paths)
+
+        parameters = oracle.parse_athinput_text(oracle.render_oracle_deck(case))
+        parameters["output5"] = dict(parameters["output4"])
+        with self.assertRaisesRegex(oracle.ContractError, "output block inventory"):
+            oracle._normalized_runtime_parameters(
+                parameters, case=case, field="prtcl_rho"
+            )
 
     def test_transverse_current_and_spatial_nonuniformity_fail_closed(self) -> None:
         case = _case("q043-current-oracle-d1-coarse-ppc1-single-cvr1000")
@@ -479,7 +560,7 @@ class Q043BellCurrentVolumeAwareDepositedCurrentOracleTests(unittest.TestCase):
             with self.assertRaisesRegex(oracle.ContractError, "matrix is incomplete"):
                 oracle.analyze_raw_matrix(raw)
 
-            split = _case("q043-current-oracle-d2-coarse-ppc1-split-cvr1000")
+            split = _case("q043-current-oracle-d3-coarse-ppc1-split_xyz-cvr1000")
             split_paths = _write_raw_case(root / "split", split)
             split_paths["prtcl_jx"] = split_paths["prtcl_jx"][:1]
             with self.assertRaisesRegex(oracle.ContractError, "shard count"):
@@ -498,7 +579,18 @@ class Q043BellCurrentVolumeAwareDepositedCurrentOracleTests(unittest.TestCase):
         self.assertFalse(record["authority"]["launch_authorized"])
         self.assertFalse(record["authority"]["scientific_claim_authorized"])
         self.assertFalse(record["authority"]["publication_authorized"])
-        self.assertEqual(record["matrix_contract"]["case_count"], 72)
+        self.assertEqual(record["matrix_contract"]["case_count"], 132)
+        self.assertEqual(
+            record["matrix_contract"]["decompositions"],
+            list(oracle.DECOMPOSITIONS),
+        )
+        self.assertEqual(
+            record["matrix_contract"]["decompositions_by_dimension"],
+            {
+                str(dimension): list(oracle.DECOMPOSITIONS_BY_DIMENSION[dimension])
+                for dimension in oracle.DIMENSIONS
+            },
+        )
         self.assertEqual(
             record["normalization_contract"]["formula"],
             "PPC*deposit_qscale*species_charge*v_CR/V_root_cell=2*B_g*k0",
@@ -507,7 +599,7 @@ class Q043BellCurrentVolumeAwareDepositedCurrentOracleTests(unittest.TestCase):
         self.assertEqual(record["raw_output_oracle"]["output_dcycle"], 2)
         self.assertEqual(
             record["raw_output_oracle"]["cross_field_runtime_metadata"],
-            "strict_after_normalizing_only_numbered_output_file_number_and_last_time",
+            oracle.RUNTIME_METADATA_CONTRACT,
         )
         self.assertEqual(
             record["raw_output_oracle"]["initial_state"],

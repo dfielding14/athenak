@@ -17,6 +17,7 @@ int main(int argc, char **argv) {
   using q043_bell_current_volume_aware::HasRequiredDepositedJOverC;
   using q043_bell_current_volume_aware::HasRequiredSpeciesChargeOverMass;
   using q043_bell_current_volume_aware::ModeParameters;
+  using q043_bell_current_volume_aware::PositiveIntegralPPCIsValid;
   using q043_bell_current_volume_aware::RequiredDepositQScale;
   using q043_bell_current_volume_aware::RequiredDepositedJOverC;
   using q043_bell_current_volume_aware::RootCellVolume;
@@ -140,4 +141,10 @@ int main(int argc, char **argv) {
             << ' '
             << SourceModeSpeciesMassIsValid(SourceMode::corrected_linear_eigenmode, 1.0)
             << '\n';
+  std::cout << "ppc_contract "
+            << PositiveIntegralPPCIsValid(1.0) << ' '
+            << PositiveIntegralPPCIsValid(4.0) << ' '
+            << PositiveIntegralPPCIsValid(0.0) << ' '
+            << PositiveIntegralPPCIsValid(0.5) << ' '
+            << PositiveIntegralPPCIsValid(1.1) << '\n';
 }

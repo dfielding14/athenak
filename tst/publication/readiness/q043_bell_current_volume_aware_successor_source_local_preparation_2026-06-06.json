@@ -37,6 +37,8 @@
     "root_cell_volume_reason": "ppc-created particles represent particles per root cell and AthenaK moment deposition divides macro charge by cell volume",
     "artificial_light_speed_in_required_current": false,
     "meshblock_decomposition_in_required_current": false,
+    "multidirectional_MPI_oracle_requirement": "registered_cycle_one_raw_outputs_must_cover_x1_x2_x3_and_multiaxis_partitions",
+    "ppc_contract": "positive_integer_only_because_AthenaK_realizes_a_discrete_global_particle_count",
     "fixed_qscale_valid_across_dimensions_or_resolutions": false,
     "fixed_qscale_policy": "forbidden_across_dimensions_and_resolutions",
     "direct_deposited_current_outputs": [
@@ -119,23 +121,24 @@
     "src/pgen/AGENTS.md": "d76233e748027ae5b2fb666979221695fa4c7f219e8ea17f2afc298abe47529e",
     "src/pgen/pgen.cpp": "f6553d0e635e3a3c1a647614c9c8a813123e0bd59bb9f108eb2effac92345874",
     "src/pgen/pgen.hpp": "1ee1b72bf5c44adc672c776b2b4b053456f24e543b96367b8db123bea4800c5d",
-    "src/pgen/tests/q043_bell_current_volume_aware.cpp": "d3a6158dd4632c9c2774b035ecff6d5f4b0d6a32b5fbc4214afa25f08f8dcede",
+    "src/pgen/tests/q043_bell_current_volume_aware.cpp": "0b3a6803d1b0111d08c43e04be4e984c0afb9b031708cd469895c0e1ae1c3fcf",
     "tst/publication/analyze_q043_bell_current_volume_aware.py": "8a381d4f6075bc3a1b3987a802018a010ed8c34c22af2ec9e5b92f1c36a79d7e",
-    "tst/publication/q043_bell_current_volume_aware_host_harness.cpp": "be9d1c0fcf0a9741a941cb064cec0befe197b1e3b858e5f41e8d8ff56773f462",
-    "tst/publication/q043_bell_current_volume_aware_deposited_current_oracle.py": "4ff96d6310e27198f51c2bf1a2b9d6b48be8ac667f812a195531ba1813f01bb6",
+    "tst/publication/q043_bell_current_volume_aware_host_harness.cpp": "0ad9f2c559cffc5831e3a130af260154cd9c7d76eeb12aa26877c2d137db184a",
+    "tst/publication/q043_bell_current_volume_aware_deposited_current_oracle.py": "7d8f48b95f4b33d0ae1589631d54b127d318be255a48430ed90429f29e918ab7",
     "tst/publication/test_analyze_q043_bell_current_volume_aware.py": "6f27848d9d91c88eacf1f33084fc05d229fbf4359bef339d43986b05803cd43c",
-    "tst/publication/test_q043_bell_current_volume_aware_host_harness.py": "6b4877805594581d6a824e2b21e97a47307139ce4d20246893e4714e06eb9974",
-    "tst/publication/test_q043_bell_current_volume_aware_deposited_current_oracle.py": "685f60a22431060deb31c441eec88b83c6b7ee76b3d49c925ec475ee34ddf213",
-    "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/deck_manifest.json": "140d0821dc60bd7b197d7d25527bce6044ce9e29f016c50f91c04d24a8bbe81b",
-    "tst/publication/readiness/q043_bell_current_volume_aware_deposited_current_oracle_source_local_2026-06-06.json": "b494894109e9331a27c9e0c08cfcc4326694bb9c008578a4a2acfdced15207d8",
-    "tst/publication/readiness/q043_bell_current_normalization_supersession_2026-06-06.json": "ebf8130cf85a8caff8e6e53f3b7dd8fbe16ff74349452b3152e2c080a3d74c31",
-    "tst/publication/test_q043_bell_current_normalization_supersession.py": "e8320dba50ee709e10ea4eea6d7ab7856865145e4cb014da89b11eaeb133568f"
+    "tst/publication/test_q043_bell_current_volume_aware_host_harness.py": "800f43cdfbe61aee5db930fe475a9e57dda5d241901e4f8134eea67e267f602d",
+    "tst/publication/test_q043_bell_current_volume_aware_deposited_current_oracle.py": "20e971c7c528486398eaae2fe3db5e2cda7bb2c4ae697850e04766bb4a40f471",
+    "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/deck_manifest.json": "77d6ec862314d308c41490dde1137f6c384d1da24b6b72ad43e357545cff98b0",
+    "tst/publication/readiness/q043_bell_current_volume_aware_deposited_current_oracle_source_local_2026-06-06.json": "829c65184f89a445c6708e5cedae770f29d04f06d19031dfb453677de241e046",
+    "tst/publication/readiness/q043_bell_current_normalization_supersession_2026-06-06.json": "2f83afc03e83038db168fed7d40bdc85bc7bca1eccbba52d18ede0d319dce342",
+    "tst/publication/test_q043_bell_current_normalization_supersession.py": "8abcc79548a66ce11984219e52953956eafbfd7b862cdebe458ccf3761ffe883"
   },
   "source_local_verification": {
     "strict_preparation_analyzer": "pass",
     "focused_preparation_tests": "pass",
     "source_build_and_focused_runtime_smokes": "pass",
     "cycle_one_raw_oracle_matrix_observation": "pending",
+    "multidirectional_MPI_raw_oracle_observation": "pending",
     "qualification_effect": "none"
   },
   "explicitly_not_claimed": [
@@ -149,7 +152,7 @@
   ],
   "open_dependencies": [
     "Bind a clean candidate, registered campaign, exact runtime decks, and authorized Orion artifact root.",
-    "Execute the complete cycle-one direct prtcl_rho/prtcl_jx/prtcl_jy/prtcl_jz current-oracle matrix at multiple artificial light speeds and root-grid resolutions.",
+    "Execute the complete cycle-one direct prtcl_rho/prtcl_jx/prtcl_jy/prtcl_jz current-oracle matrix at multiple artificial light speeds, root-grid resolutions, and x1/x2/x3/multiaxis MPI decompositions.",
     "Complete linear-growth qualification, independent recompute, and external scientific review before any Section 5.2 claim."
   ]
 }

@@ -242,8 +242,23 @@ def validate_supersession(record: dict[str, object]) -> None:
     _require(oracle["parallel_closure"] ==
              "dot(volume_average(prtcl_j),b_hat_stream)=2*B0*k0",
              "oracle target drifted")
-    _require(oracle["required_matrix"]["decompositions"] == ["serial", "MPI"],
-             "decomposition oracle was weakened")
+    _require(
+        oracle["required_matrix"]["decompositions"]
+        == ["serial", "MPI_x1", "MPI_x2", "MPI_x3", "MPI_multiaxis"],
+        "decomposition oracle was weakened",
+    )
+    _require(
+        "require_registered_raw_output_coverage_of_x1_x2_x3_and_multiaxis_"
+        "MPI_moment_exchange_paths"
+        in successor["required_source_contracts"],
+        "multidirectional MPI oracle was weakened",
+    )
+    _require(
+        "require_positive_integer_PPC_because_AthenaK_realizes_a_discrete_global_"
+        "particle_count"
+        in successor["required_source_contracts"],
+        "discrete PPC contract was weakened",
+    )
     _require(oracle["required_matrix"]["minimum_resolution_values_per_geometry"] >= 2,
              "resolution oracle was weakened")
     _require(oracle["required_matrix"]["minimum_PPC_values_per_geometry"] >= 2,

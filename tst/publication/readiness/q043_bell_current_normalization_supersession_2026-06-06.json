@@ -119,9 +119,11 @@
       "compute_V_root_cell_from_the_runtime_root_mesh_geometry",
       "use_species_charge_directly_in_current_closure_and_bind_species_charge_over_species_mass_as_q_over_mc",
       "support_arbitrary_positive_species_mass_in_uniform_current_oracle_mode_and_scope_any_mass_1_requirement_to_corrected_linear_mode",
+      "require_positive_integer_PPC_because_AthenaK_realizes_a_discrete_global_particle_count",
       "treat_deposited_prtcl_j_as_j_CR_over_c",
       "scale_deposit_qscale_with_root_cell_volume_and_inverse_PPC_for_a_fixed_physical_current",
-      "reject_dimension_resolution_PPC_or_mesh_changes_that_drift_the_intended_physical_current"
+      "reject_dimension_resolution_PPC_or_mesh_changes_that_drift_the_intended_physical_current",
+      "require_registered_raw_output_coverage_of_x1_x2_x3_and_multiaxis_MPI_moment_exchange_paths"
     ],
     "required_requalification_order": [
       "output_level_deposited_current_oracle",
@@ -141,7 +143,7 @@
     "required_observation_cycle": 1,
     "canonical_output_dcycle": 2,
     "canonical_output_timing": "cycle_zero_initialization_and_cycle_one_finalize_only",
-    "cross_field_runtime_metadata": "strict_after_normalizing_only_numbered_output_file_number_and_last_time",
+    "cross_field_runtime_metadata": "strict_after_validating_observed_cycle_one_sequential_output_bookkeeping_and_normalizing_only_file_number_and_last_time",
     "cycle_zero_evidence_status": "prohibited_initial_output_precedes_particle_moment_deposition",
     "required_outputs": [
       "prtcl_rho",
@@ -164,7 +166,10 @@
       "minimum_PPC_values_per_geometry": 2,
       "decompositions": [
         "serial",
-        "MPI"
+        "MPI_x1",
+        "MPI_x2",
+        "MPI_x3",
+        "MPI_multiaxis"
       ],
       "artificial_C_over_v_CR": [
         100,
@@ -179,6 +184,7 @@
       "the_measured_target_contains_C",
       "V_root_cell_is_absent_from_the_source_closure",
       "any_required_current_component_output_is_absent",
+      "the_registered_matrix_omits_any_applicable_x1_x2_x3_or_multiaxis_MPI_decomposition",
       "the_measured_current_changes_with_dimension_resolution_PPC_or_decomposition_beyond_the_preregistered_tolerance"
     ],
     "qualification_effect": "none_until_executed_from_a_corrected_successor_and_independently_recomputed"

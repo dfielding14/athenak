@@ -21,7 +21,7 @@ x2max = 2.2912878474779199
 ix2_bc = periodic
 ox2_bc = periodic
 
-nx3 = 4
+nx3 = 8
 x3min = 0
 x3max = 1.14564392373896
 ix3_bc = periodic
@@ -30,7 +30,7 @@ ox3_bc = periodic
 <meshblock>
 nx1 = 16
 nx2 = 8
-nx3 = 4
+nx3 = 8
 
 <time>
 evolution = dynamic
@@ -54,7 +54,7 @@ nspecies = 1
 cr_distribution = center
 deposit_moments = true
 deposit_order = 2
-deposit_qscale = 2349.4650779802892
+deposit_qscale = 1174.7325389901446
 couple_moments_to_mhd = true
 couple_j_to_efield_coeff = 1.0
 couple_j_to_efield_representation = cell_centered
@@ -126,6 +126,8 @@ campaign_id = Q043-BELL-DEPOSITED-J-OVER-C-VOLUME-AWARE
 case_id = q043-current-oracle-d3-coarse-ppc4-single-cvr10000
 resolution = coarse
 decomposition = single
+partitioned_axes = none
+meshblock_grid = 1,1,1
 mpi_ranks = 1
 artificial_c_over_v_cr = 10000
 species_mass = 2
@@ -133,7 +135,7 @@ species_charge = 1.2566370614359172e-05
 species_charge_over_mass = 6.2831853071795858e-06
 required_output_cycle = 1
 initial_state = uniform_zero_perturbation_parallel_stream
-root_cell_volume = 0.023494650779802891
+root_cell_volume = 0.011747325389901446
 configured_volume_mean_j_over_c = 12.566370614359172
 qualification_effect = none_source_local_output_oracle_only
 launch_authorized = false

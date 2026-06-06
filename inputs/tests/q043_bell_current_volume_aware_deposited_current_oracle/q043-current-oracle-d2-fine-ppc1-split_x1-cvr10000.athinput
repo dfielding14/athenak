@@ -1,0 +1,173 @@
+# Corrected Q-043 Bell deposited-current source-local oracle only.
+# No launch, qualification, science, or publication authority.
+
+<comment>
+problem = q043-current-oracle-d2-fine-ppc1-split_x1-cvr10000
+
+<job>
+basename = q043_current_oracle_d2_fine_ppc1_split_x1_cvr10000
+
+<mesh>
+nghost = 2
+nx1 = 32
+x1min = 0
+x1max = 2.2360679774997898
+ix1_bc = periodic
+ox1_bc = periodic
+
+nx2 = 16
+x2min = 0
+x2max = 1.1180339887498949
+ix2_bc = periodic
+ox2_bc = periodic
+
+nx3 = 1
+x3min = 0
+x3max = 1
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 16
+nx2 = 16
+nx3 = 1
+
+<time>
+evolution = dynamic
+integrator = rk2
+cfl_number = 0.1
+nlim = 1
+tlim = 1.0e30
+ndiag = 1
+
+<mhd>
+eos = ideal
+reconstruct = plm
+rsolver = llf
+gamma = 1.66666666667
+
+<particles>
+particle_type = cosmic_ray
+ppc = 1.0
+pusher = boris_tsc
+nspecies = 1
+cr_distribution = center
+deposit_moments = true
+deposit_order = 2
+deposit_qscale = 1953.1250000000007
+couple_moments_to_mhd = true
+couple_j_to_efield_coeff = 1.0
+couple_j_to_efield_representation = cell_centered
+couple_j_deposition_mode = cc_convert
+couple_moments_momentum_to_mhd = true
+couple_moments_energy_to_mhd = true
+couple_fluid_feedback_order = mhd_src_terms
+couple_moments_momentum_coeff = 1.0
+couple_moments_energy_coeff = 1.0
+cr_vx0 = 1.1180339887498949
+cr_vy0 = 2.2360679774997898
+cr_vz0 = 0
+pic_physical_mode = paper_mhd_pic_vl2_tsc
+pic_background_mode = coupled
+pic_feedback_mode = coupled
+pic_interp_scheme = tsc
+pic_enable_2d3v = true
+pic_cr_light_speed = 25000
+pic_cr_initial_state = velocity
+pic_cr_hall_mode = off
+pic_wave_damping_mode = off
+pic_max_cell_cross = 1
+pic_theta_max = 0.3
+pic_deltaf_mode = off
+pic_load_balance_cost_per_particle = 0.0
+pic_sort_interval = 0
+pic_intermediate_arrays = auto
+pic_expanding_box_mode = off
+
+<species0>
+mass = 2
+charge = 1.2566370614359172e-05
+
+<problem>
+pgen_name = q043_bell_current_volume_aware
+
+<q043_bell_current_volume_aware>
+campaign_id = Q043-BELL-CURRENT-VOLUME-AWARE
+supersedes_campaign_id = Q023-PAPER-BELL-LINEAR
+deck_role = source_local_deposited_current_oracle_not_authorized
+dimension = 2
+source_mode = uniform_current_oracle
+epsilon_default = 0.4
+epsilon = 0.4
+epsilon_grid = 0.1,0.2,0.4,0.6,0.8
+rho = 1.0
+pressure = 1.0
+amplitude = 0.0
+b_g = 1.0
+u_a = 1.0
+wavelength = 1.0
+k0 = 6.2831853071795862
+omega = 6.2831853071795858e-06
+c_over_v_cr = 10000.0
+initial_eigenmode = uniform_zero_perturbation_parallel_stream
+current_normalization = deposited_j_over_c_equals_2_b_g_k0
+deposition_measure = ppc_times_deposit_qscale_times_species_charge_times_v_cr_over_root_cell_volume
+root_cell_volume = global_root_mesh_extents_over_global_root_mesh_counts
+deposit_qscale_semantics = root_cell_macro_charge_volume_aware
+fixed_qscale = forbidden_across_dimensions_and_resolutions
+q_over_mc_representation = species_charge_over_species_mass_equals_omega_over_b_g
+supersession_effect = historical_c_multiplied_normalization_invalid_for_qualification
+qualification_effect = none_source_local_output_oracle_only
+launch_authorized = false
+timestep = open_clean_candidate_timestep_freeze
+
+<q043_bell_current_volume_aware_deposited_current_oracle>
+campaign_id = Q043-BELL-DEPOSITED-J-OVER-C-VOLUME-AWARE
+case_id = q043-current-oracle-d2-fine-ppc1-split_x1-cvr10000
+resolution = fine
+decomposition = split_x1
+partitioned_axes = x1
+meshblock_grid = 2,1,1
+mpi_ranks = 2
+artificial_c_over_v_cr = 10000
+species_mass = 2
+species_charge = 1.2566370614359172e-05
+species_charge_over_mass = 6.2831853071795858e-06
+required_output_cycle = 1
+initial_state = uniform_zero_perturbation_parallel_stream
+root_cell_volume = 0.0048828125000000009
+configured_volume_mean_j_over_c = 12.566370614359172
+qualification_effect = none_source_local_output_oracle_only
+launch_authorized = false
+
+<output1>
+file_type = bin
+variable = prtcl_rho
+id = prtcl_rho
+dcycle = 2
+ghost_zones = false
+single_file_per_rank = true
+
+<output2>
+file_type = bin
+variable = prtcl_jx
+id = prtcl_jx
+dcycle = 2
+ghost_zones = false
+single_file_per_rank = true
+
+<output3>
+file_type = bin
+variable = prtcl_jy
+id = prtcl_jy
+dcycle = 2
+ghost_zones = false
+single_file_per_rank = true
+
+<output4>
+file_type = bin
+variable = prtcl_jz
+id = prtcl_jz
+dcycle = 2
+ghost_zones = false
+single_file_per_rank = true

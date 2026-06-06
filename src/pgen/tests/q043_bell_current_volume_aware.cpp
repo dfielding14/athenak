@@ -81,6 +81,10 @@ inline bool HasRequiredSpeciesChargeOverMass(const double species_mass,
   return std::abs(measured_q_over_mc - expected_q_over_mc) <= 1.0e-12*scale;
 }
 
+inline bool PositiveIntegralPPCIsValid(const double ppc) {
+  return std::isfinite(ppc) && ppc >= 1.0 && std::floor(ppc) == ppc;
+}
+
 inline double DepositedJOverC(const double ppc, const double qscale,
                               const double species_charge, const double stream_speed,
                               const double root_cell_volume) {
@@ -170,6 +174,7 @@ void ProblemGenerator::Q043BellCurrentVolumeAware(ParameterInput *pin,
   using q043_bell_current_volume_aware::HasRequiredDepositedJOverC;
   using q043_bell_current_volume_aware::ModeBasis;
   using q043_bell_current_volume_aware::ModeParameters;
+  using q043_bell_current_volume_aware::PositiveIntegralPPCIsValid;
   using q043_bell_current_volume_aware::SourceMode;
   using q043_bell_current_volume_aware::SourceModeAmplitudeIsValid;
   using q043_bell_current_volume_aware::SourceModeSpeciesMassIsValid;
@@ -347,10 +352,12 @@ void ProblemGenerator::Q043BellCurrentVolumeAware(ParameterInput *pin,
   Q043VolumeAwareRequireFinite("species mass", species_mass);
   Q043VolumeAwareRequireFinite("species charge", species_charge);
   Q043VolumeAwareRequireFinite("root cell volume", root_cell_volume);
-  if (v_cr <= 0.0 || ppc <= 0.0 || qscale <= 0.0 || species_mass <= 0.0 ||
+  if (v_cr <= 0.0 || !PositiveIntegralPPCIsValid(ppc) || qscale <= 0.0 ||
+      species_mass <= 0.0 ||
       species_charge <= 0.0 || root_cell_volume <= 0.0) {
     Q043VolumeAwareFatal("q043_bell_current_volume_aware particle normalization "
-                    "contract is invalid");
+                    "contract is invalid; PPC must be a positive integer because "
+                    "AthenaK realizes a discrete global particle count");
   }
   Q043VolumeAwareRequireClose(
       "root cell volume", root_cell_volume,

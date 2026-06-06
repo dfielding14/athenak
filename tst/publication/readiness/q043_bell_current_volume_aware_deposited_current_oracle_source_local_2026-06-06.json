@@ -25,6 +25,7 @@
     "species_mass_contract": "oracle_uses_species_mass_2_and_species_charge_4pi_times_1e-6_with_species_charge_over_species_mass_equals_omega_over_b_g",
     "artificial_light_speed_in_formula": false,
     "fixed_deposit_qscale_per_campaign": false,
+    "ppc_contract": "positive_integer_only_because_AthenaK_realizes_a_discrete_global_particle_count",
     "deposit_qscale_derivation": "2*B_g*k0*V_root_cell/(PPC*species_charge*v_CR)",
     "guide_field_projection": "Q043 dimension-specific guide-field basis",
     "required_raw_fields": [
@@ -35,7 +36,7 @@
     ]
   },
   "matrix_contract": {
-    "case_count": 72,
+    "case_count": 132,
     "dimensions": [
       1,
       2,
@@ -51,15 +52,38 @@
     ],
     "decompositions": [
       "single",
-      "split"
+      "split_x1",
+      "split_x2",
+      "split_x1x2",
+      "split_x3",
+      "split_xyz"
     ],
+    "decompositions_by_dimension": {
+      "1": [
+        "single",
+        "split_x1"
+      ],
+      "2": [
+        "single",
+        "split_x1",
+        "split_x2",
+        "split_x1x2"
+      ],
+      "3": [
+        "single",
+        "split_x1",
+        "split_x2",
+        "split_x3",
+        "split_xyz"
+      ]
+    },
     "artificial_C_over_v_CR": [
       100,
       1000,
       10000
     ],
-    "matrix_kind": "exact_cartesian_product",
-    "split_decomposition_contract": "two_x1_meshblocks_two_MPI_ranks_single_file_per_rank_outputs",
+    "matrix_kind": "exact_dimension_valid_product_with_multidirectional_MPI_decompositions",
+    "split_decomposition_contract": "one_meshblock_per_MPI_rank_with_x1_x2_x3_and_multiaxis_partitions_and_single_file_per_rank_outputs",
     "checked_in_deck_root": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle",
     "checked_in_deck_manifest": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/deck_manifest.json"
   },
@@ -67,11 +91,12 @@
     "cycle": 1,
     "output_dcycle": 2,
     "output_timing": "cycle_zero_initialization_and_cycle_one_finalize_only",
-    "cross_field_runtime_metadata": "strict_after_normalizing_only_numbered_output_file_number_and_last_time",
+    "cross_field_runtime_metadata": "strict_after_validating_observed_cycle_one_sequential_output_bookkeeping_and_normalizing_only_file_number_and_last_time",
+    "runtime_parameter_binding": "exact_frozen_deck_parameters_plus_exact_AthenaK_runtime_defaults",
     "time": "positive_after_one_complete_cycle",
     "initial_state": "uniform_zero_perturbation_parallel_stream",
     "parser": "strict_AthenaK_binary_version_1p1_parser",
-    "rank_shard_handling": "merge_strict_same_snapshot_rank_shards_before_complete_composite_grid",
+    "rank_shard_handling": "merge_strict_same_snapshot_rank_shards_before_complete_multidimensional_composite_grid",
     "raw_provenance": "absolute_path_size_and_SHA256_for_every_field_shard",
     "checks": [
       "configured_volume_averaged_deposited_current_equals_2_B_g_k0",
@@ -80,7 +105,8 @@
       "raw_prtcl_j_spatial_nonuniformity_is_zero_within_representation_roundoff",
       "raw_volume_averaged_prtcl_rho_equals_2_B_g_k0_over_v_CR",
       "raw_prtcl_rho_spatial_nonuniformity_is_zero_within_representation_roundoff",
-      "cross_dimension_resolution_PPC_decomposition_and_artificial_C_current_invariance"
+      "cross_dimension_resolution_PPC_decomposition_and_artificial_C_current_invariance",
+      "x1_x2_x3_and_multiaxis_MPI_moment_exchange_paths_are_represented"
     ],
     "tolerance": "128_machine_eps_times_2_B_g_k0_selected_from_raw_variable_precision",
     "tolerance_scope": "source_local_exact_deposition_oracle_representation_roundoff_only_not_science_acceptance"
@@ -107,14 +133,15 @@
     "publication_authority"
   ],
   "artifact_bindings": {
-    "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/deck_manifest.json": "140d0821dc60bd7b197d7d25527bce6044ce9e29f016c50f91c04d24a8bbe81b",
-    "tst/publication/q043_bell_current_volume_aware_deposited_current_oracle.py": "4ff96d6310e27198f51c2bf1a2b9d6b48be8ac667f812a195531ba1813f01bb6",
-    "tst/publication/test_q043_bell_current_volume_aware_deposited_current_oracle.py": "685f60a22431060deb31c441eec88b83c6b7ee76b3d49c925ec475ee34ddf213"
+    "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/deck_manifest.json": "77d6ec862314d308c41490dde1137f6c384d1da24b6b72ad43e357545cff98b0",
+    "tst/publication/q043_bell_current_volume_aware_deposited_current_oracle.py": "7d8f48b95f4b33d0ae1589631d54b127d318be255a48430ed90429f29e918ab7",
+    "tst/publication/test_q043_bell_current_volume_aware_deposited_current_oracle.py": "20e971c7c528486398eaae2fe3db5e2cda7bb2c4ae697850e04766bb4a40f471"
   },
   "open_dependencies": [
     "integrate_and_review_the_separately_implemented_q043_bell_current_volume_aware_generator",
     "freeze_a_clean_candidate_containing_the_corrected_generator_and_this_oracle",
     "execute_the_complete_cycle_one_raw_output_matrix",
+    "execute_every_multidirectional_MPI_decomposition_on_compute_nodes",
     "retain_and_bind_raw_artifact_provenance",
     "independent_recompute_and_external_review_before_any_scientific_use"
   ]

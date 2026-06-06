@@ -29,13 +29,31 @@ FIELDS = ("prtcl_rho", "prtcl_jx", "prtcl_jy", "prtcl_jz")
 DIMENSIONS = (1, 2, 3)
 RESOLUTIONS = ("coarse", "fine")
 PPC_VALUES = (1, 4)
-DECOMPOSITIONS = ("single", "split")
+DECOMPOSITIONS_BY_DIMENSION = {
+    1: ("single", "split_x1"),
+    2: ("single", "split_x1", "split_x2", "split_x1x2"),
+    3: ("single", "split_x1", "split_x2", "split_x3", "split_xyz"),
+}
+DECOMPOSITIONS = tuple(
+    dict.fromkeys(
+        decomposition
+        for dimension in DIMENSIONS
+        for decomposition in DECOMPOSITIONS_BY_DIMENSION[dimension]
+    )
+)
+_DECOMPOSITION_AXES = {
+    "single": (),
+    "split_x1": (0,),
+    "split_x2": (1,),
+    "split_x1x2": (0, 1),
+    "split_x3": (2,),
+    "split_xyz": (0, 1, 2),
+}
 ARTIFICIAL_C_OVER_V_CR_VALUES = (100, 1000, 10000)
 EXPECTED_CASE_COUNT = (
-    len(DIMENSIONS)
+    sum(len(DECOMPOSITIONS_BY_DIMENSION[dimension]) for dimension in DIMENSIONS)
     * len(RESOLUTIONS)
     * len(PPC_VALUES)
-    * len(DECOMPOSITIONS)
     * len(ARTIFICIAL_C_OVER_V_CR_VALUES)
 )
 SPECIES_MASS = 2.0
@@ -49,6 +67,62 @@ EXPECTED_RHO = EXPECTED_J_OVER_C / STREAM_SPEED
 RAW_ORACLE_CYCLE = 1
 RAW_ORACLE_DCYCLE = 2
 RUNTIME_OUTPUT_BOOKKEEPING_KEYS = frozenset(("file_number", "last_time"))
+RUNTIME_OUTPUT_BLOCKS = tuple(f"output{index}" for index in range(1, len(FIELDS) + 1))
+RUNTIME_METADATA_CONTRACT = (
+    "strict_after_validating_observed_cycle_one_sequential_output_bookkeeping_"
+    "and_normalizing_only_file_number_and_last_time"
+)
+_RUNTIME_DEFAULTS = {
+    "coord": {"special_rel": "0", "general_rel": "0"},
+    "mesh_refinement": {"refinement": "none"},
+    "mhd": {
+        "dfloor": "1.17549e-38",
+        "pfloor": "1.17549e-38",
+        "tfloor": "1.17549e-38",
+        "sfloor": "1.17549e-38",
+        "nscalars": "0",
+        "const_accel": "0",
+        "cooling_dt_factor": "1",
+        "t_start_ism_cooling": "0",
+        "ism_cooling": "0",
+        "cgm_cooling": "0",
+        "beam_source": "0",
+        "rel_cooling": "0",
+        "fofc": "0",
+    },
+    "particles": {
+        "track_displacement": "0",
+        "pic_ion_neutral_collision_rate": "0",
+        "pic_deltaf_f0": "",
+        "pic_deltaf_p0": "1",
+        "pic_deltaf_kappa": "1.25",
+        "pic_deltaf_drift_x1": "0",
+        "pic_deltaf_drift_x2": "0",
+        "pic_deltaf_drift_x3": "0",
+        "pic_deltaf_aniso_x1": "1",
+        "pic_deltaf_aniso_x2": "1",
+        "pic_deltaf_aniso_x3": "1",
+        "pic_deltaf_background_rho": "0",
+        "pic_deltaf_background_jx": "0",
+        "pic_deltaf_background_jy": "0",
+        "pic_deltaf_background_jz": "0",
+        "pic_deltaf_adapt_mode": "off",
+        "pic_deltaf_adapt_interval": "0",
+        "pic_q017_sync_kernel_timers": "0",
+        "pic_random_seed": "0",
+        "pic_expansion_law": "linear",
+        "pic_expansion_rate_x1": "0",
+        "pic_expansion_rate_x2": "0",
+        "pic_expansion_rate_x3": "0",
+        "pic_no_mhd_bx": "0",
+        "pic_no_mhd_by": "0",
+        "pic_no_mhd_bz": "0",
+        "assign_tag": "index_order",
+    },
+    "problem": {"user_srcs": "0", "user_hist": "0", "user_work_in_loop": "0"},
+    "time": {"start_time": "0"},
+    "par_end": {},
+}
 DEPOSITION_TOLERANCE_ULPS = 128.0
 QUALIFICATION_EFFECT = "none_source_local_output_oracle_only"
 
@@ -69,8 +143,8 @@ _GEOMETRY = {
             (0.0, math.sqrt(5.25)),
             (0.0, math.sqrt(1.3125)),
         ),
-        "coarse": (16, 8, 4),
-        "fine": (32, 16, 8),
+        "coarse": (16, 8, 8),
+        "fine": (32, 16, 16),
     },
 }
 
@@ -164,8 +238,32 @@ def _case_id(
     )
 
 
+def _decomposition(
+    dimension: int, nx: Sequence[int], name: str
+) -> tuple[tuple[int, int, int], tuple[int, int, int], int]:
+    """Return a dimension-valid MeshBlock grid, MeshBlock extent, and rank count."""
+    _require(
+        name in DECOMPOSITIONS_BY_DIMENSION[dimension],
+        f"d{dimension}: decomposition is not allowed",
+    )
+    partitioned_axes = _DECOMPOSITION_AXES[name]
+    meshblock_grid = tuple(2 if axis in partitioned_axes else 1 for axis in range(3))
+    _require(
+        all(count % blocks == 0 for count, blocks in zip(nx, meshblock_grid)),
+        f"d{dimension} {name}: root grid is not divisible by MeshBlock grid",
+    )
+    meshblock_nx = tuple(
+        count // blocks for count, blocks in zip(nx, meshblock_grid)
+    )
+    _require(
+        all(count == 1 or count >= 4 for count in meshblock_nx),
+        f"d{dimension} {name}: active MeshBlock extent is below AthenaK minimum",
+    )
+    return meshblock_grid, meshblock_nx, math.prod(meshblock_grid)
+
+
 def expected_cases() -> tuple[dict[str, object], ...]:
-    """Return the exact small Cartesian source-local oracle matrix."""
+    """Return the exact dimension-valid source-local oracle matrix."""
     cases: list[dict[str, object]] = []
     for dimension in DIMENSIONS:
         geometry = _GEOMETRY[dimension]
@@ -177,11 +275,9 @@ def expected_cases() -> tuple[dict[str, object], ...]:
                 qscale = required_deposit_qscale(
                     root_cell_volume=root_cell_volume, ppc=ppc
                 )
-                for decomposition in DECOMPOSITIONS:
-                    meshblock_nx = (
-                        nx
-                        if decomposition == "single"
-                        else (nx[0] // 2, nx[1], nx[2])
+                for decomposition in DECOMPOSITIONS_BY_DIMENSION[dimension]:
+                    meshblock_grid, meshblock_nx, mpi_ranks = _decomposition(
+                        dimension, nx, decomposition
                     )
                     for artificial_c_over_v_cr in ARTIFICIAL_C_OVER_V_CR_VALUES:
                         cases.append(
@@ -197,8 +293,13 @@ def expected_cases() -> tuple[dict[str, object], ...]:
                                 "resolution": resolution,
                                 "ppc": ppc,
                                 "decomposition": decomposition,
-                                "mpi_ranks": 1 if decomposition == "single" else 2,
+                                "partitioned_axes": [
+                                    axis + 1
+                                    for axis in _DECOMPOSITION_AXES[decomposition]
+                                ],
+                                "mpi_ranks": mpi_ranks,
                                 "global_nx": list(nx),
+                                "meshblock_grid": list(meshblock_grid),
                                 "meshblock_nx": list(meshblock_nx),
                                 "bounds": [list(item) for item in bounds],
                                 "root_cell_volume": root_cell_volume,
@@ -246,7 +347,7 @@ def render_oracle_deck(case: Mapping[str, object]) -> str:
     bounds = tuple(tuple(float(value) for value in item) for item in case["bounds"])
     basis = _mode_basis(dimension)
     stream = tuple(STREAM_SPEED * value for value in basis)
-    per_rank = "true" if case["decomposition"] == "split" else "false"
+    per_rank = "true" if int(case["mpi_ranks"]) > 1 else "false"
     basename = str(case["case_id"]).replace("-", "_")
 
     lines = [
@@ -386,6 +487,15 @@ def render_oracle_deck(case: Mapping[str, object]) -> str:
             f"case_id = {case['case_id']}",
             f"resolution = {case['resolution']}",
             f"decomposition = {case['decomposition']}",
+            (
+                "partitioned_axes = "
+                + (
+                    ",".join(f"x{axis}" for axis in case["partitioned_axes"])
+                    if case["partitioned_axes"]
+                    else "none"
+                )
+            ),
+            "meshblock_grid = " + ",".join(str(value) for value in case["meshblock_grid"]),
             f"mpi_ranks = {case['mpi_ranks']}",
             f"artificial_c_over_v_cr = {case['artificial_c_over_v_cr']}",
             f"species_mass = {_float_token(float(case['species_mass']))}",
@@ -533,13 +643,29 @@ def validate_rendered_deck(case: Mapping[str, object], text: str) -> dict[str, o
         == case["case_id"],
         f"{case['case_id']}: oracle identity drifted",
     )
+    oracle_block = blocks["q043_bell_current_volume_aware_deposited_current_oracle"]
+    expected_partitioned_axes = (
+        ",".join(f"x{axis}" for axis in case["partitioned_axes"])
+        if case["partitioned_axes"]
+        else "none"
+    )
+    _require(
+        oracle_block["decomposition"] == case["decomposition"]
+        and oracle_block["partitioned_axes"] == expected_partitioned_axes
+        and oracle_block["meshblock_grid"]
+        == ",".join(str(value) for value in case["meshblock_grid"])
+        and int(oracle_block["mpi_ranks"]) == int(case["mpi_ranks"]),
+        f"{case['case_id']}: multidirectional decomposition contract drifted",
+    )
     for index, field in enumerate(FIELDS, 1):
         output = blocks[f"output{index}"]
         _require(
             output["file_type"] == "bin"
             and output["variable"] == field
             and output["id"] == field
-            and output["dcycle"] == str(RAW_ORACLE_DCYCLE),
+            and output["dcycle"] == str(RAW_ORACLE_DCYCLE)
+            and output["single_file_per_rank"]
+            == ("true" if int(case["mpi_ranks"]) > 1 else "false"),
             f"{case['case_id']}: output contract drifted",
         )
     return {
@@ -555,7 +681,7 @@ def validate_rendered_deck(case: Mapping[str, object], text: str) -> dict[str, o
 
 
 def build_deck_manifest() -> tuple[dict[str, object], dict[str, str]]:
-    """Build and validate the exact 72-deck source-local oracle matrix."""
+    """Build and validate the exact dimension-valid source-local oracle matrix."""
     decks: dict[str, str] = {}
     records = []
     for case in expected_cases():
@@ -586,6 +712,10 @@ def build_deck_manifest() -> tuple[dict[str, object], dict[str, str]]:
             "resolutions": list(RESOLUTIONS),
             "ppc": list(PPC_VALUES),
             "decompositions": list(DECOMPOSITIONS),
+            "decompositions_by_dimension": {
+                str(dimension): list(DECOMPOSITIONS_BY_DIMENSION[dimension])
+                for dimension in DIMENSIONS
+            },
             "artificial_c_over_v_cr": list(ARTIFICIAL_C_OVER_V_CR_VALUES),
         },
         "case_count": len(records),
@@ -630,6 +760,26 @@ def _case_map() -> dict[str, dict[str, object]]:
     return {str(case["case_id"]): case for case in expected_cases()}
 
 
+def expected_runtime_parameters(case: Mapping[str, object]) -> dict[str, dict[str, str]]:
+    """Return the exact immutable runtime header expected from the frozen deck."""
+    expected = {
+        block: dict(values)
+        for block, values in parse_athinput_text(render_oracle_deck(case)).items()
+    }
+    for block, values in _RUNTIME_DEFAULTS.items():
+        expected.setdefault(block, {}).update(values)
+    for block in RUNTIME_OUTPUT_BLOCKS:
+        expected[block].update({"gid": "-1", "data_format": "%12.5e"})
+    expected["species0"].update(
+        {
+            "vx0": format(float(expected["particles"]["cr_vx0"]), ".6g"),
+            "vy0": format(float(expected["particles"]["cr_vy0"]), ".6g"),
+            "vz0": format(float(expected["particles"]["cr_vz0"]), ".6g"),
+        }
+    )
+    return expected
+
+
 def _runtime_parameter(parameters: Mapping[str, Mapping[str, str]], block: str, name: str) -> str:
     _require(block in parameters and name in parameters[block], f"runtime {block}/{name} missing")
     return parameters[block][name]
@@ -637,11 +787,70 @@ def _runtime_parameter(parameters: Mapping[str, Mapping[str, str]], block: str, 
 
 def _normalized_runtime_parameters(
     parameters: Mapping[str, Mapping[str, str]],
+    *,
+    case: Mapping[str, object],
+    field: str,
 ) -> dict[str, dict[str, str]]:
-    """Remove only sequential-output bookkeeping from runtime parameters."""
+    """Validate and remove only the exact cycle-one output bookkeeping state."""
+    _require(field in FIELDS, "runtime output field is unknown")
+    output_blocks = {block for block in parameters if block.startswith("output")}
+    _require(
+        output_blocks == set(RUNTIME_OUTPUT_BLOCKS),
+        f"{field}: runtime output block inventory drifted",
+    )
+    field_index = FIELDS.index(field) + 1
     normalized = {}
     for block, values in parameters.items():
-        numbered_output = block.startswith("output") and block[6:].isdigit()
+        _require(
+            isinstance(block, str) and isinstance(values, Mapping),
+            f"{field}: runtime parameter block is malformed",
+        )
+        numbered_output = block in RUNTIME_OUTPUT_BLOCKS
+        if numbered_output:
+            output_index = int(block[6:])
+            _require(
+                values.get("file_type") == "bin"
+                and values.get("variable") == FIELDS[output_index - 1]
+                and values.get("id") == FIELDS[output_index - 1]
+                and values.get("dcycle") == str(RAW_ORACLE_DCYCLE)
+                and values.get("ghost_zones") == "false"
+                and values.get("single_file_per_rank")
+                == ("true" if int(case["mpi_ranks"]) > 1 else "false"),
+                f"{field}: runtime {block} immutable contract drifted",
+            )
+            _require(
+                RUNTIME_OUTPUT_BOOKKEEPING_KEYS <= set(values),
+                f"{field}: runtime {block} output bookkeeping is incomplete",
+            )
+            file_number = values["file_number"]
+            try:
+                parsed_file_number = int(file_number)
+            except ValueError as error:
+                raise ContractError(
+                    f"{field}: runtime {block} file_number must be an integer"
+                ) from error
+            _require(
+                file_number == str(parsed_file_number) and parsed_file_number >= 0,
+                f"{field}: runtime {block} file_number must be a canonical "
+                "non-negative integer",
+            )
+            expected_file_number = 1 if output_index <= field_index else 2
+            _require(
+                parsed_file_number == expected_file_number,
+                f"{field}: runtime {block} file_number violates the observed "
+                "cycle-one sequential publication contract",
+            )
+            try:
+                last_time = float(values["last_time"])
+            except ValueError as error:
+                raise ContractError(
+                    f"{field}: runtime {block} last_time must be numeric"
+                ) from error
+            _require(
+                math.isfinite(last_time) and last_time == 0.0,
+                f"{field}: runtime {block} last_time violates the cycle-cadence "
+                "publication contract",
+            )
         normalized[block] = {
             key: value
             for key, value in values.items()
@@ -664,6 +873,12 @@ def _validate_runtime_dataset(
     _require(dataset.root_grid_shape == tuple(case["global_nx"]), f"{field}: root grid drifted")
     _require(dataset.meshblock_shape == tuple(case["meshblock_nx"]), f"{field}: MeshBlock drifted")
     parameters = dataset.input_parameters
+    _require(
+        _normalized_runtime_parameters(parameters, case=case, field=field)
+        == expected_runtime_parameters(case),
+        f"{field}: runtime parameters drifted from the authoritative deck and "
+        "frozen default contract",
+    )
     _require(_runtime_parameter(parameters, "problem", "pgen_name") == PGEN_NAME, "runtime pgen drifted")
     _require(
         _runtime_parameter(parameters, "q043_bell_current_volume_aware_deposited_current_oracle", "case_id")
@@ -793,7 +1008,9 @@ def analyze_raw_case(
                 dataset.root_grid_shape,
                 dataset.meshblock_shape,
                 dataset.domain_bounds,
-                _normalized_runtime_parameters(dataset.input_parameters),
+                _normalized_runtime_parameters(
+                    dataset.input_parameters, case=case, field=field
+                ),
             )
             == (
                 reference.time,
@@ -803,7 +1020,9 @@ def analyze_raw_case(
                 reference.root_grid_shape,
                 reference.meshblock_shape,
                 reference.domain_bounds,
-                _normalized_runtime_parameters(reference.input_parameters),
+                _normalized_runtime_parameters(
+                    reference.input_parameters, case=case, field=FIELDS[0]
+                ),
             ),
             f"{case_id}: raw field metadata disagrees",
         )
@@ -866,9 +1085,7 @@ def analyze_raw_case(
         "source_local_oracle_check_pass": True,
         "case_contract": case,
         "raw_provenance": provenance,
-        "cross_field_runtime_metadata": (
-            "strict_after_normalizing_only_numbered_output_file_number_and_last_time"
-        ),
+        "cross_field_runtime_metadata": RUNTIME_METADATA_CONTRACT,
         "representation_derived_absolute_tolerance": tolerance,
         "configured_volume_mean_j_over_c": configured_volume_mean_j_over_c(case),
         "measured_volume_mean_j_over_c_vector": mean_vector.tolist(),
@@ -923,9 +1140,7 @@ def analyze_raw_matrix(
         "required_output_cycle": RAW_ORACLE_CYCLE,
         "output_dcycle": RAW_ORACLE_DCYCLE,
         "output_timing": "cycle_zero_initialization_and_cycle_one_finalize_only",
-        "cross_field_runtime_metadata": (
-            "strict_after_normalizing_only_numbered_output_file_number_and_last_time"
-        ),
+        "cross_field_runtime_metadata": RUNTIME_METADATA_CONTRACT,
         "initial_state_verified": "uniform_zero_perturbation_parallel_stream",
         "artificial_c_in_formula": False,
         "configured_current_formula": (

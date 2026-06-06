@@ -134,6 +134,13 @@ class Q043BellCurrentVolumeAwareHostHarnessTests(unittest.TestCase):
         )
         self.assertEqual(masses[1:], ["1", "1", "0", "1"])
 
+    def test_source_rejects_fractional_ppc_before_exact_current_claim(self) -> None:
+        ppc = next(line.split() for line in self.lines if line.startswith("ppc_contract "))
+        self.assertEqual(ppc[1:], ["1", "1", "0", "0", "0"])
+        source = SOURCE.read_text(encoding="utf-8")
+        self.assertIn("PositiveIntegralPPCIsValid(ppc)", source)
+        self.assertIn("PPC must be a positive integer", source)
+
     def test_host_contract_rejects_unknown_source_mode(self) -> None:
         result = subprocess.run(
             [str(self.binary), "unknown", "0", "2", "1", "0.5"],
