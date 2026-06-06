@@ -52,6 +52,47 @@ ANALYSIS_PUBLICATION_SCHEMA_VERSION = 1
 ANALYSIS_PUBLICATION_CURRENT_NAME = "analysis-current"
 ANALYSIS_PUBLICATION_GENERATIONS_NAME = ".analysis-generations"
 ANALYSIS_PUBLICATION_MANIFEST_NAME = "publication-manifest.json"
+MECHANISM_DIAGNOSTIC_SCHEMA_VERSION = 1
+MECHANISM_JOINT_SCHEMA_VERSION = 1
+DESCRIPTIVE_UNCERTAINTY_SCHEMA_VERSION = 1
+DESCRIPTIVE_BLOCK_COUNT_MAX = 4
+MECHANISM_FIELD_DEFINITIONS = {
+    "delta_p": "pressure anisotropy Delta p = p_perp - p_parallel",
+    "bb_grad_velocity": (
+        "b b : grad(u), with b = B/sqrt(max(B^2, machine tiny))"
+    ),
+    "div_velocity": "div(u)",
+    "dln_b_dt": (
+        "D ln(B)/Dt reconstructed from the ideal-induction identity "
+        "b b : grad(u) - div(u), with "
+        "b = B/sqrt(max(B^2, machine tiny))"
+    ),
+    "b_grad_delta_p": (
+        "b . grad(Delta p), with b = B/sqrt(max(B^2, machine tiny)) and "
+        "Delta p = p_perp - p_parallel"
+    ),
+    "signed_pressure_stress_power_density": (
+        "-Delta p (b b : grad(u)); positive values correspond to local "
+        "kinetic-energy gain if the anisotropic pressure-stress force is applied"
+    ),
+}
+MECHANISM_JOINT_FIELDS = {
+    "b_grad_delta_p_vs_delta_p": ("delta_p", "b_grad_delta_p"),
+    "bb_grad_velocity_vs_delta_p": ("delta_p", "bb_grad_velocity"),
+    "bb_grad_velocity_vs_b_grad_delta_p": (
+        "b_grad_delta_p",
+        "bb_grad_velocity",
+    ),
+    "dln_b_dt_vs_bb_grad_velocity": ("bb_grad_velocity", "dln_b_dt"),
+    "signed_pressure_stress_power_density_vs_bb_grad_velocity": (
+        "bb_grad_velocity",
+        "signed_pressure_stress_power_density",
+    ),
+    "signed_pressure_stress_power_density_vs_delta_p": (
+        "delta_p",
+        "signed_pressure_stress_power_density",
+    ),
+}
 FIGURE_13_FIREHOSE_CASES = ("R03", "R07", "R14", "R15")
 FIGURE_13_EXECUTION_EPOCH = "E03-forcing-policy"
 FIGURE_13_ACCEPTED_FINAL_TIME = 10.0
@@ -800,19 +841,25 @@ def velocity_gradient_products(velocity: list[np.ndarray], bhat: list[np.ndarray
     strain_parallel = sum(
         bhat[index] * parallel_component[index] for index in range(3)
     )
+    divergence = sum(
+        component_gradients[index][index] for index in range(3)
+    )
     return {
         "grad_parallel_velocity_parallel": parallel_parallel,
         "grad_perp_velocity_parallel": perpendicular_parallel,
         "grad_parallel_velocity_perp": parallel_perp,
         "grad_perp_velocity_perp": perpendicular_perp,
         "bb_grad_velocity": strain_parallel,
+        "div_velocity": divergence,
+        "dln_b_dt": strain_parallel - divergence,
     }
 
 
 def pressure_work_decomposition(fields: dict[str, np.ndarray],
                                 lengths: tuple[float, float, float],
                                 strain_parallel: np.ndarray,
-                                model: dict[str, object] | None
+                                model: dict[str, object] | None,
+                                divergence: np.ndarray | None = None,
                                 ) -> dict[str, object]:
     """Reconstruct cell-centered CGL pressure-force work from one snapshot.
 
@@ -820,10 +867,11 @@ def pressure_work_decomposition(fields: dict[str, np.ndarray],
     force contribution to kinetic energy is integral[P : grad(u)] dV.
     """
 
-    velocity = [fields["velx"], fields["vely"], fields["velz"]]
-    divergence = sum(
-        periodic_gradient(velocity[index], lengths)[index] for index in range(3)
-    )
+    if divergence is None:
+        velocity = [fields["velx"], fields["vely"], fields["velz"]]
+        divergence = sum(
+            periodic_gradient(velocity[index], lengths)[index] for index in range(3)
+        )
     pperp = fields["p_perp"]
     delta_p = pperp - fields["eint"]
     isotropic_density = pperp * divergence
@@ -964,17 +1012,206 @@ def pdf(values: np.ndarray, bins: int, value_range: tuple[float, float] | None =
 
 
 def joint_pdf(x_values: np.ndarray, y_values: np.ndarray, bins: int,
-              ranges: tuple[tuple[float, float], tuple[float, float]] | None = None
+              ranges: tuple[tuple[float, float], tuple[float, float]] | None = None,
+              include_counts: bool = False,
               ) -> dict[str, object]:
     """Return a density-normalized two-dimensional histogram."""
 
-    density, x_edges, y_edges = np.histogram2d(
-        x_values.ravel(), y_values.ravel(), bins=bins, range=ranges, density=True
-    )
-    return {
+    if include_counts:
+        counts, x_edges, y_edges = np.histogram2d(
+            x_values.ravel(), y_values.ravel(), bins=bins, range=ranges, density=False
+        )
+        binned_count = float(np.sum(counts))
+        if binned_count <= 0.0:
+            raise ValueError("joint histogram contains no samples in the requested range")
+        density = counts / binned_count
+        density /= np.diff(x_edges)[:, np.newaxis]
+        density /= np.diff(y_edges)[np.newaxis, :]
+    else:
+        density, x_edges, y_edges = np.histogram2d(
+            x_values.ravel(), y_values.ravel(), bins=bins, range=ranges, density=True
+        )
+        counts = None
+    result: dict[str, object] = {
         "x_edges": x_edges.tolist(),
         "y_edges": y_edges.tolist(),
         "density": density.tolist(),
+    }
+    if counts is not None:
+        result.update({
+            "bin_counts": counts.astype(np.int64).tolist(),
+            "sample_count": int(x_values.size),
+            "binned_sample_count": int(np.sum(counts)),
+        })
+    return result
+
+
+def conditional_profile_from_joint_pdf(product: dict[str, object]) -> dict[str, object]:
+    """Derive descriptive y-given-x summaries from one joint histogram."""
+
+    x_edges = np.asarray(product["x_edges"], dtype=float)
+    y_edges = np.asarray(product["y_edges"], dtype=float)
+    density = np.asarray(product["density"], dtype=float)
+    if (
+        x_edges.ndim != 1
+        or y_edges.ndim != 1
+        or density.shape != (len(x_edges) - 1, len(y_edges) - 1)
+        or not np.isfinite(x_edges).all()
+        or not np.isfinite(y_edges).all()
+        or not np.isfinite(density).all()
+        or np.any(np.diff(x_edges) <= 0.0)
+        or np.any(np.diff(y_edges) <= 0.0)
+        or np.any(density < 0.0)
+    ):
+        raise ValueError("joint histogram is invalid for conditional summaries")
+    x_centers = 0.5 * (x_edges[1:] + x_edges[:-1])
+    y_centers = 0.5 * (y_edges[1:] + y_edges[:-1])
+    x_widths = np.diff(x_edges)
+    y_widths = np.diff(y_edges)
+    negative_bin_fractions = np.clip(
+        (np.minimum(y_edges[1:], 0.0) - y_edges[:-1]) / y_widths,
+        0.0,
+        1.0,
+    )
+    positive_bin_fractions = np.clip(
+        (y_edges[1:] - np.maximum(y_edges[:-1], 0.0)) / y_widths,
+        0.0,
+        1.0,
+    )
+    y_weights = density * y_widths[np.newaxis, :]
+    x_marginal_density = np.sum(y_weights, axis=1)
+    x_bin_probability = x_marginal_density * x_widths
+    bin_counts_value = product.get("bin_counts", product.get("bin_counts_sum"))
+    bin_counts = (
+        np.asarray(bin_counts_value, dtype=np.int64)
+        if bin_counts_value is not None else None
+    )
+    if bin_counts is not None and bin_counts.shape != density.shape:
+        raise ValueError("joint histogram bin counts differ from density shape")
+
+    summaries: dict[str, list[float | int | None]] = {
+        "sample_count": [],
+        "response_mean": [],
+        "response_rms": [],
+        "response_quantile_16": [],
+        "response_median": [],
+        "response_quantile_84": [],
+        "response_negative_fraction": [],
+        "response_positive_fraction": [],
+    }
+    for index, marginal in enumerate(x_marginal_density):
+        count = int(np.sum(bin_counts[index])) if bin_counts is not None else None
+        summaries["sample_count"].append(count)
+        if marginal <= 0.0:
+            for name in summaries:
+                if name != "sample_count":
+                    summaries[name].append(None)
+            continue
+        weights = y_weights[index] / marginal
+        cumulative = np.cumsum(weights)
+
+        def quantile(probability: float) -> float:
+            position = min(
+                int(np.searchsorted(cumulative, probability, side="left")),
+                len(y_centers) - 1,
+            )
+            return float(y_centers[position])
+
+        summaries["response_mean"].append(float(np.sum(weights * y_centers)))
+        summaries["response_rms"].append(
+            float(np.sqrt(np.sum(weights * y_centers ** 2)))
+        )
+        summaries["response_quantile_16"].append(quantile(0.16))
+        summaries["response_median"].append(quantile(0.5))
+        summaries["response_quantile_84"].append(quantile(0.84))
+        summaries["response_negative_fraction"].append(
+            float(np.sum(weights * negative_bin_fractions))
+        )
+        summaries["response_positive_fraction"].append(
+            float(np.sum(weights * positive_bin_fractions))
+        )
+    return {
+        "definition": (
+            "descriptive y-given-x summaries derived from the joint-PDF bins"
+        ),
+        "quantile_definition": (
+            "first y-bin center whose conditional cumulative probability reaches "
+            "the requested quantile"
+        ),
+        "bin_reconstruction": (
+            "response moments and quantiles use y-bin centers; response-sign "
+            "fractions allocate bins spanning zero in proportion to bin width"
+        ),
+        "scope": (
+            "histogram-resolution descriptive relationship; not an independent-"
+            "sample inference"
+        ),
+        "x_edges": x_edges.tolist(),
+        "x_bin_centers": x_centers.tolist(),
+        "x_marginal_density": x_marginal_density.tolist(),
+        "x_bin_probability": x_bin_probability.tolist(),
+        **summaries,
+    }
+
+
+def mechanism_joint_coordinates(
+    mechanism_fields: dict[str, np.ndarray],
+) -> dict[str, tuple[np.ndarray, np.ndarray]]:
+    """Return named x/y fields for descriptive mechanism relationships."""
+
+    return {
+        name: (mechanism_fields[x_name], mechanism_fields[y_name])
+        for name, (x_name, y_name) in MECHANISM_JOINT_FIELDS.items()
+        if x_name in mechanism_fields and y_name in mechanism_fields
+    }
+
+
+def mechanism_joint_diagnostics(
+    mechanism_fields: dict[str, np.ndarray],
+    bins: int,
+    ranges: dict[
+        str, tuple[tuple[float, float], tuple[float, float]]
+    ] | None = None,
+    applied_to_flow: bool | None = None,
+    interpretation: str = "model feedback scope was not archived",
+) -> dict[str, object]:
+    """Construct descriptive joint and conditional mechanism products."""
+
+    products: dict[str, object] = {}
+    for name, (x_values, y_values) in mechanism_joint_coordinates(
+        mechanism_fields
+    ).items():
+        x_name, y_name = MECHANISM_JOINT_FIELDS[name]
+        histogram = joint_pdf(
+            x_values,
+            y_values,
+            bins,
+            None if ranges is None else ranges.get(name),
+            include_counts=True,
+        )
+        products[name] = {
+            "x_field": x_name,
+            "y_field": y_name,
+            "x_definition": MECHANISM_FIELD_DEFINITIONS[x_name],
+            "y_definition": MECHANISM_FIELD_DEFINITIONS[y_name],
+            "joint_pdf": histogram,
+            "conditional_y_given_x": conditional_profile_from_joint_pdf(histogram),
+        }
+    return {
+        "schema_version": MECHANISM_JOINT_SCHEMA_VERSION,
+        "scope": (
+            "descriptive retained-snapshot relationships among local mechanism "
+            "diagnostics"
+        ),
+        "discretization": (
+            "cell-centered periodic-gradient reconstruction; local signed "
+            "pressure-stress exchange is not applied stage accounting"
+        ),
+        "applied_to_flow": applied_to_flow,
+        "interpretation": interpretation,
+        "local_signed_exchange_field": "signed_pressure_stress_power_density",
+        "scale_resolved_signed_transfer_path": "pressure_transfer.signed_transfer",
+        "products": products,
     }
 
 
@@ -1036,6 +1273,23 @@ def pressure_transfer(rho: np.ndarray, velocity: list[np.ndarray],
         "dk": dk,
         "k_perp": (np.arange(len(values), dtype=float) * dk).tolist(),
         "transfer": values,
+        "signed_transfer": list(values),
+        "definition": (
+            "perpendicular-shell partition of integral[sqrt(rho) u . "
+            "((B/sqrt(rho)) . grad((Delta p/B^2) B))] dV"
+        ),
+        "filter_definition": (
+            "sqrt(rho) u is filtered into nonoverlapping k_perp shells; "
+            "the pressure-stress force factor is unfiltered"
+        ),
+        "sign_convention": (
+            "positive signed transfer corresponds to kinetic-energy gain if the "
+            "anisotropic CGL pressure-stress force is applied"
+        ),
+        "interpretation": (
+            "signed pressure-stress exchange reconstructed from one retained "
+            "snapshot; model feedback scope is not specified here"
+        ),
         "normalization_available": normalization_available,
         "normalization_definition": (
             "T_total ~= E_K (2 pi u_rms / L_perp), with "
@@ -1047,6 +1301,10 @@ def pressure_transfer(rho: np.ndarray, velocity: list[np.ndarray],
         "perpendicular_outer_scale": lperp,
         "total_transfer_rate": total_transfer_rate,
         "transfer_normalized_by_total": (
+            [value / total_transfer_rate for value in values]
+            if normalization_available else None
+        ),
+        "signed_transfer_normalized_by_total": (
             [value / total_transfer_rate for value in values]
             if normalization_available else None
         ),
@@ -1921,7 +2179,8 @@ def validate_instantaneous_firehose_occupancy(
 
 
 def pdf_fields(fields: dict[str, np.ndarray],
-               lengths: tuple[float, float, float] | None = None
+               lengths: tuple[float, float, float] | None = None,
+               mechanism_fields: dict[str, np.ndarray] | None = None,
                ) -> dict[str, np.ndarray]:
     """Construct the scalar fields used for paper PDF products."""
 
@@ -1936,13 +2195,24 @@ def pdf_fields(fields: dict[str, np.ndarray],
         "beta_delta": beta_delta_field(fields),
     }
     if lengths is not None:
-        magnetic = [fields["bcc1"], fields["bcc2"], fields["bcc3"]]
-        velocity = [fields["velx"], fields["vely"], fields["velz"]]
-        bhat = [component / np.sqrt(np.maximum(bsqr, np.finfo(float).tiny))
-                for component in magnetic]
-        values["bb_grad_velocity"] = velocity_gradient_products(
-            velocity, bhat, lengths
-        )["bb_grad_velocity"]
+        if mechanism_fields is None:
+            magnetic = [fields["bcc1"], fields["bcc2"], fields["bcc3"]]
+            velocity = [fields["velx"], fields["vely"], fields["velz"]]
+            bhat = [
+                component / np.sqrt(np.maximum(bsqr, np.finfo(float).tiny))
+                for component in magnetic
+            ]
+            mechanism_fields = velocity_gradient_products(velocity, bhat, lengths)
+            mechanism_fields["b_grad_delta_p"] = projected_gradient(
+                pperp - ppar, bhat, lengths
+            )[0]
+            mechanism_fields["delta_p"] = pperp - ppar
+            mechanism_fields["signed_pressure_stress_power_density"] = (
+                -(pperp - ppar) * mechanism_fields["bb_grad_velocity"]
+            )
+        values.update({
+            name: mechanism_fields[name] for name in MECHANISM_FIELD_DEFINITIONS
+        })
     return values
 
 
@@ -1986,10 +2256,29 @@ def analyze_fields(fields: dict[str, np.ndarray], lengths: tuple[float, float, f
             for component in magnetic]
     gradient_parallel, gradient_perp = projected_gradient(delta_p, bhat, lengths)
     velocity_products = velocity_gradient_products(velocity, bhat, lengths)
+    mechanism_fields = {
+        **velocity_products,
+        "delta_p": delta_p,
+        "b_grad_delta_p": gradient_parallel,
+        "signed_pressure_stress_power_density": (
+            -delta_p * velocity_products["bb_grad_velocity"]
+        ),
+    }
     transfer = pressure_transfer(rho, velocity, magnetic, delta_p, lengths, dk)
     pressure_work = pressure_work_decomposition(
-        fields, lengths, velocity_products["bb_grad_velocity"], model_choices
+        fields,
+        lengths,
+        velocity_products["bb_grad_velocity"],
+        model_choices,
+        velocity_products["div_velocity"],
     )
+    transfer.update({
+        "applied_to_flow": pressure_work["applied_to_flow"],
+        "interpretation": (
+            f"{pressure_work['interpretation']}; signed pressure-stress exchange "
+            "reconstructed from one retained snapshot"
+        ),
+    })
     anisotropic_power = float(pressure_work["anisotropic_stress_power"])
     transfer_direct = float(transfer["direct_real_space"])
     transfer_difference = transfer_direct - anisotropic_power
@@ -2002,8 +2291,14 @@ def analyze_fields(fields: dict[str, np.ndarray], lengths: tuple[float, float, f
             )
         ),
     })
-    pdf_values = pdf_fields(fields, lengths)
+    pdf_values = pdf_fields(fields, lengths, mechanism_fields)
     pressure_density_values = pressure_density_fields(fields)
+    parallel_gradient_spectrum = shell_spectrum(
+        [gradient_parallel],
+        lengths,
+        dk,
+        field_definition=MECHANISM_FIELD_DEFINITIONS["b_grad_delta_p"],
+    )
     spectra = {
         "velocity": shell_spectrum(
             velocity, lengths, dk, field_definition="velocity vector u"
@@ -2032,13 +2327,33 @@ def analyze_fields(fields: dict[str, np.ndarray], lengths: tuple[float, float, f
             field_definition="magnetic pressure B^2/2 in AthenaK units",
         ),
         "delta_p": shell_spectrum(
-            [delta_p], lengths, dk, field_definition="pressure anisotropy Delta p"
+            [delta_p],
+            lengths,
+            dk,
+            field_definition=MECHANISM_FIELD_DEFINITIONS["delta_p"],
         ),
-        "grad_parallel_delta_p": shell_spectrum([gradient_parallel], lengths, dk),
-        "grad_perp_delta_p": shell_spectrum([gradient_perp], lengths, dk),
+        "signed_pressure_stress_power_density": shell_spectrum(
+            [mechanism_fields["signed_pressure_stress_power_density"]],
+            lengths,
+            dk,
+            field_definition=MECHANISM_FIELD_DEFINITIONS[
+                "signed_pressure_stress_power_density"
+            ],
+        ),
+        "grad_parallel_delta_p": dict(parallel_gradient_spectrum),
+        "b_grad_delta_p": dict(parallel_gradient_spectrum),
+        "grad_perp_delta_p": shell_spectrum(
+            [gradient_perp], lengths, dk,
+            field_definition="magnitude of the gradient of Delta p perpendicular to b",
+        ),
     }
     spectra.update({
-        name: shell_spectrum([values], lengths, dk)
+        name: shell_spectrum(
+            [values],
+            lengths,
+            dk,
+            field_definition=MECHANISM_FIELD_DEFINITIONS.get(name),
+        )
         for name, values in velocity_products.items()
     })
     return {
@@ -2046,7 +2361,9 @@ def analyze_fields(fields: dict[str, np.ndarray], lengths: tuple[float, float, f
         "shape_z_y_x": list(rho.shape),
         "lengths_x_y_z": list(lengths),
         "pdf": {
-            name: pdf(values, bins, None if pdf_ranges is None else pdf_ranges[name])
+            name: pdf(
+                values, bins, None if pdf_ranges is None else pdf_ranges.get(name)
+            )
             for name, values in pdf_values.items()
         },
         "pressure_density_joint": {
@@ -2069,6 +2386,16 @@ def analyze_fields(fields: dict[str, np.ndarray], lengths: tuple[float, float, f
         },
         "spectra": spectra,
         "pressure_transfer": transfer,
+        "mechanism_diagnostics": mechanism_diagnostic_index(
+            normalized_transfer_available=transfer["normalization_available"]
+        ),
+        "mechanism_joint_diagnostics": mechanism_joint_diagnostics(
+            mechanism_fields,
+            bins,
+            joint_ranges,
+            pressure_work["applied_to_flow"],
+            pressure_work["interpretation"],
+        ),
         "pressure_work_decomposition": pressure_work,
         "alignment": alignment_histograms(velocity, magnetic, lengths, dk,
                                           alignment_shells, bins),
@@ -2095,34 +2422,300 @@ def mean_distribution(records: list[dict[str, object]]) -> dict[str, object]:
     }
 
 
-def mean_joint_distribution(records: list[dict[str, object]]) -> dict[str, object]:
+def mean_joint_distribution(
+    records: list[dict[str, object]],
+    snapshot_times: list[float] | np.ndarray | None = None,
+) -> dict[str, object]:
     """Average compatible two-dimensional histogram products."""
 
+    densities = [
+        np.asarray(record["density"], dtype=float) for record in records
+    ]
+    x_edges = np.asarray(records[0]["x_edges"], dtype=float)
+    y_edges = np.asarray(records[0]["y_edges"], dtype=float)
+    if any(
+        not np.array_equal(np.asarray(record["x_edges"], dtype=float), x_edges)
+        or not np.array_equal(np.asarray(record["y_edges"], dtype=float), y_edges)
+        for record in records[1:]
+    ):
+        raise ValueError("joint distributions require identical shared bin edges")
+    result: dict[str, object] = {
+        "x_edges": x_edges.tolist(),
+        "y_edges": y_edges.tolist(),
+        "density": np.mean(densities, axis=0).tolist(),
+    }
+    if all("bin_counts" in record for record in records):
+        bin_counts = [
+            np.asarray(record["bin_counts"], dtype=np.int64) for record in records
+        ]
+        result.update({
+            "bin_counts_sum": np.sum(bin_counts, axis=0).tolist(),
+            "sample_count_sum": int(sum(
+                int(record.get("sample_count", np.sum(counts)))
+                for record, counts in zip(records, bin_counts)
+            )),
+            "binned_sample_count_sum": int(sum(
+                int(record.get("binned_sample_count", np.sum(counts)))
+                for record, counts in zip(records, bin_counts)
+            )),
+        })
+    if snapshot_times is not None:
+        result["uncertainty"] = descriptive_snapshot_block_uncertainty(
+            densities, snapshot_times
+        )
+    return result
+
+
+def mechanism_diagnostic_index(
+    uncertainty_available: bool = False,
+    ensemble: bool = False,
+    normalized_transfer_available: bool = True,
+) -> dict[str, object]:
+    """Describe stable output paths for retained-snapshot mechanism diagnostics."""
+
+    fields = {
+        name: {
+            "definition": definition,
+            "pdf_path": f"pdf.{name}",
+            "scale_resolved_path": f"spectra.{name}",
+            **({
+                "scale_resolved_uncertainty_path": f"spectra.{name}.uncertainty",
+            } if uncertainty_available else {}),
+        }
+        for name, definition in MECHANISM_FIELD_DEFINITIONS.items()
+    }
+    transfer = {
+        "curve_path": "pressure_transfer.signed_transfer",
+        "normalized_curve_path": (
+            "pressure_transfer.signed_transfer_normalized_by_total"
+        ),
+        "normalized_curve_available": normalized_transfer_available,
+        "applied_to_flow_path": "pressure_transfer.applied_to_flow",
+        "direct_real_space_path": (
+            "pressure_transfer.direct_real_space_mean"
+            if ensemble else "pressure_transfer.direct_real_space"
+        ),
+        "sign_convention_path": "pressure_transfer.sign_convention",
+    }
+    if uncertainty_available:
+        transfer["curve_uncertainty_path"] = (
+            "pressure_transfer.uncertainty.signed_transfer"
+        )
+        if normalized_transfer_available:
+            transfer["normalized_curve_uncertainty_path"] = (
+                "pressure_transfer.uncertainty.signed_transfer_normalized_by_total"
+            )
+        transfer["direct_real_space_uncertainty_path"] = (
+            "pressure_transfer.uncertainty.direct_real_space"
+        )
     return {
-        "x_edges": records[0]["x_edges"],
-        "y_edges": records[0]["y_edges"],
-        "density": np.mean(
-            [np.asarray(record["density"], dtype=float) for record in records], axis=0
-        ).tolist(),
+        "schema_version": MECHANISM_DIAGNOSTIC_SCHEMA_VERSION,
+        "scope": "descriptive diagnostics reconstructed from retained snapshots",
+        "discretization": (
+            "cell-centered periodic gradients and perpendicular Fourier-shell "
+            "partitions; not applied finite-volume face or stage accounting"
+        ),
+        "fields": fields,
+        "signed_pressure_stress_transfer": transfer,
+        "joint_conditional_products": {
+            name: {
+                "x_field": x_name,
+                "y_field": y_name,
+                "path": f"mechanism_joint_diagnostics.products.{name}",
+            }
+            for name, (x_name, y_name) in MECHANISM_JOINT_FIELDS.items()
+        },
     }
 
 
-def mean_spectrum(records: list[dict[str, object]]) -> dict[str, object]:
+def descriptive_snapshot_block_uncertainty(
+    values: list[object] | np.ndarray,
+    snapshot_times: list[float] | np.ndarray,
+) -> dict[str, object]:
+    """Summarize within-realization snapshot and contiguous-block variability."""
+
+    times = np.asarray(snapshot_times, dtype=float)
+    arrays = [np.asarray(value, dtype=float) for value in values]
+    if len(arrays) != len(times) or not arrays:
+        raise ValueError("uncertainty values and snapshot times must be nonempty and match")
+    if not np.isfinite(times).all() or (
+        len(times) > 1 and np.any(np.diff(times) < 0.0)
+    ):
+        raise ValueError("uncertainty snapshot times must be finite and nondecreasing")
+    try:
+        stacked = np.stack(arrays, axis=0)
+    except ValueError as error:
+        raise ValueError("uncertainty values have incompatible shapes") from error
+    if not np.isfinite(stacked).all():
+        raise ValueError("uncertainty values must be finite")
+    result: dict[str, object] = {
+        "schema_version": DESCRIPTIVE_UNCERTAINTY_SCHEMA_VERSION,
+        "scope": (
+            "descriptive within-realization temporal variability; not "
+            "realization-to-realization or population uncertainty"
+        ),
+        "snapshot_weighting": "equal weight per retained snapshot",
+        "snapshot_count": len(times),
+        "snapshot_times": times.tolist(),
+        "unique_snapshot_time_count": len(np.unique(times)),
+        "duplicate_snapshot_times_present": len(np.unique(times)) != len(times),
+        "available": len(times) >= 2,
+    }
+    if len(times) < 2:
+        result.update({
+            "reason": "at least two retained snapshots are required",
+            "equal_snapshot_standard_deviation": None,
+            "equal_snapshot_standard_error": None,
+            "contiguous_blocks": {
+                "available": False,
+                "reason": "at least two retained snapshots are required",
+            },
+        })
+        return result
+
+    snapshot_standard_deviation = np.std(stacked, axis=0, ddof=1)
+    block_count = min(
+        DESCRIPTIVE_BLOCK_COUNT_MAX,
+        max(2, len(times) // 2),
+    )
+    block_indices = np.array_split(np.arange(len(times)), block_count)
+    block_means = np.stack(
+        [np.mean(stacked[indices], axis=0) for indices in block_indices],
+        axis=0,
+    )
+    block_standard_deviation = np.std(block_means, axis=0, ddof=1)
+    result.update({
+        "equal_snapshot_standard_deviation": snapshot_standard_deviation.tolist(),
+        "equal_snapshot_standard_error": (
+            snapshot_standard_deviation / math.sqrt(len(times))
+        ).tolist(),
+        "contiguous_blocks": {
+            "available": True,
+            "method": (
+                "deterministic partition into up to four nonoverlapping contiguous "
+                "equal-snapshot-count blocks, retaining at least two snapshots per "
+                "block when the snapshot count permits; block sizes differ by at "
+                "most one"
+            ),
+            "interpretation": (
+                "descriptive sensitivity to contiguous temporal aggregation; "
+                "not an autocorrelation-calibrated confidence interval"
+            ),
+            "maximum_block_count": DESCRIPTIVE_BLOCK_COUNT_MAX,
+            "block_count": block_count,
+            "block_snapshot_counts": [len(indices) for indices in block_indices],
+            "block_time_ranges": [
+                [float(times[indices[0]]), float(times[indices[-1]])]
+                for indices in block_indices
+            ],
+            "block_mean_standard_deviation": block_standard_deviation.tolist(),
+            "block_mean_standard_error": (
+                block_standard_deviation / math.sqrt(block_count)
+            ).tolist(),
+        },
+    })
+    return result
+
+
+def mean_spectrum(
+    records: list[dict[str, object]],
+    snapshot_times: list[float] | np.ndarray | None = None,
+) -> dict[str, object]:
     """Average compatible shell-summed spectra."""
 
+    powers = [
+        np.asarray(record["power_per_dk"], dtype=float) for record in records
+    ]
     result: dict[str, object] = {
         "dk": records[0]["dk"],
         "perpendicular": records[0]["perpendicular"],
         "k": records[0]["k"],
-        "power_per_dk": np.mean(
-            [np.asarray(record["power_per_dk"], dtype=float) for record in records],
-            axis=0,
-        ).tolist(),
+        "power_per_dk": np.mean(powers, axis=0).tolist(),
     }
     for key in ("field_definition", "normalization_definition"):
         if key in records[0]:
             result[key] = records[0][key]
+    if snapshot_times is not None:
+        result["uncertainty"] = descriptive_snapshot_block_uncertainty(
+            powers, snapshot_times
+        )
     return result
+
+
+def mean_mechanism_joint_diagnostics(
+    records: list[dict[str, object]],
+    snapshot_times: list[float] | np.ndarray,
+) -> dict[str, object]:
+    """Average compatible mechanism joint PDFs and derive conditional summaries."""
+
+    if not records or any(
+        record.get("schema_version") != MECHANISM_JOINT_SCHEMA_VERSION
+        for record in records
+    ):
+        raise ValueError("mechanism joint diagnostics are missing or incompatible")
+    first_products = records[0].get("products")
+    if not isinstance(first_products, dict) or set(first_products) != set(
+        MECHANISM_JOINT_FIELDS
+    ):
+        raise ValueError("mechanism joint diagnostic product inventory differs")
+    applied_values = [record.get("applied_to_flow") for record in records]
+    applied_to_flow = (
+        applied_values[0]
+        if all(value == applied_values[0] for value in applied_values[1:])
+        else None
+    )
+    interpretations = [str(record.get("interpretation", "")) for record in records]
+    interpretation = (
+        interpretations[0]
+        if all(value == interpretations[0] for value in interpretations[1:])
+        else "mixed model feedback scopes"
+    )
+    products: dict[str, object] = {}
+    for name, (x_name, y_name) in MECHANISM_JOINT_FIELDS.items():
+        source_products = [
+            record["products"][name] for record in records
+        ]
+        if any(
+            source["x_field"] != x_name or source["y_field"] != y_name
+            for source in source_products
+        ):
+            raise ValueError(f"mechanism joint diagnostic fields differ: {name}")
+        histogram = mean_joint_distribution(
+            [source["joint_pdf"] for source in source_products],
+            snapshot_times,
+        )
+        products[name] = {
+            "x_field": x_name,
+            "y_field": y_name,
+            "x_definition": MECHANISM_FIELD_DEFINITIONS[x_name],
+            "y_definition": MECHANISM_FIELD_DEFINITIONS[y_name],
+            "joint_pdf": histogram,
+            "conditional_y_given_x": conditional_profile_from_joint_pdf(histogram),
+        }
+    return {
+        "schema_version": MECHANISM_JOINT_SCHEMA_VERSION,
+        "scope": (
+            "equal-snapshot-mean descriptive relationships among local mechanism "
+            "diagnostics"
+        ),
+        "discretization": records[0].get(
+            "discretization",
+            "cell-centered periodic-gradient reconstruction",
+        ),
+        "applied_to_flow": applied_to_flow,
+        "interpretation": interpretation,
+        "local_signed_exchange_field": records[0].get(
+            "local_signed_exchange_field",
+            "signed_pressure_stress_power_density",
+        ),
+        "scale_resolved_signed_transfer_path": records[0].get(
+            "scale_resolved_signed_transfer_path",
+            "pressure_transfer.signed_transfer",
+        ),
+        "snapshot_count": len(records),
+        "snapshot_times": np.asarray(snapshot_times, dtype=float).tolist(),
+        "products": products,
+    }
 
 
 def mean_eddy_anisotropy(records: list[dict[str, object]]) -> dict[str, object]:
@@ -2426,6 +3019,19 @@ def average_snapshot_records(records: dict[str, dict[str, object]]) -> dict[str,
         pressure_work_ensemble[f"{name}_mean"] = float(
             np.mean([sample[name] for sample in pressure_work])
         )
+    pressure_work_ensemble["uncertainty"] = {
+        name: descriptive_snapshot_block_uncertainty(
+            [sample[name] for sample in pressure_work], times
+        )
+        for name in (
+            "isotropic_perpendicular_pressure_power",
+            "anisotropic_stress_power",
+            "total_cgl_pressure_power",
+            "parallel_strain_rms",
+            "anisotropic_power_density_rms",
+            "mks24_transfer_direct_real_space",
+        )
+    }
     pressure_integral: dict[str, object] = {
         "available": can_integrate,
         "definition": (
@@ -2508,10 +3114,137 @@ def average_snapshot_records(records: dict[str, dict[str, object]]) -> dict[str,
                     [sample[name] for sample in heat_flux], heat_flux_times
                 )
         heat_flux_ensemble["time_integral_estimate"] = heat_flux_integral
+    spectra_ensemble = {
+        name: mean_spectrum(
+            [sample["spectra"][name] for sample in samples], times
+        )
+        for name in spectrum_names
+    }
+    transfer_values = [
+        np.asarray(item["transfer"], dtype=float) for item in transfer
+    ]
+    signed_transfer_values = [
+        np.asarray(item.get("signed_transfer", item["transfer"]), dtype=float)
+        for item in transfer
+    ]
+    transfer_mean = np.mean(transfer_values, axis=0).tolist()
+    signed_transfer_mean = np.mean(signed_transfer_values, axis=0).tolist()
+    pressure_transfer_ensemble: dict[str, object] = {
+        "dk": transfer[0]["dk"],
+        "k_perp": transfer[0]["k_perp"],
+        "transfer": transfer_mean,
+        "signed_transfer": list(signed_transfer_mean),
+        "definition": transfer[0].get(
+            "definition",
+            "signed perpendicular-shell pressure-stress transfer partition",
+        ),
+        "filter_definition": transfer[0].get(
+            "filter_definition",
+            "sqrt(rho) u filtered into nonoverlapping k_perp shells",
+        ),
+        "sign_convention": transfer[0].get(
+            "sign_convention",
+            "positive transfer is kinetic-energy gain from the pressure force",
+        ),
+        "interpretation": (
+            f"{shared_work_scope}; signed pressure-stress exchange reconstructed "
+            "from retained snapshots"
+        ),
+        "applied_to_flow": transfer[0].get("applied_to_flow") if all(
+            item.get("applied_to_flow") == transfer[0].get("applied_to_flow")
+            for item in transfer[1:]
+        ) else None,
+        "normalization_available": normalized_transfer_available,
+        "normalization_definition": transfer[0]["normalization_definition"],
+        "kinetic_energy_mean": float(np.mean(
+            [item["kinetic_energy"] for item in transfer]
+        )),
+        "velocity_rms_mean": float(np.mean(
+            [item["velocity_rms"] for item in transfer]
+        )),
+        "perpendicular_outer_scale": transfer[0]["perpendicular_outer_scale"],
+        "total_transfer_rate_mean": float(np.mean(
+            [item["total_transfer_rate"] for item in transfer]
+        )),
+        "transfer_normalized_by_total": (
+            np.mean(
+                [
+                    np.asarray(item["transfer_normalized_by_total"], dtype=float)
+                    for item in transfer
+                ],
+                axis=0,
+            ).tolist()
+            if normalized_transfer_available else None
+        ),
+        "signed_transfer_normalized_by_total": (
+            np.mean(
+                [
+                    np.asarray(
+                        item.get(
+                            "signed_transfer_normalized_by_total",
+                            item["transfer_normalized_by_total"],
+                        ),
+                        dtype=float,
+                    )
+                    for item in transfer
+                ],
+                axis=0,
+            ).tolist()
+            if normalized_transfer_available else None
+        ),
+        "direct_real_space_mean": float(np.mean(
+            [item["direct_real_space"] for item in transfer]
+        )),
+        "shell_sum_mean": float(np.mean([item["shell_sum"] for item in transfer])),
+        "closure_error_mean": float(np.mean(
+            [item["closure_error"] for item in transfer]
+        )),
+        "uncertainty": {
+            "signed_transfer": descriptive_snapshot_block_uncertainty(
+                signed_transfer_values, times
+            ),
+            "direct_real_space": descriptive_snapshot_block_uncertainty(
+                [item["direct_real_space"] for item in transfer], times
+            ),
+            "shell_sum": descriptive_snapshot_block_uncertainty(
+                [item["shell_sum"] for item in transfer], times
+            ),
+        },
+    }
+    if normalized_transfer_available:
+        pressure_transfer_ensemble["uncertainty"][
+            "signed_transfer_normalized_by_total"
+        ] = descriptive_snapshot_block_uncertainty(
+            [
+                item.get(
+                    "signed_transfer_normalized_by_total",
+                    item["transfer_normalized_by_total"],
+                )
+                for item in transfer
+            ],
+            times,
+        )
+    mechanism_ensemble: dict[str, object] = {}
+    if all(
+        isinstance(sample.get("mechanism_joint_diagnostics"), dict)
+        for sample in samples
+    ):
+        mechanism_ensemble = {
+            "mechanism_diagnostics": mechanism_diagnostic_index(
+                uncertainty_available=True,
+                ensemble=True,
+                normalized_transfer_available=normalized_transfer_available,
+            ),
+            "mechanism_joint_diagnostics": mean_mechanism_joint_diagnostics(
+                [sample["mechanism_joint_diagnostics"] for sample in samples],
+                times,
+            ),
+        }
     return {
         "snapshot_count": len(samples),
         "time_first": min(float(sample["time"]) for sample in samples),
         "time_last": max(float(sample["time"]) for sample in samples),
+        "snapshot_times": times.tolist(),
         "pdf": {
             name: mean_distribution([sample["pdf"][name] for sample in samples])
             for name in pdf_names
@@ -2525,50 +3258,13 @@ def average_snapshot_records(records: dict[str, dict[str, object]]) -> dict[str,
             **{
                 name: mean_joint_distribution([
                     sample[name] for sample in pressure_density
-                ])
+                ], times)
                 for name in joint_names
             },
         },
-        "spectra": {
-            name: mean_spectrum([sample["spectra"][name] for sample in samples])
-            for name in spectrum_names
-        },
-        "pressure_transfer": {
-            "dk": transfer[0]["dk"],
-            "k_perp": transfer[0]["k_perp"],
-            "transfer": np.mean(
-                [np.asarray(item["transfer"], dtype=float) for item in transfer], axis=0
-            ).tolist(),
-            "normalization_available": normalized_transfer_available,
-            "normalization_definition": transfer[0]["normalization_definition"],
-            "kinetic_energy_mean": float(np.mean(
-                [item["kinetic_energy"] for item in transfer]
-            )),
-            "velocity_rms_mean": float(np.mean(
-                [item["velocity_rms"] for item in transfer]
-            )),
-            "perpendicular_outer_scale": transfer[0]["perpendicular_outer_scale"],
-            "total_transfer_rate_mean": float(np.mean(
-                [item["total_transfer_rate"] for item in transfer]
-            )),
-            "transfer_normalized_by_total": (
-                np.mean(
-                    [
-                        np.asarray(item["transfer_normalized_by_total"], dtype=float)
-                        for item in transfer
-                    ],
-                    axis=0,
-                ).tolist()
-                if normalized_transfer_available else None
-            ),
-            "direct_real_space_mean": float(np.mean(
-                [item["direct_real_space"] for item in transfer]
-            )),
-            "shell_sum_mean": float(np.mean([item["shell_sum"] for item in transfer])),
-            "closure_error_mean": float(np.mean(
-                [item["closure_error"] for item in transfer]
-            )),
-        },
+        "spectra": spectra_ensemble,
+        "pressure_transfer": pressure_transfer_ensemble,
+        **mechanism_ensemble,
         "pressure_work_decomposition": pressure_work_ensemble,
         "alignment": {
             name: mean_distribution([sample["alignment"][name] for sample in samples])
@@ -2631,7 +3327,8 @@ def analyze_snapshot_paths(paths: list[Path], bins: int, alignment_shells: list[
 
     for path in selected:
         fields, lengths, _ = read_selected(path)
-        for name, values in pdf_fields(fields, lengths).items():
+        scalar_fields = pdf_fields(fields, lengths)
+        for name, values in scalar_fields.items():
             finite = values[np.isfinite(values)]
             if finite.size == 0:
                 continue
@@ -2641,7 +3338,11 @@ def analyze_snapshot_paths(paths: list[Path], bins: int, alignment_shells: list[
                 extrema[name][1] = max(extrema[name][1], high)
             else:
                 extrema[name] = [low, high]
-        for name, (x_values, y_values) in pressure_density_fields(fields).items():
+        joint_coordinates = {
+            **pressure_density_fields(fields),
+            **mechanism_joint_coordinates(scalar_fields),
+        }
+        for name, (x_values, y_values) in joint_coordinates.items():
             coordinates = (x_values, y_values)
             if name not in joint_extrema:
                 joint_extrema[name] = [
@@ -6356,15 +7057,21 @@ def analyzed_product_curve(ensemble: dict[str, object], product: str,
         record = products[name]
         edges = np.asarray(record["edges"], dtype=float)
         return 0.5 * (edges[1:] + edges[:-1]), np.asarray(record["density"], dtype=float)
-    if product == "pressure_transfer.transfer":
+    if product in ("pressure_transfer.transfer", "pressure_transfer.signed_transfer"):
         record = ensemble.get("pressure_transfer", {})
         if not isinstance(record, dict):
             raise ValueError(f"analyzed product is missing: {product}")
+        key = "signed_transfer" if product.endswith("signed_transfer") else "transfer"
+        if key not in record:
+            key = "transfer"
         return (
             np.asarray(record["k_perp"], dtype=float),
-            np.asarray(record["transfer"], dtype=float),
+            np.asarray(record[key], dtype=float),
         )
-    if product == "pressure_transfer.transfer_normalized_by_total":
+    if product in (
+        "pressure_transfer.transfer_normalized_by_total",
+        "pressure_transfer.signed_transfer_normalized_by_total",
+    ):
         record = ensemble.get("pressure_transfer", {})
         if (
             not isinstance(record, dict)
@@ -6372,9 +7079,16 @@ def analyzed_product_curve(ensemble: dict[str, object], product: str,
             or record.get("transfer_normalized_by_total") is None
         ):
             raise ValueError(f"analyzed product is missing: {product}")
+        key = (
+            "signed_transfer_normalized_by_total"
+            if product.endswith("signed_transfer_normalized_by_total")
+            else "transfer_normalized_by_total"
+        )
+        if record.get(key) is None:
+            key = "transfer_normalized_by_total"
         return (
             np.asarray(record["k_perp"], dtype=float),
-            np.asarray(record["transfer_normalized_by_total"], dtype=float),
+            np.asarray(record[key], dtype=float),
         )
     if family == "alignment":
         products = ensemble.get("alignment", {})
