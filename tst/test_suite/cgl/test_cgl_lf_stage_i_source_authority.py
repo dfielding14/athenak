@@ -1104,6 +1104,23 @@ def direct_promote(campaign: Campaign) -> None:
         )
 
 
+def direct_recover(campaign: Campaign) -> None:
+    args = SimpleNamespace(
+        expected_audit_sha256=campaign.expected["audit"],
+        simulate_interruption=None,
+    )
+    layout = authority.root_layout(campaign.root)
+    with authority.stage_i_lock(layout):
+        authority.recover(
+            args,
+            campaign.root,
+            campaign.repository,
+            False,
+            campaign.expected["publisher"],
+            layout,
+        )
+
+
 def direct_verify(campaign: Campaign) -> None:
     layout = authority.root_layout(campaign.root)
     with authority.stage_i_lock(layout):
@@ -1270,6 +1287,71 @@ def test_verify_promoted_public_authority_lease_rejects_final_return_tail_exchan
 
 
 @pytest.mark.parametrize("action", ("promote", "recover", "verify"))
+def test_direct_lifecycle_rejects_exchange_before_successful_lease_close(
+    campaign: Campaign, monkeypatch: pytest.MonkeyPatch, action: str
+) -> None:
+    if action == "recover":
+        assert_failed(campaign.promote("after-catalogs"), "simulated interruption")
+    elif action == "verify":
+        assert campaign.promote().returncode == 0
+    real_close = authority.F118PublicAuthorityLease.close
+    mutated = False
+
+    def mutate_immediately_before_successful_close(
+        lease: authority.F118PublicAuthorityLease, *, authenticate: bool = False
+    ) -> None:
+        nonlocal mutated
+        if authenticate and not mutated:
+            hostile_exchange_public_member(f118_public_member(campaign, "evidence"))
+            mutated = True
+        real_close(lease, authenticate=authenticate)
+
+    monkeypatch.setattr(
+        authority.F118PublicAuthorityLease,
+        "close",
+        mutate_immediately_before_successful_close,
+    )
+    with pytest.raises(ValueError, match="public-authority lease|inode identity changed"):
+        globals()[f"direct_{action}"](campaign)
+
+    assert mutated
+    assert campaign.verify().returncode != 0
+
+
+@pytest.mark.parametrize("action", ("promote", "recover", "verify"))
+def test_direct_lifecycle_rejects_premature_lease_close_before_successful_release(
+    campaign: Campaign, monkeypatch: pytest.MonkeyPatch, action: str
+) -> None:
+    if action == "recover":
+        assert_failed(campaign.promote("after-catalogs"), "simulated interruption")
+    elif action == "verify":
+        assert campaign.promote().returncode == 0
+    real_close = authority.F118PublicAuthorityLease.close
+    mutated = False
+
+    def prematurely_close_before_authenticated_release(
+        lease: authority.F118PublicAuthorityLease, *, authenticate: bool = False
+    ) -> None:
+        nonlocal mutated
+        if authenticate and not mutated:
+            real_close(lease)
+            hostile_exchange_public_member(f118_public_member(campaign, "evidence"))
+            mutated = True
+        real_close(lease, authenticate=authenticate)
+
+    monkeypatch.setattr(
+        authority.F118PublicAuthorityLease,
+        "close",
+        prematurely_close_before_authenticated_release,
+    )
+    with pytest.raises(ValueError, match="closed before authenticated release"):
+        globals()[f"direct_{action}"](campaign)
+
+    assert mutated
+    assert campaign.verify().returncode != 0
+
+
+@pytest.mark.parametrize("action", ("promote", "recover", "verify"))
 def test_cli_lifecycle_final_return_lease_rejects_exchange_after_guards_release(
     campaign: Campaign,
     monkeypatch: pytest.MonkeyPatch,
@@ -1315,6 +1397,110 @@ def test_cli_lifecycle_final_return_lease_rejects_exchange_after_guards_release(
     assert mutated
     assert authority._ACTIVE_MUTATION_LOCK is None
     assert authority._ACTIVE_CANONICAL_PUBLIC_NAMESPACE is None
+    assert capsys.readouterr().out == ""
+    assert f118_public_member(campaign, "audit").exists()
+    assert campaign.verify().returncode != 0
+
+
+@pytest.mark.parametrize("action", ("promote", "recover", "verify"))
+def test_cli_lifecycle_rejects_exchange_before_successful_lease_close(
+    campaign: Campaign,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    action: str,
+) -> None:
+    if action == "recover":
+        assert_failed(campaign.promote("after-catalogs"), "simulated interruption")
+    elif action == "verify":
+        assert campaign.promote().returncode == 0
+
+    command = getattr(campaign, f"{action}_command")()[1:]
+    real_close = authority.F118PublicAuthorityLease.close
+    mutated = False
+
+    def mutate_immediately_before_successful_close(
+        lease: authority.F118PublicAuthorityLease, *, authenticate: bool = False
+    ) -> None:
+        nonlocal mutated
+        if (
+            authenticate
+            and not mutated
+            and authority._ACTIVE_MUTATION_LOCK is None
+            and authority._ACTIVE_CANONICAL_PUBLIC_NAMESPACE is None
+        ):
+            hostile_exchange_public_member(f118_public_member(campaign, "evidence"))
+            mutated = True
+        real_close(lease, authenticate=authenticate)
+
+    monkeypatch.setattr(
+        authority.F118PublicAuthorityLease,
+        "close",
+        mutate_immediately_before_successful_close,
+    )
+    monkeypatch.setattr(
+        authority,
+        "authenticate_self",
+        lambda _argv: (
+            campaign.publisher,
+            campaign.repository,
+            campaign.expected["publisher"],
+        ),
+    )
+
+    with pytest.raises(ValueError, match="public-authority lease|inode identity changed"):
+        authority.main(command)
+
+    assert mutated
+    assert capsys.readouterr().out == ""
+    assert f118_public_member(campaign, "audit").exists()
+    assert campaign.verify().returncode != 0
+
+
+@pytest.mark.parametrize("action", ("promote", "recover", "verify"))
+def test_cli_lifecycle_rejects_premature_lease_close_before_successful_release(
+    campaign: Campaign,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    action: str,
+) -> None:
+    if action == "recover":
+        assert_failed(campaign.promote("after-catalogs"), "simulated interruption")
+    elif action == "verify":
+        assert campaign.promote().returncode == 0
+
+    command = getattr(campaign, f"{action}_command")()[1:]
+    real_close = authority.F118PublicAuthorityLease.close
+    mutated = False
+
+    def prematurely_close_before_authenticated_release(
+        lease: authority.F118PublicAuthorityLease, *, authenticate: bool = False
+    ) -> None:
+        nonlocal mutated
+        if authenticate and not mutated:
+            real_close(lease)
+            hostile_exchange_public_member(f118_public_member(campaign, "evidence"))
+            mutated = True
+        real_close(lease, authenticate=authenticate)
+
+    monkeypatch.setattr(
+        authority.F118PublicAuthorityLease,
+        "close",
+        prematurely_close_before_authenticated_release,
+    )
+    monkeypatch.setattr(
+        authority,
+        "authenticate_self",
+        lambda _argv: (
+            campaign.publisher,
+            campaign.repository,
+            campaign.expected["publisher"],
+        ),
+    )
+
+    with pytest.raises(ValueError, match="closed before authenticated release"):
+        authority.main(command)
+
+    assert mutated
     assert capsys.readouterr().out == ""
     assert f118_public_member(campaign, "audit").exists()
     assert campaign.verify().returncode != 0

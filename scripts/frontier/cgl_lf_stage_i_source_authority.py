@@ -877,15 +877,27 @@ class F118PublicAuthorityLease:
                     f"{label} changed while F118 public-authority lease is active"
                 ) from error
 
-    def close(self) -> None:
-        """Release every retained F118 public-authority descriptor."""
+    def close(self, *, authenticate: bool = False) -> None:
+        """Release every retained descriptor, optionally from a successful use."""
 
         if self.closed:
+            if authenticate:
+                raise ValueError(
+                    "F118 public-authority lease closed before authenticated release"
+                )
             return
+        authentication_error = None
+        try:
+            if authenticate:
+                self.assert_bound()
+        except BaseException as error:
+            authentication_error = error
         self.closed = True
         for member in reversed(self.members):
             os.close(int(member["descriptor"]))
             os.close(int(member["parent"]))
+        if authentication_error is not None:
+            raise authentication_error
 
 
 @contextmanager
@@ -919,8 +931,11 @@ def f118_public_authority_closure(
     try:
         with active_f118_public_authority_lease(lease):
             yield lease
-    finally:
+    except BaseException:
         lease.close()
+        raise
+    else:
+        lease.close(authenticate=True)
 
 
 def require_bound_directory_descriptor(descriptor: int) -> None:
@@ -7330,8 +7345,11 @@ def main(argv: list[str] | None = None) -> int:
             print(result)
             return 0
         with active_f118_public_authority_lease(success_lease):
-            print(result)
-            return 0
+            pass
+        success_lease.close(authenticate=True)
+        success_lease = None
+        print(result)
+        return 0
     finally:
         if success_lease is not None:
             success_lease.close()
