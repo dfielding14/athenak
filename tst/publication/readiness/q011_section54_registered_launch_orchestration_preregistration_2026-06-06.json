@@ -1,0 +1,68 @@
+{
+  "date": "2026-06-06",
+  "non_authorization_guards": {
+    "claim_closure_authorized": false,
+    "frontier_execution_authorized": false,
+    "live_policy_mutation_authorized": false,
+    "scheduler_calls_authorized": false,
+    "scheduler_submission_authorized": false
+  },
+  "outputs": [
+    "registered_policy_slice_fragment.json",
+    "pre_submit_config_candidates/<attempt_id>.json",
+    "materialization_receipt.json"
+  ],
+  "pre_submit_candidate_late_bindings": [
+    "fresh_submission_uuid",
+    "fresh_pre_manifest_operator_attestation_after_policy_promotion",
+    "fresh_timeout_margin_artifact",
+    "fresh_six_field_queue_snapshot",
+    "fresh_site_policy_checked_utc",
+    "artifact_dir_derived_from_campaign_and_submission_uuid"
+  ],
+  "qualification_effect": "none_review_candidates_only_no_launch_authority_no_claim_closure",
+  "record_type": "q011_section54_registered_launch_orchestration_preregistration",
+  "registered_slice_required_fields": [
+    "authorization_id",
+    "status",
+    "campaign",
+    "test_id",
+    "evidence_class",
+    "physical_mode",
+    "runtime_profile",
+    "selected_qos",
+    "registered_short_nonproduction",
+    "maximum_nodes",
+    "maximum_walltime_seconds",
+    "maximum_attempts",
+    "job_script_sha256",
+    "input_deck_sha256",
+    "environment_profile_sha256",
+    "analysis_script_sha256",
+    "executable_sha256",
+    "launch_contract_sha256",
+    "clean_candidate_manifest_sha256"
+  ],
+  "required_attempt_scope": "one_or_more_unique_ordered_baseline_attempts_each_with_one_exact_revalidated_planner_retention_record",
+  "required_next_gates": [
+    "review_the_registered_policy_slice_fragment",
+    "freeze_source_and_install_the_exact_selected_controller_generation",
+    "authorize_the_exact_selected_clean_candidate_in_a_launch_prohibited_policy",
+    "verify_remaining_ledger_budget_against_the_declared_batch_ceiling",
+    "capture_a_fresh_pre_policy_promotion_operator_attestation_with_an_empty_user_queue",
+    "promote_a_separately_reviewed_policy_successor_containing_only_the_selected_slices",
+    "for_each_attempt_capture_fresh_late_bindings_and_materialize_one_exact_pre_submit_config",
+    "capture_a_fresh_pre_submit_wrapper_attestation_and_use_only_the_installed_submission_wrapper",
+    "wait_for_terminal_state_and_reconcile_before_materializing_another_attempt"
+  ],
+  "resource_ceiling_policy": {
+    "maximum_attempts_per_registered_slice": 1,
+    "maximum_total_node_hours": 10000.0,
+    "qos_selection_reason": "normal_required_by_registered_campaign",
+    "registered_short_nonproduction": false,
+    "selected_qos": "normal"
+  },
+  "schema_version": 1,
+  "selected_binding_record_type": "q011_section54_registered_launch_selected_bindings",
+  "status": "source_local_review_materializer_only_no_launch_authority"
+}
