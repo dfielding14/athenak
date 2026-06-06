@@ -2897,7 +2897,7 @@ def test_strong_r17_gate_separates_current_tooling_from_frozen_scientific_source
     provenance = fixture["recost"]["provenance"]
     provenance["generator_revision"] = tooling_revision
     provenance["stage_i_helper_revision"] = tooling_revision
-    provenance["matrix_revision"] = scientific_revision
+    provenance["matrix_revision"] = tooling_revision
     provenance["source_bundle_verified_revisions"] = [
         scientific_revision,
         tooling_revision,
@@ -2907,6 +2907,8 @@ def test_strong_r17_gate_separates_current_tooling_from_frozen_scientific_source
         fixture["paths"], fixture["args"], [], **fixture["kwargs"]
     )
     assert result is not None
+    assert provenance["matrix_revision"] == tooling_revision
+    assert fixture["profile"]["input_revision"] == scientific_revision
 
 
 @pytest.mark.parametrize(
@@ -2922,6 +2924,7 @@ def test_strong_r17_gate_separates_current_tooling_from_frozen_scientific_source
         "controller-binding",
         "generator-binding",
         "matrix-binding",
+        "matrix-revision",
         "bundle-revisions",
         "source-authority",
         "authority-bundle",
@@ -2956,6 +2959,8 @@ def test_strong_r17_gate_fails_closed_on_drift(tmp_path, monkeypatch, mutation):
         recost["provenance"]["generator_sha256"] = "9" * 64
     elif mutation == "matrix-binding":
         recost["provenance"]["matrix_sha256"] = "9" * 64
+    elif mutation == "matrix-revision":
+        recost["provenance"]["matrix_revision"] = "e" * 40
     elif mutation == "bundle-revisions":
         recost["provenance"]["source_bundle_verified_revisions"] = ["b" * 40]
     elif mutation == "source-authority":
@@ -6152,7 +6157,7 @@ def test_promoted_f117_profile_preserves_frozen_science_revision(
             "stage_i_helper_sha256": utility["sha256"],
             "stage_i_helper_revision": utility["revision"],
             "matrix_sha256": sha256(matrix),
-            "matrix_revision": module.QUALIFIED_SOURCE_REVISION,
+            "matrix_revision": tooling_revision,
             "source_bundle_sha256": sha256(bundle),
             "qualification_approval_sha256": qualification["sha256"],
         },
@@ -6161,31 +6166,9 @@ def test_promoted_f117_profile_preserves_frozen_science_revision(
         module, "latest_published_r17_recost",
         lambda *_args: (recost_path, "3" * 64, recost, audit_path, "4" * 64),
     )
-    retained = module.require_promoted_profile_for_prepare(
-        paths,
-        args,
-        source_dir=source,
-        matrix_path=matrix,
-        input_path=input_path,
-        input_revision=module.QUALIFIED_SOURCE_REVISION,
-        utility_provenance=utility,
-        build_provenance={
-            "revision": module.QUALIFIED_SOURCE_REVISION,
-            "sha256": sha256(executable),
-            "manifest_dir": str(build_manifest),
-        },
-        build_manifest=build_manifest,
-        qualification_approval=qualification,
-        bundle_provenance=bundle_record,
-        current_source_authority=authority,
-        restart=None,
-        parent_segment=None,
-        time_tlim_target=0.25,
-    )
-    assert retained["profile"]["input_revision"] == module.QUALIFIED_SOURCE_REVISION
-    profile["input_revision"] = tooling_revision
-    with pytest.raises(ValueError, match="differs from prepare arguments"):
-        module.require_promoted_profile_for_prepare(
+
+    def require_profile():
+        return module.require_promoted_profile_for_prepare(
             paths,
             args,
             source_dir=source,
@@ -6206,6 +6189,22 @@ def test_promoted_f117_profile_preserves_frozen_science_revision(
             parent_segment=None,
             time_tlim_target=0.25,
         )
+
+    retained = require_profile()
+    assert retained["profile"]["input_revision"] == module.QUALIFIED_SOURCE_REVISION
+    assert recost["provenance"]["matrix_revision"] == tooling_revision
+    assert (
+        recost["provenance"]["matrix_revision"] != retained["profile"]["input_revision"]
+    )
+
+    recost["provenance"]["matrix_revision"] = module.QUALIFIED_SOURCE_REVISION
+    with pytest.raises(ValueError, match="profile provenance is stale"):
+        require_profile()
+
+    recost["provenance"]["matrix_revision"] = tooling_revision
+    profile["input_revision"] = tooling_revision
+    with pytest.raises(ValueError, match="differs from prepare arguments"):
+        require_profile()
 
 
 def test_parse_history_preserves_real_athenak_hyphenated_labels(tmp_path):

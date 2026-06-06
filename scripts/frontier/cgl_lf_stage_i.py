@@ -8011,14 +8011,17 @@ def require_promoted_profile_for_prepare(
         ) < 1
     ):
         raise ValueError("promoted F117-era profile lacks reviewed scientific policy")
+    tooling_revision = require_source_authority_revision(
+        utility_provenance.get("revision"), "current F117 tooling revision"
+    )
     provenance = recost.get("provenance")
     if (
         not isinstance(provenance, dict)
         or provenance.get("source_authority") != current_source_authority
         or provenance.get("stage_i_helper_sha256") != utility_provenance.get("sha256")
-        or provenance.get("stage_i_helper_revision") != utility_provenance.get("revision")
+        or provenance.get("stage_i_helper_revision") != tooling_revision
         or provenance.get("matrix_sha256") != sha256(matrix_path)
-        or provenance.get("matrix_revision") != input_revision
+        or provenance.get("matrix_revision") != tooling_revision
         or provenance.get("source_bundle_sha256") != bundle_provenance.get("sha256")
         or provenance.get("qualification_approval_sha256")
         != qualification_approval.get("sha256")
@@ -8301,7 +8304,7 @@ def require_r17_readiness_for_prepare(
         "stage_i_helper_sha256": utility_provenance["sha256"],
         "stage_i_helper_revision": tooling_revision,
         "matrix_sha256": sha256(matrix_path),
-        "matrix_revision": input_revision,
+        "matrix_revision": tooling_revision,
         "source_bundle_sha256": bundle_provenance["sha256"],
         "qualification_approval_sha256": qualification_approval["sha256"],
         "ledger_sha256": sha256(paths["ledger"]),
