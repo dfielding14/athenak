@@ -69,7 +69,8 @@ from control_plane_common import TRUSTED_GIT, TRUSTED_PYTHON
 from control_plane_common import TRUSTED_SACCT, TRUSTED_SBATCH, TRUSTED_SCANCEL
 from control_plane_common import TRUSTED_SCONTROL, TRUSTED_SQUEUE
 from create_clean_candidate_freeze import _authorized_source_path
-from create_clean_candidate_freeze import create_freeze, _validated_submodules
+from create_clean_candidate_freeze import _source_identity, _validated_submodules
+from create_clean_candidate_freeze import create_freeze
 from create_pre_submit_manifest import create_manifest
 from initialize_frontier_ledger import initialize_from_policy
 from install_control_plane import install
@@ -96,6 +97,13 @@ from validate_and_reserve_frontier_job import repair_reservation_attachments
 from validate_and_reserve_frontier_job import reservation_bound_manifest
 from validate_and_reserve_frontier_job import reserve, transition
 from verify_compute_node_snapshot import verify
+from write_orion_build_profile import _clone_exact_submodule
+from write_orion_build_profile import _clone_fresh_source
+from write_orion_build_profile import _require_exact_clone_capabilities
+from write_orion_build_profile import _require_exact_standalone_clone
+from write_orion_build_profile import _require_exact_standalone_full_clone
+from write_orion_build_profile import _require_exact_standalone_shallow_clone
+from write_orion_build_profile import _submodule_status
 from write_orion_build_profile import build_profile as build_orion_profile
 from write_orion_build_profile import write_profile
 
@@ -994,7 +1002,7 @@ class SnapshotTests(unittest.TestCase):
         def mutate(artifact: dict[str, object]) -> None:
             artifact.update(
                 completed_utc="2026-06-02T00:00:00Z",
-                schema_version=1,
+                schema_version=2,
                 source_authentication={
                     **AUTHORIZED_STORAGE_PREFLIGHT_PREDECESSOR_MIGRATION_SOURCE_AUTHENTICATION
                 },
@@ -1004,11 +1012,16 @@ class SnapshotTests(unittest.TestCase):
         self._rewrite_active_storage_preflight_artifact(mutate)
 
     @contextmanager
-    def _authorize_active_exact_reviewed_preflight_predecessor(self) -> Iterator[None]:
+    def _authorize_active_exact_reviewed_preflight_predecessor(
+        self, *, control_plane_version: str | None = None
+    ) -> Iterator[None]:
         policy_path = self.pic_root / "policy" / "storage_policy.json"
         promotion_path = self.pic_root / "policy" / "active_promotion.json"
         policy = json.loads(policy_path.read_text(encoding="utf-8"))
         binding = policy["olcf_side_storage"]["storage_preflight_evidence"]
+        predecessor_control_plane_version = (
+            control_plane_version or self.control_plane_version
+        )
         with patch(
             "control_plane_common."
             "AUTHORIZED_STORAGE_PREFLIGHT_PREDECESSOR_MIGRATION_POLICY_SHA256",
@@ -1020,7 +1033,7 @@ class SnapshotTests(unittest.TestCase):
         ), patch(
             "control_plane_common."
             "AUTHORIZED_STORAGE_PREFLIGHT_PREDECESSOR_MIGRATION_CONTROL_PLANE_VERSION",
-            self.control_plane_version,
+            predecessor_control_plane_version,
         ), patch(
             "control_plane_common."
             "AUTHORIZED_STORAGE_PREFLIGHT_PREDECESSOR_MIGRATION_PROBE_ID",
@@ -2953,6 +2966,33 @@ class SnapshotTests(unittest.TestCase):
             capture_output=True,
         )
         return source_root
+
+    def _commit_source_change(
+        self, source_root: Path, *, relative: str, content: str, message: str
+    ) -> None:
+        path = source_root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+        subprocess.run(["git", "-C", str(source_root), "add", "--", relative], check=True)
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(source_root),
+                "-c",
+                "user.name=PIC Test",
+                "-c",
+                "user.email=pic-test@example.invalid",
+                "commit",
+                "-m",
+                message,
+            ],
+            check=True,
+            capture_output=True,
+        )
+
+    def _tag_source_head(self, source_root: Path, tag: str) -> None:
+        subprocess.run(["git", "-C", str(source_root), "tag", tag], check=True)
 
     def _prepared_artifact_inventory(self) -> str:
         return "tst/publication/frontier_control_plane/prepared_pic_artifact_inventory.json"
@@ -12008,6 +12048,523 @@ PY
         with self.assertRaises(FileExistsError):
             write_profile(**arguments)
 
+    def test_orion_build_profile_main_clone_is_bounded_and_submodules_preserve_status(
+        self,
+    ) -> None:
+        child_source = self._clean_source("exact-clone-child-source")
+        self._commit_source_change(
+            child_source,
+            relative="child-history.txt",
+            content="second child revision\n",
+            message="advance child source",
+        )
+        self._tag_source_head(child_source, "status-child")
+        nested_source = self._clean_source("exact-clone-nested-source")
+        self._add_existing_submodule(nested_source, child_source, "child")
+        self._commit_source_change(
+            nested_source,
+            relative="nested-history.txt",
+            content="second nested revision\n",
+            message="advance nested source",
+        )
+        self._tag_source_head(nested_source, "status-nested")
+        source_root = self._clean_source("exact-clone-source")
+        self._add_existing_submodule(source_root, nested_source, "nested")
+        self._commit_source_change(
+            source_root,
+            relative="top-history.txt",
+            content="second top-level revision\n",
+            message="advance top-level source",
+        )
+        subprocess.run(
+            [
+                "git",
+                "-c",
+                "protocol.file.allow=always",
+                "-C",
+                str(source_root),
+                "submodule",
+                "update",
+                "--init",
+                "--recursive",
+            ],
+            check=True,
+            capture_output=True,
+        )
+        commit, tree, submodules = _source_identity(source_root)
+        destination = self.root / "exact-clone-destination"
+        clone_commands: list[list[str]] = []
+        checkout_commands: list[list[str]] = []
+        real_run = subprocess.run
+
+        def track_clone_commands(
+            command: list[str], *arguments: object, **keywords: object
+        ) -> subprocess.CompletedProcess[bytes]:
+            if "clone" in command:
+                clone_commands.append(command)
+            if "checkout" in command:
+                checkout_commands.append(command)
+            return real_run(command, *arguments, **keywords)
+
+        with patch(
+            "write_orion_build_profile.subprocess.run", side_effect=track_clone_commands
+        ):
+            _clone_fresh_source(
+                source_root,
+                destination,
+                commit=commit,
+                submodules=submodules,
+            )
+
+        ordered_submodules = sorted(
+            submodules, key=lambda record: len(Path(record["path"]).parts)
+        )
+        self.assertEqual(len(clone_commands), 1 + len(ordered_submodules))
+        main_clone = clone_commands[0]
+        main_clone_index = main_clone.index("clone")
+        self.assertEqual(
+            main_clone[main_clone_index + 1 :],
+            [
+                "--no-local",
+                "--no-tags",
+                "--depth=1",
+                f"--revision={commit}",
+                str(source_root),
+                str(destination),
+            ],
+        )
+        for command, record in zip(
+            clone_commands[1:], ordered_submodules, strict=True
+        ):
+            clone_index = command.index("clone")
+            self.assertEqual(
+                command[clone_index + 1 :],
+                [
+                    "--no-local",
+                    "--reject-shallow",
+                    "--no-checkout",
+                    str(source_root / record["path"]),
+                    str(destination / record["path"]),
+                ],
+            )
+        self.assertEqual(len(checkout_commands), len(ordered_submodules))
+        for command, record in zip(checkout_commands, ordered_submodules, strict=True):
+            checkout_index = command.index("checkout")
+            self.assertEqual(
+                command[checkout_index + 1 :], ["--detach", record["git_commit"]]
+            )
+
+        self.assertEqual(_source_identity(destination), (commit, tree, submodules))
+        authorized_submodule_status = subprocess.check_output(
+            ["git", "-C", str(source_root), "submodule", "status", "--recursive"]
+        )
+        self.assertIn(b"(status-nested)", authorized_submodule_status)
+        self.assertIn(b"(status-child)", authorized_submodule_status)
+        self.assertEqual(
+            subprocess.check_output(
+                ["git", "-C", str(destination), "submodule", "status", "--recursive"]
+            ),
+            authorized_submodule_status,
+        )
+        repositories = [(destination, source_root, commit)] + [
+            (
+                destination / record["path"],
+                source_root / record["path"],
+                record["git_commit"],
+            )
+            for record in ordered_submodules
+        ]
+        for repository, original, revision in repositories:
+            with self.subTest(repository=repository):
+                self.assertEqual(
+                    subprocess.check_output(
+                        ["git", "-C", str(repository), "rev-parse", "HEAD"], text=True
+                    ).strip(),
+                    revision,
+                )
+                self.assertEqual(
+                    subprocess.run(
+                        ["git", "-C", str(repository), "symbolic-ref", "-q", "HEAD"],
+                        capture_output=True,
+                    ).returncode,
+                    1,
+                )
+                self.assertEqual(
+                    subprocess.check_output(
+                        [
+                            "git",
+                            "-C",
+                            str(repository),
+                            "config",
+                            "--get",
+                            "remote.origin.url",
+                        ],
+                        text=True,
+                    ).strip(),
+                    str(original),
+                )
+        self.assertEqual(
+            subprocess.check_output(
+                ["git", "-C", str(destination), "rev-parse", "--is-shallow-repository"],
+                text=True,
+            ).strip(),
+            "true",
+        )
+        self.assertEqual(
+            subprocess.check_output(
+                ["git", "-C", str(destination), "rev-list", "--count", "HEAD"],
+                text=True,
+            ).strip(),
+            "1",
+        )
+        for repository, original, _ in repositories[1:]:
+            with self.subTest(full_submodule=repository):
+                self.assertEqual(
+                    subprocess.check_output(
+                        [
+                            "git",
+                            "-C",
+                            str(repository),
+                            "rev-parse",
+                            "--is-shallow-repository",
+                        ],
+                        text=True,
+                    ).strip(),
+                    "false",
+                )
+                self.assertEqual(
+                    subprocess.check_output(
+                        ["git", "-C", str(repository), "rev-list", "--count", "HEAD"],
+                        text=True,
+                    ).strip(),
+                    subprocess.check_output(
+                        ["git", "-C", str(original), "rev-list", "--count", "HEAD"],
+                        text=True,
+                    ).strip(),
+                )
+
+        unavailable_source = source_root.with_name(f"{source_root.name}-unavailable")
+        source_root.rename(unavailable_source)
+        self.assertEqual(_source_identity(destination), (commit, tree, submodules))
+        _require_exact_standalone_shallow_clone(destination, commit=commit)
+        for repository, _, revision in repositories[1:]:
+            _require_exact_standalone_full_clone(repository, commit=revision)
+        for index, (repository, _, _) in enumerate(repositories):
+            with self.subTest(standalone_repository=repository):
+                subprocess.run(
+                    [
+                        "git",
+                        "-C",
+                        str(repository),
+                        "archive",
+                        "--format=tar",
+                        f"--output={self.root / f'exact-clone-{index}.tar'}",
+                        "HEAD",
+                    ],
+                    check=True,
+                )
+                subprocess.run(
+                    ["git", "-C", str(repository), "cat-file", "commit", "HEAD"],
+                    check=True,
+                    capture_output=True,
+                )
+
+    def test_orion_build_profile_exact_clone_capabilities_precede_build_paths(
+        self,
+    ) -> None:
+        _require_exact_clone_capabilities()
+        source_root = self._clean_source("unsupported-exact-clone-capability-source")
+        commit = subprocess.check_output(
+            ["git", "-C", str(source_root), "rev-parse", "HEAD"], text=True
+        ).strip()
+        profile_id = "unsupported-exact-clone-capability"
+        build_root = self.pic_root / "build" / commit[:12] / profile_id
+        artifact_root = self.pic_root / "bin" / commit[:12] / profile_id
+        with patch(
+            "write_orion_build_profile._require_exact_clone_capabilities",
+            side_effect=ValueError("Trusted Git lacks required exact-clone capabilities"),
+        ), patch(
+            "write_orion_build_profile._execute_logged_command"
+        ) as execute, self.assertRaisesRegex(
+            ValueError, "lacks required exact-clone capabilities"
+        ):
+            build_orion_profile(
+                source_root=source_root,
+                expected_git_commit=commit,
+                profile_id=profile_id,
+                control_plane_dir=self.control_plane_dir,
+                authorized_pic_root=self.pic_root,
+                authorized_source_root=source_root,
+            )
+        execute.assert_not_called()
+        self.assertFalse(build_root.exists())
+        self.assertFalse(artifact_root.exists())
+
+    def test_orion_build_profile_exact_clone_accepts_linked_authorized_worktree(
+        self,
+    ) -> None:
+        source_root = self._clean_source("linked-authorized-source")
+        linked_source = self.root / "linked-authorized-worktree"
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(source_root),
+                "worktree",
+                "add",
+                "--detach",
+                str(linked_source),
+                "HEAD",
+            ],
+            check=True,
+            capture_output=True,
+        )
+        commit, tree, submodules = _source_identity(linked_source)
+        destination = self.root / "linked-authorized-destination"
+        _clone_fresh_source(
+            linked_source,
+            destination,
+            commit=commit,
+            submodules=submodules,
+        )
+        self.assertEqual(_source_identity(destination), (commit, tree, submodules))
+        _require_exact_standalone_shallow_clone(destination, commit=commit)
+
+    def test_orion_build_profile_rejects_recursive_status_drift_before_build(
+        self,
+    ) -> None:
+        child_source = self._clean_source("status-drift-child-source")
+        self._tag_source_head(child_source, "status-base")
+        self._commit_source_change(
+            child_source,
+            relative="after-tag.txt",
+            content="after tag\n",
+            message="advance after tag",
+        )
+        source_root = self._clean_source("status-drift-source")
+        self._add_existing_submodule(source_root, child_source, "child")
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(source_root / "child"),
+                "config",
+                "--local",
+                "core.abbrev",
+                "12",
+            ],
+            check=True,
+        )
+        authorized_status = _submodule_status(source_root)
+        self.assertIn(b"status-base-1-g", authorized_status)
+        commit = subprocess.check_output(
+            ["git", "-C", str(source_root), "rev-parse", "HEAD"], text=True
+        ).strip()
+        with patch(
+            "write_orion_build_profile._execute_logged_command"
+        ) as execute, self.assertRaisesRegex(
+            ValueError, "recursive submodule status differs"
+        ):
+            build_orion_profile(
+                source_root=source_root,
+                expected_git_commit=commit,
+                profile_id="status-drift",
+                control_plane_dir=self.control_plane_dir,
+                authorized_pic_root=self.pic_root,
+                authorized_source_root=source_root,
+            )
+        execute.assert_not_called()
+
+    def test_orion_build_profile_rejects_shallow_submodule_source(self) -> None:
+        source_root = self._clean_source("full-submodule-source")
+        self._commit_source_change(
+            source_root,
+            relative="history.txt",
+            content="second revision\n",
+            message="advance full source",
+        )
+        shallow_source = self.root / "shallow-submodule-source"
+        subprocess.run(
+            [
+                "git",
+                "clone",
+                "--depth=1",
+                f"file://{source_root}",
+                str(shallow_source),
+            ],
+            check=True,
+            capture_output=True,
+        )
+        commit = subprocess.check_output(
+            ["git", "-C", str(shallow_source), "rev-parse", "HEAD"], text=True
+        ).strip()
+        self.assertEqual(
+            subprocess.check_output(
+                [
+                    "git",
+                    "-C",
+                    str(shallow_source),
+                    "rev-parse",
+                    "--is-shallow-repository",
+                ],
+                text=True,
+            ).strip(),
+            "true",
+        )
+        with self.assertRaises(subprocess.CalledProcessError):
+            _clone_exact_submodule(
+                shallow_source,
+                self.root / "rejected-shallow-submodule",
+                commit=commit,
+            )
+        subprocess.run(
+            ["git", "-C", str(shallow_source), "checkout", "--detach", commit],
+            check=True,
+            capture_output=True,
+        )
+        with self.assertRaisesRegex(ValueError, "submodule clone is shallow"):
+            _require_exact_standalone_full_clone(shallow_source, commit=commit)
+
+    def test_orion_build_profile_exact_revision_clone_postconditions_fail_closed(
+        self,
+    ) -> None:
+        source_root = self._clean_source("adversarial-exact-clone-source")
+        self._commit_source_change(
+            source_root,
+            relative="history.txt",
+            content="second source revision\n",
+            message="advance adversarial source",
+        )
+        commit = subprocess.check_output(
+            ["git", "-C", str(source_root), "rev-parse", "HEAD"], text=True
+        ).strip()
+
+        def fresh_clone(name: str) -> Path:
+            destination = self.root / name
+            _clone_fresh_source(source_root, destination, commit=commit, submodules=[])
+            return destination
+
+        wrong_revision = fresh_clone("wrong-revision-clone")
+        with self.assertRaisesRegex(ValueError, "exact requested revision"):
+            _require_exact_standalone_clone(wrong_revision, commit="0" * 40)
+
+        attached = fresh_clone("attached-clone")
+        subprocess.run(
+            ["git", "-C", str(attached), "switch", "-c", "forged"],
+            check=True,
+            capture_output=True,
+        )
+        with self.assertRaisesRegex(ValueError, "not detached"):
+            _require_exact_standalone_clone(attached, commit=commit)
+
+        linked_source = fresh_clone("linked-source-clone")
+        linked_worktree = self.root / "linked-worktree"
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(linked_source),
+                "worktree",
+                "add",
+                "--detach",
+                str(linked_worktree),
+                "HEAD",
+            ],
+            check=True,
+            capture_output=True,
+        )
+        with self.assertRaisesRegex(ValueError, "linked worktree"):
+            _require_exact_standalone_clone(linked_worktree, commit=commit)
+
+        unbounded = fresh_clone("unbounded-clone")
+        unbounded_git_dir = Path(
+            subprocess.check_output(
+                ["git", "-C", str(unbounded), "rev-parse", "--absolute-git-dir"],
+                text=True,
+            ).strip()
+        )
+        (unbounded_git_dir / "shallow").unlink()
+        with self.assertRaisesRegex(ValueError, "not shallow"):
+            _require_exact_standalone_shallow_clone(unbounded, commit=commit)
+
+        alternate = fresh_clone("alternate-clone")
+        alternate_git_dir = Path(
+            subprocess.check_output(
+                ["git", "-C", str(alternate), "rev-parse", "--absolute-git-dir"],
+                text=True,
+            ).strip()
+        )
+        alternate_info = alternate_git_dir / "objects" / "info"
+        alternate_info.mkdir(parents=True, exist_ok=True)
+        (alternate_info / "alternates").write_text(
+            f"{source_root / '.git' / 'objects'}\n", encoding="utf-8"
+        )
+        with self.assertRaisesRegex(ValueError, "alternate object store"):
+            _require_exact_standalone_clone(alternate, commit=commit)
+
+        linked_objects = fresh_clone("linked-objects-clone")
+        linked_objects_git_dir = Path(
+            subprocess.check_output(
+                ["git", "-C", str(linked_objects), "rev-parse", "--absolute-git-dir"],
+                text=True,
+            ).strip()
+        )
+        linked_pack = linked_objects_git_dir / "objects" / "pack"
+        external_pack = self.root / "external-object-pack"
+        linked_pack.rename(external_pack)
+        linked_pack.symlink_to(external_pack, target_is_directory=True)
+        with self.assertRaisesRegex(ValueError, "object store contains a symlink"):
+            _require_exact_standalone_clone(linked_objects, commit=commit)
+
+        hardlinked_objects = fresh_clone("hardlinked-objects-clone")
+        hardlinked_objects_git_dir = Path(
+            subprocess.check_output(
+                [
+                    "git",
+                    "-C",
+                    str(hardlinked_objects),
+                    "rev-parse",
+                    "--absolute-git-dir",
+                ],
+                text=True,
+            ).strip()
+        )
+        object_file = next(
+            path
+            for path in (hardlinked_objects_git_dir / "objects").rglob("*")
+            if path.is_file()
+        )
+        os.link(object_file, self.root / "external-hardlinked-object")
+        with self.assertRaisesRegex(ValueError, "hard-linked object"):
+            _require_exact_standalone_clone(hardlinked_objects, commit=commit)
+
+        promisor_objects = fresh_clone("promisor-objects-clone")
+        promisor_git_dir = Path(
+            subprocess.check_output(
+                ["git", "-C", str(promisor_objects), "rev-parse", "--absolute-git-dir"],
+                text=True,
+            ).strip()
+        )
+        (promisor_git_dir / "objects" / "pack" / "forged.promisor").touch()
+        with self.assertRaisesRegex(ValueError, "promisor objects"):
+            _require_exact_standalone_clone(promisor_objects, commit=commit)
+
+        for key in [
+            "remote.origin.promisor",
+            "remote.origin.partialCloneFilter",
+            "extensions.partialClone",
+        ]:
+            with self.subTest(configuration=key):
+                promisor = fresh_clone(
+                    f"promisor-clone-{key.lower().replace('.', '-')}"
+                )
+                subprocess.run(
+                    ["git", "-C", str(promisor), "config", "--local", key, "true"],
+                    check=True,
+                )
+                with self.assertRaisesRegex(ValueError, "promisor configuration"):
+                    _require_exact_standalone_clone(promisor, commit=commit)
+
     def test_orion_build_profile_writer_rejects_dirty_source_tree(self) -> None:
         source_root = self._clean_source("dirty-profile-writer-source")
         (source_root / "untracked.txt").write_text("dirty\n", encoding="utf-8")
@@ -12510,8 +13067,11 @@ PY
 
     def test_clean_candidate_creator_archives_recursive_pinned_submodules(self) -> None:
         source_root = self._clean_source("recursive-submodule-source")
+        child = self._clean_source("recursive-child-source")
+        self._tag_source_head(child, "status-child")
         nested = self._clean_source("recursive-nested-source")
-        self._add_submodule(nested, "child")
+        self._add_existing_submodule(nested, child, "child")
+        self._tag_source_head(nested, "status-nested")
         self._add_existing_submodule(source_root, nested, "nested")
         subprocess.run(
             [
@@ -12528,8 +13088,17 @@ PY
             check=True,
             capture_output=True,
         )
+        authorized_submodule_status = subprocess.check_output(
+            ["git", "-C", str(source_root), "submodule", "status", "--recursive"]
+        )
+        self.assertIn(b"(status-nested)", authorized_submodule_status)
+        self.assertIn(b"(status-child)", authorized_submodule_status)
         executable, profile = self._build_profile(
             source_root, self.pic_root / "recursive-submodule-build", "test-profile"
+        )
+        self.assertEqual(
+            profile.with_name("submodule_status.txt").read_bytes(),
+            authorized_submodule_status,
         )
         manifest_path = create_freeze(
             source_root=source_root,
@@ -12760,40 +13329,43 @@ PY
         self.assertEqual(
             control_plane_common.
             AUTHORIZED_STORAGE_PREFLIGHT_PREDECESSOR_MIGRATION_POLICY_SHA256,
-            "23a73b868146f63d4b363713f988d55e9dadffa15b26f2b2f1d07da66331f5c3",
+            "48e74f3151b51ba84b72e3214ef4a66c03441c745912b833395f98f6f60a0bd1",
         )
         self.assertEqual(
             control_plane_common.
             AUTHORIZED_STORAGE_PREFLIGHT_PREDECESSOR_MIGRATION_PROMOTION_SHA256,
-            "4824ea825e7b9e42becdca4b9a8b72c0454bd1a2e02d5e365b1878ed94c53243",
+            "4ecb45bb399cee750ce69198286afc9fb903dde92cffc7507600b0a53f1c547f",
         )
         self.assertEqual(
             control_plane_common.
             AUTHORIZED_STORAGE_PREFLIGHT_PREDECESSOR_MIGRATION_CONTROL_PLANE_VERSION,
-            "821d185856722bd0178acb9427f78ac82671a4b6670779ec8400fbac54c6d721",
+            "b56d96b40f2c666b9fa5b421fac589d6a4d6500a716f20b479c354a3d239cb48",
         )
         self.assertEqual(
             control_plane_common.
             AUTHORIZED_STORAGE_PREFLIGHT_PREDECESSOR_MIGRATION_PROBE_ID,
-            "1554766c-21e2-48b1-8cfe-b1e7e4e75aa2",
+            "bc399b56-8fbb-4b67-b1dc-5df1dbff62b6",
         )
         self.assertEqual(
             control_plane_common.
             AUTHORIZED_STORAGE_PREFLIGHT_PREDECESSOR_MIGRATION_EVIDENCE_SHA256,
-            "81ba8415e786cf88563520119e88d5e749937aaad293d84003ec8f4b3acb6501",
+            "d4a289ce9f4cd7c406dbea8d457864790f3112488e47ea24766cb192beaafab2",
         )
         self.assertEqual(
             AUTHORIZED_STORAGE_PREFLIGHT_PREDECESSOR_MIGRATION_SOURCE_AUTHENTICATION,
             {
-                "entrypoint_sha256": (
-                    "22b8c3898154e0c687bf5bd555b7fae35826014cd5af8e33bd04b946671cb7f0"
+                "common_sha256": (
+                    "8873527c19b46236ed66f1c8e3b0318cfcb106e017c5289eac70b482db0ef963"
                 ),
-                "git_commit": "749c95bb7492d67bd3765eadd5287f54663c4052",
+                "entrypoint_sha256": (
+                    "b6dae64b28dbcc7ce82877ad25d53bc4f0637016c4bd274431c1a4ba947ec94b"
+                ),
+                "git_commit": "f6471610a116ce5433550625c9dc61752315040f",
                 "runner_sha256": (
-                    "74ab26fdf66129e018ce5a63a3827853e878b1efff71449490b0b017f48fd956"
+                    "6053f190ed5bea093537ca5e6aef110212d54861f6726a6fa7294a1716eca2d5"
                 ),
                 "schema_sha256": (
-                    "183fb8996381660a731a650e2fb42e0ee4989b248646d592fb28c0e57f8de898"
+                    "348b80f6b56fa56da57a4d30932b41784c939f5a2b1bf49c82d3a6acd024ee3f"
                 ),
                 "tracked_clean_head_blobs": True,
             },
@@ -12979,7 +13551,7 @@ PY
             installed_control_plane_version=successor.name,
             staged_control_plane_candidate_version=successor.name,
         )
-        with self.assertRaisesRegex(ValueError, "root schema"):
+        with self.assertRaisesRegex(ValueError, "source authentication"):
             promote(
                 self.policy,
                 control_plane_dir=successor,
@@ -13136,12 +13708,58 @@ PY
         assert candidate_source_root is not None
         authorized_freeze = self._authorized_science_freeze(candidate)
         historical_build_controller = self.control_plane_version
+        active_predecessor = self._publish_test_control_plane_successor(
+            self.pic_root, schema_suffix="\n\n"
+        )
+        project_home_active_predecessor = self._publish_test_control_plane_successor(
+            self.project_home_root, schema_suffix="\n\n"
+        )
+        self.assertEqual(
+            project_home_active_predecessor.name,
+            active_predecessor.name,
+        )
+        self.assertNotEqual(active_predecessor.name, historical_build_controller)
+        self._write_policy(
+            installed_control_plane_version=active_predecessor.name,
+            staged_control_plane_candidate_version=active_predecessor.name,
+            science_submission_freeze=authorized_freeze,
+        )
+
+        def revalidate_with_test_source(
+            candidate_manifest_path: Path, **kwargs: object
+        ) -> dict[str, object]:
+            return revalidate_clean_candidate.revalidate_clean_candidate(
+                candidate_manifest_path,
+                **kwargs,
+                authorized_source_root=candidate_source_root,
+            )
+
+        with patch(
+            "promote_active_policy.revalidate_clean_candidate",
+            side_effect=revalidate_with_test_source,
+        ) as predecessor_revalidate:
+            promote(
+                self.policy,
+                control_plane_dir=active_predecessor,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+        self.assertEqual(predecessor_revalidate.call_count, 2)
+        for invocation in predecessor_revalidate.call_args_list:
+            self.assertEqual(
+                invocation.kwargs["expected_receipt_control_plane_version"],
+                historical_build_controller,
+            )
+            self.assertEqual(invocation.kwargs["control_plane_dir"], active_predecessor)
         self._rewrite_active_policy_as_exact_reviewed_preflight_predecessor()
-        successor = self._publish_test_control_plane_successor(self.pic_root)
+        successor = self._publish_test_control_plane_successor(
+            self.pic_root, schema_suffix="\n\n\n"
+        )
         project_home_successor = self._publish_test_control_plane_successor(
-            self.project_home_root
+            self.project_home_root, schema_suffix="\n\n\n"
         )
         self.assertEqual(project_home_successor.name, successor.name)
+        self.assertNotEqual(successor.name, active_predecessor.name)
         self._write_policy(
             installed_control_plane_version=successor.name,
             staged_control_plane_candidate_version=successor.name,
@@ -13172,16 +13790,9 @@ PY
                 raise OSError("injected exact migration committed cleanup failure")
             real_unlink(parent_descriptor, name)
 
-        def revalidate_with_test_source(
-            candidate_manifest_path: Path, **kwargs: object
-        ) -> dict[str, object]:
-            return revalidate_clean_candidate.revalidate_clean_candidate(
-                candidate_manifest_path,
-                **kwargs,
-                authorized_source_root=candidate_source_root,
-            )
-
-        with self._authorize_active_exact_reviewed_preflight_predecessor(), patch(
+        with self._authorize_active_exact_reviewed_preflight_predecessor(
+            control_plane_version=active_predecessor.name
+        ), patch(
             "promote_active_policy.revalidate_clean_candidate",
             side_effect=revalidate_with_test_source,
         ) as migration_revalidate, patch(
@@ -13262,6 +13873,16 @@ PY
             authorized_project_home_root=self.project_home_root,
         )
         self.assertEqual(active["science_submission_freeze"], authorized_freeze)
+        self.assertEqual(
+            active["science_submission_freeze"][
+                "build_profile_control_plane_version"
+            ],
+            historical_build_controller,
+        )
+        self.assertEqual(
+            active["olcf_side_storage"]["installed_control_plane_version"],
+            successor.name,
+        )
         self.assertEqual(active["registered_science_slices"], [])
 
     def test_exact_reviewed_storage_preflight_migration_complete_prepared_or_mixed_recovery_preserves_historical_authorized_freeze(

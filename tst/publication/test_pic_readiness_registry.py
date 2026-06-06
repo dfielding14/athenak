@@ -114,6 +114,7 @@ _Q011_EXACT_PREDECESSOR_REPAIR_SOURCE_TEST_CLOSURE_PATHS = (
     "tst/publication/frontier_control_plane/install_control_plane.py",
     "tst/publication/frontier_control_plane/capture_storage_preflight_evidence.py",
     "tst/publication/frontier_control_plane/storage_preflight.schema.json",
+    "tst/publication/frontier_control_plane/write_orion_build_profile.py",
     "tst/publication/frontier_control_plane/test_control_plane.py",
     "tst/publication/q011_section54_pressure_pilot_execution.py",
     "tst/publication/test_q011_section54_pressure_pilot_execution.py",
@@ -825,6 +826,7 @@ def _validate_q011_exact_predecessor_migration_repair_successor(
         "predecessor_sha256",
         "retained_clean_worker",
         "retained_failed_migration_attempt",
+        "retained_failed_build_freeze_attempt",
         "unchanged_live_operational_baseline",
         "source_local_exact_predecessor_repair",
         "next_clean_worker",
@@ -856,8 +858,8 @@ def _validate_q011_exact_predecessor_migration_repair_successor(
                 "q011_section54_pressure_gate_exact_predecessor_migration_"
                 "repair_successor"
             ),
-            "recorded_utc": "2026-06-05T12:17:04Z",
-            "source_checkpoint_commit": "164e98ec153d90f26dea42647edeb23fe5ce9a4e",
+            "recorded_utc": "2026-06-06T04:56:47Z",
+            "source_checkpoint_commit": "f6471610a116ce5433550625c9dc61752315040f",
             "predecessor_record": (
                 "tst/publication/readiness/"
                 "q011_section54_post_publication_pressure_gate_status_successor_"
@@ -869,8 +871,8 @@ def _validate_q011_exact_predecessor_migration_repair_successor(
             "frontier_launch_authorization": "none_launch_prohibited",
             "qualification_effect": "none_no_science_claim",
             "status": (
-                "exact_predecessor_migration_repair_source_local_pending_commit_"
-                "clean_worker_pair_install_and_promotion"
+                "accepted_build_freeze_timeout_bounded_successor_clone_repair_"
+                "pending_commit_clean_worker_pair_install_and_promotion"
             ),
         },
     ):
@@ -880,38 +882,38 @@ def _validate_q011_exact_predecessor_migration_repair_successor(
     if not _exact_json_equal(
         value["retained_clean_worker"],
         {
-            "job_id": "4767080",
+            "job_id": "4769961",
             "job_name": "pic-q011-pressure-gate-validate",
             "state": "COMPLETED",
             "exit_code": "0:0",
-            "submitted_utc": "2026-06-05T07:41:58",
-            "started_utc": "2026-06-05T07:42:26",
-            "ended_utc": "2026-06-05T07:53:08",
-            "source_commit": "164e98ec153d90f26dea42647edeb23fe5ce9a4e",
+            "submitted_utc": "2026-06-05T23:34:19",
+            "started_utc": "2026-06-05T23:34:55",
+            "ended_utc": "2026-06-05T23:46:20",
+            "source_commit": "f6471610a116ce5433550625c9dc61752315040f",
             "worker": {
                 "path": (
                     "tst/publication/"
                     "frontier_q011_section54_pressure_gate_validation_job.sh"
                 ),
                 "sha256": (
-                    "63ee6ca57229a96c0448134a7c105dcd0de820bbf46bd70182f49ff6514ed4d7"
+                    "3966f56d61bd73164873c88aac906da27cc002a11a88ea11d176329945a37d97"
                 ),
                 "expected_publication_python_files": 145,
                 "expected_publication_shell_files": 17,
-                "expected_publication_json_files": 290,
+                "expected_publication_json_files": 291,
                 "expected_publication_test_modules": 65,
             },
             "log": {
                 "path": (
                     "/lustre/orion/ast207/proj-shared/dfielding/PIC/logs/slurm/"
-                    "pic-q011-pressure-gate-validate.4767080.log"
+                    "pic-q011-pressure-gate-validate.4769961.log"
                 ),
                 "sha256": (
-                    "ff04031ad6ffa0a13f03378357a7dede7acf4b1cd6328f00b4297d73cdf32fd8"
+                    "1bed9421b7e32d84c4b48ee0ada5d2189860e26363d640a632f51651772f3074"
                 ),
             },
             "archive_focused_tests": 199,
-            "publication_tests": 1394,
+            "publication_tests": 1508,
             "publication_test_skips": 2,
         },
     ):
@@ -981,12 +983,86 @@ def _validate_q011_exact_predecessor_migration_repair_successor(
         },
     ):
         raise ValueError("retained failed migration-attempt binding drifted")
-    live_version = "821d185856722bd0178acb9427f78ac82671a4b6670779ec8400fbac54c6d721"
+    if not _exact_json_equal(
+        value["retained_failed_build_freeze_attempt"],
+        {
+            "job_id": "4769975",
+            "job_name": "pic-q011-build-freeze",
+            "top_level_scheduler_record": (
+                "4769975|pic-q011-build-freeze|ast207|batch|debug|TIMEOUT|0:0|"
+                "01:00:24|01:00:00|"
+                "/autofs/nccs-svm1_home2/dfielding/athenak-pic"
+            ),
+            "batch_step_record": "4769975.batch|batch|CANCELLED|0:15|01:00:25",
+            "worker_inputs": {
+                "source_commit": "f6471610a116ce5433550625c9dc61752315040f",
+                "control_plane_version": (
+                    "b56d96b40f2c666b9fa5b421fac589d6a4d6500a716f20b479c354a3d239cb48"
+                ),
+                "expected_active_policy_sha256": (
+                    "48e74f3151b51ba84b72e3214ef4a66c03441c745912b833395f98f6f60a0bd1"
+                ),
+                "expected_active_promotion_sha256": (
+                    "4ecb45bb399cee750ce69198286afc9fb903dde92cffc7507600b0a53f1c547f"
+                ),
+                "expected_authorized_freeze_manifest": (
+                    f"{orion_root}/clean_candidates/"
+                    "98a372c9-2ea0-47e6-ad34-e66343e7eea1/"
+                    "clean_candidate_manifest.json"
+                ),
+                "expected_authorized_freeze_manifest_sha256": (
+                    "dee6be45657e99ec477eec513c45be4ba6ac43b4fd5deb5655750f51c668e42f"
+                ),
+                "expected_authorized_freeze_build_controller": (
+                    "821d185856722bd0178acb9427f78ac82671a4b6670779ec8400fbac54c6d721"
+                ),
+            },
+            "log": {
+                "path": (
+                    f"{orion_root}/logs/slurm/"
+                    "pic-q011-build-freeze.4769975.log"
+                ),
+                "sha256": (
+                    "d07a92eb89c5646bbb25977b9076b3e05e7a1b3935abdb1e1f4448741446cffa"
+                ),
+            },
+            "failure_phase": "source_clone_before_checkout_configure_build_or_freeze",
+            "published_outputs": {
+                "clean_candidate_manifest": False,
+                "candidate_only_policy": False,
+                "science_launch": False,
+            },
+            "residue": {
+                "build_root": {
+                    "path": (
+                        f"{orion_root}/build/f6471610a116/"
+                        "hip-mpi-release-paper-pic"
+                    ),
+                    "top_level_entries": ["source"],
+                    "file_count": 6912,
+                    "directory_count": 209,
+                    "symlink_count": 0,
+                    "status": "preserved_in_place_non_authoritative_chronology",
+                },
+                "bin_root": {
+                    "path": (
+                        f"{orion_root}/bin/f6471610a116/"
+                        "hip-mpi-release-paper-pic"
+                    ),
+                    "entry_count": 0,
+                    "status": "preserved_in_place_non_authoritative_chronology",
+                },
+            },
+            "authority": "none",
+        },
+    ):
+        raise ValueError("retained failed build/freeze-attempt binding drifted")
+    live_version = "b56d96b40f2c666b9fa5b421fac589d6a4d6500a716f20b479c354a3d239cb48"
     live_policy_sha256 = (
-        "23a73b868146f63d4b363713f988d55e9dadffa15b26f2b2f1d07da66331f5c3"
+        "48e74f3151b51ba84b72e3214ef4a66c03441c745912b833395f98f6f60a0bd1"
     )
     live_promotion_sha256 = (
-        "4824ea825e7b9e42becdca4b9a8b72c0454bd1a2e02d5e365b1878ed94c53243"
+        "4ecb45bb399cee750ce69198286afc9fb903dde92cffc7507600b0a53f1c547f"
     )
     if not _exact_json_equal(
         value["unchanged_live_operational_baseline"],
@@ -1034,11 +1110,11 @@ def _validate_q011_exact_predecessor_migration_repair_successor(
             "source_test_closure",
         }
         or repair["control_plane_version"]
-        != "b56d96b40f2c666b9fa5b421fac589d6a4d6500a716f20b479c354a3d239cb48"
+        != "930a04d1d39c873ea49abfcf500069011f6d5759240a8f5c5b3341a6d243b246"
         or type(repair["inventoried_file_count"]) is not int
         or repair["inventoried_file_count"] != 24
         or repair["state"]
-        != "source_local_uncommitted_exact_predecessor_migration_repair"
+        != "source_local_uncommitted_bounded_clone_and_schema_v2_predecessor_migration_repair"
         or not _exact_json_equal(
             repair["final_binding_refresh"],
             {
@@ -1051,6 +1127,7 @@ def _validate_q011_exact_predecessor_migration_repair_successor(
         != [
             "exact_active_policy_and_promotion_hashes",
             "exact_active_controller_probe_evidence_and_source_authentication",
+            "schema_v2_exact_predecessor_evidence_authorized",
             "new_control_plane_required",
             "empty_registered_science_allowlist_required",
             "authorized_science_freeze_preserved",
@@ -1087,6 +1164,9 @@ def _validate_q011_exact_predecessor_migration_repair_successor(
             "preflight_capture_source_authentication_binds_executing_common_module",
             "preflight_recovery_requires_exact_pair_digest_source_and_existing_role",
             "preflight_evidence_publication_is_commit_forward_and_preserves_ambiguous_residue",
+            "trusted_git_exact_clone_capabilities_required_before_build_path_creation",
+            "bounded_top_level_exact_revision_and_full_independent_submodule_transport_required",
+            "prebuild_exact_recursive_submodule_status_equivalence_required",
             "normal_unlock_and_promotion_remain_strict",
         ]
         or type(closure) is not dict
@@ -1165,9 +1245,9 @@ def _validate_q011_exact_predecessor_migration_repair_successor(
             "status": "blocked",
             "required_receipt_schema_version": 3,
             "remaining_actions": [
-                "commit_push_exact_predecessor_migration_repair",
-                "clean_worker_validate_exact_repair_commit",
-                "capture_fresh_preflight_pair_install_and_promote_exact_migration",
+                "commit_push_bounded_clone_and_schema_v2_predecessor_migration_repair",
+                "clean_worker_validate_bounded_clone_repair_commit",
+                "capture_fresh_preflight_pair_install_and_promote_repaired_controller",
                 "build_freeze_revalidate_and_promote_fresh_clean_candidate",
                 "seal_authoritative_reanalysis_reviewer_and_selection_receipt",
                 "verify_all_pressure_selection_replay_boundaries",
@@ -4210,10 +4290,11 @@ class PicReadinessRegistryTests(unittest.TestCase):
             "tst/publication/frontier_control_plane/install_control_plane.py",
             "tst/publication/frontier_control_plane/capture_storage_preflight_evidence.py",
             "tst/publication/frontier_control_plane/storage_preflight.schema.json",
+            "tst/publication/frontier_control_plane/write_orion_build_profile.py",
             "tst/publication/test_capture_storage_preflight_evidence.py",
         }
         closure_paths = _Q011_EXACT_PREDECESSOR_REPAIR_SOURCE_TEST_CLOSURE_PATHS
-        self.assertEqual(len(closure_paths), 15)
+        self.assertEqual(len(closure_paths), 16)
         self.assertEqual(len(set(closure_paths)), len(closure_paths))
         self.assertTrue(newly_critical_paths.issubset(closure_paths))
         for relative in closure_paths:
@@ -4274,6 +4355,39 @@ class PicReadinessRegistryTests(unittest.TestCase):
             reviewed_policy["sha256"],
         )
 
+        failed_build = successor["retained_failed_build_freeze_attempt"]
+        self.assertEqual(
+            _sha256(Path(failed_build["log"]["path"])),
+            failed_build["log"]["sha256"],
+        )
+        build_residue = failed_build["residue"]["build_root"]
+        build_root = Path(build_residue["path"])
+        self.assertEqual(
+            sorted(path.name for path in build_root.iterdir()),
+            build_residue["top_level_entries"],
+        )
+        self.assertEqual(
+            sum(1 for path in build_root.rglob("*") if path.is_file()),
+            build_residue["file_count"],
+        )
+        self.assertEqual(
+            1 + sum(1 for path in build_root.rglob("*") if path.is_dir()),
+            build_residue["directory_count"],
+        )
+        self.assertEqual(
+            sum(1 for path in build_root.rglob("*") if path.is_symlink()),
+            build_residue["symlink_count"],
+        )
+        bin_residue = failed_build["residue"]["bin_root"]
+        self.assertEqual(
+            sum(1 for _path in Path(bin_residue["path"]).iterdir()),
+            bin_residue["entry_count"],
+        )
+        self.assertNotIn(
+            "clean_candidate_manifest=",
+            Path(failed_build["log"]["path"]).read_text(encoding="utf-8"),
+        )
+
         live = successor["unchanged_live_operational_baseline"]
         for bindings_key, identical_key in (
             ("active_policies", "active_policies_byte_identical"),
@@ -4289,6 +4403,36 @@ class PicReadinessRegistryTests(unittest.TestCase):
         live_policy = json.loads(
             Path(live["active_policies"][0]["path"]).read_text(encoding="utf-8")
         )
+        live_promotion = json.loads(
+            Path(live["active_promotions"][0]["path"]).read_text(encoding="utf-8")
+        )
+        active_predecessor_controller = failed_build["worker_inputs"][
+            "control_plane_version"
+        ]
+        preserved_freeze_controller = failed_build["worker_inputs"][
+            "expected_authorized_freeze_build_controller"
+        ]
+        self.assertEqual(
+            live_policy["olcf_side_storage"]["installed_control_plane_version"],
+            active_predecessor_controller,
+        )
+        self.assertEqual(
+            live_policy["olcf_side_storage"][
+                "staged_control_plane_candidate_version"
+            ],
+            active_predecessor_controller,
+        )
+        self.assertEqual(
+            live_promotion["control_plane_version"],
+            active_predecessor_controller,
+        )
+        self.assertEqual(
+            live_policy["science_submission_freeze"][
+                "build_profile_control_plane_version"
+            ],
+            preserved_freeze_controller,
+        )
+        self.assertNotEqual(active_predecessor_controller, preserved_freeze_controller)
         self.assertEqual(live_policy["registered_science_slices"], [])
         self.assertEqual(
             live_policy["science_submission_freeze"]["status"],
@@ -4377,6 +4521,11 @@ class PicReadinessRegistryTests(unittest.TestCase):
                 "failed-attempt authority",
                 ("retained_failed_migration_attempt", "authority"),
                 "pair_install",
+            ),
+            (
+                "failed build/freeze authority",
+                ("retained_failed_build_freeze_attempt", "authority"),
+                "build_evidence",
             ),
             (
                 "live active policy",
@@ -5777,45 +5926,23 @@ class PicReadinessRegistryTests(unittest.TestCase):
             "transition_2026-06-05.json"
         )["candidate_only_policy_promotion"]
         self.assertEqual(
+            current["reviewed_policy_sha256"],
+            _sha256(Path(current["reviewed_policy_path"])),
+        )
+        self.assertEqual(
             current["orion_active_policy_sha256"],
-            _sha256(
-                Path(
-                    "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/"
-                    "storage_policy.json"
-                )
-            ),
+            current["reviewed_policy_sha256"],
         )
         self.assertEqual(
             current["project_home_active_policy_sha256"],
-            _sha256(
-                Path(
-                    "/autofs/nccs-svm1_proj/ast207/proj-shared/PIC/policy/"
-                    "storage_policy.json"
-                )
-            ),
+            current["reviewed_policy_sha256"],
         )
         self.assertEqual(
             current["orion_active_promotion_sha256"],
-            _sha256(
-                Path(
-                    "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/"
-                    "active_promotion.json"
-                )
-            ),
-        )
-        self.assertEqual(
             current["project_home_active_promotion_sha256"],
-            _sha256(
-                Path(
-                    "/autofs/nccs-svm1_proj/ast207/proj-shared/PIC/policy/"
-                    "active_promotion.json"
-                )
-            ),
         )
         current_policy = json.loads(
-            Path(
-                "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/storage_policy.json"
-            ).read_text(encoding="utf-8")
+            Path(current["reviewed_policy_path"]).read_text(encoding="utf-8")
         )
         self.assertEqual(current_policy["registered_science_slices"], [])
         attestation = successor["pre_policy_promotion_operator_attestation"]

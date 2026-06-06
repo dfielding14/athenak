@@ -14,6 +14,7 @@ import json
 import os
 from pathlib import Path, PurePosixPath
 import re
+import stat
 import subprocess
 import tempfile
 
@@ -346,16 +347,180 @@ def _execute_logged_command(
     )
 
 
-def _clone_fresh_source(
-    source_root: Path,
-    destination: Path,
-    *,
-    commit: str,
-    submodules: list[dict[str, str]],
-) -> None:
+def _require_exact_clone_capabilities() -> None:
+    help_result = subprocess.run(
+        trusted_git_command("clone", "-h"),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        env=trusted_git_environment(),
+    )
+    help_text = help_result.stdout
+    required_options = {
+        "--revision": ("--revision", "--[no-]revision"),
+        "--reject-shallow": ("--reject-shallow", "--[no-]reject-shallow"),
+        "--no-local": ("--no-local", "--[no-]local"),
+    }
+    missing = [
+        label
+        for label, spellings in required_options.items()
+        if not any(spelling in help_text for spelling in spellings)
+    ]
+    if missing:
+        raise ValueError(
+            "Trusted Git lacks required exact-clone capabilities: "
+            + ", ".join(missing)
+        )
+
+
+def _require_independent_object_store(objects_dir: Path) -> None:
+    pending = [objects_dir]
+    while pending:
+        directory = pending.pop()
+        with os.scandir(directory) as entries:
+            for entry in entries:
+                metadata = entry.stat(follow_symlinks=False)
+                if stat.S_ISLNK(metadata.st_mode):
+                    raise ValueError("Fresh source clone object store contains a symlink")
+                if stat.S_ISDIR(metadata.st_mode):
+                    pending.append(Path(entry.path))
+                    continue
+                if not stat.S_ISREG(metadata.st_mode):
+                    raise ValueError(
+                        "Fresh source clone object store contains a non-regular object"
+                    )
+                if metadata.st_nlink != 1:
+                    raise ValueError(
+                        "Fresh source clone object store contains a hard-linked object"
+                    )
+
+
+def _require_exact_standalone_clone(repository: Path, *, commit: str) -> None:
+    def git_text(*arguments: str) -> str:
+        return subprocess.check_output(
+            trusted_git_command("-C", str(repository), *arguments),
+            text=True,
+            env=trusted_git_environment(),
+        ).rstrip("\n")
+
+    if git_text("rev-parse", "--verify", "HEAD") != commit:
+        raise ValueError("Fresh source clone HEAD differs from exact requested revision")
+    symbolic_head = subprocess.run(
+        trusted_git_command("-C", str(repository), "symbolic-ref", "-q", "HEAD"),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env=trusted_git_environment(),
+    )
+    if symbolic_head.returncode != 1:
+        raise ValueError("Fresh source clone HEAD is not detached")
+
+    git_dir = Path(git_text("rev-parse", "--absolute-git-dir"))
+    if not git_dir.is_absolute():
+        raise ValueError("Fresh source clone Git directory is not absolute")
+    common_dir = Path(
+        git_text("rev-parse", "--path-format=absolute", "--git-common-dir")
+    )
+    if common_dir != git_dir:
+        raise ValueError("Fresh source clone is a linked worktree")
+    if git_dir.resolve(strict=True) != git_dir:
+        raise ValueError("Fresh source clone Git directory is not canonical")
+    objects_dir = git_dir / "objects"
+    if not objects_dir.is_dir() or objects_dir.resolve(strict=True) != objects_dir:
+        raise ValueError("Fresh source clone object store is not standalone")
+    _require_independent_object_store(objects_dir)
+    for name in ["alternates", "http-alternates"]:
+        if os.path.lexists(objects_dir / "info" / name):
+            raise ValueError("Fresh source clone uses an alternate object store")
+    if any((objects_dir / "pack").glob("*.promisor")):
+        raise ValueError("Fresh source clone uses promisor objects")
+
+    promisor = subprocess.run(
+        trusted_git_command(
+            "-C",
+            str(repository),
+            "config",
+            "--local",
+            "--get-regexp",
+            r"^(extensions\.partialclone|remote\..*\.(promisor|partialclonefilter))$",
+        ),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env=trusted_git_environment(),
+    )
+    if promisor.returncode == 0:
+        raise ValueError(
+            "Fresh source clone uses partial-clone or promisor configuration"
+        )
+    if promisor.returncode != 1:
+        raise ValueError("Cannot verify fresh source clone promisor configuration")
+
+
+def _require_exact_standalone_shallow_clone(repository: Path, *, commit: str) -> None:
+    _require_exact_standalone_clone(repository, commit=commit)
+    if (
+        subprocess.check_output(
+            trusted_git_command(
+                "-C", str(repository), "rev-parse", "--is-shallow-repository"
+            ),
+            text=True,
+            env=trusted_git_environment(),
+        ).rstrip("\n")
+        != "true"
+    ):
+        raise ValueError("Fresh source clone is not shallow")
+    if (
+        subprocess.check_output(
+            trusted_git_command("-C", str(repository), "rev-list", "--count", "HEAD"),
+            text=True,
+            env=trusted_git_environment(),
+        ).rstrip("\n")
+        != "1"
+    ):
+        raise ValueError("Fresh source clone exceeds the exact one-commit history bound")
+
+
+def _require_exact_standalone_full_clone(repository: Path, *, commit: str) -> None:
+    _require_exact_standalone_clone(repository, commit=commit)
+    if (
+        subprocess.check_output(
+            trusted_git_command(
+                "-C", str(repository), "rev-parse", "--is-shallow-repository"
+            ),
+            text=True,
+            env=trusted_git_environment(),
+        ).rstrip("\n")
+        != "false"
+    ):
+        raise ValueError("Fresh source submodule clone is shallow")
+
+
+def _clone_exact_revision(source_root: Path, destination: Path, *, commit: str) -> None:
     subprocess.run(
         trusted_git_command(
-            "clone", "--no-hardlinks", "--no-checkout", str(source_root), str(destination)
+            "clone",
+            "--no-local",
+            "--no-tags",
+            "--depth=1",
+            f"--revision={commit}",
+            str(source_root),
+            str(destination),
+        ),
+        check=True,
+        env=trusted_git_environment(),
+    )
+    _require_exact_standalone_shallow_clone(destination, commit=commit)
+
+
+def _clone_exact_submodule(source_root: Path, destination: Path, *, commit: str) -> None:
+    # Recursive status includes git-describe suffixes, which require full refs/history.
+    subprocess.run(
+        trusted_git_command(
+            "clone",
+            "--no-local",
+            "--reject-shallow",
+            "--no-checkout",
+            str(source_root),
+            str(destination),
         ),
         check=True,
         env=trusted_git_environment(),
@@ -365,6 +530,18 @@ def _clone_fresh_source(
         check=True,
         env=trusted_git_environment(),
     )
+    _require_exact_standalone_full_clone(destination, commit=commit)
+
+
+def _clone_fresh_source(
+    source_root: Path,
+    destination: Path,
+    *,
+    commit: str,
+    submodules: list[dict[str, str]],
+) -> None:
+    authorized_submodule_status = _submodule_status(source_root)
+    _clone_exact_revision(source_root, destination, commit=commit)
     cloned_paths: list[PurePosixPath] = []
     for record in sorted(
         submodules, key=lambda item: len(PurePosixPath(item["path"]).parts)
@@ -391,20 +568,7 @@ def _clone_fresh_source(
         original = source_root.joinpath(*relative.parts)
         cloned = destination.joinpath(*relative.parts)
         cloned.parent.mkdir(parents=True, exist_ok=True)
-        subprocess.run(
-            trusted_git_command(
-                "clone", "--no-hardlinks", "--no-checkout", str(original), str(cloned)
-            ),
-            check=True,
-            env=trusted_git_environment(),
-        )
-        subprocess.run(
-            trusted_git_command(
-                "-C", str(cloned), "checkout", "--detach", record["git_commit"]
-            ),
-            check=True,
-            env=trusted_git_environment(),
-        )
+        _clone_exact_submodule(original, cloned, commit=record["git_commit"])
         subprocess.run(
             trusted_git_command(
                 "-C",
@@ -416,7 +580,14 @@ def _clone_fresh_source(
             check=True,
             env=trusted_git_environment(),
         )
+        _require_exact_standalone_full_clone(cloned, commit=record["git_commit"])
         cloned_paths.append(relative)
+    if _submodule_status(source_root) != authorized_submodule_status:
+        raise ValueError("Authorized recursive submodule status changed while cloning")
+    if _submodule_status(destination) != authorized_submodule_status:
+        raise ValueError(
+            "Fresh detached source recursive submodule status differs from authorized source"
+        )
 
 
 def _production_build_environment() -> dict[str, str]:
@@ -495,6 +666,7 @@ def build_profile(
                     submodules, parent_path=record["path"]
                 ),
             )
+    _require_exact_clone_capabilities()
     paths = _documented_build_paths(
         authorized_pic_root=authorized_pic_root,
         git_commit=commit,

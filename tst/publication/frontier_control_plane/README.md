@@ -205,9 +205,11 @@ partial publication may roll back. Later direct candidate mutation cannot alter
 the authorized digest and remains rejected by downstream candidate validation.
 Normal active promotion records use schema v2 and one
 unique canonical promotion UUID. The one-use exact reviewed predecessor
-migration is the sole path that may consume the exact retained schema-v1 live
-predecessor. A direct edit to the repository policy or either active copy is
-not an authorization.
+migration is the sole path that may consume the exact literal live predecessor
+bound by the executing successor controller. The currently authorized
+replacement predecessor uses schema v2 and binds its historical executing
+common-module digest. A direct edit to the repository policy or either active
+copy is not an authorization.
 Do not promote the retained historical `readiness/storage_policy.json`
 directly. The live historical migration must use the generated one-use
 retirement successor sequence below.
@@ -942,26 +944,24 @@ copy. Its terminal ledger event is retained as immutable chronology. The four
 rebuilt v2 slices completed and are consumed historical evidence. Do not
 relaunch them.
 
-The current live policy contains authenticated mirrored storage-preflight
-evidence produced by an older reviewed capture runner. Capture one successor
-preflight binding from clean tracked source, persist the emitted fragment as a
-read-only review artifact under `${PIC_ROOT}/policy`, then install the paired
-successor controller. Materialize the exact predecessor-migration successor
-only after both installs print the same digest. The one-use migration
-flag accepts only the exact reviewed live policy, promotion, controller,
-preflight binding, and evidence source-authentication tuple. The successor must
-preserve every policy field except the newer controller version and a
-different, strictly newer strict-current preflight binding; this preserves the
-authorized clean-candidate freeze and empty registered-slice allowlist. This
-sequence authorizes no science. The only permitted `sbatch` below is the exact
-non-science build/freeze worker. Never invoke `pilot-policy-successor`,
-`policy-slices`, `pre-submit-config`, `submit_frontier_job.sh`,
+The current live policy contains authenticated mirrored schema-v2
+storage-preflight evidence produced by the prior repaired controller. Capture
+one successor preflight binding from clean tracked source, persist the emitted
+fragment as a read-only review artifact under `${PIC_ROOT}/policy`, then
+install the paired successor controller. Materialize the exact
+predecessor-migration successor only after both installs print the same digest.
+The one-use migration flag accepts only the exact reviewed live policy,
+promotion, controller, preflight binding, and complete schema-v2 evidence
+source-authentication tuple. The successor must preserve every policy field
+except the newer controller version and a different, strictly newer
+strict-current preflight binding; this preserves the authorized clean-candidate
+freeze and empty registered-slice allowlist. This sequence authorizes no
+science. The only permitted `sbatch` below is the exact non-science
+build/freeze worker. Never invoke `pilot-policy-successor`, `policy-slices`,
+`pre-submit-config`, `submit_frontier_job.sh`,
 `launch_with_frontier_profile.sh`, or the historical launch block while
 executing this sequence. Every reviewed `ps` and `squeue` gate must confirm
 that no same-user process or job can launch science or mutate either PIC root.
-The new strict-current preflight artifact is schema v2 and binds the executing
-common module; the one-use exact predecessor path alone accepts the bound
-historical schema-v1 artifact.
 Every source-only control-plane invocation below binds the same
 `FULL_GIT_COMMIT` independently at both the source runner and source-only
 entrypoint. Each live Q011 policy materialization repeats the clean true-remote
@@ -969,10 +969,10 @@ gate, creates a fresh detached worktree snapshot at that exact commit, and
 passes the materializer's own required commit binding. The final read-only
 publication verification instead executes from a fresh `git archive` snapshot
 of that reviewed commit, never from mutable checkout files.
-The new active launch-prohibited generation verifier accepts schema v2 only;
-do not invoke it against the exact schema-v1 predecessor. Verify that
-predecessor only through its exact mirrored anchors, paired historical
-controller, and preserved candidate as shown below:
+The active predecessor and successor generation verifiers both accept schema
+v2. Independently bracket migration with the exact mirrored anchors, paired
+active predecessor controller, and explicitly historical preserved-candidate
+build controller as shown below:
 
 ```bash
 (
@@ -987,15 +987,15 @@ GIT=(
   /usr/bin/env -i HOME=/ LANG=C LC_ALL=C PATH=/usr/bin:/bin
   /usr/bin/git -c core.fsmonitor=false -c core.hooksPath=/dev/null
 )
-OLD_ACTIVE_CONTROL_PLANE_VERSION=821d185856722bd0178acb9427f78ac82671a4b6670779ec8400fbac54c6d721
-OLD_ACTIVE_POLICY_SHA256=23a73b868146f63d4b363713f988d55e9dadffa15b26f2b2f1d07da66331f5c3
-OLD_ACTIVE_PROMOTION_SHA256=4824ea825e7b9e42becdca4b9a8b72c0454bd1a2e02d5e365b1878ed94c53243
+ACTIVE_PREDECESSOR_CONTROL_PLANE_VERSION=b56d96b40f2c666b9fa5b421fac589d6a4d6500a716f20b479c354a3d239cb48
+ACTIVE_PREDECESSOR_POLICY_SHA256=48e74f3151b51ba84b72e3214ef4a66c03441c745912b833395f98f6f60a0bd1
+ACTIVE_PREDECESSOR_PROMOTION_SHA256=4ecb45bb399cee750ce69198286afc9fb903dde92cffc7507600b0a53f1c547f
 PRESERVED_CLEAN_CANDIDATE_MANIFEST="${PIC_ROOT}/clean_candidates/98a372c9-2ea0-47e6-ad34-e66343e7eea1/clean_candidate_manifest.json"
 PRESERVED_CLEAN_CANDIDATE_MANIFEST_SHA256=dee6be45657e99ec477eec513c45be4ba6ac43b4fd5deb5655750f51c668e42f
-PRESERVED_CLEAN_CANDIDATE_BUILD_PROFILE_CONTROL_PLANE_VERSION="$OLD_ACTIVE_CONTROL_PLANE_VERSION"
-OLD_ORION_CONTROL_PLANE="${PIC_ROOT}/control_plane/${OLD_ACTIVE_CONTROL_PLANE_VERSION}"
-OLD_PROJECT_HOME_CONTROL_PLANE="${PROJECT_HOME_POLICY_ROOT}/control_plane/${OLD_ACTIVE_CONTROL_PLANE_VERSION}"
-OLD_CONTROL_PLANE=("$PYTHON" -I -B "${OLD_ORION_CONTROL_PLANE}/run_control_plane.py")
+PRESERVED_CLEAN_CANDIDATE_BUILD_PROFILE_CONTROL_PLANE_VERSION=821d185856722bd0178acb9427f78ac82671a4b6670779ec8400fbac54c6d721
+ACTIVE_PREDECESSOR_ORION_CONTROL_PLANE="${PIC_ROOT}/control_plane/${ACTIVE_PREDECESSOR_CONTROL_PLANE_VERSION}"
+ACTIVE_PREDECESSOR_PROJECT_HOME_CONTROL_PLANE="${PROJECT_HOME_POLICY_ROOT}/control_plane/${ACTIVE_PREDECESSOR_CONTROL_PLANE_VERSION}"
+ACTIVE_PREDECESSOR_CONTROL_PLANE=("$PYTHON" -I -B "${ACTIVE_PREDECESSOR_ORION_CONTROL_PLANE}/run_control_plane.py")
 require_no_policy_recovery_entries() {
   local policy_parent recovery_entry
   for policy_parent in "${PIC_ROOT}/policy" "${PROJECT_HOME_POLICY_ROOT}/policy"; do
@@ -1108,44 +1108,44 @@ run_reviewed_q011_materializer() {
   /usr/bin/rm -rf -- "$snapshot_root" || status=1
   return "$status"
 }
-verify_exact_old_launch_prohibited_generation() {
+verify_exact_active_predecessor_launch_prohibited_generation() {
   local remote_pic_tip
   remote_pic_tip="$(
     "${GIT[@]}" -C "$SOURCE_REPO" ls-remote --exit-code origin refs/heads/PIC |
       /usr/bin/awk '$2 == "refs/heads/PIC" {count += 1; tip = $1} END {if (count != 1) exit 1; print tip}'
   )"
   test "$FULL_GIT_COMMIT" = "$remote_pic_tip"
-  test -d "$OLD_ORION_CONTROL_PLANE"
-  test -d "$OLD_PROJECT_HOME_CONTROL_PLANE"
+  test -d "$ACTIVE_PREDECESSOR_ORION_CONTROL_PLANE"
+  test -d "$ACTIVE_PREDECESSOR_PROJECT_HOME_CONTROL_PLANE"
   /usr/bin/cmp -s \
-    "${OLD_ORION_CONTROL_PLANE}/inventory.json" \
-    "${OLD_PROJECT_HOME_CONTROL_PLANE}/inventory.json"
+    "${ACTIVE_PREDECESSOR_ORION_CONTROL_PLANE}/inventory.json" \
+    "${ACTIVE_PREDECESSOR_PROJECT_HOME_CONTROL_PLANE}/inventory.json"
   test "$(
-    "${OLD_CONTROL_PLANE[@]}" \
+    "${ACTIVE_PREDECESSOR_CONTROL_PLANE[@]}" \
       validate_and_reserve_frontier_job.py verify-control-plane
-  )" = "$OLD_ACTIVE_CONTROL_PLANE_VERSION"
+  )" = "$ACTIVE_PREDECESSOR_CONTROL_PLANE_VERSION"
   /usr/bin/cmp -s \
     "${PIC_ROOT}/policy/storage_policy.json" \
     "${PROJECT_HOME_POLICY_ROOT}/policy/storage_policy.json"
   /usr/bin/cmp -s \
     "${PIC_ROOT}/policy/active_promotion.json" \
     "${PROJECT_HOME_POLICY_ROOT}/policy/active_promotion.json"
-  test "$OLD_ACTIVE_POLICY_SHA256" = "$(
+  test "$ACTIVE_PREDECESSOR_POLICY_SHA256" = "$(
     /usr/bin/sha256sum "${PIC_ROOT}/policy/storage_policy.json" |
       /usr/bin/awk '{print $1}'
   )"
-  test "$OLD_ACTIVE_PROMOTION_SHA256" = "$(
+  test "$ACTIVE_PREDECESSOR_PROMOTION_SHA256" = "$(
     /usr/bin/sha256sum "${PIC_ROOT}/policy/active_promotion.json" |
       /usr/bin/awk '{print $1}'
   )"
   "$PYTHON" -I -B - \
-    "$OLD_ORION_CONTROL_PLANE" \
-    "$OLD_PROJECT_HOME_CONTROL_PLANE" \
+    "$ACTIVE_PREDECESSOR_ORION_CONTROL_PLANE" \
+    "$ACTIVE_PREDECESSOR_PROJECT_HOME_CONTROL_PLANE" \
     "$PIC_ROOT" \
     "$PROJECT_HOME_POLICY_ROOT" \
-    "$OLD_ACTIVE_CONTROL_PLANE_VERSION" \
-    "$OLD_ACTIVE_POLICY_SHA256" \
-    "$OLD_ACTIVE_PROMOTION_SHA256" \
+    "$ACTIVE_PREDECESSOR_CONTROL_PLANE_VERSION" \
+    "$ACTIVE_PREDECESSOR_POLICY_SHA256" \
+    "$ACTIVE_PREDECESSOR_PROMOTION_SHA256" \
     "$PRESERVED_CLEAN_CANDIDATE_MANIFEST" \
     "$PRESERVED_CLEAN_CANDIDATE_MANIFEST_SHA256" \
     "$PRESERVED_CLEAN_CANDIDATE_BUILD_PROFILE_CONTROL_PLANE_VERSION" <<'PY'
@@ -1200,7 +1200,7 @@ require_no_incomplete_manual_accounting_marker(
 )
 _require_no_outstanding_submissions(policy, pic_root, project_home_root)
 PY
-  "${OLD_CONTROL_PLANE[@]}" revalidate_clean_candidate.py \
+  "${ACTIVE_PREDECESSOR_CONTROL_PLANE[@]}" revalidate_clean_candidate.py \
     --manifest "$PRESERVED_CLEAN_CANDIDATE_MANIFEST" \
     --expected-manifest-sha256 "$PRESERVED_CLEAN_CANDIDATE_MANIFEST_SHA256"
 }
@@ -1251,7 +1251,7 @@ require_no_staging_entries
   -h -o '%i|%j|%a|%q|%T|%Z|%o'
 REVIEWED_NO_SCIENCE_OR_SAME_USER_PIC_MUTATOR='<yes only after reviewing both snapshots>'
 test "$REVIEWED_NO_SCIENCE_OR_SAME_USER_PIC_MUTATOR" = yes
-verify_exact_old_launch_prohibited_generation
+verify_exact_active_predecessor_launch_prohibited_generation
 STORAGE_PREFLIGHT_BINDING_DIR="${PIC_ROOT}/policy/storage_preflight_bindings"
 test -d "$STORAGE_PREFLIGHT_BINDING_DIR"
 test ! -L "$STORAGE_PREFLIGHT_BINDING_DIR"
@@ -1293,7 +1293,7 @@ test "$(
 
 require_no_policy_recovery_entries
 require_no_staging_entries
-verify_exact_old_launch_prohibited_generation
+verify_exact_active_predecessor_launch_prohibited_generation
 require_exact_reviewed_source
 ORION_CONTROL_PLANE="$(
   "${SOURCE_CONTROL_PLANE[@]}" install_control_plane.py \
@@ -1303,7 +1303,7 @@ ORION_CONTROL_PLANE="$(
 printf 'one_sided_orion_control_plane=%s\n' "$ORION_CONTROL_PLANE"
 require_no_policy_recovery_entries
 require_no_staging_entries
-verify_exact_old_launch_prohibited_generation
+verify_exact_active_predecessor_launch_prohibited_generation
 require_exact_reviewed_source
 PROJECT_HOME_CONTROL_PLANE="$(
   "${SOURCE_CONTROL_PLANE[@]}" install_control_plane.py \
@@ -1329,7 +1329,7 @@ test ! -e "$MIGRATION_POLICY"
 test ! -e "$CANDIDATE_ONLY_POLICY"
 require_no_policy_recovery_entries
 require_no_staging_entries
-verify_exact_old_launch_prohibited_generation
+verify_exact_active_predecessor_launch_prohibited_generation
 /usr/bin/ps -u "$(/usr/bin/id -u)" -ww -o pid=,ppid=,lstart=,args=
 "${SLURM_ENV[@]}" /usr/bin/squeue --clusters=frontier -u "$(/usr/bin/id -un)" \
   -h -o '%i|%j|%a|%q|%T|%Z|%o'
@@ -1427,8 +1427,8 @@ FULL_GIT_COMMIT='<exact committed source identity used for interrupted capture>'
 PROBE_ID='<exact reviewed interrupted-capture probe UUID>'
 EXPECTED_EVIDENCE_SHA256='<sha256 of the exact surviving or complete evidence bytes>'
 EXPECTED_EXISTING_ROLE='<orion_simulation_root or project_home_mirror_root>'
-OLD_ACTIVE_POLICY_SHA256=23a73b868146f63d4b363713f988d55e9dadffa15b26f2b2f1d07da66331f5c3
-OLD_ACTIVE_PROMOTION_SHA256=4824ea825e7b9e42becdca4b9a8b72c0454bd1a2e02d5e365b1878ed94c53243
+ACTIVE_PREDECESSOR_POLICY_SHA256=48e74f3151b51ba84b72e3214ef4a66c03441c745912b833395f98f6f60a0bd1
+ACTIVE_PREDECESSOR_PROMOTION_SHA256=4ecb45bb399cee750ce69198286afc9fb903dde92cffc7507600b0a53f1c547f
 [[ "$FULL_GIT_COMMIT" =~ ^[0-9a-f]{40}$ ]]
 [[ "$PROBE_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]
 [[ "$EXPECTED_EVIDENCE_SHA256" =~ ^[0-9a-f]{64}$ ]]
@@ -1463,11 +1463,11 @@ require_exact_reviewed_source
 /usr/bin/cmp -s \
   "${PIC_ROOT}/policy/active_promotion.json" \
   "${PROJECT_HOME_POLICY_ROOT}/policy/active_promotion.json"
-test "$OLD_ACTIVE_POLICY_SHA256" = "$(
+test "$ACTIVE_PREDECESSOR_POLICY_SHA256" = "$(
   /usr/bin/sha256sum "${PIC_ROOT}/policy/storage_policy.json" |
     /usr/bin/awk '{print $1}'
 )"
-test "$OLD_ACTIVE_PROMOTION_SHA256" = "$(
+test "$ACTIVE_PREDECESSOR_PROMOTION_SHA256" = "$(
   /usr/bin/sha256sum "${PIC_ROOT}/policy/active_promotion.json" |
     /usr/bin/awk '{print $1}'
 )"
@@ -1548,7 +1548,8 @@ do not rerun the primary block and do not remove any `.tmp-*` entry. A
 `.tmp-*` entry requires reviewed manual recovery. Otherwise, fill the exact
 printed installed path, its opposite missing root, the retained preflight
 binding, and the committed source identity into this one-sided recovery block.
-It re-verifies the unchanged exact old launch-prohibited generation and mutates
+It re-verifies the unchanged exact active-predecessor launch-prohibited
+generation and mutates
 only the missing half of the pair:
 
 ```bash
@@ -1568,14 +1569,15 @@ PROBE_ID='<probe_id from the retained published preflight binding>'
 VERSION='<digest basename from the one_sided_*_control_plane checkpoint>'
 EXISTING_CONTROL_PLANE='<exact one_sided_*_control_plane checkpoint path>'
 MISSING_CONTROL_PLANE_ROOT='<the exact opposite root>'
-OLD_ACTIVE_CONTROL_PLANE_VERSION=821d185856722bd0178acb9427f78ac82671a4b6670779ec8400fbac54c6d721
-OLD_ACTIVE_POLICY_SHA256=23a73b868146f63d4b363713f988d55e9dadffa15b26f2b2f1d07da66331f5c3
-OLD_ACTIVE_PROMOTION_SHA256=4824ea825e7b9e42becdca4b9a8b72c0454bd1a2e02d5e365b1878ed94c53243
+ACTIVE_PREDECESSOR_CONTROL_PLANE_VERSION=b56d96b40f2c666b9fa5b421fac589d6a4d6500a716f20b479c354a3d239cb48
+ACTIVE_PREDECESSOR_POLICY_SHA256=48e74f3151b51ba84b72e3214ef4a66c03441c745912b833395f98f6f60a0bd1
+ACTIVE_PREDECESSOR_PROMOTION_SHA256=4ecb45bb399cee750ce69198286afc9fb903dde92cffc7507600b0a53f1c547f
 PRESERVED_CLEAN_CANDIDATE_MANIFEST="${PIC_ROOT}/clean_candidates/98a372c9-2ea0-47e6-ad34-e66343e7eea1/clean_candidate_manifest.json"
 PRESERVED_CLEAN_CANDIDATE_MANIFEST_SHA256=dee6be45657e99ec477eec513c45be4ba6ac43b4fd5deb5655750f51c668e42f
-OLD_ORION_CONTROL_PLANE="${PIC_ROOT}/control_plane/${OLD_ACTIVE_CONTROL_PLANE_VERSION}"
-OLD_PROJECT_HOME_CONTROL_PLANE="${PROJECT_HOME_POLICY_ROOT}/control_plane/${OLD_ACTIVE_CONTROL_PLANE_VERSION}"
-OLD_CONTROL_PLANE=("$PYTHON" -I -B "${OLD_ORION_CONTROL_PLANE}/run_control_plane.py")
+PRESERVED_CLEAN_CANDIDATE_BUILD_PROFILE_CONTROL_PLANE_VERSION=821d185856722bd0178acb9427f78ac82671a4b6670779ec8400fbac54c6d721
+ACTIVE_PREDECESSOR_ORION_CONTROL_PLANE="${PIC_ROOT}/control_plane/${ACTIVE_PREDECESSOR_CONTROL_PLANE_VERSION}"
+ACTIVE_PREDECESSOR_PROJECT_HOME_CONTROL_PLANE="${PROJECT_HOME_POLICY_ROOT}/control_plane/${ACTIVE_PREDECESSOR_CONTROL_PLANE_VERSION}"
+ACTIVE_PREDECESSOR_CONTROL_PLANE=("$PYTHON" -I -B "${ACTIVE_PREDECESSOR_ORION_CONTROL_PLANE}/run_control_plane.py")
 [[ "$FULL_GIT_COMMIT" =~ ^[0-9a-f]{40}$ ]]
 [[ "$PROBE_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]
 [[ "$VERSION" =~ ^[0-9a-f]{64}$ ]]
@@ -1683,37 +1685,37 @@ while IFS= read -r EVIDENCE_NAME; do
     "${PROJECT_HOME_POLICY_ROOT}/policy/storage_preflight_evidence/${EVIDENCE_NAME}"
 done <<< "$ORION_EVIDENCE"
 /usr/bin/cmp -s \
-  "${OLD_ORION_CONTROL_PLANE}/inventory.json" \
-  "${OLD_PROJECT_HOME_CONTROL_PLANE}/inventory.json"
+  "${ACTIVE_PREDECESSOR_ORION_CONTROL_PLANE}/inventory.json" \
+  "${ACTIVE_PREDECESSOR_PROJECT_HOME_CONTROL_PLANE}/inventory.json"
 test "$(
-  "${OLD_CONTROL_PLANE[@]}" \
+  "${ACTIVE_PREDECESSOR_CONTROL_PLANE[@]}" \
     validate_and_reserve_frontier_job.py verify-control-plane
-)" = "$OLD_ACTIVE_CONTROL_PLANE_VERSION"
+)" = "$ACTIVE_PREDECESSOR_CONTROL_PLANE_VERSION"
 /usr/bin/cmp -s \
   "${PIC_ROOT}/policy/storage_policy.json" \
   "${PROJECT_HOME_POLICY_ROOT}/policy/storage_policy.json"
 /usr/bin/cmp -s \
   "${PIC_ROOT}/policy/active_promotion.json" \
   "${PROJECT_HOME_POLICY_ROOT}/policy/active_promotion.json"
-test "$OLD_ACTIVE_POLICY_SHA256" = "$(
+test "$ACTIVE_PREDECESSOR_POLICY_SHA256" = "$(
   /usr/bin/sha256sum "${PIC_ROOT}/policy/storage_policy.json" |
     /usr/bin/awk '{print $1}'
 )"
-test "$OLD_ACTIVE_PROMOTION_SHA256" = "$(
+test "$ACTIVE_PREDECESSOR_PROMOTION_SHA256" = "$(
   /usr/bin/sha256sum "${PIC_ROOT}/policy/active_promotion.json" |
     /usr/bin/awk '{print $1}'
 )"
 "$PYTHON" -I -B - \
-  "$OLD_ORION_CONTROL_PLANE" \
-  "$OLD_PROJECT_HOME_CONTROL_PLANE" \
+  "$ACTIVE_PREDECESSOR_ORION_CONTROL_PLANE" \
+  "$ACTIVE_PREDECESSOR_PROJECT_HOME_CONTROL_PLANE" \
   "$PIC_ROOT" \
   "$PROJECT_HOME_POLICY_ROOT" \
-  "$OLD_ACTIVE_CONTROL_PLANE_VERSION" \
-  "$OLD_ACTIVE_POLICY_SHA256" \
-  "$OLD_ACTIVE_PROMOTION_SHA256" \
+  "$ACTIVE_PREDECESSOR_CONTROL_PLANE_VERSION" \
+  "$ACTIVE_PREDECESSOR_POLICY_SHA256" \
+  "$ACTIVE_PREDECESSOR_PROMOTION_SHA256" \
   "$PRESERVED_CLEAN_CANDIDATE_MANIFEST" \
   "$PRESERVED_CLEAN_CANDIDATE_MANIFEST_SHA256" \
-  "$OLD_ACTIVE_CONTROL_PLANE_VERSION" <<'PY'
+  "$PRESERVED_CLEAN_CANDIDATE_BUILD_PROFILE_CONTROL_PLANE_VERSION" <<'PY'
 import sys
 from pathlib import Path
 
@@ -1765,7 +1767,7 @@ require_no_incomplete_manual_accounting_marker(
 )
 _require_no_outstanding_submissions(policy, pic_root, project_home_root)
 PY
-"${OLD_CONTROL_PLANE[@]}" revalidate_clean_candidate.py \
+"${ACTIVE_PREDECESSOR_CONTROL_PLANE[@]}" revalidate_clean_candidate.py \
   --manifest "$PRESERVED_CLEAN_CANDIDATE_MANIFEST" \
   --expected-manifest-sha256 "$PRESERVED_CLEAN_CANDIDATE_MANIFEST_SHA256"
 /usr/bin/ps -u "$(/usr/bin/id -u)" -ww -o pid=,ppid=,lstart=,args=
@@ -1796,7 +1798,7 @@ After this recovery succeeds, or after an interruption that left both
 controller installs complete but did not start migration, fill the exact
 retained checkpoints into this standalone post-install resume block. It
 revalidates the completed repair worker, clean true-remote source, paired
-controller, old launch-prohibited generation, complete mirrored evidence pairs
+controller, active-predecessor launch-prohibited generation, complete mirrored evidence pairs
 and empty recovery namespaces. It executes the Q011 migration materializer from
 a fresh detached worktree snapshot at the reviewed commit, performs only the
 one-use migration, verifies the resulting launch-prohibited generation, and
@@ -1818,12 +1820,12 @@ FULL_GIT_COMMIT='<exact committed source identity used for preflight and install
 REPAIR_VALIDATION_JOB_ID='<repair_validation_job_id from the completed checkpoint>'
 PROBE_ID='<probe_id from the retained published preflight binding>'
 VERSION='<shared digest basename from the completed paired installs>'
-OLD_ACTIVE_CONTROL_PLANE_VERSION=821d185856722bd0178acb9427f78ac82671a4b6670779ec8400fbac54c6d721
-OLD_ACTIVE_POLICY_SHA256=23a73b868146f63d4b363713f988d55e9dadffa15b26f2b2f1d07da66331f5c3
-OLD_ACTIVE_PROMOTION_SHA256=4824ea825e7b9e42becdca4b9a8b72c0454bd1a2e02d5e365b1878ed94c53243
+ACTIVE_PREDECESSOR_CONTROL_PLANE_VERSION=b56d96b40f2c666b9fa5b421fac589d6a4d6500a716f20b479c354a3d239cb48
+ACTIVE_PREDECESSOR_POLICY_SHA256=48e74f3151b51ba84b72e3214ef4a66c03441c745912b833395f98f6f60a0bd1
+ACTIVE_PREDECESSOR_PROMOTION_SHA256=4ecb45bb399cee750ce69198286afc9fb903dde92cffc7507600b0a53f1c547f
 PRESERVED_CLEAN_CANDIDATE_MANIFEST="${PIC_ROOT}/clean_candidates/98a372c9-2ea0-47e6-ad34-e66343e7eea1/clean_candidate_manifest.json"
 PRESERVED_CLEAN_CANDIDATE_MANIFEST_SHA256=dee6be45657e99ec477eec513c45be4ba6ac43b4fd5deb5655750f51c668e42f
-PRESERVED_CLEAN_CANDIDATE_BUILD_PROFILE_CONTROL_PLANE_VERSION="$OLD_ACTIVE_CONTROL_PLANE_VERSION"
+PRESERVED_CLEAN_CANDIDATE_BUILD_PROFILE_CONTROL_PLANE_VERSION=821d185856722bd0178acb9427f78ac82671a4b6670779ec8400fbac54c6d721
 [[ "$FULL_GIT_COMMIT" =~ ^[0-9a-f]{40}$ ]]
 [[ "$REPAIR_VALIDATION_JOB_ID" =~ ^[0-9]+$ ]]
 [[ "$PROBE_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]
@@ -1930,9 +1932,9 @@ run_reviewed_q011_materializer() {
   /usr/bin/rm -rf -- "$snapshot_root" || status=1
   return "$status"
 }
-OLD_ORION_CONTROL_PLANE="${PIC_ROOT}/control_plane/${OLD_ACTIVE_CONTROL_PLANE_VERSION}"
-OLD_PROJECT_HOME_CONTROL_PLANE="${PROJECT_HOME_POLICY_ROOT}/control_plane/${OLD_ACTIVE_CONTROL_PLANE_VERSION}"
-OLD_CONTROL_PLANE=("$PYTHON" -I -B "${OLD_ORION_CONTROL_PLANE}/run_control_plane.py")
+ACTIVE_PREDECESSOR_ORION_CONTROL_PLANE="${PIC_ROOT}/control_plane/${ACTIVE_PREDECESSOR_CONTROL_PLANE_VERSION}"
+ACTIVE_PREDECESSOR_PROJECT_HOME_CONTROL_PLANE="${PROJECT_HOME_POLICY_ROOT}/control_plane/${ACTIVE_PREDECESSOR_CONTROL_PLANE_VERSION}"
+ACTIVE_PREDECESSOR_CONTROL_PLANE=("$PYTHON" -I -B "${ACTIVE_PREDECESSOR_ORION_CONTROL_PLANE}/run_control_plane.py")
 ORION_CONTROL_PLANE="${PIC_ROOT}/control_plane/${VERSION}"
 PROJECT_HOME_CONTROL_PLANE="${PROJECT_HOME_POLICY_ROOT}/control_plane/${VERSION}"
 CONTROL_PLANE=("$PYTHON" -I -B "${ORION_CONTROL_PLANE}/run_control_plane.py")
@@ -1973,33 +1975,33 @@ test ! -e "$CANDIDATE_ONLY_POLICY"
 require_no_policy_recovery_entries
 require_no_staging_entries
 /usr/bin/cmp -s \
-  "${OLD_ORION_CONTROL_PLANE}/inventory.json" \
-  "${OLD_PROJECT_HOME_CONTROL_PLANE}/inventory.json"
+  "${ACTIVE_PREDECESSOR_ORION_CONTROL_PLANE}/inventory.json" \
+  "${ACTIVE_PREDECESSOR_PROJECT_HOME_CONTROL_PLANE}/inventory.json"
 test "$(
-  "${OLD_CONTROL_PLANE[@]}" validate_and_reserve_frontier_job.py verify-control-plane
-)" = "$OLD_ACTIVE_CONTROL_PLANE_VERSION"
+  "${ACTIVE_PREDECESSOR_CONTROL_PLANE[@]}" validate_and_reserve_frontier_job.py verify-control-plane
+)" = "$ACTIVE_PREDECESSOR_CONTROL_PLANE_VERSION"
 /usr/bin/cmp -s \
   "${PIC_ROOT}/policy/storage_policy.json" \
   "${PROJECT_HOME_POLICY_ROOT}/policy/storage_policy.json"
 /usr/bin/cmp -s \
   "${PIC_ROOT}/policy/active_promotion.json" \
   "${PROJECT_HOME_POLICY_ROOT}/policy/active_promotion.json"
-test "$OLD_ACTIVE_POLICY_SHA256" = "$(
+test "$ACTIVE_PREDECESSOR_POLICY_SHA256" = "$(
   /usr/bin/sha256sum "${PIC_ROOT}/policy/storage_policy.json" |
     /usr/bin/awk '{print $1}'
 )"
-test "$OLD_ACTIVE_PROMOTION_SHA256" = "$(
+test "$ACTIVE_PREDECESSOR_PROMOTION_SHA256" = "$(
   /usr/bin/sha256sum "${PIC_ROOT}/policy/active_promotion.json" |
     /usr/bin/awk '{print $1}'
 )"
 "$PYTHON" -I -B - \
-  "$OLD_ORION_CONTROL_PLANE" \
-  "$OLD_PROJECT_HOME_CONTROL_PLANE" \
+  "$ACTIVE_PREDECESSOR_ORION_CONTROL_PLANE" \
+  "$ACTIVE_PREDECESSOR_PROJECT_HOME_CONTROL_PLANE" \
   "$PIC_ROOT" \
   "$PROJECT_HOME_POLICY_ROOT" \
-  "$OLD_ACTIVE_CONTROL_PLANE_VERSION" \
-  "$OLD_ACTIVE_POLICY_SHA256" \
-  "$OLD_ACTIVE_PROMOTION_SHA256" \
+  "$ACTIVE_PREDECESSOR_CONTROL_PLANE_VERSION" \
+  "$ACTIVE_PREDECESSOR_POLICY_SHA256" \
+  "$ACTIVE_PREDECESSOR_PROMOTION_SHA256" \
   "$PRESERVED_CLEAN_CANDIDATE_MANIFEST" \
   "$PRESERVED_CLEAN_CANDIDATE_MANIFEST_SHA256" \
   "$PRESERVED_CLEAN_CANDIDATE_BUILD_PROFILE_CONTROL_PLANE_VERSION" <<'PY'
@@ -2050,7 +2052,7 @@ require_no_incomplete_manual_accounting_marker(
 )
 _require_no_outstanding_submissions(policy, pic_root, project_home_root)
 PY
-"${OLD_CONTROL_PLANE[@]}" revalidate_clean_candidate.py \
+"${ACTIVE_PREDECESSOR_CONTROL_PLANE[@]}" revalidate_clean_candidate.py \
   --manifest "$PRESERVED_CLEAN_CANDIDATE_MANIFEST" \
   --expected-manifest-sha256 "$PRESERVED_CLEAN_CANDIDATE_MANIFEST_SHA256"
 /usr/bin/ps -u "$(/usr/bin/id -u)" -ww -o pid=,ppid=,lstart=,args=
@@ -2285,6 +2287,64 @@ test "$BUILD_FREEZE_JOB_TOKEN" = "$BUILD_FREEZE_JOB_ID" ||
 printf 'build_freeze_job_id=%s\n' "$BUILD_FREEZE_JOB_ID"
 )
 ```
+
+### Accepted build/freeze timeout successor recovery
+
+Build/freeze job `4769975` is retained as an accepted failed attempt, not as a
+worker-only-resume candidate. Its exact top-level scheduler state is
+`TIMEOUT|0:0`, its log SHA-256 is
+`d07a92eb89c5646bbb25977b9076b3e05e7a1b3935abdb1e1f4448741446cffa`,
+and the log binds the seven post-migration worker inputs before ending during
+the first source clone. It contains no `clean_candidate_manifest` binding.
+No configure, build, freeze, revalidation, candidate-only policy, or science
+launch occurred.
+
+Preserve these exact incomplete paths in place as non-authoritative chronology:
+
+```text
+/lustre/orion/ast207/proj-shared/dfielding/PIC/build/f6471610a116/hip-mpi-release-paper-pic
+/lustre/orion/ast207/proj-shared/dfielding/PIC/bin/f6471610a116/hip-mpi-release-paper-pic
+```
+
+Do not delete, rename, reuse, complete, or treat either path as build evidence.
+Do not run the post-worker phase with job `4769975`, and do not use the
+worker-only resume block with its source/controller checkpoint. The accepted
+timeout exposed that local `git clone --no-hardlinks` copied the linked
+worktree's complete shared object database into Lustre.
+
+The reviewed successor repair uses a new exact source commit and new paired
+controller. Its build authority transfers the already-authenticated top-level
+revision through a standalone, detached, shallow `--no-local`
+`--revision=<commit>` clone. Recursive submodules use standalone full transport
+clones because their exact raw `git submodule status --recursive` provenance
+includes history/tag-derived descriptions. The trusted Git capability gate
+runs before any build or artifact path is created. Both paths reject
+alternates, promisor/partial-clone configuration, symlinked or hard-linked
+object storage, a non-detached or wrong head, and any identity drift; the
+top-level clone additionally rejects extra reachable history, while submodules
+reject shallow source history. Exact recursive submodule-status bytes are
+compared immediately after materialization, before configure or build. Because
+the canonical build path is commit-derived, the repaired successor uses a
+different path while retaining the failed attempt untouched.
+
+Before submitting the repaired build/freeze worker, run the full primary
+no-science preflight, paired-install, and exact-predecessor migration phase
+against the exact current active predecessor:
+
+```text
+policy SHA-256:    48e74f3151b51ba84b72e3214ef4a66c03441c745912b833395f98f6f60a0bd1
+promotion SHA-256: 4ecb45bb399cee750ce69198286afc9fb903dde92cffc7507600b0a53f1c547f
+controller:        b56d96b40f2c666b9fa5b421fac589d6a4d6500a716f20b479c354a3d239cb48
+preflight probe:   bc399b56-8fbb-4b67-b1dc-5df1dbff62b6
+preflight SHA-256: d4a289ce9f4cd7c406dbea8d457864790f3112488e47ea24766cb192beaafab2
+```
+
+This replacement migration must preserve the authorized historical clean
+candidate, empty registered-science allowlist, launch prohibition, failed
+attempt residue, and all prior evidence. It must capture a fresh strictly newer
+preflight, pair-install the repaired controller, and print a new post-migration
+checkpoint before any replacement submission. Only the replacement job ID from
+that new checkpoint may enter the post-worker phase.
 
 After the worker job completes successfully, fill the values printed by the
 post-migration checkpoint and the accepted job ID into this independent

@@ -116,31 +116,35 @@ AUTHORIZED_HISTORICAL_STORAGE_PREFLIGHT_RETIREMENT_POLICY_SHA256 = (
 AUTHORIZED_HISTORICAL_STORAGE_PREFLIGHT_RETIREMENT_PROMOTION_SHA256 = (
     "073da1d4fe7f2eb054da9f3ec2bf2860f2643c3f44ca88d6183f4592eb0681bf"
 )
+# Exact launch-prohibited schema-v2 predecessor retained after build job 4769975.
 AUTHORIZED_STORAGE_PREFLIGHT_PREDECESSOR_MIGRATION_POLICY_SHA256 = (
-    "23a73b868146f63d4b363713f988d55e9dadffa15b26f2b2f1d07da66331f5c3"
+    "48e74f3151b51ba84b72e3214ef4a66c03441c745912b833395f98f6f60a0bd1"
 )
 AUTHORIZED_STORAGE_PREFLIGHT_PREDECESSOR_MIGRATION_PROMOTION_SHA256 = (
-    "4824ea825e7b9e42becdca4b9a8b72c0454bd1a2e02d5e365b1878ed94c53243"
+    "4ecb45bb399cee750ce69198286afc9fb903dde92cffc7507600b0a53f1c547f"
 )
 AUTHORIZED_STORAGE_PREFLIGHT_PREDECESSOR_MIGRATION_CONTROL_PLANE_VERSION = (
-    "821d185856722bd0178acb9427f78ac82671a4b6670779ec8400fbac54c6d721"
+    "b56d96b40f2c666b9fa5b421fac589d6a4d6500a716f20b479c354a3d239cb48"
 )
 AUTHORIZED_STORAGE_PREFLIGHT_PREDECESSOR_MIGRATION_PROBE_ID = (
-    "1554766c-21e2-48b1-8cfe-b1e7e4e75aa2"
+    "bc399b56-8fbb-4b67-b1dc-5df1dbff62b6"
 )
 AUTHORIZED_STORAGE_PREFLIGHT_PREDECESSOR_MIGRATION_EVIDENCE_SHA256 = (
-    "81ba8415e786cf88563520119e88d5e749937aaad293d84003ec8f4b3acb6501"
+    "d4a289ce9f4cd7c406dbea8d457864790f3112488e47ea24766cb192beaafab2"
 )
 AUTHORIZED_STORAGE_PREFLIGHT_PREDECESSOR_MIGRATION_SOURCE_AUTHENTICATION = {
-    "entrypoint_sha256": (
-        "22b8c3898154e0c687bf5bd555b7fae35826014cd5af8e33bd04b946671cb7f0"
+    "common_sha256": (
+        "8873527c19b46236ed66f1c8e3b0318cfcb106e017c5289eac70b482db0ef963"
     ),
-    "git_commit": "749c95bb7492d67bd3765eadd5287f54663c4052",
+    "entrypoint_sha256": (
+        "b6dae64b28dbcc7ce82877ad25d53bc4f0637016c4bd274431c1a4ba947ec94b"
+    ),
+    "git_commit": "f6471610a116ce5433550625c9dc61752315040f",
     "runner_sha256": (
-        "74ab26fdf66129e018ce5a63a3827853e878b1efff71449490b0b017f48fd956"
+        "6053f190ed5bea093537ca5e6aef110212d54861f6726a6fa7294a1716eca2d5"
     ),
     "schema_sha256": (
-        "183fb8996381660a731a650e2fb42e0ee4989b248646d592fb28c0e57f8de898"
+        "348b80f6b56fa56da57a4d30932b41784c939f5a2b1bf49c82d3a6acd024ee3f"
     ),
     "tracked_clean_head_blobs": True,
 }
@@ -4840,7 +4844,12 @@ def _validate_storage_preflight_artifact(
     artifact = read_json_bytes(payload, label="storage-preflight evidence")
     if payload != _canonical_storage_preflight_bytes(artifact):
         raise ValueError("Storage-preflight evidence must use canonical JSON bytes")
-    expected_schema_version = 1 if authorized_source_authentication is not None else 2
+    expected_schema_version = (
+        2
+        if authorized_source_authentication is None
+        or "common_sha256" in authorized_source_authentication
+        else 1
+    )
     if (
         set(artifact)
         != {
