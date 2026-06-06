@@ -30,6 +30,39 @@ def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def retained_tree_snapshot(root: Path) -> dict[str, tuple[object, ...]]:
+    """Capture retained bytes and all mutation-relevant inode profile fields."""
+
+    retained = {}
+    pending = [root]
+    while pending:
+        path = pending.pop()
+        profile = path.lstat()
+        relative = "." if path == root else path.relative_to(root).as_posix()
+        payload: bytes | str | None = None
+        if stat.S_ISREG(profile.st_mode):
+            payload = path.read_bytes()
+        elif stat.S_ISLNK(profile.st_mode):
+            payload = os.readlink(path)
+        elif stat.S_ISDIR(profile.st_mode):
+            pending.extend(
+                reversed(sorted(path.iterdir(), key=lambda child: child.name))
+            )
+        retained[relative] = (
+            profile.st_mode,
+            profile.st_dev,
+            profile.st_ino,
+            profile.st_uid,
+            profile.st_gid,
+            profile.st_nlink,
+            profile.st_size,
+            profile.st_mtime_ns,
+            profile.st_ctime_ns,
+            payload,
+        )
+    return retained
+
+
 def test_cli_reachable_graph_excludes_legacy_namespace_replacement() -> None:
     tree = ast.parse(PUBLISHER.read_text())
     functions = {
@@ -980,7 +1013,7 @@ def test_incomplete_prepublication_staging_blocks_unbounded_retry(
     transactions = campaign.root / "accounting" / authority.TRANSACTION_ROOT_NAME
     incomplete = next(transactions.iterdir())
     assert_failed(campaign.recover(), "requires operator disposition")
-    assert_failed(campaign.promote(), "refusing to create unbounded recovery debris")
+    assert_failed(campaign.promote(), "only complete authenticated prior-attempt debris")
     assert incomplete.is_dir()
     assert list(transactions.iterdir()) == [incomplete]
 
@@ -1204,9 +1237,447 @@ def test_draft_evidence_fails_closed_while_staging_requires_disposition(
     output = campaign.candidates / "blocked-draft.json"
     assert_failed(
         campaign.run(campaign.draft_evidence_command(output, now())),
-        "requires recovery or operator disposition before candidate drafting",
+        "requires operator disposition",
     )
     assert not output.exists()
+
+
+def test_candidate_drafting_coexists_with_complete_stale_staging_without_mutation(
+    campaign: Campaign,
+) -> None:
+    assert_failed(campaign.promote("after-staging"), "simulated interruption")
+    transactions = campaign.root / "accounting" / authority.TRANSACTION_ROOT_NAME
+    retained_before = retained_tree_snapshot(transactions)
+    evidence = campaign.candidates / "coexisting-drafted-evidence.json"
+    audit = campaign.candidates / "coexisting-drafted-audit.json"
+
+    assert campaign.run(campaign.draft_evidence_command(evidence, now())).returncode == 0
+    assert campaign.run(
+        campaign.draft_audit_command(campaign.evidence_candidate, audit, now())
+    ).returncode == 0
+
+    assert retained_tree_snapshot(transactions) == retained_before
+
+
+def test_candidate_drafting_accepts_setgid_complete_stale_staging_without_mutation(
+    campaign: Campaign,
+) -> None:
+    assert_failed(campaign.promote("after-staging"), "simulated interruption")
+    transactions = campaign.root / "accounting" / authority.TRANSACTION_ROOT_NAME
+    transaction = next(transactions.iterdir())
+    transactions.chmod(0o2700)
+    transaction.chmod(0o2700)
+    retained_before = retained_tree_snapshot(transactions)
+    output = campaign.candidates / "setgid-coexisting-draft.json"
+
+    assert campaign.run(campaign.draft_evidence_command(output, now())).returncode == 0
+
+    assert retained_tree_snapshot(transactions) == retained_before
+
+
+@pytest.mark.parametrize(
+    "corruption",
+    [
+        "bare-transaction",
+        "retired-transaction",
+        "installing-state",
+        "committed-state",
+        "missing-publisher-revision",
+        "missing-publisher-file",
+        "non-ancestor-publisher",
+        "wrong-publisher-bytes",
+        "wrong-publisher-mode",
+        "rebound-f116-target",
+        "rebound-bundle-target",
+        "rebound-catalog-target",
+        "mode-zero-journal",
+        "mode-zero-payload",
+        "malformed-journal",
+        "malformed-transaction-path",
+        "missing-payload",
+        "symlink-payload",
+        "unsafe-payload-mode",
+        "externally-hardlinked-payload",
+        "catalog-digest-rebinding",
+        "partial-public-bundle",
+        "dangling-public-bundle",
+        "partial-public-artifact",
+        "catalog-after",
+        "catalog-mixed",
+        "private-publication-slot",
+        "catalog-temporary",
+        "legacy-single-link-temporary",
+        "catalog-predecessor-recovery",
+        "catalog-atomic-recovery",
+        "catalog-atomic-recovery-alternate",
+        "live-catalog-drift",
+    ],
+)
+def test_drafting_and_new_promotion_reject_non_inert_stale_transaction(
+    campaign: Campaign, corruption: str
+) -> None:
+    assert_failed(campaign.promote("after-staging"), "simulated interruption")
+    transactions = campaign.root / "accounting" / authority.TRANSACTION_ROOT_NAME
+    transaction = next(transactions.iterdir())
+    stale_audit = campaign.expected["audit"]
+    campaign.reviewer_ids["provenance"] = "fixture-provenance-next-attempt"
+    campaign.refresh_candidates()
+    assert campaign.expected["audit"] != stale_audit
+
+    journal = transaction / "journal.json"
+    payload = transaction / authority.TRANSACTION_PAYLOADS["evidence"][0]
+    if corruption == "bare-transaction":
+        transaction = transaction.rename(
+            transaction.with_name(transaction.name.removesuffix(
+                authority.STAGING_TRANSACTION_SUFFIX
+            ))
+        )
+    elif corruption == "retired-transaction":
+        transaction = transaction.rename(
+            transaction.with_name(
+                transaction.name.removesuffix(authority.STAGING_TRANSACTION_SUFFIX)
+                + authority.RETIRED_TRANSACTION_SUFFIX
+            )
+        )
+    elif corruption in {"installing-state", "committed-state"}:
+        retained_journal = json.loads(journal.read_text())
+        retained_journal["state"] = corruption.removesuffix("-state")
+        write_json(journal, retained_journal, 0o600)
+    elif corruption == "missing-publisher-revision":
+        retained_journal = json.loads(journal.read_text())
+        retained_journal["publisher"]["revision"] = "0" * 40
+        write_json(journal, retained_journal, 0o600)
+    elif corruption == "missing-publisher-file":
+        git(
+            campaign.repository,
+            "rm",
+            "--cached",
+            authority.PUBLISHER_RELATIVE.as_posix(),
+        )
+        git(campaign.repository, "commit", "-m", "missing publisher file")
+        retained_journal = json.loads(journal.read_text())
+        retained_journal["publisher"]["revision"] = git(
+            campaign.repository, "rev-parse", "HEAD"
+        ).stdout.strip()
+        write_json(journal, retained_journal, 0o600)
+    elif corruption == "non-ancestor-publisher":
+        tree = git(campaign.repository, "rev-parse", "HEAD^{tree}").stdout.strip()
+        unrelated = git(
+            campaign.repository, "commit-tree", tree, "-m", "unrelated publisher"
+        ).stdout.strip()
+        retained_journal = json.loads(journal.read_text())
+        retained_journal["publisher"]["revision"] = unrelated
+        write_json(journal, retained_journal, 0o600)
+    elif corruption == "wrong-publisher-bytes":
+        original = campaign.publisher.read_bytes()
+        write_bytes(campaign.publisher, b"committed wrong publisher bytes\n", 0o755)
+        git(campaign.repository, "add", authority.PUBLISHER_RELATIVE.as_posix())
+        git(campaign.repository, "commit", "-m", "wrong publisher bytes")
+        write_bytes(campaign.publisher, original, 0o755)
+        retained_journal = json.loads(journal.read_text())
+        retained_journal["publisher"]["revision"] = git(
+            campaign.repository, "rev-parse", "HEAD"
+        ).stdout.strip()
+        write_json(journal, retained_journal, 0o600)
+    elif corruption == "wrong-publisher-mode":
+        git(
+            campaign.repository,
+            "update-index",
+            "--chmod=-x",
+            authority.PUBLISHER_RELATIVE.as_posix(),
+        )
+        git(campaign.repository, "commit", "-m", "wrong publisher mode")
+        retained_journal = json.loads(journal.read_text())
+        retained_journal["publisher"]["revision"] = git(
+            campaign.repository, "rev-parse", "HEAD"
+        ).stdout.strip()
+        write_json(journal, retained_journal, 0o600)
+    elif corruption == "rebound-f116-target":
+        retained_journal = json.loads(journal.read_text())
+        retained_journal["targets"]["evidence"] = "accounting/rebound-f116-evidence"
+        write_json(journal, retained_journal, 0o600)
+    elif corruption == "rebound-bundle-target":
+        retained_journal = json.loads(journal.read_text())
+        retained_journal["targets"][
+            "bundle"
+        ] = "source-archives/athenak-feature-cgl-through-000000000.bundle"
+        write_json(journal, retained_journal, 0o600)
+    elif corruption == "rebound-catalog-target":
+        retained_journal = json.loads(journal.read_text())
+        retained_journal["targets"]["readme"] = "source-archives/REBOUND.md"
+        write_json(journal, retained_journal, 0o600)
+    elif corruption == "mode-zero-journal":
+        journal.chmod(0o000)
+    elif corruption == "mode-zero-payload":
+        payload.chmod(0o000)
+    elif corruption == "malformed-journal":
+        write_json(journal, {"malformed": True}, 0o600)
+    elif corruption == "malformed-transaction-path":
+        transaction = transaction.rename(transactions / "malformed.staging")
+    elif corruption == "missing-payload":
+        payload.unlink()
+    elif corruption == "symlink-payload":
+        retained = campaign.candidates / "retained-staged-evidence"
+        payload.rename(retained)
+        payload.symlink_to(retained)
+    elif corruption == "unsafe-payload-mode":
+        payload.chmod(0o666)
+    elif corruption == "externally-hardlinked-payload":
+        os.link(payload, campaign.candidates / "external-staged-evidence-link")
+    elif corruption == "catalog-digest-rebinding":
+        retained_journal = json.loads(journal.read_text())
+        retained_journal["catalog_after"]["readme_sha256"] = "0" * 64
+        write_json(journal, retained_journal, 0o600)
+    elif corruption == "partial-public-bundle":
+        write_bytes(
+            campaign.final_target,
+            (transaction / authority.TRANSACTION_PAYLOADS["bundle"][0]).read_bytes(),
+            0o644,
+        )
+    elif corruption == "dangling-public-bundle":
+        campaign.final_target.symlink_to(campaign.candidates / "missing-public-bundle")
+    elif corruption == "partial-public-artifact":
+        write_bytes(
+            campaign.root / authority.F116_PATHS["evidence"],
+            (transaction / authority.TRANSACTION_PAYLOADS["evidence"][0]).read_bytes(),
+            0o444,
+        )
+    elif corruption in {"catalog-after", "catalog-mixed"}:
+        write_bytes(
+            campaign.root / "source-archives/README.md",
+            (transaction / authority.TRANSACTION_PAYLOADS["readme_after"][0]).read_bytes(),
+            0o644,
+        )
+        if corruption == "catalog-after":
+            write_bytes(
+                campaign.root / "source-archives/SHA256SUMS",
+                (
+                    transaction / authority.TRANSACTION_PAYLOADS["sha256sums_after"][0]
+                ).read_bytes(),
+                0o644,
+            )
+    elif corruption == "private-publication-slot":
+        target = campaign.root / authority.F116_PATHS["evidence"]
+        write_bytes(
+            target.parent / authority.private_publication_names(
+                target.name, "stale F116 evidence"
+            )[0],
+            b"private publication debris\n",
+            0o600,
+        )
+    else:
+        transaction_id = authority.logical_transaction_id(transaction)
+        target = campaign.root / "source-archives/README.md"
+        if corruption == "catalog-temporary":
+            name = f".{target.name}.{transaction_id}.tmp"
+        elif corruption == "legacy-single-link-temporary":
+            name = f".{target.name}.single-link.{transaction_id}.tmp"
+        elif corruption == "catalog-predecessor-recovery":
+            name = f".{target.name}.predecessor.{transaction_id}.tmp"
+        elif corruption == "catalog-atomic-recovery":
+            name = authority.atomic_recovery_names(target)[0]
+        elif corruption == "catalog-atomic-recovery-alternate":
+            name = authority.atomic_recovery_names(target)[1]
+        else:
+            write_bytes(target, b"unreviewed live catalog drift\n", 0o644)
+            name = ""
+        if not name:
+            output = campaign.candidates / f"blocked-{corruption}-draft.json"
+            assert campaign.run(campaign.draft_evidence_command(output, now())).returncode != 0
+            assert not output.exists()
+            assert campaign.promote().returncode != 0
+            assert list(transactions.iterdir()) == [transaction]
+            return
+        write_bytes(target.parent / name, b"catalog recovery debris\n", 0o600)
+
+    output = campaign.candidates / f"blocked-{corruption}-draft.json"
+    assert campaign.run(campaign.draft_evidence_command(output, now())).returncode != 0
+    assert not output.exists()
+    assert campaign.promote().returncode != 0
+    assert list(transactions.iterdir()) == [transaction]
+
+
+@pytest.mark.parametrize(
+    "point",
+    ["after-bundle", "after-artifacts", "after-readme", "after-catalogs", "after-audit"],
+)
+def test_nonmatching_partial_publication_blocks_drafting_and_new_promotion(
+    campaign: Campaign, point: str
+) -> None:
+    assert_failed(campaign.promote(point), f"simulated interruption {point}")
+    transactions = campaign.root / "accounting" / authority.TRANSACTION_ROOT_NAME
+    retained_before = retained_tree_snapshot(transactions)
+    stale_audit = campaign.expected["audit"]
+    campaign.expected["audit"] = "0" * 64
+    assert campaign.expected["audit"] != stale_audit
+
+    output = campaign.candidates / f"blocked-{point}-draft.json"
+    assert campaign.run(campaign.draft_evidence_command(output, now())).returncode != 0
+    assert not output.exists()
+    assert campaign.promote().returncode != 0
+    assert retained_tree_snapshot(transactions) == retained_before
+
+
+@pytest.mark.parametrize(
+    ("target_key", "dangling"),
+    [
+        ("bundle", False),
+        ("bundle", True),
+        ("evidence", False),
+        ("evidence", True),
+        ("provenance_review", False),
+        ("provenance_review", True),
+        ("plasma_review", False),
+        ("plasma_review", True),
+        ("publication_audit", False),
+        ("publication_audit", True),
+    ],
+)
+def test_drafting_rejects_each_stale_public_target_and_dangling_symlink(
+    campaign: Campaign, target_key: str, dangling: bool
+) -> None:
+    assert_failed(campaign.promote("after-staging"), "simulated interruption")
+    transactions = campaign.root / "accounting" / authority.TRANSACTION_ROOT_NAME
+    transaction = next(transactions.iterdir())
+    campaign.expected["audit"] = "0" * 64
+    if target_key == "bundle":
+        target = campaign.final_target
+        payload_key = "bundle"
+        mode = 0o644
+    else:
+        target = campaign.root / authority.F116_PATHS[target_key]
+        payload_key = "audit" if target_key == "publication_audit" else target_key
+        mode = 0o444
+    if dangling:
+        target.symlink_to(campaign.candidates / f"missing-{target_key}")
+    else:
+        write_bytes(
+            target,
+            (transaction / authority.TRANSACTION_PAYLOADS[payload_key][0]).read_bytes(),
+            mode,
+        )
+
+    output = campaign.candidates / f"blocked-{target_key}-{dangling}-draft.json"
+    assert campaign.run(campaign.draft_evidence_command(output, now())).returncode != 0
+    assert not output.exists()
+    assert campaign.promote().returncode != 0
+    assert list(transactions.iterdir()) == [transaction]
+
+
+@pytest.mark.parametrize(
+    ("target_kind", "recovery_kind", "dangling"),
+    [
+        ("artifact", "temporary", False),
+        ("artifact", "temporary", True),
+        ("artifact", "single-link", False),
+        ("artifact", "single-link", True),
+        ("catalog", "temporary", False),
+        ("catalog", "temporary", True),
+        ("catalog", "single-link", False),
+        ("catalog", "single-link", True),
+        ("catalog", "predecessor", False),
+        ("catalog", "predecessor", True),
+    ],
+)
+def test_drafting_and_new_promotion_reject_foreign_transaction_recovery_names(
+    campaign: Campaign, target_kind: str, recovery_kind: str, dangling: bool
+) -> None:
+    assert_failed(campaign.promote("after-staging"), "simulated interruption")
+    transactions = campaign.root / "accounting" / authority.TRANSACTION_ROOT_NAME
+    transaction = next(transactions.iterdir())
+    campaign.reviewer_ids["provenance"] = "fixture-provenance-next-attempt"
+    campaign.refresh_candidates()
+
+    target = (
+        campaign.root / authority.F116_PATHS["evidence"]
+        if target_kind == "artifact"
+        else campaign.root / "source-archives/README.md"
+    )
+    foreign_transaction_id = f"2099-12-31T235959+0000-{'f' * 32}"
+    assert foreign_transaction_id != authority.logical_transaction_id(transaction)
+    infix = "" if recovery_kind == "temporary" else f"{recovery_kind}."
+    recovery = target.parent / f".{target.name}.{infix}{foreign_transaction_id}.tmp"
+    if dangling:
+        recovery.symlink_to(campaign.candidates / f"missing-{target_kind}-{recovery_kind}")
+    else:
+        write_bytes(recovery, b"foreign transaction recovery debris\n", 0o600)
+
+    output = campaign.candidates / (
+        f"blocked-foreign-{target_kind}-{recovery_kind}-{dangling}-draft.json"
+    )
+    assert campaign.run(campaign.draft_evidence_command(output, now())).returncode != 0
+    assert not output.exists()
+    assert campaign.promote().returncode != 0
+    assert list(transactions.iterdir()) == [transaction]
+    assert os.path.lexists(recovery)
+
+
+def test_transaction_recovery_scanner_retries_insertion_after_first_identity_snapshot(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    target = tmp_path / "artifact"
+    transaction_id = f"2099-12-31T235959+0000-{'e' * 32}"
+    recovery = tmp_path / f".{target.name}.{transaction_id}.tmp"
+    real_bindings = authority.direct_child_identity_bindings
+    inserted = False
+
+    def insert_after_first_snapshot(
+        parent: int, label: str
+    ) -> tuple[tuple[str, tuple[int, ...]], ...] | None:
+        nonlocal inserted
+        bindings = real_bindings(parent, label)
+        if not inserted:
+            inserted = True
+            descriptor = os.open(
+                recovery.name,
+                os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                0o600,
+                dir_fd=parent,
+            )
+            os.close(descriptor)
+        return bindings
+
+    monkeypatch.setattr(authority, "direct_child_identity_bindings", insert_after_first_snapshot)
+    with pytest.raises(ValueError, match="retains forbidden names"):
+        authority.require_transaction_recovery_names_absent(
+            tmp_path, target.name, "hostile artifact recovery namespace"
+        )
+
+    assert inserted
+    assert recovery.is_file()
+
+
+@pytest.mark.parametrize(
+    ("catalog", "name"),
+    [
+        (False, f".artifact.٢099-12-31T235959+0000-{'a' * 32}.tmp"),
+        (False, f".artifact.2099-02-31T235959+0000-{'a' * 32}.tmp"),
+        (False, f".artifact.2099-12-31T235959+0000-{'A' * 32}.tmp"),
+        (False, f".artifact.2099-12-31T235959+0000-{'a' * 32}.tmp.extra"),
+        (False, f".artifact.predecessor.2099-12-31T235959+0000-{'a' * 32}.tmp"),
+        (True, f".README.md.predecessors.2099-12-31T235959+0000-{'a' * 32}.tmp"),
+    ],
+)
+def test_transaction_recovery_scanner_accepts_unrelated_near_miss_names(
+    tmp_path: Path, catalog: bool, name: str
+) -> None:
+    target = "README.md" if catalog else "artifact"
+    near_miss = tmp_path / name
+    near_miss.symlink_to(tmp_path / "missing-near-miss")
+
+    authority.require_transaction_recovery_names_absent(
+        tmp_path, target, "near-miss recovery namespace", catalog=catalog
+    )
+
+    assert near_miss.is_symlink()
+
+
+def test_exact_audit_matching_partial_transaction_resumes_under_strict_classifier(
+    campaign: Campaign,
+) -> None:
+    assert_failed(campaign.promote("after-artifacts"), "simulated interruption after-artifacts")
+    assert campaign.promote().returncode == 0
+    assert campaign.verify().returncode == 0
 
 
 def test_drafted_evidence_reviews_and_audit_are_operable_end_to_end(
@@ -1246,6 +1717,48 @@ def test_drafted_evidence_reviews_and_audit_are_operable_end_to_end(
     verify = campaign.verify_command()
     verify[-1] = sha256(audit_one)
     assert campaign.run(verify).returncode == 0
+
+
+def test_drafted_candidate_promotion_coexists_with_unchanged_complete_stale_transaction(
+    campaign: Campaign,
+) -> None:
+    assert_failed(campaign.promote("after-staging"), "simulated interruption")
+    transactions = campaign.root / "accounting" / authority.TRANSACTION_ROOT_NAME
+    stale = next(transactions.iterdir())
+    stale_audit = campaign.expected["audit"]
+    stale_before = retained_tree_snapshot(stale)
+    evidence = campaign.candidates / "coexisting-end-to-end-evidence.json"
+    audit = campaign.candidates / "coexisting-end-to-end-audit.json"
+
+    assert campaign.run(campaign.draft_evidence_command(evidence, now())).returncode == 0
+    bind_external_reviews(campaign, evidence)
+    assert campaign.run(campaign.draft_audit_command(evidence, audit, now())).returncode == 0
+    assert sha256(audit) != stale_audit
+
+    command = campaign.promote_command()
+    replacements = {
+        "--evidence-candidate": str(evidence),
+        "--expected-evidence-sha256": sha256(evidence),
+        "--provenance-review-candidate": str(campaign.provenance_candidate),
+        "--expected-provenance-review-sha256": sha256(campaign.provenance_candidate),
+        "--plasma-review-candidate": str(campaign.plasma_candidate),
+        "--expected-plasma-review-sha256": sha256(campaign.plasma_candidate),
+        "--audit-candidate": str(audit),
+        "--expected-audit-sha256": sha256(audit),
+    }
+    for option, value in replacements.items():
+        command[command.index(option) + 1] = value
+    assert campaign.run(command).returncode == 0
+    verify = campaign.verify_command()
+    verify[-1] = sha256(audit)
+    assert campaign.run(verify).returncode == 0
+
+    assert retained_tree_snapshot(stale) == stale_before
+    retained_audits = {
+        json.loads((transaction / "journal.json").read_text())["expected"]["audit"]
+        for transaction in transactions.iterdir()
+    }
+    assert retained_audits == {stale_audit, sha256(audit)}
 
 
 def test_draft_audit_rejects_review_for_different_evidence(campaign: Campaign) -> None:
@@ -1350,6 +1863,51 @@ def test_repeated_promotion_resumes_exact_retained_transaction(campaign: Campaig
     assert campaign.promote().returncode == 0
     assert campaign.verify().returncode == 0
     assert (retained.stat().st_dev, retained.stat().st_ino) == retained_identity
+
+
+def test_new_promotion_coexists_with_complete_stale_transaction_without_mutation(
+    campaign: Campaign,
+) -> None:
+    assert_failed(campaign.promote("after-staging"), "simulated interruption")
+    transactions = campaign.root / "accounting" / authority.TRANSACTION_ROOT_NAME
+    stale = next(transactions.iterdir())
+    stale_audit = campaign.expected["audit"]
+    stale_before = retained_tree_snapshot(stale)
+
+    campaign.reviewer_ids["provenance"] = "fixture-provenance-next-attempt"
+    campaign.refresh_candidates()
+    assert campaign.expected["audit"] != stale_audit
+
+    assert campaign.promote().returncode == 0
+    assert campaign.verify().returncode == 0
+    assert retained_tree_snapshot(stale) == stale_before
+    retained_audits = {
+        json.loads((transaction / "journal.json").read_text())["expected"]["audit"]
+        for transaction in transactions.iterdir()
+    }
+    assert retained_audits == {stale_audit, campaign.expected["audit"]}
+
+
+def test_new_promotion_rejects_nonmatching_stale_transaction_payload_tampering(
+    campaign: Campaign,
+) -> None:
+    assert_failed(campaign.promote("after-staging"), "simulated interruption")
+    transactions = campaign.root / "accounting" / authority.TRANSACTION_ROOT_NAME
+    stale = next(transactions.iterdir())
+    stale_audit = campaign.expected["audit"]
+    payload = stale / authority.TRANSACTION_PAYLOADS["evidence"][0]
+    payload.chmod(0o644)
+    payload.write_bytes(payload.read_bytes() + b" ")
+    payload.chmod(0o444)
+
+    campaign.reviewer_ids["provenance"] = "fixture-provenance-next-attempt"
+    campaign.refresh_candidates()
+    assert campaign.expected["audit"] != stale_audit
+
+    assert_failed(campaign.promote(), "checksum differs")
+    assert list(transactions.iterdir()) == [stale]
+    assert not campaign.final_target.exists()
+    assert not (campaign.root / authority.F116_PATHS["publication_audit"]).exists()
 
 
 def test_recovery_rejects_transaction_payload_tampering(campaign: Campaign) -> None:

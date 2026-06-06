@@ -8,9 +8,12 @@ scientific changes, or historical manifest rebinding.  Publication is a
 recoverable forward transaction under the canonical Stage-I lock; the
 single-link exact-digest 0444 F-116 publication audit is the sole authority
 commit marker.
-Retained transaction directories and bounded private-publication remnants are
-recovery inputs before that marker and non-authoritative recovery debris after
-it.  Normal forward completion removes authenticated incomplete private
+Before that marker, the exact complete transaction matching the requested audit
+is a recovery input; only complete inert staged transactions with no publication
+state may coexist as non-authoritative prior-attempt debris.  Incomplete,
+non-inert, or unsafe transactions block.  All retained transactions and bounded
+private-publication remnants are non-authoritative recovery debris after the
+marker.  Normal forward completion removes authenticated incomplete private
 remnants before committing; private names observed after commit are never
 mutated.
 """
@@ -193,8 +196,9 @@ JOURNAL_RECOVERY_NAME = ".journal.json.recovery.tmp"
 JOURNAL_RECOVERY_ALTERNATE_NAME = ".journal.json.recovery.alternate.tmp"
 JOURNAL_RECOVERY_NAMES = (JOURNAL_RECOVERY_NAME, JOURNAL_RECOVERY_ALTERNATE_NAME)
 TRANSACTION_ID_RE = re.compile(
-    r"\d{4}-\d{2}-\d{2}T\d{6}\+0000-[0-9a-f]{32}"
+    r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{6}\+0000-[0-9a-f]{32}"
 )
+TRANSACTION_ID_TIMESTAMP_FORMAT = "%Y-%m-%dT%H%M%S+0000"
 GIT = Path("/usr/lib/git/git")
 GIT_EXEC_PATH = Path("/usr/lib/git")
 TRUSTED_SYSTEM_PATH = "/usr/bin:/bin"
@@ -225,6 +229,19 @@ def canonical_json(value: object) -> bytes:
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
+def is_publisher_transaction_id(value: object) -> bool:
+    """Return whether a value has the exact transaction ID grammar we generate."""
+
+    if not isinstance(value, str) or TRANSACTION_ID_RE.fullmatch(value) is None:
+        return False
+    timestamp, _, _ = value.rpartition("-")
+    try:
+        datetime.strptime(timestamp, TRANSACTION_ID_TIMESTAMP_FORMAT)
+    except ValueError:
+        return False
+    return True
 
 
 def require_utc(value: object, label: str) -> datetime:
@@ -3278,16 +3295,13 @@ def require_external_draft_output(path: Path, root: Path, label: str) -> Path:
     return retained
 
 
-def require_draftable_state(layout: dict[str, Path]) -> None:
+def require_draftable_state(root: Path, repository: Path,
+                            layout: dict[str, Path]) -> None:
     require_other_transactions_empty(layout)
     for key in F116_PATHS:
-        if layout[f"f116_{key}"].exists():
+        if os.path.lexists(layout[f"f116_{key}"]):
             raise ValueError(f"F116 target already exists: {layout[f'f116_{key}']}")
-    if transaction_directories(layout):
-        raise ValueError(
-            "source-authority staging requires recovery or operator disposition "
-            "before candidate drafting"
-        )
+    require_inert_stale_transactions(root, repository, layout)
 
 
 def current_f115_bindings(root: Path, canonical: bool) -> dict[str, object]:
@@ -3318,7 +3332,7 @@ def publication_binding(path: Path, digest: str, mode: str) -> dict[str, object]
 def draft_evidence(args: argparse.Namespace, root: Path, repository: Path,
                    canonical: bool, publisher_sha256: str,
                    layout: dict[str, Path]) -> Path:
-    require_draftable_state(layout)
+    require_draftable_state(root, repository, layout)
     output = require_external_draft_output(
         args.evidence_candidate_output, root, "F116 evidence candidate output"
     )
@@ -3458,7 +3472,7 @@ def draft_evidence(args: argparse.Namespace, root: Path, repository: Path,
 def reviewed_draft_context(args: argparse.Namespace, root: Path, repository: Path,
                            canonical: bool, publisher_sha256: str,
                            layout: dict[str, Path]) -> dict[str, object]:
-    require_draftable_state(layout)
+    require_draftable_state(root, repository, layout)
     bundle_path = normalized_absolute(args.bundle_candidate, "final bundle candidate")
     evidence_path = normalized_absolute(args.evidence_candidate, "F116 evidence candidate")
     evidence_payload, evidence_sha256 = candidate_file(
@@ -3664,11 +3678,7 @@ def initial_plan(args: argparse.Namespace, root: Path, repository: Path,
                  canonical: bool, publisher_sha256: str,
                  layout: dict[str, Path]) -> dict[str, object]:
     require_other_transactions_empty(layout)
-    if transaction_directories(layout):
-        raise ValueError(
-            "source-authority staging requires recovery or operator disposition "
-            "before new promotion"
-        )
+    require_inert_stale_transactions(root, repository, layout)
     candidate_paths = {
         "bundle": normalized_absolute(args.bundle_candidate, "final bundle candidate"),
         "evidence": normalized_absolute(args.evidence_candidate, "F116 evidence candidate"),
@@ -3960,104 +3970,27 @@ def logical_transaction_id(transaction: Path) -> str:
         name = name.removesuffix(STAGING_TRANSACTION_SUFFIX)
     elif name.endswith(RETIRED_TRANSACTION_SUFFIX):
         name = name.removesuffix(RETIRED_TRANSACTION_SUFFIX)
-    if TRANSACTION_ID_RE.fullmatch(name) is None:
+    if not is_publisher_transaction_id(name):
         raise ValueError("source-authority transaction pathname is malformed")
     return name
 
 
 def matching_transaction_directories(
-    layout: dict[str, Path], expected_audit_sha256: str
+    root: Path,
+    repository: Path,
+    layout: dict[str, Path],
+    expected_audit_sha256: str,
 ) -> list[Path]:
-    """Select exact recoverable transactions while validating bounded debris."""
+    """Select exact recovery inputs while requiring nonmatching state to be inert."""
 
     expected_audit = require_sha256(expected_audit_sha256, "expected audit SHA-256")
-    retained = []
-    payload_names = {name for name, _ in TRANSACTION_PAYLOADS.values()}
-    for transaction in transaction_directories(layout):
-        transaction_id = logical_transaction_id(transaction)
-        journal: dict[str, object] | None = None
-        with bound_directory(
-            transaction, "source-authority retained transaction", mode=0o700
-        ) as (descriptor, _):
-            entries = set(os.listdir(descriptor))
-            journal_profile = (
-                os.stat("journal.json", dir_fd=descriptor, follow_symlinks=False)
-                if "journal.json" in entries
-                else None
-            )
-            if (
-                journal_profile is not None
-                and transaction.name.endswith(STAGING_TRANSACTION_SUFFIX)
-                and stat.S_IMODE(journal_profile.st_mode) == 0o000
-            ):
-                raise ValueError(
-                    "incomplete or downgraded source-authority journal requires "
-                    "operator disposition"
-                )
-            if "journal.json" not in entries:
-                if not transaction.name.endswith(STAGING_TRANSACTION_SUFFIX):
-                    raise ValueError("journal-free source-authority transaction is not staging")
-                if not entries <= payload_names:
-                    raise ValueError(
-                        "incomplete source-authority staging contains unexpected entries"
-                    )
-                for name in entries:
-                    profile = os.stat(name, dir_fd=descriptor, follow_symlinks=False)
-                    require_file_profile(
-                        profile,
-                        f"incomplete source-authority staging entry {name}",
-                        mode=stat.S_IMODE(profile.st_mode),
-                    )
-                continue
-            unexpected = {
-                name
-                for name in entries
-                if name not in payload_names
-                and name != "journal.json"
-                and name not in JOURNAL_RECOVERY_NAMES
-                and JOURNAL_TEMP_RE.fullmatch(name) is None
-            }
-            if unexpected:
-                raise ValueError(
-                    "retained source-authority transaction contains unexpected entries"
-                )
-            payload_modes = {
-                name: int(mode, 8) for name, mode in TRANSACTION_PAYLOADS.values()
-            }
-            for name in entries:
-                profile = os.stat(name, dir_fd=descriptor, follow_symlinks=False)
-                expected_mode = payload_modes.get(name, 0o600)
-                require_file_profile(
-                    profile,
-                    f"retained source-authority transaction entry {name}",
-                    mode=expected_mode,
-                )
-            journal, _, _, _ = read_bound_json(
-                descriptor,
-                "journal.json",
-                "source-authority retained journal",
-                mode=0o600,
-            )
-        if journal is None:
-            raise ValueError("source-authority retained journal disappeared")
-        if (
-            journal.get("schema_version") != 1
-            or journal.get("record_type")
-            != "stage-i-current-source-authority-publication-transaction"
-            or journal.get("transaction_id") != transaction_id
-            or journal.get("execution_epoch") != EXECUTION_EPOCH
-            or journal.get("checkpoint") != CHECKPOINT
-        ):
-            raise ValueError("source-authority retained journal identity differs")
-        expected = journal.get("expected")
-        if not isinstance(expected, dict):
-            raise ValueError("source-authority retained journal expected digests are missing")
-        retained_audit = require_sha256(
-            expected.get("audit"), "source-authority retained journal audit SHA-256"
+    return [
+        transaction
+        for transaction, journal, _ in classified_prepublication_transactions(
+            root, repository, layout, expected_audit
         )
-        if retained_audit == expected_audit:
-            retained.append(transaction)
-    return retained
+        if transaction_expected_audit(journal) == expected_audit
+    ]
 
 
 def recover_atomic_journal(transaction: Path) -> str:
@@ -4268,18 +4201,50 @@ def recover_atomic_journal(transaction: Path) -> str:
         return retained
 
 
-def load_transaction(layout: dict[str, Path], expected_audit_sha256: str
-                     ) -> tuple[Path, dict[str, object], dict[str, bytes]]:
-    transactions = matching_transaction_directories(layout, expected_audit_sha256)
-    if len(transactions) != 1:
-        raise ValueError("source-authority recovery requires exactly one transaction")
-    transaction = transactions[0]
-    if transaction.name.endswith(RETIRED_TRANSACTION_SUFFIX):
-        raise ValueError("source-authority committed transaction retirement requires recovery")
+def read_complete_transaction(
+    transaction: Path,
+) -> tuple[dict[str, object], dict[str, bytes]]:
+    """Read-only authenticate one complete retained source-authority transaction."""
+
     with bound_directory(
         transaction, "source-authority transaction directory", mode=0o700
     ) as (descriptor, _):
         entries = set(os.listdir(descriptor))
+        if "journal.json" not in entries:
+            payload_names = {name for name, _ in TRANSACTION_PAYLOADS.values()}
+            if not transaction.name.endswith(STAGING_TRANSACTION_SUFFIX):
+                raise ValueError("journal-free source-authority transaction is not staging")
+            unexpected = entries - payload_names
+            if unexpected:
+                raise ValueError(
+                    "incomplete source-authority staging contains unexpected entries"
+                )
+            for name in entries:
+                try:
+                    profile = os.stat(name, dir_fd=descriptor, follow_symlinks=False)
+                except OSError as error:
+                    raise ValueError(
+                        f"incomplete source-authority staging entry {name} is unavailable"
+                    ) from error
+                require_file_profile(
+                    profile,
+                    f"incomplete source-authority staging entry {name}",
+                    mode=stat.S_IMODE(profile.st_mode),
+                )
+            raise ValueError(
+                "incomplete source-authority staging requires operator disposition"
+            )
+        try:
+            journal_profile = os.stat(
+                "journal.json", dir_fd=descriptor, follow_symlinks=False
+            )
+        except OSError as error:
+            raise ValueError("source-authority journal is unavailable") from error
+        if stat.S_IMODE(journal_profile.st_mode) == 0o000:
+            raise ValueError(
+                "incomplete or downgraded source-authority journal requires "
+                "operator disposition"
+            )
         journal, journal_payload, journal_digest, _ = read_bound_json(
             descriptor, "journal.json", "source-authority journal", mode=0o600
         )
@@ -4308,16 +4273,90 @@ def load_transaction(layout: dict[str, Path], expected_audit_sha256: str
             {"bundle", "evidence", "provenance_review", "plasma_review", "audit"},
             "source-authority journal expected digests",
         )
-        if expected["audit"] != require_sha256(
-            expected_audit_sha256, "expected audit SHA-256"
+        for key, digest in expected.items():
+            require_sha256(digest, f"source-authority journal expected {key} SHA-256")
+        publisher = require_exact_keys(
+            journal["publisher"],
+            {"revision", "sha256"},
+            "source-authority journal publisher",
+        )
+        require_revision(publisher["revision"], "source-authority journal publisher revision")
+        require_sha256(publisher["sha256"], "source-authority journal publisher SHA-256")
+        candidate_paths = require_exact_keys(
+            journal["candidate_paths"],
+            {"bundle", "evidence", "provenance_review", "plasma_review", "audit"},
+            "source-authority journal candidate paths",
+        )
+        for key, value in candidate_paths.items():
+            normalized_absolute(
+                Path(require_nonempty(value, f"source-authority journal {key} candidate path")),
+                f"source-authority journal {key} candidate path",
+            )
+        targets = require_exact_keys(
+            journal["targets"],
+            {
+                "bundle", "evidence", "provenance_review", "plasma_review",
+                "publication_audit", "readme", "sha256sums",
+            },
+            "source-authority journal targets",
+        )
+        for key, value in targets.items():
+            require_relative(value, f"source-authority journal {key} target")
+        catalog_keys = {
+            "catalog_before": {
+                "readme_sha256", "sha256sums_sha256", "bridge_listed",
+                "final_bundle_listed", "corrupt_c7_listed",
+            },
+            "catalog_after": {
+                "readme_sha256", "sha256sums_sha256",
+                "bridge_listed_exactly_once", "final_bundle_listed_exactly_once",
+                "corrupt_c7_listed", "historical_f115_preserved",
+                "sole_current_source_bundle",
+            },
+        }
+        catalogs = {}
+        for generation, keys in catalog_keys.items():
+            catalog = require_exact_keys(
+                journal[generation],
+                keys,
+                f"source-authority journal {generation}",
+            )
+            for key in ("readme_sha256", "sha256sums_sha256"):
+                require_sha256(
+                    catalog[key], f"source-authority journal {generation} {key} SHA-256"
+                )
+            catalogs[generation] = catalog
+        if (
+            catalogs["catalog_before"]["bridge_listed"] is not False
+            or catalogs["catalog_before"]["final_bundle_listed"] is not False
+            or catalogs["catalog_before"]["corrupt_c7_listed"] is not False
+            or catalogs["catalog_after"]["bridge_listed_exactly_once"] is not True
+            or catalogs["catalog_after"]["final_bundle_listed_exactly_once"] is not True
+            or catalogs["catalog_after"]["corrupt_c7_listed"] is not False
+            or catalogs["catalog_after"]["historical_f115_preserved"] is not True
+            or catalogs["catalog_after"]["sole_current_source_bundle"]
+            != targets["bundle"]
         ):
-            raise ValueError("source-authority recovery audit digest differs")
+            raise ValueError("source-authority journal catalog policy bindings differ")
         payload_bindings = require_exact_keys(
             journal["payloads"], set(TRANSACTION_PAYLOADS),
             "source-authority journal payloads",
         )
         recoveries = entries & set(JOURNAL_RECOVERY_NAMES)
-        if len(recoveries) > 1 or any(JOURNAL_TEMP_RE.fullmatch(name) for name in entries):
+        temporaries = {name for name in entries if JOURNAL_TEMP_RE.fullmatch(name)}
+        for temporary in temporaries:
+            try:
+                profile = os.stat(temporary, dir_fd=descriptor, follow_symlinks=False)
+            except OSError as error:
+                raise ValueError(
+                    f"source-authority retained journal temporary {temporary} is unavailable"
+                ) from error
+            require_file_profile(
+                profile,
+                f"source-authority retained journal temporary {temporary}",
+                mode=0o600,
+            )
+        if len(recoveries) > 1 or temporaries:
             raise ValueError(
                 "source-authority transaction contains legacy mutable-journal state"
             )
@@ -4364,6 +4403,411 @@ def load_transaction(layout: dict[str, Path], expected_audit_sha256: str
     for key in ("bundle", "evidence", "provenance_review", "plasma_review", "audit"):
         if sha256_bytes(payloads[key]) != expected[key]:
             raise ValueError(f"source-authority transaction {key} differs from operator binding")
+    for generation, payload_generation in (
+        ("catalog_before", "before"),
+        ("catalog_after", "after"),
+    ):
+        catalog = journal[generation]
+        if not isinstance(catalog, dict):
+            raise ValueError(f"source-authority journal {generation} is not an object")
+        for catalog_key, payload_key in (
+            ("readme_sha256", f"readme_{payload_generation}"),
+            ("sha256sums_sha256", f"sha256sums_{payload_generation}"),
+        ):
+            if sha256_bytes(payloads[payload_key]) != catalog[catalog_key]:
+                raise ValueError(
+                    "source-authority journal catalog bindings differ from payloads: "
+                    f"{generation} {catalog_key}"
+                )
+    return journal, payloads
+
+
+def require_committed_ancestor_publisher(
+    repository: Path, journal: dict[str, object]
+) -> None:
+    """Bind one stale journal publisher to exact bytes in a reachable commit."""
+
+    publisher = require_exact_keys(
+        journal["publisher"],
+        {"revision", "sha256"},
+        "source-authority journal publisher",
+    )
+    revision = require_revision(
+        publisher["revision"], "source-authority journal publisher revision"
+    )
+    digest = require_sha256(
+        publisher["sha256"], "source-authority journal publisher SHA-256"
+    )
+    if git_run(repository, ["cat-file", "-e", f"{revision}^{{commit}}"]).returncode:
+        raise ValueError("source-authority stale publisher revision is not committed")
+    head = repository_head(repository)
+    if git_run(
+        repository, ["merge-base", "--is-ancestor", revision, head]
+    ).returncode:
+        raise ValueError("source-authority stale publisher revision is not an ancestor")
+    committed = git_run(
+        repository, ["show", f"{revision}:{PUBLISHER_RELATIVE.as_posix()}"]
+    )
+    if committed.returncode or sha256_bytes(committed.stdout) != digest:
+        raise ValueError(
+            "source-authority stale publisher digest differs from committed revision"
+        )
+    tree = git_run(
+        repository, ["ls-tree", revision, "--", PUBLISHER_RELATIVE.as_posix()]
+    )
+    try:
+        tree_line = tree.stdout.decode("ascii").strip()
+    except UnicodeDecodeError as error:
+        raise ValueError("source-authority stale publisher tree entry is not ASCII") from error
+    if (
+        tree.returncode
+        or not tree_line.startswith("100755 blob ")
+        or not tree_line.endswith(f"\t{PUBLISHER_RELATIVE.as_posix()}")
+    ):
+        raise ValueError("source-authority stale publisher is not a committed executable")
+
+
+def require_names_absent(parent_path: Path, names: set[str], label: str) -> None:
+    """Require exact direct-child names to be absent, including dangling symlinks."""
+
+    with bound_directory(parent_path, f"{label} parent") as (parent, _):
+        retained = []
+        for name in sorted(names):
+            name = require_entry_name(name, f"{label} retained name")
+            try:
+                os.stat(name, dir_fd=parent, follow_symlinks=False)
+            except FileNotFoundError:
+                continue
+            except OSError as error:
+                raise ValueError(f"{label} retained name {name} is unavailable") from error
+            retained.append(name)
+        if retained:
+            raise ValueError(f"{label} retains forbidden names: {retained}")
+
+
+def direct_child_identity_bindings(
+    parent: int, label: str
+) -> tuple[tuple[str, tuple[int, ...]], ...] | None:
+    """Return one identity-bearing direct-child snapshot, or None after a race."""
+
+    require_bound_directory_descriptor(parent)
+    try:
+        names = sorted(os.listdir(parent))
+    except OSError as error:
+        raise ValueError(f"{label} namespace is unavailable") from error
+    bindings = []
+    for name in names:
+        try:
+            profile = os.stat(name, dir_fd=parent, follow_symlinks=False)
+        except FileNotFoundError:
+            return None
+        except OSError as error:
+            raise ValueError(f"{label} entry {name} is unavailable") from error
+        bindings.append(
+            (
+                name,
+                (
+                    profile.st_dev,
+                    profile.st_ino,
+                    profile.st_mode,
+                    profile.st_uid,
+                    profile.st_gid,
+                    profile.st_nlink,
+                    profile.st_size,
+                    profile.st_mtime_ns,
+                    profile.st_ctime_ns,
+                ),
+            )
+        )
+    require_bound_directory_descriptor(parent)
+    return tuple(bindings)
+
+
+def recovery_transaction_id(name: str, prefixes: tuple[str, ...]) -> str | None:
+    """Extract an exact publisher-generatable transaction ID from a recovery name."""
+
+    if not name.endswith(".tmp"):
+        return None
+    for prefix in prefixes:
+        if name.startswith(prefix):
+            transaction_id = name[len(prefix):-len(".tmp")]
+            if is_publisher_transaction_id(transaction_id):
+                return transaction_id
+    return None
+
+
+def require_transaction_recovery_names_absent(
+    parent_path: Path, target: str, label: str, *, catalog: bool = False
+) -> None:
+    """Reject legacy recovery names for every valid source-authority transaction ID."""
+
+    target = require_entry_name(target, label)
+    prefixes = [f".{target}.", f".{target}.single-link."]
+    if catalog:
+        prefixes.append(f".{target}.predecessor.")
+    with bound_directory(parent_path, f"{label} parent") as (parent, _):
+        previous = None
+        consecutive = 0
+        for _ in range(8):
+            current = direct_child_identity_bindings(parent, label)
+            if current is None:
+                previous = None
+                consecutive = 0
+                continue
+            retained = [
+                name for name, _ in current
+                if recovery_transaction_id(name, tuple(prefixes)) is not None
+            ]
+            if retained:
+                raise ValueError(f"{label} retains forbidden names: {retained}")
+            if current == previous:
+                consecutive += 1
+            else:
+                previous = current
+                consecutive = 1
+            if consecutive >= 2:
+                require_bound_directory_descriptor(parent)
+                return
+        raise ValueError(f"{label} namespace did not stabilize")
+
+
+def inert_stale_targets(
+    root: Path,
+    layout: dict[str, Path],
+    journal: dict[str, object],
+    payloads: dict[str, bytes],
+) -> tuple[tuple[Path, str], ...]:
+    """Return exact public targets after binding a stale journal to its evidence."""
+
+    targets = require_exact_keys(
+        journal["targets"],
+        {
+            "bundle", "evidence", "provenance_review", "plasma_review",
+            "publication_audit", "readme", "sha256sums",
+        },
+        "source-authority journal targets",
+    )
+    for key, relative in F116_PATHS.items():
+        if targets[key] != relative.as_posix():
+            raise ValueError(f"source-authority stale F116 {key} target differs")
+    if (
+        targets["readme"] != "source-archives/README.md"
+        or targets["sha256sums"] != "source-archives/SHA256SUMS"
+    ):
+        raise ValueError("source-authority stale catalog targets differ")
+
+    evidence = require_exact_keys(
+        parse_json_payload(payloads["evidence"], "source-authority stale evidence"),
+        {
+            "schema_version", "record_type", "checkpoint", "execution_epoch",
+            "generated_utc", "scope", "predecessor_authorities", "implementation",
+            "source_archive_catalog", "authorization", "validation",
+            "publication_requirements",
+        },
+        "source-authority stale evidence",
+    )
+    if (
+        evidence["schema_version"] != 1
+        or evidence["record_type"]
+        != "stage-i-current-source-authority-supersession-evidence"
+        or evidence["checkpoint"] != CHECKPOINT
+        or evidence["execution_epoch"] != EXECUTION_EPOCH
+    ):
+        raise ValueError("source-authority stale evidence identity differs")
+    implementation = require_exact_keys(
+        evidence["implementation"],
+        {
+            "publisher", "committed_tools", "intermediate_36140_bundle",
+            "current_source_bundle",
+        },
+        "source-authority stale evidence implementation",
+    )
+    publisher = require_exact_keys(
+        journal["publisher"],
+        {"revision", "sha256"},
+        "source-authority journal publisher",
+    )
+    if implementation["publisher"] != {
+        "path": PUBLISHER_RELATIVE.as_posix(),
+        "revision": publisher["revision"],
+        "sha256": publisher["sha256"],
+        "mode": REQUIRED_TOOLS[PUBLISHER_RELATIVE.as_posix()],
+    }:
+        raise ValueError("source-authority stale evidence publisher binding differs")
+    final = parse_bundle_declaration(
+        implementation["current_source_bundle"],
+        "source-authority stale current source bundle",
+        current=True,
+    )
+    if targets["bundle"] != final["path"]:
+        raise ValueError("source-authority stale final bundle target differs")
+    catalog = require_exact_keys(
+        evidence["source_archive_catalog"],
+        {"before", "after"},
+        "source-authority stale evidence catalog",
+    )
+    if (
+        catalog["before"] != journal["catalog_before"]
+        or catalog["after"] != journal["catalog_after"]
+    ):
+        raise ValueError("source-authority stale evidence catalog binding differs")
+
+    bundle = root / require_relative(targets["bundle"], "source-authority stale bundle target")
+    if bundle.parent != layout["source_archives"]:
+        raise ValueError("source-authority stale bundle target is not a source-archive child")
+    return (
+        (bundle, "source-authority stale final source bundle"),
+        (layout["f116_evidence"], "source-authority stale F116 evidence"),
+        (
+            layout["f116_provenance_review"],
+            "source-authority stale F116 provenance review",
+        ),
+        (layout["f116_plasma_review"], "source-authority stale F116 plasma review"),
+        (layout["f116_publication_audit"], "source-authority stale F116 publication audit"),
+    )
+
+
+def require_inert_stale_transaction(
+    root: Path,
+    repository: Path,
+    layout: dict[str, Path],
+    transaction: Path,
+    journal: dict[str, object],
+    payloads: dict[str, bytes],
+) -> None:
+    """Require one non-authoritative prior attempt to have no publication state."""
+
+    if not transaction.name.endswith(STAGING_TRANSACTION_SUFFIX):
+        raise ValueError("source-authority stale transaction must retain exact .staging name")
+    transaction_id = logical_transaction_id(transaction)
+    if journal["state"] != "staged":
+        raise ValueError("source-authority stale transaction state must be staged")
+    require_committed_ancestor_publisher(repository, journal)
+    public_targets = inert_stale_targets(root, layout, journal, payloads)
+    for target, label in public_targets:
+        require_names_absent(target.parent, {target.name}, label)
+
+    catalogs = (
+        (
+            layout["readme"],
+            "readme_sha256",
+            "readme_before",
+            "source-authority stale source-archive README",
+        ),
+        (
+            layout["sha256sums"],
+            "sha256sums_sha256",
+            "sha256sums_before",
+            "source-authority stale source-archive SHA256SUMS",
+        ),
+    )
+    for target, digest_key, payload_key, label in catalogs:
+        retained, digest = read_file(
+            target,
+            label,
+            expected=str(journal["catalog_before"][digest_key]),
+            mode=0o644,
+        )
+        if retained != payloads[payload_key] or digest != journal["catalog_before"][digest_key]:
+            raise ValueError(f"{label} differs from exact catalog_before")
+
+    for target, label in (*public_targets, *((item[0], item[3]) for item in catalogs)):
+        names = set(private_publication_names(target.name, label))
+        names.update(
+            {
+                f".{target.name}.{transaction_id}.tmp",
+                f".{target.name}.single-link.{transaction_id}.tmp",
+            }
+        )
+        if target in {layout["readme"], layout["sha256sums"]}:
+            names.add(f".{target.name}.predecessor.{transaction_id}.tmp")
+            names.update(atomic_recovery_names(target))
+        require_names_absent(target.parent, names, f"{label} recovery namespace")
+        require_transaction_recovery_names_absent(
+            target.parent,
+            target.name,
+            f"{label} transaction recovery namespace",
+            catalog=target in {layout["readme"], layout["sha256sums"]},
+        )
+
+
+def authenticated_complete_transactions(
+    layout: dict[str, Path],
+) -> Iterator[tuple[Path, dict[str, object], dict[str, bytes]]]:
+    """Read-only authenticate every retained pre-publication transaction."""
+
+    try:
+        for transaction in transaction_directories(layout):
+            journal, payloads = read_complete_transaction(transaction)
+            yield transaction, journal, payloads
+    except ValueError as error:
+        raise ValueError(
+            "incomplete source-authority staging or unsafe retained transaction "
+            "requires operator disposition; only complete authenticated prior-attempt "
+            f"debris may coexist before publication: {error}"
+        ) from error
+
+
+def require_inert_stale_transactions(
+    root: Path, repository: Path, layout: dict[str, Path]
+) -> None:
+    """Require every retained drafting/prepublication transaction to be inert."""
+
+    for transaction, journal, payloads in authenticated_complete_transactions(layout):
+        require_inert_stale_transaction(
+            root, repository, layout, transaction, journal, payloads
+        )
+
+
+def transaction_expected_audit(journal: dict[str, object]) -> str:
+    """Return the exact audit digest from one authenticated transaction journal."""
+
+    expected = require_exact_keys(
+        journal["expected"],
+        {"bundle", "evidence", "provenance_review", "plasma_review", "audit"},
+        "source-authority journal expected digests",
+    )
+    return require_sha256(
+        expected["audit"], "source-authority retained journal audit SHA-256"
+    )
+
+
+def classified_prepublication_transactions(
+    root: Path,
+    repository: Path,
+    layout: dict[str, Path],
+    expected_audit_sha256: str,
+) -> Iterator[tuple[Path, dict[str, object], dict[str, bytes]]]:
+    """Authenticate all transactions and require every nonmatching one to be inert."""
+
+    expected_audit = require_sha256(expected_audit_sha256, "expected audit SHA-256")
+    for transaction, journal, payloads in authenticated_complete_transactions(layout):
+        if transaction_expected_audit(journal) != expected_audit:
+            require_inert_stale_transaction(
+                root, repository, layout, transaction, journal, payloads
+            )
+        yield transaction, journal, payloads
+
+
+def load_transaction(root: Path, repository: Path, layout: dict[str, Path],
+                     expected_audit_sha256: str
+                     ) -> tuple[Path, dict[str, object], dict[str, bytes]]:
+    expected_audit = require_sha256(expected_audit_sha256, "expected audit SHA-256")
+    retained = None
+    matches = 0
+    for transaction, journal, payloads in classified_prepublication_transactions(
+        root, repository, layout, expected_audit
+    ):
+        if transaction_expected_audit(journal) != expected_audit:
+            continue
+        matches += 1
+        if matches == 1:
+            retained = transaction, journal, payloads
+    if matches != 1 or retained is None:
+        raise ValueError("source-authority recovery requires exactly one transaction")
+    transaction, journal, payloads = retained
+    if transaction.name.endswith(RETIRED_TRANSACTION_SUFFIX):
+        raise ValueError("source-authority committed transaction retirement requires recovery")
     return transaction, journal, payloads
 
 
@@ -5800,26 +6244,23 @@ def promote(args: argparse.Namespace, root: Path, repository: Path, canonical: b
             args.expected_audit_sha256, allow_transaction=True,
         )
         return
-    retained = matching_transaction_directories(layout, args.expected_audit_sha256)
+    retained = matching_transaction_directories(
+        root, repository, layout, args.expected_audit_sha256
+    )
     if retained:
         transaction, journal, payloads = load_transaction(
-            layout, args.expected_audit_sha256
+            root, repository, layout, args.expected_audit_sha256
         )
         continue_transaction(
             args, root, repository, canonical, publisher_sha256, layout,
             transaction, journal, payloads,
         )
         return
-    if transaction_directories(layout):
-        raise ValueError(
-            "incomplete source-authority staging requires operator disposition; "
-            "refusing to create unbounded recovery debris"
-        )
     plan = initial_plan(args, root, repository, canonical, publisher_sha256, layout)
     transaction = create_transaction(args, layout, plan, publisher_sha256)
     simulation(args, "after-staging")
     loaded_transaction, journal, payloads = load_transaction(
-        layout, args.expected_audit_sha256
+        root, repository, layout, args.expected_audit_sha256
     )
     if loaded_transaction != transaction:
         raise ValueError("new source-authority transaction identity changed")
@@ -5837,12 +6278,9 @@ def recover(args: argparse.Namespace, root: Path, repository: Path, canonical: b
             args.expected_audit_sha256, allow_transaction=True,
         )
         return
-    if not matching_transaction_directories(layout, args.expected_audit_sha256):
-        if transaction_directories(layout):
-            raise ValueError(
-                "incomplete source-authority staging requires operator disposition"
-            )
-    transaction, journal, payloads = load_transaction(layout, args.expected_audit_sha256)
+    transaction, journal, payloads = load_transaction(
+        root, repository, layout, args.expected_audit_sha256
+    )
     continue_transaction(
         args, root, repository, canonical, publisher_sha256, layout,
         transaction, journal, payloads,
