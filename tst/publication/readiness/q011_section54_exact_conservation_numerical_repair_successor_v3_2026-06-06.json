@@ -1,0 +1,190 @@
+{
+  "record_type": "q011_section54_exact_conservation_numerical_repair_successor_v3_readiness",
+  "schema_version": 1,
+  "date": "2026-06-06",
+  "gate": "Q-011",
+  "status": "fixed_uniform_numerical_candidate_and_restart_guards_complete_trusted_execution_pending",
+  "qualification_effect": "none",
+  "authority": {
+    "execution_authorized": false,
+    "launch_authorized": false,
+    "policy_mutation_authorized": false,
+    "scientific_claim_authorized": false,
+    "publication_authorized": false
+  },
+  "isolation": {
+    "branch": "codex/q011-exact-conservation-numerical-repair-clean-v1",
+    "base_commit": "1d72534619da277fdd6838cabdab0d465d0a8867",
+    "numerical_predecessor_commit": "35525e1e7a084fc5c6f9523718455d2fb0c59568",
+    "reviewed_repair_source_commit": "b2d7c4895e354e113115147d55d205b70beaaf7d",
+    "worktree": "/ccs/home/dfielding/athenak-pic-q011-exact-conservation-numerical-repair-clean-v1",
+    "primary_worktree_touched": false,
+    "protected_historical_files_edited": false
+  },
+  "scope": "Clean current-PIC numerical candidate for exact combined MHD+CR accounting in pic_parallel_shock. The candidate ports the bounded ledger implementation and the independently reviewed restart/topology guards, removes the self-attested runtime-evidence packet verifier, and makes no trusted-execution, scientific, or publication claim.",
+  "source_fail_closed_contract": {
+    "qualified_topology": "fixed uniform mesh only",
+    "qualified_boundary_geometry": "reflecting inner-x1, inflow or outflow outer-x1, periodic transverse boundaries",
+    "required_model": "2D3V cosmic-ray paper_mhd_pic_vl2_tsc with RK2, TSC, coupled momentum and energy feedback, injection with gas subtraction, and user history",
+    "validated_mesh_state_requirements": [
+      "mesh adaptive and multilevel flags are false",
+      "max_level equals root_level",
+      "every reconstructed MeshBlock logical level equals root_level",
+      "every reconstructed MeshBlock cost_eachmb is finite and exactly 1.0",
+      "restored adaptive refinement cooldown metadata is absent",
+      "curvature AMR and particle-weighted runtime load balancing are disabled"
+    ],
+    "rejected": [
+      "configured or restored AMR and SMR",
+      "refined restart topology hidden by uniform restart overrides",
+      "restored adaptive cooldown metadata even when all blocks are at root level",
+      "nonfinite or non-unit restored MeshBlock costs",
+      "particle-aware runtime load balancing",
+      "boundary geometries outside the explicitly enforced Section 5.4 geometry"
+    ]
+  },
+  "numerical_accounting_surface": {
+    "combined_state": "MHD conserved state plus CR macro-particle mass, momentum, and kinetic energy",
+    "external_terms": [
+      "MHD numerical transport through the reflecting inner-x1 and physical outer-x1 boundaries",
+      "CR reflecting-wall state change",
+      "CR physical escape state change",
+      "injected CR state",
+      "applied gas subtraction",
+      "removed excluded startup-cohort CR state"
+    ],
+    "restart_contract": "schema-bound cumulative ledger with committed cycle and time continuity",
+    "source_local_negative_restart_cases": [
+      "non-unit restored MeshBlock cost",
+      "refined adaptive topology hidden by uniform overrides",
+      "adaptive restart metadata with root-only blocks"
+    ]
+  },
+  "evidence_boundary": {
+    "pure_reducer": "supplied_artifact_self_consistency_only",
+    "source_local_harness": "engineering_self_consistency_only",
+    "trusted_execution_provenance": false,
+    "registered_science_evidence": false,
+    "self_attested_runtime_packet_verifier": "removed_not_authoritative",
+    "historical_scheduler_records": "not accepted as evidence for this current-PIC candidate"
+  },
+  "source_local_engineering_runtime": {
+    "evidence_class": "bounded_source_local_engineering_self_consistency_only",
+    "mpi_enabled_debug_executable_sha256": "d10875e34192bae92a16664607985a95bacd92d41fa637be5197146dd944334b",
+    "trusted_execution_provenance": "absent",
+    "registered_science_evidence": false,
+    "mpi2_inflow": "not_requested",
+    "ledger_disabled_parity": "not_requested",
+    "restart_execution_negative_guards": {
+      "nonunit_restored_cost": {
+        "returncode": 1,
+        "restart_sha256": "e4e6769fb5e7034cea7273cf6afe03f61025d27cb883c4297eeb14f9c6965940",
+        "stdout_sha256": "95791b5a1b53d183f8c8d4eab7e1f0f4eaa6da4789854297d738ebc4179ac706"
+      },
+      "restored_refined_or_adaptive_topology": {
+        "returncode": 1,
+        "seed_root_level": 1,
+        "seed_nmb_total": 8,
+        "seed_levels": [2, 2, 2, 2, 2, 2, 2, 2],
+        "restart_sha256": "849582b236f6d109ab8ec018a5f391f1a9edd5d430928c5563e60a2beae87e9c",
+        "stdout_sha256": "58c8f0e3e47701eac447ce7b090f23d68f8e41301b3dce3e1afb20fac6976dc4"
+      },
+      "restored_adaptive_metadata_without_refinement": {
+        "returncode": 1,
+        "seed_root_level": 1,
+        "seed_nmb_total": 2,
+        "seed_levels": [1, 1],
+        "restart_sha256": "999067297f340c0658fa0bb87e8a5b02a98a73b0a51aab8a39aaa7e534d4bf37",
+        "stdout_sha256": "95791b5a1b53d183f8c8d4eab7e1f0f4eaa6da4789854297d738ebc4179ac706"
+      }
+    },
+    "serial_inflow": {
+      "terminal_time": 205.0,
+      "terminal_cycle": 3153,
+      "max_absolute_normalized_residual": 1.933518017631311e-14,
+      "restart_max_mhd_state_absolute_error": 3.637978807091713e-12,
+      "restart_max_cr_budget_absolute_error": 5.70615603379121e-16,
+      "restart_max_ledger_absolute_error": 4.547473508864641e-13,
+      "restart_particle_count": 107,
+      "restart_tag_sorted_integer_state_exactly_equal": true,
+      "restart_tag_sorted_real_state_max_absolute_error": 8.570921750106208e-13
+    },
+    "serial_outflow": {
+      "terminal_time": 205.0,
+      "terminal_cycle": 3153,
+      "max_absolute_normalized_residual": 1.0056769595133872e-15,
+      "restart_max_mhd_state_absolute_error": 3.637978807091713e-12,
+      "restart_max_cr_budget_absolute_error": 1.8496489062602706e-16,
+      "restart_max_ledger_absolute_error": 1.8189894035458565e-12,
+      "restart_particle_count": 107,
+      "restart_tag_sorted_integer_state_exactly_equal": true,
+      "restart_tag_sorted_real_state_max_absolute_error": 2.6689761511988763e-13
+    }
+  },
+  "downstream_binding_refresh": {
+    "path": "tst/publication/readiness/q011_section54_production_campaign_contract_successor_v2_2026-06-06.json",
+    "pipeline_contract_sha256": "84c64f27c3deedbe200fa02bc16215304010919ca25625d3bef3f720635ea047",
+    "runtime_source_closure_sha256": "f276f7dab1987095e6db25117cc595f137104400491ea898841a6c6837652a57"
+  },
+  "candidate_preparation_validation": {
+    "focused_tests": "15 passed",
+    "active_q011_adjacent_tests": "146 passed",
+    "q043_adjacent_tests": "62 passed",
+    "broad_q011_tests": "278 passed, 14 expected historical_or_predecessor_source_binding_drift_failures",
+    "mpi_enabled_debug_built_in_pgens_build": "pass",
+    "source_local_engineering_runtime_harness": "pass",
+    "python_bytecode_compile": "pass",
+    "git_diff_check": "pass"
+  },
+  "remaining_limitations": [
+    "trusted installed-control-plane receipts",
+    "No registered execution exists for this current-PIC numerical candidate.",
+    "No fresh multi-rank or scheduler runtime evidence exists for this current-PIC numerical candidate.",
+    "AMR, SMR, mixed-level exact conservation, migration, and particle-aware runtime load balancing remain outside scope.",
+    "The production-target adaptive Section 5.4 deck intentionally fails closed under this candidate.",
+    "The pure reducer and source-local harness do not establish build, scheduler, command, or independent-reducer execution provenance.",
+    "No execution, launch, policy, scientific, or publication authority is granted."
+  ],
+  "artifacts": [
+    {
+      "path": "inputs/publication/pic_parallel_shock_section54_exact_conservation_successor_v1_vl2_tsc.athinput",
+      "sha256": "bd0f37a5121c074b653580a3192f8687cba4f431c099e755ce96e54fa21b61e4"
+    },
+    {
+      "path": "inputs/tests/pic_parallel_shock_exact_conservation_closure_vl2_tsc.athinput",
+      "sha256": "bc8b4b256220a8f4a2253897f42748bf74e7ebef7b80e9422ac5ac0e2491213b"
+    },
+    {
+      "path": "src/bvals/bvals_part.cpp",
+      "sha256": "e68bb955528c6d1b3d101c54fbdc794911a6ca6ea39175d8593123bc25f2fdd8"
+    },
+    {
+      "path": "src/particles/particles.cpp",
+      "sha256": "b296a573029145818887a8b5da85afd75196c99aeb6d2f54a0399d70577c86d6"
+    },
+    {
+      "path": "src/particles/particles.hpp",
+      "sha256": "548d4cd9cca6081c7460b6b8eea6e0dd75ddd4b291f219edb5095ba8ee8a2610"
+    },
+    {
+      "path": "src/particles/particles_pushers.cpp",
+      "sha256": "815645c947d54041b8c8b33405dc4c7ab94ef0aa9885e68f16fed3a5c21b14cf"
+    },
+    {
+      "path": "src/pgen/tests/pic_parallel_shock.cpp",
+      "sha256": "ec74b46024f5bf14b67f83b3a07e6d603550e8d8f0cc4a978d46f9e61fcc5f5f"
+    },
+    {
+      "path": "tst/publication/q011_section54_exact_conservation_closure_successor_v1.py",
+      "sha256": "97f492fc8aa5d836bd33d9b617b0dd334a47608bb1ad6362fde9911b22c7706e"
+    },
+    {
+      "path": "tst/publication/test_q011_section54_exact_conservation_closure_successor_v1.py",
+      "sha256": "a91d8be957e21f6b346f58bc4d1ad4b38d70ca75d73cf9d7ad397be107a0b3d4"
+    },
+    {
+      "path": "tst/scripts/particles/pic_parallel_shock_exact_conservation_closure_vl2_tsc.py",
+      "sha256": "177208171d39cda940b62f888e86e808d9eb00d3f754092f166d533b37417be6"
+    }
+  ]
+}

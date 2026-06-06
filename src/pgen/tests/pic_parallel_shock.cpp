@@ -40,10 +40,12 @@
 #include "mesh/mesh.hpp"
 #include "eos/eos.hpp"
 #include "mhd/mhd.hpp"
+#include "outputs/outputs.hpp"
 #include "outputs/restart_utils.hpp"
 #include "particles/field_interpolation.hpp"
 #include "particles/particles.hpp"
 #include "pgen/pgen.hpp"
+#include "srcterms/srcterms.hpp"
 
 namespace {
 
@@ -128,6 +130,7 @@ bool ps_enable_injection = true;
 bool ps_enable_subtraction = true;
 bool ps_enable_curvature_amr = true;
 bool ps_enable_frame_tracking = false;
+bool ps_enable_conservation_ledger = false;
 bool ps_use_2d3v = false;
 enum class PSFrameMode { velocity, recenter };
 PSFrameMode ps_frame_mode = PSFrameMode::velocity;
@@ -195,6 +198,14 @@ std::int64_t ps_escape_event_probe_allreduces = 0;
 std::int64_t ps_escape_full_payload_allreduces = 0;
 std::int64_t ps_particle_population_audit_calls = 0;
 bool ps_cr_ledger_complete = true;
+std::array<Real, 5> ps_conservation_mhd_boundary_cycle_local = {};
+std::array<Real, 5> ps_conservation_mhd_boundary_global = {};
+std::array<Real, 5> ps_conservation_particle_reflect_global = {};
+std::array<Real, 5> ps_conservation_particle_escape_global = {};
+std::array<Real, 5> ps_conservation_gas_subtracted_global = {};
+int ps_conservation_committed_cycles = 0;
+Real ps_conservation_committed_time = 0.0;
+bool ps_conservation_ledger_complete = true;
 bool ps_tag_seeded = false;
 bool ps_tag_progression_validated = false;
 std::int64_t ps_injection_tag_floor = 0;
@@ -206,6 +217,23 @@ std::ofstream ps_escape_event_stream;
 std::uint64_t ps_escape_event_prefix_hash = 14695981039346656037ULL;
 std::int64_t ps_escape_event_rank_count = 0;
 bool ps_escape_event_stream_finalized = false;
+
+bool ParallelShockExactMeshStateIsFixedUniform(const Mesh *pmesh) {
+  if (pmesh == nullptr || pmesh->adaptive || pmesh->multilevel ||
+      pmesh->nmb_total <= 0 || pmesh->lloc_eachmb == nullptr ||
+      pmesh->cost_eachmb == nullptr || pmesh->max_level != pmesh->root_level ||
+      !pmesh->restart_meta.ncyc_since_ref.empty()) {
+    return false;
+  }
+  for (int gid = 0; gid < pmesh->nmb_total; ++gid) {
+    if (pmesh->lloc_eachmb[gid].level != pmesh->root_level ||
+        !std::isfinite(pmesh->cost_eachmb[gid]) ||
+        pmesh->cost_eachmb[gid] != 1.0F) {
+      return false;
+    }
+  }
+  return true;
+}
 
 void HashParallelShockRestartBytes(std::uint64_t &hash, const void *data,
                                    const std::size_t size) {
@@ -260,6 +288,8 @@ std::string ParallelShockRestartControlFingerprint() {
                                   static_cast<int>(ps_enable_subtraction));
   HashParallelShockRestartControl(hash, "ps_enable_curvature_amr",
                                   static_cast<int>(ps_enable_curvature_amr));
+  HashParallelShockRestartControl(hash, "ps_enable_conservation_ledger",
+                                  static_cast<int>(ps_enable_conservation_ledger));
   HashParallelShockRestartControl(hash, "ps_test_source_transaction_terms_override",
                                   static_cast<int>(
                                       ps_test_source_transaction_terms_override));
@@ -1070,6 +1100,101 @@ void ValidatePaperVL2CommittedEscapeChronology(const particles::Particles *ppart
               << std::endl
               << "pic_parallel_shock " << context
               << " paper-VL2 escape-audit chronology is invalid." << std::endl;
+constexpr std::array<const char *, 5> ps_cons_mhd_boundary_fields = {
+  "ps_cons_mhd_boundary_mass_global",
+  "ps_cons_mhd_boundary_momentum_x1_global",
+  "ps_cons_mhd_boundary_momentum_x2_global",
+  "ps_cons_mhd_boundary_momentum_x3_global",
+  "ps_cons_mhd_boundary_energy_global"
+};
+constexpr std::array<const char *, 5> ps_cons_particle_reflect_fields = {
+  "ps_cons_particle_reflect_mass_global",
+  "ps_cons_particle_reflect_momentum_x1_global",
+  "ps_cons_particle_reflect_momentum_x2_global",
+  "ps_cons_particle_reflect_momentum_x3_global",
+  "ps_cons_particle_reflect_energy_global"
+};
+constexpr std::array<const char *, 5> ps_cons_particle_escape_fields = {
+  "ps_cons_particle_escape_mass_global",
+  "ps_cons_particle_escape_momentum_x1_global",
+  "ps_cons_particle_escape_momentum_x2_global",
+  "ps_cons_particle_escape_momentum_x3_global",
+  "ps_cons_particle_escape_energy_global"
+};
+constexpr std::array<const char *, 5> ps_cons_gas_subtracted_fields = {
+  "ps_cons_gas_subtracted_mass_global",
+  "ps_cons_gas_subtracted_momentum_x1_global",
+  "ps_cons_gas_subtracted_momentum_x2_global",
+  "ps_cons_gas_subtracted_momentum_x3_global",
+  "ps_cons_gas_subtracted_energy_global"
+};
+
+void StoreParallelShockConservationVector(
+    ParameterInput *pin, const std::array<const char *, 5> &fields,
+    const std::array<Real, 5> &values) {
+  for (int n=0; n<5; ++n) {
+    pin->SetReal("problem", fields[n], values[n]);
+  }
+}
+
+std::array<Real, 5> LoadParallelShockConservationVector(
+    ParameterInput *pin, const std::array<const char *, 5> &fields) {
+  std::array<Real, 5> values = {};
+  for (int n=0; n<5; ++n) {
+    values[n] = pin->GetReal("problem", fields[n]);
+  }
+  return values;
+}
+
+std::array<Real, 5> ParallelShockCumulativeExternalDelta() {
+  const std::array<Real, 5> injected = {
+    ps_injected_cr_mass_global, ps_injected_cr_momentum_x1_global,
+    ps_injected_cr_momentum_x2_global, ps_injected_cr_momentum_x3_global,
+    ps_injected_cr_energy_global
+  };
+  const std::array<Real, 5> removed = {
+    ps_removed_cr_mass_global, ps_removed_cr_momentum_x1_global,
+    ps_removed_cr_momentum_x2_global, ps_removed_cr_momentum_x3_global,
+    ps_removed_cr_energy_global
+  };
+  std::array<Real, 5> external = {};
+  for (int n=0; n<5; ++n) {
+    external[n] = ps_conservation_mhd_boundary_global[n]
+        + ps_conservation_particle_reflect_global[n]
+        + ps_conservation_particle_escape_global[n]
+        + injected[n] - ps_conservation_gas_subtracted_global[n] - removed[n];
+  }
+  return external;
+}
+
+void ValidateParallelShockConservationLedger(const char *context) {
+  if (!ps_enable_conservation_ledger) return;
+  bool invalid = !ps_conservation_ledger_complete ||
+      ps_conservation_committed_cycles < 0 ||
+      !std::isfinite(ps_conservation_committed_time) ||
+      ps_conservation_committed_time < 0.0;
+  for (int n=0; n<5; ++n) {
+    invalid = invalid ||
+        !std::isfinite(ps_conservation_mhd_boundary_global[n]) ||
+        !std::isfinite(ps_conservation_particle_reflect_global[n]) ||
+        !std::isfinite(ps_conservation_particle_escape_global[n]) ||
+        !std::isfinite(ps_conservation_gas_subtracted_global[n]);
+  }
+  invalid = invalid || ps_conservation_gas_subtracted_global[0] < 0.0 ||
+      ps_conservation_gas_subtracted_global[4] < 0.0 ||
+      ps_conservation_particle_reflect_global[0] != 0.0 ||
+      ps_conservation_particle_reflect_global[4] != 0.0 ||
+      ps_conservation_particle_escape_global[0] > 0.0 ||
+      ps_conservation_particle_escape_global[4] > 0.0;
+  const auto external = ParallelShockCumulativeExternalDelta();
+  for (const Real value : external) {
+    invalid = invalid || !std::isfinite(value);
+  }
+  if (invalid) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock " << context
+              << " exact conservation ledger is invalid." << std::endl;
     restart_utils::AbortOnFatalError();
   }
 }
@@ -1344,6 +1469,27 @@ void StoreRuntimeStateForRestart(const Real current_time) {
                      static_cast<int>(ps_injection_tag_floor));
   ps_pin->SetInteger("problem", "ps_next_tag",
                      static_cast<int>(ps_next_tag));
+  if (ps_enable_conservation_ledger) {
+    ValidateParallelShockConservationLedger("runtime");
+    ps_pin->SetInteger("problem", "ps_conservation_ledger_schema", 1);
+    ps_pin->SetBoolean("problem", "ps_conservation_ledger_complete",
+                       ps_conservation_ledger_complete);
+    ps_pin->SetInteger("problem", "ps_conservation_committed_cycles",
+                       ps_conservation_committed_cycles);
+    ps_pin->SetReal("problem", "ps_conservation_committed_time",
+                    ps_conservation_committed_time);
+    StoreParallelShockConservationVector(
+        ps_pin, ps_cons_mhd_boundary_fields, ps_conservation_mhd_boundary_global);
+    StoreParallelShockConservationVector(
+        ps_pin, ps_cons_particle_reflect_fields,
+        ps_conservation_particle_reflect_global);
+    StoreParallelShockConservationVector(
+        ps_pin, ps_cons_particle_escape_fields,
+        ps_conservation_particle_escape_global);
+    StoreParallelShockConservationVector(
+        ps_pin, ps_cons_gas_subtracted_fields,
+        ps_conservation_gas_subtracted_global);
+  }
 }
 
 void ObserveParallelShockParticleDestruction(particles::Particles *ppart, Mesh *pm,
@@ -2712,7 +2858,90 @@ void PrepareParallelShockInjectionTransaction(Mesh *pm) {
   pm->CountParticles();
 }
 
+void AccumulateParallelShockMHDBoundaryTransport(Mesh *pm, const Real stage_weight) {
+  if (!ps_enable_conservation_ledger) return;
+  if (!(stage_weight > 0.0) || !std::isfinite(stage_weight) ||
+      pm == nullptr || !(pm->dt > 0.0)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock exact MHD boundary ledger received an invalid "
+              << "RK stage weight or timestep." << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+  MeshBlockPack *pmbp = pm->pmb_pack;
+  if (pmbp == nullptr || pmbp->pmhd == nullptr) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock exact MHD boundary ledger requires active MHD."
+              << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+
+  const auto &indcs = pm->mb_indcs;
+  const int is = indcs.is;
+  const int ie = indcs.ie;
+  const int js = indcs.js;
+  const int ks = indcs.ks;
+  const int nx2 = indcs.nx2;
+  const int nx3 = indcs.nx3;
+  const int nmb = pmbp->nmb_thispack;
+  const int nterms = nmb*nx3*nx2*5;
+  auto flx1 = pmbp->pmhd->uflx.x1f;
+  auto &size = pmbp->pmb->mb_size;
+  auto &mb_bcs = pmbp->pmb->mb_bcs;
+  const Real dt = pm->dt;
+  array_sum::GlobalSum boundary_delta;
+  Kokkos::parallel_reduce(
+      "ps_exact_mhd_boundary_transport",
+      Kokkos::RangePolicy<>(DevExeSpace(), 0, nterms),
+  KOKKOS_LAMBDA(const int idx, array_sum::GlobalSum &sum) {
+    const int n = idx % 5;
+    const int cell = idx/5;
+    const int j0 = cell % nx2;
+    const int k0 = (cell/nx2) % nx3;
+    const int m = cell/(nx2*nx3);
+    const int j = js + j0;
+    const int k = ks + k0;
+    const Real area = size.d_view(m).dx2*size.d_view(m).dx3;
+    Real delta = static_cast<Real>(0.0);
+    if (mb_bcs.d_view(m, BoundaryFace::inner_x1) == BoundaryFlag::reflect) {
+      delta += dt*area*flx1(m, n, k, j, is);
+    }
+    const BoundaryFlag outer = mb_bcs.d_view(m, BoundaryFace::outer_x1);
+    if (outer == BoundaryFlag::inflow || outer == BoundaryFlag::outflow) {
+      delta -= dt*area*flx1(m, n, k, j, ie + 1);
+    }
+    sum.the_array[n] += delta;
+  }, Kokkos::Sum<array_sum::GlobalSum>(boundary_delta));
+  Kokkos::fence();
+
+  const bool paper_vl2 =
+      pmbp->ppart != nullptr && pmbp->ppart->UsesPaperVL2Coupling();
+  for (int n=0; n<5; ++n) {
+    if (!std::isfinite(boundary_delta.the_array[n])) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "pic_parallel_shock exact MHD boundary transport is non-finite."
+                << std::endl;
+      restart_utils::AbortOnFatalError();
+    }
+    if (paper_vl2) {
+      // Paper VL2 stage 2 resets to the saved cycle-start state and applies the
+      // final full-step flux. Overwrite the stage-1 predictor transport.
+      ps_conservation_mhd_boundary_cycle_local[n] =
+          stage_weight*boundary_delta.the_array[n];
+    } else {
+      ps_conservation_mhd_boundary_cycle_local[n] =
+          stage_weight*(ps_conservation_mhd_boundary_cycle_local[n]
+                        + boundary_delta.the_array[n]);
+    }
+  }
+}
+
 void ParallelShockSource(Mesh *pm, const Real bdt) {
+  if (ps_enable_conservation_ledger && bdt > 0.0) {
+    AccumulateParallelShockMHDBoundaryTransport(pm, bdt/pm->dt);
+  }
   if (!ps_enable_injection || bdt <= 0.0) return;
   if (pm->time < ps_inject_t_start || pm->time > ps_inject_t_stop) return;
   if (ps_injection_transaction_cycle != pm->ncycle) {
@@ -2759,6 +2988,11 @@ void ValidateParallelShockInjectionTransaction(Mesh *pm) {
       restart_utils::AbortOnFatalError();
     }
   }
+  if (ps_enable_conservation_ledger) {
+    for (int n=0; n<5; ++n) {
+      ps_conservation_gas_subtracted_global[n] += applied_global[n];
+    }
+  }
   if (global_variable::my_rank == 0 && ps_feedback_diag_dcycle > 0 &&
       (pm->ncycle % ps_feedback_diag_dcycle) == 0) {
     std::cout << "pic_parallel_shock source_transaction_diag: cycle=" << pm->ncycle
@@ -2771,6 +3005,134 @@ void ValidateParallelShockInjectionTransaction(Mesh *pm) {
               << ps_injection_transaction_expected_global[3] << ","
               << ps_injection_transaction_expected_global[4] << ")" << std::endl;
   }
+}
+
+void CommitParallelShockConservationCycle(Mesh *pm) {
+  if (!ps_enable_conservation_ledger) return;
+  if (ps_conservation_committed_cycles != pm->ncycle ||
+      ps_conservation_committed_time != pm->time) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock exact conservation cycle commit is "
+              << "duplicate or cycle/time-discontinuous." << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+  MeshBlockPack *pmbp = pm->pmb_pack;
+  if (pmbp == nullptr || pmbp->ppart == nullptr) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock exact conservation commit requires particles."
+              << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+  auto *ppart = pmbp->ppart;
+  auto h_reflect = Kokkos::create_mirror_view_and_copy(
+      HostMemSpace(), ppart->pic_reflecting_boundary_delta);
+  auto h_escape = Kokkos::create_mirror_view_and_copy(
+      HostMemSpace(), ppart->pic_escape_boundary_delta);
+  auto h_errors = Kokkos::create_mirror_view_and_copy(
+      HostMemSpace(), ppart->pic_boundary_conservation_errors);
+  int floor_events_global[3] = {
+    pm->ecounter.neos_dfloor,
+    pm->ecounter.neos_efloor,
+    pm->ecounter.neos_tfloor
+  };
+  std::array<Real, 5> mhd_boundary_global = {};
+  std::array<Real, 5> reflect_global = {};
+  std::array<Real, 5> escape_global = {};
+  std::array<Real, 5> reflect_local = {};
+  std::array<Real, 5> escape_local = {};
+  for (int n=0; n<5; ++n) {
+    reflect_local[n] = h_reflect(n);
+    escape_local[n] = h_escape(n);
+  }
+  int boundary_errors_global = h_errors(0);
+#if MPI_PARALLEL_ENABLED
+  int floor_events_local[3] = {
+    pm->ecounter.neos_dfloor,
+    pm->ecounter.neos_efloor,
+    pm->ecounter.neos_tfloor
+  };
+  MPI_Allreduce(floor_events_local, floor_events_global, 3, MPI_INT, MPI_SUM,
+                MPI_COMM_WORLD);
+  MPI_Allreduce(ps_conservation_mhd_boundary_cycle_local.data(),
+                mhd_boundary_global.data(), 5, MPI_ATHENA_REAL, MPI_SUM,
+                MPI_COMM_WORLD);
+  MPI_Allreduce(reflect_local.data(), reflect_global.data(), 5, MPI_ATHENA_REAL,
+                MPI_SUM, MPI_COMM_WORLD);
+  MPI_Allreduce(escape_local.data(), escape_global.data(), 5, MPI_ATHENA_REAL,
+                MPI_SUM, MPI_COMM_WORLD);
+  const int boundary_errors_local = h_errors(0);
+  MPI_Allreduce(&boundary_errors_local, &boundary_errors_global, 1, MPI_INT,
+                MPI_SUM, MPI_COMM_WORLD);
+#else
+  mhd_boundary_global = ps_conservation_mhd_boundary_cycle_local;
+  reflect_global = reflect_local;
+  escape_global = escape_local;
+#endif
+  if (floor_events_global[0] != 0 || floor_events_global[1] != 0 ||
+      floor_events_global[2] != 0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock exact conservation ledger observed an "
+              << "unledgered EOS floor: density=" << floor_events_global[0]
+              << " energy=" << floor_events_global[1]
+              << " temperature=" << floor_events_global[2] << "." << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+  if (boundary_errors_global != 0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock exact particle boundary ledger observed "
+              << boundary_errors_global << " invalid state records." << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+  for (int n=0; n<5; ++n) {
+    ps_conservation_mhd_boundary_global[n] += mhd_boundary_global[n];
+    ps_conservation_particle_reflect_global[n] += reflect_global[n];
+    ps_conservation_particle_escape_global[n] += escape_global[n];
+  }
+  ps_conservation_committed_cycles = pm->ncycle + 1;
+  ps_conservation_committed_time = pm->time + pm->dt;
+  ValidateParallelShockConservationLedger("cycle commit");
+  StoreRuntimeStateForRestart(ps_conservation_committed_time);
+}
+
+void ParallelShockConservationHistory(HistoryData *pdata, Mesh *pm) {
+  if (ps_conservation_committed_cycles != pm->ncycle ||
+      ps_conservation_committed_time != pm->time) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock exact conservation history is "
+              << "cycle/time-discontinuous." << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+  pdata->nhist = 12;
+  pdata->label[0] = "ext_mass";
+  pdata->label[1] = "ext_mom1";
+  pdata->label[2] = "ext_mom2";
+  pdata->label[3] = "ext_mom3";
+  pdata->label[4] = "ext_etot";
+  pdata->label[5] = "mhd_bmass";
+  pdata->label[6] = "mhd_bmom1";
+  pdata->label[7] = "mhd_bmom2";
+  pdata->label[8] = "mhd_bmom3";
+  pdata->label[9] = "mhd_betot";
+  pdata->label[10] = "cr_bmass";
+  pdata->label[11] = "cr_betot";
+  for (int n=0; n<12; ++n) {
+    pdata->hdata[n] = static_cast<Real>(0.0);
+  }
+  if (global_variable::my_rank != 0) return;
+  const auto external = ParallelShockCumulativeExternalDelta();
+  for (int n=0; n<5; ++n) {
+    pdata->hdata[n] = external[n];
+    pdata->hdata[5 + n] = ps_conservation_mhd_boundary_global[n];
+  }
+  pdata->hdata[10] = ps_conservation_particle_reflect_global[0]
+      + ps_conservation_particle_escape_global[0];
+  pdata->hdata[11] = ps_conservation_particle_reflect_global[4]
+      + ps_conservation_particle_escape_global[4];
 }
 
 void ParallelShockRefinement(MeshBlockPack *pmbp) {
@@ -3053,6 +3415,7 @@ void ParallelShockWorkInLoop(Mesh *pm) {
   if (pm == nullptr || pm->dt <= 0.0) return;
   if (ps_frame_diag_dcycle < 1) ps_frame_diag_dcycle = 1;
   ValidateParallelShockInjectionTransaction(pm);
+  CommitParallelShockConservationCycle(pm);
 
   if (!ps_enable_frame_tracking) {
     CompleteParallelShockCycle(pm);
@@ -3128,6 +3491,10 @@ void ParallelShockWorkBeforeLoop(Mesh *pm) {
   if (pm == nullptr || pm->dt <= 0.0) return;
   MeshBlockPack *pmbp = pm->pmb_pack;
   if (pmbp != nullptr && pmbp->ppart != nullptr) {
+    if (ps_enable_conservation_ledger) {
+      ps_conservation_mhd_boundary_cycle_local.fill(0.0);
+      pmbp->ppart->ResetPICBoundaryConservationDeltas();
+    }
     SeedNextTag(pmbp->ppart, pm->time);
   }
   RemoveExcludedEarlyInjectedParticles(pm);
@@ -3191,6 +3558,15 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
               << "pic_parallel_shock expects periodic y boundaries." << std::endl;
     restart_utils::AbortOnFatalError();
   }
+  if (pmy_mesh_->three_d &&
+      (pmy_mesh_->mesh_bcs[BoundaryFace::inner_x3] != BoundaryFlag::periodic ||
+       pmy_mesh_->mesh_bcs[BoundaryFace::outer_x3] != BoundaryFlag::periodic)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock expects periodic z boundaries in 3D."
+              << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
 
   // Parse runtime controls.
   ps_rho0 = pin->GetOrAddReal("problem", "ps_rho0", 1.0);
@@ -3218,6 +3594,8 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
       "problem", "ps_enable_gas_subtraction", true);
   ps_enable_curvature_amr = pin->GetOrAddBoolean(
       "problem", "ps_enable_curvature_amr", true);
+  ps_enable_conservation_ledger = pin->GetOrAddBoolean(
+      "problem", "ps_enable_conservation_ledger", false);
   ps_test_source_transaction_terms_override = pin->GetOrAddBoolean(
       "problem", "ps_test_source_transaction_terms_override", false);
   ps_test_source_transaction_terms = pin->GetOrAddReal(
@@ -3285,6 +3663,63 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
               << "pic_parallel_shock gas subtraction requires "
               << "<particles>/pic_background_mode=coupled." << std::endl;
     restart_utils::AbortOnFatalError();
+  }
+  if (ps_enable_conservation_ledger) {
+    auto *ppart = pmbp->ppart;
+    const bool user_history_enabled =
+        pin->GetOrAddBoolean("problem", "user_hist", false);
+    const bool exact_particle_model =
+        ppart->pic_boundary_conservation_ledger &&
+        ppart->UsesPaperVL2Coupling() &&
+        ppart->pic_background_mode == PICBackgroundMode::coupled &&
+        ppart->pic_feedback_mode == PICFeedbackMode::coupled &&
+        ppart->deposit_moments && ppart->deposit_order == 2 &&
+        ppart->couple_moments_to_mhd &&
+        ppart->couple_moments_momentum_to_mhd &&
+        ppart->couple_moments_energy_to_mhd &&
+        ppart->couple_moments_momentum_coeff == static_cast<Real>(1.0) &&
+        ppart->couple_moments_energy_coeff == static_cast<Real>(1.0) &&
+        !ppart->UsesDeltaF() && !ppart->UsesExpandingBox() &&
+        !ppart->UsesPICWaveDamping();
+    const bool exact_mhd_model =
+        pmbp->pmhd->pvisc == nullptr && pmbp->pmhd->presist == nullptr &&
+        pmbp->pmhd->pcond == nullptr && pmbp->pmhd->nscalars == 0 &&
+        pmbp->pmhd->psrc != nullptr &&
+        !pmbp->pmhd->psrc->const_accel && !pmbp->pmhd->psrc->ism_cooling &&
+        !pmbp->pmhd->psrc->cgm_cooling && !pmbp->pmhd->psrc->rel_cooling &&
+        !pmbp->pmhd->psrc->beam && !pmbp->pmhd->psrc->shearing_box &&
+        pmbp->pmhd->porb_u == nullptr && pmbp->pmhd->porb_b == nullptr &&
+        pmbp->prad == nullptr && pmbp->pionn == nullptr && pmbp->pturb == nullptr &&
+        pmbp->padm == nullptr && pmbp->ptmunu == nullptr && pmbp->pz4c == nullptr &&
+        pmbp->pdyngr == nullptr && pmbp->pnr == nullptr &&
+        !pin->GetOrAddBoolean("coord", "special_rel", false) &&
+        !pin->GetOrAddBoolean("coord", "general_rel", false) &&
+        !pin->GetOrAddBoolean("mesh_refinement", "prolong_primitives", false) &&
+        !pin->DoesBlockExist("initial_turb");
+    const bool exact_mesh_model =
+        ParallelShockExactMeshStateIsFixedUniform(pmy_mesh_) &&
+        !ps_enable_curvature_amr &&
+        ppart->pic_load_balance_cost_per_particle == static_cast<Real>(0.0);
+    if (!exact_particle_model || !exact_mhd_model || integrator != "rk2" ||
+        !ps_enable_injection || !ps_enable_subtraction ||
+        ps_enable_frame_tracking || frame_mode != "velocity" ||
+        !user_history_enabled || !exact_mesh_model) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "pic_parallel_shock exact conservation ledger requires the "
+                << "paper_mhd_pic_vl2_tsc conservative coupled model, rk2, exact "
+                << "particle-boundary instrumentation, injection with gas "
+                << "subtraction, user history, no frame/recenter map, no MHD "
+                << "diffusion or other source terms, a fixed uniform mesh with "
+                << "curvature AMR and particle-weighted AMR load balancing disabled, "
+                << "root_level=max_level, every reconstructed MeshBlock at root_level "
+                << "with unit cost, no restored adaptive cooldown metadata, and no "
+                << "untracked physics modules. AMR, SMR, refined restart topology, "
+                << "non-unit restored MeshBlock costs and runtime load balancing are "
+                << "not qualified by this bounded successor."
+                << std::endl;
+      restart_utils::AbortOnFatalError();
+    }
   }
   if (!std::isfinite(ps_vinj_over_u0) || ps_vinj_over_u0 <= 0.0 ||
       !std::isfinite(ps_inject_half_width_cells) ||
@@ -3586,6 +4021,66 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
       ps_tag_seeded = true;
     }
   }
+  if (ps_enable_conservation_ledger) {
+    const bool has_conservation_schema =
+        restart &&
+        pin->DoesParameterExist("problem", "ps_conservation_ledger_schema");
+    bool conservation_fields_complete = has_conservation_schema;
+    conservation_fields_complete = conservation_fields_complete &&
+        pin->DoesParameterExist("problem", "ps_conservation_ledger_complete") &&
+        pin->DoesParameterExist("problem", "ps_conservation_committed_cycles") &&
+        pin->DoesParameterExist("problem", "ps_conservation_committed_time");
+    for (int n=0; n<5; ++n) {
+      conservation_fields_complete = conservation_fields_complete &&
+          pin->DoesParameterExist("problem", ps_cons_mhd_boundary_fields[n]) &&
+          pin->DoesParameterExist("problem", ps_cons_particle_reflect_fields[n]) &&
+          pin->DoesParameterExist("problem", ps_cons_particle_escape_fields[n]) &&
+          pin->DoesParameterExist("problem", ps_cons_gas_subtracted_fields[n]);
+    }
+    if (restart &&
+        (!conservation_fields_complete ||
+         pin->GetInteger("problem", "ps_conservation_ledger_schema") != 1)) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "pic_parallel_shock restart requires complete schema-1 exact "
+                << "conservation metadata." << std::endl;
+      restart_utils::AbortOnFatalError();
+    }
+    if (restart) {
+      ps_conservation_ledger_complete =
+          pin->GetBoolean("problem", "ps_conservation_ledger_complete");
+      ps_conservation_committed_cycles =
+          pin->GetInteger("problem", "ps_conservation_committed_cycles");
+      ps_conservation_committed_time =
+          pin->GetReal("problem", "ps_conservation_committed_time");
+      ps_conservation_mhd_boundary_global =
+          LoadParallelShockConservationVector(pin, ps_cons_mhd_boundary_fields);
+      ps_conservation_particle_reflect_global =
+          LoadParallelShockConservationVector(pin, ps_cons_particle_reflect_fields);
+      ps_conservation_particle_escape_global =
+          LoadParallelShockConservationVector(pin, ps_cons_particle_escape_fields);
+      ps_conservation_gas_subtracted_global =
+          LoadParallelShockConservationVector(pin, ps_cons_gas_subtracted_fields);
+      if (ps_conservation_committed_cycles != pmy_mesh_->ncycle ||
+          ps_conservation_committed_time != pmy_mesh_->time) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl
+                  << "pic_parallel_shock restart conservation ledger is "
+                  << "cycle/time-discontinuous." << std::endl;
+        restart_utils::AbortOnFatalError();
+      }
+    } else {
+      ps_conservation_ledger_complete = true;
+      ps_conservation_committed_cycles = pmy_mesh_->ncycle;
+      ps_conservation_committed_time = pmy_mesh_->time;
+      ps_conservation_mhd_boundary_global.fill(0.0);
+      ps_conservation_particle_reflect_global.fill(0.0);
+      ps_conservation_particle_escape_global.fill(0.0);
+      ps_conservation_gas_subtracted_global.fill(0.0);
+    }
+    ps_conservation_mhd_boundary_cycle_local.fill(0.0);
+    ValidateParallelShockConservationLedger(restart ? "restart" : "initial");
+  }
   ValidateParallelShockRuntimeLedger(restart ? "restart" : "runtime",
                                      pmy_mesh_->time);
   ValidatePaperVL2CommittedEscapeChronology(pmbp->ppart, pmy_mesh_->ncycle,
@@ -3682,6 +4177,9 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
   pgen_final_func = ParallelShockFinalize;
   pmbp->ppart->particle_destruction_observer =
       ObserveParallelShockParticleDestruction;
+  if (ps_enable_conservation_ledger) {
+    user_hist_func = ParallelShockConservationHistory;
+  }
 
   // The inflow reservoir is not stored in restart files, so rebuild it before
   // Driver::Initialize() fills ghost zones on both new and restarted runs.

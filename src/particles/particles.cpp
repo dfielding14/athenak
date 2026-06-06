@@ -398,6 +398,16 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
       (pic_physical_mode == PICPhysicalMode::paper_mhd_pic_vl2_tsc);
   const bool paper_vl2_tsc_mode =
       (pic_physical_mode == PICPhysicalMode::paper_mhd_pic_vl2_tsc);
+  pic_boundary_conservation_ledger = pin->GetOrAddBoolean(
+      "particles", "pic_boundary_conservation_ledger", false);
+  if (pic_boundary_conservation_ledger &&
+      (particle_type != ParticleType::cosmic_ray || !paper_vl2_tsc_mode)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "<particles>/pic_boundary_conservation_ledger=true is qualified "
+              << "only for cosmic-ray paper_mhd_pic_vl2_tsc runs." << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
 
   // PR1 deposition controls
   deposit_moments = pin->GetOrAddBoolean("particles", "deposit_moments",
@@ -1393,6 +1403,12 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
 
   Kokkos::realloc(prtcl_rdata, nrdata, nprtcl_thispack);
   Kokkos::realloc(prtcl_idata, nidata, nprtcl_thispack);
+  if (pic_boundary_conservation_ledger) {
+    Kokkos::realloc(pic_reflecting_boundary_delta, NPIC_BOUNDARY_CONSERVATION);
+    Kokkos::realloc(pic_escape_boundary_delta, NPIC_BOUNDARY_CONSERVATION);
+    Kokkos::realloc(pic_boundary_conservation_errors, 1);
+    ResetPICBoundaryConservationDeltas();
+  }
 
   // allocate boundary object
   pbval_part = new ParticlesBoundaryValues(this, pin);
@@ -1488,6 +1504,17 @@ Particles::~Particles() {
   if (paper_smooth_mom_transport != nullptr) {
     delete paper_smooth_mom_transport;
   }
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void Particles::ResetPICBoundaryConservationDeltas()
+//! \brief Reset opt-in per-cycle particle physical-boundary state-change ledgers.
+
+void Particles::ResetPICBoundaryConservationDeltas() {
+  if (!pic_boundary_conservation_ledger) return;
+  Kokkos::deep_copy(pic_reflecting_boundary_delta, static_cast<Real>(0.0));
+  Kokkos::deep_copy(pic_escape_boundary_delta, static_cast<Real>(0.0));
+  Kokkos::deep_copy(pic_boundary_conservation_errors, 0);
 }
 
 //----------------------------------------------------------------------------------------

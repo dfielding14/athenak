@@ -21,6 +21,7 @@
 #include "parameter_input.hpp"
 #include "mesh/nghbr_index.hpp"
 #include "mesh/mesh.hpp"
+#include "outputs/restart_utils.hpp"
 #include "particles/particles.hpp"
 #include "bvals.hpp"
 
@@ -478,6 +479,76 @@ TaskStatus ParticlesBoundaryValues::SetNewPrtclGID() {
   destroylist.template modify<DevExeSpace>();
   destroylist.template sync<HostMemSpace>();
 
+  if (pmy_part->pic_boundary_conservation_ledger && nprtcl_destroy > 0) {
+    std::vector<int> destroyed_indices;
+    destroyed_indices.reserve(nprtcl_destroy);
+    bool invalid_destruction = false;
+    for (int n=0; n<nprtcl_destroy; ++n) {
+      const auto entry = destroylist.h_view(n);
+      if (entry.prtcl_indx < 0 || entry.prtcl_indx >= npart ||
+          entry.destruction_reason !=
+              static_cast<int>(ParticleDestructionReason::physical_boundary) ||
+          entry.physical_boundary_mask == particle_boundary_none) {
+        invalid_destruction = true;
+      }
+      destroyed_indices.push_back(entry.prtcl_indx);
+    }
+    std::sort(destroyed_indices.begin(), destroyed_indices.end());
+    for (int n=1; n<nprtcl_destroy; ++n) {
+      if (destroyed_indices[n] == destroyed_indices[n-1]) {
+        invalid_destruction = true;
+      }
+    }
+    if (invalid_destruction) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "PIC boundary conservation ledger observed an invalid, duplicate, "
+                << "or non-physical particle destruction request." << std::endl;
+      restart_utils::AbortOnFatalError();
+    }
+
+    auto escape_delta = pmy_part->pic_escape_boundary_delta;
+    auto boundary_errors = pmy_part->pic_boundary_conservation_errors;
+    auto species_mass = pmy_part->species_mass;
+    const Real qscale = pmy_part->deposit_qscale;
+    const Real light_speed = pmy_part->pic_cr_light_speed;
+    const int nspecies = pmy_part->nspecies;
+    auto dlist = destroylist.d_view;
+    par_for("pic_boundary_escape_ledger", DevExeSpace(), 0, nprtcl_destroy - 1,
+    KOKKOS_LAMBDA(const int n) {
+      const int p = dlist(n).prtcl_indx;
+      const int sp = pi(PSP, p);
+      const Real weight = pr(IPWT, p);
+      if (sp < 0 || sp >= nspecies || !Kokkos::isfinite(weight) ||
+          !(weight > static_cast<Real>(0.0))) {
+        Kokkos::atomic_increment(&boundary_errors(0));
+        return;
+      }
+      const Real macro_mass = qscale*weight*species_mass(sp);
+      const Real state_x = pr(IPVX, p);
+      const Real state_y = pr(IPVY, p);
+      const Real state_z = pr(IPVZ, p);
+      const Real energy =
+          particles::CRKineticEnergy(true, light_speed, state_x, state_y, state_z);
+      if (!Kokkos::isfinite(macro_mass) ||
+          !(macro_mass > static_cast<Real>(0.0)) ||
+          !Kokkos::isfinite(state_x) || !Kokkos::isfinite(state_y) ||
+          !Kokkos::isfinite(state_z) || !Kokkos::isfinite(energy)) {
+        Kokkos::atomic_increment(&boundary_errors(0));
+        return;
+      }
+      Kokkos::atomic_add(&escape_delta(Particles::IPIC_BND_MASS), -macro_mass);
+      Kokkos::atomic_add(&escape_delta(Particles::IPIC_BND_MOM1),
+                         -macro_mass*state_x);
+      Kokkos::atomic_add(&escape_delta(Particles::IPIC_BND_MOM2),
+                         -macro_mass*state_y);
+      Kokkos::atomic_add(&escape_delta(Particles::IPIC_BND_MOM3),
+                         -macro_mass*state_z);
+      Kokkos::atomic_add(&escape_delta(Particles::IPIC_BND_ENERGY),
+                         -macro_mass*energy);
+    });
+  }
+
   return TaskStatus::complete;
 }
 
@@ -514,6 +585,14 @@ TaskStatus ParticlesBoundaryValues::CountSendsAndRecvs() {
     } else {
       invalid_prtcl_indcs.push_back(entry.prtcl_indx);
     }
+  }
+  if (pmy_part->pic_boundary_conservation_ledger &&
+      !(invalid_prtcl_indcs.empty())) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "PIC boundary conservation ledger refuses to classify invalid "
+              << "particle send targets as physical escape." << std::endl;
+    restart_utils::AbortOnFatalError();
   }
   if (!(invalid_prtcl_indcs.empty())) {
     int old_ndestroy = nprtcl_destroy;

@@ -256,6 +256,16 @@ class Particles {
   int pic_random_seed = 0;        // deterministic seed for random CR placement
   Real pic_load_balance_cost_per_particle = 0.0; // optional AMR balancing cost weight
   bool pic_q017_sync_kernel_timers = false; // opt-in fences for device elapsed timing
+  bool pic_boundary_conservation_ledger = false;
+  static constexpr int NPIC_BOUNDARY_CONSERVATION = 5;
+  static constexpr int IPIC_BND_MASS = 0;
+  static constexpr int IPIC_BND_MOM1 = 1;
+  static constexpr int IPIC_BND_MOM2 = 2;
+  static constexpr int IPIC_BND_MOM3 = 3;
+  static constexpr int IPIC_BND_ENERGY = 4;
+  DvceArray1D<Real> pic_reflecting_boundary_delta;
+  DvceArray1D<Real> pic_escape_boundary_delta;
+  DvceArray1D<int> pic_boundary_conservation_errors;
   Real pic_expansion_rate_x1 = 0.0;
   Real pic_expansion_rate_x2 = 0.0;
   Real pic_expansion_rate_x3 = 0.0;
@@ -361,6 +371,7 @@ class Particles {
   TaskStatus DriftPaperCosmicRaysHalfStep(Driver *pdriver, int stage);
   TaskStatus PushStars(Driver *pdriver, int stage);
   void NewTimeStep();
+  void ResetPICBoundaryConservationDeltas();
   void Q017Fence() const {
     if (pic_q017_sync_kernel_timers) Kokkos::fence();
   }

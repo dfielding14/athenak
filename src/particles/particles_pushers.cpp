@@ -568,7 +568,13 @@ TaskStatus Particles::DriftPaperCosmicRaysHalfStep(Driver *pdriver, int stage) {
   const bool allow_2d3v = (pic_enable_2d3v && (nx3 == 1));
   const bool use_vz_component = (nx3 > 1) || allow_2d3v;
   const bool track_displacement_local = track_displacement;
+  const bool boundary_ledger = pic_boundary_conservation_ledger;
+  const Real qscale = deposit_qscale;
+  const int nspecies_local = nspecies;
   const Real light_speed = pic_cr_light_speed;
+  auto mspecies = species_mass;
+  auto reflecting_delta = pic_reflecting_boundary_delta;
+  auto boundary_errors = pic_boundary_conservation_errors;
   auto &pi = prtcl_idata;
   auto &pr = prtcl_rdata;
   auto &size = pmy_pack->pmb->mb_size;
@@ -612,8 +618,48 @@ TaskStatus Particles::DriftPaperCosmicRaysHalfStep(Driver *pdriver, int stage) {
         x += dt_half*vx;
         y += dt_half*vy;
         if (nx3 > 1) z += dt_half*vz;
+        const Real state_x_before_reflect = state_x;
+        const Real state_y_before_reflect = state_y;
+        const Real state_z_before_reflect = state_z;
         ApplyReflectiveParticleBCs(m, size_view, mb_bcs_view, multi_d, three_d,
                                    x, y, z, state_x, state_y, state_z);
+        if (boundary_ledger &&
+            (state_x != state_x_before_reflect ||
+             state_y != state_y_before_reflect ||
+             state_z != state_z_before_reflect)) {
+          const int sp = pi(PSP, p);
+          const Real weight = pr(IPWT, p);
+          if (sp < 0 || sp >= nspecies_local || !Kokkos::isfinite(weight) ||
+              !(weight > static_cast<Real>(0.0))) {
+            Kokkos::atomic_increment(&boundary_errors(0));
+          } else {
+            const Real macro_mass = qscale*weight*mspecies(sp);
+            const Real energy_before = CRKineticEnergy(
+                true, light_speed, state_x_before_reflect, state_y_before_reflect,
+                state_z_before_reflect);
+            const Real energy_after = CRKineticEnergy(
+                true, light_speed, state_x, state_y, state_z);
+            if (!Kokkos::isfinite(macro_mass) ||
+                !(macro_mass > static_cast<Real>(0.0)) ||
+                !Kokkos::isfinite(energy_before) ||
+                !Kokkos::isfinite(energy_after)) {
+              Kokkos::atomic_increment(&boundary_errors(0));
+            } else {
+              Kokkos::atomic_add(
+                  &reflecting_delta(IPIC_BND_MOM1),
+                  macro_mass*(state_x - state_x_before_reflect));
+              Kokkos::atomic_add(
+                  &reflecting_delta(IPIC_BND_MOM2),
+                  macro_mass*(state_y - state_y_before_reflect));
+              Kokkos::atomic_add(
+                  &reflecting_delta(IPIC_BND_MOM3),
+                  macro_mass*(state_z - state_z_before_reflect));
+              Kokkos::atomic_add(
+                  &reflecting_delta(IPIC_BND_ENERGY),
+                  macro_mass*(energy_after - energy_before));
+            }
+          }
+        }
         pr(IPX, p) = x;
         pr(IPY, p) = y;
         pr(IPZ, p) = z;
