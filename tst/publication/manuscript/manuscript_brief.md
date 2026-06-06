@@ -6,10 +6,12 @@
 - **Target venue:** The Astrophysical Journal (ApJ), methods-paper framing.
 - **Article subtype and formal limits:** `[AUTHOR DECISION / VERIFY AGAINST CURRENT APJ REQUIREMENTS]`.
 - **Current manuscript source:** `tst/publication/manuscript/athenak_mhd_pic_apj_methods_scaffold.tex`.
+- **Authoritative source baseline for this revision:** `PIC` commit
+  `1d72534619da277fdd6838cabdab0d465d0a8867`.
 - **Companion operational tracker:** `tst/publication/manuscript/claim_evidence_ledger.md`.
-- **Status:** Gate 1 planning artifact with a narrowed target-paper scope. It
-  does not authorize result wording, certify evidence, or replace a claim
-  manifest.
+- **Status:** Source-audited methods draft with visible result gates and a
+  narrowed target-paper scope. It does not authorize result wording, certify
+  evidence, or replace a claim manifest.
 - **Default reviewer state:** `pending external review`.
 
 This brief follows
@@ -30,8 +32,11 @@ Use the following sources in this order when drafting or adjudicating a claim:
 4. Source-controlled physical-model, algorithm, AMR, provenance, and toolchain
    contracts under `docs/source/engineering/`, after verification against the
    exact release source.
-5. The current TeX scaffold for manuscript architecture and visible gates.
-6. Historical status records and engineering proxies, which may orient future
+5. Independent review findings for narrowing claims and recording blockers.
+   A review can reject or limit evidence; it cannot make an unintegrated
+   successor part of the authoritative release source.
+6. The current TeX scaffold for manuscript architecture and visible gates.
+7. Historical status records and engineering proxies, which may orient future
    work but may not independently support a manuscript result.
 
 The human pressure-selection receipt at
@@ -142,10 +147,13 @@ confirmed volume-aware current-normalization defect invalidates the historical
 Bell linear preparation/proxy evidence for qualification and invalidates any
 nonlinear foundation or campaign design that inherits it. Corrected source,
 decks, and a raw-output oracle now exist source-locally, but the complete
-registered runtime matrix and hardened provenance admission remain open. A
-separately named corrected volume-aware Q019 campaign design exists, but it
-grants no execution or claim authority and does not itself establish a
-corrected Bell result.
+registered runtime matrix and hardened provenance admission remain open. The
+latest independently reviewed Q043 hardening successor still permits
+run-root, installed-generation, and hash-versus-analysis substitution and is
+inadmissible. A blocked source-local Q019 redesign catalogs possible controls
+but has not passed a physics-first successor review; it remains unintegrated,
+unexecuted, and non-authorizing and does not itself establish a corrected Bell
+result.
 
 Until Q-019, Q-023, Q-025, Q-026, and Q-028 close with a named reviewer:
 
@@ -193,6 +201,12 @@ startup-cohort removal. These are method properties only; they do not establish
 a qualifying shock result or exact conservation outside the separately
 qualified envelope.
 
+The source-audited methods description must also state that the active
+`paper_smooth` receiver-resolution AMR policy is not individually conservative
+at mixed levels. The separate reviewed `conservative_partition` candidate is
+not an active production policy and remains blocked on scalable design and
+multi-rank/dynamic-AMR/HIP qualification.
+
 Required result scope, if the gate closes: the exact paper-mode implementation,
 coarse/AMR/fine paired-seed matrix, nominal-slot and observed-committed-time
 semantics, retained failures, restart behavior, provenance, MPI/GPU scope,
@@ -209,9 +223,13 @@ For the two central-result gates specifically:
 
 - **Bell nonlinear:** the historical source-local fixed-current-like foundation
   deck and bounded analyzer inherit the invalid volume-blind, artificial-`C`
-  current normalization and are ineligible for qualification. A separately
-  named corrected volume-aware Q019 campaign design exists but grants no
-  execution or claim authority. Corrected linear qualification, a
+  current normalization and are ineligible for qualification. A blocked
+  source-local 26-case Q019 redesign catalogs possible high- and
+  finite-rigidity branches, relabeled tiled replication controls, and proposed
+  non-tiled box, finite-rigidity predecessor, resolution/PPC, quiet-start, and
+  noise-seeded controls. It remains pending a physics-first successor,
+  unintegrated, unexecuted, and non-authorizing. Corrected linear
+  qualification, a
   dimension/resolution/decomposition deposited-current oracle, a superseding
   nonlinear implementation, qualifying generator and deck matrix,
   excluded-pilot-frozen saturation windows, comparison maps, numeric tolerances,
@@ -220,6 +238,10 @@ For the two central-result gates specifically:
   qualifying policy is detailed, and a staged resource-scaling plan now exists,
   but production registration, stable clean source, prerequisite simulations,
   measured runtime sizing, qualifying execution, and result review remain open.
+  The `paper_smooth` AMR policy remains the active candidate and does not
+  inherit uniform-mesh exact conservation. A separately developed
+  `conservative_partition` candidate remains blocked on production-scale
+  algorithm design and multi-rank/dynamic-AMR/HIP qualification.
 
 ## Applicability and Claim Boundaries
 
@@ -403,7 +425,20 @@ The following statements may orient methods drafting, subject to source audit:
   before they support a result.
 - The corrected source-local Q043 Bell current matrix uses nonunit species mass
   and binds charge separately from charge-to-mass, but complete registered
-  runtime observation and hardened provenance admission remain open.
+  runtime observation and hardened provenance admission remain open. The
+  latest independently reviewed Q043 hardening successor remains inadmissible
+  because run-root substitution, installed-generation replacement before
+  import, and hash-versus-analysis reopen gaps can cross its trust boundary.
+- The active `paper_smooth` AMR policy follows receiver-resolution deposition
+  and is not individually conservative at mixed refinement levels. A separate
+  source-local `conservative_partition` candidate demonstrates bounded serial
+  partition of unity but remains unsuitable for production integration because
+  its current design performs scale-unsafe global tag audits and serial
+  per-particle host work and lacks multi-rank, dynamic-AMR, restart, HIP, and
+  performance evidence.
+- A reviewed Q011 fixed-uniform exact-accounting repair narrows the source
+  envelope appropriately, but its runtime-evidence verifier is self-attested
+  and cannot close execution provenance.
 - A Q011 preproduction resource-scaling plan recommends a three-seed paired
   core followed by resource-gated expansion; it does not modify the historical
   eight-seed preregistration or authorize production.
@@ -437,23 +472,40 @@ These statements do not close a scientific claim.
 - The source and campaign-control work remains active; prose may become stale
   unless it binds an exact release candidate.
 - Independent review found that the first Q043 registered-execution admission
-  could self-attest control-plane provenance, did not bind raw-output bytes at
-  reconciliation, omitted deposition/output files from the candidate closure,
-  and did not validate cycle-zero moments. No Q043 registered evidence is
-  admissible until a hardened successor closes those defects.
+  was self-attested. A later hardening successor added scheduler-exit,
+  source-closure, raw-inventory, and cycle-zero checks but still accepts a
+  substituted frozen run root, can import a replaced installed-control-plane
+  generation after verifying an earlier one, and can analyze raw bytes reopened
+  after binding different bytes. No Q043 registered evidence is admissible
+  until a further independently reviewed successor closes those trust gaps.
 - The deterministic Q043 launch/policy preparation successor is planning
   evidence only. Its 132-case matrix cannot run or qualify until the hardened
   installed reconciliation/admission path, final clean candidate, live
   preflight, policy promotion, and empty-user-queue gate all close.
-- Independent review found that the current corrected Q019 candidate cannot
-  support nonlinear-saturation claims: its HR large-box control is an exact
-  tiled replication, its FR 3D kinetic scale is under-resolved, particle noise
-  overwhelms the intended magnetic seed, finite-rigidity early evolution is
-  unvalidated, and the trusted raw-evidence path is incomplete.
+- A blocked Q019 source-local redesign responds to prior experiment-design
+  findings by proposing relabeled tiled controls, non-tiled box controls,
+  finite-rigidity predecessor and evolving-resolution diagnostics,
+  resolution/PPC ladders, and quiet-start/noise sensitivities. These proposals
+  have not passed physics-first successor review. The redesign remains outside
+  the integrated primary, unexecuted, unfrozen for registered production, and
+  blocked on Q043/Q023 prerequisites, thresholds, resources, and trusted
+  evidence.
 - The Q009 dynamic-AMR/load-balance pilot now has a fail-closed five-case
   contract, but no materializer, trusted telemetry/admission path, live policy
   slice, or execution evidence. It does not qualify production AMR or extend
   uniform-mesh exact-conservation claims.
+- Independent review blocked integration of the Q009
+  `conservative_partition` candidate: its deposition-stage global PTAG audit
+  is unsafe at production scale, normalization performs serial host
+  allocation and scans per particle, PTAG uniqueness is an unnecessary
+  incompletely established precondition, and MPI-facing behavior is untested.
+  The stage-local identity repair for default `paper_smooth` may be split and
+  reviewed separately.
+- Independent review accepted the narrow numerical logic of a Q011
+  fixed-uniform exact-accounting repair but rejected its runtime-evidence
+  verifier as self-attestation. The repair cannot be described as complete
+  evidence closure unless numerical source changes are split from or paired
+  with trusted execution provenance.
 - A large inventory of bounded evidence can obscure the central argument unless
   the manuscript preserves evidence hierarchy and scope.
 - The central Bell and shock campaigns may remain blocked by prerequisites,

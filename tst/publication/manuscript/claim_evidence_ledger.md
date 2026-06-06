@@ -37,19 +37,22 @@ Snapshot date: 2026-06-06. Recheck before every substantive manuscript revision.
 
 | Item | Current evidence | Manuscript consequence |
 |---|---|---|
+| Authoritative source baseline for this revision | `PIC` commit `1d72534619da277fdd6838cabdab0d465d0a8867`; unintegrated successors are review context only | Positive methods statements must describe the integrated baseline; unintegrated work may narrow claims or identify blockers but cannot support a result |
 | Active registered-science allowlist | Production policy has `registered_science_slices: []` | No current production policy authorizes a qualifying Q011 or nonlinear Bell campaign |
 | Frontier accounting | Latest reconciled cumulative consumed node-hours: `1.3019444444444446`; project cap: `10000` | Budget headroom exists, but no campaign-specific node-hour sizing or authorization follows from it |
 | Active science freeze | An older clean candidate is authorized by active policy | It does not bind the current timing/retention source candidate |
 | Target manuscript scope | Core implementation, corrected Bell linear/nonlinear, Section 5.4 shock, reproducibility, and measured performance | Standalone oscillation, CRSI, CRPAI, driven-box, physical-damping, and calibrated-transport results are outside this target paper; their claims remain open |
 | Bell current normalization | Generic deposition includes statistical/delta-f weights, physical-density scaling, shape, configured species charge, and recipient-cell volume. The uniform full-f Q043 specialization is `deposited J_CR/c = PPC * deposit_qscale * species_charge * v_CR / V_root_cell = 2 B_g k_0`; the corrected source-local matrix uses nonunit species mass and separately binds `species_charge/species_mass`. Historical preparation targeted `2 B_g C k_0` and held `PPC * deposit_qscale` fixed without the root-cell-volume factor | Historical volume-blind/artificial-`C` Bell evidence changes current with dimension/resolution and is invalid; corrected source/decks/raw-output oracle exist source-locally, but the complete registered runtime matrix and reruns remain required |
-| Q043 registered-execution admission | Independent review found self-attested control-plane provenance, incomplete candidate source closure, no reconciliation-time digest inventory of raw output, and no scientific validation of cycle-zero deposited moments | The provisional admission cannot support registered or scientific evidence; a hardened fail-closed successor and negative-test matrix are required |
+| Q043 registered-execution admission | A later hardening successor adds scheduler `ExitCode`, broader source closure, raw-inventory, mirror, and cycle-zero checks. Independent adversarial review nevertheless demonstrated frozen run-root substitution, verified installed-generation replacement before import, and a gap between raw bytes bound and raw bytes reopened for analysis | The hardened successor remains inadmissible. No Q043 registered evidence may support Q023, Q019, or a manuscript claim until a further independently reviewed successor closes all three trust gaps |
 | Q043 registered launch preparation | A deterministic fail-closed successor generates 132 launch candidates, 132 policy candidates, exact raw-output topology interfaces, and one aggregate review fragment under a 22 node-hour and 182804545536-byte ceiling | Planning evidence only; it grants no launch, policy, science, or publication authority and remains blocked on the hardened installed reconciliation/admission path, final clean candidate, live preflight, and an empty user queue |
 | Section 5.4 pressure selection | Human-only receipt selected `ps_p0_1p00`, `problem_ps_p0=1`; receipt SHA-256 `e5c1492cfc67d5cfad0110e7d772bf75f9d6d2e1fd90b0d5d8dd3338965905cc` | May state only that `p0=1.0` is the provenance-first baseline |
 | Q011 future campaign policy | Three grid variants, eight paired seeds, 24 expected baseline attempts; nominal-slot/observed-time rules and all-attempt retention are frozen in a policy-only successor | Planning evidence only; no execution authorization or result |
 | Q011 resource-scaling plan | Excluded preproduction pilots and a three-seed paired core with resource-gated complete-triad expansion are designed under a 500-node-hour pilot ceiling | Does not change the historical eight-seed preregistration; measured sizing and authorization remain open |
 | Q011 storage projection | Approximately `10.553535598859627 TB` planning envelope for 24 baseline attempts | Planning value only; actual sizes, retry capacity, capacity confirmation, and reservation remain open |
 | Q009 dynamic AMR/load-balance pilot | A reviewed fail-closed five-case contract specifies paired load-balance off/on migration, restart through `t>45`, and a held-out full-geometry engineering pilot under 100 node-hours and 200 GiB | Contract evidence only; deck materialization, trusted telemetry/admission, live policy slices, execution, and scientific-AMR qualification remain open |
-| Q019 nonlinear Bell | The historical source-local foundation and analyzer inherit the invalid volume-blind/artificial-`C` normalization. A corrected volume-aware source candidate exists outside the integrated primary, but independent review found that the HR large-box pair is an exact tiled replication, the FR 3D gyroradius is under-resolved, particle noise overwhelms the intended seed, finite-rigidity linear behavior is unvalidated, and trusted raw-evidence bindings are incomplete | Historical Q019 artifacts and the reviewed candidate remain ineligible; production requires a non-tiled box-sufficiency pair, 3D resolution/PPC controls, controlled seed-versus-noise treatment, a finite-rigidity predecessor, and trusted reconciliation before any nonlinear result or figure is admissible |
+| Q009 conservative AMR receiver policy | A source-local `conservative_partition` candidate demonstrates serial partition-of-unity deposition across unequal receiver volumes and leaves `paper_smooth` default behavior distinct. Independent review found production-scale global PTAG all-to-all audit, serial host allocation and topology scans per particle, an unnecessary incompletely established PTAG-uniqueness precondition, and no multi-rank/dynamic-AMR/restart/HIP runtime evidence | Candidate remains open and must not be described as a production option or as qualifying Section 5.4 AMR conservation. The stage-local default-transport identity repair may be reviewed separately |
+| Q011 exact-accounting repair | A reviewed source-local candidate narrows exact shock accounting to fixed-uniform topology and rejects refined/adaptive restart state. Independent review accepted the narrow numerical logic but found that its runtime-evidence verifier accepts fabricated internally consistent packets | Numerical source repair and execution provenance must be separated or hardened; the candidate does not close Q011 conservation evidence |
+| Q019 nonlinear Bell | Historical source-local foundation/analyzer artifacts inherit invalid Bell normalization. A blocked source-local 26-case redesign catalogs relabeled tiled controls and proposed non-tiled HR/FR box, finite-rigidity predecessor, evolving `rL/dx`, resolution/PPC, and quiet-start/noise controls | The redesign has not passed a physics-first successor review and remains outside the integrated primary, unexecuted, unfrozen, and blocked on Q043/Q023, thresholds, resources, trusted receipts, and review. No nonlinear result or figure is admissible |
 | Source-audited methods prose | Exact source audit supports the configured relativistic Boris operation order, TSC shape, Section 5.4 candidate geometry/normalization, ideal-surface injection budget, cycle-local gas-subtraction validation, and restart-persistent cumulative injection/removal ledgers | Draftable method context only; none of these source properties establishes a qualifying Bell or shock result |
 | Q022 nonlinear Bell comparison | Bounded equation/normalization/parameter maps bind the retained references and establish that the target-paper Bell benchmark is linear. No standalone nonlinear-saturation dataset or numeric acceptance tolerance is supplied by that benchmark; extraction, execution bindings, discrepancy closure, and external review remain open | The bounded map may define comparison scope, but no nonlinear agreement, independent-comparison, or scoped-superiority claim is admissible |
 | Primary-source literature map | Bell (2004), Bai et al. (2015), Sun & Bai (2023), Riquelme & Spitkovsky (2009), Gargaté et al. (2010), Zacharegkas et al. (2024), Stone & Gardiner (2009), Birdsall & Langdon, Mignone et al. (2018), and van Marle et al. (2018) are bound in the manuscript bibliography | Supports method lineage and bounded comparison context only; it supplies no AthenaK result, cross-code agreement, universal nonlinear-saturation tolerance, or Hall-dominated validation |
@@ -81,13 +84,15 @@ nonlinear Bell evolution for the exact tested non-Hall AthenaK regime.
   deposited current invariant.
 - The historical Bell preparation/proxy evidence and historical Q019
   foundation/analyzer that inherit that normalization are invalid for
-  qualification. A separately named corrected volume-aware Q019 campaign
-  design exists, but it grants no execution or claim authority and is not
-  qualifying evidence.
+  qualification. A blocked source-local 26-case Q019 redesign catalogs
+  possible controls but has not passed a physics-first successor review; it
+  remains unintegrated, unexecuted, unfrozen, non-authorizing, and
+  nonqualifying.
 - Corrected Q043 source, decks, and a cycle-one raw-output oracle exist
-  source-locally and use nonunit species mass, but the complete registered
-  runtime matrix is unobserved and the first registered-execution admission
-  failed independent provenance review.
+  source-locally and use nonunit species mass. The complete registered runtime
+  matrix is unobserved, and the latest hardened registered-execution admission
+  failed independent review on run-root substitution, installed-generation
+  replacement before import, and bound-versus-analyzed raw bytes.
 - The bounded Q022 reference map establishes that the retained target-paper
   Bell benchmark is linear and supplies no standalone nonlinear-saturation
   dataset or numeric nonlinear acceptance tolerance.
@@ -117,13 +122,13 @@ nonlinear Bell evolution for the exact tested non-Hall AthenaK regime.
 
 | Required item | Acceptance condition | Current status | Next action |
 |---|---|---|---|
-| Corrected Bell current normalization | Source, deck, analyzer, and direct cycle-one deposited-current oracle bind `PPC * deposit_qscale * species_charge * v_CR / V_root_cell = 2 B_g k_0`; reject artificial-`C` multiplication; and demonstrate invariant physical current across the registered dimension, root-resolution, meshblock/rank-decomposition, and artificial-`C` matrix | Corrected source-local source/decks/oracle exist and focused tests plus one serial cycle-one smoke pass; complete registered matrix and hardened provenance admission remain absent | Harden admission, execute the complete registered raw-output matrix, retain immutable inventories, and obtain independent recomputation/review |
+| Corrected Bell current normalization | Source, deck, analyzer, and direct cycle-one deposited-current oracle bind `PPC * deposit_qscale * species_charge * v_CR / V_root_cell = 2 B_g k_0`; reject artificial-`C` multiplication; and demonstrate invariant physical current across the registered dimension, root-resolution, meshblock/rank-decomposition, and artificial-`C` matrix | Corrected source-local source/decks/oracle exist and focused tests plus one serial cycle-one smoke pass; complete registered matrix is absent; latest Q043 hardening successor failed independent provenance review | Close all run-root/module/raw-byte substitution windows, independently review/install the successor, execute the complete registered raw-output matrix, retain immutable inventories, and obtain independent recomputation/review |
 | Q003/Q004/Q005 prerequisites | Required mechanics, coupling, and corrected paper-faithful linear Bell gates close | Open; historical Bell linear evidence invalidated | Complete the corrected qualifying linear Bell convergence, MPI/GPU, independent-recompute, and review matrix |
-| Exact physical regime | Corrected fiducial normalization, parameters, dimensional scope, exclusions, and artifact root frozen before qualifying output | Corrected volume-aware successor design exists but is not execution-frozen; corrected implementation and evidence are absent | Implement, review, pilot, and freeze the separately named corrected Q019 successor before registration |
-| Qualifying decks | Exact corrected deck matrix and checksums frozen | Historical source-local foundation invalid for qualification; corrected successor design exists but corrected deck matrix is absent | Implement and review the separately named corrected Q019 source and exact pilot matrix |
+| Exact physical regime | Corrected fiducial normalization, parameters, dimensional scope, exclusions, and artifact root frozen before qualifying output | Blocked Q019 redesign exists outside integrated primary, has not passed physics-first successor review, is not execution-frozen, and has no runtime evidence | Produce and review a physics-first successor, then run excluded pilots and freeze the exact regime before registration |
+| Qualifying decks | Exact corrected deck matrix and checksums frozen | Historical source-local foundation invalid; blocked 26-case redesign is not registered evidence or an accepted physics-first matrix | Produce/review the physics-first successor, then freeze exact registered decks only after prerequisites and excluded pilots close |
 | Nonlinear analyzer | Production analyzer, source digest, outputs, failure behavior, and independent recompute contract frozen | Bounded source-local analyzer exists; production and independent-recompute contracts absent | Extend only after required raw diagnostics and pilot-frozen criteria close |
 | Saturation windows and criteria | Theory-derived or excluded-pilot-derived windows, estimators, uncertainty, tolerances, outlier rule, and stop conditions frozen before qualifying inspection | Open | Run only explicitly excluded pilots, then freeze successor |
-| Sensitivity design | Particle count, timestep, resolution, box size, dimensionality, and seed requirements bound; any sequential design has maximum seeds and node-hour ceiling | Proposed Q019 staged design; not frozen for execution | Complete independent physics/resource review and excluded pilots |
+| Sensitivity design | Particle count, timestep, resolution, box size, dimensionality, and seed requirements bound; any sequential design has maximum seeds and node-hour ceiling | Blocked Q019 redesign proposes non-tiled box controls, FR resolution/PPC ladders, and quiet/noise sensitivities; physics-first review, thresholds, and execution freeze remain open | Complete physics-first successor design, independent physics/resource review, and excluded pilots |
 | Resource model | Nodes, walltime, memory, output size, node-hour ceiling, retry ceiling, and storage envelope measured and reviewed | Planning ceiling exists; measured model absent | Run excluded sizing pilots and produce estimator |
 | Registered execution | Clean candidate, executable, decks, analyzer, policy slices, launch contracts, and retention bound | Unauthorized | Install/promote reviewed successor and execute serially |
 | Raw evidence | Every qualifying, failed, outlier, and replacement attempt archived with inventories | Absent | Enforce registered retention during execution |
@@ -179,6 +184,14 @@ prescription.
 - Source-local preparation, bounded injection/provenance diagnostics, restart
   guards, and future campaign policies may support methods and planned-analysis
   explanation.
+- The active `paper_smooth` AMR policy is receiver-resolution smooth but not
+  individually conservative at mixed levels. The reviewed
+  `conservative_partition` candidate has bounded serial conservation evidence
+  but remains blocked on scalable design and multi-rank/dynamic-AMR/restart/HIP
+  qualification.
+- A reviewed Q011 fixed-uniform exact-accounting source repair has a defensible
+  narrow numerical envelope, but its proposed runtime-evidence packet is
+  self-attested and cannot establish trusted execution.
 - A preproduction scaling design defines excluded strong-scaling,
   reduced-transverse full-time, and held-out validation pilots under a hard
   500-node-hour ceiling.
@@ -202,7 +215,7 @@ prescription.
 | Required item | Acceptance condition | Current status | Next action |
 |---|---|---|---|
 | Stable source baseline | Curated clean commit equals reviewed remote tip; focused and control-plane regressions pass against exact source | Open | Freeze concurrent work, commit, push, and validate |
-| Q003/Q004/Q009 prerequisites | Pusher, coupling, multi-rank AMR migration/restart, HIP, and scientific-AMR gates close for required scope | Open | Complete prerequisite registered simulations |
+| Q003/Q004/Q009 prerequisites | Pusher, coupling, multi-rank AMR migration/restart, HIP, and scientific-AMR gates close for required scope | Open; five-case dynamic-AMR pilot is unexecuted; conservative policy candidate is blocked and does not replace `paper_smooth` | Complete prerequisite registered simulations and retain explicit AMR-policy scope |
 | Pressure decision binding | Final campaign binds the immutable human receipt and selected case exactly | Receipt complete; campaign binding absent | Bind receipt during immutable campaign materialization |
 | Campaign registration | Exact clean commit, executable, per-variant decks, analyzers, Orion root, policy slices, and independent recompute plan bound | Unauthorized | Materialize, review, install, and promote successor |
 | Resource sizing | Per-variant nodes, walltime, throughput, memory, node-hours, output/checkpoint size, retry ceiling, and capacity confirmation frozen | Staged preproduction design exists; measurements absent | Run registered excluded coarse/fine/AMR timing and I/O pilots |
@@ -213,7 +226,7 @@ prescription.
 | Morphology and amplification | Preregistered `t=500` products and ideal-surface/detected-front distinction pass review | Absent | Generate from complete registered raw data |
 | Spectra and slope | Downstream spectra at required slots, fixed bins, exclusions, overflow accounting, uncertainty, and late-tail fit pass | Absent | Generate from provenance-bound particles |
 | AMR comparison | Paired-seed AMR versus fine residuals and honest speed/memory comparison pass | Absent | Complete paired analysis and uncertainty |
-| Restart and provenance | Registered restart carrier, particle provenance, cohort spectra, MPI/GPU, load balance, runtime, and memory evidence close | Open | Execute and review bound evidence |
+| Restart and provenance | Registered restart carrier, particle provenance, cohort spectra, MPI/GPU, load balance, runtime, memory, and trusted exact-accounting evidence close | Open; reviewed exact-accounting source repair has self-attested runtime evidence | Harden execution provenance, then execute and review bound evidence |
 | Independent recomputation | Reviewer-owned implementation regenerates primary metrics from archived raw output | Absent | Produce after full dataset is immutable |
 | Named review | Reviewer accepts exact reproduction claim and limitations | Pending external review | Assign reviewer after evidence package is complete |
 
@@ -248,7 +261,7 @@ substitute for either central-result gate.
 | Claim ID or topic | Intended manuscript role | Current admissible evidence | Required closure before result wording | Status |
 |---|---|---|---|---|
 | `CLAIM-PAPER-GYRO-001` | Support core particle-mechanics verification; not a standalone physical centerpiece | Bounded analytical convergence and selected registered GPU oracle | Q-003, Q-025, Q-026; final figure/table, uncertainty, provenance, named review | `blocked_result` |
-| Paper coupling methods evidence | Explain opposite-impulse exchange on its qualified uniform-mesh scope and ideal-MHD induction isolation | Bounded host and selected registered GPU evidence described in production plan | Exact source audit, full intended decomposition/GPU scope, explicit boundary/AMR/injection/removal exclusions, and claim-specific review | `draftable_method_context` |
+| Paper coupling methods evidence | Explain opposite-impulse exchange on its qualified uniform-mesh scope and ideal-MHD induction isolation | Bounded host and selected registered GPU evidence described in production plan; reviewed Q011 fixed-uniform accounting repair narrows the intended envelope but its runtime evidence is self-attested | Exact source audit, trusted execution evidence, full intended decomposition/GPU scope, explicit boundary/AMR/injection/removal exclusions, and claim-specific review | `draftable_method_context` |
 | `CLAIM-PAPER-BELL-LINEAR-001` | Establish the mandatory corrected linear predecessor to nonlinear Bell | Historical preparation/proxy evidence is invalid because it omitted `V_root_cell`, fixed `PPC * deposit_qscale` across dimension/resolution changes, and multiplied deposited `J_CR/c` by artificial `C` | Corrected volume-aware `J_CR/c` source/decks/analyzer; dimension/resolution/decomposition oracle; Q-003, Q-004, Q-005, Q-023, Q-025, Q-026; complete registered thin-2D/3V one-dimensional-variation plus 2D/3D rerun, independent recompute, and named review | `blocked_result` |
 | Performance and scalability | State measured cost, memory, communication, and load balance | Bounded observability scaffolding only for broad claims | Registered measurements, exact machine/runtime mapping, repeated measures, uncertainty, and review | `blocked_result` |
 | `CLAIM-RELEASE-PAPER-MHD-PIC-001` | Final production-ready bounded paper-mode release claim | Individual bounded gates and selected registered slices only | Final selected profile gates, Q-014 terminal sign-off, and release review | `blocked_result` |
@@ -294,43 +307,47 @@ For each inserted object, record:
 
 ## Ordered Manuscript-Evidence Critical Path
 
-1. Freeze the exact release-source candidate and rerun the full required
+1. Close the Q043 registered-evidence trust gaps for run-root substitution,
+   installed-generation replacement, and bound-versus-analyzed raw bytes; then
+   independently review the successor.
+2. Freeze the exact release-source candidate and rerun the full required
    verification/control-plane suites.
-2. Close Q003/Q004 and the campaign-specific prerequisites shared by Bell and
+3. Close Q003/Q004 and the campaign-specific prerequisites shared by Bell and
    shock work.
-3. Supersede every historical volume-blind/artificial-`C` Bell binding, close
+4. Supersede every historical volume-blind/artificial-`C` Bell binding, close
    the dimension/resolution/decomposition deposited-current oracle, then close
    corrected paper-faithful linear Bell Q005 before any nonlinear Bell
    qualifying campaign.
-4. Close multi-rank/HIP/scientific-AMR Q009 requirements before the Q011 full
+5. Close multi-rank/HIP/scientific-AMR Q009 requirements before the Q011 full
    shock campaign.
-5. Freeze campaign-specific resource models, retry ceilings, storage envelopes,
+6. Freeze campaign-specific resource models, retry ceilings, storage envelopes,
    decks, analyzers, statistical designs, and independent-recompute plans.
-6. Install and promote reviewed control-plane/policy successors with exact
+7. Install and promote reviewed control-plane/policy successors with exact
    registered-science slices.
-7. Execute, reconcile, archive, and independently recompute the qualifying
+8. Execute, reconcile, archive, and independently recompute the qualifying
    campaigns without selecting away failures or outliers.
-8. Complete Q022/Q028 Bell comparison work and record discrepancies.
-9. Obtain named scientific and provenance reviewer dispositions.
-10. Insert only accepted results, figures, tables, limitations, and provenance
+9. Complete Q022/Q028 Bell comparison work and record discrepancies.
+10. Obtain named scientific and provenance reviewer dispositions.
+11. Insert only accepted results, figures, tables, limitations, and provenance
     into the TeX manuscript.
-11. Run scientific-fidelity, argument, pedagogy, citation, equation,
+12. Run scientific-fidelity, argument, pedagogy, citation, equation,
     figure/table, adversarial, consistency, and rendered-object reviews.
 
 ## Open Questions
 
 | Question | Classification | Required disposition |
 |---|---|---|
-| What exact corrected-normalization non-Hall Bell regime and dimensional scope should the Q019 successor target? | Blocks Bell claim | Freeze before qualifying execution |
-| Does the corrected Q019 box-sufficiency comparison use a genuinely non-tiled matched realization with controlled access to modes below the small-box fundamental? | Blocks Bell claim | Demonstrate translation-symmetry rejection and preregister the paired spectral comparison |
-| Does the finite-rigidity Q019 branch resolve the evolving gyroradius and distinguish controlled deterministic seeding from particle-noise-seeded evolution? | Blocks Bell claim | Close a finite-rigidity early-time predecessor and freeze 3D resolution, PPC, quiet-start/noise, and early-growth gates |
+| What exact corrected-normalization non-Hall Bell regime and dimensional scope should the physics-first Q019 successor target? | Blocks Bell claim | Resolve in a reviewed physics-first successor before qualifying execution |
+| Does the physics-first Q019 successor use a genuinely non-tiled matched box-sufficiency comparison with controlled access to modes below the small-box fundamental? | Blocks Bell claim | Demonstrate translation-symmetry rejection and preregister the paired spectral comparison |
+| Does the physics-first Q019 finite-rigidity branch resolve the evolving gyroradius and distinguish controlled deterministic seeding from particle-noise-seeded evolution? | Blocks Bell claim | Close a finite-rigidity early-time predecessor and freeze 3D resolution, PPC, quiet-start/noise, and early-growth gates |
 | Has every historical Bell source, deck, analyzer, foundation, design, and artifact inheriting the volume omission, fixed `PPC * deposit_qscale`, or artificial-`C` multiplication been inventoried and excluded? | Blocks Bell claims | Complete supersession audit before corrected execution |
 | Does the direct deposited-current oracle hold the physical current fixed across dimension, root resolution, and meshblock/rank decomposition? | Blocks Bell claims | Close before corrected Bell execution |
-| Does the hardened Q043 admission bind an independently trusted control-plane event, the actual built executable and deposition/output source closure, reconciliation-time raw-output digests, and valid cycle-zero moments? | Blocks Bell claims | Close before any Q043 registered evidence is admissible |
+| Does the next Q043 admission retain trusted descriptors or equivalent unreplaceable identities from run freeze through reconciliation/import/analysis so that the run root, installed generation, and analyzed raw bytes cannot be substituted? | Blocks Bell claims | Close all three demonstrated substitution paths and pass fresh independent adversarial review before any Q043 registered evidence is admissible |
 | What excluded pilots are sufficient to freeze Bell saturation windows and resource sizing? | Blocks Bell claim | Review pilot design before launch |
 | What node, walltime, retry, node-hour, and storage ceilings should Q011 register? | Blocks shock execution | Measure and approve before policy promotion |
 | Does every full Q011 attempt fit one compliant `normal` allocation? | Blocks shock execution | Demonstrate by reviewed timing/sizing evidence |
-| Can the production AMR particle-moment policy close a per-particle partition-of-unity conservation oracle without losing the intended receiver-resolution smoothness, or must exact conservation remain limited to uniform meshes? | Blocks the scope of shock conservation claims | Evaluate a separately named conservative policy and retain `paper_smooth` as a distinct, explicitly non-exact reproduction option |
+| Can a production AMR particle-moment policy close a per-particle partition-of-unity oracle without losing the intended receiver-resolution smoothness or introducing scale-unsafe global audits and serial per-particle host work? | Blocks the scope of shock conservation claims | Redesign and qualify any conservative extension; retain `paper_smooth` as a distinct, explicitly non-exact reproduction option |
+| Can Q011 fixed-uniform exact accounting be paired with execution provenance that proves the bound source, scheduler command, raw run, and independent reducer actually executed? | Blocks shock conservation evidence | Replace self-attested packet consistency with trusted registered execution and independent recomputation |
 | What is the final exact release runtime identity and portability scope? | Blocks broad main claim | Resolve from final closed gates |
 | What final archive/data-availability statement is supportable under Orion-only retention? | Blocks release wording | Resolve through Q-026/external review |
 | Which additional prior-method citations are required for AMR, reproducibility, GPU portability, and the relativistic Boris method? | Requires verification | Extend the verified bibliography without inventing citations |

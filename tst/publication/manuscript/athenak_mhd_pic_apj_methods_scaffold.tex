@@ -39,27 +39,26 @@ difficult to resolve with fully kinetic methods. MHD-PIC addresses this scale
 separation by evolving the thermal plasma as magnetohydrodynamic gas while
 advancing a selected energetic-particle population kinetically
 \citep{BaiEtAl2015,SunBai2023,MignoneEtAl2018,vanMarleEtAl2018}.
-We describe the \athenak implementation of this approach.
-The active paper-reproduction candidate uses mass-normalized particle momentum,
-a relativistic Boris pusher, triangular-shaped-cloud interpolation and
-deposition, ideal-MHD induction, and opposite-impulse momentum and kinetic-energy
-feedback on qualified uniform meshes.
-\TODO{Replace this paragraph with the final quantitative results only after the
-claim-evidence ledger identifies the exact figures, tables, artifacts,
-uncertainties, and reviewer dispositions.}
-Current repository evidence includes bounded analytical and engineering
-verification, selected registered GPU oracles, and preregistered campaigns.
-It does not yet establish the complete paper-reproduction bundle, nonlinear
-Bell saturation, the Section~5.4 parallel-shock result, or production-scale
-performance.
-The historical Bell preparation is invalid for qualification because it omitted
-root-cell volume from the deposited-current contract, held particle count times
-deposit weight fixed across dimension and resolution changes, and multiplied
-AthenaK's deposited $J_{\rm CR}/c$ closure by artificial light speed
-$\mathbb{C}$. Corrected Bell linear and nonlinear results require a
-volume-aware dimension/resolution/decomposition current oracle, superseding
-contracts, and complete reruns.
-\GATE{The abstract must not claim those outcomes until their named gates close.}
+We describe the physical model, discrete coupling, mesh-interface choices, and
+evidence architecture of the \athenak implementation. The active
+paper-reproduction candidate stores mass-normalized particle momentum, advances
+it with a relativistic Boris pusher, uses triangular-shaped-cloud
+interpolation and deposition, retains ideal-MHD induction, and returns the
+opposite particle momentum and kinetic-energy changes to an ideal-MHD gas on
+the bounded uniform-mesh path. A source audit exposes two boundaries that
+control interpretation. First, the Bell driving current is the deposited
+$J_{\rm CR}/c$ and therefore depends on recipient-cell volume; historical Bell
+preparation that omitted this volume and multiplied the closure by the
+artificial particle light speed represents a different physical problem.
+Second, receiver-resolution deposition at a refinement interface trades exact
+individual-particle conservation for a smooth profile, so uniform-mesh
+conservation cannot be transferred to adaptive meshes. We consequently define
+a verification hierarchy that separates operator-level checks, distributed
+execution and restart tests, registered physical campaigns, and
+provenance-qualified manuscript claims.
+\GATE{Insert quantitative Bell, parallel-shock, and performance results only
+after their immutable evidence packages, uncertainties, and named reviews
+close.}
 \end{abstract}
 
 \keywords{magnetohydrodynamics (1964) --- cosmic rays (329) ---
@@ -69,35 +68,54 @@ plasma astrophysics (1261) --- computational methods (1965) ---
 \section{Introduction}
 \label{sec:introduction}
 
-\paragraph{Reader orientation.}
-This paper should answer one question: under what documented physical and
-numerical conditions can \athenak evolve kinetic cosmic rays coupled to an MHD
-background for corrected linear and nonlinear Bell calculations and a
-Section~5.4 parallel shock with quantitatively verified accuracy,
-reproducibility, and measured performance?
+The central numerical challenge in MHD-PIC is not advancing either an MHD
+state or a particle orbit in isolation. It is preserving a physically
+interpretable exchange between them while particles cross cells, ranks,
+boundaries, and refinement levels. An implementation can pass a local orbit
+test yet represent the wrong instability if its deposited current has the
+wrong normalization. It can conserve momentum on a uniform periodic mesh yet
+lose that property at a refinement interface. It can also produce plausible
+fields while lacking evidence that the analyzed bytes came from the registered
+executable and run. This paper therefore asks under what documented physical,
+numerical, and evidentiary conditions \athenak can support corrected Bell
+calculations and a Section~5.4 parallel shock.
 
-\TODO{Write the introduction around the unresolved method problem, not around
-the chronology of implementation.}
-MHD-PIC methods retain kinetic energetic particles while replacing the thermal
-plasma with an MHD fluid \citep{BaiEtAl2015,MignoneEtAl2018,vanMarleEtAl2018,
-SunBai2023}. These implementations establish the relevant numerical lineage,
-but they do not by themselves establish cross-code agreement for \athenak.
-The Bell current-driven instability supplies a stringent coupling test because
-its fastest-growing linear mode is set by the imposed energetic-particle current
-\citep{Bell2004}. Its nonlinear development has been studied with fully kinetic
-and hybrid approaches \citep{RiquelmeSpitkovsky2009,GargateEtAl2010,
-ZacharegkasEtAl2024}; comparison among those studies and \athenak must be
-restricted to dimensionlessly matched regimes and shared observables.
-The parallel-shock target is the Section~5.4 calculation of
-\citet{SunBai2023}, interpreted alongside the MHD-PIC shock setup of
-\citet{BaiEtAl2015}.
+MHD-PIC provides the required scale reduction by retaining kinetic energetic
+particles while replacing the thermal plasma with an MHD fluid
+\citep{BaiEtAl2015,MignoneEtAl2018,vanMarleEtAl2018,SunBai2023}. The reduction
+is useful precisely because it is selective: particle gyromotion,
+distribution evolution, and particle--gas exchange remain explicit, whereas
+thermal kinetic scales and thermal-pool injection do not. A methods claim must
+therefore state both the numerical accuracy of the retained dynamics and the
+physical questions excluded by the approximation.
+
+Two campaign-level problems organize the validation. The Bell current-driven
+instability is sensitive to the magnitude and sign of the energetic-particle
+current, making it a direct test of current deposition and backreaction
+\citep{Bell2004}. Its nonlinear development has been studied with fully
+kinetic and hybrid approaches \citep{RiquelmeSpitkovsky2009,GargateEtAl2010,
+ZacharegkasEtAl2024}; those studies provide comparison context only when
+dimensionless regimes and observables are matched. The second target is the
+non-relativistic parallel shock in Section~5.4 of \citet{SunBai2023},
+interpreted alongside the MHD-PIC shock setup of \citet{BaiEtAl2015}. It
+combines injection, open and reflecting boundaries, particle provenance,
+adaptive refinement, restart, and long-time acceleration in one calculation.
+
+Our methodological contribution is an auditable composition of the physical
+model, discrete update, and claim-evidence chain. We first identify the exact
+runtime identity and approximation envelope. We then derive the implemented
+particle and gas exchange, explain the current-normalization and
+refinement-interface choices that determine the represented physics, and
+separate local verification from distributed and campaign-level
+qualification. This organization is deliberate: a result is interpretable
+only after the method and the evidence path that produced it are both fixed.
 \TODO{Add verified primary citations for AMR, reproducibility, and GPU-portable
 astrophysical codes.}
 \TODO{State the contribution relative to prior Athena/Athena++ MHD-PIC work and
 other independently mapped methods. Do not claim cross-code agreement until
 \qgate{Q-022}, \qgate{Q-030}, and \qgate{Q-040} close.}
 
-\paragraph{Proposed central claim.}
+\paragraph{Release claim under evaluation.}
 \AUTHOR{Approve or revise: ``Within a precisely stated non-Hall, non-relativistic
 MHD applicability envelope, \athenak provides an auditable core MHD-PIC
 implementation whose corrected Bell linear and nonlinear behavior,
@@ -108,10 +126,13 @@ gates.''}
 reviewed evidence available at submission.}
 
 \paragraph{Dominant uncertainty.}
-The present dominant uncertainty is the transition from bounded local and
-selected GPU verification to complete long-horizon physical qualification,
-broad MPI/GPU portability, corrected Bell qualification, Section~5.4 shock
-results, and production-scale performance.
+The present uncertainty is not whether individual source-audited operators
+exist. It is whether their composition remains quantitatively faithful through
+long-horizon, multi-rank, accelerator-resident, adaptive calculations and
+whether the resulting raw evidence can cross a hardened provenance boundary.
+Until those questions close, nonlinear Bell saturation, the Section~5.4 shock,
+and production-scale performance remain intended demonstrations rather than
+results.
 
 \section{Scope, Runtime Identity, and Claim Discipline}
 \label{sec:scope}
@@ -131,6 +152,17 @@ results are outside this target paper.
 \GATE{Narrowing manuscript scope does not close or weaken an excluded claim.
 No excluded result or figure may re-enter without an explicit scope revision
 and its original evidence gate.}
+
+\subsection{Interpretive Rule}
+
+Each manuscript statement has three coordinates: a physical regime, an
+execution regime, and an evidence class. For example, a uniform-mesh
+opposite-impulse oracle establishes a discrete cancellation in its stated
+boundary and feedback envelope; it does not establish adaptive-mesh
+conservation or a long-time shock result. Likewise, a registered accelerator
+run establishes only the observables admitted from its bound raw artifacts; it
+does not broaden the physical model. We use this rule throughout the paper to
+prevent a true but narrow check from being promoted into a broader claim.
 
 \begin{table*}[htbp]
 \centering
@@ -166,8 +198,8 @@ Open \\
 Corrected-normalization nonlinear Bell evolution and saturation in the tested
 non-Hall regime &
 Historical foundation/analyzer artifacts inherit the invalid volume-blind,
-artificial-$\mathbb{C}$ normalization. A corrected volume-aware campaign
-design exists, but corrected implementation and qualifying nonlinear evidence
+artificial-$\mathbb{C}$ normalization. A blocked redesign awaits a
+physics-first successor; qualifying implementation and nonlinear evidence
 remain absent &
 \qgate{Q-019}, \qgate{Q-023}, \qgate{Q-025}, \qgate{Q-026},
 \qgate{Q-028}; see explicit gate in Section~\ref{sec:bell} &
@@ -491,6 +523,12 @@ Feedback impulse and energy-exchange kernels & Source-audited \\
 \section{Numerical Integration and Software Architecture}
 \label{sec:numerics}
 
+The equations in Section~\ref{sec:model} become a coupled method only after
+their stage ordering, interpolation, deposition, boundary handling, and
+restart semantics are specified. The important distinction in this section is
+between operations that are locally second order and compositions whose
+validity depends on mesh or execution topology.
+
 \subsection{Second-Order Coupled Stage Sequence}
 
 The intended coupled sequence is:
@@ -571,6 +609,22 @@ Because \texttt{paper\_smooth} permits a cross-interface particle's receiver
 weights to sum to a value other than unity, the uniform-mesh global
 conservation statement above is not extended to AMR interfaces.
 
+The interface choice exposes a numerical tradeoff rather than a missing volume
+conversion. Renormalizing the active receiver-leaf support can restore a
+per-particle partition of unity, but the position-dependent renormalization
+changes the \texttt{paper\_smooth} profile exactly where the raw mixed-level
+support is nonunit. A separately developed source-local
+\texttt{conservative\_partition} candidate applies such a scalar
+renormalization to every extensive moment and feedback channel. It is not part
+of the active paper candidate and remains unqualified: independent review
+found production-scale global particle-tag audits, serial host work and
+allocation per particle, and missing multi-rank, dynamic-AMR, restart, HIP,
+and performance evidence. We therefore treat \texttt{paper\_smooth} and a
+possible conservative extension as distinct methods with different
+observables and qualification requirements.
+\GATE{Do not describe \texttt{conservative\_partition} as a production option
+or use it to broaden the Section~5.4 conservation claim.}
+
 \subsection{Particle Provenance, Output, and Restart}
 
 Every cosmic-ray particle in the paper-mode layout carries its current
@@ -590,6 +644,11 @@ from these fields with explicit species, source-cohort, birth-time, bin-edge,
 weight, exclusion, and overflow semantics. Restart publication and qualifying
 continuations additionally require exact source/deck/executable bindings,
 completion markers, and retained raw-artifact inventories.
+The persistent tracking tag is useful provenance, but generic particle
+generation and restart do not by themselves prove global tag uniqueness.
+Receiver transport must therefore avoid using the tag as the sole identity of
+a stage-local particle contribution unless a separately qualified lifecycle
+contract establishes that uniqueness.
 \GATE{Separate bounded serial/two-rank evidence from broad MPI, AMR, HIP, and
 Frontier-filesystem qualification.}
 
@@ -612,8 +671,12 @@ scaling campaign close with retained evidence.}
 \section{Verification and Qualification Design}
 \label{sec:verification-design}
 
-The verification hierarchy must distinguish narrow implementation invariants
+The verification hierarchy distinguishes narrow implementation invariants
 from physical validation, paper reproduction, and production qualification.
+The hierarchy is cumulative: a broader evidence class consumes the narrower
+checks it depends on but does not erase their scope. This prevents a stable
+time series, a serial/MPI overlay, or a successful accelerator launch from
+standing in for the physical oracle that a claim actually requires.
 
 \begin{enumerate}
 \item Analytical and manufactured tests isolate equations and discrete
@@ -627,10 +690,77 @@ outputs.
 performance, usability, limitations, and named external review.
 \end{enumerate}
 
-\TODO{Insert the final evidence-class table and explain why a positive trend,
-stable output, or serial/MPI overlay is insufficient for physics validation.}
-\TODO{Describe seed policy, uncertainty intervals, exclusions, fit-window
-selection, independent recomputation, and discrepancy reporting.}
+\begin{table*}[htbp]
+\centering
+\caption{Evidence hierarchy used to control manuscript claims. A broader row
+requires the applicable narrower rows; no row is sufficient for a claim whose
+required oracle appears below it.}
+\label{tab:evidence-classes}
+\small
+\begin{tabular}{p{0.18\textwidth} p{0.27\textwidth} p{0.28\textwidth}
+                p{0.19\textwidth}}
+\toprule
+Evidence class & Question answered & Required structure & Explicitly
+insufficient substitute \\
+\midrule
+Source and parser audit &
+Is the intended equation and runtime composition represented and
+fail-closed? &
+Exact source/runtime identity, parameter constraints, units, signs, and
+excluded compositions &
+A deck that parses or a code path that can be reached \\
+Analytical or manufactured oracle &
+Does one operator reproduce a known invariant or solution? &
+Independent expected value, convergence or tolerance rule, and bounded
+execution scope &
+Finite output, a visually plausible trajectory, or agreement with itself \\
+Composition and topology regression &
+Does the operator survive coupling, boundaries, decomposition, AMR, restart,
+and accelerator execution? &
+Adversarial topology matrix, continuation semantics, retained failures, and
+scope-specific diagnostics &
+One serial/MPI overlay or one short successful GPU run \\
+Registered physical campaign &
+Does the frozen method support the intended physical claim? &
+Predeclared matrix, seeds, windows, exclusions, uncertainty, raw retention,
+and deterministic analysis &
+An engineering pilot, source-local smoke, or post-inspection threshold \\
+Provenance and independent review &
+Did the admitted result come from the bound execution and withstand
+independent reconstruction? &
+Immutable source/executable/deck/run bindings, trusted scheduler and artifact
+receipts, independent recomputation, and named disposition &
+Internally consistent self-attestation or manuscript assertion \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+Statistical and analysis choices are frozen before qualifying output is
+inspected. A registration must identify the qualifying seeds or a bounded
+sequential rule, maximum attempts and resource ceiling, fit windows, stop
+conditions, outlier treatment, exclusions, multiplicity handling, and
+uncertainty estimator. Failed, incomplete, and contradictory attempts remain
+in the evidence record. A changed window, threshold, or seed rule creates a
+new registration and cannot retroactively qualify the inspected dataset.
+
+The planned Section~5.4 campaign uses paired seeds across coarse-uniform,
+adaptive, and fine-uniform variants so that mesh-policy contrasts are not
+confounded with seed variation. Its resource policy admits only the largest
+affordable complete ordered prefix of paired triads and forbids dropping a
+member after launch. For three completed triads, summaries remain descriptive;
+an expanded sample must use the preregistered distribution-free paired
+analysis. A physics-first nonlinear Bell successor must similarly separate
+high-rigidity and finite-rigidity branches, because pooling them would erase a
+physical distinction in current response. This requirement is an analysis
+contract, not evidence that an acceptable Q019 design or either campaign
+exists.
+
+Independent recomputation has two jobs. It must reproduce the primary metric
+from archived raw output without trusting the producing analysis, and it must
+check that the raw bytes, executable, configuration, scheduler completion, and
+source closure are the objects named by the registration. The second job is
+essential: a deterministic analysis of substituted bytes is reproducible but
+not admissible.
 
 \begin{table*}[htbp]
 \centering
@@ -658,7 +788,7 @@ Bell linear & \runtime & \TODO{Bind corrected thin-2D/3V one-dimensional-
 variation plus 2D/3D matrix} &
 Signed phase and growth versus dispersion & Resolution, timestep, PPC, seed,
 MPI/GPU; corrected current oracle prerequisite & Blocked \\
-Bell nonlinear & \runtime & \TODO{Bind Q-019 campaign} &
+Bell nonlinear & \runtime & \TODO{Bind reviewed physics-first Q-019 successor} &
 Amplification, spectra, morphology, energy partition, saturation &
 Resolution, timestep, PPC, box, dimension, seed, decomposition, independent
 comparison; corrected current oracle prerequisite & Blocked \\
@@ -675,8 +805,22 @@ Node/rank/GPU/PPC/resolution matrix & Open \\
 \section{Core Implementation Verification}
 \label{sec:verification-results}
 
+The current evidence is sufficient to state how the core operators are tested,
+but not to promote the complete verification matrix to a release result.
+Bounded host oracles and selected registered accelerator slices isolate
+particle mechanics, paper-mode coupling, and runtime metadata. The missing
+step is composition across the exact multi-rank, adaptive, restart, and
+long-time regimes used by the central campaigns.
+
 \subsection{Relativistic Particle Mechanics}
 
+The particle-mechanics hierarchy begins with the continuum gyro solution,
+continues through discrete Boris convergence and artificial-light-speed
+sensitivity, and ends with matched CPU/GPU execution. The current source and
+bounded evidence support the operation order in
+Equations~\ref{eq:boris-electric-minus}--\ref{eq:boris-electric-plus} and a
+selected registered accelerator oracle. They do not yet establish the final
+paper-facing timestep and $\mathbb{C}$ matrix.
 \TODO{Insert the final gyro-convergence figure and quantitative table only after
 \claimid{CLAIM-PAPER-GYRO-001} receives the required disposition.}
 \TODO{Report the tested $\mathbb{C}$ values, timestep sequence, observed order,
@@ -684,12 +828,30 @@ energy/phase metrics, CPU/GPU scope, and uncertainty.}
 
 \subsection{Coupled Momentum and Energy Exchange}
 
+The relevant invariant is the sum of gas and particle changes, not the gas or
+particle channel alone. Uniform-mesh full-$f$ tests can therefore isolate the
+opposite-impulse cancellation and the absence of a direct CR-current
+contribution to paper-mode induction. Open boundaries, reflection, injection,
+removal, and floors require additional external-state terms; adaptive
+interfaces additionally change the particle shape sum. A reviewed
+source-local shock-accounting repair narrows the exact-accounting envelope to
+a fixed uniform mesh, but its proposed runtime-evidence verifier remains
+self-attested and cannot close the evidence gate.
 \TODO{Insert the final conservation and coefficient-invariance results.}
 \VERIFY{Distinguish the ideal-MHD energy-feedback path from exact-isothermal
 momentum-only carriers.}
 
 \subsection{Mesh Hierarchy, Decomposition, and Restart}
 
+Serial refine/derefine and restart stresses provide useful lifetime guards for
+particle state and reconstructed mesh ownership. A preregistered five-case
+dynamic-AMR engineering pilot further defines the required multi-rank HIP,
+migration, load-balance, restart-through-cutoff, and held-out full-geometry
+telemetry. It remains unexecuted and carries no scientific-AMR authority. The
+separate conservative receiver candidate also remains open for the correctness
+and performance reasons described in Section~\ref{sec:numerics}. Thus neither
+the lifetime guards nor the candidate policy extends uniform-mesh exact
+conservation to the Section~5.4 AMR run.
 \TODO{Report uniform, SMR, and true-AMR results with separately identified
 physical convergence, decomposition consistency, interface behavior, and
 restart continuity.}
@@ -735,16 +897,29 @@ close.}
 \paragraph{Current admissible statement.}
 The historical source-local high-rigidity, fixed-current-like foundation deck
 and bounded analyzer inherit the invalid volume-blind/artificial-$\mathbb{C}$
-Bell normalization. A separately named corrected volume-aware Q019 campaign
-design exists, but it grants no execution or claim authority and does not
-support a production result. The bounded reference map further establishes
-that the retained target-paper Bell benchmark is linear and supplies no
-standalone nonlinear-saturation dataset or numerical acceptance tolerance.
-Any accepted AthenaK result remains a no-Hall result and does not validate
-Hall-dominated shock-front evolution.
-\TODO{Complete and review corrected source, deck, and analyzer successors.
-Prohibit physical execution until the deposited-current oracle and corrected
-linear Bell predecessor close.}
+Bell normalization. A blocked source-local Q019 redesign catalogs possible
+high-rigidity and finite-rigidity branches, relabels the tiled high-rigidity
+pair as a replication control rather than a box-size test, and proposes
+non-tiled box, finite-rigidity resolution, particle-count, quiet-start, and
+noise-seeded sensitivities. It has not passed a physics-first successor review,
+is outside the integrated paper candidate, remains unexecuted, and grants no
+execution or claim authority.
+
+The registered Q043 current-oracle path is also still open. A hardened
+successor added scheduler-exit, source-closure, raw-inventory, and cycle-zero
+checks, but independent adversarial review found that a frozen run root could
+be substituted before reconciliation, a verified installed control-plane
+generation could be replaced before import, and the bytes hashed for binding
+could differ from those reopened for scientific analysis. Until those trust
+gaps close, even a numerically correct cycle-one current matrix cannot cross
+the registered-evidence boundary. The bounded reference map further
+establishes that the retained target-paper Bell benchmark is linear and
+supplies no standalone nonlinear-saturation dataset or numerical acceptance
+tolerance. Any accepted AthenaK result remains a no-Hall result and does not
+validate Hall-dominated shock-front evolution.
+\TODO{Develop and independently review a physics-first Q019 source, deck,
+analyzer, and trusted-evidence successor. Prohibit physical execution until the
+deposited-current oracle and corrected linear Bell predecessor close.}
 \TODO{Run and analyze the preregistered nonlinear sensitivity matrix covering
 particle count, resolution, timestep, box size, dimensionality, decomposition,
 and seed.}
@@ -836,6 +1011,17 @@ $P_0=1$ value is anchored to \citet{BaiEtAl2015}, who specify $P_0=T_0=1$ and
 argue that the pressure choice is unimportant only while $T_0\ll v_0^2$.
 \citet{SunBai2023} Section~5.4 does not state $P_0$.
 
+The shock's adaptive-mesh interpretation remains a separate open question.
+The active \texttt{paper\_smooth} policy follows the intended
+receiver-resolution profile but is not individually conservative at
+fine/coarse interfaces. The reviewed \texttt{conservative\_partition}
+candidate proves a bounded serial partition-of-unity construction, yet it is
+not production viable or scientifically qualified and has not replaced
+\texttt{paper\_smooth}. The registered dynamic-AMR engineering matrix is
+preregistered but unexecuted. Therefore a future coarse/AMR/fine comparison
+must distinguish physical convergence and morphology from the numerical
+consequences of the selected interface policy.
+
 \paragraph{Explicit result gate.}
 \GATE{\claimid{CLAIM-PAPER-SHOCK-001} remains open. Do not insert shock
 morphology, magnetic amplification, downstream spectra, acceleration slope,
@@ -862,6 +1048,23 @@ generality.}
 \section{Performance and Scalability}
 \label{sec:performance}
 
+Performance is part of the method's applicability envelope because particle
+deposition, communication, and adaptive ownership changes can alter which
+physical matrices are feasible. The registered measurement design therefore
+is designed to record stage-resolved particle push, deposition, coupling,
+communication, AMR/load-balance, output, and checkpoint times together with
+particle counts, mesh levels, host/device memory high-water marks, and
+artifact-publication cost. Throughput alone is insufficient: a faster
+configuration is admissible only if its physical and provenance gates remain
+unchanged.
+
+Scaling measurements must bind the exact source and executable, machine and
+software environment, rank/GPU placement, problem geometry, particle count,
+mesh hierarchy, output cadence, and sorting/load-balance settings. Repeated
+measurements and retained failures are required to distinguish a systematic
+trend from queue, filesystem, or initialization variability. Comparisons
+between uniform and adaptive runs must report both cost and the different
+numerical interface policy; they are not pure performance comparisons.
 \TODO{Insert registered Frontier timing, throughput, memory, communication,
 sorting, and load-balance measurements.}
 \TODO{Report exact hardware, software environment, node/rank/GPU mapping,
@@ -873,11 +1076,49 @@ scaling.}
 \section{Discussion: Applicability, Failure Modes, and Limitations}
 \label{sec:discussion}
 
-\TODO{Synthesize what is robust, what depends on stated assumptions, and what
-remains unqualified. Do not repeat the results section.}
-\TODO{Address the strongest objection: bounded local and selected GPU checks do
-not by themselves establish long-horizon physical fidelity or production
-operation.}
+The method is best understood as a chain of controlled approximations. MHD-PIC
+removes thermal kinetic scales while retaining an explicitly kinetic energetic
+population. Paper mode then narrows the electromagnetic coupling further by
+using ideal-MHD induction without a CR Hall term. Finally, numerical choices
+such as artificial particle light speed, particle shape, mesh-interface
+policy, and injection prescription select a computable member of that physical
+model. The value of the implementation follows from making this chain
+auditable, not from treating any one member as general plasma physics.
+
+The Bell current-normalization defect illustrates why source audit and physical
+validation cannot be separated. Omitting the root-cell volume changes the
+driving current when dimension or resolution changes; multiplying deposited
+$J_{\rm CR}/c$ by $\mathbb{C}$ changes the target mode itself. A run may remain
+stable and display filamentary structure under either error. Stability and
+morphological plausibility therefore cannot validate the represented Bell
+problem. The corrected direct-current oracle, corrected linear predecessor,
+and a physics-first nonlinear sensitivity matrix are necessary in that order.
+
+The AMR interface presents a different tradeoff. Evaluating TSC at receiver
+resolution preserves the intended local smoothness but sacrifices exact
+per-particle partition of unity at mixed levels. Renormalizing the support can
+restore extensive conservation while changing the deposited profile and
+introducing additional communication and computation. Neither choice is
+universally preferable; each defines a distinct numerical method whose
+smoothness, conservation, noise, scaling, and nonlinear consequences must be
+measured. The current paper candidate uses \texttt{paper\_smooth}, so exact
+uniform-mesh conservation is not an AMR claim.
+
+The parallel-shock calculation adds model uncertainty beyond numerical error.
+Its ideal moving injection surface and monoenergetic isotropic source provide a
+controlled energetic-particle population, but they do not resolve thermal-pool
+injection. The detected shock front need not coincide with the ideal injection
+surface, and the selected $P_0=1$ baseline is a provenance decision rather
+than evidence of pressure independence. Any accepted Section~5.4 comparison
+must preserve these distinctions.
+
+The strongest remaining objection is evidentiary: bounded local or selected
+accelerator checks do not establish long-horizon physical fidelity, and an
+internally consistent receipt does not prove that registered bytes were the
+bytes analyzed. The current Q043 hardening review demonstrates this point by
+exposing path-substitution and reopen-after-verification gaps despite extensive
+negative tests. We therefore treat trusted execution provenance as part of
+numerical qualification rather than post-processing administration.
 
 \begin{itemize}
 \item The paper-mode formulation excludes CR Hall induction; Hall behavior is a
@@ -891,6 +1132,14 @@ thin 2D/3V mesh, not a native 1D particle calculation.
 explicitly qualified uniform-mesh, full-$f$, closed-domain envelope.
 \item MHD-PIC does not resolve thermal-pool injection physics in the Section~5.4
 shock setup.
+\item The selected artificial particle light speed requires campaign-specific
+convergence; parser enforcement of subluminal initialized velocity is not a
+physical adequacy test.
+\item \texttt{paper\_smooth} AMR deposition and a possible conservative
+extension are different numerical policies; neither may inherit the other's
+claims.
+\item Registered-evidence admission remains open wherever verified paths or
+bytes can be substituted before trusted analysis.
 \item AMR-interface, broad MPI/HIP, resilience, performance, archive, and
 external-review boundaries must remain explicit.
 \item \TODO{Update this list from the final closed and open claim manifests.}
@@ -899,6 +1148,37 @@ external-review boundaries must remain explicit.
 \section{Reproducibility and Evidence Provenance}
 \label{sec:reproducibility}
 
+Reproducibility in this work means more than rerunning a command. A
+result-bearing evidence chain must bind (1) the source tree and dependencies,
+(2) the built executable and environment profile, (3) the exact input deck,
+runtime parameters, and registered policy slice, (4) scheduler identity and
+terminal state, (5) the complete raw-artifact inventory, (6) deterministic
+analysis and figure/table reconstruction, and (7) the accepted claim scope.
+Each link must fail closed if an expected object is absent, mutable,
+substituted, or inconsistent with the preceding link.
+
+Registered runs use one immutable run root of the form
+\path{runs/<campaign>/<submission-id>/}. Reservation, scheduler attachment,
+cancellation, and reconciliation events enter an append-only hash-chained
+node-hour ledger. Compact ledger state is mirrored separately from the Orion
+bulk-evidence root, while each run retains exact decks, launch metadata,
+scheduler records, raw products, and inventories. The mirror proves accounting
+continuity; it does not turn Orion-only bulk retention into a durable
+institutional archive.
+
+Admission to manuscript evidence occurs after execution. The admission process
+must independently verify the installed control-plane generation, scheduler
+completion, executable/source closure, raw inventory, and analyzed bytes, then
+recompute the scientific oracle without trusting a self-issued result. This
+requirement remains open for Q043: the latest reviewed hardening successor can
+still admit substituted run roots or installed modules and can reopen raw
+bytes after binding them. No downstream Bell claim may rely on that successor
+until those defects close.
+
+The active production policy currently authorizes no registered-science
+slices. Existing source-local preparations, preregistrations, engineering
+pilots, and bounded registered oracles therefore remain distinct from the
+future Bell and Section~5.4 evidence packages.
 \TODO{Provide the final code commit, source tree, submodule state, executable
 digest, runtime profiles, input decks, campaign registrations, artifact roots,
 analysis revisions, figure-generation commands, claim manifests, reviewer
@@ -911,9 +1191,19 @@ traceable.}
 \section{Conclusions}
 \label{sec:conclusions}
 
-\TODO{Write the conclusion only after the central claim and dominant limitation
-are fixed. Leave the reader with the verified method result, its applicability
-envelope, and the next decisive test.}
+The currently defensible conclusion is methodological. \athenak's active
+paper-mode candidate defines a source-auditable non-Hall MHD-PIC update with
+relativistic particle mechanics, TSC coupling, ideal-MHD induction, and a
+bounded opposite-impulse exchange. The same audit identifies where broader
+claims stop: Bell calculations require a corrected volume-aware current
+closure, AMR introduces a smoothness--conservation policy choice, the
+Section~5.4 injection model does not resolve thermal injection, and registered
+evidence remains subject to an open trust-boundary repair. The next decisive
+tests are therefore not additional source-local demonstrations but the
+hardened registered current oracle, corrected Bell predecessor, a physics-first
+nonlinear campaign, and the paired coarse/AMR/fine shock campaign.
+\GATE{Replace this methods-only conclusion with the strongest closed
+result-bearing conclusion after final claim and provenance review.}
 
 \appendix
 
@@ -948,6 +1238,12 @@ Do not imply a qualifying shock campaign \\
 \path{docs/source/engineering/pic_supported_toolchains.md} &
 Declared build/toolchain scope &
 Build success is not scientific qualification \\
+\path{tst/publication/q009_dynamic_amr_load_balance_registered_pilot_contract_v1.json} &
+Preregistered dynamic-AMR engineering-pilot matrix and inspection boundary &
+Unexecuted contract; no scientific-AMR authority \\
+\path{tst/publication/readiness/q043_registered_launch_policy_preparation_successor_v1_2026-06-06.json} &
+Q043 launch-policy preparation and exact registered-matrix boundary &
+Planning evidence only; reviewed registered-admission hardening remains open \\
 \path{STATUS_UPDATE.md} &
 Bounded local-readiness results and limitations &
 Historical snapshot; reconcile with current plan \\
@@ -957,6 +1253,10 @@ Engineering calibration and selection only \\
 \bottomrule
 \end{tabular}
 \end{table*}
+
+Unintegrated successor branches and independent review reports may identify
+necessary repairs and constrain draftable limitations, but they are not the
+authoritative release source and cannot support a positive result claim.
 
 \section{Equation and Figure Release Checklist}
 \label{app:release-checklist}
