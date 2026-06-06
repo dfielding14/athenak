@@ -1,0 +1,64 @@
+{
+  "record_type": "q019_nonlinear_bell_schema7_particle_state_reducer_readiness",
+  "schema_version": 1,
+  "date": "2026-06-06",
+  "gate": "Q-019",
+  "campaign_id": "Q019-HR-VOLUME-AWARE-NOHALL",
+  "claim_id": "CLAIM-PROD-BELL-NONLINEAR-NOHALL-001",
+  "status": "source_local_reducer_and_adversarial_tests_complete_raw_restart_extractor_and_production_evidence_absent",
+  "qualification_effect": "none_source_local_analysis_component_only",
+  "scope": "A fail-closed source-local reducer for trusted full-f AthenaK schema-7 particle-state extraction. It reconstructs physical velocity from stored mass-normalized momentum, macro mass, CR momentum, kinetic energy, momentum-flux and velocity-pressure tensors, deposited J_CR/c, reconstructed lab-frame and gas-frame current, sampled-field gyroradius, and gas-plus-CR conservation residuals.",
+  "authority": {
+    "launch_authorized": false,
+    "policy_mutation_authorized": false,
+    "scientific_claim_authorized": false,
+    "production_evidence_available": false,
+    "independent_recompute_complete": false,
+    "external_review_complete": false
+  },
+  "component_bindings": {
+    "reducer": {
+      "path": "tst/publication/q019_nonlinear_bell_particle_state.py",
+      "sha256": "186847fff3f5d2fe4411ed679804c48808521e56fb3d39f16e3d7b9cddf621c1"
+    },
+    "focused_tests": {
+      "path": "tst/publication/test_q019_nonlinear_bell_particle_state.py",
+      "sha256": "32ae8f3a1d50e5e576e4d1315db7940716cb151bdc15bcb02ede7416b4e4515c"
+    }
+  },
+  "physical_definitions": {
+    "stored_state": "u_equals_p_over_m",
+    "lorentz_factor": "gamma_equals_sqrt_1_plus_u_squared_over_C_squared",
+    "physical_velocity": "v_equals_u_over_gamma",
+    "macro_mass": "deposit_qscale_times_macro_weight_times_species_mass",
+    "cr_momentum": "sum_macro_mass_times_u",
+    "cr_kinetic_energy": "sum_macro_mass_times_gamma_minus_1_times_C_squared",
+    "momentum_flux_tensor": "sum_macro_mass_times_u_i_times_v_j_over_volume",
+    "deposited_current": "J_CR_over_c_equals_sum_macro_mass_times_q_over_mc_times_v_over_volume",
+    "gas_frame_current": "J_CR_gas_equals_J_CR_lab_minus_rho_charge_times_u_gas",
+    "gyroradius": "absolute_u_perpendicular_divided_by_absolute_q_over_mc_times_absolute_sampled_B"
+  },
+  "fail_closed_contract": [
+    "restart_schema_must_equal_7",
+    "state_kind_must_be_mass_normalized_momentum",
+    "deltaf_mode_must_be_off",
+    "particle_q_over_mc_must_exactly_match_the_bound_species_table",
+    "all_arrays_shapes_types_and_values_must_be_finite_and_canonical",
+    "macro_weights_species_masses_domain_volume_deposit_qscale_and_artificial_light_speed_must_be_positive",
+    "sampled_particle_magnetic_field_must_be_nonzero",
+    "mhd_total_energy_must_equal_the_bound_kinetic_thermal_and_magnetic_components"
+  ],
+  "remaining_gates": [
+    "implement_and_review_a_trusted_raw_schema_7_restart_extractor_with_exact_retained_artifact_digest_binding",
+    "bind_corrected_volume_aware_Bell_source_decks_and_direct_deposited_current_oracle",
+    "freeze_production_raw_output_and_restart_cadence",
+    "run_excluded_pilots_then_registered_qualifying_campaign",
+    "independent_recompute_and_named_external_review"
+  ],
+  "limitations": [
+    "The reducer does not parse raw AthenaK restart bytes and accepts only a separately trusted extracted state.",
+    "The reducer uses each particle's stored sampled magnetic field for gyroradius reconstruction.",
+    "The reducer accepts full-f deltaf-off states only.",
+    "The reducer does not classify a saturation mechanism or authorize a scientific claim."
+  ]
+}
