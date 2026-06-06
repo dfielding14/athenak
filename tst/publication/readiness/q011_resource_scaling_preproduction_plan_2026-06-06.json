@@ -1,0 +1,418 @@
+{
+  "record_type": "q011_resource_scaling_preproduction_plan",
+  "schema_version": 1,
+  "date": "2026-06-06",
+  "gate": "Q-011",
+  "qualification_effect": "resource_planning_only_no_execution_authorization_no_claim_closure",
+  "scope": "Versioned additive resource audit and preproduction scaling-pilot design for the Q-011 Section 5.4 shock campaign. It does not alter a historical preregistration, inspect a qualifying output, authorize a Frontier submission, or close a scientific claim.",
+  "historical_and_evidence_boundaries": {
+    "historical_preregistration_mutation": "forbidden",
+    "qualifying_output_inspection": "forbidden",
+    "qualifying_campaign_results_inspected": false,
+    "engineering_pilot_physical_field_inspection": "forbidden_resource_telemetry_scheduler_accounting_and_artifact_byte_counts_only",
+    "matrix_change_rule": "Any matrix change requires a separately reviewed versioned qualifying-preregistration successor before the first qualifying output is inspected.",
+    "authorization_boundary": "Every scaling pilot and production run still requires a separately reviewed registered-science policy and the installed control plane."
+  },
+  "source_and_evidence_bindings": {
+    "paper_deck": {
+      "path": "inputs/publication/pic_parallel_shock_section54_paper_vl2_tsc.athinput",
+      "sha256": "0b1cbd62d54027ec81a5f4f5c88d5ee56b86b8cc0cb018c3fbebfb37a11be7b1"
+    },
+    "tracked_qualifying_preregistration_predecessor": {
+      "path": "tst/publication/readiness/q011_section54_qualifying_campaign_preregistration_successor_v2_2026-06-01.json",
+      "sha256": "6fd9ebbc247b6cace69f0ff61553cf198241577b457410d57d26afcbf27cdc35"
+    },
+    "storage_planning_successor": {
+      "path": "tst/publication/readiness/q011_parallel_shock_storage_estimator_successor_v3_2026-06-02.json",
+      "sha256": "6a8080a63882669773161a51f06acf24e7020a1f1d2dacc1797223823be454b8"
+    },
+    "pressure_pilot_analysis": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/publication/q011_section54_pressure_pilot_analysis.json",
+      "sha256": "d55b4c2020716df899c86dfe5a9018d48194d63590616ff60541067243daacb7",
+      "classification": "engineering_calibration_only"
+    },
+    "pressure_pilot_bundle_manifest": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/publication/q011_section54_pressure_pilot_bundle/pressure_pilot_manifest.json",
+      "sha256": "7b3fb8de9e4dc8d6d8b2320a2c2aeaadf8bc6f076dab6b3e98ef8a415abdbf55",
+      "classification": "engineering_calibration_only"
+    },
+    "selected_pressure_receipt": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/publication/q011_section54_pressure_selection_receipt.json",
+      "sha256": "e5c1492cfc67d5cfad0110e7d772bf75f9d6d2e1fd90b0d5d8dd3338965905cc",
+      "selected_case_id": "ps_p0_1p00",
+      "selected_problem_ps_p0": 1.0
+    }
+  },
+  "frontier_budget_audit_snapshot": {
+    "active_policy": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/storage_policy.json",
+      "sha256": "aeab7e4ef92c7cbbd5b84fcd139c046f2a96f21b4f280fa6dd89c80deca981d1",
+      "account": "AST207",
+      "partition": "batch",
+      "maximum_node_hours": 10000.0,
+      "serial_pic_submissions": true
+    },
+    "frontier_node_gpu_visible_gcd_count": 8,
+    "ledger": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/ledger/node_hours.jsonl",
+      "snapshot_sha256": "7a1c6c30c9a521b6ca894cb6a2c7f9196cea92e40b4669e41c02f7902e944657",
+      "validated_record_count": 123,
+      "head_sequence_number": 122,
+      "head_event_sha256": "50ed1c9010cd2c837ea5a83eba9d96db7b3474edd3db17cc26d830ae7129bd31",
+      "cumulative_consumed_node_hours": 1.3019444444444446,
+      "currently_reserved_node_hours": 0.0,
+      "remaining_unreserved_node_hours": 9998.698055555555
+    },
+    "budget_scope_warning": "The 10000-node-hour cap is project-wide, not a Q-011-only allocation. A protected non-Q011 reserve for the nonlinear Bell campaign and other required methods work must be bound before Q-011 production authorization."
+  },
+  "current_campaign_matrix": {
+    "grid_variants": [
+      "coarse_uniform_dx12",
+      "three_level_amr_root_dx12_finest_dx3",
+      "fine_uniform_dx3"
+    ],
+    "qualifying_seeds": [
+      23050101,
+      23050102,
+      23050103,
+      23050104,
+      23050105,
+      23050106,
+      23050107,
+      23050108
+    ],
+    "paired_seed_rule": "Use the same qualifying seed for coarse-uniform, AMR and fine-uniform variants.",
+    "baseline_attempt_count": 24,
+    "additional_cost_obligations": [
+      "one observed-checkpoint-bound AMR restart-continuation carrier",
+      "failed-attempt and replacement reserve",
+      "preproduction scaling pilots",
+      "output publication and wrapper overhead",
+      "protected non-Q011 project reserve"
+    ]
+  },
+  "geometry_and_cadence": {
+    "pressure_pilot": {
+      "nx1": 100,
+      "nx2": 20,
+      "active_cells": 2000,
+      "meshblocks": 5,
+      "x1_extent": 1200.0,
+      "x2_extent": 240.0,
+      "root_dx": 12.0,
+      "tlim": 60.0,
+      "cycles": 874,
+      "mpi_ranks": 1,
+      "gpu_visible_gcds_used": 1
+    },
+    "production": {
+      "x1_extent": 48000.0,
+      "x2_extent": 3120.0,
+      "tlim": 1200.0,
+      "root_dx": 12.0,
+      "finest_dx": 3.0,
+      "coarse_uniform_dx12": {
+        "nx1": 4000,
+        "nx2": 260,
+        "cell_count": 1040000,
+        "meshblock_count": 2600,
+        "projected_cycles_from_pressure_pilot_cadence": 17480
+      },
+      "three_level_amr_root_dx12_finest_dx3": {
+        "root_nx1": 4000,
+        "root_nx2": 260,
+        "root_cell_count": 1040000,
+        "full_domain_finest_equivalent_cell_count": 16640000,
+        "projected_cycles_after_finest_level_activation_from_pressure_pilot_cadence": 69920,
+        "time_weighted_active_cell_fraction_of_full_fine_domain": "unknown_requires_scaling_pilot"
+      },
+      "fine_uniform_dx3": {
+        "nx1": 16000,
+        "nx2": 1040,
+        "cell_count": 16640000,
+        "meshblock_count": 41600,
+        "projected_cycles_from_pressure_pilot_cadence": 69920
+      }
+    }
+  },
+  "pressure_pilot_observations": {
+    "selected_case_id": "ps_p0_1p00",
+    "selected_problem_ps_p0": 1.0,
+    "terminal_particles": 142536,
+    "particle_updates": 139581103,
+    "driver_seconds_rank_max": 54.266364554,
+    "output_publication_seconds_rank_max": 146.669497363,
+    "scheduler_elapsed_seconds": 232,
+    "wrapper_and_unattributed_seconds": 31.064138083,
+    "zone_cycles_per_second": 32211.481538634856,
+    "particle_updates_per_second": 2572147.6672922145,
+    "particle_memory_high_water_bytes_rank_max": 81221560,
+    "published_case_bytes": 80718103,
+    "published_case_components_bytes": {
+      "mesh_bin": 844924,
+      "particle_vtk": 47285325,
+      "restart": 32459924
+    },
+    "interpretation": "This one-rank, one-GPU, five-MeshBlock pilot is severely underfilled and particle-heavy. It measures a valid engineering point but cannot identify production field throughput, multi-node efficiency, AMR occupancy, or parallel output bandwidth."
+  },
+  "analytical_work_model": {
+    "classification": "transparent_geometry_scaling_not_execution_authorization",
+    "equations": {
+      "retained_particle_time_integral": "I(T) = 0.5 * 45^2 + 0.5 * (T - 45)^2 for T >= 45",
+      "particle_work_ratio": "R_particle(v) = I(1200) / I(60) * (3120 / 240) * cadence_multiplier(v)",
+      "zone_work_ratio": "R_zone(v) = production_active_cells(v) / 2000 * production_cycles(v) / 874",
+      "ideal_driver_node_hours": "C_driver(v) = 54.266364554 * R(v) / (8 * 3600)",
+      "amr_zone_ratio": "R_zone(amr) = 665600 * f_amr, where f_amr is the time-weighted active-cell fraction relative to a full fine domain",
+      "project_authorization_budget": "C_consumed + C_reserved + C_preproduction + C_baseline + C_restart + max(C_fine, 0.15 * C_baseline) + R_nonQ011 <= 10000"
+    },
+    "project_authorization_budget_term_definitions": {
+      "C_consumed": "Validated project-wide Frontier node-hours already consumed at the authorization-time ledger head.",
+      "C_reserved": "Project-wide Frontier node-hours reserved but not yet consumed at the authorization-time ledger head.",
+      "C_preproduction": "Conservative authorization cost for all remaining Q011 engineering pilots and readiness executions.",
+      "C_baseline": "Conservative authorization cost for every selected coarse-AMR-fine qualifying baseline attempt.",
+      "C_restart": "Conservative authorization cost for the required observed-checkpoint-bound AMR restart-continuation carrier.",
+      "C_fine": "Conservative authorization cost for one selected fine-uniform qualifying baseline attempt, used as the minimum failed-attempt replacement reserve.",
+      "R_nonQ011": "Separately bound protected project-wide reserve for the nonlinear Bell campaign and other required non-Q011 methods work."
+    },
+    "exact_inputs": {
+      "I_60": 1125.0,
+      "I_1200": 668025.0,
+      "transverse_extent_ratio": 13.0,
+      "coarse_cadence_multiplier": 1.0,
+      "amr_and_fine_cadence_multiplier": 4.0
+    },
+    "constant_rate_ideal_eight_gpu_node_brackets": {
+      "coarse_uniform_dx12": {
+        "particle_work_ratio": 7719.4,
+        "zone_work_ratio": 10400.0,
+        "projected_particle_updates": 1077482366498.2,
+        "driver_node_hours_lower": 14.545269949241234,
+        "driver_node_hours_upper": 19.596187200055553
+      },
+      "three_level_amr_root_dx12_finest_dx3": {
+        "particle_work_ratio": 30877.6,
+        "zone_work_ratio": "665600 * f_amr",
+        "projected_particle_updates": 4309929465992.8,
+        "minimum_root_only_zone_ratio_after_finest_activation": 41600.0,
+        "driver_node_hours_particle_floor": 58.18107979696494,
+        "driver_node_hours_root_only_zone_value": 78.38474880022221,
+        "driver_node_hours_full_fine_zone_value": 1254.1559808035554
+      },
+      "fine_uniform_dx3": {
+        "particle_work_ratio": 30877.6,
+        "zone_work_ratio": 665600.0,
+        "projected_particle_updates": 4309929465992.8,
+        "driver_node_hours_lower": 58.18107979696494,
+        "driver_node_hours_upper": 1254.1559808035554
+      }
+    },
+    "matrix_brackets_driver_only": {
+      "one_complete_paired_triad_node_hours": {
+        "lower": 130.9074295431711,
+        "upper": 2527.908148807166
+      },
+      "three_complete_paired_triads_node_hours": {
+        "lower": 392.7222886295133,
+        "upper": 7583.724446421498,
+        "upper_with_25_percent_margin": 9479.655558026872
+      },
+      "current_eight_complete_paired_triads_node_hours": {
+        "lower": 1047.2594363453688,
+        "upper": 20223.26519045733,
+        "upper_with_25_percent_margin": 25279.08148807166
+      }
+    },
+    "identifiability_result": "The pressure pilot supplies one mixed driver-time equation for field and particle work. Because field and particle coefficients, multi-node efficiency, AMR occupancy, and parallel I/O scaling are unknown, no single defensible full-campaign point estimate follows from the pilot alone."
+  },
+  "scenario_only_likely_cost_envelope": {
+    "classification": "planning_scenario_only_not_measured_not_authorization",
+    "assumptions": {
+      "large_grid_per_gpu_throughput_improvement_over_tiny_pressure_pilot": [
+        4.0,
+        8.0
+      ],
+      "multi_node_efficiency": [
+        0.65,
+        0.8
+      ],
+      "amr_time_weighted_active_cell_fraction_of_full_fine_domain": [
+        0.2,
+        0.4
+      ],
+      "output_wrapper_restart_and_failure_uplift_factor": [
+        1.35,
+        1.75
+      ]
+    },
+    "calculation_rule": "For each variant, take max(particle_floor / efficiency, zone_value / (large_grid_improvement * efficiency)); sum one paired triad; multiply by triad count and the uplift factor.",
+    "three_complete_paired_triads_total_node_hours": [
+      1161.8227271924186,
+      3662.8835107077684
+    ],
+    "current_eight_complete_paired_triads_total_node_hours": [
+      3098.1939391797832,
+      9767.689361887384
+    ],
+    "interpretation": "The current eight-seed matrix may fit only near favorable scaling and leaves no robust allowance for preproduction, Bell, or failure recovery. It is therefore not resource-ready."
+  },
+  "storage_context": {
+    "current_24_run_reservation_envelope_tb_decimal": 10.553535598859627,
+    "per_run_retained_particle_count_at_t1200_analytical_approx": 160160000.0002002,
+    "coarse_logical_bytes_per_run_before_filesystem_overhead_approx": 285573133056.35236,
+    "amr_and_fine_logical_bytes_per_run_before_filesystem_overhead_approx": 336919597056.35236,
+    "storage_disposition": "Capacity planning is closed for the current 24-run envelope, but actual output and checkpoint publication time remains an unmeasured node-hour risk."
+  },
+  "preproduction_scaling_pilot_design": {
+    "hard_consumed_node_hour_cap": 500.0,
+    "engineering_seed_policy": {
+      "seeds": [
+        24060601,
+        24060602,
+        24060603,
+        24060604
+      ],
+      "must_be_disjoint_from_qualifying_seeds": true,
+      "qualification_effect": "none"
+    },
+    "common_requirements": [
+      "Use selected problem/ps_p0=1.0.",
+      "Use the final clean candidate and installed control plane selected for future Q-011 work.",
+      "Use normal QOS for multi-node scaling and production-shaped engineering runs.",
+      "Retain scheduler accounting, Q017 telemetry, active-cell and MeshBlock histories, particle-update counts, memory high-water marks, output timer records, and exact artifact byte counts.",
+      "Do not inspect or reduce engineering-pilot physical fields for scientific conclusions.",
+      "Do not use any qualifying seed or qualifying campaign root.",
+      "Stop before the 500-node-hour pilot cap."
+    ],
+    "phase_1_full_geometry_short_step_strong_scaling": {
+      "purpose": "Measure full-geometry field throughput, memory feasibility, and node-hour efficiency before late particle loading.",
+      "physics_and_geometry": "Exact production geometry and physical parameters with a separately validated engineering-only output-suppressed deck.",
+      "cycle_limit": 512,
+      "node_ladders": {
+        "coarse_uniform_dx12": [
+          4,
+          8,
+          16
+        ],
+        "three_level_amr_root_dx12_finest_dx3": [
+          8,
+          16,
+          32
+        ],
+        "fine_uniform_dx3": [
+          32,
+          64,
+          128
+        ]
+      },
+      "sampling": "Run each ladder point once, then repeat the selected node count three times.",
+      "node_selection_rule": "Choose the smallest node count whose median node-hours per completed cycle is within 10 percent of the minimum observed value and whose memory and projected walltime pass the later gates.",
+      "bulk_output_rule": "Bulk outputs must be disabled by a separately tested engineering deck; retain stdout telemetry only."
+    },
+    "phase_2_reduced_transverse_full_time_calibration": {
+      "purpose": "Measure late particle load, AMR occupancy history, checkpoint and output costs, and full-tlim stability without creating a qualifying dataset.",
+      "geometry": {
+        "x1_extent": 48000.0,
+        "x2_extent": 240.0,
+        "coarse_and_amr_root_nx1": 4000,
+        "coarse_and_amr_root_nx2": 20,
+        "fine_nx1": 16000,
+        "fine_nx2": 80,
+        "transverse_scale_relative_to_production": 0.07692307692307693
+      },
+      "time_and_outputs": "Run all three variants to t=1200 with production output and restart cadence using engineering seed 24060604.",
+      "node_counts": "Select from Phase 1 and scale down only after a memory and MeshBlock-per-rank check.",
+      "allowed_inspection": [
+        "scheduler elapsed and node-hours",
+        "runtime timing telemetry",
+        "particle counts and particle-update counts",
+        "active-cell and MeshBlock counts",
+        "memory high-water marks",
+        "artifact byte counts and output publication times"
+      ],
+      "forbidden_inspection": [
+        "shock morphology",
+        "spectra",
+        "magnetic amplification",
+        "scientific profile or residual metrics"
+      ]
+    },
+    "phase_3_held_out_cost_model_validation": {
+      "purpose": "Reject a cost model that does not predict an independent production-shaped engineering run.",
+      "run": "One additional full-geometry short-step run per variant at the selected node count and engineering seed 24060603.",
+      "model": "Fit a nonnegative additive driver model from active-cell cycles and particle updates; model I/O separately from exact bytes and output timers.",
+      "authorization_cost_rule": "For each variant, use max(model projection, reduced-transverse direct extrapolation) multiplied by max(1.25, 1 + maximum held-out absolute fractional residual).",
+      "validation_threshold": "The held-out total driver-plus-output prediction must be within 20 percent; otherwise resource readiness fails and a versioned successor is required."
+    }
+  },
+  "decision_gates": [
+    {
+      "gate_id": "Q011-RS-0",
+      "decision": "source_and_evidence_boundary",
+      "pass_condition": "All source and evidence bindings match; no qualifying output has been inspected; the final clean candidate and installed control plane are separately bound.",
+      "failure_action": "Stop and create a versioned successor."
+    },
+    {
+      "gate_id": "Q011-RS-1",
+      "decision": "full_geometry_feasibility",
+      "pass_condition": "Every variant completes Phase 1 without OOM or runtime failure, telemetry is complete, and one node count satisfies the node-selection rule.",
+      "failure_action": "Stop production planning and repair or redesign before any qualifying run."
+    },
+    {
+      "gate_id": "Q011-RS-2",
+      "decision": "late_load_and_io_feasibility",
+      "pass_condition": "Every reduced-transverse variant reaches exact terminal time, peak device-memory use is at most 70 percent of available device memory after production scaling, and no projected production output event exceeds 20 percent of requested walltime.",
+      "failure_action": "Stop and revise resources, output strategy, or deck through a versioned successor."
+    },
+    {
+      "gate_id": "Q011-RS-3",
+      "decision": "cost_model_validation",
+      "pass_condition": "The held-out driver-plus-output prediction is within 20 percent and the authorization-cost rule is evaluated from retained telemetry.",
+      "failure_action": "Do not authorize production; add a versioned resource-scaling successor."
+    },
+    {
+      "gate_id": "Q011-RS-4",
+      "decision": "project_budget",
+      "pass_condition": "C_consumed + C_reserved + C_preproduction + C_baseline + C_restart + max(C_fine, 0.15 * C_baseline) + R_nonQ011 is at most 10000 node-hours.",
+      "failure_action": "Reduce only through a versioned pre-inspection matrix successor, redesign the campaign, or obtain a larger cap."
+    },
+    {
+      "gate_id": "Q011-RS-5",
+      "decision": "matrix_selection",
+      "pass_condition": "At least three complete paired triads fit Q011-RS-4. Expansion beyond three triads is decided only from preproduction resource telemetry before any qualifying-output inspection.",
+      "failure_action": "Do not fall back to fewer than three paired triads; redesign or obtain more resources."
+    }
+  ],
+  "recommended_matrix": {
+    "status": "recommended_minimum_pending_scaling_gates_not_authorized",
+    "core_grid_variants": [
+      "coarse_uniform_dx12",
+      "three_level_amr_root_dx12_finest_dx3",
+      "fine_uniform_dx3"
+    ],
+    "core_paired_qualifying_seeds": [
+      23050101,
+      23050102,
+      23050103
+    ],
+    "core_baseline_attempt_count": 9,
+    "scientific_rationale": "Three complete paired triads preserve direct per-seed coarse-AMR-fine comparisons and provide the minimum ensemble size that can expose seed variability and support a sample variance. Two paired triads are too weak for a publication-grade stochastic-method comparison.",
+    "resource_rationale": "Three triads materially reduce the cap risk while retaining every variant and the paired comparison structure. The current eight-triad matrix is not resource-ready from existing evidence.",
+    "expansion_order": [
+      23050104,
+      23050105,
+      23050106,
+      23050107,
+      23050108
+    ],
+    "expansion_rule": "Add only complete paired triads, in order, when Q011-RS-4 remains satisfied using the conservative authorization-cost rule and a separately bound protected non-Q011 reserve.",
+    "asymmetric_matrix_disposition": "not_recommended_because_the_current_AMR_vs_fine_release_criteria_require_a_matching_fine_run_for_each_compared_AMR_seed",
+    "matrix_successor_required": true
+  },
+  "open_blocks": [
+    "No protected non-Q011 project node-hour reserve is bound.",
+    "No full-geometry multi-node scaling evidence exists for the production deck.",
+    "No late-load AMR occupancy or parallel-output timing evidence exists.",
+    "The current 24-run qualifying preregistration remains unchanged and must not be silently treated as the recommended matrix.",
+    "No scaling pilot or production execution is authorized by this record."
+  ]
+}
