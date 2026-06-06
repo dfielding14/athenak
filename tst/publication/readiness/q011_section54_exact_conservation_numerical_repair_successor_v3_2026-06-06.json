@@ -3,7 +3,7 @@
   "schema_version": 1,
   "date": "2026-06-06",
   "gate": "Q-011",
-  "status": "fixed_uniform_numerical_candidate_bounded_repair_complete_authenticated_parity_rerun_pending_trusted_execution_pending",
+  "status": "combined_escape_and_fixed_uniform_exact_conservation_candidate_repair_complete_independent_review_and_trusted_execution_pending",
   "qualification_effect": "none",
   "authority": {
     "execution_authorized": false,
@@ -13,15 +13,15 @@
     "publication_authorized": false
   },
   "isolation": {
-    "branch": "codex/q011-exact-conservation-numerical-repair-clean-v1",
+    "branch": "codex/q011-combined-exact-conservation-successor-v1",
     "base_commit": "1d72534619da277fdd6838cabdab0d465d0a8867",
     "numerical_predecessor_commit": "35525e1e7a084fc5c6f9523718455d2fb0c59568",
-    "reviewed_repair_source_commit": "b2d7c4895e354e113115147d55d205b70beaaf7d",
-    "worktree": "/ccs/home/dfielding/athenak-pic-q011-exact-conservation-numerical-repair-clean-v1",
+    "reviewed_repair_source_commit": "pending_combined_successor_commit_and_independent_review",
+    "worktree": "/ccs/home/dfielding/athenak-pic-q011-combined-exact-conservation-successor-v1",
     "primary_worktree_touched": false,
     "protected_historical_files_edited": false
   },
-  "scope": "Clean current-PIC numerical candidate for exact combined MHD+CR accounting in pic_parallel_shock. This bounded repair preserves the reviewed numerical accounting, requires nx1 greater than 1, nx2 greater than 1, nx3 equal to 1, and 2D3V reducer admission, makes the exact-base production-profile parity rerun constructible without retaining an incompatible debug-build hash, executes Athena through Linux execveat on retained authenticated executable descriptors with mutation watches and separate writable outputs, executes the installed control-plane runner from sealed captured bytes, removes the self-attested runtime-evidence packet verifier, and makes no trusted-execution, scientific, or publication claim.",
+  "scope": "Combined current-PIC candidate for exact fixed-uniform MHD+CR accounting in pic_parallel_shock. The pure reducer requires the complete configured checkpoint sequence, independently binds the reason-coded outer-x1 escape ledger, cross-checks it against the generic five-vector particle-boundary ledger, rejects initially seeded CR escape, and requires exact paper-VL2 audit chronology. Authenticated ledger-disabled parity executes retained descriptors under a minimal sanitized environment and compares the exact spatial conserved-plus-face-field restart payload and particle payload. This candidate remains non-authorizing and pending independent review and trusted execution.",
   "source_fail_closed_contract": {
     "qualified_topology": "fixed uniform mesh only",
     "qualified_boundary_geometry": "reflecting inner-x1, inflow or outflow outer-x1, periodic transverse boundaries",
@@ -33,7 +33,11 @@
       "every root-level logical coordinate is in range, unique, and part of one complete fixed-uniform tiling",
       "every reconstructed MeshBlock cost_eachmb is finite and exactly 1.0",
       "restored adaptive refinement cooldown metadata is absent",
-      "curvature AMR and particle-weighted runtime load balancing are disabled"
+      "curvature AMR and particle-weighted runtime load balancing are disabled",
+      "initial CR population is empty and initially seeded CR escape remains exactly zero",
+      "generic and reason-coded physical-escape five-vectors agree at every retained checkpoint",
+      "all configured 100-time-unit checkpoints plus the terminal checkpoint are retained",
+      "paper-VL2 escape audit count and last-audit time agree with committed cycle and time"
     ],
     "rejected": [
       "configured or restored AMR and SMR",
@@ -44,7 +48,9 @@
       "particle-aware runtime load balancing",
       "one-dimensional decks labeled as 2D3V",
       "non-2D3V exact-ledger configurations",
-      "boundary geometries outside the explicitly enforced Section 5.4 geometry"
+      "boundary geometries outside the explicitly enforced Section 5.4 geometry",
+      "missing, sparse, duplicate, stale, incomplete, or inconsistent escape-ledger checkpoints",
+      "initially seeded CR escape or disagreement between generic and reason-coded escape ledgers"
     ]
   },
   "numerical_accounting_surface": {
@@ -57,7 +63,7 @@
       "applied gas subtraction",
       "removed excluded startup-cohort CR state"
     ],
-    "restart_contract": "schema-bound cumulative ledger with committed cycle and time continuity",
+    "restart_contract": "complete configured checkpoint sequence with schema-bound cumulative ledgers, committed cycle/time continuity, exact paper-VL2 escape-audit chronology, and independent generic-versus-reason-coded escape cross-check",
     "source_local_admission_and_restart_cases": [
       "non-unit restored MeshBlock cost",
       "refined adaptive topology hidden by uniform overrides",
@@ -95,7 +101,7 @@
       "required_authentication": "read-only clean-candidate revalidation of both baseline and candidate manifests, pinned exact-base source commit and tree, explicit expected candidate commit, hip-mpi-release-paper-pic build provenance for both executables, the captured executable SHA-256 values, current installed control-plane pair, and historical build-receipt control-plane pairs",
       "required_distinctness": "authenticated candidate and baseline clean-candidate executable paths and exact bytes must differ",
       "constructibility": "Create one clean candidate from the pinned exact-base commit and one from the selected current candidate commit using the installed hip-mpi-release-paper-pic production profile; bind the explicit expected candidate commit; then authenticate and execute both retained read-only executable descriptors. No retained exact-base matching candidate currently exists and no parity result is claimed.",
-      "execution_binding": "linux_execveat_descriptor_bound_exact_authenticated_bytes_with_mutation_watch_and_separate_writable_outputs",
+      "execution_binding": "linux_execveat_descriptor_bound_exact_authenticated_bytes_with_mutation_watch_sanitized_environment_separate_writable_outputs_and_full_spatial_restart_state_comparison",
       "prior_unauthenticated_parity_result": "invalidated_not_retained"
     },
     "restart_execution_negative_guards": {
@@ -160,7 +166,7 @@
     "runtime_source_closure_sha256": "a8a34854a55e7076457e06eac4ab481c5fe71f5b0e7f06cc61a1e4d9077a7791"
   },
   "candidate_preparation_validation": {
-    "focused_tests": "28 passed",
+    "focused_tests": "31 passed",
     "transitive_dependency_adjacent_tests": "19 restart-and-particle-adjacent tests passed",
     "production_contract_adjacent_tests": "63 model, production-campaign-contract, production-science, and admission-orchestration tests passed",
     "active_q011_adjacent_tests": "110 combined focused plus directly adjacent tests passed",
@@ -192,7 +198,11 @@
     },
     {
       "path": "src/bvals/bvals_part.cpp",
-      "sha256": "e68bb955528c6d1b3d101c54fbdc794911a6ca6ea39175d8593123bc25f2fdd8"
+      "sha256": "4f64860496fd6f01b52aa6a5443ddbc8a26c46fb7ceb5bee76fcd077063e29d5"
+    },
+    {
+      "path": "src/mesh/load_balance.cpp",
+      "sha256": "439a1b110cd2608689bbcd2ec81b1f528e66afd269b9d649af2577a165ca4d35"
     },
     {
       "path": "src/particles/particles.cpp",
@@ -200,19 +210,27 @@
     },
     {
       "path": "src/particles/particles.hpp",
-      "sha256": "548d4cd9cca6081c7460b6b8eea6e0dd75ddd4b291f219edb5095ba8ee8a2610"
+      "sha256": "2ae5d902515875654789e5e375fd2ddd0b9434b4df934dc07f0c7ad8bf498431"
+    },
+    {
+      "path": "src/particles/particles_data_structs.hpp",
+      "sha256": "c0eccbaaa96993e71b90ec101eba32549fbed6faeb13f7fab82db68833835195"
     },
     {
       "path": "src/particles/particles_pushers.cpp",
       "sha256": "815645c947d54041b8c8b33405dc4c7ab94ef0aa9885e68f16fed3a5c21b14cf"
     },
     {
+      "path": "src/particles/particles_tasks.cpp",
+      "sha256": "190e362df2bb945882eca92dcd4e7584701a34320b733da96088d56409e77598"
+    },
+    {
       "path": "src/pgen/tests/pic_parallel_shock.cpp",
-      "sha256": "9503d7b8ce4e6cb071f89fede34da668adb265a74135868f592ff767120bdc85"
+      "sha256": "23a6a6334e27b69f903e246ccc8e36dd36c00eaaaf7bbf6e2e9d34ca8b0f7e8b"
     },
     {
       "path": "tst/publication/q011_section54_exact_conservation_closure_successor_v1.py",
-      "sha256": "58de0373daebc3a2a4a7c226da5d9c4c140770de643428d99dc3bb80d651b83b"
+      "sha256": "7090079aebd1d243f5d221f5c84b04447bc8b982bc23e1b4e770d5eff40b77a6"
     },
     {
       "path": "tst/publication/q011_section54_restart.py",
@@ -224,11 +242,15 @@
     },
     {
       "path": "tst/publication/test_q011_section54_exact_conservation_closure_successor_v1.py",
-      "sha256": "1073edc496019c225a5aa2b468afc9432982369cb9cccbb5dc537b06e9a3bbdf"
+      "sha256": "98c5011d9fc7a3001d30b2f22d49f10ab7de74f87261600f1523af52dc6d8a41"
     },
     {
       "path": "tst/scripts/particles/pic_parallel_shock_exact_conservation_closure_vl2_tsc.py",
-      "sha256": "c629e134d075ab26441a7585e161347aae9ab83216f8c174afc9dbb3321ddd89"
+      "sha256": "7c819893f4ed14e8486454d1f624a73702494b0fa203a97b86ef575a87137262"
+    },
+    {
+      "path": "tst/scripts/particles/pic_parallel_shock_outer_x1_escape_restart.py",
+      "sha256": "0f3ef220a96cf0c295d6a65f0d131380aab85c9eba824f2c9c91d8ceb1f8e101"
     }
   ]
 }

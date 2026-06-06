@@ -62,13 +62,17 @@ _DECK = (
 )
 _SOURCE_FILES = (
     "src/bvals/bvals_part.cpp",
+    "src/mesh/load_balance.cpp",
     "src/particles/particles.cpp",
     "src/particles/particles.hpp",
+    "src/particles/particles_data_structs.hpp",
     "src/particles/particles_pushers.cpp",
+    "src/particles/particles_tasks.cpp",
     "src/pgen/tests/pic_parallel_shock.cpp",
     "tst/publication/q011_section54_exact_conservation_closure_successor_v1.py",
     "tst/publication/q011_section54_restart.py",
     "tst/publication/q019_nonlinear_bell_particle_state.py",
+    "tst/scripts/particles/pic_parallel_shock_outer_x1_escape_restart.py",
 )
 _THREE_D_GEOMETRY_OVERRIDES = (
     "mesh/nx3=4",
@@ -95,6 +99,13 @@ _INOTIFY_MUTATION_MASK = (
     | 0x00000800  # IN_MOVE_SELF
 )
 _AT_EMPTY_PATH = 0x1000
+_SANITIZED_EXECUTION_ENV = {
+    "HOME": "/",
+    "LANG": "C",
+    "LC_ALL": "C",
+    "PATH": "/usr/bin:/bin",
+    "OMP_NUM_THREADS": "1",
+}
 
 
 @dataclass(frozen=True)
@@ -332,6 +343,7 @@ def _run_descriptor_bound_executable(
         capture_output=True,
         text=True,
         pass_fds=(executable.descriptor,),
+        env=dict(_SANITIZED_EXECUTION_ENV),
     )
     _require_bound_executable_unchanged(executable, label="post-execution")
     return completed
@@ -936,7 +948,7 @@ def _restart_state(payload: bytes, deck_payload: bytes, label: str) -> dict[str,
         "header": header,
         "mhd": mhd,
         "cr": closure._particle_budget(payload, deck, label),
-        "ledger": closure._conservation_ledger(payload, label),
+        "ledger": closure._conservation_ledger(payload, deck, label),
     }
 
 
@@ -1437,14 +1449,30 @@ def _run_optional_ledger_disabled_parity(deck_payload: bytes) -> object:
                     closure._MHD_LABELS,
                     name,
                 )
+                deck_physics = closure._deck_physics(deck_payload)
+                header, _ = closure._restart_mhd_state(
+                    path.read_bytes(), deck_physics, name
+                )
                 results.append({
                     "executable_sha256": executable.sha256,
                     "mhd": mhd_rows[-1],
+                    "spatial_mhd_and_face_field_sha256":
+                        header["spatial_mhd_and_face_field_sha256"],
+                    "terminal_time": header["time"],
+                    "terminal_cycle": header["cycle"],
                     "particles": _particle_payload(path.read_bytes(), name),
                 })
     mhd_equal = results[0]["mhd"] == results[1]["mhd"]
+    spatial_mhd_equal = (
+        results[0]["spatial_mhd_and_face_field_sha256"]
+        == results[1]["spatial_mhd_and_face_field_sha256"]
+    )
+    terminal_equal = (
+        results[0]["terminal_time"] == results[1]["terminal_time"]
+        and results[0]["terminal_cycle"] == results[1]["terminal_cycle"]
+    )
     particle_equal = results[0]["particles"] == results[1]["particles"]
-    if not (mhd_equal and particle_equal):
+    if not (mhd_equal and spatial_mhd_equal and terminal_equal and particle_equal):
         raise RuntimeError("ledger-disabled nonperiodic 3D new/base physics state differs")
     return {
         "case": "ledger_disabled_nonperiodic_3d",
@@ -1457,6 +1485,8 @@ def _run_optional_ledger_disabled_parity(deck_payload: bytes) -> object:
             key: value for key, value in candidate_authentication.items()
         },
         "mhd_history_state_exactly_equal": True,
+        "spatial_mhd_and_face_field_restart_state_exactly_equal": True,
+        "terminal_cycle_and_time_exactly_equal": True,
         "particle_payload_exactly_equal": True,
     }
 

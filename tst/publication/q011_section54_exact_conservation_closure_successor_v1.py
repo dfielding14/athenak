@@ -47,6 +47,21 @@ _CONS_PREFIXES = (
     "ps_cons_particle_escape",
     "ps_cons_gas_subtracted",
 )
+_ESCAPE_INTEGER_FIELDS = (
+    "ps_escape_ledger_schema",
+    "ps_escape_audit_calls",
+)
+_ESCAPE_BOOLEAN_FIELDS = ("ps_escape_ledger_complete",)
+_ESCAPE_REAL_FIELDS = (
+    "ps_escape_last_audit_time",
+    "ps_escaped_injected_cr_count_global",
+    "ps_escaped_injected_cr_mass_global",
+    "ps_escaped_injected_cr_momentum_x1_global",
+    "ps_escaped_injected_cr_momentum_x2_global",
+    "ps_escaped_injected_cr_momentum_x3_global",
+    "ps_escaped_injected_cr_energy_global",
+    "ps_escaped_initial_cr_count_global",
+)
 _MESH_METADATA_MAGIC = 0x4154484B4D455348
 _MESH_METADATA_VERSION = 2
 _REGION_INDCS_COUNT = 19
@@ -339,12 +354,80 @@ def _deck_physics(payload: bytes) -> dict[str, object]:
     ]
     _require(len(restart_outputs) == 1 and restart_outputs[0].get("dt") == "100.0",
              "deck must define one restart output at the 100.0 history cadence")
+    try:
+        tlim = float(blocks["time"]["tlim"])
+        checkpoint_cadence = float(restart_outputs[0]["dt"])
+        inject_species = int(problem["ps_inject_species"])
+    except (KeyError, ValueError) as exc:
+        raise ConservationClosureError(
+            "deck checkpoint or injected-species contract is incomplete"
+        ) from exc
+    _require(
+        math.isfinite(tlim)
+        and math.isfinite(checkpoint_cadence)
+        and tlim > 0.0
+        and checkpoint_cadence > 0.0
+        and tlim / checkpoint_cadence < 1.0e6,
+        "deck checkpoint schedule is invalid",
+    )
+    _require(0 <= inject_species < len(species), "deck injected species is invalid")
     return {
         "deposit_qscale": qscale,
         "artificial_light_speed": light_speed,
         "species": species,
+        "injected_macro_mass": qscale * species[inject_species]["mass"],
+        "tlim": tlim,
+        "checkpoint_cadence": checkpoint_cadence,
+        "expected_checkpoint_times": _expected_checkpoint_times(
+            tlim, checkpoint_cadence
+        ),
         "input_blocks": blocks,
     }
+
+
+def _expected_checkpoint_times(tlim: float, cadence: float) -> list[float]:
+    times = _expected_cadence_times(tlim, cadence)
+    tolerance = 64.0 * math.ulp(max(abs(tlim), abs(cadence), 1.0))
+    if not times or abs(times[-1] - tlim) > tolerance:
+        times.append(tlim)
+    else:
+        times[-1] = tlim
+    return times
+
+
+def _expected_cadence_times(tlim: float, cadence: float) -> list[float]:
+    tolerance = 64.0 * math.ulp(max(abs(tlim), abs(cadence), 1.0))
+    count = int(math.floor((tlim + tolerance) / cadence))
+    times = [cadence * index for index in range(1, count + 1)]
+    if times and abs(times[-1] - tlim) <= tolerance:
+        times[-1] = tlim
+    return times
+
+
+def _validate_checkpoint_sequence(
+    observed: Sequence[float],
+    expected_slots: Sequence[float],
+    *,
+    include_initial: bool,
+    label: str,
+) -> None:
+    values = list(observed)
+    if include_initial:
+        _require(values and values[0] == 0.0, f"{label}: initial time is not zero")
+        values = values[1:]
+    _require(
+        len(values) == len(expected_slots),
+        f"{label}: does not contain the complete configured checkpoint sequence",
+    )
+    for index, (time, slot) in enumerate(zip(values, expected_slots)):
+        _require(math.isfinite(time), f"{label}: checkpoint time is nonfinite")
+        if index == len(expected_slots) - 1:
+            _require(time == slot, f"{label}: terminal checkpoint time drifted")
+        else:
+            _require(
+                time >= slot and time < expected_slots[index + 1],
+                f"{label}: checkpoint does not bind its configured nominal slot",
+            )
 
 
 def _parameter_values_equal(expected: str, observed: str) -> bool:
@@ -621,6 +704,7 @@ def _restart_mhd_state(
         _require(np.all(np.isfinite(active)), f"{label}: nonfinite restart MHD state")
         state += np.sum(active, axis=(1, 2, 3)) * volume
 
+    spatial_payload = payload[data_offset:pic_offset]
     return {
         "time": time,
         "dt": dt,
@@ -630,6 +714,8 @@ def _restart_mhd_state(
         "nranks": nranks,
         "has_refinement_cooldown": bool(has_refinement_cooldown),
         "checkpoint_nonce": checkpoint_nonce,
+        "spatial_mhd_and_face_field_byte_count": len(spatial_payload),
+        "spatial_mhd_and_face_field_sha256": hashlib.sha256(spatial_payload).hexdigest(),
     }, state.astype(float).tolist()
 
 
@@ -650,7 +736,113 @@ def _parse_bool(value: str, label: str) -> bool:
     return value in {"1", "true"}
 
 
-def _conservation_ledger(payload: bytes, label: str) -> dict[str, object]:
+def _ledger_values_agree(lhs: float, rhs: float, accumulated_terms: int) -> bool:
+    scale = max(abs(lhs), abs(rhs), 1.0)
+    tolerance = (
+        256.0
+        * max(accumulated_terms, 1)
+        * np.finfo(np.float64).eps
+        * scale
+    )
+    return math.isfinite(tolerance) and abs(lhs - rhs) <= tolerance
+
+
+def _escape_ledger(
+    *,
+    parameters: Mapping[str, str],
+    startup: Mapping[str, object],
+    generic_escape: Sequence[float],
+    committed_cycle: int,
+    committed_time: float,
+    deck: Mapping[str, object],
+    label: str,
+) -> dict[str, object]:
+    fields = set(_ESCAPE_INTEGER_FIELDS + _ESCAPE_BOOLEAN_FIELDS + _ESCAPE_REAL_FIELDS)
+    missing = sorted(fields - set(parameters))
+    _require(not missing, f"{label}: physical escape ledger is missing {missing!r}")
+    values: dict[str, object] = {}
+    for field in _ESCAPE_INTEGER_FIELDS:
+        values[field] = _parse_int(parameters[field], f"{label}/{field}")
+    for field in _ESCAPE_BOOLEAN_FIELDS:
+        values[field] = _parse_bool(parameters[field], f"{label}/{field}")
+    for field in _ESCAPE_REAL_FIELDS:
+        values[field] = _parse_real(parameters[field], f"{label}/{field}")
+
+    _require(values["ps_escape_ledger_schema"] == 1,
+             f"{label}: physical escape schema is not 1")
+    _require(values["ps_escape_ledger_complete"],
+             f"{label}: physical escape ledger is incomplete")
+    expected_audit_calls = 2 * committed_cycle
+    _require(values["ps_escape_audit_calls"] == expected_audit_calls,
+             f"{label}: physical escape audit-call chronology is incomplete")
+    _require(
+        _ledger_values_agree(
+            float(values["ps_escape_last_audit_time"]),
+            committed_time,
+            expected_audit_calls,
+        ),
+        f"{label}: physical escape audit time differs from committed time",
+    )
+    for field in (
+        "ps_escaped_injected_cr_count_global",
+        "ps_escaped_injected_cr_mass_global",
+        "ps_escaped_injected_cr_energy_global",
+        "ps_escaped_initial_cr_count_global",
+    ):
+        _require(float(values[field]) >= 0.0, f"{label}/{field}: negative value")
+    for field in (
+        "ps_escaped_injected_cr_count_global",
+        "ps_escaped_initial_cr_count_global",
+    ):
+        _require(float(values[field]).is_integer(), f"{label}/{field}: non-integral count")
+    _require(values["ps_escaped_initial_cr_count_global"] == 0.0,
+             f"{label}: initially seeded CR escape is not fully accounted")
+    escaped_count = float(values["ps_escaped_injected_cr_count_global"])
+    escaped_mass = float(values["ps_escaped_injected_cr_mass_global"])
+    _require(
+        _ledger_values_agree(
+            escaped_mass,
+            escaped_count * float(deck["injected_macro_mass"]),
+            expected_audit_calls,
+        ),
+        f"{label}: escaped injected count/mass relation is inconsistent",
+    )
+    _require(
+        escaped_count + float(startup["ps_removed_cr_count_global"])
+        <= float(startup["ps_injected_cr_count_global"]),
+        f"{label}: removed plus escaped injected count exceeds injected count",
+    )
+    _require(
+        escaped_mass + float(startup["ps_removed_cr_mass_global"])
+        <= float(startup["ps_injected_cr_mass_global"])
+        + 256.0 * np.finfo(np.float64).eps
+        * max(float(startup["ps_injected_cr_mass_global"]), 1.0),
+        f"{label}: removed plus escaped injected mass exceeds injected mass",
+    )
+    reason_coded = [
+        escaped_mass,
+        float(values["ps_escaped_injected_cr_momentum_x1_global"]),
+        float(values["ps_escaped_injected_cr_momentum_x2_global"]),
+        float(values["ps_escaped_injected_cr_momentum_x3_global"]),
+        float(values["ps_escaped_injected_cr_energy_global"]),
+    ]
+    for component, generic, observed in zip(_COMPONENTS, generic_escape, reason_coded):
+        _require(
+            _ledger_values_agree(generic, -observed, expected_audit_calls),
+            f"{label}: generic and reason-coded physical escape differ at {component}",
+        )
+    values["reason_coded_escape_vector"] = reason_coded
+    return values
+
+
+def _conservation_ledger(
+    payload: bytes,
+    deck: Mapping[str, object],
+    label: str,
+    *,
+    expected_cycle: int | None = None,
+    expected_time: float | None = None,
+) -> dict[str, object]:
     try:
         parameters = restart_layout._problem_parameters(payload, label)
         startup = restart_layout.extract_startup_shock_ledger(payload, source=label)
@@ -689,15 +881,28 @@ def _conservation_ledger(payload: bytes, label: str) -> dict[str, object]:
     _require(vectors["ps_cons_gas_subtracted"][0] >= 0.0 and
              vectors["ps_cons_gas_subtracted"][4] >= 0.0,
              f"{label}: gas-subtraction mass or energy is negative")
+    committed_cycle = _parse_int(parameters["ps_conservation_committed_cycles"], label)
+    committed_time = _parse_real(parameters["ps_conservation_committed_time"], label)
+    if expected_cycle is not None or expected_time is not None:
+        _require(
+            committed_cycle == expected_cycle and committed_time == expected_time,
+            f"{label}: restart header/ledger commit discontinuity",
+        )
+    escape = _escape_ledger(
+        parameters=parameters,
+        startup=startup,
+        generic_escape=vectors["ps_cons_particle_escape"],
+        committed_cycle=committed_cycle,
+        committed_time=committed_time,
+        deck=deck,
+        label=label,
+    )
     return {
-        "committed_cycle": _parse_int(
-            parameters["ps_conservation_committed_cycles"], label
-        ),
-        "committed_time": _parse_real(
-            parameters["ps_conservation_committed_time"], label
-        ),
+        "committed_cycle": committed_cycle,
+        "committed_time": committed_time,
         "vectors": vectors,
         "startup": startup,
+        "escape": escape,
     }
 
 
@@ -945,6 +1150,12 @@ def reduce_exact_conservation_closure(
     )
     _require([row["time"] for row in mhd_rows] == [row["time"] for row in user_rows],
              "MHD and user history time grids differ")
+    _validate_checkpoint_sequence(
+        [row["time"] for row in mhd_rows],
+        deck["expected_checkpoint_times"],
+        include_initial=True,
+        label="history",
+    )
     _require(mhd_rows[0]["time"] == 0.0, "history lacks the t=0 initial state")
     _require(all(user_rows[0][key] == 0.0 for key in _USER_LABELS[2:]),
              "initial user conservation history is nonzero")
@@ -958,6 +1169,7 @@ def reduce_exact_conservation_closure(
     previous_time = -1.0
     previous_ledger: Mapping[str, object] | None = None
     domain_volume: float | None = None
+    observed_restart_times: list[float] = []
     for index, artifact in enumerate(restarts):
         label = f"restart_artifacts[{index}]"
         payload = artifact["payload"]
@@ -967,14 +1179,18 @@ def reduce_exact_conservation_closure(
         except restart_layout.RestartPolicyError as exc:
             raise ConservationClosureError(f"{label}: schema-7 probe failed") from exc
         header, restart_mhd = _restart_mhd_state(payload, deck, label)
-        ledger = _conservation_ledger(payload, label)
-        _require(ledger["committed_cycle"] == header["cycle"] and
-                 ledger["committed_time"] == header["time"],
-                 f"{label}: restart header/ledger commit discontinuity")
+        ledger = _conservation_ledger(
+            payload,
+            deck,
+            label,
+            expected_cycle=header["cycle"],
+            expected_time=header["time"],
+        )
         _require(header["cycle"] > previous_cycle and header["time"] > previous_time,
                  f"{label}: restart sequence is duplicate or nonmonotonic")
         _require(header["time"] in mhd_by_time, f"{label}: MHD history time is missing")
         _require(header["time"] in user_by_time, f"{label}: user history time is missing")
+        observed_restart_times.append(header["time"])
         if domain_volume is None:
             domain_volume = header["domain_volume"]
         _require(header["domain_volume"] == domain_volume,
@@ -1000,6 +1216,17 @@ def reduce_exact_conservation_closure(
                     ledger["vectors"]["ps_cons_particle_escape"][n]
                     <= previous_ledger["vectors"]["ps_cons_particle_escape"][n],
                     f"{label}: particle-escape ledger regressed",
+                )
+            for field in (
+                "ps_escape_audit_calls",
+                "ps_escape_last_audit_time",
+                "ps_escaped_injected_cr_count_global",
+                "ps_escaped_injected_cr_mass_global",
+                "ps_escaped_injected_cr_energy_global",
+            ):
+                _require(
+                    ledger["escape"][field] >= previous_ledger["escape"][field],
+                    f"{label}: reason-coded escape ledger regressed at {field}",
                 )
 
         external, terms = _external_delta(ledger)
@@ -1043,6 +1270,13 @@ def reduce_exact_conservation_closure(
         previous_cycle = header["cycle"]
         previous_time = header["time"]
         previous_ledger = ledger
+
+    _validate_checkpoint_sequence(
+        observed_restart_times,
+        deck["expected_checkpoint_times"],
+        include_initial=False,
+        label="restart artifacts",
+    )
 
     return {
         "schema_version": SCHEMA_VERSION,

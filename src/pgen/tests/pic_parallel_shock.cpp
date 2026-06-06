@@ -1218,6 +1218,34 @@ void ValidateParallelShockConservationLedger(const char *context) {
   }
 }
 
+void ValidateParallelShockEscapeLedgerCrosscheck(const char *context) {
+  if (!ps_enable_conservation_ledger) return;
+  const std::array<Real, 5> reason_coded_escape = {
+    ps_escaped_injected_cr_mass_global,
+    ps_escaped_injected_cr_momentum_x1_global,
+    ps_escaped_injected_cr_momentum_x2_global,
+    ps_escaped_injected_cr_momentum_x3_global,
+    ps_escaped_injected_cr_energy_global
+  };
+  bool invalid = !ps_escape_ledger_complete ||
+      ps_escaped_initial_cr_count_global != 0.0;
+  for (int n=0; n<5; ++n) {
+    invalid = invalid ||
+        !ParallelShockLedgerValuesAgree(
+            ps_conservation_particle_escape_global[n],
+            -reason_coded_escape[n],
+            static_cast<Real>(std::max(ps_escape_audit_calls, 1)));
+  }
+  if (invalid) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock " << context
+              << " generic and reason-coded particle escape ledgers differ."
+              << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+}
+
 void ValidateParallelShockRuntimeLedger(const char *context, const Real current_time) {
   const auto invalid_nonnegative_ledger = [](const Real value) {
     return !std::isfinite(value) || value < 0.0;
@@ -3114,6 +3142,7 @@ void CommitParallelShockConservationCycle(Mesh *pm) {
   ps_conservation_committed_cycles = pm->ncycle + 1;
   ps_conservation_committed_time = pm->time + pm->dt;
   ValidateParallelShockConservationLedger("cycle commit");
+  ValidateParallelShockEscapeLedgerCrosscheck("cycle commit");
   StoreRuntimeStateForRestart(ps_conservation_committed_time);
 }
 
@@ -4100,6 +4129,7 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
     }
     ps_conservation_mhd_boundary_cycle_local.fill(0.0);
     ValidateParallelShockConservationLedger(restart ? "restart" : "initial");
+    ValidateParallelShockEscapeLedgerCrosscheck(restart ? "restart" : "initial");
   }
   ValidateParallelShockRuntimeLedger(restart ? "restart" : "runtime",
                                      pmy_mesh_->time);

@@ -51,6 +51,7 @@ def _fixture_deck_payload() -> bytes:
         ("nx2       = 20", "nx2       = 2"),
         ("refinement           = adaptive", "refinement           = none"),
         ("num_levels           = 3", "num_levels           = 1"),
+        ("tlim       = 1200.0", "tlim       = 200.0"),
         ("ps_enable_curvature_amr       = true",
          "ps_enable_curvature_amr       = false"),
     )
@@ -151,6 +152,17 @@ def _ledger(
         "ps_tag_seeded": "true",
         "ps_injection_tag_floor": "10",
         "ps_next_tag": "11",
+        "ps_escape_ledger_schema": "1",
+        "ps_escape_ledger_complete": "true",
+        "ps_escape_audit_calls": str(2 * cycle),
+        "ps_escape_last_audit_time": repr(time),
+        "ps_escaped_injected_cr_count_global": "0.0",
+        "ps_escaped_injected_cr_mass_global": "0.0",
+        "ps_escaped_injected_cr_momentum_x1_global": "0.0",
+        "ps_escaped_injected_cr_momentum_x2_global": "0.0",
+        "ps_escaped_injected_cr_momentum_x3_global": "0.0",
+        "ps_escaped_injected_cr_energy_global": "0.0",
+        "ps_escaped_initial_cr_count_global": "0.0",
         "ps_conservation_ledger_schema": "1",
         "ps_conservation_ledger_complete": "true",
         "ps_conservation_committed_cycles": str(cycle),
@@ -415,7 +427,7 @@ class Q011ExactConservationClosureTests(unittest.TestCase):
                     mhd_payload=missing_checkpoint,
                     user_payload=user_missing_checkpoint,
                 ),
-                "MHD history time is missing",
+                "history: does not contain the complete configured checkpoint sequence",
             ),
             (
                 _fixture(user_payload=user_missing_checkpoint),
@@ -506,6 +518,95 @@ class Q011ExactConservationClosureTests(unittest.TestCase):
             with self.subTest(message=message):
                 with self.assertRaisesRegex(reducer.ConservationClosureError, message):
                     _reduce(_fixture(restart_payloads=restarts))
+
+    def test_sparse_restart_sequence_and_escape_ledger_forgery_fail_closed(self) -> None:
+        deck300 = FIXTURE_DECK.replace(b"tlim       = 200.0", b"tlim       = 300.0")
+        self.assertNotEqual(deck300, FIXTURE_DECK)
+        mhd_rows = _mhd_rows()
+        mhd_terminal = list(mhd_rows[-1])
+        mhd_terminal[0] = 300.0
+        mhd_rows.append(mhd_terminal)
+        user_rows = _user_rows()
+        user_terminal = list(user_rows[-1])
+        user_terminal[0] = 300.0
+        user_rows.append(user_terminal)
+        with self.assertRaisesRegex(
+            reducer.ConservationClosureError,
+            "restart artifacts: does not contain the complete configured checkpoint sequence",
+        ):
+            _reduce(
+                _fixture(
+                    deck_payload=deck300,
+                    mhd_payload=_history(reducer._MHD_LABELS, mhd_rows),
+                    user_payload=_history(reducer._USER_LABELS, user_rows),
+                    restart_payloads=[
+                        _restart_payload(time=100.0, cycle=10, deck_payload=deck300),
+                        _restart_payload(time=300.0, cycle=30, deck_payload=deck300),
+                    ],
+                )
+            )
+
+        cases = (
+            (
+                {"ps_escape_ledger_complete": "false"},
+                "physical escape ledger is incomplete",
+            ),
+            (
+                {"ps_escape_audit_calls": "1"},
+                "physical escape audit-call chronology is incomplete",
+            ),
+            (
+                {"ps_escape_last_audit_time": "0.0"},
+                "physical escape audit time differs from committed time",
+            ),
+            (
+                {"ps_escaped_initial_cr_count_global": "1.0"},
+                "initially seeded CR escape is not fully accounted",
+            ),
+            (
+                {
+                    "ps_escaped_injected_cr_count_global": "1.0",
+                    "ps_escaped_injected_cr_mass_global": repr(QSCALE),
+                },
+                "generic and reason-coded physical escape differ at mass",
+            ),
+            (
+                {"ps_escape_ledger_schema": None},
+                "physical escape ledger is missing",
+            ),
+        )
+        for overrides, message in cases:
+            with self.subTest(message=message):
+                with self.assertRaisesRegex(reducer.ConservationClosureError, message):
+                    _reduce(
+                        _fixture(
+                            restart_payloads=[
+                                _restart_payload(
+                                    time=100.0,
+                                    cycle=10,
+                                    ledger_overrides=overrides,
+                                ),
+                                _restart_payload(time=200.0, cycle=20),
+                            ]
+                        )
+                    )
+
+        duplicate_escape = _restart_payload(
+            time=100.0,
+            cycle=10,
+            duplicate_problem_line="ps_escape_ledger_complete=false",
+        )
+        with self.assertRaisesRegex(
+            reducer.ConservationClosureError, "duplicate or empty parameter"
+        ):
+            _reduce(
+                _fixture(
+                    restart_payloads=[
+                        duplicate_escape,
+                        _restart_payload(time=200.0, cycle=20),
+                    ]
+                )
+            )
 
     def test_restart_ledger_regression_and_history_mismatch_fail_closed(self) -> None:
         regressed = [
@@ -792,6 +893,23 @@ class Q011ExactConservationClosureTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, message):
                     runtime._compare_particle_state(valid, payload, "fixture")
 
+    def test_spatial_restart_digest_covers_face_fields(self) -> None:
+        valid = _restart_payload(time=100.0, cycle=10)
+        deck = reducer._deck_physics(FIXTURE_DECK)
+        header, aggregate = reducer._restart_mhd_state(valid, deck, "valid")
+        modified = bytearray(valid)
+        pic_offset = modified.find(struct.pack("<Q", restart_layout.PIC_RESTART_MAGIC))
+        self.assertGreater(pic_offset, 0)
+        modified[pic_offset - 1] ^= 1
+        changed_header, changed_aggregate = reducer._restart_mhd_state(
+            bytes(modified), deck, "modified"
+        )
+        self.assertEqual(aggregate, changed_aggregate)
+        self.assertNotEqual(
+            header["spatial_mhd_and_face_field_sha256"],
+            changed_header["spatial_mhd_and_face_field_sha256"],
+        )
+
     def test_source_and_deck_contract_is_additive_and_pure(self) -> None:
         source = (
             ROOT / "src/pgen/tests/pic_parallel_shock.cpp"
@@ -904,6 +1022,8 @@ class Q011ExactConservationClosureTests(unittest.TestCase):
         dependencies = (
             "tst/publication/q011_section54_restart.py",
             "tst/publication/q019_nonlinear_bell_particle_state.py",
+            "src/particles/particles_data_structs.hpp",
+            "tst/scripts/particles/pic_parallel_shock_outer_x1_escape_restart.py",
         )
         self.assertTrue(set(dependencies).issubset(runtime._SOURCE_FILES))
         baseline = runtime._candidate_payload()
@@ -1226,6 +1346,31 @@ class Q011ExactConservationClosureTests(unittest.TestCase):
             self.assertTrue((work / "output.marker").is_file())
             self.assertFalse((source / "output.marker").exists())
 
+    def test_descriptor_bound_execution_drops_hostile_environment(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            executable = root / "athena"
+            executable.write_bytes(b"#!/bin/sh\nexit 0\n")
+            executable.chmod(0o555)
+            completed = runtime.subprocess.CompletedProcess([], 0, "", "")
+            with runtime._bind_executable(
+                executable, label="sanitized-environment-probe"
+            ) as bound, mock.patch.dict(
+                os.environ,
+                {"LD_PRELOAD": "/tmp/hostile.so", "PYTHONPATH": "/tmp/hostile"},
+            ), mock.patch.object(
+                runtime.subprocess, "run", return_value=completed
+            ) as run:
+                runtime._run_descriptor_bound_executable(
+                    executable=bound,
+                    arguments=[str(executable)],
+                    cwd=root,
+                )
+            environment = run.call_args.kwargs["env"]
+            self.assertEqual(environment, runtime._SANITIZED_EXECUTION_ENV)
+            self.assertNotIn("LD_PRELOAD", environment)
+            self.assertNotIn("PYTHONPATH", environment)
+
     def test_sealed_python_runner_ignores_transient_path_replacement(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -1355,7 +1500,7 @@ class Q011ExactConservationClosureTests(unittest.TestCase):
         )
         self.assertEqual(
             parity["execution_binding"],
-            "linux_execveat_descriptor_bound_exact_authenticated_bytes_with_mutation_watch_and_separate_writable_outputs",
+            "linux_execveat_descriptor_bound_exact_authenticated_bytes_with_mutation_watch_sanitized_environment_separate_writable_outputs_and_full_spatial_restart_state_comparison",
         )
         self.assertIn(
             "trusted installed-control-plane receipts",
