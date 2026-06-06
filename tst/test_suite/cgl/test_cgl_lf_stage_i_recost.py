@@ -1304,6 +1304,123 @@ def write_draft_packet(
     return packet
 
 
+def replace_fixture_predecessor(
+    fixture: dict[str, object], checkpoint_number: int
+) -> tuple[Path, Path, Path]:
+    """Replace the fixture predecessor with one exact promoted checkpoint."""
+
+    root = fixture["root"]
+    accounting = fixture["accounting"]
+    timestamp = fixture["timestamp"]
+    old_paths = (
+        fixture["predecessor"],
+        fixture["predecessor_review"],
+        fixture["predecessor_audit"],
+    )
+    assert isinstance(root, Path)
+    assert isinstance(accounting, Path)
+    assert isinstance(timestamp, datetime)
+    assert all(isinstance(path, Path) for path in old_paths)
+    for path in old_paths:
+        path.unlink()
+
+    predecessor = (
+        accounting
+        / f"mks24_stage_i_{EPOCH_SLUG}_F{checkpoint_number}_recost_evidence.json"
+    )
+    write_immutable_json(
+        predecessor,
+        {
+            "schema_version": 2,
+            "record_type": "stage-i-recost-recommendation-evidence",
+            "checkpoint": f"F-{checkpoint_number}",
+            "artifact_name": predecessor.name,
+            "execution_epoch": EPOCH,
+            "generated_utc": (timestamp - timedelta(minutes=8)).isoformat(),
+            "authority": {
+                "authorizing": False,
+                "action_authority": "none-until-independent-review-and-publication",
+                "scheduler_mutation_authorized": False,
+                "canonical_mutation_authorized": False,
+            },
+        },
+    )
+    review = predecessor.with_name(f"{predecessor.name}.independent_review.json")
+    write_immutable_json(
+        review,
+        {
+            "schema_version": 1,
+            "record_type": "stage-i-recost-recommendation-independent-review",
+            "execution_epoch": EPOCH,
+            "reviewed_utc": (timestamp - timedelta(minutes=7)).isoformat(),
+            "decision": "approved-for-publication",
+            "reviewer": {
+                "agent_id": f"fixture-f{checkpoint_number}-reviewer",
+                "independent_from_generator": True,
+            },
+            "candidate": {"path": str(predecessor), "sha256": sha256(predecessor)},
+            "scope": {"non_authorizing": True},
+        },
+    )
+    audit = predecessor.with_name(f"{predecessor.name}.publication_audit.json")
+    write_immutable_json(
+        audit,
+        {
+            "schema_version": 1,
+            "record_type": "stage-i-recost-recommendation-publication-audit",
+            "execution_epoch": EPOCH,
+            "published_utc": (timestamp - timedelta(minutes=5)).isoformat(),
+            "artifact": {
+                "path": str(predecessor),
+                "sha256": sha256(predecessor),
+                "mode": "0444",
+                "links": 1,
+            },
+            "independent_review": {
+                "path": str(review),
+                "sha256": sha256(review),
+                "mode": "0444",
+                "links": 1,
+            },
+            "authority": {
+                "action_authority": False,
+                "scheduler_mutation_authorized": False,
+                "canonical_mutation_authorized": False,
+            },
+        },
+    )
+    fixture.update(
+        {
+            "predecessor": predecessor,
+            "predecessor_review": review,
+            "predecessor_audit": audit,
+        }
+    )
+    return predecessor, review, audit
+
+
+def bind_fixture_predecessor(
+    fixture: dict[str, object], packet: dict[str, object]
+) -> None:
+    """Bind a draft packet to the fixture's current promoted predecessor."""
+
+    root = fixture["root"]
+    assert isinstance(root, Path)
+    inputs = packet["inputs"]
+    assert isinstance(inputs, dict)
+    for key, fixture_key in (
+        ("predecessor_recost", "predecessor"),
+        ("predecessor_recost_independent_review", "predecessor_review"),
+        ("predecessor_recost_publication_audit", "predecessor_audit"),
+    ):
+        path = fixture[fixture_key]
+        assert isinstance(path, Path)
+        inputs[key] = {
+            "path": path.relative_to(root).as_posix(),
+            "sha256": sha256(path),
+        }
+
+
 def write_external_request_review(
     fixture: dict[str, object],
     request: Path,
@@ -2562,6 +2679,113 @@ def test_install_f117_draft_packet_is_managed_no_clobber_or_exact_verify(
     )
 
 
+def test_f119_managed_install_and_draft_preserve_published_f117(recost_fixture):
+    root = recost_fixture["root"]
+    accounting = recost_fixture["accounting"]
+    assert isinstance(root, Path)
+    assert isinstance(accounting, Path)
+    f117_publications = replace_fixture_predecessor(recost_fixture, 117)
+    f117_packet = write_draft_packet(
+        recost_fixture,
+        checkpoint_number=117,
+        mutate=lambda packet: bind_fixture_predecessor(recost_fixture, packet),
+    )
+    f119_packet = write_draft_packet(
+        recost_fixture,
+        checkpoint_number=119,
+        mutate=lambda packet: bind_fixture_predecessor(recost_fixture, packet),
+    )
+    external_f119 = root.parent / "externally-reviewed-f119-draft-packet.json"
+    f119_packet.replace(external_f119)
+    retained_f117 = (f117_packet, *f117_publications)
+    f117_snapshot = {
+        path: (
+            path.read_bytes(),
+            path.stat().st_dev,
+            path.stat().st_ino,
+            stat.S_IMODE(path.stat().st_mode),
+        )
+        for path in retained_f117
+    }
+
+    installed = run_action(
+        recost_fixture,
+        "install-f119-draft-packet",
+        "--packet",
+        str(external_f119),
+        "--expected-packet-sha256",
+        sha256(external_f119),
+    )
+    assert installed.returncode == 0, installed.stderr
+    install_report = action_report(installed)
+    assert install_report["action"] == "install-f119-draft-packet"
+    assert Path(install_report["path"]) == f119_packet
+    assert install_report["next_action"][-1] == "draft-request"
+
+    drafted = run_action(
+        recost_fixture,
+        "draft-request",
+        "--packet",
+        str(f119_packet),
+        "--expected-packet-sha256",
+        sha256(f119_packet),
+    )
+    assert drafted.returncode == 0, drafted.stderr
+    draft_report = action_report(drafted)
+    prefix = f"mks24_stage_i_{EPOCH_SLUG}_F119"
+    expected_paths = {
+        accounting / f"{prefix}_recost_request.json",
+        accounting / f"{prefix}_reconciliation_evidence.json",
+        accounting / f"{prefix}_storage_evidence.json",
+    }
+    assert {
+        Path(draft_report["request"]["path"]),
+        Path(draft_report["reconciliation"]["path"]),
+        Path(draft_report["storage"]["path"]),
+    } == expected_paths
+    for path, snapshot in f117_snapshot.items():
+        assert (
+            path.read_bytes(),
+            path.stat().st_dev,
+            path.stat().st_ino,
+            stat.S_IMODE(path.stat().st_mode),
+        ) == snapshot
+
+    wrong = write_draft_packet(recost_fixture, checkpoint_number=118)
+    assert_rejected(
+        run_action(
+            recost_fixture,
+            "install-f119-draft-packet",
+            "--packet",
+            str(wrong),
+            "--expected-packet-sha256",
+            sha256(wrong),
+        ),
+        "restricted to exact F-119",
+    )
+
+
+def test_draft_request_requires_exact_checkpoint_packet_namespace(recost_fixture):
+    packet = write_draft_packet(recost_fixture, checkpoint_number=205)
+    displaced = packet.with_name("reviewed-draft-packet.json")
+    packet.replace(displaced)
+    assert_rejected(
+        run_action(
+            recost_fixture,
+            "draft-request",
+            "--packet",
+            str(displaced),
+            "--expected-packet-sha256",
+            sha256(displaced),
+        ),
+        "path differs from its checkpoint namespace",
+    )
+    assert not (
+        recost_fixture["accounting"]
+        / f"mks24_stage_i_{EPOCH_SLUG}_F205_recost_request.json"
+    ).exists()
+
+
 def test_f117_managed_workflow_reaches_staged_generation_without_manual_writes(
     recost_fixture,
 ):
@@ -2719,15 +2943,39 @@ def test_f117_managed_workflow_reaches_staged_generation_without_manual_writes(
 
 
 def test_retain_generator_action_is_no_clobber_or_exact_verify(recost_fixture):
+    accounting = recost_fixture["accounting"]
+    generator = recost_fixture["generator"]
+    assert isinstance(accounting, Path)
+    assert isinstance(generator, Path)
+    utilities = accounting / "utilities"
+    utilities.mkdir()
+    legacy_f117 = utilities / "cgl_lf_stage_i_recost.py"
+    legacy_f117.write_bytes(b"immutable retained F117 generator\n")
+    legacy_f117.chmod(0o755)
+    legacy_snapshot = (
+        legacy_f117.read_bytes(),
+        legacy_f117.stat().st_dev,
+        legacy_f117.stat().st_ino,
+        stat.S_IMODE(legacy_f117.stat().st_mode),
+    )
+
     created = run_action(recost_fixture, "retain-generator")
     assert created.returncode == 0, created.stderr
     created_report = action_report(created)
     assert created_report["created"] is True
     retained = Path(created_report["path"])
-    generator = recost_fixture["generator"]
-    assert isinstance(generator, Path)
+    assert retained.name == f"cgl_lf_stage_i_recost.sha256-{sha256(generator)}.py"
+    assert created_report["checkpoint_generator_relative_path"] == (
+        retained.relative_to(recost_fixture["root"]).as_posix()
+    )
     assert retained.read_bytes() == generator.read_bytes()
     assert stat.S_IMODE(retained.stat().st_mode) == 0o755
+    assert (
+        legacy_f117.read_bytes(),
+        legacy_f117.stat().st_dev,
+        legacy_f117.stat().st_ino,
+        stat.S_IMODE(legacy_f117.stat().st_mode),
+    ) == legacy_snapshot
 
     verified = run_action(recost_fixture, "retain-generator")
     assert verified.returncode == 0, verified.stderr
@@ -2745,11 +2993,51 @@ def test_retain_generator_action_is_no_clobber_or_exact_verify(recost_fixture):
     assert retained.read_bytes() == drift
 
 
+def test_retain_generator_keeps_committed_versions_as_content_addressed_siblings(
+    recost_fixture,
+):
+    repository = recost_fixture["repository"]
+    generator = recost_fixture["generator"]
+    assert isinstance(repository, Path)
+    assert isinstance(generator, Path)
+
+    first = run_action(recost_fixture, "retain-generator")
+    assert first.returncode == 0, first.stderr
+    first_path = Path(action_report(first)["path"])
+    first_bytes = first_path.read_bytes()
+
+    generator.write_bytes(generator.read_bytes() + b"\n# committed F119 generator version\n")
+    generator.chmod(0o755)
+    git(repository, "add", str(generator.relative_to(repository)))
+    git(
+        repository,
+        "-c",
+        "user.name=CGL fixture",
+        "-c",
+        "user.email=cgl-fixture@example.invalid",
+        "commit",
+        "-q",
+        "-m",
+        "Commit next recost generator version",
+    )
+    second = run_action(recost_fixture, "retain-generator")
+    assert second.returncode == 0, second.stderr
+    second_path = Path(action_report(second)["path"])
+
+    assert second_path != first_path
+    assert first_path.read_bytes() == first_bytes
+    assert second_path.read_bytes() == generator.read_bytes()
+    assert first_path.name == f"cgl_lf_stage_i_recost.sha256-{sha256(first_path)}.py"
+    assert second_path.name == f"cgl_lf_stage_i_recost.sha256-{sha256(generator)}.py"
+    assert not (first_path.parent / "cgl_lf_stage_i_recost.py").exists()
+
+
 def test_prerequisite_actions_require_drained_queue_and_empty_transactions(
     recost_fixture,
 ):
     packet = write_draft_packet(recost_fixture, checkpoint_number=204)
     initial_f117 = write_draft_packet(recost_fixture, checkpoint_number=117)
+    initial_f119 = write_draft_packet(recost_fixture, checkpoint_number=119)
     queue = recost_fixture["queue"]
     transaction_store = recost_fixture["transaction_store"]
     request = recost_fixture["request"]
@@ -2779,6 +3067,15 @@ def test_prerequisite_actions_require_drained_queue_and_empty_transactions(
             ),
         ),
         (
+            "install-f119-draft-packet",
+            (
+                "--packet",
+                str(initial_f119),
+                "--expected-packet-sha256",
+                sha256(initial_f119),
+            ),
+        ),
+        (
             "draft-request",
             (
                 "--packet",
@@ -2804,6 +3101,15 @@ def test_prerequisite_actions_require_drained_queue_and_empty_transactions(
                 str(initial_f117),
                 "--expected-packet-sha256",
                 sha256(initial_f117),
+            ),
+        ),
+        (
+            "install-f119-draft-packet",
+            (
+                "--packet",
+                str(initial_f119),
+                "--expected-packet-sha256",
+                sha256(initial_f119),
             ),
         ),
         (

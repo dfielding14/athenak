@@ -497,6 +497,10 @@ OUTPUT_NAME_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,199}\.json\.stage
 RECOST_ARTIFACT_PATTERN = re.compile(
     r"mks24_stage_i_E03_forcing_policy_F([0-9]+)_recost_evidence\.json"
 )
+MANAGED_DRAFT_PACKET_ACTIONS = {
+    "install-f117-draft-packet": "F-117",
+    "install-f119-draft-packet": "F-119",
+}
 SEGMENT_PATTERN = re.compile(
     r"s(?P<index>[0-9]+)_rankio_t(?P<start>[0-9]+(?:p[0-9]+)?)"
     r"_t(?P<target>[0-9]+(?:p[0-9]+)?)"
@@ -2312,6 +2316,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         choices=(
             "generate",
             "install-f117-draft-packet",
+            "install-f119-draft-packet",
             "draft-request",
             "install-request-review",
             "retain-generator",
@@ -2351,7 +2356,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             )
         ):
             parser.error("generate forbids draft-packet and review-install arguments")
-    elif args.action in {"install-f117-draft-packet", "draft-request"}:
+    elif args.action in MANAGED_DRAFT_PACKET_ACTIONS or args.action == "draft-request":
         if args.packet is None or args.expected_packet_sha256 is None:
             parser.error(
                 f"{args.action} requires --packet and --expected-packet-sha256"
@@ -9495,6 +9500,7 @@ def draft_output_paths(root: Path, checkpoint: object, artifact_name: object) ->
     prefix = f"mks24_stage_i_{EXECUTION_EPOCH_SLUG}_F{match.group(1)}"
     accounting = root / "accounting"
     return {
+        "packet": accounting / f"{prefix}_recost_draft_packet.json",
         "reconciliation": accounting / f"{prefix}_reconciliation_evidence.json",
         "storage": accounting / f"{prefix}_storage_evidence.json",
         "request": accounting / f"{prefix}_recost_request.json",
@@ -9516,7 +9522,7 @@ def discovered_root_binding(
     return {"path": path.relative_to(root).as_posix(), "sha256": digest}
 
 
-def locked_install_f117_draft_packet(
+def locked_install_draft_packet(
     args: argparse.Namespace,
     root: Path,
     source_path: Path,
@@ -9524,10 +9530,16 @@ def locked_install_f117_draft_packet(
     generator_sha256: str,
     mutation_lock: MutationLock | None = None,
 ) -> None:
-    """Install or exact-verify the initial F117 packet without out-of-band writes."""
+    """Install or exact-verify one explicitly managed checkpoint draft packet."""
 
     assert args.packet is not None
     assert args.expected_packet_sha256 is not None
+    expected_checkpoint = MANAGED_DRAFT_PACKET_ACTIONS.get(args.action)
+    if expected_checkpoint is None:
+        raise ValueError("draft-packet installation action is not managed")
+    checkpoint_match = re.fullmatch(r"F-([0-9]+)", expected_checkpoint)
+    assert checkpoint_match is not None
+    checkpoint_number = checkpoint_match.group(1)
     require_empty_transaction_stores(root)
     require_drained_queue(args, root)
     require_committed_file(
@@ -9542,7 +9554,7 @@ def locked_install_f117_draft_packet(
     packet_payload = tracker.read(
         packet_source,
         args.expected_packet_sha256,
-        "initial F117 recost request draft packet source",
+        f"managed {expected_checkpoint} recost request draft packet source",
         expected_mode=0o644,
     )
     packet = parse_draft_packet(packet_payload)
@@ -9550,20 +9562,18 @@ def locked_install_f117_draft_packet(
     expected_artifact = (
         root
         / "accounting"
-        / f"mks24_stage_i_{EXECUTION_EPOCH_SLUG}_F117_recost_evidence.json"
+        / f"mks24_stage_i_{EXECUTION_EPOCH_SLUG}_F{checkpoint_number}_recost_evidence.json"
     )
-    if packet["checkpoint"] != "F-117" or paths["artifact"] != expected_artifact:
-        raise ValueError("initial draft-packet installation is restricted to exact F-117")
-    target = (
-        root
-        / "accounting"
-        / f"mks24_stage_i_{EXECUTION_EPOCH_SLUG}_F117_recost_draft_packet.json"
-    )
+    if packet["checkpoint"] != expected_checkpoint or paths["artifact"] != expected_artifact:
+        raise ValueError(
+            f"managed draft-packet installation is restricted to exact {expected_checkpoint}"
+        )
+    target = paths["packet"]
     created = write_exact_or_verify(
         target,
         packet_payload,
         mode=0o644,
-        label="managed initial F117 recost request draft packet",
+        label=f"managed {expected_checkpoint} recost request draft packet",
         mutation_lock=mutation_lock,
     )
     require_empty_transaction_stores(root)
@@ -9589,7 +9599,7 @@ def locked_install_f117_draft_packet(
     print(
         json.dumps(
             {
-                "action": "install-f117-draft-packet",
+                "action": args.action,
                 "path": str(target),
                 "sha256": args.expected_packet_sha256,
                 "mode": "0644",
@@ -9638,6 +9648,10 @@ def locked_draft_request(
         )
     )
     paths = draft_output_paths(root, packet["checkpoint"], packet["artifact_name"])
+    if packet_path != paths["packet"]:
+        raise ValueError(
+            "recost request draft packet path differs from its checkpoint namespace"
+        )
     review_path = paths["request"].with_name(
         f"{paths['request'].name}.independent_review.json"
     )
@@ -10152,7 +10166,9 @@ def locked_retain_generator(
     payload = b"".join(chunks)
     if sha256_bytes(payload) != generator_sha256:
         raise ValueError("Stage I recost generator bytes changed before retention")
-    target = ensure_utilities_directory(root, mutation_lock) / "cgl_lf_stage_i_recost.py"
+    target = ensure_utilities_directory(root, mutation_lock) / (
+        f"cgl_lf_stage_i_recost.sha256-{generator_sha256}.py"
+    )
     created = write_exact_or_verify(
         target,
         payload,
@@ -10170,9 +10186,7 @@ def locked_retain_generator(
                 "path": str(target),
                 "sha256": generator_sha256,
                 "mode": "0755",
-                "checkpoint_generator_relative_path": (
-                    "accounting/utilities/cgl_lf_stage_i_recost.py"
-                ),
+                "checkpoint_generator_relative_path": target.relative_to(root).as_posix(),
                 "created": created,
                 "no_clobber": True,
                 "exact_existing_copy_verified": not created,
@@ -10294,8 +10308,8 @@ def main(argv: list[str] | None = None) -> int:
                 generator_sha256,
                 mutation_lock,
             )
-        elif args.action == "install-f117-draft-packet":
-            locked_install_f117_draft_packet(
+        elif args.action in MANAGED_DRAFT_PACKET_ACTIONS:
+            locked_install_draft_packet(
                 args, root, source_path, repository, generator_sha256, mutation_lock
             )
         elif args.action == "draft-request":
