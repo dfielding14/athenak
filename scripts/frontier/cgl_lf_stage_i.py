@@ -840,6 +840,7 @@ STRICT_LF_FAILURE_COLUMNS = (
 _ACTIVE_ROOT_LOCKS: dict[
     Path, tuple[object, int, int, os.stat_result, tuple[tuple[str, object], ...]]
 ] = {}
+_ACTIVE_MANAGED_SHARED_ROOT_CLEARANCE_LEASES: dict[Path, tuple[object, int]] = {}
 
 
 def utc_now() -> str:
@@ -2669,8 +2670,14 @@ def validate_canonical_root_lock_binding(
 def require_canonical_mutation_lock(path: Path) -> None:
     """Reauthenticate the canonical mutation lock for one target path."""
 
-    canonical = DEFAULT_ROOT.expanduser().absolute()
     absolute = path.expanduser().absolute()
+    for lease_root, active_lease in _ACTIVE_MANAGED_SHARED_ROOT_CLEARANCE_LEASES.items():
+        try:
+            absolute.relative_to(lease_root)
+        except ValueError:
+            continue
+        active_lease[0].assert_bound()
+    canonical = DEFAULT_ROOT.expanduser().absolute()
     try:
         absolute.relative_to(canonical)
     except ValueError:
@@ -10382,61 +10389,92 @@ def apply_transaction(paths: dict[str, Path], transaction_path: Path) -> None:
     clearance_authority = reauthenticate_retained_managed_shared_root_clearance(
         paths, submission_audit
     )
-    kind = transaction.get("kind")
-    if kind == "submit_pending":
-        raise ValueError(
-            "submission outcome is ambiguous; use recover-submit with the "
-            f"scheduler job ID: {transaction_path}"
-        )
-    if kind not in {
-        "prepared", "submitted", "submit_cleared", "recorded", "cancelled",
-        "cancelled_submitted",
-    }:
-        raise ValueError(f"transaction journal has invalid kind: {transaction_path}")
-    manifest_path = Path(str(transaction["manifest_path"])).resolve()
-    manifest = transaction.get("manifest")
-    reservations = transaction.get("reservations")
-    if not isinstance(manifest, dict) or not isinstance(reservations, list):
-        raise ValueError(f"transaction payload is incomplete: {transaction_path}")
-    validate_transaction_reservation_baseline(paths, transaction)
-    row = transaction.get("ledger_row")
-    _, prospective_ledger = transaction_ledger_views(paths, row)
-    require_reservation_budget(
-        prospective_ledger, reservations, "transaction payload reservation snapshot"
+    clearance_lease = managed_shared_root_clearance_authority_lease(
+        paths, clearance_authority
     )
-    require_retained_r17_policy(paths, reservations)
-    if row is not None:
-        if not isinstance(row, dict):
-            raise ValueError(f"transaction ledger row is invalid: {transaction_path}")
-        ledger = read_ledger(paths)
-        matches = [item for item in ledger if item.get("job_id") == row.get("job_id")]
-        if len(matches) > 1:
-            raise ValueError(f"transaction ledger job is duplicated: {transaction_path}")
-        if matches and matches[0] != row:
-            raise ValueError(f"transaction ledger row conflicts: {transaction_path}")
-        if not matches:
-            reauthenticate_retained_managed_shared_root_clearance(
-                paths,
-                submission_audit,
-                expected_authority=clearance_authority,
+    try:
+        kind = transaction.get("kind")
+        if kind == "submit_pending":
+            raise ValueError(
+                "submission outcome is ambiguous; use recover-submit with the "
+                f"scheduler job ID: {transaction_path}"
             )
-            append_ledger_row(paths["ledger"], row, ledger)
-    reauthenticate_retained_managed_shared_root_clearance(
-        paths, submission_audit, expected_authority=clearance_authority
-    )
-    write_json(paths["reservations"], reservations)
-    reauthenticate_retained_managed_shared_root_clearance(
-        paths, submission_audit, expected_authority=clearance_authority
-    )
-    write_json(manifest_path, manifest)
-    reauthenticate_retained_managed_shared_root_clearance(
-        paths, submission_audit, expected_authority=clearance_authority
-    )
-    refresh_summary(paths)
-    reauthenticate_retained_managed_shared_root_clearance(
-        paths, submission_audit, expected_authority=clearance_authority
-    )
-    unlink_trusted_transaction(paths, transaction_path, transaction)
+        if kind not in {
+            "prepared", "submitted", "submit_cleared", "recorded", "cancelled",
+            "cancelled_submitted",
+        }:
+            raise ValueError(f"transaction journal has invalid kind: {transaction_path}")
+        manifest_path = Path(str(transaction["manifest_path"])).resolve()
+        manifest = transaction.get("manifest")
+        reservations = transaction.get("reservations")
+        if not isinstance(manifest, dict) or not isinstance(reservations, list):
+            raise ValueError(f"transaction payload is incomplete: {transaction_path}")
+        validate_transaction_reservation_baseline(paths, transaction)
+        row = transaction.get("ledger_row")
+        _, prospective_ledger = transaction_ledger_views(paths, row)
+        require_reservation_budget(
+            prospective_ledger, reservations, "transaction payload reservation snapshot"
+        )
+        require_retained_r17_policy(paths, reservations)
+        if row is not None:
+            if not isinstance(row, dict):
+                raise ValueError(f"transaction ledger row is invalid: {transaction_path}")
+            ledger = read_ledger(paths)
+            matches = [item for item in ledger if item.get("job_id") == row.get("job_id")]
+            if len(matches) > 1:
+                raise ValueError(
+                    f"transaction ledger job is duplicated: {transaction_path}"
+                )
+            if matches and matches[0] != row:
+                raise ValueError(
+                    f"transaction ledger row conflicts: {transaction_path}"
+                )
+            if not matches:
+                reauthenticate_retained_managed_shared_root_clearance(
+                    paths,
+                    submission_audit,
+                    expected_authority=clearance_authority,
+                )
+                use_managed_shared_root_clearance_authority(
+                    clearance_lease,
+                    lambda: append_ledger_row(paths["ledger"], row, ledger),
+                    "Stage I transaction ledger publication",
+                )
+        reauthenticate_retained_managed_shared_root_clearance(
+            paths, submission_audit, expected_authority=clearance_authority
+        )
+        use_managed_shared_root_clearance_authority(
+            clearance_lease,
+            lambda: write_json(paths["reservations"], reservations),
+            "Stage I transaction reservation publication",
+        )
+        reauthenticate_retained_managed_shared_root_clearance(
+            paths, submission_audit, expected_authority=clearance_authority
+        )
+        use_managed_shared_root_clearance_authority(
+            clearance_lease,
+            lambda: write_json(manifest_path, manifest),
+            "Stage I transaction manifest publication",
+        )
+        reauthenticate_retained_managed_shared_root_clearance(
+            paths, submission_audit, expected_authority=clearance_authority
+        )
+        use_managed_shared_root_clearance_authority(
+            clearance_lease,
+            lambda: refresh_summary(paths),
+            "Stage I transaction summary publication",
+        )
+        reauthenticate_retained_managed_shared_root_clearance(
+            paths, submission_audit, expected_authority=clearance_authority
+        )
+        use_managed_shared_root_clearance_authority(
+            clearance_lease,
+            lambda: unlink_trusted_transaction(paths, transaction_path, transaction),
+            "Stage I transaction retirement",
+        )
+    finally:
+        if clearance_lease is not None:
+            clearance_lease.close()
 
 
 def durable_transition(paths: dict[str, Path], kind: str, manifest_path: Path,
@@ -13473,11 +13511,51 @@ def managed_shared_root_clearance_checkpoints(
             )
             if not all(path.name in entries for path in chain):
                 continue
-            authenticate_managed_shared_root_clearance_final_closure(
+            authority = authenticate_managed_shared_root_clearance_final_closure(
                 layout(accounting.parent), checkpoint
             )
-            checkpoints.append(checkpoint)
+            call_final_managed_shared_root_clearance_authority(
+                layout(accounting.parent),
+                authority,
+                lambda: checkpoints.append(checkpoint),
+                f"managed shared-root clearance F-{checkpoint} checkpoint discovery",
+            )
     return sorted(set(checkpoints))
+
+
+def managed_shared_root_clearance_committed_namespace_entries(
+    accounting: Path,
+    entries: list[str] | None = None,
+    *,
+    excluding: int | None = None,
+) -> list[str]:
+    """Return names that can introduce an audit-review-last checkpoint candidate."""
+
+    if excluding is not None:
+        excluding = require_r17_integer(
+            excluding,
+            "managed shared-root clearance namespace excluded checkpoint",
+            minimum=1,
+        )
+    retained = set(
+        trusted_directory_entries(
+            accounting, "managed shared-root clearance accounting directory"
+        )
+        if entries is None
+        else entries
+    )
+    committed = []
+    for entry in sorted(retained):
+        match = SHARED_ROOT_CLEARANCE_REFRESH_AUDIT_REVIEW_PATTERN.fullmatch(entry)
+        if match is None:
+            continue
+        checkpoint = int(match.group("checkpoint"))
+        if checkpoint == excluding:
+            continue
+        chain = managed_shared_root_clearance_chain_paths(accounting, checkpoint)
+        if all(path.name in retained for path in chain):
+            committed.append(entry)
+    return committed
 
 
 def build_managed_shared_root_clearance_refresh(
@@ -14191,6 +14269,8 @@ def current_managed_shared_root_clearance_public_binding(
 def current_managed_shared_root_clearance_live_dependency_binding(
     paths: dict[str, Path],
     checkpoint: int,
+    *,
+    accounting_excluding: int | None = None,
 ) -> dict[str, object]:
     """Return exact current bindings for every live F120 dependency."""
 
@@ -14206,11 +14286,29 @@ def current_managed_shared_root_clearance_live_dependency_binding(
     supersedes = [
         paths["root"] / relative for relative in SHARED_ROOT_CLEARANCE_LEGACY_RELATIVES
     ]
-    for prior_checkpoint in managed_shared_root_clearance_checkpoints(
+    prior_transactions = []
+    prior_checkpoints = managed_shared_root_clearance_checkpoints(
         accounting, before=checkpoint
-    ):
+    )
+    for prior_checkpoint in prior_checkpoints:
         supersedes.extend(
             managed_shared_root_clearance_chain_paths(accounting, prior_checkpoint)
+        )
+        prior_transactions.append(
+            authenticate_managed_shared_root_clearance_chain_commit(
+                accounting, prior_checkpoint
+            )["transaction"]
+        )
+    committed_entries = managed_shared_root_clearance_committed_namespace_entries(
+        accounting, excluding=accounting_excluding
+    )
+    if accounting_excluding is not None and committed_entries != [
+        managed_shared_root_clearance_chain_paths(accounting, prior_checkpoint)[3].name
+        for prior_checkpoint in prior_checkpoints
+    ]:
+        raise ValueError(
+            "managed shared-root clearance publication accounting namespace contains "
+            "a foreign complete checkpoint candidate"
         )
     stale_manifest_binding = current_clearance_file_binding(
         stale_manifest,
@@ -14257,6 +14355,15 @@ def current_managed_shared_root_clearance_live_dependency_binding(
             )
             for index, path in enumerate(supersedes)
         ],
+        "prior_transactions": prior_transactions,
+        "accounting_namespace": {
+            "directory": current_clearance_directory_binding(
+                accounting,
+                "managed shared-root clearance closing accounting namespace",
+            ),
+            "committed_entries": committed_entries,
+            "excluding": accounting_excluding,
+        },
         "stale_manifest": stale_manifest_binding,
         "stale_namespace": current_clearance_directory_binding(
             stale_namespace,
@@ -14394,6 +14501,577 @@ def authenticate_managed_shared_root_clearance_final_closure(
         "expected": retained_expected,
         "binding": closing,
     }
+
+
+def authenticate_managed_shared_root_clearance_publication_closure(
+    paths: dict[str, Path],
+    checkpoint: int,
+    *,
+    expected_audit_review_sha256: str,
+) -> dict[str, object]:
+    """Close the installed transaction and live dependencies before one copy."""
+
+    initial_transaction = managed_shared_root_clearance_installed_transaction_binding(
+        paths,
+        checkpoint,
+        expected_audit_review_sha256=expected_audit_review_sha256,
+    )
+    initial_live = current_managed_shared_root_clearance_live_dependency_binding(
+        paths, checkpoint, accounting_excluding=checkpoint
+    )
+    closing_live = current_managed_shared_root_clearance_live_dependency_binding(
+        paths, checkpoint, accounting_excluding=checkpoint
+    )
+    closing_transaction = managed_shared_root_clearance_installed_transaction_binding(
+        paths,
+        checkpoint,
+        expected_audit_review_sha256=expected_audit_review_sha256,
+    )
+    if initial_transaction != closing_transaction or initial_live != closing_live:
+        raise ValueError(
+            "managed shared-root clearance publication transaction or live "
+            "dependency changed during closure"
+        )
+    return {
+        "expected": managed_shared_root_clearance_expected_digests(
+            closing_transaction["expected"],
+            "managed shared-root clearance publication closure expected",
+        ),
+        "binding": {
+            "transaction": closing_transaction,
+            "live_dependencies": closing_live,
+        },
+    }
+
+
+class ManagedSharedRootClearanceAuthorityLease:
+    """Retain one descriptor-bound F120 snapshot through an authority use.
+
+    The semantic closure above is necessarily a finite-read snapshot.  This
+    lease is acquired after that closure, so a mutation injected at its final
+    public read is rejected while opening the retained descriptors.  Every
+    guarded canonical mutation reasserts the lease through
+    ``require_canonical_mutation_lock`` immediately at its mutation boundary;
+    non-filesystem authority uses call ``use`` immediately before their
+    syscall or returned decision.
+
+    The accounting directory is selectively bound to the complete
+    audit-review-last checkpoint candidate names that can affect discovery.
+    Its unrelated ledger/summary entries, the stale-campaign output contents,
+    and the Stage I namespace contents are intentionally not frozen: none
+    independently confer F120 authority, and the latter two may change during
+    authorized work.  Their exact authority-bearing files and namespace-root
+    inodes remain pinned.
+
+    Threat-model boundary: the cooperative canonical-root lock, owner-controlled
+    namespaces, and this descriptor lease protect the interval up to the
+    guarded action.  User-space cannot make verification of many independent
+    paths atomic with an unrelated kernel syscall.  Tests may mutate at any
+    semantic/public read, including the final one, but must not magically
+    interpose a mutation inside the guarded mutation syscall itself.
+    """
+
+    def __init__(self, paths: dict[str, Path], authority: object):
+        if not isinstance(authority, dict):
+            raise ValueError(
+                "managed shared-root clearance authority lease snapshot is invalid"
+            )
+        snapshot_keys = set(authority)
+        if snapshot_keys not in (
+            {"result", "expected", "binding"},
+            {"expected", "binding"},
+        ):
+            raise ValueError(
+                "managed shared-root clearance authority lease snapshot keys differ"
+            )
+        snapshot = require_r17_exact_keys(
+            authority,
+            snapshot_keys,
+            "managed shared-root clearance authority lease snapshot",
+        )
+        binding_keys = (
+            {"public", "transaction", "live_dependencies"}
+            if "result" in snapshot
+            else {"transaction", "live_dependencies"}
+        )
+        binding = require_r17_exact_keys(
+            snapshot["binding"],
+            binding_keys,
+            "managed shared-root clearance authority lease binding",
+        )
+        public = (
+            require_r17_exact_keys(
+                binding["public"],
+                set(SHARED_ROOT_CLEARANCE_TRANSACTION_PAYLOADS),
+                "managed shared-root clearance authority lease public binding",
+            )
+            if "public" in binding
+            else {}
+        )
+        live = require_r17_exact_keys(
+            binding["live_dependencies"],
+            {
+                "controller", "source_authority_publications", "supersedes",
+                "prior_transactions", "accounting_namespace", "stale_manifest",
+                "stale_namespace", "stage_i_namespace", "terminal_source",
+                "terminal_sacct",
+            },
+            "managed shared-root clearance authority lease live dependencies",
+        )
+        if (
+            not isinstance(live["source_authority_publications"], list)
+            or not isinstance(live["supersedes"], list)
+            or not isinstance(live["prior_transactions"], list)
+        ):
+            raise ValueError(
+                "managed shared-root clearance authority lease publication bindings "
+                "are invalid"
+            )
+        accounting = require_r17_exact_keys(
+            live["accounting_namespace"],
+            {"directory", "committed_entries", "excluding"},
+            "managed shared-root clearance authority lease accounting namespace",
+        )
+        accounting_excluding = accounting["excluding"]
+        if accounting_excluding is not None:
+            accounting_excluding = require_r17_integer(
+                accounting_excluding,
+                "managed shared-root clearance authority lease accounting exclusion",
+                minimum=1,
+            )
+        committed_entries = accounting["committed_entries"]
+        if (
+            not isinstance(committed_entries, list)
+            or any(not isinstance(entry, str) for entry in committed_entries)
+            or committed_entries != sorted(set(committed_entries))
+        ):
+            raise ValueError(
+                "managed shared-root clearance authority lease accounting entries differ"
+            )
+
+        self.root = paths["root"].expanduser().absolute()
+        self.authority = snapshot
+        self._files: list[dict[str, object]] = []
+        self._directories: list[dict[str, object]] = []
+        self._file_declarations: dict[Path, dict[str, object]] = {}
+        self._directory_declarations: dict[Path, dict[str, object]] = {}
+        self._alias_targets: set[Path] = set()
+        self._staging_entries: dict[Path, tuple[str, ...]] = {}
+        self._accounting_path: Path | None = None
+        self._accounting_committed_entries = tuple(committed_entries)
+        self._accounting_excluding = accounting_excluding
+        self._closed = False
+        try:
+            for key in public:
+                path = self._add_file(
+                    f"managed shared-root clearance authority lease public {key}",
+                    public[key],
+                )
+                self._alias_targets.add(path)
+            self._add_transaction(
+                "managed shared-root clearance authority lease transaction",
+                binding["transaction"],
+            )
+            self._add_file(
+                "managed shared-root clearance authority lease controller",
+                live["controller"],
+            )
+            for index, declaration in enumerate(live["source_authority_publications"]):
+                self._add_file(
+                    "managed shared-root clearance authority lease source authority "
+                    f"{index}",
+                    declaration,
+                )
+            for index, declaration in enumerate(live["supersedes"]):
+                path = self._add_file(
+                    "managed shared-root clearance authority lease superseded "
+                    f"publication {index}",
+                    declaration,
+                )
+                self._alias_targets.add(path)
+            for index, declaration in enumerate(live["prior_transactions"]):
+                self._add_transaction(
+                    "managed shared-root clearance authority lease prior transaction "
+                    f"{index}",
+                    declaration,
+                )
+            self._add_file(
+                "managed shared-root clearance authority lease stale manifest",
+                live["stale_manifest"],
+            )
+            self._add_file(
+                "managed shared-root clearance authority lease terminal source",
+                live["terminal_source"],
+            )
+            # terminal_sacct is a pure JSON derivation of this pinned source
+            # publication, not a second filesystem authority member.
+            if live["terminal_sacct"] != retained_stale_terminal_sacct_binding(paths):
+                raise ValueError(
+                    "managed shared-root clearance authority lease terminal sacct "
+                    "derivation differs"
+                )
+            self._accounting_path = self._add_directory(
+                "managed shared-root clearance authority lease accounting namespace",
+                accounting["directory"],
+            )
+            self._add_directory(
+                "managed shared-root clearance authority lease stale namespace",
+                live["stale_namespace"],
+            )
+            self._add_directory(
+                "managed shared-root clearance authority lease Stage I namespace",
+                live["stage_i_namespace"],
+            )
+            self.assert_bound()
+        except BaseException:
+            self.close()
+            raise
+
+    def _add_transaction(self, label: str, value: object) -> None:
+        """Retain one exact installed transaction and its complete staging tree."""
+
+        transaction = require_r17_exact_keys(
+            value,
+            {"marker", "staging", "journal", "payloads", "entries", "expected"},
+            label,
+        )
+        payloads = require_r17_exact_keys(
+            transaction["payloads"],
+            set(SHARED_ROOT_CLEARANCE_TRANSACTION_PAYLOADS),
+            f"{label} payloads",
+        )
+        managed_shared_root_clearance_expected_digests(
+            transaction["expected"], f"{label} expected"
+        )
+        entries = transaction["entries"]
+        if (
+            not isinstance(entries, list)
+            or any(not isinstance(entry, str) for entry in entries)
+            or entries != sorted(set(entries))
+        ):
+            raise ValueError(f"{label} staging entries differ")
+        marker = self._add_file(f"{label} marker", transaction["marker"])
+        self._alias_targets.add(marker)
+        self._add_file(f"{label} journal", transaction["journal"])
+        for key in SHARED_ROOT_CLEARANCE_TRANSACTION_PAYLOADS:
+            self._add_file(f"{label} {key}", payloads[key])
+        staging = self._add_directory(f"{label} staging", transaction["staging"])
+        retained = self._staging_entries.get(staging)
+        if retained is not None and retained != tuple(entries):
+            raise ValueError(f"{label} duplicates staging with different entries")
+        self._staging_entries[staging] = tuple(entries)
+
+    def _add_file(self, label: str, value: object) -> Path:
+        declaration = require_r17_exact_keys(
+            value,
+            {"path", "sha256", "mode", "links", "device", "inode"},
+            label,
+        )
+        path = Path(str(declaration["path"])).expanduser().absolute()
+        retained = self._file_declarations.get(path)
+        if retained is not None:
+            if retained != declaration:
+                raise ValueError(f"{label} duplicates a path with a different binding")
+            return path
+        expected_digest = require_r17_sha256(declaration["sha256"], f"{label} SHA-256")
+        if declaration["mode"] not in {"0444", "0644"} or declaration["links"] != 1:
+            raise ValueError(f"{label} profile differs")
+        parent_fd = os.open(
+            path.parent,
+            os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0),
+        )
+        file_binding = None
+        try:
+            parent_profile = require_directory_descriptor_binding(
+                path.parent, parent_fd, f"{label} parent"
+            )
+            file_binding = open_regular_file_binding(
+                parent_fd,
+                path.name,
+                label,
+                retain_payload=False,
+                expected_sha256=expected_digest,
+            )
+            if file_binding is None:
+                raise ValueError(f"{label} is unavailable")
+            profile = file_binding.profile
+            if (
+                declaration["device"] != profile.st_dev
+                or declaration["inode"] != profile.st_ino
+                or declaration["mode"] != f"{stat.S_IMODE(profile.st_mode):04o}"
+                or declaration["links"] != profile.st_nlink
+            ):
+                raise ValueError(f"{label} differs from its authenticated snapshot")
+        except BaseException:
+            if file_binding is not None:
+                file_binding.close()
+            os.close(parent_fd)
+            raise
+        self._file_declarations[path] = declaration
+        self._files.append({
+            "label": label,
+            "path": path,
+            "parent_fd": parent_fd,
+            "parent_profile": parent_profile,
+            "binding": file_binding,
+        })
+        return path
+
+    def _add_directory(self, label: str, value: object) -> Path:
+        declaration = require_r17_exact_keys(
+            value, {"path", "mode", "device", "inode"}, label
+        )
+        path = Path(str(declaration["path"])).expanduser().absolute()
+        retained = self._directory_declarations.get(path)
+        if retained is not None:
+            if retained != declaration:
+                raise ValueError(f"{label} duplicates a path with a different binding")
+            return path
+        descriptor = os.open(
+            path,
+            os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0),
+        )
+        try:
+            profile = require_directory_descriptor_binding(path, descriptor, label)
+            if (
+                declaration["device"] != profile.st_dev
+                or declaration["inode"] != profile.st_ino
+                or declaration["mode"] != f"{stat.S_IMODE(profile.st_mode):04o}"
+            ):
+                raise ValueError(f"{label} differs from its authenticated snapshot")
+        except BaseException:
+            os.close(descriptor)
+            raise
+        self._directory_declarations[path] = declaration
+        self._directories.append({
+            "label": label,
+            "path": path,
+            "descriptor": descriptor,
+            "profile": profile,
+        })
+        return path
+
+    def assert_bound(self) -> None:
+        """Require every retained path, inode, byte stream, alias, and member."""
+
+        if self._closed:
+            raise ValueError("managed shared-root clearance authority lease is closed")
+        for retained in self._directories:
+            require_directory_descriptor_binding(
+                retained["path"],
+                retained["descriptor"],
+                retained["label"],
+                retained["profile"],
+            )
+        if not self._staging_entries:
+            raise ValueError(
+                "managed shared-root clearance authority lease lacks private staging"
+            )
+        directories = {
+            retained["path"]: retained for retained in self._directories
+        }
+        for path, expected_entries in self._staging_entries.items():
+            staging = directories[path]
+            current_entries, _ = stable_bound_directory_entries(
+                staging["path"],
+                staging["descriptor"],
+                staging["profile"],
+                f"managed shared-root clearance authority lease staging {path}",
+            )
+            if tuple(current_entries) != expected_entries:
+                raise ValueError(
+                    "managed shared-root clearance authority lease private staging "
+                    "changed"
+                )
+        if self._accounting_path is None:
+            raise ValueError(
+                "managed shared-root clearance authority lease lacks accounting namespace"
+            )
+        accounting = directories[self._accounting_path]
+        accounting_entries, _ = stable_bound_directory_entries(
+            accounting["path"],
+            accounting["descriptor"],
+            accounting["profile"],
+            "managed shared-root clearance authority lease accounting namespace",
+        )
+        committed_entries = tuple(
+            managed_shared_root_clearance_committed_namespace_entries(
+                accounting["path"],
+                accounting_entries,
+                excluding=self._accounting_excluding,
+            )
+        )
+        if committed_entries != self._accounting_committed_entries:
+            raise ValueError(
+                "managed shared-root clearance authority lease accounting checkpoint "
+                "namespace changed"
+            )
+        require_managed_shared_root_clearance_aliases_absent(
+            tuple(sorted(self._alias_targets, key=str)),
+            "managed shared-root clearance authority lease",
+        )
+        for retained in self._files:
+            require_directory_descriptor_binding(
+                retained["path"].parent,
+                retained["parent_fd"],
+                f"{retained['label']} parent",
+                retained["parent_profile"],
+            )
+            retained["binding"].assert_bound(
+                retained["parent_fd"], retained["path"].name, retained["label"]
+            )
+
+    def use(self, action, label: str):
+        """Invoke one authority use immediately inside the retained lease guard."""
+
+        if not callable(action):
+            raise ValueError(f"{label} authority action is not callable")
+        with active_managed_shared_root_clearance_authority_lease(self):
+            return action()
+
+    def close(self) -> None:
+        """Release every retained authority descriptor."""
+
+        if self._closed:
+            return
+        self._closed = True
+        for retained in reversed(self._files):
+            retained["binding"].close()
+            os.close(retained["parent_fd"])
+        for retained in reversed(self._directories):
+            os.close(retained["descriptor"])
+
+
+@contextmanager
+def active_managed_shared_root_clearance_authority_lease(
+    lease: ManagedSharedRootClearanceAuthorityLease,
+):
+    """Bind one F120 lease to canonical mutation boundaries during an action."""
+
+    lease.assert_bound()
+    active = _ACTIVE_MANAGED_SHARED_ROOT_CLEARANCE_LEASES.get(lease.root)
+    if active is not None and active[0] is not lease:
+        raise ValueError("a different managed shared-root clearance lease is active")
+    _ACTIVE_MANAGED_SHARED_ROOT_CLEARANCE_LEASES[lease.root] = (
+        lease, 1 if active is None else active[1] + 1,
+    )
+    try:
+        yield
+        lease.assert_bound()
+    finally:
+        current = _ACTIVE_MANAGED_SHARED_ROOT_CLEARANCE_LEASES.get(lease.root)
+        if current is None or current[0] is not lease:
+            raise ValueError("managed shared-root clearance authority lease changed")
+        if current[1] == 1:
+            del _ACTIVE_MANAGED_SHARED_ROOT_CLEARANCE_LEASES[lease.root]
+        else:
+            _ACTIVE_MANAGED_SHARED_ROOT_CLEARANCE_LEASES[lease.root] = (
+                lease, current[1] - 1,
+            )
+
+
+def managed_shared_root_clearance_authority_lease(
+    paths: dict[str, Path], authority: dict[str, object] | None,
+) -> ManagedSharedRootClearanceAuthorityLease | None:
+    """Acquire a descriptor lease from one authenticated F120 snapshot."""
+
+    return (
+        None
+        if authority is None
+        else ManagedSharedRootClearanceAuthorityLease(paths, authority)
+    )
+
+
+def use_managed_shared_root_clearance_authority(
+    lease: ManagedSharedRootClearanceAuthorityLease | None,
+    action,
+    label: str,
+):
+    """Invoke one action under F120 when present, or directly when absent."""
+
+    return action() if lease is None else lease.use(action, label)
+
+
+def finalize_managed_shared_root_clearance_authority(
+    paths: dict[str, Path],
+    authority: dict[str, object],
+    result: object,
+    label: str,
+):
+    """Close the final-read tail before returning an F120-authorized decision."""
+
+    return call_final_managed_shared_root_clearance_authority(
+        paths, authority, lambda: result, label
+    )
+
+
+def call_final_managed_shared_root_clearance_authority(
+    paths: dict[str, Path],
+    authority: dict[str, object],
+    action,
+    label: str,
+):
+    """Acquire a fresh lease and immediately invoke one final authority use."""
+
+    lease = managed_shared_root_clearance_authority_lease(paths, authority)
+    if lease is None:
+        raise ValueError(f"{label} lacks managed shared-root clearance authority")
+    try:
+        return lease.use(action, label)
+    finally:
+        lease.close()
+
+
+def copy_managed_shared_root_clearance_publication(
+    paths: dict[str, Path],
+    checkpoint: int,
+    *,
+    expected_audit_review_sha256: str,
+    source: Path,
+    destination: Path,
+    label: str,
+) -> None:
+    """Reclose and lease installed/live F120 authority around one public copy."""
+
+    authority = authenticate_managed_shared_root_clearance_publication_closure(
+        paths,
+        checkpoint,
+        expected_audit_review_sha256=expected_audit_review_sha256,
+    )
+    lease = managed_shared_root_clearance_authority_lease(paths, authority)
+    if lease is None:
+        raise ValueError(f"{label} lacks managed shared-root publication authority")
+    try:
+        lease.use(lambda: copy_file(source, destination), label)
+    finally:
+        lease.close()
+
+
+def emit_managed_shared_root_clearance_result(
+    paths: dict[str, Path],
+    closure: dict[str, object],
+    result: dict[str, object],
+    label: str,
+) -> int:
+    """Emit one lifecycle result immediately under a fresh final authority lease."""
+
+    if closure["result"] != result:
+        raise ValueError(f"{label} result differs from final authority")
+
+    def emit() -> int:
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return 0
+
+    return call_final_managed_shared_root_clearance_authority(
+        paths, closure, emit, label
+    )
+
+
+def print_managed_shared_root_clearance_result(result: dict[str, object]) -> int:
+    """Print one authenticated lifecycle result and return command success."""
+
+    print(json.dumps(result, indent=2, sort_keys=True))
+    return 0
 
 
 def managed_shared_root_clearance_staging_entries() -> set[str]:
@@ -14604,7 +15282,8 @@ def continue_managed_shared_root_clearance_transaction(
     checkpoint: int,
     *,
     expected_audit_review_sha256: str,
-) -> dict[str, object]:
+    final_action=None,
+):
     """Recover one exact prefix forward, publishing the audit-review last."""
 
     _, payloads, expected = require_installed_managed_shared_root_clearance_transaction(
@@ -14638,7 +15317,17 @@ def continue_managed_shared_root_clearance_transaction(
                     checkpoint,
                     expected_audit_review_sha256=expected["audit_review"],
                 )
-                copy_file(payloads[index], path)
+                key = tuple(SHARED_ROOT_CLEARANCE_TRANSACTION_PAYLOADS)[index]
+                copy_managed_shared_root_clearance_publication(
+                    paths,
+                    checkpoint,
+                    expected_audit_review_sha256=expected["audit_review"],
+                    source=payloads[index],
+                    destination=path,
+                    label=(
+                        f"managed shared-root clearance completed recovery {key}"
+                    ),
+                )
         closure = authenticate_managed_shared_root_clearance_final_closure(
             paths,
             checkpoint,
@@ -14650,7 +15339,21 @@ def continue_managed_shared_root_clearance_transaction(
                 "managed shared-root clearance installed transaction changed "
                 "during recovery"
             )
-        return closure["result"]
+        return (
+            finalize_managed_shared_root_clearance_authority(
+                paths,
+                closure,
+                closure["result"],
+                "managed shared-root clearance completed recovery",
+            )
+            if final_action is None
+            else call_final_managed_shared_root_clearance_authority(
+                paths,
+                closure,
+                lambda: final_action(closure["result"]),
+                "managed shared-root clearance completed recovery result",
+            )
+        )
     if state not in {
         (False, False, False, False),
         (True, False, False, False),
@@ -14667,7 +15370,15 @@ def continue_managed_shared_root_clearance_transaction(
             checkpoint,
             expected_audit_review_sha256=expected["audit_review"],
         )
-        copy_file(payloads[index], canonical[index])
+        key = tuple(SHARED_ROOT_CLEARANCE_TRANSACTION_PAYLOADS)[index]
+        copy_managed_shared_root_clearance_publication(
+            paths,
+            checkpoint,
+            expected_audit_review_sha256=expected["audit_review"],
+            source=payloads[index],
+            destination=canonical[index],
+            label=f"managed shared-root clearance public {key} publication",
+        )
     state = managed_shared_root_clearance_public_state(canonical, expected)
     if state != (True, True, True, False):
         raise ValueError(
@@ -14678,7 +15389,14 @@ def continue_managed_shared_root_clearance_transaction(
         checkpoint,
         expected_audit_review_sha256=expected["audit_review"],
     )
-    copy_file(payloads[3], canonical[3])
+    copy_managed_shared_root_clearance_publication(
+        paths,
+        checkpoint,
+        expected_audit_review_sha256=expected["audit_review"],
+        source=payloads[3],
+        destination=canonical[3],
+        label="managed shared-root clearance public audit-review publication",
+    )
     closure = authenticate_managed_shared_root_clearance_final_closure(
         paths,
         checkpoint,
@@ -14689,7 +15407,21 @@ def continue_managed_shared_root_clearance_transaction(
         raise ValueError(
             "managed shared-root clearance installed transaction changed during recovery"
         )
-    return closure["result"]
+    return (
+        finalize_managed_shared_root_clearance_authority(
+            paths,
+            closure,
+            closure["result"],
+            "managed shared-root clearance publication recovery",
+        )
+        if final_action is None
+        else call_final_managed_shared_root_clearance_authority(
+            paths,
+            closure,
+            lambda: final_action(closure["result"]),
+            "managed shared-root clearance publication recovery result",
+        )
+    )
 
 
 def managed_shared_root_clearance_candidate_arguments(
@@ -14731,13 +15463,12 @@ def promote_managed_shared_root_clearance(args: argparse.Namespace) -> int:
     stage_managed_shared_root_clearance_transaction(
         paths, args.checkpoint, candidates, expected
     )
-    result = continue_managed_shared_root_clearance_transaction(
+    return continue_managed_shared_root_clearance_transaction(
         paths,
         args.checkpoint,
         expected_audit_review_sha256=expected["audit_review"],
+        final_action=print_managed_shared_root_clearance_result,
     )
-    print(json.dumps(result, indent=2, sort_keys=True))
-    return 0
 
 
 @locked_root_action
@@ -14745,13 +15476,13 @@ def recover_managed_shared_root_clearance(args: argparse.Namespace) -> int:
     """Recover one complete exact managed-clearance transaction forward."""
 
     root = require_root(Path(args.root), args.allow_local_root)
-    result = continue_managed_shared_root_clearance_transaction(
-        layout(root),
+    paths = layout(root)
+    return continue_managed_shared_root_clearance_transaction(
+        paths,
         args.checkpoint,
         expected_audit_review_sha256=args.expected_audit_review_sha256,
+        final_action=print_managed_shared_root_clearance_result,
     )
-    print(json.dumps(result, indent=2, sort_keys=True))
-    return 0
 
 
 @locked_root_action
@@ -14765,8 +15496,12 @@ def verify_managed_shared_root_clearance(args: argparse.Namespace) -> int:
         args.checkpoint,
         expected_audit_review_sha256=args.expected_audit_review_sha256,
     )
-    print(json.dumps(closure["result"], indent=2, sort_keys=True))
-    return 0
+    return emit_managed_shared_root_clearance_result(
+        paths,
+        closure,
+        closure["result"],
+        "managed shared-root clearance verification",
+    )
 
 
 def require_managed_shared_root_clearance(
@@ -14984,14 +15719,15 @@ def require_managed_shared_root_clearance(
     live_queue_absence = require_stale_job_absent_from_complete_queue(
         queue_evidence, now=current
     )
-    if committed_authority != authenticate_managed_shared_root_clearance_final_closure(
+    closing_authority = authenticate_managed_shared_root_clearance_final_closure(
         paths, checkpoint_number, now=current
-    ):
+    )
+    if committed_authority != closing_authority:
         raise ValueError(
             "managed shared-root clearance public or transaction authority changed "
             "during consumption"
         )
-    return {
+    result = {
         "checkpoint": checkpoint,
         "artifact": {
             "path": str(artifact_path), "sha256": artifact_sha,
@@ -15019,6 +15755,12 @@ def require_managed_shared_root_clearance(
             "authorized_stale_manifest": str(stale_manifest),
         },
     }
+    return finalize_managed_shared_root_clearance_authority(
+        paths,
+        closing_authority,
+        result,
+        "managed shared-root clearance production consumption",
+    )
 
 
 def shared_root_campaign_conflicts(root: Path,
@@ -15620,9 +16362,13 @@ def submit(args: argparse.Namespace) -> int:
     paths, script, audit = submission_preflight(
         args, manifest_path, manifest, run_slurm_test=True
     )
+    clearance_lease = None
     try:
         clearance_authority = reauthenticate_retained_managed_shared_root_clearance(
             paths, audit
+        )
+        clearance_lease = managed_shared_root_clearance_authority_lease(
+            paths, clearance_authority
         )
         audit["final_queue_authentication"] = authenticated_production_queue_evidence(
             args, paths, read_reservations(paths), offline_local_root
@@ -15636,8 +16382,10 @@ def submit(args: argparse.Namespace) -> int:
         reauthenticate_retained_managed_shared_root_clearance(
             paths, audit, expected_authority=clearance_authority
         )
-        transaction_path = write_submit_pending_transaction(
-            paths, manifest_path, audit
+        transaction_path = use_managed_shared_root_clearance_authority(
+            clearance_lease,
+            lambda: write_submit_pending_transaction(paths, manifest_path, audit),
+            "Stage I pending-submission journal publication",
         )
         reauthenticate_open_batch_script(script, audit["batch_script"])
         if output_file:
@@ -15646,14 +16394,18 @@ def submit(args: argparse.Namespace) -> int:
             reauthenticate_retained_managed_shared_root_clearance(
                 paths, audit, expected_authority=clearance_authority
             )
-            output = subprocess.run(
-                [str(SBATCH), "--parsable", str(script["descriptor_path"])],
-                check=True,
-                capture_output=True,
-                text=True,
-                env=scheduler_environment(),
-                pass_fds=(int(script["fd"]),),
-            ).stdout
+            output = use_managed_shared_root_clearance_authority(
+                clearance_lease,
+                lambda: subprocess.run(
+                    [str(SBATCH), "--parsable", str(script["descriptor_path"])],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                    env=scheduler_environment(),
+                    pass_fds=(int(script["fd"]),),
+                ).stdout,
+                "Stage I real sbatch invocation",
+            )
         reauthenticate_open_batch_script(script, audit["batch_script"])
         job_id = parse_sbatch_job_id(output)
         finish_submit_transaction(
@@ -15663,6 +16415,8 @@ def submit(args: argparse.Namespace) -> int:
         print(f"Submitted Stage I job {job_id}: {script['path']}")
         return 0
     finally:
+        if clearance_lease is not None:
+            clearance_lease.close()
         close_authenticated_batch_script(script)
 
 
