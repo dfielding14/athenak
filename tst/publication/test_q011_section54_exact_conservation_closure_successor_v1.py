@@ -7,6 +7,7 @@ import copy
 import hashlib
 import json
 import math
+import os
 from pathlib import Path
 import struct
 import tempfile
@@ -623,12 +624,14 @@ class Q011ExactConservationClosureTests(unittest.TestCase):
         self.assertEqual(len(result["checkpoints"]), 2)
 
     def test_reducer_rejects_one_dimensional_deck_labeled_2d3v(self) -> None:
-        one_dimensional = FIXTURE_DECK.replace(b"nx2       = 2", b"nx2       = 1")
-        with self.assertRaisesRegex(
-            reducer.ConservationClosureError,
-            "requires true 2D x1-x2 geometry",
-        ):
-            _reduce(_fixture(deck_payload=one_dimensional))
+        for axis in (b"nx1       = 2", b"nx2       = 2"):
+            with self.subTest(axis=axis.decode("ascii").strip()):
+                one_dimensional = FIXTURE_DECK.replace(axis, axis[:-1] + b"1")
+                with self.assertRaisesRegex(
+                    reducer.ConservationClosureError,
+                    "requires true 2D x1-x2 geometry",
+                ):
+                    _reduce(_fixture(deck_payload=one_dimensional))
 
     def test_restart_mesh_partition_metadata_payload_and_state_drift_fail_closed(
         self,
@@ -864,7 +867,12 @@ class Q011ExactConservationClosureTests(unittest.TestCase):
             "ledger_disabled_nonperiodic_3d",
             "ledger-disabled nonperiodic 3D new/base physics state differs",
             "ATHENA_PIC_EXACT_CONSERVATION_BASE_CANDIDATE_MANIFEST",
+            "ATHENA_PIC_EXACT_CONSERVATION_CANDIDATE_MANIFEST",
+            "ATHENA_PIC_EXACT_CONSERVATION_EXPECTED_CANDIDATE_COMMIT",
             "_LEDGER_DISABLED_PARITY_CONTROL_PLANE_RUNNER",
+            "_LEDGER_DISABLED_PARITY_CONTROL_PLANE_RUNNER_SHA256",
+            "linux_execveat_descriptor_bound_exact_authenticated_bytes",
+            "descriptor-bound Athena execution",
             "base and candidate executable paths are identical",
             "authentication failed",
             "_run_athena_expect_fail",
@@ -938,35 +946,49 @@ class Q011ExactConservationClosureTests(unittest.TestCase):
             candidate.write_bytes(b"candidate-bytes")
             baseline.write_bytes(b"candidate-bytes")
             manifest.write_text("{}\n", encoding="ascii")
-            with self.assertRaisesRegex(RuntimeError, "paths are identical"):
-                runtime._authenticate_ledger_disabled_parity_base(
-                    candidate_executable=candidate,
-                    base_executable=candidate,
-                    candidate_manifest=manifest,
-                )
-            with self.assertRaisesRegex(RuntimeError, "bytes are identical"):
-                runtime._authenticate_ledger_disabled_parity_base(
-                    candidate_executable=candidate,
-                    base_executable=baseline,
-                    candidate_manifest=manifest,
-                )
+            with runtime._bind_executable(
+                candidate, label="candidate"
+            ) as candidate_bound, runtime._bind_executable(
+                candidate, label="same-path"
+            ) as same_path:
+                with self.assertRaisesRegex(RuntimeError, "paths are identical"):
+                    runtime._authenticate_ledger_disabled_parity_base(
+                        candidate_executable=candidate_bound,
+                        base_executable=same_path,
+                        base_manifest=manifest,
+                    )
+            with runtime._bind_executable(
+                candidate, label="candidate"
+            ) as candidate_bound, runtime._bind_executable(
+                baseline, label="same-bytes"
+            ) as same_bytes:
+                with self.assertRaisesRegex(RuntimeError, "bytes are identical"):
+                    runtime._authenticate_ledger_disabled_parity_base(
+                        candidate_executable=candidate_bound,
+                        base_executable=same_bytes,
+                        base_manifest=manifest,
+                    )
 
     def test_runtime_parity_revalidation_uses_pinned_installed_control_plane(self) -> None:
         completed = mock.Mock(returncode=0, stderr=b"", stdout=b'{"status":"passed"}')
         with mock.patch.object(runtime.subprocess, "run", return_value=completed) as run:
             self.assertEqual(
                 runtime._run_clean_candidate_revalidation(
-                    Path("/fixed/manifest.json"), "a" * 64
+                    Path("/fixed/manifest.json"),
+                    "a" * 64,
+                    runtime._LEDGER_DISABLED_PARITY_BASE_COMMIT,
                 ),
                 {"status": "passed"},
             )
         command = run.call_args.args[0]
         self.assertEqual(
-            command[0], str(runtime._LEDGER_DISABLED_PARITY_CONTROL_PLANE_RUNNER)
+            command[0], runtime._LEDGER_DISABLED_PARITY_CONTROL_PLANE_PYTHON
         )
-        self.assertEqual(command[-1], runtime._LEDGER_DISABLED_PARITY_BASE_COMMIT)
+        self.assertIn(str(runtime._LEDGER_DISABLED_PARITY_CONTROL_PLANE_RUNNER), command)
+        self.assertIn(runtime._LEDGER_DISABLED_PARITY_BASE_COMMIT, command)
         self.assertEqual(run.call_args.kwargs["cwd"], "/")
         self.assertFalse(run.call_args.kwargs["check"])
+        self.assertEqual(len(run.call_args.kwargs["pass_fds"]), 1)
 
     def test_runtime_parity_rejects_bogus_baseline_and_provenance(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -975,31 +997,24 @@ class Q011ExactConservationClosureTests(unittest.TestCase):
             candidate.write_bytes(b"candidate-bytes")
             manifest = root / "clean_candidate_manifest.json"
             manifest.write_text("{}\n", encoding="ascii")
-            baseline = root / "athena"
+            other = root / "other"
+            other.mkdir()
+            baseline = other / "athena"
             baseline.write_bytes(b"bogus-baseline")
-            with self.assertRaisesRegex(RuntimeError, "differs from pinned base build"):
-                runtime._authenticate_ledger_disabled_parity_base(
-                    candidate_executable=candidate,
-                    base_executable=baseline,
-                    candidate_manifest=manifest,
-                )
-
-            with mock.patch.object(
-                runtime,
-                "_LEDGER_DISABLED_PARITY_BASE_EXECUTABLE_SHA256",
-                hashlib.sha256(baseline.read_bytes()).hexdigest(),
-            ), mock.patch.object(
-                runtime,
-                "_run_clean_candidate_revalidation",
-                side_effect=ValueError("bogus provenance"),
-            ):
-                with self.assertRaisesRegex(RuntimeError, "provenance authentication failed"):
+            with runtime._bind_executable(
+                candidate, label="candidate"
+            ) as candidate_bound, runtime._bind_executable(
+                baseline, label="base"
+            ) as base_bound:
+                with self.assertRaisesRegex(RuntimeError, "manifest executable"):
                     runtime._authenticate_ledger_disabled_parity_base(
-                        candidate_executable=candidate,
-                        base_executable=baseline,
-                        candidate_manifest=manifest,
+                        candidate_executable=candidate_bound,
+                        base_executable=base_bound,
+                        base_manifest=manifest,
                     )
 
+            baseline = root / "athena"
+            baseline.write_bytes(b"bogus-baseline")
             forged_report = {
                 "status": "passed",
                 "source": {
@@ -1010,27 +1025,227 @@ class Q011ExactConservationClosureTests(unittest.TestCase):
                     "executable_sha256": hashlib.sha256(
                         baseline.read_bytes()
                     ).hexdigest(),
+                    "profile_id": runtime._LEDGER_DISABLED_PARITY_BASE_BUILD_PROFILE,
                 },
                 "clean_candidate_manifest": {
                     "sha256": hashlib.sha256(manifest.read_bytes()).hexdigest(),
                     "path": str(manifest),
                 },
+                "current_control_plane_version":
+                    runtime._LEDGER_DISABLED_PARITY_CONTROL_PLANE_VERSION,
             }
             with mock.patch.object(
                 runtime,
-                "_LEDGER_DISABLED_PARITY_BASE_EXECUTABLE_SHA256",
-                hashlib.sha256(baseline.read_bytes()).hexdigest(),
-            ), mock.patch.object(
-                runtime,
                 "_run_clean_candidate_revalidation",
                 return_value=forged_report,
-            ):
-                with self.assertRaisesRegex(RuntimeError, "does not match the pinned base build"):
+            ), runtime._bind_executable(
+                candidate, label="candidate"
+            ) as candidate_bound, runtime._bind_executable(
+                baseline, label="base"
+            ) as base_bound:
+                with self.assertRaisesRegex(RuntimeError, "does not match the pinned"):
                     runtime._authenticate_ledger_disabled_parity_base(
-                        candidate_executable=candidate,
-                        base_executable=baseline,
-                        candidate_manifest=manifest,
+                        candidate_executable=candidate_bound,
+                        base_executable=base_bound,
+                        base_manifest=manifest,
                     )
+
+    def test_runtime_parity_exact_base_production_profile_is_constructible(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            candidate = root / "candidate"
+            baseline = root / "athena"
+            manifest = root / "clean_candidate_manifest.json"
+            candidate.write_bytes(b"candidate-bytes")
+            baseline.write_bytes(b"base-production-profile-bytes")
+            manifest.write_text("{}\n", encoding="ascii")
+            with runtime._bind_executable(
+                candidate, label="candidate"
+            ) as candidate_bound, runtime._bind_executable(
+                baseline, label="base"
+            ) as base_bound:
+                report = {
+                    "status": "passed",
+                    "source": {
+                        "git_commit": runtime._LEDGER_DISABLED_PARITY_BASE_COMMIT,
+                        "git_tree": runtime._LEDGER_DISABLED_PARITY_BASE_TREE,
+                    },
+                    "build": {
+                        "executable_sha256": base_bound.sha256,
+                        "profile_id": runtime._LEDGER_DISABLED_PARITY_BASE_BUILD_PROFILE,
+                        "receipt_control_plane_version": "a" * 64,
+                    },
+                    "clean_candidate_manifest": {
+                        "sha256": hashlib.sha256(manifest.read_bytes()).hexdigest(),
+                        "path": str(manifest),
+                    },
+                    "current_control_plane_version":
+                        runtime._LEDGER_DISABLED_PARITY_CONTROL_PLANE_VERSION,
+                }
+                with mock.patch.object(
+                    runtime, "_run_clean_candidate_revalidation", return_value=report
+                ):
+                    result = runtime._authenticate_ledger_disabled_parity_base(
+                        candidate_executable=candidate_bound,
+                        base_executable=base_bound,
+                        base_manifest=manifest,
+                    )
+            self.assertEqual(result["executable_sha256"], report["build"]["executable_sha256"])
+            self.assertEqual(
+                result["build_profile_id"],
+                runtime._LEDGER_DISABLED_PARITY_BASE_BUILD_PROFILE,
+            )
+            self.assertEqual(
+                result["execution_binding"],
+                "linux_execveat_descriptor_bound_exact_authenticated_bytes",
+            )
+
+    def test_runtime_parity_candidate_requires_authenticated_production_profile(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            candidate_root = root / "candidate-clean"
+            candidate_root.mkdir()
+            candidate = candidate_root / "athena"
+            manifest = candidate_root / "clean_candidate_manifest.json"
+            candidate.write_bytes(b"candidate-production-profile-bytes")
+            manifest.write_text("{}\n", encoding="ascii")
+            expected_commit = "2" * 40
+            with runtime._bind_executable(
+                candidate, label="candidate"
+            ) as candidate_bound:
+                report = {
+                    "status": "passed",
+                    "source": {
+                        "git_commit": expected_commit,
+                        "git_tree": "3" * 40,
+                    },
+                    "build": {
+                        "executable_sha256": candidate_bound.sha256,
+                        "profile_id": runtime._LEDGER_DISABLED_PARITY_BASE_BUILD_PROFILE,
+                        "receipt_control_plane_version": "a" * 64,
+                    },
+                    "clean_candidate_manifest": {
+                        "sha256": hashlib.sha256(manifest.read_bytes()).hexdigest(),
+                        "path": str(manifest),
+                    },
+                    "current_control_plane_version":
+                        runtime._LEDGER_DISABLED_PARITY_CONTROL_PLANE_VERSION,
+                }
+                with mock.patch.object(
+                    runtime, "_run_clean_candidate_revalidation", return_value=report
+                ):
+                    result = runtime._authenticate_ledger_disabled_parity_candidate(
+                        candidate_executable=candidate_bound,
+                        candidate_manifest=manifest,
+                        expected_commit=expected_commit,
+                    )
+            self.assertEqual(result["source_commit"], expected_commit)
+            self.assertEqual(result["source_tree"], "3" * 40)
+            self.assertEqual(
+                result["build_profile_id"],
+                runtime._LEDGER_DISABLED_PARITY_BASE_BUILD_PROFILE,
+            )
+
+    def test_bound_athena_rejects_transient_path_replacement(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "source"
+            work = root / "work"
+            source.mkdir()
+            work.mkdir()
+            executable = source / "athena"
+            original = b"#!/bin/sh\nprintf 'bound-original\\n'\n"
+            executable.write_bytes(original)
+            executable.chmod(0o555)
+            deck = work / "input.athinput"
+            deck.write_text("# fixture\n", encoding="ascii")
+            with runtime._bind_executable(
+                executable, label="athena-replacement-probe"
+            ) as bound:
+                replacement = source / "replacement"
+                replacement.write_bytes(b"#!/bin/sh\nprintf 'replacement\\n'\n")
+                os.replace(replacement, executable)
+                restored = source / "restored"
+                restored.write_bytes(original)
+                os.replace(restored, executable)
+                with self.assertRaisesRegex(RuntimeError, "changed while retained"):
+                    runtime._execute_athena(
+                        label="bound_replacement_probe",
+                        exe_dir=work,
+                        basename="bound_probe",
+                        deck=deck,
+                        bound_executable=bound,
+                    )
+
+    def test_bound_athena_rejects_transient_in_place_rewrite_and_restore(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            executable = root / "athena"
+            original = b"#!/bin/sh\nprintf 'bound-original\\n'\n"
+            executable.write_bytes(original)
+            executable.chmod(0o755)
+            with runtime._bind_executable(
+                executable, label="athena-in-place-rewrite-probe"
+            ) as bound:
+                executable.write_bytes(b"#!/bin/sh\nprintf 'replacement\\n'\n")
+                executable.write_bytes(original)
+                with self.assertRaisesRegex(RuntimeError, "changed while retained"):
+                    runtime._require_bound_executable_unchanged(
+                        bound, label="in-place-rewrite-probe"
+                    )
+
+    def test_bound_athena_runs_with_read_only_source_and_writable_outputs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "source"
+            work = root / "work"
+            source.mkdir()
+            work.mkdir()
+            executable = source / "athena"
+            executable.write_bytes(b"#!/bin/sh\ntouch output.marker\n")
+            executable.chmod(0o555)
+            deck = work / "input.athinput"
+            deck.write_text("# fixture\n", encoding="ascii")
+            with runtime._bind_executable(
+                executable, label="read-only-source-probe"
+            ) as bound:
+                source.chmod(0o555)
+                try:
+                    record = runtime._execute_athena(
+                        label="read_only_source_probe",
+                        exe_dir=work,
+                        basename="sealed_probe",
+                        deck=deck,
+                        bound_executable=bound,
+                    )
+                finally:
+                    source.chmod(0o755)
+            self.assertEqual(record["returncode"], 0)
+            self.assertTrue((work / "output.marker").is_file())
+            self.assertFalse((source / "output.marker").exists())
+
+    def test_sealed_python_runner_ignores_transient_path_replacement(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            script = root / "runner.py"
+            script.write_text("print('sealed-runner-original')\n", encoding="ascii")
+            with runtime._seal_python_script(
+                script, label="runner-replacement-probe"
+            ) as sealed:
+                script.write_text("print('replacement')\n", encoding="ascii")
+                completed = runtime._run_sealed_python_script(
+                    sealed_script=sealed,
+                    original_path=script,
+                    arguments=[],
+                    cwd=str(root),
+                    env={"PATH": "/usr/bin:/bin"},
+                    timeout=30,
+                )
+            self.assertEqual(completed.returncode, 0)
+            self.assertEqual(completed.stdout, b"sealed-runner-original\n")
+            self.assertEqual(completed.stderr, b"")
 
     def test_paper_vl2_boundary_stage_and_checkpoint_order_are_explicit(self) -> None:
         driver = (ROOT / "src/driver/driver.cpp").read_text(encoding="utf-8")
@@ -1119,12 +1334,28 @@ class Q011ExactConservationClosureTests(unittest.TestCase):
             runtime._LEDGER_DISABLED_PARITY_BASE_TREE,
         )
         self.assertEqual(
+            parity["required_base_build_profile"],
+            runtime._LEDGER_DISABLED_PARITY_BASE_BUILD_PROFILE,
+        )
+        self.assertEqual(
+            parity["required_candidate_build_profile"],
+            runtime._LEDGER_DISABLED_PARITY_BASE_BUILD_PROFILE,
+        )
+        self.assertEqual(
             parity["required_base_executable_sha256"],
-            runtime._LEDGER_DISABLED_PARITY_BASE_EXECUTABLE_SHA256,
+            "derived_from_authenticated_clean_candidate_and_bound_to_execveat_execution",
         )
         self.assertEqual(
             parity["required_control_plane_version"],
             runtime._LEDGER_DISABLED_PARITY_CONTROL_PLANE_VERSION,
+        )
+        self.assertEqual(
+            parity["required_control_plane_runner_sha256"],
+            runtime._LEDGER_DISABLED_PARITY_CONTROL_PLANE_RUNNER_SHA256,
+        )
+        self.assertEqual(
+            parity["execution_binding"],
+            "linux_execveat_descriptor_bound_exact_authenticated_bytes_with_mutation_watch_and_separate_writable_outputs",
         )
         self.assertIn(
             "trusted installed-control-plane receipts",

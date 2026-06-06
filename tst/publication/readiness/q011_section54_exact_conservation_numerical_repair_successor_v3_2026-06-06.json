@@ -21,11 +21,11 @@
     "primary_worktree_touched": false,
     "protected_historical_files_edited": false
   },
-  "scope": "Clean current-PIC numerical candidate for exact combined MHD+CR accounting in pic_parallel_shock. This bounded repair preserves the reviewed numerical accounting, requires true 2D plus 2D3V reducer admission, requires an authenticated exact-base and byte/path-distinct executable for ledger-disabled parity, removes the self-attested runtime-evidence packet verifier, and makes no trusted-execution, scientific, or publication claim.",
+  "scope": "Clean current-PIC numerical candidate for exact combined MHD+CR accounting in pic_parallel_shock. This bounded repair preserves the reviewed numerical accounting, requires nx1 greater than 1, nx2 greater than 1, nx3 equal to 1, and 2D3V reducer admission, makes the exact-base production-profile parity rerun constructible without retaining an incompatible debug-build hash, executes Athena through Linux execveat on retained authenticated executable descriptors with mutation watches and separate writable outputs, executes the installed control-plane runner from sealed captured bytes, removes the self-attested runtime-evidence packet verifier, and makes no trusted-execution, scientific, or publication claim.",
   "source_fail_closed_contract": {
     "qualified_topology": "fixed uniform mesh only",
     "qualified_boundary_geometry": "reflecting inner-x1, inflow or outflow outer-x1, periodic transverse boundaries",
-    "required_model": "true 2D x1-x2 geometry with nx2 greater than 1 and nx3 equal to 1, plus 2D3V cosmic-ray paper_mhd_pic_vl2_tsc with RK2, TSC, coupled momentum and energy feedback, injection with gas subtraction, and user history",
+    "required_model": "true 2D x1-x2 geometry with nx1 greater than 1, nx2 greater than 1, and nx3 equal to 1, plus 2D3V cosmic-ray paper_mhd_pic_vl2_tsc with RK2, TSC, coupled momentum and energy feedback, injection with gas subtraction, and user history",
     "validated_mesh_state_requirements": [
       "mesh adaptive and multilevel flags are false",
       "max_level equals root_level",
@@ -86,10 +86,16 @@
       "status": "pending_authenticated_distinct_baseline_rerun",
       "required_base_commit": "1d72534619da277fdd6838cabdab0d465d0a8867",
       "required_base_tree": "38c473644a42e01179a7b3140b2ad51e6345d667",
-      "required_base_executable_sha256": "e3664bcbfb59e64f18a30613b6c5a43e1add4de5749302c0aba332c7bf139d98",
+      "required_base_build_profile": "hip-mpi-release-paper-pic",
+      "required_base_executable_sha256": "derived_from_authenticated_clean_candidate_and_bound_to_execveat_execution",
+      "required_candidate_build_profile": "hip-mpi-release-paper-pic",
+      "required_candidate_binding": "authenticated candidate clean-candidate manifest plus explicit expected candidate commit",
       "required_control_plane_version": "930a04d1d39c873ea49abfcf500069011f6d5759240a8f5c5b3341a6d243b246",
-      "required_authentication": "read-only clean-candidate revalidation of exact source commit, tree, executable, complete build provenance, current installed control-plane pair, and historical build-receipt control-plane pair",
-      "required_distinctness": "candidate and baseline executable paths and bytes must differ",
+      "required_control_plane_runner_sha256": "6053f190ed5bea093537ca5e6aef110212d54861f6726a6fa7294a1716eca2d5",
+      "required_authentication": "read-only clean-candidate revalidation of both baseline and candidate manifests, pinned exact-base source commit and tree, explicit expected candidate commit, hip-mpi-release-paper-pic build provenance for both executables, the captured executable SHA-256 values, current installed control-plane pair, and historical build-receipt control-plane pairs",
+      "required_distinctness": "authenticated candidate and baseline clean-candidate executable paths and exact bytes must differ",
+      "constructibility": "Create one clean candidate from the pinned exact-base commit and one from the selected current candidate commit using the installed hip-mpi-release-paper-pic production profile; bind the explicit expected candidate commit; then authenticate and execute both retained read-only executable descriptors. No retained exact-base matching candidate currently exists and no parity result is claimed.",
+      "execution_binding": "linux_execveat_descriptor_bound_exact_authenticated_bytes_with_mutation_watch_and_separate_writable_outputs",
       "prior_unauthenticated_parity_result": "invalidated_not_retained"
     },
     "restart_execution_negative_guards": {
@@ -154,13 +160,14 @@
     "runtime_source_closure_sha256": "a8a34854a55e7076457e06eac4ab481c5fe71f5b0e7f06cc61a1e4d9077a7791"
   },
   "candidate_preparation_validation": {
-    "focused_tests": "22 passed",
-    "transitive_dependency_adjacent_tests": "12 restart-adjacent tests passed",
-    "production_contract_adjacent_tests": "22 passed",
-    "active_q011_adjacent_tests": "44 combined focused plus production-contract tests passed; broader prior 277-test sweep not rerun",
+    "focused_tests": "28 passed",
+    "transitive_dependency_adjacent_tests": "19 restart-and-particle-adjacent tests passed",
+    "production_contract_adjacent_tests": "63 model, production-campaign-contract, production-science, and admission-orchestration tests passed",
+    "active_q011_adjacent_tests": "110 combined focused plus directly adjacent tests passed",
+    "broader_q011_unittest_sweep": "337 tests ran: 318 passed; 6 failures and 13 errors are existing historical/source-binding drift outside this bounded repair and were not modified",
     "mpi_enabled_debug_built_in_pgens_build": "prior pass; executable not rebuilt for Python-only bounded repair",
-    "source_local_engineering_runtime_harness": "prior serial exact cases and admission/restart guards retained; prior unauthenticated ledger-disabled parity result invalidated; authenticated distinct-baseline parity rerun pending; MPI not requested",
-    "installed_control_plane_revalidation_probes": "passed: retained candidate 67a418c432e2d424aa9e6cf5ed16316ea40fc0a4 positively revalidated and rejected against the exact base-commit claim",
+    "source_local_engineering_runtime_harness": "fresh serial inflow and outflow exact cases plus all admission/restart guards passed with retained executable bed6cbd4a7302bbd5bf4548a5efe9941562426f3783af3a0d6c1fe32c58641ee; max normalized residuals were 1.933518017631311e-14 and 1.0056769595133872e-15; prior unauthenticated ledger-disabled parity result remains invalidated; constructible mutually authenticated production-profile parity rerun pending; MPI and parity were not requested",
+    "installed_control_plane_revalidation_probes": "passed: retained read-only production-profile candidate 98a372c9-2ea0-47e6-ad34-e66343e7eea1 positively revalidated, its exact executable bytes completed a one-step descriptor-bound execveat run with separate writable outputs, and it was rejected against the exact base-commit claim",
     "python_bytecode_compile": "pass",
     "git_diff_check": "pass"
   },
@@ -168,7 +175,7 @@
     "trusted installed-control-plane receipts",
     "No registered execution exists for this current-PIC numerical candidate.",
     "No fresh multi-rank or scheduler runtime evidence exists for this current-PIC numerical candidate.",
-    "Authenticated byte/path-distinct exact-base ledger-disabled nonperiodic-3D parity has not been rerun for this bounded repair.",
+    "No exact-base hip-mpi-release-paper-pic clean candidate is currently retained; the now-constructible mutually authenticated production-profile ledger-disabled nonperiodic-3D parity has not been rerun for this bounded repair.",
     "AMR, SMR, mixed-level exact conservation, migration, and particle-aware runtime load balancing remain outside scope.",
     "The production-target adaptive Section 5.4 deck intentionally fails closed under this candidate.",
     "The pure reducer and source-local harness do not establish build, scheduler, command, or independent-reducer execution provenance.",
@@ -205,7 +212,7 @@
     },
     {
       "path": "tst/publication/q011_section54_exact_conservation_closure_successor_v1.py",
-      "sha256": "15f72698828413364f0e35e851edd4a0e998a2ce1ff49900c730fc4251a82aad"
+      "sha256": "58de0373daebc3a2a4a7c226da5d9c4c140770de643428d99dc3bb80d651b83b"
     },
     {
       "path": "tst/publication/q011_section54_restart.py",
@@ -217,11 +224,11 @@
     },
     {
       "path": "tst/publication/test_q011_section54_exact_conservation_closure_successor_v1.py",
-      "sha256": "fb237eab0165e8795e69e81efa7f9b756612b783b68828fca3bb38a0c4c265ee"
+      "sha256": "1073edc496019c225a5aa2b468afc9432982369cb9cccbb5dc537b06e9a3bbdf"
     },
     {
       "path": "tst/scripts/particles/pic_parallel_shock_exact_conservation_closure_vl2_tsc.py",
-      "sha256": "67415d042791e302f31aa2e854228e5e6891508535289bc093c1be8002fef776"
+      "sha256": "c629e134d075ab26441a7585e161347aae9ab83216f8c174afc9dbb3321ddd89"
     }
   ]
 }

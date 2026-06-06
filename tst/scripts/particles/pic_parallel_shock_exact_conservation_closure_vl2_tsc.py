@@ -2,17 +2,24 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+import ctypes
+from dataclasses import dataclass
+import fcntl
 import glob
 import hashlib
 import json
 import logging
 import os
 from pathlib import Path
+import re
 import shlex
+import stat
 import struct
 import subprocess
 import sys
 import tempfile
+from typing import Iterator
 
 import numpy as np
 
@@ -25,19 +32,29 @@ logger = logging.getLogger("athena" + __name__[7:])
 
 _LEDGER_DISABLED_PARITY_BASE_COMMIT = "1d72534619da277fdd6838cabdab0d465d0a8867"
 _LEDGER_DISABLED_PARITY_BASE_TREE = "38c473644a42e01179a7b3140b2ad51e6345d667"
-_LEDGER_DISABLED_PARITY_BASE_EXECUTABLE_SHA256 = (
-    "e3664bcbfb59e64f18a30613b6c5a43e1add4de5749302c0aba332c7bf139d98"
-)
+_LEDGER_DISABLED_PARITY_BASE_BUILD_PROFILE = "hip-mpi-release-paper-pic"
 _LEDGER_DISABLED_PARITY_CONTROL_PLANE_VERSION = (
     "930a04d1d39c873ea49abfcf500069011f6d5759240a8f5c5b3341a6d243b246"
+)
+_LEDGER_DISABLED_PARITY_CONTROL_PLANE_RUNNER_SHA256 = (
+    "6053f190ed5bea093537ca5e6aef110212d54861f6726a6fa7294a1716eca2d5"
 )
 _LEDGER_DISABLED_PARITY_CONTROL_PLANE_RUNNER = (
     Path("/lustre/orion/ast207/proj-shared/dfielding/PIC/control_plane")
     / _LEDGER_DISABLED_PARITY_CONTROL_PLANE_VERSION
     / "run_control_plane.py"
 )
+_LEDGER_DISABLED_PARITY_CONTROL_PLANE_PYTHON = (
+    "/opt/cray/pe/python/3.11.7/bin/python3"
+)
 _LEDGER_DISABLED_PARITY_BASE_CANDIDATE_MANIFEST_ENV = (
     "ATHENA_PIC_EXACT_CONSERVATION_BASE_CANDIDATE_MANIFEST"
+)
+_LEDGER_DISABLED_PARITY_CANDIDATE_MANIFEST_ENV = (
+    "ATHENA_PIC_EXACT_CONSERVATION_CANDIDATE_MANIFEST"
+)
+_LEDGER_DISABLED_PARITY_EXPECTED_CANDIDATE_COMMIT_ENV = (
+    "ATHENA_PIC_EXACT_CONSERVATION_EXPECTED_CANDIDATE_COMMIT"
 )
 _DECK = (
     _SOURCE_ROOT
@@ -70,6 +87,254 @@ _MAX_NORMALIZED_RESIDUAL = 2.0e-10
 _STATE_ATOL = 2.0e-10
 _RESULTS: dict[str, object] = {}
 _RAW_RUN_RECORDS: dict[str, dict[str, object]] = {}
+_INOTIFY_MUTATION_MASK = (
+    0x00000002  # IN_MODIFY
+    | 0x00000004  # IN_ATTRIB
+    | 0x00000008  # IN_CLOSE_WRITE
+    | 0x00000400  # IN_DELETE_SELF
+    | 0x00000800  # IN_MOVE_SELF
+)
+_AT_EMPTY_PATH = 0x1000
+
+
+@dataclass(frozen=True)
+class _SealedPythonScript:
+    source_path: Path
+    descriptor: int
+    sha256: str
+
+
+def _read_regular_file_once(path: Path, *, label: str) -> bytes:
+    resolved = path.resolve()
+    descriptor = os.open(
+        resolved,
+        os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
+    )
+    try:
+        before = os.fstat(descriptor)
+        if not stat.S_ISREG(before.st_mode):
+            raise RuntimeError(f"{label} is not a regular file: {resolved}")
+        chunks = []
+        while chunk := os.read(descriptor, 1024 * 1024):
+            chunks.append(chunk)
+        after = os.fstat(descriptor)
+        if (
+            before.st_dev,
+            before.st_ino,
+            before.st_size,
+            before.st_mtime_ns,
+            before.st_ctime_ns,
+        ) != (
+            after.st_dev,
+            after.st_ino,
+            after.st_size,
+            after.st_mtime_ns,
+            after.st_ctime_ns,
+        ):
+            raise RuntimeError(f"{label} changed while being captured")
+        return b"".join(chunks)
+    finally:
+        os.close(descriptor)
+
+
+@contextmanager
+def _seal_python_script(path: Path, *, label: str) -> Iterator[_SealedPythonScript]:
+    source_path = path.resolve()
+    payload = _read_regular_file_once(source_path, label=label)
+    if not hasattr(os, "memfd_create") or not hasattr(os, "MFD_ALLOW_SEALING"):
+        raise RuntimeError("sealed executable staging requires Linux memfd sealing")
+    descriptor = os.memfd_create(label, flags=os.MFD_ALLOW_SEALING)
+    try:
+        offset = 0
+        while offset < len(payload):
+            written = os.write(descriptor, payload[offset:])
+            if written <= 0:
+                raise RuntimeError(f"{label} sealed staging write made no progress")
+            offset += written
+        os.fchmod(descriptor, 0o500)
+        seals = (
+            fcntl.F_SEAL_WRITE
+            | fcntl.F_SEAL_GROW
+            | fcntl.F_SEAL_SHRINK
+            | fcntl.F_SEAL_SEAL
+        )
+        fcntl.fcntl(descriptor, fcntl.F_ADD_SEALS, seals)
+        if fcntl.fcntl(descriptor, fcntl.F_GET_SEALS) != seals:
+            raise RuntimeError(f"{label} sealed staging is incomplete")
+        if os.fstat(descriptor).st_size != len(payload):
+            raise RuntimeError(f"{label} sealed staging size differs from captured bytes")
+        os.lseek(descriptor, 0, os.SEEK_SET)
+        staged_chunks = []
+        while chunk := os.read(descriptor, 1024 * 1024):
+            staged_chunks.append(chunk)
+        if b"".join(staged_chunks) != payload:
+            raise RuntimeError(f"{label} sealed staging bytes differ from captured bytes")
+        yield _SealedPythonScript(
+            source_path=source_path,
+            descriptor=descriptor,
+            sha256=_sha(payload),
+        )
+    finally:
+        os.close(descriptor)
+
+
+@dataclass(frozen=True)
+class _BoundExecutable:
+    source_path: Path
+    descriptor: int
+    watch_descriptor: int
+    sha256: str
+    byte_count: int
+    identity: tuple[int, ...]
+
+
+def _regular_identity(value: os.stat_result) -> tuple[int, ...]:
+    return (
+        value.st_dev,
+        value.st_ino,
+        value.st_mode,
+        value.st_nlink,
+        value.st_size,
+        value.st_mtime_ns,
+        value.st_ctime_ns,
+    )
+
+
+def _descriptor_payload(descriptor: int) -> bytes:
+    size = os.fstat(descriptor).st_size
+    chunks = []
+    offset = 0
+    while offset < size:
+        chunk = os.pread(descriptor, min(1024 * 1024, size - offset), offset)
+        if not chunk:
+            raise RuntimeError("descriptor-bound executable read ended early")
+        chunks.append(chunk)
+        offset += len(chunk)
+    return b"".join(chunks)
+
+
+def _watch_descriptor(descriptor: int, *, label: str) -> int:
+    libc = ctypes.CDLL(None, use_errno=True)
+    watch_descriptor = libc.inotify_init1(os.O_NONBLOCK | os.O_CLOEXEC)
+    if watch_descriptor < 0:
+        error = ctypes.get_errno()
+        raise RuntimeError(f"{label}: cannot initialize mutation watch: {os.strerror(error)}")
+    result = libc.inotify_add_watch(
+        watch_descriptor,
+        f"/proc/self/fd/{descriptor}".encode("ascii"),
+        _INOTIFY_MUTATION_MASK,
+    )
+    if result < 0:
+        error = ctypes.get_errno()
+        os.close(watch_descriptor)
+        raise RuntimeError(f"{label}: cannot watch bound executable: {os.strerror(error)}")
+    return watch_descriptor
+
+
+def _require_no_mutation_events(descriptor: int, *, label: str) -> None:
+    try:
+        payload = os.read(descriptor, 1024 * 1024)
+    except BlockingIOError:
+        return
+    if payload:
+        raise RuntimeError(f"{label}: descriptor-bound executable changed while retained")
+
+
+@contextmanager
+def _bind_executable(path: Path, *, label: str) -> Iterator[_BoundExecutable]:
+    source_path = path.resolve()
+    descriptor = os.open(
+        source_path,
+        os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
+    )
+    watch_descriptor: int | None = None
+    try:
+        before = os.fstat(descriptor)
+        if not stat.S_ISREG(before.st_mode):
+            raise RuntimeError(f"{label} is not a regular file: {source_path}")
+        watch_descriptor = _watch_descriptor(descriptor, label=label)
+        payload = _descriptor_payload(descriptor)
+        after = os.fstat(descriptor)
+        if _regular_identity(before) != _regular_identity(after):
+            raise RuntimeError(f"{label} changed while being bound")
+        _require_no_mutation_events(watch_descriptor, label=label)
+        yield _BoundExecutable(
+            source_path=source_path,
+            descriptor=descriptor,
+            watch_descriptor=watch_descriptor,
+            sha256=_sha(payload),
+            byte_count=len(payload),
+            identity=_regular_identity(after),
+        )
+    finally:
+        if watch_descriptor is not None:
+            os.close(watch_descriptor)
+        os.close(descriptor)
+
+
+def _require_bound_executable_unchanged(
+    executable: _BoundExecutable, *, label: str
+) -> None:
+    _require_no_mutation_events(executable.watch_descriptor, label=label)
+    if _regular_identity(os.fstat(executable.descriptor)) != executable.identity:
+        raise RuntimeError(f"{label}: descriptor-bound executable metadata changed")
+    payload = _descriptor_payload(executable.descriptor)
+    if len(payload) != executable.byte_count or _sha(payload) != executable.sha256:
+        raise RuntimeError(f"{label}: descriptor-bound executable bytes changed")
+
+
+def _bound_executables_have_identical_bytes(
+    left: _BoundExecutable, right: _BoundExecutable
+) -> bool:
+    if left.byte_count != right.byte_count:
+        return False
+    offset = 0
+    while offset < left.byte_count:
+        size = min(1024 * 1024, left.byte_count - offset)
+        left_chunk = os.pread(left.descriptor, size, offset)
+        right_chunk = os.pread(right.descriptor, size, offset)
+        if left_chunk != right_chunk or len(left_chunk) != size:
+            return False
+        offset += size
+    return True
+
+
+def _run_descriptor_bound_executable(
+    *,
+    executable: _BoundExecutable,
+    arguments: list[str],
+    cwd: Path,
+) -> subprocess.CompletedProcess[str]:
+    bootstrap = (
+        "import ctypes,os,sys\n"
+        "fd=int(sys.argv[1]); args=[item.encode() for item in sys.argv[2:]]\n"
+        "env=[(key+'='+value).encode() for key,value in os.environ.items()]\n"
+        "argv=(ctypes.c_char_p*(len(args)+1))(*args,None)\n"
+        "envp=(ctypes.c_char_p*(len(env)+1))(*env,None)\n"
+        "libc=ctypes.CDLL(None,use_errno=True)\n"
+        "libc.execveat.argtypes=[ctypes.c_int,ctypes.c_char_p,"
+        "ctypes.POINTER(ctypes.c_char_p),ctypes.POINTER(ctypes.c_char_p),ctypes.c_int]\n"
+        "libc.execveat.restype=ctypes.c_int\n"
+        f"libc.execveat(fd,b'',argv,envp,{_AT_EMPTY_PATH})\n"
+        "error=ctypes.get_errno(); raise OSError(error,os.strerror(error))\n"
+    )
+    _require_bound_executable_unchanged(executable, label="pre-execution")
+    completed = subprocess.run(
+        [
+            _LEDGER_DISABLED_PARITY_CONTROL_PLANE_PYTHON,
+            "-I",
+            "-c",
+            bootstrap,
+            str(executable.descriptor),
+            *arguments,
+        ],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        pass_fds=(executable.descriptor,),
+    )
+    _require_bound_executable_unchanged(executable, label="post-execution")
+    return completed
 
 
 def _exe_dir() -> Path:
@@ -160,9 +425,16 @@ def _execute_athena(
     restart: Path | None = None,
     launcher: list[str] | None = None,
     overrides: tuple[str, ...] = (),
+    bound_executable: _BoundExecutable | None = None,
 ) -> dict[str, object]:
     _remove_outputs(exe_dir, basename)
-    command = ["./athena"]
+    if bound_executable is not None and launcher is not None:
+        raise RuntimeError(
+            label + ": descriptor-bound Athena execution does not accept an MPI launcher"
+        )
+    command = [
+        "./athena" if bound_executable is None else str(bound_executable.source_path)
+    ]
     if restart is None:
         if deck is None:
             raise RuntimeError(label + ": fresh execution requires a deck")
@@ -173,7 +445,14 @@ def _execute_athena(
     if launcher is not None:
         command = launcher + command
     logger.info("Executing %s: %s", label, " ".join(command))
-    proc = subprocess.run(command, cwd=exe_dir, capture_output=True, text=True)
+    if bound_executable is None:
+        proc = subprocess.run(command, cwd=exe_dir, capture_output=True, text=True)
+    else:
+        proc = _run_descriptor_bound_executable(
+            executable=bound_executable,
+            arguments=command,
+            cwd=exe_dir,
+        )
     stdout = proc.stdout or ""
     stderr = proc.stderr or ""
     record = {
@@ -184,7 +463,11 @@ def _execute_athena(
         "stdout_sha256": _sha(stdout.encode("utf-8")),
         "stderr": stderr,
         "stderr_sha256": _sha(stderr.encode("utf-8")),
-        "executable_sha256": _sha((exe_dir / "athena").read_bytes()),
+        "executable_sha256": (
+            _sha((exe_dir / "athena").read_bytes())
+            if bound_executable is None
+            else bound_executable.sha256
+        ),
         "deck_sha256": None if deck is None else _sha(deck.read_bytes()),
         "restart_sha256": None if restart is None else _sha(restart.read_bytes()),
     }
@@ -201,6 +484,7 @@ def _run_athena(
     restart: Path | None = None,
     launcher: list[str] | None = None,
     overrides: tuple[str, ...] = (),
+    bound_executable: _BoundExecutable | None = None,
 ) -> str:
     record = _execute_athena(
         label=label,
@@ -210,6 +494,7 @@ def _run_athena(
         restart=restart,
         launcher=launcher,
         overrides=overrides,
+        bound_executable=bound_executable,
     )
     output = str(record["stdout"]) + str(record["stderr"])
     proc_returncode = int(record["returncode"])
@@ -812,27 +1097,82 @@ def _compare_particle_state(full: bytes, restarted: bytes, label: str) -> dict[s
     }
 
 
-def _run_clean_candidate_revalidation(
-    candidate_manifest: Path, manifest_sha256: str
-) -> dict[str, object]:
+def _run_sealed_python_script(
+    *,
+    sealed_script: _SealedPythonScript,
+    original_path: Path,
+    arguments: list[str],
+    cwd: str,
+    env: dict[str, str],
+    timeout: int,
+) -> subprocess.CompletedProcess[bytes]:
+    if original_path.resolve() != sealed_script.source_path:
+        raise RuntimeError("sealed Python script source path differs from execution filename")
+    bootstrap = (
+        "import os,sys\n"
+        "fd=int(sys.argv[1]); filename=sys.argv[2]\n"
+        "os.lseek(fd,0,os.SEEK_SET); chunks=[]\n"
+        "while True:\n"
+        " chunk=os.read(fd,1048576)\n"
+        " if not chunk: break\n"
+        " chunks.append(chunk)\n"
+        "sys.argv=sys.argv[3:]\n"
+        "scope={'__name__':'__main__','__file__':filename,'__package__':None,"
+        "'__cached__':None,'__builtins__':__builtins__}\n"
+        "exec(compile(b''.join(chunks),filename,'exec'),scope)\n"
+    )
     command = [
-        str(_LEDGER_DISABLED_PARITY_CONTROL_PLANE_RUNNER),
+        _LEDGER_DISABLED_PARITY_CONTROL_PLANE_PYTHON,
+        "-I",
+        "-c",
+        bootstrap,
+        str(sealed_script.descriptor),
+        str(original_path),
+        str(original_path),
+        *arguments,
+    ]
+    return subprocess.run(
+        command,
+        cwd=cwd,
+        env=env,
+        capture_output=True,
+        check=False,
+        timeout=timeout,
+        pass_fds=(sealed_script.descriptor,),
+    )
+
+
+def _run_clean_candidate_revalidation(
+    candidate_manifest: Path, manifest_sha256: str, expected_commit: str
+) -> dict[str, object]:
+    arguments = [
         "revalidate_clean_candidate.py",
         "--manifest",
         str(candidate_manifest),
         "--expected-manifest-sha256",
         manifest_sha256,
         "--expected-git-commit",
-        _LEDGER_DISABLED_PARITY_BASE_COMMIT,
+        expected_commit,
     ]
-    completed = subprocess.run(
-        command,
-        cwd="/",
-        env={"HOME": "/", "LANG": "C", "LC_ALL": "C", "PATH": "/usr/bin:/bin"},
-        capture_output=True,
-        check=False,
-        timeout=300,
-    )
+    with _seal_python_script(
+        _LEDGER_DISABLED_PARITY_CONTROL_PLANE_RUNNER,
+        label="installed-control-plane-runner",
+    ) as sealed_runner:
+        if (
+            sealed_runner.sha256
+            != _LEDGER_DISABLED_PARITY_CONTROL_PLANE_RUNNER_SHA256
+        ):
+            raise RuntimeError(
+                "installed control-plane runner differs from pinned executable bytes"
+            )
+        completed = _run_sealed_python_script(
+            sealed_script=sealed_runner,
+            original_path=_LEDGER_DISABLED_PARITY_CONTROL_PLANE_RUNNER,
+            arguments=arguments,
+            cwd="/",
+            env={"HOME": "/", "LANG": "C", "LC_ALL": "C", "PATH": "/usr/bin:/bin"},
+            timeout=300,
+        )
     if completed.returncode != 0 or completed.stderr:
         raise RuntimeError(
             "installed control-plane clean-candidate revalidation failed: "
@@ -852,50 +1192,65 @@ def _run_clean_candidate_revalidation(
 
 
 def _authenticate_ledger_disabled_parity_base(
-    *, candidate_executable: Path, base_executable: Path, candidate_manifest: Path
+    *,
+    candidate_executable: _BoundExecutable,
+    base_executable: _BoundExecutable,
+    base_manifest: Path,
 ) -> dict[str, object]:
-    candidate_executable = candidate_executable.resolve()
-    base_executable = base_executable.resolve()
-    candidate_manifest = candidate_manifest.resolve()
-    if candidate_executable == base_executable:
+    _require_bound_executable_unchanged(
+        candidate_executable, label="parity candidate authentication"
+    )
+    _require_bound_executable_unchanged(
+        base_executable, label="parity base authentication"
+    )
+    base_manifest = base_manifest.resolve()
+    if candidate_executable.source_path == base_executable.source_path:
         raise RuntimeError(
             "ledger-disabled parity base and candidate executable paths are identical"
         )
-    for label, path in (
-        ("candidate", candidate_executable),
-        ("base", base_executable),
-        ("base clean-candidate manifest", candidate_manifest),
+    if (
+        candidate_executable.sha256 == base_executable.sha256
+        or _bound_executables_have_identical_bytes(
+            candidate_executable, base_executable
+        )
     ):
-        if not path.is_file():
-            raise RuntimeError(
-                f"ledger-disabled parity {label} is not a regular file: {path}"
-            )
-    candidate_payload = candidate_executable.read_bytes()
-    base_payload = base_executable.read_bytes()
-    candidate_sha256 = _sha(candidate_payload)
-    base_sha256 = _sha(base_payload)
-    if candidate_payload == base_payload or candidate_sha256 == base_sha256:
         raise RuntimeError(
             "ledger-disabled parity base and candidate executable bytes are identical"
         )
-    if base_sha256 != _LEDGER_DISABLED_PARITY_BASE_EXECUTABLE_SHA256:
+    if not base_manifest.is_file():
         raise RuntimeError(
-            "ledger-disabled parity baseline executable SHA-256 differs from pinned base build"
+            "ledger-disabled parity base clean-candidate manifest is not a regular file: "
+            + str(base_manifest)
         )
-    if base_executable != (candidate_manifest.parent / "athena").resolve():
+    if base_executable.source_path != (base_manifest.parent / "athena").resolve():
         raise RuntimeError(
             "ledger-disabled parity baseline executable is not the clean-candidate "
             "manifest executable"
         )
 
-    manifest_sha256 = _sha(candidate_manifest.read_bytes())
+    manifest_sha256 = _sha(
+        _read_regular_file_once(
+            base_manifest,
+            label="base clean-candidate manifest",
+        )
+    )
     try:
-        report = _run_clean_candidate_revalidation(candidate_manifest, manifest_sha256)
+        report = _run_clean_candidate_revalidation(
+            base_manifest,
+            manifest_sha256,
+            _LEDGER_DISABLED_PARITY_BASE_COMMIT,
+        )
     except Exception as error:
         raise RuntimeError(
             "ledger-disabled parity baseline clean-candidate build provenance "
             "authentication failed"
         ) from error
+    _require_bound_executable_unchanged(
+        candidate_executable, label="parity candidate authentication"
+    )
+    _require_bound_executable_unchanged(
+        base_executable, label="parity base authentication"
+    )
     if (
         report.get("status") != "passed"
         or report.get("source", {}).get("git_commit")
@@ -903,20 +1258,22 @@ def _authenticate_ledger_disabled_parity_base(
         or report.get("source", {}).get("git_tree")
         != _LEDGER_DISABLED_PARITY_BASE_TREE
         or report.get("build", {}).get("executable_sha256")
-        != _LEDGER_DISABLED_PARITY_BASE_EXECUTABLE_SHA256
+        != base_executable.sha256
+        or report.get("build", {}).get("profile_id")
+        != _LEDGER_DISABLED_PARITY_BASE_BUILD_PROFILE
         or report.get("current_control_plane_version")
         != _LEDGER_DISABLED_PARITY_CONTROL_PLANE_VERSION
         or report.get("clean_candidate_manifest", {}).get("sha256")
         != manifest_sha256
         or Path(report.get("clean_candidate_manifest", {}).get("path", "")).resolve()
-        != candidate_manifest
+        != base_manifest
     ):
         raise RuntimeError(
-            "ledger-disabled parity baseline authentication report does not match "
-            "the pinned base build"
+            "ledger-disabled parity baseline authentication report does not match the "
+            "pinned base source and production build profile or the bound executable"
         )
     return {
-        "executable": base_executable,
+        "executable_source_path": str(base_executable.source_path),
         "source_commit": _LEDGER_DISABLED_PARITY_BASE_COMMIT,
         "source_tree": _LEDGER_DISABLED_PARITY_BASE_TREE,
         "clean_candidate_manifest_sha256": manifest_sha256,
@@ -925,29 +1282,112 @@ def _authenticate_ledger_disabled_parity_base(
             "receipt_control_plane_version"
         ],
         "current_control_plane_version": _LEDGER_DISABLED_PARITY_CONTROL_PLANE_VERSION,
-        "executable_sha256": base_sha256,
-        "candidate_executable_sha256": candidate_sha256,
+        "executable_sha256": base_executable.sha256,
+        "candidate_executable_sha256": candidate_executable.sha256,
+        "execution_binding": "linux_execveat_descriptor_bound_exact_authenticated_bytes",
+    }
+
+
+def _authenticate_ledger_disabled_parity_candidate(
+    *,
+    candidate_executable: _BoundExecutable,
+    candidate_manifest: Path,
+    expected_commit: str,
+) -> dict[str, object]:
+    if re.fullmatch(r"[0-9a-f]{40}", expected_commit) is None:
+        raise RuntimeError("ledger-disabled parity expected candidate commit is malformed")
+    if expected_commit == _LEDGER_DISABLED_PARITY_BASE_COMMIT:
+        raise RuntimeError(
+            "ledger-disabled parity candidate commit is identical to the pinned base"
+        )
+    _require_bound_executable_unchanged(
+        candidate_executable, label="parity candidate authentication"
+    )
+    candidate_manifest = candidate_manifest.resolve()
+    if not candidate_manifest.is_file():
+        raise RuntimeError(
+            "ledger-disabled parity candidate clean-candidate manifest is not a "
+            "regular file: " + str(candidate_manifest)
+        )
+    if candidate_executable.source_path != (candidate_manifest.parent / "athena").resolve():
+        raise RuntimeError(
+            "ledger-disabled parity candidate executable is not the clean-candidate "
+            "manifest executable"
+        )
+    manifest_sha256 = _sha(
+        _read_regular_file_once(
+            candidate_manifest,
+            label="candidate clean-candidate manifest",
+        )
+    )
+    try:
+        report = _run_clean_candidate_revalidation(
+            candidate_manifest,
+            manifest_sha256,
+            expected_commit,
+        )
+    except Exception as error:
+        raise RuntimeError(
+            "ledger-disabled parity candidate clean-candidate build provenance "
+            "authentication failed"
+        ) from error
+    _require_bound_executable_unchanged(
+        candidate_executable, label="parity candidate authentication"
+    )
+    if (
+        report.get("status") != "passed"
+        or report.get("source", {}).get("git_commit") != expected_commit
+        or report.get("build", {}).get("executable_sha256")
+        != candidate_executable.sha256
+        or report.get("build", {}).get("profile_id")
+        != _LEDGER_DISABLED_PARITY_BASE_BUILD_PROFILE
+        or report.get("current_control_plane_version")
+        != _LEDGER_DISABLED_PARITY_CONTROL_PLANE_VERSION
+        or report.get("clean_candidate_manifest", {}).get("sha256")
+        != manifest_sha256
+        or Path(report.get("clean_candidate_manifest", {}).get("path", "")).resolve()
+        != candidate_manifest
+    ):
+        raise RuntimeError(
+            "ledger-disabled parity candidate authentication report does not match the "
+            "explicit candidate commit, production build profile, or bound executable"
+        )
+    return {
+        "executable_source_path": str(candidate_executable.source_path),
+        "source_commit": expected_commit,
+        "source_tree": report["source"]["git_tree"],
+        "clean_candidate_manifest_sha256": manifest_sha256,
+        "build_profile_id": report["build"]["profile_id"],
+        "build_receipt_control_plane_version": report["build"][
+            "receipt_control_plane_version"
+        ],
+        "current_control_plane_version": _LEDGER_DISABLED_PARITY_CONTROL_PLANE_VERSION,
+        "executable_sha256": candidate_executable.sha256,
+        "execution_binding": "linux_execveat_descriptor_bound_exact_authenticated_bytes",
     }
 
 
 def _run_optional_ledger_disabled_parity(deck_payload: bytes) -> object:
-    raw_base = os.environ.get("ATHENA_PIC_EXACT_CONSERVATION_BASE_EXE")
-    raw_manifest = os.environ.get(_LEDGER_DISABLED_PARITY_BASE_CANDIDATE_MANIFEST_ENV)
-    if raw_base is None and raw_manifest is None:
-        return "not_requested"
-    if raw_base is None or raw_manifest is None:
-        raise RuntimeError(
-            "ledger-disabled parity requires both "
-            "ATHENA_PIC_EXACT_CONSERVATION_BASE_EXE and "
-            f"{_LEDGER_DISABLED_PARITY_BASE_CANDIDATE_MANIFEST_ENV}"
-        )
-    new_dir = _exe_dir()
-    authentication = _authenticate_ledger_disabled_parity_base(
-        candidate_executable=new_dir / "athena",
-        base_executable=Path(raw_base),
-        candidate_manifest=Path(raw_manifest),
+    raw_base_manifest = os.environ.get(
+        _LEDGER_DISABLED_PARITY_BASE_CANDIDATE_MANIFEST_ENV
     )
-    base_executable = Path(authentication["executable"])
+    raw_candidate_manifest = os.environ.get(
+        _LEDGER_DISABLED_PARITY_CANDIDATE_MANIFEST_ENV
+    )
+    expected_candidate_commit = os.environ.get(
+        _LEDGER_DISABLED_PARITY_EXPECTED_CANDIDATE_COMMIT_ENV
+    )
+    supplied = (raw_base_manifest, raw_candidate_manifest, expected_candidate_commit)
+    if all(value is None for value in supplied):
+        return "not_requested"
+    if any(value is None for value in supplied):
+        raise RuntimeError(
+            "ledger-disabled parity requires base and candidate clean-candidate "
+            "manifests plus an explicit expected candidate commit"
+        )
+    base_manifest = Path(str(raw_base_manifest)).resolve()
+    candidate_manifest = Path(str(raw_candidate_manifest)).resolve()
+    expected_candidate_commit = str(expected_candidate_commit)
     overrides = _LEDGER_DISABLED_NONPERIODIC_3D_OVERRIDES + (
         "time/tlim=5.0",
         "problem/ps_remove_birth_time_before=-1.0",
@@ -955,39 +1395,53 @@ def _run_optional_ledger_disabled_parity(deck_payload: bytes) -> object:
         "output2/dt=5.0",
     )
     results = []
-    for name, executable in (("new", new_dir / "athena"), ("base", base_executable)):
-        expected_sha256 = authentication[
-            "candidate_executable_sha256" if name == "new" else "executable_sha256"
-        ]
-        if _sha(executable.read_bytes()) != expected_sha256:
-            raise RuntimeError(
-                f"ledger-disabled parity {name} executable changed after authentication"
-            )
-        exe_dir = executable.parent
-        basename = "pic_parallel_shock_exact_disabled_" + name
-        with tempfile.TemporaryDirectory(prefix="q011-disabled-deck-", dir=exe_dir) as tmp:
-            deck = Path(tmp) / _DECK.name
-            deck.write_bytes(deck_payload)
-            _run_athena(
-                label="ledger_disabled_" + name,
-                exe_dir=exe_dir,
-                basename=basename,
-                deck=deck,
-                overrides=overrides,
-            )
-        if _sha(executable.read_bytes()) != expected_sha256:
-            raise RuntimeError(
-                f"ledger-disabled parity {name} executable changed during execution"
-            )
-        path = _restart_paths(exe_dir, basename)[-1]
-        mhd_rows, _ = closure._parse_history(
-            _history_payload(exe_dir, basename, "mhd"), closure._MHD_LABELS, name
+    with _bind_executable(
+        candidate_manifest.parent / "athena",
+        label="ledger-disabled-parity-candidate",
+    ) as candidate_executable, _bind_executable(
+        base_manifest.parent / "athena",
+        label="ledger-disabled-parity-base",
+    ) as base_executable:
+        authentication = _authenticate_ledger_disabled_parity_base(
+            candidate_executable=candidate_executable,
+            base_executable=base_executable,
+            base_manifest=base_manifest,
         )
-        results.append({
-            "executable_sha256": expected_sha256,
-            "mhd": mhd_rows[-1],
-            "particles": _particle_payload(path.read_bytes(), name),
-        })
+        candidate_authentication = _authenticate_ledger_disabled_parity_candidate(
+            candidate_executable=candidate_executable,
+            candidate_manifest=candidate_manifest,
+            expected_commit=expected_candidate_commit,
+        )
+        with tempfile.TemporaryDirectory(prefix="q011-disabled-parity-work-") as tmp:
+            root = Path(tmp)
+            for name, executable in (
+                ("new", candidate_executable),
+                ("base", base_executable),
+            ):
+                exe_dir = root / name
+                exe_dir.mkdir()
+                basename = "pic_parallel_shock_exact_disabled_" + name
+                deck = exe_dir / _DECK.name
+                deck.write_bytes(deck_payload)
+                _run_athena(
+                    label="ledger_disabled_" + name,
+                    exe_dir=exe_dir,
+                    basename=basename,
+                    deck=deck,
+                    overrides=overrides,
+                    bound_executable=executable,
+                )
+                path = _restart_paths(exe_dir, basename)[-1]
+                mhd_rows, _ = closure._parse_history(
+                    _history_payload(exe_dir, basename, "mhd"),
+                    closure._MHD_LABELS,
+                    name,
+                )
+                results.append({
+                    "executable_sha256": executable.sha256,
+                    "mhd": mhd_rows[-1],
+                    "particles": _particle_payload(path.read_bytes(), name),
+                })
     mhd_equal = results[0]["mhd"] == results[1]["mhd"]
     particle_equal = results[0]["particles"] == results[1]["particles"]
     if not (mhd_equal and particle_equal):
@@ -997,7 +1451,10 @@ def _run_optional_ledger_disabled_parity(deck_payload: bytes) -> object:
         "new_executable_sha256": results[0]["executable_sha256"],
         "base_executable_sha256": results[1]["executable_sha256"],
         "base_authentication": {
-            key: value for key, value in authentication.items() if key != "executable"
+            key: value for key, value in authentication.items()
+        },
+        "candidate_authentication": {
+            key: value for key, value in candidate_authentication.items()
         },
         "mhd_history_state_exactly_equal": True,
         "particle_payload_exactly_equal": True,
