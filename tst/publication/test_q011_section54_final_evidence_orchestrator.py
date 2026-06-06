@@ -296,6 +296,37 @@ class Q011Section54FinalEvidenceOrchestratorTests(unittest.TestCase):
         with self.assertRaisesRegex(orchestrator.FinalEvidenceError, "fine-uniform pair identity"):
             _build(aggregate=aggregate)
 
+    def test_attempt_observed_time_identities_fail_closed(self) -> None:
+        aggregate = _aggregate()
+        aggregate["attempt_gate_results"][0]["source_checkpoint_lineage"][
+            "observed_committed_time"
+        ] = 500.125
+        with self.assertRaisesRegex(
+            orchestrator.FinalEvidenceError, "source checkpoint and t500 snapshot time drifted"
+        ):
+            _build(aggregate=aggregate)
+
+        aggregate = _aggregate()
+        aggregate["attempt_gate_results"][0]["snapshot_times"]["t500"][
+            "nominal_slot_time"
+        ] = 500.125
+        with self.assertRaisesRegex(orchestrator.FinalEvidenceError, "nominal slot time drifted"):
+            _build(aggregate=aggregate)
+
+        aggregate = _aggregate()
+        aggregate["attempt_gate_results"][0]["snapshot_times"]["t1200"][
+            "observed_committed_time"
+        ] = 499.0
+        with self.assertRaisesRegex(
+            orchestrator.FinalEvidenceError, "observed snapshot time sequence drifted"
+        ):
+            _build(aggregate=aggregate)
+
+        aggregate = _aggregate()
+        del aggregate["attempt_gate_results"][0]["snapshot_times"]
+        with self.assertRaisesRegex(orchestrator.FinalEvidenceError, "keys drifted"):
+            _build(aggregate=aggregate)
+
     def test_restart_parity_must_be_retained_first_seed_production_screen(self) -> None:
         aggregate = _aggregate()
         aggregate["restart_parity"]["screen_scope"] = "unit_only_synthetic_restart_comparator"

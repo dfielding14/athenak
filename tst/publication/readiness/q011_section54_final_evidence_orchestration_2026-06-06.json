@@ -9,11 +9,11 @@
   "component_bindings": {
     "orchestrator": {
       "path": "tst/publication/q011_section54_final_evidence_orchestrator.py",
-      "sha256": "88e22c3b85e85b5ebc7f75141c0a354b72a5383f191fbbf4350ef221f1801eb6"
+      "sha256": "efde574414272f45c588c541428313f5e803a52a321560f79e74dcc68fcbc691"
     },
     "focused_tests": {
       "path": "tst/publication/test_q011_section54_final_evidence_orchestrator.py",
-      "sha256": "b7afef9982eab130d28dffe8ce30dee084b24636241b77e2c7a72c2e00b8e04c"
+      "sha256": "b0122265c7dbe56430c8cae413186c74f2e96d41285f3c6516c3307bf96abe7c"
     }
   },
   "input_contract": {
@@ -39,6 +39,7 @@
     "expected campaign matrix and canonical order",
     "admitted bundle identities and unique admission-result bindings",
     "attempt and ordered raw-inventory bindings",
+    "exact nominal-slot and observed-commit time identities, including source-checkpoint binding to each selected t=500 snapshot",
     "complete same-seed AMR/fine pair coverage and passing residual gates",
     "retained first-seed AMR production restart parity and observed-commit sequence",
     "passing aggregate numerical analysis output",

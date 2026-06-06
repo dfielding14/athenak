@@ -217,11 +217,12 @@ def _validate_identity(value: object, *, label: str) -> dict[str, object]:
 
 def _validate_checkpoint_lineage(
     value: object, *, identity: Mapping[str, object], label: str
-) -> None:
+) -> dict[str, object]:
     lineage = _object(
         value,
         {
-            "snapshot_time_omega0_inverse",
+            "nominal_slot_time",
+            "observed_committed_time",
             "retained_attempt_id",
             "restart_manifest_path",
             "restart_member_path",
@@ -230,10 +231,17 @@ def _validate_checkpoint_lineage(
         },
         label=label,
     )
+    nominal = _finite_float(
+        lineage["nominal_slot_time"], label=f"{label}/nominal_slot_time", minimum=0.0
+    )
+    observed = _finite_float(
+        lineage["observed_committed_time"],
+        label=f"{label}/observed_committed_time",
+        minimum=0.0,
+    )
     _require(
-        type(lineage["snapshot_time_omega0_inverse"]) is float
-        and lineage["snapshot_time_omega0_inverse"] == 500.0,
-        f"{label}: checkpoint time drifted",
+        nominal == 500.0,
+        f"{label}: checkpoint nominal slot time drifted",
     )
     _require(
         lineage["retained_attempt_id"] == identity["attempt_id"],
@@ -247,6 +255,36 @@ def _validate_checkpoint_lineage(
     )
     _require(absolute.startswith("/"), f"{label}: retained restart path must be absolute")
     _sha256(lineage["restart_member_sha256"], label=f"{label}/restart_member_sha256")
+    parsed = dict(lineage)
+    parsed["nominal_slot_time"] = nominal
+    parsed["observed_committed_time"] = observed
+    return parsed
+
+
+def _validate_snapshot_time(
+    value: object, *, expected_nominal_slot_time: float, label: str
+) -> dict[str, float]:
+    snapshot = _object(
+        value,
+        {"nominal_slot_time", "observed_committed_time"},
+        label=label,
+    )
+    nominal = _finite_float(
+        snapshot["nominal_slot_time"], label=f"{label}/nominal_slot_time", minimum=0.0
+    )
+    observed = _finite_float(
+        snapshot["observed_committed_time"],
+        label=f"{label}/observed_committed_time",
+        minimum=0.0,
+    )
+    _require(
+        nominal == expected_nominal_slot_time,
+        f"{label}: nominal slot time drifted",
+    )
+    return {
+        "nominal_slot_time": nominal,
+        "observed_committed_time": observed,
+    }
 
 
 def _validate_attempts(
@@ -270,6 +308,7 @@ def _validate_attempts(
                 "identity",
                 "raw_inventory_sha256",
                 "source_checkpoint_lineage",
+                "snapshot_times",
                 "gates_passed",
             },
             label=label,
@@ -283,16 +322,41 @@ def _validate_attempts(
         raw_inventory = _sha256(
             attempt["raw_inventory_sha256"], label=f"{label}/raw_inventory_sha256"
         )
-        _validate_checkpoint_lineage(
+        checkpoint_lineage = _validate_checkpoint_lineage(
             attempt["source_checkpoint_lineage"],
             identity=identity,
             label=f"{label}/source_checkpoint_lineage",
+        )
+        snapshot_times = _object(
+            attempt["snapshot_times"], {"t500", "t1200"}, label=f"{label}/snapshot_times"
+        )
+        t500 = _validate_snapshot_time(
+            snapshot_times["t500"],
+            expected_nominal_slot_time=500.0,
+            label=f"{label}/snapshot_times/t500",
+        )
+        t1200 = _validate_snapshot_time(
+            snapshot_times["t1200"],
+            expected_nominal_slot_time=1200.0,
+            label=f"{label}/snapshot_times/t1200",
+        )
+        _require(
+            checkpoint_lineage["nominal_slot_time"] == t500["nominal_slot_time"]
+            and checkpoint_lineage["observed_committed_time"]
+            == t500["observed_committed_time"],
+            f"{label}: source checkpoint and t500 snapshot time drifted",
+        )
+        _require(
+            t1200["observed_committed_time"] > t500["observed_committed_time"],
+            f"{label}: observed snapshot time sequence drifted",
         )
         _require(attempt["gates_passed"] is True, f"{label}: attempt numerical gates failed")
         parsed = {
             "attempt_sha256": attempt_sha256,
             "identity": identity,
             "raw_inventory_sha256": raw_inventory,
+            "source_checkpoint_lineage": checkpoint_lineage,
+            "snapshot_times": {"t500": t500, "t1200": t1200},
         }
         parsed_attempts.append(parsed)
         by_sha256[attempt_sha256] = parsed
