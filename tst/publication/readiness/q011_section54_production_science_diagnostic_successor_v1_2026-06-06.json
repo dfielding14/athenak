@@ -33,7 +33,7 @@
     },
     "deposited_current_semantics": {
       "path": "tst/publication/readiness/q043_bell_current_normalization_supersession_2026-06-06.json",
-      "sha256": "f972d4d960ebbc80f9de2a15bd8b2335bb3ea059aa747303fa0cff1a1298cdef"
+      "sha256": "2f83afc03e83038db168fed7d40bdc85bc7bca1eccbba52d18ede0d319dce342"
     },
     "focused_tests": {
       "path": "tst/publication/test_q011_section54_production_science_successor_v1.py",
