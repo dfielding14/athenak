@@ -72,7 +72,7 @@
     ],
     "source_test_closure": {
       "file_count": 10,
-      "closure_sha256": "1bfffc201448c89c2aeeefd795b7d0213039360adb267d3c30db79321b6fe726",
+      "closure_sha256": "730e6c05c10bbee6695062bea3ce938c48012cafa1c75d837a81b3d968b56139",
       "files": [
         {
           "path": "tst/publication/publish_q011_section54_pressure_selection.py",
@@ -92,7 +92,7 @@
         },
         {
           "path": "tst/publication/frontier_q011_section54_pressure_gate_validation_job.sh",
-          "sha256": "de5a1a90ef361e875375bc4574b23af74c56a585dabd96c118fb4c9bdbd4b497"
+          "sha256": "64c4f96bf65059ad796332c30ef11dcd1bdbb1516501192aeb9aa6aa11546ab5"
         },
         {
           "path": "tst/publication/frontier_control_plane/README.md",
@@ -100,7 +100,7 @@
         },
         {
           "path": "tst/publication/test_pic_readiness_registry.py",
-          "sha256": "49a806571c369c65c72e66f528280b37e6688157e5011a4abbab3f6b5b654793"
+          "sha256": "a5c53167d92a0ccd2813469dbb0b81e24b007591b2d51678369b94c786968120"
         },
         {
           "path": "tst/publication/readiness/README.md",
@@ -126,7 +126,7 @@
   },
   "next_clean_worker": {
     "path": "tst/publication/frontier_q011_section54_pressure_gate_validation_job.sh",
-    "sha256": "de5a1a90ef361e875375bc4574b23af74c56a585dabd96c118fb4c9bdbd4b497",
+    "sha256": "64c4f96bf65059ad796332c30ef11dcd1bdbb1516501192aeb9aa6aa11546ab5",
     "expected_publication_python_files": 147,
     "expected_publication_shell_files": 17,
     "expected_publication_json_files": 292,

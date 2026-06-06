@@ -4138,13 +4138,87 @@ class PicReadinessRegistryTests(unittest.TestCase):
             wrapper,
         )
         self.assertIn("PYTHON_ENV=(\n  /usr/bin/env -i", wrapper)
+        self.assertIn("PUBLICATION_TEST_PYTHON_ENV=(\n  /usr/bin/env -i", wrapper)
         self.assertIn('set_authenticated_python_roots "$SNAPSHOT_ROOT"', wrapper)
-        self.assertIn('set_authenticated_python_roots "$FULL_SUITE_ROOT"', wrapper)
+        self.assertNotIn('set_authenticated_python_roots "$FULL_SUITE_ROOT"', wrapper)
+        self.assertIn('set_publication_test_python_roots "$FULL_SUITE_ROOT"', wrapper)
+        self.assertIn('set_publication_test_python_roots "$REPO_ROOT"', wrapper)
         self.assertIn(
-            'clone --no-checkout --shared "$REPO_ROOT" "$FULL_SUITE_ROOT"',
+            'clone --no-checkout --no-local "$REPO_ROOT" "$FULL_SUITE_ROOT"',
             wrapper,
         )
+        self.assertNotIn("clone --no-checkout --shared", wrapper)
         self.assertNotIn('set_authenticated_python_roots "$REPO_ROOT"', wrapper)
+        self.assertRegex(
+            wrapper,
+            r"PUBLICATION_RUNTIME_VIEW_RECORD_COUNT=[0-9]+",
+        )
+        self.assertRegex(
+            wrapper,
+            r"PUBLICATION_RUNTIME_VIEW_SHA256=[0-9a-f]{64}",
+        )
+        self.assertIn("for directory, dirnames, filenames in os.walk(venv_root)", wrapper)
+        self.assertIn('"kind": "directory"', wrapper)
+        self.assertIn('records = [{"kind": "directory", "path": "."}]', wrapper)
+        self.assertIn('"kind": "symlink"', wrapper)
+        self.assertIn('"kind": "regular"', wrapper)
+        self.assertIn('"include-system-site-packages": "false"', wrapper)
+        self.assertIn("manage_publication_test_dependencies materialize", wrapper)
+        self.assertEqual(
+            wrapper.count("manage_publication_test_dependencies verify"),
+            4,
+        )
+        self.assertEqual(
+            wrapper.count("\nverify_publication_test_child_runtime\n"),
+            5,
+        )
+        self.assertIn("PYTHONNOUSERSITE=1", wrapper)
+        self.assertIn("PYTHONDONTWRITEBYTECODE=1", wrapper)
+        self.assertIn("MPLBACKEND=Agg", wrapper)
+        self.assertNotIn("PYTHONPATH=", wrapper)
+        self.assertNotIn("PLOTTING_ENVIRONMENT_LOCK=", wrapper)
+        self.assertIn(
+            '"$PYTHON" -I -B -m venv --without-pip "$PUBLICATION_TEST_VENV_ROOT"',
+            wrapper,
+        )
+        self.assertIn(
+            '"$PUBLICATION_TEST_VENV_ROOT/bin/Activate.ps1"',
+            wrapper,
+        )
+        self.assertIn(
+            '"$PUBLICATION_TEST_VENV_ROOT/bin/activate.fish"',
+            wrapper,
+        )
+        self.assertIn(
+            'PATH="$PUBLICATION_TEST_VENV_ROOT/bin:/usr/bin:/bin"',
+            wrapper,
+        )
+        self.assertIn(
+            '"$PUBLICATION_TEST_PYTHON" -I -B -S -c',
+            wrapper,
+        )
+        self.assertIn(
+            '"$PUBLICATION_TEST_PYTHON" -I -B -c',
+            wrapper,
+        )
+        self.assertIn(
+            "TRUSTED_CHECKOUT_TEST_MODULE="
+            "tst.publication.test_publish_q011_section54_pressure_pilot_bundle",
+            wrapper,
+        )
+        self.assertIn(
+            '/usr/bin/grep -vx "$TRUSTED_CHECKOUT_TEST_MODULE"',
+            wrapper,
+        )
+        self.assertIn('test "${#modules[@]}" -eq 65', wrapper)
+        self.assertIn(
+            'run_publication_test_module unittest "${modules[@]}"',
+            wrapper,
+        )
+        self.assertIn(
+            'run_publication_test_module unittest "$TRUSTED_CHECKOUT_TEST_MODULE"',
+            wrapper,
+        )
         self.assertNotIn("/usr/bin/git -c core.fsmonitor=false", wrapper)
         self.assertGreaterEqual(wrapper.count("--no-replace-objects"), 10)
         self.assertIn(
@@ -4159,13 +4233,15 @@ class PicReadinessRegistryTests(unittest.TestCase):
             2,
         )
         self.assertNotIn("export PYTHONPATH=", wrapper)
-        python_launches = [
-            line.strip() for line in wrapper.splitlines() if '"$PYTHON"' in line
-        ]
         self.assertEqual(
-            python_launches,
-            ['"${PYTHON_ENV[@]}" "$PYTHON" -I -B -S -c \\'] * 2,
+            wrapper.count('"${PYTHON_ENV[@]}" "$PYTHON" -I -B -S -c \\'),
+            2,
         )
+        self.assertEqual(
+            wrapper.count('"${PYTHON_ENV[@]}" "$PYTHON" -I -B -S - \\'),
+            1,
+        )
+        self.assertEqual(wrapper.count('"${PUBLICATION_TEST_PYTHON_ENV[@]}" \\'), 2)
 
     def test_q011_historical_status_binds_installed_controller_inventory(self) -> None:
         status = _load(
