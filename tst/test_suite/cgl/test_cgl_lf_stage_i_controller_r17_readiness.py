@@ -283,6 +283,52 @@ def mutate_installed_clearance_transaction(module, fixture, target_kind, mutatio
     return target
 
 
+def mutate_managed_clearance_final_authority(module, fixture, mutation):
+    if mutation == "audit-review-delete":
+        fixture["audit_review_path"].unlink()
+        return
+    if mutation == "audit-review-alias":
+        hostile_deterministic_alias(
+            module, fixture["audit_review_path"], "temporary", "regular"
+        )
+        return
+    if mutation == "source-authority":
+        target = fixture["source_paths"][0]
+        target.chmod(0o644)
+        write_stable_json(target, {"mutated_during_final_close": mutation})
+        return
+    if mutation == "stale-manifest":
+        target = (
+            fixture["paths"]["root"] / "runs" / module.SHARED_ROOT_STALE_CAMPAIGN_ID
+            / "manifest/prepared_run.json"
+        )
+        target.write_text('{"mutated_during_final_close": true}\n')
+        return
+    if mutation == "stale-namespace":
+        target = (
+            fixture["paths"]["root"] / "runs" / module.SHARED_ROOT_STALE_CAMPAIGN_ID
+        )
+        predecessor = target.parent / f"{target.name}.closing-predecessor"
+        target.rename(predecessor)
+        (target / "manifest").mkdir(parents=True)
+        (predecessor / "manifest/prepared_run.json").rename(
+            target / "manifest/prepared_run.json"
+        )
+        return
+    if mutation == "stage-i-namespace":
+        target = (
+            fixture["paths"]["root"] / "runs/mks24-stage-i" / module.EXECUTION_EPOCH
+        )
+        target.rmdir()
+        target.mkdir()
+        return
+    target = (
+        fixture["paths"]["root"] / module.SHARED_ROOT_CLEARANCE_SUPERSESSION_RELATIVE
+    )
+    target.chmod(0o644)
+    write_stable_json(target, {"mutated_during_final_close": mutation})
+
+
 def managed_clearance_fixture(
     module, tmp_path, monkeypatch, checkpoint=120, *, install_transaction=True,
 ):
@@ -673,13 +719,13 @@ def test_managed_shared_root_clearance_rejects_changed_exact_binding(
         fixture["controller"].unlink()
         fixture["controller"].write_text("# retained controller\n")
         fixture["controller"].chmod(0o644)
-        match = "controller.*inode"
+        match = "controller.*inode|artifact exact current bindings"
     elif mutation == "source_authority":
         source = fixture["source_paths"][0]
         source.chmod(0o644)
         source.write_text('{"changed": true}\n')
         source.chmod(0o444)
-        match = "source authority publication 0"
+        match = "source authority publication 0|artifact exact current bindings"
     elif mutation == "review":
         review = fixture["review_path"]
         value = json.loads(review.read_text())
@@ -709,7 +755,9 @@ def test_managed_shared_root_clearance_rejects_forged_terminal_sacct_binding(
         artifact["stale_campaign"]["terminal_sacct"]["state"] = "FAILED"
 
     rewrite_managed_clearance_chain(fixture, mutate_artifact=forge)
-    with pytest.raises(ValueError, match="retained sacct binding"):
+    with pytest.raises(
+        ValueError, match="retained sacct binding|artifact exact current bindings"
+    ):
         authenticate_managed_clearance(module, fixture)
 
 
@@ -1023,6 +1071,101 @@ def test_managed_clearance_authority_rejects_hostile_public_deterministic_alias(
         else:
             module.read_transaction(fixture["paths"], fixture["transaction_path"])
     assert alias.exists()
+
+
+@pytest.mark.parametrize(
+    "consumer", ("promote", "recover", "verify", "checkpoint", "production", "replay")
+)
+@pytest.mark.parametrize(
+    "mutation",
+    (
+        "audit-review-delete",
+        "audit-review-alias",
+        "source-authority",
+        "stale-manifest",
+        "stale-namespace",
+        "stage-i-namespace",
+        "terminal-evidence",
+    ),
+)
+def test_managed_clearance_final_combined_close_rejects_inflight_mutation(
+    tmp_path, monkeypatch, consumer, mutation
+):
+    module = load_controller()
+    if consumer in {"promote", "recover", "verify"}:
+        fixture = managed_clearance_lifecycle_fixture(module, tmp_path, monkeypatch)
+        if consumer == "recover":
+            module.stage_managed_shared_root_clearance_transaction(
+                fixture["paths"], 120, fixture["candidates"], fixture["expected"]
+            )
+        elif consumer == "verify":
+            assert module.promote_managed_shared_root_clearance(
+                fixture["promote_args"]
+            ) == 0
+    elif consumer == "replay":
+        fixture = managed_clearance_replay_fixture(module, tmp_path, monkeypatch)
+    else:
+        fixture = managed_clearance_fixture(module, tmp_path, monkeypatch)
+
+    armed = consumer not in {"production", "replay"}
+    changed = False
+    require_absence = module.require_stale_job_absent_from_complete_queue
+
+    def arm_after_queue(*args, **kwargs):
+        nonlocal armed
+        result = require_absence(*args, **kwargs)
+        armed = True
+        return result
+
+    monkeypatch.setattr(
+        module, "require_stale_job_absent_from_complete_queue", arm_after_queue
+    )
+    installed_binding = module.managed_shared_root_clearance_installed_transaction_binding
+
+    def mutate_after_final_private_binding(paths, checkpoint, **kwargs):
+        nonlocal changed
+        result = installed_binding(paths, checkpoint, **kwargs)
+        if (
+            armed
+            and not changed
+            and kwargs.get("authenticate_payload_chain", True) is True
+            and fixture["audit_review_path"].exists()
+        ):
+            mutate_managed_clearance_final_authority(module, fixture, mutation)
+            changed = True
+        return result
+
+    monkeypatch.setattr(
+        module,
+        "managed_shared_root_clearance_installed_transaction_binding",
+        mutate_after_final_private_binding,
+    )
+    with pytest.raises(ValueError):
+        if consumer == "promote":
+            module.promote_managed_shared_root_clearance(fixture["promote_args"])
+        elif consumer == "recover":
+            module.recover_managed_shared_root_clearance(fixture["lifecycle_args"])
+        elif consumer == "verify":
+            module.verify_managed_shared_root_clearance(fixture["lifecycle_args"])
+        elif consumer == "checkpoint":
+            module.managed_shared_root_clearance_checkpoints(
+                fixture["paths"]["root"] / "accounting"
+            )
+        elif consumer == "production":
+            authenticate_managed_clearance(module, fixture, checkpoint_number=120)
+        else:
+            module.read_transaction(fixture["paths"], fixture["transaction_path"])
+    assert changed
+
+    if mutation in {"audit-review-delete", "audit-review-alias"}:
+        try:
+            checkpoints = module.managed_shared_root_clearance_checkpoints(
+                fixture["paths"]["root"] / "accounting"
+            )
+        except ValueError:
+            pass
+        else:
+            assert 120 not in checkpoints
 
 
 @pytest.mark.parametrize(

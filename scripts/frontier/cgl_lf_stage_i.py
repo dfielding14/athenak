@@ -9780,6 +9780,38 @@ def validate_submission_audit(
             raise ValueError("submission journal lacks descriptor-bound batch script")
     else:
         validate_batch_script_binding(binding, "submission-journal batch script")
+    reauthenticate_retained_managed_shared_root_clearance(paths, value)
+
+
+def reauthenticate_retained_managed_shared_root_clearance(
+    paths: dict[str, Path],
+    submission_audit: object,
+) -> None:
+    """Close a retained submit audit over its exact declared F120 checkpoint."""
+
+    if not isinstance(submission_audit, dict):
+        return
+    clearance = submission_audit.get("shared_root_isolation_clearance")
+    if clearance is None:
+        return
+    if not isinstance(clearance, dict):
+        raise ValueError("submission audit shared-root clearance is invalid")
+    checkpoint_match = re.fullmatch(r"F-([1-9][0-9]*)", str(clearance.get("checkpoint")))
+    audit_review = clearance.get("publication_audit_review")
+    if checkpoint_match is None or not isinstance(audit_review, dict):
+        raise ValueError("submission audit shared-root clearance is invalid")
+    authenticate_managed_shared_root_clearance_final_closure(
+        paths,
+        int(checkpoint_match.group(1)),
+        expected_audit_review_sha256=require_r17_sha256(
+            audit_review.get("sha256"),
+            "submission audit shared-root clearance audit-review SHA-256",
+        ),
+        now=parse_utc_timestamp(
+            submission_audit.get("created_utc"),
+            "submission audit created_utc",
+        ),
+    )
 
 
 def open_batch_script_from_binding(value: object) -> dict[str, object]:
@@ -10005,6 +10037,9 @@ def read_transaction(paths: dict[str, Path], path: Path) -> dict[str, object]:
             "pending submission reservation snapshot",
         )
         require_transaction_batch_script(value)
+        reauthenticate_retained_managed_shared_root_clearance(
+            paths, value.get("submission_audit")
+        )
         return value
     manifest = value.get("manifest")
     reservations = value.get("reservations")
@@ -10113,6 +10148,9 @@ def read_transaction(paths: dict[str, Path], path: Path) -> dict[str, object]:
     ):
         require_retained_r17_policy(paths, snapshot)
         require_reservation_budget(ledger, snapshot, label)
+    reauthenticate_retained_managed_shared_root_clearance(
+        paths, value.get("submission_audit")
+    )
     return value
 
 
@@ -13403,8 +13441,8 @@ def managed_shared_root_clearance_checkpoints(
             )
             if not all(path.name in entries for path in chain):
                 continue
-            authenticate_managed_shared_root_clearance_chain_commit(
-                accounting, checkpoint
+            authenticate_managed_shared_root_clearance_final_closure(
+                layout(accounting.parent), checkpoint
             )
             checkpoints.append(checkpoint)
     return sorted(set(checkpoints))
@@ -14068,6 +14106,228 @@ def managed_shared_root_clearance_installed_transaction_binding(
     return closing
 
 
+def current_managed_shared_root_clearance_public_binding(
+    paths: dict[str, Path],
+    checkpoint: int,
+    expected: dict[str, str],
+) -> dict[str, object]:
+    """Return one exact alias-free current public-chain binding."""
+
+    expected = managed_shared_root_clearance_expected_digests(
+        expected, "managed shared-root clearance public binding expected"
+    )
+    canonical = managed_shared_root_clearance_chain_paths(
+        paths["root"] / "accounting", checkpoint
+    )
+    require_managed_shared_root_clearance_aliases_absent(
+        canonical, f"managed shared-root clearance F-{checkpoint} public binding"
+    )
+    retained = {
+        key: current_clearance_file_binding(
+            path,
+            f"managed shared-root clearance F-{checkpoint} public {key} binding",
+            mode=0o444,
+        )
+        for key, path in zip(SHARED_ROOT_CLEARANCE_TRANSACTION_PAYLOADS, canonical)
+    }
+    if {
+        key: binding["sha256"] for key, binding in retained.items()
+    } != expected:
+        raise ValueError(
+            f"managed shared-root clearance F-{checkpoint} public binding differs "
+            "from installed transaction"
+        )
+    require_managed_shared_root_clearance_aliases_absent(
+        canonical, f"managed shared-root clearance F-{checkpoint} public binding"
+    )
+    return retained
+
+
+def current_managed_shared_root_clearance_live_dependency_binding(
+    paths: dict[str, Path],
+) -> dict[str, object]:
+    """Return exact current bindings for every live F120 dependency."""
+
+    source_paths = [
+        paths["root"] / relative
+        for relative in SHARED_ROOT_CLEARANCE_SOURCE_AUTHORITY_RELATIVES
+    ]
+    stale_namespace = paths["root"] / "runs" / SHARED_ROOT_STALE_CAMPAIGN_ID
+    stale_manifest = stale_namespace / "manifest/prepared_run.json"
+    stage_namespace = paths["root"] / "runs/mks24-stage-i" / EXECUTION_EPOCH
+    terminal_source = paths["root"] / SHARED_ROOT_CLEARANCE_SUPERSESSION_RELATIVE
+    stale_manifest_binding = current_clearance_file_binding(
+        stale_manifest,
+        "managed shared-root clearance closing stale manifest",
+        mode=0o644,
+    )
+    try:
+        stale = read_manifest(stale_manifest)
+    except (OSError, json.JSONDecodeError) as error:
+        raise ValueError(
+            "managed shared-root clearance closing stale manifest is unavailable"
+        ) from error
+    if (
+        stale.get("campaign_id") != SHARED_ROOT_STALE_CAMPAIGN_ID
+        or stale.get("slurm_job_id") != SHARED_ROOT_STALE_JOB_ID
+        or stale.get("state") != "running"
+    ):
+        raise ValueError("managed shared-root clearance stale campaign differs")
+    if (
+        stage_namespace == stale_namespace
+        or stage_namespace in stale_namespace.parents
+        or stale_namespace in stage_namespace.parents
+    ):
+        raise ValueError("managed shared-root clearance namespaces are not disjoint")
+    return {
+        "controller": current_clearance_file_binding(
+            retained_controller_source_path(),
+            "managed shared-root clearance closing controller binding",
+            mode=0o644,
+        ),
+        "source_authority_publications": [
+            current_clearance_file_binding(
+                path,
+                f"managed shared-root clearance closing source authority {index}",
+                mode=0o444,
+            )
+            for index, path in enumerate(source_paths)
+        ],
+        "stale_manifest": stale_manifest_binding,
+        "stale_namespace": current_clearance_directory_binding(
+            stale_namespace,
+            "managed shared-root clearance closing stale namespace",
+        ),
+        "stage_i_namespace": current_clearance_directory_binding(
+            stage_namespace,
+            "managed shared-root clearance closing Stage I namespace",
+        ),
+        "terminal_source": current_clearance_file_binding(
+            terminal_source,
+            "managed shared-root clearance closing terminal source",
+            mode=0o444,
+        ),
+        "terminal_sacct": retained_stale_terminal_sacct_binding(paths),
+    }
+
+
+def current_managed_shared_root_clearance_final_binding(
+    paths: dict[str, Path],
+    checkpoint: int,
+    expected: dict[str, str],
+) -> dict[str, object]:
+    """Return one stable combined public, private, and live binding."""
+
+    expected = managed_shared_root_clearance_expected_digests(
+        expected, "managed shared-root clearance final binding expected"
+    )
+    initial = {
+        "public": current_managed_shared_root_clearance_public_binding(
+            paths, checkpoint, expected
+        ),
+        "transaction": (
+            current_managed_shared_root_clearance_installed_transaction_binding(
+                paths, checkpoint, expected
+            )
+        ),
+        "live_dependencies": (
+            current_managed_shared_root_clearance_live_dependency_binding(paths)
+        ),
+    }
+    closing = {
+        "transaction": (
+            current_managed_shared_root_clearance_installed_transaction_binding(
+                paths, checkpoint, expected
+            )
+        ),
+        "live_dependencies": (
+            current_managed_shared_root_clearance_live_dependency_binding(paths)
+        ),
+        "public": current_managed_shared_root_clearance_public_binding(
+            paths, checkpoint, expected
+        ),
+    }
+    if initial != closing:
+        raise ValueError(
+            "managed shared-root clearance public, transaction, or live dependency "
+            "changed during final binding"
+        )
+    return closing
+
+
+def authenticate_managed_shared_root_clearance_final_closure(
+    paths: dict[str, Path],
+    checkpoint: int,
+    *,
+    expected_audit_review_sha256: str | None = None,
+    expected: dict[str, str] | None = None,
+    now: datetime | None = None,
+) -> dict[str, object]:
+    """Close authority over one stable public, private, and live F120 state."""
+
+    accounting = paths["root"] / "accounting"
+    committed = authenticate_managed_shared_root_clearance_chain_commit(
+        accounting, checkpoint
+    )
+    retained_expected = managed_shared_root_clearance_expected_digests(
+        committed["expected"], "managed shared-root clearance final closure expected"
+    )
+    if expected is not None and retained_expected != (
+        managed_shared_root_clearance_expected_digests(
+            expected, "expected managed shared-root clearance final closure"
+        )
+    ):
+        raise ValueError(
+            "managed shared-root clearance final closure differs from expected chain"
+        )
+    if expected_audit_review_sha256 is not None and (
+        retained_expected["audit_review"]
+        != require_r17_sha256(
+            expected_audit_review_sha256,
+            "expected managed shared-root clearance final audit-review SHA-256",
+        )
+    ):
+        raise ValueError(
+            "managed shared-root clearance final audit-review digest differs"
+        )
+    initial = current_managed_shared_root_clearance_final_binding(
+        paths, checkpoint, retained_expected
+    )
+    canonical = managed_shared_root_clearance_chain_paths(accounting, checkpoint)
+    initial_result = authenticate_managed_shared_root_clearance_chain(
+        paths, checkpoint, canonical, expected=retained_expected, now=now
+    )
+    transaction = managed_shared_root_clearance_installed_transaction_binding(
+        paths,
+        checkpoint,
+        expected_audit_review_sha256=retained_expected["audit_review"],
+    )
+    if transaction["expected"] != retained_expected:
+        raise ValueError(
+            "managed shared-root clearance final installed transaction differs"
+        )
+    closing_result = authenticate_managed_shared_root_clearance_chain(
+        paths, checkpoint, canonical, expected=retained_expected, now=now
+    )
+    closing = current_managed_shared_root_clearance_final_binding(
+        paths, checkpoint, retained_expected
+    )
+    if (
+        initial_result != closing_result
+        or committed["transaction"] != transaction
+        or transaction != closing["transaction"]
+        or initial != closing
+    ):
+        raise ValueError(
+            "managed shared-root clearance authority changed during final closure"
+        )
+    return {
+        "result": closing_result,
+        "expected": retained_expected,
+        "binding": closing,
+    }
+
+
 def managed_shared_root_clearance_staging_entries() -> set[str]:
     """Return the only exact private-staging and recoverable member names."""
 
@@ -14311,22 +14571,18 @@ def continue_managed_shared_root_clearance_transaction(
                     expected_audit_review_sha256=expected["audit_review"],
                 )
                 copy_file(payloads[index], path)
-        result = authenticate_managed_shared_root_clearance_chain(
-            paths, checkpoint, canonical, expected=expected
-        )
-        require_managed_shared_root_clearance_aliases_absent(
-            canonical, "managed shared-root clearance committed public authority"
-        )
-        if installed != managed_shared_root_clearance_installed_transaction_binding(
+        closure = authenticate_managed_shared_root_clearance_final_closure(
             paths,
             checkpoint,
             expected_audit_review_sha256=expected["audit_review"],
-        ):
+            expected=expected,
+        )
+        if installed != closure["binding"]["transaction"]:
             raise ValueError(
                 "managed shared-root clearance installed transaction changed "
                 "during recovery"
             )
-        return result
+        return closure["result"]
     if state not in {
         (False, False, False, False),
         (True, False, False, False),
@@ -14355,21 +14611,17 @@ def continue_managed_shared_root_clearance_transaction(
         expected_audit_review_sha256=expected["audit_review"],
     )
     copy_file(payloads[3], canonical[3])
-    result = authenticate_managed_shared_root_clearance_chain(
-        paths, checkpoint, canonical, expected=expected
-    )
-    require_managed_shared_root_clearance_aliases_absent(
-        canonical, "managed shared-root clearance committed public authority"
-    )
-    if installed != managed_shared_root_clearance_installed_transaction_binding(
+    closure = authenticate_managed_shared_root_clearance_final_closure(
         paths,
         checkpoint,
         expected_audit_review_sha256=expected["audit_review"],
-    ):
+        expected=expected,
+    )
+    if installed != closure["binding"]["transaction"]:
         raise ValueError(
             "managed shared-root clearance installed transaction changed during recovery"
         )
-    return result
+    return closure["result"]
 
 
 def managed_shared_root_clearance_candidate_arguments(
@@ -14440,39 +14692,12 @@ def verify_managed_shared_root_clearance(args: argparse.Namespace) -> int:
 
     root = require_root(Path(args.root), args.allow_local_root)
     paths = layout(root)
-    installed = managed_shared_root_clearance_installed_transaction_binding(
+    closure = authenticate_managed_shared_root_clearance_final_closure(
         paths,
         args.checkpoint,
         expected_audit_review_sha256=args.expected_audit_review_sha256,
     )
-    expected = managed_shared_root_clearance_expected_digests(
-        installed["expected"], "managed shared-root clearance verified transaction"
-    )
-    canonical = managed_shared_root_clearance_chain_paths(
-        paths["root"] / "accounting", args.checkpoint
-    )
-    if managed_shared_root_clearance_public_state(canonical, expected) != (
-        True, True, True, True,
-    ):
-        raise ValueError(
-            "managed shared-root clearance audit-review commit marker is absent"
-        )
-    result = authenticate_managed_shared_root_clearance_chain(
-        paths, args.checkpoint, canonical, expected=expected
-    )
-    require_managed_shared_root_clearance_aliases_absent(
-        canonical, "managed shared-root clearance verified public authority"
-    )
-    if installed != managed_shared_root_clearance_installed_transaction_binding(
-        paths,
-        args.checkpoint,
-        expected_audit_review_sha256=expected["audit_review"],
-    ):
-        raise ValueError(
-            "managed shared-root clearance installed transaction changed "
-            "during verification"
-        )
-    print(json.dumps(result, indent=2, sort_keys=True))
+    print(json.dumps(closure["result"], indent=2, sort_keys=True))
     return 0
 
 
@@ -14513,8 +14738,8 @@ def require_managed_shared_root_clearance(
         )
     checkpoint = f"F-{checkpoint_number}"
     canonical = managed_shared_root_clearance_chain_paths(accounting, checkpoint_number)
-    committed_authority = authenticate_managed_shared_root_clearance_chain_commit(
-        accounting, checkpoint_number
+    committed_authority = authenticate_managed_shared_root_clearance_final_closure(
+        paths, checkpoint_number, now=current
     )
     artifact_path, review_path, audit_path, audit_review_path = canonical
     artifact, artifact_sha = read_controller_publication_json(
@@ -14691,8 +14916,8 @@ def require_managed_shared_root_clearance(
     live_queue_absence = require_stale_job_absent_from_complete_queue(
         queue_evidence, now=current
     )
-    if committed_authority != authenticate_managed_shared_root_clearance_chain_commit(
-        accounting, checkpoint_number
+    if committed_authority != authenticate_managed_shared_root_clearance_final_closure(
+        paths, checkpoint_number, now=current
     ):
         raise ValueError(
             "managed shared-root clearance public or transaction authority changed "
