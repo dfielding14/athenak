@@ -5,17 +5,41 @@
   "date": "2026-06-06",
   "campaign_id": "Q043-BELL-DEPOSITED-J-OVER-C-VOLUME-AWARE",
   "repaired_foundation_source_commit": "5668ae65e8f02d9725da60b876221d3c441fdd95",
-  "status": "implemented_non_authorizing_registered_admission_exact_132_case_contract_registered_executions_pending",
+  "status": "implemented_non_authorizing_integrated_installed_producer_and_admission_installation_and_registered_executions_pending",
   "qualification_effect": "registered_execution_raw_oracle_prerequisite_only_no_launch_no_policy_no_q023_no_q019_no_science_no_publication_authority",
-  "scope": "Additive filesystem-backed registered-execution admission and raw-oracle qualification successor for the exact 132-case dimension-valid Q043 matrix. It verifies exact checked-in deck bytes, clean-candidate source archive and executable bindings, immutable launch and reconciled execution records, authorized Orion paths, exact srun/MPI/decomposition evidence with one MeshBlock per rank, terminal success, every cycle-zero and cycle-one field/rank artifact, strict hardened frozen runtime metadata, raw bytes, and source-local oracle recomputation. It cannot launch, mutate policy, qualify Q043, Q023, or Q019, authorize a scientific claim, or authorize publication.",
+  "scope": "Integrated non-authorizing installed-control-plane Q043 reconciliation producer and registered-execution admission for the exact 132-case dimension-valid matrix. The producer is reachable only through the installed control-plane runner, requires the exact paired installed generation, consumes canonical mirrored-ledger reconciliation with trusted scheduler ExitCode, derives raw evidence from the trampoline-sealed artifact_inventory.json through descriptor-pinned verification, and publishes byte-identical immutable Orion analysis and canonical Project Home mirrors. Admission re-derives the producer bytes from that exact installed generation, validates the complete particle/deposition/pusher/TSC/output source closure and retained executable identity, validates scientific cycle-zero values, and recomputes the raw oracle. This record cannot launch, submit, mutate policy, qualify Q043, Q023, or Q019, authorize a scientific claim, or authorize publication.",
   "source_bindings": {
     "successor": {
       "path": "tst/publication/q043_registered_execution_raw_oracle_qualification_successor_v1.py",
-      "sha256": "8d901a65b58577dd3348b0569a43011f092721c0ee23c6270e27f80a31cbe370"
+      "sha256": "69586c83ec195c5a9134d1c70eb0e97cd7aed221e22e808427e688788f31a32e"
+    },
+    "installed_q043_producer": {
+      "path": "tst/publication/frontier_control_plane/reconcile_q043_registered_execution.py",
+      "sha256": "e2577c982592fa10cf64297c9c76349923afcedffbee03d924655a811f76d6a5"
+    },
+    "control_plane_inventory_registration": {
+      "path": "tst/publication/frontier_control_plane/control_plane_common.py",
+      "sha256": "2c7be3fda82f8e6173aa7f9a8e5280339ed6e0a115f535de258b32311df93a25"
+    },
+    "installed_runner_registration": {
+      "path": "tst/publication/frontier_control_plane/run_control_plane.py",
+      "sha256": "44d8071ef8fc48cd859bd421b0741f9faeb797f91715390e360b238de7136cf8"
+    },
+    "generic_reconciliation_exit_code": {
+      "path": "tst/publication/frontier_control_plane/reconcile_frontier_job.py",
+      "sha256": "7f176ccb04e5fca9b551ad5f944c04b40dc83d95292ebf8af85f20efc08b37ad"
+    },
+    "ledger_exit_code_schema": {
+      "path": "tst/publication/frontier_control_plane/ledger.py",
+      "sha256": "902e32285bdc8210bfd159c7d7a9b04e3f988cddadb805d02be7737b6955080d"
     },
     "focused_tests": {
       "path": "tst/publication/test_q043_registered_execution_raw_oracle_qualification_successor_v1.py",
-      "sha256": "e0eac86b2818b04314c0eb71e1e3c162c80a852563eaf6ecde09e64af61024c6"
+      "sha256": "1c4703de356f19b1fa5e2874a4a5ef312fda1ab5f4d1402840651db584fc4f84"
+    },
+    "shared_control_plane_tests": {
+      "path": "tst/publication/frontier_control_plane/test_control_plane.py",
+      "sha256": "b2ee00877ee3f959c155cca4869108b335033d1d2457cfb7037f1ed937c7c35a"
     }
   },
   "foundation_bindings": {
@@ -34,13 +58,13 @@
     "foundation_role": "source_local_analysis_dependency_only_not_registered_evidence_not_downstream_qualification"
   },
   "registered_case_contract": {
-    "candidate_rule": "Read and SHA-256 verify the clean-candidate manifest, source archive, executable, and environment profile as stable unaliased regular files under the authorized Orion root; require clean-source and build cross-links; open the source archive and byte-compare the full Q043 generator, oracle, admission, deck-manifest, and all matrix-deck closure against reviewed source.",
+    "candidate_rule": "Read and SHA-256 verify the clean-candidate manifest, source archive, executable, and environment profile as stable unaliased regular files under the authorized Orion root; require exact installed-verifier clean-source/build revalidation and retained-byte ELF validation; open the source archive and byte-compare the full Q043 generator, oracle, admission, producer, deck manifest, every matrix deck, every src/particles implementation including particles_pushers.cpp TSC interpolation, and every src/outputs implementation against reviewed source.",
     "deck_rule": "Read the exact checked-in case deck and deck manifest from the reviewed source root, compare deck bytes to the deterministic renderer, require the manifest digest cross-link, and require an immutable launch-deck copy with identical bytes under the registered artifact root.",
-    "execution_rule": "Require the exact authorized Orion run namespace, exact launch contract, immutable reconciled registered-execution receipt, exact srun command, exact MPI world/rank evidence, the exact dimension-valid decomposition with one MeshBlock per rank, unique scheduler identities, and COMPLETED 0:0 termination.",
-    "stdout_terminal_rule": "Require unique registered rank evidence, cycle-one and nlim-one evidence, cycle-limit termination, zero exit and signal, and an exact cross-linked terminal receipt.",
-    "raw_inventory_rule": "Require exactly one cycle-zero and one cycle-one artifact for every required field and MPI rank, canonical AthenaK output paths, stable unaliased regular files, byte counts, SHA-256 digests, and no path, inode, or execution-identity reuse.",
+    "execution_rule": "Require runs/<campaign>/<submission-id> topology from the trusted pre-submit manifest, the exact bootstrapped paired installed producer generation and installed trampoline digest, canonical mirrored-ledger reconciliation, canonical Project Home per-submission receipt mirrors, trusted scheduler COMPLETED ExitCode=0:0, and exact trusted-manifest command and MPI resources.",
+    "stdout_terminal_rule": "Do not trust run-local stdout or self-issued launch/terminal reports. Derive terminal cycle one from the trusted time/nlim=1 manifest action plus exact sealed cycle-zero/cycle-one raw inventory, and bind it to scheduler COMPLETED ExitCode=0:0 and immutable paired terminal receipts.",
+    "raw_inventory_rule": "At Q043 reconciliation, open the trampoline-sealed artifact_inventory.json and every frozen artifact through no-follow retained descriptors, verify the complete frozen tree twice, exclude the trusted mutable analysis directory, derive an immutable SHA-256 raw inventory solely from sealed records, and reject any post-receipt raw replacement or inventory drift during admission re-derivation.",
     "runtime_metadata_rule": "Validate cycle-zero and cycle-one sequential output bookkeeping and compare all remaining runtime parameters exactly against the repaired hardened frozen-runtime helper, including positive-integer PPC and effective species0 velocity agreement with the nominal CR stream, before recomputing the raw oracle.",
-    "raw_oracle_rule": "Recompute the source-local raw oracle from admitted cycle-one bytes; require exact case and matrix result schemas, exact provenance agreement, and launch_authorized=false, scientific_claim_authorized=false, publication_authorized=false, passed=false; record that source-local or synthetic analyzer success is insufficient."
+    "raw_oracle_rule": "Scientifically validate every admitted cycle-zero deposited moment as finite and exactly zero, then recompute the source-local raw oracle from admitted cycle-one bytes; require exact case and matrix result schemas, exact provenance agreement, and launch_authorized=false, scientific_claim_authorized=false, publication_authorized=false, passed=false; record that source-local or synthetic analyzer success is insufficient."
   },
   "source_local_insufficiency": {
     "explicit": true,
@@ -88,8 +112,8 @@
     "historical_q023_or_q029_files_modified": false,
     "source_local_q043_oracle_modified": false,
     "source_local_q043_generator_modified": false,
-    "shared_control_plane_modified": false,
-    "implementation_policy": "additive_disjoint_q043_successor_files_only"
+    "shared_control_plane_modified": true,
+    "implementation_policy": "narrow_additive_installed_q043_action_registration_plus_generic_scheduler_exit_code_ledger_binding"
   },
   "authorization": {
     "launch_authorized": false,
@@ -102,7 +126,8 @@
     "publication_authorized": false
   },
   "verification": {
-    "focused_tests": 12,
+    "focused_tests": 21,
+    "direct_controller_path": "passed_manifest_to_reserve_to_trampoline_to_generic_reconcile_to_installed_q043_reconcile_to_admission_with_external_clean_candidate_and_scheduler_boundaries_fixture_backed",
     "fresh_repaired_source_runtime_smoke": {
       "status": "passed_source_local_nonqualifying_no_registered_execution",
       "source_commit": "5668ae65e8f02d9725da60b876221d3c441fdd95",
@@ -125,8 +150,14 @@
       "split case without exact MPI execution evidence",
       "missing duplicate and hardlinked raw outputs",
       "wrong clean candidate source archive executable and deck",
-      "failed scheduler state and bad terminal stdout",
+      "failed scheduler state and untrusted post-freeze stdout replacement",
       "path escape and symlink substitution",
+      "missing different replaced and symlinked canonical Project Home receipt mirrors",
+      "non-bootstrapped producer execution and installed-generation drift",
+      "trampoline-sealed artifact inventory and post-receipt raw replacement",
+      "nonzero and nonfinite cycle-zero deposited moments",
+      "fake ELF and self-reported executable hashes",
+      "modified deposition pusher TSC interpolation and output sources",
       "common-mode runtime metadata drift",
       "positive-integer PPC and exact 132-case matrix drift",
       "strict analyzer-result schema and publication-authority drift",
@@ -134,10 +165,11 @@
       "real x2 x1x2 x3 and xyz per-rank raw shard geometry",
       "non-authorizing exact record rebuild"
     ],
-    "registered_runtime_execution_status": "not_run_not_authorized_by_this_successor"
+    "registered_runtime_execution_status": "controller_path_test_passed_real_registered_matrix_not_run_not_authorized_by_this_successor"
   },
   "open_dependencies": [
-    "freeze_one_clean_candidate_containing_the_hardened_foundation_and_this_successor",
+    "independently_review_and_install_the_exact_paired_control_plane_generation_containing_this_q043_producer_and_admission",
+    "freeze_one_clean_candidate_containing_the_hardened_foundation_complete_runtime_source_closure_and_this_successor",
     "register_execute_and_reconcile_all_132_exact_Q043_matrix_cases_on_Orion",
     "build_and_independently_review_the_complete_registered_matrix_record_before_any_Q023_or_Q019_qualification"
   ]

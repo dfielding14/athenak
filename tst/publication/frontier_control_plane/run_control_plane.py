@@ -39,6 +39,7 @@ CONTROL_PLANE_FILES = [
     "q011_pressure_review_packet_verifier.py",
     "reconcile_frontier_job.py",
     "reconcile_manual_frontier_allocations.py",
+    "reconcile_q043_registered_execution.py",
     "revalidate_clean_candidate.py",
     "run_installed_control_plane_job.sh",
     "run_control_plane.py",

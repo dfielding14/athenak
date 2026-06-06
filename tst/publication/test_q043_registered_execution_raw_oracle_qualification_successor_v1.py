@@ -5,15 +5,20 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import importlib
 import io
 import json
 import math
 import os
 from pathlib import Path
+import re
+import subprocess
 import struct
+import sys
 import tarfile
 import tempfile
 import unittest
+from unittest.mock import patch
 import uuid
 
 import numpy as np
@@ -27,6 +32,12 @@ from tst.publication import (
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+CONTROL_PLANE_SOURCE = REPO_ROOT / "tst/publication/frontier_control_plane"
+sys.path.insert(0, str(CONTROL_PLANE_SOURCE))
+try:
+    q043_producer = importlib.import_module("reconcile_q043_registered_execution")
+finally:
+    sys.path.pop(0)
 READINESS = (
     REPO_ROOT
     / "tst/publication/readiness/"
@@ -50,12 +61,34 @@ def _write(path: Path, payload: bytes, *, executable: bool = False) -> dict[str,
     return {"path": str(path), "sha256": _sha(payload), "byte_count": len(payload)}
 
 
-def _source_archive_payload() -> bytes:
+def _binding(path: Path) -> dict[str, object]:
+    payload = path.read_bytes()
+    return {"path": str(path), "sha256": _sha(payload), "byte_count": len(payload)}
+
+
+def _seal(path: Path, *, executable: bool = False) -> None:
+    path.chmod(0o555 if executable else 0o444)
+
+
+def _overwrite(path: Path, payload: bytes) -> None:
+    path.chmod(0o644)
+    path.write_bytes(payload)
+
+
+REAL_TRUSTED_CANDIDATE_REVALIDATION = successor._trusted_clean_candidate_revalidation
+REAL_TRUSTED_MIRRORED_LEDGER_STATE = successor._trusted_mirrored_ledger_state
+REAL_TRUSTED_PRODUCER_REDERIVATION = successor._trusted_producer_rederivation
+
+
+def _source_archive_payload(
+    overrides: dict[str, bytes] | None = None,
+) -> bytes:
     required = set(successor.required_candidate_source_paths())
+    replacements = overrides or {}
     buffer = io.BytesIO()
     with tarfile.open(fileobj=buffer, mode="w") as archive:
         for relative in sorted(required):
-            payload = (REPO_ROOT / relative).read_bytes()
+            payload = replacements.get(relative, (REPO_ROOT / relative).read_bytes())
             member = tarfile.TarInfo(relative)
             member.mode = 0o644
             member.size = len(payload)
@@ -65,7 +98,10 @@ def _source_archive_payload() -> bytes:
 
 def _rewrite_json(binding: dict[str, object], value: object) -> None:
     payload = _json_bytes(value)
-    Path(str(binding["path"])).write_bytes(payload)
+    path = Path(str(binding["path"]))
+    path.chmod(0o644)
+    path.write_bytes(payload)
+    _seal(path)
     binding["sha256"] = _sha(payload)
     binding["byte_count"] = len(payload)
 
@@ -162,9 +198,11 @@ def _binary_payload(
     cycle: int,
     rank: int,
     common_overrides: dict[tuple[str, str], str] | None = None,
+    value_override: float | None = None,
 ) -> bytes:
     shape = tuple(reversed(tuple(int(value) for value in case["meshblock_nx"])))
-    values = np.full(shape, _field_value(case, field, cycle), dtype=np.float64)
+    value = _field_value(case, field, cycle) if value_override is None else value_override
+    values = np.full(shape, value, dtype=np.float64)
     parameter_header = _runtime_parameter_header(
         case, field=field, cycle=cycle, common_overrides=common_overrides
     )
@@ -189,6 +227,29 @@ class Fixture:
         self.root = root
         self.authorized = root / "orion"
         self.authorized.mkdir()
+        self.project_home = root / "project_home"
+        self.project_home.mkdir()
+        self.ledger_records: list[dict[str, object]] = []
+        self.mirror_receipts: list[dict[str, object]] = []
+        self.producer_sha256 = _sha(
+            (
+                REPO_ROOT
+                / "tst/publication/frontier_control_plane/"
+                "reconcile_q043_registered_execution.py"
+            ).read_bytes()
+        )
+        self.trampoline_sha256 = _sha(
+            (
+                REPO_ROOT
+                / "tst/publication/frontier_control_plane/launch_trampoline.py"
+            ).read_bytes()
+        )
+        successor.AUTHORIZED_ORION_ROOT = self.authorized
+        successor.AUTHORIZED_PROJECT_HOME_ROOT = self.project_home
+        successor.AUTHORIZED_PROJECT_HOME_LEDGER_LEXICAL_ROOT = self.project_home
+        successor._trusted_clean_candidate_revalidation = self._candidate_revalidation
+        successor._trusted_mirrored_ledger_state = self._ledger_state
+        successor._trusted_producer_rederivation = self._producer_rederivation
         freeze = self.authorized / "clean_candidates" / str(
             uuid.uuid5(uuid.NAMESPACE_URL, "q043-test-freeze")
         )
@@ -223,6 +284,13 @@ class Fixture:
         manifest = _write(
             freeze / "clean_candidate_manifest.json", _json_bytes(manifest_value)
         )
+        for path, executable_mode in (
+            (Path(str(archive["path"])), False),
+            (Path(str(executable["path"])), True),
+            (Path(str(environment["path"])), True),
+            (Path(str(manifest["path"])), False),
+        ):
+            _seal(path, executable=executable_mode)
         self.candidate = {
             "git_commit": git_commit,
             "source_bundle_sha256": bundle,
@@ -232,130 +300,207 @@ class Fixture:
             "environment_profile": environment,
         }
 
+    def _ledger_state(self, version: str) -> dict[str, object]:
+        if version != "a" * 64:
+            raise successor.AdmissionError("test installed producer generation drifted")
+        return {
+            "records": copy.deepcopy(self.ledger_records),
+            "mirror_receipts": copy.deepcopy(self.mirror_receipts),
+            "installed_control_plane": {
+                "version": version,
+                "orion_path": str(self.authorized / "control_plane" / version),
+                "project_home_path": str(self.project_home / "control_plane" / version),
+                "producer_entrypoint": successor.Q043_PRODUCER_ENTRYPOINT,
+                "producer_entrypoint_sha256": self.producer_sha256,
+                "launch_trampoline_sha256": self.trampoline_sha256,
+                "project_home_canonical_root": str(self.project_home),
+                "project_home_ledger_root": str(self.project_home),
+            },
+        }
+
+    def _candidate_revalidation(
+        self, manifest_path: Path, *, manifest_sha256: str, git_commit: str
+    ) -> dict[str, object]:
+        if (
+            manifest_path != Path(str(self.candidate["clean_candidate_manifest"]["path"]))
+            or manifest_sha256 != self.candidate["clean_candidate_manifest"]["sha256"]
+            or git_commit != self.candidate["git_commit"]
+        ):
+            raise successor.AdmissionError("test candidate revalidation binding drifted")
+        return {
+            "record_type": "frontier_pic_clean_candidate_read_only_revalidation",
+            "schema_version": 1,
+            "status": "passed",
+            "clean_candidate_manifest": {
+                "expected_sha256": manifest_sha256,
+                "path": str(manifest_path),
+                "sha256": manifest_sha256,
+            },
+            "source": {
+                "git_commit": git_commit,
+                "git_tree": "3" * 40,
+                "source_bundle_sha256": self.candidate["source_bundle_sha256"],
+            },
+            "build": {
+                "executable_sha256": self.candidate["executable"]["sha256"],
+                "profile_id": "q043-test-profile",
+                "receipt_control_plane_version": "a" * 64,
+            },
+            "validated_submodules": [],
+        }
+
+    def _producer_rederivation(self, **arguments: object) -> dict[str, object]:
+        version = str(arguments["producer_version"])
+        try:
+            expected = q043_producer.derive_q043_registered_execution_evidence(
+                copy.deepcopy(arguments["event"]),
+                copy.deepcopy(arguments["mirror_ack"]),
+                self._producer_inventory(version),
+                authorized_pic_root=self.authorized,
+                authorized_project_home_root=self.project_home,
+            )
+        except (OSError, TypeError, ValueError) as error:
+            raise successor.AdmissionError(
+                "installed Q043 producer could not re-derive execution evidence: "
+                f"{error}"
+            ) from error
+        observed = (
+            arguments["terminal_path"],
+            arguments["terminal_payload"],
+            arguments["receipt_path"],
+            arguments["receipt_payload"],
+            arguments["terminal_mirror_path"],
+            arguments["receipt_mirror_path"],
+        )
+        if expected != observed:
+            raise successor.AdmissionError(
+                "installed Q043 producer re-derived different evidence bytes or paths"
+            )
+        return {
+            "control_plane_version": version,
+            "entrypoint": successor.Q043_PRODUCER_ENTRYPOINT,
+            "entrypoint_sha256": self.producer_sha256,
+            "launch_trampoline_sha256": self.trampoline_sha256,
+            "receipt_sha256": _sha(arguments["receipt_payload"]),
+            "terminal_receipt_sha256": _sha(arguments["terminal_payload"]),
+            "exact_byte_rederivation_passed": True,
+        }
+
+    def _producer_inventory(self, version: str = "a" * 64) -> dict[str, object]:
+        return {
+            "schema_version": 1,
+            "version": version,
+            "files": [
+                {
+                    "path": successor.Q043_PRODUCER_ENTRYPOINT,
+                    "sha256": self.producer_sha256,
+                },
+                {
+                    "path": "launch_trampoline.py",
+                    "sha256": self.trampoline_sha256,
+                },
+            ],
+        }
+
+    def _snapshot(
+        self,
+        destination: Path,
+        *,
+        role: str,
+        source: Path,
+        executable: bool = False,
+    ) -> dict[str, object]:
+        payload = source.read_bytes()
+        binding = _write(destination, payload, executable=executable)
+        _seal(destination, executable=executable)
+        return {
+            "path": binding["path"],
+            "role": role,
+            "sha256": binding["sha256"],
+            "source_path": str(source),
+            "source_sha256": binding["sha256"],
+        }
+
+    def _freeze_run(self, artifact_dir: Path) -> None:
+        analysis = artifact_dir / "analysis"
+        analysis.mkdir(mode=0o700)
+        records = []
+        for path in sorted(artifact_dir.rglob("*")):
+            if path == analysis or analysis in path.parents or path.is_dir():
+                continue
+            relative = path.relative_to(artifact_dir).as_posix()
+            payload = path.read_bytes()
+            path.chmod(0o444)
+            records.append(
+                {"path": relative, "sha256": _sha(payload), "size": len(payload)}
+            )
+        inventory = artifact_dir / "artifact_inventory.json"
+        inventory.write_bytes(_json_bytes({"schema_version": 1, "files": records}))
+        inventory.chmod(0o444)
+        for path in sorted(
+            (item for item in artifact_dir.rglob("*") if item.is_dir() and item != analysis),
+            key=lambda item: len(item.parts),
+            reverse=True,
+        ):
+            path.chmod(0o555)
+        artifact_dir.chmod(0o555)
+
     def inputs(
         self,
         case_id: str,
         *,
         common_overrides: dict[tuple[str, str], str] | None = None,
+        raw_value_overrides: dict[tuple[int, str, int], float] | None = None,
     ) -> tuple[dict[str, object], dict[str, object], list[dict[str, object]]]:
         case = _case(case_id)
         submission_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"submission:{case_id}"))
         reservation_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"reservation:{case_id}"))
-        case_root = (
+        artifact_dir = (
             self.authorized
-            / successor.RUN_NAMESPACE
-            / case_id
+            / "runs"
+            / successor.REGISTERED_CAMPAIGN
             / submission_id
         )
-        raw_root = case_root / "raw"
-        artifact_dir = case_root / "artifacts"
+        raw_root = artifact_dir / "raw"
         raw_root.mkdir(parents=True)
-        artifact_dir.mkdir()
         deck = successor._deck_binding(case, REPO_ROOT)
-        normalized_candidate = successor._candidate_binding(
-            self.candidate,
-            self.authorized,
-            source_root=REPO_ROOT,
-            required_paths=successor.required_candidate_source_paths(),
-        )
-        launch_deck = _write(
-            artifact_dir / "registration/input_deck.athinput",
-            (REPO_ROOT / str(deck["path"])).read_bytes(),
-        )
-        launch_contract = successor._launch_contract(
-            case=case,
-            candidate=normalized_candidate,
-            deck=deck,
-            launch_deck=launch_deck,
-            case_root=case_root,
-            raw_root=raw_root,
-            artifact_dir=artifact_dir,
-        )
-        launch_binding = _write(
-            artifact_dir / "registration/launch_contract.json",
-            _json_bytes(launch_contract),
-        )
         ranks = int(case["mpi_ranks"])
+        launch_contract = {
+            "schema_version": 1,
+            "executor": "trusted_trampoline_athena_argv_v1",
+            "pre_actions": [],
+            "actions": [
+                {
+                    "action_id": "q043-current-oracle",
+                    "kind": "athena",
+                    "resources": {
+                        "nodes": 1,
+                        "tasks": ranks,
+                        "cpus_per_task": 1,
+                        "gpus_per_task": 1,
+                        "gpu_bind": "closest",
+                    },
+                    "arguments": [
+                        {"literal": "-i"},
+                        {"snapshot_role": "input-deck"},
+                        {"literal": "-d"},
+                        {"artifact_directory": "raw"},
+                        {"literal": "time/nlim=1"},
+                    ],
+                    "stdout_artifact": "athena_stdout.txt",
+                    "stderr_artifact": "athena_stderr.txt",
+                }
+            ],
+            "post_actions": [],
+        }
         stdout_payload = (
-            f"Q043_REGISTERED_EXECUTION case_id={case_id} mpi_world_size={ranks} "
-            f"rank_ids={','.join(str(rank) for rank in range(ranks))}\n"
             "time=0.0025 cycle=1\n"
             "tlim=1 nlim=1\n"
             "Terminating on cycle limit\n"
-            "Q043_REGISTERED_EXECUTION_EXIT exit_code=0 signal=0\n"
         ).encode("utf-8")
-        stdout_binding = _write(
-            artifact_dir / "stdout/athena_stdout.txt", stdout_payload
-        )
+        _write(artifact_dir / "athena_stdout.txt", stdout_payload)
+        _write(artifact_dir / "athena_stderr.txt", b"")
         job_id = str(int(hashlib.sha256(case_id.encode()).hexdigest()[:12], 16) + 1)
-        terminal_value = {
-            "schema_version": successor.SCHEMA_VERSION,
-            "record_type": successor.TERMINAL_RECEIPT_RECORD_TYPE,
-            "campaign_id": oracle.CAMPAIGN_ID,
-            "case_id": case_id,
-            "submission_id": submission_id,
-            "slurm_job_id": job_id,
-            "slurm_terminal_state": "COMPLETED",
-            "slurm_exit_code": "0:0",
-            "termination_reason": "cycle_limit",
-            "terminal_cycle": 1,
-            "observed_world_size": ranks,
-            "stdout_sha256": stdout_binding["sha256"],
-        }
-        terminal_binding = _write(
-            artifact_dir / "terminal/terminal_receipt.json",
-            _json_bytes(terminal_value),
-        )
-        receipt_value = {
-            "schema_version": successor.SCHEMA_VERSION,
-            "record_type": successor.EXECUTION_RECEIPT_RECORD_TYPE,
-            "receipt_role": "immutable_reconciled_registered_execution",
-            "registration_scope": "registered_science",
-            "reconciled": True,
-            "campaign_id": oracle.CAMPAIGN_ID,
-            "case_id": case_id,
-            "reservation_id": reservation_id,
-            "submission_id": submission_id,
-            "reconciliation_event_sha256": hashlib.sha256(
-                f"reconciliation:{case_id}".encode()
-            ).hexdigest(),
-            "source_commit": self.candidate["git_commit"],
-            "source_bundle_sha256": self.candidate["source_bundle_sha256"],
-            "source_archive_sha256": self.candidate["source_archive"]["sha256"],
-            "clean_candidate_manifest_sha256": self.candidate[
-                "clean_candidate_manifest"
-            ]["sha256"],
-            "executable_sha256": self.candidate["executable"]["sha256"],
-            "environment_sha256": self.candidate["environment_profile"]["sha256"],
-            "deck_sha256": deck["sha256"],
-            "launch_contract_sha256": launch_binding["sha256"],
-            "command": launch_contract["command"],
-            "mpi_evidence": launch_contract["mpi_evidence"],
-            "slurm_job_id": job_id,
-            "slurm_terminal_state": "COMPLETED",
-            "slurm_exit_code": "0:0",
-            "raw_output_root": str(raw_root),
-            "artifact_dir": str(artifact_dir),
-            "stdout_sha256": stdout_binding["sha256"],
-            "terminal_receipt_sha256": terminal_binding["sha256"],
-            "pre_submit_manifest_sha256": hashlib.sha256(
-                f"manifest:{case_id}".encode()
-            ).hexdigest(),
-        }
-        receipt_binding = _write(
-            artifact_dir / "registration/registered_execution_receipt.json",
-            _json_bytes(receipt_value),
-        )
-        execution = {
-            "case_root": str(case_root),
-            "raw_output_root": str(raw_root),
-            "artifact_dir": str(artifact_dir),
-            "launch_deck": launch_deck,
-            "launch_contract": launch_binding,
-            "registered_execution_receipt": receipt_binding,
-            "stdout_artifact": stdout_binding,
-            "terminal_receipt": terminal_binding,
-        }
         raw_artifacts = []
         for cycle in successor.REQUIRED_CYCLES:
             for field in successor.REQUIRED_FIELDS:
@@ -369,8 +514,12 @@ class Fixture:
                         cycle=cycle,
                         rank=rank,
                         common_overrides=common_overrides,
+                        value_override=(raw_value_overrides or {}).get(
+                            (cycle, field, rank)
+                        ),
                     )
                     binding = _write(raw_root / relative, payload)
+                    _seal(Path(str(binding["path"])))
                     raw_artifacts.append(
                         {
                             "path": relative,
@@ -382,6 +531,120 @@ class Fixture:
                             "rank": rank,
                         }
                     )
+        self._freeze_run(artifact_dir)
+        manifest_root = (
+            self.authorized
+            / "manifests"
+            / successor.REGISTERED_CAMPAIGN
+            / submission_id
+        )
+        snapshot_root = manifest_root / "snapshot"
+        snapshot_files = [
+            self._snapshot(
+                snapshot_root / "clean_candidate_manifest.json",
+                role="clean-candidate-manifest",
+                source=Path(str(self.candidate["clean_candidate_manifest"]["path"])),
+            ),
+            self._snapshot(
+                snapshot_root / "athena",
+                role="executable",
+                source=Path(str(self.candidate["executable"]["path"])),
+                executable=True,
+            ),
+            self._snapshot(
+                snapshot_root / f"{case_id}.athinput",
+                role="input-deck",
+                source=Path(str(deck["absolute_path"])),
+            ),
+            self._snapshot(
+                snapshot_root / "frontier_pic_environment.sh",
+                role="environment-profile",
+                source=Path(str(self.candidate["environment_profile"]["path"])),
+                executable=True,
+            ),
+        ]
+        control_plane_version = "a" * 64
+        authorization_id = "q043-test-registered-raw-oracle"
+        manifest_value = {
+            "schema_version": 1,
+            "control_plane_version": control_plane_version,
+            "submission_id": submission_id,
+            "pic_root": str(self.authorized),
+            "campaign": successor.REGISTERED_CAMPAIGN,
+            "test_id": case_id,
+            "submission_scope": "registered_science",
+            "registered_science_authorization_id": authorization_id,
+            "git_commit": self.candidate["git_commit"],
+            "launch_contract": launch_contract,
+            "artifact_dir": str(artifact_dir),
+            "clean_candidate_manifest_path": self.candidate[
+                "clean_candidate_manifest"
+            ]["path"],
+            "clean_candidate_manifest_sha256": self.candidate[
+                "clean_candidate_manifest"
+            ]["sha256"],
+            "snapshot_files": snapshot_files,
+        }
+        manifest_binding = _write(
+            manifest_root / "pre_submit_manifest.json", _json_bytes(manifest_value)
+        )
+        _seal(Path(str(manifest_binding["path"])))
+        event = {
+            "sequence_number": len(self.ledger_records) + 1,
+            "event_type": "reconciliation",
+            "reservation_id": reservation_id,
+            "submission_id": submission_id,
+            "job_id": job_id,
+            "control_plane_version": control_plane_version,
+            "campaign": successor.REGISTERED_CAMPAIGN,
+            "test_id": case_id,
+            "submission_scope": "registered_science",
+            "registered_science_authorization_id": authorization_id,
+            "clean_candidate_manifest_sha256": self.candidate[
+                "clean_candidate_manifest"
+            ]["sha256"],
+            "manifest_path": manifest_binding["path"],
+            "manifest_sha256": manifest_binding["sha256"],
+            "git_commit": self.candidate["git_commit"],
+            "executable_sha256": self.candidate["executable"]["sha256"],
+            "artifact_dir": str(artifact_dir),
+            "state": "COMPLETED",
+            "scheduler_exit_code": "0:0",
+            "reconciled": True,
+            "reconciled_by_control_plane_version": control_plane_version,
+        }
+        event["event_sha256"] = _sha(_json_bytes(event))
+        self.ledger_records.append(event)
+        mirror_ack = {
+            "mirrored_event_sha256": event["event_sha256"],
+            "mirror_destination": str(self.project_home / "ledger/node_hours.jsonl"),
+            "mirror_transport": "filesystem_copy",
+            "mirror_acknowledged_utc": "2026-06-06T00:00:00Z",
+            "mirror_ack_sha256": "b" * 64,
+        }
+        self.mirror_receipts.append(mirror_ack)
+        evidence = q043_producer.publish_q043_registered_execution_evidence(
+            event,
+            mirror_ack,
+            self._producer_inventory(control_plane_version),
+            authorized_pic_root=self.authorized,
+            authorized_project_home_root=self.project_home,
+        )
+        produced = {"reconciliation": event, "evidence": evidence}
+        self.last_event = copy.deepcopy(event)
+        self.last_mirror_ack = copy.deepcopy(mirror_ack)
+        self.last_produced = copy.deepcopy(produced)
+        terminal_binding = _binding(
+            Path(produced["evidence"]["terminal_receipt"]["orion_path"])
+        )
+        receipt_binding = _binding(
+            Path(produced["evidence"]["registered_execution_receipt"]["orion_path"])
+        )
+        execution = {
+            "artifact_dir": str(artifact_dir),
+            "registered_execution_receipt": receipt_binding,
+            "terminal_receipt": terminal_binding,
+        }
         return case, execution, raw_artifacts
 
     def admission(
@@ -396,12 +659,508 @@ class Fixture:
             candidate_binding=self.candidate,
             execution_binding=execution,
             raw_artifacts=raw,
-            source_root=REPO_ROOT,
-            authorized_orion_root=self.authorized,
         )
+
+    def reseal_receipt(
+        self, execution: dict[str, object], receipt: dict[str, object]
+    ) -> None:
+        _rewrite_json(execution["registered_execution_receipt"], receipt)
+        mirror_path = Path(
+            receipt["project_home_mirrors"]["registered_execution_receipt_path"]
+        )
+        _overwrite(mirror_path, _json_bytes(receipt))
+        _seal(mirror_path)
+
+    def replace_raw_artifact(
+        self,
+        case: dict[str, object],
+        execution: dict[str, object],
+        artifact: dict[str, object],
+        *,
+        value: float,
+    ) -> None:
+        payload = _binary_payload(
+            case,
+            field=str(artifact["field"]),
+            cycle=int(artifact["cycle"]),
+            rank=int(artifact["rank"]),
+            value_override=value,
+        )
+        path = Path(execution["artifact_dir"], "raw", str(artifact["path"]))
+        _overwrite(path, payload)
+        _seal(path)
+        artifact["sha256"] = _sha(payload)
+        artifact["byte_count"] = len(payload)
 
 
 class Q043RegisteredExecutionAdmissionTests(unittest.TestCase):
+    def test_unmocked_controller_path_produces_admissible_q043_evidence(self) -> None:
+        control_plane_path = str(CONTROL_PLANE_SOURCE)
+        sys.path.insert(0, control_plane_path)
+        try:
+            import reconcile_frontier_job
+            from test_control_plane import SnapshotTests
+        finally:
+            sys.path.pop(0)
+
+        harness = SnapshotTests()
+        original_roots = (
+            successor.AUTHORIZED_ORION_ROOT,
+            successor.AUTHORIZED_PROJECT_HOME_ROOT,
+            successor.AUTHORIZED_PROJECT_HOME_LEDGER_LEXICAL_ROOT,
+        )
+        original_bootstrap = getattr(sys, "_pic_control_plane_bootstrapped", None)
+        try:
+            harness.setUp()
+            case_id = "q043-current-oracle-d1-coarse-ppc1-single-cvr100"
+            case = _case(case_id)
+            deck_path = Path(successor._deck_binding(case, REPO_ROOT)["absolute_path"])
+            (harness.sources / "input.athinput").write_bytes(deck_path.read_bytes())
+            (harness.sources / "environment.sh").chmod(0o755)
+            contract = {
+                "schema_version": 1,
+                "executor": "trusted_trampoline_athena_argv_v1",
+                "pre_actions": [],
+                "actions": [
+                    {
+                        "action_id": "q043-current-oracle",
+                        "kind": "athena",
+                        "resources": {
+                            "nodes": 1,
+                            "tasks": 1,
+                            "cpus_per_task": 1,
+                            "gpus_per_task": 1,
+                            "gpu_bind": "closest",
+                        },
+                        "arguments": [
+                            {"literal": "-i"},
+                            {"snapshot_role": "input-deck"},
+                            {"literal": "-d"},
+                            {"artifact_directory": "raw"},
+                            {"literal": "time/nlim=1"},
+                        ],
+                        "stdout_artifact": "athena_stdout.txt",
+                        "stderr_artifact": "athena_stderr.txt",
+                    }
+                ],
+                "post_actions": [],
+            }
+            with patch.object(harness, "_launch_contract", return_value=contract):
+                candidate_path = harness._write_science_config(
+                    authorize=False,
+                    campaign=successor.REGISTERED_CAMPAIGN,
+                    test_id=case_id,
+                    registered_science_authorization_id="q043-controller-e2e",
+                    input_deck=str(deck_path),
+                    evidence_class="q043_registered_execution_test",
+                    physical_mode="paper_mhd_pic_vl2_tsc",
+                    artifact_dir=str(
+                        harness.pic_root
+                        / "runs"
+                        / successor.REGISTERED_CAMPAIGN
+                        / harness.submission_id
+                    ),
+                )
+                candidate_root = candidate_path.parent
+                candidate_manifest = json.loads(candidate_path.read_text(encoding="utf-8"))
+                source_archive = candidate_root / "source.tar"
+                executable = candidate_root / "athena"
+                environment_profile = (
+                    harness.pic_root / "test_inputs/frontier_pic_environment.sh"
+                )
+                candidate_root.chmod(0o755)
+                source_archive.chmod(0o644)
+                source_archive.write_bytes(_source_archive_payload())
+                source_archive.chmod(0o444)
+                executable.chmod(0o755)
+                executable.write_bytes(Path("/bin/true").read_bytes())
+                executable.chmod(0o555)
+                environment_profile.parent.mkdir(parents=True)
+                environment_profile.write_bytes(
+                    (harness.sources / "environment.sh").read_bytes()
+                )
+                environment_profile.chmod(0o444)
+                candidate_manifest["source"]["archive_sha256"] = _sha(
+                    source_archive.read_bytes()
+                )
+                candidate_manifest["build"]["source_archive_sha256"] = _sha(
+                    source_archive.read_bytes()
+                )
+                candidate_manifest["build"]["executable_sha256"] = _sha(
+                    executable.read_bytes()
+                )
+                candidate_path.chmod(0o644)
+                candidate_path.write_bytes(_json_bytes(candidate_manifest))
+                candidate_path.chmod(0o444)
+                candidate_root.chmod(0o555)
+                harness.authorized_clean_candidate_source_root = None
+                with (
+                    patch.object(
+                        harness,
+                        "_clean_candidate",
+                        return_value=(
+                            candidate_path,
+                            executable,
+                            candidate_manifest["source"]["git_commit"],
+                        ),
+                    ),
+                    patch(
+                        "promote_active_policy.revalidate_clean_candidate",
+                        return_value={
+                            "status": "passed",
+                            "current_control_plane_version": harness.control_plane_version,
+                            "build": {
+                                "receipt_control_plane_version": (
+                                    harness.control_plane_version
+                                )
+                            },
+                        },
+                    ),
+                ):
+                    harness._write_science_config(
+                        authorize=True,
+                        campaign=successor.REGISTERED_CAMPAIGN,
+                        test_id=case_id,
+                        registered_science_authorization_id="q043-controller-e2e",
+                        input_deck=str(deck_path),
+                        environment_profile=str(environment_profile),
+                        evidence_class="q043_registered_execution_test",
+                        physical_mode="paper_mhd_pic_vl2_tsc",
+                        artifact_dir=str(
+                            harness.pic_root
+                            / "runs"
+                            / successor.REGISTERED_CAMPAIGN
+                            / harness.submission_id
+                        ),
+                    )
+                manifest_path = harness._create_manifest()
+                with patch(
+                    "validate_and_reserve_frontier_job.validate_clean_candidate_bundle",
+                    return_value=[],
+                ):
+                    reservation = harness._reserve(
+                        manifest_path, patch_clean_candidate_bundle=False
+                    )
+
+            def runner(command: list[str], **kwargs: object) -> None:
+                raw_root = Path(command[command.index("-d") + 1])
+                for cycle in successor.REQUIRED_CYCLES:
+                    for field in successor.REQUIRED_FIELDS:
+                        relative = successor._raw_relative_path(
+                            case, field=field, cycle=cycle, rank=0
+                        )
+                        path = raw_root / relative
+                        path.parent.mkdir(parents=True, exist_ok=True)
+                        path.write_bytes(
+                            _binary_payload(
+                                case, field=field, cycle=cycle, rank=0
+                            )
+                        )
+                kwargs["stdout"].write(b"trusted trampoline q043 execution\n")
+
+            harness._launch(manifest_path, reservation, runner=runner)
+            with patch(
+                "reconcile_frontier_job._scheduler_result",
+                return_value=("COMPLETED", 30, 1, "0:0"),
+            ):
+                generic_event = reconcile_frontier_job.reconcile(
+                    job_id="12345",
+                    ledger_jsonl=harness.ledger,
+                    ledger_csv=harness.csv,
+                    receipts_jsonl=harness.receipts,
+                    mirror_jsonl=harness.mirror,
+                    control_plane_dir=harness.control_plane_dir,
+                    authorized_pic_root=harness.pic_root,
+                    authorized_project_home_root=harness.project_home_root,
+                )
+            self.assertEqual(generic_event["scheduler_exit_code"], "0:0")
+
+            successor.AUTHORIZED_ORION_ROOT = harness.pic_root
+            successor.AUTHORIZED_PROJECT_HOME_ROOT = harness.project_home_root
+            successor.AUTHORIZED_PROJECT_HOME_LEDGER_LEXICAL_ROOT = (
+                harness.project_home_root
+            )
+            with successor._installed_control_plane_modules(
+                harness.control_plane_version,
+                (successor.Q043_PRODUCER_ENTRYPOINT,),
+            ) as (modules, _pair):
+                installed_producer = modules[successor.Q043_PRODUCER_ENTRYPOINT]
+                sys.__dict__.pop("_pic_control_plane_bootstrapped", None)
+                with self.assertRaisesRegex(
+                    ValueError, "requires bootstrapped installed execution"
+                ):
+                    installed_producer.reconcile_q043(
+                        job_id="12345",
+                        ledger_jsonl=harness.ledger,
+                        ledger_csv=harness.csv,
+                        receipts_jsonl=harness.receipts,
+                        mirror_jsonl=harness.mirror,
+                        control_plane_dir=harness.control_plane_dir,
+                        authorized_pic_root=harness.pic_root,
+                        authorized_project_home_root=harness.project_home_root,
+                    )
+                sys._pic_control_plane_bootstrapped = True
+                produced = installed_producer.reconcile_q043(
+                    job_id="12345",
+                    ledger_jsonl=harness.ledger,
+                    ledger_csv=harness.csv,
+                    receipts_jsonl=harness.receipts,
+                    mirror_jsonl=harness.mirror,
+                    control_plane_dir=harness.control_plane_dir,
+                    authorized_pic_root=harness.pic_root,
+                    authorized_project_home_root=harness.project_home_root,
+                )
+
+            candidate_manifest = json.loads(candidate_path.read_text(encoding="utf-8"))
+            candidate_binding = {
+                "git_commit": candidate_manifest["source"]["git_commit"],
+                "source_bundle_sha256": candidate_manifest["source"][
+                    "source_bundle_sha256"
+                ],
+                "clean_candidate_manifest": _binding(candidate_path),
+                "source_archive": _binding(
+                    Path(candidate_manifest["source"]["archive_path"])
+                ),
+                "executable": _binding(
+                    Path(candidate_manifest["build"]["executable_path"])
+                ),
+                "environment_profile": _binding(environment_profile),
+            }
+            artifact_dir = Path(json.loads(manifest_path.read_text())["artifact_dir"])
+            inventory = json.loads(
+                (artifact_dir / "artifact_inventory.json").read_text(encoding="utf-8")
+            )
+            inventory_paths = {record["path"] for record in inventory["files"]}
+            self.assertTrue(any(path.startswith("raw/") for path in inventory_paths))
+            self.assertFalse(any(path.startswith("analysis/") for path in inventory_paths))
+            execution = {
+                "artifact_dir": str(artifact_dir),
+                "registered_execution_receipt": _binding(
+                    Path(
+                        produced["evidence"]["registered_execution_receipt"][
+                            "orion_path"
+                        ]
+                    )
+                ),
+                "terminal_receipt": _binding(
+                    Path(produced["evidence"]["terminal_receipt"]["orion_path"])
+                ),
+            }
+            raw_artifacts = []
+            for cycle in successor.REQUIRED_CYCLES:
+                for field in successor.REQUIRED_FIELDS:
+                    relative = successor._raw_relative_path(
+                        case, field=field, cycle=cycle, rank=0
+                    )
+                    binding = _binding(artifact_dir / "raw" / relative)
+                    raw_artifacts.append(
+                        {
+                            "path": relative,
+                            "sha256": binding["sha256"],
+                            "byte_count": binding["byte_count"],
+                            "case_id": case_id,
+                            "field": field,
+                            "cycle": cycle,
+                            "rank": 0,
+                        }
+                    )
+            def revalidation_fixture(
+                manifest: Path, *, manifest_sha256: str, git_commit: str
+            ) -> dict[str, object]:
+                self.assertEqual(manifest, candidate_path)
+                self.assertEqual(manifest_sha256, _sha(candidate_path.read_bytes()))
+                self.assertEqual(git_commit, candidate_manifest["source"]["git_commit"])
+                return {
+                    "record_type": "frontier_pic_clean_candidate_read_only_revalidation",
+                    "schema_version": 1,
+                    "status": "passed",
+                    "clean_candidate_manifest": {
+                        "expected_sha256": manifest_sha256,
+                        "path": str(manifest),
+                        "sha256": manifest_sha256,
+                    },
+                    "source": {
+                        "git_commit": git_commit,
+                        "source_bundle_sha256": candidate_manifest["source"][
+                            "source_bundle_sha256"
+                        ],
+                    },
+                    "build": {
+                        "executable_sha256": candidate_manifest["build"][
+                            "executable_sha256"
+                        ],
+                    },
+                }
+
+            with (
+                patch.object(
+                    successor,
+                    "_trusted_clean_candidate_revalidation",
+                    side_effect=revalidation_fixture,
+                ),
+                patch.object(
+                    successor,
+                    "_trusted_mirrored_ledger_state",
+                    REAL_TRUSTED_MIRRORED_LEDGER_STATE,
+                ),
+                patch.object(
+                    successor,
+                    "_trusted_producer_rederivation",
+                    REAL_TRUSTED_PRODUCER_REDERIVATION,
+                ),
+            ):
+                admitted = successor.build_case_admission(
+                    case_id=case_id,
+                    candidate_binding=candidate_binding,
+                    execution_binding=execution,
+                    raw_artifacts=raw_artifacts,
+                )
+            self.assertTrue(
+                admitted["hardened_raw_oracle_result"][
+                    "registered_execution_raw_oracle_check_pass"
+                ]
+            )
+            self.assertFalse(admitted["authorization"]["publication_authorized"])
+            self.assertEqual(
+                Path(execution["terminal_receipt"]["path"]).parent,
+                artifact_dir / "analysis",
+            )
+        finally:
+            if original_bootstrap is None:
+                sys.__dict__.pop("_pic_control_plane_bootstrapped", None)
+            else:
+                sys._pic_control_plane_bootstrapped = original_bootstrap
+            (
+                successor.AUTHORIZED_ORION_ROOT,
+                successor.AUTHORIZED_PROJECT_HOME_ROOT,
+                successor.AUTHORIZED_PROJECT_HOME_LEDGER_LEXICAL_ROOT,
+            ) = original_roots
+            if hasattr(harness, "temporary"):
+                harness.tearDown()
+
+    def test_installed_q043_action_is_runner_reachable(self) -> None:
+        control_plane = sys.modules["control_plane_common"]
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "control_plane"
+            staging = root / "staging"
+            staging.mkdir(parents=True)
+            records = []
+            for name in control_plane.CONTROL_PLANE_FILES:
+                payload = (CONTROL_PLANE_SOURCE / name).read_bytes()
+                path = staging / name
+                path.write_bytes(payload)
+                path.chmod(0o555 if path.suffix in {".py", ".sh"} else 0o444)
+                records.append({"path": name, "sha256": _sha(payload)})
+            version = hashlib.sha256(
+                json.dumps(records, sort_keys=True, separators=(",", ":")).encode()
+            ).hexdigest()
+            inventory = {
+                "schema_version": 1,
+                "version": version,
+                "files": records,
+            }
+            inventory_path = staging / "inventory.json"
+            inventory_path.write_bytes(_json_bytes(inventory))
+            inventory_path.chmod(0o444)
+            installed = staging.with_name(version)
+            staging.rename(installed)
+            installed.chmod(0o555)
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(installed / "run_control_plane.py"),
+                    successor.Q043_PRODUCER_ENTRYPOINT,
+                    "--help",
+                ],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("--job-id", result.stdout)
+
+    def test_q043_producer_publishes_paired_consumable_evidence_and_retries(
+        self,
+    ) -> None:
+        case_id = "q043-current-oracle-d1-coarse-ppc1-single-cvr100"
+        with tempfile.TemporaryDirectory() as temporary:
+            fixture = Fixture(Path(temporary))
+            _, execution, raw = fixture.inputs(case_id)
+            evidence = fixture.last_produced["evidence"]
+            for name in ("terminal_receipt", "registered_execution_receipt"):
+                item = evidence[name]
+                orion = Path(item["orion_path"])
+                mirror = Path(item["project_home_mirror_path"])
+                self.assertEqual(orion.read_bytes(), mirror.read_bytes())
+                self.assertEqual(_sha(orion.read_bytes()), item["sha256"])
+                self.assertFalse(bool(mirror.parent.stat().st_mode & 0o222))
+            retried = q043_producer.publish_q043_registered_execution_evidence(
+                fixture.last_event,
+                fixture.last_mirror_ack,
+                fixture._producer_inventory(),
+                authorized_pic_root=fixture.authorized,
+                authorized_project_home_root=fixture.project_home,
+            )
+            self.assertEqual(retried, evidence)
+            successor.build_case_admission(
+                case_id=case_id,
+                candidate_binding=fixture.candidate,
+                execution_binding=execution,
+                raw_artifacts=raw,
+            )
+
+    def test_missing_different_replaced_and_symlinked_project_home_mirrors_fail(
+        self,
+    ) -> None:
+        case_id = "q043-current-oracle-d1-coarse-ppc1-single-cvr100"
+        for artifact_name, execution_key in (
+            ("registered_execution_receipt", "registered_execution_receipt"),
+            ("terminal_receipt", "terminal_receipt"),
+        ):
+            for mutation, expected in (
+                ("missing", "escaped or is unavailable"),
+                ("different", "SHA-256 drifted"),
+                ("replaced", "submission mirror directory is mutable"),
+                ("symlinked", "escaped or is unavailable|symlink alias"),
+            ):
+                with (
+                    self.subTest(artifact=artifact_name, mutation=mutation),
+                    tempfile.TemporaryDirectory() as temporary,
+                ):
+                    fixture = Fixture(Path(temporary))
+                    _, execution, raw = fixture.inputs(case_id)
+                    mirror = Path(
+                        fixture.last_produced["evidence"][artifact_name][
+                            "project_home_mirror_path"
+                        ]
+                    )
+                    mirror.parent.chmod(0o700)
+                    if mutation == "missing":
+                        mirror.unlink()
+                        mirror.parent.chmod(0o500)
+                    elif mutation == "different":
+                        _overwrite(mirror, b"different trusted mirror bytes\n")
+                        _seal(mirror)
+                        mirror.parent.chmod(0o500)
+                    elif mutation == "replaced":
+                        payload = mirror.read_bytes()
+                        mirror.unlink()
+                        mirror.write_bytes(payload)
+                        _seal(mirror)
+                    else:
+                        mirror.unlink()
+                        mirror.symlink_to(
+                            Path(str(execution[execution_key]["path"]))
+                        )
+                        mirror.parent.chmod(0o500)
+                    with self.assertRaisesRegex(successor.AdmissionError, expected):
+                        successor.build_case_admission(
+                            case_id=case_id,
+                            candidate_binding=fixture.candidate,
+                            execution_binding=execution,
+                            raw_artifacts=raw,
+                        )
+
     def test_registered_dimension_valid_cases_rebuild_exactly_without_authority(
         self,
     ) -> None:
@@ -442,8 +1201,6 @@ class Q043RegisteredExecutionAdmissionTests(unittest.TestCase):
                 self.assertEqual(
                     successor.validate_case_admission(
                         record,
-                        source_root=REPO_ROOT,
-                        authorized_orion_root=fixture.authorized,
                     ),
                     record,
                 )
@@ -460,16 +1217,12 @@ class Q043RegisteredExecutionAdmissionTests(unittest.TestCase):
                     candidate_binding=fixture.candidate,
                     execution_binding=execution,
                     raw_artifacts=raw,
-                    source_root=REPO_ROOT,
-                    authorized_orion_root=fixture.authorized,
                 )
             admitted = successor.build_case_admission(
                 case_id=case_id,
                 candidate_binding=fixture.candidate,
                 execution_binding=execution,
                 raw_artifacts=raw,
-                source_root=REPO_ROOT,
-                authorized_orion_root=fixture.authorized,
             )
             source_local = admitted["hardened_raw_oracle_result"]["source_local_oracle_result"]
             with self.assertRaisesRegex(
@@ -477,8 +1230,6 @@ class Q043RegisteredExecutionAdmissionTests(unittest.TestCase):
             ):
                 successor.validate_downstream_q023_q019_prerequisite(
                     source_local,
-                    source_root=REPO_ROOT,
-                    authorized_orion_root=fixture.authorized,
                 )
 
     def test_source_local_result_schema_and_publication_authority_are_strict(self) -> None:
@@ -510,25 +1261,19 @@ class Q043RegisteredExecutionAdmissionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             fixture = Fixture(Path(temporary))
             _, execution, raw = fixture.inputs(case_id)
-            contract = json.loads(
-                Path(str(execution["launch_contract"]["path"])).read_text()
-            )
-            contract["mpi_evidence"]["mpi_enabled"] = False
-            _rewrite_json(execution["launch_contract"], contract)
             receipt = json.loads(
                 Path(str(execution["registered_execution_receipt"]["path"])).read_text()
             )
-            receipt["mpi_evidence"]["mpi_enabled"] = False
-            receipt["launch_contract_sha256"] = execution["launch_contract"]["sha256"]
-            _rewrite_json(execution["registered_execution_receipt"], receipt)
-            with self.assertRaisesRegex(successor.AdmissionError, "launch contract"):
+            receipt["mpi_evidence"]["tasks"] = 1
+            fixture.reseal_receipt(execution, receipt)
+            with self.assertRaisesRegex(
+                successor.AdmissionError, "command or MPI|re-derived different evidence"
+            ):
                 successor.build_case_admission(
                     case_id=case_id,
                     candidate_binding=fixture.candidate,
                     execution_binding=execution,
                     raw_artifacts=raw,
-                    source_root=REPO_ROOT,
-                    authorized_orion_root=fixture.authorized,
                 )
 
     def test_missing_duplicate_and_hardlinked_output_inventory_fails(self) -> None:
@@ -542,8 +1287,6 @@ class Q043RegisteredExecutionAdmissionTests(unittest.TestCase):
                     candidate_binding=fixture.candidate,
                     execution_binding=execution,
                     raw_artifacts=raw[:-1],
-                    source_root=REPO_ROOT,
-                    authorized_orion_root=fixture.authorized,
                 )
             duplicate = copy.deepcopy(raw)
             duplicate.append(copy.deepcopy(duplicate[-1]))
@@ -553,43 +1296,44 @@ class Q043RegisteredExecutionAdmissionTests(unittest.TestCase):
                     candidate_binding=fixture.candidate,
                     execution_binding=execution,
                     raw_artifacts=duplicate,
-                    source_root=REPO_ROOT,
-                    authorized_orion_root=fixture.authorized,
                 )
 
         with tempfile.TemporaryDirectory() as temporary:
             fixture = Fixture(Path(temporary))
             _, execution, raw = fixture.inputs(case_id)
-            Path(execution["raw_output_root"], "bin/undeclared.00002.bin").write_bytes(
-                b"undeclared\n"
-            )
-            with self.assertRaisesRegex(successor.AdmissionError, "filesystem inventory"):
+            raw_bin = Path(execution["artifact_dir"], "raw/bin")
+            raw_bin.chmod(0o755)
+            (raw_bin / "undeclared.00002.bin").write_bytes(b"undeclared\n")
+            raw_bin.chmod(0o555)
+            with self.assertRaisesRegex(
+                successor.AdmissionError, "artifact tree differs|expected inventory"
+            ):
                 successor.build_case_admission(
                     case_id=case_id,
                     candidate_binding=fixture.candidate,
                     execution_binding=execution,
                     raw_artifacts=raw,
-                    source_root=REPO_ROOT,
-                    authorized_orion_root=fixture.authorized,
                 )
 
         with tempfile.TemporaryDirectory() as temporary:
             fixture = Fixture(Path(temporary))
             _, execution, raw = fixture.inputs(case_id)
-            first = Path(execution["raw_output_root"], str(raw[0]["path"]))
-            second = Path(execution["raw_output_root"], str(raw[1]["path"]))
+            first = Path(execution["artifact_dir"], "raw", str(raw[0]["path"]))
+            second = Path(execution["artifact_dir"], "raw", str(raw[1]["path"]))
+            second.parent.chmod(0o755)
             second.unlink()
             os.link(first, second)
+            second.parent.chmod(0o555)
             raw[1]["sha256"] = raw[0]["sha256"]
             raw[1]["byte_count"] = raw[0]["byte_count"]
-            with self.assertRaisesRegex(successor.AdmissionError, "unaliased regular file"):
+            with self.assertRaisesRegex(
+                successor.AdmissionError, "not one read-only file|unaliased"
+            ):
                 successor.build_case_admission(
                     case_id=case_id,
                     candidate_binding=fixture.candidate,
                     execution_binding=execution,
                     raw_artifacts=raw,
-                    source_root=REPO_ROOT,
-                    authorized_orion_root=fixture.authorized,
                 )
 
     def test_wrong_candidate_deck_and_executable_fail(self) -> None:
@@ -599,14 +1343,14 @@ class Q043RegisteredExecutionAdmissionTests(unittest.TestCase):
             _, execution, raw = fixture.inputs(case_id)
             bad_candidate = copy.deepcopy(fixture.candidate)
             bad_candidate["source_archive"]["sha256"] = "9" * 64
-            with self.assertRaisesRegex(successor.AdmissionError, "SHA-256 drifted"):
+            with self.assertRaisesRegex(
+                successor.AdmissionError, "SHA-256 drifted|lacks an execute bit"
+            ):
                 successor.build_case_admission(
                     case_id=case_id,
                     candidate_binding=bad_candidate,
                     execution_binding=execution,
                     raw_artifacts=raw,
-                    source_root=REPO_ROOT,
-                    authorized_orion_root=fixture.authorized,
                 )
 
         with tempfile.TemporaryDirectory() as temporary:
@@ -614,7 +1358,7 @@ class Q043RegisteredExecutionAdmissionTests(unittest.TestCase):
             _, execution, raw = fixture.inputs(case_id)
             bad_candidate = copy.deepcopy(fixture.candidate)
             malformed = b"not a source archive\n"
-            Path(str(bad_candidate["source_archive"]["path"])).write_bytes(malformed)
+            _overwrite(Path(str(bad_candidate["source_archive"]["path"])), malformed)
             bad_candidate["source_archive"]["sha256"] = _sha(malformed)
             bad_candidate["source_archive"]["byte_count"] = len(malformed)
             manifest = json.loads(
@@ -631,68 +1375,210 @@ class Q043RegisteredExecutionAdmissionTests(unittest.TestCase):
                     candidate_binding=bad_candidate,
                     execution_binding=execution,
                     raw_artifacts=raw,
-                    source_root=REPO_ROOT,
-                    authorized_orion_root=fixture.authorized,
                 )
 
         with tempfile.TemporaryDirectory() as temporary:
             fixture = Fixture(Path(temporary))
             _, execution, raw = fixture.inputs(case_id)
             bad_candidate = copy.deepcopy(fixture.candidate)
-            Path(str(bad_candidate["executable"]["path"])).write_bytes(b"wrong executable\n")
-            with self.assertRaisesRegex(successor.AdmissionError, "SHA-256 drifted"):
+            _overwrite(
+                Path(str(bad_candidate["executable"]["path"])), b"wrong executable\n"
+            )
+            with self.assertRaisesRegex(
+                successor.AdmissionError, "SHA-256 drifted|lacks an execute bit"
+            ):
                 successor.build_case_admission(
                     case_id=case_id,
                     candidate_binding=bad_candidate,
                     execution_binding=execution,
                     raw_artifacts=raw,
-                    source_root=REPO_ROOT,
-                    authorized_orion_root=fixture.authorized,
                 )
 
         with tempfile.TemporaryDirectory() as temporary:
             fixture = Fixture(Path(temporary))
             _, execution, raw = fixture.inputs(case_id)
-            launch_deck_path = Path(str(execution["launch_deck"]["path"]))
+            launch_deck_path = (
+                Path(str(fixture.last_event["manifest_path"])).parent
+                / "snapshot"
+                / f"{case_id}.athinput"
+            )
             bad_launch_deck = launch_deck_path.read_bytes() + b"# drift\n"
-            launch_deck_path.write_bytes(bad_launch_deck)
-            execution["launch_deck"]["sha256"] = _sha(bad_launch_deck)
-            execution["launch_deck"]["byte_count"] = len(bad_launch_deck)
-            with self.assertRaisesRegex(successor.AdmissionError, "immutable launch deck"):
+            _overwrite(launch_deck_path, bad_launch_deck)
+            with self.assertRaisesRegex(successor.AdmissionError, "input-deck|snapshot"):
                 successor.build_case_admission(
                     case_id=case_id,
                     candidate_binding=fixture.candidate,
                     execution_binding=execution,
                     raw_artifacts=raw,
-                    source_root=REPO_ROOT,
-                    authorized_orion_root=fixture.authorized,
                 )
 
         with tempfile.TemporaryDirectory() as temporary:
             fixture = Fixture(Path(temporary))
             _, execution, raw = fixture.inputs(case_id)
-            contract = json.loads(
-                Path(str(execution["launch_contract"]["path"])).read_text()
-            )
-            contract["deck"]["reviewed_checked_in_deck"]["sha256"] = "9" * 64
-            _rewrite_json(execution["launch_contract"], contract)
             receipt = json.loads(
                 Path(str(execution["registered_execution_receipt"]["path"])).read_text()
             )
             receipt["deck_sha256"] = "9" * 64
-            receipt["launch_contract_sha256"] = execution["launch_contract"]["sha256"]
-            _rewrite_json(execution["registered_execution_receipt"], receipt)
-            with self.assertRaisesRegex(successor.AdmissionError, "launch contract"):
+            fixture.reseal_receipt(execution, receipt)
+            with self.assertRaisesRegex(successor.AdmissionError, "cross-link|re-derived"):
                 successor.build_case_admission(
                     case_id=case_id,
                     candidate_binding=fixture.candidate,
                     execution_binding=execution,
                     raw_artifacts=raw,
-                    source_root=REPO_ROOT,
-                    authorized_orion_root=fixture.authorized,
                 )
 
-    def test_bad_terminal_state_and_stdout_fail(self) -> None:
+    def test_self_issued_receipt_without_canonical_reconciliation_fails(self) -> None:
+        case_id = "q043-current-oracle-d1-coarse-ppc1-single-cvr100"
+        with tempfile.TemporaryDirectory() as temporary:
+            fixture = Fixture(Path(temporary))
+            _, execution, raw = fixture.inputs(case_id)
+            fixture.ledger_records.clear()
+            with self.assertRaisesRegex(
+                successor.AdmissionError, "canonical mirrored-ledger reconciliation"
+            ):
+                successor.build_case_admission(
+                    case_id=case_id,
+                    candidate_binding=fixture.candidate,
+                    execution_binding=execution,
+                    raw_artifacts=raw,
+                )
+
+    def test_self_reported_fake_executable_fails_retained_elf_validation(self) -> None:
+        case_id = "q043-current-oracle-d1-coarse-ppc1-single-cvr100"
+        with tempfile.TemporaryDirectory() as temporary:
+            fixture = Fixture(Path(temporary))
+            _, execution, raw = fixture.inputs(case_id)
+            executable = fixture.candidate["executable"]
+            fake = b"self-reported fake executable\n"
+            _overwrite(Path(str(executable["path"])), fake)
+            _seal(Path(str(executable["path"])), executable=True)
+            executable["sha256"] = _sha(fake)
+            executable["byte_count"] = len(fake)
+            manifest = json.loads(
+                Path(str(fixture.candidate["clean_candidate_manifest"]["path"])).read_text()
+            )
+            manifest["build"]["executable_sha256"] = executable["sha256"]
+            _rewrite_json(fixture.candidate["clean_candidate_manifest"], manifest)
+            with self.assertRaisesRegex(successor.AdmissionError, "not an ELF binary"):
+                successor.build_case_admission(
+                    case_id=case_id,
+                    candidate_binding=fixture.candidate,
+                    execution_binding=execution,
+                    raw_artifacts=raw,
+                )
+
+        with tempfile.TemporaryDirectory() as temporary:
+            fixture = Fixture(Path(temporary))
+            _, execution, raw = fixture.inputs(case_id)
+            executable = fixture.candidate["executable"]
+            fake_elf = b"\x7fELFself-reported fake executable\n"
+            _overwrite(Path(str(executable["path"])), fake_elf)
+            _seal(Path(str(executable["path"])), executable=True)
+            executable["sha256"] = _sha(fake_elf)
+            executable["byte_count"] = len(fake_elf)
+            manifest = json.loads(
+                Path(str(fixture.candidate["clean_candidate_manifest"]["path"])).read_text()
+            )
+            manifest["build"]["executable_sha256"] = executable["sha256"]
+            _rewrite_json(fixture.candidate["clean_candidate_manifest"], manifest)
+            with patch.object(
+                successor,
+                "_trusted_clean_candidate_revalidation",
+                REAL_TRUSTED_CANDIDATE_REVALIDATION,
+            ), self.assertRaisesRegex(
+                successor.AdmissionError, "failed trusted fixed-root build revalidation"
+            ):
+                successor.build_case_admission(
+                    case_id=case_id,
+                    candidate_binding=fixture.candidate,
+                    execution_binding=execution,
+                    raw_artifacts=raw,
+                )
+
+    def test_modified_deposition_and_output_sources_fail_archive_closure(self) -> None:
+        case_id = "q043-current-oracle-d1-coarse-ppc1-single-cvr100"
+        for relative in (
+            "src/particles/particles_moments.cpp",
+            "src/particles/particles_pushers.cpp",
+            "src/outputs/binary.cpp",
+        ):
+            with self.subTest(relative=relative), tempfile.TemporaryDirectory() as temporary:
+                fixture = Fixture(Path(temporary))
+                _, execution, raw = fixture.inputs(case_id)
+                archive = fixture.candidate["source_archive"]
+                payload = _source_archive_payload({relative: b"review-bypassing drift\n"})
+                _overwrite(Path(str(archive["path"])), payload)
+                _seal(Path(str(archive["path"])))
+                archive["sha256"] = _sha(payload)
+                archive["byte_count"] = len(payload)
+                manifest = json.loads(
+                    Path(
+                        str(fixture.candidate["clean_candidate_manifest"]["path"])
+                    ).read_text()
+                )
+                manifest["source"]["archive_sha256"] = archive["sha256"]
+                manifest["build"]["source_archive_sha256"] = archive["sha256"]
+                _rewrite_json(fixture.candidate["clean_candidate_manifest"], manifest)
+                with self.assertRaisesRegex(
+                    successor.AdmissionError,
+                    rf"source archive member drifted: {re.escape(relative)}",
+                ):
+                    successor.build_case_admission(
+                        case_id=case_id,
+                        candidate_binding=fixture.candidate,
+                        execution_binding=execution,
+                        raw_artifacts=raw,
+                    )
+
+    def test_post_receipt_raw_replacement_fails_inventory_seal(self) -> None:
+        case_id = "q043-current-oracle-d1-coarse-ppc1-single-cvr100"
+        with tempfile.TemporaryDirectory() as temporary:
+            fixture = Fixture(Path(temporary))
+            case, execution, raw = fixture.inputs(case_id)
+            artifact = next(
+                item
+                for item in raw
+                if item["cycle"] == 1 and item["field"] == "prtcl_jx"
+            )
+            fixture.replace_raw_artifact(
+                case,
+                execution,
+                artifact,
+                value=_field_value(case, "prtcl_jx", 1) + 0.25,
+            )
+            with self.assertRaisesRegex(
+                successor.AdmissionError,
+                "installed Q043 producer|Sealed launch artifact",
+            ):
+                successor.build_case_admission(
+                    case_id=case_id,
+                    candidate_binding=fixture.candidate,
+                    execution_binding=execution,
+                    raw_artifacts=raw,
+                )
+
+    def test_invalid_cycle_zero_values_fail_scientific_validation(self) -> None:
+        case_id = "q043-current-oracle-d1-coarse-ppc1-single-cvr100"
+        for value in (1.0, float("nan")):
+            with self.subTest(value=value), tempfile.TemporaryDirectory() as temporary:
+                fixture = Fixture(Path(temporary))
+                _, execution, raw = fixture.inputs(
+                    case_id,
+                    raw_value_overrides={(0, "prtcl_rho", 0): value},
+                )
+                with self.assertRaisesRegex(
+                    successor.AdmissionError,
+                    "must be exactly finite zero|malformed AthenaK binary output",
+                ):
+                    successor.build_case_admission(
+                        case_id=case_id,
+                        candidate_binding=fixture.candidate,
+                        execution_binding=execution,
+                        raw_artifacts=raw,
+                    )
+
+    def test_bad_terminal_state_and_post_freeze_stdout_replacement_fail(self) -> None:
         case_id = "q043-current-oracle-d1-coarse-ppc1-single-cvr100"
         with tempfile.TemporaryDirectory() as temporary:
             fixture = Fixture(Path(temporary))
@@ -702,45 +1588,32 @@ class Q043RegisteredExecutionAdmissionTests(unittest.TestCase):
             )
             receipt["slurm_terminal_state"] = "FAILED"
             _rewrite_json(execution["registered_execution_receipt"], receipt)
-            with self.assertRaisesRegex(successor.AdmissionError, "registered execution"):
+            with self.assertRaisesRegex(
+                successor.AdmissionError, "registered.execution|receipt"
+            ):
                 successor.build_case_admission(
                     case_id=case_id,
                     candidate_binding=fixture.candidate,
                     execution_binding=execution,
                     raw_artifacts=raw,
-                    source_root=REPO_ROOT,
-                    authorized_orion_root=fixture.authorized,
                 )
 
         with tempfile.TemporaryDirectory() as temporary:
             fixture = Fixture(Path(temporary))
             _, execution, raw = fixture.inputs(case_id)
-            stdout_path = Path(str(execution["stdout_artifact"]["path"]))
+            stdout_path = Path(str(execution["artifact_dir"])) / "athena_stdout.txt"
             bad_stdout = stdout_path.read_bytes().replace(
                 b"Terminating on cycle limit", b"Terminating on wall clock limit"
             )
-            stdout_path.write_bytes(bad_stdout)
-            execution["stdout_artifact"]["sha256"] = _sha(bad_stdout)
-            execution["stdout_artifact"]["byte_count"] = len(bad_stdout)
-            terminal = json.loads(
-                Path(str(execution["terminal_receipt"]["path"])).read_text()
-            )
-            terminal["stdout_sha256"] = execution["stdout_artifact"]["sha256"]
-            _rewrite_json(execution["terminal_receipt"], terminal)
-            receipt = json.loads(
-                Path(str(execution["registered_execution_receipt"]["path"])).read_text()
-            )
-            receipt["stdout_sha256"] = execution["stdout_artifact"]["sha256"]
-            receipt["terminal_receipt_sha256"] = execution["terminal_receipt"]["sha256"]
-            _rewrite_json(execution["registered_execution_receipt"], receipt)
-            with self.assertRaisesRegex(successor.AdmissionError, "stdout"):
+            _overwrite(stdout_path, bad_stdout)
+            with self.assertRaisesRegex(
+                successor.AdmissionError, "installed Q043 producer|artifact"
+            ):
                 successor.build_case_admission(
                     case_id=case_id,
                     candidate_binding=fixture.candidate,
                     execution_binding=execution,
                     raw_artifacts=raw,
-                    source_root=REPO_ROOT,
-                    authorized_orion_root=fixture.authorized,
                 )
 
     def test_path_escape_and_symlink_fail(self) -> None:
@@ -756,28 +1629,27 @@ class Q043RegisteredExecutionAdmissionTests(unittest.TestCase):
                     candidate_binding=fixture.candidate,
                     execution_binding=execution,
                     raw_artifacts=escaped,
-                    source_root=REPO_ROOT,
-                    authorized_orion_root=fixture.authorized,
                 )
 
         with tempfile.TemporaryDirectory() as temporary:
             fixture = Fixture(Path(temporary))
             _, execution, raw = fixture.inputs(case_id)
-            path = Path(execution["raw_output_root"], str(raw[0]["path"]))
+            path = Path(execution["artifact_dir"], "raw", str(raw[0]["path"]))
             retained = fixture.authorized / "retained.bin"
             retained.write_bytes(path.read_bytes())
+            path.parent.chmod(0o755)
             path.unlink()
             path.symlink_to(retained)
+            path.parent.chmod(0o555)
             with self.assertRaisesRegex(
-                successor.AdmissionError, "escaped or is unavailable|symlink alias"
+                successor.AdmissionError,
+                "escaped or is unavailable|symlink alias|unsupported entry",
             ):
                 successor.build_case_admission(
                     case_id=case_id,
                     candidate_binding=fixture.candidate,
                     execution_binding=execution,
                     raw_artifacts=raw,
-                    source_root=REPO_ROOT,
-                    authorized_orion_root=fixture.authorized,
                 )
 
     def test_common_mode_runtime_metadata_drift_fails_registered_admission(self) -> None:
@@ -789,7 +1661,7 @@ class Q043RegisteredExecutionAdmissionTests(unittest.TestCase):
             )
             cycle_one = {
                 field: tuple(
-                    Path(execution["raw_output_root"], str(item["path"]))
+                    Path(execution["artifact_dir"], "raw", str(item["path"]))
                     for item in raw
                     if item["cycle"] == 1 and item["field"] == field
                 )
@@ -807,8 +1679,6 @@ class Q043RegisteredExecutionAdmissionTests(unittest.TestCase):
                     candidate_binding=fixture.candidate,
                     execution_binding=execution,
                     raw_artifacts=raw,
-                    source_root=REPO_ROOT,
-                    authorized_orion_root=fixture.authorized,
                 )
             self.assertEqual(case["case_id"], case_id)
 
@@ -863,8 +1733,6 @@ class Q043RegisteredExecutionAdmissionTests(unittest.TestCase):
             with self.assertRaisesRegex(successor.AdmissionError, "matrix is incomplete"):
                 successor.build_matrix_qualification(
                     case_admissions=[admission],
-                    source_root=REPO_ROOT,
-                    authorized_orion_root=fixture.authorized,
                 )
 
     def test_readiness_binds_only_additive_non_authorizing_successor(self) -> None:

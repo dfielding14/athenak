@@ -73,7 +73,7 @@ def _scheduler_result(
     reservation_id: str,
     *,
     allow_purged_cancelled_zero_execution: bool = False,
-) -> tuple[str, int, int]:
+) -> tuple[str, int, int, str]:
     output = subprocess.check_output(
         [
             TRUSTED_SACCT,
@@ -83,7 +83,7 @@ def _scheduler_result(
             f"--clusters={AUTHORIZED_SLURM_CLUSTER}",
             "--noheader",
             "--parsable2",
-            "--format=JobIDRaw,State,ElapsedRaw,AllocNodes,Comment,Account",
+            "--format=JobIDRaw,State,ElapsedRaw,AllocNodes,Comment,Account,ExitCode",
         ],
         text=True,
         env=trusted_slurm_environment(),
@@ -93,7 +93,7 @@ def _scheduler_result(
         for line in output.splitlines()
         if (fields := line.split("|")) and fields[0] == job_id
     ]
-    if len(matching) != 1 or len(matching[0]) != 6:
+    if len(matching) != 1 or len(matching[0]) != 7:
         raise ValueError(f"Expected one exact Slurm allocation record for job {job_id}")
     fields = matching[0]
     if fields[4]:
@@ -111,11 +111,14 @@ def _scheduler_result(
                 or int(fields[2]) != snapshot["elapsed_raw"]
                 or int(fields[3]) != snapshot["allocated_nodes"]
                 or fields[5] != snapshot["account"]
+                or fields[6] != snapshot["exit_code"]
             ):
                 raise ValueError("Slurm accounting changed during terminal recovery")
     if not scheduler_account_matches_authorized(fields[5]):
         raise ValueError("Slurm accounting account does not match the PIC account")
-    return fields[1].split()[0], int(fields[2]), int(fields[3])
+    if re.fullmatch(r"[0-9]+:[0-9]+", fields[6]) is None:
+        raise ValueError("Slurm accounting exit code is malformed")
+    return fields[1].split()[0], int(fields[2]), int(fields[3]), fields[6]
 
 
 def _verify_reservation_control_plane_pair(
@@ -521,8 +524,14 @@ def reconcile(
             state = str(snapshot["state"]).split()[0]
             elapsed_seconds = int(snapshot["elapsed_raw"])
             allocated_nodes = int(snapshot["allocated_nodes"])
+            scheduler_exit_code = str(snapshot["exit_code"])
         else:
-            state, elapsed_seconds, allocated_nodes = _scheduler_result(
+            (
+                state,
+                elapsed_seconds,
+                allocated_nodes,
+                scheduler_exit_code,
+            ) = _scheduler_result(
                 job_id,
                 str(latest[0]["reservation_id"]),
                 allow_purged_cancelled_zero_execution=(
@@ -579,6 +588,7 @@ def reconcile(
                 "scheduler_reported_allocated_nodes": allocated_nodes,
                 "billed_nodes": billed_nodes,
                 "elapsed_seconds": elapsed_seconds,
+                "scheduler_exit_code": scheduler_exit_code,
                 "consumed_node_hours": consumed,
                 "cumulative_consumed_node_hours": cumulative,
             }

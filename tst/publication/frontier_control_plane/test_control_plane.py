@@ -6656,7 +6656,7 @@ class SnapshotTests(unittest.TestCase):
         self._attach(reservation_id)
         with patch(
             "reconcile_frontier_job._scheduler_result",
-            return_value=("COMPLETED", 300, 1),
+            return_value=("COMPLETED", 300, 1, "0:0"),
         ):
             result = reconcile(
                 job_id="12345",
@@ -9140,7 +9140,7 @@ PY
         self.assertNotIn("allocated_nodes", inspect.signature(reconcile).parameters)
         with patch(
             "reconcile_frontier_job.subprocess.check_output",
-            return_value="12345|COMPLETED|300|1|wrong|AST207\n",
+            return_value="12345|COMPLETED|300|1|wrong|AST207|0:0\n",
         ):
             with self.assertRaises(ValueError):
                 reconcile(
@@ -9163,11 +9163,11 @@ PY
             with patch.object(
                 reconcile_frontier_job.subprocess,
                 "check_output",
-                return_value="12345|CANCELLED by 18664|0|0||ast207\n",
+                return_value="12345|CANCELLED by 18664|0|0||ast207|0:0\n",
             ):
                 self.assertEqual(
                     reconcile_frontier_job._scheduler_result("12345", "reservation"),
-                    ("CANCELLED", 0, 0),
+                    ("CANCELLED", 0, 0, "0:0"),
                 )
         scheduler_binding.assert_called_once_with("12345", "reservation")
         with patch(
@@ -9177,21 +9177,22 @@ PY
             with patch.object(
                 reconcile_frontier_job.subprocess,
                 "check_output",
-                return_value="12345|CANCELLED|0|0||ast207\n",
+                return_value="12345|CANCELLED|0|0||ast207|0:0\n",
             ):
                 with self.assertRaises(ValueError):
                     reconcile_frontier_job._scheduler_result("12345", "reservation")
         with patch.object(
             reconcile_frontier_job.subprocess,
             "check_output",
-            return_value="12345|CANCELLED|0|0||wrong\n",
+            return_value="12345|CANCELLED|0|0||wrong|0:0\n",
         ):
             with self.assertRaises(ValueError):
                 reconcile_frontier_job._scheduler_result("12345", "reservation")
         for output in [
-            "12345|CANCELLED|0|0|pic-reservation=reservation|ast207|extra\n",
-            "12345|CANCELLED|0|0|pic-reservation=reservation|ast207\n"
-            "12345|CANCELLED|0|0|pic-reservation=reservation|ast207\n",
+            "12345|CANCELLED|0|0|pic-reservation=reservation|ast207|0:0|extra\n",
+            "12345|CANCELLED|0|0|pic-reservation=reservation|ast207|malformed\n",
+            "12345|CANCELLED|0|0|pic-reservation=reservation|ast207|0:0\n"
+            "12345|CANCELLED|0|0|pic-reservation=reservation|ast207|0:0\n",
         ]:
             with self.subTest(output=output):
                 with patch.object(
@@ -9450,7 +9451,7 @@ PY
             )
         with patch(
             "reconcile_frontier_job._scheduler_result",
-            return_value=("CANCELLED", 30, 1),
+            return_value=("CANCELLED", 30, 1, "0:0"),
         ):
             result = reconcile(
                 job_id="12345",
@@ -9499,7 +9500,7 @@ PY
             self.assertEqual(marker["state"], "scheduler_job_id_received")
             with patch(
                 "reconcile_frontier_job._scheduler_result",
-                return_value=("CANCELLED", 0, 1),
+                return_value=("CANCELLED", 0, 1, "0:0"),
             ):
                 result = reconcile(
                     job_id="12345",
@@ -9589,7 +9590,7 @@ PY
         ):
             with patch(
                 "reconcile_frontier_job._scheduler_result",
-                return_value=("CANCELLED", 0, 1),
+                return_value=("CANCELLED", 0, 1, "0:0"),
             ):
                 reconcile(
                     job_id="12345",
@@ -9635,7 +9636,7 @@ PY
         self._attach(reservation_id)
         with patch(
             "reconcile_frontier_job._scheduler_result",
-            return_value=("COMPLETED", 300, 1),
+            return_value=("COMPLETED", 300, 1, "0:0"),
         ):
             first = reconcile(
                 job_id="12345",
@@ -9694,7 +9695,7 @@ PY
 
         with patch(
             "reconcile_frontier_job._scheduler_result",
-            return_value=("COMPLETED", 60, 1),
+            return_value=("COMPLETED", 60, 1, "0:0"),
         ), patch(
             "reconcile_frontier_job.atomic_write_bytes_at",
             side_effect=observe_post_mirror_authority,
@@ -9726,7 +9727,7 @@ PY
         _, _, artifact_dir = self._prepare_planner_retention_reconciliation()
         with patch(
             "reconcile_frontier_job._scheduler_result",
-            return_value=("COMPLETED", 60, 1),
+            return_value=("COMPLETED", 60, 1, "0:0"),
         ):
             first = reconcile(
                 job_id="12345",
@@ -9805,7 +9806,7 @@ PY
 
         with patch(
             "reconcile_frontier_job._scheduler_result",
-            return_value=("COMPLETED", 60, 1),
+            return_value=("COMPLETED", 60, 1, "0:0"),
         ), patch(
             "reconcile_frontier_job.atomic_write_bytes_at",
             side_effect=substitute_then_write,
@@ -9847,7 +9848,7 @@ PY
         self._attach(reservation_id)
         with patch(
             "reconcile_frontier_job._scheduler_result",
-            return_value=("COMPLETED", 300, 1),
+            return_value=("COMPLETED", 300, 1, "0:0"),
         ):
             reconcile(
                 job_id="12345",
@@ -9938,7 +9939,7 @@ PY
             handoff = self._create_test_terminal_recovery_handoff(successor)
             with patch(
                 "reconcile_frontier_job._scheduler_result",
-                return_value=("CANCELLED", 0, 1),
+                return_value=("CANCELLED", 0, 1, "0:0"),
             ):
                 result = reconcile(
                     job_id="12345",
@@ -10017,7 +10018,7 @@ PY
             "12345|run_installed_control_plane_job.sh|CANCELLED by 18664|0|0||"
             "ast207|2026-05-30T15:47:31|None|2026-05-30T15:47:31|0:0\n"
         )
-        short_row = "12345|CANCELLED by 18664|0|0||ast207\n"
+        short_row = "12345|CANCELLED by 18664|0|0||ast207|0:0\n"
 
         def scheduler_output(command: list[str], **kwargs: object) -> str:
             if command[0] == TRUSTED_SCONTROL:
@@ -10094,7 +10095,7 @@ PY
             "12345|run_installed_control_plane_job.sh|CANCELLED by 18664|0|0||"
             "ast207|2026-05-30T15:47:31|None|2026-05-30T15:47:31|0:0\n"
         )
-        short_row = "12345|CANCELLED by 18664|0|0||ast207\n"
+        short_row = "12345|CANCELLED by 18664|0|0||ast207|0:0\n"
 
         def scheduler_output(command: list[str], **kwargs: object) -> str:
             if command[0] == TRUSTED_SCONTROL:
@@ -10191,7 +10192,7 @@ PY
             "12345|run_installed_control_plane_job.sh|CANCELLED by 18664|0|0||"
             "ast207|2026-05-30T15:47:31|None|2026-05-30T15:47:31|0:0\n"
         )
-        short_row = "12345|CANCELLED by 18664|0|0||ast207\n"
+        short_row = "12345|CANCELLED by 18664|0|0||ast207|0:0\n"
 
         def scheduler_output(command: list[str], **kwargs: object) -> str:
             if command[0] == TRUSTED_SCONTROL:
@@ -10320,7 +10321,7 @@ PY
         ):
             with patch(
                 "reconcile_frontier_job._scheduler_result",
-                return_value=("CANCELLED", 0, 1),
+                return_value=("CANCELLED", 0, 1, "0:0"),
             ):
                 with patch(
                     "reconcile_frontier_job.append_primary_event_locked",
@@ -10365,7 +10366,7 @@ PY
         ):
             with patch(
                 "reconcile_frontier_job._scheduler_result",
-                return_value=("CANCELLED", 0, 1),
+                return_value=("CANCELLED", 0, 1, "0:0"),
             ):
                 result = reconcile(
                     job_id="12345",
@@ -10426,7 +10427,7 @@ PY
         ):
             with patch(
                 "reconcile_frontier_job._scheduler_result",
-                return_value=("CANCELLED", 0, 1),
+                return_value=("CANCELLED", 0, 1, "0:0"),
             ):
                 with patch(
                     "reconcile_frontier_job._clear_matching_pending_marker",
@@ -10706,7 +10707,7 @@ PY
         ):
             with patch(
                 "reconcile_frontier_job._scheduler_result",
-                return_value=("RUNNING", 0, 1),
+                return_value=("RUNNING", 0, 1, "0:0"),
             ):
                 with self.assertRaises(ValueError):
                     reconcile(
@@ -11564,7 +11565,7 @@ PY
         self._attach(str(reservation["reservation_id"]))
         with patch(
             "reconcile_frontier_job._scheduler_result",
-            return_value=("COMPLETED", 60, 1),
+            return_value=("COMPLETED", 60, 1, "0:0"),
         ):
             reconcile(
                 job_id="12345",
@@ -15957,7 +15958,7 @@ PY
         self._attach(str(reservation["reservation_id"]))
         with patch(
             "reconcile_frontier_job._scheduler_result",
-            return_value=("NOT_A_SLURM_TERMINAL_STATE", 300, 1),
+            return_value=("NOT_A_SLURM_TERMINAL_STATE", 300, 1, "0:0"),
         ):
             with self.assertRaises(ValueError):
                 reconcile(

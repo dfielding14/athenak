@@ -21,6 +21,7 @@ import json
 import math
 import os
 from pathlib import Path
+import re
 import stat
 from typing import Iterator, TextIO
 import uuid
@@ -84,6 +85,7 @@ CSV_FIELDS = [
     "requested_walltime",
     "reserved_node_hours",
     "elapsed_seconds",
+    "scheduler_exit_code",
     "consumed_node_hours",
     "cumulative_consumed_node_hours",
     "state",
@@ -273,6 +275,7 @@ REGISTERED_RECONCILIATION_CHANGES = {
     "scheduler_reported_allocated_nodes",
     "billed_nodes",
     "elapsed_seconds",
+    "scheduler_exit_code",
     "consumed_node_hours",
     "cumulative_consumed_node_hours",
 }
@@ -576,6 +579,7 @@ def _registered_event_field_bounds(event_type: str) -> tuple[set[str], set[str]]
             | {
                 "attached_by_control_plane_version",
                 "reconciled_by_control_plane_version",
+                "scheduler_exit_code",
             }
             | TERMINAL_RECOVERY_FIELDS
         )
@@ -1180,6 +1184,7 @@ def _validate_accounting_records(records: list[dict[str, object]]) -> None:
             allocated_nodes = record.get("scheduler_reported_allocated_nodes")
             billed_nodes = record.get("billed_nodes")
             elapsed_seconds = record.get("elapsed_seconds")
+            scheduler_exit_code = record.get("scheduler_exit_code")
             if (
                 type(requested_nodes) is not int
                 or requested_nodes <= 0
@@ -1189,6 +1194,13 @@ def _validate_accounting_records(records: list[dict[str, object]]) -> None:
                 or billed_nodes != max(requested_nodes, allocated_nodes)
                 or type(elapsed_seconds) is not int
                 or elapsed_seconds < 0
+                or (
+                    scheduler_exit_code is not None
+                    and (
+                        not isinstance(scheduler_exit_code, str)
+                        or re.fullmatch(r"[0-9]+:[0-9]+", scheduler_exit_code) is None
+                    )
+                )
             ):
                 raise ValueError("Registered reconciliation usage is invalid")
             consumed = _nonnegative_finite_number(

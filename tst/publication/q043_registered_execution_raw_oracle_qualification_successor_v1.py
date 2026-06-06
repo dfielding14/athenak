@@ -3,7 +3,9 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 import hashlib
+import importlib.util
 import io
 import json
 import math
@@ -11,10 +13,12 @@ import os
 from pathlib import Path, PurePosixPath
 import re
 import stat
+import sys
 import tarfile
 from typing import Any, Mapping, Sequence
 
 from tst.publication import analyze_q011_section54_outputs as binary
+from tst.publication import immutable_orion_tree
 from tst.publication import (
     q043_bell_current_volume_aware_deposited_current_oracle as oracle,
 )
@@ -22,12 +26,22 @@ from tst.publication import (
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 AUTHORIZED_ORION_ROOT = Path("/lustre/orion/ast207/proj-shared/dfielding/PIC")
-RUN_NAMESPACE = "runs/q043_registered_execution_raw_oracle_successor_v1"
+AUTHORIZED_PROJECT_HOME_ROOT = Path(
+    "/autofs/nccs-svm1_proj/ast207/proj-shared/PIC"
+)
+AUTHORIZED_PROJECT_HOME_LEDGER_LEXICAL_ROOT = Path(
+    "/ccs/proj/ast207/proj-shared/PIC"
+)
+AUTHORIZED_CLEAN_CANDIDATE_SOURCE_ROOT = Path("/ccs/home/dfielding/athenak-pic")
+REGISTERED_CAMPAIGN = "q043_registered_execution_raw_oracle_successor_v1"
+REGISTERED_AUTHORIZATION_PREFIX = "q043-"
+REGISTERED_EXECUTION_RECEIPT_NAME = "q043_registered_execution_receipt.json"
+Q043_PRODUCER_ENTRYPOINT = "reconcile_q043_registered_execution.py"
+PROJECT_HOME_MIRROR_NAMESPACE = Path("ledger/q043_registered_execution_receipts")
 SCHEMA_VERSION = 1
 SUCCESSOR_ID = "q043_registered_execution_raw_oracle_qualification_successor_v1"
 CASE_RECORD_TYPE = "q043_registered_execution_raw_oracle_case_admission"
 MATRIX_RECORD_TYPE = "q043_registered_execution_raw_oracle_matrix_qualification"
-LAUNCH_CONTRACT_RECORD_TYPE = "q043_registered_execution_launch_contract"
 EXECUTION_RECEIPT_RECORD_TYPE = "q043_reconciled_registered_execution_receipt"
 TERMINAL_RECEIPT_RECORD_TYPE = "q043_registered_execution_terminal_receipt"
 SOURCE_LOCAL_CASE_RECORD_TYPE = (
@@ -113,8 +127,34 @@ REQUIRED_CANDIDATE_SOURCE_PATHS = frozenset(
         "src/pgen/pgen.cpp",
         "src/pgen/pgen.hpp",
         "src/pgen/tests/q043_bell_current_volume_aware.cpp",
+        "src/particles/particles.cpp",
+        "src/particles/particles.hpp",
+        "src/particles/particles_data_structs.hpp",
+        "src/particles/particles_moments.cpp",
+        "src/particles/particles_pushers.cpp",
+        "src/particles/particles_tasks.cpp",
+        "src/outputs/basetype_output.cpp",
+        "src/outputs/binary.cpp",
+        "src/outputs/coarsened_binary.cpp",
+        "src/outputs/derived_variables.cpp",
+        "src/outputs/eventlog.cpp",
+        "src/outputs/formatted_table.cpp",
+        "src/outputs/history.cpp",
+        "src/outputs/io_wrapper.cpp",
+        "src/outputs/io_wrapper.hpp",
+        "src/outputs/outputs.cpp",
+        "src/outputs/outputs.hpp",
+        "src/outputs/pdf.cpp",
+        "src/outputs/restart.cpp",
+        "src/outputs/restart_utils.cpp",
+        "src/outputs/restart_utils.hpp",
+        "src/outputs/track_prtcl.cpp",
+        "src/outputs/vtk_mesh.cpp",
+        "src/outputs/vtk_prtcl.cpp",
         "tst/publication/q043_bell_current_volume_aware_deposited_current_oracle.py",
         "tst/publication/q043_registered_execution_raw_oracle_qualification_successor_v1.py",
+        "tst/publication/frontier_control_plane/reconcile_q043_registered_execution.py",
+        "tst/publication/immutable_orion_tree.py",
         "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/"
         "deck_manifest.json",
     )
@@ -132,19 +172,6 @@ _UUID = re.compile(
     r"[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}"
 )
 _JOB_ID = re.compile(r"[1-9][0-9]*")
-_TIME_CYCLE = re.compile(r"^time=([^\s]+) cycle=(0|[1-9][0-9]*)$", re.MULTILINE)
-_LIMITS = re.compile(r"^tlim=([^\s]+) nlim=([^\s]+)$", re.MULTILINE)
-_RANK_EVIDENCE = re.compile(
-    r"^Q043_REGISTERED_EXECUTION case_id=([^\s]+) mpi_world_size=([1-9][0-9]*) "
-    r"rank_ids=([0-9]+(?:,[0-9]+)*)$",
-    re.MULTILINE,
-)
-_EXIT_EVIDENCE = re.compile(
-    r"^Q043_REGISTERED_EXECUTION_EXIT exit_code=([0-9]+) signal=([0-9]+)$",
-    re.MULTILINE,
-)
-
-
 class AdmissionError(ValueError):
     """Reject incomplete, mixed-lineage, synthetic, or authority-bearing evidence."""
 
@@ -326,6 +353,7 @@ def _read_stable_regular_file(
     expected_sha256: str | None = None,
     expected_byte_count: int | None = None,
     executable: bool = False,
+    read_only: bool = False,
 ) -> tuple[bytes, dict[str, int]]:
     descriptor = None
     try:
@@ -377,6 +405,10 @@ def _read_stable_regular_file(
         not executable or bool(before.st_mode & 0o111),
         f"{label}: bound executable lacks an execute bit",
     )
+    _require(
+        not read_only or not bool(before.st_mode & 0o222),
+        f"{label}: bound file is not read-only",
+    )
     digest = hashlib.sha256(payload).hexdigest()
     if expected_sha256 is not None:
         _require(digest == expected_sha256, f"{label}: SHA-256 drifted")
@@ -402,6 +434,7 @@ def _verified_binding(
     root: Path,
     label: str,
     executable: bool = False,
+    read_only: bool = False,
 ) -> tuple[dict[str, object], bytes]:
     binding = _binding(value, label=label)
     path = _canonical_below(binding["path"], root, label=f"{label}/path")
@@ -411,12 +444,291 @@ def _verified_binding(
         expected_sha256=str(binding["sha256"]),
         expected_byte_count=int(binding["byte_count"]),
         executable=executable,
+        read_only=read_only,
     )
     return {**binding, "filesystem_identity": identity}, payload
 
 
 def _public_binding(value: Mapping[str, object]) -> dict[str, object]:
     return {key: value[key] for key in ("path", "sha256", "byte_count")}
+
+
+def _trusted_roots() -> tuple[Path, Path]:
+    """Resolve the fixed Orion and Project Home trust anchors."""
+    orion = _canonical_root(
+        AUTHORIZED_ORION_ROOT, label="canonical authorized Orion root"
+    )
+    project_home = _canonical_root(
+        AUTHORIZED_PROJECT_HOME_ROOT,
+        label="canonical authorized Project Home root",
+    )
+    try:
+        ledger_resolved = Path(
+            os.path.abspath(AUTHORIZED_PROJECT_HOME_LEDGER_LEXICAL_ROOT)
+        ).resolve(strict=True)
+    except OSError as error:
+        raise AdmissionError("canonical Project Home ledger root is unavailable") from error
+    _require(
+        ledger_resolved == project_home,
+        "Project Home ledger root does not resolve to the canonical active-policy root",
+    )
+    return orion, project_home
+
+
+def _installed_control_plane_inventory(
+    root: Path, version: str
+) -> tuple[Path, dict[str, object], dict[str, str]]:
+    version = _sha256(version, label="installed control-plane version")
+    directory = _canonical_below(
+        str(root / "control_plane" / version),
+        root,
+        label="installed control-plane generation",
+        directory=True,
+    )
+    _require(
+        not bool(directory.stat(follow_symlinks=False).st_mode & 0o222),
+        "installed control-plane generation is mutable",
+    )
+    inventory_payload, _ = _read_stable_regular_file(
+        directory / "inventory.json",
+        label="installed control-plane inventory",
+        read_only=True,
+    )
+    inventory = _json_payload(
+        inventory_payload, label="installed control-plane inventory"
+    )
+    _require(
+        set(inventory) == {"schema_version", "version", "files"}
+        and inventory.get("schema_version") == 1
+        and inventory.get("version") == version
+        and type(inventory.get("files")) is list
+        and bool(inventory["files"]),
+        "installed control-plane inventory schema drifted",
+    )
+    records: list[dict[str, str]] = []
+    digests: dict[str, str] = {}
+    for index, item in enumerate(inventory["files"]):
+        label = f"installed control-plane inventory/files[{index}]"
+        record = _object(item, {"path", "sha256"}, label=label)
+        name = _text(record["path"], label=f"{label}/path")
+        _require(
+            Path(name).name == name and "/" not in name and name != "inventory.json",
+            f"{label}: unsafe installed filename",
+        )
+        digest = _sha256(record["sha256"], label=f"{label}/sha256")
+        _require(name not in digests, "installed control-plane inventory has duplicate files")
+        records.append({"path": name, "sha256": digest})
+        digests[name] = digest
+    expected_version = hashlib.sha256(
+        json.dumps(records, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    _require(
+        expected_version == version,
+        "installed control-plane inventory digest drifted",
+    )
+    try:
+        entries = {path.name for path in directory.iterdir()}
+    except OSError as error:
+        raise AdmissionError("installed control-plane generation is unavailable") from error
+    _require(
+        entries == {*digests, "inventory.json"},
+        "installed control-plane generation entries drifted",
+    )
+    for name, digest in digests.items():
+        _read_stable_regular_file(
+            directory / name,
+            label=f"installed control-plane file/{name}",
+            expected_sha256=digest,
+            read_only=True,
+        )
+    return directory, inventory, digests
+
+
+def _installed_control_plane_pair(version: str) -> dict[str, object]:
+    orion, project_home = _trusted_roots()
+    orion_dir, orion_inventory, digests = _installed_control_plane_inventory(
+        orion, version
+    )
+    project_home_dir, project_home_inventory, project_home_digests = (
+        _installed_control_plane_inventory(project_home, version)
+    )
+    _require(
+        _strict_equal(orion_inventory, project_home_inventory)
+        and digests == project_home_digests,
+        "paired installed control-plane generations differ",
+    )
+    return {
+        "version": version,
+        "orion_directory": orion_dir,
+        "project_home_directory": project_home_dir,
+        "inventory": orion_inventory,
+        "digests": digests,
+    }
+
+
+@contextmanager
+def _installed_control_plane_modules(
+    version: str, filenames: Sequence[str]
+) -> Any:
+    pair = _installed_control_plane_pair(version)
+    directory = Path(pair["orion_directory"])
+    digests = pair["digests"]
+    _require(
+        all(filename in digests and filename.endswith(".py") for filename in filenames),
+        "required installed control-plane module is absent",
+    )
+    module_names = {
+        Path(name).stem
+        for name in digests
+        if name.endswith(".py")
+    }
+    previous = {name: sys.modules.get(name) for name in module_names}
+    for name in module_names:
+        sys.modules.pop(name, None)
+    sys.path.insert(0, str(directory))
+    loaded: dict[str, object] = {}
+    try:
+        for filename in filenames:
+            module_name = Path(filename).stem
+            specification = importlib.util.spec_from_file_location(
+                module_name, directory / filename
+            )
+            _require(
+                specification is not None and specification.loader is not None,
+                f"installed control-plane module cannot be loaded: {filename}",
+            )
+            module = importlib.util.module_from_spec(specification)
+            sys.modules[module_name] = module
+            specification.loader.exec_module(module)
+            loaded[filename] = module
+        yield loaded, pair
+    except (ImportError, OSError, ValueError) as error:
+        raise AdmissionError("verified installed control-plane module failed") from error
+    finally:
+        sys.path.pop(0)
+        for name in module_names:
+            sys.modules.pop(name, None)
+            if previous[name] is not None:
+                sys.modules[name] = previous[name]
+
+
+def _trusted_mirrored_ledger_state(
+    control_plane_version: str,
+) -> dict[str, object]:
+    """Validate canonical ledger bytes with the exact installed producer generation."""
+    orion, project_home = _trusted_roots()
+    ledger_root = Path(os.path.abspath(AUTHORIZED_PROJECT_HOME_LEDGER_LEXICAL_ROOT))
+    ledger_jsonl = orion / "ledger/node_hours.jsonl"
+    receipts_jsonl = orion / "ledger/mirror_receipts.jsonl"
+    mirror_jsonl = ledger_root / "ledger/node_hours.jsonl"
+    with _installed_control_plane_modules(
+        control_plane_version, ("ledger.py",)
+    ) as (modules, pair):
+        ledger = modules["ledger.py"]
+        try:
+            with ledger.validated_read_only_mirrored_state_snapshot(
+                ledger_jsonl,
+                receipts_jsonl,
+                mirror_jsonl,
+                ledger_root=orion,
+                receipts_root=orion,
+                mirror_root=ledger_root,
+            ) as records:
+                ledger.require_explicit_genesis(records)
+                receipts = ledger.validate_receipts(
+                    receipts_jsonl,
+                    records,
+                    mirror_jsonl=mirror_jsonl,
+                    mirror_transport="filesystem_copy",
+                    root=orion,
+                )
+                copied_records = [dict(record) for record in records]
+                copied_receipts = [dict(receipt) for receipt in receipts]
+        except (OSError, ValueError) as error:
+            raise AdmissionError(
+                "canonical mirrored Frontier PIC ledger is invalid"
+            ) from error
+        producer_sha256 = pair["digests"].get(Q043_PRODUCER_ENTRYPOINT)
+        trampoline_sha256 = pair["digests"].get("launch_trampoline.py")
+        _require(
+            type(producer_sha256) is str and _SHA256.fullmatch(producer_sha256),
+            "installed control-plane generation lacks the Q043 receipt producer",
+        )
+        _require(
+            type(trampoline_sha256) is str and _SHA256.fullmatch(trampoline_sha256),
+            "installed control-plane generation lacks the trusted launch trampoline",
+        )
+        return {
+            "records": copied_records,
+            "mirror_receipts": copied_receipts,
+            "installed_control_plane": {
+                "version": control_plane_version,
+                "orion_path": str(pair["orion_directory"]),
+                "project_home_path": str(pair["project_home_directory"]),
+                "producer_entrypoint": Q043_PRODUCER_ENTRYPOINT,
+                "producer_entrypoint_sha256": producer_sha256,
+                "launch_trampoline_sha256": trampoline_sha256,
+                "project_home_canonical_root": str(project_home),
+                "project_home_ledger_root": str(ledger_root),
+            },
+        }
+
+
+def _trusted_clean_candidate_revalidation(
+    manifest_path: Path,
+    *,
+    manifest_sha256: str,
+    git_commit: str,
+) -> dict[str, object]:
+    """Run the exact installed clean-candidate verifier bound by its build receipt."""
+    orion, project_home = _trusted_roots()
+    try:
+        receipt_payload, _ = _read_stable_regular_file(
+            manifest_path.parent / "profile_receipt.json",
+            label="clean-candidate build-profile receipt",
+            read_only=True,
+        )
+        receipt = _json_payload(
+            receipt_payload, label="clean-candidate build-profile receipt"
+        )
+        control_plane_version = _sha256(
+            receipt.get("control_plane_version"),
+            label="clean-candidate build-profile receipt/control_plane_version",
+        )
+        with _installed_control_plane_modules(
+            control_plane_version, ("revalidate_clean_candidate.py",)
+        ) as (modules, pair):
+            verifier = modules["revalidate_clean_candidate.py"]
+            report = verifier.revalidate_clean_candidate(
+                manifest_path,
+                expected_manifest_sha256=manifest_sha256,
+                expected_git_commit=git_commit,
+                expected_receipt_control_plane_version=control_plane_version,
+                control_plane_dir=pair["orion_directory"],
+                authorized_pic_root=orion,
+                authorized_project_home_root=project_home,
+                authorized_source_root=AUTHORIZED_CLEAN_CANDIDATE_SOURCE_ROOT,
+            )
+    except (AttributeError, KeyError, OSError, TypeError, ValueError) as error:
+        raise AdmissionError(
+            "clean candidate failed trusted fixed-root build revalidation"
+        ) from error
+    _require(
+        type(report) is dict
+        and report.get("record_type")
+        == "frontier_pic_clean_candidate_read_only_revalidation"
+        and report.get("status") == "passed"
+        and report.get("clean_candidate_manifest")
+        == {
+            "expected_sha256": manifest_sha256,
+            "path": str(manifest_path),
+            "sha256": manifest_sha256,
+        }
+        and type(report.get("source")) is dict
+        and report["source"].get("git_commit") == git_commit,
+        "trusted clean-candidate revalidation report drifted",
+    )
+    return report
 
 
 def _expected_case_axis_rows() -> list[tuple[object, ...]]:
@@ -676,13 +988,28 @@ def _source_archive_closure(
     return {"members": bindings, "sha256": canonical_sha256(bindings)}
 
 
+def _captured_executable_elf_validation(
+    payload: bytes, *, expected_sha256: str
+) -> dict[str, str | bool]:
+    """Apply the established retained-ELF validator to stable captured bytes."""
+    descriptor = immutable_orion_tree._sealed_memfd(
+        payload, 0o555, name="q043-registered-admission-athena"
+    )
+    try:
+        return immutable_orion_tree.validate_executable_elf(
+            Path(f"/proc/self/fd/{descriptor}"),
+            expected_sha256,
+            error_type=AdmissionError,
+            label="clean-candidate executable",
+        )
+    finally:
+        os.close(descriptor)
+
+
 def _candidate_binding(
     value: object,
-    authorized_root: Path,
-    *,
-    source_root: Path,
-    required_paths: frozenset[str],
 ) -> dict[str, object]:
+    authorized_root, _ = _trusted_roots()
     record = _object(
         value,
         {
@@ -704,22 +1031,36 @@ def _candidate_binding(
         record["clean_candidate_manifest"],
         root=authorized_root,
         label="clean-candidate manifest",
+        read_only=True,
     )
     archive_binding, archive_payload = _verified_binding(
         record["source_archive"],
         root=authorized_root,
         label="clean-candidate source archive",
+        read_only=True,
     )
-    executable_binding, _ = _verified_binding(
+    executable_binding, executable_payload = _verified_binding(
         record["executable"],
         root=authorized_root,
         label="clean-candidate executable",
         executable=True,
+        read_only=True,
     )
     environment_binding, _ = _verified_binding(
         record["environment_profile"],
         root=authorized_root,
         label="registered environment profile",
+        read_only=True,
+    )
+    candidate_root = Path(str(manifest_binding["path"])).parent
+    _require(
+        candidate_root.parent == authorized_root / "clean_candidates"
+        and _UUID.fullmatch(candidate_root.name) is not None
+        and manifest_binding["path"]
+        == str(candidate_root / "clean_candidate_manifest.json")
+        and archive_binding["path"] == str(candidate_root / "source.tar")
+        and executable_binding["path"] == str(candidate_root / "athena"),
+        "clean-candidate fixed-root layout drifted",
     )
     manifest = _json_payload(manifest_payload, label="clean-candidate manifest")
     source = manifest.get("source")
@@ -742,8 +1083,26 @@ def _candidate_binding(
         and build.get("executable_sha256") == executable_binding["sha256"],
         "clean-candidate manifest candidate cross-link drifted",
     )
+    executable_elf_validation = _captured_executable_elf_validation(
+        executable_payload, expected_sha256=str(executable_binding["sha256"])
+    )
+    trusted_revalidation = _trusted_clean_candidate_revalidation(
+        Path(str(manifest_binding["path"])),
+        manifest_sha256=str(manifest_binding["sha256"]),
+        git_commit=git_commit,
+    )
+    _require(
+        type(trusted_revalidation.get("build")) is dict
+        and trusted_revalidation["build"].get("executable_sha256")
+        == executable_binding["sha256"]
+        and type(trusted_revalidation.get("source")) is dict
+        and trusted_revalidation["source"].get("source_bundle_sha256") == bundle,
+        "trusted clean-candidate build identity differs from candidate binding",
+    )
     archive_closure = _source_archive_closure(
-        archive_payload, source_root=source_root, required_paths=required_paths
+        archive_payload,
+        source_root=REPO_ROOT,
+        required_paths=required_candidate_source_paths(),
     )
     return {
         "git_commit": git_commit,
@@ -751,7 +1110,9 @@ def _candidate_binding(
         "clean_candidate_manifest": manifest_binding,
         "source_archive": archive_binding,
         "source_archive_closure": archive_closure,
+        "trusted_clean_candidate_revalidation": trusted_revalidation,
         "executable": executable_binding,
+        "executable_elf_validation": executable_elf_validation,
         "environment_profile": environment_binding,
     }
 
@@ -802,136 +1163,483 @@ def expected_mpi_evidence(case: Mapping[str, object]) -> dict[str, object]:
     }
 
 
-def _expected_command(
-    case: Mapping[str, object],
+def _receipt_raw_inventory(value: object) -> list[dict[str, object]]:
+    records = _array(value, label="registered execution receipt/raw_inventory")
+    normalized = []
+    for index, item in enumerate(records):
+        label = f"registered execution receipt/raw_inventory[{index}]"
+        record = _object(
+            item,
+            {"path", "sha256", "byte_count", "case_id", "field", "cycle", "rank"},
+            label=label,
+        )
+        normalized.append(
+            {
+                "path": _relative_path(record["path"], label=f"{label}/path"),
+                "sha256": _sha256(record["sha256"], label=f"{label}/sha256"),
+                "byte_count": _positive_integer(
+                    record["byte_count"], label=f"{label}/byte_count"
+                ),
+                "case_id": _text(record["case_id"], label=f"{label}/case_id"),
+                "field": _text(record["field"], label=f"{label}/field"),
+                "cycle": _nonnegative_integer(
+                    record["cycle"], label=f"{label}/cycle"
+                ),
+                "rank": _nonnegative_integer(record["rank"], label=f"{label}/rank"),
+            }
+        )
+    return normalized
+
+
+def _project_home_mirror_binding(
+    payload: bytes,
+    orion_binding: Mapping[str, object],
     *,
-    candidate: Mapping[str, object],
-    launch_deck: Mapping[str, object],
-    raw_root: Path,
-) -> list[str]:
-    ranks = int(case["mpi_ranks"])
-    return [
-        "srun",
-        "--nodes=1",
-        f"--ntasks={ranks}",
-        f"--ntasks-per-node={ranks}",
-        "--cpus-per-task=1",
-        "--gpus-per-task=1",
-        "--gpu-bind=closest",
-        str(candidate["executable"]["path"]),
-        "-i",
-        str(launch_deck["path"]),
-        "-d",
-        str(raw_root),
+    submission_id: str,
+    filename: str,
+    label: str,
+) -> dict[str, object]:
+    _, project_home = _trusted_roots()
+    path = (
+        project_home
+        / PROJECT_HOME_MIRROR_NAMESPACE
+        / submission_id
+        / filename
+    )
+    path = _canonical_below(str(path), project_home, label=f"{label}/path")
+    _require(
+        not bool(path.parent.stat(follow_symlinks=False).st_mode & 0o222),
+        f"{label}: submission mirror directory is mutable",
+    )
+    mirrored, identity = _read_stable_regular_file(
+        path,
+        label=label,
+        expected_sha256=str(orion_binding["sha256"]),
+        expected_byte_count=int(orion_binding["byte_count"]),
+        read_only=True,
+    )
+    _require(mirrored == payload, f"{label}: bytes differ from Orion")
+    _require(
+        (
+            identity["device"],
+            identity["inode"],
+        )
+        != (
+            orion_binding["filesystem_identity"]["device"],
+            orion_binding["filesystem_identity"]["inode"],
+        ),
+        f"{label}: reuses the Orion filesystem object",
+    )
+    return {
+        "path": str(path),
+        "sha256": str(orion_binding["sha256"]),
+        "byte_count": int(orion_binding["byte_count"]),
+        "filesystem_identity": identity,
+    }
+
+
+def _trusted_producer_rederivation(
+    *,
+    producer_version: str,
+    event: Mapping[str, object],
+    mirror_ack: Mapping[str, object],
+    receipt_path: Path,
+    receipt_payload: bytes,
+    terminal_path: Path,
+    terminal_payload: bytes,
+    receipt_mirror_path: Path,
+    terminal_mirror_path: Path,
+) -> dict[str, object]:
+    """Re-derive exact receipt bytes through the verified installed Q043 producer."""
+    orion, project_home = _trusted_roots()
+    with _installed_control_plane_modules(
+        producer_version, (Q043_PRODUCER_ENTRYPOINT,)
+    ) as (modules, pair):
+        producer = modules[Q043_PRODUCER_ENTRYPOINT]
+        try:
+            derived = producer.derive_q043_registered_execution_evidence(
+                dict(event),
+                dict(mirror_ack),
+                pair["inventory"],
+                authorized_pic_root=orion,
+                authorized_project_home_root=project_home,
+            )
+        except (AttributeError, KeyError, OSError, TypeError, ValueError) as error:
+            raise AdmissionError(
+                "installed Q043 producer could not re-derive execution evidence: "
+                f"{error}"
+            ) from error
+    expected = (
+        terminal_path,
+        terminal_payload,
+        receipt_path,
+        receipt_payload,
+        terminal_mirror_path,
+        receipt_mirror_path,
+    )
+    _require(
+        derived == expected,
+        "installed Q043 producer re-derived different evidence bytes or paths",
+    )
+    return {
+        "control_plane_version": producer_version,
+        "entrypoint": Q043_PRODUCER_ENTRYPOINT,
+        "entrypoint_sha256": pair["digests"][Q043_PRODUCER_ENTRYPOINT],
+        "receipt_sha256": hashlib.sha256(receipt_payload).hexdigest(),
+        "terminal_receipt_sha256": hashlib.sha256(terminal_payload).hexdigest(),
+        "exact_byte_rederivation_passed": True,
+    }
+
+
+def _manifest_snapshot_binding(
+    manifest: Mapping[str, object],
+    *,
+    role: str,
+    expected_path: Path,
+    expected_source_path: str,
+    expected_sha256: str,
+    executable: bool = False,
+) -> dict[str, object]:
+    records = manifest.get("snapshot_files")
+    _require(type(records) is list, "pre-submit manifest snapshot_files is malformed")
+    matches = [
+        item for item in records if type(item) is dict and item.get("role") == role
     ]
+    _require(len(matches) == 1, f"pre-submit manifest requires one {role} snapshot")
+    record = _object(
+        matches[0],
+        {"path", "role", "sha256", "source_path", "source_sha256"},
+        label=f"pre-submit manifest snapshot/{role}",
+    )
+    _require(
+        record["path"] == str(expected_path)
+        and record["source_path"] == expected_source_path
+        and record["sha256"] == expected_sha256
+        and record["source_sha256"] == expected_sha256,
+        f"pre-submit manifest {role} snapshot binding drifted",
+    )
+    payload, identity = _read_stable_regular_file(
+        expected_path,
+        label=f"pre-submit manifest snapshot/{role}",
+        expected_sha256=expected_sha256,
+        executable=executable,
+        read_only=True,
+    )
+    return {
+        "path": str(expected_path),
+        "sha256": expected_sha256,
+        "byte_count": len(payload),
+        "source_path": expected_source_path,
+        "filesystem_identity": identity,
+    }
 
 
-def _launch_contract(
+def _trusted_pre_submit_manifest(
+    event: Mapping[str, object],
     *,
     case: Mapping[str, object],
     candidate: Mapping[str, object],
     deck: Mapping[str, object],
-    launch_deck: Mapping[str, object],
-    case_root: Path,
-    raw_root: Path,
     artifact_dir: Path,
 ) -> dict[str, object]:
+    orion, _ = _trusted_roots()
+    submission_id = str(event["submission_id"])
+    manifest_path = _canonical_below(
+        event["manifest_path"],
+        orion / "manifests",
+        label="trusted pre-submit manifest",
+    )
+    expected_manifest_path = (
+        orion
+        / "manifests"
+        / REGISTERED_CAMPAIGN
+        / submission_id
+        / "pre_submit_manifest.json"
+    )
+    _require(
+        manifest_path == expected_manifest_path,
+        "trusted pre-submit manifest fixed-root layout drifted",
+    )
+    manifest_payload, identity = _read_stable_regular_file(
+        manifest_path,
+        label="trusted pre-submit manifest",
+        expected_sha256=_sha256(
+            event["manifest_sha256"], label="trusted reconciliation/manifest_sha256"
+        ),
+        read_only=True,
+    )
+    manifest = _json_payload(manifest_payload, label="trusted pre-submit manifest")
+    authorization_id = _text(
+        event["registered_science_authorization_id"],
+        label="trusted reconciliation/registered_science_authorization_id",
+    )
+    _require(
+        authorization_id.startswith(REGISTERED_AUTHORIZATION_PREFIX)
+        and manifest.get("schema_version") == 1
+        and manifest.get("pic_root") == str(orion)
+        and manifest.get("submission_id") == submission_id
+        and manifest.get("campaign") == REGISTERED_CAMPAIGN
+        and manifest.get("test_id") == case["case_id"]
+        and manifest.get("submission_scope") == "registered_science"
+        and manifest.get("registered_science_authorization_id") == authorization_id
+        and manifest.get("control_plane_version") == event["control_plane_version"]
+        and manifest.get("git_commit") == candidate["git_commit"]
+        and manifest.get("artifact_dir") == str(artifact_dir)
+        and manifest.get("clean_candidate_manifest_path")
+        == candidate["clean_candidate_manifest"]["path"]
+        and manifest.get("clean_candidate_manifest_sha256")
+        == candidate["clean_candidate_manifest"]["sha256"],
+        "trusted pre-submit manifest identity or reconciliation cross-link drifted",
+    )
+    snapshot_root = manifest_path.parent / "snapshot"
+    bindings = {
+        "clean_candidate_manifest": _manifest_snapshot_binding(
+            manifest,
+            role="clean-candidate-manifest",
+            expected_path=snapshot_root / "clean_candidate_manifest.json",
+            expected_source_path=str(candidate["clean_candidate_manifest"]["path"]),
+            expected_sha256=str(candidate["clean_candidate_manifest"]["sha256"]),
+        ),
+        "executable": _manifest_snapshot_binding(
+            manifest,
+            role="executable",
+            expected_path=snapshot_root / "athena",
+            expected_source_path=str(candidate["executable"]["path"]),
+            expected_sha256=str(candidate["executable"]["sha256"]),
+            executable=True,
+        ),
+        "input_deck": _manifest_snapshot_binding(
+            manifest,
+            role="input-deck",
+            expected_path=snapshot_root / f"{case['case_id']}.athinput",
+            expected_source_path=str(deck["absolute_path"]),
+            expected_sha256=str(deck["sha256"]),
+        ),
+        "environment_profile": _manifest_snapshot_binding(
+            manifest,
+            role="environment-profile",
+            expected_path=snapshot_root / "frontier_pic_environment.sh",
+            expected_source_path=str(candidate["environment_profile"]["path"]),
+            expected_sha256=str(candidate["environment_profile"]["sha256"]),
+        ),
+    }
     return {
-        "schema_version": SCHEMA_VERSION,
-        "record_type": LAUNCH_CONTRACT_RECORD_TYPE,
-        "registration_scope": "registered_science",
-        "campaign_id": oracle.CAMPAIGN_ID,
-        "case_id": case["case_id"],
-        "candidate_binding_sha256": canonical_sha256(candidate),
-        "clean_candidate_manifest": _public_binding(
-            candidate["clean_candidate_manifest"]
-        ),
-        "source_archive": _public_binding(candidate["source_archive"]),
-        "executable": _public_binding(candidate["executable"]),
-        "environment_profile": _public_binding(candidate["environment_profile"]),
-        "deck": {
-            "reviewed_checked_in_deck": {
-                key: deck[key]
-                for key in ("path", "absolute_path", "sha256", "byte_count")
-            },
-            "immutable_launch_deck": _public_binding(launch_deck),
-        },
-        "authorized_orion_case_root": str(case_root),
-        "raw_output_root": str(raw_root),
-        "artifact_dir": str(artifact_dir),
-        "command": _expected_command(
-            case, candidate=candidate, launch_deck=launch_deck, raw_root=raw_root
-        ),
-        "mpi_evidence": expected_mpi_evidence(case),
-        "launch_authorized": False,
-        "scheduler_submission_authorized": False,
-        "policy_mutation_authorized": False,
+        "path": str(manifest_path),
+        "sha256": hashlib.sha256(manifest_payload).hexdigest(),
+        "byte_count": len(manifest_payload),
+        "filesystem_identity": identity,
+        "control_plane_version": event["control_plane_version"],
+        "registered_science_authorization_id": authorization_id,
+        "snapshot_bindings": bindings,
+        "launch_contract": manifest["launch_contract"],
     }
 
 
-def _validate_stdout(
-    payload: bytes, *, case: Mapping[str, object]
-) -> dict[str, object]:
-    try:
-        text = payload.decode("utf-8")
-    except UnicodeDecodeError as error:
-        raise AdmissionError("stdout: invalid UTF-8") from error
-    _require(
-        "FATAL ERROR" not in text and "Traceback" not in text,
-        "stdout: fatal execution evidence present",
+def _trusted_reconciliation(
+    receipt: Mapping[str, object],
+    *,
+    case: Mapping[str, object],
+    candidate: Mapping[str, object],
+    deck: Mapping[str, object],
+    artifact_dir: Path,
+    receipt_path: Path,
+    receipt_payload: bytes,
+    terminal_path: Path,
+    terminal_payload: bytes,
+    receipt_mirror_path: Path,
+    terminal_mirror_path: Path,
+) -> tuple[dict[str, object], dict[str, object]]:
+    producer = _object(
+        receipt.get("producer"),
+        {
+            "entrypoint",
+            "entrypoint_sha256",
+            "launch_trampoline_sha256",
+            "control_plane_version",
+        },
+        label="registered execution receipt/producer",
     )
-    ranks = int(case["mpi_ranks"])
-    rank_matches = _RANK_EVIDENCE.findall(text)
-    _require(
-        rank_matches
-        == [
-            (
-                case["case_id"],
-                str(ranks),
-                ",".join(str(rank) for rank in range(ranks)),
-            )
-        ],
-        "stdout: registered rank evidence missing or ambiguous",
+    producer_version = _sha256(
+        producer["control_plane_version"],
+        label="registered execution receipt/producer/control_plane_version",
     )
-    times = _TIME_CYCLE.findall(text)
-    limits = _LIMITS.findall(text)
-    exits = _EXIT_EVIDENCE.findall(text)
-    terminations = [
-        line for line in text.splitlines() if line.startswith("Terminating on ")
+    state = _trusted_mirrored_ledger_state(producer_version)
+    matches = [
+        record
+        for record in state["records"]
+        if record.get("event_type") == "reconciliation"
+        and record.get("event_sha256") == receipt["reconciliation_event_sha256"]
     ]
     _require(
-        len(times) == 1
-        and len(limits) == 1
-        and exits == [("0", "0")]
-        and terminations == ["Terminating on cycle limit"],
-        "stdout: terminal success evidence missing or ambiguous",
+        len(matches) == 1,
+        "registered execution lacks one canonical mirrored-ledger reconciliation",
     )
-    try:
-        observed_time = float(times[0][0])
-        tlim = float(limits[0][0])
-        cycle = int(times[0][1])
-        nlim = int(limits[0][1])
-    except ValueError as error:
-        raise AdmissionError("stdout: terminal evidence is non-numeric") from error
+    event = matches[0]
+    mirror_matches = [
+        mirror_receipt
+        for mirror_receipt in state["mirror_receipts"]
+        if mirror_receipt.get("mirrored_event_sha256") == event["event_sha256"]
+    ]
     _require(
-        math.isfinite(observed_time)
-        and observed_time > 0.0
-        and math.isfinite(tlim)
-        and cycle == 1
-        and nlim == 1,
-        "stdout: terminal cycle-limit evidence drifted",
+        len(mirror_matches) == 1,
+        "registered execution lacks one canonical Project Home mirror acknowledgment",
     )
-    return {
-        "termination_reason": "Terminating on cycle limit",
-        "terminal_cycle": cycle,
-        "observed_time": observed_time,
-        "tlim": tlim,
-        "nlim": nlim,
-        "observed_world_size": ranks,
-        "observed_rank_ids": list(range(ranks)),
-        "exit_code": 0,
-        "signal": 0,
-    }
+    mirror_ack = mirror_matches[0]
+    installed = state["installed_control_plane"]
+    _require(
+        producer
+        == {
+            "entrypoint": installed["producer_entrypoint"],
+            "entrypoint_sha256": installed["producer_entrypoint_sha256"],
+            "launch_trampoline_sha256": installed["launch_trampoline_sha256"],
+            "control_plane_version": installed["version"],
+        }
+        and mirror_ack.get("mirror_ack_sha256")
+        == receipt["reconciliation_mirror_ack_sha256"]
+        and mirror_ack.get("mirror_destination")
+        == str(
+            Path(str(installed["project_home_ledger_root"]))
+            / "ledger/node_hours.jsonl"
+        )
+        and mirror_ack.get("mirror_transport") == "filesystem_copy",
+        "registered execution receipt is not bound to the installed Q043 producer "
+        "and canonical Project Home ledger mirror",
+    )
+    _require(
+        event.get("submission_scope") == "registered_science"
+        and event.get("campaign") == REGISTERED_CAMPAIGN
+        and event.get("test_id") == case["case_id"]
+        and type(event.get("registered_science_authorization_id")) is str
+        and event["registered_science_authorization_id"].startswith(
+            REGISTERED_AUTHORIZATION_PREFIX
+        )
+        and event.get("reconciled") is True
+        and event.get("state") == "COMPLETED"
+        and event.get("scheduler_exit_code") == "0:0"
+        and event.get("reconciled_by_control_plane_version") == producer_version
+        and event.get("reservation_id") == receipt["reservation_id"]
+        and event.get("submission_id") == receipt["submission_id"]
+        and event.get("job_id") == receipt["slurm_job_id"]
+        and event.get("artifact_dir") == str(artifact_dir)
+        and event.get("git_commit") == candidate["git_commit"]
+        and event.get("clean_candidate_manifest_sha256")
+        == candidate["clean_candidate_manifest"]["sha256"]
+        and event.get("executable_sha256") == candidate["executable"]["sha256"]
+        and event.get("manifest_path") == receipt["pre_submit_manifest_path"]
+        and event.get("manifest_sha256") == receipt["pre_submit_manifest_sha256"]
+        and event.get("control_plane_version") == receipt["control_plane_version"]
+        and event.get("registered_science_authorization_id")
+        == receipt["registered_science_authorization_id"],
+        "registered execution receipt differs from canonical reconciliation",
+    )
+    manifest = _trusted_pre_submit_manifest(
+        event, case=case, candidate=candidate, deck=deck, artifact_dir=artifact_dir
+    )
+    producer_rederivation = _trusted_producer_rederivation(
+        producer_version=producer_version,
+        event=event,
+        mirror_ack=mirror_ack,
+        receipt_path=receipt_path,
+        receipt_payload=receipt_payload,
+        terminal_path=terminal_path,
+        terminal_payload=terminal_payload,
+        receipt_mirror_path=receipt_mirror_path,
+        terminal_mirror_path=terminal_mirror_path,
+    )
+    return (
+        {
+            key: event[key]
+            for key in (
+                "sequence_number",
+                "event_sha256",
+                "reservation_id",
+                "submission_id",
+                "job_id",
+                "control_plane_version",
+                "reconciled_by_control_plane_version",
+                "registered_science_authorization_id",
+                "manifest_path",
+                "manifest_sha256",
+                "state",
+                "scheduler_exit_code",
+            )
+        }
+        | {
+            "mirror_ack_sha256": mirror_ack["mirror_ack_sha256"],
+            "mirror_destination": mirror_ack["mirror_destination"],
+            "mirror_transport": mirror_ack["mirror_transport"],
+            "installed_control_plane": installed,
+            "producer_rederivation": producer_rederivation,
+        },
+        manifest,
+    )
+
+
+def _trusted_q043_launch_contract(
+    value: object, *, case: Mapping[str, object]
+) -> tuple[dict[str, object], dict[str, object], dict[str, object]]:
+    contract = _object(
+        value,
+        {"schema_version", "executor", "pre_actions", "actions", "post_actions"},
+        label="trusted pre-submit manifest/launch_contract",
+    )
+    actions = _array(
+        contract["actions"], label="trusted pre-submit manifest/launch_contract/actions"
+    )
+    _require(
+        contract["schema_version"] == 1
+        and contract["executor"] == "trusted_trampoline_athena_argv_v1"
+        and contract["pre_actions"] == []
+        and len(actions) == 1,
+        "trusted Q043 launch contract executor or action count drifted",
+    )
+    action = _object(
+        actions[0],
+        {
+            "action_id",
+            "kind",
+            "resources",
+            "arguments",
+            "stdout_artifact",
+            "stderr_artifact",
+        },
+        label="trusted Q043 launch action",
+    )
+    resources = _object(
+        action["resources"],
+        {"nodes", "tasks", "cpus_per_task", "gpus_per_task", "gpu_bind"},
+        label="trusted Q043 launch resources",
+    )
+    expected_arguments = [
+        {"literal": "-i"},
+        {"snapshot_role": "input-deck"},
+        {"literal": "-d"},
+        {"artifact_directory": "raw"},
+        {"literal": "time/nlim=1"},
+    ]
+    _require(
+        action["kind"] == "athena"
+        and action["arguments"] == expected_arguments
+        and action["stdout_artifact"] == "athena_stdout.txt"
+        and action["stderr_artifact"] == "athena_stderr.txt"
+        and resources["nodes"] == 1
+        and resources["tasks"] == int(case["mpi_ranks"])
+        and type(resources["cpus_per_task"]) is int
+        and resources["cpus_per_task"] > 0
+        and type(resources["gpus_per_task"]) is int
+        and resources["gpus_per_task"] > 0
+        and resources["gpu_bind"] == "closest",
+        "trusted Q043 launch action, MPI resources, or raw destination drifted",
+    )
+    return contract, action, resources
+
+
+def _launch_contract_sha256(value: object) -> str:
+    return hashlib.sha256(
+        json.dumps(
+            value, sort_keys=True, separators=(",", ":"), allow_nan=False
+        ).encode("utf-8")
+    ).hexdigest()
 
 
 def _execution_binding(
@@ -940,105 +1648,40 @@ def _execution_binding(
     case: Mapping[str, object],
     candidate: Mapping[str, object],
     deck: Mapping[str, object],
-    authorized_root: Path,
 ) -> dict[str, object]:
+    authorized_root, _ = _trusted_roots()
     record = _object(
         value,
-        {
-            "case_root",
-            "raw_output_root",
-            "artifact_dir",
-            "launch_contract",
-            "launch_deck",
-            "registered_execution_receipt",
-            "stdout_artifact",
-            "terminal_receipt",
-        },
+        {"artifact_dir", "registered_execution_receipt", "terminal_receipt"},
         label="execution_binding",
-    )
-    case_root = _canonical_below(
-        record["case_root"], authorized_root, label="execution_binding/case_root", directory=True
-    )
-    raw_root = _canonical_below(
-        record["raw_output_root"],
-        authorized_root,
-        label="execution_binding/raw_output_root",
-        directory=True,
     )
     artifact_dir = _canonical_below(
         record["artifact_dir"],
-        authorized_root,
+        authorized_root / "runs",
         label="execution_binding/artifact_dir",
         directory=True,
-    )
-    launch_deck_binding, launch_deck_payload = _verified_binding(
-        record["launch_deck"], root=artifact_dir, label="immutable launch deck"
-    )
-    contract_binding, contract_payload = _verified_binding(
-        record["launch_contract"], root=artifact_dir, label="launch contract"
     )
     receipt_binding, receipt_payload = _verified_binding(
         record["registered_execution_receipt"],
         root=artifact_dir,
         label="registered execution receipt",
-    )
-    stdout_binding, stdout_payload = _verified_binding(
-        record["stdout_artifact"], root=artifact_dir, label="registered stdout"
+        read_only=True,
     )
     terminal_binding, terminal_payload = _verified_binding(
-        record["terminal_receipt"], root=artifact_dir, label="terminal receipt"
+        record["terminal_receipt"],
+        root=artifact_dir,
+        label="terminal receipt",
+        read_only=True,
     )
     _require(
-        launch_deck_binding["path"]
-        == str(artifact_dir / "registration/input_deck.athinput")
-        and contract_binding["path"]
-        == str(artifact_dir / "registration/launch_contract.json")
-        and receipt_binding["path"]
-        == str(artifact_dir / "registration/registered_execution_receipt.json")
-        and stdout_binding["path"] == str(artifact_dir / "stdout/athena_stdout.txt")
-        and terminal_binding["path"] == str(artifact_dir / "terminal/terminal_receipt.json"),
-        "execution_binding: evidence path layout drifted",
-    )
-    _require(
-        launch_deck_binding["sha256"] == deck["sha256"]
-        and launch_deck_binding["byte_count"] == deck["byte_count"]
-        and hashlib.sha256(launch_deck_payload).hexdigest() == deck["sha256"],
-        "execution_binding: immutable launch deck differs from checked-in deck",
-    )
-    contract = _json_payload(contract_payload, label="launch contract")
-    receipt = _json_payload(receipt_payload, label="registered execution receipt")
-    terminal = _json_payload(terminal_payload, label="terminal receipt")
-    submission_id = _text(
-        receipt.get("submission_id"), label="registered execution receipt/submission_id"
-    )
-    _require(
-        _UUID.fullmatch(submission_id) is not None,
-        "registered execution receipt/submission_id: malformed UUID",
-    )
-    expected_case_root = (
-        authorized_root / RUN_NAMESPACE / str(case["case_id"]) / submission_id
-    )
-    _require(
-        case_root == expected_case_root
-        and raw_root == case_root / "raw"
-        and artifact_dir == case_root / "artifacts",
-        "execution_binding: authorized Orion case-root layout drifted",
-    )
-    expected_contract = _launch_contract(
-        case=case,
-        candidate=candidate,
-        deck=deck,
-        launch_deck=launch_deck_binding,
-        case_root=case_root,
-        raw_root=raw_root,
-        artifact_dir=artifact_dir,
-    )
-    _require(
-        _strict_equal(contract, expected_contract),
-        "launch contract: candidate, deck, command, MPI, or authority drifted",
+        receipt_binding["path"]
+        == str(artifact_dir / "analysis" / REGISTERED_EXECUTION_RECEIPT_NAME)
+        and terminal_binding["path"]
+        == str(artifact_dir / "analysis" / "terminal_receipt.json"),
+        "execution_binding: post-reconciliation evidence is outside trusted analysis",
     )
     receipt = _object(
-        receipt,
+        _json_payload(receipt_payload, label="registered execution receipt"),
         {
             "schema_version",
             "record_type",
@@ -1050,6 +1693,11 @@ def _execution_binding(
             "reservation_id",
             "submission_id",
             "reconciliation_event_sha256",
+            "reconciliation_mirror_ack_sha256",
+            "control_plane_version",
+            "project_home_mirrors",
+            "producer",
+            "registered_science_authorization_id",
             "source_commit",
             "source_bundle_sha256",
             "source_archive_sha256",
@@ -1057,19 +1705,80 @@ def _execution_binding(
             "executable_sha256",
             "environment_sha256",
             "deck_sha256",
-            "launch_contract_sha256",
-            "command",
+            "command_evidence",
             "mpi_evidence",
             "slurm_job_id",
             "slurm_terminal_state",
             "slurm_exit_code",
+            "terminal_cycle",
             "raw_output_root",
             "artifact_dir",
-            "stdout_sha256",
+            "artifact_inventory",
             "terminal_receipt_sha256",
+            "pre_submit_manifest_path",
             "pre_submit_manifest_sha256",
+            "raw_inventory",
+            "raw_inventory_sha256",
         },
         label="registered execution receipt",
+    )
+    terminal = _json_payload(terminal_payload, label="terminal receipt")
+    submission_id = _text(
+        receipt["submission_id"], label="registered execution receipt/submission_id"
+    )
+    _require(
+        _UUID.fullmatch(submission_id) is not None
+        and artifact_dir
+        == authorized_root / "runs" / REGISTERED_CAMPAIGN / submission_id,
+        "execution_binding: generic controller run-root layout drifted",
+    )
+    raw_root = _canonical_below(
+        receipt["raw_output_root"],
+        artifact_dir,
+        label="registered execution receipt/raw_output_root",
+        directory=True,
+    )
+    _require(raw_root == artifact_dir / "raw", "Q043 raw output is not beneath run root")
+    artifact_inventory_binding, _ = _verified_binding(
+        receipt["artifact_inventory"],
+        root=artifact_dir,
+        label="trampoline-sealed artifact inventory",
+        read_only=True,
+    )
+    _require(
+        artifact_inventory_binding["path"]
+        == str(artifact_dir / "artifact_inventory.json"),
+        "trampoline-sealed artifact inventory path drifted",
+    )
+    receipt_inventory = _receipt_raw_inventory(receipt["raw_inventory"])
+    receipt_producer = _object(
+        receipt["producer"],
+        {
+            "entrypoint",
+            "entrypoint_sha256",
+            "launch_trampoline_sha256",
+            "control_plane_version",
+        },
+        label="registered execution receipt/producer",
+    )
+    project_home_mirrors = _object(
+        receipt["project_home_mirrors"],
+        {"registered_execution_receipt_path", "terminal_receipt_path"},
+        label="registered execution receipt/project_home_mirrors",
+    )
+    receipt_mirror_binding = _project_home_mirror_binding(
+        receipt_payload,
+        receipt_binding,
+        submission_id=submission_id,
+        filename=REGISTERED_EXECUTION_RECEIPT_NAME,
+        label="canonical Project Home registered-execution receipt mirror",
+    )
+    terminal_mirror_binding = _project_home_mirror_binding(
+        terminal_payload,
+        terminal_binding,
+        submission_id=submission_id,
+        filename="terminal_receipt.json",
+        label="canonical Project Home terminal receipt mirror",
     )
     _require(
         receipt["schema_version"] == SCHEMA_VERSION
@@ -1081,9 +1790,30 @@ def _execution_binding(
         and receipt["case_id"] == case["case_id"]
         and type(receipt["reservation_id"]) is str
         and _UUID.fullmatch(receipt["reservation_id"]) is not None
-        and receipt["submission_id"] == submission_id
         and type(receipt["reconciliation_event_sha256"]) is str
         and _SHA256.fullmatch(receipt["reconciliation_event_sha256"]) is not None
+        and type(receipt["reconciliation_mirror_ack_sha256"]) is str
+        and _SHA256.fullmatch(receipt["reconciliation_mirror_ack_sha256"]) is not None
+        and type(receipt["control_plane_version"]) is str
+        and _SHA256.fullmatch(receipt["control_plane_version"]) is not None
+        and project_home_mirrors["registered_execution_receipt_path"]
+        == receipt_mirror_binding["path"]
+        and project_home_mirrors["terminal_receipt_path"]
+        == terminal_mirror_binding["path"]
+        and receipt_producer["entrypoint"] == Q043_PRODUCER_ENTRYPOINT
+        and all(
+            type(receipt_producer[key]) is str
+            and _SHA256.fullmatch(receipt_producer[key]) is not None
+            for key in (
+                "entrypoint_sha256",
+                "launch_trampoline_sha256",
+                "control_plane_version",
+            )
+        )
+        and type(receipt["registered_science_authorization_id"]) is str
+        and receipt["registered_science_authorization_id"].startswith(
+            REGISTERED_AUTHORIZATION_PREFIX
+        )
         and receipt["source_commit"] == candidate["git_commit"]
         and receipt["source_bundle_sha256"] == candidate["source_bundle_sha256"]
         and receipt["source_archive_sha256"] == candidate["source_archive"]["sha256"]
@@ -1092,23 +1822,79 @@ def _execution_binding(
         and receipt["executable_sha256"] == candidate["executable"]["sha256"]
         and receipt["environment_sha256"] == candidate["environment_profile"]["sha256"]
         and receipt["deck_sha256"] == deck["sha256"]
-        and receipt["launch_contract_sha256"]
-        == hashlib.sha256(contract_payload).hexdigest()
-        and _strict_equal(receipt["command"], expected_contract["command"])
-        and _strict_equal(receipt["mpi_evidence"], expected_contract["mpi_evidence"])
-        and type(receipt["slurm_job_id"]) is str
-        and _JOB_ID.fullmatch(receipt["slurm_job_id"]) is not None
         and receipt["slurm_terminal_state"] == "COMPLETED"
         and receipt["slurm_exit_code"] == "0:0"
+        and receipt["terminal_cycle"] == 1
         and receipt["raw_output_root"] == str(raw_root)
         and receipt["artifact_dir"] == str(artifact_dir)
-        and receipt["stdout_sha256"] == stdout_binding["sha256"]
         and receipt["terminal_receipt_sha256"] == terminal_binding["sha256"]
+        and type(receipt["pre_submit_manifest_path"]) is str
+        and PurePosixPath(receipt["pre_submit_manifest_path"]).is_absolute()
         and type(receipt["pre_submit_manifest_sha256"]) is str
-        and _SHA256.fullmatch(receipt["pre_submit_manifest_sha256"]) is not None,
+        and _SHA256.fullmatch(receipt["pre_submit_manifest_sha256"]) is not None
+        and receipt["raw_inventory"] == receipt_inventory
+        and receipt["raw_inventory_sha256"] == canonical_sha256(receipt_inventory),
         "registered execution receipt immutable cross-link drifted",
     )
-    stdout_terminal = _validate_stdout(stdout_payload, case=case)
+    trusted_reconciliation, trusted_manifest = _trusted_reconciliation(
+        receipt,
+        case=case,
+        candidate=candidate,
+        deck=deck,
+        artifact_dir=artifact_dir,
+        receipt_path=Path(str(receipt_binding["path"])),
+        receipt_payload=receipt_payload,
+        terminal_path=Path(str(terminal_binding["path"])),
+        terminal_payload=terminal_payload,
+        receipt_mirror_path=Path(str(receipt_mirror_binding["path"])),
+        terminal_mirror_path=Path(str(terminal_mirror_binding["path"])),
+    )
+    contract, action, resources = _trusted_q043_launch_contract(
+        trusted_manifest["launch_contract"], case=case
+    )
+    command_evidence = _object(
+        receipt["command_evidence"],
+        {
+            "source",
+            "executor",
+            "action",
+            "launch_contract_sha256",
+            "launch_trampoline_entrypoint",
+            "launch_trampoline_sha256",
+        },
+        label="registered execution receipt/command_evidence",
+    )
+    mpi_evidence = _object(
+        receipt["mpi_evidence"],
+        {
+            "source",
+            "nodes",
+            "tasks",
+            "cpus_per_task",
+            "gpus_per_task",
+            "gpu_bind",
+        },
+        label="registered execution receipt/mpi_evidence",
+    )
+    _require(
+        command_evidence
+        == {
+            "source": "trusted_pre_submit_manifest_and_installed_trampoline",
+            "executor": contract["executor"],
+            "action": action,
+            "launch_contract_sha256": _launch_contract_sha256(contract),
+            "launch_trampoline_entrypoint": "launch_trampoline.py",
+            "launch_trampoline_sha256": receipt_producer[
+                "launch_trampoline_sha256"
+            ],
+        }
+        and mpi_evidence
+        == {
+            "source": "trusted_pre_submit_manifest_launch_contract",
+            **resources,
+        },
+        "registered execution command or MPI evidence differs from trusted controller",
+    )
     expected_terminal = {
         "schema_version": SCHEMA_VERSION,
         "record_type": TERMINAL_RECEIPT_RECORD_TYPE,
@@ -1118,26 +1904,35 @@ def _execution_binding(
         "slurm_job_id": receipt["slurm_job_id"],
         "slurm_terminal_state": "COMPLETED",
         "slurm_exit_code": "0:0",
-        "termination_reason": "cycle_limit",
         "terminal_cycle": 1,
-        "observed_world_size": int(case["mpi_ranks"]),
-        "stdout_sha256": stdout_binding["sha256"],
+        "registered_mpi_tasks": int(case["mpi_ranks"]),
+        "artifact_inventory_sha256": artifact_inventory_binding["sha256"],
+        "raw_inventory_sha256": receipt["raw_inventory_sha256"],
+        "reconciliation_event_sha256": receipt["reconciliation_event_sha256"],
+        "reconciliation_mirror_ack_sha256": receipt[
+            "reconciliation_mirror_ack_sha256"
+        ],
+        "project_home_mirror_path": terminal_mirror_binding["path"],
+        "producer": receipt_producer,
     }
     _require(
         _strict_equal(terminal, expected_terminal),
-        "terminal receipt: completion evidence drifted",
+        "terminal receipt: trusted controller completion evidence drifted",
     )
     return {
-        "case_root": str(case_root),
         "raw_output_root": str(raw_root),
         "artifact_dir": str(artifact_dir),
-        "launch_deck": launch_deck_binding,
-        "launch_contract": contract_binding,
+        "artifact_inventory": artifact_inventory_binding,
         "registered_execution_receipt": receipt_binding,
-        "stdout_artifact": stdout_binding,
+        "registered_execution_receipt_mirror": receipt_mirror_binding,
         "terminal_receipt": terminal_binding,
-        "command": expected_contract["command"],
-        "mpi_evidence": expected_contract["mpi_evidence"],
+        "terminal_receipt_mirror": terminal_mirror_binding,
+        "trusted_reconciliation": trusted_reconciliation,
+        "trusted_pre_submit_manifest": trusted_manifest,
+        "receipt_raw_inventory": receipt_inventory,
+        "receipt_raw_inventory_sha256": receipt["raw_inventory_sha256"],
+        "command_evidence": command_evidence,
+        "mpi_evidence": mpi_evidence,
         "registered_execution_identity": {
             key: receipt[key]
             for key in (
@@ -1146,9 +1941,10 @@ def _execution_binding(
                 "reconciliation_event_sha256",
                 "slurm_job_id",
                 "pre_submit_manifest_sha256",
+                "control_plane_version",
+                "registered_science_authorization_id",
             )
         },
-        "stdout_terminal_success": stdout_terminal,
     }
 
 
@@ -1269,6 +2065,11 @@ def _validate_raw_dataset(
     _normalized_runtime_parameters(
         dataset.input_parameters, case=case, field=field, cycle=cycle
     )
+    if cycle == 0:
+        _require(
+            all((block.fields[field] == 0.0).all() for block in dataset.blocks),
+            f"{field}/cycle0: deposited moment field must be exactly finite zero",
+        )
 
 
 def _raw_relative_path(
@@ -1337,28 +2138,6 @@ def _raw_artifact(
         },
         absolute,
     )
-
-
-def _raw_filesystem_inventory(raw_root: Path) -> list[str]:
-    files = []
-    for path in raw_root.rglob("*"):
-        relative = path.relative_to(raw_root).as_posix()
-        try:
-            metadata = path.lstat()
-        except OSError as error:
-            raise AdmissionError("raw output tree changed during inventory") from error
-        _require(
-            not stat.S_ISLNK(metadata.st_mode),
-            f"raw output tree contains symlink: {relative}",
-        )
-        if stat.S_ISDIR(metadata.st_mode):
-            continue
-        _require(
-            stat.S_ISREG(metadata.st_mode),
-            f"raw output tree contains non-regular artifact: {relative}",
-        )
-        files.append(_relative_path(relative, label="raw output tree member"))
-    return sorted(files)
 
 
 def _authorization_boundary() -> dict[str, object]:
@@ -1520,26 +2299,16 @@ def build_case_admission(
     candidate_binding: Mapping[str, object],
     execution_binding: Mapping[str, object],
     raw_artifacts: Sequence[Mapping[str, object]],
-    source_root: str | Path = REPO_ROOT,
-    authorized_orion_root: str | Path = AUTHORIZED_ORION_ROOT,
 ) -> dict[str, object]:
     """Build one filesystem-backed non-authorizing registered Q043 admission."""
-    source = _canonical_root(source_root, label="source_root")
-    authorized = _canonical_root(authorized_orion_root, label="authorized_orion_root")
     case = _case_contract(case_id)
-    deck = _deck_binding(case, source)
-    candidate = _candidate_binding(
-        candidate_binding,
-        authorized,
-        source_root=source,
-        required_paths=required_candidate_source_paths(),
-    )
+    deck = _deck_binding(case, REPO_ROOT)
+    candidate = _candidate_binding(candidate_binding)
     execution = _execution_binding(
         execution_binding,
         case=case,
         candidate=candidate,
         deck=deck,
-        authorized_root=authorized,
     )
     _require(type(raw_artifacts) is list, "raw_artifacts: expected array")
     verified = [
@@ -1580,10 +2349,18 @@ def build_case_admission(
         observed_inventory == expected_inventory,
         "raw_artifacts: expected exactly one cycle-zero and cycle-one field/rank artifact",
     )
+    receipt_inventory = [
+        {
+            key: item[key]
+            for key in ("path", "sha256", "byte_count", "case_id", "field", "cycle", "rank")
+        }
+        for item in artifacts
+    ]
     _require(
-        _raw_filesystem_inventory(Path(execution["raw_output_root"]))
-        == sorted(item["path"] for item in artifacts),
-        "raw output filesystem inventory differs from the exact declared inventory",
+        receipt_inventory == execution["receipt_raw_inventory"]
+        and canonical_sha256(receipt_inventory)
+        == execution["receipt_raw_inventory_sha256"],
+        "raw artifacts differ from the installed-reconciliation receipt inventory",
     )
     cycle_one_paths = {
         field: tuple(
@@ -1620,7 +2397,12 @@ def build_case_admission(
     )
     hardened_result = {
         "registered_execution_raw_oracle_check_pass": True,
+        "canonical_mirrored_ledger_reconciliation_check_pass": True,
+        "trusted_pre_submit_manifest_snapshot_check_pass": True,
+        "trusted_clean_candidate_build_revalidation_check_pass": True,
+        "installed_reconciliation_receipt_raw_inventory_seal_check_pass": True,
         "strict_cycle_zero_and_cycle_one_runtime_metadata_check_pass": True,
+        "cycle_zero_exact_finite_zero_moments_check_pass": True,
         "exact_output_inventory_check_pass": True,
         "source_local_oracle_result": source_local_result,
         "source_local_result_sufficient_for_downstream_qualification": False,
@@ -1665,16 +2447,10 @@ def _candidate_input(value: Mapping[str, object]) -> dict[str, object]:
 
 
 def _execution_input(value: Mapping[str, object]) -> dict[str, object]:
-    return {
-        key: value[key]
-        for key in ("case_root", "raw_output_root", "artifact_dir")
-    } | {
+    return {"artifact_dir": value["artifact_dir"]} | {
         key: _public_binding(value[key])
         for key in (
-            "launch_deck",
-            "launch_contract",
             "registered_execution_receipt",
-            "stdout_artifact",
             "terminal_receipt",
         )
     }
@@ -1689,9 +2465,6 @@ def _raw_input(value: Mapping[str, object]) -> dict[str, object]:
 
 def validate_case_admission(
     value: object,
-    *,
-    source_root: str | Path = REPO_ROOT,
-    authorized_orion_root: str | Path = AUTHORIZED_ORION_ROOT,
 ) -> dict[str, object]:
     """Rebuild and exactly validate one registered Q043 case admission."""
     record = _object(
@@ -1724,8 +2497,6 @@ def validate_case_admission(
         candidate_binding=_candidate_input(record["candidate_binding"]),
         execution_binding=_execution_input(record["execution_binding"]),
         raw_artifacts=[_raw_input(item) for item in record["raw_artifacts"]],
-        source_root=source_root,
-        authorized_orion_root=authorized_orion_root,
     )
     _require(
         _strict_equal(record, rebuilt),
@@ -1835,17 +2606,11 @@ def multidirectional_mpi_coverage_report(
 def build_matrix_qualification(
     *,
     case_admissions: Sequence[Mapping[str, object]],
-    source_root: str | Path = REPO_ROOT,
-    authorized_orion_root: str | Path = AUTHORIZED_ORION_ROOT,
 ) -> dict[str, object]:
     """Build the complete non-authorizing registered Q043 matrix prerequisite."""
     _require(type(case_admissions) is list, "case_admissions: expected array")
     admissions = [
-        validate_case_admission(
-            item,
-            source_root=source_root,
-            authorized_orion_root=authorized_orion_root,
-        )
+        validate_case_admission(item)
         for item in case_admissions
     ]
     expected_ids = list(_case_map())
@@ -1877,11 +2642,12 @@ def build_matrix_qualification(
         admission["execution_binding"][key]
         for admission in admissions
         for key in (
-            "launch_deck",
-            "launch_contract",
+            "artifact_inventory",
             "registered_execution_receipt",
-            "stdout_artifact",
+            "registered_execution_receipt_mirror",
             "terminal_receipt",
+            "terminal_receipt_mirror",
+            "trusted_pre_submit_manifest",
         )
     ]
     execution_paths = [item["path"] for item in execution_artifacts]
@@ -1974,9 +2740,6 @@ def build_matrix_qualification(
 
 def validate_matrix_qualification(
     value: object,
-    *,
-    source_root: str | Path = REPO_ROOT,
-    authorized_orion_root: str | Path = AUTHORIZED_ORION_ROOT,
 ) -> dict[str, object]:
     """Rebuild and exactly validate a complete registered Q043 matrix record."""
     _require(
@@ -1985,8 +2748,6 @@ def validate_matrix_qualification(
     )
     rebuilt = build_matrix_qualification(
         case_admissions=value.get("case_admissions"),
-        source_root=source_root,
-        authorized_orion_root=authorized_orion_root,
     )
     _require(
         _strict_equal(value, rebuilt),
@@ -1997,16 +2758,9 @@ def validate_matrix_qualification(
 
 def validate_downstream_q023_q019_prerequisite(
     value: object,
-    *,
-    source_root: str | Path = REPO_ROOT,
-    authorized_orion_root: str | Path = AUTHORIZED_ORION_ROOT,
 ) -> dict[str, object]:
     """Reject source-local evidence and accept only an exact registered matrix."""
-    record = validate_matrix_qualification(
-        value,
-        source_root=source_root,
-        authorized_orion_root=authorized_orion_root,
-    )
+    record = validate_matrix_qualification(value)
     _require(
         record["registered_execution_qualification_check_pass"] is True
         and record["source_local_matrix_result_sufficient_for_downstream_qualification"]
