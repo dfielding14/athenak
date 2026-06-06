@@ -213,6 +213,174 @@ F116_CANONICAL_SHA256 = {
     "plasma_review": "bc4da6897263843f5d233f996539ff047d6ef465b775a9b5cdc8f864de96a6b8",
     "publication_audit": "3a6168e3039c02656b38ebdfcadffc07a2f151b1a474084307a80a341ba83096",
 }
+F115_CATALOG_README_SHA256 = (
+    "71bdf7ae401a306f8bd5f67e39eab5f8ed598665e421d8c1ee416228a43ae11c"
+)
+F115_CATALOG_SHA256SUMS_SHA256 = (
+    "89abcca70d61927a689eb2b62fdaea991257d8d335184059c2792731c13f5e21"
+)
+F116_CATALOG_README_SHA256 = (
+    "7ea9847db38576a132381d56b7a7defdb142202ab14126547e680b7dabfea297"
+)
+F116_CATALOG_SHA256SUMS_SHA256 = (
+    "a4732ea46003dc39d83591beaf93f5fe475dddf054c2eb57f76bda108fa80854"
+)
+F115_DECLARATION_CONTRACT_SHA256 = {
+    "predecessor.f113_controller_transition": (
+        "f7a15082ca357e18af7dc36ded7b9a695cf262e4187064f7bd9e5bbac5b6c6c8"
+    ),
+    "predecessor.f114_clean_partial_recost": (
+        "c0ec92a8ae4d08e8f0db2b1c8a9897bf206f3e2987666aa1f3d86a2db88c5e3c"
+    ),
+    "predecessor.f114_publication_audit": (
+        "5dd53ca90705feccd7a0f88347e3ea7fd03543e45c9e016de66e50c4c3eee817"
+    ),
+    "predecessor.reviewed_intermediate_recovery_bundle": (
+        "d0757fed57e557219ee7cdb5f9aa619e1bc48c375be00ce32fea613f693b27f5"
+    ),
+    "incident.corrupt_live_bundle": (
+        "8c1ca98e17dc3a27860048ba8931ab7f257fa1c6f844bbca05d5a829e226269c"
+    ),
+    "incident.evidence": (
+        "df29873d4b2e7da48be8af88aa794bcea63cb5c74041d9a1950da72e16e6434f"
+    ),
+    "cancelled.authorization": (
+        "ee88a2f7943d01fdc0bb9178a19d576515937d249fbe38199c997c4de2c839ae"
+    ),
+    "cancelled.live_cancelled_manifest": (
+        "8203c2a7131e09deb59b24f66550eb4e871e7e2307af7ca699cdfc0a49435181"
+    ),
+    "cancelled.post_cancel_sacct": (
+        "241da5c72e1bc48b3c6def5210670dcd07a7a933612c99ed8368932965cc5339"
+    ),
+    "cancelled.post_cancel_squeue": (
+        "2898ef15f4a2e38a1f545182a09cabe733c7a4246b393b6ff43cae46c1e63377"
+    ),
+    "cancelled.pre_cancel_hold": (
+        "26ca82fdfc5ee9b23b33d96754465e76e623b4d2e4e7b5c44294029c2f7b45ce"
+    ),
+    "cancelled.publication_audit": (
+        "0faecb1f9896457315ee37db143f3a9635c20f69b7bdefb7749d533c9a2cae5f"
+    ),
+    "cancelled.scheduler_batch_script": (
+        "2a769a41049bf3d957b70459ea4af4812166505b3479bb784ea3aac23aaf9708"
+    ),
+    "cancelled.submitted_manifest": (
+        "ff9abdd5064caf37cc74419c89124b19a86c74b7b623aad5090b4e7e8df71c48"
+    ),
+    "implementation.cpu_regression_suite": (
+        "907109ffcd3c0997f9b42e6df1aa25cde87b8a052b6eace619f54a47e82a05d2"
+    ),
+    "implementation.stage_i_helper": (
+        "ef4d9f33c698cb955de52af7dec992fd72f9e51bcaa735a1bb744110da8bbb24"
+    ),
+    "implementation.catalog.readme": (
+        "fc901c36e6a42ea62d9c2e656a9b150a4d5de820260dd21ed57d2a26e9071056"
+    ),
+    "implementation.catalog.sha256sums": (
+        "24ffb0eaaf56e6252ddeb68203c5a7838ac0bd3632c8415fffdb38c4a0ff467b"
+    ),
+    "snapshot.node_hours_ledger": (
+        "5ec254c5f25cb096ddb5164e5607c0d18ac4c1b997e6e4caf765671c9e971877"
+    ),
+    "snapshot.qualification_approval": (
+        "fbf0c8fda250837dd2aea8ccb68b64e423a4436a8260d4a51327e309d91f6e5d"
+    ),
+    "snapshot.reservations": (
+        "4c9c3ca2a0e2c339f489c8e1a256258bd0a88da63b8c0a8ae03aa8c377aee23d"
+    ),
+    "audit.catalog.readme": (
+        "a286ce1aa0413153a9545b3d6e32b5f83beeaf4fa0fbf7029cb834925cabc303"
+    ),
+    "audit.catalog.sha256sums": (
+        "d5fe883a0a5261b3e2f347d93a63eae7b5ae4712612ab2ff6223b1e4e20b6127"
+    ),
+}
+F115_CONTRACT_DYNAMIC_PATHS = {
+    "evidence": (
+        "implementation.commit",
+        "implementation.parent_commit",
+        "implementation.tree",
+        "implementation.subject",
+        "implementation.source_bundle",
+        "authorization.sole_next_segment_profile.source_bundle",
+        "authorization.sole_next_segment_profile.source_bundle_sha256",
+        "authorization.supersedes_f114_profile_only_where_explicitly_listed.source_bundle.to",
+        "authorization.supersedes_f114_profile_only_where_explicitly_listed.source_bundle_sha256.to",
+    ),
+    "provenance_review": (
+        "reviewed_candidate.sha256",
+        "published_f115.path",
+        "published_f115.sha256",
+    ),
+    "plasma_review": (
+        "reviewed_candidate.sha256",
+        "published_f115.path",
+        "published_f115.sha256",
+        "verified.source_bundle",
+    ),
+    "publication_audit": (
+        "artifact.path",
+        "artifact.sha256",
+        "independent_reviews.reviews_bind_exact_published_f115_sha256",
+        "independent_reviews.provenance_security.path",
+        "independent_reviews.provenance_security.sha256",
+        "independent_reviews.plasma_scientific_continuation.path",
+        "independent_reviews.plasma_scientific_continuation.sha256",
+        "authority_and_enforcement.f115_authority.path",
+        "authority_and_enforcement.f115_authority.sha256",
+        "authority_and_enforcement.sole_next_segment_profile.source_bundle",
+        "authority_and_enforcement.sole_next_segment_profile.source_bundle_sha256",
+        "source_archive_catalog.readme.path",
+        "source_archive_catalog.readme.sha256",
+        "source_archive_catalog.sha256sums.path",
+        "source_archive_catalog.sha256sums.sha256",
+        "reproducible_implementation_authority.authoritative_source_bundle",
+    ),
+}
+F115_CONTRACT_SHA256 = {
+    "evidence": "5b162918f4e9d0e0fec7ad4b25e10a3bef55c721ff7087b5d246b3c11ccbdcc0",
+    "provenance_review": "445ff05d812e39c619058b1c607913d7a4de477f0b5df3f19b62fd7a92ce9c64",
+    "plasma_review": "2422ab7efbd414fac5d5380dd73602e812427c4dfb983b8acbda660e5d161d7f",
+    "publication_audit": "3ed52b1fc11091db17fc696245ee688776032b8e16e127a1153ddd8d1da6c9ac",
+}
+F116_CONTRACT_DYNAMIC_PATHS = {
+    "evidence": (
+        "predecessor_authorities",
+        "implementation",
+        "source_archive_catalog.before.readme_sha256",
+        "source_archive_catalog.before.sha256sums_sha256",
+        "source_archive_catalog.after.readme_sha256",
+        "source_archive_catalog.after.sha256sums_sha256",
+        "source_archive_catalog.after.sole_current_source_bundle",
+    ),
+    "provenance_review": (
+        "reviewed_candidate.sha256",
+        "published_f116.path",
+        "published_f116.sha256",
+        "verified.final_bundle_sha256",
+        "verified.final_head",
+    ),
+    "plasma_review": (
+        "reviewed_candidate.sha256",
+        "published_f116.path",
+        "published_f116.sha256",
+        "verified.final_bundle_sha256",
+        "verified.final_head",
+    ),
+    "publication_audit": (
+        "artifact",
+        "independent_reviews",
+        "historical_f115_authority",
+        "source_archive_catalog",
+    ),
+}
+F116_CONTRACT_SHA256 = {
+    "evidence": "26d7ced154f7606a6fe079bd764447c4bded265dd2764412562ddbe94c3b451a",
+    "provenance_review": "429d8c54beed52c72c5948bd99783b4b631353211525135f2307465af0c5fdc5",
+    "plasma_review": "a6b144bbd81c721c99474768150a5855471422e90ffc7b6e92388831856f324e",
+    "publication_audit": "9fbe87695b6838180d5443a7f92c3249cc053602872cbb180f13e857712b60a1",
+}
 F118_RELATIVE = Path(
     "accounting/"
     "mks24_stage_i_E03_forcing_policy_F118_current_source_authority_supersession_evidence.json"
@@ -2936,6 +3104,27 @@ def absolute_path(value: Path) -> Path:
     return Path(os.path.abspath(os.path.expanduser(str(value))))
 
 
+def is_production_root(root: Path) -> bool:
+    """Return whether a path identifies the canonical Stage I root."""
+
+    requested = absolute_path(root)
+    canonical = absolute_path(DEFAULT_ROOT)
+    try:
+        requested_resolved = requested.resolve(strict=True)
+        canonical_resolved = canonical.resolve(strict=True)
+        requested_stat = requested.stat()
+        canonical_stat = canonical.stat()
+    except OSError as error:
+        if requested == canonical:
+            raise ValueError(
+                f"cannot authenticate canonical Stage I root identity: {canonical}"
+            ) from error
+        return False
+    return requested_resolved == canonical_resolved or os.path.samestat(
+        requested_stat, canonical_stat
+    )
+
+
 def require_offline_path(path: Path, label: str) -> Path:
     """Require offline fixture paths beneath an explicit local prefix."""
 
@@ -3037,11 +3226,9 @@ def require_root(root: Path, allow_local_root: bool) -> tuple[Path, bool]:
 
     requested = absolute_path(root)
     canonical = absolute_path(DEFAULT_ROOT)
-    if requested == canonical:
+    if is_production_root(requested):
         if allow_local_root:
             raise ValueError("--allow-local-root may not relax the canonical root")
-        if root.expanduser().resolve() != canonical:
-            raise ValueError(f"canonical Stage I root resolves unexpectedly: {root}")
         return canonical, False
     if not allow_local_root:
         raise ValueError(
@@ -4013,6 +4200,42 @@ def git_revision_subject(repository: Path, revision: str, label: str) -> str:
     return require_nonempty_string(subject, f"{label} subject")
 
 
+def git_revision_object(repository: Path, revision: str, suffix: str, label: str) -> str:
+    """Resolve one exact retained Git object related to a commit."""
+
+    completed = git_run(
+        repository,
+        ["rev-parse", "--verify", f"{revision}{suffix}"],
+        capture_output=True,
+    )
+    if completed.returncode:
+        raise ValueError(f"cannot inspect {label}")
+    try:
+        resolved = completed.stdout.decode("ascii").strip()
+    except UnicodeDecodeError as error:
+        raise ValueError(f"{label} is not ASCII") from error
+    return require_git_revision(resolved, label)
+
+
+def git_revision_parent(repository: Path, revision: str, label: str) -> str:
+    """Return the sole parent, or the deterministic zero sentinel for a root commit."""
+
+    completed = git_run(
+        repository,
+        ["rev-list", "--parents", "-n", "1", revision],
+        capture_output=True,
+    )
+    if completed.returncode:
+        raise ValueError(f"cannot inspect {label}")
+    try:
+        revisions = completed.stdout.decode("ascii").strip().split()
+    except UnicodeDecodeError as error:
+        raise ValueError(f"{label} is not ASCII") from error
+    if not revisions or revisions[0] != revision or len(revisions) > 2:
+        raise ValueError(f"{label} is not a sole-parent commit")
+    return "0" * 40 if len(revisions) == 1 else require_git_revision(revisions[1], label)
+
+
 def require_git_revision(value: object, label: str) -> str:
     """Require one lowercase full Git revision."""
 
@@ -4356,6 +4579,84 @@ def canonical_json_object(payload: bytes, label: str) -> dict[str, object]:
     return value
 
 
+def historical_contract_sha256(
+    value: dict[str, object], dynamic_paths: tuple[str, ...]
+) -> str:
+    """Hash an immutable historical contract after authenticated-field projection."""
+
+    projected = json.loads(json.dumps(value))
+    for dotted_path in dynamic_paths:
+        retained: object = projected
+        parts = dotted_path.split(".")
+        for part in parts[:-1]:
+            if not isinstance(retained, dict) or part not in retained:
+                raise ValueError(f"historical contract lacks dynamic path {dotted_path}")
+            retained = retained[part]
+        if not isinstance(retained, dict) or parts[-1] not in retained:
+            raise ValueError(f"historical contract lacks dynamic path {dotted_path}")
+        retained[parts[-1]] = "<authenticated-dynamic>"
+    return sha256_bytes((json.dumps(projected, indent=2, sort_keys=True) + "\n").encode())
+
+
+def validate_historical_contract(
+    value: dict[str, object],
+    kind: str,
+    dynamic_paths: dict[str, tuple[str, ...]],
+    expected_digests: dict[str, str],
+    label: str,
+) -> None:
+    """Require every non-authenticated historical field to match canonical authority."""
+
+    if (
+        kind not in dynamic_paths
+        or kind not in expected_digests
+        or historical_contract_sha256(value, dynamic_paths[kind])
+        != expected_digests[kind]
+    ):
+        raise ValueError(f"{label} differs from the exact historical contract")
+
+
+def historical_f115_declaration_contract_sha256(
+    evidence: dict[str, object], audit: dict[str, object]
+) -> dict[str, str]:
+    """Return exact digests for every immutable F115 historical declaration."""
+
+    declarations = {
+        **{
+            f"predecessor.{key}": value
+            for key, value in evidence["predecessors"].items()
+        },
+        "incident.corrupt_live_bundle": evidence["incident"]["corrupt_live_bundle"],
+        "incident.evidence": evidence["incident"]["evidence"],
+        **{
+            f"cancelled.{key}": value
+            for key, value in evidence["cancelled_submission"]["evidence"].items()
+        },
+        "implementation.cpu_regression_suite": evidence["implementation"][
+            "cpu_regression_suite"
+        ],
+        "implementation.stage_i_helper": evidence["implementation"]["stage_i_helper"],
+        "implementation.catalog.readme": evidence["implementation"][
+            "source_archive_catalog"
+        ]["readme"],
+        "implementation.catalog.sha256sums": evidence["implementation"][
+            "source_archive_catalog"
+        ]["sha256sums"],
+        **{
+            f"snapshot.{key}": audit["exact_state_snapshot_before_prepare"][key]
+            for key in ("node_hours_ledger", "qualification_approval", "reservations")
+        },
+        "audit.catalog.readme": audit["source_archive_catalog"]["readme"],
+        "audit.catalog.sha256sums": audit["source_archive_catalog"]["sha256sums"],
+    }
+    return {
+        key: sha256_bytes(
+            (json.dumps(value, indent=2, sort_keys=True) + "\n").encode()
+        )
+        for key, value in declarations.items()
+    }
+
+
 def exact_publication_binding(
     value: object,
     path: Path,
@@ -4396,7 +4697,7 @@ def read_source_authority_record_set(
         )
         if binding["path"] != relative.as_posix():
             raise ValueError(f"{label} {key} path differs")
-        if root == DEFAULT_ROOT and binding["sha256"] != canonical_digests[key]:
+        if is_production_root(root) and binding["sha256"] != canonical_digests[key]:
             raise ValueError(f"{label} {key} canonical digest differs")
         path, payload = read_confined_file_sha256(
             root,
@@ -4426,15 +4727,22 @@ def expected_historical_f115_sole_profile(
 
 
 def validate_f115_declared_binding(
-    value: object, label: str, *, mode: str
+    value: object, label: str, *, mode: str, contract_key: str
 ) -> dict[str, object]:
-    """Require one exact single-link F115 declaration."""
+    """Require one exact canonical single-link F115 historical declaration."""
 
     retained = require_exact_keys(value, {"path", "sha256", "mode", "links"}, label)
     require_nonempty_string(retained["path"], f"{label} path")
     require_sha256(retained["sha256"], f"{label} SHA-256")
-    if retained["mode"] != mode or retained["links"] != 1:
-        raise ValueError(f"{label} mode or links differ")
+    observed = sha256_bytes(
+        (json.dumps(retained, indent=2, sort_keys=True) + "\n").encode()
+    )
+    if (
+        retained["mode"] != mode
+        or retained["links"] != 1
+        or F115_DECLARATION_CONTRACT_SHA256.get(contract_key) != observed
+    ):
+        raise ValueError(f"{label} differs from the exact historical declaration")
     return retained
 
 
@@ -4592,7 +4900,6 @@ def validate_historical_f116_catalog_transition(
     root: Path,
     readme: bytes,
     sums: bytes,
-    historical_f115: dict[str, object],
     bridge: dict[str, object],
     current: dict[str, object],
 ) -> None:
@@ -4602,11 +4909,12 @@ def validate_historical_f116_catalog_transition(
     block = historical_f116_catalog_readme_block(bridge, current)
     if readme.count(marker) != 1 or readme.count(block) != 1:
         raise ValueError("schema-2 historical F116 README is not the exact F115 append")
+    if sha256_bytes(readme) != F116_CATALOG_README_SHA256:
+        raise ValueError("schema-2 historical F116 README differs from canonical bytes")
     predecessor_readme = readme.replace(marker + block, marker, 1)
-    f115_catalog = historical_f115["catalog_before_f116"]
     if (
         predecessor_readme == readme
-        or sha256_bytes(predecessor_readme) != f115_catalog["readme_sha256"]
+        or sha256_bytes(predecessor_readme) != F115_CATALOG_README_SHA256
     ):
         raise ValueError("schema-2 historical F116 README does not derive exactly from F115")
 
@@ -4618,10 +4926,10 @@ def validate_historical_f116_catalog_transition(
     ).encode()
     if not sums.endswith(suffix):
         raise ValueError("schema-2 historical F116 SHA256SUMS is not the exact F115 append")
+    if sha256_bytes(sums) != F116_CATALOG_SHA256SUMS_SHA256:
+        raise ValueError("schema-2 historical F116 SHA256SUMS differs from canonical bytes")
     predecessor_sums = sums[: -len(suffix)]
-    if (
-        sha256_bytes(predecessor_sums) != f115_catalog["sha256sums_sha256"]
-    ):
+    if sha256_bytes(predecessor_sums) != F115_CATALOG_SHA256SUMS_SHA256:
         raise ValueError("schema-2 historical F116 SHA256SUMS does not derive exactly from F115")
     predecessor_entries = parse_source_archive_sha256sums(
         predecessor_sums, "schema-2 historical F115 predecessor SHA256SUMS"
@@ -4782,17 +5090,22 @@ def validate_historical_f115_authority(
         or require_git_revision(
             implementation["parent_commit"], "schema-2 historical F115 parent commit"
         )
-        == head
+        != git_revision_parent(repository, head, "schema-2 historical F115 parent commit")
         or require_git_revision(implementation["tree"], "schema-2 historical F115 tree")
-        == head
+        != git_revision_object(
+            repository, head, "^{tree}", "schema-2 historical F115 tree"
+        )
     ):
-        raise ValueError("schema-2 historical F115 implementation subject differs")
+        raise ValueError("schema-2 historical F115 implementation Git identity differs")
     for key, expected_suffix in (
         ("stage_i_helper", STAGE_I_RELATIVE.as_posix()),
         ("cpu_regression_suite", "tst/test_suite/cgl/test_cgl_landau_fluid_cpu.py"),
     ):
         binding = validate_f115_declared_binding(
-            implementation[key], f"schema-2 historical F115 {key}", mode="0644"
+            implementation[key],
+            f"schema-2 historical F115 {key}",
+            mode="0644",
+            contract_key=f"implementation.{key}",
         )
         if not str(binding["path"]).endswith(expected_suffix):
             raise ValueError(f"schema-2 historical F115 {key} path differs")
@@ -4808,10 +5121,16 @@ def validate_historical_f115_authority(
         "schema-2 historical F115 source-archive catalog",
     )
     readme_binding = validate_f115_declared_binding(
-        catalog["readme"], "schema-2 historical F115 catalog README", mode="0644"
+        catalog["readme"],
+        "schema-2 historical F115 catalog README",
+        mode="0644",
+        contract_key="implementation.catalog.readme",
     )
     sums_binding = validate_f115_declared_binding(
-        catalog["sha256sums"], "schema-2 historical F115 catalog SHA256SUMS", mode="0644"
+        catalog["sha256sums"],
+        "schema-2 historical F115 catalog SHA256SUMS",
+        mode="0644",
+        contract_key="implementation.catalog.sha256sums",
     )
     if (
         catalog["b0d3_bundle_retained"] is not True
@@ -4819,6 +5138,8 @@ def validate_historical_f115_authority(
         or catalog["new_bundle_present_exactly_once"] is not True
         or readme_binding["path"] != "source-archives/README.md"
         or sums_binding["path"] != "source-archives/SHA256SUMS"
+        or readme_binding["sha256"] != F115_CATALOG_README_SHA256
+        or sums_binding["sha256"] != F115_CATALOG_SHA256SUMS_SHA256
     ):
         raise ValueError("schema-2 historical F115 source-archive catalog differs")
 
@@ -4889,7 +5210,10 @@ def validate_historical_f115_authority(
     )
     for key, value in predecessors.items():
         validate_f115_declared_binding(
-            value, f"schema-2 historical F115 predecessor {key}", mode="0644"
+            value,
+            f"schema-2 historical F115 predecessor {key}",
+            mode="0644",
+            contract_key=f"predecessor.{key}",
         )
     incident = require_exact_keys(
         evidence["incident"],
@@ -4906,9 +5230,13 @@ def validate_historical_f115_authority(
         incident["corrupt_live_bundle"],
         "schema-2 historical F115 corrupt bundle",
         mode="0644",
+        contract_key="incident.corrupt_live_bundle",
     )
     validate_f115_declared_binding(
-        incident["evidence"], "schema-2 historical F115 incident evidence", mode="0444"
+        incident["evidence"],
+        "schema-2 historical F115 incident evidence",
+        mode="0444",
+        contract_key="incident.evidence",
     )
     if (
         require_sha256(incident["expected_sha256"], "schema-2 historical F115 expected SHA-256")
@@ -4953,6 +5281,7 @@ def validate_historical_f115_authority(
             value,
             f"schema-2 historical F115 cancellation evidence {key}",
             mode="0644" if key == "live_cancelled_manifest" else "0444",
+            contract_key=f"cancelled.{key}",
         )
     if (
         cancelled["allocated_nodes"] != 0
@@ -5121,12 +5450,16 @@ def validate_historical_f115_authority(
         "schema-2 historical F115 audit source-archive catalog",
     )
     audit_readme = validate_f115_declared_binding(
-        audit_catalog["readme"], "schema-2 historical F115 audit catalog README", mode="0644"
+        audit_catalog["readme"],
+        "schema-2 historical F115 audit catalog README",
+        mode="0644",
+        contract_key="audit.catalog.readme",
     )
     audit_sums = validate_f115_declared_binding(
         audit_catalog["sha256sums"],
         "schema-2 historical F115 audit catalog SHA256SUMS",
         mode="0644",
+        contract_key="audit.catalog.sha256sums",
     )
     if (
         audit_catalog["corrupt_c7_absent_from_active_checksum_ledger"] is not True
@@ -5210,7 +5543,10 @@ def validate_historical_f115_authority(
     )
     for key in ("node_hours_ledger", "qualification_approval", "reservations"):
         validate_f115_declared_binding(
-            snapshot[key], f"schema-2 historical F115 snapshot {key}", mode="0644"
+            snapshot[key],
+            f"schema-2 historical F115 snapshot {key}",
+            mode="0644",
+            contract_key=f"snapshot.{key}",
         )
     if (
         not isinstance(snapshot["manifest_inventory"], list)
@@ -5365,6 +5701,19 @@ def validate_historical_f115_authority(
         )
     if len(reviewed_times) != 2:
         raise ValueError("schema-2 historical F115 independent reviews are incomplete")
+    for kind, value in (
+        ("evidence", evidence),
+        ("provenance_review", loaded["provenance_review"][0]),
+        ("plasma_review", loaded["plasma_review"][0]),
+        ("publication_audit", audit),
+    ):
+        validate_historical_contract(
+            value,
+            kind,
+            F115_CONTRACT_DYNAMIC_PATHS,
+            F115_CONTRACT_SHA256,
+            f"schema-2 historical F115 {kind}",
+        )
     return {
         "digests": {
             "evidence_sha256": evidence_digest,
@@ -5543,6 +5892,10 @@ def validate_historical_f116_authority(
         or after["corrupt_c7_listed"] is not False
         or after["historical_f115_preserved"] is not True
         or after["sole_current_source_bundle"] != current["path"]
+        or before["readme_sha256"] != F115_CATALOG_README_SHA256
+        or before["sha256sums_sha256"] != F115_CATALOG_SHA256SUMS_SHA256
+        or after["readme_sha256"] != F116_CATALOG_README_SHA256
+        or after["sha256sums_sha256"] != F116_CATALOG_SHA256SUMS_SHA256
     ):
         raise ValueError("schema-2 historical F116 source-archive catalog policy differs")
 
@@ -5754,6 +6107,19 @@ def validate_historical_f116_authority(
         or audit_catalog["sole_current_source_bundle"] != str(root / str(current["path"]))
     ):
         raise ValueError("schema-2 historical F116 audit catalog binding differs")
+    for kind, value in (
+        ("evidence", evidence),
+        ("provenance_review", loaded["provenance_review"][0]),
+        ("plasma_review", loaded["plasma_review"][0]),
+        ("publication_audit", audit),
+    ):
+        validate_historical_contract(
+            value,
+            kind,
+            F116_CONTRACT_DYNAMIC_PATHS,
+            F116_CONTRACT_SHA256,
+            f"schema-2 historical F116 {kind}",
+        )
     return {
         "digests": {
             "evidence_sha256": evidence_digest,
@@ -5925,7 +6291,6 @@ def validate_f118_catalog_transition(
         root,
         old_readme,
         old_sums,
-        historical_f115,
         bridge,
         predecessor,
     )
