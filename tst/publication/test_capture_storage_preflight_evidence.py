@@ -36,6 +36,12 @@ SOURCE_AUTHENTICATION = {
 }
 
 
+def _with_link_count(metadata: os.stat_result, link_count: int) -> os.stat_result:
+    fields = list(metadata)
+    fields[3] = link_count
+    return os.stat_result(fields)
+
+
 class SourceAuthenticator:
     """Return deterministic reviewed-source records while counting calls."""
 
@@ -744,6 +750,271 @@ class CaptureStoragePreflightEvidenceTest(unittest.TestCase):
         self.assertEqual(destination.read_bytes(), replacement)
         self.assertEqual(len(staging), 1)
         self.assertEqual(staging[0].read_bytes(), replacement)
+
+    def test_staged_publication_tolerates_transient_committed_link_count(
+        self,
+    ) -> None:
+        expected_identity = (
+            self.orion_root.stat().st_dev,
+            self.orion_root.stat().st_ino,
+        )
+        filename = f"{PROBE_ID}.json"
+        real_require = storage_preflight._require_same_regular_entry
+        real_open = storage_preflight.os.open
+        real_close = storage_preflight.os.close
+        destination_checks = 0
+        staging_descriptor: int | None = None
+        staging_descriptor_closed = False
+
+        def record_staging_descriptor(
+            path: object,
+            *args: object,
+            **kwargs: object,
+        ) -> int:
+            nonlocal staging_descriptor
+            descriptor = real_open(path, *args, **kwargs)
+            if (
+                isinstance(path, str)
+                and path.endswith(storage_preflight.RECOVERY_STAGING_SUFFIX)
+            ):
+                staging_descriptor = descriptor
+            return descriptor
+
+        def record_staging_close(descriptor: int) -> None:
+            nonlocal staging_descriptor_closed
+            if descriptor == staging_descriptor:
+                staging_descriptor_closed = True
+            real_close(descriptor)
+
+        def report_one_stale_committed_link_count(
+            directory_descriptor: int,
+            name: str,
+            expected: os.stat_result,
+            *,
+            label: str,
+        ) -> os.stat_result:
+            nonlocal destination_checks
+            current = real_require(
+                directory_descriptor,
+                name,
+                expected,
+                label=label,
+            )
+            if name == filename:
+                destination_checks += 1
+                if destination_checks == 2:
+                    self.assertFalse(staging_descriptor_closed)
+                    return _with_link_count(current, 2)
+                if destination_checks == 3:
+                    self.assertFalse(staging_descriptor_closed)
+            return current
+
+        with mock.patch.object(
+            storage_preflight.os,
+            "open",
+            side_effect=record_staging_descriptor,
+        ), mock.patch.object(
+            storage_preflight.os,
+            "close",
+            side_effect=record_staging_close,
+        ), mock.patch.object(
+            storage_preflight,
+            "_require_same_regular_entry",
+            side_effect=report_one_stale_committed_link_count,
+        ), mock.patch.object(storage_preflight.time, "sleep") as sleep:
+            destination = storage_preflight._publish_staged_evidence(
+                self.orion_root,
+                expected_root_identity=expected_identity,
+                filename=filename,
+                payload=b"reviewed payload\n",
+            )
+
+        self.assertEqual(destination.read_bytes(), b"reviewed payload\n")
+        self.assertEqual(destination.stat().st_nlink, 1)
+        self.assertEqual(destination_checks, 3)
+        self.assertTrue(staging_descriptor_closed)
+        sleep.assert_called_once_with(
+            storage_preflight.COMMITTED_LINK_COUNT_INITIAL_RETRY_SECONDS
+        )
+        self.assertEqual(
+            list(
+                destination.parent.glob(
+                    f".{filename}.*{storage_preflight.RECOVERY_STAGING_SUFFIX}"
+                )
+            ),
+            [],
+        )
+
+    def test_staged_publication_rejects_persistent_committed_link_count(
+        self,
+    ) -> None:
+        expected_identity = (
+            self.orion_root.stat().st_dev,
+            self.orion_root.stat().st_ino,
+        )
+        filename = f"{PROBE_ID}.json"
+        real_require = storage_preflight._require_same_regular_entry
+        destination_checks = 0
+
+        def report_persistent_stale_committed_link_count(
+            directory_descriptor: int,
+            name: str,
+            expected: os.stat_result,
+            *,
+            label: str,
+        ) -> os.stat_result:
+            nonlocal destination_checks
+            current = real_require(
+                directory_descriptor,
+                name,
+                expected,
+                label=label,
+            )
+            if name == filename:
+                destination_checks += 1
+                if destination_checks >= 2:
+                    return _with_link_count(current, 2)
+            return current
+
+        with mock.patch.object(
+            storage_preflight,
+            "_require_same_regular_entry",
+            side_effect=report_persistent_stale_committed_link_count,
+        ), mock.patch.object(
+            storage_preflight.time,
+            "monotonic",
+            side_effect=[0.0, 0.0, 1.0, 2.0],
+        ), mock.patch.object(storage_preflight.time, "sleep") as sleep:
+            with self.assertRaisesRegex(ValueError, "did not converge to one"):
+                storage_preflight._publish_staged_evidence(
+                    self.orion_root,
+                    expected_root_identity=expected_identity,
+                    filename=filename,
+                    payload=b"reviewed payload\n",
+                )
+
+        destination = self.orion_root.joinpath(
+            *storage_preflight.EVIDENCE_PARENT_PARTS,
+            filename,
+        )
+        self.assertEqual(destination.read_bytes(), b"reviewed payload\n")
+        self.assertEqual(destination.stat().st_nlink, 1)
+        self.assertEqual(destination_checks, 4)
+        self.assertEqual(sleep.call_count, 2)
+        self.assertEqual(
+            list(
+                destination.parent.glob(
+                    f".{filename}.*{storage_preflight.RECOVERY_STAGING_SUFFIX}"
+                )
+            ),
+            [],
+        )
+
+    def test_staged_publication_rejects_convergence_after_deadline(
+        self,
+    ) -> None:
+        expected_identity = (
+            self.orion_root.stat().st_dev,
+            self.orion_root.stat().st_ino,
+        )
+        filename = f"{PROBE_ID}.json"
+        real_require = storage_preflight._require_same_regular_entry
+        destination_checks = 0
+
+        def report_overdue_committed_link_count_convergence(
+            directory_descriptor: int,
+            name: str,
+            expected: os.stat_result,
+            *,
+            label: str,
+        ) -> os.stat_result:
+            nonlocal destination_checks
+            current = real_require(
+                directory_descriptor,
+                name,
+                expected,
+                label=label,
+            )
+            if name == filename:
+                destination_checks += 1
+                if destination_checks == 2:
+                    return _with_link_count(current, 2)
+            return current
+
+        with mock.patch.object(
+            storage_preflight,
+            "_require_same_regular_entry",
+            side_effect=report_overdue_committed_link_count_convergence,
+        ), mock.patch.object(
+            storage_preflight.time,
+            "monotonic",
+            side_effect=[0.0, 0.0, 3.0],
+        ), mock.patch.object(storage_preflight.time, "sleep") as sleep:
+            with self.assertRaisesRegex(ValueError, "before the commit deadline"):
+                storage_preflight._publish_staged_evidence(
+                    self.orion_root,
+                    expected_root_identity=expected_identity,
+                    filename=filename,
+                    payload=b"reviewed payload\n",
+                )
+
+        destination = self.orion_root.joinpath(
+            *storage_preflight.EVIDENCE_PARENT_PARTS,
+            filename,
+        )
+        self.assertEqual(destination.read_bytes(), b"reviewed payload\n")
+        self.assertEqual(destination.stat().st_nlink, 1)
+        self.assertEqual(destination_checks, 3)
+        sleep.assert_called_once_with(
+            storage_preflight.COMMITTED_LINK_COUNT_INITIAL_RETRY_SECONDS
+        )
+
+    def test_staged_publication_rejects_unexpected_committed_link_count_without_retry(
+        self,
+    ) -> None:
+        expected_identity = (
+            self.orion_root.stat().st_dev,
+            self.orion_root.stat().st_ino,
+        )
+        filename = f"{PROBE_ID}.json"
+        real_require = storage_preflight._require_same_regular_entry
+        destination_checks = 0
+
+        def report_unexpected_committed_link_count(
+            directory_descriptor: int,
+            name: str,
+            expected: os.stat_result,
+            *,
+            label: str,
+        ) -> os.stat_result:
+            nonlocal destination_checks
+            current = real_require(
+                directory_descriptor,
+                name,
+                expected,
+                label=label,
+            )
+            if name == filename:
+                destination_checks += 1
+                if destination_checks == 2:
+                    return _with_link_count(current, 3)
+            return current
+
+        with mock.patch.object(
+            storage_preflight,
+            "_require_same_regular_entry",
+            side_effect=report_unexpected_committed_link_count,
+        ), mock.patch.object(storage_preflight.time, "sleep") as sleep:
+            with self.assertRaisesRegex(ValueError, "link count is not one"):
+                storage_preflight._publish_staged_evidence(
+                    self.orion_root,
+                    expected_root_identity=expected_identity,
+                    filename=filename,
+                    payload=b"reviewed payload\n",
+                )
+
+        sleep.assert_not_called()
+        self.assertEqual(destination_checks, 2)
 
     def test_fifo_evidence_entry_fails_without_blocking(self) -> None:
         evidence = self.orion_root.joinpath(*storage_preflight.EVIDENCE_PARENT_PARTS)

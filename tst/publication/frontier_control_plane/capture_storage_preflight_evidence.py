@@ -17,6 +17,7 @@ import secrets
 import stat
 import subprocess
 import sys
+import time
 import uuid
 
 from control_plane_common import stable_serialization_anchor
@@ -92,6 +93,9 @@ ORION_ROLE = "orion_simulation_root"
 PROJECT_HOME_ROLE = "project_home_mirror_root"
 RECOVERY_ROLES = {ORION_ROLE, PROJECT_HOME_ROLE}
 RECOVERY_STAGING_SUFFIX = ".recovery-staging"
+COMMITTED_LINK_COUNT_TIMEOUT_SECONDS = 2.0
+COMMITTED_LINK_COUNT_INITIAL_RETRY_SECONDS = 0.01
+COMMITTED_LINK_COUNT_MAX_RETRY_SECONDS = 0.25
 STABLE_FIELDS = (
     "st_dev",
     "st_ino",
@@ -477,13 +481,17 @@ def _read_published_evidence(
         os.close(parent_descriptor)
 
 
-def _validate_evidence_metadata(metadata: os.stat_result) -> None:
+def _validate_evidence_metadata_without_link_count(metadata: os.stat_result) -> None:
     if not stat.S_ISREG(metadata.st_mode):
         raise ValueError("Published storage-preflight evidence is not a regular file")
     if stat.S_IMODE(metadata.st_mode) != 0o400:
         raise ValueError("Published storage-preflight evidence mode is not exactly 0400")
     if metadata.st_uid != os.getuid():
         raise ValueError("Published storage-preflight evidence owner differs")
+
+
+def _validate_evidence_metadata(metadata: os.stat_result) -> None:
+    _validate_evidence_metadata_without_link_count(metadata)
     if metadata.st_nlink != 1:
         raise ValueError("Published storage-preflight evidence link count is not one")
 
@@ -646,6 +654,50 @@ def _audit_exact_pair_with_pinned_roots(
     return state, payloads, artifact
 
 
+def _require_committed_evidence_metadata(
+    parent: Path,
+    parent_descriptor: int,
+    filename: str,
+    expected: os.stat_result,
+) -> os.stat_result:
+    deadline = time.monotonic() + COMMITTED_LINK_COUNT_TIMEOUT_SECONDS
+    retry_seconds = COMMITTED_LINK_COUNT_INITIAL_RETRY_SECONDS
+    retrying = False
+    while True:
+        _require_same_directory(parent, parent_descriptor, label="Evidence parent")
+        committed = _require_same_regular_entry(
+            parent_descriptor,
+            filename,
+            expected,
+            label="Published storage-preflight evidence",
+        )
+        _validate_evidence_metadata_without_link_count(committed)
+        if committed.st_nlink == 1:
+            if retrying and time.monotonic() >= deadline:
+                raise ValueError(
+                    "Published storage-preflight evidence link count did not "
+                    "converge to one before the commit deadline"
+                )
+            return committed
+        if committed.st_nlink != 2:
+            raise ValueError(
+                "Published storage-preflight evidence link count is not one"
+            )
+        remaining_seconds = deadline - time.monotonic()
+        if remaining_seconds <= 0:
+            raise ValueError(
+                "Published storage-preflight evidence link count did not converge "
+                "to one after commit"
+            )
+        retrying = True
+        os.fsync(parent_descriptor)
+        time.sleep(min(retry_seconds, remaining_seconds))
+        retry_seconds = min(
+            retry_seconds * 2,
+            COMMITTED_LINK_COUNT_MAX_RETRY_SECONDS,
+        )
+
+
 def _publish_staged_evidence(
     root: Path,
     *,
@@ -708,14 +760,12 @@ def _publish_staged_evidence(
         )
         os.unlink(staging_name, dir_fd=parent_descriptor)
         os.fsync(parent_descriptor)
-        _require_same_directory(parent, parent_descriptor, label="Evidence parent")
-        committed = _require_same_regular_entry(
+        _require_committed_evidence_metadata(
+            parent,
             parent_descriptor,
             filename,
             staged,
-            label="Published storage-preflight evidence",
         )
-        _validate_evidence_metadata(committed)
         return lexical.joinpath(*EVIDENCE_PARENT_PARTS, filename)
     finally:
         if descriptor is not None:

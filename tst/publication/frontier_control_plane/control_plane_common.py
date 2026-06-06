@@ -101,7 +101,7 @@ AUTHORIZED_STORAGE_PREFLIGHT_OPERATIONS = [
 # checked against this executing controller below.
 AUTHORIZED_STORAGE_PREFLIGHT_CAPTURE_SOURCE_BLOBS = {
     "entrypoint_sha256": (
-        "118e8206fc172522380ee135022d0e089ac5452da5073e8149a8e4ea265b5b9c"
+        "0fdbbf87e69641c3196ca90297f6f4f212fb824e859ba5e1e652ab6ce06e82f8"
     ),
     "runner_sha256": (
         "6053f190ed5bea093537ca5e6aef110212d54861f6726a6fa7294a1716eca2d5"
