@@ -357,7 +357,9 @@ def test_preregistered_criteria_bind_final_utility_and_completed_reviews(policy)
     assert acceptance.reviewed_scientific_products_available(policy) is True
     assert policy["review"]["replay_tool_promotion_review"]["reviewer"] == {
         "role": "scientific_replay_security",
-        "reviewer_id": "019e9ba3-4e89-7b52-92ef-dd9df89f1aab",
+        "reviewer_id": (
+            "codex-independent-scientific-replay-security-74cb129d5-20260606"
+        ),
         "independent_of_implementation": True,
     }
     assert "analyzer_contract" not in policy["criteria"]["source_bindings"]
