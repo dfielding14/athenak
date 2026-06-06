@@ -566,7 +566,7 @@ def test_analysis_as_output_is_rejected_without_deleting_evidence(
 
 
 def test_output_containing_discovered_evidence_is_rejected_without_deletion(
-    publication, tmp_path
+    publication, tmp_path, monkeypatch
 ):
     analysis = tmp_path / "analysis"
     analysis.mkdir()
@@ -575,22 +575,50 @@ def test_output_containing_discovered_evidence_is_rejected_without_deletion(
     write_json(evidence, {"record_type": "discovered-evidence"})
     publication.write_text(output / "keep.txt", "keep output evidence\n")
     previous = tree_bytes(output)
+    data = empty_data(publication, analysis)
+    data.source_paths.add(evidence.absolute())
+    monkeypatch.setattr(
+        publication, "discover_data", lambda _analysis, _acceptance: data
+    )
 
     with pytest.raises(
         publication.PublicationError,
         match="contains discovered source or acceptance evidence",
+    ):
+        publication.main([str(analysis), "--output", str(output)])
+
+    assert tree_bytes(output) == previous
+    assert not publication.publication_ownership_path(output).exists()
+    assert not publication.publication_lock_path(output).exists()
+
+
+@pytest.mark.parametrize("nested_output", [False, True], ids=["equal", "contains"])
+def test_explicit_empty_acceptance_root_equal_or_contains_output_is_rejected(
+    publication, tmp_path, nested_output
+):
+    analysis = tmp_path / "analysis"
+    analysis.mkdir()
+    acceptance = tmp_path / "acceptance"
+    acceptance.mkdir()
+    output = acceptance / "publication" if nested_output else acceptance
+
+    with pytest.raises(
+        publication.PublicationError,
+        match="overlaps an explicit acceptance root",
     ):
         publication.main([
             str(analysis),
             "--output",
             str(output),
             "--acceptance",
-            str(evidence.parent),
+            str(acceptance),
         ])
 
-    assert tree_bytes(output) == previous
+    assert tree_bytes(acceptance) == {}
     assert not publication.publication_ownership_path(output).exists()
     assert not publication.publication_lock_path(output).exists()
+    if nested_output:
+        assert not output.exists()
 
 
 def test_arbitrary_nonempty_unowned_output_is_rejected(
@@ -666,8 +694,8 @@ def test_default_output_descendant_of_analysis_works_without_evidence_overlap(
     assert tree_bytes(output) == first
 
 
-def test_valid_existing_manifest_proves_nonempty_output_ownership(
-    publication, tmp_path
+def test_valid_existing_manifest_migrates_ownership_before_interruption(
+    publication, tmp_path, monkeypatch
 ):
     output = tmp_path / "publication"
     old_product = output / "old.txt"
@@ -692,9 +720,82 @@ def test_valid_existing_manifest_proves_nonempty_output_ownership(
         staging,
         output,
         "existing-manifest",
-        {"new.txt": "new publication\n"},
+        {"a.txt": "new a\n", "b.txt": "new b\n"},
+    )
+    real_promote_file = publication.promote_file
+    product_promotions = 0
+
+    def interrupt_after_migrated_ownership(staged_path, canonical):
+        nonlocal product_promotions
+        real_promote_file(staged_path, canonical)
+        if canonical.name != "manifest.json":
+            product_promotions += 1
+            if product_promotions == 1:
+                assert publication.valid_publication_ownership(output)
+                assert not (output / "manifest.json").exists()
+                raise RuntimeError("interrupted migrated publication")
+
+    monkeypatch.setattr(
+        publication, "promote_file", interrupt_after_migrated_ownership
     )
 
+    with pytest.raises(RuntimeError, match="interrupted migrated publication"):
+        publication.promote_staged_publication(
+            staging,
+            output,
+            products,
+            manifest,
+            analysis=tmp_path / "analysis",
+            evidence_paths=[],
+        )
+
+    assert not old_product.exists()
+    assert publication.valid_publication_ownership(output)
+    ownership = publication.publication_ownership_path(output)
+    ownership_bytes = ownership.read_bytes()
+    assert not (output / "manifest.json").exists()
+    assert (output / "a.txt").read_text(encoding="utf-8") == "new a\n"
+    assert not (output / "b.txt").exists()
+
+    monkeypatch.setattr(publication, "promote_file", real_promote_file)
+    recovery_staging = tmp_path / ".publication.staging-existing-manifest-recovery"
+    recovery_products, recovery_manifest = staged_publication(
+        publication,
+        recovery_staging,
+        output,
+        "existing-manifest",
+        {"a.txt": "new a\n", "b.txt": "new b\n"},
+    )
+    publication.promote_staged_publication(
+        recovery_staging,
+        output,
+        recovery_products,
+        recovery_manifest,
+        analysis=tmp_path / "analysis",
+        evidence_paths=[],
+    )
+
+    assert publication.valid_publication_ownership(output)
+    assert ownership.read_bytes() == ownership_bytes
+    assert (output / "a.txt").read_text(encoding="utf-8") == "new a\n"
+    assert (output / "b.txt").read_text(encoding="utf-8") == "new b\n"
+    assert json.loads(
+        (output / "manifest.json").read_text(encoding="utf-8")
+    ) == recovery_manifest
+
+
+def test_owned_output_replacement_does_not_authorize_cleanup(
+    publication, tmp_path
+):
+    output = tmp_path / "publication"
+    staging = tmp_path / ".publication.staging-owned-instance"
+    products, manifest = staged_publication(
+        publication,
+        staging,
+        output,
+        "owned-instance",
+        {"owned.txt": "owned publication\n"},
+    )
     publication.promote_staged_publication(
         staging,
         output,
@@ -703,10 +804,43 @@ def test_valid_existing_manifest_proves_nonempty_output_ownership(
         analysis=tmp_path / "analysis",
         evidence_paths=[],
     )
+    owned_identity = publication.publication_output_identity(output)
+    assert publication.valid_publication_ownership(output)
 
-    assert not old_product.exists()
-    assert (output / "new.txt").read_text(encoding="utf-8") == "new publication\n"
-    assert not publication.publication_ownership_path(output).exists()
+    displaced = tmp_path / "displaced-publication"
+    output.rename(displaced)
+    output.mkdir()
+    publication.write_text(output / "unrelated.txt", "do not delete\n")
+    replacement = tree_bytes(output)
+
+    assert publication.publication_output_identity(output) != owned_identity
+    assert not publication.valid_publication_ownership(output)
+    replacement_staging = tmp_path / ".publication.staging-replacement"
+    replacement_products, replacement_manifest = staged_publication(
+        publication,
+        replacement_staging,
+        output,
+        "replacement",
+        {"new.txt": "new publication\n"},
+    )
+
+    with pytest.raises(
+        publication.PublicationError,
+        match="does not bind the current nonempty output directory instance",
+    ):
+        publication.promote_staged_publication(
+            replacement_staging,
+            output,
+            replacement_products,
+            replacement_manifest,
+            analysis=tmp_path / "analysis",
+            evidence_paths=[],
+        )
+
+    assert tree_bytes(output) == replacement
+    assert (displaced / "owned.txt").read_text(encoding="utf-8") == (
+        "owned publication\n"
+    )
 
 
 def test_concurrent_promotions_are_serialized_by_sibling_lock(

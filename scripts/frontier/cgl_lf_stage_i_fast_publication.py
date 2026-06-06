@@ -5534,13 +5534,26 @@ def path_contains(root: Path, path: Path) -> bool:
 
 
 def validate_publication_output_overlap(
-    analysis: Path, output: Path, evidence_paths: Iterable[Path]
+    analysis: Path,
+    output: Path,
+    evidence_paths: Iterable[Path],
+    acceptance_roots: Iterable[Path] = (),
 ) -> None:
     """Reject output roots that could delete analysis or discovered evidence."""
 
     if path_contains(output, analysis):
         raise PublicationError(
             f"publication output may not equal or contain the analysis root: {output}"
+        )
+    overlapping_roots = sorted({
+        normalized_filesystem_path(path)
+        for path in acceptance_roots
+        if path_contains(path, output) or path_contains(output, path)
+    })
+    if overlapping_roots:
+        raise PublicationError(
+            "publication output overlaps an explicit acceptance root: "
+            + ", ".join(str(path) for path in overlapping_roots)
         )
     overlapping = sorted({
         normalized_filesystem_path(path)
@@ -5554,13 +5567,42 @@ def validate_publication_output_overlap(
         )
 
 
+def publication_output_identity(output: Path) -> dict[str, int]:
+    """Return stable identity and ownership fields for one output directory."""
+
+    flags = os.O_RDONLY
+    if hasattr(os, "O_CLOEXEC"):
+        flags |= os.O_CLOEXEC
+    if hasattr(os, "O_DIRECTORY"):
+        flags |= os.O_DIRECTORY
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    try:
+        descriptor = os.open(output, flags)
+    except OSError as error:
+        raise PublicationError(
+            f"cannot bind publication output directory identity: {output}"
+        ) from error
+    try:
+        observed = os.fstat(descriptor)
+    finally:
+        os.close(descriptor)
+    return {
+        "device": int(observed.st_dev),
+        "inode": int(observed.st_ino),
+        "owner_uid": int(observed.st_uid),
+        "owner_gid": int(observed.st_gid),
+    }
+
+
 def publication_ownership_record(output: Path) -> dict[str, object]:
     """Return the persistent ownership proof for one canonical output root."""
 
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "record_type": "cgl_lf_stage_i_fast_publication_output_ownership",
         "output": str(normalized_filesystem_path(output)),
+        "directory_identity": publication_output_identity(output),
         "authority": "cgl_lf_stage_i_fast_publication.py",
     }
 
@@ -5575,6 +5617,40 @@ def valid_publication_ownership(output: Path) -> bool:
         return load_json(path) == publication_ownership_record(output)
     except (OSError, json.JSONDecodeError, PublicationError):
         return False
+
+
+def fsync_directory(path: Path) -> None:
+    """Durably publish prior directory-entry changes."""
+
+    flags = os.O_RDONLY
+    if hasattr(os, "O_CLOEXEC"):
+        flags |= os.O_CLOEXEC
+    if hasattr(os, "O_DIRECTORY"):
+        flags |= os.O_DIRECTORY
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    try:
+        descriptor = os.open(path, flags)
+    except OSError as error:
+        raise PublicationError(f"cannot open directory for fsync: {path}") from error
+    try:
+        os.fsync(descriptor)
+    except OSError as error:
+        raise PublicationError(f"cannot fsync directory: {path}") from error
+    finally:
+        os.close(descriptor)
+
+
+def write_durable_publication_ownership(output: Path) -> None:
+    """Atomically and durably bind ownership to the current output directory."""
+
+    path = publication_ownership_path(output)
+    write_json(path, publication_ownership_record(output))
+    fsync_directory(path.parent)
+    if not valid_publication_ownership(output):
+        raise PublicationError(
+            f"publication ownership record failed post-write validation: {path}"
+        )
 
 
 def output_is_empty(output: Path) -> bool:
@@ -5640,24 +5716,30 @@ def valid_existing_publication_manifest(output: Path) -> bool:
 
 
 def require_or_create_publication_ownership(output: Path) -> None:
-    """Require ownership proof, creating it only for absent or empty output."""
+    """Require instance-bound proof, creating or migrating it before cleanup."""
 
     ownership_path = publication_ownership_path(output)
     if ownership_path.is_symlink():
         raise PublicationError(
             f"publication ownership record may not be a symlink: {ownership_path}"
         )
-    if ownership_path.exists():
-        if valid_publication_ownership(output):
-            return
-        raise PublicationError(
-            f"publication ownership record is invalid: {ownership_path}"
-        )
+    if not output.exists():
+        output.mkdir()
+        write_durable_publication_ownership(output)
+        return
+    if valid_publication_ownership(output):
+        return
     if output_is_empty(output):
-        write_json(ownership_path, publication_ownership_record(output))
+        write_durable_publication_ownership(output)
         return
     if valid_existing_publication_manifest(output):
+        write_durable_publication_ownership(output)
         return
+    if ownership_path.exists():
+        raise PublicationError(
+            "publication ownership record does not bind the current nonempty "
+            f"output directory instance: {ownership_path}"
+        )
     raise PublicationError(
         "refusing destructive publication cleanup of nonempty unowned output: "
         f"{output}"
@@ -5819,6 +5901,7 @@ def promote_staged_publication(
     *,
     analysis: Path,
     evidence_paths: Iterable[Path],
+    acceptance_roots: Iterable[Path] = (),
 ) -> Path:
     """Promote products atomically and publish their canonical manifest last."""
 
@@ -5826,7 +5909,10 @@ def promote_staged_publication(
     output = output.absolute()
     analysis = analysis.absolute()
     evidence_paths = tuple(path.absolute() for path in evidence_paths)
-    validate_publication_output_overlap(analysis, output, evidence_paths)
+    acceptance_roots = tuple(path.absolute() for path in acceptance_roots)
+    validate_publication_output_overlap(
+        analysis, output, evidence_paths, acceptance_roots
+    )
     if staging.parent.resolve(strict=True) != output.parent.resolve(strict=True):
         raise PublicationError("publication staging directory must be a sibling of output")
     records = canonical_product_records(products, staging, output)
@@ -5843,12 +5929,17 @@ def promote_staged_publication(
     canonical_manifest = output / "manifest.json"
 
     with exclusive_publication_lock(output):
-        validate_publication_output_overlap(analysis, output, evidence_paths)
+        validate_publication_output_overlap(
+            analysis, output, evidence_paths, acceptance_roots
+        )
         validate_canonical_output_tree(output)
         require_or_create_publication_ownership(output)
-        if not output.exists():
-            output.mkdir()
         validate_canonical_output_tree(output)
+        if not valid_publication_ownership(output):
+            raise PublicationError(
+                "publication ownership no longer binds the current output "
+                f"directory instance: {output}"
+            )
 
         # Withdraw the previous authority before any canonical path is changed.
         # Cleanup and product promotion happen under the sibling lock, so an
@@ -6453,10 +6544,16 @@ def main(argv: list[str] | None = None) -> int:
         if args.output is not None
         else analysis / "publication-products"
     )
+    acceptance_roots = tuple(path.absolute() for path in args.acceptance)
+    validate_publication_output_overlap(
+        analysis, output, (), acceptance_roots
+    )
     acceptance_candidates = discover_acceptance_paths(analysis, args.acceptance)
     data = discover_data(analysis, args.acceptance)
     evidence_paths = set(data.source_paths) | set(acceptance_candidates)
-    validate_publication_output_overlap(analysis, output, evidence_paths)
+    validate_publication_output_overlap(
+        analysis, output, evidence_paths, acceptance_roots
+    )
     output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(
         dir=output.parent, prefix=f".{output.name}.staging-"
@@ -6464,7 +6561,9 @@ def main(argv: list[str] | None = None) -> int:
         staging = Path(staging_value).absolute()
         products = render_products(data, staging)
         evidence_paths.update(data.source_paths)
-        validate_publication_output_overlap(analysis, output, evidence_paths)
+        validate_publication_output_overlap(
+            analysis, output, evidence_paths, acceptance_roots
+        )
         manifest = build_publication_manifest(
             data, analysis, output, args.acceptance, products, staging
         )
@@ -6475,6 +6574,7 @@ def main(argv: list[str] | None = None) -> int:
             manifest,
             analysis=analysis,
             evidence_paths=evidence_paths,
+            acceptance_roots=acceptance_roots,
         )
     print(
         f"rendered {len(products)} publication products in {output}; "
